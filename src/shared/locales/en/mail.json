@@ -1,0 +1,5 @@
+{
+  "verificationCodeSubject": "Sign in to your account",
+  "passwordResetSubject": "Reset your password",
+  "passwordResetHtml": "Click <a href=\"{{resetUrl}}\">here</a> to reset your password. This link expires in {{expiresInMinutes}} minutes."
+}

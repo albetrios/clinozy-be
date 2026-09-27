@@ -1,0 +1,36 @@
+{
+  "project": {
+    "name": "clinozy-be",
+    "displayName": "Clinozy Backend",
+    "brandName": "Clinozy",
+    "previousNames": ["core-be", "core-fe", "clinovia-be", "clinovia-fe"],
+    "previousOwners": ["nikunjmavani"],
+    "packageName": "clinozy-be"
+  },
+  "git": {
+    "protectedBranches": ["main"],
+    "defaultBranch": "main"
+  },
+  "environments": [
+    {
+      "name": "development",
+      "label": "Development",
+      "nodeEnvironment": "development",
+      "protected": true,
+      "isDefault": true
+    },
+    {
+      "name": "production",
+      "label": "Production",
+      "nodeEnvironment": "production",
+      "protected": true
+    }
+  ],
+  "providers": {
+    "github": {
+      "enabled": true,
+      "repository": "albetrios/clinozy-be",
+      "owners": ["albetrios"]
+    }
+  }
+}

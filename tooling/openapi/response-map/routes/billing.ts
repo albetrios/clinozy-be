@@ -1,0 +1,94 @@
+/** OpenAPI success responses — billing. */
+import type { ResponseDefinition } from '@tooling/openapi/response-map/building-blocks.js';
+import { wrapSuccess } from '@tooling/openapi/response-map/building-blocks.js';
+import * as schemas from '@tooling/openapi/response-map/resource-schemas.js';
+
+export const billingRouteResponses: Record<string, ResponseDefinition> = {
+  'GET /api/v1/billing/plans': {
+    statusCode: 200,
+    schema: wrapSuccess({ type: 'array', items: schemas.planSchema }, [
+      {
+        ...schemas.planExample,
+        id: 'pln_free123',
+        name: 'Free',
+        description: 'For individuals and small projects',
+        price_monthly: '0.00',
+        price_yearly: '0.00',
+      },
+      schemas.planExample,
+      {
+        ...schemas.planExample,
+        id: 'pln_ent456',
+        name: 'Enterprise',
+        description: 'For large organizations with custom needs',
+        price_monthly: '99.00',
+        price_yearly: '990.00',
+      },
+    ]),
+    example: null,
+  },
+  'GET /api/v1/billing/plans/{plan_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.planSchema, schemas.planExample),
+    example: null,
+  },
+
+  // ── Subscriptions ──
+  'GET /api/v1/billing/subscriptions': {
+    statusCode: 200,
+    schema: wrapSuccess({ type: 'array', items: schemas.subscriptionSchema }, [
+      schemas.subscriptionExample,
+    ]),
+    example: null,
+  },
+  'GET /api/v1/billing/subscriptions/{subscription_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.subscriptionSchema, schemas.subscriptionExample),
+    example: null,
+  },
+  'POST /api/v1/billing/subscriptions': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.subscriptionSchema, schemas.subscriptionExample),
+    example: null,
+  },
+  'PATCH /api/v1/billing/subscriptions/{subscription_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.subscriptionSchema, {
+      ...schemas.subscriptionExample,
+      cancel_at_period_end: true,
+    }),
+    example: null,
+  },
+  'POST /api/v1/billing/subscriptions/{subscription_id}/change-plan': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.subscriptionSchema, {
+      ...schemas.subscriptionExample,
+      plan_id: 'pln_ent456',
+    }),
+    example: null,
+  },
+  'POST /api/v1/billing/subscriptions/{subscription_id}/cancel': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.subscriptionSchema, {
+      ...schemas.subscriptionExample,
+      status: 'CANCELLED',
+      cancel_at_period_end: true,
+    }),
+    example: null,
+  },
+  'POST /api/v1/billing/subscriptions/{subscription_id}/resume': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.subscriptionSchema, {
+      ...schemas.subscriptionExample,
+      cancel_at_period_end: false,
+    }),
+    example: null,
+  },
+
+  // ── Stripe webhook (protocol-owned 200) ──
+  'POST /api/v1/billing/webhook': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.webhookReceivedSchema, schemas.webhookReceivedExample),
+    example: null,
+  },
+};

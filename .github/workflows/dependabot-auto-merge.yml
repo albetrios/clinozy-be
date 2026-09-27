@@ -1,0 +1,68 @@
+# Enables squash auto-merge on a low-risk Dependabot PR (the `npm-non-major` group)
+# once a maintainer APPROVES it — the approval is the manual gate. The PR then merges
+# automatically when the required PR CI checks pass.
+#
+# Why approval-triggered: a maintainer's approval is the opt-in signal that arms
+# auto-merge, and this works in BOTH governance modes (see
+# docs/deployment/ci-cd/branch-protection.md). In personal mode (0 required approvals)
+# it is the only human gate; in team mode (1 required CODEOWNER approval) the same
+# approval doubles as the required review. Either way the PR merges automatically once
+# the required PR CI checks pass — no per-mode change to this workflow is needed.
+# Majors / security / github-actions / docker stay fully manual.
+#
+# Prerequisite: the repo setting "Allow auto-merge" must be enabled
+# (Settings -> General -> Pull Requests -> Allow auto-merge).
+#
+# No third-party actions are used (keeps the action-pin gate satisfied); the
+# non-major classification uses the Dependabot group name from .github/dependabot.yml.
+
+name: Dependabot auto-merge
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 || 'true' }}
+
+jobs:
+  enable-auto-merge:
+    name: Enable auto-merge for approved low-risk Dependabot updates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # RELEASE_PLEASE_TOKEN is maintained as an ENVIRONMENT secret, so the job has
+    # to be scoped to that environment to resolve it; an unscoped job silently
+    # reads the repository-level copy instead, which nothing validates or
+    # rotates. `development` has no protection rules, so this adds no approval
+    # gate (same rationale as scheduled-release-guards.yml).
+    environment: development
+    # Maintainer approved + Dependabot-authored + the non-major npm group only.
+    # `npm-major` does not contain the substring `npm-non-major`, so majors never match.
+    if: >-
+      github.event.review.state == 'approved' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      (
+        contains(github.event.pull_request.title, 'npm-non-major') ||
+        contains(github.event.pull_request.head.ref, 'npm-non-major')
+      )
+    steps:
+      - name: Enable squash auto-merge
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          # PAT (falling back to github.token) so the eventual merge is
+          # PAT-attributed and its push to main TRIGGERS post-merge CI. A
+          # GITHUB_TOKEN merge produces no post-merge run — no SBOM, no release
+          # processing for that commit. Same fix as clinozy-fe / the release PRs.
+          # The fallback covers an ABSENT secret, not an expired one — an invalid
+          # PAT is passed through and fails auth, so this must resolve the
+          # environment copy (see `environment:` on the job).
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}

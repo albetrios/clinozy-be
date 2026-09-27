@@ -1,0 +1,415 @@
+name: Reusable — integration tests with Postgres and Redis
+
+# Post-merge integration gate: five parallel DB shards (no unit/global — those run on PR).
+# Domain e2e/integration is split across three domain shards; the cross-cutting projects
+# (unit-db + security + performance + non-domain `rest` e2e/integration) are the heaviest single
+# group (~150 files, ~277s of module import alone), so they are split in HALF with vitest
+# `--shard=1/2` / `2/2` — an even by-file-count split across the two runners. Both halves carry
+# route-exercising tests (security + e2e/integration span both), so each still emits its
+# route-status observation and the shard-completeness guard holds.
+# Always migrates against ephemeral Postgres + Redis and enforces merged coverage thresholds.
+
+on:
+  workflow_call:
+    inputs:
+      merge_commit_sha:
+        description: Commit SHA on the target branch after merge (or branch tip for manual dispatch)
+        required: true
+        type: string
+      target_branch:
+        description: Protected branch that received the merge (main)
+        required: true
+        type: string
+    secrets:
+      RESEND_API_KEY:
+        required: false
+      TEST_RESULT_EMAIL_TO:
+        required: false
+    outputs:
+      coverage_gate_result:
+        description: Summary emitted by the merged coverage gate job
+        value: ${{ jobs.coverage-gate.outputs.coverage_summary }}
+  workflow_dispatch:
+    inputs:
+      merge_commit_sha:
+        description: Commit SHA to test
+        required: false
+        type: string
+        default: ''
+      target_branch:
+        description: Branch context (main)
+        required: true
+        type: choice
+        options:
+          - main
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 || 'true' }}
+
+jobs:
+  matrix-config:
+    name: Matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      shards: ${{ steps.config.outputs.shards }}
+    steps:
+      - name: Integration shard matrix
+        id: config
+        run: |
+          set -euo pipefail
+          shards_compact='[{"name":"tenancy + billing","id":"db-tenancy-billing","projects":"--project e2e --project integration","domain_filter":"tenancy,billing"},{"name":"auth + user","id":"db-auth-user","projects":"--project e2e --project integration","domain_filter":"auth,user"},{"name":"notify + audit + upload","id":"db-notify-audit-upload","projects":"--project e2e --project integration","domain_filter":"notify,audit,upload"},{"name":"cross-cutting 1/2","id":"db-crosscutting-1","projects":"--project unit-db --project e2e --project integration --project security --project performance --shard=1/2","domain_filter":"rest"},{"name":"cross-cutting 2/2","id":"db-crosscutting-2","projects":"--project unit-db --project e2e --project integration --project security --project performance --shard=2/2","domain_filter":"rest"}]'
+          echo "shards=${shards_compact}" >> "$GITHUB_OUTPUT"
+          echo "Selected shards:"
+          jq . <<<"${shards_compact}"
+
+  run:
+    name: ${{ matrix.shard.name }}
+    needs: matrix-config
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # RESEND_API_KEY / TEST_RESULT_EMAIL_TO (test-result email, below) are held as
+    # environment secrets, so this job has to be environment-scoped to resolve
+    # them — an unscoped job reads the repository-level copies instead. A caller
+    # job that `uses:` a reusable workflow cannot declare `environment:`
+    # (GitHub allows only with/secrets/needs/if/permissions/strategy/concurrency
+    # there), so the scope must live here even though both callers pass
+    # `secrets: inherit`. `development` has no protection rules — no approval gate.
+    environment: development
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.matrix-config.outputs.shards) }}
+
+    services:
+      postgres:
+        image: postgres:17.10-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: clinozy
+          POSTGRES_PASSWORD: clinozy
+          POSTGRES_DB: clinozy
+        options: >-
+          --health-cmd="pg_isready -U clinozy -d clinozy"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+      redis:
+        image: redis:8.6.3-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      NODE_ENV: development
+      LOG_LEVEL: warn
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      REDIS_URL: redis://localhost:6379
+      RATE_LIMIT_MAX: 1000
+      RATE_LIMIT_WINDOW_MS: 60000
+      RUN_DB_TESTS: 1
+      RUN_REDIS_TESTS: 1
+      ENABLE_MCP_SERVER: 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.merge_commit_sha || github.sha }}
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Cache Vitest
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: node_modules/.vitest
+          key: vitest-integration-${{ runner.os }}-${{ matrix.shard.id }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            vitest-integration-${{ runner.os }}-${{ matrix.shard.id }}-
+            vitest-integration-${{ runner.os }}-
+
+      - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
+        uses: ./.github/actions/test-env
+
+      - name: Run migrations
+        run: pnpm db:migrate
+
+      - name: Run ${{ matrix.shard.id }} test shard with coverage
+        id: run-tests
+        env:
+          VITEST_DOMAIN_FILTER: ${{ matrix.shard.domain_filter }}
+        run: |
+          set -euo pipefail
+          pnpm exec vitest run \
+            --coverage \
+            --coverage.thresholds.lines=0 \
+            --coverage.thresholds.functions=0 \
+            --coverage.thresholds.statements=0 \
+            --coverage.thresholds.branches=0 \
+            --passWithNoTests \
+            --exclude 'src/tests/security/rls/**' \
+            ${{ matrix.shard.projects }}
+
+      - name: Rename coverage report for shard
+        if: always() && hashFiles('coverage/**') != ''
+        run: mv coverage "coverage-${{ matrix.shard.id }}"
+
+      - name: Upload coverage artifact
+        if: always() && hashFiles(format('coverage-{0}/**', matrix.shard.id)) != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: coverage-${{ matrix.shard.id }}
+          path: coverage-${{ matrix.shard.id }}/
+          retention-days: ${{ github.event_name == 'pull_request' && 30 || 14 }}
+
+      # Route-status observations (route success-status coverage gate) — flushed
+      # by createTestApp()'s observer; merged and evaluated in the coverage job.
+      - name: Rename route-status observations for shard
+        if: always() && hashFiles('route-coverage-observed/**') != ''
+        run: mv route-coverage-observed "route-observed-${{ matrix.shard.id }}"
+
+      - name: Upload route-status observation artifact
+        if: always() && hashFiles(format('route-observed-{0}/**', matrix.shard.id)) != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: route-observed-${{ matrix.shard.id }}
+          path: route-observed-${{ matrix.shard.id }}/
+          retention-days: ${{ github.event_name == 'pull_request' && 30 || 14 }}
+
+      - name: Send test result email
+        if: always() && env.RESEND_API_KEY != '' && env.TEST_RESULT_EMAIL_TO != ''
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          TEST_RESULT_EMAIL_TO: ${{ secrets.TEST_RESULT_EMAIL_TO }}
+          TEST_STATUS: ${{ steps.run-tests.outcome }}
+          TEST_SHARD: ${{ matrix.shard.id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_WORKFLOW: ${{ github.workflow }}
+          GITHUB_REF_NAME: ${{ inputs.target_branch }}
+          GITHUB_SHA: ${{ inputs.merge_commit_sha }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: pnpm tool:test-report-email
+
+  unit-coverage:
+    # Runs the pure-unit/global projects WITH coverage so the merged gate reflects
+    # the true union (unit + DB-bound), not just the DB-bound shards. Mirrors the
+    # PR unit lane (reusable-vitest-unit-only.yml): no Postgres, VITEST_SKIP_DATABASE.
+    name: Unit coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      redis:
+        image: redis:8.6.3-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      VITEST_SKIP_DATABASE: 'true'
+      NODE_ENV: development
+      LOG_LEVEL: warn
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      REDIS_URL: redis://localhost:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.merge_commit_sha || github.sha }}
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
+        uses: ./.github/actions/test-env
+
+      - name: Cache Vitest
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: node_modules/.vitest
+          key: vitest-unit-cov-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'tooling/vitest/**') }}
+          restore-keys: |
+            vitest-unit-cov-${{ runner.os }}-
+
+      - name: Generate OpenAPI artifact for global tests
+        run: pnpm docs:generate
+
+      - name: Run unit + global tests with coverage
+        run: |
+          set -euo pipefail
+          pnpm exec vitest run \
+            --project unit \
+            --project global \
+            --coverage \
+            --coverage.thresholds.lines=0 \
+            --coverage.thresholds.functions=0 \
+            --coverage.thresholds.statements=0 \
+            --coverage.thresholds.branches=0 \
+            --passWithNoTests
+
+      - name: Rename coverage report
+        if: always() && hashFiles('coverage/**') != ''
+        run: mv coverage coverage-unit
+
+      - name: Upload coverage artifact
+        if: always() && hashFiles('coverage-unit/**') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: coverage-unit
+          path: coverage-unit/
+          retention-days: ${{ github.event_name == 'pull_request' && 30 || 14 }}
+
+      # Route-status observations from the unit + global lane — without this
+      # the merged route success-status gate sees one lane less than ci:local.
+      - name: Rename route-status observations for unit lane
+        if: always() && hashFiles('route-coverage-observed/**') != ''
+        run: mv route-coverage-observed route-observed-unit
+
+      - name: Upload route-status observation artifact
+        if: always() && hashFiles('route-observed-unit/**') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: route-observed-unit
+          path: route-observed-unit/
+          retention-days: ${{ github.event_name == 'pull_request' && 30 || 14 }}
+
+  coverage-gate:
+    name: Coverage
+    needs: [run, unit-coverage]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      coverage_summary: ${{ steps.summary.outputs.coverage_summary }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.merge_commit_sha || github.sha }}
+          # Full history so the patch-coverage gate can diff changed lines against
+          # the PR base merge-base (git diff origin/<target>...HEAD).
+          fetch-depth: 0
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Download all shard coverage artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: coverage-*
+          path: coverage-shards
+          merge-multiple: false
+
+      - name: Download route-status observation artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: route-observed-*
+          path: route-observed-shards
+          merge-multiple: false
+
+      - name: Generate OpenAPI artifact for the error-status documentation check
+        run: pnpm docs:generate
+
+      - name: Route success-status coverage gate (merged shards)
+        run: |
+          set -euo pipefail
+          # Shard-completeness guard: every DB shard that produced coverage must also
+          # have produced its route-status observation. A missing observation silently
+          # undercounts coverage — fail loud and re-run instead of trusting an
+          # undercounted gate. Scoped to the `db-*` shards (they exercise routes via
+          # e2e/integration); the unit+global lane produces coverage without a matching
+          # route observation, so it is intentionally excluded.
+          shopt -s nullglob
+          db_coverage_shards=(coverage-shards/coverage-db-*)
+          db_observed_shards=(route-observed-shards/route-observed-db-*)
+          if [ "${#db_observed_shards[@]}" -lt "${#db_coverage_shards[@]}" ]; then
+            echo "::error title=Route-coverage shard artifact missing::Got ${#db_observed_shards[@]} db route-observed shard(s) but ${#db_coverage_shards[@]} db coverage shard(s). A DB shard's route-status observation was lost — re-run the matrix rather than trusting an undercounted coverage gate."
+            exit 1
+          fi
+          # Route success-status coverage is an ADVISORY metric — it is capture-based
+          # and environment-inconsistent (the same tree observed 0 uncovered on one run
+          # and 3 on another). The AUTHORITATIVE gate is the e2e/integration tests
+          # themselves (the shards above), which block on the PR. This step always
+          # reports (never blocks) so a flaky observation can neither red a PR nor skip
+          # release-please post-merge. The uncovered list + budget file remain the
+          # tracked signal for cleanup. (item 1.35)
+          pnpm validate:route-success-coverage --observed-dir route-observed-shards --report-only
+
+      - name: Merge coverage and check thresholds
+        env:
+          # Item 1.35: PR blocks (authoritative), post-merge/dispatch report only.
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          inputs=()
+          for shard_dir in coverage-shards/coverage-*; do
+            if [ -f "${shard_dir}/coverage-final.json" ]; then
+              inputs+=("${shard_dir}/coverage-final.json")
+            fi
+          done
+          if [ "${#inputs[@]}" -eq 0 ]; then
+            echo "::warning::No shard coverage artifacts found — skipping merged gate."
+            exit 0
+          fi
+          report_only_flag=""
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            report_only_flag="--report-only"
+          fi
+          node tooling/ci/merge-coverage-and-check-thresholds.mjs \
+            "${inputs[@]}" \
+            --output coverage-merged/coverage-final.json \
+            ${report_only_flag}
+
+      - name: Patch coverage (changed lines ≥ 90%)
+        # Complements the slow global merged-coverage ratchet: holds the lines a PR
+        # ADDED/MODIFIED to a strict bar (90% of changed, coverable lines), measured
+        # against the merged report (unit + global + DB e2e/integration union), so a
+        # service line covered only by integration tests still counts. PR-only — a
+        # post-merge HEAD is its own base, so there is no patch to measure. Blocks the
+        # PR: the changed-line delta must clear the bar even while the global ratchet
+        # moves slowly. Zero changed coverable lines → 100%, so docs/CI/script-only
+        # PRs pass trivially.
+        if: github.event_name == 'pull_request' && hashFiles('coverage-merged/coverage-final.json') != ''
+        env:
+          # inputs.target_branch is the controlled PR base name (e.g. main); passed
+          # via env + quoted rather than interpolated into the run script.
+          BASE_REF: ${{ inputs.target_branch }}
+        run: |
+          set -euo pipefail
+          git fetch origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" --quiet
+          node tooling/ci/check-patch-coverage.mjs \
+            --coverage coverage-merged/coverage-final.json \
+            --base "origin/${BASE_REF}" \
+            --threshold 90
+
+      - name: Upload merged coverage artifact
+        if: always() && hashFiles('coverage-merged/**') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: coverage-merged
+          path: coverage-merged/
+          retention-days: ${{ github.event_name == 'pull_request' && 30 || 14 }}
+
+      - name: Emit coverage summary output
+        id: summary
+        if: always()
+        run: echo "coverage_summary=coverage-gate-complete" >> "$GITHUB_OUTPUT"

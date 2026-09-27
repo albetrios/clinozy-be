@@ -1,0 +1,16 @@
+{
+  "name": "production",
+  "protection": {
+    "requiredReviewers": {
+      "users": [
+        "albetrios"
+      ],
+      "teams": [],
+      "preventSelfReview": false
+    },
+    "deploymentBranchPolicy": {
+      "protectedBranches": true,
+      "customBranchPolicies": false
+    }
+  }
+}

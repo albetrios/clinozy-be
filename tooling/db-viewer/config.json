@@ -1,0 +1,6 @@
+{
+  "name": "clinozy-be",
+  "schema": "./src",
+  "migrations": "./migrations",
+  "port": 4984
+}

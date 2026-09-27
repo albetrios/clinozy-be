@@ -1,0 +1,24 @@
+node_modules
+dist
+coverage
+.git
+.github
+.husky
+.cursor
+.vscode
+.env
+.env.*
+!.env.example
+*.md
+docs/
+*.log
+.nvmrc
+.prettierrc
+.prettierignore
+.semgrepignore
+.gitleaks.toml
+vitest.config.ts
+eslint.config.mjs
+drizzle.config.ts
+# Local DB Viewer runtime history (gitignored in-module; keep out of build context)
+tooling/db-viewer/.db-viewer-history/

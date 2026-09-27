@@ -1,0 +1,764 @@
+# Reusable Railway deploy (called from post-merge-ci.yml) or manual workflow_dispatch.
+# Gate sequence: migrate → seed reference data → deploy API → API /readyz → deploy worker.
+# When the worker deploy reaches Railway terminal SUCCESS the environment is
+# fully live for traffic.
+#
+# Worker deploy gating: the worker service is internal-only on Railway (no
+# public domain) and DATABASE_URL / REDIS_URL in the GitHub Environment point
+# at `*.railway.internal`, which is reachable only from other Railway services
+# — not from the GitHub Actions runner. We therefore cannot probe worker
+# `/readyz` over public HTTP, and we cannot dial Postgres/Redis from the
+# runner either. Instead we rely on `pnpm tool:railway-deploy-image` polling
+# Railway until the deployment reaches a terminal status. Railway only
+# reports SUCCESS once the container HEALTHCHECK in `Dockerfile.worker`
+# (127.0.0.1:9090/readyz inside the pod) starts returning 200, which covers
+# process-up + dependency probes + queue heartbeats. DLQ growth on a stalled
+# worker is caught by the `dlq-depth` Sentry alert.
+#
+# API and worker are deployed by `pnpm tool:railway-deploy-image`
+# (tooling/setup/railway/deploy-image.ts), which goes straight to the Railway
+# GraphQL API:
+#   1. serviceInstanceUpdate { source: { image: <ghcr-ref> } }
+#   2. serviceInstanceDeployV2(serviceId, environmentId)
+#   3. poll deployment(id) until terminal status (SUCCESS / FAILED / CRASHED)
+#
+# This is the only reliable way to deploy a freshly built GHCR image. The
+# Railway CLI's deploy paths are unsuitable: the in-place refresh command
+# re-runs the previous deployment object with its existing image tag (so it
+# silently serves the OLD image), and the source-upload command pushes the
+# runner's checked-out source for Railway to build (so it bypasses the
+# scanned GHCR image entirely). The CLI also has no `--image` flag. See
+# tooling/setup/railway/deploy-image.ts for the GraphQL details.
+#
+# The same code path handles both the initial bootstrap (no prior deployment)
+# and steady-state redeploys, so no fallback branch is needed.
+
+name: Reusable — Railway deploy
+
+on:
+  workflow_call:
+    inputs:
+      merge_commit_sha:
+        description: Commit SHA on the target branch after merge (optional when invoked via workflow_dispatch)
+        required: false
+        type: string
+      github_environment:
+        description: >-
+          Explicit GitHub Environment to deploy (development | production). Takes
+          precedence over any branch mapping. Single-trunk: environment is chosen
+          explicitly, never derived from the branch. post-merge-ci passes
+          `development`; release-deploy.yml passes `production`.
+        required: false
+        type: string
+        default: ''
+      image_override:
+        description: Optional GHCR image ref to deploy instead of the commit SHA tag
+        required: false
+        type: string
+        default: ''
+      debug:
+        description: Emit verbose Railway/GitHub Environment diagnostics
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      api_base_url:
+        description: Deployed API base URL
+        value: ${{ jobs.deploy.outputs.api_base_url }}
+      api_image:
+        description: Deployed API image reference
+        value: ${{ jobs.deploy.outputs.api_image }}
+      worker_image:
+        description: Deployed worker image reference
+        value: ${{ jobs.deploy.outputs.worker_image }}
+      deployment_environment:
+        description: GitHub Environment name used for deploy
+        value: ${{ jobs.deploy.outputs.deployment_environment }}
+  workflow_dispatch:
+    inputs:
+      target:
+        description: GitHub Environment to deploy
+        required: true
+        type: choice
+        options:
+          - production
+          - development
+      merge_commit_sha:
+        description: Commit SHA to deploy (defaults to branch tip)
+        required: false
+        type: string
+        default: ''
+      image_override:
+        description: Optional GHCR image ref to deploy instead of the commit SHA tag
+        required: false
+        type: string
+        default: ''
+      debug:
+        description: Emit verbose Railway/GitHub Environment diagnostics
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  # Keyed on the target ENVIRONMENT only (single-trunk: environment ≠ branch) — NOT the sha
+  # Dropping the sha serializes every deploy to a given Railway environment: two
+  # dispatches of different shas to `production` (or `development`) now queue instead of
+  # racing on the same live service. Post-merge runs are already serialized per-ref, so this
+  # closes the manual-dispatch race. cancel-in-progress: false → queue, never cancel a deploy.
+  group: railway-deploy-${{ inputs.github_environment || inputs.target || 'deploy' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 || 'true' }}
+
+jobs:
+  resolve-environment:
+    name: Resolve environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      environment: ${{ steps.map.outputs.environment }}
+    steps:
+      - name: Resolve environment (explicit — never from the branch)
+        # Single-trunk: `main` is the only branch and it deploys to EACH environment —
+        # development on every merge, production on release. The environment is therefore
+        # ALWAYS chosen EXPLICITLY, never derived from the branch (no `github.ref_name ==
+        # 'main'` / `main)` case). Callers pass it directly:
+        #   github_environment input  → post-merge-ci (development), release-deploy (production)
+        #   workflow_dispatch target  → manual deploy / rollback
+        # If neither is supplied the deploy fails fast rather than guessing a branch default.
+        #
+        # `${{ ... }}` are forwarded via env: so they arrive as opaque variables (no
+        # injection via crafted input names). See GitHub security hardening docs:
+        # https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
+        id: map
+        env:
+          GITHUB_ENVIRONMENT_INPUT: ${{ inputs.github_environment }}
+          EVENT_NAME: ${{ github.event_name }}
+          TARGET_INPUT: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          if [ -n "$GITHUB_ENVIRONMENT_INPUT" ]; then
+            environment="$GITHUB_ENVIRONMENT_INPUT"
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$TARGET_INPUT" ]; then
+            # `github.event_name` propagates into reusable workflows, so a dispatched
+            # CALLER reports workflow_dispatch here even without a `target` — hence the
+            # non-empty guard (its absence broke the 4.8.0 release-resume dispatch).
+            environment="$TARGET_INPUT"
+          else
+            echo "::error::No deploy environment specified. Pass the github_environment input (development|production) or the workflow_dispatch target — the environment is never derived from the branch." && exit 1
+          fi
+          case "$environment" in
+            development|production) echo "environment=$environment" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::Invalid environment: $environment (expected development|production)" && exit 1 ;;
+          esac
+
+  deploy:
+    name: Deploy (${{ needs.resolve-environment.outputs.environment }})
+    needs: resolve-environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ needs.resolve-environment.outputs.environment }}
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      api_base_url: ${{ steps.api_health.outputs.api_base_url }}
+      api_image: ${{ steps.ghcr_images.outputs.api_image }}
+      worker_image: ${{ steps.ghcr_images.outputs.worker_image }}
+      deployment_environment: ${{ needs.resolve-environment.outputs.environment }}
+    env:
+      ENVIRONMENT: ${{ needs.resolve-environment.outputs.environment }}
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
+      RAILWAY_WORKER_SERVICE_ID: ${{ secrets.RAILWAY_WORKER_SERVICE_ID }}
+      RAILWAY_GIT_COMMIT_SHA: ${{ inputs.merge_commit_sha || github.sha }}
+      GH_SECRETS_JSON: ${{ toJSON(secrets) }}
+      GH_VARS_JSON: ${{ toJSON(vars) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.merge_commit_sha || github.sha }}
+
+      - name: Setup project identity
+        uses: ./.github/actions/setup-project-identity
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Export GitHub Environment to runner
+        # Persist every GitHub Environment secret + variable into $GITHUB_ENV
+        # so EVERY subsequent step in this job sees them as real process.env
+        # entries. This replaces dozens of per-step `env:` mappings: anything
+        # added/removed in the GitHub Environment flows through automatically
+        # with zero workflow edits.
+        #
+        # Why $GITHUB_ENV (not just `export`): job-level `env:` only takes
+        # static expressions, and per-step `export` does not persist across
+        # steps. $GITHUB_ENV is GitHub's documented mechanism for cross-step
+        # env. GitHub continues to mask each secret value in logs.
+        #
+        # Multi-line values (e.g. JWT_PRIVATE_KEY PEM) MUST use the heredoc
+        # form: `KEY<<DELIM\n...\nDELIM`. We pick a random per-key delimiter
+        # so a value containing the literal "EOF" cannot escape the heredoc.
+        run: |
+          set -euo pipefail
+          jq -nrj \
+            --argjson vars "$GH_VARS_JSON" \
+            --argjson secrets "$GH_SECRETS_JSON" \
+            '($vars + $secrets)
+              | to_entries
+              | map(select(.value != null and .value != ""))
+              | .[]
+              | "\(.key)=\(.value)\u0000"' \
+          | while IFS= read -r -d '' kv; do
+              key="${kv%%=*}"
+              value="${kv#*=}"
+              # Always use heredoc; safe for both single- and multi-line values.
+              delimiter="GHENV_$(openssl rand -hex 8)"
+              {
+                printf '%s<<%s\n' "$key" "$delimiter"
+                printf '%s\n' "$value"
+                printf '%s\n' "$delimiter"
+              } >> "$GITHUB_ENV"
+            done
+          echo "Exported GitHub Environment to \$GITHUB_ENV for downstream steps."
+
+      - name: Warn on placeholder configuration values
+        # Non-blocking sweep for dev placeholders that survived into a deployed
+        # environment (localhost origins, example.com allowlists, test-mode Stripe
+        # keys). The env schema hard-fails the critical subset at boot; this makes
+        # the rest loud on the run page instead of surfacing weeks later. Variable
+        # VALUES are only pattern-tested (never printed for secrets — only the
+        # sk_test_ prefix of STRIPE_SECRET_KEY is checked, value never echoed).
+        if: needs.resolve-environment.outputs.environment == 'production'
+        env:
+          GH_VARS_JSON: ${{ toJSON(vars) }}
+          DEPLOY_ENVIRONMENT: ${{ needs.resolve-environment.outputs.environment }}
+        run: |
+          set -euo pipefail
+          node -e '
+            const vars = JSON.parse(process.env.GH_VARS_JSON || "{}");
+            const placeholder = /(localhost|127\.0\.0\.1|example\.com|yourdomain|changeme|placeholder)/i;
+            const hits = Object.entries(vars)
+              .filter(([, value]) => typeof value === "string" && placeholder.test(value))
+              .map(([key]) => key)
+              .sort();
+            for (const key of hits) {
+              console.log("::warning title=Placeholder value in " + process.env.DEPLOY_ENVIRONMENT + " environment::Variable " + key + " looks like a dev placeholder — set a real value.");
+            }
+            if (hits.length === 0) console.log("No placeholder-looking variable values detected.");
+          '
+          if [ -n "${STRIPE_SECRET_KEY:-}" ] && [ "${STRIPE_SECRET_KEY:0:8}" = "sk_test_" ]; then
+            echo "::warning title=Test Stripe key in ${DEPLOY_ENVIRONMENT}::STRIPE_SECRET_KEY is a test-mode key — the env schema hard-fails production boot on this."
+          fi
+
+      - name: Validate GitHub environment secrets
+        # tooling/setup/github/validate-environment-runtime.ts asserts every
+        # schema-required key (src/shared/config/env-schema.ts) is present and
+        # non-empty in process.env. Everything is already in process.env from
+        # the previous step.
+        env:
+          CONFIG: ${{ needs.resolve-environment.outputs.environment }}
+        run: pnpm validate:github-env-runtime
+
+      - name: Validate Railway deploy secrets
+        if: inputs.debug == true
+        run: |
+          set -euo pipefail
+
+          print_key_diagnostic() {
+            local name="$1"
+            local value="${!name:-}"
+            local source="process.env"
+            local secret_present="false"
+            local variable_present="false"
+
+            secret_present="$(jq -r --arg key "$name" 'has($key)' <<< "$GH_SECRETS_JSON")"
+            variable_present="$(jq -r --arg key "$name" 'has($key)' <<< "$GH_VARS_JSON")"
+
+            if [ "$secret_present" = "true" ]; then
+              source="GitHub Environment secret"
+            elif [ "$variable_present" = "true" ]; then
+              source="GitHub Environment variable"
+            fi
+
+            if [ -z "$value" ]; then
+              echo "${name}: missing (source=${source}, secrets_json=${secret_present}, vars_json=${variable_present})"
+              return
+            fi
+
+            local length
+            local fingerprint
+            length="${#value}"
+            fingerprint="$(printf '%s' "$value" | sha256sum | cut -c1-12)"
+            echo "${name}: present (source=${source}, length=${length}, sha256_12=${fingerprint}, secrets_json=${secret_present}, vars_json=${variable_present})"
+          }
+
+          echo "::group::Railway CLI diagnostics"
+          echo "railway binary: $(command -v railway || true)"
+          echo "railway version: $(railway --version 2>&1 || true)"
+          echo "github event: ${GITHUB_EVENT_NAME:-unknown}"
+          echo "github ref: ${GITHUB_REF:-unknown}"
+          echo "github sha: ${GITHUB_SHA:-unknown}"
+          echo "resolved environment: ${ENVIRONMENT}"
+          echo "deploy commit sha: ${RAILWAY_GIT_COMMIT_SHA}"
+          echo "::endgroup::"
+
+          echo "::group::GitHub Environment payload diagnostics"
+          echo "GH_SECRETS_JSON keys:"
+          jq -r 'keys | sort | join(", ")' <<< "$GH_SECRETS_JSON"
+          echo "GH_VARS_JSON keys:"
+          jq -r 'keys | sort | join(", ")' <<< "$GH_VARS_JSON"
+          echo "::endgroup::"
+
+          echo "::group::Required Railway env diagnostics"
+          print_key_diagnostic "RAILWAY_TOKEN"
+          print_key_diagnostic "RAILWAY_SERVICE_ID"
+          print_key_diagnostic "RAILWAY_WORKER_SERVICE_ID"
+          echo "::endgroup::"
+
+          missing=()
+          if [ -z "${RAILWAY_TOKEN:-}" ]; then
+            missing+=("RAILWAY_TOKEN")
+          fi
+          if [ -z "${RAILWAY_SERVICE_ID:-}" ]; then
+            missing+=("RAILWAY_SERVICE_ID")
+          fi
+          if [ -z "${RAILWAY_WORKER_SERVICE_ID:-}" ]; then
+            missing+=("RAILWAY_WORKER_SERVICE_ID")
+          fi
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing required Railway deploy secrets in GitHub Environment '${ENVIRONMENT}': ${missing[*]}"
+            echo "::error::Set these in GitHub → Settings → Environments → ${ENVIRONMENT}. See docs/deployment/runbooks/production-go-live.md and docs/deployment/setup/railway-github-cli-setup.md."
+            exit 1
+          fi
+          railway_token_length="${#RAILWAY_TOKEN}"
+          if [ "${railway_token_length}" -lt 16 ]; then
+            echo "::error::RAILWAY_TOKEN in GitHub Environment '${ENVIRONMENT}' is suspiciously short (${railway_token_length} chars). Rotate the Railway project token and update the GitHub Environment secret."
+            exit 1
+          fi
+
+          echo "::group::Railway authentication probe"
+          for service_name in api worker; do
+            if [ "$service_name" = "api" ]; then
+              service_id="$RAILWAY_SERVICE_ID"
+            else
+              service_id="$RAILWAY_WORKER_SERVICE_ID"
+            fi
+
+            echo "Validation command (${service_name}): railway variables --service <${service_name}-service-id> --json"
+            if ! railway_variables_output="$(railway variables --service "$service_id" --json 2>&1)"; then
+              echo "::error::Railway rejected RAILWAY_TOKEN or service id for ${service_name} service in GitHub Environment '${ENVIRONMENT}'."
+              echo "::error::Command used: railway variables --service <${service_name}-service-id> --json"
+              echo "::error::Output: ${railway_variables_output}"
+              echo "::error::Check that RAILWAY_TOKEN belongs to the same Railway project as ${service_name} service id and that the service id is current."
+              exit 1
+            fi
+            variable_count="$(jq 'length' <<< "$railway_variables_output" 2>/dev/null || echo "unknown")"
+            echo "Railway ${service_name} service authenticated; variables visible: ${variable_count}."
+          done
+          echo "::endgroup::"
+
+          echo "Railway deploy secrets present and service-scoped authentication succeeded for environment '${ENVIRONMENT}'."
+
+      - name: Validate Railway deploy secrets (minimal)
+        if: inputs.debug != true
+        run: |
+          set -euo pipefail
+          missing=()
+          if [ -z "${RAILWAY_TOKEN:-}" ]; then missing+=("RAILWAY_TOKEN"); fi
+          if [ -z "${RAILWAY_SERVICE_ID:-}" ]; then missing+=("RAILWAY_SERVICE_ID"); fi
+          if [ -z "${RAILWAY_WORKER_SERVICE_ID:-}" ]; then missing+=("RAILWAY_WORKER_SERVICE_ID"); fi
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing required Railway deploy secrets in GitHub Environment '${ENVIRONMENT}': ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Log expected scanned CI image refs from GHCR
+        id: ghcr_images
+        env:
+          GHCR_API_IMAGE: ${{ secrets.GHCR_API_IMAGE }}
+          GHCR_WORKER_IMAGE: ${{ secrets.GHCR_WORKER_IMAGE }}
+          IMAGE_OVERRIDE: ${{ inputs.image_override }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          API_BASE="ghcr.io/${REPOSITORY}/${{ env.API_IMAGE }}"
+          WORKER_BASE="ghcr.io/${REPOSITORY}/${{ env.WORKER_IMAGE }}"
+          if [ -n "${IMAGE_OVERRIDE:-}" ]; then
+            api_image="${IMAGE_OVERRIDE}"
+            worker_image="${IMAGE_OVERRIDE/${{ env.API_IMAGE }}/${{ env.WORKER_IMAGE }}}"
+          elif [ -n "${GHCR_API_IMAGE:-}" ]; then
+            api_image="${GHCR_API_IMAGE}"
+          else
+            api_image="${API_BASE}:${RAILWAY_GIT_COMMIT_SHA}"
+          fi
+          if [ -n "${IMAGE_OVERRIDE:-}" ]; then
+            :
+          elif [ -n "${GHCR_WORKER_IMAGE:-}" ]; then
+            worker_image="${GHCR_WORKER_IMAGE}"
+          else
+            worker_image="${WORKER_BASE}:${RAILWAY_GIT_COMMIT_SHA}"
+          fi
+          echo "api_image=${api_image}" >> "$GITHUB_OUTPUT"
+          echo "worker_image=${worker_image}" >> "$GITHUB_OUTPUT"
+          echo "API image: ${api_image}"
+          echo "Worker image: ${worker_image}"
+
+      - name: Wait for GHCR images to be pullable
+        # A manually-dispatched deploy (workflow_dispatch) can start before the
+        # Post-merge CI Docker build has pushed the commit-SHA image to GHCR.
+        # Railway then accepts the deploy but the deployment fails within seconds
+        # with an opaque "image could not be found" pull error (INITIALIZING →
+        # FAILED). In the normal merge-triggered path the deploy job
+        # `needs: docker-build-push`, so the image already exists and this probe
+        # passes on the first attempt (no added latency). On a premature dispatch
+        # we poll until the manifest appears (bounded) — converting a confusing
+        # hard failure into a short wait, and a clear, actionable error if the
+        # image never shows up within the timeout.
+        env:
+          API_IMAGE_REF: ${{ steps.ghcr_images.outputs.api_image }}
+          WORKER_IMAGE_REF: ${{ steps.ghcr_images.outputs.worker_image }}
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          timeout_seconds=900
+          interval_seconds=15
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_ACTOR}" --password-stdin >/dev/null 2>&1
+
+          wait_for_image() {
+            local ref="$1" label="$2" waited=0
+            while ! docker buildx imagetools inspect "$ref" >/dev/null 2>&1; do
+              if [ "$waited" -ge "$timeout_seconds" ]; then
+                echo "::error title=GHCR image not found::${label} image ${ref} was not pullable after ${timeout_seconds}s. This image is built and pushed by Post-merge CI's Docker build job; a deploy dispatched before that job completes cannot find it. Re-run this deploy once the Docker build for this commit has finished."
+                return 1
+              fi
+              echo "  ${label} image not present yet (${ref}); waited ${waited}s, retrying in ${interval_seconds}s…"
+              sleep "$interval_seconds"
+              waited=$((waited + interval_seconds))
+            done
+            echo "  ✓ ${label} image present: ${ref}"
+          }
+
+          wait_for_image "${API_IMAGE_REF}" "api"
+          wait_for_image "${WORKER_IMAGE_REF}" "worker"
+
+      - name: Run database migrations
+        # `pnpm db:migrate` only needs DATABASE_URL/DATABASE_MIGRATION_URL,
+        # but the migrate script transitively imports `env.config.ts` which
+        # boot-validates the entire Zod env schema — so every required key
+        # must be present in `process.env`. The "Export GitHub Environment
+        # to runner" step has already populated all of them; we only force
+        # METRICS_ENABLED=false here so the migration runner does not start
+        # the metrics endpoint (step env: overrides $GITHUB_ENV).
+        env:
+          METRICS_ENABLED: 'false'
+        run: pnpm db:migrate
+
+      - name: Seed reference data
+        # `pnpm db:seed` (minimal) inserts the idempotent reference/bootstrap rows the app
+        # HARD-depends on — chiefly the `tenancy.permissions` codes that owner-role
+        # provisioning FK-references (plus billing `plans`). Migrations create the schema but
+        # never seed these, so without this step a fresh environment provisions NO
+        # personal/team organization: every provision rolls back on the missing permission
+        # FK and the read-path self-heal swallows it to `personal_organization_id: null`.
+        # Idempotent (onConflictDoNothing), so it is safe to run on every deploy. Same env
+        # requirements as the migrate step above (env.config boot-validates the schema).
+        env:
+          METRICS_ENABLED: 'false'
+        run: pnpm db:seed
+
+      - name: Set Railway service variables
+        # Mirror the entire GitHub Environment (secrets + variables) into each
+        # Railway service. The GitHub Environment is the source of truth (kept
+        # in sync from .env.<environment> via `pnpm github:sync`), so any new
+        # runtime key flows through automatically — no workflow edit needed.
+        #
+        # Implementation: read `GH_SECRETS_JSON` / `GH_VARS_JSON` (job-level),
+        # merge in jq, drop infra-only / CI-only keys, and emit NUL-delimited
+        # KEY=VALUE pairs so multi-line values (PEM keys) survive intact.
+        # Empty/null values are skipped so Railway is never blanked out by an
+        # unset optional key. GitHub still masks each secret value in logs.
+        #
+        # NUL bytes survive only when streamed directly to the consumer — bash
+        # command substitution `$(...)` silently strips NULs (you'll see
+        # "warning: command substitution: ignored null byte in input"), so the
+        # jq pipeline is materialised to a temp file and replayed per service.
+        #
+        # All KEY=VALUE pairs are bundled into a single `railway variables
+        # --set ... --set ...` call per service. Batching collapses ~50 GraphQL
+        # mutations into one (so transient `backboard.railway.com` timeouts
+        # don't fail mid-stream) and any genuine flake is absorbed by an
+        # exponential-backoff retry loop. We pass `--skip-deploys` so this
+        # mutation only updates config — the single deploy per service is
+        # triggered later by `pnpm tool:railway-deploy-image`
+        # (serviceInstanceUpdate + serviceInstanceDeployV2 are issued back-to-
+        # back in the same process and reliably coalesced by Railway into one
+        # deployment whose id we poll for terminal status). Without
+        # `--skip-deploys`, every `railway variables`/`railway variable set`
+        # call would also queue its own redeploy, and Railway's best-effort
+        # coalescing window is shorter than the gap between these CLI calls,
+        # so we saw 2–3 extra deployments per service per CD run.
+        run: |
+          set -euo pipefail
+
+          # Keys that must NOT be pushed to Railway:
+          #   - RAILWAY_*       Railway already injects its own platform vars
+          #                     (RAILWAY_TOKEN, RAILWAY_SERVICE_ID,
+          #                      RAILWAY_GIT_COMMIT_SHA, RAILWAY_PRIVATE_DOMAIN,
+          #                      RAILWAY_PROJECT_ID, …). Mirroring any of them
+          #                     from the GitHub Environment would shadow
+          #                     Railway's runtime injection, so the entire
+          #                     prefix is excluded.
+          #   - GHCR_*          Image overrides consumed only by this workflow.
+          #   - SMOKE_*         Post-deploy smoke-test credentials, runner-only.
+          #   - GITHUB_TOKEN /
+          #     ACTIONS_* / CI  GitHub Actions internals.
+          # Anything else flows through to Railway as runtime config.
+          exclude_regex='^(RAILWAY_.*|GHCR_API_IMAGE|GHCR_WORKER_IMAGE|SMOKE_DEMO_EMAIL|SMOKE_DEMO_PASSWORD|GITHUB_TOKEN|ACTIONS_.*|CI)$'
+
+          services="$RAILWAY_SERVICE_ID"
+          if [ -n "${RAILWAY_WORKER_SERVICE_ID:-}" ]; then
+            services="$services $RAILWAY_WORKER_SERVICE_ID"
+          fi
+
+          # Merge vars + secrets (secrets win on the rare key-name collision)
+          # and emit "KEY=VALUE\0" pairs into a temp file. Writing to a file
+          # preserves NUL separators (a bash variable would not).
+          payload_file="$(mktemp)"
+          trap 'rm -f "$payload_file"' EXIT
+          jq -nrj \
+            --argjson vars "$GH_VARS_JSON" \
+            --argjson secrets "$GH_SECRETS_JSON" \
+            '($vars + $secrets)
+              | to_entries
+              | map(select(.value != null and .value != ""))
+              | .[]
+              | "\(.key)=\(.value)\u0000"' \
+            > "$payload_file"
+
+          payload_byte_count="$(wc -c < "$payload_file")"
+          echo "Prepared $payload_byte_count bytes of NUL-delimited KEY=VALUE pairs."
+
+          # Build a single argv batch (one --set per runtime KEY=VALUE) so we
+          # can ship every variable in a single GraphQL mutation per service.
+          # Track skipped key names so the operator can verify nothing was
+          # excluded by accident — values are never logged, only names.
+          set_args=()
+          pushed_keys=()
+          skipped_keys=()
+          while IFS= read -r -d '' kv; do
+            [ -z "$kv" ] && continue
+            key="${kv%%=*}"
+            if [[ "$key" =~ $exclude_regex ]]; then
+              skipped_keys+=("$key")
+              continue
+            fi
+            set_args+=(--set "$kv")
+            pushed_keys+=("$key")
+          done < "$payload_file"
+
+          if [ "${#skipped_keys[@]}" -gt 0 ]; then
+            echo "Skipped ${#skipped_keys[@]} keys (Railway-managed / GHCR / smoke / GitHub Actions internals — not sent to Railway service variables):"
+            printf '  - %s\n' "${skipped_keys[@]}" | LC_ALL=C sort
+          else
+            echo "No keys matched the exclude regex; pushing all runtime variables."
+          fi
+
+          push_count=${#pushed_keys[@]}
+          if [ "$push_count" -eq 0 ]; then
+            echo "::warning::No runtime variables to push to Railway (every key matched the exclude regex)."
+            exit 0
+          fi
+          echo "Pushing ${push_count} runtime variables per service:"
+          printf '  + %s\n' "${pushed_keys[@]}" | LC_ALL=C sort
+
+          # Retry the batched call to ride out transient backboard timeouts.
+          # Railway accepts the same payload idempotently (set is upsert), so
+          # retries are safe.
+          max_attempts=5
+          for service in $services; do
+            attempt=1
+            while true; do
+              if railway variables --service "$service" --skip-deploys "${set_args[@]}"; then
+                echo "Pushed ${push_count} variables to Railway service ${service} on attempt ${attempt} (skipped ${#skipped_keys[@]} excluded keys)."
+                break
+              fi
+              if [ "$attempt" -ge "$max_attempts" ]; then
+                echo "::error::Railway variables push failed for service ${service} after ${max_attempts} attempts."
+                exit 1
+              fi
+              sleep_seconds=$(( 2 ** attempt ))
+              echo "Railway variables push for ${service} failed (attempt ${attempt}/${max_attempts}); retrying in ${sleep_seconds}s..."
+              sleep "$sleep_seconds"
+              attempt=$((attempt + 1))
+            done
+          done
+
+      - name: Deploy API and worker to Railway
+        id: api_health
+        # API and worker share `deploy_service_from_image` so retries and
+        # deployment behaviour stay identical. Health gating differs:
+        #   - API: public Railway domain, so we curl `/readyz` from the runner.
+        #   - Worker: no public domain, and Postgres/Redis sit on the Railway
+        #     private network (`*.railway.internal`) which is unreachable from
+        #     the GitHub runner. Worker readiness is therefore gated only by
+        #     the Railway deployment terminal status — Railway flips a
+        #     deployment to SUCCESS once the in-pod container HEALTHCHECK in
+        #     `Dockerfile.worker` (127.0.0.1:9090/readyz) starts returning 200,
+        #     which already covers process up + dependency probes + queue
+        #     heartbeats.
+        env:
+          API_IMAGE: ${{ steps.ghcr_images.outputs.api_image }}
+          WORKER_IMAGE: ${{ steps.ghcr_images.outputs.worker_image }}
+        run: |
+          set -euo pipefail
+          resolve_service_base_url() {
+            local service="$1"
+            local domain_json
+            domain_json="$(railway domain --service "$service" --json)"
+            printf '%s' "$domain_json" | node -e "
+              const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+              const url = input.domain ?? input.domains?.[0];
+              if (!url) process.exit(1);
+              const host = String(url).replace(/\\/$/, '');
+              process.stdout.write(host.includes('://') ? host : 'https://' + host);
+            "
+          }
+
+          deploy_service_from_image() {
+            local service="$1"
+            local image="$2"
+            local label="$3"
+            railway variable set --service "$service" --skip-deploys "RAILWAY_GIT_COMMIT_SHA=${RAILWAY_GIT_COMMIT_SHA}"
+            echo "Deploying ${label} service from GHCR image: ${image}"
+            pnpm tool:railway-deploy-image \
+              --service "$service" \
+              --image "$image" \
+              --label "$label"
+          }
+
+          # On a readyz timeout the runner only ever sees the Railway edge (a 502
+          # when the container never bound its port, a 503 when it booted but a
+          # dependency probe fails). The actual boot stack trace lives in the pod's
+          # deploy logs, so surface the last lines directly in Actions instead of
+          # leaving an opaque timeout. `--lines` switches the CLI to fetch mode
+          # (no streaming), and `timeout` guards against an unexpected hang.
+          dump_service_deploy_logs() {
+            local service="$1"
+            local label="$2"
+            [ -n "$service" ] || return 0
+            echo "::group::Railway deploy logs — ${label} service (last 200 lines)"
+            timeout 60 railway logs --service "$service" --lines 200 2>&1 \
+              || echo "Could not fetch Railway deploy logs for ${label} service '${service}'."
+            echo "::endgroup::"
+          }
+
+          wait_for_service_health() {
+            local base_url="$1"
+            local label="$2"
+            local output_file="$3"
+            local service="${4:-}"
+            local health_url="${base_url}/readyz"
+            local deadline=$(( $(date +%s) + 300 ))
+            until curl -sfS "$health_url" -o "$output_file"; do
+              if [ "$(date +%s)" -ge "$deadline" ]; then
+                echo "::error::${label} /readyz timeout"
+                dump_service_deploy_logs "$service" "$label"
+                exit 1
+              fi
+              sleep 5
+            done
+            node -e "const health = require(process.argv[1]); if (health.status !== 'ok') { console.error('${label} health status is not ok:', health.status ?? 'unknown'); process.exit(1); }" "$output_file"
+          }
+
+          # /readyz proves the process boots and reaches Postgres/Redis; it does NOT
+          # prove the HTTP stack works. Exercise routing + middleware + the error
+          # handler end to end: an unknown API route must come back as a JSON 404
+          # through the full plugin chain (helmet, error envelope, serialization).
+          verify_api_surface() {
+            local base_url="$1"
+            curl -sfS "${base_url}/livez" -o /dev/null \
+              || { echo "::error::API /livez failed after deploy"; exit 1; }
+            local status_code
+            status_code="$(curl -s -D /tmp/api-probe-headers.txt -o /tmp/api-probe-body.json \
+              -w '%{http_code}' "${base_url}/api/v1/__post_deploy_probe__")"
+            [ "$status_code" = "404" ] \
+              || { echo "::error::expected JSON 404 from unknown API route, got HTTP ${status_code}"; exit 1; }
+            grep -qi '^content-type: application/json' /tmp/api-probe-headers.txt \
+              || { echo "::error::unknown-route 404 is not JSON — error handler not active"; exit 1; }
+            grep -qi '^x-content-type-options: nosniff' /tmp/api-probe-headers.txt \
+              || { echo "::error::security headers missing on API responses — helmet not active"; exit 1; }
+            node -e "JSON.parse(require('fs').readFileSync('/tmp/api-probe-body.json', 'utf8'))" \
+              || { echo "::error::404 body is not valid JSON — error envelope broken"; exit 1; }
+            echo "API surface verified: /livez OK, JSON 404 envelope + security headers present."
+          }
+
+          if [ -z "$RAILWAY_WORKER_SERVICE_ID" ]; then
+            echo "::error::RAILWAY_WORKER_SERVICE_ID must be set in this GitHub environment."
+            exit 1
+          fi
+
+          deploy_service_from_image "$RAILWAY_SERVICE_ID" "$API_IMAGE" "api"
+          api_base_url="$(resolve_service_base_url "$RAILWAY_SERVICE_ID")"
+          echo "api_base_url=${api_base_url}" >> "$GITHUB_OUTPUT"
+          wait_for_service_health "$api_base_url" "API" "/tmp/api-health.json" "$RAILWAY_SERVICE_ID"
+          verify_api_surface "$api_base_url"
+
+          deploy_service_from_image "$RAILWAY_WORKER_SERVICE_ID" "$WORKER_IMAGE" "worker"
+          echo "Worker deployment reached terminal SUCCESS (Railway only flips to SUCCESS once the in-pod HEALTHCHECK passes)."
+
+      - name: Retag production images as previous
+        if: success() && needs.resolve-environment.outputs.environment == 'production'
+        env:
+          API_IMAGE: ${{ steps.ghcr_images.outputs.api_image }}
+          WORKER_IMAGE: ${{ steps.ghcr_images.outputs.worker_image }}
+        run: |
+          set -euo pipefail
+          npm install -g @railway/cli >/dev/null 2>&1 || true
+          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          API_BASE="${API_IMAGE%:*}"
+          WORKER_BASE="${WORKER_IMAGE%:*}"
+          docker pull "${API_IMAGE}"
+          docker pull "${WORKER_IMAGE}"
+          docker tag "${API_IMAGE}" "${API_BASE}:previous"
+          docker tag "${WORKER_IMAGE}" "${WORKER_BASE}:previous"
+          docker push "${API_BASE}:previous"
+          docker push "${WORKER_BASE}:previous"
+          echo "Retagged ${API_BASE}:previous and ${WORKER_BASE}:previous"
+
+      - name: Retag failed deploy images for triage
+        if: failure()
+        env:
+          API_IMAGE: ${{ steps.ghcr_images.outputs.api_image }}
+          WORKER_IMAGE: ${{ steps.ghcr_images.outputs.worker_image }}
+        run: |
+          set -euo pipefail
+          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin || exit 0
+          API_BASE="${API_IMAGE%:*}"
+          WORKER_BASE="${WORKER_IMAGE%:*}"
+          SHA_TAG="${API_IMAGE##*:}"
+          docker pull "${API_IMAGE}" || exit 0
+          docker pull "${WORKER_IMAGE}" || exit 0
+          docker tag "${API_IMAGE}" "${API_BASE}:deploy-failed-${SHA_TAG}"
+          docker tag "${WORKER_IMAGE}" "${WORKER_BASE}:deploy-failed-${SHA_TAG}"
+          docker push "${API_BASE}:deploy-failed-${SHA_TAG}" || true
+          docker push "${WORKER_BASE}:deploy-failed-${SHA_TAG}" || true
+
+      - name: Environment fully live
+        if: success()
+        env:
+          API_BASE_URL: ${{ steps.api_health.outputs.api_base_url }}
+        run: |
+          set -euo pipefail
+          echo "::notice title=Fully live::${ENVIRONMENT} is fully live at ${API_BASE_URL} (migrate, API /health, and worker terminal SUCCESS passed)."

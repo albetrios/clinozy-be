@@ -1,0 +1,49 @@
+/** Request, export, and worker batch size limits shared across domains. */
+
+/** Maximum idempotent HTTP response body size cached in Redis (bytes). */
+export const IDEMPOTENCY_CACHED_BODY_BYTES = 100 * 1024;
+
+/** Default row batch size for bulk delete helpers (not a duration). */
+export const DEFAULT_BATCH_DELETE_ROW_COUNT = 5_000;
+
+/** Default cap for unscoped repository list methods (prevents OOM on hot paths). */
+export const DEFAULT_REPOSITORY_LIST_LIMIT = 500;
+
+/** Bounded stale-request scan size for each commit-dispatch recovery pass. */
+export const DEFAULT_COMMIT_DISPATCH_RECOVERY_BATCH_SIZE = 50;
+
+/**
+ * Maximum post-commit `onCommit` tasks executed concurrently by `eventBus.flushOnCommit`.
+ *
+ * @remarks
+ * The queue length is not structurally bounded, and a task that touches the database opens its
+ * own scoped context — hence its own pooled connection. Dispatching the whole queue at once made
+ * a single request's connection demand equal its task count, multiplying under load to
+ * `requests x tasks-per-request`. Capping keeps that demand predictable while retaining nearly
+ * all of the parallelism, since these tasks are short enqueue calls.
+ */
+export const MAX_CONCURRENT_ON_COMMIT_TASKS = 8;
+
+/** Poll interval (milliseconds) for permission-cache lock waiters during stampede control. */
+export const PERMISSION_CACHE_STAMPEDE_POLL_MS = 50;
+
+/** Maximum rows per table included in GDPR user data export. */
+export const GDPR_EXPORT_MAX_ROWS_PER_TABLE = 1_000;
+
+/** Visible prefix length when storing organization API key fingerprints. */
+export const ORGANIZATION_API_KEY_PREFIX_DISPLAY_LENGTH = 8;
+
+/** Raw secret byte length for generated organization API keys. */
+export const ORGANIZATION_API_KEY_RAW_SECRET_BYTE_LENGTH = 32;
+
+/** Resend send retry attempts for transient network failures. */
+export const MAIL_SEND_RETRY_MAX_ATTEMPTS = 3;
+
+/** Default max attempts when retrying a transient Postgres/connection error. */
+export const DEFAULT_TRANSIENT_RETRY_ATTEMPTS = 3;
+
+/** Maximum inbound request body size (bytes) accepted by Fastify (1 MiB). */
+export const DEFAULT_BODY_LIMIT_BYTES = 1_048_576;
+
+/** Bytes per mebibyte (1024 * 1024) — RSS / threshold byte math. */
+export const BYTES_PER_MEGABYTE = 1024 * 1024;

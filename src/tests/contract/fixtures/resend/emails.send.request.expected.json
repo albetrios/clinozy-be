@@ -1,0 +1,6 @@
+{
+  "from": "Contract Fixture Sender <noreply@contract.test>",
+  "to": ["subscriber@contract.test"],
+  "subject": "Contract fixture outbound subject line",
+  "html": "<p>Outbound contract fixture markup</p>"
+}

@@ -1,0 +1,74 @@
+name: Reusable — Vitest unit (no DB)
+
+# PR gate: runs the COMPLETE unit + global Vitest projects (no Postgres/Redis, no
+# migrations). Intentionally NOT `vitest --changed`: import-graph selection under-selects
+# when a source change breaks an EXISTING test whose linkage isn't detected (e.g. `.js`
+# path-alias imports resolving to the changed `.ts`), letting the break pass the PR gate and
+# only fail post-merge (this bit #327 and #311). Running the full suite makes the gate
+# authoritative — a regression to any existing unit/global test fails the PR, not post-merge.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 || 'true' }}
+
+jobs:
+  run:
+    name: Unit + global
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      redis:
+        image: redis:8.6.3-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      VITEST_SKIP_DATABASE: 'true'
+      NODE_ENV: development
+      LOG_LEVEL: warn
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
+      REDIS_URL: redis://localhost:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full suite runs all unit+global files (no `vitest --changed`), so no base-ref
+          # history is needed — a shallow checkout is enough.
+          fetch-depth: 1
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Export shared CI test env
+        uses: ./.github/actions/test-env
+
+      - name: Cache Vitest
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: node_modules/.vitest
+          key: vitest-unit-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'tooling/vitest/**') }}
+          restore-keys: |
+            vitest-unit-${{ runner.os }}-
+
+      - name: Generate OpenAPI artifact for global tests
+        run: pnpm docs:generate
+
+      - name: Run unit + global tests (full suite — NOT --changed; see header)
+        run: |
+          set -euo pipefail
+          pnpm exec vitest run \
+            --project unit \
+            --project global

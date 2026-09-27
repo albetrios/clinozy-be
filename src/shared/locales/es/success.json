@@ -1,0 +1,5 @@
+{
+  "passwordResetEmailSent": "Si existe una cuenta con este correo, recibirás un enlace para restablecer la contraseña en breve.",
+  "verificationCodeSent": "Si existe una cuenta con este correo, recibirás un código de inicio de sesión en breve.",
+  "webhookTestDelivery": "Este es un envío de prueba de la configuración de tu webhook."
+}

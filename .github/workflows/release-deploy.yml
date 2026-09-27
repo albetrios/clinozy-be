@@ -1,0 +1,217 @@
+name: Release deploy (production)
+
+# Production deploy, triggered on release publication (D7 — migration item 1.12).
+#
+# Why a release-event workflow instead of the post-merge deploy: the post-merge
+# concurrency group keeps only the newest pending run and cancels intermediates,
+# so `releases_created` can fire on a LATER run whose github.sha already contains
+# post-release commits (and the tag sha's image may never have been built by that
+# run). This workflow pins EVERYTHING to the release TAG SHA — never github.sha —
+# so it is immune to that race and is independently re-runnable (re-run the
+# workflow for the same tag any time).
+#
+# It fires only because releases are created with RELEASE_PLEASE_TOKEN (a PAT);
+# a github.token-created release would not trigger any workflow. The PAT tripwire
+# in post-merge-ci's release-please job therefore also guards production deploys.
+#
+# Flow: resolve tag sha + image → build only if the image is missing (the
+# queue-cancelled-run case; otherwise D3 build-once, no rebuild) → publish
+# production docs → deploy production (environment reviewer approval, D4).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to (re)deploy to production (e.g. v4.10.0)
+        required: true
+        type: string
+
+concurrency:
+  group: release-deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 || 'true' }}
+
+jobs:
+  resolve:
+    name: Resolve release tag + image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+      tag: ${{ steps.sha.outputs.tag }}
+      api_image: ${{ steps.image.outputs.api_image }}
+      image_present: ${{ steps.image.outputs.present }}
+    steps:
+      - name: Resolve tag name
+        id: tagname
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="$DISPATCH_TAG"
+          else
+            tag="$RELEASE_TAG"
+          fi
+          # Validate the tag shape before it reaches checkout ref (injection-safe).
+          case "$tag" in
+            v[0-9]*) echo "tag=${tag}" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::Refusing to deploy an unexpected tag: '${tag}' (expected v<semver>)" && exit 1 ;;
+          esac
+
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.tagname.outputs.tag }}
+          fetch-depth: 1
+
+      - name: Resolve tag SHA
+        id: sha
+        env:
+          TAG_NAME: ${{ steps.tagname.outputs.tag }}
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Release ${TAG_NAME} → ${sha}"
+
+      - name: Project identity
+        uses: ./.github/actions/setup-project-identity
+
+      - name: Login to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve + probe the tag-sha image
+        id: image
+        env:
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          set -euo pipefail
+          ref="ghcr.io/${REPO}/${API_IMAGE}:${SHA}"
+          echo "api_image=${ref}" >> "$GITHUB_OUTPUT"
+          if docker buildx imagetools inspect "${ref}" >/dev/null 2>&1; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "Image present (build-once): ${ref}"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "Image missing for the tag sha (queue-cancelled build?) — will rebuild."
+          fi
+
+  build-if-missing:
+    name: Build tag image (only if missing)
+    needs: [resolve]
+    # Must match what reusable-docker-build-trivy's `run` job requests. A called workflow
+    # cannot elevate beyond the CALLING JOB's grant, and the workflow-level default here is
+    # `contents: read` (everything else `none`) — so omitting this block fails the whole run
+    # at startup, before any job exists. Mirrors post-merge-ci.yml's docker-build-push job.
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      security-events: write
+    if: needs.resolve.outputs.image_present != 'true'
+    uses: ./.github/workflows/reusable-docker-build-trivy.yml
+    secrets: inherit
+    with:
+      merge_commit_sha: ${{ needs.resolve.outputs.sha }}
+      target_branch: main
+
+  docs:
+    name: Publish production docs
+    needs: [resolve, build-if-missing]
+    if: |
+      always() &&
+      (needs.build-if-missing.result == 'success' || needs.build-if-missing.result == 'skipped')
+    uses: ./.github/workflows/reusable-openapi-postman-publish.yml
+    secrets: inherit
+    with:
+      merge_commit_sha: ${{ needs.resolve.outputs.sha }}
+      target_branch: main
+      github_environment: production
+      publish_hosted_docs: true
+
+  deploy:
+    name: Deploy production
+    needs: [resolve, build-if-missing, docs]
+    # Matches reusable-railway-deploy's `deploy` job (it pulls the GHCR image).
+    # Same startup-failure rule as build-if-missing above.
+    permissions:
+      contents: read
+      packages: write
+    if: |
+      always() &&
+      (needs.build-if-missing.result == 'success' || needs.build-if-missing.result == 'skipped') &&
+      (needs.docs.result == 'success' || needs.docs.result == 'skipped')
+    uses: ./.github/workflows/reusable-railway-deploy.yml
+    secrets: inherit
+    with:
+      merge_commit_sha: ${{ needs.resolve.outputs.sha }}
+      github_environment: production
+      # Deploy the exact scanned tag-sha image (D3 build-once, promote).
+      image_override: ${{ needs.resolve.outputs.api_image }}
+
+  retag:
+    name: Retag release image (:vX.Y.Z)
+    # Release traceability alias. After a SUCCESSFUL production deploy, retag the exact
+    # scanned+deployed sha image as `:vX.Y.Z` (api + worker). Runs ONLY here (the production
+    # release flow), gated on deploy success, so the version tag always points at the image
+    # that is live in production — never a build that failed to deploy. Development /
+    # post-merge deploys are untouched (they keep `:sha` + `:latest`). `imagetools create`
+    # adds a tag pointing at the SAME manifest (no pull, multi-arch safe).
+    needs: [resolve, deploy]
+    if: success()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+          fetch-depth: 1
+
+      - name: Project identity
+        uses: ./.github/actions/setup-project-identity
+
+      - name: Login to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag api + worker images as the release tag
+        env:
+          API_IMAGE_REF: ${{ needs.resolve.outputs.api_image }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ needs.resolve.outputs.sha }}
+        run: |
+          set -euo pipefail
+          api_base="${API_IMAGE_REF%:*}"
+          worker_ref="ghcr.io/${REPO}/${WORKER_IMAGE}:${SHA}"
+          worker_base="ghcr.io/${REPO}/${WORKER_IMAGE}"
+          docker buildx imagetools create --tag "${api_base}:${TAG}" "${API_IMAGE_REF}"
+          docker buildx imagetools create --tag "${worker_base}:${TAG}" "${worker_ref}"
+          echo "::notice title=Release image retagged::${api_base}:${TAG} and ${worker_base}:${TAG}"

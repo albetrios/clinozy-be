@@ -1,0 +1,32 @@
+// markdownlint-cli2 configuration.
+//
+// `config` references the rule set in `.markdownlint.json` (kept separate so
+// editors / DavidAnson.vscode-markdownlint pick it up automatically).
+//
+// `globs` and `ignores` are the canonical place to control which files are
+// linted. We do not use a separate `.markdownlintignore` file — this is the
+// SINGLE source of truth.
+{
+  "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint-cli2/main/schema/markdownlint-cli2-config-schema.json",
+  "config": ".markdownlint.json",
+  "globs": ["**/*.md"],
+  "ignores": [
+    "node_modules/**",
+    // Stryker's sandbox copies the whole tree, node_modules included, and a crashed or
+    // cancelled mutation run leaves it behind. Its nested node_modules escape the
+    // `node_modules/**` glob above (they sit under `.stryker-tmp/sandbox-*/`), so a stale
+    // sandbox makes `pnpm docs:lint` fail on third-party markdown the repo does not own.
+    ".stryker-tmp/**",
+    "dist/**",
+    "coverage/**",
+    "coverage-*/**",
+    "CHANGELOG.md",
+    "docs/openapi/**",
+    "docs/postman-collection.json",
+    "docs/routes.txt",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    "reports/**",
+    ".claude/**",
+    "SESSION.md"
+  ]
+}

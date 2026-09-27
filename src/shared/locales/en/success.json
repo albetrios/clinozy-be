@@ -1,0 +1,5 @@
+{
+  "passwordResetEmailSent": "If an account exists with this email, you will receive a password reset link shortly.",
+  "verificationCodeSent": "If an account exists with this email, you will receive a sign-in code shortly.",
+  "webhookTestDelivery": "This is a test delivery from your webhook configuration."
+}

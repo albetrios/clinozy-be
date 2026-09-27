@@ -1,0 +1,123 @@
+name: Reusable — generate API docs
+
+on:
+  workflow_call:
+    inputs:
+      merge_commit_sha:
+        description: Commit SHA on the target branch after merge
+        required: true
+        type: string
+      target_branch:
+        description: Protected branch that received the merge (main)
+        required: true
+        type: string
+      github_environment:
+        description: GitHub Environment for Postman/Scalar secrets (development, production)
+        required: true
+        type: string
+      publish_hosted_docs:
+        description: Upload Postman collection and Scalar Registry after generation
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      POSTMAN_API_KEY:
+        required: false
+      POSTMAN_WORKSPACE_ID:
+        required: false
+      SCALAR_API_KEY:
+        required: false
+  workflow_dispatch:
+    inputs:
+      merge_commit_sha:
+        description: Commit SHA to generate docs from
+        required: false
+        type: string
+        default: ''
+      target_branch:
+        description: Branch context (main)
+        required: true
+        type: choice
+        options:
+          - main
+      github_environment:
+        description: GitHub Environment for Postman/Scalar secrets
+        required: true
+        type: choice
+        options:
+          - development
+          - production
+      publish_hosted_docs:
+        description: Upload Postman collection and Scalar Registry
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 || 'true' }}
+
+jobs:
+  run:
+    name: Generate + publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.github_environment }}
+    env:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.merge_commit_sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Export shared CI test env
+        uses: ./.github/actions/test-env
+
+      - name: Regenerate API docs (OpenAPI + Postman)
+        run: pnpm docs:all
+
+      - name: Check API docs sync
+        run: pnpm docs:check
+
+      - name: Upload API docs artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: api-docs-${{ inputs.github_environment }}
+          path: |
+            docs/openapi/
+            docs/postman-collection.json
+          retention-days: 30
+
+      # Credential gating lives inside the upload scripts (shouldSkipHostedUpload): they log a
+      # clear "Skipping…" warning and exit 0 when the API keys are unset. The previous `if:`
+      # tested a step-level env mapped from a secret, but GitHub does not populate a step's own
+      # env before evaluating that same step's `if`, so the step was skipped even when the
+      # secrets were set. `continue-on-error: true` keeps a publish failure from blocking deploy.
+      - name: Upload Postman Collection to workspace
+        if: inputs.publish_hosted_docs
+        continue-on-error: true
+        env:
+          POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
+          POSTMAN_WORKSPACE_ID: ${{ secrets.POSTMAN_WORKSPACE_ID }}
+        run: pnpm docs:upload
+
+      - name: Upload OpenAPI to Scalar Registry
+        if: inputs.publish_hosted_docs
+        continue-on-error: true
+        env:
+          # API key is the only sensitive value → secret. The namespace/slug appear in the
+          # public registry URL (@<namespace>/apis/<slug>) and ship as GitHub Variables, which
+          # is exactly how `pnpm github:sync` classifies them (classifyKey → variable).
+          SCALAR_API_KEY: ${{ secrets.SCALAR_API_KEY }}
+          SCALAR_NAMESPACE: ${{ vars.SCALAR_NAMESPACE }}
+          SCALAR_SLUG: ${{ vars.SCALAR_SLUG }}
+        run: pnpm docs:upload:scalar

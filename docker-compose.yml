@@ -1,0 +1,107 @@
+# Local development: Postgres + Redis. Optional profile `smoke` runs API container (see docs/deployment/docker-images.md).
+# Pinned patch tags for reproducibility; bump intentionally when upgrading.
+services:
+  postgres:
+    image: postgres:17.10-alpine
+    restart: unless-stopped
+    container_name: clinozy-be-postgres
+    command: postgres -c max_connections=500 -c shared_buffers=256MB -c work_mem=8MB -c effective_cache_size=1GB -c maintenance_work_mem=64MB
+    mem_limit: 2g
+    shm_size: 512m
+    environment:
+      POSTGRES_USER: clinozy
+      POSTGRES_PASSWORD: clinozy
+      POSTGRES_DB: clinozy
+    ports:
+      - '5432:5432'
+    volumes:
+      - clinozy_be_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U clinozy -d clinozy']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:8.6.3-alpine
+    restart: unless-stopped
+    container_name: clinozy-be-redis
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api-smoke:
+    profiles: ['smoke']
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+      args:
+        GENERATE_MCP_DOCS: 'true'
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # NODE_ENV is only development | production. This local smoke stack runs as `development`;
+      # the boot-time safety checks default hardened, so relax them for the compose Postgres/Redis
+      # (plaintext, single replica, no reverse proxy).
+      NODE_ENV: development
+      DATABASE_TLS_ENFORCED: 'false'
+      DATABASE_RLS_SAFETY_ENFORCED: 'false'
+      DATABASE_CONNECTION_BUDGET_ENFORCED: 'false'
+      REDIS_TLS_ENFORCED: 'false'
+      TRUST_PROXY_REQUIRED: 'false'
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATABASE_URL: postgresql://clinozy:clinozy@postgres:5432/clinozy
+      REDIS_URL: redis://redis:6379
+      # sec-r4-C5: JWT_SECRET is not a recognized env key (env-schema uses RS256
+      # via JWT_PRIVATE_KEY / JWT_PUBLIC_KEY). Set the real keys explicitly here
+      # so the env-schema required fields are visible to anyone reading this
+      # file — the Dockerfile only carries placeholders for `pnpm build` and
+      # those would silently leak through if compose forgot to override.
+      # These placeholder strings pass the schema (min(1)) and let the API
+      # container boot for health-endpoint smoke; any test that actually exercises
+      # token signing must supply real PEMs.
+      JWT_PRIVATE_KEY: smoke-test-private-key-placeholder
+      JWT_PUBLIC_KEY: smoke-test-public-key-placeholder
+      # Required in every runtime by the env schema; a fixed all-zero test key is fine for smoke.
+      SECRETS_ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+      ALLOWED_ORIGINS: http://localhost:3000
+      AUDIT_RETENTION_DAYS: 90
+      AUTH_SESSION_RETENTION_DAYS: 30
+      # Disable metrics for smoke so a METRICS_SCRAPE_TOKEN is not required at boot.
+      METRICS_ENABLED: 'false'
+      LOG_LEVEL: info
+
+  toxiproxy:
+    # Built locally from the official release binary (see tooling/chaos/toxiproxy.Dockerfile):
+    # the ghcr.io/shopify/toxiproxy blob CDN (pkg-containers.githubusercontent.com) is
+    # unreachable from some restricted dev networks, while github.com release assets are.
+    # CI provisions Toxiproxy via a GitHub Actions service container, not this compose service.
+    build:
+      context: ./tooling/chaos
+      dockerfile: toxiproxy.Dockerfile
+    image: clinozy-be-toxiproxy:2.12.0
+    container_name: clinozy-be-toxiproxy
+    profiles: ['chaos']
+    ports:
+      - '8474:8474'
+      - '25432:25432'
+      - '26379:26379'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  clinozy_be_postgres_data:

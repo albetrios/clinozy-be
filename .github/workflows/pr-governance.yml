@@ -1,0 +1,109 @@
+name: PR Governance
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 || 'true' }}
+
+jobs:
+  pr-quality:
+    name: Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Skip the conventional-commits title check when the PR title starts with
+      # `Merge ` (e.g. `Merge main into feature/foo` from an internal merge of a
+      # parent branch into a child branch). Commitlint's defaultIgnores already
+      # skips these on push to main, so the title gate would otherwise be the
+      # only place a `Merge ...` title is rejected.
+      - name: Validate PR title (conventional commits)
+        if: ${{ !startsWith(github.event.pull_request.title, 'Merge ') }}
+        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+
+      - name: Sync PR size label
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const SIZE_PREFIX = 'size/';
+            const { data: existing } = await github.rest.issues.listLabelsOnIssue({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            for (const label of existing.filter((labelItem) => labelItem.name.startsWith(SIZE_PREFIX))) {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                name: label.name,
+              });
+            }
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              per_page: 100,
+            });
+            const changes = files.reduce((sum, file) => sum + file.additions + file.deletions, 0);
+            let sizeLabel = 'size/small';
+            if (changes > 500) sizeLabel = 'size/x-large';
+            else if (changes > 200) sizeLabel = 'size/large';
+            else if (changes > 50) sizeLabel = 'size/medium';
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: [sizeLabel],
+            });
+
+      - name: Guard .env files
+        # Branch names are repo-controlled, but pass them through env anyway —
+        # never interpolate event data directly into run: scripts.
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref || github.base_ref || 'main' }}
+        run: |
+          git fetch origin "${BASE_REF}" --depth=1 2>/dev/null || true
+          ENV_FILES=$(git diff --name-only "origin/${BASE_REF}...HEAD" 2>/dev/null \
+            | grep -E '^\.env(\.|$)' \
+            | grep -vE '^\.env\.(example|local\.example|development\.example|production\.example|setup\.example)$' || true)
+          if [ -n "$ENV_FILES" ]; then
+            echo "::error::Environment files detected in PR diff: $ENV_FILES"
+            echo "Remove .env files from the commit. Only committed templates (.env.example, .env.*.example) are allowed."
+            exit 1
+          fi
+
+      - name: Apply path labels
+        uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          configuration-path: .github/labeler.yml

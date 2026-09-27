@@ -1,0 +1,22 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "be-agentforge",
+  "version": "0.1.0",
+  "description": "Single-source, multi-runtime agent tooling for clinozy-be: skills, agents, workflow commands, and the requirement to production-ready build pipeline, all driven from agent-os/.",
+  "author": { "name": "clinozy-be" },
+  "commands": ["./commands"],
+  "skills": ["./skills"],
+  "agents": [
+    "./agents/be-changelog-reviewer.md",
+    "./agents/be-ci-investigator.md",
+    "./agents/be-dependency-auditor.md",
+    "./agents/be-docs-auditor.md",
+    "./agents/be-i18n-auditor.md",
+    "./agents/be-production-hardening-reviewer.md",
+    "./agents/be-production-reviewer.md",
+    "./agents/be-sql-design-reviewer.md",
+    "./agents/be-tsdoc-coverage-reviewer.md",
+    "./agents/be-verifier.md"
+  ],
+  "mcpServers": "./mcp/mcp.default.json"
+}

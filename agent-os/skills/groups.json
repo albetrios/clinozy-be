@@ -1,0 +1,70 @@
+{
+  "description": "Skill taxonomy — every project skill belongs to exactly one group. Single source for grouped rendering of the skill index and for group-level operations ('run all docs maintainers'). agent-os/evals/check.ts asserts this stays in sync with the skills on disk (every skill grouped exactly once; no unknown names).",
+  "groups": {
+    "api-routes": [
+      "be-api-contract-guard",
+      "be-route-schema-doc-guard",
+      "be-route-catalog",
+      "be-openapi-multilingual",
+      "be-openapi-route-sync",
+      "be-idempotency-guard",
+      "be-i18n-message-guard"
+    ],
+    "database": [
+      "be-schema-generator",
+      "be-sql-design-guard",
+      "be-db-migration-maintainer"
+    ],
+    "domain": [
+      "be-domain-generator",
+      "be-workers-events",
+      "be-supabase-porting"
+    ],
+    "testing": [
+      "be-test-generator",
+      "be-chaos-test-maintainer",
+      "be-contract-test-maintainer"
+    ],
+    "docs": [
+      "be-tsdoc-export-guard",
+      "be-docs-maintainer",
+      "be-docs-audit",
+      "be-overview-doc-maintainer",
+      "be-system-narrative-maintainer"
+    ],
+    "quality": [
+      "be-code-quality-guard",
+      "be-code-smells-and-best-practices",
+      "be-lint-warnings-handler",
+      "be-before-commit-guard",
+      "be-change-completeness-guard",
+      "ponytail",
+      "ponytail-audit"
+    ],
+    "security-hardening": [
+      "be-rls-tenant-isolation-guard",
+      "be-read-cache-guard",
+      "be-dependency-security",
+      "be-production-hardening-guard",
+      "be-path-to-production-gate"
+    ],
+    "infra-config": [
+      "be-env-schema-add",
+      "be-ide-productivity-guard"
+    ],
+    "seed": [
+      "be-seed-maintainer"
+    ],
+    "workflow": [
+      "be-auto-implement",
+      "be-delegate-search",
+      "be-ci-investigation",
+      "be-pr-babysit",
+      "be-split-to-prs",
+      "be-skill-index",
+      "be-find-skills",
+      "be-cursor-global-skills",
+      "be-structure-maintainer"
+    ]
+  }
+}

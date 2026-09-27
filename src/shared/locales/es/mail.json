@@ -1,0 +1,5 @@
+{
+  "verificationCodeSubject": "Inicia sesión en tu cuenta",
+  "passwordResetSubject": "Restablece tu contraseña",
+  "passwordResetHtml": "Haz clic <a href=\"{{resetUrl}}\">aquí</a> para restablecer tu contraseña. Este enlace caduca en {{expiresInMinutes}} minutos."
+}

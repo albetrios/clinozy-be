@@ -1,0 +1,89 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "packageManager": "pnpm",
+  "testRunner": "vitest",
+  "plugins": [
+    "@stryker-mutator/vitest-runner"
+  ],
+  "mutate": [
+    "src/domains/audit/audit.service.ts",
+    "src/domains/audit/workers/audit-retention.processor.ts",
+    "src/domains/auth/auth.service.ts",
+    "src/domains/auth/sub-domains/auth-session/auth-session.service.ts",
+    "src/domains/auth/sub-domains/auth-method/auth-method.service.ts",
+    "src/domains/auth/sub-domains/auth-method/email-login.service.ts",
+    "src/domains/auth/sub-domains/auth-method/oauth/oauth.service.ts",
+    "src/domains/auth/sub-domains/auth-mfa/auth-mfa.service.ts",
+    "src/domains/auth/sub-domains/auth-webauthn/webauthn.service.ts",
+    "src/domains/auth/sub-domains/auth-session/session-token-cache.service.ts",
+    "src/domains/auth/sub-domains/auth-method/verification-token/verification-token.service.ts",
+    "src/domains/auth/auth-me-context.service.ts",
+    "src/domains/billing/**/*.service.ts",
+    "src/domains/tenancy/sub-domains/membership/membership.service.ts",
+    "src/domains/tenancy/sub-domains/organization/organization.service.ts",
+    "src/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.service.ts",
+    "src/domains/tenancy/sub-domains/member-roles/member-role.service.ts",
+    "src/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.service.ts",
+    "src/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.ts",
+    "src/domains/tenancy/sub-domains/permission/authorization.service.ts",
+    "src/domains/tenancy/sub-domains/permission/permission.service.ts",
+    "src/domains/tenancy/sub-domains/member-roles/member-role-permission/member-role-permission.service.ts",
+    "src/domains/tenancy/sub-domains/organization/organization-notification-policy/organization-notification-policy.service.ts",
+    "src/domains/tenancy/sub-domains/permission/permission-cache.service.ts",
+    "src/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery.worker.ts",
+    "src/domains/notify/sub-domains/webhook/webhook.service.ts",
+    "src/domains/notify/sub-domains/notification/notification.service.ts",
+    "src/domains/notify/sub-domains/notification/notification-dispatch.service.ts",
+    "src/domains/upload/upload.service.ts",
+    "src/domains/user/user.service.ts",
+    "src/domains/user/sub-domains/user-data-export/user-data-export.service.ts",
+    "src/domains/user/sub-domains/user-settings/user-settings.service.ts",
+    "src/domains/user/sub-domains/user-notification-preferences/user-notification-preferences.service.ts",
+    "src/shared/middlewares/core/auth.middleware.ts",
+    "src/shared/middlewares/core/idempotency.middleware.ts",
+    "src/shared/middlewares/security/api-key-auth.middleware.ts",
+    "src/shared/middlewares/core/error-handler.middleware.ts",
+    "src/shared/middlewares/tenant/organization-rls-transaction.middleware.ts",
+    "src/shared/middlewares/security/encryption.middleware.ts"
+  ],
+  "mutator": {
+    "excludedMutations": [
+      "StringLiteral",
+      "Regex",
+      "TemplateLiteral"
+    ]
+  },
+  "thresholds": {
+    "high": 80,
+    "low": 70,
+    "break": 70
+  },
+  "reporters": [
+    "html",
+    "clear-text",
+    "progress",
+    "json"
+  ],
+  "htmlReporter": {
+    "fileName": "reports/mutation/mutation-report.html"
+  },
+  "jsonReporter": {
+    "fileName": "reports/mutation/mutation-report.json"
+  },
+  "vitest": {
+    "configFile": "tooling/vitest/stryker.config.ts",
+    "related": true
+  },
+  "tsconfigFile": "tsconfig.stryker-noop.json",
+  "ignorePatterns": [
+    ".claude",
+    ".cursor",
+    ".codex",
+    ".codegraph",
+    ".mcp.json",
+    "reports",
+    "coverage"
+  ],
+  "timeoutMS": 60000,
+  "concurrency": 4
+}

@@ -1,0 +1,569 @@
+name: Post-merge CI
+
+# Single-trunk post-merge pipeline on pushes to main (or manual workflow_dispatch).
+#
+# The PR gate (pr-ci.yml) is AUTHORITATIVE: the same tree already passed lint,
+# typecheck, unit, build, security, contract/property AND the full DB-backed
+# matrix (e2e/integration/rls/performance) before merge. Post-merge does not
+# re-test a single-PR push. Caveat: `strict up-to-date` is intentionally OFF on
+# the main ruleset, so a green PR tested on a stale base can squash-merge into a
+# combined tree no gate ever saw — that residual skew is caught by the nightly
+# scheduled-main-canary.yml (`pnpm ci:quality` on main → ci-failure issue).
+#
+# Adaptive lanes (D10 — migration item 1.32), keyed on N = commits in the push
+# (squash ⇒ N = number of PRs merged in this push):
+#   N == 1  FAST lane  → build image → release-please → deploy development
+#                        (no matrix — the PR already proved this exact tree)
+#   N >= 2  FULL lane   → matrix (the COMBINED tree of batched/merge-queue PRs
+#                        was never tested together) → build → release → deploy
+#
+# Deploy: every push deploys the DEVELOPMENT environment (D5). Production deploys
+# are NOT here — they run in release-deploy.yml on `release: published`, pinned to
+# the release tag SHA (D7). release-please only opens/refreshes ONE Release PR and
+# is NOT auto-merged (D1); merging that Release PR is the manual ship button.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: Skip matrix integration tests (full lane only)
+        required: false
+        type: boolean
+        default: false
+      force_full_lane:
+        description: Force the FULL lane (run the matrix even for a single-commit push)
+        required: false
+        type: boolean
+        default: false
+      skip_security:
+        description: Skip Docker build and Trivy scan
+        required: false
+        type: boolean
+        default: false
+      skip_docker:
+        description: Skip Docker build/push (alias for skip_security when only docker is needed)
+        required: false
+        type: boolean
+        default: false
+      skip_deploy:
+        description: Skip Railway deploy
+        required: false
+        type: boolean
+        default: false
+      skip_docs:
+        description: Skip API docs generation and publish
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: post-merge-ci-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 || 'true' }}
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      src-code: ${{ steps.filter.outputs.src-code }}
+      docker: ${{ steps.filter.outputs.docker }}
+      ci-config: ${{ steps.filter.outputs.ci-config }}
+      docs-artifacts: ${{ steps.filter.outputs.docs-artifacts }}
+      full-lane: ${{ steps.lane.outputs.full_lane }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          # Full history: dorny/paths-filter deepens to find the merge-base, and
+          # the lane step below counts commits in the push range.
+          fetch-depth: 0
+
+      - name: Compute lane (single-PR FAST vs batched FULL)
+        id: lane
+        # Squash-merge ⇒ one commit per PR, so N = commits in the push = number of
+        # PRs. N==1 trusts the authoritative PR gate (FAST); N>=2 re-runs the matrix
+        # because the combined tree was never tested together (FULL). A dispatch, a
+        # forced/new-branch push (no before SHA), or force_full_lane all pick FULL.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+          FORCE_FULL: ${{ inputs.force_full_lane }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "push" ] || [ "$FORCE_FULL" = "true" ]; then
+            echo "full_lane=true" >> "$GITHUB_OUTPUT"
+            echo "Lane: FULL (event=$EVENT_NAME force_full=$FORCE_FULL)"
+            exit 0
+          fi
+          if [ -z "${BEFORE_SHA:-}" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            echo "full_lane=true" >> "$GITHUB_OUTPUT"
+            echo "Lane: FULL (no before SHA — new or forced push)"
+            exit 0
+          fi
+          count="$(git rev-list --count "${BEFORE_SHA}..${AFTER_SHA}" 2>/dev/null || echo 999)"
+          echo "Commits in push: ${count}"
+          if [ "$count" -ge 2 ]; then
+            echo "full_lane=true" >> "$GITHUB_OUTPUT"
+            echo "Lane: FULL (${count} commits batched — matrix re-run)"
+          else
+            echo "full_lane=false" >> "$GITHUB_OUTPUT"
+            echo "Lane: FAST (single PR — authoritative PR gate already ran the matrix)"
+          fi
+
+      - name: Path filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            src-code:
+              - 'src/**'
+              - 'migrations/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'Dockerfile.agent'
+              - 'vitest.config.ts'
+              - 'tooling/**'
+            docker:
+              - 'Dockerfile'
+              - 'Dockerfile.worker'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'tooling/ci/check-dockerfile-sync.mjs'
+            ci-config:
+              - '.github/**'
+            docs-artifacts:
+              - 'docs/openapi/**'
+              - 'docs/postman-collection.json'
+              - 'src/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+
+  docker-build-push:
+    name: Docker
+    needs: [changes]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      security-events: write
+    if: |
+      always() &&
+      inputs.skip_security != true &&
+      inputs.skip_docker != true &&
+      (
+        needs.changes.outputs.src-code == 'true' ||
+        needs.changes.outputs.docker == 'true' ||
+        needs.changes.outputs.ci-config == 'true'
+      )
+    uses: ./.github/workflows/reusable-docker-build-trivy.yml
+    secrets: inherit
+    with:
+      merge_commit_sha: ${{ github.sha }}
+      target_branch: main
+
+  matrix-tests:
+    name: Matrix Tests
+    # FULL lane only (N>=2). The PR gate is authoritative for single-PR pushes, so
+    # a FAST-lane merge skips this entirely. Un-serialized from docker/sbom (item
+    # 1.15): the suite boots its own Postgres/Redis and runs against source, never
+    # the image, so it starts immediately alongside the build.
+    needs: [changes]
+    if: |
+      always() &&
+      inputs.skip_tests != true &&
+      needs.changes.outputs.full-lane == 'true' &&
+      (
+        needs.changes.outputs.src-code == 'true' ||
+        needs.changes.outputs.ci-config == 'true'
+      )
+    uses: ./.github/workflows/reusable-vitest-postgres-redis.yml
+    secrets: inherit
+    with:
+      merge_commit_sha: ${{ github.sha }}
+      target_branch: main
+
+  sbom:
+    name: SBOM
+    needs: [changes]
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    if: |
+      always() &&
+      needs.changes.outputs.src-code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom.cyclonedx.json
+
+      - name: Attest CycloneDX source SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: sbom.cyclonedx.json
+          sbom-path: sbom.cyclonedx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom.cyclonedx.json
+          path: sbom.cyclonedx.json
+          retention-days: 30
+
+  api-docs:
+    name: API docs
+    # Publishes DEVELOPMENT docs (OpenAPI + Postman + Scalar) from the merged source
+    # every trunk merge. Production docs publish in release-deploy.yml on release
+    # (item 1.13). Decoupled from release-please: a release-please failure must NOT
+    # skip docs publishing, and release-please does not bump package.json in this run.
+    needs: [changes]
+    if: |
+      always() &&
+      inputs.skip_docs != true &&
+      (
+        needs.changes.outputs.docs-artifacts == 'true' ||
+        needs.changes.outputs.src-code == 'true'
+      )
+    uses: ./.github/workflows/reusable-openapi-postman-publish.yml
+    secrets: inherit
+    with:
+      merge_commit_sha: ${{ github.sha }}
+      target_branch: main
+      github_environment: development
+      publish_hosted_docs: true
+
+  release-please:
+    name: Release Please
+    # Runs every merge (both lanes) to keep the single Release PR current. In the
+    # FAST lane the matrix is skipped (the PR already proved it); in the FULL lane
+    # the matrix must be green before a release can be cut.
+    needs: [matrix-tests]
+    if: |
+      always() &&
+      (needs.matrix-tests.result == 'success' || needs.matrix-tests.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # release-please creates GitHub Releases with RELEASE_PLEASE_TOKEN (a PAT with
+    # the `workflow` scope; the default GITHUB_TOKEN cannot create releases here).
+    # The PAT is a GitHub Environment secret synced via `pnpm github:sync`. It is
+    # read from the DEVELOPMENT environment (D2): the production environment has a
+    # required-reviewer gate that would block the Release-PR refresh on manual
+    # approval every merge. The weekly PAT canary already probes the development
+    # copy, so this reads exactly the copy in use.
+    environment: development
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      # Some release-please-action paths invoke OIDC-scoped octokit calls that the
+      # default GITHUB_TOKEN cannot reach without id-token: write; actions: write
+      # lets the action update the run status when a release-PR step runs.
+      id-token: write
+      actions: write
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created == 'true' && 'true' || 'false' }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      # PAT tripwire: `secrets.RELEASE_PLEASE_TOKEN || github.token` below makes an
+      # EXPIRED PAT fail deep inside release-please as a cryptic "Bad credentials"
+      # (and an unset one silently degrade to a token that cannot create releases —
+      # which also means release-deploy.yml never fires, since a github.token-created
+      # release does not trigger workflows). Probe the PAT first so expiry fails THIS
+      # step with an actionable message; notify-failure then opens a ci-failure issue.
+      - name: Verify RELEASE_PLEASE_TOKEN validity
+        env:
+          RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASE_PLEASE_TOKEN:-}" ]; then
+            echo "::warning::RELEASE_PLEASE_TOKEN is not set in this GitHub Environment — falling back to github.token. Releases/tags cannot be created, and a github.token-created release does NOT trigger release-deploy.yml (no production deploy). Provision the PAT via pnpm github:sync."
+            exit 0
+          fi
+          status="$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${RELEASE_PLEASE_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GH_REPOSITORY}")"
+          if [ "$status" = "401" ]; then
+            echo "::error::RELEASE_PLEASE_TOKEN is expired or revoked (API returned 401). Rotate the PAT in this GitHub Environment (development AND production copies) — the github.token fallback cannot create releases."
+            exit 1
+          fi
+          echo "RELEASE_PLEASE_TOKEN accepted by the API (HTTP ${status})."
+
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
+        with:
+          # PAT (repo + workflow scopes) read from the development GitHub Environment
+          # secret. Falls back to github.token until RELEASE_PLEASE_TOKEN is
+          # provisioned (github.token cannot create releases, but the fallback keeps
+          # release-PR creation working meanwhile).
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          target-branch: main
+          config-file: .github/release-please/config.json
+          manifest-file: .github/release-please/manifest.json
+
+      - name: Lint-fix CHANGELOG on release PR branches
+        if: steps.release.outputs.prs_created == 'true' || steps.release.outputs.pr != ''
+        env:
+          # PAT (not github.token) so the lint-fix commit pushed to the release PR
+          # branch re-triggers the PR checks the human reviewer waits on.
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          RELEASE_PRS: ${{ steps.release.outputs.prs }}
+          RELEASE_PR: ${{ steps.release.outputs.pr }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          mapfile -t branches < <(
+            jq -rn --arg pr "${RELEASE_PR}" --arg prs "${RELEASE_PRS}" '
+              def parse_object($raw):
+                try ($raw | fromjson) catch null;
+              def parse_array($raw):
+                try ($raw | fromjson) catch [];
+              (
+                [parse_object($pr) | .headBranchName // .headRefName // empty] +
+                [parse_array($prs)[] | .headBranchName // .headRefName // empty]
+              )
+              | map(select(. != null and . != ""))
+              | unique
+              | .[]
+            '
+          )
+
+          if [ "${#branches[@]}" -eq 0 ]; then
+            echo "No release PR branches to lint-fix."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          for branch in "${branches[@]}"; do
+            echo "::group::Lint-fix CHANGELOG on ${branch}"
+            git fetch origin "${branch}" --depth=2
+            git checkout -B "${branch}" "origin/${branch}"
+            npx --yes markdownlint-cli2@0.15.0 \
+              --config .markdownlint.json \
+              --fix \
+              'CHANGELOG*.md' || true
+            if [ -n "$(git status --porcelain CHANGELOG*.md 2>/dev/null)" ]; then
+              git add CHANGELOG*.md
+              git commit -m "chore(docs): lint-fix CHANGELOG after release-please"
+              git push origin "${branch}"
+              echo "Pushed CHANGELOG lint-fix to ${branch}"
+            else
+              echo "${branch} CHANGELOG already lint-clean."
+            fi
+            echo "::endgroup::"
+          done
+
+      # NOTE: the Release PR is NOT auto-merged (D1). Merging it manually is the ship
+      # button: that merge (attributed to the PAT) re-triggers this workflow, whose
+      # release-please then cuts the tag + GitHub Release, which fires release-deploy.yml.
+
+  release-sbom:
+    name: Release SBOM
+    needs: [sbom, release-please]
+    if: |
+      always() &&
+      needs.release-please.outputs.releases_created == 'true' &&
+      needs.release-please.outputs.tag_name != '' &&
+      needs.sbom.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download SBOM artifact from sbom job
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: sbom.cyclonedx.json
+          path: .
+
+      - name: Upload SBOM to GitHub Release
+        # Resolved by the exact release-please tag_name output (item 1.14) — no
+        # gh release list ordering / isPrerelease filter (single stable channel now).
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
+        with:
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
+          files: sbom.cyclonedx.json
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  deploy:
+    name: Deploy (development)
+    # Every trunk merge deploys the DEVELOPMENT environment (D5). Production deploys
+    # run in release-deploy.yml on release (D7) — not here. Gated on a green build
+    # and, in the FULL lane, a green matrix (skipped counts as pass in the FAST lane).
+    needs:
+      - changes
+      - docker-build-push
+      - api-docs
+      - matrix-tests
+    permissions:
+      contents: read
+      packages: write
+    if: |
+      always() &&
+      inputs.skip_deploy != true &&
+      needs.docker-build-push.result == 'success' &&
+      (needs.api-docs.result == 'success' || needs.api-docs.result == 'skipped') &&
+      (needs.matrix-tests.result == 'success' || needs.matrix-tests.result == 'skipped')
+    uses: ./.github/workflows/reusable-railway-deploy.yml
+    secrets: inherit
+    with:
+      merge_commit_sha: ${{ github.sha }}
+      github_environment: development
+
+  resolve-success:
+    name: Close ci-failure issue
+    needs:
+      - docker-build-push
+      - matrix-tests
+      - deploy
+      - release-please
+    # The exact negation of `notify-failure` below, plus an explicit cancellation
+    # guard: a cancelled run proves nothing about the health of the tree, so it
+    # must not close the incident. `skipped` IS acceptable -- path filters and
+    # release gating legitimately skip these jobs on a healthy run.
+    if: |
+      !cancelled() &&
+      needs.docker-build-push.result != 'failure' &&
+      needs.docker-build-push.result != 'cancelled' &&
+      needs.matrix-tests.result != 'failure' &&
+      needs.matrix-tests.result != 'cancelled' &&
+      needs.deploy.result != 'failure' &&
+      needs.deploy.result != 'cancelled' &&
+      needs.release-please.result != 'failure' &&
+      needs.release-please.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Close the open ci-failure issue
+        # `notify-failure` opens one issue per branch and comments repeats onto it,
+        # but nothing ever closed it -- a recovered branch left the incident open
+        # until a human noticed. Closing on the first clean run makes an open
+        # ci-failure issue mean "this branch is red right now".
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Post-merge CI failing on ${REF_NAME}"
+          existing="$(gh issue list --repo "$GH_REPOSITORY" --state open --label ci-failure \
+            --search "in:title \"${title}\"" --json number --jq '.[0].number // empty')"
+          if [ -z "$existing" ]; then
+            echo "No open ci-failure issue to close."
+            exit 0
+          fi
+          gh issue close "$existing" --repo "$GH_REPOSITORY" \
+            --comment "Post-merge CI is green again on \`${REF_NAME}\` — closing automatically. Run: ${WORKFLOW_URL}"
+          echo "Closed ci-failure issue #${existing}."
+
+  notify-failure:
+    name: Notify failure
+    needs:
+      - docker-build-push
+      - matrix-tests
+      - deploy
+      - release-please
+    if: |
+      always() &&
+      (
+        needs.docker-build-push.result == 'failure' ||
+        needs.matrix-tests.result == 'failure' ||
+        needs.deploy.result == 'failure' ||
+        needs.release-please.result == 'failure'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Emit post-merge failure notice
+        env:
+          DOCKER_RESULT: ${{ needs.docker-build-push.result }}
+          TESTS_RESULT: ${{ needs.matrix-tests.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          RELEASE_RESULT: ${{ needs.release-please.result }}
+          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          echo "::error title=Post-merge CI failed::docker=${DOCKER_RESULT} tests=${TESTS_RESULT} deploy=${DEPLOY_RESULT} release=${RELEASE_RESULT} — ${WORKFLOW_URL}"
+
+      - name: Open or update ci-failure issue
+        # Run annotations only notify someone already looking at the Actions tab.
+        # An issue generates a real GitHub notification/email to the owner. One
+        # open issue per branch collects repeat failures as comments; closing it
+        # acknowledges the incident.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          DOCKER_RESULT: ${{ needs.docker-build-push.result }}
+          TESTS_RESULT: ${{ needs.matrix-tests.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          RELEASE_RESULT: ${{ needs.release-please.result }}
+          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh label create ci-failure --repo "$GH_REPOSITORY" \
+            --color D93F0B --description "Automated post-merge/guard failure notification" \
+            2>/dev/null || true
+          title="Post-merge CI failing on ${REF_NAME}"
+          body="$(printf '%s\n' \
+            "Run: ${WORKFLOW_URL}" \
+            "" \
+            "| job | result |" \
+            "| --- | --- |" \
+            "| docker | ${DOCKER_RESULT} |" \
+            "| matrix tests | ${TESTS_RESULT} |" \
+            "| release-please | ${RELEASE_RESULT} |" \
+            "| deploy (development) | ${DEPLOY_RESULT} |" \
+            "" \
+            "Close this issue once the failure is resolved.")"
+          existing="$(gh issue list --repo "$GH_REPOSITORY" --state open --label ci-failure \
+            --search "in:title \"${title}\"" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GH_REPOSITORY" --body "$body"
+            echo "Commented on existing ci-failure issue #${existing}."
+          else
+            gh issue create --repo "$GH_REPOSITORY" --title "$title" --label ci-failure --body "$body"
+          fi

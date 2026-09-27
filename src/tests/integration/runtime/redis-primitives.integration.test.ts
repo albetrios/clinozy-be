@@ -1,0 +1,182 @@
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { connectRedis, redisConnection } from '@/infrastructure/cache/redis.client.js';
+import {
+  getCachedPermissions,
+  invalidateOrganizationPermissions,
+  setCachedPermissions,
+  withPermissionCacheRecomputeLock,
+} from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
+import { CircuitBreaker } from '@/infrastructure/resilience/circuit-breaker.js';
+import { cleanupTestRedis } from '@/tests/helpers/test-redis.js';
+
+const runRedisTests = process.env.RUN_REDIS_TESTS === '1';
+let redisAvailable = false;
+
+describe.runIf(runRedisTests)('Integration: Redis primitives', () => {
+  const testKeyPrefix = `test:redis-primitives:${Date.now()}`;
+
+  beforeAll(async () => {
+    try {
+      await connectRedis();
+      const pong = await redisConnection.ping();
+      redisAvailable = pong === 'PONG';
+    } catch {
+      redisAvailable = false;
+    }
+  });
+
+  beforeEach(async () => {
+    if (redisAvailable) {
+      await cleanupTestRedis();
+    }
+  });
+
+  it.runIf(() => redisAvailable)(
+    'should expire cache keys after TTL',
+    async () => {
+      const userId = `${testKeyPrefix}:user`;
+      const organizationId = `${testKeyPrefix}:org`;
+      const versionKey = `perm:org:${organizationId}:v`;
+      const cacheKey = `perm:0:${userId}:${organizationId}`;
+
+      await setCachedPermissions(userId, organizationId, ['billing:read'], 1);
+      expect(await getCachedPermissions(userId, organizationId)).toEqual(['billing:read']);
+
+      const remainingSeconds = await redisConnection.ttl(cacheKey);
+      expect(remainingSeconds).toBeGreaterThan(0);
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, (remainingSeconds + 1) * 1_000);
+      });
+      expect(await getCachedPermissions(userId, organizationId)).toBeNull();
+
+      await redisConnection.del(cacheKey, versionKey);
+    },
+    70_000,
+  );
+
+  it.runIf(() => redisAvailable)(
+    'should acquire and release distributed recompute lock (SET NX)',
+    async () => {
+      const userId = `${testKeyPrefix}:lock-user`;
+      const organizationId = `${testKeyPrefix}:lock-org`;
+      let recomputeCount = 0;
+
+      const first = await withPermissionCacheRecomputeLock(userId, organizationId, async () => {
+        recomputeCount += 1;
+        await setCachedPermissions(userId, organizationId, ['tenancy:read'], 300);
+        return ['tenancy:read'];
+      });
+
+      const second = await withPermissionCacheRecomputeLock(userId, organizationId, async () => {
+        recomputeCount += 1;
+        return ['tenancy:read'];
+      });
+
+      expect(first).toEqual(['tenancy:read']);
+      expect(second).toEqual(['tenancy:read']);
+      expect(recomputeCount).toBe(1);
+
+      await redisConnection.del(
+        `perm:0:${userId}:${organizationId}`,
+        `perm:lock:${userId}:${organizationId}`,
+        `perm:org:${organizationId}:v`,
+      );
+    },
+  );
+
+  it.runIf(() => redisAvailable)(
+    'a concurrent waiter awaits the lock holder and does not stampede a second recompute (audit-#9)',
+    async () => {
+      const userId = `${testKeyPrefix}:stampede-user`;
+      const organizationId = `${testKeyPrefix}:stampede-org`;
+      let recomputeCount = 0;
+
+      const holder = withPermissionCacheRecomputeLock(userId, organizationId, async () => {
+        recomputeCount += 1;
+        // A non-trivial recompute: the waiter must poll and wait for the cache to
+        // populate rather than falling through to its own uncached recompute.
+        await new Promise<void>((resolve) => setTimeout(resolve, 300));
+        await setCachedPermissions(userId, organizationId, ['member:read'], 300);
+        return ['member:read'];
+      });
+
+      // Let the holder acquire the lock before the waiter starts.
+      await new Promise<void>((resolve) => setTimeout(resolve, 25));
+
+      const waiter = withPermissionCacheRecomputeLock(userId, organizationId, async () => {
+        recomputeCount += 1; // must NOT run — the waiter should read the holder's cached value
+        return ['member:read'];
+      });
+
+      const [holderResult, waiterResult] = await Promise.all([holder, waiter]);
+      expect(holderResult).toEqual(['member:read']);
+      expect(waiterResult).toEqual(['member:read']);
+      expect(recomputeCount).toBe(1);
+
+      await redisConnection.del(
+        `perm:0:${userId}:${organizationId}`,
+        `perm:lock:${userId}:${organizationId}`,
+        `perm:org:${organizationId}:v`,
+      );
+    },
+    70_000,
+  );
+
+  it.runIf(() => redisAvailable)(
+    'invalidates organization permission cache via version INCR',
+    async () => {
+      const userId = `${testKeyPrefix}:version-user`;
+      const organizationId = `${testKeyPrefix}:version-org`;
+
+      await setCachedPermissions(userId, organizationId, ['billing:read'], 3_600);
+      await invalidateOrganizationPermissions(organizationId);
+      expect(await getCachedPermissions(userId, organizationId)).toBeNull();
+
+      await redisConnection.del(`perm:org:${organizationId}:v`);
+    },
+  );
+
+  it.runIf(() => redisAvailable)(
+    'should use Redis WATCH/MULTI for circuit breaker state updates',
+    async () => {
+      const circuit = new CircuitBreaker({
+        name: `${testKeyPrefix}:circuit`,
+        redis: redisConnection,
+        failureThreshold: 2,
+        resetTimeoutMs: 1_000,
+      });
+
+      await expect(
+        circuit.execute(async () => Promise.reject(new Error('fail'))),
+      ).rejects.toThrow();
+      await expect(
+        circuit.execute(async () => Promise.reject(new Error('fail'))),
+      ).rejects.toThrow();
+      await expect(circuit.execute(async () => Promise.resolve('ok'))).rejects.toThrow(/OPEN/);
+
+      await circuit.reset();
+    },
+  );
+
+  it.runIf(() => redisAvailable)(
+    'route-audit C5: incrementWithExpiryOnFirst increments and sets TTL atomically on the first hit',
+    async () => {
+      const { incrementWithExpiryOnFirst } = await import(
+        '@/shared/utils/infrastructure/redis-counter.util.js'
+      );
+      const key = `${testKeyPrefix}:counter`;
+
+      // First increment → count 1 AND a TTL is set (no INCR-then-EXPIRE gap).
+      expect(await incrementWithExpiryOnFirst(redisConnection, key, 100)).toBe(1);
+      const ttlAfterFirst = await redisConnection.ttl(key);
+      expect(ttlAfterFirst).toBeGreaterThan(0);
+      expect(ttlAfterFirst).toBeLessThanOrEqual(100);
+
+      // Second increment → count 2; the window is anchored to the first hit, not extended.
+      expect(await incrementWithExpiryOnFirst(redisConnection, key, 100)).toBe(2);
+      const ttlAfterSecond = await redisConnection.ttl(key);
+      expect(ttlAfterSecond).toBeGreaterThan(0);
+      expect(ttlAfterSecond).toBeLessThanOrEqual(ttlAfterFirst);
+    },
+  );
+});

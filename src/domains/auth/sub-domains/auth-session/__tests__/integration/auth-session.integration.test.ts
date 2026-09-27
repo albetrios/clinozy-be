@@ -1,0 +1,257 @@
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
+import { createTestApp } from '@/tests/helpers/test-app.js';
+import {
+  injectAuthenticated,
+  injectUnauthenticated,
+} from '@/tests/helpers/test-http-inject.helper.js';
+import { cleanupDatabase } from '@/tests/helpers/test-database.js';
+import { createTestUser } from '@/tests/factories/user.factory.js';
+import { generateTestToken, generateTestTokenAndSession } from '@/tests/helpers/test-auth.js';
+import { seedRecentStepUpForTestUser } from '@/tests/helpers/test-step-up.helper.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import enErrors from '@/shared/locales/en/errors.json' with { type: 'json' };
+import type { FastifyInstance } from 'fastify';
+
+describe('Auth Session Sub-Domain — Integration', () => {
+  let app: FastifyInstance;
+
+  beforeAll(async () => {
+    const { app: testApplication } = await createTestApp();
+    app = testApplication;
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  beforeEach(async () => {
+    await cleanupDatabase();
+  });
+
+  describe('GET /api/v1/auth/me/sessions', () => {
+    it('should return 401 without authentication', async () => {
+      const response = await injectUnauthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/auth/me/sessions'),
+      });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('should return sessions for authenticated user', async () => {
+      const user = await createTestUser();
+      const token = await generateTestToken({ userId: user.public_id });
+      const response = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/auth/me/sessions'),
+        token,
+      });
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('flags the calling session is_current and exposes the derived device/browser fields', async () => {
+      const user = await createTestUser();
+      const { token, sessionPublicId } = await generateTestTokenAndSession({
+        userId: user.public_id,
+      });
+      const response = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/auth/me/sessions'),
+        token,
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as { data: Array<Record<string, unknown>> };
+      const current = body.data.find((session) => session.id === sessionPublicId);
+      expect(current).toBeDefined();
+      expect(current?.is_current).toBe(true);
+      // The derived display fields are always part of the contract (value may be null).
+      expect(current).toHaveProperty('device');
+      expect(current).toHaveProperty('browser');
+      // Only the calling session is flagged current.
+      for (const session of body.data) {
+        if (session.id !== sessionPublicId) {
+          expect(session.is_current).toBe(false);
+        }
+      }
+    });
+  });
+
+  describe('DELETE /api/v1/auth/me/sessions/:id', () => {
+    it('should return 401 without authentication', async () => {
+      const response = await injectUnauthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath('/auth/me/sessions/test-id'),
+      });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('route-#9: returns 409 when revoking the CURRENT session (directs to logout)', async () => {
+      const user = await createTestUser();
+      const { token, sessionPublicId } = await generateTestTokenAndSession({
+        userId: user.public_id,
+      });
+      await seedRecentStepUpForTestUser(user.public_id, sessionPublicId); // pass the sec-A7 gate
+      const response = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath(`/auth/me/sessions/${sessionPublicId}`),
+        token,
+      });
+      expect(response.statusCode).toBe(409);
+    });
+
+    it('returns the declared 204 and the revoked session disappears from the list', async () => {
+      // The domain's DELETE routes were proven only by their denial cases — revoking a session
+      // and NOT revoking it returned the same untested status. Pin the declared 204 AND the
+      // observable effect, so a handler that stopped calling the service would still fail here.
+      const user = await createTestUser();
+      const { token: callerToken, sessionPublicId: callerSessionPublicId } =
+        await generateTestTokenAndSession({ userId: user.public_id });
+      const { sessionPublicId: otherSessionPublicId } = await generateTestTokenAndSession({
+        userId: user.public_id,
+      });
+      await seedRecentStepUpForTestUser(user.public_id, callerSessionPublicId);
+
+      const response = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath(`/auth/me/sessions/${otherSessionPublicId}`),
+        token: callerToken,
+      });
+      expect(response.statusCode, response.body).toBe(204);
+      expect(response.body).toBe('');
+
+      const remaining = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/auth/me/sessions'),
+        token: callerToken,
+      });
+      expect(remaining.statusCode).toBe(200);
+      const sessionIds = (remaining.json() as { data: Array<{ id: string }> }).data.map(
+        (session) => session.id,
+      );
+      expect(sessionIds).not.toContain(otherSessionPublicId);
+      // The caller's own session survives — revoking one session must not log them out.
+      expect(sessionIds).toContain(callerSessionPublicId);
+    });
+
+    it('route-#9: a DIFFERENT session id is NOT blocked by the guard (reaches the service → 404)', async () => {
+      const user = await createTestUser();
+      const { token, sessionPublicId } = await generateTestTokenAndSession({
+        userId: user.public_id,
+      });
+      await seedRecentStepUpForTestUser(user.public_id, sessionPublicId);
+      // A non-current session id passes the current-session guard and reaches the service, which
+      // 404s because the (non-existent) session is not the caller's — proving the guard targets
+      // ONLY the current session, not every revoke.
+      const response = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath(`/auth/me/sessions/${generatePublicId('authSession')}`),
+        token,
+      });
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe('GET /api/v1/auth/me/auth-methods', () => {
+    it('should return 401 without authentication', async () => {
+      const response = await injectUnauthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/auth/me/auth-methods'),
+      });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('should return auth methods for authenticated user', async () => {
+      const user = await createTestUser();
+      const token = await generateTestToken({ userId: user.public_id });
+      const response = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/auth/me/auth-methods'),
+        token,
+      });
+      expect(response.statusCode).toBe(200);
+    });
+  });
+
+  describe('step-up factor gating on destructive session routes (item #8)', () => {
+    it('rejects DELETE /me/sessions when the recent step-up used the bootstrap email_code factor', async () => {
+      const user = await createTestUser();
+      const { token, sessionPublicId } = await generateTestTokenAndSession({
+        userId: user.public_id,
+      });
+      // A bootstrap email-code step-up window (a passwordless account enrolling its first factor)
+      // may NOT authorize a destructive session revoke — the strong gate requires password/MFA.
+      await seedRecentStepUpForTestUser(user.public_id, sessionPublicId, 'email_code');
+
+      const response = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath('/auth/me/sessions'),
+        token,
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = response.json() as { error?: { detail?: string } };
+      expect(['errors:strongStepUpRequired', enErrors.strongStepUpRequired]).toContain(
+        body.error?.detail,
+      );
+    });
+
+    it('allows DELETE /me/sessions with a strong (password) step-up', async () => {
+      const user = await createTestUser();
+      const { token, sessionPublicId } = await generateTestTokenAndSession({
+        userId: user.public_id,
+      });
+      await seedRecentStepUpForTestUser(user.public_id, sessionPublicId, 'password');
+
+      const response = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath('/auth/me/sessions'),
+        token,
+      });
+
+      // Not the 403 step-up gate — a strong factor authorizes the revoke. Assert the declared
+      // 204 rather than the old `< 400` band: any 2xx used to pass, including a 200 that never
+      // reached the service.
+      expect(response.statusCode, response.body).toBe(204);
+    });
+  });
+
+  describe('DELETE /api/v1/auth/me/sessions — revoke-all success path', () => {
+    it('returns 204, drops every other session, and preserves the caller’s own (sec-new-A3)', async () => {
+      const user = await createTestUser();
+      const { token: callerToken, sessionPublicId: callerSessionPublicId } =
+        await generateTestTokenAndSession({ userId: user.public_id });
+      const { sessionPublicId: secondSessionPublicId } = await generateTestTokenAndSession({
+        userId: user.public_id,
+      });
+      const { sessionPublicId: thirdSessionPublicId } = await generateTestTokenAndSession({
+        userId: user.public_id,
+      });
+      await seedRecentStepUpForTestUser(user.public_id, callerSessionPublicId, 'password');
+
+      const response = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath('/auth/me/sessions'),
+        token: callerToken,
+      });
+      expect(response.statusCode, response.body).toBe(204);
+      // sec-r4-A1: revoke-all must NOT clear the caller's session cookie — doing so would
+      // destroy the browser-side refresh token for the session it deliberately preserved.
+      expect(response.cookies.session_id).toBeUndefined();
+
+      const remaining = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/auth/me/sessions'),
+        token: callerToken,
+      });
+      expect(remaining.statusCode).toBe(200);
+      const sessionIds = (remaining.json() as { data: Array<{ id: string }> }).data.map(
+        (session) => session.id,
+      );
+      // "Revoke all except mine" is the whole contract: the other two are gone, the caller stays
+      // logged in. This is what a user reaches for when they believe they are compromised.
+      expect(sessionIds).toEqual([callerSessionPublicId]);
+      expect(sessionIds).not.toContain(secondSessionPublicId);
+      expect(sessionIds).not.toContain(thirdSessionPublicId);
+    });
+  });
+});

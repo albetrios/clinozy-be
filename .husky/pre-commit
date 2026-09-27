@@ -1,0 +1,3 @@
+# ── Layer 2: Pre-commit checks ───────────────────────────────
+# Labeled steps: pnpm guard:pre-commit:list
+pnpm guard:pre-commit

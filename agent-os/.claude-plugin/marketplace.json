@@ -1,0 +1,13 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "clinozy-be",
+  "owner": { "name": "clinozy-be" },
+  "metadata": { "description": "clinozy-be single-source agent tooling (be-agentforge): skills, agents, workflow commands, and the requirement to production-ready build pipeline." },
+  "plugins": [
+    {
+      "name": "be-agentforge",
+      "source": "./",
+      "description": "Single-source, multi-runtime agent tooling for clinozy-be, driven from agent-os/."
+    }
+  ]
+}

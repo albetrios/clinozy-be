@@ -1,0 +1,129 @@
+# syntax=docker/dockerfile:1.7
+
+ARG NODE_VERSION=24.18.1
+ARG PNPM_VERSION=11.1.1
+ARG GENERATE_MCP_DOCS=true
+ARG INSTALL_MCP_OPTIONAL=false
+ARG BUILD_REVISION=unknown
+ARG IMAGE_SOURCE=unknown
+
+FROM node:${NODE_VERSION}-alpine AS build
+ARG PNPM_VERSION
+ARG GENERATE_MCP_DOCS
+WORKDIR /app
+
+# sec-r4-C6: WARNING — every value below is a TEST-ONLY COMPILE-TIME PLACEHOLDER
+# that exists solely so `pnpm build` / `pnpm build:check` / `pnpm routes:catalog`
+# pass the env-schema's `min(1)` Zod check during the build stage. These values
+# MUST NEVER be replaced with real credentials at build time:
+#
+#   - Build-stage ENV is baked into the intermediate image layer metadata and is
+#     visible via `docker history` / `docker inspect` / any pulled `--target build`
+#     image. The runtime stage (`AS api`) explicitly resets NODE_ENV=production
+#     and reads real credentials from the runtime environment — these placeholders
+#     are stripped from the final production image.
+#   - JWT_PRIVATE_KEY / JWT_PUBLIC_KEY are not PEMs; they would fail RS256
+#     signing at runtime if the runtime stage somehow inherited them.
+#   - SECRETS_ENCRYPTION_KEY is the all-zero key; the env schema rejects it under
+#     NODE_ENV=production (sec-r4-C3), so a build-stage leak cannot
+#     accidentally become a real key.
+#
+# If you need to substitute real values at build time, pass them as `--build-arg`
+# instead so they appear only in build-time logs (not the persistent ENV metadata
+# of the final image), and confirm they never appear in the runtime stage.
+# NODE_ENV is only development | production; the build stage uses `development` (a non-production
+# value) so the placeholder secrets above pass the schema (production-only refines reject them).
+ENV NODE_ENV=development \
+  DATABASE_URL=postgresql://postgres:postgres@localhost:5432/clinozy \
+  REDIS_URL=redis://localhost:6379 \
+  JWT_PRIVATE_KEY=test-private-key \
+  JWT_PUBLIC_KEY=test-public-key \
+  ALLOWED_ORIGINS=http://localhost:3000 \
+  AUDIT_RETENTION_DAYS=90 \
+  AUTH_SESSION_RETENTION_DAYS=30 \
+  METRICS_SCRAPE_TOKEN=test-metrics-token-min-32-characters \
+  SECRETS_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
+
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+RUN pnpm build && pnpm build:check \
+  && if [ "$GENERATE_MCP_DOCS" = "true" ]; then \
+       pnpm routes:catalog && pnpm docs:generate:multilang; \
+     fi
+
+FROM node:${NODE_VERSION}-alpine AS runtime
+ARG PNPM_VERSION
+ARG INSTALL_MCP_OPTIONAL
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Refresh the apk index before upgrading so published security patches actually
+# install: the pinned alpine base ships a stale cached index, so a bare `apk upgrade`
+# can miss already-fixed CVEs (e.g. openssl CVE-2026-45447). `apk update` pulls the
+# current index first so the upgrade picks up the patched packages.
+#
+# SECURITY_PATCH_EPOCH cache-busts THIS layer only (issue #1119): with the gha
+# layer cache, an unchanged RUN line is reused forever, so patches published
+# AFTER the layer was first cached (e.g. openssl CVE-2026-14456, fixed upstream
+# hours before alpine shipped 3.5.8-r0) never install and Trivy keeps failing.
+# The workflow passes the run id, so every build re-runs the upgrade (~seconds).
+ARG SECURITY_PATCH_EPOCH=0
+RUN echo "security-patch-epoch: ${SECURITY_PATCH_EPOCH}" && apk update && apk upgrade --no-cache
+
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/src/infrastructure/resilience/lua ./dist/src/infrastructure/resilience/lua
+COPY --from=build /app/migrations ./migrations
+COPY --from=build /app/src/shared/locales ./src/shared/locales
+COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts \
+  $( [ "$INSTALL_MCP_OPTIONAL" = "true" ] || echo "--no-optional" ) \
+  && rm -rf \
+    /root/.cache/node/corepack \
+    /usr/local/bin/corepack \
+    /usr/local/bin/npm \
+    /usr/local/bin/npx \
+    /usr/local/bin/pnpm \
+    /usr/local/bin/pnpx \
+    /usr/local/lib/node_modules/npm
+
+USER node
+
+FROM runtime AS worker
+ARG BUILD_REVISION
+ARG IMAGE_SOURCE
+LABEL org.opencontainers.image.source="${IMAGE_SOURCE}"
+LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
+
+# audit-#15c: the worker serves /livez on WORKER_HEALTH_PORT (default 9090). Give the
+# worker image its own liveness probe for parity with the API image (docker run /
+# compose-local liveness; platform probes still apply in hosted deploys).
+# reaudit-#8: read WORKER_HEALTH_PORT at runtime so overriding it does not leave the
+# container permanently unhealthy on a hardcoded port.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.WORKER_HEALTH_PORT||'9090')+'/livez').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+EXPOSE 9090
+CMD ["node", "dist/src/worker.js"]
+
+FROM runtime AS api
+ARG BUILD_REVISION
+ARG IMAGE_SOURCE
+LABEL org.opencontainers.image.source="${IMAGE_SOURCE}"
+LABEL org.opencontainers.image.revision="${BUILD_REVISION}"
+
+COPY --from=build /app/docs/routes.txt ./docs/routes.txt
+COPY --from=build /app/docs/openapi ./docs/openapi
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||'3000')+'/livez').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+EXPOSE 3000
+CMD ["node", "dist/src/server.js"]

@@ -1,0 +1,257 @@
+# Monthly disaster-recovery drill — fully automated RTO measurement.
+# Creates a throwaway Neon PITR branch from the workflow ref (main), runs migrate +
+# integration smoke, asserts RTO, then deletes the branch. See docs/process/backup-drills.md.
+
+name: Monthly backup restore & RTO drill
+
+on:
+  schedule:
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+
+env:
+  RTO_MINUTES: '60'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 || 'true' }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: restore-drill-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  resolve-environment:
+    name: Resolve environment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.map.outputs.environment }}
+    steps:
+      - name: Map branch to GitHub Environment
+        # Single-trunk model (see docs/deployment/runbooks/add-new-environment.md):
+        #   main → production   (the only long-lived branch; environment ≠ branch)
+        id: map
+        run: |
+          set -euo pipefail
+          case "${{ github.ref_name }}" in
+            main) echo "environment=production"  >> "$GITHUB_OUTPUT" ;;
+            *)    echo "::error::Unsupported branch for restore drill: ${{ github.ref_name }} (single-trunk: Neon parent must be main)" && exit 1 ;;
+          esac
+
+  checklist:
+    name: DR drill checklist
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Print drill steps
+        run: |
+          set -euo pipefail
+          echo "::notice title=Restore drill::Parent Neon branch: ${{ github.ref_name }}. See docs/process/backup-drills.md"
+          test -f docs/process/backup-drills.md
+          test -f docs/process/dr-runbook.md
+
+  restore-integration:
+    name: Restore branch — migrate and integration smoke
+    needs: [checklist, resolve-environment]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.resolve-environment.outputs.environment }}
+    timeout-minutes: 45
+    services:
+      redis:
+        image: redis:8.6.3-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY: ${{ secrets.MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY }}
+      RESTORE_DRILL_PARENT_BRANCH_NAME: ${{ github.ref_name }}
+      NODE_ENV: development
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Require restore drill secrets
+        run: |
+          set -euo pipefail
+          if [ -z "${MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY}" ]; then
+            echo "::error::GitHub Environment secret MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY is required (sync via pnpm github:sync)."
+            exit 1
+          fi
+
+      - name: Provision Neon PITR restore branch
+        id: neon_drill
+        run: bash tooling/ci/restore-drill-neon.sh create
+
+      - name: Setup Node and pnpm
+        if: env.NEON_DRILL_DATABASE_URL != ''
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Export shared CI test env
+        if: env.NEON_DRILL_DATABASE_URL != ''
+        uses: ./.github/actions/test-env
+
+      - name: Run migrations on restored branch
+        env:
+          DATABASE_URL: ${{ steps.neon_drill.outputs.database_url }}
+        run: pnpm db:migrate
+
+      - name: Integration smoke on restored database
+        env:
+          DATABASE_URL: ${{ steps.neon_drill.outputs.database_url }}
+        run: pnpm test:integration -- --run src/domains/auth/__tests__/integration/auth.integration.test.ts
+
+      - name: Record restore duration and assert RTO
+        if: success()
+        env:
+          RESTORE_START_EPOCH: ${{ steps.neon_drill.outputs.restore_start_epoch }}
+          RESTORE_SOURCE: ${{ steps.neon_drill.outputs.restore_source }}
+          PARENT_BRANCH_NAME: ${{ steps.neon_drill.outputs.parent_branch_name }}
+        run: |
+          set -euo pipefail
+          restore_end_epoch=$(date +%s)
+          restore_seconds=$((restore_end_epoch - RESTORE_START_EPOCH))
+          rto_minutes="${RTO_MINUTES:-60}"
+          rto_target_seconds=$((rto_minutes * 60))
+          within_rto_target=false
+          if (( restore_seconds < rto_target_seconds )); then
+            within_rto_target=true
+          fi
+
+          cat > restore-drill-rto.json <<EOF
+          {
+            "recorded_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "workflow_run_id": "${GITHUB_RUN_ID}",
+            "metric": "${RESTORE_SOURCE}",
+            "parent_branch_name": "${PARENT_BRANCH_NAME}",
+            "restore_seconds": ${restore_seconds},
+            "rto_minutes": ${rto_minutes},
+            "rto_target_seconds": ${rto_target_seconds},
+            "within_rto_target": ${within_rto_target}
+          }
+          EOF
+
+          {
+            echo "## Restore drill — automated RTO"
+            echo ""
+            echo "| Field | Value |"
+            echo "| ----- | ----- |"
+            echo "| Parent Neon branch | ${PARENT_BRANCH_NAME} |"
+            echo "| Metric | ${RESTORE_SOURCE} |"
+            echo "| Restore time | **${restore_seconds}s** ($(awk "BEGIN {printf \"%.1f\", ${restore_seconds}/60}") min) |"
+            echo "| RTO target | **${rto_minutes} min** (${rto_target_seconds}s) |"
+            echo "| Within target | ${within_rto_target} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "::notice title=Restore drill RTO::parent=${PARENT_BRANCH_NAME} restore_seconds=${restore_seconds} within_target=${within_rto_target}"
+
+          if [[ "${within_rto_target}" != "true" ]]; then
+            echo "::error title=RTO exceeded::Restore took ${restore_seconds}s; target is ${rto_target_seconds}s (${rto_minutes} min)."
+            exit 1
+          fi
+
+      - name: Upload RTO report
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: restore-drill-rto
+          path: restore-drill-rto.json
+          if-no-files-found: error
+
+      - name: Delete Neon restore drill branch
+        if: always() && steps.neon_drill.outputs.branch_id != ''
+        env:
+          DRILL_BRANCH_ID: ${{ steps.neon_drill.outputs.branch_id }}
+          MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY: ${{ secrets.MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY }}
+        run: bash tooling/ci/restore-drill-neon.sh delete
+
+  record-rto:
+    name: Record and publish RTO
+    needs: [checklist, restore-integration]
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      within_rto_target: ${{ steps.publish.outputs.within_rto_target }}
+      restore_seconds: ${{ steps.publish.outputs.restore_seconds }}
+      rto_minutes: ${{ steps.publish.outputs.rto_minutes }}
+    steps:
+      - name: Fail when automated restore did not complete
+        if: needs.restore-integration.result != 'success'
+        run: |
+          echo "::error title=Restore drill not measured::Configure MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY, ensure Neon project clinozy-be and branch names match git refs (main), and verify migrate + integration smoke pass."
+          exit 1
+
+      - name: Download automated RTO report
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: restore-drill-rto
+
+      - name: Publish consolidated RTO report
+        id: publish
+        run: |
+          set -euo pipefail
+          rto_minutes="${RTO_MINUTES:-60}"
+          rto_target_seconds=$((rto_minutes * 60))
+
+          if [[ ! -f restore-drill-rto.json ]]; then
+            echo "::error::No automated RTO report artifact"
+            exit 1
+          fi
+
+          cp restore-drill-rto.json restore-drill-rto-report.json
+
+          within_rto_target=$(jq -r '.within_rto_target' restore-drill-rto-report.json)
+          restore_seconds=$(jq -r '.restore_seconds // empty' restore-drill-rto-report.json)
+          metric=$(jq -r '.metric' restore-drill-rto-report.json)
+          parent_branch_name=$(jq -r '.parent_branch_name // empty' restore-drill-rto-report.json)
+
+          if [[ "${within_rto_target}" != "true" ]]; then
+            echo "::error title=RTO not within target::Consolidated report has within_rto_target=${within_rto_target}"
+            exit 1
+          fi
+
+          {
+            echo "within_rto_target=${within_rto_target}"
+            echo "restore_seconds=${restore_seconds}"
+            echo "rto_minutes=${rto_minutes}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Restore drill — consolidated RTO"
+            echo ""
+            echo "| Field | Value |"
+            echo "| ----- | ----- |"
+            if [[ -n "${parent_branch_name}" && "${parent_branch_name}" != "null" ]]; then
+              echo "| Parent Neon branch | ${parent_branch_name} |"
+            fi
+            echo "| Source | ${metric} |"
+            echo "| RTO target | **${rto_minutes} min** (${rto_target_seconds}s) |"
+            if [[ -n "${restore_seconds}" && "${restore_seconds}" != "null" ]]; then
+              echo "| Restore time | **${restore_seconds}s** |"
+            fi
+            echo "| Within target | ${within_rto_target} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload consolidated RTO report
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: restore-drill-rto-report
+          path: restore-drill-rto-report.json
+          if-no-files-found: error
+
+  alert-on-failure:
+    name: Alert on drill failure
+    needs: [checklist, restore-integration, record-rto]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Emit workflow failure notice
+        run: |
+          echo "::error title=Restore drill failed::Review docs/process/backup-drills.md — RTO target is ${RTO_MINUTES} minutes."

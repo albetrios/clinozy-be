@@ -1,0 +1,9 @@
+---
+description: Use object parameters (named options bag) for functions and methods everywhere except in repository files. Reduces argument-order bugs, makes call sites self-documenting, and keeps signatures stable under change.
+globs: src/**/*.ts
+alwaysApply: false
+---
+
+# Object params
+
+Convention (no backing skill — **no automated enforcement point; review-enforced**). Functions/methods with **2+ parameters** take a single named options object, **except** repository files and framework callbacks (Fastify `req`/`reply`, array callbacks). Reduces arg-order bugs, keeps call sites self-documenting and signatures stable. Detail: CLAUDE.md › Naming Conventions.

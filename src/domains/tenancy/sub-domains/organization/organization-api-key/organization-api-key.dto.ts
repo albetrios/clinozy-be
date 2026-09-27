@@ -1,0 +1,48 @@
+import { z } from 'zod';
+import { listSearchSortSchema } from '@/shared/utils/http/list-query.util.js';
+import { trimmedStringMinMax } from '@/shared/utils/validation/validation.util.js';
+
+/** Zod schema for the `:api_key_id` path param (get/update/delete/rotate API key). */
+export const apiKeyIdParamsDto = z
+  .object({
+    api_key_id: trimmedStringMinMax(1, 28),
+  })
+  .strict();
+
+/**
+ * Zod schema for `POST /api/v1/organization/api-keys` — requires a
+ * human label, 1–50 scope strings, and an optional `expires_in_days`
+ * (1–365). The raw secret is generated server-side and returned only once.
+ */
+export const createOrganizationApiKeyDto = z
+  .object({
+    name: trimmedStringMinMax(1, 255),
+    scopes: z.array(trimmedStringMinMax(1, 100)).min(1).max(50),
+    expires_in_days: z.number().int().min(1).max(365).optional().nullable(),
+  })
+  .strict();
+
+/**
+ * Zod schema for `PATCH /api/v1/organization/api-keys/:api_key_id` —
+ * supports renaming and toggling status between `ACTIVE` and `REVOKED`.
+ * Scopes and expiration are immutable; rotate the key to change them.
+ */
+export const updateOrganizationApiKeyDto = z
+  .object({
+    name: trimmedStringMinMax(1, 255).optional(),
+    status: z.enum(['ACTIVE', 'REVOKED']).optional(),
+  })
+  .strict();
+
+/** Zod schema for the `GET /api/v1/organization/api-keys` query string — cursor pagination + search (q) / sort / order. */
+export const listOrganizationApiKeysQueryDto = listSearchSortSchema([
+  'name',
+  'created_at',
+] as const);
+
+/** DTO inferred from {@link createOrganizationApiKeyDto}. */
+export type CreateOrganizationApiKeyInput = z.infer<typeof createOrganizationApiKeyDto>;
+/** DTO inferred from {@link updateOrganizationApiKeyDto}. */
+export type UpdateOrganizationApiKeyInput = z.infer<typeof updateOrganizationApiKeyDto>;
+/** DTO inferred from {@link listOrganizationApiKeysQueryDto}. */
+export type ListOrganizationApiKeysQueryInput = z.infer<typeof listOrganizationApiKeysQueryDto>;

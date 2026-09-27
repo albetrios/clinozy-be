@@ -1,0 +1,692 @@
+name: PR CI
+
+# Fast merge gate (~2–3 min target). All jobs run in parallel; no Postgres/Redis on PR.
+# Lint, typecheck, unit, migration safety lint, and TS/Docker build verification run here.
+# Security + contract/property tests stay on PR. Post-merge CI handles Docker publish,
+# deploy, release automation after merge (same commit SHA already passed PR CI).
+#
+# Required checks: see docs/deployment/ci-cd/branch-protection.md
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: pr-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 || 'true' }}
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      src-code: ${{ steps.filter.outputs.src-code }}
+      docker: ${{ steps.filter.outputs.docker }}
+      ci-config: ${{ steps.filter.outputs.ci-config }}
+      agent-os: ${{ steps.filter.outputs.agent-os }}
+      docs-only-md: ${{ steps.filter.outputs.docs-only-md == 'true' && steps.filter.outputs.src-code == 'false' && steps.filter.outputs.docker == 'false' && steps.filter.outputs.ci-config == 'false' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Path filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            src-code:
+              - 'src/**'
+              - 'migrations/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'vitest.config.ts'
+              - 'tooling/**'
+            docker:
+              - 'Dockerfile'
+              - 'Dockerfile.worker'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'tooling/ci/check-dockerfile-sync.mjs'
+            ci-config:
+              - '.github/**'
+            agent-os:
+              - 'agent-os/**'
+              - '.claude/**'
+            docs-only-md:
+              - '**/*.md'
+              - 'docs/**'
+
+  agent-os-gate:
+    name: agent-os evals
+    needs: [changes]
+    if: needs.changes.outputs.agent-os == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Integrity gate (counts, frontmatter, paths, hooks)
+        run: pnpm agent-os:check
+      - name: Trigger evals (routing map)
+        run: pnpm agent-os:triggers:strict
+      - name: Platform wiring drift gate (generated adapters in sync with source)
+        # A contributor who skips the local gate cannot land drifted
+        # .cursor/.claude/.codex adapters — they must match agent-os/ source.
+        run: pnpm agent-os:generate:check
+
+  lint:
+    name: Lint
+    needs: [changes]
+    if: needs.changes.outputs.docs-only-md != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: ./.github/actions/setup-node-pnpm
+      - run: pnpm lint
+
+  typecheck:
+    name: Typecheck
+    needs: [changes]
+    if: needs.changes.outputs.docs-only-md != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: ./.github/actions/setup-node-pnpm
+      - run: pnpm typecheck
+
+  static-sync:
+    name: Static sync
+    needs: [changes]
+    if: needs.changes.outputs.docs-only-md != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Validate domain structure (strict)
+        run: pnpm validate:domain:strict
+
+      - name: Validate domain integration test coverage
+        run: pnpm validate:domain:coverage
+
+      - name: Scripts layout (no root-level .ts)
+        run: pnpm validate:scripts-layout
+
+      - name: Route catalog in sync
+        run: pnpm routes:catalog:check
+
+      - name: Validate route HTTP coverage
+        run: pnpm validate:route-http-coverage
+
+      - name: Validate route success-status map in sync
+        run: pnpm validate:route-success-statuses
+
+      - uses: ./.github/actions/test-env
+
+      - name: OpenAPI specs in sync
+        env:
+          NODE_ENV: development
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
+          REDIS_URL: redis://localhost:6379
+        run: pnpm docs:check
+
+      - name: Env example in sync with schema
+        run: |
+          pnpm tool:sync-env-example || (echo "::error::.env.example is out of sync with env schema or is missing the # GitHub Secrets / # GitHub Variables top-level halves. See log above. Run pnpm tool:sync-env-example (with --fix if needed)." && exit 1)
+
+      # Ran only inside `ci:quality` (the post-merge canary), so a PR could go green and
+      # redden main — which is exactly what happened twice in a row while landing the gate
+      # itself. Enforcing it here makes the failure land on the PR that causes it.
+      - name: Project identity artifacts in sync
+        run: pnpm tool:generate-project-identity:check
+
+  unit-tests:
+    needs: [changes]
+    if: |
+      needs.changes.outputs.docs-only-md != 'true' &&
+      (needs.changes.outputs.src-code == 'true' || needs.changes.outputs.ci-config == 'true')
+    uses: ./.github/workflows/reusable-vitest-unit-only.yml
+
+  # Required-status-check gate: satisfies the branch-protection rule
+  # "unit / Unit + global" on every PR — including docs-only PRs where
+  # unit-tests is legitimately skipped by the path filter.
+  unit:
+    needs: [changes, unit-tests]
+    if: always()
+    uses: ./.github/workflows/reusable-unit-gate.yml
+    with:
+      unit-tests-result: ${{ needs.unit-tests.result }}
+
+  # Authoritative DB-backed matrix ON THE PR (D10 — migration item 1.31): the full
+  # e2e / integration / unit-db / performance / security suite runs here so the
+  # post-merge FAST lane can trust a single-PR merge without re-testing. The same
+  # reusable runs post-merge only in the FULL (batched) lane. Tests the PR head tree
+  # that squash-lands (strict up-to-date ⇒ that tree == the merge-commit tree).
+  # NOTE: the "Matrix Tests / *" checks must be added to main.json's required status
+  # checks in Phase 2 so a red matrix blocks merge (that is what makes it authoritative).
+  matrix-tests:
+    needs: [changes]
+    if: |
+      needs.changes.outputs.docs-only-md != 'true' &&
+      (needs.changes.outputs.src-code == 'true' || needs.changes.outputs.ci-config == 'true')
+    uses: ./.github/workflows/reusable-vitest-postgres-redis.yml
+    secrets: inherit
+    with:
+      merge_commit_sha: ${{ github.event.pull_request.head.sha }}
+      target_branch: main
+
+  # Required-status-check gate: satisfies the branch-protection rule
+  # "matrix / Integration" on every PR — including docs-only PRs where
+  # matrix-tests is legitimately skipped by the path filter. This is what makes
+  # the authoritative matrix (D10) a merge-blocking required check.
+  matrix:
+    needs: [changes, matrix-tests]
+    if: always()
+    uses: ./.github/workflows/reusable-matrix-gate.yml
+    with:
+      matrix-tests-result: ${{ needs.matrix-tests.result }}
+
+  migration-lint:
+    name: Migration lint
+    needs: [changes]
+    if: needs.changes.outputs.docs-only-md != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: ./.github/actions/setup-node-pnpm
+      - run: pnpm db:migrate:lint
+
+  knip:
+    name: Knip (dead code)
+    needs: [changes]
+    if: needs.changes.outputs.docs-only-md != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: ./.github/actions/setup-node-pnpm
+      # Dead-code / unused-export / unused-dependency gate. Scoped to the high-signal
+      # rules (files, dependencies, binaries, duplicates); the noisy cross-file
+      # exports/types analysis is deferred (see knip.jsonc).
+      - run: pnpm knip
+
+  rls-security:
+    name: RLS security (non-superuser)
+    needs: [changes]
+    if: |
+      needs.changes.outputs.docs-only-md != 'true' &&
+      (needs.changes.outputs.src-code == 'true' || needs.changes.outputs.ci-config == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Policy-level RLS coverage. These tests opt INTO the non-superuser `clinozy_be_app` role per
+    # statement (`SET LOCAL ROLE`, via the rls-matrix helpers), which is what lets them assert what
+    # a FORCE ROW LEVEL SECURITY policy does and does not permit — the CI superuser below is
+    # RLS-exempt, so without that opt-in they would assert nothing (this is how the
+    # org-mandated-MFA bypass reached production). Note the scope: only the statements that opt in
+    # are RLS-subject. Application code paths on this connection are NOT — a path that forgets a
+    # database context still reads rows here and returns none in production. The
+    # `rls-application-role` job below covers that half. Stays scoped to `src/tests/security/rls`
+    # (the rest of `--project security` runs post-merge) to keep the gate fast. Required-check
+    # wiring: docs/deployment/ci-cd/branch-protection.md.
+    services:
+      postgres:
+        image: postgres:17.10-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: clinozy
+          POSTGRES_PASSWORD: clinozy
+          POSTGRES_DB: clinozy
+        options: >-
+          --health-cmd="pg_isready -U clinozy -d clinozy"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:8.6.3-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      NODE_ENV: development
+      LOG_LEVEL: warn
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      REDIS_URL: redis://localhost:6379
+      RATE_LIMIT_MAX: 1000
+      RATE_LIMIT_WINDOW_MS: 60000
+      RUN_DB_TESTS: 1
+      RUN_REDIS_TESTS: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
+        uses: ./.github/actions/test-env
+
+      - name: Run migrations
+        run: pnpm db:migrate
+
+      - name: Run non-superuser RLS security tests
+        run: |
+          set -euo pipefail
+          pnpm exec vitest run --project security src/tests/security/rls
+
+  rls-application-role:
+    name: RLS application role (whole connection)
+    needs: [changes]
+    if: |
+      needs.changes.outputs.docs-only-md != 'true' &&
+      (needs.changes.outputs.src-code == 'true' || needs.changes.outputs.ci-config == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # The job above proves the POLICIES are right. This one proves the APPLICATION obeys them.
+    # The pool under test is opened as `clinozy_be_app` via libpq's `options=-c role=...`, so the
+    # role applies to every statement — including ones inside the app's own transactions —
+    # rather than only where a test opts in. A path that reaches a FORCE RLS table without a
+    # database context matches no policy arm, reads zero rows and reports success; that is how
+    # organization and account deletion came to erase no uploads with every check green, and it
+    # is invisible on the RLS-exempt superuser every other job uses. Harness fixtures use the
+    # operator connection (`src/tests/helpers/operator-database.ts`) because TRUNCATE and
+    # cross-tenant seeding are not things the application role may do.
+    services:
+      postgres:
+        image: postgres:17.10-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: clinozy
+          POSTGRES_PASSWORD: clinozy
+          POSTGRES_DB: clinozy
+        options: >-
+          --health-cmd="pg_isready -U clinozy -d clinozy"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:8.6.3-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      NODE_ENV: development
+      LOG_LEVEL: warn
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      REDIS_URL: redis://localhost:6379
+      RATE_LIMIT_MAX: 1000
+      RATE_LIMIT_WINDOW_MS: 60000
+      RUN_DB_TESTS: 1
+      RUN_REDIS_TESTS: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
+        uses: ./.github/actions/test-env
+
+      # Migrations run on the superuser URL above, BEFORE the role is applied — the application
+      # role is deliberately not a schema owner.
+      - name: Run migrations
+        run: pnpm db:migrate
+
+      - name: Run e2e + integration as the RLS-subject application role
+        run: |
+          set -euo pipefail
+          pnpm test:rls-role
+
+  build-verify:
+    name: Build verify
+    needs: [changes]
+    if: |
+      needs.changes.outputs.docs-only-md != 'true' &&
+      (
+        needs.changes.outputs.src-code == 'true' ||
+        needs.changes.outputs.docker == 'true' ||
+        needs.changes.outputs.ci-config == 'true'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DOCKER_BUILDKIT: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Setup project identity
+        uses: ./.github/actions/setup-project-identity
+
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - run: pnpm build
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Verify Dockerfile.worker sync
+        run: node tooling/ci/check-dockerfile-sync.mjs
+
+      - name: Build API Docker image (load only)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          target: api
+          load: true
+          push: false
+          tags: ${{ env.DOCKER_LOCAL_API_TAG }}:pr-verify
+          build-args: |
+            GENERATE_MCP_DOCS=true
+            BUILD_REVISION=${{ github.sha }}
+            IMAGE_SOURCE=${{ github.server_url }}/${{ github.repository }}
+          # Shared cache scope with post-merge (no -pr suffix) so the post-merge
+          # build is a warm cache hit instead of a cold rebuild (item C4/1.34).
+          cache-from: type=gha,scope=${{ env.GHCR_CACHE_SCOPE_API }}
+          cache-to: type=gha,mode=max,scope=${{ env.GHCR_CACHE_SCOPE_API }}
+
+      - name: Build worker Docker image (load only)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          file: Dockerfile.worker
+          load: true
+          push: false
+          tags: ${{ env.WORKER_IMAGE }}:pr-verify
+          build-args: |
+            BUILD_REVISION=${{ github.sha }}
+            IMAGE_SOURCE=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=${{ env.GHCR_CACHE_SCOPE_WORKER }}
+          cache-to: type=gha,mode=max,scope=${{ env.GHCR_CACHE_SCOPE_WORKER }}
+
+  security-audit:
+    name: Security audit
+    needs: [changes]
+    if: needs.changes.outputs.docs-only-md != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Dependency audit (all deps)
+        run: pnpm deps:audit
+
+      - name: Production dependency audit
+        run: pnpm deps:audit:prod
+
+  security-secrets:
+    name: Security secrets
+    needs: [changes]
+    if: needs.changes.outputs.docs-only-md != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Cache gitleaks binary
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: /usr/local/bin/gitleaks
+          key: gitleaks-8.30.1-${{ runner.os }}
+
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          set -euo pipefail
+          if [ ! -x /usr/local/bin/gitleaks ]; then
+            curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+              | sudo tar -xz -C /usr/local/bin gitleaks
+            sudo chmod +x /usr/local/bin/gitleaks
+          fi
+          gitleaks version
+
+      - name: Gitleaks (secret detection)
+        run: gitleaks detect --redact --verbose --no-banner --config .gitleaks.toml
+
+  security-sast:
+    name: Security SAST
+    needs: [changes]
+    if: needs.changes.outputs.docs-only-md != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+
+      - name: Install Semgrep
+        run: pip install semgrep
+
+      - name: Semgrep SAST
+        run: semgrep scan --config p/default --metrics off
+
+  security-iac:
+    # Trivy config (IaC misconfiguration scan) — closes the Dockerfile/compose
+    # gap left by CodeQL/semgrep/pnpm audit, which don't inspect container
+    # build configuration. Post-merge Trivy already scans built images for OS
+    # CVEs; this job runs PR-time on Dockerfiles + compose for misconfigs
+    # (running as root, missing HEALTHCHECK, etc.) so they don't reach main.
+    # Action + CLI versions match reusable-docker-build-trivy.yml.
+    #
+    # skip-files: Dockerfile.agent is intentionally excluded. It is a
+    # development-only image for Cursor cloud agents (see header comment in
+    # Dockerfile.agent) where the host platform manages user identity and a
+    # USER directive would conflict with the agent's apt-installed tooling
+    # workflow. Deployed images (Dockerfile, Dockerfile.worker) are scanned.
+    name: Security IaC (Trivy config)
+    needs: [changes]
+    if: needs.changes.outputs.docs-only-md != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Scan IaC for misconfigurations (table — blocking)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: 1
+          version: v0.69.2
+          skip-files: Dockerfile.agent
+
+      - name: Scan IaC for misconfigurations (SARIF — non-blocking, for Security tab)
+        if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          format: sarif
+          output: trivy-config.sarif
+          severity: CRITICAL,HIGH
+          exit-code: 0
+          version: v0.69.2
+          skip-files: Dockerfile.agent
+
+      - name: Upload IaC Trivy SARIF
+        if: always() && hashFiles('trivy-config.sarif') != ''
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v3
+        with:
+          sarif_file: trivy-config.sarif
+          category: trivy-config
+
+  dependency-review:
+    name: Dependency review
+    needs: [changes]
+    if: needs.changes.outputs.docs-only-md != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v4
+        with:
+          fail-on-severity: high
+          deny-licenses: GPL-3.0, AGPL-3.0
+
+  actionlint:
+    name: Actionlint
+    needs: [changes]
+    if: needs.changes.outputs.docs-only-md != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Run actionlint
+        uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
+
+  contract-property:
+    name: Contract + property
+    needs: [changes]
+    if: needs.changes.outputs.docs-only-md != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Outbound contract tests (nock, offline)
+        run: pnpm test:contract
+
+      - name: Property tests (bounded)
+        env:
+          FAST_CHECK_NUM_RUNS: 50
+        run: pnpm test:property
+
+  quality-gate:
+    name: Quality gate
+    # ── Single aggregate required check ──────────────────────────────────────
+    # Branch protection (.github/rulesets/main.json) requires only "Quality gate"
+    # + "Checks" (from pr-governance.yml). This job rolls up every required PR-CI
+    # lane, so adding, removing, or renaming a lane changes ONLY this `needs:` list
+    # — never the ruleset, and never a `pnpm github:sync`. That removes the whole
+    # class of "a job rename silently disabled a required check" drift that the
+    # 13-explicit-context model was exposed to.
+    #
+    # A lane that is legitimately skipped (docs-only PR path filter) counts as a
+    # pass; a real failure or cancellation fails the gate. The ruleset ↔ needs
+    # invariant is pinned by src/tests/unit/ci/pr-quality-gate.policy.unit.test.ts.
+    #
+    # agent-os-gate IS required: it only runs on agent-os/** changes (skip → pass
+    # otherwise) and blocks a broken routing map or drifted .cursor/.claude/.codex
+    # adapters. Promote a lane to blocking by adding it here AND to REQUIRED_LANES
+    # in the policy test.
+    needs:
+      - changes
+      - lint
+      - typecheck
+      - static-sync
+      - agent-os-gate
+      - unit
+      - matrix
+      - migration-lint
+      - knip
+      - build-verify
+      - security-audit
+      - security-secrets
+      - security-sast
+      - security-iac
+      - dependency-review
+      - contract-property
+      - rls-security
+      - rls-application-role
+      - actionlint
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Aggregate required-lane results
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          {
+            echo "| lane | result |"
+            echo "| --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          failed=0
+          while IFS=$'\t' read -r lane result; do
+            echo "| ${lane} | ${result} |" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+              echo "::error::Required lane '${lane}' did not pass (result: ${result})"
+              failed=1
+            fi
+          done < <(printf '%s' "$NEEDS_JSON" | jq -r 'to_entries[] | [.key, .value.result] | @tsv')
+          if [ "$failed" -ne 0 ]; then
+            echo "Quality gate FAILED — one or more required lanes did not pass."
+            exit 1
+          fi
+          echo "Quality gate PASSED — all required lanes succeeded or were skipped."

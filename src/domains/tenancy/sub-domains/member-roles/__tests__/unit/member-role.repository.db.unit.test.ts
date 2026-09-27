@@ -1,0 +1,197 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { cleanupDatabase } from '@/tests/helpers/test-database.js';
+import { createTestUser } from '@/tests/factories/user.factory.js';
+import { createTestOrganization } from '@/tests/factories/organization.factory.js';
+import {
+  createMembership,
+  createRoleWithPermissions,
+  seedPermissions,
+} from '@/domains/tenancy/__tests__/factories/permission.factory.js';
+import { MemberRoleRepository } from '@/domains/tenancy/sub-domains/member-roles/member-role.repository.js';
+
+describe('MemberRoleRepository (database)', () => {
+  const repository = new MemberRoleRepository();
+
+  beforeEach(async () => {
+    await cleanupDatabase();
+    await seedPermissions(['organization:read', 'organization:manage']);
+  });
+
+  it('paginates an empty organization role list', async () => {
+    const owner = await createTestUser();
+    const organization = await createTestOrganization({ ownerUserId: owner.id });
+    const emptyPage = await repository.findByOrganizationId(organization.id, {
+      limit: 20,
+      order: 'asc',
+    });
+    expect(emptyPage.items).toEqual([]);
+    expect(emptyPage.total).toBeNull();
+  });
+
+  it('finds roles by organization and public id', async () => {
+    const owner = await createTestUser();
+    const organization = await createTestOrganization({ ownerUserId: owner.id });
+    const role = await createRoleWithPermissions({
+      organizationId: organization.id,
+      permissionCodes: ['organization:read'],
+    });
+
+    const page = await repository.findByOrganizationId(organization.id, {
+      limit: 20,
+      order: 'asc',
+    });
+    expect(page.items.some((row) => row.public_id === role.public_id)).toBe(true);
+
+    const byPublicId = await repository.findByPublicId(role.public_id, organization.id);
+    expect(byPublicId?.name).toBe(role.name);
+
+    const created = await repository.create({
+      organization_id: organization.id,
+      name: 'Editor',
+      description: 'Editor role',
+      is_system: true,
+      created_by_user_id: owner.id,
+    });
+    expect(created.name).toBe('Editor');
+    expect(created.is_system).toBe(true);
+
+    const systemRole = await repository.create({
+      organization_id: organization.id,
+      name: 'System',
+      created_by_user_id: null,
+    });
+    expect(systemRole.name).toBe('System');
+
+    const defaultRole = await repository.create({
+      organization_id: organization.id,
+      name: 'Default',
+    });
+    expect(defaultRole.is_system).toBe(false);
+
+    const explicitNullDescription = await repository.create({
+      organization_id: organization.id,
+      name: 'Explicit null description',
+      description: null,
+    });
+    expect(explicitNullDescription.description).toBeNull();
+
+    const updated = await repository.update(
+      created.public_id,
+      organization.id,
+      { name: 'Editor Plus', description: 'Updated description' },
+      owner.id,
+    );
+    expect(updated?.name).toBe('Editor Plus');
+
+    const updatedWithNullUpdater = await repository.update(
+      created.public_id,
+      organization.id,
+      { description: 'No updater' },
+      null,
+    );
+    expect(updatedWithNullUpdater?.description).toBe('No updater');
+
+    const deleted = await repository.softDelete(created.public_id, organization.id);
+    expect(deleted?.deleted_at).not.toBeNull();
+    expect(await repository.softDelete(created.public_id, organization.id)).toBeNull();
+    expect(await repository.findByPublicId(created.public_id, organization.id)).toBeNull();
+    expect(await repository.findByPublicId('missing_role', organization.id)).toBeNull();
+    expect(
+      await repository.update('missing_role', organization.id, { name: 'X' }, owner.id),
+    ).toBeNull();
+  });
+
+  it('route-audit C2: softDeleteIfNoActiveMembers refuses when the role has active members', async () => {
+    const owner = await createTestUser({ email: 'c2-owner@test.com' });
+    const organization = await createTestOrganization({ ownerUserId: owner.id });
+
+    const assignedRole = await createRoleWithPermissions({
+      organizationId: organization.id,
+      permissionCodes: [],
+    });
+    const emptyRole = await createRoleWithPermissions({
+      organizationId: organization.id,
+      permissionCodes: [],
+    });
+
+    const member = await createTestUser({ email: 'c2-member@test.com' });
+    await createMembership({
+      userId: member.id,
+      organizationId: organization.id,
+      roleId: assignedRole.id,
+      status: 'ACTIVE',
+    });
+
+    // Role WITH an active member → the atomic guard matches zero rows (null); the role stays.
+    expect(
+      await repository.softDeleteIfNoActiveMembers(assignedRole.public_id, organization.id),
+    ).toBeNull();
+    expect(await repository.findByPublicId(assignedRole.public_id, organization.id)).not.toBeNull();
+
+    // Role with NO members → soft-deleted.
+    expect(
+      await repository.softDeleteIfNoActiveMembers(emptyRole.public_id, organization.id),
+    ).not.toBeNull();
+    expect(await repository.findByPublicId(emptyRole.public_id, organization.id)).toBeNull();
+  });
+
+  it('countMembers* count ACTIVE + INVITED per role, excluding SUSPENDED; unassigned role → 0', async () => {
+    const owner = await createTestUser({ email: 'mc-owner@test.com' });
+    const organization = await createTestOrganization({ ownerUserId: owner.id });
+
+    const roleA = await createRoleWithPermissions({
+      organizationId: organization.id,
+      permissionCodes: [],
+    });
+    const roleB = await createRoleWithPermissions({
+      organizationId: organization.id,
+      permissionCodes: [],
+    });
+    const emptyRole = await createRoleWithPermissions({
+      organizationId: organization.id,
+      permissionCodes: [],
+    });
+
+    // roleA: 1 ACTIVE + 1 INVITED are counted (2); the SUSPENDED member is excluded.
+    // Distinct users — the partial unique index is on (user_id, organization_id).
+    const active = await createTestUser({ email: 'mc-active@test.com' });
+    const invited = await createTestUser({ email: 'mc-invited@test.com' });
+    const suspended = await createTestUser({ email: 'mc-suspended@test.com' });
+    await createMembership({
+      userId: active.id,
+      organizationId: organization.id,
+      roleId: roleA.id,
+      status: 'ACTIVE',
+    });
+    await createMembership({
+      userId: invited.id,
+      organizationId: organization.id,
+      roleId: roleA.id,
+      status: 'INVITED',
+    });
+    await createMembership({
+      userId: suspended.id,
+      organizationId: organization.id,
+      roleId: roleA.id,
+      status: 'SUSPENDED',
+    });
+    // roleB: a single ACTIVE member.
+    const soloActive = await createTestUser({ email: 'mc-solo@test.com' });
+    await createMembership({
+      userId: soloActive.id,
+      organizationId: organization.id,
+      roleId: roleB.id,
+      status: 'ACTIVE',
+    });
+
+    const counts = await repository.countMembersByRoleForOrganization(organization.id);
+    expect(counts.get(roleA.id)).toBe(2); // ACTIVE + INVITED; SUSPENDED excluded
+    expect(counts.get(roleB.id)).toBe(1);
+    // A role with no counted members is absent from the map — callers default it to 0.
+    expect(counts.has(emptyRole.id)).toBe(false);
+
+    // The single-role variant shares the status filter and matches the aggregate.
+    expect(await repository.countMembersForRole(roleA.id, organization.id)).toBe(2);
+    expect(await repository.countMembersForRole(emptyRole.id, organization.id)).toBe(0);
+  });
+});

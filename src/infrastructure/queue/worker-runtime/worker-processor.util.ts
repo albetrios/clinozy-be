@@ -1,0 +1,107 @@
+import { Worker, type Job, type WorkerOptions } from 'bullmq';
+import {
+  MAINTENANCE_SCOPE,
+  PRINCIPAL_SCOPE,
+  withAppDatabaseContext,
+  withMaintenanceDatabaseContext,
+} from '@/infrastructure/database/contexts/database-context.js';
+import {
+  type WorkerContextDatabaseHandle,
+  brandWorkerContextDatabaseHandle,
+} from '@/infrastructure/database/utils/database-handle.types.js';
+import { buildWorkerHandle } from '@/infrastructure/queue/worker-runtime/worker-close.util.js';
+import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
+
+/** Explicit Drizzle handle passed from a worker context wrapper into processors/repositories. */
+export type WorkerDatabaseHandle = WorkerContextDatabaseHandle;
+
+/**
+ * Decorates a per-queue job payload `TJob` with the `organizationPublicId` discriminator
+ * required by {@link runOrganizationScopedWorkerJob} so the processor can re-enter Postgres
+ * inside the job-scope principal context (sets `app.current_organization_public_id` for RLS).
+ */
+export type TenantScopedWorkerJob<TJob> = TJob & {
+  organizationPublicId: string;
+};
+
+/**
+ * Minimal shape every tenant-scoped BullMQ job must satisfy — extracted as its own type
+ * so {@link createTenantScopedBullMQWorker}'s generic constraint stays narrow.
+ */
+export type OrganizationScopedJobData = {
+  organizationPublicId: string;
+};
+
+/**
+ * Decorates a per-queue job payload `TJob` with the `userPublicId` discriminator required
+ * by {@link runUserScopedWorkerJob} so the processor can re-enter Postgres inside
+ * the job-scope principal context (sets `app.current_user_public_id` for GDPR-scoped reads).
+ */
+export type UserScopedWorkerJob<TJob> = TJob & {
+  userPublicId: string;
+};
+
+/**
+ * Runs a tenant-scoped BullMQ job handler with RLS organization context and a pinned database handle.
+ */
+export async function runOrganizationScopedWorkerJob<TJob, TResult>(
+  job: TenantScopedWorkerJob<TJob>,
+  processor: (databaseHandle: WorkerDatabaseHandle, job: TJob) => Promise<TResult>,
+): Promise<TResult> {
+  const { organizationPublicId, ...jobPayload } = job;
+  return withAppDatabaseContext(
+    PRINCIPAL_SCOPE.JOB({ organizationPublicId: organizationPublicId }),
+    (databaseHandle) =>
+      processor(brandWorkerContextDatabaseHandle(databaseHandle), jobPayload as TJob),
+  );
+}
+
+/**
+ * Runs a global retention/tombstone worker job with `app.global_retention_cleanup` set.
+ */
+export async function runGlobalRetentionWorkerJob<TResult>(
+  processor: (databaseHandle: WorkerDatabaseHandle) => Promise<TResult>,
+): Promise<TResult> {
+  return withMaintenanceDatabaseContext(
+    MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+    (databaseHandle) => processor(brandWorkerContextDatabaseHandle(databaseHandle)),
+  );
+}
+
+/**
+ * Runs a user-scoped worker job with `app.current_user_public_id` set (GDPR export, etc.).
+ */
+export async function runUserScopedWorkerJob<TJob, TResult>(
+  job: UserScopedWorkerJob<TJob>,
+  processor: (databaseHandle: WorkerDatabaseHandle, job: TJob) => Promise<TResult>,
+): Promise<TResult> {
+  const { userPublicId, ...jobPayload } = job;
+  return withAppDatabaseContext(
+    PRINCIPAL_SCOPE.JOB({ userPublicId: userPublicId }),
+    (databaseHandle) =>
+      processor(brandWorkerContextDatabaseHandle(databaseHandle), jobPayload as TJob),
+  );
+}
+
+/**
+ * BullMQ worker factory for jobs that include `organizationPublicId` in the payload.
+ * Runs each job inside `withAppDatabaseContext` and passes a pinned `databaseHandle` to the handler.
+ */
+export function createTenantScopedBullMQWorker<TJobData extends OrganizationScopedJobData>(
+  queueName: string,
+  handler: (databaseHandle: WorkerDatabaseHandle, job: Job<TJobData>) => Promise<unknown>,
+  workerOptions: WorkerOptions,
+): WorkerHandle {
+  const worker = new Worker<TJobData>(
+    queueName,
+    async (job) => {
+      const { organizationPublicId, ...jobPayload } = job.data;
+      return runOrganizationScopedWorkerJob(
+        { organizationPublicId, ...jobPayload },
+        (databaseHandle) => handler(databaseHandle, job),
+      );
+    },
+    workerOptions,
+  );
+  return buildWorkerHandle(worker, queueName);
+}

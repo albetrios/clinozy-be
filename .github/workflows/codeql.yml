@@ -1,0 +1,59 @@
+name: CodeQL
+
+# Semantic (taint-tracking) security analysis for JS/TS. Complements the Semgrep
+# SAST job in pr-ci.yml: CodeQL traces dataflow from request-input sources to
+# dangerous sinks (SQL, exec, redirects) that pattern-based SAST can miss.
+# Results land in the repository Security tab.
+
+# Single-trunk model: analyze once per change on the PR (the authoritative gate),
+# plus a weekly full scan. The former `push` trigger re-analyzed the merge commit —
+# redundant with the PR run under PR-only merges — so it is dropped (item C1).
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly full scan (Monday 04:27 UTC) so advisories that land between merges
+    # are still surfaced (direct-push backstop under PR-only merges).
+    - cron: '27 4 * * 1'
+  # On-demand default-branch scan. With no `push` trigger, a code-scanning alert
+  # fixed on a PR is not re-analyzed on `main` until the next weekly cron — so the
+  # alert lingers as "open" for up to a week. Dispatching this workflow from `main`
+  # runs a fresh analysis of the trunk immediately, clearing fixed alerts on demand.
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 || 'true' }}
+
+jobs:
+  analyze:
+    name: Analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      # Required to upload analysis results to the Security tab.
+      security-events: write
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@84498526a009a99c875e83ef4821a8ba52de7c22 # codeql-bundle-v2.25.5
+        with:
+          languages: javascript-typescript
+          # JS/TS needs no compilation; analyze source directly.
+          build-mode: none
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@84498526a009a99c875e83ef4821a8ba52de7c22 # codeql-bundle-v2.25.5
+        with:
+          category: '/language:javascript-typescript'

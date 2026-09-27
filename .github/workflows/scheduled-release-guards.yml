@@ -1,0 +1,211 @@
+# Release-flow guards — scheduled canaries that catch release-cycle drift while it
+# is still a notification, not a blocked release (all of these bit the 4.8.0 release).
+# Single-trunk model: the branch-ancestry guard is retired (no dev → main promotion
+# or back-merge exists anymore — main is the only long-lived branch).
+#   1. Ruleset liveness (weekly): every committed `.github/rulesets/*.json` must
+#      have a live, active ruleset counterpart — a deleted or disabled ruleset
+#      silently removes the merge gates. Environment-protection drift
+#      (`.github/environments/*.json` vs the GitHub UI) is covered by guard 3's
+#      `github:sync --check`, which diffs the whole setup surface.
+#   2. RELEASE_PLEASE_TOKEN canary (weekly): probes the development environment's
+#      PAT copy for expiry. Rotation (`pnpm github:sync`) updates both environment
+#      copies together, so the unprotected development copy is a usable canary for
+#      the production copy — which cannot be probed on a schedule without tripping
+#      the production required-reviewer gate every week. The production copy is
+#      additionally verified at use time by the tripwire step in post-merge-ci's
+#      release-please job.
+#   3. Repo settings drift (weekly): read-only `pnpm github:sync --check` over the
+#      whole setup surface (setup.config.json ↔ rulesets ↔ workflows ↔ GitHub
+#      Environments) — broader than guard 1's protection/ruleset checks.
+
+name: Release-flow guards
+
+on:
+  schedule:
+    - cron: '30 6 * * 1' # weekly (Monday) — ruleset liveness + PAT canary + repo settings drift
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 || 'true' }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-flow-guards
+  cancel-in-progress: false
+
+jobs:
+  ruleset-liveness-drift:
+    name: Ruleset liveness drift
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 6 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Verify committed rulesets are live and active
+        # `.github/rulesets/*.json` is the committed source of truth for branch
+        # protection; a deleted or disabled live ruleset silently removes the
+        # merge gates (required checks, merge-method lock, review rules).
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GH_REPOSITORY}/rulesets" --paginate \
+            --jq '[.[] | {name, enforcement}]' > /tmp/live-rulesets.json
+          failures=0
+          for ruleset_file in .github/rulesets/*.json; do
+            name="$(jq -r '.name' "$ruleset_file")"
+            live_enforcement="$(jq -r --arg n "$name" \
+              '[.[] | select(.name == $n) | .enforcement][0] // "absent"' /tmp/live-rulesets.json)"
+            if [ "$live_enforcement" != "active" ]; then
+              echo "::error::Committed ruleset '${name}' (${ruleset_file}) is not live+active on GitHub (live state: ${live_enforcement}). Re-apply it via pnpm github:sync or the repo Rules settings."
+              failures=$((failures + 1))
+            else
+              echo "OK: ruleset '${name}' is live and active."
+            fi
+          done
+          [ "$failures" -eq 0 ]
+
+  release-token:
+    name: RELEASE_PLEASE_TOKEN canary (development copy)
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 6 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The development environment has no protection rules, so a scheduled job can
+    # read its secrets without an approval prompt (production's copy would require
+    # the reviewer gate weekly; it is covered at use time in post-merge-ci).
+    environment: development
+    steps:
+      - name: Probe RELEASE_PLEASE_TOKEN for expiry
+        env:
+          RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASE_PLEASE_TOKEN:-}" ]; then
+            echo "::error::RELEASE_PLEASE_TOKEN is not set in the development environment — release automation is silently degraded (Releases/tags cannot be created)."
+            exit 1
+          fi
+          # Dump the response headers: a fine-grained PAT returns its expiry in the
+          # `github-authentication-token-expiration` header on any authenticated
+          # request, so we can warn a fortnight BEFORE it lapses — instead of only
+          # discovering it dead (401) on the day a release needs it.
+          status="$(curl -sS -D /tmp/pat-headers -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${RELEASE_PLEASE_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GH_REPOSITORY}" || echo 000)"
+          if [ "$status" = "401" ]; then
+            echo "::error::RELEASE_PLEASE_TOKEN (development copy) is expired or revoked. Rotate the PAT and update BOTH environment copies (pnpm github:sync) before the next release needs it."
+            exit 1
+          fi
+          if [ "$status" != "200" ]; then
+            echo "::warning title=RELEASE_PLEASE_TOKEN probe inconclusive::GitHub API returned HTTP ${status} (transient?). Not failing the canary."
+            exit 0
+          fi
+          # Classic / non-expiring PATs omit the header — nothing to warn about.
+          expiry="$(grep -i '^github-authentication-token-expiration:' /tmp/pat-headers \
+            | sed -E 's/^[^:]+:[[:space:]]*//; s/[[:space:]]*$//' || true)"
+          if [ -z "$expiry" ]; then
+            echo "RELEASE_PLEASE_TOKEN valid (HTTP 200); no expiry header (classic or non-expiring PAT)."
+            exit 0
+          fi
+          expiry_epoch="$(date -u -d "$expiry" +%s 2>/dev/null || echo 0)"
+          now_epoch="$(date -u +%s)"
+          if [ "$expiry_epoch" -gt 0 ]; then
+            days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
+            echo "RELEASE_PLEASE_TOKEN valid; expires ${expiry} (${days_left} days left)."
+            if [ "$days_left" -lt 14 ]; then
+              echo "::warning title=RELEASE_PLEASE_TOKEN expiring soon::The PAT expires in ${days_left} day(s) (${expiry}). Rotate it and update BOTH environment copies (pnpm github:sync) before it lapses to avoid a stuck release."
+            fi
+          else
+            echo "RELEASE_PLEASE_TOKEN valid; expiry header present but unparseable: ${expiry}"
+          fi
+
+  repo-settings-drift:
+    name: Repo settings drift (github:sync --check)
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 6 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Same environment as the release-token canary above, for the same reason:
+    # `secrets.RELEASE_PLEASE_TOKEN` only resolves to the environment copy that
+    # canary actually probes when the job is scoped to that environment. Without
+    # this the expression falls back to the repository-level secret, which no
+    # guard validates — an expired repo-level copy then fails `gh auth status`
+    # and reports a token problem as "settings drift" (issue #1006).
+    environment: development
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      # Read-only consistency + remote drift for the WHOLE setup surface
+      # (setup.config.json ↔ rulesets ↔ workflows ↔ GitHub Environments) —
+      # broader than the ruleset-liveness job's checks (it also covers environment protection).
+      # `github:sync` shells out to `gh`, which authenticates via GH_TOKEN;
+      # the PAT fallback keeps this runnable if the default token lacks a
+      # settings-read scope. Note the fallback triggers on an EMPTY secret, not
+      # an invalid one — a set-but-expired PAT is used as-is and fails auth, so
+      # the token must come from the environment copy the canary probes.
+      - name: Run github:sync --check (read-only)
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+        run: pnpm github:sync --check
+
+  notify-failure:
+    name: Notify failure
+    needs: [ruleset-liveness-drift, release-token, repo-settings-drift]
+    if: |
+      always() &&
+      (needs.ruleset-liveness-drift.result == 'failure' || needs.release-token.result == 'failure' || needs.repo-settings-drift.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update ci-failure issue
+        # A failed guard on a schedule is invisible unless someone checks the
+        # Actions tab; an issue produces a real notification. One open issue per
+        # guard collects repeats as comments; closing it acknowledges the drift.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          DRIFT_RESULT: ${{ needs.ruleset-liveness-drift.result }}
+          TOKEN_RESULT: ${{ needs.release-token.result }}
+          SETTINGS_RESULT: ${{ needs.repo-settings-drift.result }}
+          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh label create ci-failure --repo "$GH_REPOSITORY" \
+            --color D93F0B --description "Automated post-merge/guard failure notification" \
+            2>/dev/null || true
+          title="Release-flow guard failing"
+          body="$(printf '%s\n' \
+            "Run: ${WORKFLOW_URL}" \
+            "" \
+            "| guard | result |" \
+            "| --- | --- |" \
+            "| environment/ruleset drift | ${DRIFT_RESULT} |" \
+            "| RELEASE_PLEASE_TOKEN canary | ${TOKEN_RESULT} |" \
+            "| repo settings drift (github:sync --check) | ${SETTINGS_RESULT} |" \
+            "" \
+            "Drift red → align GitHub environment settings with .github/environments/*.json and re-apply .github/rulesets/*.json." \
+            "Token red → rotate the RELEASE_PLEASE_TOKEN PAT and update both environment copies (pnpm github:sync)." \
+            "Settings red → run pnpm github:sync --check locally and reconcile with pnpm github:sync." \
+            "" \
+            "Close this issue once the guard is green again.")"
+          existing="$(gh issue list --repo "$GH_REPOSITORY" --state open --label ci-failure \
+            --search "in:title \"${title}\"" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GH_REPOSITORY" --body "$body"
+            echo "Commented on existing ci-failure issue #${existing}."
+          else
+            gh issue create --repo "$GH_REPOSITORY" --title "$title" --label ci-failure --body "$body"
+          fi

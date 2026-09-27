@@ -1,0 +1,180 @@
+{
+  "DELETE /api/v1/auth/me/auth-methods/:auth_method_id": {
+    "model": "user",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/auth/me/sessions/:session_id": {
+    "model": "user",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/auth/me/mfa/:mfa_method_id": {
+    "model": "user",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/auth/me/webauthn/credentials/:credential_id": {
+    "model": "user",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/billing/subscriptions/:subscription_id": {
+    "model": "organization"
+  },
+  "GET /api/v1/billing/subscriptions/:subscription_id/payment-setup": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/billing/subscriptions/:subscription_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/billing/subscriptions/:subscription_id/cancel": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/billing/subscriptions/:subscription_id/change-plan": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/billing/subscriptions/:subscription_id/resume": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/notify/notifications/:notification_id": {
+    "model": "user"
+  },
+  "DELETE /api/v1/notify/notifications/:notification_id": {
+    "model": "user",
+    "verifyNoMutation": true
+  },
+  "PATCH /api/v1/notify/notifications/:notification_id/read": {
+    "model": "user",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/notify/webhooks/:webhook_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/notify/webhooks/:webhook_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/notify/webhooks/:webhook_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/notify/webhooks/:webhook_id/delivery-attempts": {
+    "model": "organization"
+  },
+  "POST /api/v1/notify/webhooks/:webhook_id/test": {
+    "model": "organization"
+  },
+  "POST /api/v1/tenancy/invitations/:invitation_id/accept": {
+    "model": "email",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/tenancy/organization/transfer-ownership": {
+    "model": "tier:owner",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/tenancy/organization/leave": {
+    "model": "tier:owner"
+  },
+  "GET /api/v1/tenancy/organization/api-keys/:api_key_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/tenancy/organization/api-keys/:api_key_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/tenancy/organization/api-keys/:api_key_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/tenancy/organization/api-keys/:api_key_id/rotate": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/tenancy/organization/invitations/:invitation_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/tenancy/organization/invitations/:invitation_id/resend": {
+    "model": "organization"
+  },
+  "GET /api/v1/tenancy/organization/memberships/:membership_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/tenancy/organization/memberships/:membership_id": {
+    "model": "tier:owner",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/tenancy/organization/memberships/:membership_id": {
+    "model": "tier:owner",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/tenancy/organization/memberships/:membership_id/permissions": {
+    "model": "organization"
+  },
+  "GET /api/v1/tenancy/organization/notification-policies/:notification_policy_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/tenancy/organization/notification-policies/:notification_policy_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/tenancy/organization/notification-policies/:notification_policy_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/tenancy/organization/roles/:role_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/tenancy/organization/roles/:role_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/tenancy/organization/roles/:role_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/tenancy/organization/roles/:role_id/permissions": {
+    "model": "organization"
+  },
+  "PUT /api/v1/tenancy/organization/roles/:role_id/permissions": {
+    "model": "grant",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/tenancy/organizations/by-slug/:slug": {
+    "model": "organization"
+  },
+  "GET /api/v1/uploads/:upload_id": {
+    "model": "user"
+  },
+  "DELETE /api/v1/uploads/:upload_id": {
+    "model": "user",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/uploads/:upload_id/confirm": {
+    "model": "user",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/users/:user_id": {
+    "model": "global-role"
+  },
+  "PATCH /api/v1/users/:user_id": {
+    "model": "global-role",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/users/:user_id": {
+    "model": "global-role",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/users/:user_id/suspend": {
+    "model": "global-role",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/users/:user_id/unsuspend": {
+    "model": "global-role",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/users/me/data-export/:data_export_id": {
+    "model": "user"
+  }
+}

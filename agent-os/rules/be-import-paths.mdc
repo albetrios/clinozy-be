@@ -1,0 +1,9 @@
+---
+description: Enforces strict path-alias imports in src/ and tooling/ — no parent-relative (../) paths.
+globs: src/**/*.ts, tooling/**/*.ts
+alwaysApply: false
+---
+
+# Import paths
+
+`@/` in `src/`, `@tooling/` in tooling; same-folder `./` only; **never `../`**; `.js` ESM specifiers that resolve to `.ts` on disk. Enforced by `src/tests/global/import-paths.global.test.ts`. Detail: CLAUDE.md › Import paths.

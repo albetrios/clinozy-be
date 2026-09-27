@@ -1,0 +1,64 @@
+name: Start API server
+description: Start the API in the background and wait for /readyz
+
+inputs:
+  rate-limit-max:
+    description: RATE_LIMIT_MAX for the server process
+    required: false
+    default: '10000'
+  log-file:
+    description: Server log file path
+    required: false
+    default: server.log
+  ready-timeout-seconds:
+    description: Max seconds to wait for readiness
+    required: false
+    default: '120'
+
+runs:
+  using: composite
+  steps:
+    - name: Start API server (background)
+      # The boot-time safety checks default hardened (src/shared/config/env-schema.ts). This
+      # ephemeral CI boot runs against plaintext, superuser, proxy-less service containers, so it
+      # relaxes them exactly as the Docker smoke boot in reusable-docker-build-trivy.yml does.
+      env:
+        DATABASE_TLS_ENFORCED: 'false'
+        DATABASE_RLS_SAFETY_ENFORCED: 'false'
+        DATABASE_CONNECTION_BUDGET_ENFORCED: 'false'
+        REDIS_TLS_ENFORCED: 'false'
+        TRUST_PROXY_REQUIRED: 'false'
+      run: |
+        RATE_LIMIT_MAX=${{ inputs.rate-limit-max }} pnpm exec tsx src/server.ts > "${{ inputs.log-file }}" 2>&1 &
+        echo $! > server.pid
+      shell: bash
+
+    - name: Wait for server readiness
+      run: |
+        deadline=$((SECONDS + ${{ inputs.ready-timeout-seconds }}))
+        while [ "$SECONDS" -lt "$deadline" ]; do
+          if [ -f server.pid ] && ! kill -0 "$(tr -d '\n' < server.pid)" 2>/dev/null; then
+            echo "API server exited before readiness."
+            echo "--- ${{ inputs.log-file }} (tail 200) ---"
+            tail -n 200 "${{ inputs.log-file }}" || true
+            exit 1
+          fi
+
+          if curl -sf http://localhost:3000/readyz; then
+            exit 0
+          fi
+
+          if [ $((SECONDS % 10)) -eq 0 ]; then
+            echo "Waiting for API readiness..."
+            curl -s http://localhost:3000/readyz || true
+            echo
+          fi
+
+          sleep 1
+        done
+
+        echo "API server did not become ready within ${{ inputs.ready-timeout-seconds }} seconds."
+        echo "--- ${{ inputs.log-file }} (tail 200) ---"
+        tail -n 200 "${{ inputs.log-file }}" || true
+        exit 1
+      shell: bash
