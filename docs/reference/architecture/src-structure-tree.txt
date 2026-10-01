@@ -1799,6 +1799,7 @@ src/
     │   ├── audit-log-partition.helper.ts
     │   ├── database-context-mock.helper.ts
     │   ├── fast-check-property.util.ts
+    │   ├── iteration-repository.helper.ts
     │   ├── object-storage-mock.helper.ts
     │   ├── operator-database.ts
     │   ├── principal-scope.helper.ts
@@ -2264,6 +2265,8 @@ src/
     │   │   ├── check-load-coverage.unit.test.ts
     │   │   ├── check-patch-coverage.unit.test.ts
     │   │   ├── db-viewer.unit.test.ts
+    │   │   ├── iteration-diff.unit.test.ts
+    │   │   ├── iteration-intake.unit.test.ts
     │   │   ├── iteration.unit.test.ts
     │   │   ├── project-identity.policy.unit.test.ts
     │   │   ├── railway-deploy-image.unit.test.ts

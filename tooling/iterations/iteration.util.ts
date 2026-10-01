@@ -1,10 +1,10 @@
 /**
- * Design-iteration model behind `pnpm iteration:new` and `pnpm iteration:list`.
+ * Design-iteration model behind the `pnpm iteration:*` commands: naming, the README field table and
+ * its History, the Status lifecycle, the Baseline suggestion, the generator and the listing.
  *
- * An iteration is a folder `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/` holding one
- * product/design change; the rules live in `iterations/README.md`. clinozy-fe ships the same
- * commands, names and README format, so a folder created in either repository with `--both`
- * looks the same in both.
+ * An iteration is a folder `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/`; the rules live in
+ * `iterations/README.md`. The sibling (frontend) repository ships the same commands, names and
+ * README template, so a folder created in either repository looks the same in both.
  */
 import { execFileSync } from 'node:child_process';
 import { createHash, randomInt } from 'node:crypto';
@@ -21,31 +21,74 @@ export type IterationType = (typeof ITERATION_TYPES)[number];
 /** Folder (relative to a repository root) that holds every iteration. */
 export const ITERATIONS_DIRECTORY = 'iterations';
 
-/**
- * Status a freshly opened iteration starts in (`planning` → `ready-for-approval` → `approved` →
- * `implementing` → `done` → `frozen`; see iterations/README.md).
- */
-export const INITIAL_ITERATION_STATUS = 'planning';
+/** Folder inside an iteration holding the files received from outside, exactly as delivered. */
+export const INTAKE_DIRECTORY = 'intake-files';
 
-/** Baseline recorded for the launch, the only iteration that builds on nothing. */
+/** README Status values, in lifecycle order. */
+export const ITERATION_STATUSES = [
+  'planning',
+  'ready-for-approval',
+  'approved',
+  'implementing',
+  'done',
+  'frozen',
+] as const;
+
+/** One of {@link ITERATION_STATUSES}. */
+export type IterationStatus = (typeof ITERATION_STATUSES)[number];
+
+/** Status a freshly opened iteration starts in. */
+export const INITIAL_ITERATION_STATUS: IterationStatus = 'planning';
+
+/** Statuses from which the intake is locked (the approved plan rests on it). */
+export const LOCKED_INTAKE_STATUSES: ReadonlySet<IterationStatus> = new Set([
+  'approved',
+  'implementing',
+  'done',
+  'frozen',
+]);
+
+/** Statuses an iteration must have to be suggested as another iteration's Baseline. */
+const BASELINE_STATUSES: ReadonlySet<string> = new Set(['done', 'frozen']);
+
+/** Baseline of an initial iteration — the first one in a repository. */
 export const NO_BASELINE = 'none';
 
-/** Placeholder for an empty README field (the launch's Topic, a new iteration's Summary). */
+/** Placeholder for an empty README field. */
 export const EMPTY_FIELD = '—';
 
 /** Maximum random suffixes tried before giving up on a unique name. */
 export const MAXIMUM_NAME_ATTEMPTS = 20;
 
-/** Templates written into this repository's iteration folder (relative to `templates/`). */
-export const LOCAL_ITERATION_TEMPLATES = [
-  'README.md',
-  'PRD.md',
-  'schema-routes.md',
-  'plans/product-plan.md',
+/** Files every drop for this (backend) repository must contain. */
+export const REQUIRED_INTAKE_FILES = ['PRD.md', 'schema-routes.md'] as const;
+
+/** Files a backend drop may contain besides the required ones. */
+export const OPTIONAL_INTAKE_FILES = ['design-overview.md'] as const;
+
+/** Files `--both` copies into the sibling repository's same-named iteration. */
+export const SHARED_INTAKE_FILES = ['PRD.md', 'schema-routes.md'] as const;
+
+/** Hex characters of the sha256 shown for `schema-routes.md` (the same in both repositories). */
+export const SCHEMA_ROUTES_HASH_LENGTH = 12;
+
+/** README field labels, in table order — the template must list exactly these rows. */
+export const README_FIELD_LABELS = [
+  'Type',
+  'Topic',
+  'Owner',
+  'Opened',
+  'Branch',
+  'Baseline',
+  'Status',
+  'Summary',
+  'Drop placed',
+  'Drop source',
+  'Schema-routes',
 ] as const;
 
-/** Templates written into the sibling (clinozy-fe) folder when `--both` is passed. */
-export const SIBLING_ITERATION_TEMPLATES = ['README.md', 'PRD.md', 'schema-routes.md'] as const;
+/** One of {@link README_FIELD_LABELS}. */
+export type ReadmeFieldLabel = (typeof README_FIELD_LABELS)[number];
 
 const TEMPLATES_DIRECTORY = join(import.meta.dirname, 'templates');
 const TOPIC_PATTERN = /^[a-z]+(?:-[a-z]+)*$/;
@@ -54,11 +97,27 @@ const ITERATION_NAME_PATTERN =
 const SUFFIX_ALPHABET = 'abcdefghijklmnopqrstuvwxyz';
 const SUFFIX_LENGTH = 4;
 const TEMPLATE_PLACEHOLDER = /\{\{(\w+)\}\}/g;
-const README_ROW = /^\|\s*([A-Za-z]+)\s*\|\s*(.*?)\s*\|\s*$/;
-const LOCAL_PACKAGE_SUFFIX = '-be';
-const SIBLING_PACKAGE_SUFFIX = '-fe';
+const README_ROW = /^\|\s*([A-Za-z][A-Za-z -]*?)\s*\|\s*(.*?)\s*\|\s*$/;
+const HISTORY_HEADING = '## History';
+const SIBLING_SUFFIXES: Readonly<Record<string, string>> = { '-be': '-fe', '-fe': '-be' };
 
-/** The fields of an iteration's `README.md`, in table order. */
+/** Forward Status moves: one step along the lifecycle at a time. */
+const FORWARD_TRANSITIONS: ReadonlyMap<IterationStatus, IterationStatus> = new Map([
+  ['planning', 'ready-for-approval'],
+  ['ready-for-approval', 'approved'],
+  ['approved', 'implementing'],
+  ['implementing', 'done'],
+  ['done', 'frozen'],
+]);
+
+/** Statuses that may move back to `planning` — only with a reason. */
+const BACK_TO_PLANNING: ReadonlySet<IterationStatus> = new Set([
+  'ready-for-approval',
+  'approved',
+  'implementing',
+]);
+
+/** The values of an iteration's `README.md` field table, keyed for the template. */
 export interface IterationReadmeFields {
   readonly type: string;
   readonly topic: string;
@@ -68,6 +127,9 @@ export interface IterationReadmeFields {
   readonly baseline: string;
   readonly status: string;
   readonly summary: string;
+  readonly dropPlaced: string;
+  readonly dropSource: string;
+  readonly schemaRoutes: string;
 }
 
 /** One row of `pnpm iteration:list`. */
@@ -78,8 +140,9 @@ export interface IterationListing {
   readonly opened: string;
   readonly baseline: string;
   readonly status: string;
-  /** First {@link SCHEMA_ROUTES_HASH_LENGTH} hex characters of the sha256 of `schema-routes.md`. */
+  /** Fingerprint of `intake-files/schema-routes.md` ({@link schemaRoutesHash}). */
   readonly schemaRoutes: string;
+  readonly dropPlaced: string;
 }
 
 /** Parsed `pnpm iteration:new` command line. */
@@ -92,7 +155,7 @@ export interface NewIterationArguments {
   readonly help: boolean;
 }
 
-/** A file the generator will write, with its absolute path. */
+/** A file a command will write, with its absolute path. */
 export interface PlannedFile {
   readonly path: string;
   readonly content: string;
@@ -102,10 +165,10 @@ export interface PlannedFile {
 export interface NewIterationPlan {
   readonly name: string;
   readonly fields: IterationReadmeFields;
-  /** False when the Baseline fell back to the current branch because the base branch holds none. */
-  readonly baselineOnBaseBranch: boolean;
   readonly localFolder: string;
   readonly siblingFolder: string | undefined;
+  /** The sibling README's Baseline — suggested from the sibling's own iterations. */
+  readonly siblingBaseline: string | undefined;
   readonly files: readonly PlannedFile[];
 }
 
@@ -123,11 +186,16 @@ export interface NewIterationRequest {
   readonly nextSuffix?: () => string;
 }
 
-interface BaselineCandidate {
-  readonly name: string;
-  readonly opened: string;
-  readonly lastCommitTime: number;
+/** Everything a README-writing command decided, before the README is written. */
+export interface ReadmeChangePlan {
+  readonly readmePath: string;
+  readonly from: string;
+  readonly to: string;
+  readonly historyEntry: string;
+  readonly content: string;
 }
+
+// ── arguments ────────────────────────────────────────────────────────────────
 
 /**
  * Parses `pnpm iteration:new` arguments: `<type> [topic] [--both] [--sibling <path>] [--dry-run]`.
@@ -169,6 +237,8 @@ export function parseNewIterationArguments(commandLine: readonly string[]): NewI
     help,
   };
 }
+
+// ── names ────────────────────────────────────────────────────────────────────
 
 /** Returns whether `value` is one of {@link ITERATION_TYPES}. */
 export function isIterationType(value: string): value is IterationType {
@@ -240,12 +310,14 @@ export function randomIterationSuffix(): string {
   return suffix;
 }
 
-/** Formats a date as local `YYYY-MM-DD` — the day as the person opening the iteration sees it. */
+/** Formats a date as local `YYYY-MM-DD` — the day as the person running the command sees it. */
 export function localDate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${date.getFullYear()}-${month}-${day}`;
 }
+
+// ── README ───────────────────────────────────────────────────────────────────
 
 /**
  * Fills `{{placeholder}}` slots in a template.
@@ -285,8 +357,8 @@ export function renderIterationReadme(readme: {
  * Reads the field table of an iteration's `README.md` into a label → value map.
  *
  * @remarks
- * Only `| Label | Value |` rows count; the header row and separator are skipped, as is any
- * row whose first cell is not a single word.
+ * Only two-cell `| Label | Value |` rows count, where the label is words (letters, spaces,
+ * hyphens); the header row and separator are skipped.
  */
 export function parseIterationReadme(markdown: string): ReadonlyMap<string, string> {
   const fields = new Map<string, string>();
@@ -295,10 +367,103 @@ export function parseIterationReadme(markdown: string): ReadonlyMap<string, stri
     if (!match) continue;
     const [, label, value] = match;
     if (label === undefined || value === undefined || label === 'Field') continue;
+    if (value.includes('|')) continue;
     fields.set(label, value);
   }
   return fields;
 }
+
+/**
+ * Sets one row of a README field table, keeping every other line as it is.
+ *
+ * @remarks
+ * Failure modes: throws when the README has no `| <label> | … |` row.
+ */
+export function setReadmeField(update: {
+  readonly readme: string;
+  readonly label: ReadmeFieldLabel;
+  readonly value: string;
+}): string {
+  const row = new RegExp(`^\\|\\s*${update.label}\\s*\\|.*\\|\\s*$`, 'm');
+  if (!row.test(update.readme)) {
+    throw new Error(`The README has no "| ${update.label} | … |" row.`);
+  }
+  return update.readme.replace(row, `| ${update.label} | ${update.value} |`);
+}
+
+/** Formats one History line: `- <date> · <change> · <reason or —> · <who>`. */
+export function renderHistoryEntry(entry: {
+  readonly date: string;
+  /** `<from> → <to>` for a Status move; `Baseline <from> → <to>` for a Baseline change. */
+  readonly change: string;
+  readonly reason: string | undefined;
+  readonly owner: string;
+}): string {
+  const reason = entry.reason?.replace(/\s+/g, ' ') ?? EMPTY_FIELD;
+  return `- ${entry.date} · ${entry.change} · ${reason} · ${entry.owner}`;
+}
+
+/**
+ * Appends a line to the README's `## History` list.
+ *
+ * @remarks
+ * Algorithm: the line goes at the end of the History section — after its last line, before the
+ * next `## ` section if one follows; the section is created at the end of the file when missing.
+ */
+export function appendHistoryEntry(update: {
+  readonly readme: string;
+  readonly historyEntry: string;
+}): string {
+  const lines = update.readme.replace(/\s+$/, '').split('\n');
+  const headingIndex = lines.findIndex((line) => line.trim() === HISTORY_HEADING);
+  if (headingIndex === -1) {
+    return `${[...lines, '', HISTORY_HEADING, '', update.historyEntry].join('\n')}\n`;
+  }
+  const nextSection = lines.findIndex(
+    (line, index) => index > headingIndex && line.startsWith('## '),
+  );
+  const sectionEnd = nextSection === -1 ? lines.length : nextSection;
+  let insertAt = sectionEnd;
+  while (insertAt > headingIndex + 1 && (lines[insertAt - 1] ?? '').trim() === '') insertAt -= 1;
+  const entryLines =
+    insertAt === headingIndex + 1 ? ['', update.historyEntry] : [update.historyEntry];
+  lines.splice(insertAt, 0, ...entryLines);
+  return `${lines.join('\n')}\n`;
+}
+
+/** Path of an iteration's README. */
+export function iterationReadmePath(location: {
+  readonly repositoryRoot: string;
+  readonly iteration: string;
+}): string {
+  return join(location.repositoryRoot, ITERATIONS_DIRECTORY, location.iteration, 'README.md');
+}
+
+/**
+ * Reads an iteration's README after checking the name and the file.
+ *
+ * @remarks
+ * Failure modes: throws when the name is not an iteration name or the README is missing.
+ */
+export function readIterationReadme(location: {
+  readonly repositoryRoot: string;
+  readonly iteration: string;
+}): {
+  readonly path: string;
+  readonly content: string;
+  readonly fields: ReadonlyMap<string, string>;
+} {
+  const path = iterationReadmePath(location);
+  if (parseIterationName(location.iteration) === undefined || !existsSync(path)) {
+    throw new Error(
+      `No iteration "${location.iteration}" with a README — see pnpm iteration:list.`,
+    );
+  }
+  const content = readFileSync(path, 'utf-8');
+  return { path, content, fields: parseIterationReadme(content) };
+}
+
+// ── git ──────────────────────────────────────────────────────────────────────
 
 function runGit(command: {
   readonly repositoryRoot: string;
@@ -322,6 +487,20 @@ function tryGit(command: {
     return undefined;
   }
 }
+
+/**
+ * Reads `git config user.name` — who signs History lines and owns new iterations.
+ *
+ * @remarks
+ * Failure modes: throws when it is not set.
+ */
+export function gitUserName(repositoryRoot: string): string {
+  const owner = tryGit({ repositoryRoot, gitArguments: ['config', 'user.name'] }) ?? '';
+  if (owner === '') throw new Error('git config user.name is not set — it signs the README.');
+  return owner;
+}
+
+// ── iterations on disk ───────────────────────────────────────────────────────
 
 /** Iteration folder names present in a repository's working tree. */
 export function workingTreeIterationNames(repositoryRoot: string): string[] {
@@ -357,105 +536,123 @@ export function baseBranchIterationNames(location: {
     .sort();
 }
 
-function openedDate(candidate: {
-  readonly name: string;
-  readonly readme: string | undefined;
-}): string {
-  const fromReadme =
-    candidate.readme === undefined
-      ? undefined
-      : parseIterationReadme(candidate.readme).get('Opened');
-  return fromReadme ?? parseIterationName(candidate.name)?.opened ?? '';
-}
-
-function lastCommitTime(location: {
-  readonly repositoryRoot: string;
-  readonly revision: string;
-  readonly name: string;
-}): number {
-  const timestamp = tryGit({
-    repositoryRoot: location.repositoryRoot,
-    gitArguments: [
-      'log',
-      '-1',
-      '--format=%ct',
-      location.revision,
-      '--',
-      `${ITERATIONS_DIRECTORY}/${location.name}`,
-    ],
-  });
-  return timestamp ? Number(timestamp) : 0;
-}
-
-/**
- * Picks the Baseline among candidate iterations: the latest Opened date, then the newest last
- * commit (merge order), then the name — so the choice is deterministic.
- */
-export function chooseBaseline(candidates: readonly BaselineCandidate[]): string | undefined {
-  const ranked = [...candidates].sort(
-    (left, right) =>
-      right.opened.localeCompare(left.opened) ||
-      right.lastCommitTime - left.lastCommitTime ||
-      right.name.localeCompare(left.name),
-  );
-  return ranked[0]?.name;
-}
-
-/**
- * Resolves the Baseline for a new non-launch iteration.
- *
- * @remarks
- * Algorithm: the iterations committed on the base branch are ranked by {@link chooseBaseline},
- * reading Opened from each README as committed there. When the base branch holds none yet, the
- * iterations in the working tree are ranked the same way and `onBaseBranch` is false, so the
- * caller can say the Baseline is not on the base branch yet.
- *
- * Failure modes: returns `undefined` when no iteration exists anywhere.
- */
-export function resolveBaseline(location: {
-  readonly repositoryRoot: string;
-  readonly baseBranch: string;
-}): { readonly baseline: string; readonly onBaseBranch: boolean } | undefined {
-  const { repositoryRoot, baseBranch } = location;
-  const onBase = baseBranchIterationNames(location).map((name) => ({
-    name,
-    opened: openedDate({
+/** Reads every working-tree iteration's README fields (an iteration without a README maps empty). */
+export function readAllIterationFields(
+  repositoryRoot: string,
+): ReadonlyMap<string, ReadonlyMap<string, string>> {
+  const all = new Map<string, ReadonlyMap<string, string>>();
+  for (const name of workingTreeIterationNames(repositoryRoot)) {
+    const path = iterationReadmePath({ repositoryRoot, iteration: name });
+    all.set(
       name,
-      readme: tryGit({
-        repositoryRoot,
-        gitArguments: ['show', `${baseBranch}:${ITERATIONS_DIRECTORY}/${name}/README.md`],
-      }),
-    }),
-    lastCommitTime: lastCommitTime({ repositoryRoot, revision: baseBranch, name }),
-  }));
-  const fromBase = chooseBaseline(onBase);
-  if (fromBase !== undefined) return { baseline: fromBase, onBaseBranch: true };
-
-  const inWorkingTree = workingTreeIterationNames(repositoryRoot).map((name) => {
-    const readmePath = join(repositoryRoot, ITERATIONS_DIRECTORY, name, 'README.md');
-    return {
-      name,
-      opened: openedDate({
-        name,
-        readme: existsSync(readmePath) ? readFileSync(readmePath, 'utf-8') : undefined,
-      }),
-      lastCommitTime: lastCommitTime({ repositoryRoot, revision: 'HEAD', name }),
-    };
-  });
-  const fromWorkingTree = chooseBaseline(inWorkingTree);
-  return fromWorkingTree === undefined
-    ? undefined
-    : { baseline: fromWorkingTree, onBaseBranch: false };
-}
-
-/** Maps a `-be` package name to its `-fe` sibling (`acme-be` → `acme-fe`). */
-export function siblingPackageName(packageName: string): string {
-  if (!packageName.endsWith(LOCAL_PACKAGE_SUFFIX)) {
-    throw new Error(
-      `package.json name "${packageName}" does not end in ${LOCAL_PACKAGE_SUFFIX} — pass --sibling <path>.`,
+      existsSync(path)
+        ? parseIterationReadme(readFileSync(path, 'utf-8'))
+        : new Map<string, string>(),
     );
   }
-  return `${packageName.slice(0, -LOCAL_PACKAGE_SUFFIX.length)}${SIBLING_PACKAGE_SUFFIX}`;
+  return all;
+}
+
+/**
+ * Lists the required intake files an iteration's `intake-files/` lacks — empty when complete.
+ *
+ * @remarks
+ * An incremental iteration's delta is a diff of `intake-files/` against its Baseline's, so a
+ * Baseline is usable only when this is empty.
+ */
+export function missingIntakeFiles(location: {
+  readonly repositoryRoot: string;
+  readonly iteration: string;
+}): string[] {
+  const folder = join(
+    location.repositoryRoot,
+    ITERATIONS_DIRECTORY,
+    location.iteration,
+    INTAKE_DIRECTORY,
+  );
+  return REQUIRED_INTAKE_FILES.filter((name) => !existsSync(join(folder, name)));
+}
+
+/** The date of the last History line that moved an iteration to `done` (or `frozen`), if any. */
+function finishedDate(readme: string): string {
+  let finished = '';
+  for (const line of readme.split('\n')) {
+    const match = /^- (\d{4}-\d{2}-\d{2}) · \S+ → (done|frozen) · /.exec(line.trim());
+    if (match?.[1] && match[1] > finished) finished = match[1];
+  }
+  return finished;
+}
+
+/**
+ * Suggests a Baseline: the latest `done` or `frozen` iteration in this repository.
+ *
+ * @remarks
+ * Algorithm: among working-tree iterations whose Status is `done` or `frozen` and whose
+ * `intake-files/` holds the required set (excluding `excluding`), the one that finished last — the latest History date moving it to `done` or
+ * `frozen`, then the latest Opened, then the name. The user confirms or picks another at planning
+ * Step 0 (`pnpm iteration:baseline`).
+ *
+ * Failure modes: returns `undefined` when no iteration is done or frozen.
+ */
+export function suggestBaseline(location: {
+  readonly repositoryRoot: string;
+  readonly excluding?: string;
+}): string | undefined {
+  const candidates: Array<{ name: string; finished: string; opened: string }> = [];
+  for (const [name, fields] of readAllIterationFields(location.repositoryRoot)) {
+    if (name === location.excluding || !BASELINE_STATUSES.has(fields.get('Status') ?? '')) continue;
+    if (
+      missingIntakeFiles({ repositoryRoot: location.repositoryRoot, iteration: name }).length > 0
+    ) {
+      continue;
+    }
+    const readme = readFileSync(
+      iterationReadmePath({ repositoryRoot: location.repositoryRoot, iteration: name }),
+      'utf-8',
+    );
+    candidates.push({
+      name,
+      finished: finishedDate(readme),
+      opened: fields.get('Opened') ?? parseIterationName(name)?.opened ?? '',
+    });
+  }
+  candidates.sort(
+    (left, right) =>
+      right.finished.localeCompare(left.finished) ||
+      right.opened.localeCompare(left.opened) ||
+      right.name.localeCompare(left.name),
+  );
+  return candidates[0]?.name;
+}
+
+/**
+ * Fingerprints a `schema-routes.md`: the first {@link SCHEMA_ROUTES_HASH_LENGTH} hex characters of
+ * the sha256 of its bytes, or {@link EMPTY_FIELD} when the file is missing.
+ *
+ * @remarks
+ * The same file is copied byte-for-byte into the frontend and backend repositories, so equal
+ * fingerprints in both repositories' `pnpm iteration:list` mean the two copies match.
+ */
+export function schemaRoutesHash(path: string): string {
+  if (!existsSync(path)) return EMPTY_FIELD;
+  return createHash('sha256')
+    .update(readFileSync(path))
+    .digest('hex')
+    .slice(0, SCHEMA_ROUTES_HASH_LENGTH);
+}
+
+// ── sibling repository ──────────────────────────────────────────────────────
+
+/** Maps a package name to its sibling's (`acme-be` ↔ `acme-fe`). */
+export function siblingPackageName(packageName: string): string {
+  for (const [suffix, siblingSuffix] of Object.entries(SIBLING_SUFFIXES)) {
+    if (packageName.endsWith(suffix)) {
+      return `${packageName.slice(0, -suffix.length)}${siblingSuffix}`;
+    }
+  }
+  throw new Error(
+    `package.json name "${packageName}" does not end in -be or -fe — pass --sibling <path>.`,
+  );
 }
 
 /**
@@ -463,10 +660,10 @@ export function siblingPackageName(packageName: string): string {
  *
  * @remarks
  * Algorithm: `--sibling <path>` wins (resolved against the repository root); otherwise the sibling
- * is `../<name>` with this repository's `package.json` name mapped `-be` → `-fe`.
+ * is `../<name>` with this repository's `package.json` name mapped `-be` ↔ `-fe`.
  *
- * Failure modes: throws when the folder has no `package.json`, so a typo never creates a stray
- * `iterations/` folder somewhere else on disk.
+ * Failure modes: throws when the folder has no `package.json`, so a typo never writes into a
+ * stray folder somewhere else on disk.
  */
 export function resolveSiblingRoot(location: {
   readonly repositoryRoot: string;
@@ -490,6 +687,8 @@ export function resolveSiblingRoot(location: {
   return siblingRoot;
 }
 
+// ── iteration:new ───────────────────────────────────────────────────────────
+
 function pickUniqueName(choice: {
   readonly type: IterationType;
   readonly topic: string | undefined;
@@ -505,20 +704,30 @@ function pickUniqueName(choice: {
   throw new Error(`No free iteration name after ${MAXIMUM_NAME_ATTEMPTS} attempts — run it again.`);
 }
 
+function suggestedBaselineFor(location: {
+  readonly repositoryRoot: string;
+  readonly type: IterationType;
+}): string {
+  if (location.type === 'launch') return NO_BASELINE;
+  return suggestBaseline({ repositoryRoot: location.repositoryRoot }) ?? EMPTY_FIELD;
+}
+
 /**
  * Decides everything `pnpm iteration:new` will do, without writing anything.
  *
  * @remarks
  * Algorithm: validate type + topic; collect existing iterations (this working tree, the base
  * branch, and the sibling's working tree under `--both`); refuse a second launch and refuse any
- * non-launch before a launch exists; pick a name with a fresh random suffix, retrying while it is
- * taken; resolve the Baseline; read Owner (`git config user.name`) and Branch (current branch);
- * render the templates for this repository and, under `--both`, the sibling.
+ * non-launch before an iteration exists; pick a name with a fresh random suffix, retrying while it
+ * is taken; suggest each repository's Baseline from its own iterations ({@link suggestBaseline};
+ * `none` for the launch, `—` when nothing is done yet — the user confirms it at planning Step 0);
+ * read Owner and Branch from git; render the README for this repository and, under `--both`, the
+ * sibling. An iteration starts with its README only — `iteration:intake` fills `intake-files/`.
  *
  * Failure modes: throws with a message meant for the terminal on any refusal, a missing
  * `user.name`, or a detached HEAD.
  *
- * Side effects: runs read-only git commands; writes nothing (see {@link writeIterationPlan}).
+ * Side effects: runs read-only git commands; writes nothing (see {@link writePlannedFiles}).
  */
 export function planNewIteration(request: NewIterationRequest): NewIterationPlan {
   const { repositoryRoot, baseBranch, siblingRoot } = request;
@@ -553,9 +762,7 @@ export function planNewIteration(request: NewIterationRequest): NewIterationPlan
     nextSuffix: request.nextSuffix ?? randomIterationSuffix,
   });
 
-  const resolved = type === 'launch' ? undefined : resolveBaseline({ repositoryRoot, baseBranch });
-  const owner = tryGit({ repositoryRoot, gitArguments: ['config', 'user.name'] }) ?? '';
-  if (owner === '') throw new Error('git config user.name is not set — it fills the Owner field.');
+  const owner = gitUserName(repositoryRoot);
   const branch = tryGit({ repositoryRoot, gitArguments: ['branch', '--show-current'] }) ?? '';
   if (branch === '') {
     throw new Error('HEAD is detached — check out the branch this iteration will be built on.');
@@ -567,60 +774,67 @@ export function planNewIteration(request: NewIterationRequest): NewIterationPlan
     owner,
     opened,
     branch,
-    baseline: resolved?.baseline ?? NO_BASELINE,
+    baseline: suggestedBaselineFor({ repositoryRoot, type }),
     status: INITIAL_ITERATION_STATUS,
     summary: EMPTY_FIELD,
+    dropPlaced: EMPTY_FIELD,
+    dropSource: EMPTY_FIELD,
+    schemaRoutes: EMPTY_FIELD,
   };
-  const values = { name, ...fields };
-  const render = (templates: readonly string[], folder: string): PlannedFile[] =>
-    templates.map((relativePath) => ({
-      path: join(folder, relativePath),
-      content: renderTemplate({ template: readIterationTemplate(relativePath), values }),
-    }));
-
   const localFolder = join(repositoryRoot, ITERATIONS_DIRECTORY, name);
   const siblingFolder =
     siblingRoot === undefined ? undefined : join(siblingRoot, ITERATIONS_DIRECTORY, name);
+  const siblingBaseline =
+    siblingRoot === undefined
+      ? undefined
+      : suggestedBaselineFor({ repositoryRoot: siblingRoot, type });
   return {
     name,
     fields,
-    baselineOnBaseBranch: resolved?.onBaseBranch ?? true,
     localFolder,
     siblingFolder,
+    siblingBaseline,
     files: [
-      ...render(LOCAL_ITERATION_TEMPLATES, localFolder),
-      ...(siblingFolder === undefined ? [] : render(SIBLING_ITERATION_TEMPLATES, siblingFolder)),
+      { path: join(localFolder, 'README.md'), content: renderIterationReadme({ name, fields }) },
+      ...(siblingFolder === undefined
+        ? []
+        : [
+            {
+              path: join(siblingFolder, 'README.md'),
+              content: renderIterationReadme({
+                name,
+                fields: { ...fields, baseline: siblingBaseline ?? EMPTY_FIELD },
+              }),
+            },
+          ]),
     ],
   };
 }
 
 /**
- * Writes the files of a {@link NewIterationPlan}.
+ * Writes planned files, refusing to overwrite.
  *
  * @remarks
- * Failure modes: refuses to overwrite — throws if any planned file already exists, before writing
- * any of them.
+ * Failure modes: throws if any planned file already exists, before writing any of them.
  *
- * Side effects: creates the iteration folder(s) and their files.
+ * Side effects: creates the folders and files.
  */
-export function writeIterationPlan(plan: NewIterationPlan): void {
-  const existing = plan.files.find((file) => existsSync(file.path));
+export function writePlannedFiles(files: readonly PlannedFile[]): void {
+  const existing = files.find((file) => existsSync(file.path));
   if (existing !== undefined) throw new Error(`${existing.path} already exists — not overwriting.`);
-  for (const file of plan.files) {
+  for (const file of files) {
     mkdirSync(dirname(file.path), { recursive: true });
     writeFileSync(file.path, file.content);
   }
 }
 
+// ── iteration:list ──────────────────────────────────────────────────────────
+
 /** Reads every `iterations/*\/README.md` in a working tree into list rows, oldest first. */
 export function readIterationListings(repositoryRoot: string): IterationListing[] {
-  return workingTreeIterationNames(repositoryRoot)
-    .map((name) => {
-      const readmePath = join(repositoryRoot, ITERATIONS_DIRECTORY, name, 'README.md');
-      const fields = existsSync(readmePath)
-        ? parseIterationReadme(readFileSync(readmePath, 'utf-8'))
-        : new Map<string, string>();
-      const field = (label: string): string => fields.get(label) ?? EMPTY_FIELD;
+  return [...readAllIterationFields(repositoryRoot)]
+    .map(([name, fields]) => {
+      const field = (label: ReadmeFieldLabel): string => fields.get(label) ?? EMPTY_FIELD;
       return {
         name,
         type: field('Type'),
@@ -629,8 +843,9 @@ export function readIterationListings(repositoryRoot: string): IterationListing[
         baseline: field('Baseline'),
         status: field('Status'),
         schemaRoutes: schemaRoutesHash(
-          join(repositoryRoot, ITERATIONS_DIRECTORY, name, 'schema-routes.md'),
+          join(repositoryRoot, ITERATIONS_DIRECTORY, name, INTAKE_DIRECTORY, 'schema-routes.md'),
         ),
+        dropPlaced: field('Drop placed'),
       };
     })
     .sort(
@@ -641,10 +856,19 @@ export function readIterationListings(repositoryRoot: string): IterationListing[
 
 /**
  * Formats list rows as an aligned `Name | Type | Owner | Opened | Baseline | Status |
- * schema-routes` table.
+ * Schema-routes | Drop placed` table.
  */
 export function formatIterationTable(listings: readonly IterationListing[]): string {
-  const header = ['Name', 'Type', 'Owner', 'Opened', 'Baseline', 'Status', 'schema-routes'];
+  const header = [
+    'Name',
+    'Type',
+    'Owner',
+    'Opened',
+    'Baseline',
+    'Status',
+    'Schema-routes',
+    'Drop placed',
+  ];
   const rows = listings.map((listing) => [
     listing.name,
     listing.type,
@@ -653,6 +877,7 @@ export function formatIterationTable(listings: readonly IterationListing[]): str
     listing.baseline,
     listing.status,
     listing.schemaRoutes,
+    listing.dropPlaced,
   ]);
   const widths = header.map((title, column) =>
     Math.max(title.length, ...rows.map((row) => (row[column] ?? '').length)),
@@ -663,73 +888,7 @@ export function formatIterationTable(listings: readonly IterationListing[]): str
   return [line(header), separator, ...rows.map(line)].join('\n');
 }
 
-/** Hex characters of the sha256 shown for `schema-routes.md` (the same length clinozy-fe records). */
-export const SCHEMA_ROUTES_HASH_LENGTH = 12;
-
-/**
- * Fingerprints a `schema-routes.md`: the first {@link SCHEMA_ROUTES_HASH_LENGTH} hex characters of
- * the sha256 of its bytes, or {@link EMPTY_FIELD} when the file is missing.
- *
- * @remarks
- * The same file is copied byte-for-byte into the frontend and backend repositories, so equal
- * fingerprints in both repositories' `pnpm iteration:list` mean the two copies match.
- */
-export function schemaRoutesHash(path: string): string {
-  if (!existsSync(path)) return EMPTY_FIELD;
-  return createHash('sha256')
-    .update(readFileSync(path))
-    .digest('hex')
-    .slice(0, SCHEMA_ROUTES_HASH_LENGTH);
-}
-
-/** README Status values, in lifecycle order. */
-export const ITERATION_STATUSES = [
-  'planning',
-  'ready-for-approval',
-  'approved',
-  'implementing',
-  'done',
-  'frozen',
-] as const;
-
-/** One of {@link ITERATION_STATUSES}. */
-export type IterationStatus = (typeof ITERATION_STATUSES)[number];
-
-/** Forward moves: one step along the lifecycle at a time. */
-const FORWARD_TRANSITIONS: ReadonlyMap<IterationStatus, IterationStatus> = new Map([
-  ['planning', 'ready-for-approval'],
-  ['ready-for-approval', 'approved'],
-  ['approved', 'implementing'],
-  ['implementing', 'done'],
-  ['done', 'frozen'],
-]);
-
-/** Statuses that may move back to `planning` — only with a reason. */
-const BACK_TO_PLANNING: ReadonlySet<IterationStatus> = new Set([
-  'ready-for-approval',
-  'approved',
-  'implementing',
-]);
-
-const HISTORY_HEADING = '## History';
-const STATUS_ROW = /^\|\s*Status\s*\|\s*(.*?)\s*\|\s*$/m;
-
-/** Parsed `pnpm iteration:status` command line. */
-export interface StatusArguments {
-  readonly iteration: string | undefined;
-  readonly status: string | undefined;
-  readonly reason: string | undefined;
-  readonly help: boolean;
-}
-
-/** Everything `pnpm iteration:status` decided, before the README is written. */
-export interface StatusChangePlan {
-  readonly readmePath: string;
-  readonly from: IterationStatus;
-  readonly to: IterationStatus;
-  readonly historyEntry: string;
-  readonly content: string;
-}
+// ── iteration:status ────────────────────────────────────────────────────────
 
 /** Returns whether `value` is one of {@link ITERATION_STATUSES}. */
 export function isIterationStatus(value: string): value is IterationStatus {
@@ -742,7 +901,12 @@ export function isIterationStatus(value: string): value is IterationStatus {
  * @remarks
  * Failure modes: throws on an unknown option, a `--reason` without text, or a third positional.
  */
-export function parseStatusArguments(commandLine: readonly string[]): StatusArguments {
+export function parseStatusArguments(commandLine: readonly string[]): {
+  readonly iteration: string | undefined;
+  readonly status: string | undefined;
+  readonly reason: string | undefined;
+  readonly help: boolean;
+} {
   const positionals: string[] = [];
   let reason: string | undefined;
   let help = false;
@@ -775,8 +939,7 @@ export function parseStatusArguments(commandLine: readonly string[]): StatusArgu
  * @remarks
  * Allowed: one step forward along `planning → ready-for-approval → approved → implementing →
  * done → frozen`, and `ready-for-approval`, `approved` or `implementing` back to `planning` with a
- * reason. clinozy-fe follows the same rules without `ready-for-approval` (it plans no
- * requirements).
+ * reason.
  *
  * Failure modes: throws with the allowed next statuses on any other move, and when a move back to
  * `planning` has no reason.
@@ -805,62 +968,15 @@ export function validateStatusTransition(move: {
   );
 }
 
-/** Formats one README History line: `- <date> · <from> → <to> · <reason> · <who>`. */
-export function renderHistoryEntry(entry: {
-  readonly date: string;
-  readonly from: IterationStatus;
-  readonly to: IterationStatus;
-  readonly reason: string | undefined;
-  readonly owner: string;
-}): string {
-  const reason = entry.reason?.replace(/\s+/g, ' ') ?? EMPTY_FIELD;
-  return `- ${entry.date} · ${entry.from} → ${entry.to} · ${reason} · ${entry.owner}`;
-}
-
-/**
- * Writes the new Status into an iteration README and appends a History entry.
- *
- * @remarks
- * Algorithm: replaces the value of the `| Status | … |` row; appends the entry at the end of the
- * `## History` section, creating the section at the end of the file when it is missing. Other
- * sections are left untouched.
- *
- * Failure modes: throws when the README has no Status row.
- */
-export function applyStatusToReadme(update: {
-  readonly readme: string;
-  readonly status: IterationStatus;
-  readonly historyEntry: string;
-}): string {
-  if (!STATUS_ROW.test(update.readme)) throw new Error('The README has no "| Status | … |" row.');
-  const withStatus = update.readme.replace(STATUS_ROW, `| Status | ${update.status} |`);
-  const lines = withStatus.replace(/\s+$/, '').split('\n');
-  const headingIndex = lines.findIndex((line) => line.trim() === HISTORY_HEADING);
-  if (headingIndex === -1) {
-    return `${[...lines, '', HISTORY_HEADING, '', update.historyEntry].join('\n')}\n`;
-  }
-  const nextSection = lines.findIndex(
-    (line, index) => index > headingIndex && line.startsWith('## '),
-  );
-  const sectionEnd = nextSection === -1 ? lines.length : nextSection;
-  let insertAt = sectionEnd;
-  while (insertAt > headingIndex + 1 && (lines[insertAt - 1] ?? '').trim() === '') insertAt -= 1;
-  const entryLines =
-    insertAt === headingIndex + 1 ? ['', update.historyEntry] : [update.historyEntry];
-  lines.splice(insertAt, 0, ...entryLines);
-  return `${lines.join('\n')}\n`;
-}
-
 /**
  * Decides a `pnpm iteration:status` change without writing it.
  *
  * @remarks
- * Algorithm: checks the iteration folder and its README exist, reads the current Status, validates
- * the move ({@link validateStatusTransition}), reads `git config user.name` for the History entry,
- * and renders the updated README.
+ * Algorithm: reads the README, validates the move ({@link validateStatusTransition}), sets the
+ * Status row and appends a History line signed with `git config user.name`.
  *
- * Failure modes: throws on an unknown iteration or status, an unknown current Status in the
- * README, a refused move, or an empty `user.name`.
+ * Failure modes: throws on an unknown iteration or status, an unknown current Status, a refused
+ * move, or an empty `user.name`.
  *
  * Side effects: runs `git config user.name`; writes nothing.
  */
@@ -869,41 +985,98 @@ export function planStatusChange(request: {
   readonly iteration: string | undefined;
   readonly status: string | undefined;
   readonly reason: string | undefined;
-  /** `YYYY-MM-DD`; defaults to today's local date. */
   readonly today?: string;
-}): StatusChangePlan {
+}): ReadmeChangePlan {
   const { repositoryRoot, iteration, status, reason } = request;
   if (iteration === undefined || status === undefined) {
     throw new Error('Usage: pnpm iteration:status <iteration> <status> [--reason "<text>"]');
   }
-  const readmePath = join(repositoryRoot, ITERATIONS_DIRECTORY, iteration, 'README.md');
-  if (parseIterationName(iteration) === undefined || !existsSync(readmePath)) {
-    throw new Error(`No iteration "${iteration}" with a README — see pnpm iteration:list.`);
-  }
+  const readme = readIterationReadme({ repositoryRoot, iteration });
   if (!isIterationStatus(status)) {
     throw new Error(`Unknown status "${status}" — use ${ITERATION_STATUSES.join(', ')}.`);
   }
-  const readme = readFileSync(readmePath, 'utf-8');
-  const current = parseIterationReadme(readme).get('Status') ?? '';
+  const current = readme.fields.get('Status') ?? '';
   if (!isIterationStatus(current)) {
     throw new Error(`${iteration}/README.md has Status "${current}", which is not a known status.`);
   }
   validateStatusTransition({ from: current, to: status, reason });
-  const owner = tryGit({ repositoryRoot, gitArguments: ['config', 'user.name'] }) ?? '';
-  if (owner === '')
-    throw new Error('git config user.name is not set — it signs the History entry.');
   const historyEntry = renderHistoryEntry({
     date: request.today ?? localDate(new Date()),
-    from: current,
-    to: status,
+    change: `${current} → ${status}`,
     reason,
-    owner,
+    owner: gitUserName(repositoryRoot),
   });
   return {
-    readmePath,
+    readmePath: readme.path,
     from: current,
     to: status,
     historyEntry,
-    content: applyStatusToReadme({ readme, status, historyEntry }),
+    content: appendHistoryEntry({
+      readme: setReadmeField({ readme: readme.content, label: 'Status', value: status }),
+      historyEntry,
+    }),
+  };
+}
+
+// ── iteration:baseline ──────────────────────────────────────────────────────
+
+/**
+ * Decides a `pnpm iteration:baseline <iteration> <baseline|none>` change without writing it.
+ *
+ * @remarks
+ * Algorithm: the Baseline must be `none` or an existing iteration in this repository's working
+ * tree, other than the iteration itself, opened no later than it, whose `intake-files/` holds the
+ * required set (the incremental delta is a diff of `intake-files/`). Sets the Baseline row and
+ * appends a History line `Baseline <from> → <to>`.
+ *
+ * Failure modes: throws on an unknown iteration, a Baseline that is not an earlier iteration, an
+ * unchanged Baseline, or an empty `user.name`.
+ *
+ * Side effects: runs `git config user.name`; writes nothing.
+ */
+export function planBaselineChange(request: {
+  readonly repositoryRoot: string;
+  readonly iteration: string | undefined;
+  readonly baseline: string | undefined;
+  readonly today?: string;
+}): ReadmeChangePlan {
+  const { repositoryRoot, iteration, baseline } = request;
+  if (iteration === undefined || baseline === undefined) {
+    throw new Error('Usage: pnpm iteration:baseline <iteration> <baseline|none>');
+  }
+  const readme = readIterationReadme({ repositoryRoot, iteration });
+  if (baseline !== NO_BASELINE) {
+    const opened = readme.fields.get('Opened') ?? parseIterationName(iteration)?.opened ?? '';
+    const candidate = readAllIterationFields(repositoryRoot).get(baseline);
+    const candidateOpened = candidate?.get('Opened') ?? parseIterationName(baseline)?.opened ?? '';
+    if (baseline === iteration || candidate === undefined || candidateOpened > opened) {
+      throw new Error(
+        `Baseline "${baseline}" must be "none" or an earlier iteration in this repository — see pnpm iteration:list.`,
+      );
+    }
+    const missing = missingIntakeFiles({ repositoryRoot, iteration: baseline });
+    if (missing.length > 0) {
+      throw new Error(
+        `Baseline "${baseline}" has no complete ${INTAKE_DIRECTORY}/ (missing ${missing.join(', ')}) — an incremental iteration diffs ${INTAKE_DIRECTORY}/ against its Baseline's, so it must be there.`,
+      );
+    }
+  }
+  const current = readme.fields.get('Baseline') ?? EMPTY_FIELD;
+  if (current === baseline) throw new Error(`${iteration} already has Baseline ${baseline}.`);
+  const historyEntry = renderHistoryEntry({
+    date: request.today ?? localDate(new Date()),
+    change: `Baseline ${current} → ${baseline}`,
+    reason: undefined,
+    owner: gitUserName(repositoryRoot),
+  });
+  return {
+    readmePath: readme.path,
+    from: current,
+    to: baseline,
+    historyEntry,
+    content: appendHistoryEntry({
+      readme: setReadmeField({ readme: readme.content, label: 'Baseline', value: baseline }),
+      historyEntry,
+    }),
   };
 }
