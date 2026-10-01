@@ -60,6 +60,12 @@ It runs the pipeline (each step is an existing skill), self-healing failed gates
 
 ---
 
+## Building tables from a design iteration
+
+When the requirement comes from a design iteration ([iterations/README.md](../../iterations/README.md)), build it one table at a time: paste the table's file from `iterations/<iteration>/plans/` followed by the **[staged-build prompt](staged-build-prompt.md)** — a 4-stage gated workflow (schema → routes → implementation → recap) that waits for your approval after each stage. Follow the build order in the iteration's `plans/product-plan.md`.
+
+---
+
 ## Requirement types and details to provide
 
 ### 1. New domain or sub-domain (new resource/API surface)

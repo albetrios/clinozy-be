@@ -50,7 +50,7 @@ Committed files at the project root (not directories) group as follows:
 | Env                | `.env.example` (committed); every `.env.*` per-environment file gitignored                         |
 | Policy / community | `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `AGENTS.md`, `CLAUDE.md`, `LICENSE`, `CHANGELOG.md` |
 
-Application code, human docs, and automation live under `src/`, `docs/`, and `tooling/` respectively.
+Application code, human docs, and automation live under `src/`, `docs/`, and `tooling/` respectively; product/design iterations live under `iterations/` (see [`iterations/README.md`](iterations/README.md)).
 
 ## Project layout and patterns
 

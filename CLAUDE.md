@@ -57,7 +57,7 @@ Detail and examples live in scoped Cursor rules (auto-attach when editing `src/*
 
 - **[be-full-names-only.mdc](.cursor/rules/be-full-names-only.mdc)** — no abbreviations in identifiers OR prose (`organization` not `org`, incl. plurals/compounds); intentional compact WIRE literals are the only survivors — the `org_` public-id prefix, the JWT claim keys `org`/`sv`, third-party payloads, and the agent-os prefixes `be-`/`fe-`; Fastify `req`/`reply` exempt
 - **[be-object-params.mdc](.cursor/rules/be-object-params.mdc)** — options objects for 2+ params; repos and framework callbacks exempt
-- **[be-no-digits-in-names.mdc](agent-os/rules/be-no-digits-in-names.mdc)** — no digits in identifiers we own (`firstPage`, never `page1`); a digit is a version, a duplicate or a shrug. Exempt: the API `v1` segment, vendor/standard names (`S3`, `OAuth2`, `SHA256`), a third-party export renamed **at the import**, audit-finding citations in comments, and digits in values
+- **[be-no-digits-in-names.mdc](agent-os/rules/be-no-digits-in-names.mdc)** — no digits in identifiers we own (`firstPage`, never `page1`); a digit is a version, a duplicate or a shrug. Exempt: the API `v1` segment, vendor/standard names (`S3`, `OAuth2`, `SHA256`), a third-party export renamed **at the import**, audit-finding citations in comments, digits in values, and the date stamp on a dated record (`migrations/<timestamp>_*.sql`, `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/`)
 - Sub-domain folders **must** prefix with domain/resource name (`organization-settings`, `webhook-event`, …)
 
 ## Domain Structure
@@ -424,7 +424,7 @@ Already pushed as `claude/*`? Leave it — it auto-deletes when the PR squash-me
 
 ## Commands
 
-Script namespaces: `ci:*`, `compose:*`, `test:*`, `validate:*`, `db:*`, `docs:*`, `routes:*`, `load:*`, `chaos:*`, `tool:*`, `setup:*`, `mcp:*`, `security:*`, `sonar:*`, `deps:*`, `agent-os:*`, `github:*`, `tsdoc:*`, `docker:*`, `dashboards:*`, `ops:*`, `sbom:*`, `guard:*`, `dev:*`, `build:*`, `lint:*`, `format:*`, `health:*`, `coverage:*`, `env:*`, `start:*`, `verify:*`. List all: `pnpm run`.
+Script namespaces: `ci:*`, `compose:*`, `test:*`, `validate:*`, `db:*`, `docs:*`, `routes:*`, `load:*`, `chaos:*`, `tool:*`, `setup:*`, `mcp:*`, `security:*`, `sonar:*`, `deps:*`, `agent-os:*`, `github:*`, `tsdoc:*`, `docker:*`, `dashboards:*`, `ops:*`, `sbom:*`, `guard:*`, `dev:*`, `build:*`, `lint:*`, `format:*`, `health:*`, `coverage:*`, `env:*`, `start:*`, `verify:*`, `iteration:*`. List all: `pnpm run`.
 
 Local SonarQube quality gate (pre-commit): `pnpm sonar:up` / `sonar:scan` / `sonar:down` / `sonar:reset`. The pre-commit hook (`pnpm guard:pre-commit`, step 17) blocks a commit when SonarQube has any open issue on the deployed-app surface; the gate is mandatory — there is no bypass, every issue must be resolved. See **`docs/reference/quality/sonarqube-local.md`**.
 
@@ -486,3 +486,5 @@ Local SonarQube quality gate (pre-commit): `pnpm sonar:up` / `sonar:scan` / `son
 - **Merge policy — never merge on red (enforced, not convention):** the `main` ruleset has **no `bypass_actors`**, so a PR with any failing or pending required check (`Quality gate`, `Checks`) **cannot be merged by anyone — the repo owner included**. Never re-add `bypass_actors` to `.github/rulesets/main.json`, and never merge with `--admin` / the merge API to skip a red gate: a flaky-red required check is **re-run (or its branch updated) to green**, never bypassed. `strict up-to-date` is off so a green PR merges cleanly via `gh pr merge --squash`; `required_signatures` is intentionally absent (unsigned branch commits — GitHub signs the squash-merge commit on `main` regardless). Pinned by [`src/tests/unit/ci/rulesets.policy.unit.test.ts`](src/tests/unit/ci/rulesets.policy.unit.test.ts).
 - `pnpm tool:sync-env-example` — report env schema vs .env.example diff and PR snippet; use `--fix` to append missing vars
 - `pnpm tool:project-structure-tree` — print `src/` directory tree to stdout (see `docs/reference/architecture/project-structure-guide.md`)
+- `pnpm iteration:new <type> [topic] [--both] [--sibling <path>] [--dry-run]` — open a design iteration folder `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/` (type `launch|feat|change|fix`) with README, PRD, schema-routes and `plans/`, Baseline filled from `main`; `--both` creates the same folder in clinozy-fe. Model: **`iterations/README.md`**
+- `pnpm iteration:list` — print every iteration's Name, Type, Owner, Opened, Baseline and Status from `iterations/*/README.md`

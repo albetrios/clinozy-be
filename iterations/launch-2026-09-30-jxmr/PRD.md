@@ -209,7 +209,7 @@ Desktop / tablet web app. One header for every screen: logo · "All sections" co
 
 ## 6. Visual Direction
 
-- **Design system / brand guide:** Clinozy's own — shadcn-style zinc neutrals, deep pastel section colours with dark ink (AA contrast), Lucide icons. Rules in `clinozy-fe/CLAUDE.md`, tokens in `clinozy-fe/legacy/v1/preset.md`.
+- **Design system / brand guide:** Clinozy's own — shadcn-style zinc neutrals, deep pastel section colours with dark ink (AA contrast), Lucide icons. Rules in `clinozy-fe/CLAUDE.md`, tokens in `clinozy-fe/iterations/launch-2026-09-30-jxmr/preset.md`.
 - **Products whose look you like:** shadcn/ui, Linear, Notion-style calm tables.
 - **Adjectives:** calm, clean, fast, colour-coded, dense but readable, light theme with dark mode.
 - **Logo / brand colors:** Clinozy "C" mark with a green dot · green oklch(0.52 0.12 150) for success · #18181b for primary actions.
@@ -240,7 +240,7 @@ Desktop / tablet web app. One header for every screen: logo · "All sections" co
 
 - Dark-mode pale tints need a visual check on real screens.
 - Should the "verify your email" banner be built now?
-- Final URLs: routes are proposed in `legacy/v1/schema-routes.md` (93 routes) but the prototype is still one page.
+- Final URLs: routes are proposed in `iterations/launch-2026-09-30-jxmr/schema-routes.md` (93 routes) but the prototype is still one page.
 - When should the phone layout be designed, and for which roles first (doctor? front desk)?
 - Is WhatsApp the only messaging channel, or are SMS / calls logged too?
 
