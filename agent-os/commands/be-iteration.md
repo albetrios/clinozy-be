@@ -25,8 +25,11 @@ in `iterations/README.md`. Do **one** step, show its result, then stop and ask b
    - The drop: which folder holds the **full** drop (`PRD.md`, `schema-routes.md`)?
 3. **Open it** — `pnpm iteration:new <type> [topic] [--both] --dry-run`, show the name and the
    suggested Baseline, and run it for real only after the user confirms. Write the Summary.
-4. **Place the drop** — `pnpm iteration:intake <iteration> <source-folder> [--both] --dry-run`,
-   show the report, then run it for real after the user confirms.
+4. **Place the drop** — ask what arrived: the whole drop (`full`), only the changed files
+   (`--mode overlay`) or only a `BRIEF.md` (`--mode brief`, template
+   `tooling/iterations/templates/BRIEF.md`). Run `pnpm iteration:intake <iteration> <source>
+   [--mode …] [--both] --dry-run`, show the report, then run it for real after the user confirms,
+   and check it with `pnpm iteration:intake <iteration> --check`.
 5. **Continue step by step** through the guide — **be-iteration-planning** (Steps 0–6; Step 0
    confirms the Baseline with `pnpm iteration:baseline`) → approval → **be-kickoff-iteration**
    (one ROUTE row at a time, `AS-BUILT.md`) → close → freeze. Both skills stop after each of their

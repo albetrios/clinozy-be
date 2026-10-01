@@ -31,14 +31,19 @@ change touches; `pnpm iteration:new <type> <topic> --both` creates it in both.
 | Path | Holds | Written by |
 | --- | --- | --- |
 | `README.md` | the field table, then a `## History` list | `iteration:new`, then only the commands |
-| `intake-files/` | the files received from outside, **exactly as delivered**, flat, never edited | `iteration:intake` |
+| `intake-files/` | the **full snapshot** — files received from outside, exactly as delivered, flat, never edited (see Intake modes) | `iteration:intake` |
 | `KICKOFF.md` | the plan and its ordered ROUTE ledger | be-iteration-planning |
 | `plans/` | our supporting documents: `decisions.md`, `coverage.md`, `requirements/`, `features/`, `acceptance.md` | be-iteration-planning (+ scope decisions during implementation) |
-| `AS-BUILT.md` | per ROUTE row: planned · actually built · difference · why · decision · commit; revisions to upcoming rows; a closing summary | be-kickoff-iteration |
+| `AS-BUILT.md` | per ROUTE row: planned · actually built · difference · why · decision · commit; revisions to upcoming rows; a closing summary; the **Standing deviations** | be-kickoff-iteration |
 
-- **`intake-files/`** holds the **full drop** in every iteration, not only the launch. Backend
-  required set: `PRD.md`, `schema-routes.md`; optional: `design-overview.md`. It is locked once the
-  Status is `approved` or later.
+- **`intake-files/`** holds a **full snapshot** in every iteration, not only the launch, whatever
+  arrived (see Intake modes). Backend mandatory set: `PRD.md`, `schema-routes.md` (+ `BRIEF.md` in
+  brief mode); optional: `design-overview.md`, a carried-forward `BRIEF.md`. It is locked once the
+  Status is `approved` or later — re-recording the hash included.
+- **`AS-BUILT.md` › Standing deviations** is the complete list of where the code differs from the
+  drop. The launch starts it empty; each iteration copies its Baseline's list, adds what it
+  deliberately builds differently and removes what it resolves. Planning reads it, so a later
+  iteration plans against what was actually built.
 - **`KICKOFF.md`** is frozen at approval: afterwards only its ROUTE Status column and
   "revised → AS-BUILT #n" markers change.
 - `schema-routes.md` is the same file, byte-for-byte, in the same-named clinozy-fe iteration —
@@ -58,7 +63,10 @@ change touches; `pnpm iteration:new <type> <topic> --both` creates it in both.
 | Summary | one line on what it changes — the one field you write by hand |
 | Drop placed | the day `iteration:intake` placed the drop |
 | Drop source | where the drop came from |
+| Intake mode | `full`, `overlay` or `brief` — how the snapshot was built |
+| Intake note | what was received versus carried forward: `<n> received`, or `<n> received (<names>) · <m> carried forward from <baseline>` |
 | Schema-routes | the first 12 characters of the sha256 of `intake-files/schema-routes.md` |
+| Intake hash | the first 12 characters of one sha256 over the whole snapshot — any added, removed or edited file changes it |
 
 Below the table, a `## History` list records every Status and Baseline change, one line each:
 `- <date> · <from> → <to> · <reason or —> · <git user.name>` (a Baseline change reads
@@ -79,6 +87,35 @@ hand — except **Summary**, the one line you write yourself after `pnpm iterati
   the notes omit is a finding.
 - Parallel branches are fine. Before merging, if another iteration reached `main` meanwhile, check
   overlap — the same entity, route or screen changed by both — and resolve it in review.
+
+## Intake modes and the gate
+
+`pnpm iteration:intake <iteration> <source> --mode <mode>` always leaves a **full snapshot** in
+`intake-files/`; `<source>` is a folder or a single file.
+
+| Mode | What arrived | The snapshot |
+| --- | --- | --- |
+| `full` (default; always the launch) | the whole drop | exactly what was received |
+| `overlay` | only the changed files | the Baseline's snapshot with them laid over it (at least one file; nothing is removed) |
+| `brief` | only a written change, `BRIEF.md` (template: `tooling/iterations/templates/BRIEF.md`) | the Baseline's snapshot plus `BRIEF.md`; any other received file must match the Baseline's byte for byte |
+
+- `overlay` and `brief` need a confirmed Baseline (not `none` or `—`) whose intake passes the gate.
+- A `BRIEF.md` must have the sections What changes · Why · Affected screens, entities and routes ·
+  Rules · Acceptance criteria · Out of scope — "none" is an answer, a missing section is not.
+- Replacing a different existing snapshot (removals included) needs `--replace`, only while
+  planning. From `approved` on, any change is refused.
+- `--both` builds the sibling's same-named iteration in the same mode on **its own** Baseline, with
+  `PRD.md` and `schema-routes.md` (+ `BRIEF.md` in brief mode) from this snapshot.
+
+**The gate**, `pnpm iteration:intake <iteration> --check [--baseline <baseline>]`, proves the
+mandatory set is present and the recomputed Intake hash equals the README's (for the Baseline too),
+and that an overlay or brief was built on the README's Baseline. It exits 1 with
+"Gate failed — n problem(s). Stop here: write nothing, change no status." and one line per problem
+with its fix. Planning and kickoff run it first and stop when it fails.
+
+The Intake hash is one sha256 over every flat, visible file of `intake-files/` — names in code-unit
+order, each fed as its name, a NUL, its bytes and a NUL — cut to 12 characters; it is computed the
+same way in both repositories.
 
 ## Lifecycle
 
@@ -101,11 +138,12 @@ Status moves one step at a time with `pnpm iteration:status <iteration> <status>
 
 ```bash
 pnpm iteration:new feat pharmacy-returns --both          # open (README only)
-pnpm iteration:intake <iteration> <source-folder> --both # place the drop + check it
+pnpm iteration:intake <iteration> <source> [--mode full|overlay|brief] --both   # place the snapshot
+pnpm iteration:intake <iteration> --check [--baseline <baseline>]                 # the gate
 pnpm iteration:baseline <iteration> <baseline|none>      # record the confirmed Baseline
 pnpm iteration:diff <baseline> <iteration> [--json]      # the delta: intake-files/ only
 pnpm iteration:status <iteration> <status> [--reason "<text>"]
-pnpm iteration:list                                      # Name · Type · Owner · Opened · Baseline · Status · Schema-routes · Drop placed
+pnpm iteration:list   # Name · Type · Owner · Opened · Baseline · Status · Intake mode · Schema-routes · Intake hash · Drop placed
 ```
 
 Every command takes `--help`. `iteration:new` and `iteration:intake` take `--dry-run`; `--both` works

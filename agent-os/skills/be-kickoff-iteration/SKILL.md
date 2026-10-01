@@ -1,11 +1,13 @@
 ---
 name: be-kickoff-iteration
 description: >
-  Implement an approved iteration: confirm which iteration to kick off (Step 0), set it implementing,
-  then follow KICKOFF.md's ROUTE one row at a time — do → verify → write the AS-BUILT.md row → check
-  the impact on upcoming rows → stop for the user's review → next — and close with the gates,
-  plans/acceptance.md and Status done. Use when the user says 'kickoff', 'kickoff iteration <name>',
-  'kickoff <iteration>' or 'start implementing <iteration>'. Requires README Status approved.
+  Implement an approved iteration: confirm which iteration to kick off (Step 0), pass the intake gate
+  (iteration:intake --check — stop on failure), set it implementing, then follow KICKOFF.md's ROUTE
+  one row at a time — do → verify (by Intake mode) → write the AS-BUILT.md row and Standing
+  deviations → check the impact on upcoming rows → stop for the user's review → next — and close
+  with the gates, plans/acceptance.md and Status done. Use when the user says 'kickoff', 'kickoff
+  iteration <name>', 'kickoff <iteration>' or 'start implementing <iteration>'. Requires README
+  Status approved.
 indexNote: implement an approved iteration — follow the KICKOFF.md ROUTE row by row, record AS-BUILT.md, stop for review after each row
 trigger: iterations/*/AS-BUILT.md
 triggerNote: Iteration implementation — one ROUTE row at a time; every row's technical decisions go into AS-BUILT.md
@@ -32,8 +34,21 @@ Run `pnpm iteration:list` and show:
   `done` / `frozen`.
 - Recommend the earliest-opened eligible iteration (the launch always comes first). If the user
   named one, check it against the rule.
-- Always ask with **AskUserQuestion** — never pick silently. Then run
-  `pnpm iteration:status <iteration> implementing`.
+- Always ask with **AskUserQuestion** — never pick silently.
+
+Once confirmed, **the gate**:
+
+```bash
+pnpm iteration:intake <iteration> --check
+```
+
+**Gate rule:** if it exits non-zero, stop now — write nothing, change no status, ask nothing else;
+print the command's output and end the turn. The intake has to be fixed (and the plan re-approved
+if it changed) before any build.
+
+When it passes: `pnpm iteration:status <iteration> implementing`, and start `AS-BUILT.md` from the
+shape below, dated today, with the Baseline's Standing deviations copied in as the starting list
+(empty for an initial iteration).
 
 ## Before the first row — read
 
@@ -43,7 +58,7 @@ Run `pnpm iteration:list` and show:
   permission model (`src/domains/tenancy/sub-domains/permission/authorization.service.ts` and the
   seeded catalog in `src/domains/tenancy/seed/tenancy.seed.ts`), the public-id prefixes
   (`src/shared/utils/identity/public-id.util.ts`) and `docs/reference/`.
-- Start `AS-BUILT.md` with its header (iteration, Baseline, `KICKOFF.md` approval date).
+- `KICKOFF.md` section 8 — the Baseline's Standing deviations this change touches.
 
 ## The ROUTE — its shape
 
@@ -74,14 +89,20 @@ Each driver runs the matching skill chain (schema-change, route-change, worker-c
 ## Each ROUTE row — do → verify → record → check impact → stop
 
 1. **Do** — mark the row `in progress` in `KICKOFF.md` and build it through its driver.
-2. **Verify** — the row's acceptance, its tests, `pnpm validate`.
+2. **Verify** — the row's acceptance, its tests, `pnpm validate` — by the README's Intake mode:
+   `full` / `overlay` → the acceptance traced to the PRD; `brief` → the `BRIEF.md` acceptance
+   criteria the row covers, and the parts it touches still match the carried-forward PRD and
+   `schema-routes.md` except where the brief changes them. MODE incremental, every mode: re-run the
+   existing end-to-end tests for everything touched.
 3. **Record** — add the row to `AS-BUILT.md`:
 
    | # | Planned | Actually built | Difference | Why | Decision | Commit |
    | --- | --- | --- | --- | --- | --- | --- |
 
    Every technical decision the row made (table and column design, endpoints, permission codes,
-   queue names) goes here.
+   queue names) goes here. Where the build now differs from the drop on purpose, add a **Standing
+   deviation** (item · design says · built as · since iteration · decision); where this row resolves
+   one, remove it.
 4. **Check the impact on upcoming rows.**
    - Small and inside the row → record it in `AS-BUILT.md` and continue.
    - **Scope** — a row added or removed, an acceptance changed, the order changed → **stop and ask**
@@ -98,7 +119,9 @@ Each driver runs the matching skill chain (schema-change, route-change, worker-c
 - Every ROUTE row is `done`, or `deferred` with the user's explicit OK.
 - Fill `plans/acceptance.md` — a Result and Evidence for every item.
 - Finish `AS-BUILT.md` with its closing summary: planned but not built (deferred, user OK), built but
-  not planned, follow-ups for the next iteration.
+  not planned, follow-ups for the next iteration — and the **Standing deviations**: the complete list
+  of where the code now differs from the drop (the Baseline's list, minus what this iteration
+  resolved, plus its new ones). The next iteration plans against it.
 - Run `pnpm iteration:status <iteration> done`. `pnpm iteration:status <iteration> frozen` goes in
   the last commit before the merge.
 - **Never push, open a PR or merge** — the user raises PRs.
@@ -124,6 +147,14 @@ Baseline: <none | iteration> · KICKOFF.md approved <date>
 - Planned, not built (deferred — user OK): …
 - Built, not planned: …
 - Follow-ups for the next iteration: …
+
+## Standing deviations
+
+The complete list of where the code differs from the drop — the Baseline's list (empty for an
+initial iteration), minus what this iteration resolved, plus its new ones.
+
+| Item | Design says | Built as | Since iteration | Decision |
+| --- | --- | --- | --- | --- |
 ```
 
 ## Project conventions every row must keep (non-negotiable)
@@ -151,6 +182,8 @@ Baseline: <none | iteration> · KICKOFF.md approved <date>
 | Failure | Prevention here |
 | --- | --- |
 | The wrong iteration implemented, or one on an unfinished Baseline | Step 0 eligibility + AskUserQuestion |
+| A build on an incomplete or edited intake | Step 0 gate (`iteration:intake --check`) |
+| A deliberate difference from the drop that nobody can find later | Standing deviations, carried forward |
 | Rows built in a batch, reviewed too late | stop for review after every row |
 | What was built drifts from the plan with no record | the AS-BUILT row per ROUTE row |
 | A scope change slipped in silently | the impact check — scope changes stop and ask |

@@ -63,14 +63,36 @@ export const MAXIMUM_NAME_ATTEMPTS = 20;
 /** Files every drop for this (backend) repository must contain. */
 export const REQUIRED_INTAKE_FILES = ['PRD.md', 'schema-routes.md'] as const;
 
-/** Files a backend drop may contain besides the required ones. */
-export const OPTIONAL_INTAKE_FILES = ['design-overview.md'] as const;
+/** Intake modes: how the snapshot in `intake-files/` was built from what arrived. */
+export const INTAKE_MODES = ['full', 'overlay', 'brief'] as const;
+
+/** One of {@link INTAKE_MODES}. */
+export type IntakeMode = (typeof INTAKE_MODES)[number];
+
+/** The mode when none is given — and always the launch's: the drop as received. */
+export const DEFAULT_INTAKE_MODE: IntakeMode = 'full';
+
+/** The written change a `brief` intake receives instead of design files. */
+export const BRIEF_FILE = 'BRIEF.md';
+
+/** The `## ` sections every `BRIEF.md` must have ("none" is an answer; a missing section is not). */
+export const BRIEF_SECTIONS = [
+  'What changes',
+  'Why',
+  'Affected screens, entities and routes',
+  'Rules',
+  'Acceptance criteria',
+  'Out of scope',
+] as const;
+
+/** Files a backend snapshot may hold besides the required ones (a carried-forward brief included). */
+export const OPTIONAL_INTAKE_FILES = ['design-overview.md', BRIEF_FILE] as const;
 
 /** Files `--both` copies into the sibling repository's same-named iteration. */
 export const SHARED_INTAKE_FILES = ['PRD.md', 'schema-routes.md'] as const;
 
-/** Hex characters of the sha256 shown for `schema-routes.md` (the same in both repositories). */
-export const SCHEMA_ROUTES_HASH_LENGTH = 12;
+/** Hex characters kept of a sha256 fingerprint — Schema-routes and Intake hash (both repositories). */
+export const FINGERPRINT_LENGTH = 12;
 
 /** README field labels, in table order — the template must list exactly these rows. */
 export const README_FIELD_LABELS = [
@@ -84,7 +106,10 @@ export const README_FIELD_LABELS = [
   'Summary',
   'Drop placed',
   'Drop source',
+  'Intake mode',
+  'Intake note',
   'Schema-routes',
+  'Intake hash',
 ] as const;
 
 /** One of {@link README_FIELD_LABELS}. */
@@ -129,7 +154,10 @@ export interface IterationReadmeFields {
   readonly summary: string;
   readonly dropPlaced: string;
   readonly dropSource: string;
+  readonly intakeMode: string;
+  readonly intakeNote: string;
   readonly schemaRoutes: string;
+  readonly intakeHash: string;
 }
 
 /** One row of `pnpm iteration:list`. */
@@ -140,8 +168,11 @@ export interface IterationListing {
   readonly opened: string;
   readonly baseline: string;
   readonly status: string;
-  /** Fingerprint of `intake-files/schema-routes.md` ({@link schemaRoutesHash}). */
+  readonly intakeMode: string;
+  /** Live fingerprint of `intake-files/schema-routes.md` ({@link schemaRoutesHash}). */
   readonly schemaRoutes: string;
+  /** Live {@link intakeHash}; `<live> ≠ README <recorded>` when it differs from the README's. */
+  readonly intakeHash: string;
   readonly dropPlaced: string;
 }
 
@@ -626,19 +657,105 @@ export function suggestBaseline(location: {
 }
 
 /**
- * Fingerprints a `schema-routes.md`: the first {@link SCHEMA_ROUTES_HASH_LENGTH} hex characters of
- * the sha256 of its bytes, or {@link EMPTY_FIELD} when the file is missing.
+ * Fingerprints a `schema-routes.md`: the first {@link FINGERPRINT_LENGTH} hex characters of the
+ * sha256 of its bytes, or {@link EMPTY_FIELD} when the file is missing.
  *
  * @remarks
  * The same file is copied byte-for-byte into the frontend and backend repositories, so equal
  * fingerprints in both repositories' `pnpm iteration:list` mean the two copies match.
  */
-export function schemaRoutesHash(path: string): string {
-  if (!existsSync(path)) return EMPTY_FIELD;
-  return createHash('sha256')
-    .update(readFileSync(path))
-    .digest('hex')
-    .slice(0, SCHEMA_ROUTES_HASH_LENGTH);
+export function schemaRoutesHash(path: string | undefined): string {
+  if (path === undefined || !existsSync(path)) return EMPTY_FIELD;
+  return createHash('sha256').update(readFileSync(path)).digest('hex').slice(0, FINGERPRINT_LENGTH);
+}
+
+/** The flat, visible files of a folder (no subfolders, no dotfiles), in `localeCompare` order. */
+export function flatFileNames(folder: string): string[] {
+  if (!existsSync(folder)) return [];
+  return readdirSync(folder, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && !entry.name.startsWith('.'))
+    .map((entry) => entry.name)
+    .sort((left, right) => left.localeCompare(right));
+}
+
+/** Reads a folder's flat, visible files into file name → bytes. */
+export function readSnapshot(folder: string): ReadonlyMap<string, Buffer> {
+  return new Map(flatFileNames(folder).map((name) => [name, readFileSync(join(folder, name))]));
+}
+
+function byCodeUnit(left: string, right: string): number {
+  if (left < right) return -1;
+  return left > right ? 1 : 0;
+}
+
+/**
+ * Fingerprints a whole snapshot — the Intake hash.
+ *
+ * @remarks
+ * Algorithm (identical in both repositories): one sha256 over every file, names in code-unit
+ * order (not `localeCompare`), each fed as its name, a NUL, its bytes and a NUL; the hex digest's
+ * first {@link FINGERPRINT_LENGTH} characters. {@link EMPTY_FIELD} for an empty snapshot. Any added,
+ * removed, renamed or edited file changes it.
+ */
+export function snapshotFingerprint(files: ReadonlyMap<string, Buffer>): string {
+  if (files.size === 0) return EMPTY_FIELD;
+  const hash = createHash('sha256');
+  for (const name of [...files.keys()].sort(byCodeUnit)) {
+    hash.update(name);
+    hash.update('\0');
+    hash.update(files.get(name) ?? Buffer.alloc(0));
+    hash.update('\0');
+  }
+  return hash.digest('hex').slice(0, FINGERPRINT_LENGTH);
+}
+
+/** The Intake hash of a folder as it is on disk ({@link snapshotFingerprint}). */
+export function intakeHash(folder: string): string {
+  return snapshotFingerprint(readSnapshot(folder));
+}
+
+/** The `## ` sections of {@link BRIEF_SECTIONS} a `BRIEF.md` lacks. */
+export function missingBriefSections(markdown: string): string[] {
+  const headings = new Set(
+    markdown
+      .split('\n')
+      .filter((line) => line.startsWith('## '))
+      .map((line) => line.slice(3).trim()),
+  );
+  return BRIEF_SECTIONS.filter((section) => !headings.has(section));
+}
+
+/** Returns whether `value` is one of {@link INTAKE_MODES}. */
+export function isIntakeMode(value: string): value is IntakeMode {
+  return (INTAKE_MODES as readonly string[]).includes(value);
+}
+
+/** The Intake mode a README records — `full` when the row is missing or not a known mode. */
+export function recordedIntakeMode(fields: ReadonlyMap<string, string>): IntakeMode {
+  const mode = fields.get('Intake mode') ?? '';
+  return isIntakeMode(mode) ? mode : DEFAULT_INTAKE_MODE;
+}
+
+/**
+ * Checks a backend snapshot against the mandatory set: {@link REQUIRED_INTAKE_FILES}, plus
+ * `BRIEF.md` in `brief` mode. {@link OPTIONAL_INTAKE_FILES} are allowed; anything else is an extra.
+ */
+export function checkIntakeSet(snapshot: {
+  readonly names: readonly string[];
+  readonly mode?: IntakeMode;
+}): { readonly missing: string[]; readonly extras: string[] } {
+  const present = new Set(snapshot.names);
+  const required: string[] = [
+    ...REQUIRED_INTAKE_FILES,
+    ...(snapshot.mode === 'brief' ? [BRIEF_FILE] : []),
+  ];
+  const known = new Set<string>([...required, ...OPTIONAL_INTAKE_FILES]);
+  return {
+    missing: required
+      .filter((name) => !present.has(name))
+      .sort((left, right) => left.localeCompare(right)),
+    extras: snapshot.names.filter((name) => !known.has(name)),
+  };
 }
 
 // ── sibling repository ──────────────────────────────────────────────────────
@@ -779,7 +896,10 @@ export function planNewIteration(request: NewIterationRequest): NewIterationPlan
     summary: EMPTY_FIELD,
     dropPlaced: EMPTY_FIELD,
     dropSource: EMPTY_FIELD,
+    intakeMode: EMPTY_FIELD,
+    intakeNote: EMPTY_FIELD,
     schemaRoutes: EMPTY_FIELD,
+    intakeHash: EMPTY_FIELD,
   };
   const localFolder = join(repositoryRoot, ITERATIONS_DIRECTORY, name);
   const siblingFolder =
@@ -835,6 +955,8 @@ export function readIterationListings(repositoryRoot: string): IterationListing[
   return [...readAllIterationFields(repositoryRoot)]
     .map(([name, fields]) => {
       const field = (label: ReadmeFieldLabel): string => fields.get(label) ?? EMPTY_FIELD;
+      const folder = join(repositoryRoot, ITERATIONS_DIRECTORY, name, INTAKE_DIRECTORY);
+      const liveHash = intakeHash(folder);
       return {
         name,
         type: field('Type'),
@@ -842,9 +964,12 @@ export function readIterationListings(repositoryRoot: string): IterationListing[
         opened: field('Opened'),
         baseline: field('Baseline'),
         status: field('Status'),
-        schemaRoutes: schemaRoutesHash(
-          join(repositoryRoot, ITERATIONS_DIRECTORY, name, INTAKE_DIRECTORY, 'schema-routes.md'),
-        ),
+        intakeMode: field('Intake mode'),
+        schemaRoutes: schemaRoutesHash(join(folder, 'schema-routes.md')),
+        intakeHash:
+          liveHash === field('Intake hash')
+            ? liveHash
+            : `${liveHash} ≠ README ${field('Intake hash')}`,
         dropPlaced: field('Drop placed'),
       };
     })
@@ -855,8 +980,8 @@ export function readIterationListings(repositoryRoot: string): IterationListing[
 }
 
 /**
- * Formats list rows as an aligned `Name | Type | Owner | Opened | Baseline | Status |
- * Schema-routes | Drop placed` table.
+ * Formats list rows as an aligned `Name | Type | Owner | Opened | Baseline | Status | Intake mode |
+ * Schema-routes | Intake hash | Drop placed` table.
  */
 export function formatIterationTable(listings: readonly IterationListing[]): string {
   const header = [
@@ -866,7 +991,9 @@ export function formatIterationTable(listings: readonly IterationListing[]): str
     'Opened',
     'Baseline',
     'Status',
+    'Intake mode',
     'Schema-routes',
+    'Intake hash',
     'Drop placed',
   ];
   const rows = listings.map((listing) => [
@@ -876,7 +1003,9 @@ export function formatIterationTable(listings: readonly IterationListing[]): str
     listing.opened,
     listing.baseline,
     listing.status,
+    listing.intakeMode,
     listing.schemaRoutes,
+    listing.intakeHash,
     listing.dropPlaced,
   ]);
   const widths = header.map((title, column) =>

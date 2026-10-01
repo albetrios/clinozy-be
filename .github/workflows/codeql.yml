@@ -34,11 +34,6 @@ env:
 jobs:
   analyze:
     name: Analyze (javascript-typescript)
-    # CodeQL results go to code scanning, which needs GitHub Advanced Security on a PRIVATE
-    # repository ("Advanced Security must be enabled for this repository to use code
-    # scanning"). Skip there; a public repository analyzes as before. (A scheduled event
-    # carries no repository payload, so the weekly scan still runs.)
-    if: github.event.repository.private != true
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

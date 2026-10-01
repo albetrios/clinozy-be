@@ -1,19 +1,20 @@
 /**
  * `pnpm iteration:diff` — compare two iterations' `intake-files/` (Baseline ↔ current).
  *
- * Every iteration's intake holds the full drop, so the delta of an incremental iteration is this
- * comparison plus the designer's "What changed" notes; anything the comparison shows that the notes
- * omit is a finding. The summary covers files, screens (via `_index.md` Slugs where present),
+ * Every iteration's intake holds a full snapshot, so the delta of an incremental iteration is this
+ * comparison plus the designer's "What changed" notes (in brief mode, `BRIEF.md` — and the
+ * comparison shows nothing else); anything the comparison shows that the notes omit is a finding. The summary covers files, screens (via `_index.md` Slugs where present),
  * whether the PRD, `schema-routes.md` or the prototype changed, and the `schema-routes.md` entities,
  * fields, enums, routes and operations added, removed or changed.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
 import {
   EMPTY_FIELD,
   INTAKE_DIRECTORY,
+  readSnapshot,
   ITERATIONS_DIRECTORY,
   NO_BASELINE,
   readIterationReadme,
@@ -207,17 +208,6 @@ function intakeFolder(location: {
   return join(location.repositoryRoot, ITERATIONS_DIRECTORY, location.iteration, INTAKE_DIRECTORY);
 }
 
-function readFiles(folder: string): ReadonlyMap<string, Buffer> {
-  const files = new Map<string, Buffer>();
-  if (!existsSync(folder)) return files;
-  for (const entry of readdirSync(folder, { withFileTypes: true })) {
-    if (entry.isFile() && !entry.name.startsWith('.')) {
-      files.set(entry.name, readFileSync(join(folder, entry.name)));
-    }
-  }
-  return files;
-}
-
 function screenSlugs(index: Buffer | undefined): string[] {
   if (index === undefined) return [];
   let slugColumn = -1;
@@ -268,8 +258,8 @@ export function summarizeIntakeDiff(request: {
       );
     }
   }
-  const before = readFiles(beforeFolder);
-  const after = readFiles(afterFolder);
+  const before = readSnapshot(beforeFolder);
+  const after = readSnapshot(afterFolder);
   const files = compareMaps({ before, after, same: (left, right) => left.equals(right) });
   const touched = new Set([...files.added, ...files.removed, ...files.changed]);
   const slugs = new Set([
