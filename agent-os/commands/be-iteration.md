@@ -32,6 +32,7 @@ in `iterations/README.md`. Do **one** step, show its result, then stop and ask b
    (one ROUTE row at a time, `AS-BUILT.md`) → close → freeze. Both skills stop after each of their
    own steps; keep those stops.
 6. **README values change only through the commands** — `pnpm iteration:status`,
-   `pnpm iteration:baseline`, `pnpm iteration:intake` — never by editing the README.
+   `pnpm iteration:baseline`, `pnpm iteration:intake` — never by editing the README. The one
+   exception is the Summary line, written by hand after `pnpm iteration:new`.
 
 Never push, open a PR or merge — the user raises PRs.

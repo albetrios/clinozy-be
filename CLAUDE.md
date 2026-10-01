@@ -10,7 +10,7 @@ A requirement that comes from a **design iteration** (`iterations/<iteration>/`)
 
 A design iteration is one product/design change, recorded as `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/` (type `launch` · `feat` · `change` · `fix`) — not an app release. Rules: **`iterations/README.md`**; the flow: **`docs/design-workflow/process/README.md`**; every step with its questions: **`docs/design-workflow/process/iteration-guide.md`**. **`/be-iteration [iteration]`** walks it with the user.
 
-The folder: `README.md` (field table + History, written only by the commands) · `intake-files/` (the **full** drop, exactly as delivered, locked from `approved`) · `KICKOFF.md` (the plan + ROUTE ledger, written by planning, frozen at approval) · `plans/` (decisions, coverage, requirements, stories, acceptance) · `AS-BUILT.md` (what each ROUTE row actually built, written during implementation).
+The folder: `README.md` (field table + History, written by the commands — except the Summary line you write) · `intake-files/` (the **full** drop, exactly as delivered, locked from `approved`) · `KICKOFF.md` (the plan + ROUTE ledger, written by planning, frozen at approval) · `plans/` (decisions, coverage, requirements, stories, acceptance) · `AS-BUILT.md` (what each ROUTE row actually built, written during implementation).
 
 **Before opening one, ask (AskUserQuestion — never guess):** what changes, in one line (the Summary) · launch, or `feat` / `change` / `fix` · the topic (lowercase kebab-case, no digits) · backend only or both repositories (`--both`) · is the current branch `<type>/<topic>` · which folder holds the full drop · what it builds on (the Baseline — it must have its own `intake-files/`).
 

@@ -55,15 +55,15 @@ change touches; `pnpm iteration:new <type> <topic> --both` creates it in both.
 | Branch | the branch it is built on |
 | Baseline | `none` (initial), an earlier iteration (incremental), or `—` until the user confirms it |
 | Status | `planning`, `ready-for-approval`, `approved`, `implementing`, `done` or `frozen` |
-| Summary | one line on what it changes |
+| Summary | one line on what it changes — the one field you write by hand |
 | Drop placed | the day `iteration:intake` placed the drop |
 | Drop source | where the drop came from |
 | Schema-routes | the first 12 characters of the sha256 of `intake-files/schema-routes.md` |
 
 Below the table, a `## History` list records every Status and Baseline change, one line each:
 `- <date> · <from> → <to> · <reason or —> · <git user.name>` (a Baseline change reads
-`Baseline <from> → <to>`). Only the commands write the table values and the History — never edit them
-by hand.
+`Baseline <from> → <to>`). The commands write every table value and the History — never edit those by
+hand — except **Summary**, the one line you write yourself after `pnpm iteration:new`.
 
 ## Mode and Baseline
 
