@@ -123,6 +123,7 @@ jobs:
     # `contents: read` (everything else `none`) — so omitting this block fails the whole run
     # at startup, before any job exists. Mirrors post-merge-ci.yml's docker-build-push job.
     permissions:
+      actions: read
       contents: read
       packages: write
       id-token: write
