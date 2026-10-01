@@ -110,7 +110,7 @@ jobs:
         run: |
           set -euo pipefail
           gh label create ci-failure --repo "$GH_REPOSITORY" \
-            --color D93F0B --description "Automated post-merge/guard failure notification" \
+            --color FFAB91 --description "Automated post-merge/guard failure notification" \
             2>/dev/null || true
           title="Main quality canary failing"
           body="$(printf '%s\n' \
