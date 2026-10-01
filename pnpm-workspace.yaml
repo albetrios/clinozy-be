@@ -7,6 +7,9 @@ engineStrict: true
 useNodeVersion: 24.18.1
 
 allowBuilds:
+  # OpenAPI linter pulled in by @scalar/cli; its postinstall downloads a binary that only
+  # `scalar document lint` runs — the repo uses the CLI to publish, never to lint — so deny it.
+  '@quobix/vacuum': false
   # Telemetry package pulled in transitively; deny its postinstall build so a
   # strict install does not fail on an undecided build script (ERR_PNPM_IGNORED_BUILDS).
   '@scarf/scarf': false
