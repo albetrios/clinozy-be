@@ -65,6 +65,7 @@
       "be-find-skills",
       "be-cursor-global-skills",
       "be-structure-maintainer"
-    ]
+    ],
+    "iteration": ["be-iteration-planning", "be-kickoff-iteration"]
   }
 }

@@ -7,7 +7,7 @@ alwaysApply: true
 
 When a task matches a pattern below, **read the corresponding `SKILL.md` before starting** and complete the steps it defines (including the tests, route/OpenAPI registration, docs, and lint it lists) as part of the same change — see `agent-os/rules/be-change-completeness.mdc`. This table is the fast path; the authoritative catalog and decision tree live in `agent-os/skills/be-skill-index/SKILL.md` (consult it first for anything not listed here), and the file-pattern → skill map is `agent-os/docs/skill-triggers.md`.
 
-Behaviour: infer sensible defaults from the codebase rather than asking, and run the whole matched chain — see `agent-os/rules/be-agent-behavior.mdc` for the full-completion policy. The **one** confirmation checkpoint is the new-requirement plan gate in `agent-os/rules/be-new-requirement-intake.mdc` ("propose a Plan once, wait for **go**"); outside that, proceed without stopping to ask.
+Behaviour: infer sensible defaults from the codebase rather than asking, and run the whole matched chain — see `agent-os/rules/be-agent-behavior.mdc` for the full-completion policy. The **one** confirmation checkpoint is the new-requirement plan gate in `agent-os/rules/be-new-requirement-intake.mdc` ("propose a Plan once, wait for **go**"); outside that, proceed without stopping to ask. The iteration skills are the exception by design: **be-iteration-planning** and **be-kickoff-iteration** stop after every step of their own procedure.
 
 ## Task → skill
 
@@ -37,6 +37,8 @@ Behaviour: infer sensible defaults from the codebase rather than asking, and run
 | PR CI failing — diagnose one check | be-ci-investigation | `agent-os/skills/be-ci-investigation/SKILL.md` |
 | Get a PR merge-ready (CI + review loop) | be-pr-babysit | `agent-os/skills/be-pr-babysit/SKILL.md` |
 | Split a branch/large change into reviewable PRs | be-split-to-prs | `agent-os/skills/be-split-to-prs/SKILL.md` |
+| **Plan an iteration** — "plan iteration <name>", PRD + schema-routes → requirements (`iterations/*/plans/`) | be-iteration-planning | `agent-os/skills/be-iteration-planning/SKILL.md` |
+| **Kick off an iteration** — "kickoff iteration <name>", "kickoff <iteration>", "start implementing <iteration>" | be-kickoff-iteration (after be-iteration-planning's approval) | `agent-os/skills/be-kickoff-iteration/SKILL.md` |
 
 ## Orchestration manifests
 

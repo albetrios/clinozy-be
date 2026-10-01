@@ -5,7 +5,8 @@ product/design iteration, **not** an app release — releases are the `package.j
 `CHANGELOG.md`.
 
 Open one with `pnpm iteration:new`; list them with `pnpm iteration:list`. There is no shared index
-file — each iteration describes itself in its own `README.md`.
+file — each iteration describes itself in its own `README.md`. How an iteration is planned, kicked
+off and built: [docs/design-workflow/process/README.md](../docs/design-workflow/process/README.md).
 
 ## Naming
 
@@ -30,8 +31,8 @@ touches; `pnpm iteration:new <type> <topic> --both` creates it in both.
 - **launch** — the full snapshot: the full PRD, the full schema-routes and every table plan. MODE
   initial, Baseline `none`. There is only ever one launch.
 - **feat**, **change**, **fix** — one person, one branch, **changes only**: a feature PRD for the
-  changed screens, flows and data, a `schema-routes.md` scoped to the changed screens, and plans for
-  the new or changed tables. MODE incremental against its Baseline. The iteration folder **is** the
+  changed screens, flows and data, a `schema-routes.md` scoped to the changed screens, and the plans
+  and kickoff for that change. MODE incremental against its Baseline. The iteration folder **is** the
   delta — never diff two snapshots.
 
 ## README fields
@@ -46,7 +47,7 @@ Every iteration folder has a `README.md` holding one table:
 | Opened | `YYYY-MM-DD` |
 | Branch | the branch it is built on |
 | Baseline | `none` (launch only) or the iteration it builds on |
-| Status | `planning`, `building` or `frozen` |
+| Status | `planning`, `ready-for-approval`, `approved`, `implementing`, `done` or `frozen` |
 | Summary | one line on what it changes |
 
 ## Baseline
@@ -61,7 +62,17 @@ Every iteration folder has a `README.md` holding one table:
 
 ## Lifecycle
 
-- Status moves `planning` → `building` → `frozen`.
+- Status moves `planning` → `ready-for-approval` → `approved` → `implementing` → `done` → `frozen`:
+
+  | Status | Set by | When |
+  | --- | --- | --- |
+  | `planning` | `pnpm iteration:new` | the folder is opened |
+  | `ready-for-approval` | be-iteration-planning | its self-check passes (Step 5) |
+  | `approved` | the user's go-ahead | logged in `plans/decisions.md` |
+  | `implementing` | be-kickoff-iteration | the user confirms `KICKOFF.md` |
+  | `done` | the build | every ledger row is closed and `plans/acceptance.md` is filled |
+  | `frozen` | the last commit before the merge | the iteration merges to `main` |
+
 - An iteration is frozen once it merges to `main`. Never edit a merged iteration; a correction is a
   new `fix` iteration.
 - The current full picture is the launch plus every merged iteration, in merge order.
@@ -73,14 +84,29 @@ Every iteration folder has a `README.md` holding one table:
 | `README.md` | the field table | the field table |
 | `PRD.md` | the full PRD | a feature PRD for the changed screens, flows and data |
 | `schema-routes.md` | the full data model and route map | the same, scoped to the changed screens |
-| `plans/product-plan.md` | the product plan, with build order | this change only, with build order |
-| `plans/<table>.md` | one per table | one per new or changed table |
+| `plans/` | requirements for the whole product | requirements for this change only |
+| `KICKOFF.md` | the technical plan and its ledger | the same, for this change only |
+
+`plans/` is written by **be-iteration-planning** — requirements only, never technical design:
+
+| Path | Holds |
+| --- | --- |
+| `plans/product-plan.md` | goal, in / out of scope, the feature list and its order, open AMBER items, definition of done |
+| `plans/coverage.md` | one row per PRD and schema-routes item, the PRD ↔ schema-routes reconciliation, overlaps |
+| `plans/decisions.md` | the add-only decision log (RED, AMBER, TECH) |
+| `plans/requirements/*.md` | data (with Mermaid diagrams), access, operations, background, notifications, realtime, integrations, files, quality |
+| `plans/features/<feature>/story.md` | stories, rules, acceptance criteria and work items per feature |
+| `plans/acceptance.md` | every acceptance criterion, with its result and evidence after the build |
+
+`KICKOFF.md` is written by **be-kickoff-iteration** after the approval: schema first, contracts,
+build order, work items with their drivers, verification, and the ledger.
 
 - `schema-routes.md` comes from Claude Design (`docs/design-workflow/prompts/schema-routes-prompt.md`
   in clinozy-fe) and is copied here byte-for-byte from the clinozy-fe folder of the same name.
-- Every `plans/<table>.md` starts with its Status.
-- No digit prefixes on file names — the build order lives in `plans/product-plan.md`.
-- Build each table with the [staged-build prompt](../docs/getting-started/staged-build-prompt.md).
+- No digit prefixes on file names — the order lives in `plans/product-plan.md` and the ledger.
+- A NEW table is built with the [staged-build prompt](../docs/getting-started/staged-build-prompt.md);
+  a CHANGE table, a flow or an async piece with `/be-build-requirement` — `KICKOFF.md` names the
+  driver per ledger row.
 
 clinozy-fe holds the design side of the same iteration (prototype, screen specs, `KICKOFF.md`)
 under the same folder name.

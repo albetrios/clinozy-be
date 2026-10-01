@@ -14,10 +14,13 @@ When you edit a file matching a pattern below, invoke the listed skill(s). Gener
 | `src/domains/**/*.schema.ts` | be-schema-generator → be-sql-design-guard → be-db-migration-maintainer → be-rls-tenant-isolation-guard | Adding or changing a Drizzle schema / table end-to-end. |
 | `src/domains/**/events/**`, `src/domains/**/queues/**`, `src/domains/**/workers/**` | be-workers-events → be-test-generator → be-tsdoc-export-guard | Adding or changing events, queues, or workers. |
 | `src/domains/**/*.container.ts` | be-domain-generator → be-schema-generator → be-db-migration-maintainer → be-workers-events → be-route-schema-doc-guard → be-route-catalog → be-seed-maintainer → be-test-generator → be-tsdoc-export-guard → be-overview-doc-maintainer → be-system-narrative-maintainer | Scaffolding a whole new domain or sub-domain (the full DAG). |
+| `iterations/*/PRD.md`, `iterations/*/schema-routes.md` | be-iteration-planning → be-kickoff-iteration | Planning and kicking off a design iteration: requirements (plans/), then the technical KICKOFF.md + ledger — both stop after every step. |
 | `.vscode/extensions.json`, `.vscode/settings.json` | be-ide-productivity-guard | Backend-relevant IDE tooling |
 | `CLAUDE.md`, `AGENTS.md`, `agent-os/rules/**`, `agent-os/skills/**`, `agent-os/agents/**`, `agent-os/mcp/**`, `.mcp.example.json`, `.mcp.default.json` | be-structure-maintainer | Structure/naming; MCP template mirrors must stay identical (mcp-config test) |
 | `biome.json`, `.husky/pre-commit`, `.husky/pre-push` | be-code-quality-guard | Lint/format/pre-commit/pre-push + branch-name policy |
 | `docs/**/*.md` | be-docs-maintainer | Hand-written docs — index + cross-links |
+| `iterations/*/KICKOFF.md` | be-kickoff-iteration | Iteration kickoff — technical plan and ledger; build one ledger row at a time after the user confirms |
+| `iterations/*/plans/**` | be-iteration-planning | Iteration plans — requirements only, no technical design; be-kickoff-iteration follows the approval |
 | `migrations/*.sql` | be-db-migration-maintainer | Migration files (schema changes go via the schema-change chain) |
 | `package.json`, `pnpm-lock.yaml` | be-dependency-security | Zero-vuln dependency updates |
 | `src/**/*.overview.md` | be-overview-doc-maintainer | Per-folder overview docs |

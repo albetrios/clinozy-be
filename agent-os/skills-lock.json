@@ -59,7 +59,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-cursor-global-skills/SKILL.md",
-      "computedHash": "96eba85700e3fd24af5ea4e497e2f5a0316ca5a7f3823352a1e8b4f67b41f95d"
+      "computedHash": "2aa0c48114c82c0d1525f3d784df5f42c707fd8fe9d8589e1febd3a2dc6ec3d4"
     },
     "be-db-migration-maintainer": {
       "source": "local",
@@ -83,13 +83,13 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-docs-audit/SKILL.md",
-      "computedHash": "fc10225b9e49f75890007a5081edcf43b1fcec7dddeefb5d61346d0938172ced"
+      "computedHash": "bceeb18c130d6fdd87554553761c3c2f3f099ed8f2b575f3c8fca1e115873d7a"
     },
     "be-docs-maintainer": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-docs-maintainer/SKILL.md",
-      "computedHash": "d0e2765d75adbfe7e8c3946b2b9e54a6b3dbfa065ae32486e6f6ee05231f3055"
+      "computedHash": "bc66a33273135808001be508a25d34331bd68eaf881be4f95b6cf921f6e950e1"
     },
     "be-domain-generator": {
       "source": "local",
@@ -126,6 +126,18 @@
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-idempotency-guard/SKILL.md",
       "computedHash": "ea6a8f8992d430fe82050bfa4481e8dbb6c3542f9e1d58d9183535f46df67934"
+    },
+    "be-iteration-planning": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": "agent-os/skills/be-iteration-planning/SKILL.md",
+      "computedHash": "8e90d7a17acab3a464faafc9bc3e9f2c04c17f51a6ca6d9fe1111862fa38520b"
+    },
+    "be-kickoff-iteration": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": "agent-os/skills/be-kickoff-iteration/SKILL.md",
+      "computedHash": "4ab789e8a96cafafdf96a5e7456db7c4b71832d8c882e30285e92f819b2711c9"
     },
     "be-lint-warnings-handler": {
       "source": "local",
@@ -209,7 +221,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-skill-index/SKILL.md",
-      "computedHash": "5717cbd1186e5b7d0d8ec7a38e02f68de5f68d75268bac1179a577bea5524348"
+      "computedHash": "fbcf7a01162d01bccf85bcb74d9a0e4b0116256f97aec8602124647088d1445a"
     },
     "be-split-to-prs": {
       "source": "local",

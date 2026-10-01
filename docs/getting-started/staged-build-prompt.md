@@ -5,19 +5,20 @@ list, full implementation, final recap — and stops for your approval after eac
 
 ## How to use it
 
-1. Open the iteration's plans in `iterations/<iteration>/plans/` (see
-   [iterations/README.md](../../iterations/README.md)). There is one `<table>.md` per table; build
-   them in the order `plans/product-plan.md` gives.
-2. Paste that one table file, then the prompt below it, as a single message.
+1. Take the next open **NEW table** row from the iteration's `KICKOFF.md` ledger (see the
+   [iteration process](../design-workflow/process/README.md)), in ledger order.
+2. Paste that work item — its schema-plan entry, the requirement identifiers it covers and its
+   feature story from `iterations/<iteration>/plans/` — then the prompt below it, as a single
+   message.
 3. Reply **approved**, **yes** or **go next** to move to the next stage; any other reply revises the
-   current stage.
+   current stage. Mark the ledger row `done` after Stage 4.
 
 **Launch tables are all new**, so the prompt works as written for every table in the launch
 iteration.
 
-**Changing an existing table** in a later iteration needs a "change" variant of this prompt, which
-is not written yet — Stage 1's STRICT TABLE RULE forbids modifying existing tables. Until it exists,
-use this prompt only for tables that are new in the iteration.
+**Changing an existing table** is not this prompt's job — Stage 1's STRICT TABLE RULE forbids
+modifying existing tables. `KICKOFF.md` routes a CHANGE table (and every flow and async piece) to
+`/be-build-requirement` instead.
 
 The prompt is kept verbatim from the core-platform `NEW-PRODUCT-GUIDE.md` (Appendix A, the reusable
 template).

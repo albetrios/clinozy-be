@@ -4,6 +4,8 @@
 
 For **any new requirement** (new domain, routes, worker, schema, etc.), use the format and checklist in **`docs/getting-started/requirement-intake.md`**. That doc defines what details to provide and which skills/rules to invoke so the AI can perform best and keep docs, routes, tests, and lint in sync. Consult **`agent-os/skills/be-skill-index/SKILL.md`** first, then run the skills listed for the requirement type.
 
+A requirement that comes from a **design iteration** (`iterations/<iteration>/`) follows the iteration process instead — **be-iteration-planning** (requirements, stops after every step) → your approval → **be-kickoff-iteration** (`KICKOFF.md` + ledger) → build the ledger rows: **`docs/design-workflow/process/README.md`**.
+
 ## Reuse before you create
 
 Before adding a helper, wrapper, env var, constant or pattern, find the one that already does the job and use it; create something new only when nothing fits. If an existing one is close but not right, improve it — or say in the PR why new is better — **in the same PR**, never leaving old and new side by side. Detail and examples: principle #3 in [`agent-os/docs/principles.md`](agent-os/docs/principles.md).

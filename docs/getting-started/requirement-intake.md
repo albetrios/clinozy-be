@@ -60,9 +60,9 @@ It runs the pipeline (each step is an existing skill), self-healing failed gates
 
 ---
 
-## Building tables from a design iteration
+## Requirements from a design iteration
 
-When the requirement comes from a design iteration ([iterations/README.md](../../iterations/README.md)), build it one table at a time: paste the table's file from `iterations/<iteration>/plans/` followed by the **[staged-build prompt](staged-build-prompt.md)** — a 4-stage gated workflow (schema → routes → implementation → recap) that waits for your approval after each stage. Follow the build order in the iteration's `plans/product-plan.md`.
+When the requirement comes from a design iteration ([iterations/README.md](../../iterations/README.md)), follow the **[iteration process](../design-workflow/process/README.md)** instead of this form: **be-iteration-planning** turns the iteration's PRD and `schema-routes.md` into approved requirements, then **be-kickoff-iteration** writes `KICKOFF.md` and its ledger. Each ledger row names its driver — a NEW table runs the **[staged-build prompt](staged-build-prompt.md)** (a 4-stage gated workflow: schema → routes → implementation → recap); a CHANGE table, a flow or an async piece runs `/be-build-requirement` with this form.
 
 ---
 
@@ -390,7 +390,7 @@ flowchart LR
 
 | Skill                          | Path                                                     | When to invoke                                            |
 | ------------------------------ | -------------------------------------------------------- | --------------------------------------------------------- |
-| **be-skill-index**                | `.cursor/skills/be-skill-index/SKILL.md`                    | **First** — full catalog and triggers (45 project skills) |
+| **be-skill-index**                | `.cursor/skills/be-skill-index/SKILL.md`                    | **First** — full catalog and triggers (47 project skills) |
 | be-domain-generator               | `.cursor/skills/be-domain-generator/SKILL.md`               | New domain/sub-domain scaffold                            |
 | be-route-catalog                  | `.cursor/skills/be-route-catalog/SKILL.md`                  | Any change to `*.routes.ts`                               |
 | be-route-schema-doc-guard         | `.cursor/skills/be-route-schema-doc-guard/SKILL.md`         | Route `schema: { summary, description, tags }`          |
@@ -422,6 +422,8 @@ flowchart LR
 | be-contract-test-maintainer       | `.cursor/skills/be-contract-test-maintainer/SKILL.md`       | Stripe/Resend/S3 nock contracts                           |
 | be-chaos-test-maintainer          | `.cursor/skills/be-chaos-test-maintainer/SKILL.md`          | Toxiproxy chaos tests                                     |
 | be-cursor-global-skills           | `.cursor/skills/be-cursor-global-skills/SKILL.md`           | Reference: Cursor built-in skills                         |
+| be-iteration-planning             | `.cursor/skills/be-iteration-planning/SKILL.md`             | "Plan iteration <name>" — requirements only, under `iterations/<iteration>/plans/` |
+| be-kickoff-iteration              | `.cursor/skills/be-kickoff-iteration/SKILL.md`              | "Kickoff iteration <name>" — `KICKOFF.md` + ledger after the plans are approved |
 | **be-system-narrative-maintainer**| `.cursor/skills/be-system-narrative-maintainer/SKILL.md`    | Hand-authored `src/OVERVIEW.md` / `src/PATTERNS.md` / `src/FLOWS.md` / `src/POLICIES.md` |
 | **be-overview-doc-maintainer**    | `.cursor/skills/be-overview-doc-maintainer/SKILL.md`        | Per-folder `<folder>.overview.md` (hand-written) |
 | **be-route-schema-doc-guard**     | `.cursor/skills/be-route-schema-doc-guard/SKILL.md`         | Fastify route `schema: { summary, description, tags }`    |

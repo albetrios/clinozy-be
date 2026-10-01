@@ -43,6 +43,11 @@
         "be-overview-doc-maintainer",
         "be-system-narrative-maintainer"
       ]
+    },
+    "iteration": {
+      "description": "Planning and kicking off a design iteration: requirements (plans/), then the technical KICKOFF.md + ledger — both stop after every step.",
+      "trigger": "iterations/*/{PRD,schema-routes}.md",
+      "steps": ["be-iteration-planning", "be-kickoff-iteration"]
     }
   }
 }

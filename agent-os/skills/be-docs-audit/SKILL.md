@@ -21,7 +21,7 @@ Run a **full pass** over hand-written docs when the user asks to "review docs", 
    Ensure every hand-written doc under `docs/` (in subfolders; no stray root `.md` except `docs/README.md`) is listed in [docs/README.md](../../../docs/README.md) under the correct use-case section, and deployment docs appear in [docs/deployment/README.md](../../../docs/deployment/README.md) where applicable.
 
 2. **Naming**  
-   Confirm subfolder + **lowercase kebab-case** filenames (e.g. `getting-started/setup.md`, `reference/testing/load-testing.md`). No UPPER-KEBAB in subfolders. Generated artifacts live in `docs/`: `openapi/` (openapi\*.json), `postman-collection.json`, `routes.txt`. Known subfolders include: `getting-started/`, `process/`, `deployment/`, `integrations/`, `reference/`, `reviews/`, `database/` (`clinozy-be.dbml` — auto-generated database diagram). Do not flag these as unexpected.
+   Confirm subfolder + **lowercase kebab-case** filenames (e.g. `getting-started/setup.md`, `reference/testing/load-testing.md`). No UPPER-KEBAB in subfolders. Generated artifacts live in `docs/`: `openapi/` (openapi\*.json), `postman-collection.json`, `routes.txt`. Known subfolders include: `getting-started/`, `process/`, `deployment/`, `integrations/`, `reference/`, `reviews/`, `design-workflow/` (prompts/, process/ — the design-iteration process and paste prompts), `database/` (`clinozy-be.dbml` — auto-generated database diagram). Do not flag these as unexpected.
 
 3. **Mermaid**  
    For each doc that describes a **process, flow, or structure**, confirm it has a Mermaid diagram (flowchart or sequence). Add one if missing so GitHub renders it.

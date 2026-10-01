@@ -24,9 +24,9 @@ When **documentation under `docs/`** is added, renamed, or reorganized, this ski
    Ensure [docs/README.md](../../../docs/README.md) exists and lists all hand-written docs by use case (Getting started, Development workflow, Deployment, Features and tooling, Reference, Reviews). Deployment sub-index: [docs/deployment/README.md](../../../docs/deployment/README.md). Use correct paths after any rename or move.
 
 2. **Naming**  
-   Hand-written docs live in **subfolders** with **lowercase kebab-case** filenames (e.g. `getting-started/setup.md`, `reference/testing/load-testing.md`). When adding a new doc, place it in the correct subfolder (`getting-started`, `process`, `deployment` with `setup/` · `ci-cd/` · `runbooks/`, `integrations`, `reference/<topic>`, or point-in-time `reviews/`) and use this convention. Avoid new markdown files at `docs/` root (except `docs/README.md` and generated artifacts). **CI/CD:** one canonical doc — `deployment/ci-cd/cicd-and-deployment.md` (do not add parallel flow/diagram-only copies).
+   Hand-written docs live in **subfolders** with **lowercase kebab-case** filenames (e.g. `getting-started/setup.md`, `reference/testing/load-testing.md`). When adding a new doc, place it in the correct subfolder (`getting-started`, `process`, `deployment` with `setup/` · `ci-cd/` · `runbooks/`, `integrations`, `reference/<topic>`, `design-workflow` with `prompts/` · `process/`, or point-in-time `reviews/`) and use this convention. Avoid new markdown files at `docs/` root (except `docs/README.md` and generated artifacts). **CI/CD:** one canonical doc — `deployment/ci-cd/cicd-and-deployment.md` (do not add parallel flow/diagram-only copies).
 
-   **Known subfolders:** `getting-started/`, `process/`, `deployment/` (setup/, ci-cd/, runbooks/), `integrations/`, `reference/`, `reviews/`, `database/` (`clinozy-be.dbml` — auto-generated database diagram).
+   **Known subfolders:** `getting-started/`, `process/`, `deployment/` (setup/, ci-cd/, runbooks/), `integrations/`, `reference/`, `reviews/`, `design-workflow/` (prompts/, process/ — the design-iteration process and paste prompts), `database/` (`clinozy-be.dbml` — auto-generated database diagram).
 
 3. **Cross-links**  
    When a doc is renamed or moved, search the repo for the old path and update:

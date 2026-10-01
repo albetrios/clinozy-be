@@ -21,7 +21,10 @@ export type IterationType = (typeof ITERATION_TYPES)[number];
 /** Folder (relative to a repository root) that holds every iteration. */
 export const ITERATIONS_DIRECTORY = 'iterations';
 
-/** Status a freshly opened iteration starts in (`planning` → `building` → `frozen`). */
+/**
+ * Status a freshly opened iteration starts in (`planning` → `ready-for-approval` → `approved` →
+ * `implementing` → `done` → `frozen`; see iterations/README.md).
+ */
 export const INITIAL_ITERATION_STATUS = 'planning';
 
 /** Baseline recorded for the launch, the only iteration that builds on nothing. */

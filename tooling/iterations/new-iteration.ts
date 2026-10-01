@@ -54,8 +54,8 @@ function nextSteps(plan: NewIterationPlan): string[] {
     `  1. Write the Summary line in ${folder}/README.md.`,
     `  2. Write ${folder}/PRD.md — only the changed screens, flows and data.`,
     `  3. Generate schema-routes.md from clinozy-fe's docs/design-workflow/prompts/schema-routes-prompt.md (SCOPE = the changed screens) and copy it into ${folder}/ in both repositories.`,
-    `  4. Write ${folder}/plans/product-plan.md, then one plans/<table>.md per new or changed table.`,
-    '  5. Build each table with docs/getting-started/staged-build-prompt.md.',
+    `  4. Plan it: "plan iteration ${plan.name}" (be-iteration-planning — requirements in ${folder}/plans/, then your approval).`,
+    `  5. Kick it off: "kickoff iteration ${plan.name}" (be-kickoff-iteration — KICKOFF.md + ledger); see docs/design-workflow/process/README.md.`,
     ...(plan.siblingFolder === undefined
       ? []
       : [`  6. Work in clinozy-fe on the same branch (${plan.fields.branch}).`]),

@@ -1,21 +1,31 @@
 # {{name}} — product plan
 
-> This change only, against Baseline `{{baseline}}`. Build each table with
-> `docs/getting-started/staged-build-prompt.md`, in the order below.
+> Written by `be-iteration-planning` (requirements only — no technical design), against Baseline
+> `{{baseline}}`. The technical plan comes later, in `KICKOFF.md`, from `be-kickoff-iteration`.
+
+## Goal
+
+What this iteration must achieve, for whom.
 
 ## Scope
 
-What the backend builds or changes for this iteration, from `PRD.md` and `schema-routes.md`.
+- **In:** (what this iteration covers)
+- **Out:** (what it deliberately leaves out, with the decision in `decisions.md`)
 
-## Build order
+## Features
 
-One `plans/<table>.md` per new or changed table, each starting with its Status. File names carry no
-digit prefixes — the order lives here.
+In build order — screen features before the flow features that involve them. One
+`features/<feature>/story.md` each.
 
-| Order | Table | New or changed | Plan file |
+| Order | Feature | Kind | Depends on |
 | --- | --- | --- | --- |
 | | | | |
 
-## Decisions
+## Open AMBER items
 
-Open questions and the answers that unblock the build.
+Safe defaults taken in `decisions.md` that are still open.
+
+## Definition of done
+
+Every acceptance criterion in `acceptance.md` has a result and evidence, and every ledger row in
+`KICKOFF.md` is closed.

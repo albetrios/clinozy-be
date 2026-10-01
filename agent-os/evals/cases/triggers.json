@@ -35,6 +35,21 @@
       "file": "src/shared/middlewares/core/idempotency.middleware.ts",
       "expectSkills": ["be-idempotency-guard"],
       "why": "Changing the idempotency engine must run the idempotency guard."
+    },
+    {
+      "file": "iterations/launch-2026-09-30-jxmr/PRD.md",
+      "expectSkills": ["be-iteration-planning", "be-kickoff-iteration"],
+      "why": "A changed iteration PRD (or schema-routes) runs the iteration chain: plan the requirements, then kick off."
+    },
+    {
+      "file": "iterations/launch-2026-09-30-jxmr/plans/requirements/data.md",
+      "expectSkills": ["be-iteration-planning"],
+      "why": "Iteration plans follow be-iteration-planning's formats (requirements only, Mermaid conventions)."
+    },
+    {
+      "file": "iterations/launch-2026-09-30-jxmr/KICKOFF.md",
+      "expectSkills": ["be-kickoff-iteration"],
+      "why": "KICKOFF.md and its ledger are owned by be-kickoff-iteration."
     }
   ]
 }
