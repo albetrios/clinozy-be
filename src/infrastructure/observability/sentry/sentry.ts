@@ -14,6 +14,13 @@ import {
 
 let initialized = false;
 
+/**
+ * Header and query-parameter name fragments that identify the caller (forwarding chains, client
+ * IPs, remote addresses, user ids) — denied from Sentry events, as `sendDefaultPii: false` did
+ * before Sentry 11. The list is the SDK migration guide's equivalent of that default.
+ */
+const PERSONAL_DATA_KEY_DENY_TERMS = ['forwarded', '-ip', 'remote-', 'via', '-user'] as const;
+
 /** Redacts secrets from each breadcrumb's `data` payload in place. */
 function redactSentryBreadcrumbsInPlace(
   breadcrumbs: NonNullable<Sentry.ErrorEvent['breadcrumbs']>,
@@ -114,6 +121,8 @@ export function initSentry(): void {
   // when profiling is enabled. `httpIntegration` is always installed: besides outbound-HTTP tracing
   // it provides the per-request isolation scope that gives captured errors their route/request
   // context, so dropping it would degrade error reports even though error capture itself is cheap.
+  // `fastifyIntegration` is always installed too: since Sentry 11 it captures routed errors on its
+  // own (setupFastifyErrorHandler is a no-op), filtered by the same capture policy as before.
   const tracingEnabled = defaultTracesSampleRate > 0;
   const profilingEnabled = profileSessionSampleRate > 0;
   // Build via conditional spreads so the array's element type is the union of the
@@ -121,6 +130,7 @@ export function initSentry(): void {
   // named integration would otherwise be rejected under exactOptionalPropertyTypes.
   const integrations = [
     Sentry.httpIntegration(),
+    Sentry.fastifyIntegration({ shouldHandleError: shouldCaptureErrorInSentry }),
     ...(profilingEnabled ? [nodeProfilingIntegration()] : []),
     ...(tracingEnabled ? [Sentry.postgresIntegration(), Sentry.redisIntegration()] : []),
   ];
@@ -131,7 +141,22 @@ export function initSentry(): void {
     ...(release ? { release } : {}),
 
     // Avoid shipping emails, cookies, and raw IPs by default — breadcrumbs are redacted in beforeSend.
-    sendDefaultPii: false,
+    // Sentry 11 replaced `sendDefaultPii: false` with `dataCollection`, whose defaults collect
+    // everything; this is the SDK migration guide's exact equivalent of the old restrictive posture.
+    dataCollection: {
+      userInfo: false,
+      cookies: false,
+      httpHeaders: {
+        request: { deny: [...PERSONAL_DATA_KEY_DENY_TERMS] },
+        response: { deny: [...PERSONAL_DATA_KEY_DENY_TERMS] },
+      },
+      httpBodies: [],
+      urlQueryParams: { deny: [...PERSONAL_DATA_KEY_DENY_TERMS] },
+      genAI: { inputs: false, outputs: false },
+      databaseQueryData: false,
+      queues: false,
+      graphQL: { document: false, variables: false },
+    },
 
     // ── Integrations ────────────────────────────────────────────────
     // Built above: error capture always on; tracing (pg/redis) + profiling only when enabled.
@@ -285,7 +310,8 @@ export function isSentryInitialized(): boolean {
 }
 
 /**
- * Capture policy for the Fastify error handler: only server faults are defects.
+ * Capture policy for Sentry's Fastify error capture (`fastifyIntegration`'s `shouldHandleError`):
+ * only server faults are defects.
  *
  * A 4xx is a handled outcome the API deliberately returns (missing bearer token,
  * validation failure, unknown id) — routing those to Sentry buries real faults in
