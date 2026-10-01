@@ -83,13 +83,13 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-docs-audit/SKILL.md",
-      "computedHash": "357024a6e99c760549c2c78f29f5e1af72b31d2c56602cbdc43e4a6b883e4a78"
+      "computedHash": "fc10225b9e49f75890007a5081edcf43b1fcec7dddeefb5d61346d0938172ced"
     },
     "be-docs-maintainer": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-docs-maintainer/SKILL.md",
-      "computedHash": "fa82201100ff70076aaac89e36ca308813cd945ae57e79d520ab5308a9ea0456"
+      "computedHash": "d0e2765d75adbfe7e8c3946b2b9e54a6b3dbfa065ae32486e6f6ee05231f3055"
     },
     "be-domain-generator": {
       "source": "local",

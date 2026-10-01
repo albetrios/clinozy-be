@@ -90,12 +90,11 @@ const INTENTIONALLY_ABSENT = new Set<string>([
   'tooling/feature-docs', // retired DOCS.md aggregator, cited historically
   '.github/sync.config.json', // dead reference the evals README quotes as a past finding
   'docs/reference/load-testing.md', // be-docs-audit skill cites it as the example of a stale flat path
-  // `init:project --reset-history` deletes the BASE project's audit history, so these are
-  // legitimately empty in a freshly adopted repo. Restoring them would import another
+  // `init:project --reset-history` deletes the BASE project's audit history, so this is
+  // legitimately empty in a freshly adopted repo. Restoring it would import another
   // product's history; leaving the links unguarded made this gate permanently red after
   // any adoption. Both `ci:local` and `ci:quality` run it.
   'docs/reviews',
-  'docs/superpowers',
 ]);
 
 /**
@@ -113,7 +112,7 @@ const BRANCH_NAME_EXAMPLES = new Set<string>(['docs/american-spelling-organizati
  * Archival point-in-time snapshots — exempt from both passes (they legitimately
  * cite paths and link targets as they existed at the time).
  */
-const ARCHIVAL_DIRS = ['docs/reviews/', 'docs/superpowers/'];
+const ARCHIVAL_DIRS = ['docs/reviews/'];
 
 /** Archive-suffixed docs are inline-path exempt for the same reason. */
 const ARCHIVE_FILE_SUFFIX = '-archive.md';

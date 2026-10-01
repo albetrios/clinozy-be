@@ -15,7 +15,6 @@ Hand-written guides live in **topic subfolders**; generated API artifacts stay a
 | [reference/reliability/observability-log-events.md](reference/reliability/observability-log-events.md)     | Structured log event names / dashboard migrations                                          |
 | [deployment/docker-images.md](deployment/docker-images.md)                                                 | API vs worker images, MCP docs in container                                                |
 | [reviews/](reviews/)                                                                                       | Point-in-time review snapshots (add new dated files; do not rewrite history)               |
-| [superpowers/](superpowers/)                                                                               | AI planning-session artifacts — **plans/** and **specs/** (dated, archival)                |
 
 **Generated (do not edit by hand):** [routes.txt](routes.txt), [openapi/](openapi/) (`openapi*.json`), [postman-collection.json](postman-collection.json).
 
@@ -37,7 +36,6 @@ flowchart TB
     IN[integrations]
     RF[reference]
     RV[reviews]
-    SP[superpowers]
     DB[database]
   end
 

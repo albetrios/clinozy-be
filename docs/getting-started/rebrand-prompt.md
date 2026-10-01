@@ -82,7 +82,7 @@ pnpm tool:generate-project-identity:check
 
 It fails on: drift in generated artifacts; the current slug, owner, display name or brand hardcoded
 in code or config (the brand as a whole word); and any **previous** slug, database name or owner
-left anywhere outside `CHANGELOG.md`, `docs/reviews/` and `docs/superpowers/`. Rename each hit. If
+left anywhere outside `CHANGELOG.md` and `docs/reviews/`. Rename each hit. If
 a hit is your own example text, use a generic placeholder (`acme-be`), never a real old name.
 
 ### Phase 3 — Local stack
@@ -123,7 +123,7 @@ reports a false "clean". The first rename's audit said "0 leftovers" twice becau
 **5a. Old names still present**, for each `OLD_*` slug, the bare brand word and the old owner:
 
 ```bash
-git grep -niIP "<old>" -- . ':!CHANGELOG.md' ':!docs/reviews' ':!docs/superpowers' ':!tooling/setup/setup.config.json'
+git grep -niIP "<old>" -- . ':!CHANGELOG.md' ':!docs/reviews' ':!tooling/setup/setup.config.json'
 ```
 
 A miss is the old name used as the *product*: copy, a sender name, an OpenAPI description, a Redis

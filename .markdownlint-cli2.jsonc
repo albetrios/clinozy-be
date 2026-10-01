@@ -21,6 +21,8 @@
     "coverage/**",
     "coverage-*/**",
     "CHANGELOG.md",
+    // Imported product/design docs (PRD, prototype schema-routes) kept as authored upstream.
+    "legacy/**",
     "docs/openapi/**",
     "docs/postman-collection.json",
     "docs/routes.txt",
