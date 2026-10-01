@@ -110,8 +110,9 @@ hand — except **Summary**, the one line you write yourself after `pnpm iterati
 **The gate**, `pnpm iteration:intake <iteration> --check [--baseline <baseline>]`, proves the
 mandatory set is present and the recomputed Intake hash equals the README's (for the Baseline too),
 and that an overlay or brief was built on the README's Baseline. It exits 1 with
-"Gate failed — n problem(s). Stop here: write nothing, change no status." and one line per problem
-with its fix. Planning and kickoff run it first and stop when it fails.
+"Gate failed — 1 problem." (or "— 2 problems.", and so on) and "Stop here: write nothing, change no
+status.", then one line per problem with its fix. Planning and kickoff run it first and stop when
+it fails.
 
 The Intake hash is one sha256 over every flat, visible file of `intake-files/` — names in code-unit
 order, each fed as its name, a NUL, its bytes and a NUL — cut to 12 characters; it is computed the

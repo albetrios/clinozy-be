@@ -467,7 +467,8 @@ export function gateFailures(location: {
  * Algorithm: with a Baseline, the README's Baseline must equal it; then the iteration's intake and
  * the Baseline's each pass {@link gateFailures}. An unknown iteration is reported, not thrown.
  * Every failure names the folder, what is missing or changed and the fix; the first line of a
- * failure is "Gate failed — n problem(s). Stop here: write nothing, change no status.".
+ * failure is "Gate failed — 1 problem." (or "— 2 problems.", and so on) followed by "Stop here: write
+ * nothing, change no status.".
  *
  * Side effects: reads files and runs read-only git commands.
  */
