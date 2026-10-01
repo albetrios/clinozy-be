@@ -22,6 +22,12 @@ import {
 } from '@/tests/helpers/iteration-repository.helper.js';
 import {
   appendHistoryEntry,
+  BRIEF_SECTIONS,
+  checkIntakeSet,
+  intakeHash,
+  missingBriefSections,
+  recordedIntakeMode,
+  snapshotFingerprint,
   buildIterationName,
   formatIterationTable,
   ITERATION_STATUSES,
@@ -42,7 +48,7 @@ import {
   renderIterationReadme,
   renderTemplate,
   resolveSiblingRoot,
-  SCHEMA_ROUTES_HASH_LENGTH,
+  FINGERPRINT_LENGTH,
   schemaRoutesHash,
   setReadmeField,
   siblingPackageName,
@@ -141,7 +147,10 @@ describe('README', () => {
     summary: '—',
     dropPlaced: '—',
     dropSource: '—',
+    intakeMode: '—',
+    intakeNote: '—',
     schemaRoutes: '—',
+    intakeHash: '—',
   };
 
   it('renders exactly the field rows, in order, and reads them back', () => {
@@ -162,7 +171,7 @@ describe('README', () => {
       .split('\n')
       .filter((line) => line.startsWith('| ') && !line.startsWith('| ---'));
     expect(rows.map((row) => row.split('|')[1]?.trim())).toEqual(['Field', ...README_FIELD_LABELS]);
-    expect(template.trimEnd().endsWith('| Schema-routes | {{schemaRoutes}} |')).toBe(true);
+    expect(template.trimEnd().endsWith('| Intake hash | {{intakeHash}} |')).toBe(true);
   });
 
   it('refuses a placeholder it has no value for', () => {
@@ -207,7 +216,7 @@ describe('schemaRoutesHash', () => {
     const path = join(folder, 'schema-routes.md');
     writeFileSync(path, '# schema-routes\n');
     const expected = createHash('sha256').update('# schema-routes\n').digest('hex');
-    expect(schemaRoutesHash(path)).toBe(expected.slice(0, SCHEMA_ROUTES_HASH_LENGTH));
+    expect(schemaRoutesHash(path)).toBe(expected.slice(0, FINGERPRINT_LENGTH));
     expect(schemaRoutesHash(path)).toHaveLength(12);
     expect(schemaRoutesHash(join(folder, 'missing.md'))).toBe('—');
   });
@@ -451,7 +460,7 @@ describe('readIterationListings', () => {
     expect(listings[1]?.schemaRoutes).toBe('—');
     const lines = formatIterationTable(listings).split('\n');
     expect(lines[0]).toMatch(
-      /^\| Name +\| Type +\| Owner +\| Opened +\| Baseline +\| Status +\| Schema-routes +\| Drop placed +\|$/,
+      /^\| Name +\| Type +\| Owner +\| Opened +\| Baseline +\| Status +\| Intake mode +\| Schema-routes +\| Intake hash +\| Drop placed +\|$/,
     );
     expect(new Set(lines.map((line) => line.length)).size).toBe(1);
   });
@@ -606,5 +615,76 @@ describe('iteration:baseline', () => {
         baseline: 'launch-2026-09-30-jxmr',
       }),
     ).toThrow(/no complete intake-files\/ \(missing PRD\.md, schema-routes\.md\)/);
+  });
+});
+
+describe('the Intake hash (shared byte for byte with clinozy-fe)', () => {
+  it('feeds name, NUL, bytes, NUL per file, names in code-unit order, and keeps 12 hex characters', () => {
+    const files = new Map([
+      ['a.md', Buffer.from('lower')],
+      ['B.md', Buffer.from('upper')],
+    ]);
+    const expected = createHash('sha256');
+    for (const name of ['B.md', 'a.md']) {
+      expected.update(name);
+      expected.update('\0');
+      expected.update(files.get(name) ?? Buffer.alloc(0));
+      expected.update('\0');
+    }
+    expect(snapshotFingerprint(files)).toBe(expected.digest('hex').slice(0, FINGERPRINT_LENGTH));
+    expect(snapshotFingerprint(new Map())).toBe('—');
+  });
+
+  it('hashes the flat, visible files of a folder and changes on any edit', () => {
+    const folder = createScratchFolder('iteration-intake-hash-');
+    writeFileSync(join(folder, 'PRD.md'), '# PRD\n');
+    writeFileSync(join(folder, 'schema-routes.md'), '# schema-routes\n');
+    writeFileSync(join(folder, '.DS_Store'), 'ignored');
+    mkdirSync(join(folder, 'nested'));
+    writeFileSync(join(folder, 'nested', 'x.md'), 'ignored');
+    const first = intakeHash(folder);
+    expect(first).toMatch(/^[0-9a-f]{12}$/);
+    writeFileSync(join(folder, 'PRD.md'), '# PRD (edited)\n');
+    expect(intakeHash(folder)).not.toBe(first);
+    expect(intakeHash(join(folder, 'missing'))).toBe('—');
+  });
+});
+
+describe('the backend mandatory set, BRIEF.md sections and the recorded mode', () => {
+  it('requires PRD.md and schema-routes.md (plus BRIEF.md in brief mode) and flags extras', () => {
+    expect(checkIntakeSet({ names: ['PRD.md', 'schema-routes.md', 'design-overview.md'] })).toEqual(
+      {
+        missing: [],
+        extras: [],
+      },
+    );
+    expect(checkIntakeSet({ names: ['PRD.md', 'notes.txt'], mode: 'full' })).toEqual({
+      missing: ['schema-routes.md'],
+      extras: ['notes.txt'],
+    });
+    expect(
+      checkIntakeSet({ names: ['PRD.md', 'schema-routes.md'], mode: 'brief' }).missing,
+    ).toEqual(['BRIEF.md']);
+    expect(
+      checkIntakeSet({ names: ['PRD.md', 'schema-routes.md', 'BRIEF.md'], mode: 'overlay' }).extras,
+    ).toEqual([]);
+  });
+
+  it('lists the BRIEF.md sections a brief lacks', () => {
+    const complete = BRIEF_SECTIONS.map((section) => `## ${section}\n\nnone\n`).join('\n');
+    expect(missingBriefSections(`# Brief — x\n\n${complete}`)).toEqual([]);
+    expect(missingBriefSections('# Brief — x\n\n## What changes\n\n## Why\n')).toEqual([
+      'Affected screens, entities and routes',
+      'Rules',
+      'Acceptance criteria',
+      'Out of scope',
+    ]);
+    expect(missingBriefSections(readIterationTemplate('BRIEF.md'))).toEqual([]);
+  });
+
+  it('reads the Intake mode, defaulting to full', () => {
+    expect(recordedIntakeMode(new Map([['Intake mode', 'overlay']]))).toBe('overlay');
+    expect(recordedIntakeMode(new Map([['Intake mode', '—']]))).toBe('full');
+    expect(recordedIntakeMode(new Map())).toBe('full');
   });
 });

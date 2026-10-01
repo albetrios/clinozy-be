@@ -59,8 +59,13 @@ function nextSteps(plan: NewIterationPlan): string[] {
   return [
     'Next:',
     `  1. Write the Summary line in ${folder}/README.md.`,
-    `  2. Place the drop: pnpm iteration:intake ${plan.name} <source-folder>${plan.siblingFolder === undefined ? '' : ' --both'}`,
-    `  3. Plan it: "plan iteration ${plan.name}" (be-iteration-planning — KICKOFF.md + plans/, then your approval).`,
+    `  2. Place the drop: pnpm iteration:intake ${plan.name} <source>${plan.siblingFolder === undefined ? '' : ' --both'}`,
+    ...(plan.fields.type === 'launch'
+      ? []
+      : [
+          `     Only the changed files: --mode overlay · only a BRIEF.md (template: tooling/iterations/templates/BRIEF.md): --mode brief — both build on the README's Baseline (${plan.fields.baseline}); for another one, first: pnpm iteration:baseline ${plan.name} <baseline>`,
+        ]),
+    `  3. Plan it: "plan iteration ${plan.name}" (be-iteration-planning runs the gate, confirms the Baseline and writes KICKOFF.md + plans/).`,
     `  4. Implement it: "kickoff iteration ${plan.name}" (be-kickoff-iteration — one ledger row at a time, AS-BUILT.md).`,
     '  The steps in full: docs/design-workflow/process/iteration-guide.md',
   ];

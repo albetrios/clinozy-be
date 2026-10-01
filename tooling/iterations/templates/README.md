@@ -12,4 +12,7 @@
 | Summary | {{summary}} |
 | Drop placed | {{dropPlaced}} |
 | Drop source | {{dropSource}} |
+| Intake mode | {{intakeMode}} |
+| Intake note | {{intakeNote}} |
 | Schema-routes | {{schemaRoutes}} |
+| Intake hash | {{intakeHash}} |

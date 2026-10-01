@@ -1,12 +1,12 @@
 /**
- * Design-iteration tooling — `pnpm iteration:intake` (`tooling/iterations/iteration-intake.util.ts`).
+ * Design-iteration tooling — `pnpm iteration:intake` and its `--check` gate
+ * (`tooling/iterations/iteration-intake.util.ts`).
  *
- * Pins the required set and extras, the flat copy (subfolders, hidden files and README.md skipped),
- * the approved-or-later lock, `--replace` only while planning, the README Drop rows and
- * Schema-routes hash, and `--both`: a missing sibling iteration stops, a differing sibling copy
- * shows its diff and stops unless `--replace`.
+ * Pins the shared intake contract with clinozy-fe: the three modes (full, overlay, brief) and the
+ * snapshot each builds, the Intake note formats, the README rows, the launch-is-full rule, the
+ * approved-or-later lock, replace-only-while-planning (removals included), the BRIEF.md sections,
+ * `--both` on the sibling's own Baseline, and every gate failure with its message.
  */
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -16,18 +16,29 @@ import {
   createScratchFolder,
   ITERATION_TEST_TODAY,
   removeIterationRepositories,
+  runTestGit,
 } from '@/tests/helpers/iteration-repository.helper.js';
 import {
   applyIntake,
-  displaySourcePath,
   parseIntakeArguments,
   planIntake,
+  readReceived,
+  renderIntakeNote,
+  runGate,
+  runIntake,
 } from '@tooling/iterations/iteration-intake.util.js';
-import { parseIterationReadme } from '@tooling/iterations/iteration.util.js';
+import {
+  BRIEF_SECTIONS,
+  intakeHash,
+  parseIterationReadme,
+} from '@tooling/iterations/iteration.util.js';
 
-const ITERATION = 'launch-2026-09-30-jxmr';
+const LAUNCH = 'launch-2026-09-30-jxmr';
+const FEATURE = 'feat-returns-2026-10-06-kqzx';
 const PRD = '# PRD\n';
 const SCHEMA_ROUTES = '# schema-routes\n\n## Entity: Patient\n';
+const COMPLETE = { 'PRD.md': PRD, 'schema-routes.md': SCHEMA_ROUTES };
+const BRIEF = `# Brief — returns\n\n${BRIEF_SECTIONS.map((section) => `## ${section}\n\nnone\n`).join('\n')}`;
 
 afterEach(() => {
   removeIterationRepositories();
@@ -42,218 +53,540 @@ function drop(files: Readonly<Record<string, string>>): string {
   return folder;
 }
 
-function readmeOf(repositoryRoot: string): ReadonlyMap<string, string> {
+function fieldsOf(location: {
+  repositoryRoot: string;
+  iteration: string;
+}): ReadonlyMap<string, string> {
   return parseIterationReadme(
-    readFileSync(join(repositoryRoot, 'iterations', ITERATION, 'README.md'), 'utf-8'),
+    readFileSync(
+      join(location.repositoryRoot, 'iterations', location.iteration, 'README.md'),
+      'utf-8',
+    ),
   );
 }
 
+function intakeOf(location: { repositoryRoot: string; iteration: string }): string {
+  return join(location.repositoryRoot, 'iterations', location.iteration, 'intake-files');
+}
+
+/** A repository with a done launch (complete, recorded intake) and a feature built on it. */
+function incrementalRepository(packageName = 'demo-be'): string {
+  const repositoryRoot = createIterationRepository(packageName);
+  addTestIteration({
+    repositoryRoot,
+    name: LAUNCH,
+    fields: { status: 'done' },
+    intake: COMPLETE,
+    recordIntake: true,
+  });
+  addTestIteration({
+    repositoryRoot,
+    name: FEATURE,
+    fields: { type: 'feat', opened: '2026-10-06', baseline: LAUNCH },
+  });
+  return repositoryRoot;
+}
+
 describe('parseIntakeArguments', () => {
-  it('reads the iteration, source and flags', () => {
-    expect(parseIntakeArguments([ITERATION, '~/drop', '--both', '--replace', '--dry-run'])).toEqual(
-      {
-        iteration: ITERATION,
-        source: '~/drop',
-        createInSibling: true,
-        siblingPath: undefined,
-        replace: true,
-        dryRun: true,
-        help: false,
-      },
+  it('reads an intake with its mode and flags, or the gate', () => {
+    expect(
+      parseIntakeArguments([
+        FEATURE,
+        '~/drop',
+        '--mode',
+        'overlay',
+        '--both',
+        '--replace',
+        '--dry-run',
+      ]),
+    ).toMatchObject({
+      iteration: FEATURE,
+      source: '~/drop',
+      mode: 'overlay',
+      check: false,
+      createInSibling: true,
+      replace: true,
+      dryRun: true,
+    });
+    expect(parseIntakeArguments([FEATURE, '--check', '--baseline', LAUNCH])).toMatchObject({
+      check: true,
+      baseline: LAUNCH,
+      mode: 'full',
+    });
+  });
+
+  it('rejects an unknown mode, --check with intake options, and --baseline without --check', () => {
+    expect(() => parseIntakeArguments([FEATURE, 'x', '--mode', 'patch'])).toThrow(
+      /Unknown --mode "patch"/,
     );
-    expect(parseIntakeArguments([ITERATION, 'x', '--sibling', '../fe']).createInSibling).toBe(true);
-    expect(() => parseIntakeArguments([ITERATION, 'x', '--force'])).toThrow(/Unknown option/);
-    expect(() => parseIntakeArguments([ITERATION, 'x', 'y'])).toThrow(/Too many/);
+    expect(() => parseIntakeArguments([FEATURE, 'x', '--check'])).toThrow(/--check takes only/);
+    expect(() => parseIntakeArguments([FEATURE, '--check', '--both'])).toThrow(
+      /--check takes only/,
+    );
+    expect(() => parseIntakeArguments([FEATURE, 'x', '--baseline', LAUNCH])).toThrow(
+      /works only with --check/,
+    );
+    expect(() => parseIntakeArguments([FEATURE, 'x', '--mode'])).toThrow(/needs a value/);
   });
 });
 
-describe('planIntake — this repository', () => {
-  it('copies the full drop flat, skips subfolders, hidden files and README.md, and warns on extras', () => {
-    const repositoryRoot = createIterationRepository();
-    addTestIteration({ repositoryRoot, name: ITERATION });
-    const source = drop({
-      'PRD.md': PRD,
-      'schema-routes.md': SCHEMA_ROUTES,
-      'design-overview.md': '# overview\n',
-      'notes.txt': 'extra',
-      'README.md': '# not ours',
-      '.DS_Store': 'x',
-      'screens/': '',
+describe('readReceived and renderIntakeNote', () => {
+  it('reads a folder flat (skipping hidden files, subfolders and README.md) or one file', () => {
+    const folder = drop({ 'PRD.md': PRD, 'README.md': 'x', '.DS_Store': 'x', 'screens/': '' });
+    const received = readReceived(folder);
+    expect(received.names).toEqual(['PRD.md']);
+    expect(received.skipped.join(' ')).toMatch(/README\.md.*never copied|screens\/.*flat/);
+    expect(readReceived(join(folder, 'PRD.md'))).toEqual({
+      folder,
+      names: ['PRD.md'],
+      skipped: [],
     });
+  });
+
+  it('writes the note: "<n> received" for full; received and carried forward otherwise', () => {
+    expect(
+      renderIntakeNote({
+        mode: 'full',
+        taken: ['PRD.md', 'schema-routes.md'],
+        total: 2,
+        baseline: undefined,
+      }),
+    ).toBe('2 received');
+    expect(
+      renderIntakeNote({ mode: 'overlay', taken: ['PRD.md'], total: 2, baseline: LAUNCH }),
+    ).toBe(`1 received (PRD.md) · 1 carried forward from ${LAUNCH}`);
+  });
+});
+
+describe('full intake', () => {
+  it('places the drop and fills the six README rows', () => {
+    const repositoryRoot = createIterationRepository();
+    addTestIteration({ repositoryRoot, name: LAUNCH });
     const plan = planIntake({
       repositoryRoot,
-      iteration: ITERATION,
-      source,
+      iteration: LAUNCH,
+      source: drop({ ...COMPLETE, 'design-overview.md': '# overview\n', 'notes.txt': 'x' }),
       siblingRoot: undefined,
       replace: false,
       today: ITERATION_TEST_TODAY,
     });
     expect(plan.problems).toEqual([]);
-    expect(plan.missing).toEqual([]);
     expect(plan.extras).toEqual(['notes.txt']);
-    expect(plan.local.files.map((file) => `${file.action} ${file.name}`)).toEqual([
-      'copy PRD.md',
-      'copy design-overview.md',
-      'copy notes.txt',
-      'copy schema-routes.md',
-    ]);
-    expect(plan.skipped.join(' ')).toMatch(/README\.md.*never copied|screens\/.*flat/);
     applyIntake(plan);
-    const intake = join(repositoryRoot, 'iterations', ITERATION, 'intake-files');
-    expect(readFileSync(join(intake, 'schema-routes.md'), 'utf-8')).toBe(SCHEMA_ROUTES);
-    expect(existsSync(join(intake, 'README.md'))).toBe(false);
-    const readme = readmeOf(repositoryRoot);
-    expect(readme.get('Drop placed')).toBe(ITERATION_TEST_TODAY);
-    expect(readme.get('Schema-routes')).toBe(
-      createHash('sha256').update(SCHEMA_ROUTES).digest('hex').slice(0, 12),
+    const fields = fieldsOf({ repositoryRoot, iteration: LAUNCH });
+    expect(fields.get('Intake mode')).toBe('full');
+    expect(fields.get('Intake note')).toBe('4 received');
+    expect(fields.get('Drop placed')).toBe(ITERATION_TEST_TODAY);
+    expect(fields.get('Intake hash')).toBe(
+      intakeHash(intakeOf({ repositoryRoot, iteration: LAUNCH })),
     );
-    expect(readme.get('Drop source')).toBe(displaySourcePath({ repositoryRoot, source }));
+    expect(runGate({ repositoryRoot, iteration: LAUNCH, baseline: undefined }).exitCode).toBe(0);
   });
 
-  it('stops when a required file is missing', () => {
+  it('stops when a mandatory file is missing, and the launch takes no other mode', () => {
     const repositoryRoot = createIterationRepository();
-    addTestIteration({ repositoryRoot, name: ITERATION });
-    const plan = planIntake({
+    addTestIteration({ repositoryRoot, name: LAUNCH });
+    const missing = planIntake({
       repositoryRoot,
-      iteration: ITERATION,
+      iteration: LAUNCH,
       source: drop({ 'PRD.md': PRD }),
       siblingRoot: undefined,
       replace: false,
     });
-    expect(plan.missing).toEqual(['schema-routes.md']);
-    expect(plan.problems.join()).toMatch(/missing required file\(s\): schema-routes\.md/);
-    expect(() => applyIntake(plan)).toThrow(/missing required/);
-  });
-
-  it('passes as a check when the drop matches intake-files — even once locked', () => {
-    const repositoryRoot = createIterationRepository();
-    const folder = addTestIteration({
+    expect(missing.problems.join()).toMatch(/missing mandatory file\(s\): schema-routes\.md/);
+    const overlay = planIntake({
       repositoryRoot,
-      name: ITERATION,
-      fields: { status: 'approved' },
-      intake: { 'PRD.md': PRD, 'schema-routes.md': SCHEMA_ROUTES },
-    });
-    const plan = planIntake({
-      repositoryRoot,
-      iteration: ITERATION,
-      source: join(folder, 'intake-files'),
+      iteration: LAUNCH,
+      source: drop(COMPLETE),
+      mode: 'overlay',
       siblingRoot: undefined,
       replace: false,
     });
-    expect(plan.problems).toEqual([]);
-    expect(plan.local.locked).toBe(true);
-    expect(plan.local.files.every((file) => file.action === 'unchanged')).toBe(true);
-    expect(plan.local.readme).toBeUndefined();
+    expect(overlay.problems).toEqual([
+      'The launch is always --mode full: it has no Baseline to build on.',
+    ]);
   });
 
-  it('refuses any change once the iteration is approved or later', () => {
-    const repositoryRoot = createIterationRepository();
-    addTestIteration({ repositoryRoot, name: ITERATION, fields: { status: 'implementing' } });
-    const plan = planIntake({
-      repositoryRoot,
-      iteration: ITERATION,
-      source: drop({ 'PRD.md': PRD, 'schema-routes.md': SCHEMA_ROUTES }),
-      siblingRoot: undefined,
-      replace: false,
-    });
-    expect(plan.problems.join()).toMatch(/intake is locked \(Status implementing\)/);
-  });
-
-  it('shows the diff and stops on a differing file; --replace overwrites only while planning', () => {
+  it('replaces a different snapshot only with --replace while planning — removals included', () => {
     const repositoryRoot = createIterationRepository();
     addTestIteration({
       repositoryRoot,
-      name: ITERATION,
-      intake: { 'PRD.md': '# PRD v-old\n', 'schema-routes.md': SCHEMA_ROUTES },
+      name: LAUNCH,
+      intake: { ...COMPLETE, 'design-overview.md': 'old' },
+      recordIntake: true,
     });
-    const source = drop({ 'PRD.md': PRD, 'schema-routes.md': SCHEMA_ROUTES });
-    const request = { repositoryRoot, iteration: ITERATION, source, siblingRoot: undefined };
+    const request = {
+      repositoryRoot,
+      iteration: LAUNCH,
+      source: drop({ 'PRD.md': '# PRD v2\n', 'schema-routes.md': SCHEMA_ROUTES }),
+      siblingRoot: undefined,
+    };
     const stopped = planIntake({ ...request, replace: false });
-    expect(stopped.local.files.find((file) => file.name === 'PRD.md')?.action).toBe('conflict');
-    expect(stopped.problems.join()).toMatch(/--replace/);
-    expect(stopped.diffs.join()).toMatch(/-# PRD v-old\n\+# PRD/);
-    const replaced = planIntake({ ...request, replace: true });
-    expect(replaced.problems).toEqual([]);
-    applyIntake(replaced);
+    expect(stopped.problems.join()).toMatch(
+      /already holds a different snapshot \(changed: PRD\.md · removed: design-overview\.md\) — re-run with --replace/,
+    );
+    expect(stopped.diffs.join()).toMatch(/-# PRD\n\+# PRD v2/);
+    applyIntake(planIntake({ ...request, replace: true }));
     expect(
-      readFileSync(
-        join(repositoryRoot, 'iterations', ITERATION, 'intake-files', 'PRD.md'),
-        'utf-8',
-      ),
-    ).toBe(PRD);
+      existsSync(join(intakeOf({ repositoryRoot, iteration: LAUNCH }), 'design-overview.md')),
+    ).toBe(false);
+    expect(fieldsOf({ repositoryRoot, iteration: LAUNCH }).get('Intake note')).toBe('2 received');
+  });
+
+  it('locks the intake from approved on — even re-recording the hash', () => {
+    const repositoryRoot = createIterationRepository();
+    addTestIteration({
+      repositoryRoot,
+      name: LAUNCH,
+      fields: { status: 'approved' },
+      intake: COMPLETE,
+    });
+    const plan = planIntake({
+      repositoryRoot,
+      iteration: LAUNCH,
+      source: intakeOf({ repositoryRoot, iteration: LAUNCH }),
+      siblingRoot: undefined,
+      replace: true,
+    });
+    expect(plan.problems.join()).toMatch(/the intake is locked \(Status approved\)/);
   });
 
   it('refuses --replace once the plan is ready for approval', () => {
     const repositoryRoot = createIterationRepository();
     addTestIteration({
       repositoryRoot,
-      name: ITERATION,
+      name: LAUNCH,
       fields: { status: 'ready-for-approval' },
-      intake: { 'PRD.md': '# old\n', 'schema-routes.md': SCHEMA_ROUTES },
+      intake: COMPLETE,
+      recordIntake: true,
     });
     const plan = planIntake({
       repositoryRoot,
-      iteration: ITERATION,
-      source: drop({ 'PRD.md': PRD, 'schema-routes.md': SCHEMA_ROUTES }),
+      iteration: LAUNCH,
+      source: drop({ 'PRD.md': '# PRD v2\n', 'schema-routes.md': SCHEMA_ROUTES }),
       siblingRoot: undefined,
       replace: true,
     });
-    expect(plan.problems.join()).toMatch(/only while Status is planning/);
+    expect(plan.problems.join()).toMatch(
+      /only while Status is planning \(it is ready-for-approval\)/,
+    );
+  });
+
+  it('asks for the new README rows when a README predates them', () => {
+    const repositoryRoot = createIterationRepository();
+    const folder = addTestIteration({ repositoryRoot, name: LAUNCH });
+    const readmePath = join(folder, 'README.md');
+    writeFileSync(
+      readmePath,
+      readFileSync(readmePath, 'utf-8').replace(/\| Intake (mode|note|hash) \| — \|\n/g, ''),
+    );
+    const plan = planIntake({
+      repositoryRoot,
+      iteration: LAUNCH,
+      source: drop(COMPLETE),
+      siblingRoot: undefined,
+      replace: false,
+    });
+    expect(plan.problems.join()).toMatch(
+      /README\.md has no Intake mode, Intake note, Intake hash row — it predates the field; add the rows from tooling\/iterations\/templates\/README\.md/,
+    );
   });
 });
 
-describe('planIntake — --both', () => {
+describe('overlay and brief intake', () => {
+  it('overlay lays the received files over the Baseline snapshot', () => {
+    const repositoryRoot = incrementalRepository();
+    const plan = planIntake({
+      repositoryRoot,
+      iteration: FEATURE,
+      source: drop({ 'PRD.md': '# PRD v2\n' }),
+      mode: 'overlay',
+      siblingRoot: undefined,
+      replace: false,
+    });
+    expect(plan.problems).toEqual([]);
+    expect(plan.baseline).toBe(LAUNCH);
+    applyIntake(plan);
+    const intake = intakeOf({ repositoryRoot, iteration: FEATURE });
+    expect(readFileSync(join(intake, 'PRD.md'), 'utf-8')).toBe('# PRD v2\n');
+    expect(readFileSync(join(intake, 'schema-routes.md'), 'utf-8')).toBe(SCHEMA_ROUTES);
+    expect(fieldsOf({ repositoryRoot, iteration: FEATURE }).get('Intake note')).toBe(
+      `1 received (PRD.md) · 1 carried forward from ${LAUNCH}`,
+    );
+    expect(runGate({ repositoryRoot, iteration: FEATURE, baseline: LAUNCH }).exitCode).toBe(0);
+  });
+
+  it('overlay and brief need a confirmed Baseline whose intake passes the gate', () => {
+    const repositoryRoot = createIterationRepository();
+    addTestIteration({
+      repositoryRoot,
+      name: LAUNCH,
+      fields: { status: 'done' },
+      intake: COMPLETE,
+    });
+    addTestIteration({
+      repositoryRoot,
+      name: FEATURE,
+      fields: { type: 'feat', opened: '2026-10-06', baseline: '—' },
+    });
+    const unconfirmed = planIntake({
+      repositoryRoot,
+      iteration: FEATURE,
+      source: drop({ 'PRD.md': PRD }),
+      mode: 'overlay',
+      siblingRoot: undefined,
+      replace: false,
+    });
+    expect(unconfirmed.problems.join()).toMatch(
+      /has Baseline — — confirm it first: pnpm iteration:baseline/,
+    );
+    addTestIteration({
+      repositoryRoot,
+      name: FEATURE,
+      fields: { type: 'feat', opened: '2026-10-06', baseline: LAUNCH },
+    });
+    const unrecorded = planIntake({
+      repositoryRoot,
+      iteration: FEATURE,
+      source: drop({ 'PRD.md': PRD }),
+      mode: 'overlay',
+      siblingRoot: undefined,
+      replace: false,
+    });
+    expect(unrecorded.problems.join()).toMatch(
+      new RegExp(`the Baseline ${LAUNCH} fails the gate — changed since the intake`),
+    );
+  });
+
+  it('brief adds the received BRIEF.md and nothing else', () => {
+    const repositoryRoot = incrementalRepository();
+    const plan = planIntake({
+      repositoryRoot,
+      iteration: FEATURE,
+      source: drop({ 'BRIEF.md': BRIEF, 'PRD.md': PRD }),
+      mode: 'brief',
+      siblingRoot: undefined,
+      replace: false,
+    });
+    expect(plan.problems).toEqual([]);
+    applyIntake(plan);
+    expect(fieldsOf({ repositoryRoot, iteration: FEATURE }).get('Intake note')).toBe(
+      `1 received (BRIEF.md) · 2 carried forward from ${LAUNCH}`,
+    );
+    expect(runGate({ repositoryRoot, iteration: FEATURE, baseline: LAUNCH }).exitCode).toBe(0);
+  });
+
+  it('brief refuses a missing BRIEF.md, missing sections and any other changed file', () => {
+    const repositoryRoot = incrementalRepository();
+    const plan = (files: Record<string, string>) =>
+      planIntake({
+        repositoryRoot,
+        iteration: FEATURE,
+        source: drop(files),
+        mode: 'brief',
+        siblingRoot: undefined,
+        replace: false,
+      });
+    expect(plan({ 'PRD.md': PRD }).problems.join()).toMatch(
+      /--mode brief needs a received BRIEF\.md — start from tooling\/iterations\/templates\/BRIEF\.md/,
+    );
+    expect(plan({ 'BRIEF.md': '# Brief\n\n## Why\n' }).problems.join()).toMatch(
+      /BRIEF\.md is missing section\(s\): What changes, Affected screens, entities and routes, Rules, Acceptance criteria, Out of scope/,
+    );
+    expect(plan({ 'BRIEF.md': BRIEF, 'PRD.md': '# PRD v2\n' }).problems.join()).toMatch(
+      new RegExp(
+        `--mode brief changes only BRIEF\\.md, but PRD\\.md differs from the Baseline ${LAUNCH} — use --mode overlay`,
+      ),
+    );
+  });
+});
+
+describe('the gate (--check)', () => {
+  it('passes a recorded intake and prints one line per folder', () => {
+    const repositoryRoot = incrementalRepository();
+    const result = runGate({ repositoryRoot, iteration: LAUNCH, baseline: undefined });
+    expect(result.exitCode).toBe(0);
+    expect(result.lines[0]).toMatch(
+      new RegExp(
+        `^✓ iterations/${LAUNCH}/intake-files/ — 2 files, mandatory set complete, Intake hash [0-9a-f]{12} unchanged \\(Intake mode full\\)$`,
+      ),
+    );
+    expect(result.lines.at(-1)).toBe('Gate passed.');
+  });
+
+  it('fails on no intake, an edited file (named by git), a wrong Baseline and an unknown iteration', () => {
+    const repositoryRoot = incrementalRepository();
+    const empty = runGate({ repositoryRoot, iteration: FEATURE, baseline: undefined });
+    expect(empty.lines).toEqual([
+      'Gate failed — 1 problem. Stop here: write nothing, change no status.',
+      `✗ iterations/${FEATURE}/intake-files/: no intake yet`,
+      `    fix: place it: pnpm iteration:intake ${FEATURE} <source>`,
+    ]);
+    runTestGit({ repositoryRoot, gitArguments: ['add', '-A'] });
+    runTestGit({ repositoryRoot, gitArguments: ['commit', '-q', '-m', 'iterations'] });
+    writeFileSync(
+      join(intakeOf({ repositoryRoot, iteration: LAUNCH }), 'PRD.md'),
+      '# PRD (edited)\n',
+    );
+    const edited = runGate({ repositoryRoot, iteration: LAUNCH, baseline: undefined });
+    expect(edited.exitCode).toBe(1);
+    expect(edited.lines.join('\n')).toMatch(
+      /changed since the intake — the Intake hash is [0-9a-f]{12}, the README records [0-9a-f]{12}\n {4}Uncommitted: modified PRD\.md/,
+    );
+    const wrongBaseline = runGate({
+      repositoryRoot,
+      iteration: FEATURE,
+      baseline: 'launch-2026-01-01-zzzz',
+    });
+    expect(wrongBaseline.lines.join('\n')).toContain(
+      `✗ iterations/${FEATURE}/README.md: the Baseline is ${LAUNCH}, not launch-2026-01-01-zzzz`,
+    );
+    expect(wrongBaseline.lines.join('\n')).toContain(
+      '✗ iterations/launch-2026-01-01-zzzz/: no such iteration (no README.md)',
+    );
+  });
+
+  it('fails an overlay whose note names another Baseline than the README', () => {
+    const repositoryRoot = incrementalRepository();
+    addTestIteration({
+      repositoryRoot,
+      name: FEATURE,
+      fields: {
+        type: 'feat',
+        opened: '2026-10-06',
+        baseline: LAUNCH,
+        intakeMode: 'overlay',
+        intakeNote: '1 received (PRD.md) · 1 carried forward from fix-old-2026-10-02-aaaa',
+      },
+      intake: COMPLETE,
+      recordIntake: true,
+    });
+    const result = runGate({ repositoryRoot, iteration: FEATURE, baseline: undefined });
+    expect(result.lines.join('\n')).toContain(
+      `the overlay snapshot was built on fix-old-2026-10-02-aaaa, but the README's Baseline is ${LAUNCH}`,
+    );
+  });
+});
+
+describe('--both', () => {
   it('stops when the sibling has no such iteration', () => {
     const repositoryRoot = createIterationRepository();
     const siblingRoot = createIterationRepository('demo-fe');
-    addTestIteration({ repositoryRoot, name: ITERATION });
+    addTestIteration({ repositoryRoot, name: LAUNCH });
     const plan = planIntake({
       repositoryRoot,
-      iteration: ITERATION,
-      source: drop({ 'PRD.md': PRD, 'schema-routes.md': SCHEMA_ROUTES }),
+      iteration: LAUNCH,
+      source: drop(COMPLETE),
       siblingRoot,
       replace: false,
     });
-    expect(plan.problems.join()).toMatch(/iteration:new <type> <topic> --both/);
+    expect(plan.problems.join()).toMatch(
+      /open it in both first: pnpm iteration:new <type> <topic> --both/,
+    );
   });
 
-  it('copies PRD.md and schema-routes.md only, and fills the sibling README rows', () => {
+  it('full: gives the sibling PRD.md and schema-routes.md, and fills its rows', () => {
     const repositoryRoot = createIterationRepository();
     const siblingRoot = createIterationRepository('demo-fe');
-    addTestIteration({ repositoryRoot, name: ITERATION });
-    addTestIteration({ repositoryRoot: siblingRoot, name: ITERATION });
+    addTestIteration({ repositoryRoot, name: LAUNCH });
+    addTestIteration({ repositoryRoot: siblingRoot, name: LAUNCH });
     const plan = planIntake({
       repositoryRoot,
-      iteration: ITERATION,
-      source: drop({ 'PRD.md': PRD, 'schema-routes.md': SCHEMA_ROUTES, 'design-overview.md': 'x' }),
+      iteration: LAUNCH,
+      source: drop({ ...COMPLETE, 'design-overview.md': 'x' }),
       siblingRoot,
       replace: false,
       today: ITERATION_TEST_TODAY,
     });
-    expect(plan.sibling?.files.map((file) => file.name)).toEqual(['PRD.md', 'schema-routes.md']);
+    expect(plan.sibling?.files.map((file) => `${file.action} ${file.name}`)).toEqual([
+      'add PRD.md',
+      'add schema-routes.md',
+    ]);
     applyIntake(plan);
-    expect(readmeOf(siblingRoot).get('Schema-routes')).toBe(
-      readmeOf(repositoryRoot).get('Schema-routes'),
+    const sibling = fieldsOf({ repositoryRoot: siblingRoot, iteration: LAUNCH });
+    expect(sibling.get('Intake note')).toBe('2 received');
+    expect(sibling.get('Schema-routes')).toBe(
+      fieldsOf({ repositoryRoot, iteration: LAUNCH }).get('Schema-routes'),
     );
-    expect(readmeOf(siblingRoot).get('Drop placed')).toBe(ITERATION_TEST_TODAY);
   });
 
   it('shows the diff and stops when the sibling copy differs, unless --replace', () => {
     const repositoryRoot = createIterationRepository();
     const siblingRoot = createIterationRepository('demo-fe');
-    addTestIteration({ repositoryRoot, name: ITERATION });
+    addTestIteration({ repositoryRoot, name: LAUNCH });
     addTestIteration({
       repositoryRoot: siblingRoot,
-      name: ITERATION,
-      intake: { 'schema-routes.md': '# schema-routes (designer v-old)\n' },
+      name: LAUNCH,
+      intake: { 'schema-routes.md': '# old\n' },
     });
-    const source = drop({ 'PRD.md': PRD, 'schema-routes.md': SCHEMA_ROUTES });
-    const request = { repositoryRoot, iteration: ITERATION, source, siblingRoot };
+    const request = { repositoryRoot, iteration: LAUNCH, source: drop(COMPLETE), siblingRoot };
     const stopped = planIntake({ ...request, replace: false });
-    expect(stopped.problems.join()).toMatch(/Sibling repository: schema-routes\.md already in/);
+    expect(stopped.problems.join()).toMatch(
+      /Sibling repository: intake-files\/ already holds a different snapshot/,
+    );
     expect(stopped.diffs.join()).toMatch(
-      /Sibling repository intake-files\/schema-routes\.md differs/,
+      /Sibling repository: intake-files\/schema-routes\.md differs from the new snapshot/,
     );
     expect(planIntake({ ...request, replace: true }).problems).toEqual([]);
+  });
+
+  it('brief: builds the sibling on its own Baseline, whose PRD and schema-routes must match', () => {
+    const repositoryRoot = incrementalRepository();
+    const siblingRoot = incrementalRepository('demo-fe');
+    const plan = planIntake({
+      repositoryRoot,
+      iteration: FEATURE,
+      source: drop({ 'BRIEF.md': BRIEF }),
+      mode: 'brief',
+      siblingRoot,
+      replace: false,
+    });
+    expect(plan.problems).toEqual([]);
+    expect(plan.sibling?.note).toBe(`1 received (BRIEF.md) · 2 carried forward from ${LAUNCH}`);
+
+    writeFileSync(
+      join(intakeOf({ repositoryRoot: siblingRoot, iteration: LAUNCH }), 'PRD.md'),
+      '# PRD (sibling)\n',
+    );
+    const mismatch = planIntake({
+      repositoryRoot,
+      iteration: FEATURE,
+      source: drop({ 'BRIEF.md': BRIEF }),
+      mode: 'brief',
+      siblingRoot,
+      replace: false,
+    });
+    expect(mismatch.problems.join()).toMatch(
+      new RegExp(
+        `Sibling repository: --mode brief changes only BRIEF\\.md, but PRD\\.md differs from the Baseline ${LAUNCH}`,
+      ),
+    );
+  });
+});
+
+describe('runIntake', () => {
+  it('reports a dry run, a stop and a placed intake', () => {
+    const repositoryRoot = createIterationRepository();
+    addTestIteration({ repositoryRoot, name: LAUNCH });
+    const source = drop(COMPLETE);
+    const run = (commandLine: string[]) =>
+      runIntake({
+        commandLine,
+        repositoryRoot,
+        resolveSibling: () => '',
+        today: ITERATION_TEST_TODAY,
+      });
+    const dry = run([LAUNCH, source, '--dry-run']);
+    expect(dry.exitCode).toBe(0);
+    expect(dry.lines[0]).toBe('Dry run — nothing written; the snapshot passes.');
+    const stopped = run([LAUNCH, source, '--mode', 'brief']);
+    expect(stopped.exitCode).toBe(1);
+    expect(stopped.lines.at(-1)).toBe('Nothing written.');
+    const placed = run([LAUNCH, source]);
+    expect(placed.lines[0]).toBe('Placed.');
+    expect(placed.lines.at(-1)).toBe(
+      `Next: say "plan iteration ${LAUNCH}" — planning runs the gate first: pnpm iteration:intake ${LAUNCH} --check`,
+    );
+    expect(run([LAUNCH, '--check']).exitCode).toBe(0);
   });
 });
