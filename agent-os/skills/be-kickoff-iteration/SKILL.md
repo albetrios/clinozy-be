@@ -130,12 +130,13 @@ Present the reconciliation, the decisions, `KICKOFF.md` and the ledger. **Stop.*
 
 ## After the user confirms — implementing
 
-- Set `Status: implementing` in the iteration's README as soon as the user confirms `KICKOFF.md`.
+- Run `pnpm iteration:status <iteration> implementing` as soon as the user confirms `KICKOFF.md`.
+  Never edit the Status row by hand — the command checks the move and signs the README's History.
 - Build **one ledger row at a time**, through its driver; update the row as it moves.
 - When every row is `done` (or `deferred (user-OK)`) and `plans/acceptance.md` has a Result and
-  Evidence for every item, set `Status: done`.
-- `Status: frozen` goes in the last commit before the iteration's branch merges; after that the
-  folder is never edited — a correction is a new `fix` iteration.
+  Evidence for every item, run `pnpm iteration:status <iteration> done`.
+- `pnpm iteration:status <iteration> frozen` goes in the last commit before the iteration's
+  branch merges; after that the folder is never edited — a correction is a new `fix` iteration.
 - **Never push, open a PR or merge** — the user raises PRs.
 
 ## Project conventions the plan must encode (non-negotiable)

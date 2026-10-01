@@ -7,29 +7,37 @@
  * match. Git-backed cases run in throwaway repositories under the OS temp folder.
  */
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  applyStatusToReadme,
   buildIterationName,
   chooseBaseline,
   formatIterationTable,
+  ITERATION_STATUSES,
   LOCAL_ITERATION_TEMPLATES,
   localDate,
   MAXIMUM_NAME_ATTEMPTS,
   parseIterationName,
   parseIterationReadme,
   parseNewIterationArguments,
+  parseStatusArguments,
   planNewIteration,
+  planStatusChange,
   randomIterationSuffix,
   readIterationListings,
   readIterationTemplate,
   renderIterationReadme,
   renderTemplate,
   resolveSiblingRoot,
+  SCHEMA_ROUTES_HASH_LENGTH,
   SIBLING_ITERATION_TEMPLATES,
+  schemaRoutesHash,
   siblingPackageName,
+  validateStatusTransition,
   validateTypeAndTopic,
   writeIterationPlan,
 } from '@tooling/iterations/iteration.util.js';
@@ -570,7 +578,199 @@ describe('readIterationListings', () => {
       'feat-returns-2026-10-06-kqzx',
     ]);
     const lines = formatIterationTable(listings).split('\n');
-    expect(lines[0]).toMatch(/^\| Name +\| Type +\| Owner +\| Opened +\| Baseline +\| Status +\|$/);
+    expect(lines[0]).toMatch(
+      /^\| Name +\| Type +\| Owner +\| Opened +\| Baseline +\| Status +\| schema-routes +\|$/,
+    );
+    expect(listings.every((listing) => listing.schemaRoutes === '—')).toBe(true);
     expect(new Set(lines.map((line) => line.length)).size).toBe(1);
+  });
+});
+
+describe('schemaRoutesHash', () => {
+  it('fingerprints schema-routes.md with the first hex characters of its sha256', () => {
+    const folder = mkdtempSync(join(tmpdir(), 'iteration-hash-'));
+    scratchFolders.push(folder);
+    const path = join(folder, 'schema-routes.md');
+    writeFileSync(path, '# schema-routes\n');
+    const expected = createHash('sha256')
+      .update('# schema-routes\n')
+      .digest('hex')
+      .slice(0, SCHEMA_ROUTES_HASH_LENGTH);
+    expect(schemaRoutesHash(path)).toBe(expected);
+    expect(expected).toHaveLength(12);
+    expect(schemaRoutesHash(join(folder, 'missing.md'))).toBe('—');
+  });
+});
+
+describe('parseStatusArguments', () => {
+  it('reads the iteration, the status and an optional reason', () => {
+    expect(parseStatusArguments(['launch-2026-09-30-jxmr', 'ready-for-approval'])).toEqual({
+      iteration: 'launch-2026-09-30-jxmr',
+      status: 'ready-for-approval',
+      reason: undefined,
+      help: false,
+    });
+    expect(parseStatusArguments(['x', 'planning', '--reason', 'scope changed']).reason).toBe(
+      'scope changed',
+    );
+    expect(parseStatusArguments(['x', 'planning', '--reason=scope changed']).reason).toBe(
+      'scope changed',
+    );
+  });
+
+  it('rejects a reason without text, unknown options and extra positionals', () => {
+    expect(() => parseStatusArguments(['x', 'planning', '--reason'])).toThrow(/needs text/);
+    expect(() => parseStatusArguments(['x', 'planning', '--reason', '--force'])).toThrow(
+      /needs text/,
+    );
+    expect(() => parseStatusArguments(['x', 'planning', '--force'])).toThrow(/Unknown option/);
+    expect(() => parseStatusArguments(['x', 'planning', 'extra'])).toThrow(/Too many arguments/);
+  });
+});
+
+describe('validateStatusTransition', () => {
+  it('allows one step forward along the lifecycle', () => {
+    for (let position = 0; position < ITERATION_STATUSES.length - 1; position += 1) {
+      const from = ITERATION_STATUSES[position];
+      const to = ITERATION_STATUSES[position + 1];
+      if (from === undefined || to === undefined) continue;
+      expect(() => validateStatusTransition({ from, to, reason: undefined })).not.toThrow();
+    }
+  });
+
+  it('refuses skipped, backward and post-freeze moves', () => {
+    expect(() =>
+      validateStatusTransition({ from: 'planning', to: 'approved', reason: undefined }),
+    ).toThrow(/allowed next status is ready-for-approval/);
+    expect(() =>
+      validateStatusTransition({ from: 'done', to: 'implementing', reason: 'x' }),
+    ).toThrow(/Cannot move done → implementing/);
+    expect(() => validateStatusTransition({ from: 'done', to: 'planning', reason: 'x' })).toThrow(
+      /Cannot move/,
+    );
+    expect(() => validateStatusTransition({ from: 'frozen', to: 'planning', reason: 'x' })).toThrow(
+      /never edited/,
+    );
+    expect(() =>
+      validateStatusTransition({ from: 'planning', to: 'planning', reason: undefined }),
+    ).toThrow(/Cannot move planning → planning/);
+  });
+
+  it.each(['ready-for-approval', 'approved', 'implementing'] as const)(
+    'moves %s back to planning only with a reason',
+    (from) => {
+      expect(() => validateStatusTransition({ from, to: 'planning', reason: undefined })).toThrow(
+        /needs --reason/,
+      );
+      expect(() =>
+        validateStatusTransition({ from, to: 'planning', reason: 'scope changed' }),
+      ).not.toThrow();
+    },
+  );
+});
+
+describe('applyStatusToReadme', () => {
+  const readme = renderIterationReadme({
+    name: 'feat-returns-2026-10-06-kqzx',
+    fields: {
+      type: 'feat',
+      topic: 'returns',
+      owner: OWNER,
+      opened: '2026-10-06',
+      branch: WORK_BRANCH,
+      baseline: 'launch-2026-09-30-jxmr',
+      status: 'planning',
+      summary: '—',
+    },
+  });
+
+  it('rewrites the Status row and starts a History section', () => {
+    const updated = applyStatusToReadme({
+      readme,
+      status: 'ready-for-approval',
+      historyEntry: '- 2026-10-07 · planning → ready-for-approval · — · Test Owner',
+    });
+    expect(parseIterationReadme(updated).get('Status')).toBe('ready-for-approval');
+    expect(
+      updated.endsWith(
+        '## History\n\n- 2026-10-07 · planning → ready-for-approval · — · Test Owner\n',
+      ),
+    ).toBe(true);
+  });
+
+  it('appends to the History section without touching the sections after it', () => {
+    const first = applyStatusToReadme({
+      readme,
+      status: 'ready-for-approval',
+      historyEntry: '- one',
+    });
+    const withDrop = `${first}\n## Drop\n\n- Placed: 2026-10-06\n`;
+    const second = applyStatusToReadme({
+      readme: withDrop,
+      status: 'approved',
+      historyEntry: '- two',
+    });
+    expect(second).toContain('## History\n\n- one\n- two\n\n## Drop\n\n- Placed: 2026-10-06\n');
+    expect(parseIterationReadme(second).get('Status')).toBe('approved');
+  });
+
+  it('refuses a README without a Status row', () => {
+    expect(() =>
+      applyStatusToReadme({ readme: '# x\n', status: 'approved', historyEntry: '- x' }),
+    ).toThrow(/no "\| Status/);
+  });
+});
+
+describe('planStatusChange', () => {
+  function repositoryWithLaunch(status: string): string {
+    const repositoryRoot = createRepository();
+    const folder = join(repositoryRoot, 'iterations', 'launch-2026-09-30-jxmr');
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(
+      join(folder, 'README.md'),
+      renderIterationReadme({
+        name: 'launch-2026-09-30-jxmr',
+        fields: {
+          type: 'launch',
+          topic: '—',
+          owner: OWNER,
+          opened: '2026-09-30',
+          branch: BASE_BRANCH,
+          baseline: 'none',
+          status,
+          summary: '—',
+        },
+      }),
+    );
+    return repositoryRoot;
+  }
+
+  it('plans the README with the new Status and a signed History entry', () => {
+    const repositoryRoot = repositoryWithLaunch('approved');
+    const plan = planStatusChange({
+      repositoryRoot,
+      iteration: 'launch-2026-09-30-jxmr',
+      status: 'planning',
+      reason: 'scope changed',
+      today: TODAY,
+    });
+    expect(plan.from).toBe('approved');
+    expect(plan.historyEntry).toBe(`- ${TODAY} · approved → planning · scope changed · ${OWNER}`);
+    expect(parseIterationReadme(plan.content).get('Status')).toBe('planning');
+    expect(readFileSync(plan.readmePath, 'utf-8')).toContain('| Status | approved |');
+  });
+
+  it('refuses an unknown iteration, an unknown status and a refused move', () => {
+    const repositoryRoot = repositoryWithLaunch('planning');
+    const request = { repositoryRoot, reason: undefined, today: TODAY };
+    expect(() =>
+      planStatusChange({ ...request, iteration: 'feat-x-2026-10-01-abcd', status: 'approved' }),
+    ).toThrow(/No iteration/);
+    expect(() =>
+      planStatusChange({ ...request, iteration: 'launch-2026-09-30-jxmr', status: 'shipped' }),
+    ).toThrow(/Unknown status/);
+    expect(() =>
+      planStatusChange({ ...request, iteration: 'launch-2026-09-30-jxmr', status: 'done' }),
+    ).toThrow(/Cannot move planning → done/);
   });
 });

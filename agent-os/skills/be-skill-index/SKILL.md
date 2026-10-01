@@ -27,6 +27,7 @@ Start here — map your intent to the skill or **chain** to run (chains are name
 - **Finish any code change (definition-of-done)** → **be-change-completeness-guard**
 - **Review before merge** → **pre-merge-review** pipeline (be-sql-design-reviewer → be-production-hardening-reviewer → verifier)
 - **Release / production readiness** → **be-path-to-production-gate** (then **prod-readiness** pipeline)
+- **Start or continue a design iteration, step by step** → **`/be-iteration`** (asks the opening questions; walks `docs/design-workflow/process/iteration-guide.md`)
 - **Plan a design iteration** ("plan iteration <name>") → **iteration** chain, first half: **be-iteration-planning** (requirements only under `iterations/<iteration>/plans/`; stops after every step)
 - **Kick off an approved iteration** ("kickoff iteration <name>", "start implementing <iteration>") → **iteration** chain, second half: **be-kickoff-iteration** (`KICKOFF.md` + ledger; no code until you confirm)
 

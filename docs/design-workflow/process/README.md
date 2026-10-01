@@ -20,10 +20,10 @@ flowchart TB
 
 | Step | Who / what | Output | Stops for |
 | --- | --- | --- | --- |
-| Open | `pnpm iteration:new <type> [topic]` | the folder + README (`Status: planning`) | — |
+| Open | `pnpm iteration:new <type> [topic]` | the folder + README (`Status: planning`) | the opening questions ([guide](iteration-guide.md)) |
 | Inputs | Claude Design (in clinozy-fe) | `PRD.md`, `schema-routes.md` copied byte-for-byte | — |
 | Plan | **be-iteration-planning**, [prompt](../prompts/iteration-planning-prompt.md) | `plans/` — coverage, decisions, requirements, stories, acceptance; `Status: ready-for-approval` | which iteration (Step 0); every step; RED questions |
-| Approve | you | `Status: approved`, logged in `plans/decisions.md` | — |
+| Approve | you — `pnpm iteration:status <iteration> approved` | `Status: approved`, logged in `plans/decisions.md` | — |
 | Kick off | **be-kickoff-iteration**, [prompt](../prompts/kickoff-iteration-prompt.md) | `KICKOFF.md` + ledger | which iteration (Step 0); every step; TECH questions |
 | Build | one ledger row at a time | `Status: implementing` once you confirm `KICKOFF.md`; code, migrations, tests | each row |
 | Accept | the build | `plans/acceptance.md` filled; `Status: done` | — |
@@ -42,8 +42,13 @@ flowchart TB
 - **Every work item has a driver.** A NEW table is built with the
   [staged-build prompt](../../getting-started/staged-build-prompt.md); a CHANGE table, a flow or an
   async piece with `/be-build-requirement` ([requirement intake](../../getting-started/requirement-intake.md)).
+- **Status moves through one command.** `pnpm iteration:status <iteration> <status>` allows one
+  step forward at a time (or back to `planning` with `--reason`) and signs the README's History.
 - **The ledger is the definition of done.** No success is reported while any row is open.
 - **Agents never push, open a PR or merge.** You raise the PR.
+
+Walking through it for the first time? The [step-by-step guide](iteration-guide.md) lists every
+command and the questions to answer at each step, and `/be-iteration` walks it with you.
 
 ## Related
 

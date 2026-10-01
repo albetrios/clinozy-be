@@ -7,7 +7,7 @@
  * looks the same in both.
  */
 import { execFileSync } from 'node:child_process';
-import { randomInt } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
@@ -78,6 +78,8 @@ export interface IterationListing {
   readonly opened: string;
   readonly baseline: string;
   readonly status: string;
+  /** First {@link SCHEMA_ROUTES_HASH_LENGTH} hex characters of the sha256 of `schema-routes.md`. */
+  readonly schemaRoutes: string;
 }
 
 /** Parsed `pnpm iteration:new` command line. */
@@ -626,6 +628,9 @@ export function readIterationListings(repositoryRoot: string): IterationListing[
         opened: field('Opened'),
         baseline: field('Baseline'),
         status: field('Status'),
+        schemaRoutes: schemaRoutesHash(
+          join(repositoryRoot, ITERATIONS_DIRECTORY, name, 'schema-routes.md'),
+        ),
       };
     })
     .sort(
@@ -634,9 +639,12 @@ export function readIterationListings(repositoryRoot: string): IterationListing[
     );
 }
 
-/** Formats list rows as an aligned `Name | Type | Owner | Opened | Baseline | Status` table. */
+/**
+ * Formats list rows as an aligned `Name | Type | Owner | Opened | Baseline | Status |
+ * schema-routes` table.
+ */
 export function formatIterationTable(listings: readonly IterationListing[]): string {
-  const header = ['Name', 'Type', 'Owner', 'Opened', 'Baseline', 'Status'];
+  const header = ['Name', 'Type', 'Owner', 'Opened', 'Baseline', 'Status', 'schema-routes'];
   const rows = listings.map((listing) => [
     listing.name,
     listing.type,
@@ -644,6 +652,7 @@ export function formatIterationTable(listings: readonly IterationListing[]): str
     listing.opened,
     listing.baseline,
     listing.status,
+    listing.schemaRoutes,
   ]);
   const widths = header.map((title, column) =>
     Math.max(title.length, ...rows.map((row) => (row[column] ?? '').length)),
@@ -652,4 +661,249 @@ export function formatIterationTable(listings: readonly IterationListing[]): str
     `| ${cells.map((cell, column) => cell.padEnd(widths[column] ?? 0)).join(' | ')} |`;
   const separator = `| ${widths.map((width) => '-'.repeat(width)).join(' | ')} |`;
   return [line(header), separator, ...rows.map(line)].join('\n');
+}
+
+/** Hex characters of the sha256 shown for `schema-routes.md` (the same length clinozy-fe records). */
+export const SCHEMA_ROUTES_HASH_LENGTH = 12;
+
+/**
+ * Fingerprints a `schema-routes.md`: the first {@link SCHEMA_ROUTES_HASH_LENGTH} hex characters of
+ * the sha256 of its bytes, or {@link EMPTY_FIELD} when the file is missing.
+ *
+ * @remarks
+ * The same file is copied byte-for-byte into the frontend and backend repositories, so equal
+ * fingerprints in both repositories' `pnpm iteration:list` mean the two copies match.
+ */
+export function schemaRoutesHash(path: string): string {
+  if (!existsSync(path)) return EMPTY_FIELD;
+  return createHash('sha256')
+    .update(readFileSync(path))
+    .digest('hex')
+    .slice(0, SCHEMA_ROUTES_HASH_LENGTH);
+}
+
+/** README Status values, in lifecycle order. */
+export const ITERATION_STATUSES = [
+  'planning',
+  'ready-for-approval',
+  'approved',
+  'implementing',
+  'done',
+  'frozen',
+] as const;
+
+/** One of {@link ITERATION_STATUSES}. */
+export type IterationStatus = (typeof ITERATION_STATUSES)[number];
+
+/** Forward moves: one step along the lifecycle at a time. */
+const FORWARD_TRANSITIONS: ReadonlyMap<IterationStatus, IterationStatus> = new Map([
+  ['planning', 'ready-for-approval'],
+  ['ready-for-approval', 'approved'],
+  ['approved', 'implementing'],
+  ['implementing', 'done'],
+  ['done', 'frozen'],
+]);
+
+/** Statuses that may move back to `planning` — only with a reason. */
+const BACK_TO_PLANNING: ReadonlySet<IterationStatus> = new Set([
+  'ready-for-approval',
+  'approved',
+  'implementing',
+]);
+
+const HISTORY_HEADING = '## History';
+const STATUS_ROW = /^\|\s*Status\s*\|\s*(.*?)\s*\|\s*$/m;
+
+/** Parsed `pnpm iteration:status` command line. */
+export interface StatusArguments {
+  readonly iteration: string | undefined;
+  readonly status: string | undefined;
+  readonly reason: string | undefined;
+  readonly help: boolean;
+}
+
+/** Everything `pnpm iteration:status` decided, before the README is written. */
+export interface StatusChangePlan {
+  readonly readmePath: string;
+  readonly from: IterationStatus;
+  readonly to: IterationStatus;
+  readonly historyEntry: string;
+  readonly content: string;
+}
+
+/** Returns whether `value` is one of {@link ITERATION_STATUSES}. */
+export function isIterationStatus(value: string): value is IterationStatus {
+  return (ITERATION_STATUSES as readonly string[]).includes(value);
+}
+
+/**
+ * Parses `pnpm iteration:status <iteration> <status> [--reason "<text>"]`.
+ *
+ * @remarks
+ * Failure modes: throws on an unknown option, a `--reason` without text, or a third positional.
+ */
+export function parseStatusArguments(commandLine: readonly string[]): StatusArguments {
+  const positionals: string[] = [];
+  let reason: string | undefined;
+  let help = false;
+  for (let index = 0; index < commandLine.length; index += 1) {
+    const token = commandLine[index] ?? '';
+    if (token === '--help' || token === '-h') help = true;
+    else if (token === '--reason') {
+      reason = commandLine[index + 1]?.trim();
+      if (reason === undefined || reason === '' || reason.startsWith('--')) {
+        throw new Error('--reason needs text, e.g. --reason "scope changed after review"');
+      }
+      index += 1;
+    } else if (token.startsWith('--reason=')) {
+      reason = token.slice('--reason='.length).trim();
+      if (reason === '') throw new Error('--reason needs text.');
+    } else if (token.startsWith('-')) throw new Error(`Unknown option "${token}".`);
+    else positionals.push(token);
+  }
+  if (positionals.length > 2) {
+    throw new Error(
+      `Too many arguments: ${positionals.join(' ')} — expected <iteration> <status>.`,
+    );
+  }
+  return { iteration: positionals[0], status: positionals[1], reason, help };
+}
+
+/**
+ * Checks one Status move against the lifecycle.
+ *
+ * @remarks
+ * Allowed: one step forward along `planning → ready-for-approval → approved → implementing →
+ * done → frozen`, and `ready-for-approval`, `approved` or `implementing` back to `planning` with a
+ * reason. clinozy-fe follows the same rules without `ready-for-approval` (it plans no
+ * requirements).
+ *
+ * Failure modes: throws with the allowed next statuses on any other move, and when a move back to
+ * `planning` has no reason.
+ */
+export function validateStatusTransition(move: {
+  readonly from: IterationStatus;
+  readonly to: IterationStatus;
+  readonly reason: string | undefined;
+}): void {
+  const { from, to, reason } = move;
+  if (FORWARD_TRANSITIONS.get(from) === to) return;
+  if (to === 'planning' && BACK_TO_PLANNING.has(from)) {
+    if (reason === undefined) {
+      throw new Error(`Moving ${from} → planning needs --reason "<why it goes back>".`);
+    }
+    return;
+  }
+  const allowed = [
+    ...(FORWARD_TRANSITIONS.has(from) ? [FORWARD_TRANSITIONS.get(from)] : []),
+    ...(BACK_TO_PLANNING.has(from) ? ['planning (with --reason)'] : []),
+  ];
+  throw new Error(
+    `Cannot move ${from} → ${to}. From ${from} the allowed next status is ${
+      allowed.length === 0 ? 'none — a frozen iteration is never edited' : allowed.join(' or ')
+    }.`,
+  );
+}
+
+/** Formats one README History line: `- <date> · <from> → <to> · <reason> · <who>`. */
+export function renderHistoryEntry(entry: {
+  readonly date: string;
+  readonly from: IterationStatus;
+  readonly to: IterationStatus;
+  readonly reason: string | undefined;
+  readonly owner: string;
+}): string {
+  const reason = entry.reason?.replace(/\s+/g, ' ') ?? EMPTY_FIELD;
+  return `- ${entry.date} · ${entry.from} → ${entry.to} · ${reason} · ${entry.owner}`;
+}
+
+/**
+ * Writes the new Status into an iteration README and appends a History entry.
+ *
+ * @remarks
+ * Algorithm: replaces the value of the `| Status | … |` row; appends the entry at the end of the
+ * `## History` section, creating the section at the end of the file when it is missing. Other
+ * sections are left untouched.
+ *
+ * Failure modes: throws when the README has no Status row.
+ */
+export function applyStatusToReadme(update: {
+  readonly readme: string;
+  readonly status: IterationStatus;
+  readonly historyEntry: string;
+}): string {
+  if (!STATUS_ROW.test(update.readme)) throw new Error('The README has no "| Status | … |" row.');
+  const withStatus = update.readme.replace(STATUS_ROW, `| Status | ${update.status} |`);
+  const lines = withStatus.replace(/\s+$/, '').split('\n');
+  const headingIndex = lines.findIndex((line) => line.trim() === HISTORY_HEADING);
+  if (headingIndex === -1) {
+    return `${[...lines, '', HISTORY_HEADING, '', update.historyEntry].join('\n')}\n`;
+  }
+  const nextSection = lines.findIndex(
+    (line, index) => index > headingIndex && line.startsWith('## '),
+  );
+  const sectionEnd = nextSection === -1 ? lines.length : nextSection;
+  let insertAt = sectionEnd;
+  while (insertAt > headingIndex + 1 && (lines[insertAt - 1] ?? '').trim() === '') insertAt -= 1;
+  const entryLines =
+    insertAt === headingIndex + 1 ? ['', update.historyEntry] : [update.historyEntry];
+  lines.splice(insertAt, 0, ...entryLines);
+  return `${lines.join('\n')}\n`;
+}
+
+/**
+ * Decides a `pnpm iteration:status` change without writing it.
+ *
+ * @remarks
+ * Algorithm: checks the iteration folder and its README exist, reads the current Status, validates
+ * the move ({@link validateStatusTransition}), reads `git config user.name` for the History entry,
+ * and renders the updated README.
+ *
+ * Failure modes: throws on an unknown iteration or status, an unknown current Status in the
+ * README, a refused move, or an empty `user.name`.
+ *
+ * Side effects: runs `git config user.name`; writes nothing.
+ */
+export function planStatusChange(request: {
+  readonly repositoryRoot: string;
+  readonly iteration: string | undefined;
+  readonly status: string | undefined;
+  readonly reason: string | undefined;
+  /** `YYYY-MM-DD`; defaults to today's local date. */
+  readonly today?: string;
+}): StatusChangePlan {
+  const { repositoryRoot, iteration, status, reason } = request;
+  if (iteration === undefined || status === undefined) {
+    throw new Error('Usage: pnpm iteration:status <iteration> <status> [--reason "<text>"]');
+  }
+  const readmePath = join(repositoryRoot, ITERATIONS_DIRECTORY, iteration, 'README.md');
+  if (parseIterationName(iteration) === undefined || !existsSync(readmePath)) {
+    throw new Error(`No iteration "${iteration}" with a README — see pnpm iteration:list.`);
+  }
+  if (!isIterationStatus(status)) {
+    throw new Error(`Unknown status "${status}" — use ${ITERATION_STATUSES.join(', ')}.`);
+  }
+  const readme = readFileSync(readmePath, 'utf-8');
+  const current = parseIterationReadme(readme).get('Status') ?? '';
+  if (!isIterationStatus(current)) {
+    throw new Error(`${iteration}/README.md has Status "${current}", which is not a known status.`);
+  }
+  validateStatusTransition({ from: current, to: status, reason });
+  const owner = tryGit({ repositoryRoot, gitArguments: ['config', 'user.name'] }) ?? '';
+  if (owner === '')
+    throw new Error('git config user.name is not set — it signs the History entry.');
+  const historyEntry = renderHistoryEntry({
+    date: request.today ?? localDate(new Date()),
+    from: current,
+    to: status,
+    reason,
+    owner,
+  });
+  return {
+    readmePath,
+    from: current,
+    to: status,
+    historyEntry,
+    content: applyStatusToReadme({ readme, status, historyEntry }),
+  };
 }

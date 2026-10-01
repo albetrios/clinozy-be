@@ -6,7 +6,9 @@ product/design iteration, **not** an app release — releases are the `package.j
 
 Open one with `pnpm iteration:new`; list them with `pnpm iteration:list`. There is no shared index
 file — each iteration describes itself in its own `README.md`. How an iteration is planned, kicked
-off and built: [docs/design-workflow/process/README.md](../docs/design-workflow/process/README.md).
+off and built: [docs/design-workflow/process/README.md](../docs/design-workflow/process/README.md);
+every step with the questions to answer: [iteration-guide.md](../docs/design-workflow/process/iteration-guide.md)
+(`/be-iteration` walks it with you).
 
 ## Naming
 
@@ -50,6 +52,10 @@ Every iteration folder has a `README.md` holding one table:
 | Status | `planning`, `ready-for-approval`, `approved`, `implementing`, `done` or `frozen` |
 | Summary | one line on what it changes |
 
+Below the table, a `## History` list records every Status change, one line each:
+`- <date> · <from> → <to> · <reason or —> · <git user.name>`. `pnpm iteration:status` writes both
+the Status row and the History line — never edit them by hand.
+
 ## Baseline
 
 - Baseline is the latest iteration on `main` when the iteration was opened: the most recent Opened
@@ -62,7 +68,11 @@ Every iteration folder has a `README.md` holding one table:
 
 ## Lifecycle
 
-- Status moves `planning` → `ready-for-approval` → `approved` → `implementing` → `done` → `frozen`:
+- Status moves one step at a time with `pnpm iteration:status <iteration> <status>`:
+  `planning` → `ready-for-approval` → `approved` → `implementing` → `done` → `frozen`.
+  `ready-for-approval`, `approved` or `implementing` may go back to `planning` with
+  `--reason "<why>"`; nothing else is allowed. clinozy-fe uses the same rules without
+  `ready-for-approval` (it plans no requirements):
 
   | Status | Set by | When |
   | --- | --- | --- |
@@ -118,5 +128,11 @@ pnpm iteration:new launch
 pnpm iteration:new feat pharmacy-returns
 pnpm iteration:new fix invoice-rounding --both
 pnpm iteration:new change patient-consent --both --sibling ../clinozy-fe --dry-run
+pnpm iteration:status feat-pharmacy-returns-2026-10-06-kqzx ready-for-approval
+pnpm iteration:status feat-pharmacy-returns-2026-10-06-kqzx planning --reason "scope changed"
 pnpm iteration:list
 ```
+
+`pnpm iteration:list` prints Name, Type, Owner, Opened, Baseline, Status and **schema-routes** — the
+first 12 characters of the sha256 of the iteration's `schema-routes.md`. The same file sits in the
+same-named clinozy-fe folder, so equal values in both repositories' lists mean the copies match.

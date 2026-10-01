@@ -91,7 +91,7 @@ Reusable slash commands live in [`agent-os/commands/`](agent-os/commands/) (sing
 source of truth). Claude Code reads them via `.claude/commands`, Cursor via
 `.cursor/commands`; for Codex, symlink them into `~/.codex/prompts/` (see
 [agent-os/docs/commands.md](agent-os/docs/commands.md)). Available: `/be-validate`,
-`/be-ci-local`, `/be-new-domain`, `/be-routes-sync`.
+`/be-ci-local`, `/be-new-domain`, `/be-routes-sync`, `/be-iteration`.
 
 ## Guardrails
 

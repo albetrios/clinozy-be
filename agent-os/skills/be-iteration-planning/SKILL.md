@@ -256,8 +256,11 @@ Fix before presenting, never after:
 - [ ] The diagrams match `data.md` — every entity, field and relationship
 - [ ] No technical design anywhere (see the Principle above)
 
-Write `acceptance.md`, set `Status: ready-for-approval` in the iteration's README and **stop.**
-On the user's go-ahead, set `Status: approved` and log the approval in `decisions.md` (who, when).
+Write `acceptance.md`, run `pnpm iteration:status <iteration> ready-for-approval` and **stop.**
+On the user's go-ahead, run `pnpm iteration:status <iteration> approved` and log the approval in
+`decisions.md` (who, when). Changes requested instead → the iteration stays `ready-for-approval`
+while you revise, or goes back with `pnpm iteration:status <iteration> planning --reason "<why>"`.
+Never edit the Status row by hand — the command checks the move and signs the README's History.
 The next step is **`be-kickoff-iteration`**.
 
 ## Failure modes this skill exists to prevent

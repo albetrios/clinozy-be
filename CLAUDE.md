@@ -4,7 +4,27 @@
 
 For **any new requirement** (new domain, routes, worker, schema, etc.), use the format and checklist in **`docs/getting-started/requirement-intake.md`**. That doc defines what details to provide and which skills/rules to invoke so the AI can perform best and keep docs, routes, tests, and lint in sync. Consult **`agent-os/skills/be-skill-index/SKILL.md`** first, then run the skills listed for the requirement type.
 
-A requirement that comes from a **design iteration** (`iterations/<iteration>/`) follows the iteration process instead — **be-iteration-planning** (requirements, stops after every step) → your approval → **be-kickoff-iteration** (`KICKOFF.md` + ledger) → build the ledger rows: **`docs/design-workflow/process/README.md`**.
+A requirement that comes from a **design iteration** (`iterations/<iteration>/`) follows the iteration process in **Design iterations** below instead.
+
+## Design iterations
+
+A design iteration is one product/design change, recorded as `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/` (type `launch` · `feat` · `change` · `fix`) — not an app release. Rules: **`iterations/README.md`**; the flow: **`docs/design-workflow/process/README.md`**; every step with its questions: **`docs/design-workflow/process/iteration-guide.md`**. **`/be-iteration [iteration]`** walks it with the user.
+
+**Before opening one, ask (AskUserQuestion — never guess):** what changes, in one line (the Summary) · launch, or `feat` / `change` / `fix` · the topic (lowercase kebab-case, no digits) · backend only or both repositories (`--both`) · is the current branch `<type>/<topic>` · do `PRD.md` and `schema-routes.md` exist yet.
+
+**Then follow the steps one by one — finish and check each before the next:**
+
+1. **Branch** — `git switch -c <type>/<topic>`.
+2. **Open** — `pnpm iteration:new <type> [topic] [--both] --dry-run`, check the name and Baseline, then run it without `--dry-run` (Status `planning`).
+3. **Inputs** — write the Summary; put in `PRD.md` and `schema-routes.md` (byte-for-byte from the same-named clinozy-fe folder; `pnpm iteration:list` shows the same **schema-routes** hash in both repositories).
+4. **Plan** — "plan iteration `<iteration>`" → **be-iteration-planning** (Steps 0–5, stops after each; RED questions to the user) → `ready-for-approval`.
+5. **Approve** — the user reviews `plans/` → `pnpm iteration:status <iteration> approved` (or back: `planning --reason "<why>"`).
+6. **Kick off** — "kickoff iteration `<iteration>`" → **be-kickoff-iteration** (Steps 0–5; TECH questions) → the user confirms `KICKOFF.md` → `implementing`.
+7. **Build** — one ledger row at a time: NEW table → `docs/getting-started/staged-build-prompt.md`; CHANGE table, flow or async piece → `/be-build-requirement`.
+8. **Accept** — fill `plans/acceptance.md`; every ledger row closed → `pnpm iteration:status <iteration> done`.
+9. **Freeze** — update Baseline and resolve overlaps if newer iterations merged → `pnpm iteration:status <iteration> frozen` in the last commit → the user raises the PR.
+
+Status changes only through `pnpm iteration:status` (one step forward along `planning → ready-for-approval → approved → implementing → done → frozen`; back to `planning` only with `--reason`) — it also signs the README's History. Never edit a merged iteration; a correction is a new `fix` iteration.
 
 ## Reuse before you create
 
@@ -489,4 +509,5 @@ Local SonarQube quality gate (pre-commit): `pnpm sonar:up` / `sonar:scan` / `son
 - `pnpm tool:sync-env-example` — report env schema vs .env.example diff and PR snippet; use `--fix` to append missing vars
 - `pnpm tool:project-structure-tree` — print `src/` directory tree to stdout (see `docs/reference/architecture/project-structure-guide.md`)
 - `pnpm iteration:new <type> [topic] [--both] [--sibling <path>] [--dry-run]` — open a design iteration folder `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/` (type `launch|feat|change|fix`) with README, PRD, schema-routes and `plans/`, Baseline filled from `main`; `--both` creates the same folder in clinozy-fe. Model: **`iterations/README.md`**
-- `pnpm iteration:list` — print every iteration's Name, Type, Owner, Opened, Baseline and Status from `iterations/*/README.md`
+- `pnpm iteration:list` — print every iteration's Name, Type, Owner, Opened, Baseline, Status and **schema-routes** (first 12 characters of the sha256 of its `schema-routes.md`, to compare with clinozy-fe's) from `iterations/*/README.md`
+- `pnpm iteration:status <iteration> <status> [--reason "<text>"]` — move an iteration one step along `planning → ready-for-approval → approved → implementing → done → frozen` (or back to `planning` with `--reason`); writes the README's Status and a History entry
