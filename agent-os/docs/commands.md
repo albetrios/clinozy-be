@@ -42,6 +42,12 @@ Granular procedures live in **skills** (invoked by name); these commands are **w
 | `/be-routes-sync` | Re-sync route catalog + OpenAPI/seed artifacts after route changes. |
 | `/be-structure-audit` | Monthly semantic drift audit — hand-written docs/skills/rules vs the actual `src/` tree (also run by the `monthly-structure-audit` scheduled routine). |
 
+**Design iterations**
+
+| Command | Purpose |
+| ------- | ------- |
+| `/be-iteration [iteration]` | Walk a design iteration one step at a time — the opening questions, `pnpm iteration:new`, `pnpm iteration:intake`, planning (`KICKOFF.md`), approval, the kickoff row by row (`AS-BUILT.md`), close, freeze (`docs/design-workflow/process/iteration-guide.md`). |
+
 **Autonomous build**
 
 | Command | Purpose |

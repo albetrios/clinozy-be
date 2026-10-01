@@ -43,6 +43,11 @@
         "be-overview-doc-maintainer",
         "be-system-narrative-maintainer"
       ]
+    },
+    "iteration": {
+      "description": "A design iteration: plan the drop in intake-files/ into KICKOFF.md + plans/ (no code), then implement the ROUTE one row at a time with AS-BUILT.md.",
+      "trigger": "iterations/*/intake-files/**",
+      "steps": ["be-iteration-planning", "be-kickoff-iteration"]
     }
   }
 }

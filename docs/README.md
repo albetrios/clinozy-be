@@ -15,7 +15,7 @@ Hand-written guides live in **topic subfolders**; generated API artifacts stay a
 | [reference/reliability/observability-log-events.md](reference/reliability/observability-log-events.md)     | Structured log event names / dashboard migrations                                          |
 | [deployment/docker-images.md](deployment/docker-images.md)                                                 | API vs worker images, MCP docs in container                                                |
 | [reviews/](reviews/)                                                                                       | Point-in-time review snapshots (add new dated files; do not rewrite history)               |
-| [superpowers/](superpowers/)                                                                               | AI planning-session artifacts — **plans/** and **specs/** (dated, archival)                |
+| [design-workflow/](design-workflow/process/README.md)                                                      | Design iterations → backend: the [process](design-workflow/process/README.md) (plan → kick off → build), the [step-by-step guide](design-workflow/process/iteration-guide.md) and the paste prompts |
 
 **Generated (do not edit by hand):** [routes.txt](routes.txt), [openapi/](openapi/) (`openapi*.json`), [postman-collection.json](postman-collection.json).
 
@@ -37,7 +37,7 @@ flowchart TB
     IN[integrations]
     RF[reference]
     RV[reviews]
-    SP[superpowers]
+    DW[design-workflow]
     DB[database]
   end
 
@@ -50,6 +50,8 @@ flowchart TB
   DP --> SET
   DP --> CICD
   DP --> RB
+  DW --> DWP[prompts]
+  DW --> DWS[process]
   GS --> DP
 ```
 
@@ -65,6 +67,7 @@ flowchart TB
 | [getting-started/prerequisites.md](getting-started/prerequisites.md)                         | External tools (Homebrew, Node, gitleaks, codegraph, headroom, …) auto-installed on macOS by `pnpm setup:local`. |
 | [getting-started/api-testing.md](getting-started/api-testing.md)                             | Manual API checklist and smoke after `pnpm db:seed:full`.                                                   |
 | [getting-started/requirement-intake.md](getting-started/requirement-intake.md)               | Format for new requirements; which skills and rules to run.                                                 |
+| [getting-started/staged-build-prompt.md](getting-started/staged-build-prompt.md)             | Copy-paste **4-stage gated prompt** that builds one table from a design iteration's `plans/` (see [iterations/README.md](../iterations/README.md)). |
 | [getting-started/seeded-fixtures.md](getting-started/seeded-fixtures.md)                       | Fixed demo data produced by `pnpm db:seed:full`.                                                            |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md)                                                     | Contributor quick start; **AGENTS.md** (author gate), **pr-review.md** (reviewers).                         |
 | [deployment/runbooks/environment-variables.md](deployment/runbooks/environment-variables.md) | Env variable workflow (`tooling/setup/setup.config.json` → `pnpm github:sync` → edit values → `pnpm github:sync`). |

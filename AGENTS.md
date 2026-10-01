@@ -5,7 +5,7 @@ Before changing this repository:
 1. Follow **[.cursor/rules/be-engineering-principles.mdc](.cursor/rules/be-engineering-principles.mdc)** for general engineering behavior (always applied in Cursor). Product slug, image names, and branch/env mapping: **[.cursor/rules/be-project-identity.mdc](.cursor/rules/be-project-identity.mdc)** (`tooling/setup/setup.config.json` → `project-identity.constants.ts`).
 2. Agent-os items this repo owns start with `be-` (see **[CLAUDE.md → Agent-os naming](CLAUDE.md#agent-os-naming)**); upstream skills keep their names.
 3. Read **[CLAUDE.md](CLAUDE.md)** for architecture, domain layout, dependency rules, and commands. Import path policy: **[`.cursor/rules/be-import-paths.mdc`](.cursor/rules/be-import-paths.mdc)** (`@/` in `src/`, `@tooling/` in tooling; no `../`).
-4. For new domains, routes, workers, or schema work, follow **[docs/getting-started/requirement-intake.md](docs/getting-started/requirement-intake.md)** and consult **[be-skill-index](agent-os/skills/be-skill-index/SKILL.md)** first (45 project skills; Cursor built-ins: **be-cursor-global-skills**) — run only the skills that match your changes (no duplicate invocations).
+4. For new domains, routes, workers, or schema work, follow **[docs/getting-started/requirement-intake.md](docs/getting-started/requirement-intake.md)** and consult **[be-skill-index](agent-os/skills/be-skill-index/SKILL.md)** first (47 project skills; Cursor built-ins: **be-cursor-global-skills**) — run only the skills that match your changes (no duplicate invocations).
 5. For any change under `src/`, the **in-source documentation system** also applies — see **[docs/reference/architecture/documentation-system.md](docs/reference/architecture/documentation-system.md)**. TSDoc on every public export is canonical (gated by `pnpm tsdoc:check` against [`tooling/tsdoc-coverage/budget.json`](tooling/tsdoc-coverage/budget.json) — counts may decrease but may not increase); hand-written `<folder>.overview.md` files cover folder-level design decisions; `src/{OVERVIEW,PATTERNS,FLOWS,POLICIES}.md` carry the system narrative. There is no auto-generated `DOCS.md` aggregator.
 6. Human contributors — see **[CONTRIBUTING.md](CONTRIBUTING.md)** (setup summary, branching, **`SECURITY.md`**, **`CODE_OF_CONDUCT.md`**, **[`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)**).
 7. Before opening a pull request, ensure these pass (pre-commit runs the same sync checks locally):
@@ -91,7 +91,7 @@ Reusable slash commands live in [`agent-os/commands/`](agent-os/commands/) (sing
 source of truth). Claude Code reads them via `.claude/commands`, Cursor via
 `.cursor/commands`; for Codex, symlink them into `~/.codex/prompts/` (see
 [agent-os/docs/commands.md](agent-os/docs/commands.md)). Available: `/be-validate`,
-`/be-ci-local`, `/be-new-domain`, `/be-routes-sync`.
+`/be-ci-local`, `/be-new-domain`, `/be-routes-sync`, `/be-iteration`.
 
 ## Guardrails
 

@@ -4,6 +4,29 @@
 
 For **any new requirement** (new domain, routes, worker, schema, etc.), use the format and checklist in **`docs/getting-started/requirement-intake.md`**. That doc defines what details to provide and which skills/rules to invoke so the AI can perform best and keep docs, routes, tests, and lint in sync. Consult **`agent-os/skills/be-skill-index/SKILL.md`** first, then run the skills listed for the requirement type.
 
+A requirement that comes from a **design iteration** (`iterations/<iteration>/`) follows the iteration process in **Design iterations** below instead.
+
+## Design iterations
+
+A design iteration is one product/design change, recorded as `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/` (type `launch` · `feat` · `change` · `fix`) — not an app release. Rules: **`iterations/README.md`**; the flow: **`docs/design-workflow/process/README.md`**; every step with its questions: **`docs/design-workflow/process/iteration-guide.md`**. **`/be-iteration [iteration]`** walks it with the user.
+
+The folder: `README.md` (field table + History, written by the commands — except the Summary line you write) · `intake-files/` (a **full** snapshot — Intake mode `full`, `overlay` or `brief` — locked from `approved`; `--check` is the gate) · `KICKOFF.md` (the plan + ROUTE ledger, written by planning, frozen at approval) · `plans/` (decisions, coverage, requirements, stories, acceptance) · `AS-BUILT.md` (what each ROUTE row actually built, written during implementation, ending with the Standing deviations carried to the next iteration).
+
+**Before opening one, ask (AskUserQuestion — never guess):** what changes, in one line (the Summary) · launch, or `feat` / `change` / `fix` · the topic (lowercase kebab-case, no digits) · backend only or both repositories (`--both`) · is the current branch `<type>/<topic>` · what arrived — the whole drop, only changed files, or only a `BRIEF.md` (the Intake mode) · what it builds on (the Baseline — it must have its own `intake-files/`).
+
+**Then follow the steps one by one — finish and check each before the next:**
+
+1. **Branch** — `git switch -c <type>/<topic>`.
+2. **Open** — `pnpm iteration:new <type> [topic] [--both] --dry-run`, check the name and suggested Baseline, then run it (README only, Status `planning`); write the Summary.
+3. **Place the drop** — `pnpm iteration:intake <iteration> <source> [--mode full|overlay|brief] [--both] --dry-run`, then for real: a full snapshot in `intake-files/` (`overlay` lays the changed files over the Baseline's; `brief` adds a `BRIEF.md` to it), the Drop, Intake and Schema-routes rows filled; check it with `pnpm iteration:intake <iteration> --check`.
+4. **Plan, no code** — "plan iteration `<iteration>`" → **be-iteration-planning** Steps 0–6 (Step 0 confirms the iteration and the Baseline → `pnpm iteration:baseline`, then the gate `pnpm iteration:intake <iteration> --check` — stop if it fails; incremental delta = `pnpm iteration:diff <baseline> <iteration>` — `intake-files/` only — plus the designer's notes, or `BRIEF.md` in brief mode; the Baseline's Standing deviations; RED questions to the user) → `KICKOFF.md` + `plans/` → `ready-for-approval`.
+5. **Approve** — the user reviews `KICKOFF.md` and `plans/` → `pnpm iteration:status <iteration> approved` (or back: `planning --reason "<why>"`).
+6. **Kick off** — "kickoff iteration `<iteration>`" → **be-kickoff-iteration** Step 0 confirms, runs the gate → `implementing`; then **one ROUTE row at a time**: do (NEW table → `docs/getting-started/staged-build-prompt.md`; CHANGE table, flow, background work → `/be-build-requirement`) → verify → the `AS-BUILT.md` row → impact check (scope change → stop and ask) → the user's review.
+7. **Close** — the gates, `/be-pre-merge-review` (review only), `plans/acceptance.md` filled, the `AS-BUILT.md` summary → `pnpm iteration:status <iteration> done`.
+8. **Freeze** — resolve overlaps with iterations merged meanwhile → `pnpm iteration:status <iteration> frozen` in the last commit → the user raises the PR.
+
+Status changes only through `pnpm iteration:status` (one step forward along `planning → ready-for-approval → approved → implementing → done → frozen`; back to `planning` only with `--reason`) — it also signs the README's History. Never edit a merged iteration; a correction is a new `fix` iteration.
+
 ## Reuse before you create
 
 Before adding a helper, wrapper, env var, constant or pattern, find the one that already does the job and use it; create something new only when nothing fits. If an existing one is close but not right, improve it — or say in the PR why new is better — **in the same PR**, never leaving old and new side by side. Detail and examples: principle #3 in [`agent-os/docs/principles.md`](agent-os/docs/principles.md).
@@ -57,7 +80,7 @@ Detail and examples live in scoped Cursor rules (auto-attach when editing `src/*
 
 - **[be-full-names-only.mdc](.cursor/rules/be-full-names-only.mdc)** — no abbreviations in identifiers OR prose (`organization` not `org`, incl. plurals/compounds); intentional compact WIRE literals are the only survivors — the `org_` public-id prefix, the JWT claim keys `org`/`sv`, third-party payloads, and the agent-os prefixes `be-`/`fe-`; Fastify `req`/`reply` exempt
 - **[be-object-params.mdc](.cursor/rules/be-object-params.mdc)** — options objects for 2+ params; repos and framework callbacks exempt
-- **[be-no-digits-in-names.mdc](agent-os/rules/be-no-digits-in-names.mdc)** — no digits in identifiers we own (`firstPage`, never `page1`); a digit is a version, a duplicate or a shrug. Exempt: the API `v1` segment, vendor/standard names (`S3`, `OAuth2`, `SHA256`), a third-party export renamed **at the import**, audit-finding citations in comments, and digits in values
+- **[be-no-digits-in-names.mdc](agent-os/rules/be-no-digits-in-names.mdc)** — no digits in identifiers we own (`firstPage`, never `page1`); a digit is a version, a duplicate or a shrug. Exempt: the API `v1` segment, vendor/standard names (`S3`, `OAuth2`, `SHA256`), a third-party export renamed **at the import**, audit-finding citations in comments, digits in values, and the date stamp on a dated record (`migrations/<timestamp>_*.sql`, `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/`)
 - Sub-domain folders **must** prefix with domain/resource name (`organization-settings`, `webhook-event`, …)
 
 ## Domain Structure
@@ -424,7 +447,7 @@ Already pushed as `claude/*`? Leave it — it auto-deletes when the PR squash-me
 
 ## Commands
 
-Script namespaces: `ci:*`, `compose:*`, `test:*`, `validate:*`, `db:*`, `docs:*`, `routes:*`, `load:*`, `chaos:*`, `tool:*`, `setup:*`, `mcp:*`, `security:*`, `sonar:*`, `deps:*`, `agent-os:*`, `github:*`, `tsdoc:*`, `docker:*`, `dashboards:*`, `ops:*`, `sbom:*`, `guard:*`, `dev:*`, `build:*`, `lint:*`, `format:*`, `health:*`, `coverage:*`, `env:*`, `start:*`, `verify:*`. List all: `pnpm run`.
+Script namespaces: `ci:*`, `compose:*`, `test:*`, `validate:*`, `db:*`, `docs:*`, `routes:*`, `load:*`, `chaos:*`, `tool:*`, `setup:*`, `mcp:*`, `security:*`, `sonar:*`, `deps:*`, `agent-os:*`, `github:*`, `tsdoc:*`, `docker:*`, `dashboards:*`, `ops:*`, `sbom:*`, `guard:*`, `dev:*`, `build:*`, `lint:*`, `format:*`, `health:*`, `coverage:*`, `env:*`, `start:*`, `verify:*`, `iteration:*`. List all: `pnpm run`.
 
 Local SonarQube quality gate (pre-commit): `pnpm sonar:up` / `sonar:scan` / `sonar:down` / `sonar:reset`. The pre-commit hook (`pnpm guard:pre-commit`, step 17) blocks a commit when SonarQube has any open issue on the deployed-app surface; the gate is mandatory — there is no bypass, every issue must be resolved. See **`docs/reference/quality/sonarqube-local.md`**.
 
@@ -486,3 +509,9 @@ Local SonarQube quality gate (pre-commit): `pnpm sonar:up` / `sonar:scan` / `son
 - **Merge policy — never merge on red (enforced, not convention):** the `main` ruleset has **no `bypass_actors`**, so a PR with any failing or pending required check (`Quality gate`, `Checks`) **cannot be merged by anyone — the repo owner included**. Never re-add `bypass_actors` to `.github/rulesets/main.json`, and never merge with `--admin` / the merge API to skip a red gate: a flaky-red required check is **re-run (or its branch updated) to green**, never bypassed. `strict up-to-date` is off so a green PR merges cleanly via `gh pr merge --squash`; `required_signatures` is intentionally absent (unsigned branch commits — GitHub signs the squash-merge commit on `main` regardless). Pinned by [`src/tests/unit/ci/rulesets.policy.unit.test.ts`](src/tests/unit/ci/rulesets.policy.unit.test.ts).
 - `pnpm tool:sync-env-example` — report env schema vs .env.example diff and PR snippet; use `--fix` to append missing vars
 - `pnpm tool:project-structure-tree` — print `src/` directory tree to stdout (see `docs/reference/architecture/project-structure-guide.md`)
+- `pnpm iteration:new <type> [topic] [--both] [--sibling <path>] [--dry-run]` — open a design iteration `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/` (type `launch|feat|change|fix`) with its README only and a suggested Baseline (the latest `done`/`frozen` iteration in this repository); `--both` opens the same folder in clinozy-fe. Model: **`iterations/README.md`**
+- `pnpm iteration:list` — every iteration's Name, Type, Owner, Opened, Baseline, Status, Intake mode, **Schema-routes** (first 12 characters of the sha256 of `intake-files/schema-routes.md`, to compare with clinozy-fe's), **Intake hash** (`<live> ≠ README <recorded>` when the snapshot changed) and Drop placed
+- `pnpm iteration:status <iteration> <status> [--reason "<text>"]` — move an iteration one step along `planning → ready-for-approval → approved → implementing → done → frozen` (or back to `planning` with `--reason`); writes the README's Status and a History entry
+- `pnpm iteration:intake <iteration> <source> [--mode full|overlay|brief] [--both] [--replace] [--dry-run]` — write the full snapshot into `intake-files/` (never README.md): `full` = the drop as received (always the launch), `overlay` = the received files over the Baseline's snapshot, `brief` = the Baseline's snapshot + `BRIEF.md` (template `tooling/iterations/templates/BRIEF.md`); check the mandatory set (`PRD.md`, `schema-routes.md`, + `BRIEF.md` in brief); fill Drop placed / Drop source / Intake mode / Intake note / Schema-routes / Intake hash; replace only with `--replace` while planning, locked from `approved` on; `--both` builds the sibling in the same mode on its own Baseline. `pnpm iteration:intake <iteration> --check [--baseline <baseline>]` is the gate
+- `pnpm iteration:diff [<baseline>] <current> [--json]` — compare two iterations' `intake-files/` only (both mandatory): files, screens, PRD / schema-routes / prototype changed, schema-routes entities, fields, enums, routes and operations; then the raw `git diff --no-index`
+- `pnpm iteration:baseline <iteration> <baseline|none>` — record the Baseline the user confirmed (an earlier iteration in this repository with a complete `intake-files/`, or `none`); writes the row + a History line

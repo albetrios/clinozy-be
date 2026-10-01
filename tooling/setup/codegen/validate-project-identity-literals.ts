@@ -158,7 +158,6 @@ export function identityLiterals(snapshot: ProjectIdentitySnapshot): string[] {
 const PREVIOUS_IDENTITY_EXEMPT_PREFIXES: readonly string[] = [
   'CHANGELOG.md',
   'docs/reviews/',
-  'docs/superpowers/',
   'tooling/setup/setup.config.json',
 ];
 

@@ -21,6 +21,9 @@
     "coverage/**",
     "coverage-*/**",
     "CHANGELOG.md",
+    // Design iterations (PRD, schema-routes, plans) — imported or generated from the design
+    // workflow and kept as authored; see iterations/README.md.
+    "iterations/**",
     "docs/openapi/**",
     "docs/postman-collection.json",
     "docs/routes.txt",
