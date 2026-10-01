@@ -74,8 +74,9 @@ const RATE_LIMIT_EMAIL_HASH_PREFIX_LENGTH = 16;
  * strings; the breadcrumb message isn't run through any redaction. Every credential-stuffing
  * campaign hitting the per-email cap therefore shipped its targeted addresses to BOTH Pino logs
  * AND Sentry breadcrumbs — a direct breach of the codebase's email redaction policy and the
- * `sendDefaultPii: false` Sentry posture. Hashing the email keeps the bucket stable (deterministic
- * per address) while making the log/breadcrumb value an opaque identifier.
+ * restrictive Sentry data-collection posture (`dataCollection`, formerly `sendDefaultPii: false`).
+ * Hashing the email keeps the bucket stable (deterministic per address) while making the
+ * log/breadcrumb value an opaque identifier.
  */
 function buildRateLimitKeyFromRequestBodyEmail(request: FastifyRequest): string {
   const body = request.body as { email?: unknown } | undefined;

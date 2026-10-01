@@ -8,7 +8,8 @@ import {
 } from '@/shared/errors/index.js';
 
 /**
- * Capture policy for the Fastify error handler (`Sentry.setupFastifyErrorHandler`).
+ * Capture policy for Sentry's Fastify error capture (`Sentry.fastifyIntegration`'s
+ * `shouldHandleError`; before Sentry 11, `Sentry.setupFastifyErrorHandler`).
  *
  * The handler used to capture EVERY routed error, so ordinary client outcomes —
  * a request with no bearer token, a failed validation, an unknown id — arrived in
