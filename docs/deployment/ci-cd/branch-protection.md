@@ -69,7 +69,7 @@ Lanes currently rolled up (**authoritative source: `quality-gate.needs` in pr-ci
 | `security-secrets` | Security secrets |
 | `security-sast` | Security SAST |
 | `security-iac` | Security IaC (Trivy config) |
-| `dependency-review` | Dependency review |
+| `dependency-review` | Dependency review — runs on a public repository; skipped (counts as a pass) on a private one, where the API needs GitHub Advanced Security; vulnerabilities stay gated by Security audit |
 | `contract-property` | Contract + property |
 | `rls-security` | RLS security (non-superuser) |
 | `rls-application-role` | RLS application role (whole connection) |

@@ -574,7 +574,12 @@ jobs:
   dependency-review:
     name: Dependency review
     needs: [changes]
-    if: needs.changes.outputs.docs-only-md != 'true'
+    # The dependency-review API needs GitHub Advanced Security on a PRIVATE repository; without
+    # it every run fails with "Dependency review is not supported on this repository". On a
+    # private repository the lane skips (the quality gate counts a skip as a pass) and
+    # vulnerabilities stay gated by `security-audit` (pnpm audit, any severity). Public
+    # repositories run it as before.
+    if: needs.changes.outputs.docs-only-md != 'true' && !github.event.repository.private
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

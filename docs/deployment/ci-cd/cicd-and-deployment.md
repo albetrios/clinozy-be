@@ -84,7 +84,7 @@ All jobs run **in parallel** (~2–3 min target). Caching: `actions/setup-node` 
 | **Unit** | `vitest --project unit --project global --changed origin/{base}` (no DB) |
 | **Migration lint** | `pnpm db:migrate:lint` (static migration safety) |
 | **Build verify** | `pnpm build` + Docker API/worker build (`load: true`, no push, no Trivy) |
-| **Security audit** | `pnpm deps:audit`, `pnpm deps:audit:prod`, dependency review |
+| **Security audit** | `pnpm deps:audit`, `pnpm deps:audit:prod`, dependency review (public repositories only — a private repository needs GitHub Advanced Security for it) |
 | **Security secrets** | gitleaks full-history scan |
 | **Security SAST** | semgrep |
 | **Contract + property** | `pnpm test:contract`, `pnpm test:property` |
