@@ -44,6 +44,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
+      # upload-sarif reads its own workflow run, which needs actions: read on a private repository.
+      actions: read
       contents: read
       packages: write
       id-token: write

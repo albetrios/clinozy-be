@@ -153,6 +153,7 @@ jobs:
     name: Docker
     needs: [changes]
     permissions:
+      actions: read
       contents: read
       packages: write
       id-token: write
