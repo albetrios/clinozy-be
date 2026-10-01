@@ -111,7 +111,7 @@ jobs:
         # container — not secrets. BYPASSRLS requires the superuser, exactly as
         # the maintenance-database-role runbook documents for local provisioning.
         env:
-          PGPASSWORD: core
+          PGPASSWORD: clinozy
         run: |
           set -euo pipefail
           psql -h localhost -U clinozy -d clinozy <<'SQL'
