@@ -1,147 +1,134 @@
 ---
 name: be-kickoff-iteration
 description: >
-  Kick off an approved iteration: confirm which iteration to kick off (Step 0), then turn
-  iterations/<iteration>/plans into a technical KICKOFF.md with a ledger — schema first, then
-  contracts, build order and drivers — before any code. Use when the user says
-  'kickoff iteration <name>', 'kickoff <iteration>', 'start implementing <iteration>'. Requires
-  README Status approved.
-indexNote: confirm which approved iteration to kick off, then plans → technical KICKOFF.md + ledger (schema first) — no code
-trigger: iterations/*/KICKOFF.md
-triggerNote: Iteration kickoff — technical plan and ledger; build one ledger row at a time after the user confirms
+  Implement an approved iteration: confirm which iteration to kick off (Step 0), set it implementing,
+  then follow KICKOFF.md's ROUTE one row at a time — do → verify → write the AS-BUILT.md row → check
+  the impact on upcoming rows → stop for the user's review → next — and close with the gates,
+  plans/acceptance.md and Status done. Use when the user says 'kickoff', 'kickoff iteration <name>',
+  'kickoff <iteration>' or 'start implementing <iteration>'. Requires README Status approved.
+indexNote: implement an approved iteration — follow the KICKOFF.md ROUTE row by row, record AS-BUILT.md, stop for review after each row
+trigger: iterations/*/AS-BUILT.md
+triggerNote: Iteration implementation — one ROUTE row at a time; every row's technical decisions go into AS-BUILT.md
 ---
 
-# Kickoff an iteration (technical plan from `iterations/<iteration>/plans/`)
+# Kickoff an iteration (implement `KICKOFF.md`, one ROUTE row at a time)
 
-The second half of the iteration workflow. **`be-iteration-planning` wrote the requirements; this
-skill turns them into a technical plan; the build runs after the user confirms it.** Its output is
-two artifacts inside the iteration folder, and a stop:
+The second half of the iteration workflow. **`be-iteration-planning` wrote and the user approved
+`KICKOFF.md`; this skill implements it.** It follows the ROUTE ledger row by row, records what was
+actually built in `iterations/<iteration>/AS-BUILT.md`, and stops for the user's review after every
+row. It never pushes, opens a PR or merges.
 
-1. `iterations/<iteration>/KICKOFF.md` — the plan, with every required section present
-2. The **ledger** at its end — one numbered row per work item, each with a driver and a status
-
-**Nothing is built until the user confirms the plan.** A kickoff that slides into implementation
-has failed.
-
-The whole flow on one page: [`docs/design-workflow/process/README.md`](../../../docs/design-workflow/process/README.md).
+The whole flow: [`docs/design-workflow/process/README.md`](../../../docs/design-workflow/process/README.md).
 The iteration rules: [`iterations/README.md`](../../../iterations/README.md).
 
-## Procedure — stop after every step and wait
-
-### Step 0 — Confirm the iteration, then stop until confirmed
+## Step 0 — Confirm the iteration, then stop until confirmed
 
 Run `pnpm iteration:list` and show:
 
 | Iteration | Type | Baseline | Status | Eligible | Why |
 | --- | --- | --- | --- | --- | --- |
 
-- Planning: eligible = Status planning.
-- Kickoff: eligible = Status approved, not yet implementing, and Baseline none or done/frozen.
+- Eligible = Status `approved`, not yet `implementing`, and Baseline `none` or an iteration that is
+  `done` / `frozen`.
+- Recommend the earliest-opened eligible iteration (the launch always comes first). If the user
+  named one, check it against the rule.
+- Always ask with **AskUserQuestion** — never pick silently. Then run
+  `pnpm iteration:status <iteration> implementing`.
 
-Recommend the earliest-opened eligible iteration (launch always comes first). If the user
-named one, check it against the rule. Always ask the user to confirm (AskUserQuestion)
-before Step 1 — never pick silently.
+## Before the first row — read
 
-### Step 1 — Read, then stop
-
-- The README (stop unless `Status: approved` — anything earlier goes back to
-  `be-iteration-planning`, whose Step 5 ends in the approval) and **every** file under `plans/` in full:
-  `product-plan.md`, `coverage.md`, `decisions.md`, every `requirements/*.md`, every
-  `features/*/story.md`, `acceptance.md`.
+- `KICKOFF.md` (the plan and its ROUTE) and every file under `plans/`.
 - The repository's conventions: `CLAUDE.md`, the skill index
   (`agent-os/skills/be-skill-index/SKILL.md`), the existing domains under `src/domains/`, the
   permission model (`src/domains/tenancy/sub-domains/permission/authorization.service.ts` and the
   seeded catalog in `src/domains/tenancy/seed/tenancy.seed.ts`), the public-id prefixes
   (`src/shared/utils/identity/public-id.util.ts`) and `docs/reference/`.
+- Start `AS-BUILT.md` with its header (iteration, Baseline, `KICKOFF.md` approval date).
 
-Map every requirement identifier and every story work item to a draft work item. Report the
-mapping. **Stop.**
+## The ROUTE — its shape
 
-### Step 2 — Reconcile with the code, then stop
+**Initial** (Baseline `none`):
 
-For each entity and requirement, decide reuse, extend or new — with evidence:
+1. **Schema first** — tables in dependency order. Each NEW table's design is approved through the
+   staged-build prompt's Stage 1, then its schema and migration land.
+2. **Features** — each table's code: data access, service, handlers, routes, permissions, i18n,
+   seed, tests.
+3. **Background work** — jobs, notifications, events.
+4. **Flows** — cross-table rules and end-to-end tests.
+5. **Acceptance** — `plans/acceptance.md`.
 
-| Requirement / entity | Verdict (reuse · extend · new) | Evidence (file:line) | Conflict |
-| --- | --- | --- | --- |
+**Incremental:** schema changes first — new tables and `ALTER` migrations from the diff, never an
+edit to an existing migration → changed features → changed background work → affected flows,
+re-running the existing end-to-end tests for everything touched.
 
-Flag every conflict with an existing domain (an entity that already exists under another name, a
-permission that overlaps, a lifecycle that disagrees). **Stop.**
+**Drivers:**
 
-### Step 3 — Technical blocking questions, then stop
+| Work item | Driver |
+| --- | --- |
+| NEW table | the staged-build prompt (`docs/getting-started/staged-build-prompt.md`) — paste the ROUTE row, its requirements and its story above it |
+| CHANGE table, flow, background work | `/be-build-requirement` (`agent-os/commands/be-build-requirement.md`), from the requirement form `docs/getting-started/requirement.template.md` |
 
-Decide what the requirements leave open, never by guessing: domain placement, which side holds
-the foreign key in a cycle, polymorphic references, embedded items versus their own table, delete
-strategy (soft delete, revocation, immutable ledger), permission codes, the transport for
-realtime, queues and schedules. Ask with **AskUserQuestion** — at most 4 per call, one recommended
-option each, quoting the evidence. Record every answer in `plans/decisions.md` with `Kind: TECH`.
-**Stop.**
+Each driver runs the matching skill chain (schema-change, route-change, worker-change or new-domain
+— `agent-os/skills/chains.json`).
 
-### Step 4 — Write `iterations/<iteration>/KICKOFF.md`, then stop
+## Each ROUTE row — do → verify → record → check impact → stop
 
-Every section is present. A section may say `n/a — <reason>`; it may never be absent.
+1. **Do** — mark the row `in progress` in `KICKOFF.md` and build it through its driver.
+2. **Verify** — the row's acceptance, its tests, `pnpm validate`.
+3. **Record** — add the row to `AS-BUILT.md`:
 
-1. **Header** — iteration, mode (initial · incremental), Baseline, sources read, date.
-2. **Locked technical decisions** — one numbered line each, linked to its `decisions.md` row.
-3. **Schema plan — schema first.** NEW and CHANGE tables, enums, the migration order; foreign
-   keys that break a cycle are added last.
-4. **Contracts** — HTTP, realtime, events, jobs and schedules, notifications, webhooks,
-   integrations, files, permissions.
-5. **Build order** — schema → missing platform capability → per feature (its table work items →
-   its async, notification, realtime and integration work items → its flow) → acceptance.
-6. **Work items** — one per table, flow and async piece, each with its **driver**:
-
-   | Work item | Driver |
-   | --- | --- |
-   | NEW table | the staged-build prompt (`docs/getting-started/staged-build-prompt.md`) — paste the work item (its schema-plan entry, requirement identifiers and story) above it |
-   | CHANGE table, flow, async piece | `/be-build-requirement` (`agent-os/commands/be-build-requirement.md`), from the requirement form `docs/getting-started/requirement.template.md` |
-
-   Name the skill chain each item runs: schema-change, route-change, worker-change or new-domain
-   (`agent-os/skills/chains.json`).
-7. **Verification** — the repository's gates (`pnpm validate`, `pnpm ci:local`, the route and
-   domain gates); `plans/acceptance.md` filled with Result and Evidence after the build.
-8. **Ledger** — numbered rows, one per work item:
-
-   | # | Work item | Kind | Driver | Requirements | Assignee | Status |
+   | # | Planned | Actually built | Difference | Why | Decision | Commit |
    | --- | --- | --- | --- | --- | --- | --- |
 
-   Assignee is `—` until someone takes the row. Status is `open`, `in progress`, `done` or
-   `deferred (user-OK)`. **Success may not be reported while any row is open.**
+   Every technical decision the row made (table and column design, endpoints, permission codes,
+   queue names) goes here.
+4. **Check the impact on upcoming rows.**
+   - Small and inside the row → record it in `AS-BUILT.md` and continue.
+   - **Scope** — a row added or removed, an acceptance changed, the order changed → **stop and ask**
+     (AskUserQuestion). Record the decision in `plans/decisions.md` (Kind `SCOPE`) and in
+     `AS-BUILT.md` › Revisions to upcoming rows (the revised row text), and mark the affected
+     `KICKOFF.md` row "revised → AS-BUILT #n". Never rewrite `KICKOFF.md` otherwise — it is frozen.
+5. **Stop** — mark the row `done`, show the user what was built and the AS-BUILT row, and wait for
+   their review before the next row.
 
-#### Step 4-inc — MODE incremental only
+## Close
 
-- Plan **only this iteration's changes**; the folder is the delta.
-- A CHANGE table gets a new `ALTER` migration — never an edit to an existing migration.
-- Re-check `plans/coverage.md` › Overlap first: if newer iterations reached `main` since the
-  Baseline, update the Baseline and resolve every overlap before planning on top of it.
-
-**Stop** after writing `KICKOFF.md`.
-
-### Step 5 — Self-check, then stop
-
-Fix before presenting, never after:
-
-- [ ] Every requirement identifier and every story work item is in the ledger
-- [ ] No ledger row without a driver
-- [ ] The schema order respects every dependency (cycle-breaking foreign keys last)
-- [ ] Every section of `KICKOFF.md` is present (or `n/a — <reason>`)
-- [ ] Every TECH decision is in `plans/decisions.md`
-
-Present the reconciliation, the decisions, `KICKOFF.md` and the ledger. **Stop.**
-
-## After the user confirms — implementing
-
-- Run `pnpm iteration:status <iteration> implementing` as soon as the user confirms `KICKOFF.md`.
-  Never edit the Status row by hand — the command checks the move and signs the README's History.
-- Build **one ledger row at a time**, through its driver; update the row as it moves.
-- When every row is `done` (or `deferred (user-OK)`) and `plans/acceptance.md` has a Result and
-  Evidence for every item, run `pnpm iteration:status <iteration> done`.
-- `pnpm iteration:status <iteration> frozen` goes in the last commit before the iteration's
-  branch merges; after that the folder is never edited — a correction is a new `fix` iteration.
+- Run the repository's gates: `pnpm validate`, `pnpm ci:local`, and the route and domain gates.
+- Run `/be-pre-merge-review` as a review only — report its findings, change nothing on its say-so.
+- Every ROUTE row is `done`, or `deferred` with the user's explicit OK.
+- Fill `plans/acceptance.md` — a Result and Evidence for every item.
+- Finish `AS-BUILT.md` with its closing summary: planned but not built (deferred, user OK), built but
+  not planned, follow-ups for the next iteration.
+- Run `pnpm iteration:status <iteration> done`. `pnpm iteration:status <iteration> frozen` goes in
+  the last commit before the merge.
 - **Never push, open a PR or merge** — the user raises PRs.
 
-## Project conventions the plan must encode (non-negotiable)
+## AS-BUILT.md — the shape
 
-`CLAUDE.md` is the source of truth; these are what a kickoff most often gets wrong:
+```markdown
+# <iteration> — as built
+
+Baseline: <none | iteration> · KICKOFF.md approved <date>
+
+## Rows
+
+| # | Planned | Actually built | Difference | Why | Decision | Commit |
+| --- | --- | --- | --- | --- | --- | --- |
+
+## Revisions to upcoming rows
+
+- #<n>: <the revised row text> — <decision link>
+
+## Summary
+
+- Planned, not built (deferred — user OK): …
+- Built, not planned: …
+- Follow-ups for the next iteration: …
+```
+
+## Project conventions every row must keep (non-negotiable)
+
+`CLAUDE.md` is the source of truth; these are what a row most often gets wrong:
 
 - **Domain layout** — `src/domains/<domain>/sub-domains/<sub-domain>/`, prefixed sub-domain names,
   nested only when the child's lifecycle is the parent's
@@ -159,33 +146,22 @@ Present the reconciliation, the decisions, `KICKOFF.md` and the ledger. **Stop.*
   `organizationPublicId` (`docs/reference/runtime/workers-and-events.md`).
 - **Copy** — every user-facing message is an i18n key.
 
-## Skill routing — the plan names the chain per work item
-
-| Work item | Chain / skill |
-| --- | --- |
-| New or changed table | **schema-change** — be-schema-generator → be-sql-design-guard → be-db-migration-maintainer → be-rls-tenant-isolation-guard |
-| New or changed route | **route-change** — be-api-contract-guard → be-route-schema-doc-guard → be-route-catalog → be-seed-maintainer |
-| New domain or sub-domain | **new-domain** — be-domain-generator → … |
-| Event, queue, worker, schedule | **worker-change** — be-workers-events → be-test-generator → be-tsdoc-export-guard |
-| Money or state write | be-idempotency-guard |
-| Seed data | be-seed-maintainer |
-| Finishing every row | be-change-completeness-guard |
-
 ## Failure modes this skill exists to prevent
 
 | Failure | Prevention here |
 | --- | --- |
-| The wrong iteration kicked off, or one planned on an unbuilt Baseline | Step 0 eligibility table + confirmation |
-| A plan that duplicates an existing entity or permission | Step 2 reconciliation with evidence |
-| Guessed foreign-key side, delete strategy or permission code → rework | Step 3 TECH questions |
-| Tables built before the tables they reference | Step 4.3 schema first, cycle-breaking keys last |
-| Work done outside the ledger; "done" claimed with open rows | Step 4.8 + Step 5 self-check |
-| An existing migration edited for a CHANGE table | Step 4-inc: new `ALTER` migrations only |
+| The wrong iteration implemented, or one on an unfinished Baseline | Step 0 eligibility + AskUserQuestion |
+| Rows built in a batch, reviewed too late | stop for review after every row |
+| What was built drifts from the plan with no record | the AS-BUILT row per ROUTE row |
+| A scope change slipped in silently | the impact check — scope changes stop and ask |
+| The approved plan rewritten after the fact | `KICKOFF.md` frozen; revisions live in AS-BUILT |
+| An existing migration edited for a CHANGE table | incremental route: new `ALTER` migrations only |
+| "Done" claimed with open rows | close: every row done or deferred with the user's OK |
 
 ## Related
 
-- **`be-iteration-planning`** — the requirements half; its approval is this skill's input
+- **`be-iteration-planning`** — writes and gets approval for `KICKOFF.md`
 - [`kickoff-iteration-prompt.md`](../../../docs/design-workflow/prompts/kickoff-iteration-prompt.md) — the paste prompt
 - [`staged-build-prompt.md`](../../../docs/getting-started/staged-build-prompt.md) — the driver for NEW tables
 - [`requirement-intake.md`](../../../docs/getting-started/requirement-intake.md) — `/be-build-requirement` and the requirement form
-- [`iterations/README.md`](../../../iterations/README.md) — the iteration rules
+- [`iteration-guide.md`](../../../docs/design-workflow/process/iteration-guide.md) — every step with its questions

@@ -62,7 +62,7 @@ It runs the pipeline (each step is an existing skill), self-healing failed gates
 
 ## Requirements from a design iteration
 
-When the requirement comes from a design iteration ([iterations/README.md](../../iterations/README.md)), follow the **[iteration process](../design-workflow/process/README.md)** instead of this form: **be-iteration-planning** turns the iteration's PRD and `schema-routes.md` into approved requirements, then **be-kickoff-iteration** writes `KICKOFF.md` and its ledger. Each ledger row names its driver — a NEW table runs the **[staged-build prompt](staged-build-prompt.md)** (a 4-stage gated workflow: schema → routes → implementation → recap); a CHANGE table, a flow or an async piece runs `/be-build-requirement` with this form.
+When the requirement comes from a design iteration ([iterations/README.md](../../iterations/README.md)), follow the **[iteration process](../design-workflow/process/README.md)** instead of this form: **be-iteration-planning** turns the iteration's `intake-files/` (the full drop) into an approved `KICKOFF.md` — the plan and its ordered ROUTE — plus `plans/`; then **be-kickoff-iteration** implements it one ROUTE row at a time and records each in `AS-BUILT.md`. Each row names its driver — a NEW table runs the **[staged-build prompt](staged-build-prompt.md)** (a 4-stage gated workflow: schema → routes → implementation → recap); a CHANGE table, a flow or background work runs `/be-build-requirement` with this form. Every step with its questions: **[iteration-guide.md](../design-workflow/process/iteration-guide.md)**.
 
 ---
 
@@ -422,8 +422,8 @@ flowchart LR
 | be-contract-test-maintainer       | `.cursor/skills/be-contract-test-maintainer/SKILL.md`       | Stripe/Resend/S3 nock contracts                           |
 | be-chaos-test-maintainer          | `.cursor/skills/be-chaos-test-maintainer/SKILL.md`          | Toxiproxy chaos tests                                     |
 | be-cursor-global-skills           | `.cursor/skills/be-cursor-global-skills/SKILL.md`           | Reference: Cursor built-in skills                         |
-| be-iteration-planning             | `.cursor/skills/be-iteration-planning/SKILL.md`             | "Plan iteration <name>" — requirements only, under `iterations/<iteration>/plans/` |
-| be-kickoff-iteration              | `.cursor/skills/be-kickoff-iteration/SKILL.md`              | "Kickoff iteration <name>" — `KICKOFF.md` + ledger after the plans are approved |
+| be-iteration-planning             | `.cursor/skills/be-iteration-planning/SKILL.md`             | "Plan iteration <name>" — no code; `KICKOFF.md` (plan + ROUTE) + `plans/` from `intake-files/` |
+| be-kickoff-iteration              | `.cursor/skills/be-kickoff-iteration/SKILL.md`              | "Kickoff iteration <name>" — implement the approved ROUTE row by row, `AS-BUILT.md` |
 | **be-system-narrative-maintainer**| `.cursor/skills/be-system-narrative-maintainer/SKILL.md`    | Hand-authored `src/OVERVIEW.md` / `src/PATTERNS.md` / `src/FLOWS.md` / `src/POLICIES.md` |
 | **be-overview-doc-maintainer**    | `.cursor/skills/be-overview-doc-maintainer/SKILL.md`        | Per-folder `<folder>.overview.md` (hand-written) |
 | **be-route-schema-doc-guard**     | `.cursor/skills/be-route-schema-doc-guard/SKILL.md`         | Fastify route `schema: { summary, description, tags }`    |

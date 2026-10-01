@@ -37,8 +37,8 @@ Behaviour: infer sensible defaults from the codebase rather than asking, and run
 | PR CI failing — diagnose one check | be-ci-investigation | `agent-os/skills/be-ci-investigation/SKILL.md` |
 | Get a PR merge-ready (CI + review loop) | be-pr-babysit | `agent-os/skills/be-pr-babysit/SKILL.md` |
 | Split a branch/large change into reviewable PRs | be-split-to-prs | `agent-os/skills/be-split-to-prs/SKILL.md` |
-| **Plan an iteration** — "plan iteration <name>", PRD + schema-routes → requirements (`iterations/*/plans/`) | be-iteration-planning | `agent-os/skills/be-iteration-planning/SKILL.md` |
-| **Kick off an iteration** — "kickoff iteration <name>", "kickoff <iteration>", "start implementing <iteration>" | be-kickoff-iteration (after be-iteration-planning's approval) | `agent-os/skills/be-kickoff-iteration/SKILL.md` |
+| **Plan an iteration** — "plan iteration <name>": no code; the drop in `intake-files/` → `KICKOFF.md` (plan + ROUTE ledger) + `plans/` | be-iteration-planning | `agent-os/skills/be-iteration-planning/SKILL.md` |
+| **Implement an iteration** — "kickoff", "kickoff iteration <name>", "start implementing <iteration>": one ROUTE row at a time, `AS-BUILT.md` | be-kickoff-iteration (after be-iteration-planning's approval) | `agent-os/skills/be-kickoff-iteration/SKILL.md` |
 
 ## Orchestration manifests
 

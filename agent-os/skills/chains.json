@@ -45,8 +45,8 @@
       ]
     },
     "iteration": {
-      "description": "Planning and kicking off a design iteration: requirements (plans/), then the technical KICKOFF.md + ledger — both stop after every step.",
-      "trigger": "iterations/*/{PRD,schema-routes}.md",
+      "description": "A design iteration: plan the drop in intake-files/ into KICKOFF.md + plans/ (no code), then implement the ROUTE one row at a time with AS-BUILT.md.",
+      "trigger": "iterations/*/intake-files/**",
       "steps": ["be-iteration-planning", "be-kickoff-iteration"]
     }
   }

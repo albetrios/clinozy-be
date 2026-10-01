@@ -5,19 +5,21 @@ list, full implementation, final recap — and stops for your approval after eac
 
 ## How to use it
 
-1. Take the next open **NEW table** row from the iteration's `KICKOFF.md` ledger (see the
-   [iteration process](../design-workflow/process/README.md)), in ledger order.
-2. Paste that work item — its schema-plan entry, the requirement identifiers it covers and its
-   feature story from `iterations/<iteration>/plans/` — then the prompt below it, as a single
+1. Take the next open **NEW table** row from the iteration's `KICKOFF.md` ROUTE (see the
+   [iteration process](../design-workflow/process/README.md)), in ROUTE order — the
+   `be-kickoff-iteration` skill does this for you.
+2. Paste that ROUTE row, the requirements it reaches (`iterations/<iteration>/plans/requirements/`)
+   and its feature story (`plans/features/<feature>/story.md`), then the prompt below it, as a single
    message.
 3. Reply **approved**, **yes** or **go next** to move to the next stage; any other reply revises the
-   current stage. Mark the ledger row `done` after Stage 4.
+   current stage. Stage 1 is where the table's design is approved — the plan never fixed it. After
+   Stage 4, record the row in `AS-BUILT.md` and mark it `done` in the ROUTE.
 
 **Launch tables are all new**, so the prompt works as written for every table in the launch
 iteration.
 
 **Changing an existing table** is not this prompt's job — Stage 1's STRICT TABLE RULE forbids
-modifying existing tables. `KICKOFF.md` routes a CHANGE table (and every flow and async piece) to
+modifying existing tables. The ROUTE sends a CHANGE table (and every flow and background piece) to
 `/be-build-requirement` instead.
 
 The prompt is kept verbatim from the core-platform `NEW-PRODUCT-GUIDE.md` (Appendix A, the reusable

@@ -46,7 +46,7 @@ Granular procedures live in **skills** (invoked by name); these commands are **w
 
 | Command | Purpose |
 | ------- | ------- |
-| `/be-iteration [iteration]` | Walk a design iteration one step at a time — the opening questions, `pnpm iteration:new`, planning, approval, kickoff, the ledger, acceptance, freeze (`docs/design-workflow/process/iteration-guide.md`). |
+| `/be-iteration [iteration]` | Walk a design iteration one step at a time — the opening questions, `pnpm iteration:new`, `pnpm iteration:intake`, planning (`KICKOFF.md`), approval, the kickoff row by row (`AS-BUILT.md`), close, freeze (`docs/design-workflow/process/iteration-guide.md`). |
 
 **Autonomous build**
 

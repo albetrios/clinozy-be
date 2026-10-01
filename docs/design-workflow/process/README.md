@@ -1,54 +1,63 @@
 # Iteration → clinozy-be process
 
-How a design iteration becomes built, verified backend work — requirements first, then a technical
-plan, then one ledger row at a time. The iteration rules (naming, Baseline, lifecycle) are in
-[iterations/README.md](../../../iterations/README.md).
+How a design iteration becomes built, verified backend work — two phases: **planning** writes the
+plan (no code), **kickoff** implements it one ROUTE row at a time. The iteration rules (naming,
+folder, Baseline, lifecycle, commands) are in [iterations/README.md](../../../iterations/README.md);
+every step with its questions is in the [step-by-step guide](iteration-guide.md).
 
 ## The flow
 
 ```mermaid
 flowchart TB
-  NEW["pnpm iteration:new<br/>Status: planning"] --> INPUTS["PRD.md + schema-routes.md<br/>in iterations/&lt;iteration&gt;/"]
-  INPUTS --> PLAN["be-iteration-planning<br/>Step 0 confirm → steps 1–5 → plans/"]
+  NEW["pnpm iteration:new<br/>Status: planning"] --> INTAKE["pnpm iteration:intake<br/>the full drop → intake-files/"]
+  INTAKE --> PLAN["be-iteration-planning — no code<br/>Steps 0–6 → KICKOFF.md + plans/"]
   PLAN --> READY["Status: ready-for-approval"]
-  READY -->|your go-ahead| APPROVED["Status: approved"]
-  APPROVED --> KICK["be-kickoff-iteration<br/>Step 0 confirm → KICKOFF.md + ledger"]
-  KICK -->|you confirm KICKOFF.md| BUILD["Status: implementing<br/>build ledger rows one by one"]
-  BUILD --> ACCEPT["Fill plans/acceptance.md<br/>Status: done"]
-  ACCEPT --> FROZEN["Status: frozen<br/>last commit before the merge"]
+  READY -->|your go-ahead| APPROVED["Status: approved<br/>KICKOFF.md + intake-files/ freeze"]
+  APPROVED --> KICK["be-kickoff-iteration<br/>Step 0 confirm → Status: implementing"]
+  KICK --> ROW["one ROUTE row: do → verify →<br/>AS-BUILT.md row → impact check → your review"]
+  ROW -->|next row| ROW
+  ROW --> DONE["gates · acceptance.md · AS-BUILT summary<br/>Status: done"]
+  DONE --> FROZEN["Status: frozen<br/>last commit before the merge"]
 ```
 
 | Step | Who / what | Output | Stops for |
 | --- | --- | --- | --- |
 | Open | `pnpm iteration:new <type> [topic]` | the folder + README (`Status: planning`) | the opening questions ([guide](iteration-guide.md)) |
-| Inputs | Claude Design (in clinozy-fe) | `PRD.md`, `schema-routes.md` copied byte-for-byte | — |
-| Plan | **be-iteration-planning**, [prompt](../prompts/iteration-planning-prompt.md) | `plans/` — coverage, decisions, requirements, stories, acceptance; `Status: ready-for-approval` | which iteration (Step 0); every step; RED questions |
+| Intake | `pnpm iteration:intake <iteration> <source-folder>` | the full drop in `intake-files/`; the README's Drop rows | a missing required file; a conflict |
+| Plan | **be-iteration-planning**, [prompt](../prompts/iteration-planning-prompt.md) | `KICKOFF.md` (plan + ROUTE ledger) and `plans/`; `Status: ready-for-approval` | which iteration and Baseline (Step 0); every step; RED questions |
 | Approve | you — `pnpm iteration:status <iteration> approved` | `Status: approved`, logged in `plans/decisions.md` | — |
-| Kick off | **be-kickoff-iteration**, [prompt](../prompts/kickoff-iteration-prompt.md) | `KICKOFF.md` + ledger | which iteration (Step 0); every step; TECH questions |
-| Build | one ledger row at a time | `Status: implementing` once you confirm `KICKOFF.md`; code, migrations, tests | each row |
-| Accept | the build | `plans/acceptance.md` filled; `Status: done` | — |
+| Kick off | **be-kickoff-iteration**, [prompt](../prompts/kickoff-iteration-prompt.md) | `Status: implementing` | which iteration (Step 0) |
+| Build | one ROUTE row at a time | code, migrations, tests; one `AS-BUILT.md` row each | your review after every row; any scope change |
+| Close | the gates, `/be-pre-merge-review` (review only) | `plans/acceptance.md` filled, `AS-BUILT.md` summary; `Status: done` | — |
 | Freeze | the last commit before the merge | `Status: frozen`; never edited again | — |
 
 ## Rules that hold the flow together
 
-- **Requirements before design.** The planning skill writes what must be true, never how — no
-  SQL, endpoint paths, `src/` paths or queue names. The kickoff decides those against the code.
-- **Confirm the iteration first (Step 0).** Both skills start with a `pnpm iteration:list` table of
-  which iterations are eligible and why, recommend the earliest-opened eligible one (the launch
-  always first) and wait for your confirmation — never pick silently. Planning takes `planning`
-  iterations; a kickoff takes `approved` ones whose Baseline is `none` or `done`/`frozen`.
-- **Schema first.** The kickoff plans tables, enums and the migration order before contracts and
-  flows; foreign keys that break a cycle go last.
-- **Every work item has a driver.** A NEW table is built with the
-  [staged-build prompt](../../getting-started/staged-build-prompt.md); a CHANGE table, a flow or an
-  async piece with `/be-build-requirement` ([requirement intake](../../getting-started/requirement-intake.md)).
-- **Status moves through one command.** `pnpm iteration:status <iteration> <status>` allows one
-  step forward at a time (or back to `planning` with `--reason`) and signs the README's History.
-- **The ledger is the definition of done.** No success is reported while any row is open.
+- **The drop is always full.** `intake-files/` holds the whole drop, exactly as delivered, in every
+  iteration. An incremental delta is the designer's "What changed" notes plus
+  `pnpm iteration:diff <baseline> <iteration>` — a diff of `intake-files/` only, so the Baseline's
+  `intake-files/` is mandatory. Anything the diff shows that the notes omit is a finding.
+- **The user confirms the Baseline.** Planning Step 0 suggests the latest `done` / `frozen`
+  iteration in this repository; the user confirms it or picks another
+  (`pnpm iteration:baseline`).
+- **Confirm the iteration first.** Both skills start with a `pnpm iteration:list` table of which
+  iterations are eligible and why, recommend the earliest-opened one (the launch always first), and
+  wait for your confirmation — never pick silently.
+- **Planning is WHAT, never HOW.** `KICKOFF.md` and `plans/` hold requirements and decisions — no
+  SQL, endpoint paths, `src/` paths or queue names. Each row's technical design is decided while it
+  is built and recorded in `AS-BUILT.md`.
+- **Schema first.** The ROUTE runs tables (in dependency order) → features → background work →
+  flows → acceptance; an incremental ROUTE runs schema changes first and never edits an existing
+  migration.
+- **Every ROUTE row has a driver.** A NEW table goes through the
+  [staged-build prompt](../../getting-started/staged-build-prompt.md); a CHANGE table, a flow or
+  background work through `/be-build-requirement` ([requirement intake](../../getting-started/requirement-intake.md)).
+- **Scope changes stop and ask.** A row added or removed, an acceptance changed or the order changed
+  is recorded in `plans/decisions.md` and `AS-BUILT.md` only after you agree. `KICKOFF.md` itself is
+  frozen at approval.
+- **Status moves through one command** — `pnpm iteration:status`, one step at a time (or back to
+  `planning` with `--reason`); it signs the README's History.
 - **Agents never push, open a PR or merge.** You raise the PR.
-
-Walking through it for the first time? The [step-by-step guide](iteration-guide.md) lists every
-command and the questions to answer at each step, and `/be-iteration` walks it with you.
 
 ## Related
 
@@ -56,6 +65,7 @@ command and the questions to answer at each step, and `/be-iteration` walks it w
   [`be-kickoff-iteration`](../../../agent-os/skills/be-kickoff-iteration/SKILL.md)
 - Prompts: [iteration-planning-prompt.md](../prompts/iteration-planning-prompt.md) ·
   [kickoff-iteration-prompt.md](../prompts/kickoff-iteration-prompt.md)
-- Building a table: [staged-build-prompt.md](../../getting-started/staged-build-prompt.md)
+- Every step with its questions: [iteration-guide.md](iteration-guide.md) — `/be-iteration` walks it
+- Building a NEW table: [staged-build-prompt.md](../../getting-started/staged-build-prompt.md)
 - Requirements outside an iteration: [requirement-intake.md](../../getting-started/requirement-intake.md)
 - The iteration rules: [iterations/README.md](../../../iterations/README.md)

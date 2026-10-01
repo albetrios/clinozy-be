@@ -1,100 +1,98 @@
 ---
 name: be-iteration-planning
 description: >
-  Plan an iteration under iterations/<iteration>/ as requirements only — coverage matrix, PRD ↔
-  schema-routes reconciliation, blocking-question gate, requirements by angle with Mermaid data
-  diagrams, feature stories, self-check — stopping after each step. Use when the user says
-  'plan iteration <name>', 'iteration planning', or asks to turn a PRD + schema-routes into
-  plans. Next step after approval: be-kickoff-iteration.
-indexNote: plan an iteration as requirements only (coverage, reconciliation, RED gate, requirements, stories) — stops after each step
+  Plan an iteration under iterations/<iteration>/ — NO CODE: confirm the iteration and its Baseline,
+  check the intake, take the delta from iteration:diff (incremental), reconcile PRD ↔ schema-routes,
+  ask the blocking questions, then write KICKOFF.md (the plan + ordered ROUTE ledger) and plans/
+  (decisions, coverage, requirements with Mermaid data diagrams, feature stories, acceptance) —
+  stopping after each step. Use when the user says 'plan iteration <name>', 'iteration planning',
+  or asks to turn a PRD + schema-routes into a plan. Next step after approval: be-kickoff-iteration.
+indexNote: plan an iteration — no code; KICKOFF.md (plan + ROUTE ledger) + plans/ (requirements, decisions); stops after each step
 trigger: iterations/*/plans/**
-triggerNote: Iteration plans — requirements only, no technical design; be-kickoff-iteration follows the approval
+triggerNote: Iteration plans — requirements and decisions only, never technical design; KICKOFF.md is written at Step 5
 ---
 
-# Iteration planning (requirements from `iterations/<iteration>/`)
+# Iteration planning (KICKOFF.md + plans/ from `iterations/<iteration>/intake-files/`)
 
-The first half of the iteration workflow. **This skill writes requirements; `be-kickoff-iteration`
-turns them into a technical plan; the build comes after both.** Its output is
-`iterations/<iteration>/plans/`, and a stop after every step.
+The first half of the iteration workflow. **This skill writes the plan and writes no code;
+`be-kickoff-iteration` implements it after the user approves.** Its outputs are
+`iterations/<iteration>/KICKOFF.md` (the plan and its ordered ROUTE ledger) and
+`iterations/<iteration>/plans/`, with a stop after every step.
 
-The whole flow on one page: [`docs/design-workflow/process/README.md`](../../../docs/design-workflow/process/README.md).
-The iteration rules (naming, Baseline, lifecycle): [`iterations/README.md`](../../../iterations/README.md).
+The whole flow: [`docs/design-workflow/process/README.md`](../../../docs/design-workflow/process/README.md).
+The iteration rules: [`iterations/README.md`](../../../iterations/README.md).
 
 ## Principle — WHAT must be true, never HOW
 
-Requirements and decisions only. A plan that names an implementation has decided something the
-kickoff must decide against the code. **Never write:**
+`plans/` and `KICKOFF.md` hold requirements and decisions only. **Never write:**
 
 - SQL or DDL, physical column types, indexes, constraints
 - endpoint paths, HTTP methods, status codes
 - `src/` file paths, domain or sub-domain folder names
 - queue, job, event or worker names
 
-Write instead what must hold: who may do what, what is stored and for how long, what happens in
-the background and when, who is told, what outside system is involved.
+Each ROUTE row is a work item (one per table, background piece, flow); its technical design is
+decided during implementation and recorded in `AS-BUILT.md`, not here.
 
 ## Inputs and mode
 
 | Input | Used for |
 | --- | --- |
 | `iterations/<iteration>/README.md` | Type, Owner, Opened, Branch, Baseline, Status |
-| `iterations/<iteration>/PRD.md` | screens, flows, data, priorities, open questions |
-| `iterations/<iteration>/schema-routes.md` | entities, enums, operations, routes the design implies |
+| `iterations/<iteration>/intake-files/PRD.md` | screens, flows, data, priorities, open questions |
+| `iterations/<iteration>/intake-files/schema-routes.md` | entities, enums, operations, routes |
+| `iterations/<iteration>/intake-files/design-overview.md` | optional — the designer's overview and "What changed" notes |
 
-- **Baseline `none` → MODE initial** (the launch): plan everything.
-- **Any other Baseline → MODE incremental**: read the Baseline iteration and every iteration merged
-  after it — with the launch they are the current state — and plan **only this iteration's
-  changes**. The merged iterations, in merge order:
+`intake-files/` always holds the **full drop**, exactly as delivered — every iteration, not only the
+launch.
 
-  ```bash
-  git log main --reverse --diff-filter=A --name-only --format= -- 'iterations/*/README.md'
-  ```
+- **Baseline `none` → MODE initial** — the first iteration in this repository: plan everything.
+- **Baseline `<iteration>` → MODE incremental** — the Baseline the user confirms at Step 0. The delta
+  is the designer's "What changed" notes **plus** `pnpm iteration:diff <baseline> <iteration>`, which
+  compares the two iterations' `intake-files/` only. The Baseline's `intake-files/` is therefore
+  mandatory (`iteration:baseline` refuses a Baseline without it). Anything the diff shows that the
+  notes omit is a finding.
 
-**Stop and tell the user** if an input is missing, the README has no Baseline, or a non-launch
-iteration names Baseline `none`.
-
-## Output — `iterations/<iteration>/plans/`
+## Outputs
 
 ```text
-plans/
-├── product-plan.md          goal · in / out of scope · feature list + order · open AMBER items · definition of done
-├── coverage.md              Coverage · Reconciliation · Overlap (incremental only)
-├── decisions.md             add-only decision log
-├── requirements/
-│   ├── data.md              + the Mermaid data diagrams
-│   ├── access.md
-│   ├── operations.md
-│   ├── background.md
-│   ├── notifications.md
-│   ├── realtime.md
-│   ├── integrations.md
-│   ├── files.md
-│   └── quality.md
-├── features/<feature>/story.md
-└── acceptance.md
+iterations/<iteration>/
+├── KICKOFF.md                         the plan + the ROUTE ledger — frozen at approval
+└── plans/
+    ├── decisions.md                   every blocking answer and scope decision (add-only)
+    ├── coverage.md                    Coverage · Reconciliation · Delta (incremental)
+    ├── requirements/
+    │   ├── data.md                    + the Mermaid data diagrams
+    │   ├── access.md
+    │   ├── operations.md
+    │   ├── background.md
+    │   ├── notifications.md
+    │   ├── realtime.md
+    │   ├── integrations.md
+    │   ├── files.md
+    │   └── quality.md
+    ├── features/<feature>/story.md
+    └── acceptance.md
 ```
 
-**`coverage.md` › Coverage** — one row per source item; planning is not done while any row is
-`open`:
-
-| Source (file:line) | Item | Requirement | Feature | Acceptance | Status |
-| --- | --- | --- | --- | --- | --- |
-
-Status is `open`, `covered`, or `out-of-scope` (with a link to the decision that put it there).
-
-**`decisions.md`** — add-only; a changed mind is a new row that supersedes an old one, never an
-edit:
+**`plans/decisions.md`** — add-only; a changed mind is a new row that supersedes an old one:
 
 | Question | Options | Decision | Date | Who | Kind |
 | --- | --- | --- | --- | --- | --- |
 
-Kind is `RED` (blocking, answered by the user) or `AMBER` (safe default, still open).
-`be-kickoff-iteration` appends `TECH` rows.
+Kind is `RED` (answered by the user), `AMBER` (safe default, still open) or `SCOPE` (a scope
+decision during implementation, written by `be-kickoff-iteration`).
 
-**`requirements/`** — every file is present. A file that does not apply says
-`n/a — <reason>`; it is never absent. Each requirement gets a dotted identifier —
-`data.patient-scope`, `access.refund-approval`, `background.expiry-sweep` — which coverage rows
-and stories cite.
+**`plans/coverage.md` › Coverage** — planning is not done while any row is `open`:
+
+| Source (file:line) | Item | Requirement | Feature | Acceptance | Status |
+| --- | --- | --- | --- | --- | --- |
+
+Status is `open`, `covered` or `out-of-scope` (with a link to the decision that put it there).
+
+**`plans/requirements/`** — every file present; one that does not apply says `n/a — <reason>`.
+Each requirement gets a dotted identifier — `data.patient-scope`, `access.refund-approval`,
+`background.expiry-sweep` — which coverage rows, stories and ROUTE rows cite.
 
 | File | Answers |
 | --- | --- |
@@ -108,7 +106,8 @@ and stories cite.
 | `files.md` | uploads, images, prints, exports |
 | `quality.md` | audit, privacy, retention, limits, idempotency, performance expectations |
 
-**`features/<feature>/story.md`** — one per feature, kebab-case folder:
+**`plans/features/<feature>/story.md`** — one per feature, kebab-case folder. Screen features own
+entities; flow features (the PRD's end-to-end flows) come after the entities they involve.
 
 ```markdown
 Status: draft | ready
@@ -122,32 +121,32 @@ Depends on: <features, or none>
 - <business rule> (requirement identifier)
 
 ## Acceptance criteria
-- <observable result> — PRD.md:<line>
+- <observable result> — intake-files/PRD.md:<line>
 
 ## Work items
 - <requirement identifiers this feature delivers>
 ```
 
-**`acceptance.md`** — one row per acceptance criterion; Result and Evidence stay empty until the
-build:
+**`plans/acceptance.md`** — one row per acceptance criterion; Result and Evidence stay empty until
+built:
 
 | Item | Source | Result | Evidence |
 | --- | --- | --- | --- |
 
-## Data diagrams — Mermaid, inside `requirements/data.md`
+## Data diagrams — Mermaid, inside `plans/requirements/data.md`
 
 - **One overview** `erDiagram`: entities and relationships, no fields.
 - **One per feature**: the entities it touches, with fields.
 - **Entity label**: `name["name · NEW|CHANGED|EXISTING|REMOVED"]`. `EXISTING` is context only.
-- **Field comment**: `"ADDED"`, `"CHANGED: <what>"` or `"REMOVED"`. An unchanged field has no
-  comment.
+- **Field comment** (taken from the diff): `"ADDED"`, `"CHANGED: <what>"` or `"REMOVED"`. An
+  unchanged field has no comment.
 - **Relationship label** for a change: `"ADDED: <name>"` or `"REMOVED: <name>"`.
 - **Logical types only**: `id`, `text`, `number`, `money`, `date`, `datetime`, `boolean`, `enum`,
   `json`, `file`.
 - An existing or changed entity shows only its key, the changed fields, and the fields other
   entities reference.
 
-Worked example — a pharmacy-returns change:
+Worked example — a pharmacy-returns iteration:
 
 ```mermaid
 erDiagram
@@ -171,7 +170,7 @@ erDiagram
   medical_sale ||--o{ return_request : "ADDED: is returned through"
 ```
 
-The overview for the same change:
+The overview for the same iteration:
 
 ```mermaid
 erDiagram
@@ -191,92 +190,116 @@ Run `pnpm iteration:list` and show:
 | Iteration | Type | Baseline | Status | Eligible | Why |
 | --- | --- | --- | --- | --- | --- |
 
-- Planning: eligible = Status planning.
-- Kickoff: eligible = Status approved, not yet implementing, and Baseline none or done/frozen.
+- Eligible = Status `planning`. Recommend the earliest-opened eligible iteration (the launch always
+  comes first). If the user named one, check it against the rule.
+- **Incremental:** suggest the Baseline — the latest `done` / `frozen` iteration in this repository
+  with a complete `intake-files/` (`pnpm iteration:diff <iteration>` prints the suggestion). The user
+  confirms it or picks another; save it with `pnpm iteration:baseline <iteration> <baseline|none>`.
+- Always ask with **AskUserQuestion** before Step 1 — never pick silently.
 
-Recommend the earliest-opened eligible iteration (launch always comes first). If the user
-named one, check it against the rule. Always ask the user to confirm (AskUserQuestion)
-before Step 1 — never pick silently.
+### Step 1 — Intake check and inventory, then stop
 
-### Step 1 — Inventory, then stop
+- `pnpm iteration:intake <iteration> iterations/<iteration>/intake-files --dry-run` must pass — the
+  required set (`PRD.md`, `schema-routes.md`) is present. A missing file → stop and say so.
+- Read **every** intake file **in full** — no skimming, no grep-only.
+- Draft `plans/coverage.md` › Coverage with one row per PRD screen, flow, must-have and open
+  question, and per `schema-routes.md` entity, enum and operation — each with its `file:line`.
+- Draft the overview diagram in `plans/requirements/data.md`.
 
-Read **every** input **in full** — no skimming, no grep-only. Draft `coverage.md` › Coverage with
-one row per:
+Report the counts. **Stop.**
 
-- PRD screen, flow, must-have and open question
-- `schema-routes.md` entity, enum and operation
+### Step 2 — Delta (MODE incremental only), then stop
 
-each with its `file:line`. Draft the overview diagram in `requirements/data.md`. Report the counts
-(screens, flows, must-haves, open questions, entities, enums, operations, rows). **Stop.**
+Run `pnpm iteration:diff <baseline> <iteration>` (`--json` for the structured summary) and read the
+designer's "What changed" notes. In `plans/coverage.md` › Delta, classify every entity, field,
+enum and operation **added, changed or removed**; plan only those. Anything the diff shows that the
+notes omit is a **finding** — list it. MODE initial: write `n/a — initial` and continue.
 
-### Step 2 — Reconcile, then stop
+### Step 3 — Reconcile, then stop
 
-List every PRD ↔ `schema-routes.md` mismatch in `coverage.md` › Reconciliation:
+List every `PRD.md` ↔ `schema-routes.md` mismatch in `plans/coverage.md` › Reconciliation:
 
 | # | Item | PRD says (file:line) | schema-routes says (file:line) | Verdict | Action |
 | --- | --- | --- | --- | --- | --- |
 
 No verdict without evidence on both sides — a verdict without a line number is an opinion.
 
-Incremental: also compare the change with the current state, and fill `coverage.md` › Overlap with
-every entity or operation that an iteration merged after the Baseline also changed. **Stop.**
+### Step 4 — Blocking questions, then stop when every RED is answered
 
-### Step 3 — Blocking questions, then stop when every RED is answered
-
-- **RED** — never guess: ownership, scope, lifecycle, who may do what, background timing,
-  channels, realtime needs, outside systems. Ask with **AskUserQuestion**, at most 4 questions per
-  call, one recommended option each, quoting the evidence (`file:line`).
+- **RED** — never guess: ownership; scope (the organization, or narrower — a branch, a patient,
+  the owner); lifecycle and delete policy; who may do what; background timing; notification
+  channels; realtime needs; outside systems. Ask with **AskUserQuestion** — at most 4 per call, one
+  recommended option each, quoting the evidence (`file:line`).
 - **AMBER** — a safe default exists: take it and log it as open.
 
-Every question, RED or AMBER, goes in `decisions.md`. Update the diagrams with the answers.
-**Stop when every RED is answered.**
+Every answer goes in `plans/decisions.md`; update the diagrams with it.
 
-### Step 4a — Requirements, then stop for approval
+### Step 5 — Write KICKOFF.md and plans/, then stop
 
-Write every `requirements/*.md` file (or its `n/a — <reason>`), with a dotted identifier per
-requirement and the per-feature diagrams in `data.md`. **Stop for approval.**
+Write every `plans/requirements/*.md` (dotted identifiers, the per-feature diagrams in `data.md`),
+one `plans/features/<feature>/story.md` per feature, and `plans/acceptance.md`.
 
-### Step 4b — Features, then stop for approval
+Then write `KICKOFF.md`. Every section is present — a section may say `n/a — <reason>`, never be
+absent:
 
-- **Screen features** own entities.
-- **Flow features** (the PRD's end-to-end flows) come after the entities they involve.
+1. **Header** — iteration, mode, Baseline, intake (`Drop placed`, `Schema-routes` from the README),
+   date.
+2. **Goal and scope** — what this iteration achieves; in scope; out of scope (with decision links).
+3. **Locked decisions** — a one-line summary of each RED answer, linked to `plans/decisions.md`.
+4. **Features and order** — screen features before the flow features that involve them.
+5. **ROUTE** — the ordered ledger, one row per work item (table, background piece, flow):
 
-Write the feature list and its order in `product-plan.md` and one `features/<feature>/story.md`
-each, every acceptance criterion traced to a PRD line. **Stop for approval.**
+   | # | Work item | Kind | Depends on | Skill/driver | Acceptance | Assignee | Status |
+   | --- | --- | --- | --- | --- | --- | --- | --- |
 
-### Step 5 — Self-check, then stop
+   Kind is `table`, `feature`, `background` or `flow`. Status starts `open`. The order follows the
+   route shape in `be-kickoff-iteration`: schema first (tables in dependency order) → features →
+   background work → flows → acceptance; incremental — schema changes first, then changed features,
+   changed background work, affected flows. Driver: NEW table → the staged-build prompt; CHANGE
+   table, flow, background work → `/be-build-requirement`.
+6. **Requirements index** — every dotted identifier, linked to its `plans/requirements/` file.
+7. **Open AMBER items** — the safe defaults still open.
+8. **Definition of done** — every ROUTE row `done` (or `deferred` with the user's OK);
+   `plans/acceptance.md` filled; the repository's gates green.
+9. **Verification** — the gates that close the iteration and the acceptance check.
+
+**Stop.**
+
+### Step 6 — Self-check, then stop
 
 Fix before presenting, never after:
 
-- [ ] Every `coverage.md` row is `covered` or `out-of-scope`
-- [ ] Every RED is answered in `decisions.md`
-- [ ] Every open AMBER is listed in `product-plan.md`
-- [ ] Every requirement identifier is used by at least one feature
-- [ ] Every acceptance criterion traces to a PRD line
-- [ ] The diagrams match `data.md` — every entity, field and relationship
-- [ ] No technical design anywhere (see the Principle above)
+- [ ] Every `plans/coverage.md` row is `covered` or `out-of-scope`
+- [ ] Every RED is answered in `plans/decisions.md`; every open AMBER is in `KICKOFF.md`
+- [ ] Every requirement identifier is used by a feature and reached by a ROUTE row
+- [ ] Every acceptance criterion traces to a line in `intake-files/PRD.md`
+- [ ] The diagrams match `data.md`; incremental field comments match the diff
+- [ ] Every `KICKOFF.md` section is present; every ROUTE row has a driver and acceptance
+- [ ] No technical design anywhere (see the Principle)
 
-Write `acceptance.md`, run `pnpm iteration:status <iteration> ready-for-approval` and **stop.**
-On the user's go-ahead, run `pnpm iteration:status <iteration> approved` and log the approval in
-`decisions.md` (who, when). Changes requested instead → the iteration stays `ready-for-approval`
-while you revise, or goes back with `pnpm iteration:status <iteration> planning --reason "<why>"`.
-Never edit the Status row by hand — the command checks the move and signs the README's History.
-The next step is **`be-kickoff-iteration`**.
+Run `pnpm iteration:status <iteration> ready-for-approval` and **stop.** On the user's go-ahead run
+`pnpm iteration:status <iteration> approved` and log the approval in `plans/decisions.md`. Changes
+requested instead → revise while it stays `ready-for-approval`, or send it back with
+`pnpm iteration:status <iteration> planning --reason "<why>"`. Never edit the Status row by hand.
+
+From approval on, `KICKOFF.md` is frozen: only its ROUTE Status column and "revised → AS-BUILT #n"
+markers change, and `intake-files/` is locked.
 
 ## Failure modes this skill exists to prevent
 
 | Failure | Prevention here |
 | --- | --- |
-| A screen, flow or entity silently missing from the plan | Step 1 coverage rows |
-| PRD and schema-routes disagree and the build picks one | Step 2 reconciliation with evidence |
-| Guessed ownership, access or timing → rework | Step 3 RED gate |
-| A plan that decides implementation before the code is read | the Principle; Step 5 check |
-| An incremental plan that re-plans unchanged parts or misses an overlap | MODE incremental + Overlap |
-| "Done" with nothing to verify against | `acceptance.md`, traced to PRD lines |
+| The wrong iteration planned, or against an unconfirmed Baseline | Step 0 table + AskUserQuestion + `iteration:baseline` |
+| An incomplete drop planned | Step 1 `iteration:intake --dry-run` |
+| A change in the drop the designer didn't mention | Step 2 diff vs notes → findings |
+| PRD and schema-routes disagree and the build picks one | Step 3 reconciliation with evidence |
+| Guessed ownership, scope, access or timing → rework | Step 4 RED gate |
+| A plan that decides implementation before the code is read | the Principle; Step 6 check |
+| A ROUTE that misses a requirement | Step 6 — every identifier reached by a row |
 
 ## Related
 
-- **`be-kickoff-iteration`** — the technical half: `KICKOFF.md` and its ledger, after approval
+- **`be-kickoff-iteration`** — implements the approved `KICKOFF.md`, one ROUTE row at a time
 - [`iteration-planning-prompt.md`](../../../docs/design-workflow/prompts/iteration-planning-prompt.md) — the paste prompt
-- [`iterations/README.md`](../../../iterations/README.md) — the iteration rules; `pnpm iteration:new` opens one, `pnpm iteration:list` lists them
-- [`requirement-intake.md`](../../../docs/getting-started/requirement-intake.md) — requirements that do not come from an iteration
+- [`iteration-guide.md`](../../../docs/design-workflow/process/iteration-guide.md) — every step with its questions
+- [`iterations/README.md`](../../../iterations/README.md) — the iteration rules and commands

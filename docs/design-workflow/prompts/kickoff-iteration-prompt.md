@@ -1,52 +1,49 @@
 # Kickoff iteration prompt
 
 > The **`be-kickoff-iteration`** skill (`agent-os/skills/be-kickoff-iteration/SKILL.md`) does the
-> work — saying "kickoff iteration <name>" or "kickoff <iteration>" triggers it directly; it plans and stops, then the ledger
-> rows are built one at a time. This prompt is kept as the explicit paste-in entry point.
+> work — saying "kickoff", "kickoff iteration <name>" or "start implementing <iteration>" triggers
+> it directly. This prompt is kept as the explicit paste-in entry point.
 
-**Paste this to Claude Code (here, in clinozy-be) to start a build**, once the iteration's plans
-are approved (`Status: approved` in its README). One prompt for every iteration — set `ITERATION`,
-or leave it blank and the skill asks which approved iteration to kick off first.
+**Paste this to Claude Code (here, in clinozy-be) to start implementing**, once the iteration's
+`KICKOFF.md` is approved (`Status: approved` in its README). Set `ITERATION` and, if you want, the
+scope — or leave `ITERATION` blank and the skill asks which approved iteration to kick off first.
+The mode comes from the README (Baseline `none` = initial, otherwise incremental).
 
 The iteration rule (in full: [iterations/README.md](../../../iterations/README.md)):
 
 - Folders are `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/`, opened with `pnpm iteration:new` —
-  e.g. `launch-2026-09-30-jxmr`, `feat-pharmacy-returns-2026-10-06-kqzx`. The type is `launch`,
-  `feat`, `change` or `fix`.
-- The **launch** is the one full snapshot: MODE initial, Baseline `none`.
-- Every later iteration is MODE incremental and holds **only its change**; its README names its
-  Baseline, the latest iteration on `main` when it was opened.
-- Kickoffs follow the Baseline chain: the launch first, then an iteration whose Baseline is `done` or
-  `frozen`.
-- An iteration is frozen once it merges; a correction is a new `fix` iteration.
+  e.g. `launch-2026-09-30-jxmr`, `feat-pharmacy-returns-2026-10-06-kqzx`.
+- Every iteration's `intake-files/` holds the full drop; an incremental iteration's delta is
+  `pnpm iteration:diff <baseline> <iteration>` plus the designer's notes.
+- `KICKOFF.md` is the approved plan and ROUTE ledger — frozen at approval. What was actually built
+  goes into `AS-BUILT.md`, row by row.
+- Kickoffs follow the Baseline chain: an iteration is eligible once its Baseline is `none`, `done`
+  or `frozen`.
 
 ---
 
 ```text
-Kick off iteration <ITERATION> with the be-kickoff-iteration skill — first confirm it is the one to kick off. Plan only — stop before any code.
+Kick off iteration <ITERATION> with the be-kickoff-iteration skill. Scope: <the whole ROUTE | rows #a–#b>. Follow the ROUTE one row at a time and stop for my review after each row.
 ```
 
-What happens, one stop per step:
+What happens:
 
-0. **Confirm the iteration** — a table of every iteration with whether it is eligible (Status
+0. **Confirm the iteration** — a table of every iteration and whether it is eligible (Status
    `approved`, not yet `implementing`, Baseline `none` or `done`/`frozen`) and why; the
-   earliest-opened eligible one is recommended (the launch always first), and you confirm.
-1. **Read** the approved `plans/` and the repository's conventions; map every requirement to a
-   work item.
-2. **Reconcile with the code** — reuse, extend or new, with `file:line` evidence.
-3. **Technical questions** — domain placement, foreign keys, delete strategy, permission codes,
-   queues; recorded in `plans/decisions.md` as `TECH`.
-4. **Write `KICKOFF.md`** — schema first, contracts, build order, work items with their drivers,
-   verification, and the ledger.
-5. **Self-check**, then stop for your confirmation.
+   earliest-opened eligible one is recommended (the launch always first); you confirm; the README
+   moves to `Status: implementing`.
+1. **Each ROUTE row** — built through its driver (a NEW table through the
+   [staged-build prompt](../../getting-started/staged-build-prompt.md), everything else through
+   `/be-build-requirement`), verified, recorded in `AS-BUILT.md`, its impact on upcoming rows
+   checked — a scope change stops and asks — then a stop for your review.
+2. **Close** — the repository's gates, `/be-pre-merge-review` as a review only, every row `done` or
+   `deferred` with your OK, `plans/acceptance.md` filled, the `AS-BUILT.md` summary, then
+   `Status: done`.
 
-After you confirm `KICKOFF.md`, the iteration's README moves to `Status: implementing` and the ledger is built one row at a time — NEW tables through the
-[staged-build prompt](../../getting-started/staged-build-prompt.md), everything else through
-`/be-build-requirement` — and no success is reported while any row is open. The agent never pushes,
-opens a PR or merges.
+No success is reported while any row is open, and the agent never pushes, opens a PR or merges.
 
 ## Related
 
-- The whole flow: [process/README.md](../process/README.md)
+- The whole flow: [process/README.md](../process/README.md) · every step: [iteration-guide.md](../process/iteration-guide.md)
 - The skill: [`be-kickoff-iteration`](../../../agent-os/skills/be-kickoff-iteration/SKILL.md)
 - The step before it: [iteration-planning-prompt.md](iteration-planning-prompt.md)

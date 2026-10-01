@@ -1,5 +1,5 @@
 ---
-description: Walk a design iteration one step at a time — ask the opening questions, open it, plan, approve, kick off, build, accept, freeze
+description: Walk a design iteration one step at a time — the opening questions, open it, place the drop, plan, approve, kick off row by row, close, freeze
 argument-hint: '[iteration] e.g. "feat-pharmacy-returns-2026-10-06-kqzx", or empty to open a new one'
 ---
 
@@ -10,10 +10,10 @@ in `iterations/README.md`. Do **one** step, show its result, then stop and ask b
 
 1. **Where are we?** Run `pnpm iteration:list` and show the table.
    - No argument and the user wants a new iteration → step 2.
-   - An iteration is named (or picked) → read its `README.md` Status and jump to the matching
-     step of the guide: `planning` without `plans/` → inputs (Step 3) or planning (Step 4);
-     `ready-for-approval` → approve (Step 5); `approved` → kick off (Step 6); `implementing` →
-     build the next open ledger row (Step 7) or accept (Step 8); `done` → freeze (Step 9);
+   - An iteration is named (or picked) → read its README and jump to the matching step of the
+     guide: `planning` without `intake-files/` → place the drop (Step 3); `planning` with it →
+     plan (Step 4); `ready-for-approval` → approve (Step 5); `approved` → kick off (Step 6);
+     `implementing` → the next open ROUTE row, or close (Step 7); `done` → freeze (Step 8);
      `frozen` → nothing to do — a correction is a new `fix` iteration.
 2. **Opening questions** — ask with **AskUserQuestion** (at most 4 per call, one recommended
    option each), never guess:
@@ -22,13 +22,16 @@ in `iterations/README.md`. Do **one** step, show its result, then stop and ask b
    - Topic: lowercase kebab-case, no digits.
    - Repositories: backend only, or backend and frontend (`--both`).
    - Branch: is the current branch `<type>/<topic>`? If not, offer to create it.
-   - Inputs: do `PRD.md` and `schema-routes.md` exist yet?
-3. **Open it** — run `pnpm iteration:new <type> [topic] [--both] --dry-run`, show the name and
-   Baseline, and run it for real only after the user confirms. Write the Summary into the README.
-4. **Continue step by step** through the guide — inputs → **be-iteration-planning** → approval →
-   **be-kickoff-iteration** → one ledger row at a time → acceptance → freeze. The two skills stop
-   after each of their own steps; keep those stops.
-5. **Status changes only through** `pnpm iteration:status <iteration> <status> [--reason "<text>"]`
-   — never by editing the README.
+   - The drop: which folder holds the **full** drop (`PRD.md`, `schema-routes.md`)?
+3. **Open it** — `pnpm iteration:new <type> [topic] [--both] --dry-run`, show the name and the
+   suggested Baseline, and run it for real only after the user confirms. Write the Summary.
+4. **Place the drop** — `pnpm iteration:intake <iteration> <source-folder> [--both] --dry-run`,
+   show the report, then run it for real after the user confirms.
+5. **Continue step by step** through the guide — **be-iteration-planning** (Steps 0–6; Step 0
+   confirms the Baseline with `pnpm iteration:baseline`) → approval → **be-kickoff-iteration**
+   (one ROUTE row at a time, `AS-BUILT.md`) → close → freeze. Both skills stop after each of their
+   own steps; keep those stops.
+6. **README values change only through the commands** — `pnpm iteration:status`,
+   `pnpm iteration:baseline`, `pnpm iteration:intake` — never by editing the README.
 
 Never push, open a PR or merge — the user raises PRs.
