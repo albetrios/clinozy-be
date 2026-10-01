@@ -185,13 +185,17 @@ jobs:
           scanners: vuln
           skip-files: /app/package.json,/app/pnpm-lock.yaml
 
+      # Code scanning needs GitHub Advanced Security on a private repository; there the SARIF
+      # uploads are skipped (the scans above still run and log their findings).
       - name: Upload API Trivy SARIF
+        if: github.event.repository.private != true
         uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v3
         with:
           sarif_file: trivy-api.sarif
           category: trivy-api
 
       - name: Upload worker Trivy SARIF
+        if: github.event.repository.private != true
         uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v3
         with:
           sarif_file: trivy-worker.sarif
