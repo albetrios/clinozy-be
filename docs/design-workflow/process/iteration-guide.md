@@ -17,7 +17,7 @@ Answer these before running anything. `/be-iteration` asks them for you.
 | 3 | **What is the topic?** Lowercase kebab-case words, no digits (`pharmacy-returns`) | It names the folder in both repositories | the folder name, `README.md` › Topic |
 | 4 | **Which repositories does it touch?** backend only, or backend and frontend | `--both` opens the same folder in clinozy-fe and copies `PRD.md` + `schema-routes.md` there | `iteration:new … --both`, `iteration:intake … --both` |
 | 5 | **Are you on the branch it will be built on?** `<type>/<topic>`, per the branch-naming rule | The README records the current branch | `README.md` › Branch |
-| 6 | **Where is the drop?** The folder with the **full** drop — `PRD.md`, `schema-routes.md` (and `design-overview.md` if there is one) — never just the changed files | `iteration:intake` copies it exactly as delivered | `intake-files/`, `README.md` › Drop source |
+| 6 | **What arrived, and where?** The whole drop (`full`), only the changed files (`overlay`), or only a written change, `BRIEF.md` (`brief`) — a folder or a single file | It picks the Intake mode; every mode still leaves a full snapshot | `intake-files/`, `README.md` › Intake mode, Drop source |
 | 7 | **What does it build on?** The Baseline — for a later iteration, normally the latest `done` / `frozen` one, and it must have its own `intake-files/` | The incremental delta is a diff of the two `intake-files/` folders | `README.md` › Baseline (confirmed at planning Step 0) |
 
 ## The steps
@@ -46,18 +46,27 @@ pnpm iteration:new feat pharmacy-returns --both
 ### Step 3 — Place the drop
 
 ```bash
-pnpm iteration:intake <iteration> <source-folder> --both --dry-run   # check first
-pnpm iteration:intake <iteration> <source-folder> --both
+pnpm iteration:intake <iteration> <source> --both --dry-run                  # full: the whole drop
+pnpm iteration:intake <iteration> <source> --mode overlay --both --dry-run   # only the changed files
+pnpm iteration:intake <iteration> BRIEF.md --mode brief --both --dry-run     # only a written change
+pnpm iteration:intake <iteration> <source> [--mode …] --both                 # then for real
 ```
 
-- The **full** drop goes into `intake-files/`, flat and exactly as delivered; the README's
-  Drop placed, Drop source and Schema-routes rows are filled.
-- It stops when `PRD.md` or `schema-routes.md` is missing, and when a file already there differs —
-  re-run with `--replace` while the iteration is still `planning`.
-- With `--both`, `pnpm iteration:list` in both repositories shows the same **Schema-routes** value.
+- Every mode leaves a **full snapshot** in `intake-files/`: `full` is the drop as received (always the
+  launch); `overlay` lays the received files over the Baseline's snapshot; `brief` adds `BRIEF.md`
+  (start from `tooling/iterations/templates/BRIEF.md`; all six sections required) to the Baseline's
+  snapshot and refuses any other changed file.
+- `overlay` and `brief` build on the README's Baseline — confirm it first if it is `—`
+  (`pnpm iteration:baseline <iteration> <baseline>`); its own intake must pass the gate.
+- The README's Drop placed, Drop source, Intake mode, Intake note, Schema-routes and Intake hash rows
+  are filled. It stops when `PRD.md` or `schema-routes.md` is missing, and when a different snapshot
+  is already there — re-run with `--replace` while the iteration is still `planning`.
+- With `--both`, the sibling's same-named iteration gets a snapshot in the same mode on its own
+  Baseline; `pnpm iteration:list` in both repositories shows the same **Schema-routes** value.
+- Check it: `pnpm iteration:intake <iteration> --check` — the gate planning and kickoff run first.
 
-**Ask before moving on:** is this the final drop for the iteration? Do the Schema-routes values match
-in both repositories?
+**Ask before moving on:** is this the final drop for the iteration, and the right Intake mode? Does
+the gate pass? Do the Schema-routes values match in both repositories?
 
 ### Step 4 — Plan (no code)
 
@@ -67,9 +76,9 @@ skill runs Steps 0–6 and stops after each:
 
 | Skill step | What you answer or check |
 | --- | --- |
-| 0 — Confirm | pick the iteration from the eligibility table; incremental: confirm the Baseline (saved with `pnpm iteration:baseline`) |
-| 1 — Intake check | the drop is complete; are the counts right — screens, flows, entities, operations? |
-| 2 — Delta (incremental) | `pnpm iteration:diff <baseline> <iteration>` vs the designer's notes — are the findings (changes the notes omit) intended? |
+| 0 — Confirm + gate | pick the iteration from the eligibility table; incremental: confirm the Baseline (saved with `pnpm iteration:baseline`); then `pnpm iteration:intake <iteration> --check` — a failure stops everything |
+| 1 — Inventory | are the counts right — screens, flows, entities, operations? |
+| 2 — Delta (incremental) | full / overlay: `pnpm iteration:diff <baseline> <iteration>` vs the designer's notes — are the findings intended? brief: `BRIEF.md` is the change list, and nothing else changed. Always: the Baseline's Standing deviations |
 | 3 — Reconcile | for each PRD ↔ schema-routes mismatch: which source wins? |
 | 4 — Blocking questions | the RED questions — ownership, scope (organization or narrower), lifecycle and delete policy, who may do what, background timing, notification channels, realtime, outside systems |
 | 5 — KICKOFF.md + plans/ | the plan, the ROUTE ledger (one row per table, background piece, flow), the requirements, the stories |
