@@ -176,7 +176,7 @@ the pre-commit guard. It fails when:
   word that merely starts the same (`acmeFeatures`, `AcmeBehavior`, a folder named `acme`) is never
   flagged, and `init:project` never renames it — a previous backend's database name only
   where it is the database (`POSTGRES_USER`, `-U`/`-d`, a connection string, `CREATE DATABASE`), and a
-  previous owner as a whole word. `CHANGELOG.md`, `docs/reviews/` and `docs/superpowers/` are exempt:
+  previous owner as a whole word. `CHANGELOG.md` and `docs/reviews/` are exempt:
   they record what happened under the old name.
 
 The allowlist lives in

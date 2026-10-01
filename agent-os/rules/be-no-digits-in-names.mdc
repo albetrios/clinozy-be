@@ -35,6 +35,7 @@ function resolveFallbackScope() {}
 | A third-party export, on the import side only | `import { Thing2 as Thing } from 'vendor'` — the digit stops at the import and app code never sees it |
 | `sec-r4-I1`, `audit-#B2` in **comments** | audit-finding references into `docs/`; they are citations, not identifiers |
 | Digits in **values** | `LIMIT 100`, `z-[70]`, HTTP `401`, `[a-z0-9]` in a regex — the rule is about what a thing is *called*, not what it *contains* |
+| A date stamp on a dated record — `migrations/<timestamp>_*.sql`, `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/` | the stamp is a value (when it was created); the rest of the name carries no digits |
 
 ## Why this is a rule and not a preference
 

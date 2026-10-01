@@ -55,9 +55,9 @@ command file and rule file (`pnpm agent-os:check`, Check 17). Upstream skills ke
 - **create-subagent** / **shell** — unless building custom agent workflows outside clinozy-be conventions
 - **automate** / **loop** — automation outside normal PR/feature workflow
 
-## clinozy-be project skills (45)
+## clinozy-be project skills (47)
 
-**45 total** — 42 actionable skills plus **be-skill-index** (meta) and **be-cursor-global-skills** (this reference). **be-lint-warnings-handler** is a detail skill invoked via **be-code-smells-and-best-practices**, not counted separately.
+**47 total** — 44 actionable skills plus **be-skill-index** (meta) and **be-cursor-global-skills** (this reference). **be-lint-warnings-handler** is a detail skill invoked via **be-code-smells-and-best-practices**, not counted separately.
 
 For the full list and triggers, read **`agent-os/skills/be-skill-index/SKILL.md`**.
 

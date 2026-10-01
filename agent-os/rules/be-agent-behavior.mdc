@@ -24,6 +24,11 @@ ownership (per the intake doc), and everything in `agent-os/rules/be-ai-guardrai
 (protected paths, secrets, destructive shell, migrations on billing ledgers). Those
 guardrails are unchanged — this rule narrows *routine* confirmation, not safety.
 
+The iteration skills are a deliberate exception: **be-iteration-planning** stops after
+every step of its procedure (its output is a plan the user approves before any code), and
+**be-kickoff-iteration** stops for the user's review after every ROUTE row and before any scope
+change. Each starts by confirming the iteration. Keep those stops.
+
 ## Do these as part of every change (never ask)
 
 1. **Tests** — add/update the right layer per `agent-os/rules/be-testing-conventions.mdc`

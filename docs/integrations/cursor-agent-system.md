@@ -25,9 +25,9 @@ flowchart LR
 
 ---
 
-## Project skills (36)
+## Project skills (47)
 
-**36 total** — consult [be-skill-index](../../agent-os/skills/be-skill-index/SKILL.md) first. Includes **be-skill-index** (meta) and **be-cursor-global-skills** (reference to Cursor built-ins).
+**47 total** — consult [be-skill-index](../../agent-os/skills/be-skill-index/SKILL.md) first. Includes **be-skill-index** (meta) and **be-cursor-global-skills** (reference to Cursor built-ins).
 
 Common chains:
 

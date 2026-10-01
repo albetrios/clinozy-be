@@ -61,7 +61,6 @@ const RESET_CONFIRMATION_PHRASE = 'reset';
 const PROSE_REWRITE_EXCLUDED: readonly string[] = [
   'CHANGELOG.md',
   'docs/reviews/',
-  'docs/superpowers/',
   'pnpm-lock.yaml',
   // The manifest is written by `saveConfig`, never by the prose pass. Rewriting it turned the
   // `previousNames` entries it had just recorded into the NEW slug, so the previous-identity
@@ -111,10 +110,6 @@ const PROSE_REWRITE_EXTENSIONS: readonly string[] = [
 /** Paths deleted by `--reset-history` — artifacts describing the BASE project's history. */
 const FORK_RESET_PATHS: ReadonlyArray<{ path: string; description: string }> = [
   { path: 'docs/reviews', description: "the base project's archived review reports" },
-  {
-    path: 'docs/superpowers',
-    description: "the base project's completed implementation plans and specs",
-  },
 ];
 
 interface InitOptions {
@@ -552,16 +547,7 @@ function reportResidualLiterals(previousSlug: string, previousOwner: string): vo
       // on. Prose in docs/ is still reported: it describes the fork now.
       output = execFileSync(
         'git',
-        [
-          'grep',
-          '-rniI',
-          '--',
-          literal,
-          ':!CHANGELOG.md',
-          ':!docs/reviews/',
-          ':!docs/superpowers/',
-          ':!pnpm-lock.yaml',
-        ],
+        ['grep', '-rniI', '--', literal, ':!CHANGELOG.md', ':!docs/reviews/', ':!pnpm-lock.yaml'],
         {
           cwd: REPOSITORY_ROOT,
           encoding: 'utf-8',

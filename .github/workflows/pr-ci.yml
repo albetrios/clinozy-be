@@ -564,8 +564,10 @@ jobs:
           version: v0.69.2
           skip-files: Dockerfile.agent
 
+      # Code scanning needs GitHub Advanced Security on a private repository; there the upload
+      # is skipped (the blocking table scan above still gates the PR).
       - name: Upload IaC Trivy SARIF
-        if: always() && hashFiles('trivy-config.sarif') != ''
+        if: always() && hashFiles('trivy-config.sarif') != '' && github.event.repository.private != true
         uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v3
         with:
           sarif_file: trivy-config.sarif
@@ -574,7 +576,12 @@ jobs:
   dependency-review:
     name: Dependency review
     needs: [changes]
-    if: needs.changes.outputs.docs-only-md != 'true'
+    # The dependency-review API needs GitHub Advanced Security on a PRIVATE repository; without
+    # it every run fails with "Dependency review is not supported on this repository". On a
+    # private repository the lane skips (the quality gate counts a skip as a pass) and
+    # vulnerabilities stay gated by `security-audit` (pnpm audit, any severity). Public
+    # repositories run it as before.
+    if: needs.changes.outputs.docs-only-md != 'true' && !github.event.repository.private
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
