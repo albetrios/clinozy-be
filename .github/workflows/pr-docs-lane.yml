@@ -40,6 +40,11 @@ jobs:
             "${{ github.event.pull_request.base.sha }}" \
             "${{ github.event.pull_request.head.sha }}" \
             -- '*.md' || true)"
+          # Generated changelogs are not link-checked (markdownlint already ignores them): a
+          # release-please CHANGELOG.md holds thousands of commit/compare links into this private
+          # repository, which lychee cannot open anonymously — it retried until the 15-minute
+          # job timeout on every Release PR.
+          files="$(printf '%s\n' "${files}" | grep -vE '(^|/)CHANGELOG[^/]*\.md$' || true)"
           if [ -z "${files}" ]; then
             echo "has-files=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -58,6 +63,8 @@ jobs:
           config: '.markdownlint.json'
           globs: ${{ steps.changed-markdown.outputs.files }}
 
+      # Advisory (fail: false). Links into this organization's private repositories are skipped:
+      # lychee checks anonymously, so they can never resolve and only cost retries.
       - name: Check links in changed markdown files (lychee)
         if: steps.changed-markdown.outputs.has-files == 'true'
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
@@ -66,6 +73,9 @@ jobs:
             --no-progress
             --max-redirects 5
             --accept 200,204,206,429
+            --timeout 20
+            --max-retries 2
+            --exclude '^https://github\.com/${{ github.repository_owner }}/'
             ${{ steps.changed-markdown.outputs.files }}
           fail: false
           # PR templates and short docs may have no links; do not fail the lane.
