@@ -45,6 +45,20 @@ describe('cors.middleware', () => {
     );
   });
 
+  it("allows Sentry's tracing headers, or every traced browser request fails its preflight", async () => {
+    application = Fastify();
+    const registerSpy = vi.spyOn(application, 'register');
+    await application.register(corsMiddleware);
+    await application.ready();
+
+    expect(registerSpy).toHaveBeenCalledWith(
+      fastifyCorsPlugin,
+      expect.objectContaining({
+        allowedHeaders: expect.arrayContaining(['sentry-trace', 'baggage']),
+      }),
+    );
+  });
+
   it('exposes Retry-After so cross-origin clients can read it on 429/503 (EX-11)', async () => {
     application = Fastify();
     const registerSpy = vi.spyOn(application, 'register');
