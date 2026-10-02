@@ -5,7 +5,7 @@ import { buildOutboundCallOptions, outboundCall } from '@/infrastructure/outboun
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 
 /** Pinned Stripe API version — bump deliberately and verify against Stripe's changelog. */
-const STRIPE_API_VERSION = '2026-08-26.dahlia';
+const STRIPE_API_VERSION = '2026-09-30.endive';
 /** SDK-level network retries for Stripe calls (mutations additionally pass an idempotency key). */
 const STRIPE_MAX_NETWORK_RETRIES = 2;
 
@@ -513,7 +513,9 @@ export async function createStripeSetupIntent(
         const intent = await stripe.setupIntents.create(
           {
             customer: customerId,
-            payment_method_types: ['card'],
+            // Stripe API 2026-09-30.endive removed `payment_method_types` from SetupIntent
+            // create; `allowed_payment_method_types` restricts the intent to cards instead.
+            allowed_payment_method_types: ['card'],
             usage: 'off_session',
           },
           options?.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : undefined,
