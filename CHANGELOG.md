@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.2.0](https://github.com/albetrios/clinozy-be/compare/v7.1.0...v7.2.0) (2026-10-02)
+
+
+### Added
+
+* **config:** raise the DATABASE_POOL_MAX default to 30 ([#27](https://github.com/albetrios/clinozy-be/issues/27)) ([2a24510](https://github.com/albetrios/clinozy-be/commit/2a24510584d12a6f2f9b22758f016828067d289c))
+* **github-sync:** --only KEY,KEY pushes just the values that changed ([#28](https://github.com/albetrios/clinozy-be/issues/28)) ([6eda421](https://github.com/albetrios/clinozy-be/commit/6eda4216e12f9bfa019ae40bc7e6be7d9513b3b8))
+
+
+### Fixed
+
+* **auth:** unblock Google sign-in — allow Sentry trace headers; no captcha on OAuth start ([#29](https://github.com/albetrios/clinozy-be/issues/29)) ([120bbfa](https://github.com/albetrios/clinozy-be/commit/120bbfaa09f662e21ae91610fd3f8d4b768b9589))
+
+
+### Documentation
+
+* **deploy:** a published release deploys production by itself ([#25](https://github.com/albetrios/clinozy-be/issues/25)) ([022ee2f](https://github.com/albetrios/clinozy-be/commit/022ee2f870dbcb3c95a6f907c0ff31d88e808adf))
+
 ## [7.1.0](https://github.com/albetrios/clinozy-be/compare/v7.0.2...v7.1.0) (2026-10-02)
 
 
