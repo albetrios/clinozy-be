@@ -62,16 +62,44 @@ interface CliOptions {
   readonly skipConfirmation: boolean;
   readonly prune: boolean;
   readonly keepSchemaDefaults: boolean;
+  /** `--only KEY,KEY`: push just these values (no rulesets/protection, no prune). */
+  readonly onlyKeys: string[] | undefined;
   readonly environments: string[];
 }
 
 function parseArguments(): CliOptions {
-  const argumentsList = process.argv.slice(2);
+  const rawArguments = process.argv.slice(2);
   const environments: string[] = [];
+
+  // `--only KEY,KEY` or `--only=KEY,KEY` — taken out before the flag/environment checks below.
+  let onlyKeys: string[] | undefined;
+  const argumentsList: string[] = [];
+  for (let index = 0; index < rawArguments.length; index += 1) {
+    const argument = rawArguments[index] ?? '';
+    if (argument === '--only' || argument.startsWith('--only=')) {
+      let value = argument.slice('--only='.length);
+      if (argument === '--only') {
+        index += 1;
+        value = rawArguments[index] ?? '';
+      }
+      onlyKeys = value
+        .split(',')
+        .map((key) => key.trim())
+        .filter(Boolean);
+      const invalid = onlyKeys.filter((key) => !/^[A-Z][A-Z0-9_]*$/.test(key));
+      if (onlyKeys.length === 0 || invalid.length > 0) {
+        throw new Error(
+          `--only needs comma-separated KEY names${invalid.length > 0 ? ` (invalid: ${invalid.join(', ')})` : ''}.`,
+        );
+      }
+      continue;
+    }
+    argumentsList.push(argument);
+  }
 
   if (argumentsList.includes('--help') || argumentsList.includes('-h')) {
     console.log(
-      'Usage: pnpm github:sync [environment...] [--check | --dry-run] [--yes] [--prune] [--keep-schema-defaults]',
+      'Usage: pnpm github:sync [environment...] [--check | --dry-run] [--yes] [--prune] [--keep-schema-defaults] [--only KEY,KEY]',
     );
     console.log('');
     console.log('  (default)   All environments: scaffold + remote apply + full reconcile');
@@ -84,6 +112,10 @@ function parseArguments(): CliOptions {
     console.log('  --prune     Delete remote environments not in setup.config.json');
     console.log('  --keep-schema-defaults  Push variables equal to their env-schema default');
     console.log('                          instead of skipping and pruning them');
+    console.log(
+      '  --only KEY,KEY  Push just these values (schema defaults included): no rulesets,',
+    );
+    console.log('                  no environment protection, nothing else pushed or pruned');
     process.exit(0);
   }
 
@@ -123,6 +155,7 @@ function parseArguments(): CliOptions {
     skipConfirmation: argumentsList.includes('--yes') || argumentsList.includes('-y'),
     prune: argumentsList.includes('--prune'),
     keepSchemaDefaults: argumentsList.includes('--keep-schema-defaults'),
+    onlyKeys,
     environments,
   };
 }
@@ -257,8 +290,16 @@ function isInteractiveShell(): boolean {
 }
 
 async function main(): Promise<void> {
-  const { checkOnly, dryRun, diff, skipConfirmation, prune, keepSchemaDefaults, environments } =
-    parseArguments();
+  const {
+    checkOnly,
+    dryRun,
+    diff,
+    skipConfirmation,
+    prune,
+    keepSchemaDefaults,
+    onlyKeys,
+    environments,
+  } = parseArguments();
   const mode: SyncMode = checkOnly ? 'check' : dryRun ? 'dry-run' : 'sync';
   const config = loadConfig();
 
@@ -300,19 +341,27 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  if (onlyKeys && (checkOnly || diff)) {
+    console.error('--only pushes values; it cannot be combined with --check or --diff.');
+    process.exit(1);
+  }
+
   const scaffoldResult =
-    checkOnly || dryRun
+    checkOnly || dryRun || onlyKeys
       ? { createdEnvironmentFiles: [], createdGithubEnvironmentConfigs: [], createdRulesets: [] }
       : scaffoldGithubSyncFiles(config);
   printScaffoldResult(scaffoldResult);
 
-  const initResult = await runGithubInit({
-    mode,
-    purpose: checkOnly
-      ? 'Read-only check: rulesets + environments'
-      : 'GitHub sync: rulesets + environments + values',
-    scaffoldOnSync: false,
-  });
+  // `--only` updates a few values: rulesets and environment protection are left alone.
+  const initResult = onlyKeys
+    ? { failures: 0, drift: 0 }
+    : await runGithubInit({
+        mode,
+        purpose: checkOnly
+          ? 'Read-only check: rulesets + environments'
+          : 'GitHub sync: rulesets + environments + values',
+        scaffoldOnSync: false,
+      });
 
   console.log('');
 
@@ -360,10 +409,16 @@ async function main(): Promise<void> {
       console.error('Non-interactive shell: re-run with --yes to push values.');
       process.exit(1);
     } else {
-      console.log('  ! This reconciles GitHub Environments against local .env.<env> files.');
-      console.log('  ! Items in the local files are pushed; items on GitHub NOT in the');
-      console.log('  ! local files are DELETED. The local file is the source of truth.');
-      if (!keepSchemaDefaults) {
+      if (onlyKeys) {
+        console.log(
+          `  ! Pushes only ${onlyKeys.join(', ')} from the local files; nothing is deleted.`,
+        );
+      } else {
+        console.log('  ! This reconciles GitHub Environments against local .env.<env> files.');
+        console.log('  ! Items in the local files are pushed; items on GitHub NOT in the');
+        console.log('  ! local files are DELETED. The local file is the source of truth.');
+      }
+      if (!(keepSchemaDefaults || onlyKeys)) {
         console.log('  ! Variables equal to their env-schema default are NOT pushed and are');
         console.log('  ! pruned from GitHub (runtime uses the default). --keep-schema-defaults');
         console.log('  ! pushes them verbatim.');
@@ -396,6 +451,7 @@ async function main(): Promise<void> {
         dryRun,
         skipPreflight: true,
         keepSchemaDefaults,
+        ...(onlyKeys ? { onlyKeys } : {}),
       });
       totalPushed += result.pushed;
       totalUnchanged += result.unchanged;

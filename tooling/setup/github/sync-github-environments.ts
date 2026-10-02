@@ -335,11 +335,30 @@ export interface SyncEnvironmentToGitHubOptions {
    * and pruning them. Restores the pre-schema-default reconciliation behaviour.
    */
   readonly keepSchemaDefaults?: boolean;
+  /**
+   * Push exactly these keys and nothing else — schema defaults included — and never prune:
+   * for updating a few changed values without re-pushing every secret (`--only`).
+   */
+  readonly onlyKeys?: readonly string[];
 }
 
 interface EnvEntry {
   name: string;
   value: string;
+}
+
+/**
+ * The declared entries `--only` pushes, plus the requested keys that are missing or blank in
+ * the local file (the caller refuses to push then, rather than silently skipping a key).
+ */
+export function selectOnlyEntries<T extends { name: string; value: string }>(
+  declaredEntries: readonly T[],
+  onlyKeys: readonly string[],
+): { readonly entries: T[]; readonly missing: string[] } {
+  const wanted = new Set(onlyKeys);
+  const entries = declaredEntries.filter((entry) => wanted.has(entry.name) && entry.value !== '');
+  const present = new Set(entries.map((entry) => entry.name));
+  return { entries, missing: [...wanted].filter((key) => !present.has(key)) };
 }
 
 /**
@@ -734,6 +753,7 @@ export async function syncEnvironmentToGitHub(
     skipCreate = false,
     skipPreflight = false,
     keepSchemaDefaults = false,
+    onlyKeys,
   } = options;
   const envFilePath = resolve(projectRoot, `.env.${environment}`);
 
@@ -743,12 +763,23 @@ export async function syncEnvironmentToGitHub(
     );
   }
 
-  const declaredEntries = parseEnvFile(envFilePath);
+  const parsedEntries = parseEnvFile(envFilePath);
+  let declaredEntries = parsedEntries;
+  if (onlyKeys) {
+    const { entries, missing } = selectOnlyEntries(parsedEntries, onlyKeys);
+    if (missing.length > 0) {
+      throw new Error(`--only: not set in .env.${environment}: ${missing.join(', ')}`);
+    }
+    declaredEntries = entries;
+  }
   const {
     pushable: pushableEntries,
     blank: blankEntries,
     schemaDefault: schemaDefaultEntries,
-  } = splitDeclaredEntries(declaredEntries, { keepSchemaDefaults });
+  } = splitDeclaredEntries(declaredEntries, {
+    // An explicitly requested key is pushed even when it equals the schema default.
+    keepSchemaDefaults: keepSchemaDefaults || onlyKeys !== undefined,
+  });
   const secrets = pushableEntries.filter((e) => classifyKey(e.name) === 'secret');
   const variables = pushableEntries.filter((e) => classifyKey(e.name) === 'variable');
 
@@ -769,6 +800,8 @@ export async function syncEnvironmentToGitHub(
 
   console.log(`Source:      .env.${environment}`);
   console.log(`Environment: ${environment}`);
+  if (onlyKeys)
+    console.log(`Only:        ${onlyKeys.join(', ')} (nothing else is pushed or pruned)`);
   console.log(`Plan:        ${secrets.length} secret(s), ${variables.length} variable(s)`);
   if (blankEntries.length > 0) {
     console.log(
@@ -894,14 +927,16 @@ export async function syncEnvironmentToGitHub(
   //      previously, now correctly classified as a Variable). The Secret is
   //      no longer in localSecretNames, so it gets pruned here while the
   //      Variable is created above — no duplicate left behind.
-  const staleSecrets = findStaleRemoteKeys({
-    declaredNames: localSecretNames,
-    remoteKeys: [...existingSecrets],
-  });
-  const staleVariables = findStaleRemoteKeys({
-    declaredNames: localVariableNames,
-    remoteKeys: [...existingVariables.keys()],
-  });
+  // `--only` declares a few keys, not the whole file — it must never prune the rest.
+  const staleSecrets = onlyKeys
+    ? []
+    : findStaleRemoteKeys({ declaredNames: localSecretNames, remoteKeys: [...existingSecrets] });
+  const staleVariables = onlyKeys
+    ? []
+    : findStaleRemoteKeys({
+        declaredNames: localVariableNames,
+        remoteKeys: [...existingVariables.keys()],
+      });
   const crossKindDuplicates = new Set<string>([
     ...staleSecrets.filter((name) => localVariableNames.has(name)),
     ...staleVariables.filter((name) => localSecretNames.has(name)),
