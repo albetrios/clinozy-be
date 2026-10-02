@@ -52,7 +52,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `DATABASE_POOL_CLUSTER_WARN_RATIO` | — | `0.8` |  | — |
 | `DATABASE_POOL_CONNECT_TIMEOUT_SECONDS` | — | — *(optional)* |  | — |
 | `DATABASE_POOL_IDLE_TIMEOUT_SECONDS` | — | — *(optional)* |  | — |
-| `DATABASE_POOL_MAX` | — | `20` |  | — |
+| `DATABASE_POOL_MAX` | — | `30` |  | — |
 | `DATABASE_POOL_MAX_LIFETIME_SECONDS` | — | — *(optional)* |  | — |
 | `DATABASE_RLS_SAFETY_ENFORCED` | — | `true` |  | — |
 | `DATABASE_SSL_ENABLED` | — | `true` |  | — |
