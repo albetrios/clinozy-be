@@ -18,7 +18,12 @@ authority becomes a connection-level property instead of a GUC-only one.
 - **Local development is provisioned**: the compose Postgres role has LOGIN and the
   gitignored local env file carries `DATABASE_MAINTENANCE_URL` — local runs and the DB
   test suites exercise maintenance contexts as `clinozy_be_maintenance` (production-like RLS
-  instead of the superuser-exempt pool). Hosted environments are NOT yet provisioned.
+  instead of the superuser-exempt pool).
+- **Hosted environments are provisioned by clinozy-infra**: its Neon provisioning creates
+  `clinozy_be_maintenance` as a `LOGIN NOBYPASSRLS` user on each environment's branch
+  before the first deploy (next to `clinozy_be_app` and `clinozy_be_migrator` — see
+  [Database runtime role](resource-limits.md#database-runtime-role-row-level-security-safety))
+  and writes `DATABASE_MAINTENANCE_URL` (pooled host).
 - `DATABASE_MAINTENANCE_URL` (optional env var) selects the pool: unset → maintenance
   contexts use the shared `DATABASE_URL` pool exactly as before; set → they use a lazy
   second pool built from the same tuned options
@@ -29,16 +34,19 @@ authority becomes a connection-level property instead of a GUC-only one.
 
 ## Operator steps (per environment)
 
-1. Enable login for the role on the environment's Postgres (Neon: create the role via
-   the console/CLI or run as the elevated migration user):
+1. Create the login on the environment's Postgres — clinozy-infra's Neon provisioning
+   does this via SQL as `neondb_owner` (never the Neon console/CLI/REST API, which add
+   `BYPASSRLS`), before the first deploy:
 
    ```sql
+   CREATE ROLE clinozy_be_maintenance LOGIN PASSWORD '<generated>';
+   -- or, when an earlier migrate already created it NOLOGIN:
    ALTER ROLE clinozy_be_maintenance LOGIN PASSWORD '<generated>';
    ```
 
-2. Set `DATABASE_MAINTENANCE_URL` for the environment (same host/database as
-   `DATABASE_URL`, user `clinozy_be_maintenance`), e.g. in `.env.<environment>` +
-   `pnpm github:sync`.
+2. Set `DATABASE_MAINTENANCE_URL` for the environment (same pooled host/database as
+   `DATABASE_URL`, user `clinozy_be_maintenance`) — clinozy-infra writes it into
+   `.env.<environment>`; `pnpm github:sync` pushes it.
 
 3. Deploy and verify workers: retention/cleanup jobs must keep succeeding (they now run
    on the maintenance pool).
@@ -77,15 +85,18 @@ FORCE-RLS policy, the five roles, ownership, and grants all materialize from one
 cold `pnpm db:migrate` (proven by the local scratch rebuild and the nightly CI
 canary). A deleted-and-recreated database therefore needs exactly three steps:
 
-1. **Bootstrap migrate** — `DATABASE_MIGRATION_URL` must point at the provider's
-   elevated user for the FIRST run (`clinozy_be_migrator` does not exist until the
-   migrations create it). On Neon a recreated database usually means a new host:
-   update `DATABASE_URL` / `DATABASE_MIGRATION_URL` secrets (direct host, no
-   `-pooler`, for the migration URL).
-2. **Re-enable logins** — migrations create every role `NOLOGIN` (passwords are
-   per-environment secrets, never in committed SQL). Re-run the `ALTER ROLE …
-   LOGIN PASSWORD` steps above for whichever roles the environment's URLs use,
-   then `pnpm github:sync` any changed secrets.
+1. **Logins** — hosted: re-run clinozy-infra's Neon provisioning. It creates
+   `clinozy_be_app`, `clinozy_be_maintenance` and `clinozy_be_migrator` (with the
+   migrator's database / `public` / ADMIN grants) on the new branch and rewrites the three
+   URLs — on Neon a recreated database usually means a new host (direct host, no
+   `-pooler`, for the migration URL); `pnpm github:sync` any changed secrets. Passwords
+   are per-environment secrets, never in committed SQL.
+2. **Migrate** — hosted: the deploy's `pnpm db:migrate` runs as `clinozy_be_migrator`,
+   the very first run on the empty database included — the provider owner is not
+   needed. The migrations skip the three users that already exist and create the rest
+   (`clinozy_be_owner`, `clinozy_be_operator`) `NOLOGIN`. Local: the compose superuser
+   runs the first `pnpm db:migrate`, then re-run the `ALTER ROLE … LOGIN PASSWORD` steps
+   above.
 3. **Data** — reference data returns via `pnpm db:seed`; tenant/billing rows do
    not, and external state (e.g. Stripe customers pointing at vanished internal
    rows) needs reconciliation. Treat recreate as a provisioning event, not a
