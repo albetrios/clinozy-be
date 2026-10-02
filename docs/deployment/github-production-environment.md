@@ -19,7 +19,7 @@ Both environments deploy from `main`; the target GitHub Environment is chosen ex
 
 Declared in [`production.json`](../../.github/environments/production.json) and applied by `pnpm github:sync` — edit the JSON, run the command, GitHub matches it:
 
-1. **Required reviewers** — at least one team member (platform or release manager) must approve before the deploy job runs (`requiredReviewers` in the JSON).
+1. **Required reviewers** — at least one team member (platform or release manager) must approve before the deploy job runs (`requiredReviewers` in the JSON). GitHub enforces this on a private repository only on **GitHub Enterprise**; on any other plan `pnpm github:sync` reports that the reviewers were not applied, applies the branch policy below, and still pushes the values.
 2. **Deployment branch policy** — `protectedBranches` (only a protected branch — `main` — may deploy). Production is deployed by dispatching `release-deploy.yml` **from `main`** with the release tag as an input (`gh workflow run release-deploy.yml --ref main -f tag=vX.Y.Z`). The `release: published` auto-trigger runs with the tag as the deployment ref, which this policy does **not** permit — so release-published does not auto-deploy production; production deploys are dispatched from `main` by design.
 3. **Environment secrets** — `DATABASE_URL`, `RAILWAY_TOKEN`, `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, etc. per [cicd-and-deployment.md](ci-cd/cicd-and-deployment.md). Pushed by the same `pnpm github:sync`; do not reuse dev secrets.
 

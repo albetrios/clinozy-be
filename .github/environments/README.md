@@ -11,7 +11,7 @@ JSON files here declare protection rules for [GitHub Environments](https://docs.
 
 | Config file | GitHub Environment | Protection |
 | ----------- | ------------------ | ---------- |
-| [production.json](production.json) | `production` | Required reviewers, deployment branches |
+| [production.json](production.json) | `production` | Required reviewers (enforced on a private repo only with GitHub Enterprise — otherwise `github:sync` skips them with a notice), deployment branches |
 | [development.json](development.json) | `development` | None (extend when needed) |
 
 **API docs uploads** (Postman workspace, Scalar Registry) use the same GitHub Environment on push: `dev` → `development`, `main` → `production`. Set `POSTMAN_API_KEY`, `POSTMAN_WORKSPACE_ID`, `SCALAR_API_KEY`, `SCALAR_NAMESPACE`, and optional `SCALAR_SLUG` per environment (e.g. `clinozy-be-dev` vs `clinozy-be`) so hosted docs do not overwrite each other.

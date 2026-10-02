@@ -10,6 +10,10 @@
  * gap: `--check` reports drift, `--dry-run` previews it, and the default mode
  * reconciles GitHub to the JSON.
  *
+ * Plan limit: GitHub enforces required reviewers on a private repository's environments only on
+ * Enterprise. On any other plan the run says the reviewers were not applied, still applies the
+ * deployment branch policy, and carries on to the values instead of failing.
+ *
  * Safety: every dynamic value (reviewer logins aside, which are trusted config)
  * flows to `gh` through a stdin JSON body (`--input -`), never interpolated into
  * the shell command line — so branch-name globs like `v*` are never shell-expanded.
@@ -292,18 +296,37 @@ function readRemoteEnvironment(repository: string, environment: string): RemoteE
   };
 }
 
+/**
+ * Body of the environment PUT. `reviewers` is sent only when there are reviewers to set or to
+ * clear: GitHub rejects the field on a plan without required reviewers — even as `[]` — so a
+ * branch-policy-only update leaves it out.
+ */
+export function buildEnvironmentPutBody(
+  desired: DesiredEnvironment,
+  remoteHasReviewers: boolean,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    deployment_branch_policy: desired.deploymentBranchPolicy,
+  };
+  if (desired.reviewers.length > 0 || remoteHasReviewers) {
+    body.reviewers = desired.reviewers.map((reviewer) => ({
+      type: reviewer.type,
+      id: reviewer.id,
+    }));
+  }
+  if (desired.reviewers.length > 0) {
+    body.prevent_self_review = desired.preventSelfReview;
+  }
+  return body;
+}
+
 function putEnvironment(
   repository: string,
   environment: string,
   desired: DesiredEnvironment,
+  remoteHasReviewers: boolean,
 ): void {
-  const body: Record<string, unknown> = {
-    reviewers: desired.reviewers.map((reviewer) => ({ type: reviewer.type, id: reviewer.id })),
-    deployment_branch_policy: desired.deploymentBranchPolicy,
-  };
-  if (desired.reviewers.length > 0) {
-    body.prevent_self_review = desired.preventSelfReview;
-  }
+  const body = buildEnvironmentPutBody(desired, remoteHasReviewers);
   ghWriteWithBody(
     [
       'api',
@@ -359,14 +382,76 @@ function reconcileCustomBranchPolicies(
   }
 }
 
+/** Whether GitHub can enforce required reviewers on a repository's environments. */
+export type RequiredReviewersSupport = 'supported' | 'unsupported' | 'unknown';
+
+/**
+ * Required reviewers on a PRIVATE repository's environments need GitHub Enterprise; public
+ * repositories get them on every plan. `ownerPlan` is undefined when the token cannot read the
+ * organization's plan (only organization owners can), which leaves the answer `unknown`.
+ */
+export function requiredReviewersSupport(repository: {
+  readonly isPrivate: boolean;
+  readonly ownerType: string;
+  readonly ownerPlan?: string | undefined;
+}): RequiredReviewersSupport {
+  if (!repository.isPrivate) return 'supported';
+  if (repository.ownerType !== 'Organization') return 'unsupported';
+  if (repository.ownerPlan === undefined) return 'unknown';
+  return repository.ownerPlan === 'enterprise' ? 'supported' : 'unsupported';
+}
+
+/** GitHub's HTTP 422 for a required-reviewers rule the account's plan cannot enforce. */
+export function isRequiredReviewersPlanError(message: string): boolean {
+  return /billing plan supports the required reviewers/i.test(message);
+}
+
+interface RequiredReviewersSupportProbe {
+  readonly support: RequiredReviewersSupport;
+  readonly plan: string | undefined;
+}
+
+function readRequiredReviewersSupport(repository: string): RequiredReviewersSupportProbe {
+  const repositoryProbe = ghProbe(['api', `repos/${repository}`]);
+  if (repositoryProbe.exitCode !== 0) return { support: 'unknown', plan: undefined };
+  const parsed = JSON.parse(repositoryProbe.stdout) as {
+    private?: boolean;
+    owner?: { login?: string; type?: string };
+  };
+  const isPrivate = parsed.private === true;
+  const ownerType = parsed.owner?.type ?? 'User';
+  let ownerPlan: string | undefined;
+  if (isPrivate && ownerType === 'Organization' && parsed.owner?.login) {
+    const organizationProbe = ghProbe(['api', `orgs/${parsed.owner.login}`]);
+    if (organizationProbe.exitCode === 0) {
+      ownerPlan = (JSON.parse(organizationProbe.stdout) as { plan?: { name?: string } }).plan?.name;
+    }
+  }
+  return {
+    support: requiredReviewersSupport({ isPrivate, ownerType, ownerPlan }),
+    plan: ownerPlan,
+  };
+}
+
+function withoutReviewers(desired: DesiredEnvironment): DesiredEnvironment {
+  return { ...desired, reviewers: [], preventSelfReview: false };
+}
+
+function printReviewersSkipped(environment: string, reason: string): void {
+  console.log(
+    `  ${environment}: required reviewers not applied — ${reason}. The deployment branch policy still is.`,
+  );
+}
+
 function applyEnvironment(
   repository: string,
   environment: string,
   desired: DesiredEnvironment,
+  remote: RemoteEnvironment,
 ): void {
   // PUT first: switching custom_branch_policies on is a prerequisite for the
   // deployment-branch-policies sub-resource to accept POSTs.
-  putEnvironment(repository, environment, desired);
+  putEnvironment(repository, environment, desired, remote.reviewers.length > 0);
   if (desired.deploymentBranchPolicy?.custom_branch_policies) {
     reconcileCustomBranchPolicies(repository, environment, desired.customBranches);
   }
@@ -404,11 +489,28 @@ export function syncEnvironmentProtection(args: {
 
   let failures = 0;
   let drift = 0;
+  let reviewersProbe: RequiredReviewersSupportProbe | undefined;
 
   for (const environment of environments) {
     try {
       const config = readEnvironmentConfig(environment);
-      const desired = buildDesiredEnvironment(repository, config);
+      let desired = buildDesiredEnvironment(repository, config);
+      if (desired.reviewers.length > 0) {
+        reviewersProbe ??= readRequiredReviewersSupport(repository);
+        if (reviewersProbe.support === 'unsupported') {
+          printReviewersSkipped(
+            environment,
+            `GitHub needs Enterprise for them on a private repository (this account is on ${reviewersProbe.plan ?? 'a personal plan'})`,
+          );
+          desired = withoutReviewers(desired);
+        } else if (reviewersProbe.support === 'unknown' && mode === 'check') {
+          printReviewersSkipped(
+            environment,
+            "not checked: this token can't read the account's plan",
+          );
+          desired = withoutReviewers(desired);
+        }
+      }
       const remote = readRemoteEnvironment(repository, environment);
       const issues = diffEnvironment(desired, remote);
 
@@ -430,7 +532,16 @@ export function syncEnvironmentProtection(args: {
         continue;
       }
 
-      applyEnvironment(repository, environment, desired);
+      try {
+        applyEnvironment(repository, environment, desired, remote);
+      } catch (applyError) {
+        const message = applyError instanceof Error ? applyError.message : String(applyError);
+        if (desired.reviewers.length === 0 || !isRequiredReviewersPlanError(message)) {
+          throw applyError;
+        }
+        printReviewersSkipped(environment, "GitHub rejected them for this account's plan");
+        applyEnvironment(repository, environment, withoutReviewers(desired), remote);
+      }
       console.log(`  ${environment}: applied (${issues.length} change(s))`);
     } catch (environmentError) {
       failures += 1;
