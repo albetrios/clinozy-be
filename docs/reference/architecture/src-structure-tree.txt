@@ -2072,6 +2072,7 @@ src/
     │   │   ├── github-actions-workflow-run-references.policy.unit.test.ts
     │   │   ├── github-environment-protection.policy.unit.test.ts
     │   │   ├── github-sync-blank-values.policy.unit.test.ts
+    │   │   ├── github-sync-only-keys.policy.unit.test.ts
     │   │   ├── governance-mode.policy.unit.test.ts
     │   │   ├── hosted-docs-publish.policy.unit.test.ts
     │   │   ├── k6-coverage.policy.unit.test.ts

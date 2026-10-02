@@ -41,6 +41,8 @@ Preview without pushing: `pnpm github:sync <environment> --dry-run`.
 
 **Re-syncing** after editing a value: `pnpm github:sync <environment>` again — idempotent, overwrites in place.
 
+**Only a few values changed?** `pnpm github:sync [environment...] --only KEY,KEY --yes` pushes just those keys (even one that equals its schema default), skips rulesets and environment protection, and deletes nothing — instead of re-pushing every secret.
+
 **Adding a new environment** (e.g. `staging`):
 
 1. Add `staging` to the `NODE_ENV` enum in `src/shared/config/env-schema.ts`.
