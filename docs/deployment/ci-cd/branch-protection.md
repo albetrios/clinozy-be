@@ -101,6 +101,8 @@ When [pr-ci.yml](../../../.github/workflows/pr-ci.yml) path filters detect **doc
 
 Treat these as **post-merge gates**: failing runs still indicate problems on the branch tip after merge.
 
+**Artifact attestations** (`Docker` image provenance + SBOM, `SBOM` source SBOM) need **GitHub Enterprise Cloud** on a private repository — on any other plan GitHub refuses to store them and the job fails. There, set the repository variable `ARTIFACT_ATTESTATIONS=disabled`: the attest steps are skipped with a warning (cosign signing and the SBOM artifacts are unaffected). clinozy-infra's `pnpm setup:infra:deploy` sets it from the organization's plan; by hand: `gh variable set ARTIFACT_ATTESTATIONS --body disabled --repo albetrios/clinozy-be`. Delete the variable after upgrading the plan.
+
 Manual emergency redeploy: [reusable-railway-deploy.yml](../../../.github/workflows/reusable-railway-deploy.yml) `workflow_dispatch` only (not a PR status check).
 
 ---
