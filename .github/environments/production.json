@@ -3,7 +3,7 @@
   "protection": {
     "requiredReviewers": {
       "users": [
-        "albetrios"
+        "nikunjmavani"
       ],
       "teams": [],
       "preventSelfReview": false

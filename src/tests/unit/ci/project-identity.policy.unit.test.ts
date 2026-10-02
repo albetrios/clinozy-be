@@ -208,6 +208,24 @@ describe('project identity — previous identity gate', () => {
     expect(flags('legacy-organizations-archive')).toBe(false);
   });
 
+  it('lets a previous repository owner stay a code owner, flagging only <owner>/<repo>', () => {
+    // The repo moved from a personal account to an organization, but that person still owns code.
+    const moved = buildProjectIdentitySnapshot({
+      ...buildConfig(),
+      project: { ...buildConfig().project, previousOwners: ['jane-doe'] },
+      providers: {
+        ...buildConfig().providers,
+        github: { ...buildConfig().providers.github, owners: ['jane-doe'] },
+      },
+    } as SetupConfig);
+    const flagsMoved = (line: string): boolean =>
+      previousIdentityPatterns(moved).some(({ pattern }) => pattern.test(line));
+    expect(flagsMoved('*                        @jane-doe')).toBe(false);
+    expect(flagsMoved('        "jane-doe"')).toBe(false);
+    expect(flagsMoved('git clone https://github.com/jane-doe/acme-api')).toBe(true);
+    expect(flagsMoved('authorize the app on `jane-doe/acme-api`')).toBe(true);
+  });
+
   it('never flags the current identity, so the gate can pass', () => {
     const current = buildProjectIdentitySnapshot({
       ...buildConfig(),
