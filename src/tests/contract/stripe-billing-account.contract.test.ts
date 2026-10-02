@@ -148,7 +148,7 @@ describe('Stripe billing-account read + setup contract (`stripe.client`)', () =>
           stripeOutboundRequestBody: encodedBody,
           expectedStripeFields: {
             customer: contractCustomerId,
-            'payment_method_types[0]': 'card',
+            'allowed_payment_method_types[0]': 'card',
           },
         });
         return true;
