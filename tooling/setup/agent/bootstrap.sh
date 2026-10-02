@@ -76,7 +76,7 @@ fi
 
 node -v >/dev/null 2>&1 || die "Node not available"
 if [ "$(node -v 2>/dev/null | tr -dc '0-9.' | cut -d. -f1)" -lt "${required_major}" ] 2>/dev/null; then
-  skip "[1/${TOTAL}] Node $(node -v) < required v${required_major} — pnpm will self-provision it via useNodeVersion (slower, but unblocks the run)"
+  skip "[1/${TOTAL}] Node $(node -v) < required v${required_major} and no pinned Node was found to activate — pnpm engineStrict will reject installs"
 else
   ok "[1/${TOTAL}] Node $(node -v)"
 fi

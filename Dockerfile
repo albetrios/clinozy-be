@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
-ARG NODE_VERSION=24.18.1
-ARG PNPM_VERSION=11.1.1
+ARG NODE_VERSION=24.21.0
+ARG PNPM_VERSION=12.8.1
 ARG GENERATE_MCP_DOCS=true
 ARG INSTALL_MCP_OPTIONAL=false
 ARG BUILD_REVISION=unknown
@@ -83,10 +83,13 @@ COPY --from=build /app/migrations ./migrations
 COPY --from=build /app/src/shared/locales ./src/shared/locales
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 
+# pnpm 12 caches the registry metadata it checks the lockfile against (~140 MB) in
+# /root/.cache/pnpm — delete it with the package-manager binaries so it never ships.
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts \
   $( [ "$INSTALL_MCP_OPTIONAL" = "true" ] || echo "--no-optional" ) \
   && rm -rf \
     /root/.cache/node/corepack \
+    /root/.cache/pnpm \
     /usr/local/bin/corepack \
     /usr/local/bin/npm \
     /usr/local/bin/npx \

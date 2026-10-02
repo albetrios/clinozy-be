@@ -6,8 +6,8 @@ target "_common" {
   context    = "."
   dockerfile = "Dockerfile"
   args = {
-    NODE_VERSION = "24.18.1"
-    PNPM_VERSION = "11.1.1"
+    NODE_VERSION = "24.21.0"
+    PNPM_VERSION = "12.8.1"
   }
 }
 

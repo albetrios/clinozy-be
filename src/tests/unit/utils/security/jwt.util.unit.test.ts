@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from 'node:crypto';
-import { SignJWT, decodeProtectedHeader, importPKCS8 } from 'jose';
+import { type CryptoKey, SignJWT, decodeProtectedHeader, importPKCS8 } from 'jose';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetEnvCacheForTests } from '@/shared/config/env.config.js';
 import { PROJECT_SLUG } from '@/shared/constants/project-identity.constants.js';

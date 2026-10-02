@@ -1,10 +1,5 @@
 autoInstallPeers: true
 engineStrict: true
-# Pin the Node version pnpm runs scripts with so environments that boot an
-# older Node (e.g. the Claude Code web sandbox defaults to Node 22) don't trip
-# the engineStrict gate — pnpm self-provisions this version. Keep in sync with
-# .nvmrc / .node-version / engines.node (>=24).
-useNodeVersion: 24.18.1
 
 allowBuilds:
   # OpenAPI linter pulled in by @scalar/cli; its postinstall downloads a binary that only
@@ -146,3 +141,12 @@ overrides:
   undici: '>=7.29.1 <8'
   uuid: '>=11.1.1'
   yaml@1.10.2: 1.10.3
+
+# pnpm's minimumReleaseAge safeguard (default 1 day) stays ON. These exact versions were
+# younger than the window when the toolchain was aligned with clinozy-infra / clinozy-fe
+# (published 2026-10-01). Drop each entry once that version is past the window.
+minimumReleaseAgeExclude:
+  - '@aws-sdk/client-s3@3.1145.0'
+  - '@types/node@24.19.1'
+  - '@aws-sdk/s3-presigned-post@3.1145.0'
+  - '@aws-sdk/s3-request-presigner@3.1145.0'
