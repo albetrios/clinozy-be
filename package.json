@@ -1,6 +1,6 @@
 {
   "name": "clinozy-be",
-  "version": "7.0.2",
+  "version": "7.1.0",
   "description": "Node.js API with Fastify, Drizzle ORM, and BullMQ",
   "license": "MIT",
   "private": true,

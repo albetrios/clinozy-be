@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.1.0](https://github.com/albetrios/clinozy-be/compare/v7.0.2...v7.1.0) (2026-10-02)
+
+
+### Added
+
+* add the design-iteration workflow (iterations/, planning + kickoff skills, iteration:* commands) ([c7b2950](https://github.com/albetrios/clinozy-be/commit/c7b2950dc14820fd662eed3c908ac4f725ec59fa))
+* iteration intake modes (full/overlay/brief), the intake hash and the --check gate ([712baa3](https://github.com/albetrios/clinozy-be/commit/712baa3175bdf133c2441bcbddaeac1f150fdd10))
+* **tooling:** add pnpm iteration:status, the schema-routes hash and the iteration guide ([f90392c](https://github.com/albetrios/clinozy-be/commit/f90392cc6f2f576ff1317e7c124c6e62236dfba8))
+
+
+### Fixed
+
+* **database:** let the pre-created clinozy_be_migrator run every migration and document the hosted database users ([#16](https://github.com/albetrios/clinozy-be/issues/16)) ([bc492b6](https://github.com/albetrios/clinozy-be/commit/bc492b6e584d30fbd93e656d820fc54b8ab6ba5a))
+* **deps:** override transitive packages with new advisories ([0e85895](https://github.com/albetrios/clinozy-be/commit/0e858958eb5b31f9e8d48f85ca2677435841bd42))
+* **github:** let github:sync finish when the plan can't enforce required reviewers ([#20](https://github.com/albetrios/clinozy-be/issues/20)) ([fed858e](https://github.com/albetrios/clinozy-be/commit/fed858e45689392aaca7243ea0c566021ecfd244))
+
+
+### Documentation
+
+* add the iteration planning and kickoff skills with their process ([069b915](https://github.com/albetrios/clinozy-be/commit/069b9153aaa78dbb75c5b07d6d118bf1c238260e))
+* adopt the design-iteration model and add the iteration generator ([2d048a9](https://github.com/albetrios/clinozy-be/commit/2d048a93029d27f075545674325acddf23396bcf))
+* correct the project skill count in cursor-agent-system.md (47) ([83e936b](https://github.com/albetrios/clinozy-be/commit/83e936be96084180d6a0703b5f0e73d83c4697d0))
+* import v1 PRD and schema-routes into legacy, drop superpowers docs ([8facc65](https://github.com/albetrios/clinozy-be/commit/8facc6523b9634731b8cf05bf9320394a8b14390))
+* intake modes, the intake gate and standing deviations in the iteration workflow ([3525360](https://github.com/albetrios/clinozy-be/commit/3525360a7aa8b199d2f2383b04ee3d91bc40480b))
+* move design iterations to intake-files, KICKOFF.md and AS-BUILT.md ([715773e](https://github.com/albetrios/clinozy-be/commit/715773ed251f1fbf8ea79bd5a8174bdec42dd95d))
+* note that Summary is the one README field written by hand ([9ecc31e](https://github.com/albetrios/clinozy-be/commit/9ecc31edaac938517921d2005347c949b0d681a9))
+
 ## [7.0.2](https://github.com/albetrios/core-be/compare/v7.0.1...v7.0.2) (2026-09-22)
 
 
