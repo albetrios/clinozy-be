@@ -4,8 +4,8 @@
 --   clinozy_be_owner     NOLOGIN  owns every schema/table/sequence — DDL + TRUNCATE
 --                              authority; RLS-SUBJECT on data (FORCE binds owners)
 --   clinozy_be_migrator  NOLOGIN  dedicated migration login (member of clinozy_be_owner);
---                              hosted may keep using the provider owner in
---                              DATABASE_MIGRATION_URL — same semantic slot
+--                              hosted: clinozy-infra pre-creates it LOGIN CREATEROLE
+--                              BYPASSRLS and it runs every migration, this one included
 --   clinozy_be_operator  NOLOGIN  test-harness / seed / ops fixtures (member of
 --                              clinozy_be_owner); LOCAL provisioning additionally grants
 --                              LOGIN + BYPASSRLS (superuser-only attribute) so
@@ -17,8 +17,8 @@
 -- a definer executes as its OWNER, and FORCE RLS binds a non-exempt owner — reassigning
 -- would make every resolver (billing/tenancy/notify/audit resolve_*) silently return
 -- ZERO rows (empirically reproduced). Functions stay owned by the migration-executing
--- role: local `core` (superuser, exempt) / hosted provider owner (BYPASSRLS via the
--- provider's elevated grant). Verify resolver behavior after hosted provisioning —
+-- role: local `core` (superuser, exempt) / hosted `clinozy_be_migrator` (BYPASSRLS,
+-- granted by clinozy-infra's provisioning). Verify resolver behavior after hosted provisioning —
 -- the rls-offboarding-regressions db.unit suite asserts it as clinozy_be_app.
 -- PG16+ (hosted 42501 fix): make creator self-grants SET-capable for roles created
 -- in this session — `ALTER ... OWNER TO clinozy_be_owner` requires membership WITH SET,
@@ -54,7 +54,23 @@ BEGIN
   EXECUTE format('GRANT CONNECT ON DATABASE %I TO clinozy_be_owner, clinozy_be_migrator, clinozy_be_operator', database_name);
 END $$;
 --> statement-breakpoint
-GRANT clinozy_be_owner TO clinozy_be_migrator WITH ADMIN OPTION;
+-- Skipped when clinozy_be_migrator already holds this membership with ADMIN, INHERIT and SET
+-- — the case when the migrator itself runs this file (hosted): creating clinozy_be_owner above
+-- gave it ADMIN (PG16+ creator grant) plus INHERIT/SET (createrole_self_grant), and PG16+
+-- rejects a role granting ADMIN to itself ("ADMIN option cannot be granted back to your own
+-- grantor").
+DO $$
+BEGIN
+  IF NOT (
+    SELECT COALESCE(bool_or(membership.admin_option) AND bool_or(membership.inherit_option)
+                    AND bool_or(membership.set_option), FALSE)
+      FROM pg_auth_members membership
+     WHERE membership.roleid = 'clinozy_be_owner'::regrole
+       AND membership.member = 'clinozy_be_migrator'::regrole
+  ) THEN
+    GRANT clinozy_be_owner TO clinozy_be_migrator WITH ADMIN OPTION;
+  END IF;
+END $$;
 --> statement-breakpoint
 GRANT clinozy_be_owner TO clinozy_be_operator;
 --> statement-breakpoint
