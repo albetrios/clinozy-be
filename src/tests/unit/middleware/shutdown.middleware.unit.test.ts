@@ -89,7 +89,11 @@ describe('shutdown.middleware', () => {
   it('schedules shutdown watchdog at default DEFAULT_SHUTDOWN_TIMEOUT_MS + buffer when SHUTDOWN_TIMEOUT_MS is unset', async () => {
     const originalSetTimeout = global.setTimeout;
     const scheduledDelaysListeningForShutdownTimeout: number[] = [];
-    vi.spyOn(global, 'setTimeout').mockImplementation(((handler, timeout, ...arguments_) => {
+    vi.spyOn(global, 'setTimeout').mockImplementation(((
+      handler: (...callbackArguments: unknown[]) => void,
+      timeout?: number,
+      ...arguments_: unknown[]
+    ) => {
       if (typeof timeout === 'number') {
         scheduledDelaysListeningForShutdownTimeout.push(timeout);
       }
@@ -114,7 +118,11 @@ describe('shutdown.middleware', () => {
 
     const originalSetTimeout = global.setTimeout;
     const scheduledDelaysListeningForShutdownTimeout: number[] = [];
-    vi.spyOn(global, 'setTimeout').mockImplementation(((handler, timeout, ...arguments_) => {
+    vi.spyOn(global, 'setTimeout').mockImplementation(((
+      handler: (...callbackArguments: unknown[]) => void,
+      timeout?: number,
+      ...arguments_: unknown[]
+    ) => {
       if (typeof timeout === 'number') {
         scheduledDelaysListeningForShutdownTimeout.push(timeout);
       }
@@ -137,7 +145,11 @@ describe('shutdown.middleware', () => {
   it('skips the load-balancer drain delay outside staging/production', async () => {
     const originalSetTimeout = global.setTimeout;
     const scheduledDelaysListeningForShutdownTimeout: number[] = [];
-    vi.spyOn(global, 'setTimeout').mockImplementation(((handler, timeout, ...arguments_) => {
+    vi.spyOn(global, 'setTimeout').mockImplementation(((
+      handler: (...callbackArguments: unknown[]) => void,
+      timeout?: number,
+      ...arguments_: unknown[]
+    ) => {
       if (typeof timeout === 'number') {
         scheduledDelaysListeningForShutdownTimeout.push(timeout);
       }
@@ -170,7 +182,11 @@ describe('shutdown.middleware', () => {
     const applicationCloseSpy = vi.spyOn(applicationListeningForShutdown, 'close');
 
     /** Fire the drain timer immediately so the test does not block for the full 3s delay. */
-    vi.spyOn(global, 'setTimeout').mockImplementation(((handler, timeout, ...arguments_) => {
+    vi.spyOn(global, 'setTimeout').mockImplementation(((
+      handler: (...callbackArguments: unknown[]) => void,
+      timeout?: number,
+      ...arguments_: unknown[]
+    ) => {
       if (typeof timeout === 'number') {
         scheduledDelaysListeningForShutdownTimeout.push(timeout);
       }

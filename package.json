@@ -7,7 +7,7 @@
   "type": "module",
   "engines": {
     "node": ">=24.15",
-    "pnpm": ">=11.1.1"
+    "pnpm": ">=12.8.1"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
@@ -221,11 +221,11 @@
     "test:smoke": "vitest run --config tooling/vitest/smoke.config.ts",
     "test:bench:quick": "tsx src/tests/bench/run-benches.ts --only readyz --duration 5"
   },
-  "packageManager": "pnpm@11.1.1+sha512.d1fdf5f73c617b64fa1a56a81c3c8dfe0e966e33a6010aa256b517ae77be21d93e05affc0de1a83b0e4f29d569f68b446ae8f068cd7247c0bb3df0fb4d7bdf9a",
+  "packageManager": "pnpm@12.8.1+sha512.f64ba907507f5ceafe06c8d38e6052d0179444580ec1279ddd5bfc11cb48aa8a2644b66598e07e761da84872a9fc57d5f902b87fa49d024198d558612aabbe45",
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1141.0",
-    "@aws-sdk/s3-presigned-post": "^3.1141.0",
-    "@aws-sdk/s3-request-presigner": "^3.1141.0",
+    "@aws-sdk/client-s3": "^3.1145.0",
+    "@aws-sdk/s3-presigned-post": "^3.1145.0",
+    "@aws-sdk/s3-request-presigner": "^3.1145.0",
     "@bull-board/api": "^9.10.1",
     "@bull-board/fastify": "^9.10.1",
     "@fastify/compress": "^9.2.0",
@@ -246,7 +246,7 @@
     "argon2": "^0.45.1",
     "bullmq": "^6.3.9",
     "disposable-email-domains-js": "^1.26.0",
-    "dotenv": "^18.0.4",
+    "dotenv": "^18.0.5",
     "drizzle-orm": "^0.45.3",
     "fastify": "^5.12.5",
     "fastify-plugin": "^6.0.0",
@@ -272,7 +272,7 @@
     "@modelcontextprotocol/sdk": "^1.30.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.13",
+    "@biomejs/biome": "^2.5.15",
     "@commitlint/cli": "^21.2.3",
     "@commitlint/config-conventional": "^21.2.3",
     "@faker-js/faker": "^10.6.0",
@@ -283,9 +283,9 @@
     "@scalar/cli": "^2.5.2",
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
-    "@types/node": "^25.9.8",
+    "@types/node": "^24.19.1",
     "@types/opossum": "^8.1.9",
-    "@vitest/coverage-v8": "^5.0.2",
+    "@vitest/coverage-v8": "^5.0.3",
     "chalk": "^6.0.1",
     "drizzle-kit": "^0.31.11",
     "fast-check": "^4.10.2",
@@ -302,7 +302,7 @@
     "tsc-alias": "^1.9.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.3"
   },
   "repository": {
     "type": "git",

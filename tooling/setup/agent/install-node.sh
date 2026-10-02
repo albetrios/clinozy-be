@@ -25,12 +25,12 @@
 # pinned version is present (Setup scripts re-run on cache rebuilds).
 set -euo pipefail
 
-readonly DEFAULT_VERSION="24.13.0"
+readonly DEFAULT_VERSION="24.21.0"
 readonly INSTALL_PREFIX="${NODE_INSTALL_PREFIX:-/opt}"
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
-# Resolve the pinned version from .nvmrc (e.g. 24.13.0); fall back when it is
+# Resolve the pinned version from .nvmrc (e.g. 24.21.0); fall back when it is
 # missing or not a full x.y.z (the dist tarball URL needs the full version).
 version="${DEFAULT_VERSION}"
 if [ -f "${repository_root}/.nvmrc" ]; then

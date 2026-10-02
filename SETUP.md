@@ -14,7 +14,7 @@ End-to-end guide to get **clinozy-be** running locally or on managed cloud infra
 | Requirement     | Notes                                                                                                          |
 | --------------- | -------------------------------------------------------------------------------------------------------------- |
 | **Node.js 24+** | Pinned in `package.json` → `engines.node` and `.nvmrc`.                                                        |
-| **pnpm 11+**    | `corepack enable && corepack prepare pnpm@latest --activate`                                                   |
+| **pnpm 12+**    | `corepack enable` — Corepack then runs the exact pnpm pinned in `package.json` → `packageManager` (12.8.1).    |
 | **Docker**      | Required for local Postgres + Redis (`pnpm compose:up`). Start Docker Desktop / OrbStack before `setup:local`. |
 | **Git**         | To clone the repository.                                                                                       |
 
