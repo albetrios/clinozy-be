@@ -227,7 +227,12 @@ export function previousIdentityPatterns(
 
   for (const owner of snapshot.previousOwners) {
     if (owner === snapshot.repository.owner) continue;
-    patterns.push({ previous: owner, pattern: identityTokenPattern(owner) });
+    // A previous repository owner can still be a person who owns code here (a CODEOWNERS
+    // handle, the production reviewer). Then only an `<owner>/<repo>` reference is a leftover.
+    const pattern = snapshot.repository.owners.includes(owner)
+      ? new RegExp(`(?<![A-Za-z0-9-])${escapeRegExp(owner)}/[A-Za-z0-9._-]`)
+      : identityTokenPattern(owner);
+    patterns.push({ previous: owner, pattern });
   }
   return patterns;
 }

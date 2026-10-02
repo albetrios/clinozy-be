@@ -154,7 +154,7 @@ The repository runs in one of two **governance modes**, and you switch between t
 
 In **both** modes the automated gates (`Quality gate` + `Checks`, including the authoritative DB matrix) still block every merge — the mode only governs the **human** review requirement.
 
-Today the repo is in **personal** mode **by design, not by oversight**: [`.github/CODEOWNERS`](../../../.github/CODEOWNERS) lists a **single** owner (`@albetrios`), so requiring a (code-owner) review would make that owner's own PRs unmergeable (GitHub forbids self-approval) — strictly worse than leaving the human-review gate off. (There is no Admin bypass to fall back on: `bypass_actors` is empty, so the automated `Quality gate` / `Checks` gates are absolute for everyone.) The mode fields are **coupled** (e.g. `preventSelfReview` needs ≥2 reviewers; `require_code_owner_review` needs ≥2 owners), which is exactly why they move together through the tool.
+Today the repo is in **personal** mode **by design, not by oversight**: [`.github/CODEOWNERS`](../../../.github/CODEOWNERS) lists a **single** owner (`@nikunjmavani`), so requiring a (code-owner) review would make that owner's own PRs unmergeable (GitHub forbids self-approval) — strictly worse than leaving the human-review gate off. (There is no Admin bypass to fall back on: `bypass_actors` is empty, so the automated `Quality gate` / `Checks` gates are absolute for everyone.) The mode fields are **coupled** (e.g. `preventSelfReview` needs ≥2 reviewers; `require_code_owner_review` needs ≥2 owners), which is exactly why they move together through the tool.
 
 ### Switch modes
 

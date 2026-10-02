@@ -5,53 +5,53 @@
 # Team mode requires at least two distinct owners here.
 
 # Default — all files
-*                        @albetrios
+*                        @nikunjmavani
 
 # Domains
-/src/domains/auth/       @albetrios
-/src/domains/billing/    @albetrios
-/src/domains/tenancy/    @albetrios
-/src/domains/user/       @albetrios
-/src/domains/notify/     @albetrios
-/src/domains/audit/      @albetrios
-/src/domains/upload/     @albetrios
+/src/domains/auth/       @nikunjmavani
+/src/domains/billing/    @nikunjmavani
+/src/domains/tenancy/    @nikunjmavani
+/src/domains/user/       @nikunjmavani
+/src/domains/notify/     @nikunjmavani
+/src/domains/audit/      @nikunjmavani
+/src/domains/upload/     @nikunjmavani
 
 # Infrastructure
-/src/infrastructure/     @albetrios
+/src/infrastructure/     @nikunjmavani
 
 # Shared / middleware
-/src/shared/             @albetrios
+/src/shared/             @nikunjmavani
 
 # CI/CD
-/.github/                @albetrios
+/.github/                @nikunjmavani
 
 # Database
-/migrations/             @albetrios
-/drizzle.config.ts       @albetrios
+/migrations/             @nikunjmavani
+/drizzle.config.ts       @nikunjmavani
 
 # Scripts, docs, and tests
-/tooling/                @albetrios
-/docs/                   @albetrios
-/src/tests/              @albetrios
+/tooling/                @nikunjmavani
+/docs/                   @nikunjmavani
+/src/tests/              @nikunjmavani
 
 # Tooling and editor
-/.husky/                 @albetrios
-/.vscode/                @albetrios
+/.husky/                 @nikunjmavani
+/.vscode/                @nikunjmavani
 
 # Container
-/Dockerfile              @albetrios
-/Dockerfile.worker       @albetrios
-/Dockerfile.agent        @albetrios
-/docker-compose.yml      @albetrios
-/.dockerignore           @albetrios
+/Dockerfile              @nikunjmavani
+/Dockerfile.worker       @nikunjmavani
+/Dockerfile.agent        @nikunjmavani
+/docker-compose.yml      @nikunjmavani
+/.dockerignore           @nikunjmavani
 
 # Root configuration
-/package.json            @albetrios
-/pnpm-lock.yaml          @albetrios
-/tsconfig.json           @albetrios
-/vitest.config.ts        @albetrios
-/tooling/vitest/         @albetrios
-/biome.json              @albetrios
-/.biomeignore            @albetrios
-/.gitleaks.toml          @albetrios
-/.semgrepignore          @albetrios
+/package.json            @nikunjmavani
+/pnpm-lock.yaml          @nikunjmavani
+/tsconfig.json           @nikunjmavani
+/vitest.config.ts        @nikunjmavani
+/tooling/vitest/         @nikunjmavani
+/biome.json              @nikunjmavani
+/.biomeignore            @nikunjmavani
+/.gitleaks.toml          @nikunjmavani
+/.semgrepignore          @nikunjmavani
