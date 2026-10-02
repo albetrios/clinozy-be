@@ -629,8 +629,8 @@ function stripSqlLineComments(fileContent: string): string {
  *   binds table owners — so the migrator is RLS-subject on data, by design. A write to a FORCE
  *   RLS table is rejected; a READ from one returns zero rows. The second is the dangerous case:
  *   an `INSERT ... SELECT` whose source is FORCE RLS inserts nothing and reports success.
- *   Hosted migrations run as a provider owner that bypasses RLS, so both pass there and fail
- *   only where the migrator is RLS-subject — which is exactly how
+ *   Hosted migrations run as a `clinozy_be_migrator` login that also holds BYPASSRLS, so both pass
+ *   there and fail only where the migrator is RLS-subject — which is exactly how
  *   `20260921000000_team_owner_notify_permissions_backfill` blocked every later migration.
  * - **Algorithm:** skip files before {@link RLS_SUBJECT_MIGRATOR_SINCE} and files with no data
  *   statement. Otherwise every FORCE RLS table named anywhere in the SQL — write target or read

@@ -333,20 +333,21 @@ LOGIN when provisioned and act as connection users.
 | Role | Connects via | RLS posture | Purpose |
 | ---- | ------------ | ----------- | ------- |
 | `clinozy_be_owner` | never (NOLOGIN group) | subject (FORCE binds owners) | owns every app schema/table/sequence — DDL + TRUNCATE authority lives here; migrator/operator act through membership |
-| `clinozy_be_migrator` | `DATABASE_MIGRATION_URL` (local + the hosted slot; the bootstrap superuser is needed ONLY for a fresh clone's first migrate, before the roles exist) | subject | migrations/DDL (owner-member, `CREATEROLE`, ledger read/write) |
+| `clinozy_be_migrator` | `DATABASE_MIGRATION_URL` (local + hosted; locally the bootstrap superuser is needed ONLY for a fresh clone's first migrate, before the roles exist — hosted, clinozy-infra pre-creates it and it runs the first migrate too) | subject locally; **BYPASSRLS** hosted (granted by clinozy-infra so the SECURITY DEFINER resolvers it creates keep working) | migrations/DDL (owner-member, `CREATEROLE`, ledger read/write) |
 | `clinozy_be_app` | `DATABASE_URL` | **subject** | ALL runtime traffic — local `pnpm dev` now connects as it too (production parity; boot logs `rls_safety.ok` locally) |
 | `clinozy_be_maintenance` | `DATABASE_MAINTENANCE_URL` | **subject** | maintenance (bypass) contexts — authority comes only from the GUC arms, never the connection |
 | `clinozy_be_operator` | `DATABASE_OPERATOR_URL` (**local/CI only — never hosted**) | **BYPASSRLS** | test-harness fixtures, full/bulk seeds, ops scratch; owner-member + member of app/maintenance so suites can `SET LOCAL ROLE clinozy_be_app` to exercise real policies |
 
 Locks: `role-taxonomy.db.unit.test.ts` pins the role set, non-superuser/non-BYPASSRLS
-posture (operator excepted), the owner's table-ownership sweep (drift lock — new tables
+posture (operator excepted — this is the local/CI posture; the hosted migrator carries
+BYPASSRLS by design), the owner's table-ownership sweep (drift lock — new tables
 must `ALTER TABLE … OWNER TO clinozy_be_owner`), and membership edges.
 
 **SECURITY DEFINER nuance (empirically proven):** a definer function executes as its
 OWNER, and FORCE RLS binds a non-exempt owner — so resolver functions are deliberately
 NOT owned by `clinozy_be_owner` (they would silently return zero rows). They stay owned by
-the per-environment elevated role: local `core` (superuser) / hosted provider owner
-(BYPASSRLS via the provider's elevated grant). Verify resolver behavior after
+the per-environment migration role: local `core` (superuser) / hosted `clinozy_be_migrator`
+(BYPASSRLS, granted by clinozy-infra's provisioning). Verify resolver behavior after
 provisioning any new hosted environment.
 
 End-state (operator-gated): after every hosted environment provisions the maintenance

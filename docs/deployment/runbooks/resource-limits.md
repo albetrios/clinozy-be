@@ -125,14 +125,14 @@ Enable **`SCHEDULER_ENABLED=true` on only one service** per environment so repea
 
 Worker processes also poll pool pressure (same intervals as API) and attach `workerQueueFamilies` / `workerPeakPostgresConcurrency` to Sentry pool alerts when `METRICS_ENABLED` is on.
 
-Use **`DATABASE_MIGRATION_URL`** (owner) for migrations and **`DATABASE_URL`** as a restricted non-superuser **login** role that is granted `clinozy_be_app` (see [Database runtime role](#database-runtime-role-row-level-security-safety) below). `clinozy_be_app` itself is created `NOLOGIN` in the [baseline migration](../../../migrations/00000000000000_init.sql) and cannot be connected as directly — it is the privilege holder, not the connecting role. RLS is enforced via `FORCE ROW LEVEL SECURITY`, also defined in the baseline.
+Use **`DATABASE_MIGRATION_URL`** (`clinozy_be_migrator`) for migrations and **`DATABASE_URL`** (`clinozy_be_app`, a non-superuser `NOBYPASSRLS` login) for runtime (see [Database runtime role](#database-runtime-role-row-level-security-safety) below). The [baseline migration](../../../migrations/00000000000000_init.sql) creates `clinozy_be_app` `NOLOGIN` only when it is missing; hosted environments get it as a login from clinozy-infra before the first deploy. RLS is enforced via `FORCE ROW LEVEL SECURITY`, also defined in the baseline.
 
 ### Neon connection strings
 
 | Variable                     | Use                                       | Notes                                                                                                                                  |
 | ---------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | **`DATABASE_URL`**           | API + worker runtime                      | Prefer **pooled** endpoint (`-pooler` host / `?pgbouncer=true` per Neon docs). Provisioning requests `pooled=true` from the Neon API. |
-| **`DATABASE_MIGRATION_URL`** | `pnpm db:migrate`, deploy pre-deploy step | **Direct** (non-pooler) connection with migration owner credentials.                                                                   |
+| **`DATABASE_MIGRATION_URL`** | `pnpm db:migrate`, deploy pre-deploy step | **Direct** (non-pooler) connection as `clinozy_be_migrator`.                                                                           |
 
 Size the connection budget against Neon `max_connections` (see formula above).
 
@@ -311,26 +311,33 @@ The deploy's **"Deploy API and worker to Railway"** step fails: the image builds
 "neondb_owner" with rolsuper=false rolbypassrls=true. ..."
 ```
 
-Common triggers: **Neon's `neondb_owner`** (`BYPASSRLS=true`) or **Railway's default `postgres`** superuser used directly as `DATABASE_URL`.
+Common triggers: **Neon's `neondb_owner`** (`BYPASSRLS=true`), **Railway's default `postgres`** superuser, or a role created through Neon's REST API / console / CLI (all of which grant `BYPASSRLS`) used directly as `DATABASE_URL`.
 
-### Fix — split the two database URLs by role
+### Fix — split the database URLs by role
 
-| Env var | Role | Why |
+| Env var | Database user | Why |
 | --- | --- | --- |
-| `DATABASE_URL` (runtime) | dedicated **non-superuser** login role granted `clinozy_be_app` (e.g. `<environment>_app_login`) | enforces RLS / tenant isolation |
-| `DATABASE_MIGRATION_URL` (migrations only) | the **owner** (`neondb_owner` / `postgres`) | DDL + role management need owner privileges |
+| `DATABASE_URL` (runtime, pooled) | `clinozy_be_app` — `LOGIN NOSUPERUSER NOBYPASSRLS` | enforces RLS / tenant isolation |
+| `DATABASE_MAINTENANCE_URL` (maintenance pool, pooled) | `clinozy_be_maintenance` — `LOGIN NOBYPASSRLS` | maintenance contexts stay RLS-subject ([runbook](maintenance-database-role.md)) |
+| `DATABASE_MIGRATION_URL` (migrations only, direct host) | `clinozy_be_migrator` — `LOGIN CREATEROLE BYPASSRLS` | DDL + role management; runs every migration, the first one on an empty database included |
 
-The intended runtime role is `clinozy_be_app` (`NOLOGIN`, created by `migrations/00000000000000_init.sql`); a dedicated login role inherits its DML via membership. Provision it **as the owner** (through `DATABASE_MIGRATION_URL`) with SQL `CREATE ROLE` — not Neon's REST API, which taints roles with `BYPASSRLS`:
+API and worker share these users (tenant jobs on `DATABASE_URL`, retention/cleanup on the maintenance pool). The provider owner (`neondb_owner` / `postgres`) is in none of them — it only creates the users. `BYPASSRLS` on the migrator mirrors the provider owner it replaces: SECURITY DEFINER resolvers run as the role that created them, and `FORCE ROW LEVEL SECURITY` would otherwise make them return zero rows (see the header of `migrations/20260827050000_role_taxonomy_owner_operator_migrator.sql`). Create the users **as the provider owner** with SQL `CREATE ROLE` — not Neon's REST API, which taints roles with `BYPASSRLS`:
 
 ```sql
-CREATE ROLE development_app_login LOGIN PASSWORD '<generated>';
-GRANT CONNECT ON DATABASE neondb TO development_app_login;
-GRANT clinozy_be_app TO development_app_login;   -- inherits DML on the app schemas
+CREATE ROLE clinozy_be_app LOGIN PASSWORD '<generated>';
+CREATE ROLE clinozy_be_maintenance LOGIN PASSWORD '<generated>';
+CREATE ROLE clinozy_be_migrator LOGIN CREATEROLE BYPASSRLS PASSWORD '<generated>';
+GRANT CONNECT ON DATABASE neondb TO clinozy_be_app, clinozy_be_maintenance, clinozy_be_migrator;
+GRANT ALL ON DATABASE neondb TO clinozy_be_migrator WITH GRANT OPTION;
+GRANT ALL ON SCHEMA public TO clinozy_be_migrator WITH GRANT OPTION;
+-- ADMIN only (no inherited privileges): the migrations grant these roles to others.
+GRANT clinozy_be_app TO clinozy_be_migrator WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+GRANT clinozy_be_maintenance TO clinozy_be_migrator WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
 ```
 
-Then point `DATABASE_URL` at that role (keep the pooler host and params; swap only `user:password`) and re-deploy. Confirm with `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = session_user` — both must be `false`.
+The migrations create every role `NOLOGIN` only when it is missing, so they leave these users' attributes alone and attach the grants — including `clinozy_be_migrator`'s membership in `clinozy_be_owner`, the `NOLOGIN` group that owns the tables. Point each URL at its user (pooler host for the two runtime URLs, direct host for the migration URL) and re-deploy. Confirm with `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = session_user` on `DATABASE_URL` — both must be `false`.
 
-> core-infra's Neon provisioning creates this `<environment>_app_login` role automatically (`setup-neon` → `ensureRuntimeRoleViaSql`). A database set up **outside** that flow (e.g. a hand-created Neon branch) must have the role created and wired manually as above.
+> clinozy-infra's Neon provisioning (`setup-neon`) creates these three users on each environment's branch before the first deploy — via SQL as `neondb_owner` — and writes the three URLs into `.env.<environment>`. A database set up **outside** that flow (e.g. a hand-created Neon branch) must have the users created and wired manually as above.
 
 ### Do NOT disable the guard to "fix" it
 

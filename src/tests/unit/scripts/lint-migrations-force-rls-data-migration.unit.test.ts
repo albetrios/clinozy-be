@@ -5,8 +5,8 @@ import { lintMigrationFileContent } from '@/scripts/validators/migration/lint-mi
  * The migrator is RLS-subject: `clinozy_be_migrator` is a member of `clinozy_be_owner`, and FORCE ROW
  * LEVEL SECURITY binds table owners. A data migration that WRITES a FORCE RLS table is rejected;
  * one that READS from one is handed zero rows and succeeds having done nothing. Hosted
- * migrations run as a provider owner that bypasses RLS, so both pass there and fail only where
- * the migrator is RLS-subject.
+ * migrations run as a `clinozy_be_migrator` login that also holds BYPASSRLS, so both pass there
+ * and fail only where the migrator is RLS-subject.
  *
  * Both failure modes happened for real on `20260921000000_team_owner_notify_permissions_backfill`:
  * the original file was rejected outright and blocked every later migration, and the first fix
