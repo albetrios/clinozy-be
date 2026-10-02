@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   type DesiredEnvironment,
   type RemoteEnvironment,
+  buildEnvironmentPutBody,
   diffEnvironment,
+  isRequiredReviewersPlanError,
+  requiredReviewersSupport,
 } from '@tooling/setup/github/sync-environment-protection.js';
 
 /**
@@ -103,5 +106,68 @@ describe('diffEnvironment (github:sync environment protection)', () => {
       customBranches: [],
     };
     expect(diffEnvironment(desiredEmpty, remoteEmpty)).toEqual([]);
+  });
+});
+
+/**
+ * GitHub enforces required reviewers on a private repository's environments only on Enterprise —
+ * on Team the PUT fails with HTTP 422 and used to abort the whole `github:sync` before any value
+ * was pushed. These pin when the sync skips the reviewers instead of failing.
+ */
+describe('required reviewers plan support (github:sync environment protection)', () => {
+  it('supports them on a public repository, whatever the plan', () => {
+    expect(
+      requiredReviewersSupport({ isPrivate: false, ownerType: 'Organization', ownerPlan: 'free' }),
+    ).toBe('supported');
+  });
+
+  it('supports them on a private repository only on Enterprise', () => {
+    expect(
+      requiredReviewersSupport({
+        isPrivate: true,
+        ownerType: 'Organization',
+        ownerPlan: 'enterprise',
+      }),
+    ).toBe('supported');
+    expect(
+      requiredReviewersSupport({ isPrivate: true, ownerType: 'Organization', ownerPlan: 'team' }),
+    ).toBe('unsupported');
+    expect(requiredReviewersSupport({ isPrivate: true, ownerType: 'User' })).toBe('unsupported');
+  });
+
+  it("is unknown when the token can't read the organization's plan", () => {
+    expect(requiredReviewersSupport({ isPrivate: true, ownerType: 'Organization' })).toBe(
+      'unknown',
+    );
+  });
+
+  it("recognises GitHub's plan error and nothing else", () => {
+    expect(
+      isRequiredReviewersPlanError(
+        'gh: Failed to create the environment protection rule. Please ensure the billing plan supports the required reviewers protection rule. (HTTP 422)',
+      ),
+    ).toBe(true);
+    expect(isRequiredReviewersPlanError('gh: Validation Failed (HTTP 422)')).toBe(false);
+  });
+
+  it('leaves reviewers out of a branch-policy-only PUT, since GitHub rejects even [] on this plan', () => {
+    const branchPolicyOnly: DesiredEnvironment = {
+      reviewers: [],
+      preventSelfReview: false,
+      deploymentBranchPolicy: { protected_branches: true, custom_branch_policies: false },
+      customBranches: [],
+    };
+    expect(buildEnvironmentPutBody(branchPolicyOnly, false)).toEqual({
+      deployment_branch_policy: { protected_branches: true, custom_branch_policies: false },
+    });
+    // Reviewers that GitHub still has are cleared explicitly.
+    expect(buildEnvironmentPutBody(branchPolicyOnly, true)).toMatchObject({ reviewers: [] });
+    expect(
+      buildEnvironmentPutBody({ ...branchPolicyOnly, reviewers: [{ type: 'User', id: 7 }] }, false),
+    ).toEqual({
+      deployment_branch_policy: { protected_branches: true, custom_branch_policies: false },
+      reviewers: [{ type: 'User', id: 7 }],
+      prevent_self_review: false,
+    });
   });
 });
