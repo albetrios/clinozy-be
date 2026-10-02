@@ -221,7 +221,16 @@ jobs:
           format: cyclonedx-json
           output-file: sbom.cyclonedx.json
 
+      # Artifact attestations need GitHub Enterprise Cloud on a private repository; on any
+      # other plan GitHub refuses to store them and the step fails. There, set the repository
+      # variable ARTIFACT_ATTESTATIONS=disabled (clinozy-infra's `pnpm setup:infra:deploy`
+      # sets it from the plan) to skip them with this warning instead.
+      - name: Artifact attestations disabled
+        if: vars.ARTIFACT_ATTESTATIONS == 'disabled'
+        run: echo "::warning title=Artifact attestations skipped::ARTIFACT_ATTESTATIONS=disabled — GitHub stores attestations for a private repository only on GitHub Enterprise Cloud."
+
       - name: Attest CycloneDX source SBOM
+        if: vars.ARTIFACT_ATTESTATIONS != 'disabled'
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
           subject-path: sbom.cyclonedx.json
