@@ -125,7 +125,7 @@ describe('auth public-route rate-limit + captcha policy (public go-live surface)
     });
   }
 
-  // CAPTCHA (Turnstile) on the public credential / outbound-email / OAuth-initiation forms.
+  // CAPTCHA (Turnstile) on the public credential / outbound-email forms.
   const CAPTCHA_PROTECTED_ROUTES: Array<{ method: string; url: string }> = [
     { method: 'post', url: '/login' },
     { method: 'post', url: '/email/send-code' },
@@ -134,13 +134,19 @@ describe('auth public-route rate-limit + captcha policy (public go-live surface)
     { method: 'post', url: '/password/reset' },
     { method: 'post', url: '/mfa/login' },
     { method: 'post', url: '/webauthn/authenticate/options' },
-    { method: 'get', url: '/oauth/:provider' },
   ];
   for (const route of CAPTCHA_PROTECTED_ROUTES) {
     it(`${route.method.toUpperCase()} ${route.url} carries captchaPreHandler`, () => {
       expect(findRouteOptionsObject(route.method, route.url)).toContain('captchaPreHandler');
     });
   }
+
+  // OAuth initiation only returns the provider's authorization URL; Google/GitHub authenticate
+  // the user, so it carries no captcha (the challenge on click was the slowest part of "Sign in
+  // with Google") — the strict public rate limit above still applies.
+  it('GET /oauth/:provider carries no captchaPreHandler', () => {
+    expect(findRouteOptionsObject('get', '/oauth/:provider')).not.toContain('captchaPreHandler');
+  });
 
   // Per-identity (per-email) throttle layered on the IP cap so spoofed-IP rotation cannot bypass
   // the public limit on the highest-value credential / email-sending endpoints.

@@ -26,6 +26,12 @@ const corsMiddleware: FastifyPluginAsync = async (app) => {
       // preflight `Access-Control-Allow-Headers` the OPTIONS check fails, which blocked
       // the silent auth-token refresh on the dev deploy.
       'X-Requested-With',
+      // Sentry's distributed-tracing headers: the frontend SDK adds them to every request
+      // matching its tracePropagationTargets (`https://api.*`). Missing from the preflight,
+      // the browser blocked the request outright — production Google sign-in failed with
+      // "Request header field baggage is not allowed by Access-Control-Allow-Headers".
+      'sentry-trace',
+      'baggage',
     ],
     // sec-re-17: sec-CM #27 added the server-minted `X-Client-Request-Id`
     // response header but did not list it on `exposedHeaders`. Cross-origin

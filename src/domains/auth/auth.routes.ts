@@ -113,9 +113,11 @@ export const authRoutesPlugin: FastifyPluginAsync = async (app) => {
     },
     controller.listOauthProviders,
   );
+  // No captcha: this only returns the provider's authorization URL (with a PKCE/state nonce);
+  // Google/GitHub authenticate the user themselves, and the strict public rate limit still
+  // applies. A Turnstile challenge here was the slowest part of "Sign in with Google".
   zodApplication.get('/oauth/:provider', {
     ...STRICT_PUBLIC_RATE_LIMIT,
-    preHandler: [captchaPreHandler],
     schema: {
       summary: 'Initiate OAuth flow',
       description:
