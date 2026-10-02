@@ -38,7 +38,7 @@ The worker process logs a warning when **RSS** exceeds **512 MiB** ([`src/infras
 
 ### Postgres connection budget
 
-Each **API** and **worker** process opens its own postgres.js pool (`DATABASE_POOL_MAX`, default **20**). Size deployments so:
+Each **API** and **worker** process opens its own postgres.js pool (`DATABASE_POOL_MAX`, default **30**). Size deployments so:
 
 ```text
 DEPLOYMENT_TOTAL_REPLICA_COUNT × DATABASE_POOL_MAX ≤ max_connections − POSTGRES_RESERVED_CONNECTIONS
@@ -51,7 +51,7 @@ If you set split counts instead of `DEPLOYMENT_TOTAL_REPLICA_COUNT`, the API and
 | `DEPLOYMENT_TOTAL_REPLICA_COUNT`  | Shorthand: `api_replicas + worker_replicas`                     | required in production (or use split counts) |
 | `DEPLOYMENT_API_REPLICA_COUNT`    | API service replica count                                       | optional split count                         |
 | `DEPLOYMENT_WORKER_REPLICA_COUNT` | Worker service replica count                                    | optional split count                         |
-| `DATABASE_POOL_MAX`               | postgres.js pool `max` per pool                                 | `20`                                         |
+| `DATABASE_POOL_MAX`               | postgres.js pool `max` per pool                                 | `30`                                         |
 | `POSTGRES_RESERVED_CONNECTIONS`   | Admin, migrations, monitoring headroom                          | `10`                                         |
 | `POSTGRES_MAX_CONNECTIONS`        | Optional override when `SHOW max_connections` is wrong (pooler) | query Postgres                               |
 
