@@ -180,6 +180,13 @@ export class OrganizationApiKeyService {
       if (!organization) throw new NotFoundError('Organization');
       const row = await this.apiKeyRepository.findByPublicId(api_key_public_id, organization.id);
       if (!row) throw new NotFoundError('API key');
+      if (parsed.status === 'ACTIVE' && row.status !== 'ACTIVE') {
+        await this.assertCanReactivate({
+          organizationPublicId: organization_public_id,
+          scopes: row.scopes,
+          callerUserPublicId: updated_by_user_public_id,
+        });
+      }
       const userId =
         await this.organizationRepository.resolveUserIdByPublicId(updated_by_user_public_id);
       const updated = await this.apiKeyRepository.update(
@@ -190,6 +197,32 @@ export class OrganizationApiKeyService {
       );
       if (!updated) throw new NotFoundError('API key');
       return serializeOrganizationApiKey(updated, organization_public_id);
+    });
+  }
+
+  /**
+   * Reactivating a revoked key brings its old secret and its stored scopes back to life — a
+   * fresh grant of those scopes, so it passes the same grant check as {@link create}.
+   *
+   * @remarks
+   * The caller must be a real user holding every scope on the key
+   * ({@link assertCallerCanGrantPermissionCodes}); an API-key principal has no acting user and is
+   * refused. Without this, an `api-key:manage` holder could PATCH a broader revoked key back to
+   * ACTIVE and use its retained secret — authority neither creation nor rotation would grant.
+   * The active-key cap needs no re-check: it counts every non-deleted key, revoked ones included,
+   * so the reactivated key already holds its slot.
+   */
+  private async assertCanReactivate(options: {
+    organizationPublicId: string;
+    scopes: string[];
+    callerUserPublicId: string | undefined;
+  }): Promise<void> {
+    await assertCallerCanGrantPermissionCodes({
+      authorizationService: this.authorizationService,
+      permissionRepository: this.permissionRepository,
+      callerUserPublicId: options.callerUserPublicId,
+      organizationPublicId: options.organizationPublicId,
+      requestedPermissionCodes: options.scopes,
     });
   }
 
