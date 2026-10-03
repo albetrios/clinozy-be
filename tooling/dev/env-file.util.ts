@@ -18,6 +18,12 @@ export function upsertEnvAssignment(content: string, key: string, value: string)
   return content.endsWith('\n') ? `${content}${line}\n` : `${content}\n${line}\n`;
 }
 
+/** Comments out the key's assignment line (`KEY=…` → `# KEY=…`), so dotenv no longer sets it. */
+export function commentOutEnvAssignment(content: string, key: string): string {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return content.replace(new RegExp(`^(${escapedKey}=.*)$`, 'm'), (line) => `# ${line}`);
+}
+
 /**
  * A logical value in dotenv syntax that `dotenv.parse` reads back unchanged: bare when it is a plain
  * token; single-quoted (dotenv takes it literally) when it has no `'` or newline; double-quoted with

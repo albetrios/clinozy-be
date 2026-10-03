@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { formatEnvValue, upsertEnvAssignment } from './env-file.util.js';
+import { commentOutEnvAssignment, formatEnvValue, upsertEnvAssignment } from './env-file.util.js';
 
 /**
  * One value `.env.local` cannot generate for itself: a credential (or the setting tied to it) that
@@ -72,8 +72,9 @@ export const EXTERNAL_CREDENTIALS: readonly ExternalCredential[] = [
   },
   {
     key: 'OTEL_EXPORTER_OTLP_ENDPOINT',
-    integration: 'OpenTelemetry — trace collector endpoint',
-    reportMissing: true,
+    // Optional: unset means tracing off (no collector is the normal local case), so never reported.
+    integration: 'OpenTelemetry — trace collector endpoint (optional; unset = tracing off)',
+    reportMissing: false,
   },
   {
     key: 'OTEL_EXPORTER_OTLP_HEADERS',
@@ -103,6 +104,17 @@ export function parseEnvFileContent(content: string): Record<string, string> {
   return dotenv.parse(content);
 }
 
+/**
+ * Placeholders an older `.env.example` shipped as ACTIVE lines and the current one comments out.
+ * Copied into existing `.env.local` files, they still switch a feature on against a host that does
+ * not exist (`https://otel.example.com` made every process retry trace exports to nowhere). A key
+ * holding exactly one of these is treated as unset: filled when a source has a real value,
+ * otherwise commented out.
+ */
+export const RETIRED_PLACEHOLDERS: Readonly<Record<string, string>> = {
+  OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otel.example.com',
+};
+
 /** What {@link fillExternalCredentials} did, by key — never values. */
 export type ExternalCredentialFill = {
   /** The updated `.env.local` contents. */
@@ -113,11 +125,19 @@ export type ExternalCredentialFill = {
   kept: string[];
   /** Keys still on the placeholder (or unset) because no source has a real value either. */
   missing: string[];
+  /** Keys whose retired placeholder ({@link RETIRED_PLACEHOLDERS}) was commented out. */
+  retired: string[];
 };
 
-/** A value that is unset, blank, or still the `.env.example` placeholder. */
-function isPlaceholder(value: string | undefined, exampleValue: string | undefined): boolean {
-  return value === undefined || value.trim() === '' || value === exampleValue;
+/** A value that is unset, blank, still the `.env.example` placeholder, or a retired placeholder. */
+function isPlaceholder(
+  value: string | undefined,
+  exampleValue: string | undefined,
+  retiredValue: string | undefined,
+): boolean {
+  return (
+    value === undefined || value.trim() === '' || value === exampleValue || value === retiredValue
+  );
 }
 
 /**
@@ -131,6 +151,8 @@ function isPlaceholder(value: string | undefined, exampleValue: string | undefin
  * - **Never copies a placeholder:** a source value that is itself the placeholder (or blank) is not
  *   a real value, so the next source is tried; with none left the key is reported as missing when
  *   its `reportMissing` is set (an optional key, or one whose template value may be real, is not).
+ * - **Retires stale placeholders:** a key holding a {@link RETIRED_PLACEHOLDERS} value is filled
+ *   from a source with a real value, or else commented out.
  * - **Reports keys, never values,** so the caller can print the outcome safely.
  * - Pure: no file I/O — the caller reads and writes the files.
  */
@@ -146,18 +168,25 @@ export function fillExternalCredentials(options: {
     copied: [],
     kept: [],
     missing: [],
+    retired: [],
   };
   for (const { key, reportMissing } of EXTERNAL_CREDENTIALS) {
     const exampleValue = exampleValues[key];
-    if (!isPlaceholder(localValues[key], exampleValue)) {
+    const retiredValue = RETIRED_PLACEHOLDERS[key];
+    const localValue = localValues[key];
+    if (!isPlaceholder(localValue, exampleValue, retiredValue)) {
       fill.kept.push(key);
       continue;
     }
     const source = options.sources.find(
-      (candidate) => !isPlaceholder(candidate.values[key], exampleValue),
+      (candidate) => !isPlaceholder(candidate.values[key], exampleValue, retiredValue),
     );
     const sourceValue = source?.values[key];
     if (source === undefined || sourceValue === undefined) {
+      if (retiredValue !== undefined && localValue === retiredValue) {
+        fill.content = commentOutEnvAssignment(fill.content, key);
+        fill.retired.push(key);
+      }
       if (reportMissing) fill.missing.push(key);
       continue;
     }

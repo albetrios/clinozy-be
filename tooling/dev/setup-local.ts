@@ -459,22 +459,27 @@ function syncExternalCredentials(reports: StepReport[], options: BootstrapOption
     example: readFileSync(examplePath, 'utf8'),
     sources,
   });
-  if (fill.copied.length > 0 && !options.check) writeFileSync(envLocalPath, fill.content);
+  const changed = fill.copied.length > 0 || fill.retired.length > 0;
+  if (changed && !options.check) writeFileSync(envLocalPath, fill.content);
 
-  const copiedLabel = sources
-    .map(({ label }) => {
+  const copiedLabel = [
+    ...sources.map(({ label }) => {
       const keys = fill.copied.filter((copy) => copy.source === label).map((copy) => copy.key);
       return keys.length > 0
         ? `${options.check ? 'would copy' : 'copied'} from ${label}: ${keys.join(', ')}`
         : '';
-    })
+    }),
+    fill.retired.length > 0
+      ? `${options.check ? 'would comment out' : 'commented out'} a stale placeholder: ${fill.retired.join(', ')}`
+      : '',
+  ]
     .filter(Boolean)
     .join('; ');
   if (fill.missing.length === 0) {
     reportStep(
       reports,
       'third-party API keys',
-      fill.copied.length > 0 ? 'done' : 'skipped',
+      changed ? 'done' : 'skipped',
       startedAt,
       copiedLabel || 'all set',
     );
