@@ -7,7 +7,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseSchema } from './lib/parser.mjs';
 import { diffSchemas } from './lib/diff.mjs';
@@ -15,6 +14,7 @@ import { buildMigrationVersions, cloneSchema } from './lib/sql-migrations.mjs';
 import { buildPlanSchema, discoverIterationPlans, parseErDiagrams } from './lib/plan.mjs';
 import { openUrl } from './lib/open.mjs';
 import { DEFAULT_PORT } from './lib/project.mjs';
+import { LOOPBACK_HOST, createLoopbackGuard } from '../dev/loopback-guard.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -180,17 +180,12 @@ function startServer(opts = {}) {
   );
   let skippedStatements = 0;
   let reviewInFlight = false;
-  const BIND_HOST = '127.0.0.1';
   const reviewEnabled = process.env.DB_VIEWER_REVIEW === '1';
   // Loopback is shared by every local user/process: a per-boot random token — embedded in
   // the URL the CLI prints/opens — gates /api/* and /events so an unrelated local process
-  // cannot read the schema or trigger reviews (token spend).
-  const sessionToken = randomBytes(16).toString('hex');
-
-  function isValidSessionToken(provided) {
-    if (typeof provided !== 'string' || provided.length !== sessionToken.length) return false;
-    return timingSafeEqual(Buffer.from(provided), Buffer.from(sessionToken));
-  }
+  // cannot read the schema or trigger reviews (token spend). Host + Origin checks stop DNS
+  // rebinding and cross-origin pages (tooling/dev/loopback-guard.mjs).
+  const loopbackGuard = createLoopbackGuard({ port });
 
   function loadHistory() {
     if (fresh || migrationMode) return;
@@ -485,29 +480,6 @@ function startServer(opts = {}) {
     res.end(JSON.stringify(obj));
   }
 
-  function isLocalOrigin(origin, portNum) {
-    if (!origin) return true; // same-origin / non-browser clients omit Origin
-    try {
-      const u = new URL(origin);
-      const hostOk = u.hostname === '127.0.0.1' || u.hostname === 'localhost';
-      const portOk = !u.port || Number(u.port) === Number(portNum);
-      return hostOk && portOk && (u.protocol === 'http:' || u.protocol === 'https:');
-    } catch {
-      return false;
-    }
-  }
-
-  function isLocalHostHeader(host, portNum) {
-    if (!host || typeof host !== 'string') return false;
-    const h = host.trim().toLowerCase();
-    return (
-      h === `127.0.0.1:${portNum}` ||
-      h === `localhost:${portNum}` ||
-      h === '127.0.0.1' ||
-      h === 'localhost'
-    );
-  }
-
   function childEnvAllowlist() {
     const allow = ['PATH', 'HOME', 'USER', 'LOGNAME', 'TMPDIR', 'LANG', 'LC_ALL', 'TERM'];
     const env = {};
@@ -524,24 +496,12 @@ function startServer(opts = {}) {
    *
    * Returns true when the request was rejected and a response already sent.
    */
-  function rejectUntrustedRequest(req, res, pathname, searchParams) {
+  function rejectUntrustedRequest(req, res, pathname) {
     if (!(pathname.startsWith('/api/') || pathname === '/events')) return false;
-
-    if (!isLocalHostHeader(req.headers.host, port)) {
-      json(res, 403, { error: 'Invalid Host' });
-      return true;
-    }
-    if (!isLocalOrigin(req.headers.origin, port)) {
-      json(res, 403, { error: 'Origin not allowed' });
-      return true;
-    }
-    // Query param because EventSource cannot set headers; header kept for curl ergonomics.
-    const provided = req.headers['x-session-token'] || searchParams.get('token') || '';
-    if (!isValidSessionToken(provided)) {
-      json(res, 403, { error: 'Missing or invalid session token' });
-      return true;
-    }
-    return false;
+    const rejection = loopbackGuard.rejectionFor(req, { requireSessionToken: true });
+    if (!rejection) return false;
+    json(res, rejection.status, { error: rejection.error });
+    return true;
   }
 
   /** SSE stream: push the current payload, then every later broadcast. */
@@ -782,7 +742,7 @@ function startServer(opts = {}) {
       return;
     }
 
-    if (rejectUntrustedRequest(req, res, pathname, searchParams)) return;
+    if (rejectUntrustedRequest(req, res, pathname)) return;
 
     if (pathname === '/events') return handleEventsStream(req, res);
     if (pathname === '/api/review' && req.method === 'POST') return handleReviewRequest(req, res);
@@ -803,7 +763,7 @@ function startServer(opts = {}) {
     process.exit(1);
   });
 
-  server.listen(port, BIND_HOST, () => {
+  server.listen(port, LOOPBACK_HOST, () => {
     if (migrationMode) {
       rebuildMigrationVersions();
     } else {
@@ -812,7 +772,7 @@ function startServer(opts = {}) {
     }
     watch();
     // The token stays in the URL (not stripped client-side) so reloads keep working.
-    const url = `http://${BIND_HOST}:${port}/?token=${sessionToken}`;
+    const url = loopbackGuard.announcedUrl();
     console.log(`\n  DB Viewer${projectName ? ` · ${projectName}` : ''} running`);
     console.log(`  → ${url} (loopback only, session token required)`);
     console.log(`  schema:     ${target}`);
