@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { NotFoundError } from '@/shared/errors/index.js';
 
 // REQ-4: stub the seat-sync producer queue so syncs never open Redis in unit tests.
 const seatSyncMocks = vi.hoisted(() => ({ enqueueSubscriptionSeatSyncBestEffort: vi.fn() }));
@@ -244,6 +245,27 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     await service.syncSeatQuantityForOrganization('org_public');
     expect(paymentProvider.updateSubscriptionQuantity).not.toHaveBeenCalled();
     expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('syncSeatQuantityForOrganization is a no-op for an organization that no longer exists (no retry, no dead letter)', async () => {
+    // Deleted between the membership change that enqueued the job and the job itself: permanent, so
+    // throwing would only spend the queue's 5 attempts and dead-letter an alert.
+    vi.mocked(organizationService.requireOrganizationByPublicId).mockRejectedValue(
+      new NotFoundError('Organization'),
+    );
+    await expect(service.syncSeatQuantityForOrganization('org_public')).resolves.toBeUndefined();
+    expect(repository.findActiveByOrganization).not.toHaveBeenCalled();
+    expect(paymentProvider.updateSubscriptionQuantity).not.toHaveBeenCalled();
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('syncSeatQuantityForOrganization still throws a non-not-found failure so the job retries', async () => {
+    vi.mocked(organizationService.requireOrganizationByPublicId).mockRejectedValue(
+      new Error('connection terminated'),
+    );
+    await expect(service.syncSeatQuantityForOrganization('org_public')).rejects.toThrow(
+      'connection terminated',
+    );
   });
 
   it('syncSeatQuantityForOrganization reconciles seats locally but skips Stripe for a subscription with no provider id', async () => {

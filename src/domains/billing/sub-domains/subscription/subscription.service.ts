@@ -317,7 +317,9 @@ export class SubscriptionService {
    *   so reads reflect the synced quantity immediately (the `customer.subscription.updated` webhook
    *   also confirms it). Seat usage (ACTIVE + INVITED) comes from the injected membership port.
    * - **Failure modes:** a Stripe outage throws `ServiceUnavailableError` from the provider so the
-   *   caller (BullMQ worker) retries; no active subscription / no member-port is a no-op. Local-only
+   *   caller (BullMQ worker) retries; no active subscription / no member-port is a no-op, and so is an
+   *   organization that no longer exists (deleted between the membership change and the job — a
+   *   permanent condition, so retrying and dead-lettering it would only raise alerts). Local-only
    *   subscriptions (no `provider_subscription_id`) skip the Stripe call but still persist `seats`.
    * - **Side effects:** at most one Stripe update + one local `subscriptions.seats` write.
    * - **Notes:** safe to call from the seat-sync worker directly (it manages its own contexts, like
@@ -334,15 +336,28 @@ export class SubscriptionService {
       );
       return;
     }
-    const { organization, subscription } = await withAppDatabaseContext(
+    const phaseOne = await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization_public_id }),
       async () => {
-        const organization =
-          await this.organizationService.requireOrganizationByPublicId(organization_public_id);
-        const subscription = await this.repository.findActiveByOrganization(organization.id);
-        return { organization, subscription };
+        try {
+          const organization =
+            await this.organizationService.requireOrganizationByPublicId(organization_public_id);
+          const subscription = await this.repository.findActiveByOrganization(organization.id);
+          return { organization, subscription };
+        } catch (error) {
+          if (error instanceof NotFoundError) return null;
+          throw error;
+        }
       },
     );
+    if (!phaseOne) {
+      logger.info(
+        { organizationPublicId: organization_public_id },
+        'subscription.seat_sync.organization_gone',
+      );
+      return;
+    }
+    const { organization, subscription } = phaseOne;
     if (!subscription) return;
 
     const seatsUsed = await this.membershipSeatUsage.countActiveMembers({
