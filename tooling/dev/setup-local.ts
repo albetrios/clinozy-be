@@ -25,6 +25,13 @@
  * self-contained `.env.local` (seeded from `.env.example` with a generated RS256 JWT
  * keypair + SECRETS_ENCRYPTION_KEY and localhost DB/Redis URLs) and exits — used by the
  * cloud-agent bootstrap (`tooling/setup/agent/bootstrap.sh`).
+ *
+ * Third-party API keys (Stripe, Resend, S3 — the list in `external-credentials.ts`) cannot be
+ * generated: `.env.example` ships placeholders for them. Every run — `--only-env` included, on a
+ * fresh or an existing `.env.local` — copies each key still on its placeholder from the hosted
+ * development target's env file when it is present, else from the process environment (shell
+ * exports, CI or cloud variables) — never overwriting a value the developer set — and lists the
+ * keys that still need a real value. Key names are printed, never values.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -33,6 +40,12 @@ import { resolve } from 'node:path';
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { ensureDefaultMcpServers } from './mcp-config.js';
+import {
+  EXTERNAL_CREDENTIALS,
+  EXTERNAL_CREDENTIAL_SOURCE,
+  fillExternalCredentials,
+  parseEnvFileContent,
+} from './external-credentials.js';
 import { resolveDerivedNames } from '@tooling/setup/codegen/project-identity.util.js';
 import { loadConfig } from '@tooling/setup/common/config.js';
 
@@ -358,6 +371,85 @@ function runInstallDependencies(reports: StepReport[], options: BootstrapOptions
 function runEnvScaffolding(reports: StepReport[], options: BootstrapOptions): void {
   logHeading('3/9 Environment (.env.local)');
   scaffoldEnvLocal(reports, options);
+  syncExternalCredentials(reports, options);
+}
+
+/** Report label for the process environment as a credential source. */
+const PROCESS_ENVIRONMENT_LABEL = 'environment variables';
+
+/**
+ * Copies the third-party API keys `.env.local` still holds as placeholders — from
+ * {@link EXTERNAL_CREDENTIAL_SOURCE} when it is present, otherwise (per key) from the process
+ * environment (shell exports, CI or cloud variables) — and lists the ones that still need a real
+ * value. Runs on a fresh and an existing `.env.local` alike; prints key names, never values.
+ */
+function syncExternalCredentials(reports: StepReport[], options: BootstrapOptions): void {
+  const startedAt = performance.now();
+  const envLocalPath = resolve(PROJECT_ROOT, '.env.local');
+  const examplePath = resolve(PROJECT_ROOT, '.env.example');
+  if (!(existsSync(envLocalPath) && existsSync(examplePath))) {
+    reportStep(reports, 'third-party API keys', 'skipped', startedAt, 'no .env.local yet');
+    return;
+  }
+  const sourcePath = resolve(PROJECT_ROOT, EXTERNAL_CREDENTIAL_SOURCE);
+  const sources = [
+    ...(existsSync(sourcePath)
+      ? [
+          {
+            label: EXTERNAL_CREDENTIAL_SOURCE,
+            values: parseEnvFileContent(readFileSync(sourcePath, 'utf8')),
+          },
+        ]
+      : []),
+    { label: PROCESS_ENVIRONMENT_LABEL, values: process.env },
+  ];
+  const fill = fillExternalCredentials({
+    local: readFileSync(envLocalPath, 'utf8'),
+    example: readFileSync(examplePath, 'utf8'),
+    sources,
+  });
+  if (fill.copied.length > 0 && !options.check) writeFileSync(envLocalPath, fill.content);
+
+  const copiedLabel = sources
+    .map(({ label }) => {
+      const keys = fill.copied.filter((copy) => copy.source === label).map((copy) => copy.key);
+      return keys.length > 0
+        ? `${options.check ? 'would copy' : 'copied'} from ${label}: ${keys.join(', ')}`
+        : '';
+    })
+    .filter(Boolean)
+    .join('; ');
+  if (fill.missing.length === 0) {
+    reportStep(
+      reports,
+      'third-party API keys',
+      fill.copied.length > 0 ? 'done' : 'skipped',
+      startedAt,
+      copiedLabel || 'all set',
+    );
+    return;
+  }
+  reportStep(
+    reports,
+    'third-party API keys',
+    'warning',
+    startedAt,
+    [
+      copiedLabel,
+      `${fill.missing.length} still a placeholder (no real value in ${sources.map(({ label }) => label).join(' or ')})`,
+    ]
+      .filter(Boolean)
+      .join('; '),
+  );
+  for (const key of fill.missing) {
+    const integration = EXTERNAL_CREDENTIALS.find(
+      (credential) => credential.key === key,
+    )?.integration;
+    logInfo(`      ${key} — ${integration ?? 'third-party credential'}`);
+  }
+  logInfo(
+    `      Set them in .env.local, export them, or add them to ${EXTERNAL_CREDENTIAL_SOURCE} — then re-run.`,
+  );
 }
 
 function injectGeneratedSecrets(content: string): string {

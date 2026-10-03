@@ -2272,6 +2272,7 @@ src/
     │   │   ├── check-load-coverage.unit.test.ts
     │   │   ├── check-patch-coverage.unit.test.ts
     │   │   ├── db-viewer.unit.test.ts
+    │   │   ├── external-credentials.unit.test.ts
     │   │   ├── iteration-diff.unit.test.ts
     │   │   ├── iteration-intake.unit.test.ts
     │   │   ├── iteration.unit.test.ts

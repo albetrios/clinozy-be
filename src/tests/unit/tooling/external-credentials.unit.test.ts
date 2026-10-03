@@ -1,0 +1,159 @@
+import { describe, expect, it } from 'vitest';
+import dotenv from 'dotenv';
+import {
+  EXTERNAL_CREDENTIALS,
+  fillExternalCredentials,
+  parseEnvFileContent,
+} from '@tooling/dev/external-credentials.js';
+
+const EXAMPLE = [
+  'STRIPE_SECRET_KEY=sk_test_xxx',
+  'STRIPE_WEBHOOK_SECRET=whsec_xxx',
+  'RESEND_API_KEY=re_xxx',
+  'EMAIL_FROM_ADDRESS=noreply@example.com',
+  'S3_BUCKET=my-bucket',
+  'S3_REGION=us-east-1',
+  'S3_ACCESS_KEY_ID=xxx',
+  'S3_SECRET_ACCESS_KEY=xxx',
+  'LOG_LEVEL=debug',
+  '',
+].join('\n');
+
+const ALL_KEYS = EXTERNAL_CREDENTIALS.map((credential) => credential.key);
+const SECRET_KEYS = EXTERNAL_CREDENTIALS.filter((credential) => credential.kind === 'secret').map(
+  (credential) => credential.key,
+);
+
+function file(label: string, content: string) {
+  return { label, values: parseEnvFileContent(content) };
+}
+
+describe('setup:local — third-party API keys for .env.local', () => {
+  it('copies every key still on its placeholder from the env file and leaves other lines alone', () => {
+    const source = file(
+      'env file',
+      [
+        'STRIPE_SECRET_KEY=stripe-key-from-file',
+        'STRIPE_WEBHOOK_SECRET=webhook-secret-from-file',
+        'RESEND_API_KEY=re_realResendKey',
+        'EMAIL_FROM_ADDRESS="Example Sender <no-reply@mail.example.test>"',
+        'S3_BUCKET=clinozy-dev-uploads',
+        'S3_REGION=ap-south-1',
+        'S3_ACCESS_KEY_ID=AKIAREALKEY',
+        'S3_SECRET_ACCESS_KEY=real/secret+key=',
+        'LOG_LEVEL=info',
+      ].join('\n'),
+    );
+
+    const fill = fillExternalCredentials({ local: EXAMPLE, example: EXAMPLE, sources: [source] });
+
+    expect(fill.copied).toEqual(ALL_KEYS.map((key) => ({ key, source: 'env file' })));
+    expect(fill.missing).toEqual([]);
+    const result = dotenv.parse(fill.content);
+    expect(result.STRIPE_SECRET_KEY).toBe('stripe-key-from-file');
+    expect(result.EMAIL_FROM_ADDRESS).toBe('Example Sender <no-reply@mail.example.test>');
+    expect(result.S3_SECRET_ACCESS_KEY).toBe('real/secret+key=');
+    // Not an external credential: the local value stays even though the source differs.
+    expect(result.LOG_LEVEL).toBe('debug');
+  });
+
+  it('falls back to the process environment, per key, when the env file is absent or lacks a key', () => {
+    const environment = {
+      label: 'environment variables',
+      values: { STRIPE_SECRET_KEY: 'stripe-key-from-shell', RESEND_API_KEY: 're_fromShell' },
+    };
+    // No env file at all.
+    const withoutFile = fillExternalCredentials({
+      local: EXAMPLE,
+      example: EXAMPLE,
+      sources: [environment],
+    });
+    expect(withoutFile.copied).toEqual([
+      { key: 'STRIPE_SECRET_KEY', source: 'environment variables' },
+      { key: 'RESEND_API_KEY', source: 'environment variables' },
+    ]);
+    // The file wins where it has a real value; the environment fills what the file lacks.
+    const withFile = fillExternalCredentials({
+      local: EXAMPLE,
+      example: EXAMPLE,
+      sources: [
+        file('env file', 'STRIPE_SECRET_KEY=stripe-key-from-file\nRESEND_API_KEY=re_xxx'),
+        environment,
+      ],
+    });
+    expect(withFile.copied).toEqual([
+      { key: 'STRIPE_SECRET_KEY', source: 'env file' },
+      { key: 'RESEND_API_KEY', source: 'environment variables' },
+    ]);
+    expect(dotenv.parse(withFile.content)).toMatchObject({
+      STRIPE_SECRET_KEY: 'stripe-key-from-file',
+      RESEND_API_KEY: 're_fromShell',
+    });
+  });
+
+  it('never overwrites a value the developer already set', () => {
+    const local = EXAMPLE.replace('RESEND_API_KEY=re_xxx', 'RESEND_API_KEY=re_myOwnKey');
+    const fill = fillExternalCredentials({
+      local,
+      example: EXAMPLE,
+      sources: [
+        file(
+          'env file',
+          'RESEND_API_KEY=re_fromDevelopment\nSTRIPE_SECRET_KEY=stripe-key-from-development',
+        ),
+      ],
+    });
+    expect(fill.kept).toContain('RESEND_API_KEY');
+    expect(dotenv.parse(fill.content).RESEND_API_KEY).toBe('re_myOwnKey');
+    expect(fill.copied).toEqual([{ key: 'STRIPE_SECRET_KEY', source: 'env file' }]);
+  });
+
+  it('does not copy a placeholder or blank value from any source — reports the key as missing', () => {
+    const fill = fillExternalCredentials({
+      local: EXAMPLE,
+      example: EXAMPLE,
+      sources: [
+        file('env file', 'STRIPE_SECRET_KEY=sk_test_xxx\nRESEND_API_KEY='),
+        { label: 'environment variables', values: { STRIPE_SECRET_KEY: '  ' } },
+      ],
+    });
+    expect(fill.copied).toEqual([]);
+    expect(fill.missing).toContain('STRIPE_SECRET_KEY');
+    expect(fill.missing).toContain('RESEND_API_KEY');
+    expect(fill.content).toBe(EXAMPLE);
+  });
+
+  it('with no source holding a real value, changes nothing and lists every placeholder as missing', () => {
+    const fill = fillExternalCredentials({
+      local: EXAMPLE,
+      example: EXAMPLE,
+      sources: [{ label: 'environment variables', values: {} }],
+    });
+    expect(fill.content).toBe(EXAMPLE);
+    // Only secrets are reported: a setting's template value (S3_REGION=us-east-1) may be the real one.
+    expect(fill.missing).toEqual(SECRET_KEYS);
+    expect(fill.missing).not.toContain('S3_REGION');
+  });
+
+  it('adds a key the local file does not declare at all', () => {
+    const fill = fillExternalCredentials({
+      local: 'LOG_LEVEL=debug\n',
+      example: EXAMPLE,
+      sources: [file('env file', 'STRIPE_SECRET_KEY=stripe-key-from-file')],
+    });
+    expect(dotenv.parse(fill.content)).toMatchObject({
+      LOG_LEVEL: 'debug',
+      STRIPE_SECRET_KEY: 'stripe-key-from-file',
+    });
+  });
+
+  it('reports key names and source labels only — no value ever appears in the outcome', () => {
+    const fill = fillExternalCredentials({
+      local: EXAMPLE,
+      example: EXAMPLE,
+      sources: [file('env file', 'STRIPE_SECRET_KEY=stripe-key-from-file')],
+    });
+    const reported = JSON.stringify([fill.copied, fill.kept, fill.missing]);
+    expect(reported).not.toContain('stripe-key-from-file');
+  });
+});

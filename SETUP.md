@@ -62,10 +62,10 @@ pnpm setup:local --no-start                  # bootstrap only, don't start dev
 pnpm setup:local --check                     # preflight only, no mutations
 ```
 
-What it creates automatically on first run:
+What it sets up in `.env.local`:
 
-- **`.env.development`** — seeded from `.env.example` with a freshly generated RS256 JWT keypair (`JWT_PRIVATE_KEY` / `JWT_PUBLIC_KEY`) and `SECRETS_ENCRYPTION_KEY`. Existing files are never overwritten.
-- **`.env.local`** — localhost override pointing `DATABASE_URL` / `REDIS_URL` at the Docker Compose stack (`postgresql://clinozy:clinozy@localhost:5432/clinozy`, `redis://localhost:6379`). Use `--force-env-local` to rewrite it.
+- **On first run** — a self-contained `.env.local`: `.env.example` with a freshly generated RS256 JWT keypair (`JWT_PRIVATE_KEY` / `JWT_PUBLIC_KEY`), `SECRETS_ENCRYPTION_KEY`, and `DATABASE_URL` / `REDIS_URL` pointing at the Docker Compose stack (`postgresql://clinozy:clinozy@localhost:5432/clinozy`, `redis://localhost:6379`). An existing `.env.local` is never rewritten unless you pass `--force-env-local`.
+- **On every run** — the third-party API keys that cannot be generated (Stripe, Resend, S3 — the list in [`tooling/dev/external-credentials.ts`](tooling/dev/external-credentials.ts)). Each key still on its `.env.example` placeholder is copied from `.env.development` when you have that file, otherwise from your environment variables (shell exports, CI or cloud variables). A value you set yourself is never overwritten, key names are printed but values never are, and any key still missing is listed with the integration it breaks. Telemetry (Sentry, PostHog, OpenTelemetry) and OAuth clients are deliberately not copied.
 
 Useful flags: `--skip-deps`, `--skip-docker`, `--skip-migrate`, `--skip-codegraph`, `--with-toxiproxy`.
 
