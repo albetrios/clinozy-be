@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.2.1](https://github.com/albetrios/clinozy-be/compare/v7.2.0...v7.2.1) (2026-10-03)
+
+
+### Fixed
+
+* **env:** deploy-derived NODE_ENV, production-first audit gate, cloud Variables kept ([#31](https://github.com/albetrios/clinozy-be/issues/31)) ([d364e13](https://github.com/albetrios/clinozy-be/commit/d364e138163d1c25dc63083cb68f737434dc6b24))
+* security audit findings, verification fixes and local setup parity ([#35](https://github.com/albetrios/clinozy-be/issues/35)) ([ae2e766](https://github.com/albetrios/clinozy-be/commit/ae2e7663495197e5a3904c65e8bdf5078027cf46))
+
+
+### Documentation
+
+* **iterations:** plan the launch iteration, with DB Viewer plan mode ([#33](https://github.com/albetrios/clinozy-be/issues/33)) ([b51bf0a](https://github.com/albetrios/clinozy-be/commit/b51bf0a4e0f6b13341481d629cc6dfcdd33f9c3b))
+
 ## [7.2.0](https://github.com/albetrios/clinozy-be/compare/v7.1.0...v7.2.0) (2026-10-02)
 
 
