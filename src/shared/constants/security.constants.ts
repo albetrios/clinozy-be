@@ -15,6 +15,22 @@ export const AES_GCM_ALGORITHM = 'aes-256-gcm';
 export const MAX_FAILED_LOGIN_ATTEMPTS = 10;
 
 /**
+ * Cloudflare's published Turnstile **test** secrets
+ * (developers.cloudflare.com/turnstile/troubleshooting/testing): `1x…AA` always passes, `2x…AA`
+ * always fails, `3x…AA` reports the token as already spent.
+ *
+ * @remarks
+ * A test-secret result always names the solving hostname `example.com`, whatever page solved it,
+ * so the verifier's hostname pin is skipped for these secrets (every token passes regardless); the
+ * production env refine refuses them, so a deployed backend always pins and never runs on a secret
+ * that passes every token.
+ */
+export const TURNSTILE_TEST_SECRET_PATTERN = /^[123]x0{31}AA$/;
+
+/** Cloudflare's always-pass Turnstile test secret — local CAPTCHA (`pnpm setup:local --with-captcha`). */
+export const TURNSTILE_ALWAYS_PASS_TEST_SECRET = '1x0000000000000000000000000000000AA';
+
+/**
  * Maximum active (non-revoked) auth-method rows a single user may hold.
  *
  * @remarks

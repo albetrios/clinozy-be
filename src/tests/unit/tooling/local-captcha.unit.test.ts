@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import dotenv from 'dotenv';
 import { formatEnvValue, upsertEnvAssignment } from '@tooling/dev/env-file.util.js';
-import {
-  TURNSTILE_ALWAYS_PASS_TEST_SECRET,
-  applyLocalCaptcha,
-} from '@tooling/dev/local-captcha.js';
+import { applyLocalCaptcha } from '@tooling/dev/local-captcha.js';
+import { TURNSTILE_ALWAYS_PASS_TEST_SECRET } from '@/shared/constants/security.constants.js';
 
 const TEMPLATE = [
   'CAPTCHA_SECRET=',

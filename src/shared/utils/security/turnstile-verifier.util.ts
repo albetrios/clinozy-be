@@ -1,6 +1,7 @@
 import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
 import { buildOutboundCallOptions, outboundCall } from '@/infrastructure/outbound/index.js';
 import { getEnv } from '@/shared/config/env.config.js';
+import { TURNSTILE_TEST_SECRET_PATTERN } from '@/shared/constants/security.constants.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { parseAllowedOriginsList } from '@/shared/utils/security/allowed-origins.util.js';
 
@@ -84,8 +85,13 @@ export async function verifyTurnstileToken(
           // audit #20: a token solved on another property (or a `*`-hostname widget) must not be
           // replayable against our backend. When Cloudflare returns the solving `hostname` and we
           // have an allowlist (from ALLOWED_ORIGINS), reject a mismatch — defense-in-depth on top of
-          // the per-IP + per-email rate limits.
-          if (result.success && typeof payload.hostname === 'string') {
+          // the per-IP + per-email rate limits. Not for a Cloudflare test secret: its results always
+          // say `example.com` and every token passes anyway (local CAPTCHA); production refuses it.
+          if (
+            result.success &&
+            typeof payload.hostname === 'string' &&
+            !TURNSTILE_TEST_SECRET_PATTERN.test(secret)
+          ) {
             const allowedHostnames = resolveAllowedTurnstileHostnames();
             if (
               allowedHostnames !== null &&

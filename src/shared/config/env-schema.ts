@@ -14,6 +14,7 @@ import { createHash, createPrivateKey, createPublicKey } from 'node:crypto';
 import { validateProductionRedisTopology } from '@/infrastructure/cache/redis-url.parse.util.js';
 import { type EnvVarSpec, envVar, toSchemaShape } from '@/shared/config/env-var-registry.js';
 import { PERMISSION_CACHE_RECOMPUTE_LOCK_TTL_SECONDS } from '@/shared/constants/ttl.constants.js';
+import { TURNSTILE_TEST_SECRET_PATTERN } from '@/shared/constants/security.constants.js';
 import { z } from 'zod';
 
 /** Minimum accepted RSA modulus (bits) for the RS256 signing keys (audit #8). */
@@ -1236,6 +1237,18 @@ export const envSchema = envSchemaBase
       message:
         'In production, CAPTCHA_PROVIDER=turnstile and CAPTCHA_SECRET are required on public auth routes',
       path: ['CAPTCHA_PROVIDER'],
+    },
+  )
+  .refine(
+    (data) =>
+      data.NODE_ENV !== 'production' ||
+      !TURNSTILE_TEST_SECRET_PATTERN.test(data.CAPTCHA_SECRET ?? ''),
+    {
+      // A Cloudflare test secret passes (or fails) every token and skips the verifier's hostname
+      // pin — local CAPTCHA only (`pnpm setup:local --with-captcha`), never a deployed backend.
+      message:
+        'In production, CAPTCHA_SECRET must be a real Turnstile secret, not a Cloudflare test secret',
+      path: ['CAPTCHA_SECRET'],
     },
   )
   .refine(

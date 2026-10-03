@@ -1,13 +1,6 @@
 import dotenv from 'dotenv';
+import { TURNSTILE_ALWAYS_PASS_TEST_SECRET } from '@/shared/constants/security.constants.js';
 import { upsertEnvAssignment } from './env-file.util.js';
-
-/**
- * Cloudflare's published Turnstile **test** secret that always passes verification
- * (developers.cloudflare.com/turnstile/troubleshooting/testing). Public documentation, not a
- * credential: it runs the real widget and the real siteverify round trip on any hostname,
- * `localhost` included, without registering it on a production widget.
- */
-export const TURNSTILE_ALWAYS_PASS_TEST_SECRET = '1x0000000000000000000000000000000AA';
 
 /** The matching always-pass test site key — clinozy-fe's `VITE_TURNSTILE_SITE_KEY` locally. */
 export const TURNSTILE_ALWAYS_PASS_TEST_SITE_KEY = '1x00000000000000000000AA';
