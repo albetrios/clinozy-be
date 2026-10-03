@@ -11,8 +11,14 @@ import { DBML_OUTPUT_PATH } from '@/shared/constants/project-identity.constants.
 const ROUTES_CATALOG_PATH = 'docs/routes.txt';
 const SRC_STRUCTURE_TREE_PATH = 'docs/reference/architecture/src-structure-tree.txt';
 const DBML_PATH = DBML_OUTPUT_PATH;
-/** Largest blob a commit may stage — 3 MB, so an iteration's prototype export (~2.5 MB) fits. */
+/** Largest blob a commit may stage — 3 MB (parity with clinozy-fe's before-commit guard). */
 const STAGED_FILE_LIMIT_BYTES = 3 * 1024 * 1024;
+/**
+ * Design iterations hold the design tool's exports (a prototype HTML/JS bundle and the specs
+ * extracted from it) — reference material, never built or deployed — so the top-level
+ * `iterations/` folder is exempt from the size limit, as in clinozy-fe.
+ */
+const SIZE_LIMIT_EXEMPT_PREFIX = 'iterations/';
 
 /** One labeled step in the pre-commit guard sequence. */
 export interface GuardStep {
@@ -191,8 +197,26 @@ function checkConflictMarkers(stagedFiles: string[]): number {
   return 0;
 }
 
+/**
+ * Lists the staged files over the 3 MB limit, skipping design iterations.
+ *
+ * @remarks
+ * Pure — sizes come from the staged blobs ({@link checkLargeStagedFiles} reads them with
+ * `git cat-file -s`), so the rule is testable without a repository. Only the top-level
+ * `iterations/` folder is exempt, never a path that merely contains the word; a file exactly
+ * at the limit passes.
+ */
+export function findOversizedStagedFiles(
+  stagedSizes: ReadonlyArray<{ path: string; sizeBytes: number }>,
+): string[] {
+  return stagedSizes
+    .filter(({ path }) => !path.startsWith(SIZE_LIMIT_EXEMPT_PREFIX))
+    .filter(({ sizeBytes }) => Number.isFinite(sizeBytes) && sizeBytes > STAGED_FILE_LIMIT_BYTES)
+    .map(({ path, sizeBytes }) => `  ${path} (${Math.floor(sizeBytes / 1024)}KB)`);
+}
+
 function checkLargeStagedFiles(stagedFiles: string[]): number {
-  const largeFiles: string[] = [];
+  const stagedSizes: Array<{ path: string; sizeBytes: number }> = [];
   for (const file of stagedFiles) {
     // argv form (no shell) — filenames need no quoting, and stderr is piped so
     // an unresolvable path (rename/delete staging edge cases) stays silent
@@ -203,11 +227,9 @@ function checkLargeStagedFiles(stagedFiles: string[]): number {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     if (result.status !== 0) continue; // skip files git cannot resolve
-    const size = Number.parseInt(result.stdout.trim(), 10);
-    if (Number.isFinite(size) && size > STAGED_FILE_LIMIT_BYTES) {
-      largeFiles.push(`  ${file} (${Math.floor(size / 1024)}KB)`);
-    }
+    stagedSizes.push({ path: file, sizeBytes: Number.parseInt(result.stdout.trim(), 10) });
   }
+  const largeFiles = findOversizedStagedFiles(stagedSizes);
   if (largeFiles.length > 0) {
     console.error(`ERROR: Files exceed 3MB limit:\n${largeFiles.join('\n')}`);
     return 1;
@@ -373,9 +395,9 @@ export function buildGuardSteps(options: {
     },
     {
       id: '16',
-      label: 'Large staged files (>3MB)',
+      label: 'Large staged files (>3MB; iterations/ exempt)',
       when: 'always',
-      description: 'reject staged files over 3MB',
+      description: 'reject staged files over 3MB (iterations/ design exports exempt)',
     },
     {
       id: '17',
@@ -545,7 +567,7 @@ export function runPreCommitGuard(options: RunGuardOptions = {}): number {
         run: () => checkConflictMarkers(stagedFiles),
       },
       {
-        label: 'Large staged files (>3MB)',
+        label: 'Large staged files (>3MB; iterations/ exempt)',
         run: () => checkLargeStagedFiles(stagedFiles),
       },
       {

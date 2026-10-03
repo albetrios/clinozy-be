@@ -17,7 +17,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-before-commit-guard/SKILL.md",
-      "computedHash": "b1960ba42a2a4181fbc46dbebbb65078ff94a4fb50a47e57d192a5f4ef725c3f"
+      "computedHash": "771866a57e9d052254993ffaf9fde601d8318259eb51bca506eda3983a0902da"
     },
     "be-change-completeness-guard": {
       "source": "local",
@@ -41,7 +41,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-code-quality-guard/SKILL.md",
-      "computedHash": "e758f4a04296a595dcec73a1967a509f2a07bc8ee4c7bb388fd421853d9ac04b"
+      "computedHash": "608c923a0e704c2afc70a2ef137d201e61711c8603186fcac38ebae59e29d3ef"
     },
     "be-code-smells-and-best-practices": {
       "source": "local",
