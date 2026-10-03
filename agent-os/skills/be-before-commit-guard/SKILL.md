@@ -44,7 +44,7 @@ The hook in `.husky/pre-commit` delegates to **`pnpm guard:pre-commit`** (labele
 | 13 | `gitleaks protect --staged` | Secrets in staged files (**required** — install gitleaks, e.g. `brew install gitleaks`; `pnpm setup:local` auto-installs it on macOS). |
 | 14 | No secret/state files staged | Hard-rejects a force-added `.env.<environment>` / `.setup-credentials` / `.setup-state.*` / `setup.secrets.json` (only `.env.example` is allowed). Unstage it — `git restore --staged <file>`. |
 | 15 | Conflict markers | Resolve `<<<<<<<` / `>>>>>>>` in staged files. |
-| 16 | Large files (>1MB) | Unstage or use LFS. |
+| 16 | Large files (>3MB; iterations/ exempt) | Unstage or use LFS. |
 | 17 | When deployed-surface `src/**/*.ts` staged: `pnpm sonar:scan` | SonarQube quality gate — blocks the commit on any unresolved issue/hotspot. **Mandatory — no bypass.** Run `pnpm sonar:up && pnpm sonar:scan` locally and fix every finding (or mark a genuine false positive resolved in the SonarQube UI at <http://localhost:9000>). |
 
 ## Pre-push hook (`.husky/pre-push`)

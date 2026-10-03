@@ -1,4 +1,4 @@
-// Resolve schema + migrations for this project (cwd-aware).
+// Resolve schema + migrations (+ design iterations for plan mode) for this project (cwd-aware).
 // Order: CLI opts → tooling/db-viewer/config.json → drizzle.config hint → conventional layout.
 // Port: CLI → DB_VIEWER_PORT → config → 4984.
 
@@ -149,6 +149,15 @@ function detectSchema(root) {
 }
 
 /**
+ * Plan mode: the design-iterations folder whose `<iteration>/plans/db-changes.md` files are drawn
+ * after Latest — the configured folder, else a conventional `iterations/`; null when absent.
+ */
+function resolveIterationsDir(root, configured) {
+  const dir = configured ? path.resolve(root, configured) : path.join(root, 'iterations');
+  return isDir(dir) ? dir : null;
+}
+
+/**
  * Load co-located module config when the project contains this tooling module.
  * Falls back to empty object (detection only).
  */
@@ -169,7 +178,7 @@ function loadModuleConfig(root) {
 
 /**
  * Resolve a project board target.
- * @param {{ cwd?: string, projectRoot?: string, schema?: string, migrations?: string, port?: number, name?: string }} opts
+ * @param {{ cwd?: string, projectRoot?: string, schema?: string, migrations?: string, iterations?: string, port?: number, name?: string }} opts
  */
 function resolveProject(opts = {}) {
   const start = opts.projectRoot
@@ -199,6 +208,8 @@ function resolveProject(opts = {}) {
 
   if (migrationsDir && !hasSqlMigrations(migrationsDir)) migrationsDir = null;
 
+  const iterationsDir = resolveIterationsDir(root, opts.iterations || cfg.iterations || null);
+
   let source = 'none';
   if (configPath) source = 'config';
   else if (schemaTarget && hasDrizzleConfig(root)) source = 'drizzle-config';
@@ -210,6 +221,7 @@ function resolveProject(opts = {}) {
     port,
     schemaTarget,
     migrationsDir,
+    iterationsDir,
     configPath,
     configError,
     source,

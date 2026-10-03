@@ -33,7 +33,7 @@ change touches; `pnpm iteration:new <type> <topic> --both` creates it in both.
 | `README.md` | the field table, then a `## History` list | `iteration:new`, then only the commands |
 | `intake-files/` | the **full snapshot** — files received from outside, exactly as delivered, flat, never edited (see Intake modes) | `iteration:intake` |
 | `KICKOFF.md` | the plan and its ordered ROUTE ledger | be-iteration-planning |
-| `plans/` | our supporting documents: `decisions.md`, `coverage.md`, `requirements/`, `features/`, `acceptance.md` | be-iteration-planning (+ scope decisions during implementation) |
+| `plans/` | our supporting documents: `decisions.md`, `coverage.md`, `db-changes.md`, `route-changes.md`, `worker-changes.md`, `requirements/`, `features/`, `acceptance.md` | be-iteration-planning (+ scope decisions during implementation) |
 | `AS-BUILT.md` | per ROUTE row: planned · actually built · difference · why · decision · commit; revisions to upcoming rows; a closing summary; the **Standing deviations** | be-kickoff-iteration |
 
 - **`intake-files/`** holds a **full snapshot** in every iteration, not only the launch, whatever
@@ -44,6 +44,13 @@ change touches; `pnpm iteration:new <type> <topic> --both` creates it in both.
   drop. The launch starts it empty; each iteration copies its Baseline's list, adds what it
   deliberately builds differently and removes what it resolves. Planning reads it, so a later
   iteration plans against what was actually built.
+- **`plans/db-changes.md`**, **`plans/route-changes.md`** and **`plans/worker-changes.md`** are the
+  iteration's database changes (the Mermaid data diagrams), its proposed routes and its background
+  work — one file each, kept current at every planning step with before → after for anything that
+  changes (each `requirements/` file ends with the same before → after table), so they can be
+  reviewed without a PR diff; frozen at approval. `pnpm db:viewer` draws
+  `db-changes.md` in plan mode (the iteration as Latest + its changes) while the iteration is not
+  `frozen`; kickoff confirms each proposed route and records any change in `AS-BUILT.md`.
 - **`KICKOFF.md`** is frozen at approval: afterwards only its ROUTE Status column and
   "revised → AS-BUILT #n" markers change.
 - `schema-routes.md` is the same file, byte-for-byte, in the same-named clinozy-fe iteration —

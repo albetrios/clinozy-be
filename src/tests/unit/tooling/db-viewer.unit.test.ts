@@ -14,6 +14,14 @@ import {
 } from '@tooling/db-viewer/lib/normalize.mjs';
 import { hasSchemaFiles } from '@tooling/db-viewer/lib/project.mjs';
 import { parseSchema } from '@tooling/db-viewer/lib/parser.mjs';
+import {
+  buildPlanSchema,
+  discoverIterationPlans,
+  parseErDiagrams,
+  tableNameFor,
+} from '@tooling/db-viewer/lib/plan.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 describe('db-viewer normalize', () => {
@@ -323,5 +331,277 @@ describe('db-viewer project detect', () => {
   it('finds schema files in this repo src/ despite file count >> 400', () => {
     const src = path.resolve(process.cwd(), 'src');
     expect(hasSchemaFiles(src)).toBe(true);
+  });
+});
+
+describe('db-viewer plan mode', () => {
+  const planMarkdown = [
+    '# DB changes',
+    '',
+    '```mermaid',
+    'erDiagram',
+    '  organization["organization · CHANGED"]',
+    '  patient["patient · NEW"]',
+    '  organization ||--o{ patient : "has"',
+    '```',
+    '',
+    '```mermaid',
+    'erDiagram',
+    '  organization["organization · CHANGED"] {',
+    '    id id PK',
+    '    enum specialties "ADDED"',
+    '    text name "CHANGED: trimmed, 1–120 chars"',
+    '    boolean legacy_flag "REMOVED"',
+    '  }',
+    '  patient["patient · NEW"] {',
+    '    id id PK',
+    '    id organization_id FK',
+    '    text first_name',
+    '  }',
+    '  user["user · EXISTING"] {',
+    '    id id PK',
+    '  }',
+    '  ghost["ghost · REMOVED"]',
+    '  user }o--o{ patient : "ADDED: cares for"',
+    '  this line is not mermaid',
+    '```',
+  ].join('\n');
+
+  const column = (
+    name: string,
+    extra: Partial<SchemaSnapshot['tables'][number]['columns'][number]> = {},
+  ) => ({
+    key: name,
+    name,
+    type: 'text',
+    pk: false,
+    notNull: false,
+    unique: false,
+    default: null,
+    references: null,
+    ...extra,
+  });
+
+  const live = {
+    dialect: 'postgres',
+    enums: [],
+    tables: [
+      {
+        var: 'organizations',
+        name: 'organizations',
+        schema: 'tenancy',
+        columns: [
+          column('id', { type: 'bigint', pk: true, notNull: true }),
+          column('name'),
+          column('legacy_flag', { type: 'boolean' }),
+        ],
+        indexes: [],
+      },
+      {
+        var: 'users',
+        name: 'users',
+        schema: 'auth',
+        columns: [column('id', { type: 'bigint', pk: true, notNull: true })],
+        indexes: [],
+      },
+    ],
+    relations: [],
+  } satisfies SchemaSnapshot;
+
+  it('merges every erDiagram block: markers, fields, comments and cardinality', () => {
+    const plan = parseErDiagrams(planMarkdown);
+    const byName = new Map(plan.entities.map((e) => [e.name, e]));
+    expect(byName.get('organization')?.status).toBe('CHANGED');
+    expect(byName.get('patient')?.status).toBe('NEW');
+    expect(byName.get('ghost')?.status).toBe('REMOVED');
+    const organization = byName.get('organization')!;
+    expect(organization.fields.map((f) => [f.name, f.change])).toEqual([
+      ['id', null],
+      ['specialties', 'added'],
+      ['name', 'changed'],
+      ['legacy_flag', 'removed'],
+    ]);
+    expect(organization.fields.find((f) => f.name === 'name')?.note).toBe('trimmed, 1–120 chars');
+    expect(byName.get('patient')?.fields.find((f) => f.name === 'organization_id')?.fk).toBe(true);
+
+    // `organization ||--o{ patient` — patient is the many side, so it is drawn from patient
+    const has = plan.relations.find((r) => r.label === 'has')!;
+    expect([has.fromEntity, has.toEntity]).toEqual(['patient', 'organization']);
+    expect(has.card).toEqual({
+      fromKind: 'many',
+      fromOptional: true,
+      toKind: 'one',
+      toOptional: false,
+    });
+    const caresFor = plan.relations.find((r) => r.label.startsWith('ADDED'))!;
+    expect(caresFor.planStatus).toBe('added');
+    expect(caresFor.card.fromKind).toBe('many');
+    expect(caresFor.card.toKind).toBe('many');
+
+    expect(plan.warnings.some((w) => w.includes('this line is not mermaid'))).toBe(true);
+  });
+
+  it('keeps a relationship repeated across diagrams once', () => {
+    const block = ['```mermaid', 'erDiagram', '  organization ||--o{ branch : "has"', '```'].join(
+      '\n',
+    );
+    const plan = parseErDiagrams(`${block}\n\n${block}`);
+    expect(plan.relations).toHaveLength(1);
+  });
+
+  it('builds Latest + plan, and the diff shows exactly the planned changes', () => {
+    const { schema, summary, warnings } = buildPlanSchema(live, parseErDiagrams(planMarkdown));
+    // ghost is marked REMOVED but has no live table: nothing is removed, and a note says so
+    expect(summary).toMatchObject({ new: 1, changed: 1, existing: 1, removed: 0 });
+    expect(warnings).toContain('ghost: marked REMOVED, but no single live table matches');
+
+    // no domain chosen yet: drawn under `app`, named the way the repository names tables
+    const patient = schema.tables.find((t) => t.name === 'patients')!;
+    expect(patient).toMatchObject({ schema: 'app', planned: true, planStatus: 'NEW' });
+    expect(patient.columns.find((c) => c.name === 'organization_id')?.references?.table).toBe(
+      'organizations',
+    );
+    const relation = schema.relations.find(
+      (r) => r.from === 'patients' && r.to === 'organizations',
+    )!;
+    expect(relation).toMatchObject({ fromKey: 'organization_id', toColumn: 'id', planned: true });
+
+    const diff = diffSchemas(live, schema);
+    const statusOf = (name: string) => diff.tables.find((t) => t.name === name)?.status;
+    expect(statusOf('patients')).toBe('added');
+    expect(statusOf('organizations')).toBe('modified');
+    expect(statusOf('users')).toBe('unchanged');
+    const organizations = diff.tables.find((t) => t.name === 'organizations')!;
+    const columnStatus = Object.fromEntries(organizations.columns.map((c) => [c.name, c.status]));
+    expect(columnStatus).toEqual({
+      id: 'unchanged',
+      name: 'modified',
+      legacy_flag: 'removed',
+      specialties: 'added',
+    });
+    expect(organizations.columns.find((c) => c.name === 'name')?.changes).toEqual([
+      'planned: trimmed, 1–120 chars',
+    ]);
+    expect(diff.tables.find((t) => t.name === 'users')).toMatchObject({ planStatus: 'EXISTING' });
+  });
+
+  it('draws a planned table under the domain and name its label gives', () => {
+    const markdown = [
+      '```mermaid',
+      'erDiagram',
+      '  patient["patient · NEW · clinical.patients"] {',
+      '    id id PK',
+      '  }',
+      '  visit["visit · NEW"]',
+      '```',
+    ].join('\n');
+    const { schema } = buildPlanSchema(live, parseErDiagrams(markdown));
+    expect(schema.tables.find((t) => t.name === 'patients')).toMatchObject({ schema: 'clinical' });
+    expect(schema.tables.find((t) => t.name === 'visits')).toMatchObject({ schema: 'app' });
+  });
+
+  it('resolves a reference field through its → entity comment', () => {
+    const markdown = [
+      '```mermaid',
+      'erDiagram',
+      '  appointment["appointment · NEW"] {',
+      '    id id PK',
+      '    id doctor_id FK "→ user"',
+      '    id branch_id FK "ADDED → branch"',
+      '  }',
+      '  branch["branch · NEW"]',
+      '  user["user · EXISTING"]',
+      '```',
+    ].join('\n');
+    const plan = parseErDiagrams(markdown);
+    const fields = plan.entities.find((e) => e.name === 'appointment')!.fields;
+    expect(fields.find((f) => f.name === 'branch_id')).toMatchObject({
+      change: 'added',
+      referenceTo: 'branch',
+    });
+    const { schema } = buildPlanSchema(live, plan);
+    const appointments = schema.tables.find((t) => t.name === 'appointments')!;
+    const reference = (name: string) =>
+      appointments.columns.find((c) => c.name === name)?.references?.table;
+    expect(reference('doctor_id')).toBe('users');
+    expect(reference('branch_id')).toBe('branches');
+  });
+
+  it('names tables the way the repository does — plural snake_case', () => {
+    const names = ['branch', 'category', 'day_close', 'check_in', 'status', 'medicine', 'day'];
+    expect(names.map(tableNameFor)).toEqual([
+      'branches',
+      'categories',
+      'day_closes',
+      'check_ins',
+      'statuses',
+      'medicines',
+      'days',
+    ]);
+  });
+
+  it('marks a live table instead of drawing a NEW entity twice', () => {
+    const markdown = ['```mermaid', 'erDiagram', '  user["user · NEW"]', '```'].join('\n');
+    const { schema, summary, warnings } = buildPlanSchema(live, parseErDiagrams(markdown));
+    expect(schema.tables.filter((t) => t.name === 'user' || t.name === 'users')).toHaveLength(1);
+    expect(schema.tables.find((t) => t.name === 'users')).toMatchObject({ planStatus: 'NEW' });
+    expect(summary.matched).toBe(1);
+    expect(warnings).toContain('user: NEW in the plan, and users already exists');
+  });
+
+  it('draws an ADDED relationship even where a live one joins the same tables', () => {
+    const withRelation = {
+      ...live,
+      relations: [
+        {
+          from: 'organizations',
+          fromColumn: 'owner_id',
+          fromKey: 'owner_id',
+          to: 'users',
+          toColumn: 'id',
+        },
+      ],
+    } satisfies SchemaSnapshot;
+    const markdown = [
+      '```mermaid',
+      'erDiagram',
+      '  organization["organization · EXISTING"]',
+      '  user["user · EXISTING"]',
+      '  user ||--o{ organization : "owns"',
+      '  organization }o--o{ user : "ADDED: is run by"',
+      '```',
+    ].join('\n');
+    const { schema } = buildPlanSchema(withRelation, parseErDiagrams(markdown));
+    const between = schema.relations.filter((r) => r.from === 'organizations' && r.to === 'users');
+    // the built "owns" is not drawn twice; the planned "is run by" is added
+    expect(between.map((r) => r.label ?? 'built')).toEqual(['built', 'ADDED: is run by']);
+  });
+
+  it('discovers plans in every iteration that is not frozen', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'db-viewer-plans-'));
+    try {
+      const iteration = (name: string, status: string, withPlan: boolean) => {
+        const folder = path.join(root, name);
+        fs.mkdirSync(path.join(folder, 'plans'), { recursive: true });
+        fs.writeFileSync(
+          path.join(folder, 'README.md'),
+          `# ${name}\n\n| Field | Value |\n| --- | --- |\n| Opened | 2026-10-0${name.length % 9} |\n| Status | ${status} |\n`,
+        );
+        if (withPlan) fs.writeFileSync(path.join(folder, 'plans', 'db-changes.md'), planMarkdown);
+      };
+      iteration('launch-2026-10-01-abcd', 'planning', true);
+      iteration('feat-done-thing-2026-10-02-efgh', 'frozen', true);
+      iteration('feat-no-plan-2026-10-03-ijkl', 'planning', false);
+      const plans = discoverIterationPlans(root);
+      expect(plans.map((p) => [p.name, p.status])).toEqual([
+        ['launch-2026-10-01-abcd', 'planning'],
+      ]);
+      expect(plans[0]?.file).toBe(
+        path.join(root, 'launch-2026-10-01-abcd', 'plans', 'db-changes.md'),
+      );
+      expect(discoverIterationPlans(path.join(root, 'missing'))).toEqual([]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

@@ -6,6 +6,7 @@ export function resolveProject(opts?: {
   projectRoot?: string;
   schema?: string;
   migrations?: string;
+  iterations?: string;
   port?: number;
   name?: string;
 }): {
@@ -14,6 +15,7 @@ export function resolveProject(opts?: {
   port: number;
   schemaTarget: string | null;
   migrationsDir: string | null;
+  iterationsDir: string | null;
   configPath: string | null;
   configError: string | null;
   source: string;

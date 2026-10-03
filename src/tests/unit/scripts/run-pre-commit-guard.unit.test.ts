@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildGuardSteps,
+  findOversizedStagedFiles,
   hasPackageScript,
   shouldRunGlobalTests,
   shouldRunLockfileCheck,
@@ -119,6 +120,14 @@ describe('run-pre-commit-guard conditionals', () => {
     expect(stepsWithCheck.some((step) => step.id === '6c')).toBe(true);
   });
 
+  it('labels the large-file step with the 3MB limit and the iterations/ exemption', () => {
+    const largeFileStep = buildGuardSteps({ stagedFiles: [], scripts: baseScripts }).find(
+      (step) => step.id === '16',
+    );
+    expect(largeFileStep?.label).toBe('Large staged files (>3MB; iterations/ exempt)');
+    expect(largeFileStep?.when).toBe('always');
+  });
+
   it('omits validate:test-naming when script is missing', () => {
     const steps = buildGuardSteps({
       stagedFiles: [],
@@ -126,4 +135,50 @@ describe('run-pre-commit-guard conditionals', () => {
     });
     expect(steps.some((step) => step.id === '9')).toBe(false);
   });
+});
+
+describe('run-pre-commit-guard staged-file size limit (parity with clinozy-fe)', () => {
+  const LIMIT_BYTES = 3 * 1024 * 1024;
+
+  it('rejects a staged file over the limit', () => {
+    expect(findOversizedStagedFiles([{ path: 'src/big.bin', sizeBytes: LIMIT_BYTES + 1 }])).toEqual(
+      ['  src/big.bin (3072KB)'],
+    );
+  });
+
+  it('allows a 2MB file — over the old 1MB limit, under 3MB', () => {
+    expect(findOversizedStagedFiles([{ path: 'src/two.bin', sizeBytes: 2 * 1024 * 1024 }])).toEqual(
+      [],
+    );
+  });
+
+  it('allows a staged file exactly at the limit', () => {
+    expect(findOversizedStagedFiles([{ path: 'src/edge.bin', sizeBytes: LIMIT_BYTES }])).toEqual(
+      [],
+    );
+  });
+
+  it('exempts design exports under iterations/', () => {
+    expect(
+      findOversizedStagedFiles([
+        { path: 'iterations/launch-x/intake-files/Prototype.html', sizeBytes: LIMIT_BYTES * 3 },
+      ]),
+    ).toEqual([]);
+  });
+
+  it('does not let the iterations/ exemption hide a large file elsewhere in the same commit', () => {
+    const flagged = findOversizedStagedFiles([
+      { path: 'iterations/launch-x/intake-files/Prototype.html', sizeBytes: LIMIT_BYTES * 3 },
+      { path: 'docs/big.bin', sizeBytes: LIMIT_BYTES + 1 },
+    ]);
+    expect(flagged).toHaveLength(1);
+    expect(flagged[0]).toContain('docs/big.bin');
+  });
+
+  it.each(['docs/iterations/big.bin', 'iterations-archive/big.bin', 'iterations.bin'])(
+    'does not exempt %s — only the top-level iterations/ folder is exempt',
+    (path) => {
+      expect(findOversizedStagedFiles([{ path, sizeBytes: LIMIT_BYTES + 1 }])).toHaveLength(1);
+    },
+  );
 });

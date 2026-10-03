@@ -3192,3 +3192,77 @@ textarea:focus-visible {
     stroke-dasharray: none;
   }
 }
+
+/* ---------------- plan mode (iteration plans after Latest) ---------------- */
+/* A planned table is not built yet: dashed outline, header in the trace colour. */
+.node.planned {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--trace) 55%, var(--hair));
+  background: linear-gradient(
+    180deg,
+    var(--surface),
+    color-mix(in srgb, var(--trace) 5%, var(--surface-2))
+  );
+}
+.node.planned .rows .ctype {
+  font-style: italic;
+}
+.badge.plan {
+  text-transform: lowercase;
+}
+.badge.unchanged.plan {
+  color: var(--ink-faint);
+  background: transparent;
+  border: 1px dashed var(--hair-soft);
+}
+.edge.planned {
+  stroke-dasharray: 6 5;
+}
+.vitem.plan .vdot {
+  border-style: dashed;
+  color: var(--trace);
+}
+.vitem.plan .vr {
+  font-style: italic;
+}
+.vbadge.p {
+  color: var(--trace);
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--trace) 60%, transparent);
+}
+.plan-banner {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px dashed color-mix(in srgb, var(--trace) 55%, var(--hair));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--trace) 6%, transparent);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.plan-banner .plan-title {
+  font-weight: 600;
+  color: var(--ink);
+}
+.plan-banner .plan-status {
+  margin-left: 6px;
+  font-weight: 500;
+  color: var(--trace);
+}
+.plan-banner .plan-sub,
+.plan-banner .plan-file {
+  color: var(--ink-faint);
+}
+.plan-banner .plan-file {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+.plan-banner .plan-warn summary {
+  cursor: pointer;
+  color: var(--mod);
+}
+.plan-banner .plan-warn ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  color: var(--ink-faint);
+}

@@ -28,7 +28,7 @@ import {
   TEXT_REWRITE_TARGETS,
 } from '@tooling/setup/codegen/text-identity-rewrites.js';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -139,6 +139,38 @@ describe('project identity — brand name', () => {
       const flagged = violations.map((violation) => `${violation.file}:${violation.literal}`);
       expect(flagged).toContain('sender.ts:Acme');
       expect(flagged.some((entry) => entry.startsWith('helper.ts'))).toBe(false);
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves a design iteration's prototype export alone", () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'identity-iteration-'));
+    try {
+      const git = (...arguments_: string[]): void => {
+        execFileSync('git', arguments_, {
+          cwd: scratch,
+          stdio: 'ignore',
+          env: gitEnvironmentWithoutInheritedRepository(),
+        });
+      };
+      git('init', '-q');
+      mkdirSync(join(scratch, 'iterations', 'launch-x', 'intake-files'), { recursive: true });
+      writeFileSync(
+        join(scratch, 'iterations', 'launch-x', 'intake-files', 'Prototype.html'),
+        '<span aria-label="Acme">Acme</span>\n',
+      );
+      writeFileSync(join(scratch, 'sender.ts'), "export const sender = 'Acme';\n");
+      git('add', '-A');
+
+      const { violations } = scanProjectIdentityLiterals({
+        snapshot: buildProjectIdentitySnapshot(buildConfig({ brandName: 'Acme' })),
+        projectRoot: scratch,
+        generatedPaths: [],
+      });
+      const files = violations.map((violation) => violation.file);
+      expect(files).toContain('sender.ts');
+      expect(files.some((file) => file.startsWith('iterations/'))).toBe(false);
     } finally {
       rmSync(scratch, { recursive: true, force: true });
     }

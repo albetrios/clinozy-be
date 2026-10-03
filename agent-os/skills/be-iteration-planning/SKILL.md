@@ -5,8 +5,11 @@ description: >
   pass the intake gate (iteration:intake --check — stop on failure), take the delta by Intake mode
   (iteration:diff + notes, or BRIEF.md) and the Baseline's Standing deviations, reconcile
   PRD ↔ schema-routes, ask the blocking questions, then write KICKOFF.md (the plan + ordered ROUTE
-  ledger) and plans/ (decisions, coverage, requirements with Mermaid data diagrams, feature
-  stories, acceptance) — stopping after each step. Use when the user says 'plan iteration <name>',
+  ledger) and plans/ (decisions, coverage, db-changes.md, route-changes.md and worker-changes.md —
+  the data diagrams, the proposed routes and the background work, each one file kept current at every
+  step, with before → after for anything changed — requirements, feature stories, acceptance) —
+  stopping after each step with a step review (what changed, the DB Viewer URL and the change files,
+  what needs the user, continue or change). Use when the user says 'plan iteration <name>',
   'iteration planning', or asks to turn a PRD + schema-routes into a plan. Next step after
   approval: be-kickoff-iteration.
 indexNote: plan an iteration — no code; KICKOFF.md (plan + ROUTE ledger) + plans/ (requirements, decisions); stops after each step
@@ -29,12 +32,29 @@ The iteration rules: [`iterations/README.md`](../../../iterations/README.md).
 `plans/` and `KICKOFF.md` hold requirements and decisions only. **Never write:**
 
 - SQL or DDL, physical column types, indexes, constraints
-- endpoint paths, HTTP methods, status codes
-- `src/` file paths, domain or sub-domain folder names
+- endpoint paths, HTTP methods, status codes — **one exception:** `plans/route-changes.md` proposes
+  each route as method + path (never status codes) so the API can be reviewed while planning; see
+  Route changes below
+- `src/` file paths, domain or sub-domain folder names — **one exception:** an entity label in
+  `plans/db-changes.md` may carry its table's domain and name (`domain.table`) once the user has
+  chosen them (Step 4)
 - queue, job, event or worker names
 
 Each ROUTE row is a work item (one per table, background piece, flow); its technical design is
 decided during implementation and recorded in `AS-BUILT.md`, not here.
+
+## The plan proposes; agent-os decides
+
+The plan's tables, fields, routes and background work are **proposals at the requirement level**. The
+backend's **agent-os** — its skills, rules and agents under `agent-os/` — is the expert: whenever the
+plan and agent-os disagree, or anything is unclear, agent-os wins. At kickoff it decides the physical
+design and may change any detail on the way — table and field names, types, indexes, constraints, tenant rules, paths, statuses,
+idempotency, job names (`be-schema-generator`, `be-sql-design-guard`, `be-db-migration-maintainer`,
+`be-rls-tenant-isolation-guard`, `be-api-contract-guard`, `be-workers-events`, and the rest of each
+row's chain). The plan never overrides them. Every such change is recorded in `AS-BUILT.md` and
+synced back into `db-changes.md`, `route-changes.md` and `worker-changes.md`, so the plan ends as the
+true record; only a **scope** change (a row added or removed, an acceptance changed) stops for the
+user (`be-kickoff-iteration` › Each ROUTE row).
 
 ## Inputs and mode
 
@@ -74,11 +94,14 @@ iterations/<iteration>/
 └── plans/
     ├── decisions.md                   every blocking answer and scope decision (add-only)
     ├── coverage.md                    Coverage · Reconciliation · Delta (incremental)
+    ├── db-changes.md                  the Mermaid data diagrams — one file, kept current at every step
+    ├── route-changes.md               the proposed routes — one file, kept current at every step
+    ├── worker-changes.md              the background work — one file, kept current at every step
     ├── requirements/
-    │   ├── data.md                    + the Mermaid data diagrams
+    │   ├── data.md                    links to db-changes.md for its diagrams
     │   ├── access.md
     │   ├── operations.md
-    │   ├── background.md
+    │   ├── background.md              cross-cutting background rules; the list is worker-changes.md
     │   ├── notifications.md
     │   ├── realtime.md
     │   ├── integrations.md
@@ -107,12 +130,23 @@ Status is `open`, `covered` or `out-of-scope` (with a link to the decision that 
 Each requirement gets a dotted identifier — `data.patient-scope`, `access.refund-approval`,
 `background.expiry-sweep` — which coverage rows, stories and ROUTE rows cite.
 
+**Before → after for requirements.** Each requirement is `NEW`, `CHANGED` or `REMOVED` against what
+exists today — the Baseline's plans and `AS-BUILT.md` (incremental), or what the platform already does
+(initial). Every file in `requirements/` ends with a `## Before → after` section, one row per
+`CHANGED` or `REMOVED` requirement, so a change reads without opening two documents:
+
+| Requirement | Before | After | Why |
+| --- | --- | --- | --- |
+| `access.membership-roles` | a member holds exactly one role | a member holds one or more roles; access is their union | D5 |
+
+A file with nothing changed says `none — every requirement here is NEW`.
+
 | File | Answers |
 | --- | --- |
 | `data.md` | what is stored, owned by whom, related how, kept how long, removed how |
 | `access.md` | which role may see or do what, scoped to what |
 | `operations.md` | what users can do: create, change, cancel, approve, list, search, filter, sort |
-| `background.md` | what happens without a user, and when |
+| `background.md` | the rules every piece of background work follows (timing, retries, quiet hours) — the list of background work itself is `worker-changes.md` |
 | `notifications.md` | who is told what, through which channel, when |
 | `realtime.md` | what must update on screen without a refresh |
 | `integrations.md` | outside systems — payments, messaging, mail, storage |
@@ -146,16 +180,44 @@ built:
 | Item | Source | Result | Evidence |
 | --- | --- | --- | --- |
 
-## Data diagrams — Mermaid, inside `plans/requirements/data.md`
+## Data diagrams — Mermaid, in `plans/db-changes.md`
+
+The iteration's database changes live in **one file**, `plans/db-changes.md`, and nowhere else:
+`requirements/data.md` links to it instead of repeating the diagrams. It is written **on the go** —
+created at Step 1 with the overview **and one section per table, stage by stage** (the intake already
+carries every entity's fields), then updated in the same step as anything that changes the data model
+(a Step 3 verdict, each Step 4 answer, the Step 5 detail) — so it always shows the plan as it stands. It freezes with `KICKOFF.md` at approval; implementation records what was actually
+built in `AS-BUILT.md`. `pnpm db:viewer` draws it in plan mode — the iteration as a dashed future
+version after Latest, diffed against the live schema — while the iteration is not `frozen`.
 
 - **One overview** `erDiagram`: entities and relationships, no fields.
-- **One per feature**: the entities it touches, with fields.
-- **Entity label**: `name["name · NEW|CHANGED|EXISTING|REMOVED"]`. `EXISTING` is context only.
+- **Stage-wise, one section per table.** After the overview, the tables are grouped into **build
+  stages** in dependency order — the order the ROUTE ledger builds them (Step 5). Each table has its
+  own section: **Holds** (what it stores and why) · **Table** (the `domain.table` proposal; `app.<plural>`
+  until the user chooses) · **Sources** (`file:line`) · **Added** / **Replaced** (what decisions or
+  requests changed against the drop) · **Open** (the questions still open for it) · and its own
+  `erDiagram` with every field. A feature's story names the tables it uses — there is no separate
+  per-feature diagram.
+- **Reference field**: `<entity>_id` with `FK`, and the target in its comment when the name does not
+  say it — `id doctor_id FK "→ user"`.
+- **Entity label**: `name["name · NEW|CHANGED|EXISTING|REMOVED"]`, plus `· domain.table` once the
+  user has chosen where the table lives — `patient["patient · NEW · clinical.patients"]`. `EXISTING`
+  is context only.
+- **Table names follow the repository**: plural snake_case, like every existing table (`branch` →
+  `branches`, `medical_sale` → `medical_sales`). The domain is the Postgres schema the table goes
+  under (like `tenancy`, `billing`). Until the user chooses, a new entity has no `domain.table` and
+  the DB Viewer draws it under `app` with its plural name.
 - **Field comment** (taken from the diff): `"ADDED"`, `"CHANGED: <what>"` or `"REMOVED"`. An
   unchanged field has no comment.
 - **Relationship label** for a change: `"ADDED: <name>"` or `"REMOVED: <name>"`.
-- **Logical types only**: `id`, `text`, `number`, `money`, `date`, `datetime`, `boolean`, `enum`,
-  `json`, `file`.
+- **Logical types only**: `id`, `text`, `number`, `money`, `date`, `datetime`, `boolean`, `choice`,
+  `json`, `file`. `choice` is one value from a list of allowed values — never a database enum type
+  (`be-sql-design-guard`: stored as text with its allowed values). A list that clinics can change
+  (sections, categories, reasons a clinic adds) is a table or catalog of its own, not a `choice`.
+- **Names the viewer matches**: an entity is the singular snake_case name of the record
+  (`patient`, `medical_sale`); a `CHANGED`, `EXISTING` or `REMOVED` entity is matched to its label's
+  `domain.table`, else to the live table of the same name, singular or plural (`organization` →
+  `organizations`). A reference field is `<entity>_id`.
 - An existing or changed entity shows only its key, the changed fields, and the fields other
   entities reference.
 
@@ -166,13 +228,13 @@ erDiagram
   return_request["return_request · NEW"] {
     id id PK
     id medical_sale_id FK
-    enum reason
+    choice reason
     money refund_amount
     datetime requested_at
   }
   medical_sale["medical_sale · CHANGED"] {
     id id PK
-    enum status "CHANGED: adds returned"
+    choice status "CHANGED: adds returned"
     money returned_total "ADDED"
     text discount_note "REMOVED"
   }
@@ -194,7 +256,88 @@ erDiagram
   medical_sale ||--o{ return_request : "ADDED: is returned through"
 ```
 
-## Procedure — stop after every step and wait
+## Route changes — `plans/route-changes.md`
+
+The iteration's API changes live in **one file**, `plans/route-changes.md`, written on the go the same
+way as `db-changes.md`: drafted at Step 1 from the operations, updated in the same step as any verdict
+or answer that changes a route, completed at Step 5, frozen at approval. It is the one place a plan
+names paths — as **proposals**: kickoff confirms each route when it builds it, records any change in
+`AS-BUILT.md`, and the built truth is `docs/routes.txt`.
+
+- Header: iteration, mode, Intake hash, date, then a count table — NEW / CHANGED / REMOVED per area.
+- One `## <area>` section per area (Patients, Appointments, Payments, …), each a table:
+
+  | # | Change | Method | Path | Access | Operation | Source |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | RC-1 | NEW | GET | `/api/v1/…/patients` | patients · view | listPatients | `schema-routes.md:1619` |
+
+  - **Change**: `NEW`, `CHANGED` (say what changes, and the current path) or `REMOVED`.
+  - **Path** follows the API contract (`be-api-contract-guard`): snake_case semantic params
+    (`{patient_id}`, never `{id}`), no organization segment, plural resources.
+  - **Access**: the permission (section · action) or role it needs — never a status code.
+  - **Operation**: the schema-routes operation (or Appendix / decision) it serves; **Source** is its
+    `file:line`.
+- **Before → after** — one section after the area tables, one row per `CHANGED` route, so a route
+  that changes only in part reads at a glance:
+
+  | # | Route | What changes | Before | After | Why |
+  | --- | --- | --- | --- | --- | --- |
+  | RC-12 | `PATCH /api/v1/…/memberships/{membership_id}` | roles | one role | one or more roles | D5 |
+
+  "What changes" names the part — path, method, access, input, output or behaviour — and Before /
+  After say it in plain words. A `REMOVED` route lists what replaces it, if anything.
+- A route no requirement reaches is a finding; an operation no route serves is a coverage gap.
+
+## Worker changes — `plans/worker-changes.md`
+
+The iteration's background work — everything that happens without a user: schedules, reminders,
+automatic tasks, retries, clean-ups, outgoing messages — lives in **one file**,
+`plans/worker-changes.md`, written on the go like the other two. It stays **WHAT**, never HOW: plain
+words, no queue, job, event or worker names (kickoff names them and records them in `AS-BUILT.md`).
+`requirements/background.md` keeps only the rules all background work follows and links here.
+
+- Header: iteration, mode, Intake hash, date, then a count table — NEW / CHANGED / REMOVED.
+- One table, one row per piece of background work:
+
+  | # | Change | Background work | When it runs | What it touches | On failure | Who is told | Requirement | Source |
+  | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+  | WC-1 | NEW | create the aftercare call task | the day after a treatment, 10:00 clinic time | Task | retried; never doubled | the treating therapist | `background.aftercare-call` | `PRD.md:125` |
+
+  - **When it runs**: the trigger (an event — "a check-in scores 4 or less") or the schedule, in
+    clinic-local time.
+  - **On failure**: retried, given up and flagged, or safe to skip — and whether a repeat could do the
+    work twice.
+  - **Who is told**: the person or role notified, through which channel — or "nobody".
+- **Before → after** — one row per `CHANGED` piece, like routes:
+  `| # | Background work | What changes | Before | After | Why |`.
+
+## The three change files
+
+`db-changes.md`, `route-changes.md` and `worker-changes.md` are what the user reviews; each is one file
+per iteration, current at every step, with before → after wherever something existing changes.
+
+## Step review — at every stop, no PR diff needed
+
+Every step ends with the same short review, so the user can check everything in place and ask for a
+change before the next step:
+
+1. **What changed** — each file this step wrote or changed, as a clickable link, with one line on
+   what changed in it (counts, not dumps).
+2. **Review links** — whenever a change file changed:
+   - **DB changes:** the DB Viewer URL in plan mode — start it (`pnpm db:viewer`, or the
+     `db-viewer` preview), give the tokened URL it prints, and say which iteration to click under
+     ◇ Plans (dashed = not built yet; the diff against Latest is the plan); plus a link to
+     `plans/db-changes.md`.
+   - **Routes:** a link to `plans/route-changes.md` and the NEW / CHANGED / REMOVED counts that
+     moved in this step.
+   - **Background work:** a link to `plans/worker-changes.md` and the counts that moved.
+3. **What needs you** — the open questions and findings, or "nothing".
+4. **Continue or change** — ask with **AskUserQuestion**: continue to the next step (recommended
+   when nothing is open), or change something. A requested change is made in the files — a changed
+   decision is a new `plans/decisions.md` row that supersedes the old one — and the step review is
+   shown again before moving on.
+
+## Procedure — stop after every step, with its step review, and wait
 
 ### Step 0 — Confirm the iteration, then stop until confirmed
 
@@ -228,9 +371,12 @@ pnpm iteration:intake <iteration> --check --baseline <baseline>   # MODE increme
   mode.
 - Draft `plans/coverage.md` › Coverage with one row per PRD screen, flow, must-have and open
   question, and per `schema-routes.md` entity, enum and operation — each with its `file:line`.
-- Draft the overview diagram in `plans/requirements/data.md`.
+- Create `plans/db-changes.md` with the overview diagram and one section per table, grouped into
+  build stages (fields from the intake, logical types); draft `plans/route-changes.md` — one
+  proposed route per operation row (initial: all `NEW`) — and `plans/worker-changes.md` — one row per
+  piece of background work the intake names (rules, reminders, automatic tasks, schedules).
 
-Report the counts. **Stop.**
+Report the counts in the step review. **Stop.**
 
 ### Step 2 — Delta (MODE incremental only), then stop
 
@@ -258,19 +404,35 @@ List every `PRD.md` ↔ `schema-routes.md` mismatch in `plans/coverage.md` › R
 
 No verdict without evidence on both sides — a verdict without a line number is an opinion.
 
+When the drop holds more than `PRD.md` and `schema-routes.md` (screen specs, the prototype), list
+their conflicts with those two files the same way, and weigh them against the frontend's approved
+reading of the same drop (its `KICKOFF.md` reconciliation and backend requests) — `schema-routes.md`
+is the frontend's detailed data and URL contract. Only an approved source settles a row: `PRD.md`
+for scope and behaviour, `schema-routes.md` for data, value lists, limits and URLs, a frontend
+request the user accepted, or a decision in `plans/decisions.md`. **Anything only the screens or the
+prototype say gets no verdict — it is a question for the user** (Step 4), with a proposed default,
+and every change-file entry that rests on it is marked *pending your answer* until it is answered.
+
 ### Step 4 — Blocking questions, then stop when every RED is answered
 
 - **RED** — never guess: ownership; scope (the organization, or narrower — a branch, a patient,
   the owner); lifecycle and delete policy; who may do what; background timing; notification
-  channels; realtime needs; outside systems. Ask with **AskUserQuestion** — at most 4 per call, one
+  channels; realtime needs; outside systems; **where new tables live** — the domain (Postgres schema)
+  for each group of new tables, and their names, proposed in the repository's plural snake_case
+  (the answers go on the `db-changes.md` labels as `domain.table`). Ask with **AskUserQuestion** — at most 4 per call, one
   recommended option each, quoting the evidence (`file:line`).
-- **AMBER** — a safe default exists: take it and log it as open.
+- **AMBER** — a safe default exists: take it and log it as open. When the item is in neither
+  `PRD.md` nor `schema-routes.md` (it comes only from the screens or the prototype), the user still
+  confirms the default in a Step 4 group — it is never applied silently.
 
-Every answer goes in `plans/decisions.md`; update the diagrams with it.
+Every answer goes in `plans/decisions.md`; every answer that changes the data model updates
+`plans/db-changes.md`, every answer that changes a route updates `plans/route-changes.md`, and every
+answer that changes background work updates `plans/worker-changes.md`, in the same step.
 
 ### Step 5 — Write KICKOFF.md and plans/, then stop
 
-Write every `plans/requirements/*.md` (dotted identifiers, the per-feature diagrams in `data.md`),
+Write every `plans/requirements/*.md` (dotted identifiers; `data.md` links to the per-table
+sections in `plans/db-changes.md`),
 one `plans/features/<feature>/story.md` per feature, and `plans/acceptance.md`.
 
 Then write `KICKOFF.md`. Every section is present — a section may say `n/a — <reason>`, never be
@@ -287,7 +449,8 @@ absent:
    | --- | --- | --- | --- | --- | --- | --- | --- |
 
    Kind is `table`, `feature`, `background` or `flow`. Status starts `open`. The order follows the
-   route shape in `be-kickoff-iteration`: schema first (tables in dependency order) → features →
+   route shape in `be-kickoff-iteration`: schema first (tables in dependency order — the stages of
+   `db-changes.md`, one table row per table section) → features →
    background work → flows → acceptance; incremental — schema changes first, then changed features,
    changed background work, affected flows. Driver: NEW table → the staged-build prompt; CHANGE
    table, flow, background work → `/be-build-requirement`.
@@ -315,8 +478,13 @@ Fix before presenting, never after:
 - [ ] Every `plans/coverage.md` row is `covered` or `out-of-scope`
 - [ ] Every RED is answered in `plans/decisions.md`; every open AMBER is in `KICKOFF.md`
 - [ ] Every requirement identifier is used by a feature and reached by a ROUTE row
+- [ ] Every `CHANGED` or `REMOVED` requirement has its before → after row (each `requirements/` file ends with the section)
 - [ ] Every acceptance criterion traces to a line in `intake-files/PRD.md` (brief mode: in `intake-files/BRIEF.md`)
-- [ ] The diagrams match `data.md`; incremental field comments match the diff
+- [ ] `plans/db-changes.md` matches `data.md` and every decision; incremental field comments match the diff
+- [ ] `plans/db-changes.md` is stage-wise: every table has its section (holds, table, sources, added / replaced, open, diagram), and the stages follow the ROUTE order
+- [ ] `plans/route-changes.md` serves every operation in scope, each route has access and a source line, every path follows the API contract, and every `CHANGED` route has its before → after row
+- [ ] `plans/worker-changes.md` lists every piece of background work in scope with when, on failure and who is told, no queue / job / worker names, and before → after for every `CHANGED` piece
+- [ ] Every step ended with its step review (what changed, review links, what needs you, continue or change)
 - [ ] Every `KICKOFF.md` section is present; every ROUTE row has a driver and acceptance
 - [ ] No technical design anywhere (see the Principle)
 
@@ -340,6 +508,7 @@ markers change, and `intake-files/` is locked.
 | Guessed ownership, scope, access or timing → rework | Step 4 RED gate |
 | A plan that decides implementation before the code is read | the Principle; Step 6 check |
 | A ROUTE that misses a requirement | Step 6 — every identifier reached by a row |
+| The data model, API or background work only readable in a PR diff | `db-changes.md`, `route-changes.md`, `worker-changes.md` — kept current, before → after for changes, with the step review at every stop |
 
 ## Related
 

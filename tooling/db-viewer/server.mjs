@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Local ER board for Drizzle schemas + migrations/*.sql (tooling/db-viewer).
+// Local ER board for Drizzle schemas + migrations/*.sql + iteration plans (tooling/db-viewer).
 // Prefer: pnpm db:viewer
 
 import http from 'node:http';
@@ -12,12 +12,15 @@ import { fileURLToPath } from 'node:url';
 import { parseSchema } from './lib/parser.mjs';
 import { diffSchemas } from './lib/diff.mjs';
 import { buildMigrationVersions, cloneSchema } from './lib/sql-migrations.mjs';
+import { buildPlanSchema, discoverIterationPlans, parseErDiagrams } from './lib/plan.mjs';
 import { openUrl } from './lib/open.mjs';
 import { DEFAULT_PORT } from './lib/project.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const MAX_SAVE_VERSIONS = 40;
+/** Plan versions get ids from here up, so they never collide with history ids. */
+const PLAN_ID_BASE = 1_000_000;
 const MIME = {
   '.html': 'text/html',
   '.js': 'text/javascript',
@@ -127,6 +130,7 @@ function stableStringify(schema) {
  * @param {{
  *   schemaTarget: string,
  *   migrationsDir?: string|null,
+ *   iterationsDir?: string|null,
  *   port?: number,
  *   fresh?: boolean,
  *   open?: boolean,
@@ -145,6 +149,10 @@ function startServer(opts = {}) {
   const projectRoot = opts.projectRoot ? path.resolve(opts.projectRoot) : null;
   const shouldOpen = !!opts.open;
   const migrationMode = !!(migrationsDir && fs.existsSync(migrationsDir));
+  const iterationsDir =
+    opts.iterationsDir && fs.existsSync(opts.iterationsDir)
+      ? path.resolve(opts.iterationsDir)
+      : null;
 
   // ---- schema sources -------------------------------------------------------
   function parseDrizzleSchema() {
@@ -155,6 +163,8 @@ function startServer(opts = {}) {
 
   // ---- version history ------------------------------------------------------
   let versions = [];
+  // Plan mode: one future version per iteration plan, built on the tip of `versions`; never saved.
+  let plans = [];
   let clients = [];
   let seq = 0;
 
@@ -217,8 +227,64 @@ function startServer(opts = {}) {
     return path.relative(relBase, target) || target;
   }
 
+  function relativeToRoot(file) {
+    return path.relative(projectRoot || process.cwd(), file) || file;
+  }
+
+  /** History versions followed by the plan versions (lookups by id span both). */
+  function allVersions() {
+    return versions.concat(plans);
+  }
+
+  /**
+   * Rebuild every plan version on the current tip (Latest in migration mode). Runs whenever the
+   * tip or a plan file changes, so a plan always reads as "Latest + this iteration's changes".
+   */
+  function rebuildPlans() {
+    plans = [];
+    const tip = versions[versions.length - 1];
+    if (!(iterationsDir && tip)) return;
+    let index = 0;
+    for (const iteration of discoverIterationPlans(iterationsDir)) {
+      index++;
+      let markdown = '';
+      let at = new Date().toISOString();
+      try {
+        markdown = fs.readFileSync(iteration.file, 'utf8');
+        at = fs.statSync(iteration.file).mtime.toISOString();
+      } catch {
+        /* unreadable — shown as an empty plan with a warning */
+      }
+      const built = buildPlanSchema(tip.schema, parseErDiagrams(markdown));
+      if (!markdown) built.warnings.unshift('plans/db-changes.md could not be read');
+      plans.push({
+        id: PLAN_ID_BASE + index,
+        at,
+        reason: iteration.name,
+        kind: 'plan',
+        file: relativeToRoot(iteration.file),
+        structural: true,
+        schema: built.schema,
+        plan: {
+          iteration: iteration.name,
+          status: iteration.status,
+          summary: iteration.summary,
+          file: relativeToRoot(iteration.file),
+          counts: built.summary,
+          warnings: built.warnings,
+        },
+      });
+    }
+  }
+
+  /** The note the change feed shows for a plan diff. */
+  function planNote(plan) {
+    const c = plan.counts;
+    return `Plan · ${plan.iteration} (${plan.status}) — ${c.new} new · ${c.changed} changed · ${c.removed} removed · logical types, not built yet`;
+  }
+
   function buildPayload() {
-    const list = versions.map((v) => ({
+    const list = allVersions().map((v) => ({
       id: v.id,
       at: v.at,
       reason: v.reason,
@@ -226,6 +292,7 @@ function startServer(opts = {}) {
       kind: v.kind || 'save',
       file: v.file || null,
       structural: v.structural !== false,
+      ...(v.plan ? { iteration: v.plan.iteration, status: v.plan.status } : {}),
     }));
     const current = versions[versions.length - 1];
     const prev = versions[versions.length - 2];
@@ -250,6 +317,7 @@ function startServer(opts = {}) {
       migrationsDir: migrationMode
         ? path.relative(projectRoot || process.cwd(), migrationsDir) || migrationsDir
         : null,
+      iterationsDir: iterationsDir ? relativeToRoot(iterationsDir) : null,
     };
   }
 
@@ -294,6 +362,7 @@ function startServer(opts = {}) {
       },
     ];
     seq = tipId;
+    rebuildPlans();
     broadcast('version', buildPayload());
   }
 
@@ -321,6 +390,7 @@ function startServer(opts = {}) {
         schema: drizzle,
       });
     }
+    rebuildPlans();
     broadcast('version', buildPayload());
   }
 
@@ -344,12 +414,14 @@ function startServer(opts = {}) {
     versions.push({ id, at, schema, reason, kind: 'save', structural: true });
     if (versions.length > MAX_SAVE_VERSIONS) versions.shift();
     saveHistory();
+    rebuildPlans();
     broadcast('version', buildPayload());
   }
 
   // ---- file watching (debounced) --------------------------------------------
   let debounceSchema = null;
   let debounceMig = null;
+  let debouncePlans = null;
 
   function watchPath(dir, recursive, onEvt) {
     try {
@@ -382,6 +454,17 @@ function startServer(opts = {}) {
         if (filename && !filename.endsWith('.sql')) return;
         clearTimeout(debounceMig);
         debounceMig = setTimeout(() => rebuildMigrationVersions(), 200);
+      });
+    }
+
+    if (iterationsDir) {
+      watchPath(iterationsDir, true, (_ev, filename) => {
+        if (filename && !/(db-changes|README)\.md$/.test(filename)) return;
+        clearTimeout(debouncePlans);
+        debouncePlans = setTimeout(() => {
+          rebuildPlans();
+          broadcast('version', buildPayload());
+        }, 150);
       });
     }
   }
@@ -590,16 +673,24 @@ function startServer(opts = {}) {
     if (req.method !== 'GET') {
       return json(res, 405, { error: 'Method not allowed' });
     }
-    const from = versions.find((v) => v.id === Number(searchParams.get('from')));
-    const to = versions.find((v) => v.id === Number(searchParams.get('to')));
+    const every = allVersions();
+    const to = every.find((v) => v.id === Number(searchParams.get('to')));
     if (!to) {
       res.writeHead(404);
       res.end('{}');
       return;
     }
+    // A plan reads against the tip it was built on unless another baseline is asked for.
+    const from =
+      every.find((v) => v.id === Number(searchParams.get('from'))) ||
+      (to.kind === 'plan' ? versions[versions.length - 1] : undefined);
     const diff = diffSchemas(from ? from.schema : { tables: [] }, to.schema);
     if (!diff.changelog?.length && to.kind === 'migration' && to.structural === false) {
       diff.note = 'No structural table/column changes (RLS / index / function)';
+    }
+    if (to.kind === 'plan') {
+      diff.plan = to.plan;
+      diff.note = planNote(to.plan);
     }
     json(res, 200, { diff, from: from ? from.id : null, to: to.id });
   }
@@ -609,8 +700,19 @@ function startServer(opts = {}) {
     if (req.method !== 'GET') {
       return json(res, 405, { error: 'Method not allowed' });
     }
-    const v = versions.find((x) => x.id === Number(searchParams.get('id')));
+    const v = allVersions().find((x) => x.id === Number(searchParams.get('id')));
     if (!v) return json(res, 404, { error: 'Version not found' });
+    if (v.kind === 'plan') {
+      return json(res, 200, {
+        id: v.id,
+        kind: v.kind,
+        reason: v.reason,
+        at: v.at,
+        file: null,
+        content: null,
+        note: `A plan has no migration SQL — its tables are designed at kickoff. Source: ${v.file}`,
+      });
+    }
 
     if (v.kind === 'latest' || !v.file) {
       return json(res, 200, {
@@ -718,6 +820,11 @@ function startServer(opts = {}) {
       console.log(`  migrations: ${migrationsDir} (${Math.max(0, versions.length - 1)} + Latest)`);
       if (skippedStatements)
         console.log(`  skipped:    ${skippedStatements} unhandled statement(s) during replay`);
+    }
+    if (iterationsDir) {
+      console.log(
+        `  plans:      ${plans.length} iteration plan(s) from ${relativeToRoot(iterationsDir)}`,
+      );
     }
     if (reviewEnabled) console.log('  review:     enabled (DB_VIEWER_REVIEW=1)');
     console.log(

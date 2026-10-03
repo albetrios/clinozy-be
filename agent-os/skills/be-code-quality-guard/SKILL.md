@@ -92,7 +92,7 @@ Pre-commit mirrors a **subset** of the static checks in [`.github/workflows/pr-c
 | 11 | `pnpm tool:generate-project-identity:check` | Manifest / workflow drift |
 | 12 | `pnpm tool:sync-env-example` | `.env.example` drift |
 | 13 | `gitleaks protect --staged` | Secrets in staged files (**required** locally) |
-| 14–15 | Conflict markers + large files | Accidental merges / >1MB staged files |
+| 14–15 | Conflict markers + large files | Accidental merges / >3MB staged files (iterations/ exempt) |
 | 16 | `pnpm sonar:scan` (conditional) | SonarQube quality gate — blocks the commit on any unresolved issue/hotspot; runs when deployed-surface `src/**/*.ts` is staged. **Mandatory — no bypass.** |
 
 ### Pre-push (`.husky/pre-push`)

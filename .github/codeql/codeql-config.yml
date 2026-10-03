@@ -35,6 +35,11 @@ paths-ignore:
   # remains fully analyzed. Semgrep still scans tooling/ for defense-in-depth.
   - tooling/**
   - src/scripts/**
+  # Design-tool exports: a prototype HTML/JS bundle and the specs extracted from
+  # it, one folder per iteration (kept byte-identical by the intake gate).
+  # Reference material for building src/ — never built or deployed, so outside
+  # the deployed surface this config scopes to (parity with clinozy-fe).
+  - iterations/**
 
 # Suppress queries that are verified architectural false positives for this
 # codebase (not blanket security-rule disabling):

@@ -17,7 +17,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-before-commit-guard/SKILL.md",
-      "computedHash": "1ad35ef1e4f1db50bdf66c12ac90227b94d7050d48cf4721afb6f9513e310565"
+      "computedHash": "771866a57e9d052254993ffaf9fde601d8318259eb51bca506eda3983a0902da"
     },
     "be-change-completeness-guard": {
       "source": "local",
@@ -41,7 +41,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-code-quality-guard/SKILL.md",
-      "computedHash": "ae2033ea78f975d4a41e5607c6676f8f839b45415dc50986e7ef84e2f9b5121f"
+      "computedHash": "608c923a0e704c2afc70a2ef137d201e61711c8603186fcac38ebae59e29d3ef"
     },
     "be-code-smells-and-best-practices": {
       "source": "local",
@@ -131,13 +131,13 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-iteration-planning/SKILL.md",
-      "computedHash": "edfa360911a1c5b4cd56615a9351ef1fd89cb1924e19f71dbbc1efa9dd898dc2"
+      "computedHash": "d8bc258ee1986099162aa701edaaea8282c710f7d36502cad6c464849bbc245a"
     },
     "be-kickoff-iteration": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-kickoff-iteration/SKILL.md",
-      "computedHash": "cc5d3cb80f26bc8acba3075c8b9aed0296544ab5be5019c2a4c477206fc11204"
+      "computedHash": "e68846e406a0329d1a7a2fb2ade234dafbcb89cc7777cf5c30f972e34f70b022"
     },
     "be-lint-warnings-handler": {
       "source": "local",

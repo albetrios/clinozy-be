@@ -50,8 +50,14 @@ flowchart TB
 - **Confirm the iteration first.** Both skills start with a `pnpm iteration:list` table of which
   iterations are eligible and why, recommend the earliest-opened one (the launch always first), and
   wait for your confirmation — never pick silently.
+- **Reviewable as it goes.** Planning keeps the database changes (`plans/db-changes.md`, drawn by
+  the DB Viewer's plan mode), the proposed routes (`plans/route-changes.md`) and the background work
+  (`plans/worker-changes.md`) current at every step, with before → after for anything that changes,
+  and every step ends with a step review — what changed, the review links, continue or change — so
+  nothing waits for a PR diff.
 - **Planning is WHAT, never HOW.** `KICKOFF.md` and `plans/` hold requirements and decisions — no
-  SQL, endpoint paths, `src/` paths or queue names. Each row's technical design is decided while it
+  SQL, endpoint paths (the proposals in `plans/route-changes.md` are the one exception), `src/` paths
+  or queue names. Each row's technical design is decided while it
   is built and recorded in `AS-BUILT.md`.
 - **Schema first.** The ROUTE runs tables (in dependency order) → features → background work →
   flows → acceptance; an incremental ROUTE runs schema changes first and never edits an existing
