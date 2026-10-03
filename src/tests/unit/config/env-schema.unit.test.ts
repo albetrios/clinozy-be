@@ -699,6 +699,28 @@ describe('env-schema', () => {
     expect(parsed.success).toBe(false);
   });
 
+  it('rejects production boot with a Cloudflare Turnstile test secret', () => {
+    for (const testSecret of [
+      '1x0000000000000000000000000000000AA',
+      '2x0000000000000000000000000000000AA',
+      '3x0000000000000000000000000000000AA',
+    ]) {
+      const parsed = envSchema.safeParse({ ...productionRequiredBase, CAPTCHA_SECRET: testSecret });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.issues.some((issue) => issue.path[0] === 'CAPTCHA_SECRET')).toBe(true);
+      }
+    }
+    // Outside production the test secret is the local-CAPTCHA default.
+    const local = envSchema.safeParse({
+      ...commonRequiredBase,
+      NODE_ENV: 'development',
+      CAPTCHA_PROVIDER: 'turnstile',
+      CAPTCHA_SECRET: '1x0000000000000000000000000000000AA',
+    });
+    expect(local.success).toBe(true);
+  });
+
   it('allows production boot with configured turnstile CAPTCHA', () => {
     const parsed = envSchema.safeParse(productionRequiredBase);
     expect(parsed.success).toBe(true);

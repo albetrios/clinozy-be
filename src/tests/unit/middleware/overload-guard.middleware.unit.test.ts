@@ -14,13 +14,21 @@ vi.mock('@/infrastructure/observability/sentry/sentry.js', () => ({
   captureException: vi.fn(),
 }));
 
-// Pin the pool inputs the guard reads at registration, so the shed threshold is ceil(20 × 0.9) = 18
-// whatever the schema default or a developer's env file says (the load rig raises the pool size).
+// Pin the inputs the guard reads at registration, so the shed threshold is ceil(20 × 0.9) = 18
+// whatever the schema default or a developer's env file says (the load rig raises the pool size),
+// and the event-loop threshold is the production default 250 ms — the test harness raises it to
+// the maximum for every other suite (src/tests/setup.ts), which would make the boot-stall case
+// below pass vacuously.
 vi.mock('@/shared/config/env.config.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/shared/config/env.config.js')>();
   return {
     ...original,
-    env: { ...original.env, DATABASE_POOL_MAX: 20, OVERLOAD_DB_POOL_SHED_RATIO: 0.9 },
+    env: {
+      ...original.env,
+      DATABASE_POOL_MAX: 20,
+      OVERLOAD_DB_POOL_SHED_RATIO: 0.9,
+      OVERLOAD_MAX_EVENT_LOOP_DELAY_MS: 250,
+    },
   };
 });
 

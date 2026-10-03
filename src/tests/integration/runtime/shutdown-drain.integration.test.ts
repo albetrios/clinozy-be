@@ -6,7 +6,10 @@ import { Queue, Worker } from 'bullmq';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 
 import * as databaseConnection from '@/infrastructure/database/connection.js';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import * as redisClient from '@/infrastructure/cache/redis.client.js';
 import { resetApplicationDrainingForTests } from '@/shared/utils/infrastructure/application-lifecycle.util.js';
 import { buildFastifyServerOptions } from '@/shared/utils/http/fastify-server.util.js';
@@ -221,11 +224,16 @@ describe('graceful shutdown drain', () => {
           await new Promise<void>((resolve) => setTimeout(resolve, 300));
           processorCompletedAtMillisecondsListeningForObservation = Date.now();
         },
-        { connection: bullMqConnectionOptionsListeningForObservation, concurrency: 1 },
+        {
+          connection: bullMqConnectionOptionsListeningForObservation,
+          prefix: getBullMQKeyPrefix(),
+          concurrency: 1,
+        },
       );
 
       queueListeningForTeardown = new Queue(queueNameAwaitingIsolation, {
         connection: bullMqConnectionOptionsListeningForObservation,
+        prefix: getBullMQKeyPrefix(),
         defaultJobOptions: {
           removeOnComplete: { count: 10 },
           removeOnFail: { count: 10 },

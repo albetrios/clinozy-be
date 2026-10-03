@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
-import { API_PREFIX, SCENARIOS } from '../helpers/config.js';
+import { API_PREFIX, SCENARIOS, PUBLIC_AUTH_FORM_HEADERS } from '../helpers/config.js';
 
 /**
  * k6 Scenario: login brute-force burst — the rate limiter itself under load.
@@ -59,7 +59,7 @@ export function loginBurst() {
     `${API_PREFIX}/auth/login`,
     JSON.stringify({ email: burstTargetEmail, password: 'DefinitelyWrongPassword123!' }),
     {
-      headers: { 'Content-Type': 'application/json' },
+      headers: PUBLIC_AUTH_FORM_HEADERS,
       tags: { name: 'login-burst' },
       // 401 (bad credentials) and 429 (limited) are the EXPECTED outcomes here.
       responseCallback: http.expectedStatuses(401, 429),

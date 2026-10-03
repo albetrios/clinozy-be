@@ -5,6 +5,9 @@ import { createTestApp } from '@/tests/helpers/test-app.js';
 import { injectUnauthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUserWithPassword } from '@/tests/factories/user.factory.js';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
+import { webauthn_credentials } from '@/domains/auth/sub-domains/auth-webauthn/webauthn-credential.schema.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import type { InjectHttpResult } from '@/tests/helpers/test-http-inject.helper.js';
 
 /**
@@ -125,5 +128,53 @@ describe('Security: auth account-enumeration resistance', () => {
 
     expect(known.statusCode).toBe(unknown.statusCode);
     expect(responseData(unknown)).toEqual(responseData(known));
+  });
+  it('webauthn/authenticate/options: a multi-passkey account and an unknown email get the same options shape', async () => {
+    // Real accounts used to list every stored credential with its transports while decoys listed
+    // exactly one `internal` descriptor — count and transports told enrolled accounts apart.
+    const { user } = await createTestUserWithPassword({
+      email: 'enumeration-passkeys@example.com',
+      isEmailVerified: true,
+    });
+    await getOperatorDatabase()
+      .insert(webauthn_credentials)
+      .values([
+        {
+          public_id: generatePublicId('authMethod'),
+          user_id: user.id,
+          credential_id: 'enumeration-credential-usb',
+          public_key: 'cHVibGljLWtleS1h',
+          transports: ['usb', 'nfc'],
+        },
+        {
+          public_id: generatePublicId('authMethod'),
+          user_id: user.id,
+          credential_id: 'enumeration-credential-hybrid',
+          public_key: 'cHVibGljLWtleS1i',
+          transports: ['hybrid'],
+        },
+      ]);
+
+    const passkeyOptions = (email: string) =>
+      injectUnauthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/webauthn/authenticate/options'),
+        payload: { email },
+      });
+    const enrolled = await passkeyOptions('enumeration-passkeys@example.com');
+    const unknown = await passkeyOptions('enumeration-passkeys-absent@example.com');
+
+    expect(enrolled.statusCode).toBe(200);
+    expect(unknown.statusCode).toBe(enrolled.statusCode);
+    type OptionsData = { options: Record<string, unknown>; challenge_token: string };
+    const enrolledData = (enrolled.json() as { data: OptionsData }).data;
+    const unknownData = (unknown.json() as { data: OptionsData }).data;
+    // No per-account descriptors at all, and every field but the random challenge is equal.
+    expect(enrolledData.options).not.toHaveProperty('allowCredentials');
+    expect(unknownData.options).not.toHaveProperty('allowCredentials');
+    const { challenge: _enrolledChallenge, ...enrolledRest } = enrolledData.options;
+    const { challenge: _unknownChallenge, ...unknownRest } = unknownData.options;
+    expect(enrolledRest).toEqual(unknownRest);
+    expect(Object.keys(enrolledData).sort()).toEqual(Object.keys(unknownData).sort());
   });
 });

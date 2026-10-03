@@ -21,6 +21,8 @@ import { NOTIFY_PERMISSIONS } from '@/domains/notify/notify.permissions.js';
 import { database } from '@/infrastructure/database/connection.js';
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { api_keys } from '@/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.schema.js';
+import { users } from '@/domains/user/user.schema.js';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 type ApiKeyCreateResponse = {
   data: { api_key: { id: string }; raw_key: string };
 };
@@ -205,5 +207,127 @@ describe('Security: Organization API key authentication', () => {
       headers: { authorization: `ApiKey ${rawKey}` },
     });
     expect(response.statusCode).toBe(401);
+  });
+  describe('a key works only while its creator is an active member', () => {
+    // Suspending a member used to leave every key they had created ACTIVE: the key kept its stored
+    // scopes, and one holding membership:manage could PATCH the suspended member back to ACTIVE.
+    async function suspendableMemberWithKey() {
+      const admin = await createTestUser();
+      const organization = await createTestOrganization({ ownerUserId: admin.id });
+      const adminRole = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: [
+          TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+          TENANCY_PERMISSIONS.MEMBERSHIP_READ,
+        ],
+      });
+      await createMembership({
+        userId: admin.id,
+        organizationId: organization.id,
+        roleId: adminRole.id,
+      });
+      const adminToken = await generateTestToken({
+        userId: admin.public_id,
+        organizationPublicId: organization.public_id,
+      });
+
+      const member = await createTestUser();
+      const memberScopes = [
+        TENANCY_PERMISSIONS.API_KEY_MANAGE,
+        TENANCY_PERMISSIONS.API_KEY_READ,
+        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        TENANCY_PERMISSIONS.MEMBERSHIP_READ,
+      ];
+      const memberRole = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: memberScopes,
+      });
+      const membership = await createMembership({
+        userId: member.id,
+        organizationId: organization.id,
+        roleId: memberRole.id,
+      });
+      const memberToken = await generateTestToken({
+        userId: member.public_id,
+        organizationPublicId: organization.public_id,
+      });
+      const created = await injectAuthenticatedOrganizationMutation(app, {
+        method: 'POST',
+        url: testApiPath('/tenancy/organization/api-keys'),
+        token: memberToken,
+        payload: {
+          name: 'member automation key',
+          scopes: [TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE, TENANCY_PERMISSIONS.MEMBERSHIP_READ],
+        },
+      });
+      expect(created.statusCode).toBe(200);
+      return {
+        adminToken,
+        member,
+        membershipPublicId: membership.public_id,
+        rawKey: (created.json() as ApiKeyCreateResponse).data.raw_key,
+      };
+    }
+
+    function listMembersWithKey(rawKey: string) {
+      return injectRoute(app, {
+        method: 'GET',
+        url: testApiPath('/tenancy/organization/memberships'),
+        headers: { authorization: `ApiKey ${rawKey}` },
+      });
+    }
+
+    function setMembershipStatus(options: {
+      token: string;
+      membershipPublicId: string;
+      status: string;
+    }) {
+      return injectAuthenticatedOrganizationMutation(app, {
+        method: 'PATCH',
+        url: testApiPath(`/tenancy/organization/memberships/${options.membershipPublicId}`),
+        token: options.token,
+        payload: { status: options.status },
+      });
+    }
+
+    it("refuses a suspended member's key, which cannot reactivate the member — until an admin does", async () => {
+      const context = await suspendableMemberWithKey();
+      expect((await listMembersWithKey(context.rawKey)).statusCode).toBe(200);
+
+      const suspended = await setMembershipStatus({
+        token: context.adminToken,
+        membershipPublicId: context.membershipPublicId,
+        status: 'SUSPENDED',
+      });
+      expect(suspended.statusCode).toBe(200);
+
+      expect((await listMembersWithKey(context.rawKey)).statusCode).toBe(401);
+      const selfReactivation = await injectRoute(app, {
+        method: 'PATCH',
+        url: testApiPath(`/tenancy/organization/memberships/${context.membershipPublicId}`),
+        headers: { authorization: `ApiKey ${context.rawKey}` },
+        payload: { status: 'ACTIVE' },
+      });
+      expect(selfReactivation.statusCode).toBe(401);
+
+      // Suspension is reversible: an administrator reactivating the member revives the key.
+      const reactivated = await setMembershipStatus({
+        token: context.adminToken,
+        membershipPublicId: context.membershipPublicId,
+        status: 'ACTIVE',
+      });
+      expect(reactivated.statusCode).toBe(200);
+      expect((await listMembersWithKey(context.rawKey)).statusCode).toBe(200);
+    });
+
+    it('refuses the key once the creator account itself is no longer active', async () => {
+      const context = await suspendableMemberWithKey();
+      await getOperatorDatabase()
+        .update(users)
+        .set({ status: 'SUSPENDED' })
+        .where(eq(users.id, context.member.id));
+
+      expect((await listMembersWithKey(context.rawKey)).statusCode).toBe(401);
+    });
   });
 });

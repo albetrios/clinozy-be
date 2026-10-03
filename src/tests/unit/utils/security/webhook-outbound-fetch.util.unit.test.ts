@@ -190,4 +190,100 @@ describe('webhook-outbound-fetch.util', () => {
     expect(capturedHost).toBe('93.184.216.34');
     expect(lookupCount).toBe(1);
   });
+
+  describe('response conversion never throws out of the response listeners', () => {
+    type ResponseEvent = ['data', Buffer] | ['end'] | ['error', Error] | ['close'];
+
+    /**
+     * Delivers the response AFTER the promise executor returned (setImmediate), exactly like real
+     * Node — a throw from a listener would then escape the promise and reach the process-wide
+     * fatal handler instead of rejecting the fetch.
+     */
+    function mockTargetResponse(options: {
+      statusCode: number;
+      headers?: Record<string, string>;
+      events: ResponseEvent[];
+    }): void {
+      mockDnsLookupAll([{ address: '93.184.216.34', family: 4 }]);
+      mockedHttpsRequest.mockImplementation(((_options, responseCallback) => {
+        const listeners = new Map<string, (argument?: Buffer | Error) => void>();
+        setImmediate(() => {
+          const response = {
+            statusCode: options.statusCode,
+            statusMessage: '',
+            headers: options.headers ?? {},
+            on: (event: string, handler: (argument?: Buffer | Error) => void) => {
+              listeners.set(event, handler);
+            },
+          } as unknown as IncomingMessage;
+          (responseCallback as (response: IncomingMessage) => void)(response);
+          for (const [event, argument] of options.events) listeners.get(event)?.(argument);
+        });
+        return { on: vi.fn(), end: vi.fn(), destroy: vi.fn() } as unknown as ReturnType<
+          typeof httpsRequest
+        >;
+      }) as typeof httpsRequest);
+    }
+
+    async function deliver(): Promise<Response> {
+      const { createPinnedWebhookFetch } = await import(
+        '@/shared/utils/security/webhook-outbound-fetch.util.js'
+      );
+      const pinnedFetch = await createPinnedWebhookFetch('https://hooks.example.com/deliver');
+      return pinnedFetch('https://hooks.example.com/deliver', { method: 'POST', body: '{}' });
+    }
+
+    it.each([204, 205, 304])('resolves an empty %s with a null body', async (statusCode) => {
+      mockTargetResponse({ statusCode, events: [['end'], ['close']] });
+      const response = await deliver();
+      expect(response.status).toBe(statusCode);
+      expect(response.body).toBeNull();
+    });
+
+    it('keeps the body of an ordinary 200', async () => {
+      mockTargetResponse({ statusCode: 200, events: [['data', Buffer.from('ok')], ['end']] });
+      const response = await deliver();
+      expect(response.status).toBe(200);
+      await expect(response.text()).resolves.toBe('ok');
+    });
+
+    it('rejects a status Response cannot represent', async () => {
+      mockTargetResponse({ statusCode: 600, events: [['end']] });
+      await expect(deliver()).rejects.toThrow('webhook.fetch.invalid_response');
+    });
+
+    it('rejects a header value Headers refuses', async () => {
+      mockTargetResponse({
+        statusCode: 200,
+        headers: { 'x-bad': 'line\nbreak' },
+        events: [['end']],
+      });
+      await expect(deliver()).rejects.toThrow('webhook.fetch.invalid_response');
+    });
+
+    it('rejects when the response stream errors', async () => {
+      mockTargetResponse({ statusCode: 200, events: [['error', new Error('socket reset')]] });
+      await expect(deliver()).rejects.toThrow('socket reset');
+    });
+
+    it('rejects when the connection closes before the body ends', async () => {
+      mockTargetResponse({ statusCode: 200, events: [['data', Buffer.from('par')], ['close']] });
+      await expect(deliver()).rejects.toThrow('webhook.fetch.connection_closed');
+    });
+
+    it('converts headers and a null-body status without the network', async () => {
+      const { toWebhookFetchResponse } = await import(
+        '@/shared/utils/security/webhook-outbound-fetch.util.js'
+      );
+      const response = toWebhookFetchResponse({
+        statusCode: 204,
+        statusMessage: 'No Content',
+        headers: { 'set-cookie': ['a=1', 'b=2'], 'x-request-id': 'abc' },
+        body: Buffer.alloc(0),
+      });
+      expect(response.status).toBe(204);
+      expect(response.body).toBeNull();
+      expect(response.headers.get('x-request-id')).toBe('abc');
+    });
+  });
 });

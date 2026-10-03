@@ -1,7 +1,10 @@
 import { createHmac } from 'node:crypto';
 import { UnrecoverableError, Worker } from 'bullmq';
 import { captureMessage } from '@/infrastructure/observability/sentry/sentry.js';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { buildOutboundCallOptions, outboundCall } from '@/infrastructure/outbound/index.js';
 import { createPinnedWebhookFetch } from '@/shared/utils/security/webhook-outbound-fetch.util.js';
 import { getWebhookWorkerOptions } from '@/infrastructure/queue/worker-runtime/worker-options.js';
@@ -659,6 +662,7 @@ export function createWebhookDeliveryWorker(): WorkerHandle {
     },
     {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
       concurrency: getWorkerConcurrencyWebhook(),
       ...getWebhookWorkerOptions(),
       settings: {

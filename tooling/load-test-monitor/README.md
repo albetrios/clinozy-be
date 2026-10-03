@@ -4,8 +4,8 @@ A recording reverse proxy on **:4985** with a live dashboard, for reading what a
 did. Point k6 at it instead of the API and every call is captured and grouped per route as it lands.
 
 ```bash
-pnpm load:monitor                     # proxy + dashboard on http://localhost:4985
-BASE_URL=http://localhost:4985 VUS=50 k6 run src/tests/load/k6/scenarios/fe-login-to-organization.js
+pnpm load:monitor                     # proxy + dashboard on 127.0.0.1:4985 — open the URL it prints
+BASE_URL=http://127.0.0.1:4985 VUS=50 k6 run src/tests/load/k6/scenarios/fe-login-to-organization.js
 ```
 
 ## What it is for
@@ -20,9 +20,24 @@ from the overload guard".
 
 Not application monitoring, and not a second copy of one. Production signals come from `/metrics`
 (Prometheus), Sentry, and Bull Board at `/admin/queues`, and the Grafana definitions live in
-`tooling/dev/dashboards/`. This tool holds everything in memory, keeps whole request and response
-bodies, has no authentication, and disappears when you stop it. **Loopback development only** —
-never put it in front of a deployed API.
+`tooling/dev/dashboards/`. This tool holds everything in memory and disappears when you stop it.
+**Loopback development only** — never put it in front of a deployed API.
+
+## Access and what it keeps
+
+- **Loopback only.** It listens on `127.0.0.1`; no other machine can reach it.
+- **Session token.** The dashboard URL it prints carries a per-boot random token. Every
+  `/__monitor/*` endpoint requires it (`?token=` or `x-session-token`), plus a loopback `Host` and,
+  from a browser, a loopback `Origin` — the DB Viewer's guard, shared in
+  [`tooling/dev/loopback-guard.mjs`](../dev/loopback-guard.mjs). Two paths need no token: the proxy
+  itself (point k6 at it) and the run announcement a scenario `POST`s to `/__monitor/run` (k6 sends
+  no `Origin`; a cross-origin browser page does and is refused).
+- **Redacted recordings.** Bodies, query strings and headers are redacted before they are stored
+  ([`lib/recording-redaction.mjs`](lib/recording-redaction.mjs)), with the application's own
+  `redactSensitive` — the redactor behind the logs and Sentry. A proxied login is kept as
+  `{"email":"[REDACTED]","password":"[REDACTED]"}`; `X-Api-Key` and similar headers become
+  `[redacted]`; `Authorization` keeps only a fingerprint (first 12 and last 8 characters) to
+  correlate a virtual user's calls; a body that cannot be parsed for redaction is withheld.
 
 The name carries the qualifier for a reason. "Load **Testing** Monitoring" is monitoring *of a load
 test* — it exists for the minutes a run takes and then goes away. An unqualified "api-monitor", which
@@ -32,12 +47,12 @@ this was once called, reads as monitoring *of the API*, a job the list above alr
 
 | Endpoint | Purpose |
 | -------- | ------- |
-| `/` | Dashboard — per-route calls, ok/error/429 counts, avg, p95, max, total time |
-| `/__monitor/stream` | Server-sent events feed of calls as they land |
-| `/__monitor/stats` | Per-route aggregates as JSON |
-| `/__monitor/calls` | Recorded calls (`?limit=`) with headers and bodies |
-| `/__monitor/clear` | `POST` — reset counters between runs |
-| `/__monitor/run` | `POST` — a scenario announces its shape (VUs, routes, pool) so the board can show the command that produced the numbers |
+| `/` | Dashboard — per-route calls, ok/error/429 counts, avg, p95, max, total time (open with the printed `?token=` URL) |
+| `/__monitor/stream` | Server-sent events feed of calls as they land (token) |
+| `/__monitor/stats` | Per-route aggregates as JSON (token) |
+| `/__monitor/calls` | Recorded calls (`?limit=`) with redacted headers and bodies (token) |
+| `/__monitor/clear` | `POST` — reset counters between runs (token) |
+| `/__monitor/run` | `POST` — a scenario announces its shape (VUs, routes, pool) so the board can show the command that produced the numbers (no token); `GET` reads it (token) |
 | everything else | proxied to the upstream API |
 
 ## Configuration
@@ -58,4 +73,5 @@ Compare monitor-to-monitor, never monitor-to-direct. Before quoting any before/a
 [Trusting a result](../../docs/reference/testing/load-testing.md#trusting-a-result) — run-to-run
 variance on a co-located box has been measured at 2.07x.
 
-No dependencies: Node built-ins only.
+Runs under `tsx` (`pnpm load:monitor`) so the recorder can reuse the application's TypeScript
+redactor; otherwise Node built-ins only.

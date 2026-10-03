@@ -1,6 +1,11 @@
 import http from 'k6/http';
 import { sleep } from 'k6';
-import { API_PREFIX, SCENARIOS, SMOKE_THRESHOLDS } from '../helpers/config.js';
+import {
+  API_PREFIX,
+  SCENARIOS,
+  SMOKE_THRESHOLDS,
+  PUBLIC_AUTH_FORM_HEADERS,
+} from '../helpers/config.js';
 import { checkStatus, checkResponseTime } from '../helpers/checks.js';
 
 /**
@@ -25,7 +30,7 @@ export function loginSmoke() {
   const password = __ENV.DEMO_PASSWORD || 'DemoPassword123!';
 
   const loginResponse = http.post(`${API_PREFIX}/auth/login`, JSON.stringify({ email, password }), {
-    headers: { 'Content-Type': 'application/json' },
+    headers: PUBLIC_AUTH_FORM_HEADERS,
     tags: { name: 'login-smoke-login' },
   });
   checkStatus(loginResponse, 200, 'login');

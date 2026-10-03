@@ -13,6 +13,7 @@ Session lifecycle: create on successful authentication, validate on every authen
 - **One JWT per session**: `auth_sessions.token_hash = sha256(jwt)` is unique. A second `signAccessToken` call for the same user produces a fresh row, not an alias of an existing one.
 - **Revocation propagation ≤ 60 s**: the auth middleware's positive cache uses `SESSION_TOKEN_CACHE_TTL_SECONDS = 60`. A revoked session keeps working at most one minute past revocation.
 - **Origin-checked refresh**: the refresh path requires the `session_id` cookie + matching `Origin` header (CSRF defence). See [docs/reference/security/csrf-and-session-cookies.md](docs/reference/security/csrf-and-session-cookies.md).
+- **MFA assurance**: `auth_sessions.mfa_verified_at` is set when the session proves a second factor — created by the MFA login challenge, or marked by `markSessionMfaVerified` after an authenticated MFA verification or enrollment confirmation (only on a non-revoked, unexpired row). It is never cleared while the session lives; switch and refresh mint `amr: ['mfa']` from it.
 - **Session retention**: rows past `expires_at + retention window` are hard-deleted by the [auth-session retention worker](src/domains/auth/sub-domains/auth-session/workers/).
 
 ## Lifecycle

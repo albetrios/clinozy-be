@@ -1,5 +1,8 @@
 import { Queue } from 'bullmq';
-import { getBullMQProducerConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQKeyPrefix,
+  getBullMQProducerConnectionOptions,
+} from '@/infrastructure/queue/connection.js';
 import { DEFAULT_JOB_RETENTION_COUNT } from '@/infrastructure/queue/queue.constants.js';
 import { insertMailOutbox } from '@/infrastructure/mail/mail-outbox.repository.js';
 import { captureTraceContextForPropagation } from '@/infrastructure/observability/tracing/trace-context.util.js';
@@ -43,6 +46,7 @@ function getMailQueue(): Queue<MailJobData> {
     // enqueue fast instead of buffering it; the explicit 15s deadline in `enqueueMailOutboxJob`
     // additionally bounds how long a single enqueue can wait during graceful shutdown.
     connection: getBullMQProducerConnectionOptions(),
+    prefix: getBullMQKeyPrefix(),
     defaultJobOptions: {
       removeOnComplete: { count: DEFAULT_JOB_RETENTION_COUNT, age: SEVEN_DAYS_SECONDS },
       removeOnFail: { count: 500, age: SEVEN_DAYS_SECONDS },

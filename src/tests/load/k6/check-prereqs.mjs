@@ -98,7 +98,9 @@ if (serverUp && pool.length) {
     try {
       const lr = await fetch(`${API}/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // The dev-only CAPTCHA bypass (honored only with CAPTCHA_BYPASS_ALLOWED=true, never in
+        // production) — the same header the k6 scenarios send on public auth forms.
+        headers: { 'Content-Type': 'application/json', 'X-Captcha-Bypass': 'true' },
         body: JSON.stringify({ email: c.email, password: c.password }),
       });
       const j = await lr.json();
@@ -106,7 +108,7 @@ if (serverUp && pool.length) {
         fail(
           'captcha fail-open',
           'login blocked by captcha',
-          'Set NODE_ENV=development + RATE_LIMIT_RELAXED_CAPS=true and CAPTCHA_PROVIDER=disabled, restart the server',
+          'Set CAPTCHA_PROVIDER=disabled, or keep CAPTCHA on with CAPTCHA_BYPASS_ALLOWED=true (pnpm setup:local --with-captcha sets both); plus NODE_ENV=development + RATE_LIMIT_RELAXED_CAPS=true — then restart the server',
         );
         break;
       }

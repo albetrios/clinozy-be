@@ -177,6 +177,7 @@ describe('trace context propagation (API → mail enqueue → worker)', () => {
     }));
 
     vi.doMock('@/infrastructure/queue/connection.js', () => ({
+      getBullMQKeyPrefix: () => 'test:bull',
       getBullMQConnectionOptions: () => ({}),
       getBullMQProducerConnectionOptions: () => ({ enableOfflineQueue: false }),
     }));

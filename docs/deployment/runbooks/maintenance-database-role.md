@@ -15,10 +15,11 @@ authority becomes a connection-level property instead of a GUC-only one.
   maintenance-pool connection hits `deny_all` on the mail outbox / Stripe ledger / DLQ
   ledger) and grants `clinozy_be_app` membership so `SET LOCAL ROLE clinozy_be_app` tooling
   keeps working on maintenance connections.
-- **Local development is provisioned**: the compose Postgres role has LOGIN and the
-  gitignored local env file carries `DATABASE_MAINTENANCE_URL` — local runs and the DB
-  test suites exercise maintenance contexts as `clinozy_be_maintenance` (production-like RLS
-  instead of the superuser-exempt pool).
+- **Local development is provisioned**: `pnpm setup:local` enables the
+  `clinozy_be_maintenance` login and writes `DATABASE_MAINTENANCE_URL` to the gitignored
+  local env file — local runs exercise maintenance contexts as `clinozy_be_maintenance`
+  (production-like RLS instead of the superuser-exempt pool). See
+  [Local parity provisioning](#local-parity-provisioning-all-roles).
 - **Hosted environments are provisioned by clinozy-infra**: its Neon provisioning creates
   `clinozy_be_maintenance` as a `LOGIN NOBYPASSRLS` user on each environment's branch
   before the first deploy (next to `clinozy_be_app` and `clinozy_be_migrator` — see
@@ -62,21 +63,35 @@ authority becomes a connection-level property instead of a GUC-only one.
 
 Local mirrors live: migration `20260827050000` creates `clinozy_be_owner` /
 `clinozy_be_migrator` / `clinozy_be_operator` and moves table ownership to the owner group.
-Local provisioning (once, as the compose superuser):
+
+**`pnpm setup:local` provisions the local logins** (after `pnpm db:migrate`, and on every
+`--only-env` run once the roles exist), as the compose superuser — the admin connection whose
+credentials come from the same manifest Docker Compose uses. Each password is the one
+`.env.local` already has for that role, else the one the process environment carries for that
+variable (shell exports, CI or cloud variables), else a new generated one. The migrations own the
+roles; the logins are mapped in
+[`tooling/dev/local-database-logins.ts`](../../../tooling/dev/local-database-logins.ts), whose
+unit test fails when a migration creates or renames a role that is neither a local login nor
+listed as login-less (`owner`, `migrator`). This is local only — the cloud environments provision
+their own logins.
 
 ```sql
 ALTER ROLE clinozy_be_app LOGIN PASSWORD '<generated>';
+ALTER ROLE clinozy_be_maintenance LOGIN PASSWORD '<generated>';
 ALTER ROLE clinozy_be_operator LOGIN BYPASSRLS PASSWORD '<generated>';
-ALTER ROLE clinozy_be_migrator LOGIN CREATEROLE PASSWORD '<generated>';
 ```
 
-Then the gitignored local env file carries `DATABASE_URL` as `clinozy_be_app` (runtime
-parity), `DATABASE_OPERATOR_URL` as `clinozy_be_operator` (harness + full/bulk seeds pick
-it up automatically), and `DATABASE_MAINTENANCE_URL` as `clinozy_be_maintenance`.
-`DATABASE_MIGRATION_URL` points at `clinozy_be_migrator` for day-to-day migrations; the
-compose superuser is needed ONLY for a fresh clone's very first `pnpm db:migrate`
-(before the roles exist) and is otherwise used by nothing. `DATABASE_OPERATOR_URL` is
+It then writes the gitignored local env file — `DATABASE_URL` as `clinozy_be_app` (runtime
+parity, RLS-subject), `DATABASE_MAINTENANCE_URL` as `clinozy_be_maintenance` (RLS-subject),
+`DATABASE_OPERATOR_URL` as `clinozy_be_operator` (harness + full/bulk seeds pick it up
+automatically) — and logs in as each to prove the URL works. `DATABASE_OPERATOR_URL` is
 NEVER set in hosted environments.
+
+`DATABASE_MIGRATION_URL` stays the compose superuser locally (setup:local pins it there when
+unset, so migrations never fall back to the RLS-subject `DATABASE_URL`). A local migrator
+login would need what the hosted one has — `LOGIN CREATEROLE BYPASSRLS` — because SECURITY
+DEFINER functions are owned by the role that runs the migration: owned by a role subject to
+FORCE RLS, every resolver returns zero rows.
 
 ## Fresh database / recreate provisioning (disaster or reset)
 
@@ -94,9 +109,8 @@ canary). A deleted-and-recreated database therefore needs exactly three steps:
 2. **Migrate** — hosted: the deploy's `pnpm db:migrate` runs as `clinozy_be_migrator`,
    the very first run on the empty database included — the provider owner is not
    needed. The migrations skip the three users that already exist and create the rest
-   (`clinozy_be_owner`, `clinozy_be_operator`) `NOLOGIN`. Local: the compose superuser
-   runs the first `pnpm db:migrate`, then re-run the `ALTER ROLE … LOGIN PASSWORD` steps
-   above.
+   (`clinozy_be_owner`, `clinozy_be_operator`) `NOLOGIN`. Local: `pnpm setup:local` runs the
+   migrations as the compose superuser and then enables the local logins (see above).
 3. **Data** — reference data returns via `pnpm db:seed`; tenant/billing rows do
    not, and external state (e.g. Stripe customers pointing at vanished internal
    rows) needs reconciliation. Treat recreate as a provisioning event, not a

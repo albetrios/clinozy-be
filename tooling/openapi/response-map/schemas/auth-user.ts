@@ -320,9 +320,9 @@ export const webauthnRegistrationOptionsExample = {
     timeout: 60000,
     attestation: 'none',
     authenticatorSelection: {
-      residentKey: 'preferred',
+      residentKey: 'required',
       userVerification: 'required',
-      requireResidentKey: false,
+      requireResidentKey: true,
     },
   },
   challenge_token: 'opaque-registration-challenge-token',
@@ -332,7 +332,6 @@ export const webauthnAuthenticationOptionsExample = {
   options: {
     rpId: 'localhost',
     challenge: 'R1i538VsjTay-HR5E7BnBTncygO1KRomuA_mVat31KI',
-    allowCredentials: [{ id: 'credential-id', transports: ['internal'], type: 'public-key' }],
     timeout: 60000,
     userVerification: 'required',
   },

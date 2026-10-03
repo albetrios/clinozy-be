@@ -14,7 +14,10 @@ import {
   type WebhookDeliveryJobData,
 } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
 import { createPendingWebhookDeliveryAttempt } from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.js';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestWebhook } from '@/tests/factories/webhook.factory.js';
@@ -93,6 +96,7 @@ describe('Chaos resilience: webhook delivery circuit breaker isolates misbehavin
 
     enqueueQueue = new Queue<WebhookDeliveryJobData>(WEBHOOK_DELIVERY_QUEUE_NAME, {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
       defaultJobOptions: {
         removeOnComplete: { count: 20 },
         removeOnFail: { count: 20 },
@@ -103,6 +107,7 @@ describe('Chaos resilience: webhook delivery circuit breaker isolates misbehavin
 
     queueEvents = new QueueEvents(WEBHOOK_DELIVERY_QUEUE_NAME, {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
     });
     await queueEvents.waitUntilReady();
 

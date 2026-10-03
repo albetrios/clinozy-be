@@ -55,7 +55,9 @@ For production, prefer a managed Redis offering with a **replica + automatic fai
 | `REDIS_MEMORY_CRITICAL_RATIO` | `used_memory/maxmemory` ratio that escalates to Sentry (must be ≥ warn) | `0.9` |
 | `QUEUE_WAITING_DEPTH_WARN_THRESHOLD` | BullMQ `waiting`+`delayed` depth that warns/escalates | `1000` |
 
-Set `REDIS_KEY_PREFIX` when multiple environments share one Redis instance to avoid queue/cache cross-pollination. BullMQ `prefix` and ioredis `keyPrefix` both use [`resolveRedisKeyPrefix()`](../../../src/infrastructure/cache/redis-prefix.util.ts).
+Set `REDIS_KEY_PREFIX` when multiple environments share one Redis instance to avoid queue/cache cross-pollination. Both key families derive from [`resolveRedisKeyPrefix()`](../../../src/infrastructure/cache/redis-prefix.util.ts): the cache client uses it as its ioredis `keyPrefix`, and BullMQ — which rejects an ioredis `keyPrefix` and reads its prefix only from the `prefix` option of each `Queue` / `Worker` / `QueueEvents` — uses [`getBullMQKeyPrefix()`](../../../src/infrastructure/queue/connection.ts) = `<REDIS_KEY_PREFIX>bull`, so a queue lives at `<REDIS_KEY_PREFIX>bull:<queue>:…` (e.g. `clinozy:production:bull:mail:wait`). Every BullMQ construction must pass it; `bullmq-key-prefix.global.test.ts` fails the build on one that does not.
+
+**Upgrading from a release before the BullMQ prefix fix (October 2026).** Earlier releases passed the prefix inside the ioredis connection options, where BullMQ ignores it, so every environment's queues lived at the bare `bull:<queue>:…` keys — environments sharing one Redis consumed each other's jobs. Deploying the fix moves every queue to the prefixed keys; jobs still in the old `bull:*` keys are not carried over. Deploy with the queues empty (check depths with `pnpm ops:worker:drain` or the queue dashboard); repeatable schedulers re-register themselves under the new prefix when the worker boots. Afterwards, delete the stale `bull:*` keys.
 
 Boot validation in every runtime:
 

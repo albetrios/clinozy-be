@@ -1,6 +1,6 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { API_PREFIX, SMOKE_THRESHOLDS } from '../helpers/config.js';
+import { API_PREFIX, SMOKE_THRESHOLDS, PUBLIC_AUTH_FORM_HEADERS } from '../helpers/config.js';
 import { checkStatus } from '../helpers/checks.js';
 
 /**
@@ -45,7 +45,7 @@ export function sessionRefreshJourney() {
   // 1) Login — sets the httpOnly session cookie + readable csrf_token cookie
   //    in this VU's jar and returns the short-lived Bearer token.
   const loginResponse = http.post(`${API_PREFIX}/auth/login`, JSON.stringify({ email, password }), {
-    headers: { 'Content-Type': 'application/json' },
+    headers: PUBLIC_AUTH_FORM_HEADERS,
     tags: { name: 'session-journey-login' },
   });
   checkStatus(loginResponse, 200, 'session-journey login');

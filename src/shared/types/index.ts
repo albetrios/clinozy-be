@@ -20,6 +20,12 @@ export interface UserAuthContext {
    * fabricate one; production HTTP requests always carry it.
    */
   sessionPublicId?: string;
+  /**
+   * Whether the bearer's session has proven a second factor — its access token carries the
+   * `amr` claim with `mfa`. Organizations whose security policy requires MFA refuse a principal
+   * without it (`requireOrganizationPermission`, reason `mfa_required`).
+   */
+  mfaVerified?: boolean;
 }
 
 /**

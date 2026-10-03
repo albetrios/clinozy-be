@@ -2,7 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it } from 'vitest';
 import { Queue, Worker } from 'bullmq';
 
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { buildWorkerHandle } from '@/infrastructure/queue/worker-runtime/worker-close.util.js';
 
 describe('worker shutdown integration', () => {
@@ -25,11 +28,12 @@ describe('worker shutdown integration', () => {
         await new Promise<void>((resolve) => setTimeout(resolve, 300));
         processorCompletedAt = Date.now();
       },
-      { connection, concurrency: 1 },
+      { connection, prefix: getBullMQKeyPrefix(), concurrency: 1 },
     );
 
     queue = new Queue(queueName, {
       connection,
+      prefix: getBullMQKeyPrefix(),
       defaultJobOptions: {
         removeOnComplete: { count: 5 },
         removeOnFail: { count: 5 },

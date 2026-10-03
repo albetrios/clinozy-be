@@ -7,6 +7,14 @@ vi.mock('@/domains/tenancy/sub-domains/permission/authorization.service.js', () 
   resolveUserOrganizationPermissions: vi.fn(),
 }));
 
+// The organization MFA policy is read through Redis + Postgres; the unit lane has neither.
+vi.mock(
+  '@/domains/tenancy/sub-domains/organization/organization-settings/organization-mfa-policy.js',
+  () => ({
+    organizationRequiresMfa: vi.fn().mockResolvedValue(false),
+  }),
+);
+
 import { resolveUserOrganizationPermissions } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import {
   requireOrganizationPermission,

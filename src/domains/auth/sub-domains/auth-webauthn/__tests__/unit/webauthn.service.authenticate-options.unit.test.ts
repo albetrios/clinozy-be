@@ -9,13 +9,16 @@ vi.mock('@/domains/auth/sub-domains/auth-webauthn/webauthn-challenge.js', () => 
 
 vi.mock('@simplewebauthn/server', () => ({
   generateAuthenticationOptions: vi.fn(
-    async ({ allowCredentials }: { allowCredentials: { id: string }[] }) => ({
+    async (options: { rpID: string; allowCredentials?: { id: string }[] }) => ({
       challenge: 'challenge',
-      rpId: 'localhost',
-      allowCredentials,
+      rpId: options.rpID,
+      ...(options.allowCredentials ? { allowCredentials: options.allowCredentials } : {}),
     }),
   ),
 }));
+
+import { generateAuthenticationOptions } from '@simplewebauthn/server';
+import { createWebauthnChallenge } from '@/domains/auth/sub-domains/auth-webauthn/webauthn-challenge.js';
 
 vi.mock('@/infrastructure/database/contexts/database-context.js', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -68,66 +71,68 @@ describe('WebauthnService.generateAuthenticationOptions', () => {
     );
   });
 
-  it('returns decoy options for an unknown email AND runs the credential lookup to equalize timing (route-audit D1)', async () => {
+  const KNOWN_USER = {
+    id: 7,
+    public_id: 'abcdefghijklmnopqrstu',
+    email: 'has-passkey@example.com',
+  };
+
+  function challengeOwnerOfLastCall(): string {
+    const calls = vi.mocked(createWebauthnChallenge).mock.calls;
+    return calls[calls.length - 1]![2] as string;
+  }
+
+  it('sends no credential list for an unknown email, and still runs the lookup to equalize timing (route-audit D1)', async () => {
     vi.mocked(userService.findByEmail).mockResolvedValue(null);
     vi.mocked(credentialRepository.listActiveByUserId).mockResolvedValue([] as never);
 
     const result = await service.generateAuthenticationOptions({ email: 'missing@example.com' });
 
     expect(result.challenge_token).toBe('challenge-token');
-    expect(result.options.allowCredentials).toHaveLength(1);
-    // D1: the lookup now runs even for an unknown email (synthetic context, user_id 0) so the DB
-    // round-trip — and thus response latency — matches the known-email path. Pre-fix it was skipped,
-    // leaving a timing oracle that re-opened the enumeration channel the decoy was built to close.
+    expect(result.options).not.toHaveProperty('allowCredentials');
+    // D1: the lookup runs even for an unknown email (synthetic context, user_id 0) so the DB
+    // round-trip — and thus response latency — matches the known-email path.
     expect(credentialRepository.listActiveByUserId).toHaveBeenCalledWith(0);
+    expect(challengeOwnerOfLastCall()).toMatch(/^decoy:/);
   });
 
-  it('returns decoy options for a known email that has no registered passkeys', async () => {
-    vi.mocked(userService.findByEmail).mockResolvedValue({
-      id: 1,
-      public_id: 'abcdefghijklmnopqrstu',
-      email: 'user@example.com',
-    } as never);
+  it('binds a known email without passkeys to a non-resolvable decoy owner', async () => {
+    vi.mocked(userService.findByEmail).mockResolvedValue({ ...KNOWN_USER, id: 1 } as never);
     vi.mocked(credentialRepository.listActiveByUserId).mockResolvedValue([]);
 
     const result = await service.generateAuthenticationOptions({ email: 'user@example.com' });
 
-    expect(result.challenge_token).toBe('challenge-token');
-    expect(result.options.allowCredentials).toHaveLength(1);
+    expect(result.options).not.toHaveProperty('allowCredentials');
+    expect(challengeOwnerOfLastCall()).toMatch(/^decoy:/);
   });
 
-  it('derives a stable decoy credential id per email across repeated probes', async () => {
-    vi.mocked(userService.findByEmail).mockResolvedValue(null);
-
-    const first = await service.generateAuthenticationOptions({ email: 'probe@example.com' });
-    const second = await service.generateAuthenticationOptions({ email: 'probe@example.com' });
-    const other = await service.generateAuthenticationOptions({ email: 'different@example.com' });
-
-    const firstId = (first.options.allowCredentials as { id: string }[])[0]?.id;
-    const secondId = (second.options.allowCredentials as { id: string }[])[0]?.id;
-    const otherId = (other.options.allowCredentials as { id: string }[])[0]?.id;
-
-    expect(firstId).toBe(secondId);
-    expect(firstId).not.toBe(otherId);
-  });
-
-  it('returns real credentials for a known email that has passkeys', async () => {
-    vi.mocked(userService.findByEmail).mockResolvedValue({
-      id: 7,
-      public_id: 'abcdefghijklmnopqrstu',
-      email: 'has-passkey@example.com',
-    } as never);
+  it('binds a known email with passkeys to its account — without listing its credentials', async () => {
+    vi.mocked(userService.findByEmail).mockResolvedValue(KNOWN_USER as never);
     vi.mocked(credentialRepository.listActiveByUserId).mockResolvedValue([
-      { credential_id: 'real-credential', transports: ['internal'] },
+      { credential_id: 'real-credential-a', transports: ['usb', 'nfc'] },
+      { credential_id: 'real-credential-b', transports: ['hybrid'] },
     ] as never);
 
-    const result = await service.generateAuthenticationOptions({
-      email: 'has-passkey@example.com',
-    });
+    const result = await service.generateAuthenticationOptions({ email: KNOWN_USER.email });
 
-    const credentialIds = (result.options.allowCredentials as { id: string }[]).map(
-      (credential) => credential.id,
-    );
-    expect(credentialIds).toContain('real-credential');
+    expect(result.options).not.toHaveProperty('allowCredentials');
+    expect(challengeOwnerOfLastCall()).toBe(KNOWN_USER.public_id);
+  });
+
+  it('builds the options identically for an unknown email and a multi-passkey account (no enumeration)', async () => {
+    vi.mocked(userService.findByEmail).mockResolvedValueOnce(null);
+    vi.mocked(credentialRepository.listActiveByUserId).mockResolvedValueOnce([] as never);
+    const unknown = await service.generateAuthenticationOptions({ email: 'missing@example.com' });
+
+    vi.mocked(userService.findByEmail).mockResolvedValueOnce(KNOWN_USER as never);
+    vi.mocked(credentialRepository.listActiveByUserId).mockResolvedValueOnce([
+      { credential_id: 'real-credential-a', transports: ['usb'] },
+      { credential_id: 'real-credential-b', transports: ['internal'] },
+    ] as never);
+    const enrolled = await service.generateAuthenticationOptions({ email: KNOWN_USER.email });
+
+    const [unknownCall, enrolledCall] = vi.mocked(generateAuthenticationOptions).mock.calls;
+    expect(enrolledCall).toEqual(unknownCall);
+    expect(Object.keys(enrolled.options).sort()).toEqual(Object.keys(unknown.options).sort());
   });
 });

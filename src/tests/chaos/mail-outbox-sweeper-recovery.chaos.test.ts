@@ -16,7 +16,10 @@ import { database } from '@/infrastructure/database/connection.js';
 import { mail_outbox } from '@/infrastructure/mail/mail-outbox.schema.js';
 import { MAIL_QUEUE_NAME } from '@/infrastructure/mail/queues/mail.queue.js';
 import { runMailOutboxSweeperJob } from '@/infrastructure/mail/workers/mail-outbox-sweeper.processor.js';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { env } from '@/shared/config/env.config.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 
@@ -92,6 +95,7 @@ describe('Chaos resilience: mail outbox sweeper drains rows stranded by a Redis 
     // leftover job from another suite cannot mask a missing re-enqueue.
     const mailQueueHandleForRecoveryAssertion = new Queue(MAIL_QUEUE_NAME, {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
     });
     try {
       const enqueuedMailJobsAfterSweep = await mailQueueHandleForRecoveryAssertion.getJobs(

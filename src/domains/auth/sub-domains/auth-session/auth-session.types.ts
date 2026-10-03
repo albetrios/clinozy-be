@@ -6,4 +6,6 @@ export interface AuthSessionCreateData {
   ip_address: string;
   user_agent?: string;
   expires_at: Date;
+  /** Set when the session is created by the MFA login challenge (second factor proven). */
+  mfa_verified_at?: Date;
 }

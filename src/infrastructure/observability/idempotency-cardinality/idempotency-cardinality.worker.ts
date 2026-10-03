@@ -1,7 +1,10 @@
 import { Worker } from 'bullmq';
 import { sampleIdempotencyCardinality } from '@/infrastructure/observability/idempotency-cardinality/idempotency-cardinality.service.js';
 import { IDEMPOTENCY_CARDINALITY_QUEUE_NAME } from '@/infrastructure/observability/idempotency-cardinality/idempotency-cardinality.constants.js';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import {
   getRetentionWorkerOptions,
   RETENTION_WORKER_CONCURRENCY,
@@ -40,6 +43,7 @@ export function createIdempotencyCardinalityWorker(): WorkerHandle {
     },
     {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
       concurrency: RETENTION_WORKER_CONCURRENCY,
       ...getRetentionWorkerOptions(),
     },

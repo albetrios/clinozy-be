@@ -12,7 +12,7 @@ import {
 } from '@/shared/utils/auth/account-status.util.js';
 import { resolveAccessTokenRoleForUser } from '@/shared/utils/auth/global-admin-role.util.js';
 import { env } from '@/shared/config/env.config.js';
-import { signAccessToken } from '@/shared/utils/security/jwt.util.js';
+import { MFA_AUTHENTICATION_METHOD, signAccessToken } from '@/shared/utils/security/jwt.util.js';
 import { resolveDefaultActiveOrganizationPublicId } from '@/domains/tenancy/sub-domains/organization/resolve-active-organization.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import type { UserService } from '@/domains/user/user.service.js';
@@ -270,6 +270,9 @@ export class MfaService {
         isEmailVerified: user.is_email_verified,
       }),
       organizationPublicId,
+      // The second factor was just verified: the session is MFA-assured from the start, so
+      // organizations requiring MFA admit it.
+      authenticationMethods: [MFA_AUTHENTICATION_METHOD],
     });
     const sessionTokenHash = createHash('sha256').update(jsonWebToken).digest('hex');
     const sessionMaxAgeDays = env.AUTH_SESSION_MAX_AGE_DAYS;
@@ -281,6 +284,7 @@ export class MfaService {
         ip_address: ipAddress,
         user_agent: userAgent,
         expires_at: expiresAt,
+        mfa_verified_at: new Date(),
       }),
     );
     return {

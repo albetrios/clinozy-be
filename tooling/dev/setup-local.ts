@@ -2,10 +2,10 @@
 /**
  * `pnpm setup:local` — one-command local bootstrap.
  *
- * Idempotent end-to-end flow: preflight → dependencies → env scaffolding →
- * Docker (postgres + redis) → migrations → optional seed/worker/toxiproxy →
- * start `pnpm dev`. Every phase is re-run safe: each step checks its own
- * "already done" state and reports "skipped".
+ * Idempotent end-to-end flow: preflight → dependencies → env (`.env.local`) →
+ * Docker (postgres + redis) → migrations → local database logins → optional
+ * seed/worker/toxiproxy → start `pnpm dev`. Every phase is re-run safe: each step
+ * checks its own "already done" state and reports "skipped".
  *
  * Usage:
  *   pnpm setup:local
@@ -19,12 +19,22 @@
  *   pnpm setup:local --skip-mac-tools           (skip the macOS external-tool install/upgrade)
  *   pnpm setup:local --skip-mcp                  (skip MCP setup: CodeGraph + Headroom + .mcp.json)
  *   pnpm setup:local --only-env                  (scaffold .env.local only, then exit)
+ *   pnpm setup:local --only-env --with-captcha   (turn local CAPTCHA on — Cloudflare test keys)
+ *   pnpm setup:local --only-env --without-captcha (turn it back off — the default)
  *
- * Designed to never overwrite real credentials: if `.env.local` already exists it is
- * left untouched. Use `--force-env-local` to rewrite it. `--only-env` scaffolds just a
- * self-contained `.env.local` (seeded from `.env.example` with a generated RS256 JWT
- * keypair + SECRETS_ENCRYPTION_KEY and localhost DB/Redis URLs) and exits — used by the
- * cloud-agent bootstrap (`tooling/setup/agent/bootstrap.sh`).
+ * Never overwrites a real credential. A missing `.env.local` is scaffolded self-contained
+ * (`.env.example` + a generated RS256 JWT keypair + SECRETS_ENCRYPTION_KEY + localhost DB/Redis
+ * URLs); an existing one is only rewritten with `--force-env-local`, and otherwise just gets the
+ * targeted updates below. `--only-env` runs the env steps (and the database logins when the local
+ * database is up) and exits — used by the cloud-agent bootstrap (`tooling/setup/agent/bootstrap.sh`).
+ *
+ * Targeted `.env.local` updates, every run:
+ * - Third-party API keys (Stripe, Resend, S3, PostHog, OpenTelemetry — `external-credentials.ts`)
+ *   still on their `.env.example` placeholder are copied from the hosted development target's env
+ *   file, else from the process environment; key names are printed, never values.
+ * - `--with-captcha` / `--without-captcha` turn local CAPTCHA on (Cloudflare test keys) or off.
+ * - The database logins the migrations create (`local-database-logins.ts`) are enabled and their
+ *   URLs written.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -33,15 +43,39 @@ import { resolve } from 'node:path';
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { ensureDefaultMcpServers } from './mcp-config.js';
-import { resolveDerivedNames } from '@tooling/setup/codegen/project-identity.util.js';
+import {
+  EXTERNAL_CREDENTIALS,
+  EXTERNAL_CREDENTIAL_SOURCE,
+  fillExternalCredentials,
+} from './external-credentials.js';
+import { upsertEnvAssignment } from './env-file.util.js';
+import { applyLocalCaptcha, TURNSTILE_ALWAYS_PASS_TEST_SITE_KEY } from './local-captcha.js';
+import {
+  alterRoleStatement,
+  applyLocalDatabaseLogins,
+  isLocalDatabaseUrl,
+  localDatabaseLogins,
+  planLocalDatabaseLogins,
+} from './local-database-logins.js';
+import dotenv from 'dotenv';
+import postgres from 'postgres';
+import {
+  resolveDerivedNames,
+  resolveSqlIdentifierStem,
+} from '@tooling/setup/codegen/project-identity.util.js';
 import { loadConfig } from '@tooling/setup/common/config.js';
 
 const PROJECT_ROOT = process.cwd();
+/** The machine-local env file every env step reads and updates. */
+const ENV_LOCAL_PATH = resolve(PROJECT_ROOT, '.env.local');
 const REQUIRED_NODE_MAJOR = 24;
 const SETUP_CONFIG = loadConfig();
 const PROJECT_DISPLAY_NAME = SETUP_CONFIG.project.displayName;
-const { containers: LOCAL_CONTAINERS, databaseName: LOCAL_DATABASE_NAME } =
-  resolveDerivedNames(SETUP_CONFIG);
+const {
+  containers: LOCAL_CONTAINERS,
+  databaseName: LOCAL_DATABASE_NAME,
+  databaseAppRole: LOCAL_DATABASE_APP_ROLE,
+} = resolveDerivedNames(SETUP_CONFIG);
 const POSTGRES_CONTAINER = LOCAL_CONTAINERS.postgres;
 const REDIS_CONTAINER = LOCAL_CONTAINERS.redis;
 const DEFAULT_DEV_PORT = 3000;
@@ -66,6 +100,8 @@ interface BootstrapOptions {
   skipMacTools: boolean;
   forceEnvLocal: boolean;
   onlyEnv: boolean;
+  /** `--with-captcha` / `--without-captcha`: turn local CAPTCHA enforcement on or off. */
+  captcha: 'on' | 'off' | 'unchanged';
   seed: 'none' | 'minimal' | 'full';
   withWorker: boolean;
   withToxiproxy: boolean;
@@ -170,6 +206,7 @@ function parseArgs(): BootstrapOptions {
     skipMacTools: has('--skip-mac-tools'),
     forceEnvLocal: has('--force-env-local'),
     onlyEnv: has('--only-env'),
+    captcha: has('--with-captcha') ? 'on' : has('--without-captcha') ? 'off' : 'unchanged',
     seed,
     withWorker: has('--with-worker'),
     withToxiproxy: has('--with-toxiproxy'),
@@ -358,6 +395,131 @@ function runInstallDependencies(reports: StepReport[], options: BootstrapOptions
 function runEnvScaffolding(reports: StepReport[], options: BootstrapOptions): void {
   logHeading('3/9 Environment (.env.local)');
   scaffoldEnvLocal(reports, options);
+  syncExternalCredentials(reports, options);
+  configureLocalCaptcha(reports, options);
+}
+
+/**
+ * `--with-captcha` / `--without-captcha`: turns local CAPTCHA enforcement on (Cloudflare's
+ * always-pass test keys — the real widget and verify call on localhost) or off (the default).
+ * Without either flag, `.env.local` keeps whatever it has.
+ */
+function configureLocalCaptcha(reports: StepReport[], options: BootstrapOptions): void {
+  if (options.captcha === 'unchanged') return;
+  const startedAt = performance.now();
+  if (!existsSync(ENV_LOCAL_PATH)) {
+    reportStep(reports, 'local CAPTCHA', 'skipped', startedAt, 'no .env.local yet');
+    return;
+  }
+  const enabled = options.captcha === 'on';
+  if (options.check) {
+    reportStep(
+      reports,
+      'local CAPTCHA',
+      'warning',
+      startedAt,
+      `--check mode (would turn CAPTCHA ${enabled ? 'on' : 'off'})`,
+    );
+    return;
+  }
+  writeFileSync(ENV_LOCAL_PATH, applyLocalCaptcha(readFileSync(ENV_LOCAL_PATH, 'utf8'), enabled));
+  if (!enabled) {
+    reportStep(reports, 'local CAPTCHA', 'done', startedAt, 'off (CAPTCHA_PROVIDER=disabled)');
+    return;
+  }
+  reportStep(
+    reports,
+    'local CAPTCHA',
+    'done',
+    startedAt,
+    'on — Turnstile with the always-pass test secret; k6 / API smoke use the dev bypass header',
+  );
+  logInfo(
+    `      clinozy-fe: set VITE_TURNSTILE_SITE_KEY=${TURNSTILE_ALWAYS_PASS_TEST_SITE_KEY} and leave VITE_CAPTCHA_DISABLED unset.`,
+  );
+  logInfo('      Restart pnpm dev (and pnpm dev:worker) to apply.');
+}
+
+/** Report label for the process environment as a credential source. */
+const PROCESS_ENVIRONMENT_LABEL = 'environment variables';
+
+/**
+ * Copies the third-party API keys `.env.local` still holds as placeholders — from
+ * {@link EXTERNAL_CREDENTIAL_SOURCE} when it is present, otherwise (per key) from the process
+ * environment (shell exports, CI or cloud variables) — and lists the ones that still need a real
+ * value. Runs on a fresh and an existing `.env.local` alike; prints key names, never values.
+ */
+function syncExternalCredentials(reports: StepReport[], options: BootstrapOptions): void {
+  const startedAt = performance.now();
+  const examplePath = resolve(PROJECT_ROOT, '.env.example');
+  if (!(existsSync(ENV_LOCAL_PATH) && existsSync(examplePath))) {
+    reportStep(reports, 'third-party API keys', 'skipped', startedAt, 'no .env.local yet');
+    return;
+  }
+  const sourcePath = resolve(PROJECT_ROOT, EXTERNAL_CREDENTIAL_SOURCE);
+  const sources = [
+    ...(existsSync(sourcePath)
+      ? [
+          {
+            label: EXTERNAL_CREDENTIAL_SOURCE,
+            values: dotenv.parse(readFileSync(sourcePath, 'utf8')),
+          },
+        ]
+      : []),
+    { label: PROCESS_ENVIRONMENT_LABEL, values: process.env },
+  ];
+  const fill = fillExternalCredentials({
+    local: readFileSync(ENV_LOCAL_PATH, 'utf8'),
+    example: readFileSync(examplePath, 'utf8'),
+    sources,
+  });
+  const changed = fill.copied.length > 0 || fill.retired.length > 0;
+  if (changed && !options.check) writeFileSync(ENV_LOCAL_PATH, fill.content);
+
+  const copiedLabel = [
+    ...sources.map(({ label }) => {
+      const keys = fill.copied.filter((copy) => copy.source === label).map((copy) => copy.key);
+      return keys.length > 0
+        ? `${options.check ? 'would copy' : 'copied'} from ${label}: ${keys.join(', ')}`
+        : '';
+    }),
+    fill.retired.length > 0
+      ? `${options.check ? 'would comment out' : 'commented out'} a stale placeholder: ${fill.retired.join(', ')}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('; ');
+  if (fill.missing.length === 0) {
+    reportStep(
+      reports,
+      'third-party API keys',
+      changed ? 'done' : 'skipped',
+      startedAt,
+      copiedLabel || 'all set',
+    );
+    return;
+  }
+  reportStep(
+    reports,
+    'third-party API keys',
+    'warning',
+    startedAt,
+    [
+      copiedLabel,
+      `${fill.missing.length} still a placeholder (no real value in ${sources.map(({ label }) => label).join(' or ')})`,
+    ]
+      .filter(Boolean)
+      .join('; '),
+  );
+  for (const key of fill.missing) {
+    const integration = EXTERNAL_CREDENTIALS.find(
+      (credential) => credential.key === key,
+    )?.integration;
+    logInfo(`      ${key} — ${integration ?? 'third-party credential'}`);
+  }
+  logInfo(
+    `      Set them in .env.local, export them, or add them to ${EXTERNAL_CREDENTIAL_SOURCE} — then re-run.`,
+  );
 }
 
 function injectGeneratedSecrets(content: string): string {
@@ -375,14 +537,6 @@ function injectGeneratedSecrets(content: string): string {
   updated = upsertEnvAssignment(updated, 'JWT_PUBLIC_KEY', `"${escapedPublicKey}"`);
   updated = upsertEnvAssignment(updated, 'SECRETS_ENCRYPTION_KEY', secretsKey);
   return updated;
-}
-
-function upsertEnvAssignment(content: string, key: string, value: string): string {
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(`^${escapedKey}=.*$`, 'm');
-  const line = `${key}=${value}`;
-  if (pattern.test(content)) return content.replace(pattern, line);
-  return content.endsWith('\n') ? `${content}${line}\n` : `${content}\n${line}\n`;
 }
 
 // Localhost DB/Redis values for the `pnpm compose:up` stack. Credentials are
@@ -403,8 +557,7 @@ function injectLocalhostOverrides(content: string): string {
 
 function scaffoldEnvLocal(reports: StepReport[], options: BootstrapOptions): void {
   const startedAt = performance.now();
-  const envLocalPath = resolve(PROJECT_ROOT, '.env.local');
-  if (existsSync(envLocalPath) && !options.forceEnvLocal) {
+  if (existsSync(ENV_LOCAL_PATH) && !options.forceEnvLocal) {
     reportStep(
       reports,
       '.env.local',
@@ -432,7 +585,7 @@ function scaffoldEnvLocal(reports: StepReport[], options: BootstrapOptions): voi
   let content = readFileSync(examplePath, 'utf8');
   content = injectGeneratedSecrets(content);
   content = injectLocalhostOverrides(content);
-  writeFileSync(envLocalPath, content);
+  writeFileSync(ENV_LOCAL_PATH, content);
   reportStep(
     reports,
     '.env.local',
@@ -440,6 +593,124 @@ function scaffoldEnvLocal(reports: StepReport[], options: BootstrapOptions): voi
     startedAt,
     'self-contained: .env.example + generated JWT keys/SECRETS_ENCRYPTION_KEY + localhost DB/Redis',
   );
+}
+
+/**
+ * Turns on the three database logins `.env.local` connects as — runtime (`clinozy_be_app`),
+ * maintenance and operator — and writes their URLs (docs/deployment/runbooks/
+ * maintenance-database-role.md). The migrations create those roles `NOLOGIN`; this grants LOGIN
+ * (+ BYPASSRLS for the operator) as the compose superuser — each password taken from `.env.local`,
+ * else the process environment, else generated — then logs in as each to prove the URL works.
+ * Local database only; the cloud environments provision their own logins.
+ */
+async function provisionLocalDatabaseLogins(
+  reports: StepReport[],
+  options: BootstrapOptions,
+): Promise<void> {
+  const startedAt = performance.now();
+  const phase = 'database logins';
+  if (!existsSync(ENV_LOCAL_PATH)) {
+    reportStep(reports, phase, 'skipped', startedAt, 'no .env.local yet');
+    return;
+  }
+  const envLocal = readFileSync(ENV_LOCAL_PATH, 'utf8');
+  const currentDatabaseUrl = dotenv.parse(envLocal).DATABASE_URL;
+  if (currentDatabaseUrl && !isLocalDatabaseUrl(currentDatabaseUrl)) {
+    reportStep(reports, phase, 'skipped', startedAt, 'DATABASE_URL points at a remote database');
+    return;
+  }
+  const logins = localDatabaseLogins({
+    appRole: LOCAL_DATABASE_APP_ROLE,
+    sqlStem: resolveSqlIdentifierStem(SETUP_CONFIG),
+  });
+  const superuser = postgres(LOCAL_DATABASE_URL, {
+    max: 1,
+    connect_timeout: 5,
+    onnotice: () => {},
+  });
+  try {
+    let existingRoles: string[];
+    try {
+      const rows = await superuser<{ rolname: string }[]>`
+        select rolname from pg_roles where rolname in ${superuser(logins.map((login) => login.role))}`;
+      existingRoles = rows.map((row) => row.rolname);
+    } catch {
+      reportStep(
+        reports,
+        phase,
+        'warning',
+        startedAt,
+        'local Postgres not reachable — pnpm compose:up, then re-run',
+      );
+      return;
+    }
+    const missingRoles = logins.filter((login) => !existingRoles.includes(login.role));
+    if (missingRoles.length > 0) {
+      reportStep(
+        reports,
+        phase,
+        'warning',
+        startedAt,
+        `roles not created yet (${missingRoles.map((login) => login.role).join(', ')}) — pnpm db:migrate, then re-run`,
+      );
+      return;
+    }
+    const planned = planLocalDatabaseLogins({
+      envLocal,
+      environment: process.env,
+      superuserUrl: LOCAL_DATABASE_URL,
+      logins,
+    });
+    if (options.check) {
+      reportStep(
+        reports,
+        phase,
+        'warning',
+        startedAt,
+        `--check mode (would enable ${planned.map((login) => login.role).join(', ')})`,
+      );
+      return;
+    }
+    for (const login of planned) await superuser.unsafe(alterRoleStatement(login));
+    writeFileSync(
+      ENV_LOCAL_PATH,
+      applyLocalDatabaseLogins({ envLocal, superuserUrl: LOCAL_DATABASE_URL, planned }),
+    );
+    for (const login of planned) {
+      const connection = postgres(login.url, { max: 1, connect_timeout: 5, onnotice: () => {} });
+      try {
+        const [row] = await connection<{ current_user: string }[]>`select current_user`;
+        if (row?.current_user !== login.role) throw new Error(`connected as ${row?.current_user}`);
+      } finally {
+        await connection.end({ timeout: 2 });
+      }
+    }
+    reportStep(
+      reports,
+      phase,
+      'done',
+      startedAt,
+      planned
+        .map(
+          (login) =>
+            `${login.envKey} → ${login.role}${login.passwordSource === 'environment' ? ' (from the environment)' : ''}`,
+        )
+        .join(', '),
+    );
+    logInfo(
+      '      Each login verified. Restart pnpm dev (and pnpm dev:worker) to connect with them.',
+    );
+  } catch (error) {
+    reportStep(
+      reports,
+      phase,
+      'failed',
+      startedAt,
+      error instanceof Error ? error.message : String(error),
+    );
+  } finally {
+    await superuser.end({ timeout: 2 });
+  }
 }
 
 function runDocker(reports: StepReport[], options: BootstrapOptions): void {
@@ -846,6 +1117,7 @@ async function main(): Promise<void> {
 
   if (options.onlyEnv) {
     runEnvScaffolding(reports, options);
+    await provisionLocalDatabaseLogins(reports, options);
     printSummary(reports);
     return;
   }
@@ -855,6 +1127,8 @@ async function main(): Promise<void> {
   runEnvScaffolding(reports, options);
   runDocker(reports, options);
   runMigrations(reports, options);
+  // After migrations: they create the roles (NOLOGIN) this step turns on.
+  await provisionLocalDatabaseLogins(reports, options);
   runSeed(reports, options);
   runMcpSetup(reports, options);
   const worker = runOptionalWorker(reports, options);

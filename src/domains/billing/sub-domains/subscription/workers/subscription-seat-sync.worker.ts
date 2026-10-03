@@ -1,5 +1,8 @@
 import { Worker } from 'bullmq';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { getDefaultWorkerOptions } from '@/infrastructure/queue/worker-runtime/worker-options.js';
 import { buildWorkerHandle } from '@/infrastructure/queue/worker-runtime/worker-close.util.js';
 import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
@@ -71,6 +74,7 @@ export function createSubscriptionSeatSyncWorker(
     },
     {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
       concurrency: getWorkerConcurrencyStripe(),
       ...getDefaultWorkerOptions(),
     },

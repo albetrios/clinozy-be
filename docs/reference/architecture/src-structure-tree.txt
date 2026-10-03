@@ -82,7 +82,9 @@ src/
     │   │   │   ├── auth-route-smoke.integration.test.ts
     │   │   │   ├── auth.integration.test.ts
     │   │   │   ├── logout-revokes-token.integration.test.ts
+    │   │   │   ├── organization-mfa-enforcement.integration.test.ts
     │   │   │   ├── refresh-preserves-active-organization.integration.test.ts
+    │   │   │   ├── refresh-reuse-detection.integration.test.ts
     │   │   │   └── refresh-rotates-token-hash.integration.test.ts
     │   │   ├── unit/
     │   │   │   ├── auth-me-context.serializer.unit.test.ts
@@ -849,6 +851,7 @@ src/
     │   │   │   │   │   ├── organization-settings.bulk.seed.ts
     │   │   │   │   │   └── organization-settings.faker.ts
     │   │   │   │   ├── i18n-locale.cache.ts
+    │   │   │   │   ├── organization-mfa-policy.ts
     │   │   │   │   ├── organization-settings.controller.ts
     │   │   │   │   ├── organization-settings.dto.ts
     │   │   │   │   ├── organization-settings.overview.md
@@ -1616,6 +1619,7 @@ src/
     │   │   ├── password.util.ts
     │   │   ├── response-encryption-keyring.util.ts
     │   │   ├── safe-webhook-url-for-logs.util.ts
+    │   │   ├── secrets-sub-key.util.ts
     │   │   ├── sensitive-redaction.util.ts
     │   │   ├── turnstile-verifier.util.ts
     │   │   ├── webhook-outbound-fetch.util.ts
@@ -1760,6 +1764,7 @@ src/
     │   ├── audit-surface-pinning.global.test.ts
     │   ├── authz-model-coverage.global.test.ts
     │   ├── authz-runtime-coverage.global.test.ts
+    │   ├── bullmq-key-prefix.global.test.ts
     │   ├── domain-consistency.global.test.ts
     │   ├── ensure-openapi-spec.global-setup.ts
     │   ├── event-wiring-parity.global.test.ts
@@ -2268,9 +2273,14 @@ src/
     │   │   ├── check-load-coverage.unit.test.ts
     │   │   ├── check-patch-coverage.unit.test.ts
     │   │   ├── db-viewer.unit.test.ts
+    │   │   ├── env-file.unit.test.ts
+    │   │   ├── external-credentials.unit.test.ts
     │   │   ├── iteration-diff.unit.test.ts
     │   │   ├── iteration-intake.unit.test.ts
     │   │   ├── iteration.unit.test.ts
+    │   │   ├── load-test-monitor.unit.test.ts
+    │   │   ├── local-captcha.unit.test.ts
+    │   │   ├── local-database-logins.unit.test.ts
     │   │   ├── project-identity.policy.unit.test.ts
     │   │   ├── railway-deploy-image.unit.test.ts
     │   │   ├── route-catalog-auth.unit.test.ts
@@ -2319,6 +2329,7 @@ src/
     │   │   │   ├── jwt.util.unit.test.ts
     │   │   │   ├── password.util.unit.test.ts
     │   │   │   ├── response-encryption-keyring.util.unit.test.ts
+    │   │   │   ├── secrets-sub-key.util.unit.test.ts
     │   │   │   ├── sensitive-redaction.util.unit.test.ts
     │   │   │   ├── turnstile-verifier.unit.test.ts
     │   │   │   ├── webhook-outbound-fetch.util.unit.test.ts

@@ -1,6 +1,6 @@
 import http from 'k6/http';
 import { sleep } from 'k6';
-import { API_PREFIX, THRESHOLDS, SCENARIOS } from '../helpers/config.js';
+import { API_PREFIX, THRESHOLDS, SCENARIOS, PUBLIC_AUTH_FORM_HEADERS } from '../helpers/config.js';
 import { checkOk, checkStatus, checkResponseTime } from '../helpers/checks.js';
 
 /**
@@ -22,8 +22,6 @@ export const options = {
 };
 
 export function authOnboarding() {
-  const headers = { 'Content-Type': 'application/json' };
-
   // Step 1: Attempt login
   const loginResponse = http.post(
     `${API_PREFIX}/auth/login`,
@@ -31,7 +29,7 @@ export function authOnboarding() {
       email: __ENV.DEMO_EMAIL || 'demo@example.com',
       password: __ENV.DEMO_PASSWORD || 'DemoPassword123!',
     }),
-    { headers, tags: { name: 'auth-login' } },
+    { headers: PUBLIC_AUTH_FORM_HEADERS, tags: { name: 'auth-login' } },
   );
   checkOk(loginResponse, 'login');
   checkResponseTime(loginResponse, 800, 'login');

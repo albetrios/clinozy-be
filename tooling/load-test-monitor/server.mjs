@@ -1,22 +1,25 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 /**
  * Local load-testing monitor — a Bull-Board-style live view of API HTTP traffic during a load run.
  *
  * Runs a recording reverse proxy: point a client at this port instead of the API and
  * every call is forwarded upstream, timed, and pushed to a browser dashboard over SSE.
  *
- *   node tooling/load-test-monitor/server.mjs
- *   pnpm load:monitor          # dashboard + proxy on http://localhost:4985
+ *   pnpm load:monitor          # dashboard + proxy on http://127.0.0.1:4985 (runs under tsx)
  *
- * Dashboard   http://localhost:4985/
- * Proxy       http://localhost:4985/api/v1/...   ->   UPSTREAM/api/v1/...
+ * Dashboard   http://127.0.0.1:4985/?token=<per-boot session token, printed at start>
+ * Proxy       http://127.0.0.1:4985/api/v1/...   ->   UPSTREAM/api/v1/...
  *
- * Dev-only. Bodies are buffered in memory (capped, ring-buffered) and Authorization /
- * Cookie values are truncated before they ever reach the browser.
+ * Dev-only, loopback-only. Listens on 127.0.0.1 alone; the recording endpoints (`/__monitor/*`)
+ * need the session token and a loopback Host/Origin (tooling/dev/loopback-guard.mjs); recorded
+ * bodies, query strings and headers are redacted before they are stored
+ * (lib/recording-redaction.mjs). Bodies are buffered in memory (capped, ring-buffered).
  */
 import { execFile } from 'node:child_process';
 import http from 'node:http';
 import { URL } from 'node:url';
+import { LOOPBACK_HOST, createLoopbackGuard } from '../dev/loopback-guard.mjs';
+import { redactBody, redactHeaders, redactQuery } from './lib/recording-redaction.mjs';
 
 /**
  * Fixed port — deliberately not configurable.
@@ -64,6 +67,8 @@ const MAX_CALLS = Number(process.env.MAX_CALLS || 2000);
 const MAX_BODY = Number(process.env.MAX_BODY || 24_000);
 
 const upstream = new URL(UPSTREAM);
+/** Session token + Host/Origin checks for the recording endpoints. */
+const loopbackGuard = createLoopbackGuard({ port: PORT });
 
 /** Ring buffer of recorded calls, newest last. */
 const calls = [];
@@ -106,40 +111,11 @@ function normalizePath(pathname) {
     .join('/');
 }
 
-/** Never ship a full credential to the browser — enough to correlate, not to reuse. */
-function redactHeaders(headers) {
-  const out = {};
-  for (const [k, v] of Object.entries(headers)) {
-    const key = k.toLowerCase();
-    const val = Array.isArray(v) ? v.join('; ') : String(v ?? '');
-    if (key === 'authorization') {
-      const m = /^Bearer\s+(.*)$/i.exec(val);
-      out[k] = m
-        ? `Bearer ${m[1].slice(0, 12)}…${m[1].slice(-8)} (${m[1].length} chars)`
-        : '[redacted]';
-    } else if (key === 'cookie' || key === 'set-cookie') {
-      out[k] = val
-        .split(/;\s*/)
-        .map((c) => {
-          const i = c.indexOf('=');
-          if (i < 0) return c;
-          const name = c.slice(0, i);
-          const value = c.slice(i + 1);
-          return value.length > 16 ? `${name}=${value.slice(0, 8)}…(${value.length})` : c;
-        })
-        .join('; ');
-    } else {
-      out[k] = val;
-    }
-  }
-  return out;
-}
-
-function clip(buf) {
-  if (!buf?.length) return { body: '', bytes: 0, truncated: false };
-  const bytes = buf.length;
-  const slice = buf.subarray(0, MAX_BODY).toString('utf8');
-  return { body: slice, bytes, truncated: bytes > MAX_BODY };
+/** The redacted body of `buffer`, clipped to MAX_BODY characters, with the original byte count. */
+function recordedBody(buffer, contentType) {
+  if (!buffer?.length) return { body: '', bytes: 0, truncated: false };
+  const body = redactBody(buffer, contentType);
+  return { body: body.slice(0, MAX_BODY), bytes: buffer.length, truncated: body.length > MAX_BODY };
 }
 
 function broadcast(event, payload) {
@@ -283,17 +259,17 @@ function handleProxy(req, res) {
             startedAt,
             method: req.method,
             path: target.pathname,
-            query: target.search || '',
+            query: redactQuery(target.search),
             route: normalizePath(target.pathname),
             status: proxyRes.statusCode || 0,
             durationMs: Math.round(durationMs * 10) / 10,
             request: {
               headers: redactHeaders(req.headers),
-              ...clip(reqBuf),
+              ...recordedBody(reqBuf, req.headers['content-type']),
             },
             response: {
               headers: redactHeaders(proxyRes.headers),
-              ...clip(resBuf),
+              ...recordedBody(resBuf, proxyRes.headers['content-type']),
             },
           });
         });
@@ -309,11 +285,14 @@ function handleProxy(req, res) {
         startedAt,
         method: req.method,
         path: target.pathname,
-        query: target.search || '',
+        query: redactQuery(target.search),
         route: normalizePath(target.pathname),
         status: 0,
         durationMs: Math.round(durationMs * 10) / 10,
-        request: { headers: redactHeaders(req.headers), ...clip(reqBuf) },
+        request: {
+          headers: redactHeaders(req.headers),
+          ...recordedBody(reqBuf, req.headers['content-type']),
+        },
         response: { headers: {}, body: `PROXY ERROR: ${err.message}`, bytes: 0, truncated: false },
       });
     });
@@ -326,7 +305,24 @@ function handleProxy(req, res) {
 /* ─────────────────────────── server ─────────────────────────── */
 
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://localhost:${PORT}`);
+  const url = new URL(req.url, `http://${LOOPBACK_HOST}:${PORT}`);
+
+  // Every request must name the loopback listener (no DNS rebinding). The recording endpoints
+  // disclose captured traffic, so they also need a loopback Origin and the session token — except
+  // the run announcement a k6 scenario POSTs at setup: k6 knows no token and sends no Origin, while
+  // a cross-origin browser page does send one and is refused. The proxy path stays token-free so a
+  // load client can point at it; the API it forwards to enforces its own authentication.
+  const isMonitorEndpoint = url.pathname.startsWith('/__monitor/');
+  const isRunAnnouncement = url.pathname === '/__monitor/run' && req.method === 'POST';
+  const rejection = loopbackGuard.rejectionFor(req, {
+    requireSessionToken: isMonitorEndpoint && !isRunAnnouncement,
+    checkOrigin: isMonitorEndpoint,
+  });
+  if (rejection) {
+    res.writeHead(rejection.status, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: rejection.error }));
+    return;
+  }
 
   if (url.pathname === '/__monitor/stream') {
     res.writeHead(200, {
@@ -443,11 +439,11 @@ function warmUpstream(count = 8) {
   );
 }
 
-server.listen(PORT, async () => {
+server.listen(PORT, LOOPBACK_HOST, async () => {
   process.stdout.write(
-    `\n  Load Testing Monitoring listening\n` +
-      `    dashboard   http://localhost:${PORT}/\n` +
-      `    proxying    http://localhost:${PORT}/api/*  ->  ${UPSTREAM}/api/*\n`,
+    `\n  Load Testing Monitoring listening (loopback only)\n` +
+      `    dashboard   ${loopbackGuard.announcedUrl()}\n` +
+      `    proxying    http://${LOOPBACK_HOST}:${PORT}/api/*  ->  ${UPSTREAM}/api/*\n`,
   );
   await warmUpstream();
   process.stdout.write(`    upstream    connection pool warmed\n\n`);
@@ -706,7 +702,7 @@ th .info .tip{right:-4px;text-transform:none}
 <span class="p">$</span> <span class="e">TEST_MODE=true</span> pnpm dev
 
 <span class="c"># 3. this load-testing monitor (proxies :${PORT} -> ${UPSTREAM})</span>
-<span class="p">$</span> node tooling/load-test-monitor/server.mjs</pre>
+<span class="p">$</span> pnpm load:monitor</pre>
       </details>
     </div>
 
@@ -718,6 +714,20 @@ th .info .tip{right:-4px;text-transform:none}
 </main>
 
 <script>
+// The recording endpoints need the per-boot session token printed by \`pnpm load:monitor\`; it rides
+// in this page's URL (?token=…) and goes out as a header (fetch) or query parameter (EventSource).
+const SESSION_TOKEN=new URLSearchParams(location.search).get('token')||'';
+function monitorFetch(path,options){
+  const init=Object.assign({},options||{});
+  init.headers=Object.assign({'x-session-token':SESSION_TOKEN},init.headers||{});
+  return fetch(path,init).then(r=>{
+    if(r.status===403){
+      document.getElementById('livetxt').textContent='open the URL printed by pnpm load:monitor (it carries the session token)';
+      throw new Error('monitor session token missing or invalid');
+    }
+    return r;
+  });
+}
 const feed=document.getElementById('feed'),detail=document.getElementById('detail'),
   statsPane=document.getElementById('statsPane'),led=document.getElementById('led'),
   livetxt=document.getElementById('livetxt'),q=document.getElementById('q'),
@@ -894,7 +904,7 @@ function renderDetail(){
 }
 
 async function renderStats(){
-  const r=await fetch('/__monitor/stats');const {stats,branch}=await r.json();
+  const r=await monitorFetch('/__monitor/stats');const {stats,branch}=await r.json();
   document.getElementById('k-branch').textContent=branch||'\u2014';
   if(!stats.length){statsPane.innerHTML='<div class="empty">No traffic recorded yet.</div>';return}
   // Bar encodes share of TOTAL time, not p95 — it answers "where did the time go",
@@ -936,7 +946,7 @@ document.getElementById('pause').addEventListener('click',e=>{
   paused=!paused;e.target.classList.toggle('on',paused);e.target.textContent=paused?'Resume':'Pause';
 });
 document.getElementById('clear').addEventListener('click',async()=>{
-  await fetch('/__monitor/clear',{method:'POST'});
+  await monitorFetch('/__monitor/clear',{method:'POST'});
   all=[];selected=null;renderFeed();renderDetail();renderStats();
 });
 function setTab(t){
@@ -951,11 +961,11 @@ document.getElementById('tabStats').addEventListener('click',()=>setTab('stats')
 document.getElementById('tabDetail').addEventListener('click',()=>setTab('detail'));
 
 Promise.all([
-  fetch('/__monitor/calls?limit=8000').then(r=>r.json()),
-  fetch('/__monitor/run').then(r=>r.json()).catch(()=>({run:null}))
+  monitorFetch('/__monitor/calls?limit=8000').then(r=>r.json()),
+  monitorFetch('/__monitor/run').then(r=>r.json()).catch(()=>({run:null}))
 ]).then(([c,r])=>{all=c.calls||[];runMeta=r.run||null;renderFeed();renderStats()});
 
-const es=new EventSource('/__monitor/stream');
+const es=new EventSource('/__monitor/stream?token='+encodeURIComponent(SESSION_TOKEN));
 es.onopen=()=>{led.classList.add('on');livetxt.textContent='live'};
 es.onerror=()=>{led.classList.remove('on');livetxt.textContent='reconnecting'};
 es.addEventListener('cleared',()=>{all=[];runMeta=null;selected=null;renderFeed();renderDetail();renderStats()});

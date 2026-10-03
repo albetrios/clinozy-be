@@ -5,7 +5,10 @@
 
 import { Queue } from 'bullmq';
 import { SEVEN_DAYS_SECONDS } from '@/shared/constants/ttl.constants.js';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { AUDIT_RETENTION_QUEUE_NAME } from '@/domains/audit/workers/audit-retention.constants.js';
 import {
   AUDIT_OUTBOX_DRAIN_QUEUE_NAME,
@@ -330,6 +333,7 @@ async function reconcileOrphanSchedulers(options: {
   for (const [queueName, canonicalIds] of canonicalSchedulerIdsByQueueName) {
     const queueForReconcile = new Queue(queueName, {
       connection,
+      prefix: getBullMQKeyPrefix(),
       defaultJobOptions: SCHEDULED_QUEUE_DEFAULT_JOB_OPTIONS,
     });
     try {
@@ -399,6 +403,7 @@ export async function registerScheduledJobs(
       // cache+BullMQ instance.
       const queue = new Queue(job.queueName, {
         connection,
+        prefix: getBullMQKeyPrefix(),
         defaultJobOptions: SCHEDULED_QUEUE_DEFAULT_JOB_OPTIONS,
       });
       queues.push(queue);

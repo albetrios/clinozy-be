@@ -14,6 +14,7 @@ vi.mock('otplib', () => ({
 }));
 
 vi.mock('@/shared/utils/security/jwt.util.js', () => ({
+  MFA_AUTHENTICATION_METHOD: 'mfa',
   signAccessToken: vi.fn().mockReturnValue('access-token'),
 }));
 
@@ -149,6 +150,14 @@ describe('MfaService', () => {
     // H1 regression guard: the MFA-login token MUST carry the active-organization `org` claim, exactly like
     // the first-factor path. Without it an MFA user gets an organization-less token and is locked out of
     // every organization-scoped route (which resolve the active organization from the claim post-flatten).
+    // The second factor was just verified: the session starts MFA-assured and its token says so.
+    expect(authSessionService.createSessionForUser).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ mfa_verified_at: expect.any(Date) }),
+    );
+    expect(vi.mocked(signAccessToken)).toHaveBeenCalledWith(
+      expect.objectContaining({ authenticationMethods: ['mfa'] }),
+    );
     expect(vi.mocked(signAccessToken)).toHaveBeenCalledWith(
       expect.objectContaining({ organizationPublicId: 'org_mfaactive0000000000' }),
     );

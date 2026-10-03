@@ -5,7 +5,10 @@ import {
   withAppDatabaseContext,
   withMaintenanceDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { getDefaultWorkerOptions } from '@/infrastructure/queue/worker-runtime/worker-options.js';
 import { buildWorkerHandle } from '@/infrastructure/queue/worker-runtime/worker-close.util.js';
 import { parseJobDataOrDeadLetter } from '@/infrastructure/queue/dlq/poison-job.util.js';
@@ -320,6 +323,7 @@ export function createNotificationWorker(): WorkerHandle {
     },
     {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
       concurrency: getWorkerConcurrencyNotify(),
       ...getDefaultWorkerOptions(),
     },

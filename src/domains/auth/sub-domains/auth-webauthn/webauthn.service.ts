@@ -1,4 +1,3 @@
-import { createHmac } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import {
   generateAuthenticationOptions,
@@ -7,7 +6,6 @@ import {
   verifyRegistrationResponse,
 } from '@simplewebauthn/server';
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server';
-import { env } from '@/shared/config/env.config.js';
 import { MAX_WEBAUTHN_CREDENTIALS_PER_USER } from '@/shared/constants/security.constants.js';
 import {
   ConflictError,
@@ -94,8 +92,8 @@ export type WebauthnAuthenticateOptionsResult = {
  *   counter regression surface as `UnauthorizedError` or `ValidationError` with
  *   WebAuthn-specific i18n keys (`errors:webauthnInvalidChallenge`,
  *   `errors:webauthnAuthenticationFailed`, `errors:webauthnCredentialNotFound`, …). The
- *   `authenticate/options` step never reveals account existence: unknown emails and
- *   emails without passkeys receive deterministic decoy options instead of an error.
+ *   `authenticate/options` step never reveals account existence: every email gets the same
+ *   options (discoverable credentials, no `allowCredentials`); only the challenge owner differs.
  * - **Side effects:** writes to {@link webauthn_credentials} (`createCredential`,
  *   `updateCounter`), to `auth.sessions` via {@link AuthSessionService.createSessionForUser},
  *   and to Redis (`webauthn:challenge:*`). Signs an RS256 JWT on successful login.
@@ -143,7 +141,10 @@ export class WebauthnService {
         transports: credential.transports as string[],
       })),
       authenticatorSelection: {
-        residentKey: 'preferred',
+        // Discoverable credentials only: passkey sign-in sends no per-account credential list
+        // (see generateAuthenticationOptions), so every passkey must be findable by the
+        // authenticator on its own.
+        residentKey: 'required',
         // sec-r4-A2: align with the verify-time requirement (verifyRegistrationResponse
         // calls with requireUserVerification: true). Setting 'preferred' here let a
         // UV-incapable authenticator (no biometric / PIN) finish the registration
@@ -242,15 +243,13 @@ export class WebauthnService {
     _requestOrigin?: string,
   ): Promise<WebauthnAuthenticateOptionsResult> {
     const parsed = validateWebauthnAuthenticateOptions(body);
-    // `email` is required at the DTO layer (sec-A finding #24). The runtime check is
-    // retained only as a defense-in-depth for tests/callers that bypass the validator;
-    // the DTO produces a typed value so this branch should be unreachable in normal flow.
+    // `email` is required at the DTO layer (sec-A finding #24).
     const user = await this.userService.findByEmail(parsed.email);
-    // Anti-enumeration (timing): the decoy below equalizes the response SHAPE, but a KNOWN email
-    // otherwise incurs an extra user-context credential query that an unknown email skips — a
-    // measurable timing oracle that re-opens what the decoy closes. Run the SAME user-context lookup
-    // on both paths; an unknown/credential-less email uses a non-resolvable synthetic context (the
-    // RLS policy + `user_id = 0` filter return zero rows), so the DB work matches.
+    // Anti-enumeration (timing): the response below is identical for every email, but a KNOWN
+    // email would otherwise incur an extra user-context credential query that an unknown email
+    // skips — a measurable timing oracle. Run the SAME user-context lookup on both paths; an
+    // unknown/credential-less email uses a non-resolvable synthetic context (the RLS policy +
+    // `user_id = 0` filter return zero rows), so the DB work matches.
     const lookupUserPublicId = user?.public_id ?? `decoy:${generatePublicId('authMethod')}`;
     const lookupUserId = user?.id ?? 0;
     const credentials = await withAppDatabaseContext(
@@ -258,73 +257,28 @@ export class WebauthnService {
       () => this.credentialRepository.listActiveByUserId(lookupUserId),
     );
 
-    // Anti-enumeration: never let the response reveal whether `email` maps to an account
-    // that has passkeys. Unknown accounts (and known accounts without credentials) receive
-    // structurally identical decoy options keyed deterministically on the email, so the
-    // 200 + allowCredentials payload is indistinguishable from a genuine challenge. The
-    // follow-up verify fails uniformly because no authenticator can satisfy the decoy.
-    if (!user || credentials.length === 0) {
-      return this.buildDecoyAuthenticationOptions(parsed.email);
-    }
-
+    // Anti-enumeration: the options carry NO per-account data. Listing the account's credentials
+    // (allowCredentials) leaked enrollment — a real account returned every stored credential with
+    // its transports, a decoy exactly one — so sign-in uses discoverable credentials (registration
+    // requires them) and every email gets the same shape: a challenge, the RP id and the
+    // user-verification requirement. The email only decides who the challenge is bound to: the
+    // account when it has passkeys, otherwise a non-resolvable synthetic owner, so a verify
+    // against a decoy fails like any other mismatch. Verification still requires the asserted
+    // credential to belong to the challenged user (and its userHandle to match).
     const options = await generateAuthenticationOptions({
       rpID: resolveWebauthnRelyingPartyId(),
-      allowCredentials: credentials.map((credential) => ({
-        id: credential.credential_id,
-        transports: credential.transports as string[],
-      })),
       // sec-r4-A2: verifyAuthenticationResponse requires user verification, so the
       // options round-trip must also require it. 'preferred' let UV-incapable
       // authenticators round-trip successfully and then always fail verify.
       userVerification: 'required',
     });
 
+    const challengeOwnerPublicId =
+      user && credentials.length > 0 ? user.public_id : `decoy:${generatePublicId('authMethod')}`;
     const challengeToken = await createWebauthnChallenge(
       this.redis,
       'authentication',
-      user.public_id,
-      options.challenge,
-    );
-
-    return { options, challenge_token: challengeToken };
-  }
-
-  /**
-   * Builds decoy authentication options for an email that has no usable passkey, so the
-   * `authenticate/options` endpoint cannot be used as an account/credential enumeration oracle.
-   *
-   * @remarks
-   * - **Algorithm:** derives a single stable decoy credential id from
-   *   `HMAC-SHA256(SECRETS_ENCRYPTION_KEY, "webauthn-auth-decoy:" + lowercased email)` so
-   *   repeated probes for the same email return identical credential descriptors (a real
-   *   account's credential ids are likewise stable). Generates real `simplewebauthn` options
-   *   around that decoy and stores a challenge bound to a non-resolvable synthetic user.
-   * - **Failure modes:** none surfaced to the caller — the point is to return a 200 that mirrors
-   *   the genuine shape; the eventual verify fails uniformly via the standard credential lookup.
-   * - **Side effects:** writes a short-lived `webauthn:challenge:*` entry to Redis.
-   * - **Notes:** the synthetic `decoy:<publicId>` owner never matches a real user, so even if the
-   *   client echoes the challenge back, `verifyAuthentication` rejects it like any other mismatch.
-   */
-  private async buildDecoyAuthenticationOptions(
-    email: string,
-  ): Promise<WebauthnAuthenticateOptionsResult> {
-    const decoyCredentialId = createHmac('sha256', env.SECRETS_ENCRYPTION_KEY)
-      .update(`webauthn-auth-decoy:${email.toLowerCase()}`)
-      .digest()
-      .toString('base64url');
-
-    const options = await generateAuthenticationOptions({
-      rpID: resolveWebauthnRelyingPartyId(),
-      allowCredentials: [{ id: decoyCredentialId, transports: ['internal'] }],
-      // sec-r4-A2: keep the decoy structurally identical to a genuine challenge so
-      // the anti-enumeration guarantee holds.
-      userVerification: 'required',
-    });
-
-    const challengeToken = await createWebauthnChallenge(
-      this.redis,
-      'authentication',
-      `decoy:${generatePublicId('authMethod')}`,
+      challengeOwnerPublicId,
       options.challenge,
     );
 

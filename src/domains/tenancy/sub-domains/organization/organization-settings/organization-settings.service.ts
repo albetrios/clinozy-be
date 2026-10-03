@@ -18,6 +18,7 @@ import {
   invalidateCachedOrganizationDefaultLocale,
   setCachedOrganizationDefaultLocale,
 } from './i18n-locale.cache.js';
+import { invalidateOrganizationMfaPolicy } from './organization-mfa-policy.js';
 
 /**
  * Read/write service for the per-organization settings row plus two
@@ -88,6 +89,11 @@ export class OrganizationSettingsService {
     // Outside the DB context (cache write must not roll back with the organization tx).
     if (parsed.default_locale !== undefined) {
       await invalidateCachedOrganizationDefaultLocale(scope.organizationPublicId);
+    }
+    // A security-policy change (e.g. turning `mfa_required` on) must apply to the next request,
+    // not after the policy cache's TTL.
+    if (parsed.security_policy !== undefined) {
+      await invalidateOrganizationMfaPolicy(scope.organizationPublicId);
     }
     return result;
   }

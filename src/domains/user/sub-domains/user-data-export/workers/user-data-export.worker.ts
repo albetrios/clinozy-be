@@ -1,5 +1,8 @@
 import { Worker } from 'bullmq';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { getDefaultWorkerOptions } from '@/infrastructure/queue/worker-runtime/worker-options.js';
 import { getWorkerConcurrencyNotify } from '@/shared/config/worker-concurrency.util.js';
 import { USER_DATA_EXPORT_QUEUE_NAME } from '@/domains/user/sub-domains/user-data-export/queues/user-data-export.queue.js';
@@ -44,6 +47,7 @@ export function createUserDataExportWorker(
     },
     {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
       concurrency: getWorkerConcurrencyNotify(),
       ...getDefaultWorkerOptions(),
     },

@@ -9,7 +9,7 @@ import {
 import { assertUserAccountActive } from '@/shared/utils/auth/account-status.util.js';
 import { isDisposableEmailBlocked } from '@/shared/utils/text/email.util.js';
 import { resolveAccessTokenRoleForUser } from '@/shared/utils/auth/global-admin-role.util.js';
-import { signAccessToken } from '@/shared/utils/security/jwt.util.js';
+import { MFA_AUTHENTICATION_METHOD, signAccessToken } from '@/shared/utils/security/jwt.util.js';
 import { DUMMY_ARGON2_HASH, verifyPassword } from '@/shared/utils/security/password.util.js';
 import { enforceMinimumDuration } from '@/shared/utils/security/anti-enumeration.util.js';
 import {
@@ -33,7 +33,9 @@ import {
   findUserActiveOrganizationByPublicId,
   findUserActiveOrganizationPublicIdByInternalId,
   ensurePersonalOrganization,
+  resolvePersonalOrganizationPublicId,
 } from '@/domains/tenancy/sub-domains/organization/resolve-active-organization.js';
+import { organizationRequiresMfa } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-mfa-policy.js';
 import type { UserAuthRecord } from '@/domains/user/user.types.js';
 import {
   PRINCIPAL_SCOPE,
@@ -336,8 +338,13 @@ export class AuthService {
       session.organization_id != null
         ? await findUserActiveOrganizationPublicIdByInternalId(user.id, session.organization_id)
         : undefined;
-    const organizationPublicId =
-      persistedOrganizationPublicId ?? (await resolveDefaultActiveOrganizationPublicId(user.id));
+    const sessionMfaVerified = session.mfa_verified_at != null;
+    const organizationPublicId = await this.withoutUnmetOrganizationMfa({
+      userId: user.id,
+      organizationPublicId:
+        persistedOrganizationPublicId ?? (await resolveDefaultActiveOrganizationPublicId(user.id)),
+      sessionMfaVerified,
+    });
 
     const jsonWebToken = await signAccessToken({
       userId: user.public_id,
@@ -347,6 +354,7 @@ export class AuthService {
         isEmailVerified: user.is_email_verified,
       }),
       organizationPublicId,
+      authenticationMethods: sessionMfaVerified ? [MFA_AUTHENTICATION_METHOD] : undefined,
     });
 
     const rotated = await this.authSessionService.refreshSessionCredentials({
@@ -423,15 +431,58 @@ export class AuthService {
   }
 
   /**
-   * Mint an access token scoped to the given organization and re-bind the session
-   * to it, persisting the active organization's internal id on the session so a
-   * later `/auth/refresh` preserves the selection (audit-#3).
+   * Refresh must never mint authority over an organization whose security policy requires MFA
+   * for a session that has not proved a second factor — the case of an invitation accepted after
+   * a first-factor login, or a policy turned on later. Such an organization is replaced by the
+   * user's personal organization when that one does not require MFA, otherwise by none; once the
+   * session completes MFA (step-up), the next refresh returns to the persisted organization.
+   */
+  private async withoutUnmetOrganizationMfa(options: {
+    userId: number;
+    organizationPublicId: string | undefined;
+    sessionMfaVerified: boolean;
+  }): Promise<string | undefined> {
+    const { organizationPublicId } = options;
+    if (
+      !organizationPublicId ||
+      options.sessionMfaVerified ||
+      !(await organizationRequiresMfa(organizationPublicId))
+    ) {
+      return organizationPublicId;
+    }
+    const personalOrganizationPublicId = await resolvePersonalOrganizationPublicId(options.userId);
+    if (
+      personalOrganizationPublicId &&
+      personalOrganizationPublicId !== organizationPublicId &&
+      !(await organizationRequiresMfa(personalOrganizationPublicId))
+    ) {
+      return personalOrganizationPublicId;
+    }
+    return undefined;
+  }
+
+  /**
+   * Mint an access token scoped to the given organization and re-bind the session to it — the
+   * shared tail of both switch endpoints — persisting the active organization's internal id on the
+   * session so a later `/auth/refresh` preserves the selection (audit-#3).
+   *
+   * @remarks
+   * An organization whose security policy requires MFA admits only a session that has proved a
+   * second factor (`mfa_verified_at`); otherwise this throws `403 errors:organizationRequiresMfa`
+   * with reason `mfa_required`, and the client completes an MFA step-up (or enrollment) and
+   * retries. The minted token carries `amr: ['mfa']` for such a session.
    */
   private async mintForActiveOrganization(
     user: UserAuthRecord,
     sessionPublicId: string,
     organization: { id: number; public_id: string },
   ): Promise<{ access_token: string; organization_public_id: string }> {
+    const session = await this.authSessionService.findActiveSessionByPublicId(sessionPublicId);
+    if (!session) throw new UnauthorizedError('errors:invalidOrExpiredSession');
+    const sessionMfaVerified = session.mfa_verified_at != null;
+    if (!sessionMfaVerified && (await organizationRequiresMfa(organization.public_id))) {
+      throw new ForbiddenError('errors:organizationRequiresMfa').withReason('mfa_required');
+    }
     const jsonWebToken = await signAccessToken({
       userId: user.public_id,
       role: resolveAccessTokenRoleForUser({
@@ -440,6 +491,7 @@ export class AuthService {
         isEmailVerified: user.is_email_verified,
       }),
       organizationPublicId: organization.public_id,
+      authenticationMethods: sessionMfaVerified ? [MFA_AUTHENTICATION_METHOD] : undefined,
     });
     await this.authSessionService.rebindAccessToken({
       sessionPublicId,

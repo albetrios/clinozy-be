@@ -21,6 +21,7 @@ import {
   closeBullMqRedis,
   connectBullMqRedis,
   getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
 } from '@/infrastructure/queue/connection.js';
 import { getWorkerQueueRegistrationDefinitions } from '@/infrastructure/queue/worker-runtime/worker-registration.registry.js';
 
@@ -51,7 +52,9 @@ function getRegisteredQueueNames(): string[] {
 
 function createQueues(queueNames: string[]): Queue[] {
   const connection = getBullMQConnectionOptions();
-  return queueNames.map((queueName) => new Queue(queueName, { connection }));
+  return queueNames.map(
+    (queueName) => new Queue(queueName, { connection, prefix: getBullMQKeyPrefix() }),
+  );
 }
 
 async function readQueueDepth(queue: Queue): Promise<QueueDepth> {

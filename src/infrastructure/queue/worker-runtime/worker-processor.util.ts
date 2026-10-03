@@ -10,6 +10,7 @@ import {
   brandWorkerContextDatabaseHandle,
 } from '@/infrastructure/database/utils/database-handle.types.js';
 import { buildWorkerHandle } from '@/infrastructure/queue/worker-runtime/worker-close.util.js';
+import { getBullMQKeyPrefix } from '@/infrastructure/queue/connection.js';
 import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
 
 /** Explicit Drizzle handle passed from a worker context wrapper into processors/repositories. */
@@ -101,7 +102,8 @@ export function createTenantScopedBullMQWorker<TJobData extends OrganizationScop
         (databaseHandle) => handler(databaseHandle, job),
       );
     },
-    workerOptions,
+    // The environment's BullMQ key namespace is not the caller's choice — see getBullMQKeyPrefix.
+    { ...workerOptions, prefix: getBullMQKeyPrefix() },
   );
   return buildWorkerHandle(worker, queueName);
 }

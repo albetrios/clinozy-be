@@ -181,6 +181,14 @@ process.env.OAUTH_GITHUB_REDIRECT_URI ??= `${DEFAULT_FRONTEND_URL}/callback/gith
 // Isolate the test Redis keyspace from a running `pnpm dev` (both are NODE_ENV=development); a hard
 // set (not the developer's `.env.local` value) keeps the test prefix deterministic and isolated.
 process.env.REDIS_KEY_PREFIX = `${REDIS_KEY_PREFIX_STEM}:test:`;
+// The overload guard sheds a request with 503 when the last event-loop sample's p99 delay reached
+// OVERLOAD_MAX_EVENT_LOOP_DELAY_MS (default 250). The suite runs the app in-process, so the loop
+// it samples also carries Vitest's own module transforms and fixture work — on a busy machine one
+// such stall shed both requests of a performance test (`notify-list`) as a 503. Raised to the
+// schema maximum so test-runner stalls never shed; the guard's logic keeps its unit suite
+// (overload-guard.middleware.unit.test.ts, which sets its own thresholds), and the DB-pool shed
+// condition (OVERLOAD_DB_POOL_SHED_RATIO) stays active.
+process.env.OVERLOAD_MAX_EVENT_LOOP_DELAY_MS = '60000';
 delete process.env.WEBHOOK_URL_ALLOWLIST;
 // CAPTCHA mirrors CI (`reusable-vitest-postgres-redis.yml` leaves CAPTCHA_PROVIDER unset →
 // schema default `disabled`). A developer `.env.local` that enables Cloudflare Turnstile

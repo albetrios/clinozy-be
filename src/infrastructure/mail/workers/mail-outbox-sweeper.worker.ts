@@ -1,5 +1,8 @@
 import { Worker } from 'bullmq';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import {
   getRetentionWorkerOptions,
   RETENTION_WORKER_CONCURRENCY,
@@ -28,6 +31,7 @@ import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
 export function createMailOutboxSweeperWorker(): WorkerHandle {
   const worker = new Worker(MAIL_OUTBOX_SWEEPER_QUEUE_NAME, async () => runMailOutboxSweeperJob(), {
     connection: getBullMQConnectionOptions(),
+    prefix: getBullMQKeyPrefix(),
     concurrency: RETENTION_WORKER_CONCURRENCY,
     ...getRetentionWorkerOptions(),
   });

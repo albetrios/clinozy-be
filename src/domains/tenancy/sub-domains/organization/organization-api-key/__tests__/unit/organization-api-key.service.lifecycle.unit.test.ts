@@ -213,6 +213,86 @@ describe('OrganizationApiKeyService lifecycle', () => {
       );
       expect(result).toMatchObject({ name: 'Renamed' });
     });
+
+    describe('reactivating a revoked key is a fresh grant of its scopes', () => {
+      const REVOKED_ROW = { ...KEY_ROW, status: 'REVOKED', scopes: ['organization:delete'] };
+
+      it('runs the grant guard over the key scopes for the acting user', async () => {
+        const { service, apiKeyRepository } = buildService();
+        apiKeyRepository.findByPublicId.mockResolvedValueOnce(REVOKED_ROW);
+        vi.mocked(assertCallerCanGrantPermissionCodes).mockClear();
+
+        await service.update(
+          asScope('org_public'),
+          'apikey_public',
+          { status: 'ACTIVE' },
+          'user_pub',
+        );
+
+        expect(assertCallerCanGrantPermissionCodes).toHaveBeenCalledWith(
+          expect.objectContaining({
+            callerUserPublicId: 'user_pub',
+            organizationPublicId: 'org_public',
+            requestedPermissionCodes: ['organization:delete'],
+          }),
+        );
+        expect(apiKeyRepository.update).toHaveBeenCalled();
+      });
+
+      it('refuses (and writes nothing) when the caller cannot grant every scope on the key', async () => {
+        const { service, apiKeyRepository } = buildService();
+        apiKeyRepository.findByPublicId.mockResolvedValueOnce(REVOKED_ROW);
+        vi.mocked(assertCallerCanGrantPermissionCodes).mockRejectedValueOnce(
+          new ForbiddenError('errors:cannotGrantPermissionNotHeld'),
+        );
+
+        await expect(
+          service.update(asScope('org_public'), 'apikey_public', { status: 'ACTIVE' }, 'user_pub'),
+        ).rejects.toBeInstanceOf(ForbiddenError);
+        expect(apiKeyRepository.update).not.toHaveBeenCalled();
+      });
+
+      it('passes no acting user for an API-key principal, so the guard refuses it', async () => {
+        const { service, apiKeyRepository } = buildService();
+        apiKeyRepository.findByPublicId.mockResolvedValueOnce(REVOKED_ROW);
+        vi.mocked(assertCallerCanGrantPermissionCodes).mockClear();
+
+        await service.update(
+          asScope('org_public'),
+          'apikey_public',
+          { status: 'ACTIVE' },
+          undefined,
+        );
+
+        expect(assertCallerCanGrantPermissionCodes).toHaveBeenCalledWith(
+          expect.objectContaining({ callerUserPublicId: undefined }),
+        );
+      });
+
+      it('does not guard a rename, a revoke, or an already-active key', async () => {
+        const { service, apiKeyRepository } = buildService();
+        vi.mocked(assertCallerCanGrantPermissionCodes).mockClear();
+
+        apiKeyRepository.findByPublicId.mockResolvedValueOnce(REVOKED_ROW);
+        await service.update(asScope('org_public'), 'apikey_public', { name: 'X' }, 'user_pub');
+        apiKeyRepository.findByPublicId.mockResolvedValueOnce(KEY_ROW);
+        await service.update(
+          asScope('org_public'),
+          'apikey_public',
+          { status: 'REVOKED' },
+          'user_pub',
+        );
+        apiKeyRepository.findByPublicId.mockResolvedValueOnce(KEY_ROW);
+        await service.update(
+          asScope('org_public'),
+          'apikey_public',
+          { status: 'ACTIVE' },
+          'user_pub',
+        );
+
+        expect(assertCallerCanGrantPermissionCodes).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('delete', () => {

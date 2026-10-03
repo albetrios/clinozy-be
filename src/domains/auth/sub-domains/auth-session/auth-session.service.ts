@@ -1,9 +1,9 @@
-import { createHash } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { NotFoundError, UnauthorizedError } from '@/shared/errors/index.js';
 import { MAX_ACTIVE_SESSIONS_PER_USER } from '@/shared/constants/security.constants.js';
 import { captureMessage } from '@/infrastructure/observability/sentry/sentry.js';
 import type { UserService } from '@/domains/user/user.service.js';
-import { generateRefreshSecret } from '@/domains/auth/auth.http.util.js';
+import { generateRefreshSecret, isIssuedRefreshSecret } from '@/domains/auth/auth.http.util.js';
 import {
   PRINCIPAL_SCOPE,
   SESSION_SCOPE,
@@ -24,6 +24,13 @@ function hashAccessToken(rawToken: string): string {
 
 function hashRefreshSecret(refreshSecret: string): string {
   return createHash('sha256').update(refreshSecret).digest('hex');
+}
+
+/** Constant-time equality of two hex digests (equal length when both are SHA-256 hex). */
+function refreshHashesEqual(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 }
 
 /**
@@ -148,7 +155,7 @@ export class AuthSessionService {
   ): Promise<{ public_id: string; refresh_secret: string }> {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
-    const refreshSecret = generateRefreshSecret();
+    const refreshSecret = generateRefreshSecret({ userId: user.id });
     const { session, evictedSessions } = await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
       async (_databaseHandle) => {
@@ -251,6 +258,21 @@ export class AuthSessionService {
     return { sessionPublicId: session.public_id };
   }
 
+  /**
+   * Records that the session just proved a second factor (MFA step-up or enrollment), so
+   * organizations whose security policy requires MFA admit it on the next switch or refresh.
+   *
+   * @remarks
+   * Only a live session (not revoked, not expired) is marked; returns whether one was. The
+   * current access token is unchanged — the next switch or refresh mints one with `amr: ['mfa']`.
+   */
+  async markSessionMfaVerified(sessionPublicId: string): Promise<boolean> {
+    return withAppDatabaseContext(
+      SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
+      (_databaseHandle) => this.sessionRepository.markMfaVerified(sessionPublicId),
+    );
+  }
+
   async findActiveSessionByPublicId(sessionPublicId: string) {
     return withAppDatabaseContext(
       SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
@@ -296,70 +318,85 @@ export class AuthSessionService {
     nextAccessToken: string;
   }): Promise<{ refresh_secret: string }> {
     const currentRefreshHash = hashRefreshSecret(refreshSecret);
-    const nextRefreshSecret = generateRefreshSecret();
-    const nextRefreshHash = hashRefreshSecret(nextRefreshSecret);
     const nextTokenHash = hashAccessToken(nextAccessToken);
 
-    const rotated = await withAppDatabaseContext(
+    const nextRefreshSecret = await withAppDatabaseContext(
       SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
       async (_databaseHandle) => {
         const existing = await this.sessionRepository.findByPublicId(sessionPublicId);
         if (!existing?.refresh_token_hash) {
           return null;
         }
-        if (existing.token_hash) {
-          await invalidateCachedSessionToken(existing.token_hash);
-        }
-        return this.sessionRepository.rotateSessionCredentials(
+        const minted = generateRefreshSecret({ userId: existing.user_id });
+        const rotated = await this.sessionRepository.rotateSessionCredentials(
           sessionPublicId,
           currentRefreshHash,
           nextTokenHash,
-          nextRefreshHash,
+          hashRefreshSecret(minted),
         );
+        if (!rotated) {
+          return null;
+        }
+        // Only a successful rotation retires the previous access token, so only then is its
+        // cache entry dropped — a rejected secret must leave the session and its cache alone.
+        if (existing.token_hash) {
+          await invalidateCachedSessionToken(existing.token_hash);
+        }
+        return minted;
       },
     );
-
-    if (!rotated) {
-      // Reuse detection: the presented refresh secret did not match the stored hash. If the
-      // session still exists with a *different* refresh hash, an already-rotated (old/stolen)
-      // secret is being replayed. Revoke the user's entire session family so a leaked refresh
-      // token cannot be used to keep — or regain — access on any device (OAuth refresh-token
-      // rotation reuse-detection per RFC 9700).
-      //
-      // sec-A finding #9: include ALREADY-REVOKED rows in the lookup. A user who clicks
-      // "Log out everywhere" revokes the row but an attacker may still hold the stale
-      // refresh secret. Without including the revoked row in this lookup, the family-wide
-      // kill path silently no-ops and we lose the audit/Sentry signal exactly when it is
-      // most informative — "we already revoked this session and someone is still trying
-      // to use its refresh secret." We capture every refresh-secret mismatch to Sentry
-      // for breach detection, separate from whether we re-revoke.
-      const reuseDetection = await withAppDatabaseContext(
-        SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
-        async (_databaseHandle) => {
-          const existing =
-            await this.sessionRepository.findByPublicIdIncludingRevoked(sessionPublicId);
-          if (existing?.refresh_token_hash && existing.refresh_token_hash !== currentRefreshHash) {
-            return { userId: existing.user_id, wasAlreadyRevoked: existing.is_revoked };
-          }
-          return null;
-        },
-      );
-      if (reuseDetection !== null) {
-        captureMessage('auth.refresh_token.reuse_detected', {
-          level: 'warning',
-          extra: {
-            session_public_id: sessionPublicId,
-            was_already_revoked: reuseDetection.wasAlreadyRevoked,
-          },
-        });
-        if (!reuseDetection.wasAlreadyRevoked) {
-          await this.revokeAllSessionsForReusedRefreshSecret(reuseDetection.userId);
-        }
-      }
-      throw new UnauthorizedError('errors:invalidOrExpiredSession');
+    if (nextRefreshSecret !== null) {
+      return { refresh_secret: nextRefreshSecret };
     }
 
-    return { refresh_secret: nextRefreshSecret };
+    // Reuse detection (OAuth refresh-token rotation reuse-detection per RFC 9700): a secret this
+    // server ISSUED for the session's user, presented after it stopped rotating, is a replay of a
+    // retired (possibly stolen) secret — revoke the user's entire session family so it cannot keep
+    // or regain access on any device. Proof of issuance is required: the secret's MAC verifies
+    // (isIssuedRefreshSecret), or it is the session's stored previous secret (which also covers
+    // secrets minted before issuance MACs existed). A secret that merely differs from the current
+    // one proves nothing — anyone who learns a session id could invent one — so it only gets the
+    // 401 below, with no revocation and no cache change.
+    //
+    // sec-A finding #9: include ALREADY-REVOKED rows in the lookup. A user who clicks "Log out
+    // everywhere" revokes the row but an attacker may still hold the stale refresh secret; the
+    // replay is still reported (Sentry), separate from whether we re-revoke.
+    const reuseDetection = await withAppDatabaseContext(
+      SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
+      async (_databaseHandle) => {
+        const existing =
+          await this.sessionRepository.findByPublicIdIncludingRevoked(sessionPublicId);
+        if (!existing?.refresh_token_hash) return null;
+        if (refreshHashesEqual(existing.refresh_token_hash, currentRefreshHash)) return null;
+        const provenIssued =
+          isIssuedRefreshSecret({ userId: existing.user_id, refreshSecret }) ||
+          (existing.previous_refresh_token_hash !== null &&
+            refreshHashesEqual(existing.previous_refresh_token_hash, currentRefreshHash));
+        return {
+          userId: existing.user_id,
+          wasAlreadyRevoked: existing.is_revoked,
+          provenIssued,
+        };
+      },
+    );
+    if (reuseDetection?.provenIssued) {
+      captureMessage('auth.refresh_token.reuse_detected', {
+        level: 'warning',
+        extra: {
+          session_public_id: sessionPublicId,
+          was_already_revoked: reuseDetection.wasAlreadyRevoked,
+        },
+      });
+      if (!reuseDetection.wasAlreadyRevoked) {
+        await this.revokeAllSessionsForReusedRefreshSecret(reuseDetection.userId);
+      }
+    } else if (reuseDetection !== null) {
+      captureMessage('auth.refresh_token.unrecognized_secret', {
+        level: 'info',
+        extra: { session_public_id: sessionPublicId },
+      });
+    }
+    throw new UnauthorizedError('errors:invalidOrExpiredSession');
   }
 
   /**

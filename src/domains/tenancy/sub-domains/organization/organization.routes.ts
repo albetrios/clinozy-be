@@ -307,7 +307,8 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Update API key',
-          description: 'Updates an API key (name or status). Requires API_KEY_MANAGE permission.',
+          description:
+            'Updates an API key (name or status). Requires API_KEY_MANAGE permission. Reactivating a revoked key (status REVOKED → ACTIVE) is a fresh grant of its scopes: the caller must be a user holding every scope on the key (403 otherwise; API-key principals are refused).',
           tags: ['API Key'],
           params: apiKeyIdParamsDto,
           body: updateOrganizationApiKeyDto,

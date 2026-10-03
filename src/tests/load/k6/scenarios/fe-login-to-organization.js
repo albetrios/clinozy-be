@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Trend, Rate, Counter } from 'k6/metrics';
-import { API_PREFIX } from '../helpers/config.js';
+import { API_PREFIX, PUBLIC_AUTH_FORM_HEADERS } from '../helpers/config.js';
 import { credentialPool } from '../helpers/pool.js';
 
 /**
@@ -229,12 +229,12 @@ function record(name, res, expected) {
  * caller should abandon the journey. Extracted from {@link feJourney} so the three auth modes do
  * not push the main walk past the cognitive-complexity budget.
  */
-function authenticate(json, email) {
+function authenticate(email) {
   let token;
   // 02 — authenticate. One call with a password, or the two-call OTP signup.
   if (AUTH === 'otp') {
     const send = http.post(`${API_PREFIX}/auth/email/send-code`, JSON.stringify({ email }), {
-      headers: json,
+      headers: PUBLIC_AUTH_FORM_HEADERS,
       tags: { name: '02-send-code' },
     });
     if (!record('02-send-code', send, [200, 201])) return undefined;
@@ -243,7 +243,7 @@ function authenticate(json, email) {
     if (!code) return undefined; // TEST_MODE off — cannot proceed
 
     const login = http.post(`${API_PREFIX}/auth/email/login`, JSON.stringify({ email, code }), {
-      headers: json,
+      headers: PUBLIC_AUTH_FORM_HEADERS,
       tags: { name: '03-email-login' },
     });
     if (!record('03-email-login', login, [200, 201])) return undefined;
@@ -256,7 +256,7 @@ function authenticate(json, email) {
       const login = http.post(
         `${API_PREFIX}/auth/login`,
         JSON.stringify({ email: cred.email, password: cred.password }),
-        { headers: json, tags: { name: '02-login' } },
+        { headers: PUBLIC_AUTH_FORM_HEADERS, tags: { name: '02-login' } },
       );
       if (!record('02-login', login, [200])) return undefined;
       token = JSON.parse(login.body).data?.access_token;
@@ -267,7 +267,7 @@ function authenticate(json, email) {
       record(
         '02-send-code',
         http.post(`${API_PREFIX}/auth/email/send-code`, JSON.stringify({ email: cred.email }), {
-          headers: json,
+          headers: PUBLIC_AUTH_FORM_HEADERS,
           tags: { name: '02-send-code' },
         }),
         [200],
@@ -278,7 +278,7 @@ function authenticate(json, email) {
       const login = http.post(
         `${API_PREFIX}/auth/email/login`,
         JSON.stringify({ email: cred.email, code: STATIC_CODE }),
-        { headers: json, tags: { name: '03-code-login' } },
+        { headers: PUBLIC_AUTH_FORM_HEADERS, tags: { name: '03-code-login' } },
       );
       if (!record('03-code-login', login, [200])) {
         // A 401 here almost always means the API was started without a matching
@@ -315,7 +315,7 @@ export function feJourney() {
   record('01-refresh-guest', guest, [200, 401, 403]);
 
   // 02 — authenticate (password, static code, or the two-call OTP signup).
-  const token = authenticate(json, email);
+  const token = authenticate(email);
   if (!token) return void journeyComplete.add(false);
   let auth = { ...json, Authorization: `Bearer ${token}` };
 

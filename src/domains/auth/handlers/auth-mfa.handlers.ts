@@ -15,7 +15,7 @@ import { validateMfaMethodIdParam } from '@/domains/auth/auth.validator.js';
 import { AuthSerializer } from '@/domains/auth/auth.serializer.js';
 import type { AuthContainer } from '@/domains/auth/auth.container.js';
 
-type AuthMfaHandlersDependencies = Pick<AuthContainer, 'mfaService'>;
+type AuthMfaHandlersDependencies = Pick<AuthContainer, 'mfaService' | 'authSessionService'>;
 
 /**
  * Best-effort discriminator for a FAILED MFA login attempt, inferred from which credential field the
@@ -31,7 +31,10 @@ function mfaLoginSourceFromBody(body: unknown): LoginAuditSource {
 }
 
 /** Builds the MFA Fastify handlers: `verifyMfaLogin` (public login completion via `mfa_session_token`), `verifyMfa` (authenticated step-up), `enrollMfa`, `listMfaMethods`, and `deleteMfa`. */
-export function createAuthMfaHandlers({ mfaService }: AuthMfaHandlersDependencies) {
+export function createAuthMfaHandlers({
+  mfaService,
+  authSessionService,
+}: AuthMfaHandlersDependencies) {
   return {
     verifyMfaLogin: async (request: FastifyRequest, reply: FastifyReply) => {
       const ipAddress = getIpAddress(request);
@@ -81,6 +84,9 @@ export function createAuthMfaHandlers({ mfaService }: AuthMfaHandlersDependencie
         throw new ForbiddenError('errors:recentStepUpRequired');
       }
       await recordRecentStepUp(redisConnection, auth.userId, auth.sessionPublicId, 'mfa');
+      // The session has now proved a second factor: organizations requiring MFA admit it
+      // (switch / refresh re-mint its token with `amr: ['mfa']`).
+      await authSessionService.markSessionMfaVerified(auth.sessionPublicId);
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,
         action: 'auth.mfa.step_up',
@@ -101,6 +107,11 @@ export function createAuthMfaHandlers({ mfaService }: AuthMfaHandlersDependencie
     confirmEnrollMfa: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
       const data = await mfaService.enrollConfirm(auth.userId, request.body);
+      // Confirming enrollment verified a fresh code from the new factor — a second factor proven
+      // on this session, so an invited user who must enroll can enter an MFA-required organization.
+      if (auth.sessionPublicId) {
+        await authSessionService.markSessionMfaVerified(auth.sessionPublicId);
+      }
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,
         action: 'auth.mfa.enroll_confirm',

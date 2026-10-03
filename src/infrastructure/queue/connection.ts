@@ -32,7 +32,6 @@ export function getBullMQConnectionOptions(): {
   family: number;
   maxRetriesPerRequest: null;
   enableReadyCheck: boolean;
-  prefix: string;
   protocol: number;
 } {
   const bullMqRedisUrl = resolveBullMqRedisUrl();
@@ -44,8 +43,7 @@ export function getBullMQConnectionOptions(): {
     db: parsed.databaseIndex,
     family: 0,
     maxRetriesPerRequest: null,
-    // #786: BullMQ Queue/Worker connections (same `core:<env>:` prefix as the cache client) default
-    // to ioredis `enableReadyCheck: true`. The test harness churns the producer-queue connections
+    // #786: BullMQ Queue/Worker connections default to ioredis `enableReadyCheck: true`. The test harness churns the producer-queue connections
     // across createTestApp instances; a reconnect's INFO ready-check then rejects against a closing
     // stream at Vitest worker teardown — a flaky unhandled rejection on an otherwise-green run.
     // The harness sets REDIS_READY_CHECK_ENABLED=false to disable it under test (local/CI Redis is
@@ -53,12 +51,29 @@ export function getBullMQConnectionOptions(): {
     // Reads raw `process.env` (always current; the `env` const is frozen pre-flags) so no env-config
     // mock is required, matching the existing `process.env.RUN_REDIS_TESTS` test gate.
     enableReadyCheck: process.env.REDIS_READY_CHECK_ENABLED !== 'false',
-    prefix: resolveRedisKeyPrefix(),
     // BullMQ declares no RESP3 support, and ioredis 6 flipped the default to RESP3. Queue traffic
     // carries mail and billing jobs, so the wire protocol stays where it has been running in
     // production rather than moving as a side effect of a version bump — see REDIS_PROTOCOL_VERSION.
     protocol: REDIS_PROTOCOL_VERSION,
   });
+}
+
+/**
+ * BullMQ key prefix — `<REDIS_KEY_PREFIX>bull` (e.g. `clinozy:production:bull`), so a queue's keys
+ * are `<REDIS_KEY_PREFIX>bull:<queue>:…`, namespaced per environment like the cache keys.
+ *
+ * @remarks
+ * - **Why:** BullMQ reads its key prefix only from the `prefix` option of a `Queue` / `Worker` /
+ *   `QueueEvents` (default `bull`); an ioredis connection option of that name is ignored and an
+ *   ioredis `keyPrefix` is rejected. Every BullMQ construction therefore passes
+ *   `prefix: getBullMQKeyPrefix()` next to its `connection` — without it, environments sharing
+ *   one Redis (two deploy targets, or the test harness and a running `pnpm dev:worker`) share
+ *   every queue, and one environment's workers consume the other's jobs.
+ * - **Enforced by:** `bullmq-key-prefix.global.test.ts` (every construction in `src/` passes it).
+ * - **Failure modes:** none — pure string derivation from {@link resolveRedisKeyPrefix}.
+ */
+export function getBullMQKeyPrefix(): string {
+  return `${resolveRedisKeyPrefix()}bull`;
 }
 
 /**

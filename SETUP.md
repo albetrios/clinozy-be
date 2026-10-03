@@ -52,7 +52,7 @@ pnpm install
 
 ### Option A — one command (recommended)
 
-`pnpm setup:local` is an idempotent, re-run-safe bootstrap. It runs: preflight checks → `pnpm install` (if needed) → scaffold `.env.development` + `.env.local` → start Docker Postgres + Redis → `pnpm db:migrate` → optional seed → optional CodeGraph index → start `pnpm dev`.
+`pnpm setup:local` is an idempotent, re-run-safe bootstrap. It runs: preflight checks → `pnpm install` (if needed) → scaffold or update `.env.local` → start Docker Postgres + Redis → `pnpm db:migrate` → local database logins → optional seed → optional CodeGraph index → start `pnpm dev`.
 
 ```bash
 pnpm setup:local                             # bootstrap + start the API
@@ -62,12 +62,15 @@ pnpm setup:local --no-start                  # bootstrap only, don't start dev
 pnpm setup:local --check                     # preflight only, no mutations
 ```
 
-What it creates automatically on first run:
+What it sets up in `.env.local`:
 
-- **`.env.development`** — seeded from `.env.example` with a freshly generated RS256 JWT keypair (`JWT_PRIVATE_KEY` / `JWT_PUBLIC_KEY`) and `SECRETS_ENCRYPTION_KEY`. Existing files are never overwritten.
-- **`.env.local`** — localhost override pointing `DATABASE_URL` / `REDIS_URL` at the Docker Compose stack (`postgresql://clinozy:clinozy@localhost:5432/clinozy`, `redis://localhost:6379`). Use `--force-env-local` to rewrite it.
+- **On first run** — a self-contained `.env.local`: `.env.example` with a freshly generated RS256 JWT keypair (`JWT_PRIVATE_KEY` / `JWT_PUBLIC_KEY`), `SECRETS_ENCRYPTION_KEY`, and `DATABASE_URL` / `REDIS_URL` pointing at the Docker Compose stack (`postgresql://clinozy:clinozy@localhost:5432/clinozy`, `redis://localhost:6379`). An existing `.env.local` is never rewritten unless you pass `--force-env-local`.
+- **On every run** — the third-party API keys that cannot be generated (Stripe, Resend, S3, PostHog, OpenTelemetry — the list in [`tooling/dev/external-credentials.ts`](tooling/dev/external-credentials.ts)). Each key still on its `.env.example` placeholder is copied from `.env.development` when you have that file, otherwise from your environment variables (shell exports, CI or cloud variables). A value you set yourself is never overwritten, key names are printed but values never are, and any key still missing is listed with the integration it breaks. Not copied, deliberately: `SENTRY_DSN` (local errors would count against the hosted project's quota), `OTEL_SERVICE_NAME` (local traces keep their own service name), and OAuth clients (their redirect URIs are registered per environment). OpenTelemetry is optional: with no collector, leave `OTEL_EXPORTER_OTLP_ENDPOINT` unset (tracing off, no cost); setup:local comments out the old `https://otel.example.com` placeholder if an existing `.env.local` still has it.
+- **Database logins, once the migrations have run** — the three roles the migrations create without login, enabled by the Docker Compose superuser and written to `.env.local`, each password taken from `.env.local`, else your environment variables, else generated: `DATABASE_URL` as `clinozy_be_app` (the runtime, row-level security enforced like production), `DATABASE_MAINTENANCE_URL` as `clinozy_be_maintenance`, and `DATABASE_OPERATOR_URL` as `clinozy_be_operator` (bypasses RLS; the test harness and full/bulk seeds switch to it automatically). Each login is verified, re-runs keep the passwords, and `DATABASE_MIGRATION_URL` stays the compose superuser. Restart `pnpm dev` afterwards. Detail: [maintenance-database-role.md](docs/deployment/runbooks/maintenance-database-role.md#local-parity-provisioning-all-roles).
 
 Useful flags: `--skip-deps`, `--skip-docker`, `--skip-migrate`, `--skip-codegraph`, `--with-toxiproxy`.
+
+**CAPTCHA locally (off by default).** `pnpm setup:local --only-env --with-captcha` turns Cloudflare Turnstile on in `.env.local` with Cloudflare's published always-pass **test** keys: the real widget and the real verification call to Cloudflare run on `localhost`, with no change to a production widget. It also sets `CAPTCHA_BYPASS_ALLOWED=true`, because the k6 scenarios and the API smoke test send the dev-only `X-Captcha-Bypass` header on the public auth forms (production refuses the bypass). In clinozy-fe, set `VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA` and leave `VITE_CAPTCHA_DISABLED` unset. `--without-captcha` turns it back off. Restart `pnpm dev` after either.
 
 When it finishes, the API is at `http://localhost:3000` (`/livez`, `/readyz`).
 

@@ -8,7 +8,10 @@ import { WEBHOOK_DELIVERY_QUEUE_NAME } from '@/domains/notify/sub-domains/webhoo
 import { webhook_delivery_attempts } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
 import { database } from '@/infrastructure/database/connection.js';
 import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import {
   attachDeadLetterAndAlerting,
   getDeadLetterQueueName,
@@ -87,6 +90,7 @@ describe('Chaos resilience: webhook delivery dead-letters after retry exhaustion
 
     enqueueQueueAwaitingExhaustion = new Queue(WEBHOOK_DELIVERY_QUEUE_NAME, {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
       defaultJobOptions: {
         removeOnComplete: { count: 20 },
         removeOnFail: { count: 20 },
@@ -94,6 +98,7 @@ describe('Chaos resilience: webhook delivery dead-letters after retry exhaustion
     });
     queueTelemetryListeningForFailureEvents = new QueueEvents(WEBHOOK_DELIVERY_QUEUE_NAME, {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
     });
     await queueTelemetryListeningForFailureEvents.waitUntilReady();
 
@@ -139,7 +144,7 @@ describe('Chaos resilience: webhook delivery dead-letters after retry exhaustion
     // handler, marginally after the QueueEvents notification.
     deadLetterQueueAwaitingInspection = new Queue(
       getDeadLetterQueueName(WEBHOOK_DELIVERY_QUEUE_NAME),
-      { connection: getBullMQConnectionOptions() },
+      { connection: getBullMQConnectionOptions(), prefix: getBullMQKeyPrefix() },
     );
     const deadLetterEntryForExhaustedJob = await pollForDeadLetterEntryByOriginalJobId(
       deadLetterQueueAwaitingInspection,

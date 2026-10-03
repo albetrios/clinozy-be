@@ -119,13 +119,13 @@ To act in a different organization, **re-mint the token**:
 
 | Endpoint | Body | Auth | Result |
 |----------|------|------|--------|
-| `POST /auth/switch-to-organization` | `{ "organization_id": "org_…" }` | `Bearer` | `200` → new `access_token` scoped to that organization. `403` if the caller isn't a member, `400` if the id is missing. |
-| `POST /auth/switch-to-personal` | none | `Bearer` | `200` → new `access_token` scoped to the caller's personal organization. Cannot fail with `403`. |
+| `POST /auth/switch-to-organization` | `{ "organization_id": "org_…" }` | `Bearer` | `200` → new `access_token` scoped to that organization. `403` if the caller isn't a member, `403` with `error.reason: "mfa_required"` if the organization requires MFA and this session hasn't proved it ([below](#organizations-that-require-mfa)), `400` if the id is missing. |
+| `POST /auth/switch-to-personal` | none | `Bearer` | `200` → new `access_token` scoped to the caller's personal organization. Never `403` for membership; only `403` `mfa_required` if the user made their own personal organization require MFA and this session hasn't proved it. |
 
 Switching re-binds the session to the new token, so **the previous access token immediately stops
 working** (hash drift). Always swap your in-memory token for the returned one. No new refresh cookie
 is issued — the same `session_id` keeps working, and a later refresh re-mints with the now-current
-`org` claim.
+`org` claim (unless that organization requires MFA the session hasn't proved — see below).
 
 **One authoritative call — `GET /auth/me/context`.** Instead of stitching several endpoints, this returns everything a permission-aware UI needs in one request:
 
@@ -143,7 +143,7 @@ is issued — the same `session_id` keeps working, and a later refresh re-mints 
 - **`type` vs `my_permissions` — render on the intersection.** The organization `type` says what the organization **kind** allows (only a `TEAM` organization can invite members); `my_permissions` is what **this caller** may do in the active organization (resolved permission codes). Show a team-only action only when `type === 'TEAM'` **and** the caller holds the permission.
 - **The organization-switcher list is NOT here.** It lives at `GET /users/me/organizations`, which is **paginated** — follow the cursor to the end before rendering, or a user in more than one page of organizations silently loses the rest from their switcher. It was embedded in this response once, as a flat array with no cursor filled by a default-limit read, which is exactly the truncation this split fixes. Derive each row's "is this the active one?" by comparing its `id` to `active_organization.id`.
 - **Switch flow (one call):** `POST /auth/switch-to-organization` (or `…-personal`) re-mints the token **and returns the active-organization delta** — `{ access_token, active_organization, my_permissions, global_role }`. Swap your in-memory Bearer for the new `access_token` and repaint from `active_organization` + `my_permissions`. The `user` is stable across a switch, so **no follow-up `GET /auth/me/context` is needed** — re-fetch the full context only on a cold reload. Your cached organization list is stable too: switching changes which organization is active, not which ones you belong to, so re-derive the active row from the new `active_organization.id` rather than re-fetching the list.
-- **Join flow:** `POST /tenancy/invitations/{invitation_id}/accept` returns the joined `organization_id`; pass it straight to `POST /auth/switch-to-organization` (above) to land on the new team's dashboard — no lookup in between.
+- **Join flow:** `POST /tenancy/invitations/{invitation_id}/accept` returns the joined `organization_id`; pass it straight to `POST /auth/switch-to-organization` (above) to land on the new team's dashboard — no lookup in between If the team requires MFA and the session hasn't proved it, the switch answers `403` `mfa_required` — see [Organizations that require MFA](#organizations-that-require-mfa).
   - **Invited user with no account (first time):** the invite already created a passwordless, unverified **placeholder** for that email, and `accept` requires a **verified** email (else `403 errors:invitationRequiresVerifiedEmail` — a forwarded invite must not be claimable by the wrong person). So the new user first authenticates in a way that proves email control: **email verification-code** (`/auth/email/send-code` → `/auth/email/login`) or **OAuth** both claim the placeholder, verify the email, and provision their personal organization in one step. After that, the same `accept` → (`organization_id`) → `switch-to-organization` tail applies. Don't hard-block the UI when `is_email_verified` is false — route the user through the email-code login, then call `accept`.
 
 This works **identically for personal and team organizations** — there is one route surface, and the organization `type` (not different URLs) tells the UI what to show. See [route-consistency-and-organization-model.md](route-consistency-and-organization-model.md).
@@ -165,6 +165,33 @@ This works **identically for personal and team organizations** — there is one 
 > `DELETE /api/v1/tenancy/organization/invitations/{invitation_id}` and resend with
 > `POST /api/v1/tenancy/organization/invitations/{invitation_id}/resend`. The invitee becomes `ACTIVE`
 > by calling `POST /api/v1/tenancy/invitations/{invitation_id}/accept`.
+
+### Organizations that require MFA
+
+An organization can require MFA (`security_policy.mfa_required`). That policy holds for the whole
+life of a session, not only at login: a token is admitted into such an organization only when **its
+session has proved a second factor** — the MFA login challenge, an authenticated MFA step-up, or
+confirming MFA enrollment. Such tokens carry the standard `amr: ["mfa"]` claim; you never need to
+read it.
+
+When the session hasn't proved MFA, you get `403` with `error.reason: "mfa_required"` from:
+
+- `POST /auth/switch-to-organization` — e.g. right after accepting an invitation into a team that
+  requires MFA, when the user logged in without it;
+- any organization route — e.g. the organization turned MFA on after the user logged in.
+
+And `POST /auth/refresh` will not keep that organization in the new token — it falls back to the
+personal organization (repaint with `GET /auth/me/context`).
+
+The recovery is the same in every case:
+
+1. `is_mfa_enabled` true → collect a code and call `POST /auth/me/mfa/verify { code }`.
+   `is_mfa_enabled` false → enroll: `POST /auth/me/mfa/enroll` then
+   `POST /auth/me/mfa/enroll/confirm { code }`. Both enroll calls need a recent step-up; if they
+   answer `403 errors:recentStepUpRequired`, re-authenticate first.
+2. Call `POST /auth/switch-to-organization { organization_id }` again. The new token carries
+   `amr: ["mfa"]`, and the same session keeps it for later switches and refreshes.
+3. Retry the request that failed.
 
 ---
 
@@ -328,7 +355,12 @@ export async function switchOrganization(organizationId) {
     method: 'POST',
     body: JSON.stringify({ organization_id: organizationId }),
   });
-  if (!res.ok) throw new Error('switch_failed'); // 403 not a member, 400 bad id
+  if (!res.ok) {
+    const { error } = await res.json();
+    // 403 reason mfa_required → MFA step-up (or enrollment), then call switchOrganization again
+    if (error?.reason === 'mfa_required') throw new Error('mfa_required');
+    throw new Error('switch_failed'); // 403 not a member, 400 bad id
+  }
   const { data } = await res.json();
   accessToken = data.access_token; // swap token; the previous one is now dead
   return accessToken;

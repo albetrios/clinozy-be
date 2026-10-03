@@ -1,6 +1,11 @@
 import http from 'k6/http';
 import { sleep } from 'k6';
-import { API_PREFIX, SCENARIOS, SMOKE_THRESHOLDS } from '../helpers/config.js';
+import {
+  API_PREFIX,
+  SCENARIOS,
+  SMOKE_THRESHOLDS,
+  PUBLIC_AUTH_FORM_HEADERS,
+} from '../helpers/config.js';
 import { checkStatus, checkResponseTime } from '../helpers/checks.js';
 
 /**
@@ -30,13 +35,12 @@ export const options = {
 };
 
 export function passwordlessSignup() {
-  const headers = { 'Content-Type': 'application/json' };
   // Unique per virtual-user + iteration so every run signs up a brand-new account.
   const email = `loadtest+${__VU}-${__ITER}-${Date.now()}@loadtest.example.com`;
 
   // Step 1: send code (auto-signup for a new email)
   const sendResponse = http.post(`${API_PREFIX}/auth/email/send-code`, JSON.stringify({ email }), {
-    headers,
+    headers: PUBLIC_AUTH_FORM_HEADERS,
     tags: { name: 'signup-send-code' },
   });
   checkStatus(sendResponse, 200, 'send-code');
@@ -58,7 +62,7 @@ export function passwordlessSignup() {
   const loginResponse = http.post(
     `${API_PREFIX}/auth/email/login`,
     JSON.stringify({ email, code }),
-    { headers, tags: { name: 'signup-code-login' } },
+    { headers: PUBLIC_AUTH_FORM_HEADERS, tags: { name: 'signup-code-login' } },
   );
   checkStatus(loginResponse, 200, 'code-login');
   checkResponseTime(loginResponse, 800, 'code-login');

@@ -15,7 +15,8 @@ const bullMqRedisUrl = resolveBullMqRedisUrl();
 
 /**
  * Dedicated Redis connection for BullMQ health probes when an override endpoint is configured.
- * BullMQ queues use {@link getBullMQConnectionOptions} — not this client's keyPrefix.
+ * BullMQ queues use {@link getBullMQConnectionOptions} plus `prefix: getBullMQKeyPrefix()` — not this
+ * client (which has no keyPrefix).
  */
 export const bullmqRedisConnection = new Redis(bullMqRedisUrl, {
   maxRetriesPerRequest: null,

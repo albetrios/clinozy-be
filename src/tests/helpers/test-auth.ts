@@ -98,16 +98,24 @@ async function alignUserWithSuperAdminAllowlist(userPublicId: string): Promise<v
 
 /**
  * Generate a test JWT access token backed by an active auth session row (required by auth middleware).
+ *
+ * @remarks Pass `authenticationMethods: [MFA_AUTHENTICATION_METHOD]` for a token whose session has
+ * proved a second factor (`amr: ['mfa']`) — required on organization routes once the organization's
+ * security policy sets `mfa_required`.
  */
 export async function generateTestToken(options: {
   userId: string;
   role?: string;
   organizationPublicId?: string;
+  authenticationMethods?: string[];
 }): Promise<string> {
   const token = await signAccessToken({
     userId: options.userId,
     role: options.role ?? 'user',
     ...(options.organizationPublicId ? { organizationPublicId: options.organizationPublicId } : {}),
+    ...(options.authenticationMethods
+      ? { authenticationMethods: options.authenticationMethods }
+      : {}),
   });
   await persistActiveSessionForToken(options.userId, token);
   return token;

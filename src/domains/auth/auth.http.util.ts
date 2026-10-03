@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { NotImplementedError } from '@/shared/errors/index.js';
 import {
@@ -7,6 +7,7 @@ import {
 } from '@/shared/utils/i18n/i18n-response.util.js';
 import { translateRequestMessage } from '@/shared/utils/i18n/translate-request.util.js';
 import { env } from '@/shared/config/env.config.js';
+import { deriveSecretsSubKey } from '@/shared/utils/security/secrets-sub-key.util.js';
 import { SECONDS_PER_DAY } from '@/shared/constants/index.js';
 import { OAUTH_STATE_TTL_SECONDS } from '@/shared/constants/ttl.constants.js';
 
@@ -68,9 +69,46 @@ export function clearCsrfCookie(reply: FastifyReply): void {
 /** Separator between session public id and refresh secret in {@link SESSION_COOKIE_NAME}. */
 const SESSION_COOKIE_SEPARATOR = '.';
 
-/** Generates a cryptographically random refresh secret (32 bytes, base64url-encoded). */
-export function generateRefreshSecret(): string {
-  return randomBytes(32).toString('base64url');
+/** Separator between a refresh secret's random part and its issuance MAC. */
+const REFRESH_SECRET_MAC_SEPARATOR = '~';
+
+function refreshSecretMac(options: { userId: number; randomPart: string }): string {
+  return createHmac('sha256', deriveSecretsSubKey('refresh-secret-mac'))
+    .update(`refresh-secret:${options.userId}:${options.randomPart}`)
+    .digest('base64url');
+}
+
+/**
+ * Generates a refresh secret the server can later recognize as its own: 32 random bytes plus an
+ * HMAC binding them to the session's user (`<random>~<mac>`, base64url parts).
+ *
+ * @remarks
+ * The MAC is what lets refresh-token reuse detection tell a REPLAYED issued secret (revoke the
+ * user's session family) from a FABRICATED one (just 401) — see
+ * {@link isIssuedRefreshSecret}. Without it, anyone who learns a session id could make up a
+ * secret and log the user out everywhere. Bound to the user rather than the session because the
+ * session's public id is assigned by the insert, after the first secret is minted.
+ */
+export function generateRefreshSecret(options: { userId: number }): string {
+  const randomPart = randomBytes(32).toString('base64url');
+  return `${randomPart}${REFRESH_SECRET_MAC_SEPARATOR}${refreshSecretMac({ userId: options.userId, randomPart })}`;
+}
+
+/**
+ * Whether `refreshSecret` was issued by this server for `userId` — its MAC verifies in constant
+ * time. A secret minted before issuance MACs existed (no `~`) returns false.
+ *
+ * @remarks
+ * Proves issuance, not currency: a retired secret still verifies. Reuse detection combines it
+ * with a failed rotation — an issued secret that no longer rotates is a replay.
+ */
+export function isIssuedRefreshSecret(options: { userId: number; refreshSecret: string }): boolean {
+  const separatorIndex = options.refreshSecret.lastIndexOf(REFRESH_SECRET_MAC_SEPARATOR);
+  if (separatorIndex <= 0) return false;
+  const randomPart = options.refreshSecret.slice(0, separatorIndex);
+  const presentedMac = Buffer.from(options.refreshSecret.slice(separatorIndex + 1));
+  const expectedMac = Buffer.from(refreshSecretMac({ userId: options.userId, randomPart }));
+  return presentedMac.length === expectedMac.length && timingSafeEqual(presentedMac, expectedMac);
 }
 
 /** Builds the opaque session cookie value: `<sessionPublicId>.<refreshSecret>`. */

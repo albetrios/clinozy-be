@@ -124,8 +124,8 @@ When k6 runs on the **same host** as the API (the common local setup), the load 
 instead of :3000 and each call appears as it happens, grouped per route.
 
 ```bash
-pnpm load:monitor                 # proxy + dashboard on http://localhost:4985
-BASE_URL=http://localhost:4985 VUS=50 k6 run src/tests/load/k6/scenarios/fe-login-to-organization.js
+pnpm load:monitor                 # proxy + dashboard on 127.0.0.1:4985 — open the URL it prints
+BASE_URL=http://127.0.0.1:4985 VUS=50 k6 run src/tests/load/k6/scenarios/fe-login-to-organization.js
 ```
 
 **Port 4985 is fixed and not configurable.** It sits beside the DB viewer's 4984 so the loopback
@@ -134,16 +134,31 @@ dev tools occupy one obvious band, and it is deliberately not read from the envi
 the API would silently move this proxy too. `LOAD_MONITOR_UPSTREAM` (default
 `http://localhost:3000`) still points it at a different API when you need to.
 
-Node built-ins only — no dependencies. Loopback development tool: it records full request and
-response bodies in memory, so never point it at anything but a local API.
+Loopback development tool, and it enforces that:
+
+- it listens on `127.0.0.1` only — never on a LAN interface;
+- the dashboard URL it prints carries a **per-boot session token**, which every `/__monitor/*`
+  endpoint requires (as `?token=` or the `x-session-token` header), together with a loopback
+  `Host` and, from a browser, a loopback `Origin` — the same guard as the DB Viewer
+  (`tooling/dev/loopback-guard.mjs`). The proxy path needs no token, and neither does the run
+  announcement a k6 scenario `POST`s to `/__monitor/run` (k6 sends no `Origin`; a cross-origin page
+  does and is refused);
+- recorded bodies, query strings and sensitive headers go through the application's own redactor
+  (`redactSensitive`, as for logs and Sentry) before they are stored, so a proxied login keeps
+  `"password": "[REDACTED]"`, never the password; a body that cannot be parsed for redaction is
+  withheld.
+
+It runs under `tsx` (for that redactor) and keeps everything in memory; never point it at anything
+but a local API.
 
 | Endpoint | Purpose |
 | -------- | ------- |
-| `/` | Dashboard — per-route calls, ok/error/429 counts, avg, p95, max, total time |
-| `/__monitor/stream` | Server-sent events feed of calls as they land |
-| `/__monitor/stats` | Per-route aggregates as JSON |
-| `/__monitor/calls` | Recorded calls (`?limit=`) with headers and bodies |
-| `/__monitor/clear` | `POST` — reset counters between runs |
+| `/` | Dashboard — per-route calls, ok/error/429 counts, avg, p95, max, total time (open it with the printed `?token=` URL) |
+| `/__monitor/stream` | Server-sent events feed of calls as they land (token) |
+| `/__monitor/stats` | Per-route aggregates as JSON (token) |
+| `/__monitor/calls` | Recorded calls (`?limit=`) with redacted headers and bodies (token) |
+| `/__monitor/clear` | `POST` — reset counters between runs (token) |
+| `/__monitor/run` | `POST` — a scenario announces its shape (no token); `GET` reads it (token) |
 
 Because it sits in the request path it adds a small amount of latency and a second event loop to the
 same box; treat its timings as directionally accurate and compare monitor-to-monitor, not

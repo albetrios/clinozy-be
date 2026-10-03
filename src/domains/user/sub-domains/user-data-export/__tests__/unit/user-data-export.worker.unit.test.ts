@@ -34,6 +34,7 @@ vi.mock('bullmq', () => ({
 }));
 
 vi.mock('@/infrastructure/queue/connection.js', () => ({
+  getBullMQKeyPrefix: () => 'test:bull',
   getBullMQConnectionOptions: () => ({ host: 'redis.test' }),
 }));
 

@@ -29,7 +29,7 @@ Answers "is every route — organization-level included — covered, and what is
 
 1. ~~**Cross-user (intra-tenant) BOLA — `auth-by-id`.**~~ **RESOLVED (Phase 2).** `object-ownership.security.test.ts` denies User B every User A object (uploads, notifications, data-export, sessions/MFA/auth-methods under step-up) with `verifyNoMutation`; `invitation-email.security.test.ts` covers the email-bound accept.
 2. ~~**Cross-organization BOLA e2e — `org-by-id` resources.**~~ **RESOLVED (Phase 2).** `cross-organization-resource.security.test.ts` (reads → 404 + same-organization 200) and `cross-organization-mutation.security.test.ts` (writes → 404, incl. subscription/api-key/notification-policy/webhook/role/membership/invitation) cover every organization-by-id route.
-3. **Grant-grantability on create paths.** The role-permission **PUT** is now e2e-asserted (`tier-and-grant.security.test.ts`: a manager cannot grant a permission they do not hold, and cannot reach across organizations). Residual: create paths (`POST roles`, `POST invitations`, api-key scopes) are not all asserted at the route level.
+3. **Grant-grantability on create paths.** The role-permission **PUT** is now e2e-asserted (`tier-and-grant.security.test.ts`: a manager cannot grant a permission they do not hold, and cannot reach across organizations). Residual: create paths (`POST roles`, `POST invitations`, api-key scopes) are not all asserted at the route level. API-key scopes on create and on reactivation (`PATCH status: ACTIVE`, a fresh grant of the key's stored scopes) are asserted in `tenancy-grant-escalation.security.test.ts`.
 4. **Global-role denial — `global-role`.** **RESOLVED for the by-id surface (Phase 2):** `admin-only.security.test.ts` asserts a regular user is denied on all five `/users/:user_id` admin routes (GET/PATCH/DELETE/suspend/unsuspend). Residual: the collection `GET /users`, `audit/logs`, and `mcp` admin routes are still only sampled.
 5. **Caller-scope on `auth-self-mutation` (24 routes).** Guarded by auth + `/me` scoping, but there is no per-route assertion that the body cannot redirect the action to another user (mass-assignment covers a subset only).
 6. **Business-flow abuse (OWASP API6) on `public`/auth flows.** Rate-limit + captcha exist; multi-step flow abuse (e.g. invitation/checkout sequencing) is not systematically tested.
@@ -134,7 +134,7 @@ Answers "is every route — organization-level included — covered, and what is
 | GET | `/api/v1/tenancy/organization/api-keys` | PERM: api-key:read | `org-collection` | ✅ BFLA (matrix) |
 | POST | `/api/v1/tenancy/organization/api-keys` | PERM: api-key:manage | `org-collection` | ✅ BFLA (matrix) |
 | GET | `/api/v1/tenancy/organization/api-keys/:api_key_id` | PERM: api-key:read | `org-by-id` | ✅ BFLA + cross-organization |
-| PATCH | `/api/v1/tenancy/organization/api-keys/:api_key_id` | PERM: api-key:manage | `org-by-id` | ✅ BFLA + cross-organization |
+| PATCH | `/api/v1/tenancy/organization/api-keys/:api_key_id` | PERM: api-key:manage | `org-by-id` | ✅ BFLA + cross-organization; reactivation (REVOKED → ACTIVE) grant-guarded (`tenancy-grant-escalation.security.test.ts`) |
 | DELETE | `/api/v1/tenancy/organization/api-keys/:api_key_id` | PERM: api-key:manage | `org-by-id` | ✅ BFLA + cross-organization |
 | POST | `/api/v1/tenancy/organization/api-keys/:api_key_id/rotate` | PERM: api-key:manage | `org-by-id` | ✅ BFLA + cross-organization |
 | GET | `/api/v1/tenancy/organization/audit-logs` | PERM: audit-log:read | `org-collection` | ✅ BFLA (matrix) |

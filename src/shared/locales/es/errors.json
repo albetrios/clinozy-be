@@ -126,6 +126,7 @@
   "insufficientRolePrivileges": "Privilegios de rol insuficientes",
   "organizationContextRequired": "Contexto de organización requerido",
   "insufficientOrganizationPermissions": "Permisos de organización insuficientes",
+  "organizationRequiresMfa": "Esta organización requiere autenticación multifactor. Verifica con tu segundo factor y vuelve a intentarlo.",
   "insufficientUploadPermissions": "Permisos de organización insuficientes para subir",
   "invalidField": "{{label}} no válido",
   "missingAuthorizationHeader": "Falta el encabezado Authorization",

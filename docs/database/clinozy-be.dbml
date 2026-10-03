@@ -205,6 +205,7 @@ Table auth.sessions {
   ip_address "inet" [not null]
   is_revoked boolean [not null]
   last_active_at timestamptz [not null]
+  mfa_verified_at timestamptz
   organization_id bigint
   previous_refresh_token_hash varchar(64)
   public_id varchar(28) [not null, unique]

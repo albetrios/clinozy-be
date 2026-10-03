@@ -6,8 +6,16 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 vi.mock('@/domains/tenancy/sub-domains/permission/authorization.service.js', () => ({
   resolveUserOrganizationPermissions: vi.fn(),
 }));
+// The organization MFA policy is read through Redis + Postgres; the unit lane has neither.
+vi.mock(
+  '@/domains/tenancy/sub-domains/organization/organization-settings/organization-mfa-policy.js',
+  () => ({
+    organizationRequiresMfa: vi.fn().mockResolvedValue(false),
+  }),
+);
 
 import { resolveUserOrganizationPermissions } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
+import { organizationRequiresMfa } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-mfa-policy.js';
 import {
   requireOrganizationPermission,
   requireRole,
@@ -15,6 +23,7 @@ import {
 import { attachPrincipalScope } from '@/tests/helpers/principal-scope.helper.js';
 
 const mockedResolvePermissions = vi.mocked(resolveUserOrganizationPermissions);
+const mockedOrganizationRequiresMfa = vi.mocked(organizationRequiresMfa);
 
 function mockRequest(overrides: Partial<FastifyRequest> = {}): FastifyRequest {
   return attachPrincipalScope({
@@ -29,6 +38,7 @@ const mockReply = {} as FastifyReply;
 describe('authorization.util', () => {
   beforeEach(() => {
     mockedResolvePermissions.mockReset();
+    mockedOrganizationRequiresMfa.mockReset().mockResolvedValue(false);
   });
 
   describe('requireRole', () => {
@@ -76,6 +86,49 @@ describe('authorization.util', () => {
       mockedResolvePermissions.mockResolvedValue(['membership:read']);
       const handler = requireOrganizationPermission('membership:manage');
       await expect(handler(mockRequest(), mockReply)).rejects.toThrow(ForbiddenError);
+    });
+
+    describe('organizations whose security policy requires MFA', () => {
+      it('refuses a member whose session has not proved a second factor (reason mfa_required)', async () => {
+        mockedResolvePermissions.mockResolvedValue(['membership:manage']);
+        mockedOrganizationRequiresMfa.mockResolvedValue(true);
+        const handler = requireOrganizationPermission('membership:manage');
+
+        await expect(handler(mockRequest(), mockReply)).rejects.toMatchObject({
+          statusCode: 403,
+          messageKey: 'errors:organizationRequiresMfa',
+          reason: 'mfa_required',
+        });
+        expect(mockedOrganizationRequiresMfa).toHaveBeenCalledWith('org-public');
+      });
+
+      it('admits an MFA-verified member without looking the policy up', async () => {
+        mockedResolvePermissions.mockResolvedValue(['membership:manage']);
+        mockedOrganizationRequiresMfa.mockResolvedValue(true);
+        const handler = requireOrganizationPermission('membership:manage');
+        const request = mockRequest({
+          auth: {
+            kind: 'user' as const,
+            userId: 'user-1',
+            role: GLOBAL_ROLES.USER,
+            mfaVerified: true,
+          },
+        });
+
+        await expect(handler(request, mockReply)).resolves.toBeUndefined();
+        expect(mockedOrganizationRequiresMfa).not.toHaveBeenCalled();
+      });
+
+      it('gives a non-member the ordinary 403, before (and without) any MFA lookup', async () => {
+        mockedResolvePermissions.mockResolvedValue([]);
+        mockedOrganizationRequiresMfa.mockResolvedValue(true);
+        const handler = requireOrganizationPermission('membership:manage');
+
+        await expect(handler(mockRequest(), mockReply)).rejects.toMatchObject({
+          messageKey: 'errors:insufficientOrganizationPermissions',
+        });
+        expect(mockedOrganizationRequiresMfa).not.toHaveBeenCalled();
+      });
     });
 
     it('throws ForbiddenError when organization id param is missing', async () => {

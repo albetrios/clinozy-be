@@ -186,6 +186,101 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
     });
   });
 
+  describe('reactivating a revoked API key is a fresh grant of its scopes', () => {
+    // PATCH status REVOKED → ACTIVE brings the key's old secret and stored scopes back to life. A
+    // member holding only `api-key:manage` must not be able to revive a broader key — whose
+    // retained secret then acts with authority they could neither mint nor rotate.
+    async function revokedBroadKeyInOrganization() {
+      const broad = await createMemberHolding([
+        TENANCY_PERMISSIONS.API_KEY_MANAGE,
+        TENANCY_PERMISSIONS.API_KEY_READ,
+        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        TENANCY_PERMISSIONS.MEMBERSHIP_READ,
+      ]);
+      const created = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/tenancy/organization/api-keys'),
+        token: broad.token,
+        payload: { name: 'broad-key', scopes: [TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE] },
+      });
+      expect(created.statusCode).toBe(200);
+      const broadKeyId = (created.json() as { data: { api_key: { id: string } } }).data.api_key.id;
+      const revoked = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath(`/tenancy/organization/api-keys/${broadKeyId}`),
+        token: broad.token,
+        payload: { status: 'REVOKED' },
+      });
+      expect(revoked.statusCode).toBe(200);
+      return { broad, broadKeyId };
+    }
+
+    it('denies a key manager who does not hold every scope on the key', async () => {
+      const { broad, broadKeyId } = await revokedBroadKeyInOrganization();
+      const limitedUser = await createTestUser();
+      const limitedRole = await createRoleWithPermissions({
+        organizationId: broad.organization.id,
+        permissionCodes: [TENANCY_PERMISSIONS.API_KEY_MANAGE, TENANCY_PERMISSIONS.API_KEY_READ],
+      });
+      await createMembership({
+        userId: limitedUser.id,
+        organizationId: broad.organization.id,
+        roleId: limitedRole.id,
+      });
+      const limitedToken = await generateTestToken({
+        userId: limitedUser.public_id,
+        organizationPublicId: broad.organization.public_id,
+      });
+
+      const response = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath(`/tenancy/organization/api-keys/${broadKeyId}`),
+        token: limitedToken,
+        payload: { status: 'ACTIVE' },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    it('denies an API-key principal (no acting user) even with api-key:manage', async () => {
+      const { broad, broadKeyId } = await revokedBroadKeyInOrganization();
+      const manager = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/tenancy/organization/api-keys'),
+        token: broad.token,
+        payload: {
+          name: 'manager-key',
+          scopes: [TENANCY_PERMISSIONS.API_KEY_MANAGE, TENANCY_PERMISSIONS.API_KEY_READ],
+        },
+      });
+      expect(manager.statusCode).toBe(200);
+      const managerRawKey = (manager.json() as { data: { raw_key: string } }).data.raw_key;
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: testApiPath(`/tenancy/organization/api-keys/${broadKeyId}`),
+        headers: { 'x-api-key': managerRawKey },
+        payload: { status: 'ACTIVE' },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    it('permits a member holding every scope on the key (the guard is not a blanket deny)', async () => {
+      const { broad, broadKeyId } = await revokedBroadKeyInOrganization();
+
+      const response = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath(`/tenancy/organization/api-keys/${broadKeyId}`),
+        token: broad.token,
+        payload: { status: 'ACTIVE' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect((response.json() as { data: { status: string } }).data.status).toBe('ACTIVE');
+    });
+  });
+
   describe('membership role assignment cannot exceed the caller permission set', () => {
     it('denies inviting a member into a role holding a permission the caller lacks', async () => {
       // `membership:manage` lets you add people. It must not let you add them at a privilege level

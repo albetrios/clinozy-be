@@ -8,7 +8,10 @@ import type { AuditService } from '@/domains/audit/audit.service.js';
 import { SESSION_CLEANUP_QUEUE_NAME } from '@/domains/auth/sub-domains/auth-session/workers/session-cleanup.constants.js';
 import { NOTIFICATION_QUEUE_NAME } from '@/domains/notify/sub-domains/notification/queues/notification.queue.js';
 import { WEBHOOK_DELIVERY_QUEUE_NAME } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { listDeadLetterQueueNames } from '@/infrastructure/queue/dlq/dead-letter.js';
 import { MAIL_QUEUE_NAME } from '@/infrastructure/mail/queues/mail.queue.js';
 import { WEBHOOK_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/notify/sub-domains/webhook/workers/webhook-tombstone-retention.constants.js';
@@ -216,7 +219,9 @@ export async function registerQueueDashboard(
   deps: RegisterQueueDashboardDeps,
 ): Promise<void> {
   const connectionOptions = getBullMQConnectionOptions();
-  const queues = QUEUE_NAMES.map((name) => new Queue(name, { connection: connectionOptions }));
+  const queues = QUEUE_NAMES.map(
+    (name) => new Queue(name, { connection: connectionOptions, prefix: getBullMQKeyPrefix() }),
+  );
   const serverAdapter = new FastifyAdapter();
   serverAdapter.setBasePath(DASHBOARD_PREFIX);
 
