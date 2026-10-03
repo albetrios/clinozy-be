@@ -26,7 +26,9 @@ and the rest of the toolchain (github:sync, deploy, Actions) just works.
 `development | production` — you never deploy to `local`). The default is `local`: an unset `NODE_ENV`
 is a developer's machine (a stock `pnpm dev`, a local `pnpm db:*`). Every DEPLOY and CI context sets
 `NODE_ENV` explicitly (workflows, both Docker stages, the Vitest harness pin it), so the default never
-reaches a deployed or CI runtime. The Vitest suite runs as `development`; test-only behaviour is driven
+reaches a deployed or CI runtime. The Railway deploy derives it from the resolved environment, never
+from the GitHub Environment (`reusable-railway-deploy.yml`, pinned by
+`src/tests/unit/ci/deploy-node-env.policy.unit.test.ts`) — as clinozy-fe derives `VITE_APP_ENV`. The Vitest suite runs as `development`; test-only behaviour is driven
 by explicit flags the harness sets. An out-of-enum value fails loudly at boot (`env.config.ts`
 eager-parses `envSchema` and throws) — never a silent default.
 

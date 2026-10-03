@@ -24,6 +24,42 @@ describe('supply chain SBOM policy (#94 p3-sbom-syft)', () => {
     expect(prCi).toContain('pnpm deps:audit:prod');
   });
 
+  it('gates on the production tree first; the full tree is report-only', () => {
+    // A dev-only advisory with no published fix must not wedge every PR, and must never
+    // again SKIP the production audit by failing before it (same policy as clinozy-fe).
+    const prCi = readWorkflow('.github/workflows/pr-ci.yml');
+    const production = prCi.indexOf('- name: Production dependency audit');
+    const fullTree = prCi.indexOf('- name: Dependency audit (all deps, advisory)');
+    expect(production).toBeGreaterThan(-1);
+    expect(fullTree).toBeGreaterThan(production);
+    const productionStep = prCi.slice(production, fullTree);
+    expect(productionStep).toContain('run: pnpm deps:audit:prod');
+    expect(productionStep).not.toContain('continue-on-error');
+    const fullTreeStep = prCi.slice(fullTree, prCi.indexOf('\n\n', fullTree));
+    expect(fullTreeStep).toContain('continue-on-error: true');
+    expect(fullTreeStep).toContain('run: pnpm deps:audit');
+
+    const packageJson = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+    expect(packageJson.scripts['ci:quality']).toMatch(
+      /^pnpm deps:audit:prod && pnpm deps:audit:report && /,
+    );
+  });
+
+  it('accepts an advisory only with its reason, and only when no fix exists', () => {
+    const workspace = readFileSync(join(ROOT, 'pnpm-workspace.yaml'), 'utf8');
+    const block = workspace.slice(
+      workspace.indexOf('auditConfig:'),
+      workspace.indexOf('overrides:'),
+    );
+    const ignored = [...block.matchAll(/^\s+- (GHSA-[a-z0-9-]+)$/gm)].map((match) => match[1]);
+    expect(ignored).toEqual(['GHSA-vfj7-8cjw-p6xm']);
+    // Every waiver carries its path and its removal condition right above it.
+    expect(block).toContain('No patched release');
+    expect(block).toContain('Remove when braces publishes a fix');
+  });
+
   it('generates CycloneDX SBOM post-merge and attaches it when release-please publishes', () => {
     const postMergeWorkflow = readWorkflow('.github/workflows/post-merge-ci.yml');
     expect(postMergeWorkflow).toMatch(/anchore\/sbom-action@[0-9a-f]{40}/);

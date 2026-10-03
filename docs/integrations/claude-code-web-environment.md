@@ -90,26 +90,36 @@ On the first session the cached Node 24 is already on disk, [`session-start.sh`]
 
 ## Environment variables
 
-**Tests need none.** [`src/tests/setup.ts`](../../src/tests/setup.ts) bakes in test RS256 JWT PEMs and sets every other value (`??=` or hard override), and [`src/tests/global-setup.ts`](../../src/tests/global-setup.ts) forces `DATABASE_URL` to the local Docker DB and runs `pnpm db:migrate`. So the full suite runs with **only Postgres + Redis up** — no env vars and no key generation, exactly like local.
+**A cloud session runs as `local` on development values — except the database and Redis.**
 
-You only need env vars to run the **app itself** (`pnpm dev` / `pnpm dev:worker`). Mirror the `api-smoke` service in [`docker-compose.yml`](../../docker-compose.yml) (`pnpm compose:up` publishes Postgres on `localhost:5432` and Redis on `localhost:6379`):
+- **Do not set `NODE_ENV`.** Unset means `local`: the loader reads `.env.local` — created by
+  `pnpm setup:local --only-env` in the Setup script, with generated JWT keys and
+  `SECRETS_ENCRYPTION_KEY` and localhost `DATABASE_URL` / `DATABASE_MIGRATION_URL` / `REDIS_URL`
+  for the compose Postgres + Redis — as its primary file **without** override, so the
+  environment's **Variables** beat it. (With `NODE_ENV=development` the loader looks for
+  `.env.development`, which a fresh clone lacks, then lays `.env.local` over the Variables with
+  `override: true`: the session still runs as `local`, but loses the Variables.)
+- **Set the development values as the environment's Variables** — every key from your
+  `.env.development` except `NODE_ENV`, `DATABASE_URL`, `DATABASE_MIGRATION_URL`, `REDIS_URL` and
+  `DATABASE_SSL_ENABLED` (those follow the session's own Postgres + Redis). Third-party keys
+  (Resend, Stripe test mode, OAuth, S3, Sentry DSN, …) then match development. A blank `KEY=`
+  placeholder in `.env.local` no longer deletes a Variable
+  ([`load-env-files.ts`](../../src/shared/config/load-env-files.ts), pinned by
+  `src/tests/unit/config/load-env-files.unit.test.ts`).
+- **Running the frontend in the same session?** Keep `ALLOWED_ORIGINS` / `FRONTEND_URL` local
+  (`http://localhost:5173`) instead of development's hosted origin, or the browser's requests to
+  this API are refused.
+- If development enables metrics, set `METRICS_SCRAPE_TOKEN` too (or `METRICS_ENABLED=false`).
+- Never set the multi-line JWT PEMs as Variables — `setup:local` generates them. Environment
+  Variables are not a secrets store: use test-mode, least-privilege credentials.
 
-```text
-NODE_ENV=development
-DATABASE_URL=postgresql://clinozy:clinozy@localhost:5432/clinozy
-DATABASE_MIGRATION_URL=postgresql://clinozy:clinozy@localhost:5432/clinozy
-REDIS_URL=redis://localhost:6379
-DATABASE_SSL_ENABLED=false
-METRICS_ENABLED=false
-SECRETS_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
-```
+**Tests need none.** [`src/tests/setup.ts`](../../src/tests/setup.ts) bakes in test RS256 JWT PEMs
+and sets every other value (`??=` or hard override), and
+[`src/tests/global-setup.ts`](../../src/tests/global-setup.ts) forces `DATABASE_URL` to the local
+Docker DB and runs `pnpm db:migrate`. So the full suite runs with **only Postgres + Redis up**.
 
-- `DATABASE_MIGRATION_URL` must be the **direct (non-pooler)** host — `pnpm db:migrate` rejects a pooler URL.
-- `DATABASE_SSL_ENABLED=false` is for plaintext local Docker only.
-- `METRICS_ENABLED=false` avoids requiring `METRICS_SCRAPE_TOKEN` at boot.
-- **JWT keys** (`JWT_PRIVATE_KEY` / `JWT_PUBLIC_KEY`) are multi-line RS256 PEMs the env-var field handles poorly; generate them in a SessionStart hook (writing to a gitignored `.env.local`) or via `pnpm setup:local --only-env`. Tests do not need this — they use the baked-in keys in [`src/tests/setup.ts`](../../src/tests/setup.ts).
-
-The full variable surface and how to obtain real values: [`.env.example`](../../.env.example) and [credentials-and-env.md](credentials-and-env.md).
+The full variable surface and how to obtain real values: [`.env.example`](../../.env.example) and
+[credentials-and-env.md](credentials-and-env.md).
 
 ---
 

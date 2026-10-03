@@ -25,7 +25,11 @@
  * is physically absent in production; the loader needs no `NODE_ENV` guard to keep it out.
  *
  * Empty values (`KEY=` in the file) are stripped from `process.env` so optional Zod
- * fields see `undefined` instead of `""` (which fails `.string().min(1).optional()`).
+ * fields see `undefined` instead of `""` (which fails `.string().min(1).optional()`) — but only
+ * when the value IN EFFECT is empty. A value the shell already set (a cloud environment's
+ * Variables, a `KEY=… pnpm dev`) survives a blank placeholder in a file loaded without
+ * `override`: `.env.local` is scaffolded from `.env.example`, full of `KEY=` lines, and those
+ * used to delete exactly the values a cloud session supplied.
  */
 import { config, type DotenvParseOutput } from 'dotenv';
 import { existsSync } from 'node:fs';
@@ -35,12 +39,20 @@ const projectRoot = process.cwd();
 
 const SAFE_KEY = /^[A-Z][A-Z0-9_]*$/;
 
-function applyDotenvFile(envFilePath: string, override = false): void {
+/**
+ * Loads one env file into `process.env`, then unsets every key the file names whose value in
+ * effect is empty. Without `override` the shell wins, blank file line or not.
+ *
+ * @param envFilePath - absolute path of the `.env.*` file
+ * @param override - whether the file's values replace ones already in `process.env`
+ */
+export function applyDotenvFile(envFilePath: string, override = false): void {
   const result = config({ path: envFilePath, override });
   const parsed: DotenvParseOutput = result.parsed ?? {};
-  for (const [key, value] of Object.entries(parsed)) {
+  for (const key of Object.keys(parsed)) {
     if (!SAFE_KEY.test(key)) continue;
-    if (value === '') {
+    // eslint-disable-next-line security/detect-object-injection -- key validated against /^[A-Z][A-Z0-9_]*$/ above
+    if (process.env[key] === '') {
       // eslint-disable-next-line security/detect-object-injection -- key validated against /^[A-Z][A-Z0-9_]*$/ above
       delete process.env[key];
     }

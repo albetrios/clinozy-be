@@ -193,6 +193,27 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
+      - name: Derive NODE_ENV from the deploy environment
+        # NODE_ENV is the deploy TARGET, so it comes from the resolved environment — the
+        # same way clinozy-fe derives VITE_APP_ENV — and is never a hand-set value. Both
+        # mirrors below (to the runner and to Railway) set NODE_ENV=$ENVIRONMENT. Before
+        # this, NODE_ENV reached Railway only if `pnpm github:sync` had pushed it, and the
+        # runtime image defaults to NODE_ENV=production (Dockerfile), so a development
+        # GitHub Environment missing it ran its services as production, silently. A
+        # GitHub Environment value naming ANOTHER environment is a misconfiguration and
+        # stops the deploy. Pinned by src/tests/unit/ci/deploy-node-env.policy.unit.test.ts.
+        run: |
+          set -euo pipefail
+          configured="$(jq -nr \
+            --argjson vars "$GH_VARS_JSON" \
+            --argjson secrets "$GH_SECRETS_JSON" \
+            '($vars + $secrets).NODE_ENV // ""')"
+          if [ -n "$configured" ] && [ "$configured" != "$ENVIRONMENT" ]; then
+            echo "::error::The ${ENVIRONMENT} GitHub Environment sets NODE_ENV=${configured} — it must be ${ENVIRONMENT}, or unset (the deploy sets it)."
+            exit 1
+          fi
+          echo "NODE_ENV=${ENVIRONMENT} for this deploy (GitHub Environment value: ${configured:-unset})."
+
       - name: Export GitHub Environment to runner
         # Persist every GitHub Environment secret + variable into $GITHUB_ENV
         # so EVERY subsequent step in this job sees them as real process.env
@@ -213,7 +234,8 @@ jobs:
           jq -nrj \
             --argjson vars "$GH_VARS_JSON" \
             --argjson secrets "$GH_SECRETS_JSON" \
-            '($vars + $secrets)
+            --arg environment "$ENVIRONMENT" \
+            '($vars + $secrets + {NODE_ENV: $environment})
               | to_entries
               | map(select(.value != null and .value != ""))
               | .[]
@@ -540,7 +562,8 @@ jobs:
           jq -nrj \
             --argjson vars "$GH_VARS_JSON" \
             --argjson secrets "$GH_SECRETS_JSON" \
-            '($vars + $secrets)
+            --arg environment "$ENVIRONMENT" \
+            '($vars + $secrets + {NODE_ENV: $environment})
               | to_entries
               | map(select(.value != null and .value != ""))
               | .[]

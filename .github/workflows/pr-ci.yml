@@ -454,11 +454,19 @@ jobs:
 
       - uses: ./.github/actions/setup-node-pnpm
 
-      - name: Dependency audit (all deps)
-        run: pnpm deps:audit
-
+      # The PRODUCTION tree is the blocking gate: those packages ship in the image.
+      # Ordered first so it is always evaluated — with the full-tree sweep first, a
+      # dev-only failure SKIPPED this step and the audit that matters went unreported.
       - name: Production dependency audit
         run: pnpm deps:audit:prod
+
+      # The full tree (incl. devDependencies) is reported but non-blocking: a dev-only
+      # advisory with no published fix would otherwise wedge every PR with no honest way
+      # out. Same policy as clinozy-fe's Security audit. Failures stay visible in this
+      # step's log; make it blocking again once the dev-only backlog is empty.
+      - name: Dependency audit (all deps, advisory)
+        continue-on-error: true
+        run: pnpm deps:audit
 
   security-secrets:
     name: Security secrets

@@ -166,7 +166,9 @@ A drift between any two dimensions silently breaks deploys:
 
 - Branch / GH env mismatch → workflow targets an env that has no secrets → Zod-rejects on
   first request.
-- `NODE_ENV` value missing → `env.config.ts` throws at boot with no meaningful message.
+- `NODE_ENV` value not in the enum → `env.config.ts` throws at boot with no meaningful message. (The
+  deploy sets `NODE_ENV` from the environment's name, so a GitHub Environment can no longer leave it
+  out — but the name must be an enum value.)
 - GH env config missing → workflow runs but has no protection / secrets.
 
 `pnpm github:sync --check` is the single source of truth: if that command is green,
