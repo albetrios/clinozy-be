@@ -11,7 +11,8 @@ import { DBML_OUTPUT_PATH } from '@/shared/constants/project-identity.constants.
 const ROUTES_CATALOG_PATH = 'docs/routes.txt';
 const SRC_STRUCTURE_TREE_PATH = 'docs/reference/architecture/src-structure-tree.txt';
 const DBML_PATH = DBML_OUTPUT_PATH;
-const ONE_MEGABYTE = 1048576;
+/** Largest blob a commit may stage — 3 MB, so an iteration's prototype export (~2.5 MB) fits. */
+const STAGED_FILE_LIMIT_BYTES = 3 * 1024 * 1024;
 
 /** One labeled step in the pre-commit guard sequence. */
 export interface GuardStep {
@@ -203,12 +204,12 @@ function checkLargeStagedFiles(stagedFiles: string[]): number {
     });
     if (result.status !== 0) continue; // skip files git cannot resolve
     const size = Number.parseInt(result.stdout.trim(), 10);
-    if (Number.isFinite(size) && size > ONE_MEGABYTE) {
+    if (Number.isFinite(size) && size > STAGED_FILE_LIMIT_BYTES) {
       largeFiles.push(`  ${file} (${Math.floor(size / 1024)}KB)`);
     }
   }
   if (largeFiles.length > 0) {
-    console.error(`ERROR: Files exceed 1MB limit:\n${largeFiles.join('\n')}`);
+    console.error(`ERROR: Files exceed 3MB limit:\n${largeFiles.join('\n')}`);
     return 1;
   }
   return 0;
@@ -372,9 +373,9 @@ export function buildGuardSteps(options: {
     },
     {
       id: '16',
-      label: 'Large staged files (>1MB)',
+      label: 'Large staged files (>3MB)',
       when: 'always',
-      description: 'reject staged files over 1MB',
+      description: 'reject staged files over 3MB',
     },
     {
       id: '17',
@@ -544,7 +545,7 @@ export function runPreCommitGuard(options: RunGuardOptions = {}): number {
         run: () => checkConflictMarkers(stagedFiles),
       },
       {
-        label: 'Large staged files (>1MB)',
+        label: 'Large staged files (>3MB)',
         run: () => checkLargeStagedFiles(stagedFiles),
       },
       {

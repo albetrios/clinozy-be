@@ -119,6 +119,14 @@ describe('run-pre-commit-guard conditionals', () => {
     expect(stepsWithCheck.some((step) => step.id === '6c')).toBe(true);
   });
 
+  it('limits staged files to 3MB so an iteration prototype export fits', () => {
+    const largeFileStep = buildGuardSteps({ stagedFiles: [], scripts: baseScripts }).find(
+      (step) => step.id === '16',
+    );
+    expect(largeFileStep?.label).toBe('Large staged files (>3MB)');
+    expect(largeFileStep?.when).toBe('always');
+  });
+
   it('omits validate:test-naming when script is missing', () => {
     const steps = buildGuardSteps({
       stagedFiles: [],
