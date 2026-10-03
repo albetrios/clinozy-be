@@ -28,7 +28,7 @@ describe('webauthn user-verification policy (sec-r4-A2)', () => {
 
   it('every userVerification assignment uses "required"', () => {
     const matches = [...source.matchAll(/userVerification:\s*['"]([a-z]+)['"]/g)];
-    expect(matches.length).toBeGreaterThanOrEqual(3); // registration, authentication, decoy
+    expect(matches.length).toBeGreaterThanOrEqual(2); // registration, authentication (one path for every email)
     for (const [, value] of matches) {
       expect(value).toBe('required');
     }
