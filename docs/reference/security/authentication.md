@@ -51,6 +51,8 @@ Schema default is `CAPTCHA_PROVIDER=disabled`. In `development`, verification is
 
 Outside production (`development`), the middleware fail-opens by default when Turnstile is not configured.
 
+**Local CAPTCHA (opt-in).** `pnpm setup:local --only-env --with-captcha` turns Turnstile on locally with Cloudflare's published always-pass **test** keys (the real widget and siteverify round trip on `localhost`) and sets `CAPTCHA_BYPASS_ALLOWED=true` so k6 and the API smoke test pass with the dev `X-Captcha-Bypass` header; `--without-captcha` turns it off. A test secret's results always name the hostname `example.com`, so the verifier skips its hostname pin for Cloudflare test secrets only — and **production boot rejects a Cloudflare test `CAPTCHA_SECRET`** (`1x…AA` / `2x…AA` / `3x…AA`), so a deployed backend always pins and never runs on a secret that passes every token.
+
 ## Email verification-code environment safety
 
 `EmailLoginService.sendCode` **never** returns the raw sign-in code in the JSON body. The code leaves the service only via the `AUTH_EVENT.EMAIL_VERIFICATION_CODE_REQUESTED` event payload (consumed by the mail handler) and the resulting email — identical behavior across every environment. Login is `POST /api/v1/auth/email/login` with `{ email, code }`, gated by a per-user attempt cap. Codes are 6-char alphanumeric and persisted only as a keyed, user-scoped HMAC (never plaintext, never bare sha256).

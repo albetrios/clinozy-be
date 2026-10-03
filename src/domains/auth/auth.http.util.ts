@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { NotImplementedError } from '@/shared/errors/index.js';
 import {
@@ -7,6 +7,7 @@ import {
 } from '@/shared/utils/i18n/i18n-response.util.js';
 import { translateRequestMessage } from '@/shared/utils/i18n/translate-request.util.js';
 import { env } from '@/shared/config/env.config.js';
+import { deriveSecretsSubKey } from '@/shared/utils/security/secrets-sub-key.util.js';
 import { SECONDS_PER_DAY } from '@/shared/constants/index.js';
 import { OAUTH_STATE_TTL_SECONDS } from '@/shared/constants/ttl.constants.js';
 
@@ -71,18 +72,8 @@ const SESSION_COOKIE_SEPARATOR = '.';
 /** Separator between a refresh secret's random part and its issuance MAC. */
 const REFRESH_SECRET_MAC_SEPARATOR = '~';
 
-let cachedRefreshSecretMacKey: Buffer | undefined;
-
-/** Key for refresh-secret issuance MACs, derived from `SECRETS_ENCRYPTION_KEY` (like the verification-code pepper). */
-function refreshSecretMacKey(): Buffer {
-  cachedRefreshSecretMacKey ??= createHash('sha256')
-    .update(`refresh-secret-mac:${env.SECRETS_ENCRYPTION_KEY}`)
-    .digest();
-  return cachedRefreshSecretMacKey;
-}
-
 function refreshSecretMac(options: { userId: number; randomPart: string }): string {
-  return createHmac('sha256', refreshSecretMacKey())
+  return createHmac('sha256', deriveSecretsSubKey('refresh-secret-mac'))
     .update(`refresh-secret:${options.userId}:${options.randomPart}`)
     .digest('base64url');
 }

@@ -3,7 +3,6 @@ import dotenv from 'dotenv';
 import {
   EXTERNAL_CREDENTIALS,
   fillExternalCredentials,
-  parseEnvFileContent,
 } from '@tooling/dev/external-credentials.js';
 
 const EXAMPLE = [
@@ -27,7 +26,7 @@ const REPORTED_KEYS = EXTERNAL_CREDENTIALS.filter((credential) => credential.rep
 );
 
 function file(label: string, content: string) {
-  return { label, values: parseEnvFileContent(content) };
+  return { label, values: dotenv.parse(content) };
 }
 
 describe('setup:local — third-party API keys for .env.local', () => {

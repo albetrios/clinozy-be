@@ -2,10 +2,10 @@
 /**
  * `pnpm setup:local` — one-command local bootstrap.
  *
- * Idempotent end-to-end flow: preflight → dependencies → env scaffolding →
- * Docker (postgres + redis) → migrations → optional seed/worker/toxiproxy →
- * start `pnpm dev`. Every phase is re-run safe: each step checks its own
- * "already done" state and reports "skipped".
+ * Idempotent end-to-end flow: preflight → dependencies → env (`.env.local`) →
+ * Docker (postgres + redis) → migrations → local database logins → optional
+ * seed/worker/toxiproxy → start `pnpm dev`. Every phase is re-run safe: each step
+ * checks its own "already done" state and reports "skipped".
  *
  * Usage:
  *   pnpm setup:local
@@ -22,19 +22,19 @@
  *   pnpm setup:local --only-env --with-captcha   (turn local CAPTCHA on — Cloudflare test keys)
  *   pnpm setup:local --only-env --without-captcha (turn it back off — the default)
  *
- * Designed to never overwrite real credentials: if `.env.local` already exists it is
- * left untouched. Use `--force-env-local` to rewrite it. `--only-env` scaffolds just a
- * self-contained `.env.local` (seeded from `.env.example` with a generated RS256 JWT
- * keypair + SECRETS_ENCRYPTION_KEY and localhost DB/Redis URLs) and exits — used by the
- * cloud-agent bootstrap (`tooling/setup/agent/bootstrap.sh`).
+ * Never overwrites a real credential. A missing `.env.local` is scaffolded self-contained
+ * (`.env.example` + a generated RS256 JWT keypair + SECRETS_ENCRYPTION_KEY + localhost DB/Redis
+ * URLs); an existing one is only rewritten with `--force-env-local`, and otherwise just gets the
+ * targeted updates below. `--only-env` runs the env steps (and the database logins when the local
+ * database is up) and exits — used by the cloud-agent bootstrap (`tooling/setup/agent/bootstrap.sh`).
  *
- * Third-party API keys (Stripe, Resend, S3, PostHog, OpenTelemetry — the list in
- * `external-credentials.ts`) cannot be
- * generated: `.env.example` ships placeholders for them. Every run — `--only-env` included, on a
- * fresh or an existing `.env.local` — copies each key still on its placeholder from the hosted
- * development target's env file when it is present, else from the process environment (shell
- * exports, CI or cloud variables) — never overwriting a value the developer set — and lists the
- * keys that still need a real value. Key names are printed, never values.
+ * Targeted `.env.local` updates, every run:
+ * - Third-party API keys (Stripe, Resend, S3, PostHog, OpenTelemetry — `external-credentials.ts`)
+ *   still on their `.env.example` placeholder are copied from the hosted development target's env
+ *   file, else from the process environment; key names are printed, never values.
+ * - `--with-captcha` / `--without-captcha` turn local CAPTCHA on (Cloudflare test keys) or off.
+ * - The database logins the migrations create (`local-database-logins.ts`) are enabled and their
+ *   URLs written.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -47,7 +47,6 @@ import {
   EXTERNAL_CREDENTIALS,
   EXTERNAL_CREDENTIAL_SOURCE,
   fillExternalCredentials,
-  parseEnvFileContent,
 } from './external-credentials.js';
 import { upsertEnvAssignment } from './env-file.util.js';
 import { applyLocalCaptcha, TURNSTILE_ALWAYS_PASS_TEST_SITE_KEY } from './local-captcha.js';
@@ -58,6 +57,7 @@ import {
   localDatabaseLogins,
   planLocalDatabaseLogins,
 } from './local-database-logins.js';
+import dotenv from 'dotenv';
 import postgres from 'postgres';
 import {
   resolveDerivedNames,
@@ -66,6 +66,8 @@ import {
 import { loadConfig } from '@tooling/setup/common/config.js';
 
 const PROJECT_ROOT = process.cwd();
+/** The machine-local env file every env step reads and updates. */
+const ENV_LOCAL_PATH = resolve(PROJECT_ROOT, '.env.local');
 const REQUIRED_NODE_MAJOR = 24;
 const SETUP_CONFIG = loadConfig();
 const PROJECT_DISPLAY_NAME = SETUP_CONFIG.project.displayName;
@@ -405,8 +407,7 @@ function runEnvScaffolding(reports: StepReport[], options: BootstrapOptions): vo
 function configureLocalCaptcha(reports: StepReport[], options: BootstrapOptions): void {
   if (options.captcha === 'unchanged') return;
   const startedAt = performance.now();
-  const envLocalPath = resolve(PROJECT_ROOT, '.env.local');
-  if (!existsSync(envLocalPath)) {
+  if (!existsSync(ENV_LOCAL_PATH)) {
     reportStep(reports, 'local CAPTCHA', 'skipped', startedAt, 'no .env.local yet');
     return;
   }
@@ -421,7 +422,7 @@ function configureLocalCaptcha(reports: StepReport[], options: BootstrapOptions)
     );
     return;
   }
-  writeFileSync(envLocalPath, applyLocalCaptcha(readFileSync(envLocalPath, 'utf8'), enabled));
+  writeFileSync(ENV_LOCAL_PATH, applyLocalCaptcha(readFileSync(ENV_LOCAL_PATH, 'utf8'), enabled));
   if (!enabled) {
     reportStep(reports, 'local CAPTCHA', 'done', startedAt, 'off (CAPTCHA_PROVIDER=disabled)');
     return;
@@ -450,9 +451,8 @@ const PROCESS_ENVIRONMENT_LABEL = 'environment variables';
  */
 function syncExternalCredentials(reports: StepReport[], options: BootstrapOptions): void {
   const startedAt = performance.now();
-  const envLocalPath = resolve(PROJECT_ROOT, '.env.local');
   const examplePath = resolve(PROJECT_ROOT, '.env.example');
-  if (!(existsSync(envLocalPath) && existsSync(examplePath))) {
+  if (!(existsSync(ENV_LOCAL_PATH) && existsSync(examplePath))) {
     reportStep(reports, 'third-party API keys', 'skipped', startedAt, 'no .env.local yet');
     return;
   }
@@ -462,19 +462,19 @@ function syncExternalCredentials(reports: StepReport[], options: BootstrapOption
       ? [
           {
             label: EXTERNAL_CREDENTIAL_SOURCE,
-            values: parseEnvFileContent(readFileSync(sourcePath, 'utf8')),
+            values: dotenv.parse(readFileSync(sourcePath, 'utf8')),
           },
         ]
       : []),
     { label: PROCESS_ENVIRONMENT_LABEL, values: process.env },
   ];
   const fill = fillExternalCredentials({
-    local: readFileSync(envLocalPath, 'utf8'),
+    local: readFileSync(ENV_LOCAL_PATH, 'utf8'),
     example: readFileSync(examplePath, 'utf8'),
     sources,
   });
   const changed = fill.copied.length > 0 || fill.retired.length > 0;
-  if (changed && !options.check) writeFileSync(envLocalPath, fill.content);
+  if (changed && !options.check) writeFileSync(ENV_LOCAL_PATH, fill.content);
 
   const copiedLabel = [
     ...sources.map(({ label }) => {
@@ -545,6 +545,56 @@ function injectGeneratedSecrets(content: string): string {
 // `setup:local` write credentials the compose stack does not accept, so a freshly
 // adopted project could never migrate. Local Postgres/Redis are plaintext (no TLS).
 const LOCAL_DATABASE_URL = `postgresql://${LOCAL_DATABASE_NAME}:${LOCAL_DATABASE_NAME}@localhost:5432/${LOCAL_DATABASE_NAME}`;
+function injectLocalhostOverrides(content: string): string {
+  let updated = content;
+  updated = upsertEnvAssignment(updated, 'DATABASE_URL', LOCAL_DATABASE_URL);
+  updated = upsertEnvAssignment(updated, 'DATABASE_MIGRATION_URL', LOCAL_DATABASE_URL);
+  updated = upsertEnvAssignment(updated, 'REDIS_URL', 'redis://localhost:6379');
+  updated = upsertEnvAssignment(updated, 'DATABASE_SSL_ENABLED', 'false');
+  updated = upsertEnvAssignment(updated, 'DATABASE_SSL_REJECT_UNAUTHORIZED', 'false');
+  return updated;
+}
+
+function scaffoldEnvLocal(reports: StepReport[], options: BootstrapOptions): void {
+  const startedAt = performance.now();
+  if (existsSync(ENV_LOCAL_PATH) && !options.forceEnvLocal) {
+    reportStep(
+      reports,
+      '.env.local',
+      'skipped',
+      startedAt,
+      'present (use --force-env-local to rewrite)',
+    );
+    return;
+  }
+  if (options.check) {
+    reportStep(
+      reports,
+      '.env.local',
+      'warning',
+      startedAt,
+      '--check mode (would create self-contained .env.local)',
+    );
+    return;
+  }
+  const examplePath = resolve(PROJECT_ROOT, '.env.example');
+  if (!existsSync(examplePath)) {
+    reportStep(reports, '.env.local', 'failed', startedAt, '.env.example missing');
+    process.exit(1);
+  }
+  let content = readFileSync(examplePath, 'utf8');
+  content = injectGeneratedSecrets(content);
+  content = injectLocalhostOverrides(content);
+  writeFileSync(ENV_LOCAL_PATH, content);
+  reportStep(
+    reports,
+    '.env.local',
+    'done',
+    startedAt,
+    'self-contained: .env.example + generated JWT keys/SECRETS_ENCRYPTION_KEY + localhost DB/Redis',
+  );
+}
+
 /**
  * Turns on the three database logins `.env.local` connects as — runtime (`clinozy_be_app`),
  * maintenance and operator — and writes their URLs (docs/deployment/runbooks/
@@ -559,13 +609,12 @@ async function provisionLocalDatabaseLogins(
 ): Promise<void> {
   const startedAt = performance.now();
   const phase = 'database logins';
-  const envLocalPath = resolve(PROJECT_ROOT, '.env.local');
-  if (!existsSync(envLocalPath)) {
+  if (!existsSync(ENV_LOCAL_PATH)) {
     reportStep(reports, phase, 'skipped', startedAt, 'no .env.local yet');
     return;
   }
-  const envLocal = readFileSync(envLocalPath, 'utf8');
-  const currentDatabaseUrl = parseEnvFileContent(envLocal).DATABASE_URL;
+  const envLocal = readFileSync(ENV_LOCAL_PATH, 'utf8');
+  const currentDatabaseUrl = dotenv.parse(envLocal).DATABASE_URL;
   if (currentDatabaseUrl && !isLocalDatabaseUrl(currentDatabaseUrl)) {
     reportStep(reports, phase, 'skipped', startedAt, 'DATABASE_URL points at a remote database');
     return;
@@ -624,7 +673,7 @@ async function provisionLocalDatabaseLogins(
     }
     for (const login of planned) await superuser.unsafe(alterRoleStatement(login));
     writeFileSync(
-      envLocalPath,
+      ENV_LOCAL_PATH,
       applyLocalDatabaseLogins({ envLocal, superuserUrl: LOCAL_DATABASE_URL, planned }),
     );
     for (const login of planned) {
@@ -662,57 +711,6 @@ async function provisionLocalDatabaseLogins(
   } finally {
     await superuser.end({ timeout: 2 });
   }
-}
-
-function injectLocalhostOverrides(content: string): string {
-  let updated = content;
-  updated = upsertEnvAssignment(updated, 'DATABASE_URL', LOCAL_DATABASE_URL);
-  updated = upsertEnvAssignment(updated, 'DATABASE_MIGRATION_URL', LOCAL_DATABASE_URL);
-  updated = upsertEnvAssignment(updated, 'REDIS_URL', 'redis://localhost:6379');
-  updated = upsertEnvAssignment(updated, 'DATABASE_SSL_ENABLED', 'false');
-  updated = upsertEnvAssignment(updated, 'DATABASE_SSL_REJECT_UNAUTHORIZED', 'false');
-  return updated;
-}
-
-function scaffoldEnvLocal(reports: StepReport[], options: BootstrapOptions): void {
-  const startedAt = performance.now();
-  const envLocalPath = resolve(PROJECT_ROOT, '.env.local');
-  if (existsSync(envLocalPath) && !options.forceEnvLocal) {
-    reportStep(
-      reports,
-      '.env.local',
-      'skipped',
-      startedAt,
-      'present (use --force-env-local to rewrite)',
-    );
-    return;
-  }
-  if (options.check) {
-    reportStep(
-      reports,
-      '.env.local',
-      'warning',
-      startedAt,
-      '--check mode (would create self-contained .env.local)',
-    );
-    return;
-  }
-  const examplePath = resolve(PROJECT_ROOT, '.env.example');
-  if (!existsSync(examplePath)) {
-    reportStep(reports, '.env.local', 'failed', startedAt, '.env.example missing');
-    process.exit(1);
-  }
-  let content = readFileSync(examplePath, 'utf8');
-  content = injectGeneratedSecrets(content);
-  content = injectLocalhostOverrides(content);
-  writeFileSync(envLocalPath, content);
-  reportStep(
-    reports,
-    '.env.local',
-    'done',
-    startedAt,
-    'self-contained: .env.example + generated JWT keys/SECRETS_ENCRYPTION_KEY + localhost DB/Redis',
-  );
 }
 
 function runDocker(reports: StepReport[], options: BootstrapOptions): void {

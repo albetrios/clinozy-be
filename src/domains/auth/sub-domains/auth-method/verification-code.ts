@@ -1,5 +1,5 @@
-import { createHash, createHmac, randomInt, timingSafeEqual } from 'node:crypto';
-import { env } from '@/shared/config/env.config.js';
+import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
+import { deriveSecretsSubKey } from '@/shared/utils/security/secrets-sub-key.util.js';
 
 /** Number of characters in an email verification code. */
 export const VERIFICATION_CODE_LENGTH = 6;
@@ -38,20 +38,9 @@ export const VERIFICATION_CODE_RESEND_COOLDOWN_SECONDS = 60;
  */
 export const STATIC_VERIFICATION_CODE = 'TEST24';
 
-/**
- * Memoized HMAC pepper derived from the required {@link env.SECRETS_ENCRYPTION_KEY}.
- *
- * @remarks
- * Derived lazily (not at module load) so importing this util never depends on env being validated
- * first. A labelled SHA-256 sub-key keeps the verification-code pepper domain-separated from any
- * other use of the master secret.
- */
-let cachedPepper: Buffer | null = null;
+/** HMAC pepper for verification codes — a labelled sub-key of `SECRETS_ENCRYPTION_KEY`. */
 function verificationCodePepper(): Buffer {
-  cachedPepper ??= createHash('sha256')
-    .update(`verification-code-pepper:${env.SECRETS_ENCRYPTION_KEY}`)
-    .digest();
-  return cachedPepper;
+  return deriveSecretsSubKey('verification-code-pepper');
 }
 
 /**

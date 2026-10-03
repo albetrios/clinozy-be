@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 /**
  * Local load-testing monitor — a Bull-Board-style live view of API HTTP traffic during a load run.
  *
@@ -702,7 +702,7 @@ th .info .tip{right:-4px;text-transform:none}
 <span class="p">$</span> <span class="e">TEST_MODE=true</span> pnpm dev
 
 <span class="c"># 3. this load-testing monitor (proxies :${PORT} -> ${UPSTREAM})</span>
-<span class="p">$</span> node tooling/load-test-monitor/server.mjs</pre>
+<span class="p">$</span> pnpm load:monitor</pre>
       </details>
     </div>
 

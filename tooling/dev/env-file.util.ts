@@ -2,6 +2,11 @@
  * Line-level editing of dotenv files for the local bootstrap (`pnpm setup:local`).
  */
 
+/** A `^KEY=…$` line pattern, multiline, with the key escaped for use in a RegExp. */
+function assignmentLine(key: string): RegExp {
+  return new RegExp(`^(${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}=.*)$`, 'm');
+}
+
 /**
  * Sets `KEY=<value>` in env-file `content`: replaces the key's existing line, or appends one.
  *
@@ -11,8 +16,7 @@
  * value is never read as a `String.replace` pattern (`$&`, `$1`).
  */
 export function upsertEnvAssignment(content: string, key: string, value: string): string {
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(`^${escapedKey}=.*$`, 'm');
+  const pattern = assignmentLine(key);
   const line = `${key}=${value}`;
   if (pattern.test(content)) return content.replace(pattern, () => line);
   return content.endsWith('\n') ? `${content}${line}\n` : `${content}\n${line}\n`;
@@ -20,8 +24,7 @@ export function upsertEnvAssignment(content: string, key: string, value: string)
 
 /** Comments out the key's assignment line (`KEY=…` → `# KEY=…`), so dotenv no longer sets it. */
 export function commentOutEnvAssignment(content: string, key: string): string {
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return content.replace(new RegExp(`^(${escapedKey}=.*)$`, 'm'), (line) => `# ${line}`);
+  return content.replace(assignmentLine(key), (line) => `# ${line}`);
 }
 
 /**

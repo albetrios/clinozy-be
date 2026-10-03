@@ -78,7 +78,7 @@ const SQL_IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
 const LOGIN_PASSWORD = /^[A-Za-z0-9_-]+$/;
 
 /** A password for a new login: 48 hex characters (safe in a URL and a SQL literal). */
-export function generateLoginPassword(): string {
+function generateLoginPassword(): string {
   return randomBytes(24).toString('hex');
 }
 

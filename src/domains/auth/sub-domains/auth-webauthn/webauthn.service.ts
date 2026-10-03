@@ -92,8 +92,8 @@ export type WebauthnAuthenticateOptionsResult = {
  *   counter regression surface as `UnauthorizedError` or `ValidationError` with
  *   WebAuthn-specific i18n keys (`errors:webauthnInvalidChallenge`,
  *   `errors:webauthnAuthenticationFailed`, `errors:webauthnCredentialNotFound`, …). The
- *   `authenticate/options` step never reveals account existence: unknown emails and
- *   emails without passkeys receive deterministic decoy options instead of an error.
+ *   `authenticate/options` step never reveals account existence: every email gets the same
+ *   options (discoverable credentials, no `allowCredentials`); only the challenge owner differs.
  * - **Side effects:** writes to {@link webauthn_credentials} (`createCredential`,
  *   `updateCounter`), to `auth.sessions` via {@link AuthSessionService.createSessionForUser},
  *   and to Redis (`webauthn:challenge:*`). Signs an RS256 JWT on successful login.
@@ -243,9 +243,7 @@ export class WebauthnService {
     _requestOrigin?: string,
   ): Promise<WebauthnAuthenticateOptionsResult> {
     const parsed = validateWebauthnAuthenticateOptions(body);
-    // `email` is required at the DTO layer (sec-A finding #24). The runtime check is
-    // retained only as a defense-in-depth for tests/callers that bypass the validator;
-    // the DTO produces a typed value so this branch should be unreachable in normal flow.
+    // `email` is required at the DTO layer (sec-A finding #24).
     const user = await this.userService.findByEmail(parsed.email);
     // Anti-enumeration (timing): the response below is identical for every email, but a KNOWN
     // email would otherwise incur an extra user-context credential query that an unknown email

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import dotenv from 'dotenv';
-import { formatEnvValue, upsertEnvAssignment } from '@tooling/dev/env-file.util.js';
 import { applyLocalCaptcha } from '@tooling/dev/local-captcha.js';
 import { TURNSTILE_ALWAYS_PASS_TEST_SECRET } from '@/shared/constants/security.constants.js';
 
@@ -37,32 +36,5 @@ describe('setup:local --with-captcha / --without-captcha', () => {
     expect(dotenv.parse(off).CAPTCHA_PROVIDER).toBe('disabled');
     expect(off.replace('CAPTCHA_PROVIDER=disabled', 'CAPTCHA_PROVIDER=turnstile')).toBe(on);
     expect(applyLocalCaptcha(on, true)).toBe(on);
-  });
-});
-
-describe('env-file editing (setup:local)', () => {
-  it('replaces an existing assignment and appends a missing one', () => {
-    const updated = upsertEnvAssignment(upsertEnvAssignment('A=1\nB=2\n', 'A', '9'), 'C', '3');
-    expect(updated).toBe('A=9\nB=2\nC=3\n');
-  });
-
-  it('writes a `$` in a value literally (never as a replacement pattern)', () => {
-    const updated = upsertEnvAssignment('SECRET=old\n', 'SECRET', 'pa$&ss$1');
-    expect(updated).toBe('SECRET=pa$&ss$1\n');
-  });
-
-  it('quotes a value that is not a bare token so dotenv reads it back unchanged', () => {
-    const values = [
-      'plain-token_1.2',
-      'Name <a@b.test>',
-      'with space',
-      'has"quote',
-      "it's",
-      '-----BEGIN KEY-----\nline two\n-----END KEY-----',
-    ];
-    for (const value of values) {
-      const parsed = dotenv.parse(upsertEnvAssignment('', 'KEY', formatEnvValue(value)));
-      expect(parsed.KEY).toBe(value);
-    }
   });
 });

@@ -99,11 +99,6 @@ export type ExternalCredentialSource = {
   values: Readonly<Record<string, string | undefined>>;
 };
 
-/** Parses env-file contents into their logical values (quotes stripped, escapes decoded). */
-export function parseEnvFileContent(content: string): Record<string, string> {
-  return dotenv.parse(content);
-}
-
 /**
  * Placeholders an older `.env.example` shipped as ACTIVE lines and the current one comments out.
  * Copied into existing `.env.local` files, they still switch a feature on against a host that does
@@ -111,7 +106,7 @@ export function parseEnvFileContent(content: string): Record<string, string> {
  * holding exactly one of these is treated as unset: filled when a source has a real value,
  * otherwise commented out.
  */
-export const RETIRED_PLACEHOLDERS: Readonly<Record<string, string>> = {
+const RETIRED_PLACEHOLDERS: Readonly<Record<string, string>> = {
   OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otel.example.com',
 };
 

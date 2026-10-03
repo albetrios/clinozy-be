@@ -15,10 +15,11 @@ authority becomes a connection-level property instead of a GUC-only one.
   maintenance-pool connection hits `deny_all` on the mail outbox / Stripe ledger / DLQ
   ledger) and grants `clinozy_be_app` membership so `SET LOCAL ROLE clinozy_be_app` tooling
   keeps working on maintenance connections.
-- **Local development is provisioned**: the compose Postgres role has LOGIN and the
-  gitignored local env file carries `DATABASE_MAINTENANCE_URL` — local runs and the DB
-  test suites exercise maintenance contexts as `clinozy_be_maintenance` (production-like RLS
-  instead of the superuser-exempt pool).
+- **Local development is provisioned**: `pnpm setup:local` enables the
+  `clinozy_be_maintenance` login and writes `DATABASE_MAINTENANCE_URL` to the gitignored
+  local env file — local runs exercise maintenance contexts as `clinozy_be_maintenance`
+  (production-like RLS instead of the superuser-exempt pool). See
+  [Local parity provisioning](#local-parity-provisioning-all-roles).
 - **Hosted environments are provisioned by clinozy-infra**: its Neon provisioning creates
   `clinozy_be_maintenance` as a `LOGIN NOBYPASSRLS` user on each environment's branch
   before the first deploy (next to `clinozy_be_app` and `clinozy_be_migrator` — see
@@ -108,9 +109,8 @@ canary). A deleted-and-recreated database therefore needs exactly three steps:
 2. **Migrate** — hosted: the deploy's `pnpm db:migrate` runs as `clinozy_be_migrator`,
    the very first run on the empty database included — the provider owner is not
    needed. The migrations skip the three users that already exist and create the rest
-   (`clinozy_be_owner`, `clinozy_be_operator`) `NOLOGIN`. Local: the compose superuser
-   runs the first `pnpm db:migrate`, then re-run the `ALTER ROLE … LOGIN PASSWORD` steps
-   above.
+   (`clinozy_be_owner`, `clinozy_be_operator`) `NOLOGIN`. Local: `pnpm setup:local` runs the
+   migrations as the compose superuser and then enables the local logins (see above).
 3. **Data** — reference data returns via `pnpm db:seed`; tenant/billing rows do
    not, and external state (e.g. Stripe customers pointing at vanished internal
    rows) needs reconciliation. Treat recreate as a provisioning event, not a
