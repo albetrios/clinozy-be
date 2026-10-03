@@ -46,11 +46,15 @@ export interface IdentityLiteralViolation {
 /**
  * Path prefixes and suffixes scanned files are drawn from. Prose that names the
  * base project is expected and is not an identity defect, so all Markdown and
- * the agent-tooling mirrors are out of scope.
+ * the agent-tooling mirrors are out of scope — and so are design iterations:
+ * `iterations/` holds the design tool's exports (a prototype HTML/JS bundle,
+ * kept byte-identical by the intake gate), reference material that is never
+ * built or deployed.
  */
 const EXCLUDED_PREFIXES: readonly string[] = [
   'docs/',
   'agent-os/',
+  'iterations/',
   '.claude/',
   '.cursor/',
   '.codex/',
