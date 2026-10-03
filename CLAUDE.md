@@ -497,7 +497,7 @@ Local SonarQube quality gate (pre-commit): `pnpm sonar:up` / `sonar:scan` / `son
 - `pnpm validate` — lint + typecheck + markdown lint (`biome check` covers lint + formatting; `docs:lint` is folded in because markdownlint otherwise runs only at pre-commit/pre-push, and a `--no-verify` commit skips it)
 - `pnpm test:bench` — autocannon single-endpoint benchmark
 - `pnpm validate:domain` — validate domain structure (CI gate)
-- `pnpm deps:audit` — run `pnpm audit` (must pass; CI fails on any vulnerability)
+- `pnpm deps:audit:prod` — `pnpm audit --prod`, the blocking gate (the production tree ships in the image). `pnpm deps:audit` — the full tree incl. devDependencies, **report-only** in CI and `ci:quality` (`deps:audit:report`), so a dev-only advisory with no published fix cannot wedge every PR (same policy as clinozy-fe). Fix an advisory with an `overrides` entry in `pnpm-workspace.yaml`; only when no fixed version exists, add its GHSA to `auditConfig.ignoreGhsas` there with its path and removal condition.
 - `pnpm deps:update` — safe patch/minor updates within ranges; run audit + validate + test after
 - `pnpm db:seed` — seed minimal dev data (reference/bootstrap only)
 - `pnpm db:seed:full` — seed full demo data (fixed demo set)

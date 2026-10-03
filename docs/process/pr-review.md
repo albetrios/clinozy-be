@@ -135,7 +135,7 @@ Check only what the PR touches. Skip categories marked **none** in the PR **Revi
 
 | Check | What to look for | Typical severity |
 | ----- | ---------------- | ---------------- |
-| Audit | `pnpm deps:audit` / CI security audit green | Blocker |
+| Audit | `pnpm deps:audit:prod` / CI security audit green; read the report-only full-tree `deps:audit` log; any new `auditConfig.ignoreGhsas` entry names its path and removal condition | Blocker |
 | Justification | New packages are necessary; prefer existing utilities | Major |
 
 ---

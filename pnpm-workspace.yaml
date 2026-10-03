@@ -29,6 +29,17 @@ packageExtensions:
     dependencies:
       esbuild: ^0.25.0
 
+# Advisories accepted because no fixed version exists — one entry per GHSA, each with its
+# path and the condition for removing it. Prefer an override above whenever a fix exists.
+auditConfig:
+  ignoreGhsas:
+    # braces <=3.0.3 — GHSA-vfj7-8cjw-p6xm (high): stack-exhaustion DoS through deeply
+    # nested brace patterns. No patched release (3.0.3 is the newest). Dev-only: reached via
+    # markdownlint-cli2 and tsc-alias > micromatch / chokidar, which expand repo-controlled
+    # globs, never user input; the production tree is clean (`pnpm deps:audit:prod`).
+    # Remove when braces publishes a fix, then add an override for it.
+    - GHSA-vfj7-8cjw-p6xm
+
 overrides:
   # Transitive advisories with no direct upgrade path (`deps:audit` is a required
   # PR-CI gate). CARET-BOUNDED on purpose: an open-ended `>=3.3.17` resolves to the
