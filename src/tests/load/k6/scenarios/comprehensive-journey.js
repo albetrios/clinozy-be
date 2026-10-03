@@ -22,6 +22,7 @@
  *       VUS=100 DURATION=90s k6 run comprehensive-journey.js  (load)
  */
 import http from 'k6/http';
+import { PUBLIC_AUTH_FORM_HEADERS } from '../helpers/config.js';
 import { sleep } from 'k6';
 import { SharedArray } from 'k6/data';
 import { Trend, Counter } from 'k6/metrics';
@@ -83,7 +84,7 @@ export function setup() {
       `${API}/auth/login`,
       JSON.stringify({ email: c.email, password: c.password }),
       {
-        headers: { 'Content-Type': 'application/json' },
+        headers: PUBLIC_AUTH_FORM_HEADERS,
         tags: { name: 'login' },
       },
     );
@@ -246,7 +247,7 @@ function doLogin() {
     `${API}/auth/login`,
     JSON.stringify({ email: cred.email, password: cred.password }),
     {
-      headers: { 'Content-Type': 'application/json' },
+      headers: PUBLIC_AUTH_FORM_HEADERS,
       tags: { name: 'login' },
     },
   );

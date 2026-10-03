@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { formatEnvValue, upsertEnvAssignment } from './env-file.util.js';
 
 /**
  * One value `.env.local` cannot generate for itself: a credential (or the setting tied to it) that
@@ -93,20 +94,6 @@ function isPlaceholder(value: string | undefined, exampleValue: string | undefin
   return value === undefined || value.trim() === '' || value === exampleValue;
 }
 
-/** `KEY=value`, double-quoted (dotenv escaping) when the value is not a bare token. */
-function formatAssignment(key: string, value: string): string {
-  return /^[A-Za-z0-9_./:@+,=-]*$/.test(value)
-    ? `${key}=${value}`
-    : `${key}=${JSON.stringify(value)}`;
-}
-
-function upsertAssignment(content: string, key: string, value: string): string {
-  const pattern = new RegExp(`^${key}=.*$`, 'm');
-  const line = formatAssignment(key, value);
-  if (pattern.test(content)) return content.replace(pattern, () => line);
-  return content.endsWith('\n') ? `${content}${line}\n` : `${content}\n${line}\n`;
-}
-
 /**
  * Fills the {@link EXTERNAL_CREDENTIALS} that `.env.local` still holds as placeholders with real
  * values from the given sources, first source first (`pnpm setup:local` passes the hosted
@@ -148,7 +135,7 @@ export function fillExternalCredentials(options: {
       if (kind === 'secret') fill.missing.push(key);
       continue;
     }
-    fill.content = upsertAssignment(fill.content, key, sourceValue);
+    fill.content = upsertEnvAssignment(fill.content, key, formatEnvValue(sourceValue));
     fill.copied.push({ key, source: source.label });
   }
   return fill;

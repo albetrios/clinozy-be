@@ -19,6 +19,8 @@
  *   pnpm setup:local --skip-mac-tools           (skip the macOS external-tool install/upgrade)
  *   pnpm setup:local --skip-mcp                  (skip MCP setup: CodeGraph + Headroom + .mcp.json)
  *   pnpm setup:local --only-env                  (scaffold .env.local only, then exit)
+ *   pnpm setup:local --only-env --with-captcha   (turn local CAPTCHA on — Cloudflare test keys)
+ *   pnpm setup:local --only-env --without-captcha (turn it back off — the default)
  *
  * Designed to never overwrite real credentials: if `.env.local` already exists it is
  * left untouched. Use `--force-env-local` to rewrite it. `--only-env` scaffolds just a
@@ -46,6 +48,8 @@ import {
   fillExternalCredentials,
   parseEnvFileContent,
 } from './external-credentials.js';
+import { upsertEnvAssignment } from './env-file.util.js';
+import { applyLocalCaptcha, TURNSTILE_ALWAYS_PASS_TEST_SITE_KEY } from './local-captcha.js';
 import { resolveDerivedNames } from '@tooling/setup/codegen/project-identity.util.js';
 import { loadConfig } from '@tooling/setup/common/config.js';
 
@@ -79,6 +83,8 @@ interface BootstrapOptions {
   skipMacTools: boolean;
   forceEnvLocal: boolean;
   onlyEnv: boolean;
+  /** `--with-captcha` / `--without-captcha`: turn local CAPTCHA enforcement on or off. */
+  captcha: 'on' | 'off' | 'unchanged';
   seed: 'none' | 'minimal' | 'full';
   withWorker: boolean;
   withToxiproxy: boolean;
@@ -183,6 +189,7 @@ function parseArgs(): BootstrapOptions {
     skipMacTools: has('--skip-mac-tools'),
     forceEnvLocal: has('--force-env-local'),
     onlyEnv: has('--only-env'),
+    captcha: has('--with-captcha') ? 'on' : has('--without-captcha') ? 'off' : 'unchanged',
     seed,
     withWorker: has('--with-worker'),
     withToxiproxy: has('--with-toxiproxy'),
@@ -372,6 +379,49 @@ function runEnvScaffolding(reports: StepReport[], options: BootstrapOptions): vo
   logHeading('3/9 Environment (.env.local)');
   scaffoldEnvLocal(reports, options);
   syncExternalCredentials(reports, options);
+  configureLocalCaptcha(reports, options);
+}
+
+/**
+ * `--with-captcha` / `--without-captcha`: turns local CAPTCHA enforcement on (Cloudflare's
+ * always-pass test keys — the real widget and verify call on localhost) or off (the default).
+ * Without either flag, `.env.local` keeps whatever it has.
+ */
+function configureLocalCaptcha(reports: StepReport[], options: BootstrapOptions): void {
+  if (options.captcha === 'unchanged') return;
+  const startedAt = performance.now();
+  const envLocalPath = resolve(PROJECT_ROOT, '.env.local');
+  if (!existsSync(envLocalPath)) {
+    reportStep(reports, 'local CAPTCHA', 'skipped', startedAt, 'no .env.local yet');
+    return;
+  }
+  const enabled = options.captcha === 'on';
+  if (options.check) {
+    reportStep(
+      reports,
+      'local CAPTCHA',
+      'warning',
+      startedAt,
+      `--check mode (would turn CAPTCHA ${enabled ? 'on' : 'off'})`,
+    );
+    return;
+  }
+  writeFileSync(envLocalPath, applyLocalCaptcha(readFileSync(envLocalPath, 'utf8'), enabled));
+  if (!enabled) {
+    reportStep(reports, 'local CAPTCHA', 'done', startedAt, 'off (CAPTCHA_PROVIDER=disabled)');
+    return;
+  }
+  reportStep(
+    reports,
+    'local CAPTCHA',
+    'done',
+    startedAt,
+    'on — Turnstile with the always-pass test secret; k6 / API smoke use the dev bypass header',
+  );
+  logInfo(
+    `      clinozy-fe: set VITE_TURNSTILE_SITE_KEY=${TURNSTILE_ALWAYS_PASS_TEST_SITE_KEY} and leave VITE_CAPTCHA_DISABLED unset.`,
+  );
+  logInfo('      Restart pnpm dev (and pnpm dev:worker) to apply.');
 }
 
 /** Report label for the process environment as a credential source. */
@@ -467,14 +517,6 @@ function injectGeneratedSecrets(content: string): string {
   updated = upsertEnvAssignment(updated, 'JWT_PUBLIC_KEY', `"${escapedPublicKey}"`);
   updated = upsertEnvAssignment(updated, 'SECRETS_ENCRYPTION_KEY', secretsKey);
   return updated;
-}
-
-function upsertEnvAssignment(content: string, key: string, value: string): string {
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(`^${escapedKey}=.*$`, 'm');
-  const line = `${key}=${value}`;
-  if (pattern.test(content)) return content.replace(pattern, line);
-  return content.endsWith('\n') ? `${content}${line}\n` : `${content}\n${line}\n`;
 }
 
 // Localhost DB/Redis values for the `pnpm compose:up` stack. Credentials are

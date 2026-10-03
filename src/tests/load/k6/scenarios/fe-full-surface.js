@@ -1,4 +1,5 @@
 import http from 'k6/http';
+import { PUBLIC_AUTH_FORM_HEADERS } from '../helpers/config.js';
 import { check, sleep } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
 import { SharedArray } from 'k6/data';
@@ -829,13 +830,13 @@ function billingBlock(auth) {
  * first one, so this waits out that cooldown before asking for a second. The wait is per VU and
  * runs in parallel, so it costs about a minute of wall clock for the whole run.
  */
-function stepUpBlock(auth, json, email) {
+function stepUpBlock(auth, email) {
   const state = { ok: true };
   const step = stepper(state);
 
   sleep(63);
   const reissued = http.post(`${API}/auth/email/send-code`, JSON.stringify({ email }), {
-    headers: json,
+    headers: PUBLIC_AUTH_FORM_HEADERS,
     tags: { name: 'stepup-code' },
   });
   const code = reissued.status === 200 ? body(reissued).debug_verification_code : null;
@@ -980,7 +981,7 @@ export function feFullJourney() {
   step(
     '04-send-code',
     http.post(`${API}/auth/email/send-code`, JSON.stringify({ email: cred.email }), {
-      headers: json,
+      headers: PUBLIC_AUTH_FORM_HEADERS,
       tags: { name: '04-send-code' },
     }),
     [200, 202],
@@ -990,7 +991,7 @@ export function feFullJourney() {
     `${API}/auth/email/login`,
     JSON.stringify({ email: cred.email, code: STATIC_CODE }),
     {
-      headers: json,
+      headers: PUBLIC_AUTH_FORM_HEADERS,
       tags: { name: '05-login' },
     },
   );
@@ -1074,7 +1075,7 @@ export function feFullJourney() {
   if (!billingBlock(auth)) state.ok = false;
 
   if (STEP_UP) {
-    if (!stepUpBlock(auth, json, cred.email)) state.ok = false;
+    if (!stepUpBlock(auth, cred.email)) state.ok = false;
   } else {
     for (const n of ['49-step-up', '50-mfa-enroll', '51-webauthn-options']) skip(n);
   }

@@ -60,7 +60,10 @@ worker cluster exceed 12 cores. The cluster has spare capacity; it just can't ge
    so seed `≈ VUS / 0.8` (`pnpm db:seed:loadtest`).
 7. **Loadtest server reachable** on `:3001` (`/livez` → 200).
 8. **Captcha fail-open + login** — a password login returns a token (proves `NODE_ENV=development + RATE_LIMIT_RELAXED_CAPS=true`, §1) and an
-   organization-scoped read returns 200.
+   organization-scoped read returns 200. The login (like every public auth form the scenarios
+   call) sends the dev-only `X-Captcha-Bypass` header (`PUBLIC_AUTH_FORM_HEADERS` in
+   `helpers/config.js`), so it also passes against an API that enforces CAPTCHA with
+   `CAPTCHA_BYPASS_ALLOWED=true` (`pnpm setup:local --with-captcha`).
 9. **Rate limits lifted** — a token works and isn't 429'd.
 10. **Role-cap headroom** — `max(roles/organization)` well under `MEMBER_ROLE_MAX_PER_ORG` (data hygiene, §3).
 

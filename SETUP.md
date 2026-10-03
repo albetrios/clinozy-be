@@ -69,6 +69,8 @@ What it sets up in `.env.local`:
 
 Useful flags: `--skip-deps`, `--skip-docker`, `--skip-migrate`, `--skip-codegraph`, `--with-toxiproxy`.
 
+**CAPTCHA locally (off by default).** `pnpm setup:local --only-env --with-captcha` turns Cloudflare Turnstile on in `.env.local` with Cloudflare's published always-pass **test** keys: the real widget and the real verification call to Cloudflare run on `localhost`, with no change to a production widget. It also sets `CAPTCHA_BYPASS_ALLOWED=true`, because the k6 scenarios and the API smoke test send the dev-only `X-Captcha-Bypass` header on the public auth forms (production refuses the bypass). In clinozy-fe, set `VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA` and leave `VITE_CAPTCHA_DISABLED` unset. `--without-captcha` turns it back off. Restart `pnpm dev` after either.
+
 When it finishes, the API is at `http://localhost:3000` (`/livez`, `/readyz`).
 
 ### Option B — manual steps

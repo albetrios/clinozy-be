@@ -141,7 +141,9 @@ async function runProbe(probe: RouteProbe): Promise<void> {
 async function setupLogin(): Promise<void> {
   const { body } = await requestJson(`${API_PREFIX}/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // Dev-only CAPTCHA bypass: honored only when the API runs with CAPTCHA_BYPASS_ALLOWED=true
+    // (`pnpm setup:local --with-captcha`); ignored when CAPTCHA is off and refused in production.
+    headers: { 'Content-Type': 'application/json', 'X-Captcha-Bypass': 'true' },
     body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
     expectedStatus: 200,
   });

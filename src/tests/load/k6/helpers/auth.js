@@ -1,5 +1,5 @@
 import http from 'k6/http';
-import { API_PREFIX } from './config.js';
+import { API_PREFIX, PUBLIC_AUTH_FORM_HEADERS } from './config.js';
 
 /**
  * Perform login and return the access token.
@@ -11,7 +11,7 @@ import { API_PREFIX } from './config.js';
  */
 export function login(email, password) {
   const response = http.post(`${API_PREFIX}/auth/login`, JSON.stringify({ email, password }), {
-    headers: { 'Content-Type': 'application/json' },
+    headers: PUBLIC_AUTH_FORM_HEADERS,
   });
 
   if (response.status === 200) {
