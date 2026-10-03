@@ -51,15 +51,29 @@ import {
 } from './external-credentials.js';
 import { upsertEnvAssignment } from './env-file.util.js';
 import { applyLocalCaptcha, TURNSTILE_ALWAYS_PASS_TEST_SITE_KEY } from './local-captcha.js';
-import { resolveDerivedNames } from '@tooling/setup/codegen/project-identity.util.js';
+import {
+  alterRoleStatement,
+  applyLocalDatabaseLogins,
+  isLocalDatabaseUrl,
+  localDatabaseLogins,
+  planLocalDatabaseLogins,
+} from './local-database-logins.js';
+import postgres from 'postgres';
+import {
+  resolveDerivedNames,
+  resolveSqlIdentifierStem,
+} from '@tooling/setup/codegen/project-identity.util.js';
 import { loadConfig } from '@tooling/setup/common/config.js';
 
 const PROJECT_ROOT = process.cwd();
 const REQUIRED_NODE_MAJOR = 24;
 const SETUP_CONFIG = loadConfig();
 const PROJECT_DISPLAY_NAME = SETUP_CONFIG.project.displayName;
-const { containers: LOCAL_CONTAINERS, databaseName: LOCAL_DATABASE_NAME } =
-  resolveDerivedNames(SETUP_CONFIG);
+const {
+  containers: LOCAL_CONTAINERS,
+  databaseName: LOCAL_DATABASE_NAME,
+  databaseAppRole: LOCAL_DATABASE_APP_ROLE,
+} = resolveDerivedNames(SETUP_CONFIG);
 const POSTGRES_CONTAINER = LOCAL_CONTAINERS.postgres;
 const REDIS_CONTAINER = LOCAL_CONTAINERS.redis;
 const DEFAULT_DEV_PORT = 3000;
@@ -531,6 +545,118 @@ function injectGeneratedSecrets(content: string): string {
 // `setup:local` write credentials the compose stack does not accept, so a freshly
 // adopted project could never migrate. Local Postgres/Redis are plaintext (no TLS).
 const LOCAL_DATABASE_URL = `postgresql://${LOCAL_DATABASE_NAME}:${LOCAL_DATABASE_NAME}@localhost:5432/${LOCAL_DATABASE_NAME}`;
+/**
+ * Turns on the three database logins `.env.local` connects as — runtime (`clinozy_be_app`),
+ * maintenance and operator — and writes their URLs (docs/deployment/runbooks/
+ * maintenance-database-role.md). The migrations create those roles `NOLOGIN`; this grants LOGIN
+ * (+ BYPASSRLS for the operator) with a per-machine password, as the compose superuser, then logs in
+ * as each to prove the URL works. Local database only; re-runs keep the passwords already written.
+ */
+async function provisionLocalDatabaseLogins(
+  reports: StepReport[],
+  options: BootstrapOptions,
+): Promise<void> {
+  const startedAt = performance.now();
+  const phase = 'database logins';
+  const envLocalPath = resolve(PROJECT_ROOT, '.env.local');
+  if (!existsSync(envLocalPath)) {
+    reportStep(reports, phase, 'skipped', startedAt, 'no .env.local yet');
+    return;
+  }
+  const envLocal = readFileSync(envLocalPath, 'utf8');
+  const currentDatabaseUrl = parseEnvFileContent(envLocal).DATABASE_URL;
+  if (currentDatabaseUrl && !isLocalDatabaseUrl(currentDatabaseUrl)) {
+    reportStep(reports, phase, 'skipped', startedAt, 'DATABASE_URL points at a remote database');
+    return;
+  }
+  const logins = localDatabaseLogins({
+    appRole: LOCAL_DATABASE_APP_ROLE,
+    sqlStem: resolveSqlIdentifierStem(SETUP_CONFIG),
+  });
+  const superuser = postgres(LOCAL_DATABASE_URL, {
+    max: 1,
+    connect_timeout: 5,
+    onnotice: () => {},
+  });
+  try {
+    let existingRoles: string[];
+    try {
+      const rows = await superuser<{ rolname: string }[]>`
+        select rolname from pg_roles where rolname in ${superuser(logins.map((login) => login.role))}`;
+      existingRoles = rows.map((row) => row.rolname);
+    } catch {
+      reportStep(
+        reports,
+        phase,
+        'warning',
+        startedAt,
+        'local Postgres not reachable — pnpm compose:up, then re-run',
+      );
+      return;
+    }
+    const missingRoles = logins.filter((login) => !existingRoles.includes(login.role));
+    if (missingRoles.length > 0) {
+      reportStep(
+        reports,
+        phase,
+        'warning',
+        startedAt,
+        `roles not created yet (${missingRoles.map((login) => login.role).join(', ')}) — pnpm db:migrate, then re-run`,
+      );
+      return;
+    }
+    const planned = planLocalDatabaseLogins({
+      envLocal,
+      superuserUrl: LOCAL_DATABASE_URL,
+      logins,
+    });
+    if (options.check) {
+      reportStep(
+        reports,
+        phase,
+        'warning',
+        startedAt,
+        `--check mode (would enable ${planned.map((login) => login.role).join(', ')})`,
+      );
+      return;
+    }
+    for (const login of planned) await superuser.unsafe(alterRoleStatement(login));
+    writeFileSync(
+      envLocalPath,
+      applyLocalDatabaseLogins({ envLocal, superuserUrl: LOCAL_DATABASE_URL, planned }),
+    );
+    for (const login of planned) {
+      const connection = postgres(login.url, { max: 1, connect_timeout: 5, onnotice: () => {} });
+      try {
+        const [row] = await connection<{ current_user: string }[]>`select current_user`;
+        if (row?.current_user !== login.role) throw new Error(`connected as ${row?.current_user}`);
+      } finally {
+        await connection.end({ timeout: 2 });
+      }
+    }
+    reportStep(
+      reports,
+      phase,
+      'done',
+      startedAt,
+      planned.map((login) => `${login.envKey} → ${login.role}`).join(', '),
+    );
+    logInfo(
+      '      Each login verified. Restart pnpm dev (and pnpm dev:worker) to connect with them.',
+    );
+  } catch (error) {
+    reportStep(
+      reports,
+      phase,
+      'failed',
+      startedAt,
+      error instanceof Error ? error.message : String(error),
+    );
+  } finally {
+    await superuser.end({ timeout: 2 });
+  }
+}
+
 function injectLocalhostOverrides(content: string): string {
   let updated = content;
   updated = upsertEnvAssignment(updated, 'DATABASE_URL', LOCAL_DATABASE_URL);
@@ -986,6 +1112,7 @@ async function main(): Promise<void> {
 
   if (options.onlyEnv) {
     runEnvScaffolding(reports, options);
+    await provisionLocalDatabaseLogins(reports, options);
     printSummary(reports);
     return;
   }
@@ -995,6 +1122,8 @@ async function main(): Promise<void> {
   runEnvScaffolding(reports, options);
   runDocker(reports, options);
   runMigrations(reports, options);
+  // After migrations: they create the roles (NOLOGIN) this step turns on.
+  await provisionLocalDatabaseLogins(reports, options);
   runSeed(reports, options);
   runMcpSetup(reports, options);
   const worker = runOptionalWorker(reports, options);

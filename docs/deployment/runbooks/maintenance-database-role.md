@@ -62,21 +62,29 @@ authority becomes a connection-level property instead of a GUC-only one.
 
 Local mirrors live: migration `20260827050000` creates `clinozy_be_owner` /
 `clinozy_be_migrator` / `clinozy_be_operator` and moves table ownership to the owner group.
-Local provisioning (once, as the compose superuser):
+
+**`pnpm setup:local` provisions the local logins** (after `pnpm db:migrate`, and on every
+`--only-env` run once the roles exist), as the compose superuser, with a per-machine
+generated password kept across re-runs — the logins are defined in
+[`tooling/dev/local-database-logins.ts`](../../../tooling/dev/local-database-logins.ts):
 
 ```sql
 ALTER ROLE clinozy_be_app LOGIN PASSWORD '<generated>';
+ALTER ROLE clinozy_be_maintenance LOGIN PASSWORD '<generated>';
 ALTER ROLE clinozy_be_operator LOGIN BYPASSRLS PASSWORD '<generated>';
-ALTER ROLE clinozy_be_migrator LOGIN CREATEROLE PASSWORD '<generated>';
 ```
 
-Then the gitignored local env file carries `DATABASE_URL` as `clinozy_be_app` (runtime
-parity), `DATABASE_OPERATOR_URL` as `clinozy_be_operator` (harness + full/bulk seeds pick
-it up automatically), and `DATABASE_MAINTENANCE_URL` as `clinozy_be_maintenance`.
-`DATABASE_MIGRATION_URL` points at `clinozy_be_migrator` for day-to-day migrations; the
-compose superuser is needed ONLY for a fresh clone's very first `pnpm db:migrate`
-(before the roles exist) and is otherwise used by nothing. `DATABASE_OPERATOR_URL` is
+It then writes the gitignored local env file — `DATABASE_URL` as `clinozy_be_app` (runtime
+parity, RLS-subject), `DATABASE_MAINTENANCE_URL` as `clinozy_be_maintenance` (RLS-subject),
+`DATABASE_OPERATOR_URL` as `clinozy_be_operator` (harness + full/bulk seeds pick it up
+automatically) — and logs in as each to prove the URL works. `DATABASE_OPERATOR_URL` is
 NEVER set in hosted environments.
+
+`DATABASE_MIGRATION_URL` stays the compose superuser locally (setup:local pins it there when
+unset, so migrations never fall back to the RLS-subject `DATABASE_URL`). A local migrator
+login would need what the hosted one has — `LOGIN CREATEROLE BYPASSRLS` — because SECURITY
+DEFINER functions are owned by the role that runs the migration: owned by a role subject to
+FORCE RLS, every resolver returns zero rows.
 
 ## Fresh database / recreate provisioning (disaster or reset)
 
