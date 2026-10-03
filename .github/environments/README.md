@@ -4,10 +4,14 @@ JSON files here declare protection rules for [GitHub Environments](https://docs.
 
 **Canonical mapping source:** [`tooling/setup/setup.config.json`](../../tooling/setup/setup.config.json). Run `pnpm tool:generate-project-identity` after manifest changes to regenerate identity constants and the CI composite action.
 
-| Branch | GitHub Environment | `NODE_ENV` |
-| ------ | ------------------ | ---------- |
-| `main` | `production`       | `production` |
-| `dev`  | `development`      | `development` |
+Single trunk: `main` deploys to each environment, chosen explicitly by the caller — never from the
+branch. `NODE_ENV` is set by the deploy from that environment, not stored in the GitHub Environment.
+
+| Trigger                       | GitHub Environment | `NODE_ENV` (set by the deploy) |
+| ----------------------------- | ------------------ | ------------------------------ |
+| Merge to `main`               | `development`      | `development`                  |
+| Published release             | `production`       | `production`                   |
+| Manual dispatch / rollback    | the chosen target  | the chosen target              |
 
 | Config file | GitHub Environment | Protection |
 | ----------- | ------------------ | ---------- |
