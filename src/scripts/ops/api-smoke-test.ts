@@ -116,10 +116,20 @@ function notifyPath(suffix: string): string {
   return `${API_PREFIX}/notify${suffix}`;
 }
 
+/**
+ * Dev-only CAPTCHA bypass, sent on every request so the public auth forms (login, email send-code)
+ * reach their real handling when the API enforces CAPTCHA locally (`pnpm setup:local
+ * --with-captcha`, which also sets CAPTCHA_BYPASS_ALLOWED=true) — without it the invalid-password
+ * probe would pass on a CAPTCHA 401 instead of the credential check. Ignored when CAPTCHA is off or
+ * the bypass is not allowed, and production refuses it.
+ */
+const CAPTCHA_BYPASS_HEADERS = { 'X-Captcha-Bypass': 'true' } as const;
+
 async function runProbe(probe: RouteProbe): Promise<void> {
   const method = probe.method ?? 'GET';
   const headers: Record<string, string> = {
     Accept: 'application/json',
+    ...CAPTCHA_BYPASS_HEADERS,
     ...(probe.body ? { 'Content-Type': 'application/json' } : {}),
   };
   const useAuthentication = probe.authenticated === true || probe.needsOrganization === true;
@@ -141,9 +151,7 @@ async function runProbe(probe: RouteProbe): Promise<void> {
 async function setupLogin(): Promise<void> {
   const { body } = await requestJson(`${API_PREFIX}/auth/login`, {
     method: 'POST',
-    // Dev-only CAPTCHA bypass: honored only when the API runs with CAPTCHA_BYPASS_ALLOWED=true
-    // (`pnpm setup:local --with-captcha`); ignored when CAPTCHA is off and refused in production.
-    headers: { 'Content-Type': 'application/json', 'X-Captcha-Bypass': 'true' },
+    headers: { 'Content-Type': 'application/json', ...CAPTCHA_BYPASS_HEADERS },
     body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
     expectedStatus: 200,
   });
