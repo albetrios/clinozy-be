@@ -52,29 +52,53 @@ export function localDatabaseLogins(roles: {
   ];
 }
 
+/**
+ * Roles the migrations create that deliberately get no local login — `owner` is the NOLOGIN group
+ * owning the tables, and `migrator` only logs in hosted (local migrations run as the compose
+ * superuser). With {@link localDatabaseLogins} it must cover every role the migrations create:
+ * `local-database-logins.unit.test.ts` fails when a migration adds or renames a role that neither
+ * list names, so a future role change is decided here instead of drifting silently.
+ */
+export function rolesWithoutLocalLogin(sqlStem: string): readonly string[] {
+  return [`${sqlStem}_owner`, `${sqlStem}_migrator`];
+}
+
+/** Where a planned login's password came from. */
+export type PasswordSource = 'env-local' | 'environment' | 'generated';
+
 /** One login with the password to provision and the URL to write. */
 export type PlannedLogin = LocalDatabaseLogin & {
   password: string;
   url: string;
-  /** `true` when the password was kept from the URL `.env.local` already has for this role. */
-  reused: boolean;
+  passwordSource: PasswordSource;
 };
 
 const SQL_IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
-const GENERATED_PASSWORD = /^[A-Za-z0-9]+$/;
+/** Characters safe inline in a SQL literal and a URL. */
+const LOGIN_PASSWORD = /^[A-Za-z0-9_-]+$/;
 
 /** A password for a new login: 48 hex characters (safe in a URL and a SQL literal). */
 export function generateLoginPassword(): string {
   return randomBytes(24).toString('hex');
 }
 
+/** The password `value` carries when it is a URL logging in as `role`, and is safe to reuse. */
+export function passwordFromUrl(value: string | undefined, role: string): string | undefined {
+  const url = parseUrl(value);
+  if (!url || decodeURIComponent(url.username) !== role || !url.password) return undefined;
+  const password = decodeURIComponent(url.password);
+  return LOGIN_PASSWORD.test(password) ? password : undefined;
+}
+
 /**
- * Plans the logins: each keeps the password of the URL `.env.local` already holds for that role (so
- * re-runs are idempotent), otherwise gets a new one; every URL reuses the superuser URL's host,
+ * Plans the logins. Each password is the one `.env.local` already has for that role (re-runs keep
+ * every connection string stable), else the one the process environment carries for that variable
+ * (shell exports, CI or cloud variables), else a new one. Every URL reuses the superuser URL's host,
  * port, database and query (TLS options) with the role's credentials.
  */
 export function planLocalDatabaseLogins(options: {
   envLocal: string;
+  environment: Readonly<Record<string, string | undefined>>;
   superuserUrl: string;
   logins: readonly LocalDatabaseLogin[];
   newPassword?: () => string;
@@ -83,23 +107,24 @@ export function planLocalDatabaseLogins(options: {
   const newPassword = options.newPassword ?? generateLoginPassword;
   return options.logins.map((login) => {
     if (!SQL_IDENTIFIER.test(login.role)) throw new Error(`unsafe role name: ${login.role}`);
-    const existing = parseUrl(values[login.envKey]);
-    const kept =
-      existing && decodeURIComponent(existing.username) === login.role && existing.password
-        ? decodeURIComponent(existing.password)
-        : undefined;
-    const password = kept !== undefined && GENERATED_PASSWORD.test(kept) ? kept : newPassword();
+    const fromEnvLocal = passwordFromUrl(values[login.envKey], login.role);
+    const fromEnvironment = passwordFromUrl(options.environment[login.envKey], login.role);
+    const [password, passwordSource]: [string, PasswordSource] = fromEnvLocal
+      ? [fromEnvLocal, 'env-local']
+      : fromEnvironment
+        ? [fromEnvironment, 'environment']
+        : [newPassword(), 'generated'];
     const url = new URL(options.superuserUrl);
     url.username = login.role;
     url.password = password;
-    return { ...login, password, url: url.toString(), reused: password === kept };
+    return { ...login, password, url: url.toString(), passwordSource };
   });
 }
 
 /** `ALTER ROLE "<role>" <attributes> PASSWORD '<password>'` — inputs validated, never user text. */
 export function alterRoleStatement(login: PlannedLogin): string {
   if (!SQL_IDENTIFIER.test(login.role)) throw new Error(`unsafe role name: ${login.role}`);
-  if (!GENERATED_PASSWORD.test(login.password)) throw new Error('unsafe password characters');
+  if (!LOGIN_PASSWORD.test(login.password)) throw new Error('unsafe password characters');
   return `ALTER ROLE "${login.role}" ${login.attributes} PASSWORD '${login.password}'`;
 }
 

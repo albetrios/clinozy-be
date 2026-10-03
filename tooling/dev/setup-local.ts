@@ -549,8 +549,9 @@ const LOCAL_DATABASE_URL = `postgresql://${LOCAL_DATABASE_NAME}:${LOCAL_DATABASE
  * Turns on the three database logins `.env.local` connects as — runtime (`clinozy_be_app`),
  * maintenance and operator — and writes their URLs (docs/deployment/runbooks/
  * maintenance-database-role.md). The migrations create those roles `NOLOGIN`; this grants LOGIN
- * (+ BYPASSRLS for the operator) with a per-machine password, as the compose superuser, then logs in
- * as each to prove the URL works. Local database only; re-runs keep the passwords already written.
+ * (+ BYPASSRLS for the operator) as the compose superuser — each password taken from `.env.local`,
+ * else the process environment, else generated — then logs in as each to prove the URL works.
+ * Local database only; the cloud environments provision their own logins.
  */
 async function provisionLocalDatabaseLogins(
   reports: StepReport[],
@@ -607,6 +608,7 @@ async function provisionLocalDatabaseLogins(
     }
     const planned = planLocalDatabaseLogins({
       envLocal,
+      environment: process.env,
       superuserUrl: LOCAL_DATABASE_URL,
       logins,
     });
@@ -639,7 +641,12 @@ async function provisionLocalDatabaseLogins(
       phase,
       'done',
       startedAt,
-      planned.map((login) => `${login.envKey} → ${login.role}`).join(', '),
+      planned
+        .map(
+          (login) =>
+            `${login.envKey} → ${login.role}${login.passwordSource === 'environment' ? ' (from the environment)' : ''}`,
+        )
+        .join(', '),
     );
     logInfo(
       '      Each login verified. Restart pnpm dev (and pnpm dev:worker) to connect with them.',

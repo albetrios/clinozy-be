@@ -64,9 +64,15 @@ Local mirrors live: migration `20260827050000` creates `clinozy_be_owner` /
 `clinozy_be_migrator` / `clinozy_be_operator` and moves table ownership to the owner group.
 
 **`pnpm setup:local` provisions the local logins** (after `pnpm db:migrate`, and on every
-`--only-env` run once the roles exist), as the compose superuser, with a per-machine
-generated password kept across re-runs — the logins are defined in
-[`tooling/dev/local-database-logins.ts`](../../../tooling/dev/local-database-logins.ts):
+`--only-env` run once the roles exist), as the compose superuser — the admin connection whose
+credentials come from the same manifest Docker Compose uses. Each password is the one
+`.env.local` already has for that role, else the one the process environment carries for that
+variable (shell exports, CI or cloud variables), else a new generated one. The migrations own the
+roles; the logins are mapped in
+[`tooling/dev/local-database-logins.ts`](../../../tooling/dev/local-database-logins.ts), whose
+unit test fails when a migration creates or renames a role that is neither a local login nor
+listed as login-less (`owner`, `migrator`). This is local only — the cloud environments provision
+their own logins.
 
 ```sql
 ALTER ROLE clinozy_be_app LOGIN PASSWORD '<generated>';
