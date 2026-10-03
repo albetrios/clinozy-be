@@ -331,6 +331,7 @@ function render() {
       'node' +
       (showDiff && t.status ? ' st-' + t.status : '') +
       (diffDim ? ' diff-dim' : '') +
+      (t.planned ? ' planned' : '') +
       (tag ? ' tagged' : '');
     if (tag) el.style.setProperty('--tagc', tag);
     else el.style.removeProperty('--tagc');
@@ -357,10 +358,13 @@ function render() {
 const TABLE_ICON = `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2" width="13" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M1.5 6h13M1.5 10h13M6 6v8" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`;
 
 function nodeHTML(t, showDiff) {
+  // plan mode: the plan's own marker (new / changed / existing / removed) over the diff status
   const badge =
-    showDiff && t.status && t.status !== 'unchanged'
-      ? `<span class="badge ${t.status}">${t.status}</span>`
-      : '';
+    showDiff && t.planStatus
+      ? `<span class="badge ${t.status || 'unchanged'} plan">${escapeHtml(t.planStatus.toLowerCase())}</span>`
+      : showDiff && t.status && t.status !== 'unchanged'
+        ? `<span class="badge ${t.status}">${t.status}</span>`
+        : '';
   const rows = t.columns
     .map((c) => {
       const cls = ['row'];
@@ -407,7 +411,8 @@ function anchorFor(name, colKey, side) {
   const p = state.pos[name];
   if (!t || !p) return null;
   const idx = Math.max(0, colIndex(t, colKey));
-  const y = p.y + HEAD_H + idx * ROW_H + ROW_H / 2;
+  // a planned entity may have no fields yet — anchor on its header
+  const y = t.columns.length ? p.y + HEAD_H + idx * ROW_H + ROW_H / 2 : p.y + HEAD_H / 2;
   const x = side === 'right' ? p.x + CARD_W : p.x;
   return { x, y };
 }
@@ -430,7 +435,7 @@ function drawEdges(diff, onlyChanges, changedNames) {
     const c2x = b.x + (fromRight ? -dx : dx);
     const path = document.createElementNS(SVGNS, 'path');
     path.setAttribute('d', `M ${a.x} ${a.y} C ${c1x} ${a.y}, ${c2x} ${b.y}, ${b.x} ${b.y}`);
-    path.setAttribute('class', 'edge');
+    path.setAttribute('class', r.planned ? 'edge planned' : 'edge');
     path.dataset.from = r.from;
     path.dataset.to = r.to;
     edgesSvg.appendChild(path);
@@ -445,11 +450,19 @@ function drawEdges(diff, onlyChanges, changedNames) {
     const toTable = diff.tables.find((x) => x.name === r.to);
     const toCol = toTable && toTable.columns.find((c) => c.name === r.toColumn);
     hit.dataset.tokey = toCol ? toCol.key : '';
-    hit.dataset.label = `${r.from}.${r.fromColumn} → ${r.to}.${r.toColumn}${r.onDelete ? '  ·  on delete ' + r.onDelete : ''}`;
+    hit.dataset.label = r.planned
+      ? `${r.from} → ${r.to}${r.label ? `  ·  ${r.label}` : ''}  ·  planned`
+      : `${r.from}.${r.fromColumn} → ${r.to}.${r.toColumn}${r.onDelete ? '  ·  on delete ' + r.onDelete : ''}`;
     edgesSvg.appendChild(hit);
 
     // cardinality: the FK holder is the "many" side (unless the FK is unique → 1:1),
     // the referenced PK is the "one" side. A nullable FK makes the many side optional.
+    if (r.card) {
+      // plan mode: the plan states both ends' cardinality itself
+      drawMarker(a.x, a.y, fromRight ? 1 : -1, r.card.fromKind, r.card.fromOptional, r.from, r.to);
+      drawMarker(b.x, b.y, fromRight ? -1 : 1, r.card.toKind, r.card.toOptional, r.from, r.to);
+      continue;
+    }
     const srcTable = diff.tables.find((x) => x.name === r.from);
     const fk = srcTable && srcTable.columns.find((c) => c.key === r.fromKey);
     const manySide = fk && fk.unique ? 'one' : 'many';
@@ -683,6 +696,11 @@ function setupPathBar() {
 }
 
 // ---------------- inspector ----------------
+/** `.column`, or nothing for a planned relationship that has no column yet. */
+function colSuffix(column) {
+  return column ? `.${column}` : '';
+}
+
 function updateInspector() {
   const el = $('#inspector');
   const diff = currentDiff();
@@ -737,10 +755,10 @@ function updateInspector() {
   const outHTML = out.length
     ? out
         .map((r) => {
-          const target = `${tableLabelOf(r.to)}.${r.toColumn}`;
+          const target = `${tableLabelOf(r.to)}${colSuffix(r.toColumn)}`;
           const meta = r.onDelete ? `on delete ${r.onDelete}` : '';
           return `<div class="ins-rel" data-goto="${escapeHtml(r.to)}" title="${escapeHtml(r.fromColumn)} → ${escapeHtml(target)}">
-      <div class="ins-rel-line"><span class="cn">${escapeHtml(r.fromColumn)}</span><span class="arw">→</span><span class="ins-rel-target"><b>${escapeHtml(tableLabelOf(r.to))}</b>.${escapeHtml(r.toColumn)}</span></div>
+      <div class="ins-rel-line"><span class="cn">${escapeHtml(r.fromColumn)}</span><span class="arw">→</span><span class="ins-rel-target"><b>${escapeHtml(tableLabelOf(r.to))}</b>${escapeHtml(colSuffix(r.toColumn))}</span></div>
       ${meta ? `<div class="ins-rel-meta">${escapeHtml(meta)}</div>` : ''}
     </div>`;
         })
@@ -750,10 +768,10 @@ function updateInspector() {
   const incHTML = inc.length
     ? inc
         .map((r) => {
-          const source = `${tableLabelOf(r.from)}.${r.fromColumn}`;
+          const source = `${tableLabelOf(r.from)}${colSuffix(r.fromColumn)}`;
           const meta = r.onDelete ? `on delete ${r.onDelete}` : '';
           return `<div class="ins-rel" data-goto="${escapeHtml(r.from)}" title="${escapeHtml(source)} → ${escapeHtml(r.toColumn)}">
-      <div class="ins-rel-line"><span class="ins-rel-target"><b>${escapeHtml(tableLabelOf(r.from))}</b>.${escapeHtml(r.fromColumn)}</span><span class="arw">→</span><span class="cn">${escapeHtml(r.toColumn)}</span></div>
+      <div class="ins-rel-line"><span class="ins-rel-target"><b>${escapeHtml(tableLabelOf(r.from))}</b>${escapeHtml(colSuffix(r.fromColumn))}</span><span class="arw">→</span><span class="cn">${escapeHtml(r.toColumn)}</span></div>
       ${meta ? `<div class="ins-rel-meta">${escapeHtml(meta)}</div>` : ''}
     </div>`;
         })
@@ -1267,6 +1285,15 @@ function currentDiff() {
   return state._diff || (state.payload && state.payload.diff);
 }
 
+/** Plan mode: an iteration plan drawn as a future version after Latest. */
+function isPlanVersion(id) {
+  const v = state.payload && state.payload.versions.find((x) => x.id === id);
+  return !!(v && v.kind === 'plan');
+}
+function viewingPlan() {
+  return isPlanVersion(state.target);
+}
+
 function renderRail() {
   const p = state.payload;
   if (!p) return;
@@ -1274,25 +1301,31 @@ function renderRail() {
   if (sec) {
     sec.classList.toggle('collapsed', !state.versionsOpen);
     const countEl = $('#versions-count');
-    if (countEl) countEl.textContent = String(p.versions.length);
+    if (countEl) countEl.textContent = String(p.versions.filter((v) => v.kind !== 'plan').length);
   }
+  const history = p.versions.filter((v) => v.kind !== 'plan');
+  const plans = p.versions.filter((v) => v.kind === 'plan').reverse(); // newest plan first
 
   // versions — newest first at the top (no scroll needed to find Latest)
   const vwrap = $('#versions');
   vwrap.innerHTML = '';
   let toShow;
   if (state.versionsOpen) {
-    toShow = [...p.versions].reverse(); // tip / Latest first
+    toShow = [...plans, ...[...history].reverse()]; // plans (the future), then tip / Latest first
   } else {
-    // Collapsed: strictly the tip only (Latest)
+    // Collapsed: the plans and the tip only (Latest)
     const tip =
-      p.versions.find((v) => v.kind === 'latest') ||
-      p.versions.find((v) => v.id === p.current) ||
-      p.versions[p.versions.length - 1];
-    toShow = tip ? [tip] : [];
+      history.find((v) => v.kind === 'latest') ||
+      history.find((v) => v.id === p.current) ||
+      history[history.length - 1];
+    toShow = tip ? [...plans, tip] : plans;
   }
 
   for (const v of toShow) {
+    if (v.kind === 'plan') {
+      vwrap.appendChild(planItem(v));
+      continue;
+    }
     const item = document.createElement('button');
     item.className = 'vitem';
     if (v.id === state.target) item.classList.add('target');
@@ -1342,8 +1375,8 @@ function renderRail() {
   }
 
   // Sticky footer control (outside the scroll list) — always visible to collapse
-  const migCount = p.versions.filter((v) => v.kind === 'migration').length;
-  const moreN = Math.max(0, p.versions.length - 1);
+  const migCount = history.filter((v) => v.kind === 'migration').length;
+  const moreN = Math.max(0, history.length - 1);
   const more = $('#versions-more');
   if (more) {
     more.setAttribute('aria-expanded', state.versionsOpen ? 'true' : 'false');
@@ -1390,7 +1423,9 @@ function renderRail() {
   } else {
     const toV = p.versions.find((x) => x.id === state.target);
     const fromV = p.versions.find((x) => x.id === state.target - 1);
-    if (p.migrationMode && toV) {
+    if (toV && toV.kind === 'plan') {
+      cl.textContent = `Latest → ${versionShort(toV)}`;
+    } else if (p.migrationMode && toV) {
       cl.textContent = fromV ? `${versionShort(fromV)} → ${versionShort(toV)}` : versionShort(toV);
     } else {
       cl.textContent =
@@ -1409,12 +1444,53 @@ function formatMigDate(at) {
   }
 }
 
+/** A plan row in the versions rail: click to see the plan against Latest. */
+function planItem(v) {
+  const item = document.createElement('button');
+  item.className = 'vitem plan';
+  if (v.id === state.target) item.classList.add('target');
+  const badge =
+    v.id === state.target
+      ? '<span class="vbadge t">viewing</span>'
+      : '<span class="vbadge p">plan</span>';
+  item.innerHTML = `<span class="vdot">◇</span>
+    <span class="vinfo"><span class="vr">${escapeHtml(v.iteration || v.reason)}</span><span class="vt">${escapeHtml(`plan · ${v.status || 'planning'} · ${v.tables} tables`)}</span></span>
+    ${badge}`;
+  item.title = `${v.file || 'plans/db-changes.md'}\nClick to view this iteration's plan against Latest`;
+  item.addEventListener('click', () => {
+    state.target = v.id;
+    state.base = null;
+    state.liveTarget = false;
+    loadComparison({ focusChanges: true });
+  });
+  return item;
+}
+
 function versionShort(v) {
   if (!v) return '?';
   if (v.kind === 'latest') return 'Latest';
+  if (v.kind === 'plan') return `plan · ${v.iteration || v.reason}`;
   if (v.reason && v.reason.length <= 28) return v.reason;
   if (v.reason) return v.reason.slice(0, 26) + '…';
   return `v${v.id}`;
+}
+
+/** Plan mode: what the plan is, where it lives, and anything that did not resolve. */
+function planBanner(diff) {
+  if (!diff.plan) return '';
+  const plan = diff.plan;
+  const c = plan.counts || {};
+  const warnings = (plan.warnings || []).length
+    ? `<details class="plan-warn"><summary>${plan.warnings.length} note${plan.warnings.length > 1 ? 's' : ''}</summary><ul>${plan.warnings
+        .map((w) => `<li>${escapeHtml(w)}</li>`)
+        .join('')}</ul></details>`
+    : '';
+  return `<div class="plan-banner">
+    <div class="plan-title">◇ ${escapeHtml(plan.iteration)} <span class="plan-status">${escapeHtml(plan.status)}</span></div>
+    <div class="plan-sub">${escapeHtml(`${c.new || 0} new · ${c.changed || 0} changed · ${c.existing || 0} existing · ${c.removed || 0} removed — logical types, not built yet`)}</div>
+    <div class="plan-file">${escapeHtml(plan.file || '')}</div>
+    ${warnings}
+  </div>`;
 }
 
 function renderChangelog(diff) {
@@ -1454,7 +1530,7 @@ function renderChangelog(diff) {
     pills.push(
       `<span class="pill p-mod">~${c.enumsChanged} enum${c.enumsChanged > 1 ? 's' : ''}</span>`,
     );
-  sum.innerHTML = pills.join('') || '<span class="pill">no changes</span>';
+  sum.innerHTML = planBanner(diff) + (pills.join('') || '<span class="pill">no changes</span>');
 
   if (!diff.changelog.length) {
     log.innerHTML = diff.note
@@ -1596,7 +1672,8 @@ async function loadComparison(opts = {}) {
   if (state.liveTarget || (!state.base && state.target === p.current)) {
     state._diff = p.diff;
   } else {
-    const from = state.base != null ? state.base : state.target - 1;
+    const from =
+      state.base != null ? state.base : isPlanVersion(state.target) ? p.current : state.target - 1;
     const ac = new AbortController();
     state._diffAbort = ac;
     try {
@@ -1907,6 +1984,11 @@ function connect() {
     const isNew = prevCurrent != null && data.current !== prevCurrent;
     // follow the latest version but keep any pinned baseline — combined changes stay visible
     if (state.liveTarget || state.target == null) state.target = data.current;
+    // a plan that disappeared (its iteration froze) falls back to Latest
+    if (!data.versions.some((v) => v.id === state.target)) {
+      state.target = data.current;
+      state.liveTarget = true;
+    }
     // First connection in migration mode: collapse versions unless user already chose
     if (prevCurrent == null) {
       const prefs = loadUIPrefs();
@@ -2148,6 +2230,12 @@ let exportTab = 'sql';
 function openExport() {
   const diff = currentDiff();
   if (!diff) return;
+  if (viewingPlan()) {
+    flash(
+      'A plan holds logical types only — its tables are designed at kickoff, so there is no SQL to export yet',
+    );
+    return;
+  }
   const modal = $('#export');
   modal.classList.add('on');
   renderExport();
@@ -2224,7 +2312,8 @@ function analyzeSchema(diff) {
   const out = [];
   const add = (sev, table, column, msg, fix) => out.push({ sev, table, column, msg, fix });
   for (const t of diff.tables || []) {
-    if (t.status === 'removed') continue;
+    // planned tables are logical (no physical design until kickoff) — nothing to lint yet
+    if (t.status === 'removed' || t.planned) continue;
     const cols = t.columns.filter((c) => c.status !== 'removed');
     const pk = cols.filter((c) => c.pk);
     const names = new Set(cols.map((c) => c.name));
@@ -2400,6 +2489,10 @@ function setupDeepReview() {
   btn.addEventListener('click', async () => {
     const diff = currentDiff();
     if (!diff) return;
+    if (viewingPlan()) {
+      flash('A plan holds logical types only — review each table at its kickoff design step');
+      return;
+    }
     btn.disabled = true;
     const label = btn.textContent;
     btn.textContent = 'Reviewing…';
@@ -2609,7 +2702,8 @@ async function exportDiagramPNG() {
 const tm = { on: false, playing: false, timer: null };
 
 function tmVersions() {
-  return (state.payload && state.payload.versions) || [];
+  // replay walks the history only — plans are not part of it
+  return ((state.payload && state.payload.versions) || []).filter((v) => v.kind !== 'plan');
 }
 
 function tmGo(idx) {

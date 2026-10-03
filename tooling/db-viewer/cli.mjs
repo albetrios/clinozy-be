@@ -21,6 +21,7 @@ function usage() {
     -p, --port <n>         Port (default ${DEFAULT_PORT}, or DB_VIEWER_PORT / config.json)
     --schema <path>        Schema file or folder (relative to project root)
     --migrations <path>    Migrations folder with .sql files
+    --iterations <path>    Design iterations folder — each plans/db-changes.md is drawn after Latest (plan mode)
     --no-open              Do not open the browser
     --open                 Open the browser (default)
     --fresh                Ignore saved version history (save mode)
@@ -62,6 +63,7 @@ const VALUE_OPTIONS = new Map([
   ['-p', 'port'],
   ['--schema', 'schema'],
   ['--migrations', 'migrations'],
+  ['--iterations', 'iterations'],
 ]);
 
 /** A bad argument aborts startup and prints usage. */
@@ -75,6 +77,7 @@ function parseArgs(argv) {
     port: null,
     schema: null,
     migrations: null,
+    iterations: null,
     open: true,
     fresh: false,
     help: false,
@@ -131,6 +134,7 @@ function main() {
     cwd: process.cwd(),
     schema: args.schema || undefined,
     migrations: args.migrations || undefined,
+    iterations: args.iterations || undefined,
     port: args.port || undefined,
   });
 
@@ -151,6 +155,7 @@ function main() {
   startServer({
     schemaTarget: project.schemaTarget,
     migrationsDir: project.migrationsDir,
+    iterationsDir: project.iterationsDir,
     port: args.port || project.port,
     fresh: args.fresh,
     open: args.open,

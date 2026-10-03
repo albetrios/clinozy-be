@@ -21,6 +21,9 @@ export interface Column {
   length?: number;
   withTimezone?: boolean;
   status?: string;
+  /** plan mode: a planned column, and a CHANGED field's note */
+  planned?: boolean;
+  planNote?: string;
   changes?: string[];
   delta?: Record<string, unknown>;
 }
@@ -33,6 +36,10 @@ export interface Table {
   columns: Column[];
   indexes: Array<{ name: string; unique: boolean; columns: string[] }>;
   status?: string;
+  /** plan mode: not built yet, the plan's marker, and a CHANGED entity no live table matched */
+  planned?: boolean;
+  planStatus?: string;
+  planUnmatched?: boolean;
 }
 
 export interface SchemaSnapshot {
@@ -46,6 +53,16 @@ export interface SchemaSnapshot {
     to: string;
     toColumn: string;
     onDelete?: string | null;
+    /** plan mode: a relationship drawn from an iteration plan */
+    planned?: boolean;
+    planStatus?: 'added' | 'removed' | null;
+    label?: string;
+    card?: {
+      fromKind: 'one' | 'many';
+      fromOptional: boolean;
+      toKind: 'one' | 'many';
+      toOptional: boolean;
+    };
   }>;
 }
 

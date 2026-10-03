@@ -16,6 +16,8 @@ function colSignature(c) {
     array: n.array,
     references: n.references,
     length: n.length ?? null,
+    // plan mode only: a CHANGED field's note (absent on every live column, so live diffs are unaffected)
+    planNote: n.planNote,
   });
 }
 
@@ -54,6 +56,7 @@ function describeColumnChanges(pn, cn, pr, nr, prev, next) {
   if (pn.unique !== cn.unique) changes.push(cn.unique ? 'now UNIQUE' : 'no longer UNIQUE');
   if (pn.default !== cn.default)
     changes.push(`default ${pn.default ?? '∅'} → ${cn.default ?? '∅'}`);
+  if (cn.planNote && pn.planNote !== cn.planNote) changes.push(`planned: ${cn.planNote}`);
 
   if (pr !== nr) {
     changes.push(`ref ${pr} → ${nr}`);
@@ -78,6 +81,7 @@ function buildColumnDelta(pn, cn, pr, nr) {
   if (pn.unique !== cn.unique) delta.unique = cn.unique;
   if (pn.default !== cn.default) delta.default = cn.default;
   if (pr !== nr) delta.references = cn.references || null;
+  if (cn.planNote && pn.planNote !== cn.planNote) delta.plan = cn.planNote;
   return delta;
 }
 
