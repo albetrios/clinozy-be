@@ -83,6 +83,7 @@ src/
     │   │   │   ├── auth.integration.test.ts
     │   │   │   ├── logout-revokes-token.integration.test.ts
     │   │   │   ├── refresh-preserves-active-organization.integration.test.ts
+    │   │   │   ├── refresh-reuse-detection.integration.test.ts
     │   │   │   └── refresh-rotates-token-hash.integration.test.ts
     │   │   ├── unit/
     │   │   │   ├── auth-me-context.serializer.unit.test.ts

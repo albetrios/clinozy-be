@@ -74,12 +74,16 @@ describe('session cookie value (property)', () => {
 describe('CSRF and refresh-secret generators (property)', () => {
   it('emits URL-safe base64url of the expected length, with no collisions across a batch', () => {
     const csrfTokens = Array.from({ length: 200 }, () => generateCsrfToken());
-    const refreshSecrets = Array.from({ length: 200 }, () => generateRefreshSecret());
+    const refreshSecrets = Array.from({ length: 200 }, () => generateRefreshSecret({ userId: 7 }));
 
-    for (const value of [...csrfTokens, ...refreshSecrets]) {
+    for (const value of csrfTokens) {
       // 32 random bytes → 43 base64url chars, alphabet [A-Za-z0-9_-] — cookie- and URL-safe
       // without encoding. A `+`, `/`, or `=` here means someone switched to plain base64.
       expect(value).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    }
+    for (const value of refreshSecrets) {
+      // 32 random bytes + a SHA-256 issuance MAC, both base64url, joined by `~` (cookie-safe).
+      expect(value).toMatch(/^[A-Za-z0-9_-]{43}~[A-Za-z0-9_-]{43}$/);
     }
     expect(new Set(csrfTokens).size).toBe(200);
     expect(new Set(refreshSecrets).size).toBe(200);

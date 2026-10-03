@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { generateRefreshSecret } from '@/domains/auth/auth.http.util.js';
 import { NotFoundError, UnauthorizedError } from '@/shared/errors/index.js';
 import { MAX_ACTIVE_SESSIONS_PER_USER } from '@/shared/constants/security.constants.js';
 import { AuthSessionService } from '@/domains/auth/sub-domains/auth-session/auth-session.service.js';
@@ -314,7 +316,7 @@ describe('AuthSessionService', () => {
     expect(sessionRepository.revokeAllByUserId).not.toHaveBeenCalled();
   });
 
-  it('refreshSessionCredentials revokes the entire session family when an old refresh secret is replayed (reuse detection)', async () => {
+  it('refreshSessionCredentials revokes the entire session family when an issued, retired refresh secret is replayed (reuse detection)', async () => {
     // sec-A finding #9: the reuse-detection lookup now uses
     // `findByPublicIdIncludingRevoked` so a stolen refresh secret replayed against
     // an already-revoked session still triggers the family-wide kill / audit signal.
@@ -338,7 +340,8 @@ describe('AuthSessionService', () => {
     await expect(
       service.refreshSessionCredentials({
         sessionPublicId: 'session_public',
-        refreshSecret: 'stolen-old-secret',
+        // Issued by this server for the session's user (its MAC verifies), then rotated away.
+        refreshSecret: generateRefreshSecret({ userId: user.id }),
         nextAccessToken: 'next-access-token',
       }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
@@ -366,13 +369,80 @@ describe('AuthSessionService', () => {
     await expect(
       service.refreshSessionCredentials({
         sessionPublicId: 'session_public',
-        refreshSecret: 'stolen-old-secret',
+        refreshSecret: generateRefreshSecret({ userId: user.id }),
         nextAccessToken: 'next-access-token',
       }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
 
     // The session is already revoked — do NOT call revokeAllByUserId a second time.
     expect(sessionRepository.revokeAllByUserId).not.toHaveBeenCalled();
+  });
+
+  it('refreshSessionCredentials never revokes anything for a fabricated refresh secret', async () => {
+    // A stolen bearer can list session ids; it must not be able to log the user out everywhere
+    // by inventing a secret for one of them.
+    vi.mocked(sessionRepository.findByPublicId).mockResolvedValue({
+      public_id: 'session_public',
+      user_id: user.id,
+      token_hash: 'current-token-hash',
+      refresh_token_hash: 'current-refresh-hash',
+      is_revoked: false,
+    } as never);
+    vi.mocked(sessionRepository.findByPublicIdIncludingRevoked).mockResolvedValue({
+      public_id: 'session_public',
+      user_id: user.id,
+      token_hash: 'current-token-hash',
+      refresh_token_hash: 'current-refresh-hash',
+      previous_refresh_token_hash: 'some-earlier-hash',
+      is_revoked: false,
+    } as never);
+    vi.mocked(sessionRepository.rotateSessionCredentials).mockResolvedValue(null as never);
+    const { invalidateCachedSessionToken } = await import(
+      '@/domains/auth/sub-domains/auth-session/session-token-cache.service.js'
+    );
+    vi.mocked(invalidateCachedSessionToken).mockClear();
+
+    for (const fabricated of [
+      'made-up-secret',
+      'made-up~not-a-mac',
+      generateRefreshSecret({ userId: user.id + 1 }),
+    ]) {
+      await expect(
+        service.refreshSessionCredentials({
+          sessionPublicId: 'session_public',
+          refreshSecret: fabricated,
+          nextAccessToken: 'next-access-token',
+        }),
+      ).rejects.toBeInstanceOf(UnauthorizedError);
+    }
+
+    expect(sessionRepository.revokeAllByUserId).not.toHaveBeenCalled();
+    // A rejected secret leaves the live session's token cache alone, too.
+    expect(invalidateCachedSessionToken).not.toHaveBeenCalled();
+  });
+
+  it('refreshSessionCredentials treats the stored previous secret as proof of issuance (pre-MAC secrets)', async () => {
+    const legacySecret = 'legacy-random-secret-minted-before-issuance-macs';
+    vi.mocked(sessionRepository.findByPublicIdIncludingRevoked).mockResolvedValue({
+      public_id: 'session_public',
+      user_id: user.id,
+      token_hash: 'current-token-hash',
+      refresh_token_hash: 'current-refresh-hash',
+      previous_refresh_token_hash: createHash('sha256').update(legacySecret).digest('hex'),
+      is_revoked: false,
+    } as never);
+    vi.mocked(sessionRepository.rotateSessionCredentials).mockResolvedValue(null as never);
+    vi.mocked(sessionRepository.revokeAllByUserId).mockResolvedValue([] as never);
+
+    await expect(
+      service.refreshSessionCredentials({
+        sessionPublicId: 'session_public',
+        refreshSecret: legacySecret,
+        nextAccessToken: 'next-access-token',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
+
+    expect(sessionRepository.revokeAllByUserId).toHaveBeenCalledWith(user.id);
   });
 
   it('rebindAccessToken invalidates the PREVIOUS token hash only, never the new one', async () => {
