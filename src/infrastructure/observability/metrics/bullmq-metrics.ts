@@ -1,6 +1,9 @@
 import { Queue } from 'bullmq';
 import type { Job, Worker } from 'bullmq';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { isMetricsEnabled } from '@/infrastructure/observability/metrics/metrics-registry.js';
 import {
   recordBullMQJobDuration,
@@ -45,7 +48,10 @@ const queueClientsByName = new Map<string, Queue>();
 export function getOrCreateQueueClient(queueName: string): Queue {
   const existing = queueClientsByName.get(queueName);
   if (existing) return existing;
-  const queue = new Queue(queueName, { connection: getBullMQConnectionOptions() });
+  const queue = new Queue(queueName, {
+    connection: getBullMQConnectionOptions(),
+    prefix: getBullMQKeyPrefix(),
+  });
   queueClientsByName.set(queueName, queue);
   return queue;
 }

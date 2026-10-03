@@ -10,7 +10,10 @@ import { logs } from '@/domains/audit/audit.schema.js';
 import { dead_letter_jobs } from '@/infrastructure/queue/dlq/dead-letter.schema.js';
 import { createAuditRetentionWorker } from '@/domains/audit/workers/audit-retention.worker.js';
 import { AUDIT_RETENTION_QUEUE_NAME } from '@/domains/audit/workers/audit-retention.constants.js';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { ensureAuditLogPartitionsForTimestamps } from '@/tests/helpers/audit-log-partition.helper.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
@@ -30,6 +33,7 @@ describe('audit-retention.worker — purge', () => {
     workerHandle = createAuditRetentionWorker();
     queue = new Queue(AUDIT_RETENTION_QUEUE_NAME, {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
       defaultJobOptions: {
         removeOnComplete: { count: 20 },
         removeOnFail: { count: 20 },
@@ -37,6 +41,7 @@ describe('audit-retention.worker — purge', () => {
     });
     queueEvents = new QueueEvents(AUDIT_RETENTION_QUEUE_NAME, {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
     });
     await queueEvents.waitUntilReady();
     await workerHandle.worker?.waitUntilReady();

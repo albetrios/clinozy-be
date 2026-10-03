@@ -13,7 +13,10 @@ import {
   WEBHOOK_DELIVERY_QUEUE_NAME,
   type WebhookDeliveryJobData,
 } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
@@ -39,6 +42,7 @@ describe('webhook-delivery.worker — status transitions', () => {
     workerHandle = createWebhookDeliveryWorker();
     queue = new Queue<WebhookDeliveryJobData>(WEBHOOK_DELIVERY_QUEUE_NAME, {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
       defaultJobOptions: {
         removeOnComplete: { count: 20 },
         removeOnFail: { count: 20 },
@@ -46,6 +50,7 @@ describe('webhook-delivery.worker — status transitions', () => {
     });
     queueEvents = new QueueEvents(WEBHOOK_DELIVERY_QUEUE_NAME, {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
     });
     await queueEvents.waitUntilReady();
     await workerHandle.worker?.waitUntilReady();

@@ -1,5 +1,8 @@
 import { Worker } from 'bullmq';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import {
   getRetentionWorkerOptions,
   RETENTION_WORKER_CONCURRENCY,
@@ -35,6 +38,7 @@ export function createUserOffboardingReconcileWorker(
     async () => runUserOffboardingReconcileJob(service),
     {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
       concurrency: RETENTION_WORKER_CONCURRENCY,
       ...getRetentionWorkerOptions(),
     },

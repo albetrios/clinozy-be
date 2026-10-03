@@ -6,7 +6,10 @@ import {
 import { eq } from 'drizzle-orm';
 import { logs } from '@/domains/audit/audit.schema.js';
 import { users } from '@/domains/user/user.schema.js';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import {
   DLQ_QUEUE_SUFFIX,
   type DeadLetterJobData,
@@ -302,6 +305,7 @@ export async function autoReplayDeadLetterFromLedger(input: {
 
   const sourceQueue = new Queue(input.ledgerRow.source_queue, {
     connection: getBullMQConnectionOptions(),
+    prefix: getBullMQKeyPrefix(),
   });
   try {
     // Intentionally omit `jobId` — see TSDoc. App-layer idempotency dedups execution.
@@ -309,6 +313,7 @@ export async function autoReplayDeadLetterFromLedger(input: {
 
     const deadLetterQueue = new Queue(input.ledgerRow.dead_letter_queue, {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
     });
     try {
       const safeOriginalJobIdentifier = input.ledgerRow.job_id ?? 'unknown';
@@ -356,7 +361,10 @@ export async function replayDeadLetterJob(input: {
   dryRun: boolean;
   actorUserPublicId?: string;
 }): Promise<ReplayDeadLetterJobResult> {
-  const queue = new Queue(input.deadLetterQueueName, { connection: getBullMQConnectionOptions() });
+  const queue = new Queue(input.deadLetterQueueName, {
+    connection: getBullMQConnectionOptions(),
+    prefix: getBullMQKeyPrefix(),
+  });
   try {
     const job = await queue.getJob(input.deadLetterJobId);
     if (!job) {
@@ -380,6 +388,7 @@ export async function replayDeadLetterJob(input: {
 
     const sourceQueue = new Queue(data.original_queue, {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
     });
     try {
       // Intentionally omit `jobId` — see TSDoc. App-layer idempotency dedups execution.
@@ -406,7 +415,10 @@ export async function replayDeadLetterJob(input: {
  * by the `tool:dlq-replay` CLI; never call from API or worker code.
  */
 export async function listDeadLetterJobs(deadLetterQueueName: string): Promise<void> {
-  const queue = new Queue(deadLetterQueueName, { connection: getBullMQConnectionOptions() });
+  const queue = new Queue(deadLetterQueueName, {
+    connection: getBullMQConnectionOptions(),
+    prefix: getBullMQKeyPrefix(),
+  });
   try {
     const jobs = await queue.getJobs(['waiting', 'failed'], 0, 99);
     if (jobs.length === 0) {

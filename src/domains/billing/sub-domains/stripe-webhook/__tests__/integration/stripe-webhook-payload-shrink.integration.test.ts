@@ -21,7 +21,10 @@ import { createStripeWebhookWorker } from '@/domains/billing/sub-domains/stripe-
 import { createWorkerContainers } from '@/worker-containers.js';
 import { STRIPE_WEBHOOK_QUEUE_NAME } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
 import type { StripeWebhookJobData } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
 
@@ -37,6 +40,7 @@ describe('stripe-webhook — id-only Redis payload (payload shrink)', () => {
     workerHandle = createStripeWebhookWorker(createWorkerContainers().billingDomain);
     queue = new Queue<StripeWebhookJobData>(STRIPE_WEBHOOK_QUEUE_NAME, {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
       defaultJobOptions: {
         removeOnComplete: { count: 20 },
         removeOnFail: { count: 20 },
@@ -44,6 +48,7 @@ describe('stripe-webhook — id-only Redis payload (payload shrink)', () => {
     });
     queueEvents = new QueueEvents(STRIPE_WEBHOOK_QUEUE_NAME, {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
     });
     await queueEvents.waitUntilReady();
     await workerHandle.worker?.waitUntilReady();

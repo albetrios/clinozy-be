@@ -30,6 +30,7 @@ import {
   closeBullMqRedis,
   connectBullMqRedis,
   getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
 } from '@/infrastructure/queue/connection.js';
 import {
   readWorkerQueueHeartbeats,
@@ -94,7 +95,9 @@ async function main(): Promise<void> {
   try {
     await Promise.all([connectRedis(), connectBullMqRedis()]);
     const connection = getBullMQConnectionOptions();
-    queues = queueNames.map((name) => new Queue(name, { connection }));
+    queues = queueNames.map(
+      (name) => new Queue(name, { connection, prefix: getBullMQKeyPrefix() }),
+    );
 
     const startedAt = performance.now();
     const deadline = Date.now() + timeoutMilliseconds;

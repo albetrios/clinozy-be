@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Queue, QueueEvents, Worker } from 'bullmq';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { resetEnvCacheForTests } from '@/shared/config/env.config.js';
 import type * as BullMQMetricsModule from '@/infrastructure/observability/metrics/bullmq-metrics.js';
 import type * as MetricsModule from '@/infrastructure/observability/metrics/metrics.js';
@@ -51,14 +54,14 @@ describe.runIf(runRedisTests)('Integration: BullMQ Prometheus metrics', () => {
 
   it('exports bullmq_job_duration_seconds and bullmq_queue_* gauges on scrape', async () => {
     const connection = getBullMQConnectionOptions();
-    queue = new Queue(queueName, { connection });
-    queueEvents = new QueueEvents(queueName, { connection });
+    queue = new Queue(queueName, { connection, prefix: getBullMQKeyPrefix() });
+    queueEvents = new QueueEvents(queueName, { connection, prefix: getBullMQKeyPrefix() });
     worker = new Worker(
       queueName,
       async () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       },
-      { connection },
+      { connection, prefix: getBullMQKeyPrefix() },
     );
     attachBullMQJobMetrics(worker, queueName);
     await worker.waitUntilReady();

@@ -5,7 +5,10 @@
 
 import { Queue, UnrecoverableError, type Job, type Worker } from 'bullmq';
 import { isSentryInitialized, Sentry } from '@/infrastructure/observability/sentry/sentry.js';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { insertDeadLetterJob } from '@/infrastructure/queue/dlq/dead-letter.repository.js';
 import { THIRTY_DAYS_SECONDS } from '@/shared/constants/ttl.constants.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
@@ -106,6 +109,7 @@ export function getDeadLetterQueueClient(deadLetterQueueName: string): Queue {
   if (existing) return existing;
   const queue = new Queue(deadLetterQueueName, {
     connection: getBullMQConnectionOptions(),
+    prefix: getBullMQKeyPrefix(),
     // Queue-level default eviction so DLQ snapshots are bounded even when they sit
     // in `waiting` state (BullMQ `removeOn{Complete,Fail}` per-add only fires on
     // state transition; a DLQ job that never completes/fails would otherwise grow

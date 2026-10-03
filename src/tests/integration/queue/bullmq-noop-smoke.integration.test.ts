@@ -1,7 +1,10 @@
 import { describe, it, expect, afterAll, afterEach } from 'vitest';
 import { Queue, Worker, QueueEvents } from 'bullmq';
 import { randomUUID } from 'node:crypto';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { getDefaultWorkerOptions } from '@/infrastructure/queue/worker-runtime/worker-options.js';
 import {
   attachDeadLetterAndAlerting,
@@ -33,14 +36,14 @@ describe('Integration: BullMQ noop job smoke', () => {
     const queueName = `${NOOP_QUEUE_NAME}-${randomUUID()}`;
     let processedPayload: { ping: string } | null = null;
 
-    queue = new Queue(queueName, { connection });
-    queueEvents = new QueueEvents(queueName, { connection });
+    queue = new Queue(queueName, { connection, prefix: getBullMQKeyPrefix() });
+    queueEvents = new QueueEvents(queueName, { connection, prefix: getBullMQKeyPrefix() });
     worker = new Worker<{ ping: string }>(
       queueName,
       async (job) => {
         processedPayload = job.data;
       },
-      { connection },
+      { connection, prefix: getBullMQKeyPrefix() },
     );
 
     await Promise.all([
@@ -78,10 +81,11 @@ describe('Integration: BullMQ runtime under burst, retry and dead-letter', () =>
   async function openQueue<T>(processor: (data: T, attemptsMade: number) => Promise<void>) {
     const connection = getBullMQConnectionOptions();
     const queueName = `test-runtime-${randomUUID()}`;
-    const queue = new Queue<T>(queueName, { connection });
-    const queueEvents = new QueueEvents(queueName, { connection });
+    const queue = new Queue<T>(queueName, { connection, prefix: getBullMQKeyPrefix() });
+    const queueEvents = new QueueEvents(queueName, { connection, prefix: getBullMQKeyPrefix() });
     const worker = new Worker<T>(queueName, (job) => processor(job.data, job.attemptsMade), {
       connection,
+      prefix: getBullMQKeyPrefix(),
       concurrency: 10,
       ...getDefaultWorkerOptions(),
     });

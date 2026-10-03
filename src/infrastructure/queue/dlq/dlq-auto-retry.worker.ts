@@ -1,5 +1,8 @@
 import { Worker } from 'bullmq';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { runDlqAutoRetryJob } from '@/infrastructure/queue/dlq/dlq-auto-retry.processor.js';
 import { DLQ_AUTO_RETRY_QUEUE_NAME } from '@/infrastructure/queue/dlq/dlq-auto-retry.constants.js';
 import {
@@ -22,6 +25,7 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 export function createDlqAutoRetryWorker(): WorkerHandle {
   const worker = new Worker(DLQ_AUTO_RETRY_QUEUE_NAME, async () => runDlqAutoRetryJob(), {
     connection: getBullMQConnectionOptions(),
+    prefix: getBullMQKeyPrefix(),
     concurrency: RETENTION_WORKER_CONCURRENCY,
     ...getRetentionWorkerOptions(),
   });

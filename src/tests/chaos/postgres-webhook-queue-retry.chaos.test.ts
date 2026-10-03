@@ -8,7 +8,10 @@ import { database } from '@/infrastructure/database/connection.js';
 import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
 import { WEBHOOK_DELIVERY_QUEUE_NAME } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
 import { webhook_delivery_attempts } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
-import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import {
+  getBullMQConnectionOptions,
+  getBullMQKeyPrefix,
+} from '@/infrastructure/queue/connection.js';
 import { CHAOS_POSTGRES_PROXY_NAME } from '@/tests/chaos/chaos.constants.js';
 import {
   resetChaosTestingListeningProxyFailuresGloballyViaToxiproxy,
@@ -68,6 +71,7 @@ describe('Chaos resilience: BullMQ webhook delivery survives transient Postgres 
 
     enqueueQueueAwaitingIsolation = new Queue(WEBHOOK_DELIVERY_QUEUE_NAME, {
       connection: getBullMQConnectionOptions(),
+      prefix: getBullMQKeyPrefix(),
       defaultJobOptions: {
         removeOnComplete: { count: 20 },
         removeOnFail: { count: 20 },
@@ -78,6 +82,7 @@ describe('Chaos resilience: BullMQ webhook delivery survives transient Postgres 
       WEBHOOK_DELIVERY_QUEUE_NAME,
       {
         connection: getBullMQConnectionOptions(),
+        prefix: getBullMQKeyPrefix(),
       },
     );
 
