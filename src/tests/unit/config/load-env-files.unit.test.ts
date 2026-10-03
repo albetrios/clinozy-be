@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { applyDotenvFile } from '../../../shared/config/load-env-files.js';
+import { applyDotenvFile } from '@/shared/config/load-env-files.js';
 
 const PREFIX = 'CLINOZY_PROBE_';
 
