@@ -23,6 +23,21 @@ row. It never pushes, opens a PR or merges.
 The whole flow: [`docs/design-workflow/process/README.md`](../../../docs/design-workflow/process/README.md).
 The iteration rules: [`iterations/README.md`](../../../iterations/README.md).
 
+## The plan proposes; agent-os decides — remember this on every row
+
+The plan (`KICKOFF.md`, `plans/db-changes.md`, `route-changes.md`, `worker-changes.md`) states
+requirements and proposals in logical terms. **The backend's agent-os — its skills, rules and agents
+under `agent-os/` — is the expert.** Whenever the plan and agent-os disagree, or anything is unclear,
+follow agent-os. That covers the skills each row runs — the
+schema chain (`be-schema-generator`, `be-sql-design-guard`, `be-db-migration-maintainer`,
+`be-rls-tenant-isolation-guard`), the route chain (`be-api-contract-guard`, `be-route-schema-doc-guard`,
+`be-route-catalog`, `be-seed-maintainer`), `be-workers-events`, and the repository's rules. They decide
+the physical design and may change plan details on the way: names, types, indexes, constraints, tenant
+rules, paths, statuses, idempotency, job names. Follow them, never the plan's wording, wherever they
+differ; record each difference in the row's `AS-BUILT.md` entry and sync the change files (Each ROUTE
+row › Record). Only a scope change — a row added or removed, an acceptance changed, the order changed
+— stops for the user.
+
 ## Step 0 — Confirm the iteration, then stop until confirmed
 
 Run `pnpm iteration:list` and show:
@@ -93,7 +108,11 @@ Each driver runs the matching skill chain (schema-change, route-change, worker-c
    `full` / `overlay` → the acceptance traced to the PRD; `brief` → the `BRIEF.md` acceptance
    criteria the row covers, and the parts it touches still match the carried-forward PRD and
    `schema-routes.md` except where the brief changes them. MODE incremental, every mode: re-run the
-   existing end-to-end tests for everything touched.
+   existing end-to-end tests for everything touched. Against the plan's own files: every route the
+   row built matches its proposal in `plans/route-changes.md`, every table it built matches
+   `plans/db-changes.md` (`pnpm db:viewer` — the built table now stands where the plan drew it), and
+   every piece of background work it built matches `plans/worker-changes.md` (now with its real queue
+   and job names); any difference goes into the AS-BUILT row.
 3. **Record** — add the row to `AS-BUILT.md`:
 
    | # | Planned | Actually built | Difference | Why | Decision | Commit |
@@ -103,6 +122,13 @@ Each driver runs the matching skill chain (schema-change, route-change, worker-c
    queue names) goes here. Where the build now differs from the drop on purpose, add a **Standing
    deviation** (item · design says · built as · since iteration · decision); where this row resolves
    one, remove it.
+
+   Then **sync the plan with what was built**, so the three change files end as the true record:
+   `plans/db-changes.md` — the table's final `domain.table` on its label and its final field names
+   (still logical types; the physical types live in the schema code the DB Viewer draws);
+   `plans/route-changes.md` and `plans/worker-changes.md` — a `Built` column (added on the first
+   row) with the final method + path, or the final job, and the commit. `KICKOFF.md` stays frozen
+   apart from its ROUTE Status column.
 4. **Check the impact on upcoming rows.**
    - Small and inside the row → record it in `AS-BUILT.md` and continue.
    - **Scope** — a row added or removed, an acceptance changed, the order changed → **stop and ask**

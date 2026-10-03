@@ -79,10 +79,18 @@ skill runs Steps 0–6 and stops after each:
 | 0 — Confirm + gate | pick the iteration from the eligibility table; incremental: confirm the Baseline (saved with `pnpm iteration:baseline`); then `pnpm iteration:intake <iteration> --check` — a failure stops everything |
 | 1 — Inventory | are the counts right — screens, flows, entities, operations? |
 | 2 — Delta (incremental) | full / overlay: `pnpm iteration:diff <baseline> <iteration>` vs the designer's notes — are the findings intended? brief: `BRIEF.md` is the change list, and nothing else changed. Always: the Baseline's Standing deviations |
-| 3 — Reconcile | for each PRD ↔ schema-routes mismatch: which source wins? |
-| 4 — Blocking questions | the RED questions — ownership, scope (organization or narrower), lifecycle and delete policy, who may do what, background timing, notification channels, realtime, outside systems |
+| 3 — Reconcile | for each PRD ↔ schema-routes mismatch: which source wins? Anything only the screens or the prototype say (not in the PRD or schema-routes, nor an accepted frontend request): what do you want? — the plan never decides it |
+| 4 — Blocking questions | the RED questions — ownership, scope (organization or narrower), lifecycle and delete policy, who may do what, background timing, notification channels, realtime, outside systems, and where new tables live (the domain for each group, and their plural snake_case names) |
 | 5 — KICKOFF.md + plans/ | the plan, the ROUTE ledger (one row per table, background piece, flow), the requirements, the stories |
 | 6 — Self-check | the skill runs `pnpm iteration:status <iteration> ready-for-approval` |
+
+**Reviewing as it goes — no PR diff.** From Step 1 the skill keeps three files current: the database
+changes in `plans/db-changes.md` (the Mermaid data diagrams — open the DB Viewer URL it gives you and
+click the iteration under ◇ Plans to see it drawn as Latest + its changes), the proposed routes in
+`plans/route-changes.md` (a table per area) and the background work in `plans/worker-changes.md` (what
+runs without a user, when, on failure, who is told). Anything existing that changes — a table, a
+route, background work or a requirement — gets a **before → after** row. Every step ends with a **step review** — what changed, those review links,
+what needs you, then continue or change; ask for any change right there.
 
 ### Step 5 — Approve
 
@@ -113,6 +121,12 @@ skill confirms the iteration (eligible: `approved`, Baseline `none` or `done`/`f
 4. checks the impact on upcoming rows — a **scope** change (a row added or removed, an acceptance
    changed, the order changed) stops and asks you first;
 5. stops for your review.
+
+**The plan proposes; agent-os decides.** The backend's agent-os — its skills, rules and agents — is
+the expert: whenever the plan and agent-os disagree, or anything is unclear, agent-os wins, and it may
+change the plan's names, types, paths or job details on the way. Every such change lands in `AS-BUILT.md` and is synced back
+into `plans/db-changes.md`, `route-changes.md` and `worker-changes.md`; only a scope change stops for
+you.
 
 **Ask after every row:** does what was built match the plan — and if not, is the reason in
 `AS-BUILT.md`? Is anything deferred — and did you agree to it?

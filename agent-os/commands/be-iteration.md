@@ -7,6 +7,10 @@ Guide a design iteration one step at a time: **$ARGUMENTS**
 
 The steps and their questions are in `docs/design-workflow/process/iteration-guide.md`; the rules
 in `iterations/README.md`. Do **one** step, show its result, then stop and ask before the next.
+During planning every stop is a **step review** (be-iteration-planning › Step review): what changed
+as clickable links, the DB Viewer URL in plan mode and links to the change files —
+`plans/db-changes.md`, `plans/route-changes.md`, `plans/worker-changes.md` — when they changed, what
+needs the user, then continue or change.
 
 1. **Where are we?** Run `pnpm iteration:list` and show the table.
    - No argument and the user wants a new iteration → step 2.
