@@ -11,11 +11,12 @@ export type ExternalCredential = {
   /** The integration that stays broken while it holds the `.env.example` placeholder. */
   integration: string;
   /**
-   * `secret` — the `.env.example` value is never real (an API key), so a key still on it is
-   * reported as missing. `setting` — goes with a secret (bucket, region, sender) and the template
-   * value can be a real one (`us-east-1`), so it is copied when a source differs but never reported.
+   * `true` — the integration needs a real value and the `.env.example` value is never one (an API
+   * key, a placeholder endpoint), so a key still on it is reported as missing. `false` — the
+   * template value may be real (`S3_REGION=us-east-1`, the PostHog host) or the key is optional
+   * (collector auth headers): it is copied when a source has a different value, never reported.
    */
-  kind: 'secret' | 'setting';
+  reportMissing: boolean;
 };
 
 /**
@@ -24,36 +25,61 @@ export type ExternalCredential = {
  * development target's file) when the developer has it, else from the process environment.
  *
  * @remarks
- * Deliberately not listed: telemetry (`SENTRY_DSN`, `POSTHOG_KEY`, `OTEL_EXPORTER_OTLP_ENDPOINT` —
- * a laptop should not report into a hosted project), OAuth clients (their redirect URIs are
- * registered per environment, so a copied client would not complete a local login), and CAPTCHA
- * (disabled locally). Add a key here when a new integration needs an account credential locally.
+ * Deliberately not listed: `SENTRY_DSN` (local errors would count against the hosted project's
+ * quota), `OTEL_SERVICE_NAME` (local traces keep their own service name instead of posing as the
+ * development service), OAuth clients (their redirect URIs are registered per environment, so a
+ * copied client would not complete a local login), and CAPTCHA (local CAPTCHA uses Cloudflare's test
+ * keys — `--with-captcha`). Add a key here when a new integration needs an account value locally.
  */
 export const EXTERNAL_CREDENTIALS: readonly ExternalCredential[] = [
-  { key: 'STRIPE_SECRET_KEY', integration: 'Stripe — payments and subscriptions', kind: 'secret' },
+  {
+    key: 'STRIPE_SECRET_KEY',
+    integration: 'Stripe — payments and subscriptions',
+    reportMissing: true,
+  },
   {
     key: 'STRIPE_WEBHOOK_SECRET',
     integration: 'Stripe — webhook signature verification',
-    kind: 'secret',
+    reportMissing: true,
   },
   {
     key: 'RESEND_API_KEY',
     integration: 'Resend — outbound email (verification codes, invitations)',
-    kind: 'secret',
+    reportMissing: true,
   },
   {
     key: 'EMAIL_FROM_ADDRESS',
     integration: 'Resend — sender, must be on a domain verified in that account',
-    kind: 'setting',
+    reportMissing: false,
   },
   {
     key: 'S3_BUCKET',
     integration: 'S3 — uploads (bucket the credentials can access)',
-    kind: 'setting',
+    reportMissing: false,
   },
-  { key: 'S3_REGION', integration: 'S3 — the bucket’s region', kind: 'setting' },
-  { key: 'S3_ACCESS_KEY_ID', integration: 'S3 — access key', kind: 'secret' },
-  { key: 'S3_SECRET_ACCESS_KEY', integration: 'S3 — secret key', kind: 'secret' },
+  { key: 'S3_REGION', integration: 'S3 — the bucket’s region', reportMissing: false },
+  { key: 'S3_ACCESS_KEY_ID', integration: 'S3 — access key', reportMissing: true },
+  { key: 'S3_SECRET_ACCESS_KEY', integration: 'S3 — secret key', reportMissing: true },
+  {
+    key: 'POSTHOG_KEY',
+    integration: 'PostHog — product analytics project key',
+    reportMissing: true,
+  },
+  {
+    key: 'POSTHOG_HOST',
+    integration: 'PostHog — the project’s region host',
+    reportMissing: false,
+  },
+  {
+    key: 'OTEL_EXPORTER_OTLP_ENDPOINT',
+    integration: 'OpenTelemetry — trace collector endpoint',
+    reportMissing: true,
+  },
+  {
+    key: 'OTEL_EXPORTER_OTLP_HEADERS',
+    integration: 'OpenTelemetry — collector auth headers (read by the SDK when set)',
+    reportMissing: false,
+  },
 ];
 
 /**
@@ -103,8 +129,8 @@ function isPlaceholder(value: string | undefined, exampleValue: string | undefin
  * - **Never overwrites a real value:** a key is filled only while `.env.local` has it unset, blank,
  *   or equal to the `.env.example` placeholder — a credential the developer set stays.
  * - **Never copies a placeholder:** a source value that is itself the placeholder (or blank) is not
- *   a real value, so the next source is tried; with none left a `secret` is reported as missing (a
- *   `setting` is not — its template value may be the real one).
+ *   a real value, so the next source is tried; with none left the key is reported as missing when
+ *   its `reportMissing` is set (an optional key, or one whose template value may be real, is not).
  * - **Reports keys, never values,** so the caller can print the outcome safely.
  * - Pure: no file I/O — the caller reads and writes the files.
  */
@@ -121,7 +147,7 @@ export function fillExternalCredentials(options: {
     kept: [],
     missing: [],
   };
-  for (const { key, kind } of EXTERNAL_CREDENTIALS) {
+  for (const { key, reportMissing } of EXTERNAL_CREDENTIALS) {
     const exampleValue = exampleValues[key];
     if (!isPlaceholder(localValues[key], exampleValue)) {
       fill.kept.push(key);
@@ -132,7 +158,7 @@ export function fillExternalCredentials(options: {
     );
     const sourceValue = source?.values[key];
     if (source === undefined || sourceValue === undefined) {
-      if (kind === 'secret') fill.missing.push(key);
+      if (reportMissing) fill.missing.push(key);
       continue;
     }
     fill.content = upsertEnvAssignment(fill.content, key, formatEnvValue(sourceValue));

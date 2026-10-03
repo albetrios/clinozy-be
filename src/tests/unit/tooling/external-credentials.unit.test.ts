@@ -15,12 +15,15 @@ const EXAMPLE = [
   'S3_REGION=us-east-1',
   'S3_ACCESS_KEY_ID=xxx',
   'S3_SECRET_ACCESS_KEY=xxx',
+  'POSTHOG_KEY=phc_...',
+  'POSTHOG_HOST=https://us.i.posthog.com',
+  'OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.example.com',
   'LOG_LEVEL=debug',
   '',
 ].join('\n');
 
 const ALL_KEYS = EXTERNAL_CREDENTIALS.map((credential) => credential.key);
-const SECRET_KEYS = EXTERNAL_CREDENTIALS.filter((credential) => credential.kind === 'secret').map(
+const REPORTED_KEYS = EXTERNAL_CREDENTIALS.filter((credential) => credential.reportMissing).map(
   (credential) => credential.key,
 );
 
@@ -41,6 +44,10 @@ describe('setup:local — third-party API keys for .env.local', () => {
         'S3_REGION=ap-south-1',
         'S3_ACCESS_KEY_ID=AKIAREALKEY',
         'S3_SECRET_ACCESS_KEY=real/secret+key=',
+        'POSTHOG_KEY=phc_realProjectKey',
+        'POSTHOG_HOST=https://eu.i.posthog.com',
+        'OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.collector.test',
+        'OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer collector-token',
         'LOG_LEVEL=info',
       ].join('\n'),
     );
@@ -53,6 +60,9 @@ describe('setup:local — third-party API keys for .env.local', () => {
     expect(result.STRIPE_SECRET_KEY).toBe('stripe-key-from-file');
     expect(result.EMAIL_FROM_ADDRESS).toBe('Example Sender <no-reply@mail.example.test>');
     expect(result.S3_SECRET_ACCESS_KEY).toBe('real/secret+key=');
+    expect(result.OTEL_EXPORTER_OTLP_ENDPOINT).toBe('https://otlp.collector.test');
+    // Not in the template at all, still copied — and a value with a space reads back unchanged.
+    expect(result.OTEL_EXPORTER_OTLP_HEADERS).toBe('authorization=Bearer collector-token');
     // Not an external credential: the local value stays even though the source differs.
     expect(result.LOG_LEVEL).toBe('debug');
   });
@@ -130,8 +140,9 @@ describe('setup:local — third-party API keys for .env.local', () => {
       sources: [{ label: 'environment variables', values: {} }],
     });
     expect(fill.content).toBe(EXAMPLE);
-    // Only secrets are reported: a setting's template value (S3_REGION=us-east-1) may be the real one.
-    expect(fill.missing).toEqual(SECRET_KEYS);
+    // Only keys with reportMissing are listed: S3_REGION's template value may be the real one, and
+    // the collector auth headers are optional.
+    expect(fill.missing).toEqual(REPORTED_KEYS);
     expect(fill.missing).not.toContain('S3_REGION');
   });
 

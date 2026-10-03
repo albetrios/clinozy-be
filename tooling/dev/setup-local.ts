@@ -28,7 +28,8 @@
  * keypair + SECRETS_ENCRYPTION_KEY and localhost DB/Redis URLs) and exits — used by the
  * cloud-agent bootstrap (`tooling/setup/agent/bootstrap.sh`).
  *
- * Third-party API keys (Stripe, Resend, S3 — the list in `external-credentials.ts`) cannot be
+ * Third-party API keys (Stripe, Resend, S3, PostHog, OpenTelemetry — the list in
+ * `external-credentials.ts`) cannot be
  * generated: `.env.example` ships placeholders for them. Every run — `--only-env` included, on a
  * fresh or an existing `.env.local` — copies each key still on its placeholder from the hosted
  * development target's env file when it is present, else from the process environment (shell
