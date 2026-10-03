@@ -228,7 +228,7 @@ export const authRoutesPlugin: FastifyPluginAsync = async (app) => {
       schema: {
         summary: 'Switch to personal organization',
         description:
-          "Re-mints the access token scoped to the caller's personal organization (no body — the server resolves it; can never 403). Returns a new access token; the client swaps its Bearer to it.",
+          "Re-mints the access token scoped to the caller's personal organization (no body — the server resolves it; never 403 for membership — only 403 with reason `mfa_required` when the caller has set their own personal organization to require MFA and this session has not proved a second factor). Returns a new access token; the client swaps its Bearer to it.",
         tags: ['Organization'],
       },
     },
@@ -242,7 +242,7 @@ export const authRoutesPlugin: FastifyPluginAsync = async (app) => {
       schema: {
         summary: 'Switch active organization',
         description:
-          "Re-mints the access token scoped to the given organization after validating the caller's active membership (403 if not a member). Returns a new access token; the client swaps its Bearer to it.",
+          "Re-mints the access token scoped to the given organization after validating the caller's active membership (403 if not a member). When the organization's security policy requires MFA and this session has not proved a second factor, returns 403 with reason `mfa_required` — complete `POST /auth/me/mfa/verify` (or enroll MFA) and switch again; the re-minted token then carries `amr: ['mfa']`. Returns a new access token; the client swaps its Bearer to it.",
         tags: ['Organization'],
         body: z.object({
           organization_id: z
@@ -312,7 +312,7 @@ export const authRoutesPlugin: FastifyPluginAsync = async (app) => {
       schema: {
         summary: 'Confirm MFA enrollment (phase 2 of 2)',
         description:
-          'Verifies a 6-digit TOTP code against the secret staged by `POST /auth/me/mfa/enroll`. On success the auth method is persisted, recovery codes are generated and hashed, and is_mfa_enabled is flipped. The plaintext recovery codes are returned EXACTLY ONCE in this response.',
+          'Verifies a 6-digit TOTP code against the secret staged by `POST /auth/me/mfa/enroll`. On success the auth method is persisted, recovery codes are generated and hashed, and is_mfa_enabled is flipped. The current session is marked as having proved a second factor (organizations requiring MFA admit it after the next switch or refresh). The plaintext recovery codes are returned EXACTLY ONCE in this response.',
         tags: ['MFA'],
         body: MfaEnrollConfirmDto,
       },
@@ -440,7 +440,7 @@ export const authRoutesPlugin: FastifyPluginAsync = async (app) => {
       schema: {
         summary: 'Verify MFA code',
         description:
-          'Validates a TOTP code to complete MFA verification during login or enrollment confirmation.',
+          "Validates a TOTP code as an authenticated MFA step-up. On success the current session is marked as having proved a second factor, so organizations requiring MFA admit it: re-mint the token (switch organization or refresh) to receive `amr: ['mfa']`.",
         tags: ['MFA'],
         body: MfaVerifyDto,
       },

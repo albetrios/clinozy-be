@@ -127,6 +127,7 @@
   "insufficientRolePrivileges": "Insufficient role privileges",
   "organizationContextRequired": "Organization context required",
   "insufficientOrganizationPermissions": "Insufficient organization permissions",
+  "organizationRequiresMfa": "This organization requires multi-factor authentication. Verify with your second factor, then try again.",
   "insufficientUploadPermissions": "Insufficient organization permissions for upload",
   "invalidField": "Invalid {{label}}",
   "missingAuthorizationHeader": "Missing Authorization header",

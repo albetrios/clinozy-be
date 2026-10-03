@@ -156,6 +156,7 @@ describe('createAuthController', () => {
     revoke: vi.fn().mockResolvedValue(undefined),
     revokeAllSessions: vi.fn().mockResolvedValue(undefined),
     revokeAllSessionsExceptCurrent: vi.fn().mockResolvedValue(undefined),
+    markSessionMfaVerified: vi.fn().mockResolvedValue(true),
   };
 
   const webauthnService = {
@@ -258,6 +259,8 @@ describe('createAuthController', () => {
     expect(mfaService.enrollConfirm).toHaveBeenCalled();
     expect(mfaService.verifyLoginMfa).toHaveBeenCalled();
     expect(deleteReply.code).toHaveBeenCalledWith(204);
+    // MFA step-up and enrollment prove a second factor on the current session.
+    expect(authSessionService.markSessionMfaVerified).toHaveBeenCalled();
   });
 
   it('verifyMfaLogin returns session_id and sets session cookie', async () => {

@@ -41,6 +41,10 @@ export const sessions = authSchema
       last_active_at: timestamp('last_active_at', { withTimezone: true }).notNull().defaultNow(),
       expires_at: timestamp('expires_at', { withTimezone: true }).notNull(),
       is_revoked: boolean('is_revoked').notNull().default(false),
+      // When this session last proved a second factor (MFA login challenge, MFA step-up or MFA
+      // enrollment); null for a first-factor-only session. Organizations whose security policy
+      // requires MFA admit only sessions with it (organization switch, refresh, authorization).
+      mfa_verified_at: timestamp('mfa_verified_at', { withTimezone: true }),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     },
     (table) => [

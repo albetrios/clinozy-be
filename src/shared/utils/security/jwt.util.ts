@@ -90,20 +90,32 @@ export interface TokenPayload {
    * stateless second factor; do not assume it is checked per request.
    */
   sessionVersion?: number;
+  /**
+   * Authentication methods the token's session has proven — the standard `amr` claim (RFC 8176).
+   * Contains {@link MFA_AUTHENTICATION_METHOD} once the session passed a second factor (MFA login
+   * challenge, MFA step-up or enrollment). Organizations whose security policy requires MFA admit
+   * only such tokens (`requireOrganizationPermission`). Absent for a first-factor-only session.
+   */
+  authenticationMethods?: string[];
 }
+
+/** The `amr` value (RFC 8176) a token carries once its session proved a second factor. */
+export const MFA_AUTHENTICATION_METHOD = 'mfa';
 
 /**
  * Sign an access token with RS256.
  * - 15-minute expiry (or shorter for global admin)
  * - No email in payload (security: avoid leaking PII)
  * - iss/aud claims set for validation
- * - `org` carries the active organization (tenant scope); `sv` the session version.
+ * - `org` carries the active organization (tenant scope); `sv` the session version; `amr` the
+ *   authentication methods the session proved (RFC 8176) — `['mfa']` after a second factor.
  */
 export async function signAccessToken(payload: {
   userId: string;
   role?: string | undefined;
   organizationPublicId?: string | undefined;
   sessionVersion?: number | undefined;
+  authenticationMethods?: string[] | undefined;
 }): Promise<string> {
   const userId = payload.userId;
   const role = payload.role;
@@ -116,7 +128,12 @@ export async function signAccessToken(payload: {
       : ACCESS_TOKEN_EXPIRY_SECONDS;
 
   const builder = new SignJWT(
-    omitUndefined({ role, org: payload.organizationPublicId, sv: payload.sessionVersion }),
+    omitUndefined({
+      role,
+      org: payload.organizationPublicId,
+      sv: payload.sessionVersion,
+      amr: payload.authenticationMethods?.length ? payload.authenticationMethods : undefined,
+    }),
   )
     .setProtectedHeader({ alg: JWT_ALGORITHM, kid: environment.JWT_SIGNING_KID })
     .setSubject(userId)
@@ -174,6 +191,9 @@ export async function verifyAccessToken(token: string): Promise<TokenPayload> {
   }
   if (typeof payload.sv === 'number') {
     tokenPayload.sessionVersion = payload.sv;
+  }
+  if (Array.isArray(payload.amr) && payload.amr.every((method) => typeof method === 'string')) {
+    tokenPayload.authenticationMethods = payload.amr;
   }
   return tokenPayload;
 }

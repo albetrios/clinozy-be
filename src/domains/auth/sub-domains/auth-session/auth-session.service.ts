@@ -258,6 +258,21 @@ export class AuthSessionService {
     return { sessionPublicId: session.public_id };
   }
 
+  /**
+   * Records that the session just proved a second factor (MFA step-up or enrollment), so
+   * organizations whose security policy requires MFA admit it on the next switch or refresh.
+   *
+   * @remarks
+   * Only a live session (not revoked, not expired) is marked; returns whether one was. The
+   * current access token is unchanged — the next switch or refresh mints one with `amr: ['mfa']`.
+   */
+  async markSessionMfaVerified(sessionPublicId: string): Promise<boolean> {
+    return withAppDatabaseContext(
+      SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
+      (_databaseHandle) => this.sessionRepository.markMfaVerified(sessionPublicId),
+    );
+  }
+
   async findActiveSessionByPublicId(sessionPublicId: string) {
     return withAppDatabaseContext(
       SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),

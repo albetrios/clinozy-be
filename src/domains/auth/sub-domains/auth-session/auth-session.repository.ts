@@ -129,6 +129,26 @@ export class AuthSessionRepository {
       .where(eq(sessions.public_id, publicId));
   }
 
+  /**
+   * Record that the session just proved a second factor (MFA step-up or enrollment), so
+   * organizations requiring MFA admit it. Only a live session (not revoked, not expired) is
+   * marked; returns whether a row was updated.
+   */
+  async markMfaVerified(publicId: string): Promise<boolean> {
+    const rows = await getRequestDatabase()
+      .update(sessions)
+      .set({ mfa_verified_at: databaseNowTimestamp })
+      .where(
+        and(
+          eq(sessions.public_id, publicId),
+          eq(sessions.is_revoked, false),
+          gt(sessions.expires_at, databaseNowTimestamp),
+        ),
+      )
+      .returning({ public_id: sessions.public_id });
+    return rows.length > 0;
+  }
+
   async rotateSessionCredentials(
     publicId: string,
     currentRefreshTokenHash: string,
@@ -295,6 +315,7 @@ export class AuthSessionRepository {
           ip_address: data.ip_address,
           user_agent: data.user_agent,
           expires_at: data.expires_at,
+          mfa_verified_at: data.mfa_verified_at,
         })
         .returning();
       return rows[0]!;

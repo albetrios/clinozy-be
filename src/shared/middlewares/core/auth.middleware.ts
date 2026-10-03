@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { ConfigurationError, UnauthorizedError } from '@/shared/errors/index.js';
-import { verifyAccessToken } from '@/shared/utils/security/jwt.util.js';
+import { MFA_AUTHENTICATION_METHOD, verifyAccessToken } from '@/shared/utils/security/jwt.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import type { AuthContext } from '@/shared/types/index.js';
 import { GLOBAL_ROLES, type GlobalRole } from '@/shared/constants/roles.constants.js';
@@ -126,6 +126,9 @@ async function authenticateWithBearerToken(request: FastifyRequest): Promise<voi
       // Active organization (tenant scope) carried as a signed claim. Membership + RLS are
       // still re-checked per request — the claim is scope, not authority.
       organizationPublicId: payload.organizationPublicId,
+      // The session proved a second factor (signed `amr` claim); MFA-required organizations
+      // admit only such principals.
+      mfaVerified: payload.authenticationMethods?.includes(MFA_AUTHENTICATION_METHOD) === true,
     }) as AuthContext;
   } catch (error) {
     if (error instanceof UnauthorizedError) {

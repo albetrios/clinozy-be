@@ -9,6 +9,8 @@ import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
+import { MFA_AUTHENTICATION_METHOD } from '@/shared/utils/security/jwt.util.js';
+import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import {
   seedPermissions,
   createRoleWithPermissions,
@@ -36,7 +38,10 @@ describe('Tenancy Organization Settings Sub-Domain — Integration', () => {
     await seedPermissions(TENANCY_PERMISSION_CODES);
   });
 
-  async function createAuthorizedOrganizationContext(permissionCodes: string[]) {
+  async function createAuthorizedOrganizationContext(
+    permissionCodes: string[],
+    options: { authenticationMethods?: string[] } = {},
+  ) {
     const user = await createTestUser();
     const organization = await createTestOrganization({ ownerUserId: user.id });
     const role = await createRoleWithPermissions({
@@ -52,6 +57,7 @@ describe('Tenancy Organization Settings Sub-Domain — Integration', () => {
     const token = await generateTestToken({
       userId: user.public_id,
       organizationPublicId: organization.public_id,
+      ...omitUndefined({ authenticationMethods: options.authenticationMethods }),
     });
     return { user, organization, role, token };
   }
@@ -200,11 +206,13 @@ describe('Tenancy Organization Settings Sub-Domain — Integration', () => {
 
     // audit #11: security_policy is MERGED, not whole-object replaced — so a second PATCH editing a
     // different key cannot silently revert the first (e.g. an admin enabling organization-mandated MFA).
+    // The admin's session has proved MFA: once the first PATCH turns `mfa_required` on, organization
+    // routes refuse a session without it (403 `mfa_required`, organization-mfa-enforcement suite).
     it('merges security_policy keys across sequential PATCHes (no lost update)', async () => {
-      const { token } = await createAuthorizedOrganizationContext([
-        TENANCY_PERMISSIONS.ORGANIZATION_READ,
-        TENANCY_PERMISSIONS.ORGANIZATION_UPDATE,
-      ]);
+      const { token } = await createAuthorizedOrganizationContext(
+        [TENANCY_PERMISSIONS.ORGANIZATION_READ, TENANCY_PERMISSIONS.ORGANIZATION_UPDATE],
+        { authenticationMethods: [MFA_AUTHENTICATION_METHOD] },
+      );
 
       const first = await injectAuthenticatedOrganizationMutation(app, {
         method: 'PATCH',

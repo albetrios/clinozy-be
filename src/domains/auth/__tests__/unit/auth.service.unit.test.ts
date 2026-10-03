@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Redis } from 'ioredis';
-import { NotFoundError, UnauthorizedError, ValidationError } from '@/shared/errors/index.js';
+import {
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+  ValidationError,
+} from '@/shared/errors/index.js';
+import { signAccessToken } from '@/shared/utils/security/jwt.util.js';
+import { organizationRequiresMfa } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-mfa-policy.js';
 import { AuthService } from '@/domains/auth/auth.service.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import type { AuthSessionService } from '@/domains/auth/sub-domains/auth-session/auth-session.service.js';
@@ -21,8 +28,17 @@ vi.mock('@/shared/utils/security/password.util.js', () => ({
 }));
 
 vi.mock('@/shared/utils/security/jwt.util.js', () => ({
+  MFA_AUTHENTICATION_METHOD: 'mfa',
   signAccessToken: vi.fn().mockResolvedValue('jwt-access-token'),
 }));
+
+// Organization MFA policy (Redis + Postgres in production); per-test overrides below.
+vi.mock(
+  '@/domains/tenancy/sub-domains/organization/organization-settings/organization-mfa-policy.js',
+  () => ({
+    organizationRequiresMfa: vi.fn().mockResolvedValue(false),
+  }),
+);
 
 vi.mock('@/shared/utils/auth/global-admin-role.util.js', () => ({
   resolveAccessTokenRoleForUser: vi.fn().mockResolvedValue('USER'),
@@ -450,6 +466,145 @@ describe('AuthService', () => {
         activeOrganizationId: 9,
       }),
     );
+  });
+
+  describe('organizations whose security policy requires MFA', () => {
+    const resolveModule = () =>
+      import('@/domains/tenancy/sub-domains/organization/resolve-active-organization.js');
+
+    function sessionMfa(verified: boolean) {
+      const mfa_verified_at = verified ? new Date() : null;
+      vi.mocked(authSessionService.findActiveSessionByPublicId).mockResolvedValueOnce({
+        public_id: 'session_public',
+        user_id: 1,
+        mfa_verified_at,
+      } as never);
+      return mfa_verified_at;
+    }
+
+    it('refuses to switch a first-factor-only session into one (reason mfa_required), re-binding nothing', async () => {
+      const resolve = await resolveModule();
+      vi.mocked(resolve.findUserActiveOrganizationByPublicId).mockResolvedValue({
+        id: 9,
+        public_id: 'org_mfa',
+      });
+      vi.mocked(organizationRequiresMfa).mockResolvedValueOnce(true);
+      sessionMfa(false);
+      vi.mocked(authSessionService.rebindAccessToken).mockClear();
+
+      const switching = service.switchToOrganization({
+        userPublicId: user.public_id,
+        sessionPublicId: 'session_public',
+        organizationPublicId: 'org_mfa',
+      });
+
+      await expect(switching).rejects.toBeInstanceOf(ForbiddenError);
+      await expect(switching).rejects.toMatchObject({ reason: 'mfa_required' });
+      expect(authSessionService.rebindAccessToken).not.toHaveBeenCalled();
+    });
+
+    it('lets an MFA-verified session switch in and mints amr: [mfa]', async () => {
+      const resolve = await resolveModule();
+      vi.mocked(resolve.findUserActiveOrganizationByPublicId).mockResolvedValue({
+        id: 9,
+        public_id: 'org_mfa',
+      });
+      vi.mocked(organizationRequiresMfa).mockResolvedValue(true);
+      sessionMfa(true);
+
+      await service.switchToOrganization({
+        userPublicId: user.public_id,
+        sessionPublicId: 'session_public',
+        organizationPublicId: 'org_mfa',
+      });
+
+      expect(vi.mocked(signAccessToken)).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          organizationPublicId: 'org_mfa',
+          authenticationMethods: ['mfa'],
+        }),
+      );
+      vi.mocked(organizationRequiresMfa).mockResolvedValue(false);
+    });
+
+    it('refresh never re-mints an MFA-required organization for an unverified session — falls back to personal', async () => {
+      const resolve = await resolveModule();
+      vi.mocked(authSessionService.findSessionByPublicIdIncludingRevoked).mockResolvedValueOnce({
+        public_id: 'session_public',
+        user_id: 1,
+        organization_id: 9,
+        mfa_verified_at: null,
+        expires_at: new Date(Date.now() + 86_400_000),
+        is_revoked: false,
+      } as never);
+      vi.mocked(resolve.findUserActiveOrganizationPublicIdByInternalId).mockResolvedValueOnce(
+        'org_mfa',
+      );
+      vi.mocked(resolve.resolvePersonalOrganizationPublicId).mockResolvedValueOnce('org_personal');
+      vi.mocked(organizationRequiresMfa).mockImplementation(
+        async (organizationPublicId) => organizationPublicId === 'org_mfa',
+      );
+
+      await service.refreshToken({ sessionPublicId: 'session_public', refreshSecret: 'secret' });
+
+      expect(vi.mocked(signAccessToken)).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          organizationPublicId: 'org_personal',
+          authenticationMethods: undefined,
+        }),
+      );
+      vi.mocked(organizationRequiresMfa).mockReset().mockResolvedValue(false);
+    });
+
+    it('refresh mints no organization when the personal one requires MFA too', async () => {
+      const resolve = await resolveModule();
+      vi.mocked(authSessionService.findSessionByPublicIdIncludingRevoked).mockResolvedValueOnce({
+        public_id: 'session_public',
+        user_id: 1,
+        organization_id: 9,
+        mfa_verified_at: null,
+        expires_at: new Date(Date.now() + 86_400_000),
+        is_revoked: false,
+      } as never);
+      vi.mocked(resolve.findUserActiveOrganizationPublicIdByInternalId).mockResolvedValueOnce(
+        'org_mfa',
+      );
+      vi.mocked(resolve.resolvePersonalOrganizationPublicId).mockResolvedValueOnce('org_personal');
+      vi.mocked(organizationRequiresMfa).mockResolvedValue(true);
+
+      await service.refreshToken({ sessionPublicId: 'session_public', refreshSecret: 'secret' });
+
+      expect(vi.mocked(signAccessToken)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ organizationPublicId: undefined }),
+      );
+      vi.mocked(organizationRequiresMfa).mockReset().mockResolvedValue(false);
+    });
+
+    it('refresh keeps the MFA-required organization for an MFA-verified session (amr: [mfa])', async () => {
+      const resolve = await resolveModule();
+      vi.mocked(authSessionService.findSessionByPublicIdIncludingRevoked).mockResolvedValueOnce({
+        public_id: 'session_public',
+        user_id: 1,
+        organization_id: 9,
+        mfa_verified_at: new Date(),
+        expires_at: new Date(Date.now() + 86_400_000),
+        is_revoked: false,
+      } as never);
+      vi.mocked(resolve.findUserActiveOrganizationPublicIdByInternalId).mockResolvedValueOnce(
+        'org_mfa',
+      );
+      vi.mocked(organizationRequiresMfa).mockResolvedValue(true);
+
+      await service.refreshToken({ sessionPublicId: 'session_public', refreshSecret: 'secret' });
+
+      expect(vi.mocked(signAccessToken)).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          organizationPublicId: 'org_mfa',
+          authenticationMethods: ['mfa'],
+        }),
+      );
+      vi.mocked(organizationRequiresMfa).mockReset().mockResolvedValue(false);
+    });
   });
 
   /**

@@ -110,4 +110,20 @@ export class OrganizationSettingsRepository {
     ) as { requires_mfa: boolean | null }[];
     return resultRows[0]?.requires_mfa === true;
   }
+
+  /**
+   * Organization switch / refresh / per-request authorization (no tenant GUC for the caller yet):
+   * true when the organization's security_policy requires MFA. Same strict `mfa_required === true`
+   * check, through the SECURITY DEFINER resolver `tenancy.organization_requires_mfa` — the
+   * settings and organizations tables are FORCE RLS.
+   */
+  async organizationRequiresMfa(organizationPublicId: string): Promise<boolean> {
+    const rows = await database.execute(
+      sql`SELECT tenancy.organization_requires_mfa(${organizationPublicId}) AS requires_mfa`,
+    );
+    const resultRows = (
+      Array.isArray(rows) ? rows : ((rows as { rows?: unknown[] }).rows ?? [])
+    ) as { requires_mfa: boolean | null }[];
+    return resultRows[0]?.requires_mfa === true;
+  }
 }

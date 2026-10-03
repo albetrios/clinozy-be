@@ -82,6 +82,7 @@ src/
     │   │   │   ├── auth-route-smoke.integration.test.ts
     │   │   │   ├── auth.integration.test.ts
     │   │   │   ├── logout-revokes-token.integration.test.ts
+    │   │   │   ├── organization-mfa-enforcement.integration.test.ts
     │   │   │   ├── refresh-preserves-active-organization.integration.test.ts
     │   │   │   ├── refresh-reuse-detection.integration.test.ts
     │   │   │   └── refresh-rotates-token-hash.integration.test.ts
@@ -850,6 +851,7 @@ src/
     │   │   │   │   │   ├── organization-settings.bulk.seed.ts
     │   │   │   │   │   └── organization-settings.faker.ts
     │   │   │   │   ├── i18n-locale.cache.ts
+    │   │   │   │   ├── organization-mfa-policy.ts
     │   │   │   │   ├── organization-settings.controller.ts
     │   │   │   │   ├── organization-settings.dto.ts
     │   │   │   │   ├── organization-settings.overview.md

@@ -116,6 +116,30 @@ describe('auth.middleware', () => {
       userId: userPublicId,
       role: 'user',
       sessionPublicId: 'sess_test',
+      mfaVerified: false,
+    });
+  });
+
+  it('marks the principal MFA-verified when the token carries amr: [mfa]', async () => {
+    application = await createAuthMiddlewareApplication();
+    const userPublicId = generatePublicId('user');
+    const accessToken = await signAccessToken({
+      userId: userPublicId,
+      role: 'user',
+      authenticationMethods: ['mfa'],
+    });
+
+    const response = await application.inject({
+      method: 'GET',
+      url: '/protected',
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      kind: 'user',
+      userId: userPublicId,
+      mfaVerified: true,
     });
   });
 
@@ -137,6 +161,7 @@ describe('auth.middleware', () => {
       userId: userPublicId,
       role: undefined,
       sessionPublicId: 'sess_test',
+      mfaVerified: false,
     });
   });
 

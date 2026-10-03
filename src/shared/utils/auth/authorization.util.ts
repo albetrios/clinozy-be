@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { resolveUserOrganizationPermissions } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
+import { organizationRequiresMfa } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-mfa-policy.js';
 import type { GlobalRole } from '@/shared/constants/roles.constants.js';
 import { ForbiddenError, UnauthorizedError } from '@/shared/errors/index.js';
 import { recordScopedAuditEvent } from '@/shared/utils/infrastructure/audit-request-context.util.js';
@@ -183,6 +184,22 @@ export function requireOrganizationPermission(
         }),
       );
       throw new ForbiddenError('errors:insufficientOrganizationPermissions');
+    }
+    // An organization whose security policy requires MFA admits only a session that proved a
+    // second factor (the token's `amr`). Checked per request — not only at login — so a session
+    // that joined later (invitation accepted after a first-factor login) or predates the policy
+    // cannot use the organization's authority. Runs after the permission check so a non-member
+    // learns nothing about the policy; an MFA-verified principal skips the lookup entirely.
+    if (auth.mfaVerified !== true && (await organizationRequiresMfa(organizationId))) {
+      await emitPermissionDenyAudit(
+        request,
+        buildDenyMetadata(request, {
+          deny_reason: 'organization_mfa_required',
+          permission_code: permissionCode,
+          organization_id: organizationId,
+        }),
+      );
+      throw new ForbiddenError('errors:organizationRequiresMfa').withReason('mfa_required');
     }
   };
 }
