@@ -8,11 +8,16 @@
 | Opened | 2026-09-30 |
 | Branch | docs/legacy-prd-import |
 | Baseline | none |
-| Status | planning |
+| Status | approved |
 | Summary | Full clinic app: 12 screens, 93 routes, 40 entities |
-| Drop placed | 2026-10-01 |
-| Drop source | ~/Downloads |
+| Drop placed | 2026-10-03 |
+| Drop source | ~/projects/clinozy/clinozy-fe/iterations/launch-2026-09-30-jxmr/intake-files |
 | Intake mode | full |
-| Intake note | imported (pre-intake) |
+| Intake note | 22 received |
 | Schema-routes | 5f90325208e1 |
-| Intake hash | 8fd356da6cd2 |
+| Intake hash | 036cbb592ac5 |
+
+## History
+
+- 2026-10-03 · planning → ready-for-approval · — · Nikunj Mavani
+- 2026-10-03 · ready-for-approval → approved · — · Nikunj Mavani
