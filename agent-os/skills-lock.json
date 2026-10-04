@@ -53,7 +53,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-contract-test-maintainer/SKILL.md",
-      "computedHash": "6b478623a3a7fb78773829a7ec10c42c235e89363a2e677f2b3489c9f3d01077"
+      "computedHash": "2c28b47031ffc160e930751c7f1d3626fb0bcb63022ac2732bcb28b64e230eb1"
     },
     "be-cursor-global-skills": {
       "source": "local",

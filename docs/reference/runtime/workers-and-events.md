@@ -155,6 +155,8 @@ Every BullMQ worker is registered exactly once in [`worker-registration.registry
 
 Currently **32 workers** are registered (**29** use Postgres, **3** are Redis-only — `idempotency-cardinality`, `dlq-depth`, `commit-dispatch-recovery`; **26** are cron-scheduled, **6** are event-driven). Add a new worker by appending one entry — bootstrap, scheduler filtering, connection budgeting, and the scheduler-registry audit pick it up automatically.
 
+The worker's `/readyz` reports `workersRegistered` as the handles its process started: the repeatable-job scheduler plus each worker of its `WORKER_QUEUE_FAMILIES` that is enabled. A process running every family with every secret set therefore shows one more than the registry; a worker skipped for a missing secret (`mail` without `RESEND_API_KEY`, `stripe-webhook` without `STRIPE_WEBHOOK_SECRET`) or a family not selected shows fewer ([health-checks.md](../reliability/health-checks.md#worker-get-livez-and-get-readyz)).
+
 Operational sizing per family is documented in [resource-limits.md → Worker Postgres pool demand](../../deployment/runbooks/resource-limits.md#worker-postgres-pool-demand-per-process). Split-service deployment guidance is in [worker-scaling.md](../../deployment/runbooks/worker-scaling.md#splitting-worker-services-by-family).
 
 ---

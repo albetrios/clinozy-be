@@ -36,7 +36,7 @@ Runs in **Quality** CI (`pnpm test:contract`). Default `pnpm test` **excludes** 
 
 ## Checklist
 
-- [ ] `CONTRACT_TESTS_ONLY=true` path still works (global-setup skips DB when appropriate)
+- [ ] `CONTRACT_TESTS_ENABLED=true` path still works (global-setup skips DB when appropriate)
 - [ ] Stripe uses **fetch HTTP client** under contract-only runs (see contract-tests doc)
 - [ ] nock matchers handle `application/x-www-form-urlencoded` parsed bodies (`helpers/stripe-form.ts`)
 - [ ] Fixtures updated when external API shape changes
