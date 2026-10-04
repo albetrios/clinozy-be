@@ -77,17 +77,18 @@ describe('Resend outbound email contract (`mail.service.sendEmail`)', () => {
   });
 
   test('sendEmail forwards the outbox idempotency key as the Idempotency-Key header', async () => {
+    const outboxIdempotencyKey = 'mail-outbox-3f0c7a52-8a1e-4f6b-9a7d-2c5e8b1d4f60';
     nock(resendApiHostnameOutbound)
       .post('/emails', () => true)
       .matchHeader('authorization', /^Bearer /)
-      .matchHeader('idempotency-key', 'mail-outbox-99')
+      .matchHeader('idempotency-key', outboxIdempotencyKey)
       .reply(200, outboundResendEmailsSuccessEnvelope);
 
     const outboundResendMessageIdentifier = await sendEmail({
       to: outboundResendEmailsRequestExpectedEnvelope.to[0] ?? '',
       subject: outboundResendEmailsRequestExpectedEnvelope.subject,
       html: outboundResendEmailsRequestExpectedEnvelope.html,
-      idempotencyKey: 'mail-outbox-99',
+      idempotencyKey: outboxIdempotencyKey,
     });
 
     expect(outboundResendMessageIdentifier).toBe(outboundResendEmailsSuccessEnvelope.id);

@@ -23,19 +23,28 @@ import {
 const DEFAULT_MAIL_JOB_MAX_ATTEMPTS = MAIL_QUEUE_MAX_ATTEMPTS;
 
 /**
- * Builds the deterministic Resend idempotency key for a mail_outbox row.
+ * Builds the Resend idempotency key for a mail_outbox row from the row's stored random token.
  *
  * @remarks
- * - **Algorithm:** `mail-outbox-<id>` — stable across every BullMQ retry and
- *   sweeper reclaim of the same row, so Resend collapses duplicate `emails.send`
- *   calls into a single delivery (audit #20).
+ * - **Algorithm:** `mail-outbox-<resend_idempotency_token>` — a uuid Postgres generates on
+ *   insert, so the key is unique across every database sending through the same Resend account.
+ *   The bigserial `id` is not: it restarts at 1 after `TRUNCATE ... RESTART IDENTITY` or on a
+ *   fresh database, and Resend rejects a key reused with a different body for 24 hours
+ *   (409 `invalid_idempotent_request`), so that email would never be delivered. A row created
+ *   before the token column existed (token `null`) keeps the legacy `mail-outbox-<id>` key it
+ *   may already have been sent under.
  * - **Failure modes:** none — pure string builder.
  * - **Side effects:** none.
- * - **Notes:** the key is row-scoped (not attempt-scoped) on purpose; a worker
- *   that sent then crashed before marking `sent` re-uses the same key on reclaim.
+ * - **Notes:** the key is row-scoped (not attempt-scoped) on purpose: read from the row, it is the
+ *   same on every BullMQ retry and sweeper reclaim, so a worker that sent then crashed before
+ *   marking `sent` re-uses it and Resend collapses the duplicate `emails.send` into one delivery
+ *   (audit #20).
  */
-export function buildMailOutboxIdempotencyKey(mailOutboxId: number): string {
-  return `mail-outbox-${String(mailOutboxId)}`;
+export function buildMailOutboxIdempotencyKey(options: {
+  mailOutboxId: number;
+  resendIdempotencyToken: string | null;
+}): string {
+  return `mail-outbox-${options.resendIdempotencyToken ?? String(options.mailOutboxId)}`;
 }
 
 /**
@@ -191,7 +200,10 @@ async function processMailOutboxJobInner(
         text: outboxRow.text_body ?? undefined,
         replyTo: outboxRow.reply_to ?? undefined,
         tags: (outboxRow.tags as { name: string; value: string }[] | null) ?? undefined,
-        idempotencyKey: buildMailOutboxIdempotencyKey(mailOutboxId),
+        idempotencyKey: buildMailOutboxIdempotencyKey({
+          mailOutboxId,
+          resendIdempotencyToken: outboxRow.resend_idempotency_token,
+        }),
         requestId,
       }),
     );

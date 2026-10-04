@@ -1176,6 +1176,7 @@ src/
     │   │   └── unit/
     │   │   │   ├── mail-outbox-sweeper.processor.unit.test.ts
     │   │   │   ├── mail-outbox.dedupe.db.unit.test.ts
+    │   │   │   ├── mail-outbox.resend-idempotency-token.db.unit.test.ts
     │   │   │   ├── mail-outbox.scrub.db.unit.test.ts
     │   │   │   └── mail.processor.unit.test.ts
     │   ├── queues/

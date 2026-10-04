@@ -7,6 +7,9 @@ import {
   processMailOutboxJob,
 } from '@/infrastructure/mail/workers/mail.processor.js';
 
+const RESEND_IDEMPOTENCY_TOKEN = '3f0c7a52-8a1e-4f6b-9a7d-2c5e8b1d4f60';
+const OTHER_DATABASE_RESEND_IDEMPOTENCY_TOKEN = 'b7e2d915-4c3a-4e8f-8d21-6f9a0c3b5e17';
+
 const findMailOutboxByIdMock = vi.fn();
 const tryClaimPendingMailOutboxMock = vi.fn();
 const markMailOutboxSentMock = vi.fn();
@@ -41,9 +44,34 @@ describe('mail.processor', () => {
     sendEmailMock.mockReset();
   });
 
-  it('buildMailOutboxIdempotencyKey is deterministic per outbox row', () => {
-    expect(buildMailOutboxIdempotencyKey(43)).toBe('mail-outbox-43');
-    expect(buildMailOutboxIdempotencyKey(43)).toBe(buildMailOutboxIdempotencyKey(43));
+  it('buildMailOutboxIdempotencyKey keys a row on its stored random token', () => {
+    expect(
+      buildMailOutboxIdempotencyKey({
+        mailOutboxId: 43,
+        resendIdempotencyToken: RESEND_IDEMPOTENCY_TOKEN,
+      }),
+    ).toBe(`mail-outbox-${RESEND_IDEMPOTENCY_TOKEN}`);
+  });
+
+  it('buildMailOutboxIdempotencyKey gives the same id in two databases different keys', () => {
+    // A bigserial id restarts at 1 after TRUNCATE ... RESTART IDENTITY or on a fresh database, and
+    // Resend rejects a key reused with a different body for 24 hours (409
+    // invalid_idempotent_request) — keyed on the id, that email was never delivered.
+    const keyInThisDatabase = buildMailOutboxIdempotencyKey({
+      mailOutboxId: 1,
+      resendIdempotencyToken: RESEND_IDEMPOTENCY_TOKEN,
+    });
+    const keyInOtherDatabase = buildMailOutboxIdempotencyKey({
+      mailOutboxId: 1,
+      resendIdempotencyToken: OTHER_DATABASE_RESEND_IDEMPOTENCY_TOKEN,
+    });
+    expect(keyInThisDatabase).not.toBe(keyInOtherDatabase);
+  });
+
+  it('buildMailOutboxIdempotencyKey keeps the legacy mail-outbox-<id> key for a row created before the token column', () => {
+    expect(buildMailOutboxIdempotencyKey({ mailOutboxId: 43, resendIdempotencyToken: null })).toBe(
+      'mail-outbox-43',
+    );
   });
 
   it('throws UnrecoverableError (no retry burn) when the outbox row is missing — audit-#M2 phantom row', async () => {
@@ -101,6 +129,7 @@ describe('mail.processor', () => {
       text_body: null,
       reply_to: null,
       tags: null,
+      resend_idempotency_token: RESEND_IDEMPOTENCY_TOKEN,
     });
     sendEmailMock.mockResolvedValue('msg_new');
 
@@ -111,7 +140,7 @@ describe('mail.processor', () => {
 
     expect(sendEmailMock).toHaveBeenCalledOnce();
     expect(sendEmailMock).toHaveBeenCalledWith(
-      expect.objectContaining({ idempotencyKey: 'mail-outbox-43' }),
+      expect.objectContaining({ idempotencyKey: `mail-outbox-${RESEND_IDEMPOTENCY_TOKEN}` }),
     );
     expect(markMailOutboxSentMock).toHaveBeenCalledWith(43, 'msg_new');
     expect(result).toEqual({ messageId: 'msg_new' });
@@ -123,6 +152,37 @@ describe('mail.processor', () => {
       }),
       'email.sent',
     );
+  });
+
+  it('processMailOutboxJob re-sends a retried row under the same idempotency key — audit #20', async () => {
+    // The key is read from the row, so a retry (or a sweeper reclaim) after a send that reached
+    // Resend before the worker could mark the row `sent` is collapsed by Resend into one delivery.
+    tryClaimPendingMailOutboxMock.mockResolvedValue('claimed');
+    findMailOutboxByIdMock.mockResolvedValue({
+      id: 47,
+      status: 'sending',
+      to_addresses: ['user@example.com'],
+      subject: 'Hello',
+      html: '<p>Hi</p>',
+      text_body: null,
+      reply_to: null,
+      tags: null,
+      resend_idempotency_token: RESEND_IDEMPOTENCY_TOKEN,
+    });
+    sendEmailMock
+      .mockRejectedValueOnce(new Error('resend.timeout'))
+      .mockResolvedValueOnce('msg_retried');
+
+    await expect(
+      processMailOutboxJob({ mailOutboxId: 47 }, { jobAttemptNumber: 0, maxJobAttempts: 3 }),
+    ).rejects.toThrow('resend.timeout');
+    await processMailOutboxJob({ mailOutboxId: 47 }, { jobAttemptNumber: 1, maxJobAttempts: 3 });
+
+    const [firstAttemptKey, retryAttemptKey] = sendEmailMock.mock.calls.map(
+      ([sendOptions]) => sendOptions.idempotencyKey,
+    );
+    expect(firstAttemptKey).toBe(`mail-outbox-${RESEND_IDEMPOTENCY_TOKEN}`);
+    expect(retryAttemptKey).toBe(firstAttemptKey);
   });
 
   it('processMailOutboxJob releases claim on non-final send failure', async () => {
