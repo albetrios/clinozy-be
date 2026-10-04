@@ -34,7 +34,8 @@ Incident time drops from "hotfix + full CI" (~30 min) to a dispatch + approval
 Migrations lint enforces additive/compatible changes, which is what makes image
 rollback safe in the common case. If the bad release shipped a **destructive**
 migration, rollback alone is not sufficient — treat it as a restore scenario
-(see the restore drills) and involve the backup runbooks.
+and follow the [Postgres restore steps](../../process/dr-runbook.md#1-postgres-neon--rpo--15-minutes)
+in the DR runbook (they include advancing the id sequences after the restore).
 
 ## After rolling back
 

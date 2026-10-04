@@ -40,7 +40,8 @@ flowchart TD
   D -->|Yes| F{App healthy?}
   F -->|No| G[Railway redeploy + env check]
   F -->|Yes| H[App-level triage: migrations, DLQ, Stripe]
-  C --> I[Replay migrations + smoke]
+  C --> S[Migrate, then advance id sequences]
+  S --> I[Replay migrations + smoke]
   E --> I
   G --> I
   H --> I
@@ -58,7 +59,49 @@ flowchart TD
 1. Open Neon console → production project → **Restore** or create branch from PITR **≤ 15 minutes** before failure.
 2. Update `DATABASE_URL` in Railway (API + worker) to the restored branch/endpoint.
 3. Run `pnpm db:migrate` against the restored database (idempotent; fixes schema drift).
-4. Verify row counts on critical tables (`tenancy.organizations`, `billing.subscriptions`, `auth.sessions`).
+4. **Advance the id sequences** ([below](#advance-the-id-sequences-after-a-restore)) before the API and worker serve traffic on the restored database — if they kept running through the restore, do it straight away.
+5. Verify row counts on critical tables (`tenancy.organizations`, `billing.subscriptions`, `auth.sessions`).
+
+#### Advance the id sequences after a restore
+
+A restore rewinds every table's id counter along with its rows, so the database would hand out again the ids it issued between the restore point and the incident. Redis and S3 do not rewind, and they still hold those ids:
+
+| Where                         | What still holds an id from the lost window                                                         |
+| ----------------------------- | --------------------------------------------------------------------------------------------------- |
+| Redis — queues                | Waiting, delayed and retrying jobs carry the row id in their payload (notification, webhook delivery, mail outbox) |
+| Redis — commit-dispatch tasks | Post-commit dispatch tasks waiting for recovery (kept 24 hours)                                     |
+| Redis — MFA counters          | `mfa:verify:fail:<user id>` and `mfa:totp:consumed:<user id>:…`                                     |
+| S3 — audit exports            | Each NDJSON row's `organization_id`, `actor_user_id` and `resource_id`                              |
+| Logs, Sentry                  | Ids in log lines and event context                                                                  |
+
+A reissued id points those at a different row: a stale job dispatches another notification, and an audit export attributes one user's actions to another. Keys sent to other services are not at risk — Resend idempotency keys, queue job ids, email markers and audit export paths use public ids or a per-row random token, which a restore brings back unchanged.
+
+Jump every sequence far past anything issued before the incident. Ids are `bigint`, so a jump of one billion costs nothing and covers any lost window. Run this once on the restored database over the migration connection (`psql "$DATABASE_MIGRATION_URL"` — the role that owns the sequences); it prints one `old -> new` line per sequence for the incident record:
+
+```sql
+DO $$
+DECLARE
+  sequence_row record;
+BEGIN
+  FOR sequence_row IN
+    SELECT schemaname, sequencename, COALESCE(last_value, 0) AS last_value
+    FROM pg_sequences
+    WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+      AND data_type = 'bigint'::regtype
+  LOOP
+    PERFORM setval(
+      format('%I.%I', sequence_row.schemaname, sequence_row.sequencename)::regclass,
+      sequence_row.last_value + 1000000000
+    );
+    RAISE NOTICE '%.%: % -> %', sequence_row.schemaname, sequence_row.sequencename,
+      sequence_row.last_value, sequence_row.last_value + 1000000000;
+  END LOOP;
+END $$;
+```
+
+Sequence changes are not transactional, and the block only moves values forward — running it twice just jumps again, which is harmless.
+
+The Redis key prefix (`<project>:<environment>:`) does not change on a restore, which is why the old jobs and counters are still there. After the worker restarts, jobs whose row was lost in the window fail with a not-found error (`notification.not_found:<id>`, `webhook.delivery.attempt_not_found:<id>`, `mail.outbox.not_found:<id>`); discard any that reach the dead-letter queue rather than replaying them ([dlq-runbook.md](dlq-runbook.md)).
 
 ### 2. Redis (Railway Redis database)
 
