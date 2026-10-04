@@ -47,6 +47,8 @@ With `DATABASE_RLS_SCOPED_CONTEXTS=true` (default), HTTP handlers do **not** pin
 
 When Redis is unavailable, breakers fall back to in-memory state per process.
 
+**What counts as a failure.** Every error an operation throws counts against its circuit, except one that carries `countsAsCircuitFailure: false` ([`countsAsCircuitFailure`](../../../src/infrastructure/resilience/circuit-breaker.ts)) — the dependency answered and refused that one request. Such a call counts as a success, so a burst of bad requests can neither open a circuit nor keep a half-open one from closing. Resend per-email rejections use it (below); every Stripe and S3 error still counts.
+
 ---
 
 ## Mail worker and Resend
@@ -54,6 +56,7 @@ When Redis is unavailable, breakers fall back to in-memory state per process.
 - BullMQ mail jobs: **8 attempts** with **custom backoff** ([`mail.queue.ts`](../../../src/infrastructure/mail/queues/mail.queue.ts), [`mail-backoff.util.ts`](../../../src/infrastructure/mail/queues/mail-backoff.util.ts)): exponential from 5s for transport errors; **`CircuitBreakerOpenError.retryAfterMs`** (~remaining Resend circuit reset, up to 60s) when the cluster-wide Resend circuit is OPEN.
 - `sendEmail` wraps the Resend HTTP call in `resendCircuit.execute()` plus bounded transient retries ([`retry-with-backoff.util.ts`](../../../src/infrastructure/resilience/retry-with-backoff.util.ts)); throws `CircuitBreakerOpenError` when the circuit is OPEN.
 - On send failure before the final attempt, the outbox row is released to `pending` ([`releaseMailOutboxClaim`](../../../src/infrastructure/mail/mail-outbox.repository.ts)). The final attempt marks `failed` only for **non** circuit-open errors; circuit-open on the last attempt still releases the claim (job may retry via BullMQ backoff without marking the outbox failed).
+- A Resend **per-email rejection** — a 422 about the email itself (`validation_error`, `missing_required_field`, `invalid_attachment`, `invalid_parameter`) or a 409 `invalid_idempotent_request` — does not count against the `resend` circuit and is not retried: the worker marks the outbox row `failed` on the first attempt and throws `UnrecoverableError` (`mail.worker.rejected`), so it never reaches the DLQ; the failed row is the record. Account and configuration errors (API key, unverified sender domain, quota) and Resend outages keep counting against the circuit and retrying.
 - After exhausted retries, jobs may land on the `mail-dlq` queue (see [dlq-runbook.md](../../process/dlq-runbook.md)).
 
 ## Stripe webhook worker

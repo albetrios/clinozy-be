@@ -16,6 +16,11 @@ function createCircuit(overrides: { failureThreshold?: number; halfOpenAttempts?
   });
 }
 
+/** An error the dependency raised while answering normally — e.g. Resend refusing one bad address. */
+function refusalOfOneRequest(): Error {
+  return Object.assign(new Error('refused'), { countsAsCircuitFailure: false });
+}
+
 describe('CircuitBreaker state machine (in-memory fallback)', () => {
   beforeEach(() => {
     /** Fake timers also mock `Date` so `Date.now()` advances deterministically with `vi.advanceTimersByTime`. */
@@ -92,5 +97,53 @@ describe('CircuitBreaker state machine (in-memory fallback)', () => {
     await expect(circuit.execute(async () => 'noop')).rejects.toBeInstanceOf(
       CircuitBreakerOpenError,
     );
+  });
+
+  it('never opens on refusals of single requests — the dependency is answering', async () => {
+    const circuit = createCircuit({ failureThreshold: 1 });
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(
+        circuit.execute(async () => Promise.reject(refusalOfOneRequest())),
+      ).rejects.toThrow('refused');
+    }
+    expect(await circuit.getState()).toBe('CLOSED');
+
+    await expect(
+      circuit.execute(async () => Promise.reject(new Error('upstream'))),
+    ).rejects.toThrow('upstream');
+    expect(await circuit.getState()).toBe('OPEN');
+  });
+
+  it('counts a refusal as a success between failures', async () => {
+    const circuit = createCircuit({ failureThreshold: 2 });
+
+    await expect(
+      circuit.execute(async () => Promise.reject(new Error('upstream'))),
+    ).rejects.toThrow('upstream');
+    await expect(
+      circuit.execute(async () => Promise.reject(refusalOfOneRequest())),
+    ).rejects.toThrow('refused');
+    await expect(
+      circuit.execute(async () => Promise.reject(new Error('upstream'))),
+    ).rejects.toThrow('upstream');
+
+    expect(await circuit.getState()).toBe('CLOSED');
+  });
+
+  it('closes a half-open circuit when the probe is refused rather than failed', async () => {
+    const circuit = createCircuit();
+
+    await expect(
+      circuit.execute(async () => Promise.reject(new Error('upstream'))),
+    ).rejects.toThrow('upstream');
+    expect(await circuit.getState()).toBe('OPEN');
+
+    vi.advanceTimersByTime(RESET_TIMEOUT_MS + 1);
+
+    await expect(
+      circuit.execute(async () => Promise.reject(refusalOfOneRequest())),
+    ).rejects.toThrow('refused');
+    expect(await circuit.getState()).toBe('CLOSED');
   });
 });

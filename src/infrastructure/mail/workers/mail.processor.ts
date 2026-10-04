@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { UnrecoverableError } from 'bullmq';
 import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
 import { sendEmail } from '@/infrastructure/mail/mail.service.js';
+import { ResendApiError } from '@/infrastructure/mail/resend-api.error.js';
 import { MAIL_QUEUE_MAX_ATTEMPTS } from '@/infrastructure/mail/queues/mail.queue.js';
 import {
   findMailOutboxById,
@@ -94,7 +95,9 @@ export type ProcessMailOutboxJobResult = {
  *   `failed` so the DLQ hook fires.
  * - **Failure modes:** missing outbox row throws (unrecoverable); already-sent /
  *   in-flight short-circuit to a `skipped` result; `CircuitBreakerOpenError` is
- *   never terminal — the claim is released so BullMQ can retry past cooldown.
+ *   never terminal — the claim is released so BullMQ can retry past cooldown; a
+ *   Resend per-email rejection (bad recipient, field or attachment) marks the row
+ *   failed at once and throws unrecoverable — no retry can deliver that email.
  * - **Side effects:** updates `auth.mail_outbox.status` / `sent_at` /
  *   `resend_message_id`; sends one HTTP request to Resend per claimed attempt;
  *   emits `mail.worker.*` structured logs.
@@ -212,28 +215,73 @@ async function processMailOutboxJobInner(
     );
     return { messageId };
   } catch (error) {
-    const isCircuitOpen = error instanceof CircuitBreakerOpenError;
-    if (isFinalJobAttempt && !isCircuitOpen) {
-      await markMailOutboxFailed(mailOutboxId);
-    } else {
-      await releaseMailOutboxClaim(mailOutboxId);
-    }
-    if (isCircuitOpen) {
-      logger.warn(
-        {
-          jobId: options.jobId,
-          requestId,
-          mailOutboxId,
-          circuit: error.circuitName,
-          retryAfterMs: error.retryAfterMs,
-          jobAttemptNumber,
-          maxJobAttempts,
-        },
-        'mail.worker.circuit_open',
-      );
-    }
-    throw error instanceof Error
-      ? error
-      : new Error(`mail.send.failed:outbox:${String(mailOutboxId)}`);
+    throw await settleFailedSend({
+      error,
+      mailOutboxId,
+      jobId: options.jobId,
+      requestId,
+      jobAttemptNumber,
+      maxJobAttempts,
+      isFinalJobAttempt,
+    });
   }
+}
+
+/**
+ * Settles the outbox row after a failed send and returns the error the job should throw: a
+ * per-email rejection fails the row for good (`UnrecoverableError`, no retries), an open circuit
+ * releases the claim, and any other error releases it too — or fails the row on the last attempt.
+ */
+async function settleFailedSend(options: {
+  error: unknown;
+  mailOutboxId: number;
+  jobId: string | undefined;
+  requestId: string | undefined;
+  jobAttemptNumber: number;
+  maxJobAttempts: number;
+  isFinalJobAttempt: boolean;
+}): Promise<Error> {
+  const { error, mailOutboxId, jobId, requestId, jobAttemptNumber, maxJobAttempts } = options;
+
+  if (error instanceof ResendApiError && error.isPerEmailRejection) {
+    // Resend refused this email for something about the email itself (a bad recipient, field or
+    // attachment): sending it again cannot succeed, so fail the row for good instead of burning
+    // the BullMQ retries — UnrecoverableError skips the retry budget.
+    await markMailOutboxFailed(mailOutboxId);
+    logger.warn(
+      {
+        jobId,
+        requestId,
+        mailOutboxId,
+        statusCode: error.statusCode,
+        resendErrorName: error.resendErrorName,
+      },
+      'mail.worker.rejected',
+    );
+    return new UnrecoverableError(`mail.send.rejected:${String(mailOutboxId)}: ${error.message}`);
+  }
+
+  const isCircuitOpen = error instanceof CircuitBreakerOpenError;
+  if (options.isFinalJobAttempt && !isCircuitOpen) {
+    await markMailOutboxFailed(mailOutboxId);
+  } else {
+    await releaseMailOutboxClaim(mailOutboxId);
+  }
+  if (isCircuitOpen) {
+    logger.warn(
+      {
+        jobId,
+        requestId,
+        mailOutboxId,
+        circuit: error.circuitName,
+        retryAfterMs: error.retryAfterMs,
+        jobAttemptNumber,
+        maxJobAttempts,
+      },
+      'mail.worker.circuit_open',
+    );
+  }
+  return error instanceof Error
+    ? error
+    : new Error(`mail.send.failed:outbox:${String(mailOutboxId)}`);
 }

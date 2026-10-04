@@ -40,6 +40,7 @@ This module is **infrastructure**, not a domain — it offers `recordOutboxEmail
 
 - **Resend API timeout** → BullMQ retries with backoff; final failure → DLQ + Sentry. Mail outbox row stays for forensic value.
 - **Worker crash mid-send** → row stuck in `sending`; sweeper reclaims after `MAIL_OUTBOX_RECLAIM_SENDING_MINUTES` and re-queues. The row's stored Resend idempotency key prevents a duplicate delivery if the crash happened after Resend accepted the message.
-- **Resend 409 `invalid_idempotent_request`** → the key was already used in the last 24 hours with a different body. Keys come from the per-row random token, so this points to a key built from something other than `resend_idempotency_token`.
+- **Resend refuses the email itself** (422 `validation_error` — e.g. a bad recipient — `missing_required_field`, `invalid_attachment`, `invalid_parameter`) → a per-email rejection: the row is marked `failed` on the first attempt, the job throws `UnrecoverableError` (no retries, no DLQ), and the `resend` circuit counts the call as a success — one bad address cannot hold back every other email.
+- **Resend 409 `invalid_idempotent_request`** → also a per-email rejection: the key was already used in the last 24 hours with a different body. Keys come from the per-row random token, so this points to a key built from something other than `resend_idempotency_token`.
 - **Disposable email rejected at the source domain (auth)** → never reaches the outbox.
 - **Resend signs the outbound payload but the customer's email server bounces** → Resend captures the bounce; we don't inspect bounces today (future work to feed back into `user-notification-preferences`).

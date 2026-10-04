@@ -1,5 +1,6 @@
 import { sendEmail } from '@/infrastructure/mail/mail.service.js';
 import { ResendApiError } from '@/infrastructure/mail/resend-api.error.js';
+import { resendCircuit } from '@/infrastructure/resilience/circuit-breaker.js';
 import { env } from '@/shared/config/env.config.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { PROJECT_BRAND_NAME } from '@/shared/constants/project-identity.constants.js';
@@ -112,5 +113,34 @@ describe('Resend outbound email contract (`mail.service.sendEmail`)', () => {
 
     ResendEmailsErrorEnvelopeContractSchema.parse(outboundResendEmailsErrorEnvelope);
     expect(outboundLoggerFixtureErrorSpy).toHaveBeenCalled();
+  });
+
+  test('a run of per-email rejections never opens the resend circuit', async () => {
+    // One more refusal than the circuit's failure threshold (5): counted as failures, they would
+    // open it and hold back every other email for a minute.
+    const rejectionCount = 6;
+    nock(resendApiHostnameOutbound)
+      .post('/emails', () => true)
+      .times(rejectionCount)
+      .reply(422, outboundResendEmailsErrorEnvelope);
+
+    outboundLoggerFixtureErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    for (let attempt = 0; attempt < rejectionCount; attempt += 1) {
+      const rejection = await sendEmail({
+        to: outboundResendEmailsRequestExpectedEnvelope.to[0] ?? '',
+        subject: outboundResendEmailsRequestExpectedEnvelope.subject,
+        html: outboundResendEmailsRequestExpectedEnvelope.html,
+      }).catch((error: unknown) => error);
+
+      expect(rejection).toBeInstanceOf(ResendApiError);
+      expect(rejection).toMatchObject({
+        statusCode: 422,
+        resendErrorName: 'validation_error',
+        isPerEmailRejection: true,
+      });
+    }
+
+    expect(await resendCircuit.getState()).toBe('CLOSED');
   });
 });

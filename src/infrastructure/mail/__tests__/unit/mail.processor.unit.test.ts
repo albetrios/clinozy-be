@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { UnrecoverableError } from 'bullmq';
 import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
 import { MAIL_QUEUE_MAX_ATTEMPTS } from '@/infrastructure/mail/queues/mail.queue.js';
+import { ResendApiError } from '@/infrastructure/mail/resend-api.error.js';
 import {
   buildMailOutboxIdempotencyKey,
   processMailOutboxJob,
@@ -182,6 +183,63 @@ describe('mail.processor', () => {
     ).rejects.toThrow('resend.down');
 
     expect(releaseMailOutboxClaimMock).toHaveBeenCalledWith(44);
+    expect(markMailOutboxFailedMock).not.toHaveBeenCalled();
+  });
+
+  it('fails a per-email rejection for good on its first attempt — no retry can deliver it', async () => {
+    tryClaimPendingMailOutboxMock.mockResolvedValue('claimed');
+    findMailOutboxByIdMock.mockResolvedValue({
+      id: 47,
+      status: 'sending',
+      to_addresses: ['user@example.com'],
+      subject: 'Hello',
+      html: '<p>Hi</p>',
+      text_body: null,
+      reply_to: null,
+      tags: null,
+      resend_idempotency_token: RESEND_IDEMPOTENCY_TOKEN,
+    });
+    sendEmailMock.mockRejectedValue(
+      new ResendApiError({
+        message: 'Invalid `to` field.',
+        statusCode: 422,
+        resendErrorName: 'validation_error',
+      }),
+    );
+
+    await expect(
+      processMailOutboxJob({ mailOutboxId: 47 }, { jobAttemptNumber: 0, maxJobAttempts: 3 }),
+    ).rejects.toBeInstanceOf(UnrecoverableError);
+
+    expect(markMailOutboxFailedMock).toHaveBeenCalledWith(47);
+    expect(releaseMailOutboxClaimMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps retrying a Resend error that is not about the email itself', async () => {
+    tryClaimPendingMailOutboxMock.mockResolvedValue('claimed');
+    findMailOutboxByIdMock.mockResolvedValue({
+      id: 48,
+      status: 'sending',
+      to_addresses: ['user@example.com'],
+      subject: 'Hello',
+      html: '<p>Hi</p>',
+      text_body: null,
+      reply_to: null,
+      tags: null,
+      resend_idempotency_token: RESEND_IDEMPOTENCY_TOKEN,
+    });
+    const outage = new ResendApiError({
+      message: 'Internal server error',
+      statusCode: 500,
+      resendErrorName: 'application_error',
+    });
+    sendEmailMock.mockRejectedValue(outage);
+
+    await expect(
+      processMailOutboxJob({ mailOutboxId: 48 }, { jobAttemptNumber: 0, maxJobAttempts: 3 }),
+    ).rejects.toBe(outage);
+
+    expect(releaseMailOutboxClaimMock).toHaveBeenCalledWith(48);
     expect(markMailOutboxFailedMock).not.toHaveBeenCalled();
   });
 
