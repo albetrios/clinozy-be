@@ -76,30 +76,13 @@ A restore rewinds every table's id counter along with its rows, so the database 
 
 A reissued id points those at a different row: a stale job dispatches another notification, and an audit export attributes one user's actions to another. Keys sent to other services are not at risk — Resend idempotency keys, queue job ids, email markers and audit export paths use public ids or a per-row random token, which a restore brings back unchanged.
 
-Jump every sequence far past anything issued before the incident. Ids are `bigint`, so a jump of one billion costs nothing and covers any lost window. Run this once on the restored database over the migration connection (`psql "$DATABASE_MIGRATION_URL"` — the role that owns the sequences); it prints one `old -> new` line per sequence for the incident record:
+Jump every sequence far past anything issued before the incident. Ids are `bigint`, so a jump of one billion costs nothing and covers any lost window. Run this once, over the same connection `pnpm db:migrate` used in step 3 (`DATABASE_MIGRATION_URL` — the role that owns the sequences):
 
-```sql
-DO $$
-DECLARE
-  sequence_row record;
-BEGIN
-  FOR sequence_row IN
-    SELECT schemaname, sequencename, COALESCE(last_value, 0) AS last_value
-    FROM pg_sequences
-    WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
-      AND data_type = 'bigint'::regtype
-  LOOP
-    PERFORM setval(
-      format('%I.%I', sequence_row.schemaname, sequence_row.sequencename)::regclass,
-      sequence_row.last_value + 1000000000
-    );
-    RAISE NOTICE '%.%: % -> %', sequence_row.schemaname, sequence_row.sequencename,
-      sequence_row.last_value, sequence_row.last_value + 1000000000;
-  END LOOP;
-END $$;
+```bash
+DATABASE_MIGRATION_URL=<restored database URL> pnpm db:sequences:advance
 ```
 
-Sequence changes are not transactional, and the block only moves values forward — running it twice just jumps again, which is harmless.
+It prints one `<sequence>: old -> new` line per sequence — keep them in the incident record — and refuses to run when the role cannot read a sequence. Sequence changes are not transactional, and the command only moves values forward, so running it twice just jumps again, which is harmless. The monthly and weekly [restore drills](backup-drills.md) run the same command right after migrating, so it is exercised against a real restore.
 
 The Redis key prefix (`<project>:<environment>:`) does not change on a restore, which is why the old jobs and counters are still there. After the worker restarts, jobs whose row was lost in the window fail with a not-found error (`notification.not_found:<id>`, `webhook.delivery.attempt_not_found:<id>`, `mail.outbox.not_found:<id>`); discard any that reach the dead-letter queue rather than replaying them ([dlq-runbook.md](dlq-runbook.md)).
 

@@ -12,7 +12,7 @@ This page covers deployment wiring only.
 | -------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------- | --------------------- |
 | **Monthly backup restore & RTO drill** | [scheduled-monthly-restore-rto.yml](../../.github/workflows/scheduled-monthly-restore-rto.yml) | 1st of month 06:00 UTC + `workflow_dispatch` | Yes (compliance gate) |
 
-Fully automated: Neon PITR child branch from parent **`github.ref_name`** → migrate → integration smoke → RTO assert → branch delete.
+Fully automated: Neon PITR child branch from parent **`github.ref_name`** → migrate → advance id sequences → integration smoke → RTO assert → branch delete.
 
 ---
 

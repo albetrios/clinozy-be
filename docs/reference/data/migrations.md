@@ -191,5 +191,6 @@ Dropped tables from earlier schema consolidations are omitted from the cumulativ
 | `pnpm db:migrate:new <slug>` | Create new migration file with real-time `YYYYMMDDHHMMSS` prefix |
 | `pnpm db:migrate:next-prefix` | Print next filename prefix after current max |
 | `pnpm db:migrate:dry-run` | Inspect pending SQL |
+| `pnpm db:sequences:advance` | After a point-in-time restore, jump every id sequence past the lost window ([dr-runbook.md](../../process/dr-runbook.md#advance-the-id-sequences-after-a-restore)) |
 | `pnpm tool:generate-dbdiagram` | Regenerate `docs/database/clinozy-be.dbml` for dbdiagram.io |
 | `pnpm verify:base` | migrate → seed → API smoke |

@@ -131,6 +131,7 @@
     "db:migrate:dry-run": "tsx src/scripts/ops/db-migrate-dry-run.ts",
     "db:migrate:lint": "tsx src/scripts/validators/migration/lint-migrations.ts",
     "db:migrate:next-prefix": "tsx src/scripts/ops/next-migration-prefix.ts",
+    "db:sequences:advance": "tsx src/scripts/ops/db-sequences-advance.ts",
     "db:seed": "tsx src/scripts/seed/minimal.ts",
     "db:seed:full": "tsx src/scripts/seed/full.ts",
     "db:seed:demo-admin": "tsx src/scripts/seed/ensure-demo-admin.ts",
