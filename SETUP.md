@@ -169,6 +169,8 @@ Full detail (branch naming, PR flow, hotfixes, protected branches): [trunk-based
 
 Tests live under `src/tests/` (cross-cutting) and co-located `__tests__/` inside each domain. See [CLAUDE.md](CLAUDE.md) § Testing for the full layout.
 
+Local test runs use their own database, `<local database>_test` (e.g. `clinozy_test`), on the Compose Postgres — created and migrated automatically on the first run. Every suite truncates all tables with `RESTART IDENTITY`, so your `pnpm dev` data is never touched and `pnpm dev` can keep running while tests do. Test Redis keys use their own prefix (`<stem>:test:`) too. CI keeps its own service-container database.
+
 | Category                | Command                 | When to run                                         |
 | ----------------------- | ----------------------- | --------------------------------------------------- |
 | **Unit**                | `pnpm test:unit`        | Fast feedback before commit; no DB needed           |

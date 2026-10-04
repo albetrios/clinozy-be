@@ -182,7 +182,7 @@ k6 scenarios and helpers live in `src/tests/load/k6/` (`.js` files, not Vitest).
 - [ ] New/changed **route** → domain test file (see steps below)
 - [ ] **401** without token, **403** without permission (if gated), **200** success (**204** for DELETE), **400** invalid body
 - [ ] New **permission** → align seeds (`be-seed-maintainer`) and test with/without permission
-- [ ] Run e2e with dev server **stopped** on shared DB (avoid deadlocks with `pnpm dev`)
+- [ ] Run e2e freely while `pnpm dev` runs — local test runs use their own `<local database>_test` database (created and migrated by the global setup), never the one `pnpm dev` serves
 
 ### 3. Cross-cutting
 
@@ -296,7 +296,7 @@ describe('example.validator', () => {
 - Mixing **two domains** in one `__tests__/` folder
 - Duplicating the same behavior in unit **and** full e2e without reason
 - Unit-testing services with real `database` or Redis
-- Running `pnpm test:e2e` while `pnpm dev` uses the same DB
+- Pointing a local test run at the database `pnpm dev` serves — every suite truncates all tables with `RESTART IDENTITY`
 - Expecting `test:e2e` to run validator unit tests (use `pnpm test:unit`; e2e script excludes `__tests__/unit/`)
 - Adding Vitest files under `src/tests/load/` (k6-only)
 - Testing Pino/logger startup with no custom behavior

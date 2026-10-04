@@ -82,10 +82,16 @@ process.env.S3_SECRET_ACCESS_KEY ??= 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
  * Always point at Toxiproxy listener ports for this Vitest profile. A developer `.env` often
  * sets direct `localhost:5432` / `6379` URLs; `||=` would skip the override and chaos traffic
  * would bypass proxies, so toxins and administrative proxy disables would not affect the app.
- * The credentials are Compose's (`core:core`); the CI chaos job's Postgres service creates the
- * same role, so this one URL serves both.
+ * The credentials are Compose's (the project's local database name as user and password); the CI
+ * chaos job's Postgres service creates the same role. Locally the database is the harness's own
+ * `<name>_test` (see src/tests/helpers/local-test-database.ts) — chaos suites run cleanupDatabase()
+ * too, which must never truncate the database `pnpm dev` serves; CI's service container only has
+ * the primary one.
  */
-process.env.DATABASE_URL = 'postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy';
+process.env.DATABASE_URL =
+  process.env.CI === 'true'
+    ? 'postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy'
+    : 'postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy_test';
 
 process.env.REDIS_URL = 'redis://127.0.0.1:26379';
 
@@ -104,11 +110,13 @@ process.env.DATABASE_OPERATOR_URL = process.env.DATABASE_URL;
  * open their own pool on `DATABASE_MAINTENANCE_URL` when it is set, which a developer's env file
  * does. That pool would reach Postgres directly, so no toxin could touch a maintenance path. Keep
  * its role and credentials — the scope's grants are what these paths are tested under — and
- * reroute only the host and port through the Toxiproxy listener.
+ * reroute only the host and port through the Toxiproxy listener, onto the same database as
+ * `DATABASE_URL` above.
  */
 if (process.env.DATABASE_MAINTENANCE_URL) {
   const proxiedMaintenanceUrl = new URL(process.env.DATABASE_MAINTENANCE_URL);
   proxiedMaintenanceUrl.hostname = '127.0.0.1';
   proxiedMaintenanceUrl.port = '25432';
+  proxiedMaintenanceUrl.pathname = new URL(process.env.DATABASE_URL).pathname;
   process.env.DATABASE_MAINTENANCE_URL = proxiedMaintenanceUrl.toString();
 }

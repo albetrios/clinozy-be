@@ -405,6 +405,7 @@ See [docs/reference/architecture/documentation-system.md](docs/reference/archite
 ## Testing
 
 - **Test framework**: Vitest + `fastify.inject()` (helpers in `src/tests/helpers/test-http-inject.helper.ts`)
+- **Local test database**: local runs use their own `<local database>_test` (e.g. `clinozy_test`), created and migrated by the global setup ([`local-test-database.ts`](src/tests/helpers/local-test-database.ts)) — never the database `pnpm dev` serves, so suites' `TRUNCATE ... RESTART IDENTITY` cannot wipe dev data and `pnpm dev` can keep running. CI keeps its service-container database.
 - **Cross-cutting tests**: `src/tests/` — helpers, shared factories, security, performance, chaos, contract, cross-cutting e2e flows (`src/tests/e2e/` — signup, billing onboarding, data-export deletion), smoke (`src/tests/smoke/`), bench (`src/tests/bench/`), SQL fixtures (`src/tests/fixtures/`); k6 under `src/tests/load/k6/`
 - **Domain tests** (co-located with code):
   - **Bundled e2e**: `src/domains/<domain>/__tests__/<domain>.test.ts` (auth, billing, notify, user, tenancy, audit, upload)

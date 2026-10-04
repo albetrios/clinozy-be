@@ -205,7 +205,7 @@ See also [api-versioning.md](../api/api-versioning.md).
 2. `beforeAll`: `createTestApp()`; `afterAll`: `await app.close()`.
 3. `beforeEach`: `cleanupDatabase()`; seed permissions if needed.
 4. Per route: 401, 403 (if gated), 200 (204 for DELETE), 400 validation.
-5. Run targeted `pnpm test:*`; stop `pnpm dev` on shared DB before `pnpm test:e2e`.
+5. Run targeted `pnpm test:*`. `pnpm dev` can keep running: local test runs use their own database (`<local database>_test`, created and migrated by the global setup — see `src/tests/helpers/local-test-database.ts`), never the one `pnpm dev` serves.
 
 ---
 
@@ -319,7 +319,7 @@ describe("example.validator", () => {
 - Validator unit tests in `src/tests/unit/` for domain validators
 - Two domains in one `__tests__/` folder
 - Unit-testing services with real database or Redis
-- `pnpm test:e2e` while `pnpm dev` uses the same DB
+- Pointing a local test run at the database `pnpm dev` serves (e.g. `ALLOW_HOSTED_TEST_DATABASE=true` with your dev URL) — every suite truncates all tables with `RESTART IDENTITY`
 - Vitest files under `src/tests/load/` (k6-only)
 - Expecting `coverage/` after `pnpm test` (use `pnpm test:coverage`)
 

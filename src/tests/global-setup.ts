@@ -7,39 +7,12 @@ import '@/shared/config/load-env-files.js';
 import { execSync } from 'node:child_process';
 import { acquireDatabaseSuiteLock } from '@/tests/database-suite-lock.js';
 import postgres from 'postgres';
-import { LOCAL_DATABASE_NAME } from '@/shared/constants/project-identity.constants.js';
-
-const LOCAL_TEST_DATABASE_URL = `postgresql://${LOCAL_DATABASE_NAME}:${LOCAL_DATABASE_NAME}@localhost:5432/${LOCAL_DATABASE_NAME}`;
-
-function isLocalDatabaseUrl(value: string | undefined): boolean {
-  if (!value) return false;
-  try {
-    const { hostname } = new URL(value);
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
-  } catch {
-    return false;
-  }
-}
-
-function forceLocalDatabaseForNonCiTestRun(): void {
-  if (process.env.CI === 'true' || process.env.ALLOW_HOSTED_TEST_DATABASE === 'true') return;
-
-  // Local↔live parity (must mirror src/tests/setup.ts): the local env file's
-  // DATABASE_URL is the RLS-subject `clinozy_be_app` login — the harness's DDL shims
-  // and cross-tenant fixtures run as `clinozy_be_operator` (owner-member, BYPASSRLS)
-  // via DATABASE_OPERATOR_URL whenever it is provisioned.
-  const operatorUrl = process.env.DATABASE_OPERATOR_URL;
-  if (operatorUrl && isLocalDatabaseUrl(operatorUrl)) {
-    process.env.DATABASE_URL = operatorUrl;
-    process.env.DATABASE_MIGRATION_URL ??= LOCAL_TEST_DATABASE_URL;
-    return;
-  }
-
-  if (isLocalDatabaseUrl(process.env.DATABASE_URL)) return;
-
-  process.env.DATABASE_URL = LOCAL_TEST_DATABASE_URL;
-  process.env.DATABASE_MIGRATION_URL = LOCAL_TEST_DATABASE_URL;
-}
+import {
+  buildMigrationChildEnvironment,
+  ensureLocalTestDatabaseExists,
+  LOCAL_TEST_DATABASE_URL,
+  pointHarnessAtLocalTestDatabase,
+} from '@/tests/helpers/local-test-database.js';
 
 /**
  * Vitest global setup: applies migrations against the test database and
@@ -49,7 +22,7 @@ function forceLocalDatabaseForNonCiTestRun(): void {
  */
 export default async function globalSetup(): Promise<() => void> {
   process.env.NODE_ENV ??= 'development';
-  forceLocalDatabaseForNonCiTestRun();
+  pointHarnessAtLocalTestDatabase();
 
   /** Contract tests mock outbound HTTP — skip Postgres churn (offline CI slice). See `pnpm test:contract`. */
   if (process.env.CONTRACT_TESTS_ENABLED === 'true') {
@@ -80,6 +53,8 @@ export default async function globalSetup(): Promise<() => void> {
   const sql = postgres(migrationUrl, { max: 1 });
 
   try {
+    // First local run: the test database does not exist yet (CI's service container brings its own).
+    await ensureLocalTestDatabaseExists();
     await sql`SELECT 1`;
   } catch (connectionError) {
     if (process.env.CI === 'true') {
@@ -97,7 +72,8 @@ export default async function globalSetup(): Promise<() => void> {
       execSync('pnpm db:migrate', {
         stdio: 'pipe',
         encoding: 'utf-8',
-        env: process.env,
+        // Keeps the child on the test database: see buildMigrationChildEnvironment.
+        env: buildMigrationChildEnvironment(),
         cwd: process.cwd(),
       });
     } catch (migrateError) {

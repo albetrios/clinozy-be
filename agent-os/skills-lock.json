@@ -257,7 +257,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-test-generator/SKILL.md",
-      "computedHash": "deb82990622c9870ab3362cb9310cd4ae4240adac3a5681de2e1e0a87236b843"
+      "computedHash": "8f251023c7f5fb2abf33be72559be2f04864e2e4c12bcb22fe230b0da3ee01d0"
     },
     "be-tsdoc-export-guard": {
       "source": "local",

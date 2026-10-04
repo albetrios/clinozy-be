@@ -1,41 +1,10 @@
 import '@/shared/config/load-env-files.js';
 import { DEFAULT_FRONTEND_URL } from '@/shared/constants/index.js';
+import { REDIS_KEY_PREFIX_STEM } from '@/shared/constants/project-identity.constants.js';
 import {
-  LOCAL_DATABASE_NAME,
-  REDIS_KEY_PREFIX_STEM,
-} from '@/shared/constants/project-identity.constants.js';
-
-const LOCAL_TEST_DATABASE_URL = `postgresql://${LOCAL_DATABASE_NAME}:${LOCAL_DATABASE_NAME}@localhost:5432/${LOCAL_DATABASE_NAME}`;
-
-function isLocalDatabaseUrl(value: string | undefined): boolean {
-  if (!value) return false;
-  try {
-    const { hostname } = new URL(value);
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
-  } catch {
-    return false;
-  }
-}
-
-function forceLocalDatabaseForNonCiTestRun(): void {
-  if (process.env.CI === 'true' || process.env.ALLOW_HOSTED_TEST_DATABASE === 'true') return;
-
-  // Local↔live parity: the local env file's DATABASE_URL is the RLS-subject
-  // `clinozy_be_app` login (like production), which the harness's cross-tenant fixtures
-  // and TRUNCATE cleanup cannot run under. The elevated fixture connection is
-  // `clinozy_be_operator` via DATABASE_OPERATOR_URL — prefer it whenever provisioned.
-  const operatorUrl = process.env.DATABASE_OPERATOR_URL;
-  if (operatorUrl && isLocalDatabaseUrl(operatorUrl)) {
-    process.env.DATABASE_URL = operatorUrl;
-    process.env.DATABASE_MIGRATION_URL ??= LOCAL_TEST_DATABASE_URL;
-    return;
-  }
-
-  if (isLocalDatabaseUrl(process.env.DATABASE_URL)) return;
-
-  process.env.DATABASE_URL = LOCAL_TEST_DATABASE_URL;
-  process.env.DATABASE_MIGRATION_URL = LOCAL_TEST_DATABASE_URL;
-}
+  LOCAL_TEST_DATABASE_URL,
+  pointHarnessAtLocalTestDatabase,
+} from '@/tests/helpers/local-test-database.js';
 
 /**
  * The developer's `.env.local` is loaded before this file (via `load-env-files`, which defaults to
@@ -95,7 +64,7 @@ process.env.SENTRY_DEBUG ??= 'true';
  * stashing the elevated URL for the harness's own use first.
  *
  * @remarks
- * Applied AFTER {@link forceLocalDatabaseForNonCiTestRun}, which is the point: that function
+ * Applied AFTER {@link pointHarnessAtLocalTestDatabase}, which is the point: that function
  * deliberately swaps in the elevated `clinozy_be_operator` handle, and that role carries
  * `rolbypassrls`. So by default **no test in this repo has row-level security applied to it** —
  * a path that reaches a FORCE RLS table without a database context reads rows here and returns
@@ -128,7 +97,7 @@ function applyRequestedDatabaseRole(): void {
   process.env.DATABASE_URL = url.toString();
 }
 
-forceLocalDatabaseForNonCiTestRun();
+pointHarnessAtLocalTestDatabase();
 applyRequestedDatabaseRole();
 process.env.DATABASE_SSL_ENABLED = 'false';
 /**
