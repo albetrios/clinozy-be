@@ -12,6 +12,7 @@ import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import {
   AUDIT_EXPORT_MANIFEST_FILENAME,
+  AUDIT_EXPORT_SCHEMA_VERSION,
   type AuditExportManifest,
 } from '@/domains/audit/workers/audit-export.constants.js';
 import { buildManifestKey } from '@/domains/audit/workers/audit-export.processor.js';
@@ -108,11 +109,11 @@ describe('audit-export.worker — S3 NDJSON export', () => {
     expect(gzipPut.key).toMatch(
       // eslint-disable-next-line security/detect-non-literal-regexp -- pattern built from server-side ids in test fixtures.
       new RegExp(
-        `^audit/export/organization_id=${organization.id}/dt=${dateLabel}/part-.+\\.jsonl\\.gz$`,
+        `^audit/export/organization_public_id=${organization.public_id}/dt=${dateLabel}/part-.+\\.jsonl\\.gz$`,
       ),
     );
     expect(gzipPut.metadata?.format).toBe('ndjson');
-    expect(gzipPut.metadata?.schema_version).toBe('1');
+    expect(gzipPut.metadata?.schema_version).toBe(AUDIT_EXPORT_SCHEMA_VERSION);
     expect(gzipPut.metadata?.export_date).toBe(dateLabel);
     expect(gzipPut.metadata?.row_count).toBe('1');
 
@@ -130,11 +131,13 @@ describe('audit-export.worker — S3 NDJSON export', () => {
     const manifestPut = putObjectBufferMock.mock.calls.find(
       (call) => call[0]!.contentType === 'application/json',
     )![0]!;
-    expect(manifestPut.key).toBe(buildManifestKey(organization.id, dateLabel));
+    expect(manifestPut.key).toBe(
+      buildManifestKey({ organizationPublicId: organization.public_id, dateLabel }),
+    );
     const manifest = JSON.parse(manifestPut.body.toString('utf8')) as AuditExportManifest;
-    expect(manifest.schema_version).toBe('1');
+    expect(manifest.schema_version).toBe(AUDIT_EXPORT_SCHEMA_VERSION);
     expect(manifest.export_date).toBe(dateLabel);
-    expect(manifest.organization_id).toBe(organization.id);
+    expect(manifest.organization_public_id).toBe(organization.public_id);
     expect(manifest.objects).toHaveLength(1);
     expect(manifest.objects[0]).toMatchObject({
       key: gzipPut.key,
@@ -189,11 +192,15 @@ describe('audit-export.worker — S3 NDJSON export', () => {
       expect.arrayContaining([
         expect.stringMatching(
           // eslint-disable-next-line security/detect-non-literal-regexp -- pattern built from server-side ids in test fixtures.
-          new RegExp(`^audit/export/organization_id=${organizationA.id}/dt=${dateLabel}/part-`),
+          new RegExp(
+            `^audit/export/organization_public_id=${organizationA.public_id}/dt=${dateLabel}/part-`,
+          ),
         ),
         expect.stringMatching(
           // eslint-disable-next-line security/detect-non-literal-regexp -- pattern built from server-side ids in test fixtures.
-          new RegExp(`^audit/export/organization_id=${organizationB.id}/dt=${dateLabel}/part-`),
+          new RegExp(
+            `^audit/export/organization_public_id=${organizationB.public_id}/dt=${dateLabel}/part-`,
+          ),
         ),
       ]),
     );
@@ -204,8 +211,8 @@ describe('audit-export.worker — S3 NDJSON export', () => {
 
     expect(manifestKeys).toEqual(
       expect.arrayContaining([
-        buildManifestKey(organizationA.id, dateLabel),
-        buildManifestKey(organizationB.id, dateLabel),
+        buildManifestKey({ organizationPublicId: organizationA.public_id, dateLabel }),
+        buildManifestKey({ organizationPublicId: organizationB.public_id, dateLabel }),
       ]),
     );
   });
@@ -225,7 +232,10 @@ describe('audit-export.worker — S3 NDJSON export', () => {
       created_at: createdAt,
     });
 
-    const manifestKey = buildManifestKey(organization.id, dateLabel);
+    const manifestKey = buildManifestKey({
+      organizationPublicId: organization.public_id,
+      dateLabel,
+    });
     headObjectMock.mockImplementation(async (key: string) => {
       if (key === manifestKey) {
         return { contentType: 'application/json', contentLength: 256 };

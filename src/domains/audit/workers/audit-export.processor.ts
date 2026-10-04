@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { and, asc, eq, gt, gte, isNotNull, lt } from 'drizzle-orm';
 import { logs } from '@/domains/audit/audit.schema.js';
+import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { headObject, putObjectBuffer } from '@/infrastructure/storage/storage.service.js';
 import { gzipBufferAsync } from '@/shared/utils/infrastructure/gzip.util.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
@@ -39,13 +40,20 @@ function exportPrefix(): string {
  * export.
  *
  * @remarks
- * Layout is `<prefix>/organization_id=<id>/dt=<YYYY-MM-DD>/part-<uuid>.jsonl.gz`,
- * which gives Hive/Athena partition pruning by `organization_id` and `dt` and
- * makes per-tenant retention deletes cheap. The trailing `partId` is a UUID so
- * a re-run after a partial failure cannot collide with the previous attempt.
+ * Layout is `<prefix>/organization_public_id=<org public id>/dt=<YYYY-MM-DD>/part-<uuid>.jsonl.gz`,
+ * which gives Hive/Athena partition pruning by organization and `dt` and makes per-tenant
+ * retention deletes cheap. The partition is the organization's PUBLIC id, not its bigserial: the
+ * archive outlives the database, the bigserial restarts at 1 after a restore or reset, and every
+ * database writing to a shared bucket counts from 1 — keyed by it, two organizations shared one
+ * partition and the second one's day was skipped as already exported. The trailing `partId` is a
+ * UUID so a re-run after a partial failure cannot collide with the previous attempt.
  */
-export function buildExportKey(organizationId: number, dateLabel: string, partId: string): string {
-  return `${exportPrefix()}/organization_id=${organizationId}/dt=${dateLabel}/part-${partId}.jsonl.gz`;
+export function buildExportKey(options: {
+  organizationPublicId: string;
+  dateLabel: string;
+  partId: string;
+}): string {
+  return `${exportPrefix()}/organization_public_id=${options.organizationPublicId}/dt=${options.dateLabel}/part-${options.partId}.jsonl.gz`;
 }
 
 /**
@@ -55,10 +63,14 @@ export function buildExportKey(organizationId: number, dateLabel: string, partId
  * The manifest is the idempotency key for this job: the processor checks the
  * manifest's existence before exporting (`headObject(manifestKey)`) and writes
  * it last, after all data parts have been uploaded successfully. A retry that
- * sees the manifest skips the tenant entirely.
+ * sees the manifest skips the tenant entirely — which is why it is keyed by the
+ * organization's public id (see {@link buildExportKey}).
  */
-export function buildManifestKey(organizationId: number, dateLabel: string): string {
-  return `${exportPrefix()}/organization_id=${organizationId}/dt=${dateLabel}/${AUDIT_EXPORT_MANIFEST_FILENAME}`;
+export function buildManifestKey(options: {
+  organizationPublicId: string;
+  dateLabel: string;
+}): string {
+  return `${exportPrefix()}/organization_public_id=${options.organizationPublicId}/dt=${options.dateLabel}/${AUDIT_EXPORT_MANIFEST_FILENAME}`;
 }
 
 /**
@@ -72,7 +84,9 @@ export function buildManifestKey(organizationId: number, dateLabel: string): str
  *    the same job can run from any time zone without missing or double-counting
  *    rows.
  * 2. Discovers active tenants via `selectDistinct(organization_id)` over the
- *    window. This avoids holding a giant cursor over the full `logs` table.
+ *    window, with each organization's public id (the S3 partition). This avoids
+ *    holding a giant cursor over the full `logs` table. The global-retention
+ *    scope reads organizations, soft-deleted ones included.
  * 3. For each tenant, checks whether the manifest already exists; if so the
  *    tenant is treated as already exported (idempotent on retry).
  * 4. Streams rows in `AUDIT_EXPORT_BATCH_SIZE` chunks ordered by `id` (stable,
@@ -103,8 +117,12 @@ export async function runAuditExportJob(databaseHandle: WorkerDatabaseHandle): P
   );
 
   const organizationRows = await databaseHandle
-    .selectDistinct({ organization_id: logs.organization_id })
+    .selectDistinct({
+      organization_id: logs.organization_id,
+      organization_public_id: organizations.public_id,
+    })
     .from(logs)
+    .innerJoin(organizations, eq(logs.organization_id, organizations.id))
     .where(
       and(isNotNull(logs.organization_id), gte(logs.created_at, start), lt(logs.created_at, end)),
     );
@@ -112,10 +130,13 @@ export async function runAuditExportJob(databaseHandle: WorkerDatabaseHandle): P
   let exportedOrganizations = 0;
   let skipped = 0;
 
-  for (const { organization_id: organizationId } of organizationRows) {
+  for (const {
+    organization_id: organizationId,
+    organization_public_id: organizationPublicId,
+  } of organizationRows) {
     if (organizationId === null) continue;
 
-    const manifestKey = buildManifestKey(organizationId, dateLabel);
+    const manifestKey = buildManifestKey({ organizationPublicId, dateLabel });
     const existingManifest = await headObject(manifestKey);
     if (existingManifest) {
       skipped += 1;
@@ -125,6 +146,7 @@ export async function runAuditExportJob(databaseHandle: WorkerDatabaseHandle): P
     const manifestObjects = await collectOrganizationAuditBatches({
       databaseHandle,
       organizationId,
+      organizationPublicId,
       dateLabel,
       start,
       end,
@@ -138,7 +160,7 @@ export async function runAuditExportJob(databaseHandle: WorkerDatabaseHandle): P
     const manifest: AuditExportManifest = {
       schema_version: AUDIT_EXPORT_SCHEMA_VERSION,
       export_date: dateLabel,
-      organization_id: organizationId,
+      organization_public_id: organizationPublicId,
       objects: manifestObjects,
     };
 
@@ -151,7 +173,7 @@ export async function runAuditExportJob(databaseHandle: WorkerDatabaseHandle): P
     exportedOrganizations += 1;
     const rowCount = manifestObjects.reduce((total, object) => total + object.row_count, 0);
     logger.info(
-      { organizationId, manifestKey, partCount: manifestObjects.length, rowCount },
+      { organizationPublicId, manifestKey, partCount: manifestObjects.length, rowCount },
       'audit-export.organization.completed',
     );
   }
@@ -167,11 +189,12 @@ export async function runAuditExportJob(databaseHandle: WorkerDatabaseHandle): P
 async function collectOrganizationAuditBatches(options: {
   databaseHandle: WorkerDatabaseHandle;
   organizationId: number;
+  organizationPublicId: string;
   dateLabel: string;
   start: Date;
   end: Date;
 }): Promise<AuditExportManifest['objects']> {
-  const { databaseHandle, organizationId, dateLabel, start, end } = options;
+  const { databaseHandle, organizationId, organizationPublicId, dateLabel, start, end } = options;
   const batchSize = env.AUDIT_EXPORT_BATCH_SIZE;
   let afterId = 0;
   const manifestObjects: AuditExportManifest['objects'] = [];
@@ -207,7 +230,7 @@ async function collectOrganizationAuditBatches(options: {
     const body = await gzipBufferAsync(Buffer.from(lines.join(''), 'utf8'));
     const sha256 = createHash('sha256').update(body).digest('hex');
     const batchPartId = randomUUID();
-    const objectKey = buildExportKey(organizationId, dateLabel, batchPartId);
+    const objectKey = buildExportKey({ organizationPublicId, dateLabel, partId: batchPartId });
 
     await putObjectBuffer({
       key: objectKey,

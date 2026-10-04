@@ -27,13 +27,15 @@ Per organization and UTC date:
 
 | Object | Key pattern |
 | ------ | ----------- |
-| Data | `s3://{bucket}/{prefix}/organization_id={id}/dt=YYYY-MM-DD/part-{uuid}.jsonl.gz` |
-| Manifest | `s3://{bucket}/{prefix}/organization_id={id}/dt=YYYY-MM-DD/manifest.json` |
+| Data | `s3://{bucket}/{prefix}/organization_public_id={org public id}/dt=YYYY-MM-DD/part-{uuid}.jsonl.gz` |
+| Manifest | `s3://{bucket}/{prefix}/organization_public_id={org public id}/dt=YYYY-MM-DD/manifest.json` |
 
 - **Data format:** gzip-compressed NDJSON (one JSON object per line)
-- **Data metadata:** `format=ndjson`, `schema_version=1`, `export_date`, `row_count`, `sha256` (hex digest of the gzip bytes)
-- **Manifest:** JSON with `schema_version`, `export_date`, `organization_id`, and `objects[]` (`key`, `row_count`, `sha256`, `format`, `content_type`)
+- **Data metadata:** `format=ndjson`, `schema_version=2`, `export_date`, `row_count`, `sha256` (hex digest of the gzip bytes)
+- **Manifest:** JSON with `schema_version`, `export_date`, `organization_public_id`, and `objects[]` (`key`, `row_count`, `sha256`, `format`, `content_type`)
 - **Idempotency:** skips organization+date when `manifest.json` already exists (`HeadObject` on manifest key)
+- **Why the public id:** the archive outlives the database. An organization's bigserial restarts at 1 after a restore or reset, and every database writing to a shared bucket counts from 1, so partitions keyed by it put two organizations in one folder and the second one's day was skipped as already exported. The NDJSON rows still carry the database's own `organization_id` / `actor_user_id` for joins back to that database.
+- **Upgrading from schema 1:** exports written before schema 2 stay under `organization_id={id}/`; new exports go to `organization_public_id={org public id}/`. A reader that partitions by the path (an Athena table, a SIEM input path) needs the new partition column (`organization_public_id`, a string) — keep the old location as a separate table or input if those days are still queried.
 
 ## Environment
 
@@ -56,7 +58,7 @@ The worker does **not** push directly to a SIEM. Ingest is **pull-based from S3*
 
 1. **Enable export:** `AUDIT_EXPORT_ENABLED=true` and `S3_BUCKET` set; worker registered in `bootstrap.ts`; repeatable job `daily-audit-export` in `scheduler.ts` (default cron `15 2 * * *` UTC).
 2. **Daily objects:** After each run, expect one or more keys per organization under  
-   `s3://{bucket}/{AUDIT_EXPORT_S3_PREFIX}/organization_id={id}/dt=YYYY-MM-DD/part-{uuid}.jsonl.gz`.
+   `s3://{bucket}/{AUDIT_EXPORT_S3_PREFIX}/organization_public_id={org public id}/dt=YYYY-MM-DD/part-{uuid}.jsonl.gz`.
 3. **Splunk:** S3 input or SQS notification → decompress gzip → treat as **NDJSON** (`sourcetype` `_json` or `json_no_timestamp`). Map fields from each line (`action`, `organization_id`, `actor_user_id`, `created_at`, …).
 4. **Datadog:** S3 log forwarder or Lambda → **gzip** + **NDJSON** pipeline; use object metadata `format=ndjson` and `export_date` for partitioning.
 5. **Operational verification:** Confirm yesterday’s `dt=` prefix exists in the bucket after the cron window; verify `manifest.json` `sha256` matches the gzip object; spot-check NDJSON lines. Local helper (no Splunk required):

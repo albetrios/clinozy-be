@@ -79,6 +79,11 @@ interface FakeDatabaseHandle {
   requestedLimits: () => number[];
 }
 
+/** A deterministic `org_…` public id per bigserial, as the discovery join returns it. */
+function organizationPublicIdFor(organizationId: number): string {
+  return `org_${String(organizationId).padStart(21, '0')}`;
+}
+
 /**
  * Fake Drizzle handle. `selectDistinct` yields the tenant discovery rows; `select` yields the
  * keyset batches in the order the caller supplies them, so a test states exactly how the
@@ -93,9 +98,14 @@ function buildDatabaseHandle(options: {
 
   const selectDistinct = vi.fn(() => ({
     from: vi.fn(() => ({
-      where: vi.fn(async () =>
-        options.organizationIds.map((organization_id) => ({ organization_id })),
-      ),
+      innerJoin: vi.fn(() => ({
+        where: vi.fn(async () =>
+          options.organizationIds.map((organization_id) => ({
+            organization_id,
+            organization_public_id: organizationPublicIdFor(organization_id),
+          })),
+        ),
+      })),
     })),
   }));
 
@@ -167,10 +177,10 @@ describe('audit-export.processor', () => {
 
   /**
    * The manifest is the contract a restore path reads before touching a single part file. If the
-   * version literal silently drifts (or is dropped), every consumer pinned to `"1"` breaks at read
-   * time, long after the export ran. Nothing pinned its shape before this case.
+   * version literal silently drifts (or is dropped), every consumer pinned to its version breaks at
+   * read time, long after the export ran. Nothing pinned its shape before this case.
    */
-  it('writes a manifest carrying AUDIT_EXPORT_SCHEMA_VERSION, the export date, and the organization id', async () => {
+  it('writes a manifest carrying AUDIT_EXPORT_SCHEMA_VERSION, the export date, and the organization public id', async () => {
     const databaseHandle = buildDatabaseHandle({
       organizationIds: [42],
       batches: [[buildAuditRow(1, 42)]],
@@ -182,7 +192,9 @@ describe('audit-export.processor', () => {
     expect(manifest).toBeDefined();
     const parsed = JSON.parse(manifest!.body.toString('utf8')) as AuditExportManifest;
     expect(parsed.schema_version).toBe(AUDIT_EXPORT_SCHEMA_VERSION);
-    expect(parsed.organization_id).toBe(42);
+    expect(parsed.organization_public_id).toBe(organizationPublicIdFor(42));
+    // The archive outlives the database; a bigserial in it is meaningless after a restore.
+    expect(parsed).not.toHaveProperty('organization_id');
     // The window is the previous UTC calendar day, so the label is always a bare ISO date.
     expect(parsed.export_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(manifest!.contentType).toBe('application/json');
@@ -207,8 +219,8 @@ describe('audit-export.processor', () => {
   });
 
   /**
-   * The Hive-style layout (`organization_id=`/`dt=`) is what gives Athena partition pruning and
-   * makes a per-tenant retention delete a prefix delete. A flattened key would still upload
+   * The Hive-style layout (`organization_public_id=`/`dt=`) is what gives Athena partition pruning
+   * and makes a per-tenant retention delete a prefix delete. A flattened key would still upload
    * fine and quietly break both.
    */
   it('writes part objects under the partitioned organization/date key convention', async () => {
@@ -223,11 +235,28 @@ describe('audit-export.processor', () => {
     expect(part).toBeDefined();
     // The trailing slash on AUDIT_EXPORT_S3_PREFIX is normalized away, not doubled.
     expect(part!.key).toMatch(
-      /^audit\/export\/organization_id=42\/dt=\d{4}-\d{2}-\d{2}\/part-[0-9a-f-]{36}\.jsonl\.gz$/,
+      /^audit\/export\/organization_public_id=org_0+42\/dt=\d{4}-\d{2}-\d{2}\/part-[0-9a-f-]{36}\.jsonl\.gz$/,
     );
     expect(part!.contentType).toBe('application/gzip');
     expect(manifestCall()!.key).toMatch(
-      /^audit\/export\/organization_id=42\/dt=\d{4}-\d{2}-\d{2}\/manifest\.json$/,
+      /^audit\/export\/organization_public_id=org_0+42\/dt=\d{4}-\d{2}-\d{2}\/manifest\.json$/,
+    );
+  });
+
+  /**
+   * The bigserial restarts at 1 after a restore or reset, and every database writing to a shared
+   * bucket counts from 1. Partitioned by it, a second organization 42 found the first one's
+   * manifest, skipped its own day as already exported, and its parts landed in the same partition.
+   */
+  it('keeps two organizations with the same bigserial in different partitions', async () => {
+    const { buildManifestKey } = await import('@/domains/audit/workers/audit-export.processor.js');
+    const dateLabel = '2026-10-03';
+    expect(
+      buildManifestKey({ organizationPublicId: 'org_aaaaaaaaaaaaaaaaaaaaa', dateLabel }),
+    ).not.toBe(buildManifestKey({ organizationPublicId: 'org_bbbbbbbbbbbbbbbbbbbbb', dateLabel }));
+    // The same organization and day is the same manifest — the idempotency key holds.
+    expect(buildManifestKey({ organizationPublicId: 'org_aaaaaaaaaaaaaaaaaaaaa', dateLabel })).toBe(
+      buildManifestKey({ organizationPublicId: 'org_aaaaaaaaaaaaaaaaaaaaa', dateLabel }),
     );
   });
 

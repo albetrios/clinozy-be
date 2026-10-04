@@ -3,8 +3,12 @@ export const AUDIT_EXPORT_QUEUE_NAME = 'audit-export';
 
 /** Filename used for the per-export manifest sidecar uploaded next to the NDJSON parts. */
 export const AUDIT_EXPORT_MANIFEST_FILENAME = 'manifest.json';
-/** Manifest schema version literal — bump when the manifest shape changes incompatibly. */
-export const AUDIT_EXPORT_SCHEMA_VERSION = '1';
+/**
+ * Manifest schema version literal — bump when the manifest shape changes incompatibly.
+ * `2`: partitioned by `organization_public_id=` and the manifest carries the organization's public
+ * id; `1` used the organization bigserial for both.
+ */
+export const AUDIT_EXPORT_SCHEMA_VERSION = '2';
 
 /** One uploaded object entry inside an {@link AuditExportManifest} (single NDJSON.gz part). */
 export interface AuditExportManifestObject {
@@ -22,6 +26,7 @@ export interface AuditExportManifestObject {
 export interface AuditExportManifest {
   schema_version: typeof AUDIT_EXPORT_SCHEMA_VERSION;
   export_date: string;
-  organization_id: number;
+  /** The organization's public id (`org_…`) — stable across databases, unlike its bigserial. */
+  organization_public_id: string;
   objects: AuditExportManifestObject[];
 }
