@@ -29,7 +29,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-chaos-test-maintainer/SKILL.md",
-      "computedHash": "48d8908b60e6158413cc178340a6e5a50b3115603f1f3b31b2ffb7eda4f20782"
+      "computedHash": "a8230d0f976d53d1937787d57ae70a997ca8af9a124f8b26ad61d2ec692ec561"
     },
     "be-ci-investigation": {
       "source": "local",

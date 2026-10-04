@@ -11,10 +11,12 @@ import '../../shared/config/load-env-files.js';
 // cleanupDatabase/cleanupTestRedis guards) via the explicit flags below.
 process.env.NODE_ENV = 'development';
 // Isolate the chaos Redis keyspace from a running `pnpm dev` (both are NODE_ENV=development).
+// Forced with `=`, as src/tests/setup.ts does: with `??=` a developer's env file that sets
+// REDIS_KEY_PREFIX won, and the chaos jobs and cleanupTestRedis ran inside the dev namespace.
 // Literal, not an import: this module must resolve BEFORE Vitest wires `@/` aliases,
 // and the import-paths policy forbids `../` in a `from` clause. It is instead a
 // generator target (see text-identity-rewrites.ts), so a rebrand rewrites it in place.
-process.env.REDIS_KEY_PREFIX ??= 'clinozy:test:';
+process.env.REDIS_KEY_PREFIX = 'clinozy:test:';
 // Skip process-level shared-singleton teardown under the per-worker Vitest harness.
 process.env.SHUTDOWN_SKIP_SHARED_TEARDOWN = 'true';
 // Disable the ioredis ready-check (read raw from process.env by the Redis/BullMQ clients).

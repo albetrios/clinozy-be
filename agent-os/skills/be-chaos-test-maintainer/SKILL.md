@@ -42,7 +42,9 @@ Most chaos "failures" on a fresh machine are environment, not code. Check these 
   `src/tests/chaos/bootstrap-env.ts` hard-forces `NODE_ENV = 'development'` (`=`, not `||=`) so a developer's
   `.env.local` cannot leak a different value through `load-env-files`, hard-disables captcha
   (`CAPTCHA_PROVIDER = 'disabled'`, as `src/tests/setup.ts` does — an env file that enables Turnstile otherwise
-  fails every public auth form with 401 `errors:captchaRequired`), and sets the explicit flags the suite needs
+  fails every public auth form with 401 `errors:captchaRequired`), hard-sets its own Redis key prefix
+  (`REDIS_KEY_PREFIX = '<product>:test:'` — with `??=` an env file's prefix won and the chaos jobs and
+  `cleanupTestRedis` ran inside the dev namespace), and sets the explicit flags the suite needs
   (`TEST_MODE` — the single gate for `cleanupDatabase`/`cleanupTestRedis`; `RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED`).
   NODE_ENV is `local` | `development` | `production`; never downgrade the hard-forces to `||=`.
 - **Provision upstreams are in-network defaults.** With Toxiproxy in the compose network, `chaos:provision`
@@ -71,7 +73,7 @@ Most chaos "failures" on a fresh machine are environment, not code. Check these 
 - [ ] Does not rely on RLS session context in workers (pass organization identifiers explicitly)
 - [ ] `pnpm test:chaos` passes locally with chaos profile up
 - [ ] No changes to default `pnpm test` unless intentional
-- [ ] `bootstrap-env.ts` still hard-forces `NODE_ENV = 'development'`, `CAPTCHA_PROVIDER = 'disabled'` + the test-affordance flags (never `||=`)
+- [ ] `bootstrap-env.ts` still hard-forces `NODE_ENV = 'development'`, `CAPTCHA_PROVIDER = 'disabled'`, `REDIS_KEY_PREFIX` + the test-affordance flags (never `||=` / `??=`)
 - [ ] Toxiproxy still built locally from `tooling/chaos/toxiproxy.Dockerfile`, version matching the CI service container
 
 ## Related skills

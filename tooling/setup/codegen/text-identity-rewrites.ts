@@ -191,7 +191,7 @@ export const TEXT_REWRITE_TARGETS: readonly TextRewriteTarget[] = [
     rules: [
       ...localDatabaseRules(),
       {
-        pattern: /(REDIS_KEY_PREFIX \?\?= ')[a-z0-9_-]+(:test:')/,
+        pattern: /(REDIS_KEY_PREFIX = ')[a-z0-9_-]+(:test:')/,
         replace: (snapshot) => `$1${snapshot.derived.redisKeyPrefix}$2`,
       },
     ],
