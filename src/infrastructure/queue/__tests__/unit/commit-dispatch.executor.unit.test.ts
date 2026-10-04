@@ -57,6 +57,7 @@ describe('executeCommitDispatchTask', () => {
     await executeCommitDispatchTask({
       type: 'notification',
       notificationId: 42,
+      notificationPublicId: 'ntf_9z3rura5kqvcv8zggriym',
       organizationPublicId: 'org_public',
     });
     expect(notificationRepositoryDeleteMock).toHaveBeenCalledWith(42);

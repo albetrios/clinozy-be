@@ -8,7 +8,6 @@ import {
 } from '@/infrastructure/mail/workers/mail.processor.js';
 
 const RESEND_IDEMPOTENCY_TOKEN = '3f0c7a52-8a1e-4f6b-9a7d-2c5e8b1d4f60';
-const OTHER_DATABASE_RESEND_IDEMPOTENCY_TOKEN = 'b7e2d915-4c3a-4e8f-8d21-6f9a0c3b5e17';
 
 const findMailOutboxByIdMock = vi.fn();
 const tryClaimPendingMailOutboxMock = vi.fn();
@@ -45,32 +44,11 @@ describe('mail.processor', () => {
   });
 
   it('buildMailOutboxIdempotencyKey keys a row on its stored random token', () => {
-    expect(
-      buildMailOutboxIdempotencyKey({
-        mailOutboxId: 43,
-        resendIdempotencyToken: RESEND_IDEMPOTENCY_TOKEN,
-      }),
-    ).toBe(`mail-outbox-${RESEND_IDEMPOTENCY_TOKEN}`);
-  });
-
-  it('buildMailOutboxIdempotencyKey gives the same id in two databases different keys', () => {
-    // A bigserial id restarts at 1 after TRUNCATE ... RESTART IDENTITY or on a fresh database, and
-    // Resend rejects a key reused with a different body for 24 hours (409
+    // Not the bigserial id: it restarts at 1 after TRUNCATE ... RESTART IDENTITY or on a fresh
+    // database, and Resend rejects a key reused with a different body for 24 hours (409
     // invalid_idempotent_request) — keyed on the id, that email was never delivered.
-    const keyInThisDatabase = buildMailOutboxIdempotencyKey({
-      mailOutboxId: 1,
-      resendIdempotencyToken: RESEND_IDEMPOTENCY_TOKEN,
-    });
-    const keyInOtherDatabase = buildMailOutboxIdempotencyKey({
-      mailOutboxId: 1,
-      resendIdempotencyToken: OTHER_DATABASE_RESEND_IDEMPOTENCY_TOKEN,
-    });
-    expect(keyInThisDatabase).not.toBe(keyInOtherDatabase);
-  });
-
-  it('buildMailOutboxIdempotencyKey keeps the legacy mail-outbox-<id> key for a row created before the token column', () => {
-    expect(buildMailOutboxIdempotencyKey({ mailOutboxId: 43, resendIdempotencyToken: null })).toBe(
-      'mail-outbox-43',
+    expect(buildMailOutboxIdempotencyKey(RESEND_IDEMPOTENCY_TOKEN)).toBe(
+      `mail-outbox-${RESEND_IDEMPOTENCY_TOKEN}`,
     );
   });
 

@@ -134,6 +134,17 @@ describe('NotificationService', () => {
     });
   });
 
+  it('dispatchNotification enqueues nothing for a row that no longer exists', async () => {
+    const { enqueueNotification } = await import(
+      '@/domains/notify/sub-domains/notification/queues/notification.queue.js'
+    );
+    vi.mocked(repository.findDispatchPublicIdsByNotificationId).mockResolvedValueOnce(null);
+
+    await service.dispatchNotification(404);
+
+    expect(enqueueNotification).not.toHaveBeenCalled();
+  });
+
   it('markAllRead and deleteNotification delegate to repository', async () => {
     await service.markAllRead(scope);
     await service.deleteNotification('notif_public', scope);

@@ -170,15 +170,17 @@ export class NotificationService {
   }
 
   /**
-   * Enqueue async dispatch for a persisted notification row (email / in-app channels).
+   * Enqueue async dispatch for a persisted notification row (email / in-app channels); a row that
+   * no longer exists has nothing to dispatch, so nothing is enqueued.
    */
   async dispatchNotification(notificationId: number): Promise<void> {
     const dispatchPublicIds =
       await this.repository.findDispatchPublicIdsByNotificationId(notificationId);
+    if (!dispatchPublicIds) return;
     await enqueueNotification({
       notificationId,
-      notificationPublicId: dispatchPublicIds?.notificationPublicId ?? null,
-      organizationPublicId: dispatchPublicIds?.organizationPublicId ?? null,
+      notificationPublicId: dispatchPublicIds.notificationPublicId,
+      organizationPublicId: dispatchPublicIds.organizationPublicId,
     });
   }
 }

@@ -30,9 +30,7 @@ const DEFAULT_MAIL_JOB_MAX_ATTEMPTS = MAIL_QUEUE_MAX_ATTEMPTS;
  *   insert, so the key is unique across every database sending through the same Resend account.
  *   The bigserial `id` is not: it restarts at 1 after `TRUNCATE ... RESTART IDENTITY` or on a
  *   fresh database, and Resend rejects a key reused with a different body for 24 hours
- *   (409 `invalid_idempotent_request`), so that email would never be delivered. A row created
- *   before the token column existed (token `null`) keeps the legacy `mail-outbox-<id>` key it
- *   may already have been sent under.
+ *   (409 `invalid_idempotent_request`), so that email would never be delivered.
  * - **Failure modes:** none — pure string builder.
  * - **Side effects:** none.
  * - **Notes:** the key is row-scoped (not attempt-scoped) on purpose: read from the row, it is the
@@ -40,11 +38,8 @@ const DEFAULT_MAIL_JOB_MAX_ATTEMPTS = MAIL_QUEUE_MAX_ATTEMPTS;
  *   marking `sent` re-uses it and Resend collapses the duplicate `emails.send` into one delivery
  *   (audit #20).
  */
-export function buildMailOutboxIdempotencyKey(options: {
-  mailOutboxId: number;
-  resendIdempotencyToken: string | null;
-}): string {
-  return `mail-outbox-${options.resendIdempotencyToken ?? String(options.mailOutboxId)}`;
+export function buildMailOutboxIdempotencyKey(resendIdempotencyToken: string): string {
+  return `mail-outbox-${resendIdempotencyToken}`;
 }
 
 /**
@@ -200,10 +195,7 @@ async function processMailOutboxJobInner(
         text: outboxRow.text_body ?? undefined,
         replyTo: outboxRow.reply_to ?? undefined,
         tags: (outboxRow.tags as { name: string; value: string }[] | null) ?? undefined,
-        idempotencyKey: buildMailOutboxIdempotencyKey({
-          mailOutboxId,
-          resendIdempotencyToken: outboxRow.resend_idempotency_token,
-        }),
+        idempotencyKey: buildMailOutboxIdempotencyKey(outboxRow.resend_idempotency_token),
         requestId,
       }),
     );

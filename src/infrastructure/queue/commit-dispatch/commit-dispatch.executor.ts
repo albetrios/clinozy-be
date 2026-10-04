@@ -35,7 +35,7 @@ export async function executeCommitDispatchTask(task: CommitDispatchTask): Promi
       try {
         await enqueueNotification({
           notificationId: task.notificationId,
-          notificationPublicId: task.notificationPublicId ?? null,
+          notificationPublicId: task.notificationPublicId,
           organizationPublicId: task.organizationPublicId,
         });
       } catch (error) {

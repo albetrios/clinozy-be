@@ -151,7 +151,7 @@ Table auth.mail_outbox {
   html text [not null]
   id bigint [pk, increment, not null]
   reply_to varchar(320)
-  resend_idempotency_token uuid
+  resend_idempotency_token uuid [not null]
   resend_message_id varchar(255)
   sent_at timestamptz
   status varchar(20) [not null]

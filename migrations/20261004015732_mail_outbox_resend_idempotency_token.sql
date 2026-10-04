@@ -10,12 +10,8 @@
 -- and because it is stored on the row it stays the same across BullMQ retries and outbox
 -- sweeper reclaims — the duplicate-send protection the key exists for (audit #20).
 --
--- How: two metadata-only statements (no table rewrite, no backfill — auth.mail_outbox keeps
--- every row and has no retention sweep). The column is added without a default, so existing
--- rows stay NULL and keep the `mail-outbox-<id>` key they may already have been sent under —
--- a row reclaimed mid-send across this deploy still dedupes at Resend. The default then fills
--- the token for every row inserted from here on.
+-- How: one statement. The default is volatile, so Postgres rewrites the table and gives every
+-- existing row its own token; every row inserted later gets one from the same default. NOT NULL,
+-- so a key never falls back to the bigserial.
 
-ALTER TABLE auth.mail_outbox ADD COLUMN IF NOT EXISTS resend_idempotency_token UUID;--> statement-breakpoint
-
-ALTER TABLE auth.mail_outbox ALTER COLUMN resend_idempotency_token SET DEFAULT gen_random_uuid();
+ALTER TABLE auth.mail_outbox ADD COLUMN IF NOT EXISTS resend_idempotency_token UUID NOT NULL DEFAULT gen_random_uuid();

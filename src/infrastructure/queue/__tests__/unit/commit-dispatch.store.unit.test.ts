@@ -55,6 +55,7 @@ describe('commit-dispatch.store', () => {
     const task: CommitDispatchTask = {
       type: 'notification',
       notificationId: 7,
+      notificationPublicId: 'ntf_9z3rura5kqvcv8zggriym',
       organizationPublicId: 'org_abc',
     };
     const raw = JSON.stringify(task);

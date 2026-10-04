@@ -37,32 +37,11 @@ function getNotificationQueue(): Queue<NotificationJobData> {
 }
 
 /**
- * Builds the BullMQ job id for a notification's dispatch: the notification's public id.
- *
- * @remarks
- * - **Algorithm:** the public id (`ntf_…`) as-is — the queue name is already part of every key
- *   (`<prefix>bull:notification:<job id>`), so a `notification-` prefix would only cost bytes.
- *   `notificationPublicId: null` is a post-commit task recorded by the release before this one
- *   (that task carries only the bigserial); it keeps the legacy `notification-<id>` id.
- * - **Failure modes:** none — pure string builder.
- * - **Side effects:** none.
- * - **Notes:** not the bigserial `id`: it restarts at 1 after `TRUNCATE ... RESTART IDENTITY` or
- *   a database restore while Redis keeps finished jobs for up to 7 days, and BullMQ silently
- *   drops an add whose job id still exists — the new notification would never be dispatched.
- */
-export function buildNotificationJobId(options: {
-  notificationId: number;
-  notificationPublicId: string | null;
-}): string {
-  return options.notificationPublicId ?? `notification-${String(options.notificationId)}`;
-}
-
-/**
  * Enqueue a notification for async delivery across configured channels.
  */
 export async function enqueueNotification(options: {
   notificationId: number;
-  notificationPublicId: string | null;
+  notificationPublicId: string;
   organizationPublicId: string | null;
   requestId?: string;
 }): Promise<void> {
@@ -83,10 +62,10 @@ export async function enqueueNotification(options: {
   // persisted notification must not produce a second dispatch — and therefore a second outbound
   // email — for one in-app notification row. BullMQ drops an add whose jobId still exists in any
   // bucket (retained for SEVEN_DAYS_SECONDS), so a re-enqueue inside that window is a no-op. The
-  // job id is the notification's public id, unique across databases (see buildNotificationJobId).
-  await queue.add('dispatch-notification', jobData, {
-    jobId: buildNotificationJobId({ notificationId, notificationPublicId }),
-  });
+  // job id is the notification's public id as-is (the queue name is already in every key), never
+  // the bigserial: that restarts at 1 after TRUNCATE ... RESTART IDENTITY or a restore while Redis
+  // keeps finished jobs, and the add for a new notification reusing the id would be dropped.
+  await queue.add('dispatch-notification', jobData, { jobId: notificationPublicId });
 }
 
 /** Close the lazily-initialised notification queue (graceful-shutdown hook for tests/runtime). */

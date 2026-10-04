@@ -42,9 +42,8 @@ export const mail_outbox = authSchema.table(
     // bigserial `id`: that restarts at 1 after TRUNCATE ... RESTART IDENTITY or on a fresh
     // database, and Resend rejects a key reused with a different body for 24 hours per account,
     // so the email is never delivered. A uuid because the key must be unique across databases
-    // and Postgres generates it on insert. NULL only on rows created before this column existed;
-    // they keep the legacy `mail-outbox-<id>` key (see buildMailOutboxIdempotencyKey).
-    resend_idempotency_token: uuid('resend_idempotency_token').defaultRandom(),
+    // and Postgres generates it on insert (see buildMailOutboxIdempotencyKey).
+    resend_idempotency_token: uuid('resend_idempotency_token').notNull().defaultRandom(),
   },
   (table) => [
     index('idx_mail_outbox_status_created_at').on(table.status, table.created_at),
