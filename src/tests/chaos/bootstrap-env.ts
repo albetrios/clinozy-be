@@ -21,6 +21,10 @@ process.env.SHUTDOWN_SKIP_SHARED_TEARDOWN = 'true';
 process.env.REDIS_READY_CHECK_ENABLED = 'false';
 // Category-B security flags default hardened; set the relaxed test values (see src/tests/setup.ts).
 process.env.CAPTCHA_BYPASS_ALLOWED ??= 'true';
+// CAPTCHA is hard-disabled (`=`, not `??=`), as src/tests/setup.ts does for the main suite: CI leaves
+// CAPTCHA_PROVIDER unset (schema default `disabled`), while a developer's env file that enables
+// Turnstile would make every public auth form here answer 401 `errors:captchaRequired`.
+process.env.CAPTCHA_PROVIDER = 'disabled';
 process.env.SESSION_ORIGIN_CSRF_REQUIRED ??= 'false';
 process.env.WEBHOOK_ALLOWLIST_REQUIRED ??= 'false';
 process.env.METRICS_AUTH_REQUIRED ??= 'false';

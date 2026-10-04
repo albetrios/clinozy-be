@@ -32,9 +32,9 @@ via a GitHub Actions service container (see below), so this local build affects 
 > `pnpm test:chaos` is self-contained: its `bootstrap-env.ts` hard-forces `NODE_ENV=development` and points
 > `DATABASE_URL` / `REDIS_URL` at the proxied ports itself, so the manual overrides in step 2 are only
 > needed when you run the **API process** by hand against the proxies (not for the test suite). The chaos
-> bootstrap forces `NODE_ENV=development` and sets the test-affordance flags — captcha bypass via
-> `CAPTCHA_BYPASS_ALLOWED`, and `TEST_DATA_WIPE_ALLOWED=true` for `cleanupDatabase`/`cleanupTestRedis` —
-> so the suite behaves the same locally and in CI.
+> bootstrap forces `NODE_ENV=development`, hard-disables captcha (`CAPTCHA_PROVIDER=disabled`, as the main
+> suite's `src/tests/setup.ts` does) and sets the test-affordance flags — `TEST_MODE=true`, the single gate
+> for `cleanupDatabase`/`cleanupTestRedis` — so the suite behaves the same locally and in CI.
 
 ## Continuous integration
 
