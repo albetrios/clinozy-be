@@ -34,6 +34,7 @@ export type OutboundCallOptionsInput<T> = {
   requestId?: string | undefined;
   enforceAbortTimeout?: boolean | undefined;
   rethrowIf?: ((error: unknown) => boolean) | undefined;
+  countsAsCircuitFailure?: ((error: unknown) => boolean) | undefined;
 };
 
 /**
@@ -72,6 +73,12 @@ export interface OutboundCallOptions<T> {
   enforceAbortTimeout?: boolean;
   /** When true, the error is logged and rethrown without wrapping in {@link ExternalServiceError}. */
   rethrowIf?: (error: unknown) => boolean;
+  /**
+   * Returns false for a third-party error that is the upstream refusing this one request (Stripe
+   * declining a card, say): the error is tagged `countsAsCircuitFailure: false`, so the circuit
+   * counts the call as a success. Our own error classes carry that property themselves.
+   */
+  countsAsCircuitFailure?: (error: unknown) => boolean;
   operation: (signal: AbortSignal) => Promise<T>;
 }
 
@@ -107,6 +114,13 @@ async function runOperationWithOptionalRetry<T>(options: {
   }) as RetryWithBackoffOptions;
 
   return retryWithBackoff(() => operation(signal), retryOptions);
+}
+
+/** Tags a third-party error so the circuit breaker counts it as a success (see `countsAsCircuitFailure`). */
+function markAsRefusalOfRequest(error: unknown): void {
+  if (typeof error === 'object' && error !== null) {
+    Object.assign(error, { countsAsCircuitFailure: false });
+  }
 }
 
 function logOutboundFailure(options: {
@@ -159,7 +173,18 @@ export async function outboundCall<T>(options: OutboundCallOptions<T>): Promise<
       );
 
     if (circuit) {
-      return circuit.execute(run);
+      const { countsAsCircuitFailure } = resolved;
+      if (!countsAsCircuitFailure) {
+        return circuit.execute(run);
+      }
+      return circuit.execute(async () => {
+        try {
+          return await run();
+        } catch (error) {
+          if (!countsAsCircuitFailure(error)) markAsRefusalOfRequest(error);
+          throw error;
+        }
+      });
     }
     return run();
   };

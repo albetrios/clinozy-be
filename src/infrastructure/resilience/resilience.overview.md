@@ -28,5 +28,5 @@ Cross-cutting reliability primitives that don't belong to any single domain: cir
 
 - **Breaker open** → calls fail-fast with `CircuitBreakerOpenError`; controllers return 502.
 - **Breaker half-open and probe fails** → reopens immediately.
-- **Upstream refuses one request** (an error carrying `countsAsCircuitFailure: false`, e.g. a Resend per-email rejection) → counted as a success: the upstream answered, so the breaker neither opens on a burst of bad requests nor stays half-open.
+- **Upstream refuses one request** (an error carrying `countsAsCircuitFailure: false` — a Resend per-email rejection, a declined Stripe card, a not-found Stripe lookup) → counted as a success: the upstream answered, so the breaker neither opens on a burst of bad requests nor stays half-open.
 - **Per-upstream breaker not configured** → call falls through with no protection; should be considered a missing instrumentation, caught in code review.

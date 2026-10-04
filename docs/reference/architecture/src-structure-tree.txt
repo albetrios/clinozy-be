@@ -2164,6 +2164,8 @@ src/
     │   │   │   └── email-template.snapshot.unit.test.ts
     │   │   ├── outbound/
     │   │   │   └── outbound-redaction.unit.test.ts
+    │   │   ├── payment/
+    │   │   │   └── stripe-circuit-failure.unit.test.ts
     │   │   ├── queue/
     │   │   │   ├── bullmq-producer-connection.unit.test.ts
     │   │   │   └── scheduler.unit.test.ts

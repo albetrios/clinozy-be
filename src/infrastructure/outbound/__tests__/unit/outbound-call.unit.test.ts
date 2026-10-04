@@ -72,6 +72,50 @@ describe('outboundCall', () => {
     vi.useFakeTimers();
   });
 
+  it('tags an error its classifier calls a refusal, so the circuit counts the call as a success', async () => {
+    vi.useRealTimers();
+    const circuit = new CircuitBreaker({ name: 'refusal-classifier', failureThreshold: 1 });
+    const refusal = new Error('card declined');
+
+    await expect(
+      outboundCall({
+        name: 'stripe',
+        circuit,
+        rethrowIf: () => true,
+        countsAsCircuitFailure: (error) => error !== refusal,
+        operation: async () => {
+          throw refusal;
+        },
+      }),
+    ).rejects.toBe(refusal);
+
+    expect(refusal).toMatchObject({ countsAsCircuitFailure: false });
+    expect(await circuit.getState()).toBe('CLOSED');
+    vi.useFakeTimers();
+  });
+
+  it('counts an error its classifier does not call a refusal', async () => {
+    vi.useRealTimers();
+    const circuit = new CircuitBreaker({ name: 'failure-classifier', failureThreshold: 1 });
+    const outage = new Error('upstream down');
+
+    await expect(
+      outboundCall({
+        name: 'stripe',
+        circuit,
+        rethrowIf: () => true,
+        countsAsCircuitFailure: () => true,
+        operation: async () => {
+          throw outage;
+        },
+      }),
+    ).rejects.toBe(outage);
+
+    expect(outage).not.toHaveProperty('countsAsCircuitFailure');
+    expect(await circuit.getState()).toBe('OPEN');
+    vi.useFakeTimers();
+  });
+
   it('maps CircuitBreakerOpenError to ExternalServiceError circuit_open', async () => {
     const circuit = new CircuitBreaker({
       name: 'open-fast',

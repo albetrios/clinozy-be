@@ -4,11 +4,13 @@ import {
   cancelStripeSubscription,
   createStripeCustomer,
   createStripeSubscription,
+  getStripeCustomer,
   listRecentStripeEvents,
   resumeStripeSubscription,
   updateStripeSubscription,
   updateStripeSubscriptionQuantity,
 } from '@/infrastructure/payment/stripe.client.js';
+import { stripeCircuit } from '@/infrastructure/resilience/circuit-breaker.js';
 
 import customerCreateRequestSubset from './fixtures/stripe/customer.create.request.fields.json' with {
   type: 'json',
@@ -301,5 +303,28 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
     // The SDK serializes range filters as created[gte] and forwards the page limit.
     expect(capturedQuery?.['created[gte]']).toBe(String(createdGteSeconds));
     expect(capturedQuery?.limit).toBe('100');
+  });
+
+  test('a run of not-found customer lookups never opens the stripe circuit', async () => {
+    // One more lookup than the circuit's failure threshold (5): counted as failures, they would
+    // open it — the last lookup would throw CircuitBreakerOpenError instead of returning null, and
+    // every other billing call would be refused for 30 seconds.
+    const lookupCount = 6;
+    nock(stripeOutboundApiHostname)
+      .get('/v1/customers/cus_missing')
+      .times(lookupCount)
+      .reply(404, {
+        error: {
+          type: 'invalid_request_error',
+          code: 'resource_missing',
+          message: "No such customer: 'cus_missing'",
+          param: 'id',
+        },
+      });
+
+    for (let lookup = 0; lookup < lookupCount; lookup += 1) {
+      await expect(getStripeCustomer('cus_missing')).resolves.toBeNull();
+    }
+    expect(await stripeCircuit.getState()).toBe('CLOSED');
   });
 });
