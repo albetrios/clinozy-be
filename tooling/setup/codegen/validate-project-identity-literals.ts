@@ -25,7 +25,12 @@ import { relative, resolve } from 'node:path';
 import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
 
 import type { ProjectIdentitySnapshot } from './project-identity.util.js';
-import { identityTokenPattern, slugSpellings } from './text-identity-rewrites.js';
+import {
+  identityTokenPattern,
+  redisKeyPrefixStemPattern,
+  slugSpellings,
+  wordmarkPattern,
+} from './text-identity-rewrites.js';
 
 /** A file+reason pair permitting the identity literal to appear verbatim. */
 export interface IdentityLiteralAllowance {
@@ -219,19 +224,8 @@ export function previousIdentityPatterns(
       patterns.push({ previous: name, pattern: identityTokenPattern(spelling) });
     }
 
-    const separatorIndex = name.lastIndexOf('-');
-    if (separatorIndex > 0) {
-      const head = escapeRegExp(name.slice(0, separatorIndex));
-      const tail = escapeRegExp(name.slice(separatorIndex + 1));
-      const markup = '(?:<[^>]*>)?';
-      patterns.push({
-        previous: name,
-        pattern: new RegExp(
-          `(?<![A-Za-z0-9])${head}\\s*${markup}\\s*(?:·|•|∙|&middot;|&#183;)\\s*${markup}\\s*${tail}(?![A-Za-z0-9])`,
-          'i',
-        ),
-      });
-    }
+    const wordmark = wordmarkPattern(name);
+    if (wordmark) patterns.push({ previous: name, pattern: wordmark });
 
     if (!name.endsWith('-be')) continue;
     const database = name.slice(0, -'-be'.length);
@@ -250,12 +244,7 @@ export function previousIdentityPatterns(
     });
 
     if (database === snapshot.derived.redisKeyPrefix) continue;
-    patterns.push({
-      previous: name,
-      pattern: new RegExp(
-        `(?<![A-Za-z0-9_/@.-])${escapeRegExp(database)}:(?:\\$\\{|(?:local|development|production|dev|prod|test|staging)(?![A-Za-z0-9])|['"\`])`,
-      ),
-    });
+    patterns.push({ previous: name, pattern: redisKeyPrefixStemPattern(database) });
   }
 
   for (const owner of snapshot.previousOwners) {

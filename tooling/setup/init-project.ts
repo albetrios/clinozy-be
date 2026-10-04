@@ -32,6 +32,8 @@ import {
 import {
   replaceIdentityToken,
   rewritePreviousDatabaseName,
+  rewritePreviousRedisKeyPrefix,
+  rewritePreviousWordmark,
 } from '@tooling/setup/codegen/text-identity-rewrites.js';
 import {
   loadConfigIfExists,
@@ -334,6 +336,8 @@ function rewriteProseIdentity(options: {
   readonly nextSqlStem: string;
   readonly previousDatabaseName: string;
   readonly nextDatabaseName: string;
+  readonly previousRedisKeyPrefix: string;
+  readonly nextRedisKeyPrefix: string;
   readonly nextSlug: string;
   readonly nextOwner: string;
   readonly nextFrontend: string;
@@ -440,6 +444,19 @@ function rewriteProseIdentity(options: {
       previousDatabaseName: options.previousDatabaseName,
       nextDatabaseName: options.nextDatabaseName,
     });
+    // Two more forms no string pair matches, both flagged by the previous-identity gate
+    // (validate-project-identity-literals.ts): the stem as a Redis key prefix (`acme:dev:`) and
+    // the slug as a `acme·be` wordmark. Rewrite them here, or the adopted repo fails that gate.
+    updated = rewritePreviousRedisKeyPrefix(updated, {
+      previousStem: options.previousRedisKeyPrefix,
+      nextStem: options.nextRedisKeyPrefix,
+    });
+    for (const [previousSlug, nextSlug] of [
+      [options.previousFrontend, options.nextFrontend],
+      [options.previousSlug, options.nextSlug],
+    ] as const) {
+      updated = rewritePreviousWordmark(updated, { previousSlug, nextSlug });
+    }
     if (updated === contents) continue;
     changed.push(relativePath);
     if (!options.dryRun) {
@@ -744,6 +761,8 @@ async function main(): Promise<void> {
       nextSqlStem: identity.name.replace(/-/g, '_'),
       previousDatabaseName: resolveDerivedNames(current).databaseName,
       nextDatabaseName: resolveDerivedNames(updated).databaseName,
+      previousRedisKeyPrefix: resolveDerivedNames(current).redisKeyPrefix,
+      nextRedisKeyPrefix: resolveDerivedNames(updated).redisKeyPrefix,
       nextSlug: identity.name,
       nextOwner: identity.repository.split('/')[0] ?? previousOwner,
       nextFrontend: resolveFrontendSlug(updated),
