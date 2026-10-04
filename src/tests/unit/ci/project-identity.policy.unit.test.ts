@@ -222,6 +222,44 @@ describe('project identity — previous identity gate', () => {
     }
   });
 
+  it('finds a previous slug written as a display wordmark', () => {
+    // The dashboards hub still titled itself with the old slug as a `<name>·<suffix>` wordmark (and
+    // split it with a <span>) long after the rename — no slug spelling covers that separator.
+    for (const line of [
+      '<title>legacy·be — control room</title>',
+      'LEGACY • BE',
+      'legacy&middot;be',
+      '<div>legacy<span class="text-brand">·</span>be</div>',
+    ]) {
+      expect(flags(line), line).toBe(true);
+    }
+    // A space or dot is ordinary text, and the tail must end the word.
+    for (const line of ['let the legacy be', 'legacy.be', 'legacy·bean']) {
+      expect(flags(line), line).toBe(false);
+    }
+  });
+
+  it('finds the previous backend stem only where it is a Redis key prefix', () => {
+    // resolveRedisKeyPrefix() kept the old stem as its `<stem>:<NODE_ENV>:` default after the
+    // rename, so every Redis key and BullMQ queue carried the old name.
+    for (const line of [
+      `return \`legacy:\${environment.NODE_ENV}:\`;`,
+      'REDIS_KEY_PREFIX=legacy:dev:',
+      "process.env.REDIS_KEY_PREFIX = 'legacy:test:';",
+      "keyPrefix: 'legacy:'",
+    ]) {
+      expect(flags(line), line).toBe(true);
+    }
+    for (const line of [
+      'legacy: true',
+      'src/legacy/events/event-bus.ts',
+      '@scope/legacy:dev',
+      'legacy::value',
+    ]) {
+      expect(flags(line), line).toBe(false);
+    }
+  });
+
   it('never flags a genuine word that merely starts like the previous slug', () => {
     // A folder, an English word or an identifier that only BEGINS like the old slug is not it.
     for (const line of [

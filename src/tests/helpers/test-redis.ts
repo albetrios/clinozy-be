@@ -3,7 +3,7 @@ import { connectRedis, redisConnection } from '@/infrastructure/cache/redis.clie
 import { env } from '@/shared/config/env.config.js';
 
 /** Redis key prefixes cleared between integration tests (Postgres truncate does not touch Redis). */
-/** Logical prefixes (ioredis `keyPrefix: 'core:'` is applied by redisConnection). */
+/** Logical prefixes (redisConnection applies the ioredis `keyPrefix` — `<stem>:test:` under the harness). */
 const TEST_REDIS_PREFIXES = [
   'perm:',
   'idempotency:',

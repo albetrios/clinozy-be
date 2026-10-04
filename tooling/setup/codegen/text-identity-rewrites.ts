@@ -130,10 +130,11 @@ export const TEXT_REWRITE_TARGETS: readonly TextRewriteTarget[] = [
         replace: (snapshot) => `$1=${snapshot.brandName}`,
       },
       {
-        // The VALUE beside the comment above. Without this rule the template shipped
-        // the base project's stem while its own comment named the new one.
-        pattern: /^REDIS_KEY_PREFIX=[a-z0-9_-]+(:[a-z0-9_-]+:)$/m,
-        replace: (snapshot) => `REDIS_KEY_PREFIX=${snapshot.derived.redisKeyPrefix}$1`,
+        // The example VALUE beside the comment above (commented out: the prefix is derived from
+        // the identity stem and NODE_ENV by default). Without this rule the template shipped the
+        // base project's stem while its own comment named the new one.
+        pattern: /^(# )?REDIS_KEY_PREFIX=[a-z0-9_-]+(:[a-z0-9_-]+:)$/m,
+        replace: (snapshot) => `$1REDIS_KEY_PREFIX=${snapshot.derived.redisKeyPrefix}$2`,
       },
       ...localDatabaseRules(),
     ],

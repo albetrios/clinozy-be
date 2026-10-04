@@ -40,7 +40,7 @@ Enforce production-readiness checks across the codebase. Verifies security heade
 ### Redis
 
 - [ ] Retry strategy with exponential backoff (capped at 5s)
-- [ ] Key prefix (`core:`) to namespace entries
+- [ ] Key prefix `<product>:<NODE_ENV>:` (`resolveRedisKeyPrefix()` — product from the identity stem, full environment name) to namespace entries; `REDIS_KEY_PREFIX` only for several same-`NODE_ENV` deployments on one Redis
 - [ ] Production: `REDIS_URL` points at the shared managed Redis instance; `REDIS_BULLMQ_URL` is unset or the same endpoint while using the current single-instance topology — see `docs/deployment/runbooks/redis-topology.md`
 - [ ] Close timeout (5s) for graceful shutdown
 - [ ] Error logging on connection failures

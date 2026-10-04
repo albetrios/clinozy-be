@@ -179,7 +179,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-production-hardening-guard/SKILL.md",
-      "computedHash": "fa279c0548590302f0add70ad838180c5e3994972000b75305639fa4dfbe915c"
+      "computedHash": "3f81cdf214e32c9ac8eb4d13a596d80bd1a2acbf1ff71f1cd78c6cb728129549"
     },
     "be-read-cache-guard": {
       "source": "local",

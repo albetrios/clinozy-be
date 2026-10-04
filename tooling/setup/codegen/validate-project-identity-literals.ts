@@ -192,9 +192,16 @@ export interface PreviousIdentityLeftover {
  *   `acme_be`, `ACME_BE`, `AcmeBe`, `acmeBe`, `acmebe`), as a whole identity token
  *   (`identityTokenPattern`): found inside `grantAcmeBeAppRole`, never inside an ordinary word
  *   such as `acmeFeatures` or `AcmeBehavior`.
+ * - A previous slug written as a display wordmark: its two halves joined by a typographic separator
+ *   (`acme·be`, `ACME • BE`, `acme&middot;be`), markup around the separator allowed
+ *   (`acme<span class="…">·</span>be`). Plain spaces and dots are left alone — "let the legacy be"
+ *   is English, not a leftover.
  * - A previous BACKEND slug's database name (`acme-be` → `acme`) only where it IS the database:
  *   `POSTGRES_USER/PASSWORD/DB`, `-U`/`-d` flags, a connection string's database segment and
  *   `CREATE DATABASE`. The bare word is left alone, so a folder or English word spelled the same is never flagged.
+ * - The same stem where it IS a Redis key prefix: `acme:` directly followed by a template
+ *   placeholder, an environment name or a quote (`` `acme:${NODE_ENV}:` ``, `acme:dev:`,
+ *   `'acme:'`) — the form a rename missed in `resolveRedisKeyPrefix()`.
  * - A previous owner, case-sensitive, as a whole token.
  *
  * A previous value the CURRENT identity still contains is skipped, or the gate could never pass.
@@ -212,6 +219,20 @@ export function previousIdentityPatterns(
       patterns.push({ previous: name, pattern: identityTokenPattern(spelling) });
     }
 
+    const separatorIndex = name.lastIndexOf('-');
+    if (separatorIndex > 0) {
+      const head = escapeRegExp(name.slice(0, separatorIndex));
+      const tail = escapeRegExp(name.slice(separatorIndex + 1));
+      const markup = '(?:<[^>]*>)?';
+      patterns.push({
+        previous: name,
+        pattern: new RegExp(
+          `(?<![A-Za-z0-9])${head}\\s*${markup}\\s*(?:·|•|∙|&middot;|&#183;)\\s*${markup}\\s*${tail}(?![A-Za-z0-9])`,
+          'i',
+        ),
+      });
+    }
+
     if (!name.endsWith('-be')) continue;
     const database = name.slice(0, -'-be'.length);
     if (database === snapshot.derived.databaseName) continue;
@@ -225,6 +246,14 @@ export function previousIdentityPatterns(
           `postgresql://[^\\s'"\`]*@[^/\\s]+/${word}`,
           `CREATE DATABASE\\s+${word}`,
         ].join('|'),
+      ),
+    });
+
+    if (database === snapshot.derived.redisKeyPrefix) continue;
+    patterns.push({
+      previous: name,
+      pattern: new RegExp(
+        `(?<![A-Za-z0-9_/@.-])${escapeRegExp(database)}:(?:\\$\\{|(?:local|development|production|dev|prod|test|staging)(?![A-Za-z0-9])|['"\`])`,
       ),
     });
   }

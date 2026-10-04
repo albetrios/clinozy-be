@@ -29,6 +29,17 @@ const TW_PATH = join(ROOT, 'tooling/dev/dashboards/tailwind.js');
 const GRIDSTACK_JS_PATH = join(ROOT, 'tooling/dev/dashboards/gridstack.js');
 const GRIDSTACK_CSS_PATH = join(ROOT, 'tooling/dev/dashboards/gridstack.css');
 
+// The hub's `<name>·<suffix>` wordmark comes from package.json's `name`, which the identity
+// generator writes from the manifest — hub.html carries placeholders, never the name, so a rebrand
+// needs no edit there (a typed-in name once outlived a rename by months).
+const [HUB_WORDMARK_NAME, HUB_WORDMARK_SUFFIX] = (() => {
+  const packageName = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).name ?? '';
+  const separatorIndex = packageName.lastIndexOf('-');
+  return separatorIndex > 0
+    ? [packageName.slice(0, separatorIndex), packageName.slice(separatorIndex + 1)]
+    : [packageName, ''];
+})();
+
 function envVal(key) {
   try {
     const line = readFileSync(join(ROOT, '.env.local'), 'utf8')
@@ -196,7 +207,9 @@ async function probeAll() {
 
 function readHub() {
   try {
-    return readFileSync(HUB_HTML_PATH, 'utf8');
+    return readFileSync(HUB_HTML_PATH, 'utf8')
+      .replaceAll('__HUB_WORDMARK_NAME__', HUB_WORDMARK_NAME)
+      .replaceAll('__HUB_WORDMARK_SUFFIX__', HUB_WORDMARK_SUFFIX);
   } catch {
     return '<!doctype html><meta charset="utf-8"><body style="font:14px system-ui;padding:40px">Hub file missing: tooling/dev/dashboards/hub.html</body>';
   }
