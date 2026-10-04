@@ -11,9 +11,11 @@ export const NOTIFY_EVENT = {
 export type NotifyEventType = (typeof NOTIFY_EVENT)[keyof typeof NOTIFY_EVENT];
 
 /**
- * Payload of {@link NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED}. Only carries the delivery-attempt
- * id; the worker re-reads `(webhook, payload, signing secret)` from Postgres under RLS.
+ * Payload of {@link NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED}. Only carries the delivery attempt's
+ * ids; the worker re-reads `(webhook, payload, signing secret)` from Postgres under RLS.
  */
 export interface WebhookDeliveryRequestedPayload {
   delivery_attempt_id: number;
+  /** The attempt's public id — its BullMQ job id, unique across databases. */
+  delivery_attempt_public_id: string;
 }

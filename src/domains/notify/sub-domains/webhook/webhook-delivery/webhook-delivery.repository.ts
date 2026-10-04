@@ -31,6 +31,9 @@ export interface WebhookDeliveryAttemptWithWebhook {
   // use it as the X-Webhook-Delivery-Id header value without exposing the bigserial.
   deliveryAttemptPublicId: string;
   webhookId: number;
+  // Keys the per-webhook outbound circuit breaker — the bigserial would hand a webhook created
+  // after an id restart the open breaker of the one that held its id before.
+  webhookPublicId: string;
   webhookUrl: string;
   encryptedSecret: string;
   eventType: string;
@@ -122,6 +125,7 @@ export async function findWebhookDeliveryAttemptWithWebhook(
       deliveryAttemptId: webhook_delivery_attempts.id,
       deliveryAttemptPublicId: webhook_delivery_attempts.public_id,
       webhookId: webhooks.id,
+      webhookPublicId: webhooks.public_id,
       webhookUrl: webhooks.url,
       encryptedSecret: webhooks.encrypted_secret,
       eventType: webhook_delivery_attempts.event_type,
@@ -150,6 +154,7 @@ export async function findWebhookDeliveryAttemptWithWebhook(
     deliveryAttemptId: row.deliveryAttemptId,
     deliveryAttemptPublicId: row.deliveryAttemptPublicId,
     webhookId: row.webhookId,
+    webhookPublicId: row.webhookPublicId,
     webhookUrl: row.webhookUrl,
     encryptedSecret: row.encryptedSecret,
     eventType: row.eventType,
@@ -164,7 +169,8 @@ export async function findWebhookDeliveryAttemptWithWebhook(
 
 /**
  * Insert the canonical `PENDING` delivery-attempt row that {@link emitWebhookDeliveryRequested}
- * publishes through the event bus. Returns the internal id used as the BullMQ payload.
+ * publishes through the event bus. Returns the internal id (the BullMQ payload) and the public id
+ * (the BullMQ job id, unique across databases — see `enqueueWebhookDeliveryByAttemptId`).
  *
  * @remarks
  * sec-N2: when `eventKey` is supplied, persist it and apply
@@ -181,7 +187,7 @@ export async function createPendingWebhookDeliveryAttempt(input: {
   eventType: string;
   payload: Record<string, unknown>;
   eventKey?: string;
-}): Promise<number> {
+}): Promise<{ id: number; publicId: string }> {
   const baseValues = {
     webhook_id: input.webhookId,
     event_type: input.eventType,
@@ -199,8 +205,11 @@ export async function createPendingWebhookDeliveryAttempt(input: {
       .onConflictDoNothing({
         target: [webhook_delivery_attempts.webhook_id, webhook_delivery_attempts.event_key],
       })
-      .returning({ id: webhook_delivery_attempts.id });
-    if (rows[0]) return rows[0].id;
+      .returning({
+        id: webhook_delivery_attempts.id,
+        publicId: webhook_delivery_attempts.public_id,
+      });
+    if (rows[0]) return rows[0];
     // Conflict path: another inserter already wrote the PENDING row for this
     // (webhook_id, event_key). Look up its id so the caller can enqueue against
     // the existing row instead of dropping the delivery.
@@ -209,7 +218,7 @@ export async function createPendingWebhookDeliveryAttempt(input: {
     // transitions to SENDING/SENT/FAILED. Matching only PENDING here avoids
     // handing a completed-row id back to the caller.
     const existing = await getRequestDatabase()
-      .select({ id: webhook_delivery_attempts.id })
+      .select({ id: webhook_delivery_attempts.id, publicId: webhook_delivery_attempts.public_id })
       .from(webhook_delivery_attempts)
       .where(
         and(
@@ -219,12 +228,12 @@ export async function createPendingWebhookDeliveryAttempt(input: {
         ),
       )
       .limit(1);
-    return existing[0]!.id;
+    return existing[0]!;
   }
   const rows = await insertBuilder
     .values(baseValues)
-    .returning({ id: webhook_delivery_attempts.id });
-  return rows[0]!.id;
+    .returning({ id: webhook_delivery_attempts.id, publicId: webhook_delivery_attempts.public_id });
+  return rows[0]!;
 }
 
 /** Worker-only — requires an explicit handle from `withAppDatabaseContext`. */

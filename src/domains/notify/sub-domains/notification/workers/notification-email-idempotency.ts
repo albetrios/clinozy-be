@@ -5,8 +5,11 @@ import { NOTIFICATION_EMAIL_DISPATCH_IDEMPOTENCY_TTL_SECONDS } from '@/shared/co
 /** Redis key prefix for the one-time notification email-dispatch marker. */
 const NOTIFICATION_EMAIL_DISPATCH_KEY_PREFIX = 'notification:email-dispatched:';
 
-function buildKey(notificationId: number, recipient: string): string {
-  return `${NOTIFICATION_EMAIL_DISPATCH_KEY_PREFIX}${notificationId}:${recipient.toLowerCase()}`;
+// Keyed by the notification's public id, not its bigserial: the id restarts at 1 after
+// TRUNCATE ... RESTART IDENTITY or a database restore while this marker lives on in Redis for 24
+// hours, so a NEW notification reusing the id would be skipped as "already dispatched".
+function buildKey(notificationPublicId: string, recipient: string): string {
+  return `${NOTIFICATION_EMAIL_DISPATCH_KEY_PREFIX}${notificationPublicId}:${recipient.toLowerCase()}`;
 }
 
 /**
@@ -19,16 +22,17 @@ function buildKey(notificationId: number, recipient: string): string {
  * - **Side effects:** none (read-only).
  * - **Notes:** paired with {@link markNotificationEmailDispatched}, which is written ONLY AFTER the
  *   durable outbox insert. This is the durability-first replacement for the claim-before-insert
- *   model that could lose an email on a crash between the claim and the insert.
+ *   model that could lose an email on a crash between the claim and the insert. Keyed by the
+ *   notification's public id, which stays unique when the bigserial restarts.
  */
 export async function isNotificationEmailDispatched(options: {
-  notificationId: number;
+  notificationPublicId: string;
   recipient: string;
   redis?: Redis;
 }): Promise<boolean> {
-  const { notificationId, recipient } = options;
+  const { notificationPublicId, recipient } = options;
   const redis = options.redis ?? redisConnection;
-  const result = await redis.get(buildKey(notificationId, recipient));
+  const result = await redis.get(buildKey(notificationPublicId, recipient));
   return result !== null;
 }
 
@@ -47,14 +51,14 @@ export async function isNotificationEmailDispatched(options: {
  *   because a lost notification is worse than a rare duplicate.
  */
 export async function markNotificationEmailDispatched(options: {
-  notificationId: number;
+  notificationPublicId: string;
   recipient: string;
   redis?: Redis;
 }): Promise<void> {
-  const { notificationId, recipient } = options;
+  const { notificationPublicId, recipient } = options;
   const redis = options.redis ?? redisConnection;
   await redis.set(
-    buildKey(notificationId, recipient),
+    buildKey(notificationPublicId, recipient),
     '1',
     'EX',
     NOTIFICATION_EMAIL_DISPATCH_IDEMPOTENCY_TTL_SECONDS,

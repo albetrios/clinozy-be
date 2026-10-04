@@ -43,11 +43,13 @@ function getWebhookDeliveryQueue(): Queue<WebhookDeliveryJobData> {
  * Enqueue delivery for an existing attempt row (payload loaded in worker from Postgres).
  * Called from notify event handlers only.
  */
-export async function enqueueWebhookDeliveryByAttemptId(
-  deliveryAttemptId: number,
-  organizationPublicId: string,
-  requestId?: string,
-): Promise<void> {
+export async function enqueueWebhookDeliveryByAttemptId(options: {
+  deliveryAttemptId: number;
+  deliveryAttemptPublicId: string;
+  organizationPublicId: string;
+  requestId?: string;
+}): Promise<void> {
+  const { deliveryAttemptId, deliveryAttemptPublicId, organizationPublicId, requestId } = options;
   const queue = getWebhookDeliveryQueue();
   const jobData = parseBullMQJobData(
     webhookDeliveryJobDataSchema,
@@ -59,8 +61,13 @@ export async function enqueueWebhookDeliveryByAttemptId(
     }),
     WEBHOOK_DELIVERY_QUEUE_NAME,
   );
+  // The job id dedupes a re-enqueue of the same attempt (BullMQ drops an add whose job id still
+  // exists, retained for SEVEN_DAYS_SECONDS). It is the attempt's public id (`wda_…`) as-is: the
+  // queue name is already part of every key, and the bigserial restarts at 1 after
+  // `TRUNCATE ... RESTART IDENTITY` or a database restore while Redis keeps the old job — a new
+  // attempt reusing the id would be dropped silently and its webhook never delivered.
   await queue.add('deliver-webhook', jobData, {
-    jobId: `wh-attempt-${String(deliveryAttemptId)}`,
+    jobId: deliveryAttemptPublicId,
   });
 }
 

@@ -15,7 +15,7 @@ describe('NotificationRepository (database)', () => {
     const user = await createTestUser();
     const organization = await createTestOrganization({ ownerUserId: user.id });
 
-    const notificationId = await repository.create({
+    const notification = await repository.create({
       user_id: user.id,
       organization_id: organization.id,
       type: 'BILLING',
@@ -23,10 +23,15 @@ describe('NotificationRepository (database)', () => {
       message: 'Your monthly usage was updated',
       data: { subscription_id: 'sub_1' },
     });
+    expect(notification.publicId).toMatch(/^ntf_[a-z0-9]{21}$/);
 
-    const organizationPublicId =
-      await repository.findOrganizationPublicIdByNotificationId(notificationId);
-    expect(organizationPublicId).toBe(organization.public_id);
+    const dispatchPublicIds = await repository.findDispatchPublicIdsByNotificationId(
+      notification.id,
+    );
+    expect(dispatchPublicIds).toEqual({
+      notificationPublicId: notification.publicId,
+      organizationPublicId: organization.public_id,
+    });
 
     const listed = await repository.findByUser(user.id, { limit: 10 });
     expect(listed.items).toHaveLength(1);
@@ -43,17 +48,20 @@ describe('NotificationRepository (database)', () => {
     const unreadAfterMark = await repository.countUnreadForUser(user.id);
     expect(unreadAfterMark).toBe(0);
 
-    const secondId = await repository.create({
+    const second = await repository.create({
       user_id: user.id,
       type: 'SYSTEM',
       title: 'Second',
       message: 'Another notification',
     });
-    expect(secondId).toBeGreaterThan(notificationId);
+    expect(second.id).toBeGreaterThan(notification.id);
 
-    const organizationPublicIdWithoutOrg =
-      await repository.findOrganizationPublicIdByNotificationId(secondId);
-    expect(organizationPublicIdWithoutOrg).toBeNull();
+    const dispatchPublicIdsWithoutOrganization =
+      await repository.findDispatchPublicIdsByNotificationId(second.id);
+    expect(dispatchPublicIdsWithoutOrganization).toEqual({
+      notificationPublicId: second.publicId,
+      organizationPublicId: null,
+    });
 
     const markedAll = await repository.markAllReadForUser(user.id);
     expect(markedAll).toBeGreaterThanOrEqual(1);
@@ -68,7 +76,7 @@ describe('NotificationRepository (database)', () => {
   it('findByIdForDispatch returns row scoped to organization', async () => {
     const user = await createTestUser({ email: 'dispatch@example.com' });
     const organization = await createTestOrganization({ ownerUserId: user.id });
-    const notificationId = await repository.create({
+    const notification = await repository.create({
       user_id: user.id,
       organization_id: organization.id,
       type: 'BILLING',
@@ -76,24 +84,25 @@ describe('NotificationRepository (database)', () => {
       message: 'Body',
     });
 
-    const row = await repository.findByIdForDispatch(notificationId, organization.public_id);
+    const row = await repository.findByIdForDispatch(notification.id, organization.public_id);
     expect(row?.title).toBe('Dispatch');
     expect(row?.userEmail).toBe('dispatch@example.com');
+    expect(row?.publicId).toBe(notification.publicId);
   });
 
   it('findByIdForDispatch scopes user-only notifications with null organization', async () => {
     const user = await createTestUser({ email: 'personal@example.com' });
-    const notificationId = await repository.create({
+    const notification = await repository.create({
       user_id: user.id,
       type: 'SYSTEM',
       title: 'Personal',
       message: 'No org',
     });
 
-    const row = await repository.findByIdForDispatch(notificationId, null);
+    const row = await repository.findByIdForDispatch(notification.id, null);
     expect(row?.title).toBe('Personal');
 
-    const wrongScope = await repository.findByIdForDispatch(notificationId, 'wrong_org');
+    const wrongScope = await repository.findByIdForDispatch(notification.id, 'wrong_org');
     expect(wrongScope).toBeNull();
   });
 
@@ -186,7 +195,7 @@ describe('NotificationRepository (database)', () => {
 
   it('create stores optional action fields', async () => {
     const user = await createTestUser({ email: 'notify-action@example.com' });
-    const notificationId = await repository.create({
+    const notification = await repository.create({
       user_id: user.id,
       type: 'SYSTEM',
       title: 'Action',
@@ -194,7 +203,7 @@ describe('NotificationRepository (database)', () => {
       action_url: 'https://example.com/inbox',
       action_label: 'Open',
     });
-    const row = await repository.findByIdForDispatch(notificationId, null);
+    const row = await repository.findByIdForDispatch(notification.id, null);
     expect(row?.actionUrl).toBe('https://example.com/inbox');
   });
 

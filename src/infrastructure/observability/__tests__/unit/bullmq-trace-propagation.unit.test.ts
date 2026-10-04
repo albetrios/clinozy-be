@@ -48,7 +48,12 @@ describe('BullMQ trace-context propagation (API enqueue → worker processing)',
       const { enqueueNotification } = await import(
         '@/domains/notify/sub-domains/notification/queues/notification.queue.js'
       );
-      await enqueueNotification(42, 'org-public-1', 'req-notify-trace');
+      await enqueueNotification({
+        notificationId: 42,
+        notificationPublicId: 'ntf_9z3rura5kqvcv8zggriym',
+        organizationPublicId: 'org-public-1',
+        requestId: 'req-notify-trace',
+      });
       parentSpan.end();
     });
 

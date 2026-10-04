@@ -58,11 +58,12 @@ export function createNotificationDispatch(
           : await notificationRepository.findOrganizationPublicIdByOrganizationId(
               input.organization_id,
             );
-      const notification_id = await notificationRepository.create(input);
+      const notification = await notificationRepository.create(input);
       await scheduleCommitDispatch(
         {
           type: 'notification',
-          notificationId: notification_id,
+          notificationId: notification.id,
+          notificationPublicId: notification.publicId,
           organizationPublicId: organization_public_id,
         },
         options?.requestId !== undefined ? { requestId: options.requestId } : undefined,

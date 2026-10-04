@@ -265,7 +265,7 @@ export class WebhookService {
       }
       // Best-effort: drop any cached breaker so a URL/secret change does not reuse stale state.
       // Cross-process delivery workers fall back to the breaker cache's idle TTL.
-      invalidateWebhookOutboundCircuit(updated.id);
+      invalidateWebhookOutboundCircuit(webhook_public_id);
       return WebhookSerializer.one(updated);
     });
   }
@@ -328,7 +328,7 @@ export class WebhookService {
       const deleted = await this.webhookRepository.softDelete(webhook_public_id, organization.id);
       if (!deleted) throw new NotFoundError('Webhook');
       // Best-effort: drop any cached breaker for the removed webhook (idle TTL covers other processes).
-      invalidateWebhookOutboundCircuit(deleted.id);
+      invalidateWebhookOutboundCircuit(webhook_public_id);
     });
   }
 

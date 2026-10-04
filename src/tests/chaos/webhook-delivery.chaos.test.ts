@@ -111,21 +111,17 @@ describe('Chaos resilience: webhook delivery circuit breaker isolates misbehavin
     });
     await queueEvents.waitUntilReady();
 
-    const misbehavingAttemptId = await createPendingWebhookDeliveryAttempt({
+    const { id: misbehavingAttemptId } = await createPendingWebhookDeliveryAttempt({
       webhookId: misbehavingWebhook.id,
       eventType: 'chaos.webhook.misbehaving',
       payload: { probe: 'misbehaving' },
     });
 
-    const healthyAttemptId = await createPendingWebhookDeliveryAttempt({
+    const { id: healthyAttemptId } = await createPendingWebhookDeliveryAttempt({
       webhookId: healthyWebhook.id,
       eventType: 'chaos.webhook.healthy',
       payload: { probe: 'healthy' },
     });
-
-    if (misbehavingAttemptId === null || healthyAttemptId === null) {
-      throw new Error('expected webhook delivery attempt ids from test setup');
-    }
 
     const healthyJobId = `chaos-webhook-healthy-${randomUUID()}`;
     const misbehavingJobId = `chaos-webhook-misbehaving-${randomUUID()}`;

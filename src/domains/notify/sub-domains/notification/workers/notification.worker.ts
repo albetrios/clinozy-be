@@ -49,7 +49,7 @@ type NotificationDispatchData = {
  *
  * @remarks
  * - **Algorithm:** claim → record outbox row → dispatch outbox enqueue. The claim is keyed by
- *   `(notificationId, recipient)` with a TTL. If the INSERT fails, the claim is released so
+ *   `(notification public id, recipient)` with a TTL. If the INSERT fails, the claim is released so
  *   a BullMQ retry can try again. If the INSERT succeeds but the BullMQ enqueue fails, the
  *   claim is KEPT and the failure is logged — the mail-outbox sweeper will re-enqueue the
  *   pending row, and any concurrent BullMQ retry of THIS job must hit `claimed = false` and
@@ -60,6 +60,7 @@ type NotificationDispatchData = {
  */
 async function dispatchNotificationEmail(options: {
   notificationId: number;
+  notificationPublicId: string;
   type: string;
   email: string | undefined;
   title: string;
@@ -67,7 +68,16 @@ async function dispatchNotificationEmail(options: {
   actionUrl: string | null | undefined;
   requestId: string | undefined;
 }): Promise<string | null> {
-  const { notificationId, type, email, title, message, actionUrl, requestId } = options;
+  const {
+    notificationId,
+    notificationPublicId,
+    type,
+    email,
+    title,
+    message,
+    actionUrl,
+    requestId,
+  } = options;
   if (!(isMailConfigured() && email)) {
     logger.warn({ channel: 'email', notificationId }, 'notification.worker.channel_skipped');
     return null;
@@ -78,7 +88,7 @@ async function dispatchNotificationEmail(options: {
   // claim-before-insert model lost the email if the worker was hard-killed between
   // the claim and the insert: the fast BullMQ retry saw the claim, returned
   // `email:deduplicated` as success, and nothing ever sent.
-  if (await isNotificationEmailDispatched({ notificationId, recipient: email })) {
+  if (await isNotificationEmailDispatched({ notificationPublicId, recipient: email })) {
     logger.info({ notificationId, type }, 'notification.worker.email_already_dispatched');
     return 'email:deduplicated';
   }
@@ -109,7 +119,7 @@ async function dispatchNotificationEmail(options: {
   // Fast-path marker so a plain BullMQ retry skips re-touching the row. Correctness no
   // longer depends on it (the DB dedupe_key is the authority); a crash before this mark
   // just means the retry re-runs the idempotent insert and resolves to the same id.
-  await markNotificationEmailDispatched({ notificationId, recipient: email });
+  await markNotificationEmailDispatched({ notificationPublicId, recipient: email });
 
   // Do NOT throw on dispatch failure — the mail-outbox sweeper re-enqueues the row.
   let dispatchSucceeded = false;
@@ -233,6 +243,7 @@ export async function processNotificationDispatchJob(
       case 'email': {
         const emailResult = await dispatchNotificationEmail({
           notificationId,
+          notificationPublicId: notificationRow.publicId,
           type,
           email,
           title,

@@ -32,6 +32,10 @@ import {
   WEBHOOK_DELIVERY_QUEUE_NAME,
 } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
 
+const ORGANIZATION_PUBLIC_ID = 'org_abcdefghijklmnopqrstu';
+const DELIVERY_ATTEMPT_PUBLIC_ID = 'wda_9z3rura5kqvcv8zggriym';
+const SECOND_DELIVERY_ATTEMPT_PUBLIC_ID = 'wda_bchnclznbnkn5db2qocfh';
+
 /**
  * Mirrors `notification.queue.unit.test.ts` for the delivery queue, which had no dedicated test
  * despite owning the retry budget and the dedup job id for every outbound webhook.
@@ -61,40 +65,59 @@ describe('webhook-delivery queue', () => {
     expect(WEBHOOK_DELIVERY_JOB_ATTEMPTS).toBe(5);
   });
 
-  it('enqueues with an attempt-scoped jobId so a redelivery cannot double-send', async () => {
-    await enqueueWebhookDeliveryByAttemptId(123, 'org_abcdefghijklmnopqrstu', 'request-1');
+  it('enqueues with the attempt public id as jobId so a redelivery cannot double-send', async () => {
+    await enqueueWebhookDeliveryByAttemptId({
+      deliveryAttemptId: 123,
+      deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
+      organizationPublicId: ORGANIZATION_PUBLIC_ID,
+      requestId: 'request-1',
+    });
 
     expect(addMock).toHaveBeenCalledTimes(1);
     const [jobName, jobData, options] = addMock.mock.calls[0] ?? [];
     expect(jobName).toBe('deliver-webhook');
     expect(jobData).toMatchObject({
       deliveryAttemptId: 123,
-      organizationPublicId: 'org_abcdefghijklmnopqrstu',
+      organizationPublicId: ORGANIZATION_PUBLIC_ID,
       requestId: 'request-1',
     });
-    expect(options).toEqual({ jobId: 'wh-attempt-123' });
+    // Not `wh-attempt-123`: the bigserial restarts at 1 after TRUNCATE ... RESTART IDENTITY or a
+    // restore while BullMQ keeps the old job for 7 days, and an add whose id exists is dropped.
+    expect(options).toEqual({ jobId: DELIVERY_ATTEMPT_PUBLIC_ID });
   });
 
   it('omits requestId entirely rather than sending undefined when it is absent', async () => {
     // omitUndefined runs before the schema parse; an explicit `requestId: undefined` would fail
     // the min(1) check on some producers and pollute the Redis payload on others.
-    await enqueueWebhookDeliveryByAttemptId(456, 'org_abcdefghijklmnopqrstu');
+    await enqueueWebhookDeliveryByAttemptId({
+      deliveryAttemptId: 456,
+      deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
+      organizationPublicId: ORGANIZATION_PUBLIC_ID,
+    });
 
     const [, jobData, options] = addMock.mock.calls[0] ?? [];
     expect(jobData).not.toHaveProperty('requestId');
-    expect(options).toEqual({ jobId: 'wh-attempt-456' });
+    expect(options).toEqual({ jobId: DELIVERY_ATTEMPT_PUBLIC_ID });
   });
 
   it('rejects an invalid attempt id at the producer boundary', async () => {
     // parseBullMQJobData throws before queue.add, so a bad payload never reaches Redis.
-    await expect(enqueueWebhookDeliveryByAttemptId(0, 'org_abcdefghijklmnopqrstu')).rejects.toThrow(
-      /bullmq\.invalid_job_payload:webhook-delivery/,
-    );
+    await expect(
+      enqueueWebhookDeliveryByAttemptId({
+        deliveryAttemptId: 0,
+        deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
+        organizationPublicId: ORGANIZATION_PUBLIC_ID,
+      }),
+    ).rejects.toThrow(/bullmq\.invalid_job_payload:webhook-delivery/);
     expect(addMock).not.toHaveBeenCalled();
   });
 
   it('configures the queue with the declared attempts and a custom backoff', async () => {
-    await enqueueWebhookDeliveryByAttemptId(1, 'org_abcdefghijklmnopqrstu');
+    await enqueueWebhookDeliveryByAttemptId({
+      deliveryAttemptId: 1,
+      deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
+      organizationPublicId: ORGANIZATION_PUBLIC_ID,
+    });
 
     const [name, options] = queueConstructorMock.mock.calls[0] ?? [];
     expect(name).toBe(WEBHOOK_DELIVERY_QUEUE_NAME);
@@ -109,22 +132,38 @@ describe('webhook-delivery queue', () => {
   });
 
   it('reuses one lazily-created queue instance across enqueues', async () => {
-    await enqueueWebhookDeliveryByAttemptId(1, 'org_abcdefghijklmnopqrstu');
-    await enqueueWebhookDeliveryByAttemptId(2, 'org_abcdefghijklmnopqrstu');
+    await enqueueWebhookDeliveryByAttemptId({
+      deliveryAttemptId: 1,
+      deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
+      organizationPublicId: ORGANIZATION_PUBLIC_ID,
+    });
+    await enqueueWebhookDeliveryByAttemptId({
+      deliveryAttemptId: 2,
+      deliveryAttemptPublicId: SECOND_DELIVERY_ATTEMPT_PUBLIC_ID,
+      organizationPublicId: ORGANIZATION_PUBLIC_ID,
+    });
 
     expect(queueConstructorMock).toHaveBeenCalledTimes(1);
     expect(addMock).toHaveBeenCalledTimes(2);
   });
 
   it('closes the queue and allows a fresh one to be created afterwards', async () => {
-    await enqueueWebhookDeliveryByAttemptId(1, 'org_abcdefghijklmnopqrstu');
+    await enqueueWebhookDeliveryByAttemptId({
+      deliveryAttemptId: 1,
+      deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
+      organizationPublicId: ORGANIZATION_PUBLIC_ID,
+    });
     await closeWebhookDeliveryQueue();
 
     expect(closeMock).toHaveBeenCalledTimes(1);
 
     // The module-level handle must be nulled, or a post-shutdown enqueue would use a closed
     // connection instead of reconnecting.
-    await enqueueWebhookDeliveryByAttemptId(2, 'org_abcdefghijklmnopqrstu');
+    await enqueueWebhookDeliveryByAttemptId({
+      deliveryAttemptId: 2,
+      deliveryAttemptPublicId: SECOND_DELIVERY_ATTEMPT_PUBLIC_ID,
+      organizationPublicId: ORGANIZATION_PUBLIC_ID,
+    });
     expect(queueConstructorMock).toHaveBeenCalledTimes(2);
 
     await closeWebhookDeliveryQueue();

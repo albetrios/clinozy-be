@@ -51,25 +51,33 @@ describe('webhook delivery event handlers', () => {
     await runWithOnCommitScope(async () => {
       await eventBus.emit({
         type: NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED,
-        payload: { delivery_attempt_id: 99 },
+        payload: { delivery_attempt_id: 99, delivery_attempt_public_id: 'wda_attempt99' },
         timestamp: new Date(),
       });
       await eventBus.flushOnCommit();
     });
 
     expect(enqueueWebhookDeliveryByAttemptIdMock).toHaveBeenCalledOnce();
-    expect(enqueueWebhookDeliveryByAttemptIdMock).toHaveBeenCalledWith(99, 'org_public_test_99');
+    expect(enqueueWebhookDeliveryByAttemptIdMock).toHaveBeenCalledWith({
+      deliveryAttemptId: 99,
+      deliveryAttemptPublicId: 'wda_attempt99',
+      organizationPublicId: 'org_public_test_99',
+    });
   });
 
   it('enqueues webhook delivery immediately when no HTTP onCommit scope is active', async () => {
     await eventBus.emit({
       type: NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED,
-      payload: { delivery_attempt_id: 42 },
+      payload: { delivery_attempt_id: 42, delivery_attempt_public_id: 'wda_attempt42' },
       timestamp: new Date(),
     });
 
     expect(enqueueWebhookDeliveryByAttemptIdMock).toHaveBeenCalledOnce();
-    expect(enqueueWebhookDeliveryByAttemptIdMock).toHaveBeenCalledWith(42, 'org_public_test_99');
+    expect(enqueueWebhookDeliveryByAttemptIdMock).toHaveBeenCalledWith({
+      deliveryAttemptId: 42,
+      deliveryAttemptPublicId: 'wda_attempt42',
+      organizationPublicId: 'org_public_test_99',
+    });
   });
 
   it('does not enqueue an unscoped delivery when the attempt has no resolvable organization', async () => {
@@ -81,7 +89,7 @@ describe('webhook delivery event handlers', () => {
 
     await eventBus.emit({
       type: NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED,
-      payload: { delivery_attempt_id: 7 },
+      payload: { delivery_attempt_id: 7, delivery_attempt_public_id: 'wda_attempt7' },
       timestamp: new Date(),
     });
 

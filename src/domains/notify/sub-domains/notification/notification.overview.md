@@ -11,7 +11,7 @@ In-app notification rows: the user-visible feed. Rows are created via `createAnd
 ## Key invariants
 
 - **No insert-time dedupe key**: the `notifications` table has no `source_event_id` column and no `(user, …)` uniqueness, so creating the same logical notification twice yields two rows. Idempotency is enforced **downstream** (dispatch + email), not at insert.
-- **Idempotent dispatch enqueue**: the dispatch job uses `jobId = notification-<id>`, so a recovery/redelivery re-enqueue of the same persisted notification is a BullMQ no-op within the retention window — one notification row never fans out (or emails) twice.
+- **Idempotent dispatch enqueue**: the dispatch job's `jobId` is the notification's public id (`ntf_…`), so a recovery/redelivery re-enqueue of the same persisted notification is a BullMQ no-op within the retention window — one notification row never fans out (or emails) twice. Not the bigserial: it restarts at 1 after `TRUNCATE ... RESTART IDENTITY` or a database restore while Redis keeps finished jobs for 7 days, and BullMQ silently drops an add whose job id still exists — a new notification reusing the id would never be dispatched. The email channel's `notification:email-dispatched:` marker is keyed by the public id for the same reason. A post-commit task recorded by the release before this change carries only the bigserial and keeps the legacy `notification-<id>` job id.
 - **Bounded mark-all-read**: `markAllReadForUser` marks the unread backlog in `NOTIFICATION_MARK_ALL_READ_BATCH_SIZE`-row batches (looping until drained), so a huge backlog cannot become one unbounded, long-held write that stalls concurrent inserts for that user; the returned count is summed from each statement's `RETURNING` (never a separate pre-count).
 - **Email outcome is honest**: the worker reports `email:outbox_pending` (not `email:queued`) when the mail-outbox row persisted but its BullMQ enqueue failed — the mail-outbox sweeper re-enqueues it and the `mail_outbox_pending` gauge tracks the depth.
 - **Tenant-scoped**: notifications belong to a `(user, organization)` pair. Reads are scoped through the standard tenant context.
@@ -37,5 +37,5 @@ stateDiagram-v2
 
 ## Failure modes
 
-- **Worker crash during fan-out** → BullMQ retries the dispatch job (keyed `notification-<id>`), which re-reads the **same** persisted row rather than inserting a new one; the email channel's mail-outbox `dedupeKey` collapses duplicate sends. (The in-app row is created once by the handler, not by the dispatch worker.)
+- **Worker crash during fan-out** → BullMQ retries the dispatch job (keyed by the notification's public id), which re-reads the **same** persisted row rather than inserting a new one; the email channel's mail-outbox `dedupeKey` collapses duplicate sends. (The in-app row is created once by the handler, not by the dispatch worker.)
 - **Recipient user soft-deleted** → notification is skipped, logged at info.

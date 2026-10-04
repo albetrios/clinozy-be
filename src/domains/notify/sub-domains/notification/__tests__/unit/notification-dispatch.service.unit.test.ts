@@ -11,9 +11,11 @@ vi.mock('@/domains/notify/sub-domains/notification/queues/notification.queue.js'
   enqueueNotification: (...arguments_: unknown[]) => enqueueNotificationMock(...arguments_),
 }));
 
+const NOTIFICATION_PUBLIC_ID = 'ntf_9z3rura5kqvcv8zggriym';
+
 describe('NotificationDispatch', () => {
   const notificationRepository = {
-    create: vi.fn().mockResolvedValue(42),
+    create: vi.fn().mockResolvedValue({ id: 42, publicId: NOTIFICATION_PUBLIC_ID }),
     findOrganizationPublicIdByOrganizationId: vi.fn().mockResolvedValue('org_public'),
     deleteByInternalId: vi.fn().mockResolvedValue(undefined),
     resolveUserPublicIdsByInternalIds: vi.fn().mockResolvedValue(['usr_one', 'usr_two']),
@@ -41,7 +43,12 @@ describe('NotificationDispatch', () => {
 
     await eventBus.flushOnCommit();
     expect(enqueueNotificationMock).toHaveBeenCalledOnce();
-    expect(enqueueNotificationMock).toHaveBeenCalledWith(42, 'org_public');
+    // The public id travels with the post-commit task so the job id survives an id restart.
+    expect(enqueueNotificationMock).toHaveBeenCalledWith({
+      notificationId: 42,
+      notificationPublicId: NOTIFICATION_PUBLIC_ID,
+      organizationPublicId: 'org_public',
+    });
   });
 
   it('resolves organization public id before inserting the notification row', async () => {
@@ -54,7 +61,7 @@ describe('NotificationDispatch', () => {
     });
     vi.mocked(notificationRepository.create).mockImplementationOnce(async () => {
       callOrder.push('create');
-      return 42;
+      return { id: 42, publicId: NOTIFICATION_PUBLIC_ID };
     });
 
     enterOnCommitScope();
@@ -81,7 +88,11 @@ describe('NotificationDispatch', () => {
     expect(notificationRepository.findOrganizationPublicIdByOrganizationId).not.toHaveBeenCalled();
 
     await eventBus.flushOnCommit();
-    expect(enqueueNotificationMock).toHaveBeenCalledWith(42, null);
+    expect(enqueueNotificationMock).toHaveBeenCalledWith({
+      notificationId: 42,
+      notificationPublicId: NOTIFICATION_PUBLIC_ID,
+      organizationPublicId: null,
+    });
   });
 
   it('does not create the notification when organization lookup fails', async () => {

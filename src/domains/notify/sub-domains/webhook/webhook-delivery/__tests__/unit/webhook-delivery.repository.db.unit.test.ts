@@ -35,25 +35,29 @@ describe('webhook-delivery.repository (database)', () => {
     const organizationByWebhook = await findOrganizationPublicIdByWebhookId(webhook.id);
     expect(organizationByWebhook).toBe(organization.public_id);
 
-    const deliveryAttemptId = await createPendingWebhookDeliveryAttempt({
+    const deliveryAttempt = await createPendingWebhookDeliveryAttempt({
       webhookId: webhook.id,
       eventType: 'subscription.updated',
       payload: { subscription_id: 'sub_1' },
     });
-    expect(deliveryAttemptId).not.toBeNull();
+    // The public id is the BullMQ job id, so the creator hands it back with the bigserial.
+    expect(deliveryAttempt.publicId).toMatch(/^wda_[a-z0-9]{21}$/);
 
     const organizationByAttempt = await findOrganizationPublicIdByDeliveryAttemptId(
-      deliveryAttemptId!,
+      deliveryAttempt.id,
     );
     expect(organizationByAttempt).toBe(organization.public_id);
 
     const delivery = await findWebhookDeliveryAttemptWithWebhook(
-      deliveryAttemptId!,
+      deliveryAttempt.id,
       organization.public_id,
     );
     expect(delivery?.webhookUrl).toBe('https://example.com/webhooks');
     expect(delivery?.eventType).toBe('subscription.updated');
     expect(delivery?.payload).toEqual({ subscription_id: 'sub_1' });
+    expect(delivery?.deliveryAttemptPublicId).toBe(deliveryAttempt.publicId);
+    // Keys the outbound circuit breaker — the webhook's public id, not its bigserial.
+    expect(delivery?.webhookPublicId).toBe(webhook.public_id);
   });
 
   it('findWebhookDeliveryAttemptWithWebhook returns null for wrong organization', async () => {
@@ -67,15 +71,14 @@ describe('webhook-delivery.repository (database)', () => {
       created_by_user_id: owner.id,
     });
 
-    const deliveryAttemptId = await createPendingWebhookDeliveryAttempt({
+    const deliveryAttempt = await createPendingWebhookDeliveryAttempt({
       webhookId: webhook.id,
       eventType: 'subscription.updated',
       payload: {},
     });
-    expect(deliveryAttemptId).not.toBeNull();
 
     const missing = await findWebhookDeliveryAttemptWithWebhook(
-      deliveryAttemptId!,
+      deliveryAttempt.id,
       'org_does_not_match',
     );
     expect(missing).toBeNull();
@@ -103,19 +106,18 @@ describe('webhook-delivery.repository (database)', () => {
       encrypted_secret: 'sample-webhook-secret-enqueuefail',
       created_by_user_id: owner.id,
     });
-    const deliveryAttemptId = await createPendingWebhookDeliveryAttempt({
+    const deliveryAttempt = await createPendingWebhookDeliveryAttempt({
       webhookId: webhook.id,
       eventType: 'subscription.updated',
       payload: { subscription_id: 'sub_enqueue_fail' },
     });
-    expect(deliveryAttemptId).not.toBeNull();
 
-    await markDeliveryAttemptEnqueueFailed(deliveryAttemptId!);
+    await markDeliveryAttemptEnqueueFailed(deliveryAttempt.id);
 
     const [row] = await database
       .select()
       .from(webhook_delivery_attempts)
-      .where(eq(webhook_delivery_attempts.id, deliveryAttemptId!));
+      .where(eq(webhook_delivery_attempts.id, deliveryAttempt.id));
     expect(row?.status).toBe('FAILED');
     expect(row?.response_body).toBe('enqueue_failed');
     expect(row?.http_status_code).toBeNull();

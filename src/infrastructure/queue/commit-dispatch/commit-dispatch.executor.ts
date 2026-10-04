@@ -33,7 +33,11 @@ export async function executeCommitDispatchTask(task: CommitDispatchTask): Promi
       return;
     case 'notification':
       try {
-        await enqueueNotification(task.notificationId, task.organizationPublicId);
+        await enqueueNotification({
+          notificationId: task.notificationId,
+          notificationPublicId: task.notificationPublicId ?? null,
+          organizationPublicId: task.organizationPublicId,
+        });
       } catch (error) {
         logger.error(
           { error, notificationId: task.notificationId },

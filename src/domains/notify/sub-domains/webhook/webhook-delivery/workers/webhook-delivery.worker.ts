@@ -386,6 +386,7 @@ async function deliverClaimedWebhook(options: {
   } = options;
   const {
     webhookId,
+    webhookPublicId,
     webhookUrl,
     encryptedSecret,
     eventType,
@@ -477,7 +478,7 @@ async function deliverClaimedWebhook(options: {
         requestId: jobContext.requestId,
         operation: async (signal) =>
           fetchWebhookWithCircuitBreaker({
-            webhookId,
+            webhookPublicId,
             webhookUrl,
             init: {
               method: 'POST',

@@ -30,8 +30,11 @@ export interface RequestWebhookDeliveryInput {
 export async function emitWebhookDeliveryRequested(
   input: RequestWebhookDeliveryInput,
 ): Promise<void> {
-  const delivery_attempt_id = await createPendingWebhookDeliveryAttempt(input);
-  const payload: WebhookDeliveryRequestedPayload = { delivery_attempt_id };
+  const deliveryAttempt = await createPendingWebhookDeliveryAttempt(input);
+  const payload: WebhookDeliveryRequestedPayload = {
+    delivery_attempt_id: deliveryAttempt.id,
+    delivery_attempt_public_id: deliveryAttempt.publicId,
+  };
   await eventBus.emit({
     type: NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED,
     payload,

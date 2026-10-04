@@ -129,13 +129,15 @@ describe('createPendingWebhookDeliveryAttempt — event_key dedupe (sec-N2)', ()
 
   it('sec-new-D4: fallback SELECT returns the found pending row id', async () => {
     returningMock.mockResolvedValue([]);
-    limitMock.mockResolvedValue([{ id: 42 }]);
+    limitMock.mockResolvedValue([{ id: 42, publicId: 'wda_existingpendingrow0001' }]);
     const result = await createPendingWebhookDeliveryAttempt({
       webhookId: 5,
       eventType: 'customer.updated',
       payload: { ok: true },
       eventKey: 'evt_for_existing',
     });
-    expect(result).toBe(42);
+    // The existing row's public id comes back too — it is the BullMQ job id, so the caller
+    // enqueues against the SAME attempt instead of minting a second one.
+    expect(result).toEqual({ id: 42, publicId: 'wda_existingpendingrow0001' });
   });
 });

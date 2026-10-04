@@ -5,6 +5,7 @@ import {
   markDeliveryAttemptEnqueueFailed,
 } from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import {
   NOTIFY_EVENT,
   type WebhookDeliveryRequestedPayload,
@@ -23,17 +24,13 @@ async function onWebhookDeliveryRequestedEvent(event: DomainEvent): Promise<void
     }
     await runEnqueueAfterCommit(async () => {
       try {
-        if (event.requestId === undefined) {
-          await enqueueWebhookDeliveryByAttemptId(
-            payload.delivery_attempt_id,
-            organization_public_id,
-          );
-          return;
-        }
         await enqueueWebhookDeliveryByAttemptId(
-          payload.delivery_attempt_id,
-          organization_public_id,
-          event.requestId,
+          omitUndefined({
+            deliveryAttemptId: payload.delivery_attempt_id,
+            deliveryAttemptPublicId: payload.delivery_attempt_public_id,
+            organizationPublicId: organization_public_id,
+            requestId: event.requestId,
+          }),
         );
       } catch (error) {
         logger.error(

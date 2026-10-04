@@ -66,7 +66,10 @@ describe('NotificationService', () => {
     markAllReadForUser: vi.fn().mockResolvedValue(2),
     countUnreadForUser: vi.fn().mockResolvedValue(3),
     deleteByPublicIdForUser: vi.fn().mockResolvedValue(notification),
-    findOrganizationPublicIdByNotificationId: vi.fn().mockResolvedValue('org_public'),
+    findDispatchPublicIdsByNotificationId: vi.fn().mockResolvedValue({
+      notificationPublicId: 'ntf_9z3rura5kqvcv8zggriym',
+      organizationPublicId: 'org_public',
+    }),
   } as unknown as NotificationRepository;
 
   const service = new NotificationService(repository, userService);
@@ -124,7 +127,11 @@ describe('NotificationService', () => {
       '@/domains/notify/sub-domains/notification/queues/notification.queue.js'
     );
     await service.dispatchNotification(2);
-    expect(enqueueNotification).toHaveBeenCalledWith(2, 'org_public');
+    expect(enqueueNotification).toHaveBeenCalledWith({
+      notificationId: 2,
+      notificationPublicId: 'ntf_9z3rura5kqvcv8zggriym',
+      organizationPublicId: 'org_public',
+    });
   });
 
   it('markAllRead and deleteNotification delegate to repository', async () => {

@@ -76,9 +76,12 @@ function createNotificationRepository(row: unknown): NotificationRepository {
   } as unknown as NotificationRepository;
 }
 
+const NOTIFICATION_PUBLIC_ID = 'ntf_9z3rura5kqvcv8zggriym';
+
 function buildNotificationRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: 10,
+    publicId: NOTIFICATION_PUBLIC_ID,
     type: 'billing.invoice_ready',
     title: 'Invoice ready',
     message: 'Your invoice is ready.',
@@ -161,8 +164,9 @@ describe('notification.worker', () => {
       repository,
     );
 
+    // Keyed by the public id: the bigserial (10) restarts after an id reset while the marker lives.
     expect(isNotificationEmailDispatchedMock).toHaveBeenCalledWith({
-      notificationId: 10,
+      notificationPublicId: NOTIFICATION_PUBLIC_ID,
       recipient: 'user@example.com',
     });
     expect(recordOutboxEmailMock).not.toHaveBeenCalled();
@@ -190,7 +194,7 @@ describe('notification.worker', () => {
     expect(recordOutboxEmailMock).toHaveBeenCalledTimes(1);
     // The dedup marker is set ONLY after the durable insert succeeds.
     expect(markNotificationEmailDispatchedMock).toHaveBeenCalledWith({
-      notificationId: 10,
+      notificationPublicId: NOTIFICATION_PUBLIC_ID,
       recipient: 'user@example.com',
     });
     expect(recordOutboxEmailMock.mock.invocationCallOrder[0]!).toBeLessThan(

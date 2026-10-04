@@ -105,18 +105,22 @@ describe('Webhook request id forward contract', () => {
     await runWithOnCommitScope(async () => {
       await eventBus.emit({
         type: NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED,
-        payload: { delivery_attempt_id: 7 },
+        payload: {
+          delivery_attempt_id: 7,
+          delivery_attempt_public_id: 'wda_9z3rura5kqvcv8zggriym',
+        },
         timestamp: new Date(),
         requestId: correlationRequestId,
       });
       await eventBus.flushOnCommit();
     });
 
-    expect(enqueueWebhookDeliveryByAttemptIdMock).toHaveBeenCalledWith(
-      7,
-      'org_public_contract',
-      correlationRequestId,
-    );
+    expect(enqueueWebhookDeliveryByAttemptIdMock).toHaveBeenCalledWith({
+      deliveryAttemptId: 7,
+      deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
+      organizationPublicId: 'org_public_contract',
+      requestId: correlationRequestId,
+    });
 
     await processWebhookDeliveryAttempt(
       7,

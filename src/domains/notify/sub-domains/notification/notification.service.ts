@@ -173,8 +173,12 @@ export class NotificationService {
    * Enqueue async dispatch for a persisted notification row (email / in-app channels).
    */
   async dispatchNotification(notificationId: number): Promise<void> {
-    const organizationPublicId =
-      await this.repository.findOrganizationPublicIdByNotificationId(notificationId);
-    await enqueueNotification(notificationId, organizationPublicId);
+    const dispatchPublicIds =
+      await this.repository.findDispatchPublicIdsByNotificationId(notificationId);
+    await enqueueNotification({
+      notificationId,
+      notificationPublicId: dispatchPublicIds?.notificationPublicId ?? null,
+      organizationPublicId: dispatchPublicIds?.organizationPublicId ?? null,
+    });
   }
 }

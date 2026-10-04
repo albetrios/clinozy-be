@@ -6,7 +6,9 @@ import { emitWebhookDeliveryRequested } from '@/domains/notify/sub-domains/webho
 vi.mock(
   '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.js',
   () => ({
-    createPendingWebhookDeliveryAttempt: vi.fn().mockResolvedValue(99),
+    createPendingWebhookDeliveryAttempt: vi
+      .fn()
+      .mockResolvedValue({ id: 99, publicId: 'wda_9z3rura5kqvcv8zggriym' }),
   }),
 );
 
@@ -28,7 +30,10 @@ describe('webhook-delivery-emit', () => {
     expect(emitSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         type: NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED,
-        payload: { delivery_attempt_id: 99 },
+        payload: {
+          delivery_attempt_id: 99,
+          delivery_attempt_public_id: 'wda_9z3rura5kqvcv8zggriym',
+        },
       }),
     );
   });

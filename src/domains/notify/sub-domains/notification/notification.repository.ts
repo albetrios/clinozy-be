@@ -57,7 +57,7 @@ export class NotificationRepository {
     return resolveRepositoryDatabaseHandle(this.databaseHandle);
   }
 
-  async create(input: CreateNotificationInput): Promise<number> {
+  async create(input: CreateNotificationInput): Promise<{ id: number; publicId: string }> {
     const rows = await this.db()
       .insert(notifications)
       .values({
@@ -71,8 +71,8 @@ export class NotificationRepository {
         action_url: input.action_url,
         action_label: input.action_label,
       })
-      .returning({ id: notifications.id });
-    return rows[0]!.id;
+      .returning({ id: notifications.id, publicId: notifications.public_id });
+    return rows[0]!;
   }
 
   /** Removes a notification row when post-commit BullMQ enqueue fails (rollback side effect). */
@@ -80,14 +80,23 @@ export class NotificationRepository {
     await this.db().delete(notifications).where(eq(notifications.id, notification_id));
   }
 
-  async findOrganizationPublicIdByNotificationId(notification_id: number): Promise<string | null> {
+  /**
+   * The two public ids a dispatch needs: the notification's own (the BullMQ job id) and its
+   * organization's (the job's RLS scope, `null` for a notification without one).
+   */
+  async findDispatchPublicIdsByNotificationId(
+    notification_id: number,
+  ): Promise<{ notificationPublicId: string; organizationPublicId: string | null } | null> {
     const rows = await this.db()
-      .select({ organizationPublicId: organizations.public_id })
+      .select({
+        notificationPublicId: notifications.public_id,
+        organizationPublicId: organizations.public_id,
+      })
       .from(notifications)
       .leftJoin(organizations, eq(notifications.organization_id, organizations.id))
       .where(eq(notifications.id, notification_id))
       .limit(1);
-    return rows[0]?.organizationPublicId ?? null;
+    return rows[0] ?? null;
   }
 
   async findOrganizationPublicIdByOrganizationId(organization_id: number): Promise<string | null> {
@@ -126,6 +135,7 @@ export class NotificationRepository {
     const rows = await this.db()
       .select({
         id: notifications.id,
+        publicId: notifications.public_id,
         type: notifications.type,
         title: notifications.title,
         message: notifications.message,
