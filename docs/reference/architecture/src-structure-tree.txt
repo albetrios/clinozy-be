@@ -1396,6 +1396,7 @@ src/
     ├── ops/
     │   ├── api-smoke-test.ts
     │   ├── db-migrate-dry-run.ts
+    │   ├── db-sequences-advance.ts
     │   ├── memory-soak.ts
     │   ├── next-migration-prefix.ts
     │   ├── record-contract-fixtures.ts
@@ -2236,6 +2237,7 @@ src/
     │   │   │   ├── modules.unit.test.ts
     │   │   │   ├── production-guard.unit.test.ts
     │   │   │   └── seed-contract.unit.test.ts
+    │   │   ├── db-sequences-advance.db.unit.test.ts
     │   │   ├── generate-project-structure-tree.unit.test.ts
     │   │   ├── generate-route-catalog.unit.test.ts
     │   │   ├── lint-migrations-concurrent-index.unit.test.ts
