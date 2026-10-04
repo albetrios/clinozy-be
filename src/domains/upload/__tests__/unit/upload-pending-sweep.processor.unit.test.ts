@@ -169,11 +169,11 @@ describe('upload-pending-sweep.processor', () => {
 
   it('refuses to auto-confirm rows whose file_key lacks the pending prefix (sec-UP #20)', async () => {
     // Per sec-UP1 (HTTP confirm path) and sec-UP #20 (sweep parity), a row that
-    // never went through the pending-key indirection is a legacy/imported
-    // anomaly and must NOT be laundered into UPLOADED state.
+    // never went through the pending-key indirection is an anomaly (a bug or
+    // hand-written data) and must NOT be laundered into UPLOADED state.
     const row = makeRow({
       id: 99,
-      file_key: 'legacy/imports/no-prefix.png',
+      file_key: 'imports/no-prefix.png',
       file_size: 1024,
     });
     findPendingUploadsOlderThanMock.mockResolvedValueOnce([row]);

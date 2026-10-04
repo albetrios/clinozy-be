@@ -263,7 +263,7 @@ describe('UploadService', () => {
     expect(resolveUserOrganizationPermissions).not.toHaveBeenCalled();
   });
 
-  it('sec-UP1: confirmUpload refuses a legacy in-place (non-pending-keyed) row and marks it FAILED', async () => {
+  it('sec-UP1: confirmUpload refuses a row without the pending prefix and marks it FAILED', async () => {
     // A row whose file_key never went through the `pending/` indirection has finalKey === sourceKey,
     // so the presigned PUT URL the client used stays valid for its full TTL — an attacker could swap
     // a same-length / same-magic-byte payload AFTER confirm and the row would stay UPLOADED with
@@ -272,7 +272,7 @@ describe('UploadService', () => {
     vi.mocked(repository.findByPublicId).mockResolvedValueOnce({
       ...uploadRow,
       status: 'PENDING',
-      file_key: 'avatars/user_public/legacy-in-place.png', // no `pending/` prefix
+      file_key: 'avatars/user_public/not-pending-keyed.png', // no `pending/` prefix
     } as never);
 
     await expect(service.confirmUpload(uploadPublicId, userPublicId)).rejects.toBeInstanceOf(
@@ -344,8 +344,8 @@ describe('UploadService', () => {
   const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);
 
   it('confirmUpload marks UPLOADED when the object matches declared type, size, and magic bytes', async () => {
-    // sec-UP1: confirm now requires pending-key indirection — legacy in-place
-    // rows are refused. Use a pending-prefixed key so the happy path runs.
+    // sec-UP1: confirm requires the pending-key indirection — a row without the
+    // prefix is refused. Use a pending-prefixed key so the happy path runs.
     const finalKey = uploadRow.file_key;
     const pendingKey = `pending/${finalKey}`;
     vi.mocked(repository.findByPublicId).mockResolvedValue({
@@ -572,7 +572,7 @@ describe('UploadService', () => {
   });
 
   it('confirmUpload marks FAILED when magic bytes do not match the declared type (spoofed content)', async () => {
-    // sec-UP1: pending-keyed so we reach the magic-byte check rather than the legacy refusal.
+    // sec-UP1: pending-keyed so we reach the magic-byte check rather than the no-prefix refusal.
     vi.mocked(repository.findByPublicId).mockResolvedValue({
       ...uploadRow,
       file_key: `pending/${uploadRow.file_key}`,
@@ -595,7 +595,7 @@ describe('UploadService', () => {
   });
 
   it('confirmUpload marks FAILED and throws when object size does not match', async () => {
-    // sec-UP1: pending-keyed so we exercise the size-mismatch path, not the legacy refusal.
+    // sec-UP1: pending-keyed so we exercise the size-mismatch path, not the no-prefix refusal.
     vi.mocked(repository.findByPublicId).mockResolvedValue({
       ...uploadRow,
       file_key: `pending/${uploadRow.file_key}`,
@@ -613,7 +613,7 @@ describe('UploadService', () => {
   });
 
   it('UPLOAD-03: confirmUpload rethrows a transient storage error WITHOUT marking FAILED', async () => {
-    // sec-UP1: pending-keyed so we reach the verify step rather than the legacy refusal.
+    // sec-UP1: pending-keyed so we reach the verify step rather than the no-prefix refusal.
     vi.mocked(repository.findByPublicId).mockResolvedValue({
       ...uploadRow,
       file_key: `pending/${uploadRow.file_key}`,

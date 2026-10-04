@@ -595,29 +595,25 @@ export class UploadService {
     }
 
     // The bytes live at the (still client-writable) pending key; the verified bytes are published
-    // to `finalKey`. For rows created before pending-keying (rolling deploy) source === final and
-    // the verify/sanitize happens in place exactly as before.
+    // to `finalKey`.
     const sourceKey = row.file_key;
     const finalKey = stripPendingObjectKeyPrefix(sourceKey);
-    const pendingKeyed = finalKey !== sourceKey;
-    // sec-UP1: refuse to confirm a row that never went through the
-    // pending-key indirection. Without it, finalKey === sourceKey and the
-    // presigned PUT URL the client used remains valid for the full TTL —
-    // an attacker can swap a same-length, same-magic-byte payload after
-    // confirm and the row stays UPLOADED with hostile content. Roll-out
-    // legacy rows are at end-of-life; refuse and require re-upload via
-    // a fresh pending key.
-    if (!pendingKeyed) {
+    // sec-UP1: confirm only a row that went through the pending-key indirection. Without it
+    // finalKey === sourceKey and the presigned PUT URL the client used stays valid for its whole
+    // TTL — a same-length, same-magic-byte payload swapped in after confirm would stay UPLOADED
+    // with hostile content. createUpload always issues a pending key, so such a row is a bug or
+    // hand-written data: fail it and require a re-upload to a fresh pending key.
+    if (finalKey === sourceKey) {
       const failedRow = await withAppDatabaseContext(scope, () =>
         this.repository.markStatusByPublicId(validatedPublicId, UPLOAD_STATUS.FAILED),
       );
       if (!failedRow) throw new NotFoundError('Upload');
       logger.warn(
         { id: validatedPublicId, fileKey: sourceKey },
-        'upload.confirm.legacyInPlaceRefused',
+        'upload.confirm.notPendingKeyedRefused',
       );
       throw new ValidationError('errors:uploadVerificationFailed', undefined, {
-        file: ['Upload predates pending-key flow; re-upload to a fresh key'],
+        file: ['Upload did not go through the pending-key flow; re-upload to a fresh key'],
       });
     }
 
@@ -647,14 +643,12 @@ export class UploadService {
     if (!updated) throw new NotFoundError('Upload');
 
     // Best-effort: drop the now-published pending object so it is not billed or swept.
-    if (pendingKeyed) {
-      const pendingObjectDeleted = await this.objectStorage.deleteObject(sourceKey);
-      if (!pendingObjectDeleted) {
-        logger.warn(
-          { id: validatedPublicId, pendingKey: sourceKey },
-          'upload.confirm.pendingObjectDeleteFailed',
-        );
-      }
+    const pendingObjectDeleted = await this.objectStorage.deleteObject(sourceKey);
+    if (!pendingObjectDeleted) {
+      logger.warn(
+        { id: validatedPublicId, pendingKey: sourceKey },
+        'upload.confirm.pendingObjectDeleteFailed',
+      );
     }
 
     return this.toUploadDetail(updated, userPublicId);
@@ -663,9 +657,9 @@ export class UploadService {
   /**
    * Publishes the verified pending object to its immutable `finalKey`. SVGs are sanitized in
    * transit (and rejected when hostile/empty); magic-byte-verifiable types have their leading bytes
-   * checked against the declared content-type, then the object is server-side copied to `finalKey`.
-   * When `finalKey === sourceKey` (legacy in-place row) nothing is copied. Returns false when
-   * magic-byte verification fails so the caller marks the row FAILED.
+   * checked against the declared content-type, then the object is server-side copied to `finalKey`
+   * (always a different key: `confirmUpload` refuses a row without the pending prefix). Returns
+   * false when magic-byte verification fails so the caller marks the row FAILED.
    */
   private async publishConfirmedObject(
     sourceKey: string,
@@ -686,35 +680,30 @@ export class UploadService {
       if (!(header && verifyFileMagicBytes(header.body, contentType))) {
         return false;
       }
-      if (finalKey !== sourceKey) {
-        // sec-re-10: pin the COPY to the exact object bytes we just verified.
-        // The presigned PUT/POST that minted `pending/<key>` remains replayable
-        // for the lifetime of the upload URL (~15 min), so an authenticated
-        // client could race a second PUT between this HEAD and the copy and
-        // have the COPY pick up hostile bytes. `CopySourceIfMatch` makes S3
-        // reject that race with `PreconditionFailed` so the publish fails
-        // fast and we never serve unverified bytes from `finalKey`.
-        await this.objectStorage.copyObject({
-          sourceKey,
-          destinationKey: finalKey,
-          contentType,
-          ...(header.eTag ? { sourceETag: header.eTag } : {}),
-        });
-      }
+      // sec-re-10: pin the COPY to the exact object bytes we just verified.
+      // The presigned PUT/POST that minted `pending/<key>` remains replayable
+      // for the lifetime of the upload URL (~15 min), so an authenticated
+      // client could race a second PUT between this HEAD and the copy and
+      // have the COPY pick up hostile bytes. `CopySourceIfMatch` makes S3
+      // reject that race with `PreconditionFailed` so the publish fails
+      // fast and we never serve unverified bytes from `finalKey`.
+      await this.objectStorage.copyObject({
+        sourceKey,
+        destinationKey: finalKey,
+        contentType,
+        ...(header.eTag ? { sourceETag: header.eTag } : {}),
+      });
       return true;
     }
-    if (finalKey !== sourceKey) {
-      await this.objectStorage.copyObject({ sourceKey, destinationKey: finalKey, contentType });
-    }
+    await this.objectStorage.copyObject({ sourceKey, destinationKey: finalKey, contentType });
     return true;
   }
 
   /**
    * Fetches the pending SVG, strips XSS vectors (scripts, event handlers, hostile filters) via
-   * {@link sanitizeSvgBuffer}, and writes the sanitized bytes to `finalKey`. Always writes when
-   * `finalKey` differs from the source (the publish step); for a legacy in-place row (same key) it
-   * writes only when sanitization changed the bytes. Throws when sanitization yields an empty
-   * document so the caller fails verification for hostile or zero-byte SVGs.
+   * {@link sanitizeSvgBuffer}, and writes the sanitized bytes to `finalKey`. Throws when
+   * sanitization yields an empty document so the caller fails verification for hostile or
+   * zero-byte SVGs.
    */
   private async publishSanitizedSvg(
     sourceKey: string,
@@ -723,9 +712,7 @@ export class UploadService {
   ): Promise<void> {
     const object = await this.objectStorage.getObject(sourceKey);
     const sanitized = sanitizeSvgBuffer(object.body);
-    if (finalKey !== sourceKey || !sanitized.equals(object.body)) {
-      await this.objectStorage.putObject({ key: finalKey, body: sanitized, contentType });
-    }
+    await this.objectStorage.putObject({ key: finalKey, body: sanitized, contentType });
   }
 
   private async toUploadDetail(row: UploadRow, userPublicId?: string): Promise<UploadDetailOutput> {
