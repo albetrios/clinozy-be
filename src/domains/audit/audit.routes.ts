@@ -7,7 +7,7 @@ import { createAuditController } from './audit.controller.js';
 
 /**
  * Fastify plugin mounting the admin audit routes under the audit prefix.
- * Currently registers `GET /logs`, gated to SUPER_ADMIN / ADMIN global roles.
+ * Currently registers `GET /logs`, gated to the SUPER_ADMIN global role.
  */
 export const auditRoutesPlugin: FastifyPluginAsync = async (app) => {
   const controller = createAuditController(app.auditDomain.auditService);
@@ -15,7 +15,7 @@ export const auditRoutesPlugin: FastifyPluginAsync = async (app) => {
 
   // `GET /logs` was the last read-heavy admin surface in the repo carrying no per-route cap — it
   // fell back to the global limiter alone. Exposure is lower than an unauthenticated route
-  // (SUPER_ADMIN / ADMIN only), but it is a cursor-paginated read over an unbounded-growth ledger
+  // (SUPER_ADMIN only), but it is a cursor-paginated read over an unbounded-growth ledger
   // with an opt-in `include_total` count(*), so a hijacked admin session could walk the whole
   // table in a tight loop. MODERATE_AUTHED (30 req/60s, keyed by user) matches the repo's other
   // authenticated read surfaces, and its `preHandler` hook is appended AFTER `requireRole`, so a
@@ -37,7 +37,7 @@ export const auditRoutesPlugin: FastifyPluginAsync = async (app) => {
       schema: {
         summary: 'List audit logs (admin)',
         description:
-          'Returns audit log entries with cursor pagination (`after`, `limit`). Requires SUPER_ADMIN or ADMIN role.',
+          'Returns audit log entries with cursor pagination (`after`, `limit`). Requires the SUPER_ADMIN role.',
         tags: ['Audit Log'],
       },
     },

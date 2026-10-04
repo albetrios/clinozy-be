@@ -45,7 +45,7 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN)],
       schema: {
         summary: 'List all users (admin)',
-        description: 'Returns a paginated list of all users. Requires SUPER_ADMIN or ADMIN role.',
+        description: 'Returns a paginated list of all users. Requires the SUPER_ADMIN role.',
         tags: ['User Management'],
       },
     },
@@ -58,7 +58,7 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN)],
       schema: {
         summary: 'Get user by ID (admin)',
-        description: "Returns a specific user's profile. Requires SUPER_ADMIN or ADMIN role.",
+        description: "Returns a specific user's profile. Requires the SUPER_ADMIN role.",
         tags: ['User Management'],
         params: userIdParamsDto,
       },
@@ -74,7 +74,7 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN)],
       schema: {
         summary: 'Update user (admin)',
-        description: "Updates a user's profile or status. Requires SUPER_ADMIN or ADMIN role.",
+        description: "Updates a user's profile or status. Requires the SUPER_ADMIN role.",
         tags: ['User Management'],
         params: userIdParamsDto,
         body: AdminUpdateUserDto,
@@ -91,7 +91,7 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN)],
       schema: {
         summary: 'Delete user (admin)',
-        description: 'Permanently deletes a user account. Requires SUPER_ADMIN or ADMIN role.',
+        description: 'Permanently deletes a user account. Requires the SUPER_ADMIN role.',
         tags: ['User Management'],
         params: userIdParamsDto,
       },
@@ -106,8 +106,7 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN)],
       schema: {
         summary: 'Suspend user (admin)',
-        description:
-          'Suspends a user account, preventing login. Requires SUPER_ADMIN or ADMIN role.',
+        description: 'Suspends a user account, preventing login. Requires the SUPER_ADMIN role.',
         tags: ['User Management'],
         params: userIdParamsDto,
       },
@@ -122,7 +121,7 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN)],
       schema: {
         summary: 'Unsuspend user (admin)',
-        description: 'Reactivates a suspended user account. Requires SUPER_ADMIN or ADMIN role.',
+        description: 'Reactivates a suspended user account. Requires the SUPER_ADMIN role.',
         tags: ['User Management'],
         params: userIdParamsDto,
       },

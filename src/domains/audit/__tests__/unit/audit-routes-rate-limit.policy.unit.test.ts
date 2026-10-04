@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
  * registration declared `onRequest`, `preHandler`, and `schema` and fell back to the global
  * limiter. `GET /logs` is a cursor-paginated read over an append-only, unbounded-growth ledger
  * with an opt-in `include_total` count(*) — cheap to issue, expensive to serve, and reachable
- * in a loop by any holder of a valid SUPER_ADMIN / ADMIN token.
+ * in a loop by any holder of a valid SUPER_ADMIN token.
  *
  * Enforced textually against the route file rather than at runtime because Fastify's per-route
  * `config` is buried behind plugin encapsulation. The check is brace-balanced rather than

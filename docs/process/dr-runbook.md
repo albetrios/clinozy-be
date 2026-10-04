@@ -88,8 +88,8 @@ The Redis key prefix (`<project>:<environment>:`) does not change on a restore, 
 
 ### 2. Redis (Railway Redis database)
 
-1. If Redis is unavailable, provision or restore the shared Redis instance (see [redis-topology.md](../deployment/runbooks/redis-topology.md)).
-2. Update `REDIS_URL` on API and worker services. Remove `REDIS_BULLMQ_URL` or set it to the same endpoint if it exists from an older split topology.
+1. If Redis is unavailable, provision or restore the Redis instance — or both, when queues have their own (see [redis-topology.md](../deployment/runbooks/redis-topology.md)).
+2. Update `REDIS_URL` on API and worker services, and `REDIS_BULLMQ_URL` too when queues run on a dedicated instance (the recommended production topology); unset, BullMQ uses `REDIS_URL`.
 3. Expect **cold** permission cache, idempotency keys, and session token cache — traffic may be slower until caches warm.
 4. Inspect DLQ depth after workers restart ([dlq-runbook.md](dlq-runbook.md)).
 

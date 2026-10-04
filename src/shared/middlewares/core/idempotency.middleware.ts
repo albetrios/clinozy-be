@@ -138,10 +138,10 @@ interface RequestWithIdempotency extends FastifyRequest {
 }
 
 /**
- * Backward compatible parser: prior versions stored the placeholder as a fully-formed
- * CachedResponse (`{ statusCode: 202, body: '{}', headers: {} }`). Treat any entry that
- * does not explicitly carry `state: 'completed'` as `in_flight` so a rolling deployment
- * does not replay 202 placeholders as real responses.
+ * Reads a `completed` entry's stored response, or null when it is not well-formed. Only an entry
+ * that carries `state: 'completed'` and a complete response is ever replayed —
+ * {@link parseIdempotencyEntry} treats anything else as `in_flight`, so a corrupt or unknown
+ * entry can never be served as a real response.
  */
 function parseCompletedIdempotencyEntry(
   parsed: Record<string, unknown>,
