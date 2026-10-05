@@ -1,0 +1,17 @@
+diff --git a/dist/src/vitest-test-runner.js b/dist/src/vitest-test-runner.js
+index 84f1ca026503b8e92b7adc952ec6c6a401943656..0b7987063a134872668109cb4dfe699db22aed85 100644
+--- a/dist/src/vitest-test-runner.js
++++ b/dist/src/vitest-test-runner.js
+@@ -143,8 +143,11 @@ export class VitestTestRunner {
+         let testFilesToRun = explicitTestFiles;
+         if (testIds.length > 0) {
+             const parsedTests = testIds.map(fromTestId);
++            // Vitest >= 5 matches testNamePattern against `fullTestName`, whose suite and test names
++            // are joined with " > "; these ids join them with spaces, so the pattern selected no test
++            // and every mutant "survived" untested. Let each space match either separator.
+             const regexTestNameFilter = parsedTests
+-                .map(({ test: name }) => escapeRegExp(name))
++                .map(({ test: name }) => escapeRegExp(name).replaceAll(' ', '(?: | > )'))
+                 .join('|');
+             const regex = new RegExp(regexTestNameFilter);
+             testFilesToRun = parsedTests.map(({ file }) => file);

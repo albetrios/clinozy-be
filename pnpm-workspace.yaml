@@ -161,3 +161,5 @@ minimumReleaseAgeExclude:
   - '@types/node@24.19.1'
   - '@aws-sdk/s3-presigned-post@3.1145.0'
   - '@aws-sdk/s3-request-presigner@3.1145.0'
+patchedDependencies:
+  '@stryker-mutator/vitest-runner@10.0.0': patches/@stryker-mutator__vitest-runner@10.0.0.patch
