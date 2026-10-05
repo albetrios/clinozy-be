@@ -101,7 +101,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-env-schema-add/SKILL.md",
-      "computedHash": "3639fe5bab96dd53aba965d0982619ae54cc73c7d40c3b881c670c31d4c19944"
+      "computedHash": "057e5875b10f0264cefa55cd9b3c8b6215be500fadf5f2bb3cc02ad140d773be"
     },
     "be-find-skills": {
       "source": "local",
@@ -239,7 +239,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-structure-maintainer/SKILL.md",
-      "computedHash": "f1e72b4e9753fb19b2c53165689fad2cb443d2cbde8f8ac14493093106709ca9"
+      "computedHash": "a4d7768b4491269c06e8dba3c1e68ed7d90900ef8ea6dd90740a6e5bef316007"
     },
     "be-supabase-porting": {
       "source": "local",
@@ -257,7 +257,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-test-generator/SKILL.md",
-      "computedHash": "8f251023c7f5fb2abf33be72559be2f04864e2e4c12bcb22fe230b0da3ee01d0"
+      "computedHash": "fe1fd1d675caa6ab0d52f919725b73749ccb263ffa951e2eb2c677b227833aed"
     },
     "be-tsdoc-export-guard": {
       "source": "local",

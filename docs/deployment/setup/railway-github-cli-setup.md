@@ -83,7 +83,6 @@ For each environment (development, production), add Environment secrets:
 | REDIS_URL            | Redis connection string                           |
 | JWT_PRIVATE_KEY      | RS256 PEM private key                             |
 | JWT_PUBLIC_KEY       | RS256 PEM public key                              |
-| JWT_SECRET           | Optional deprecated no-op (min 32 chars when set) |
 | ALLOWED_ORIGINS      | Comma-separated frontend origins                  |
 | NODE_ENV             | development or production                         |
 | PORT                 | 3000                                              |

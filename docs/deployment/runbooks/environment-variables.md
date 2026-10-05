@@ -45,11 +45,12 @@ There is **one** source of truth for which keys exist and what kind each one is:
 ```
 
 `pnpm github:sync` classifies each key by **name** via `classifyKey()`
-(`tooling/setup/github/sync-github-environments.ts`): `*_API_KEY`, `*_TOKEN`,
-`*_SECRET`, `*_PRIVATE_KEY`, `*_DSN`, `*_WEBHOOK_SECRET`, `*_ACCESS_KEY_ID`,
-`*_SECRET_ACCESS_KEY`, `*_ENCRYPTION_KEY`, `*_WORKSPACE_ID`, `*_SERVICE_ID`,
-`*_CLIENT_SECRET`, connection URLs (`DATABASE_URL`, `REDIS_URL`), `JWT_SECRET`,
-`CAPTCHA_SECRET` → **Secret**; everything else → **Variable**. The `.env.example`
+(`tooling/setup/github/sync-github-environments.ts`): `*_SECRET` (every client, webhook and
+provider secret), `*_API_KEY`, `*_SECRET_KEY`, `*_TOKEN`, `*_PRIVATE_KEY`, `*_DSN`,
+`*_ACCESS_KEY_ID`, `*_SECRET_ACCESS_KEY`, `*_ENCRYPTION_KEY`, `*_WORKSPACE_ID`, `*_SERVICE_ID`
+and the connection URLs (`DATABASE_URL`, `DATABASE_MIGRATION_URL`, `DATABASE_MAINTENANCE_URL`,
+`DATABASE_OPERATOR_URL`, `REDIS_URL`, `REDIS_BULLMQ_URL`) → **Secret**; everything else →
+**Variable**. The `.env.example`
 half is the **human-readable mirror** of that rule — place each key under the half
 its name resolves to (the two halves are validated for existence, not per-key
 placement). The runtime schema (`src/shared/config/env-schema.ts`) declares Zod

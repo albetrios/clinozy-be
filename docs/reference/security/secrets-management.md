@@ -12,7 +12,8 @@ Application-level encryption for short secrets at rest (MFA TOTP seeds, webhook 
 
 - Generate a key with `openssl rand -hex 32` (64 hex characters = 32 bytes).
 - `SECRETS_ENCRYPTION_KEY` is **required in every runtime.** Boot fails when it is missing; `NODE_ENV` is metadata only.
-- Do not derive this key from `JWT_SECRET` or `RESPONSE_ENCRYPTION_KEY`.
+- Generate this key independently — never derive it from another secret (`RESPONSE_ENCRYPTION_KEY`,
+  the JWT key pair).
 - Each stored value carries its own `<version>:` prefix; **decryption always resolves the key for that stored version**, while encryption uses `SECRETS_ENCRYPTION_CURRENT_VERSION`.
 
 ## Rotation

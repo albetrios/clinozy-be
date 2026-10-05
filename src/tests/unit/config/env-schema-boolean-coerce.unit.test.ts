@@ -16,7 +16,6 @@ import { envSchema } from '@/shared/config/env-schema.js';
 const REQUIRED_BASE = {
   DATABASE_URL: 'postgres://localhost:5432/fixture',
   REDIS_URL: 'redis://localhost:6379',
-  JWT_SECRET: 'a'.repeat(32),
   JWT_PRIVATE_KEY: 'private',
   JWT_PUBLIC_KEY: 'public',
   ALLOWED_ORIGINS: 'http://localhost:3000',

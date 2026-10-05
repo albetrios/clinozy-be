@@ -468,10 +468,6 @@ describe('env-schema', () => {
     }
   });
 
-  // sec-C5: JWT_SECRET removed from the schema (RS256 only). The
-  // "parses without JWT_SECRET" + "accepts optional pair alongside
-  // JWT_SECRET" tests are no longer applicable; the RS256-key acceptance
-  // test below covers the surviving path.
   it('parses with the RS256 key pair set', () => {
     const parsed = envSchema.safeParse({
       ...process.env,
@@ -530,10 +526,6 @@ describe('env-schema', () => {
   });
 
   it('rejects an env missing both RS256 key parts', () => {
-    // sec-C5: the original "rejects JWT_SECRET shorter than minimum length"
-    // assertion was actually pinning the "missing RS256 keys" rejection path
-    // (the env block omitted them too); rename to match what is actually
-    // being verified.
     const parsed = envSchema.safeParse({
       DATABASE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,

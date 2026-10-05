@@ -156,7 +156,7 @@ k6 scenarios and helpers live in `src/tests/load/k6/` (`.js` files, not Vitest).
 
 | Area                          | Default                                          | Add tests only when                                                  |
 | ----------------------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
-| **JWT RS256**                 | HS256 in unit tests (`JWT_SECRET` in test setup) | Prod/CI needs RS256 → one sign/verify smoke with test key pair in CI |
+| **JWT RS256**                 | Fixed RS256 test key pair (`src/tests/setup.ts`) | A new signing or verification path → its own sign/verify test        |
 | **Logger** (`logger.util.ts`) | Skip                                             | Custom redaction, PII rules, or non-default serializers              |
 | **Pass-through serializers**  | Smoke only                                       | API contract or shape regression risk                                |
 

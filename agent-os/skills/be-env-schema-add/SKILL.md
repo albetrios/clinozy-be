@@ -114,9 +114,9 @@ Apply in order; the first rule that matches wins.
 
 1. **Is the value a credential or signing material?** → **Secret**.
    Examples: database connection string with embedded password (`DATABASE_URL`),
-   `JWT_PRIVATE_KEY`, `JWT_SECRET`, `*_API_KEY`, `*_TOKEN`, `*_DSN`, `*_WEBHOOK_SECRET`,
-   `*_ACCESS_KEY_ID`, `*_SECRET_ACCESS_KEY`, AES encryption keys (`SECRETS_ENCRYPTION_KEY`),
-   OAuth `*_CLIENT_SECRET`.
+   `JWT_PRIVATE_KEY`, every `*_SECRET` (`CAPTCHA_SECRET`, `STRIPE_WEBHOOK_SECRET`, OAuth
+   `*_CLIENT_SECRET`), `*_API_KEY`, `*_TOKEN`, `*_DSN`, `*_ACCESS_KEY_ID`,
+   `*_SECRET_ACCESS_KEY`, AES encryption keys (`SECRETS_ENCRYPTION_KEY`).
 2. **Would leaking the value cost money, breach identity, or grant unauthorized
    access to another system?** → **Secret**.
 3. **Is the value a public identifier or operational knob?** → **Variable**.
