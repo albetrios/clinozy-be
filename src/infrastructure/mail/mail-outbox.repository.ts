@@ -189,7 +189,7 @@ export async function markMailOutboxSent(
       sent_at: new Date(),
       updated_at: new Date(),
       // sec-r5-crypto-1: scrub the rendered email body after a successful
-      // send. Magic-link / invitation / password-reset / email-verification
+      // send. Email-code / invitation / password-reset / email-verification
       // templates embed the live single-use token directly in the HTML; if
       // the row persists post-send (which it does — there is no retention
       // sweep), a future PITR snapshot consumer, leaked operator console,
@@ -216,7 +216,7 @@ export async function markMailOutboxFailed(mailOutboxToken: string): Promise<voi
       updated_at: new Date(),
       // audit-#10: scrub the secret-bearing rendered body on TERMINAL failure too — not only on
       // success. A `failed` row still embedded the live single-use token (password-reset /
-      // magic-link / invitation / email-verification); previously only `markMailOutboxSent`
+      // email-code / invitation / email-verification); previously only `markMailOutboxSent`
       // cleared it, so a permanently-failed delivery left the token recoverable from a PITR
       // snapshot, leaked operator console, SQLi, or compromised app credential until token
       // expiry (and invitation/verification tokens can be long-lived). The row is retained for

@@ -4,7 +4,7 @@ import { authSchema } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 
 /**
- * Drizzle table for `auth.verification_tokens` — unified store for magic-link /
+ * Drizzle table for `auth.verification_tokens` — unified store for email-code /
  * password-reset / email-verification / email-change tokens. `token_hash` is
  * unique and indexed for replay-safe lookups; RLS is enabled with a
  * deliberately permissive `USING (true)` policy. See sec-D9 notes below.
@@ -25,7 +25,7 @@ import { users } from '@/domains/user/user.schema.js';
  *   3. No untrusted SQL execution path exists. Every code path under
  *      `getRequestDatabase()` runs prepared statements through Drizzle.
  *
- * A future operational tool that browses for "all pending magic links" would
+ * A future operational tool that browses for "all pending email codes" would
  * break invariant #2 and leak `token_hash` + `user_id` + `email`. If such a
  * tool is added, replace the policy with a narrower predicate (e.g.
  * `USING (token_hash = current_setting('app.current_verification_token_hash', true))`

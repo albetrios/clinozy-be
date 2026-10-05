@@ -6,7 +6,7 @@ import { pgSchema } from 'drizzle-orm/pg-core';
  * when schemas reference tables across domains.
  */
 
-/** Drizzle handle for the Postgres `auth` schema — magic-link tokens, sessions, MFA, mail outbox. */
+/** Drizzle handle for the Postgres `auth` schema — verification tokens, sessions, MFA, mail outbox. */
 export const authSchema = pgSchema('auth');
 /** Drizzle handle for the Postgres `tenancy` schema — organizations, memberships, roles, API keys. */
 export const tenancySchema = pgSchema('tenancy');

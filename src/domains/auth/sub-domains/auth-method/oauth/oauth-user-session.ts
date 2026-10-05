@@ -86,7 +86,7 @@ export async function completeOAuthUserSession(parameters: {
   } = parameters;
 
   // route-audit: normalize the provider email (case-insensitive mailbox) the SAME way every other
-  // entry point does (login/magic-link/forgot all use trimmedEmail → lowercase). Without this, OAuth
+  // entry point does (login/email-code/forgot all use trimmedEmail → lowercase). Without this, OAuth
   // find-or-create exact-matched the raw mixed-case email against the case-sensitive
   // `idx_users_email_unique`, so `Victim@x.com` FORKED a second account instead of matching the
   // existing `victim@x.com` — duplicating identity and sidestepping the link-into-verified guard.

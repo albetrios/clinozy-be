@@ -78,7 +78,7 @@ describe('Security: auth account-enumeration resistance', () => {
     });
   }
 
-  function sendMagicLink(email: string) {
+  function sendEmailCode(email: string) {
     return injectUnauthenticated(app, {
       method: 'POST',
       url: testApiPath('/auth/email/send-code'),
@@ -123,8 +123,8 @@ describe('Security: auth account-enumeration resistance', () => {
       isEmailVerified: true,
     });
 
-    const known = await sendMagicLink('enumeration-magic@example.com');
-    const unknown = await sendMagicLink('enumeration-magic-absent@example.com');
+    const known = await sendEmailCode('enumeration-magic@example.com');
+    const unknown = await sendEmailCode('enumeration-magic-absent@example.com');
 
     expect(known.statusCode).toBe(unknown.statusCode);
     expect(responseData(unknown)).toEqual(responseData(known));

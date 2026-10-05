@@ -105,7 +105,7 @@ export class UserRepository {
   }
 
   /**
-   * Resolves a user by internal id for the pre-session token-consume flows (magic-link verify,
+   * Resolves a user by internal id for the pre-session token-consume flows (email-code login,
    * password reset, email verify) and session refresh — same FORCE RLS rationale as
    * {@link UserRepository.findByEmail}. Mirrors the historical no-`deleted_at`-filter behaviour.
    */

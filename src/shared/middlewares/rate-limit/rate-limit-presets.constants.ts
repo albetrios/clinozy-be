@@ -165,7 +165,7 @@ export const STRICT_PUBLIC_RATE_LIMIT = {
 
 /**
  * Per-identity cap (5 requests / 15 min per normalized email in production) for unauthenticated
- * credential and outbound-email endpoints (login, magic-link request, password-reset request).
+ * credential and outbound-email endpoints (login, email-code request, password-reset request).
  * The IP-only {@link STRICT_PUBLIC_RATE_LIMIT} is spoofable, so this complements it by binding the
  * limit to the targeted account/email — blunting credential stuffing, account enumeration, and
  * mailbomb abuse on public auth routes. Lifted when RATE_LIMIT_RELAXED_CAPS is set (development/test)

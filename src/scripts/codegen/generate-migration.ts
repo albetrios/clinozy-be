@@ -49,7 +49,9 @@ function migrationFileHeader({
 --
 -- Migration-safety lints (\`pnpm db:migrate:lint\`):
 --   - CREATE TABLE / INDEX / SCHEMA must use IF NOT EXISTS.
---   - Use \`ADD COLUMN ... NULL\` + backfill + \`SET NOT NULL\` (never NOT NULL inline).
+--   - Use \`ADD COLUMN ... NULL\` + backfill + \`SET NOT NULL\` (never NOT NULL inline) once a
+--     release ships. Before that no table holds data to protect: add the column NOT NULL and
+--     allow \`add_column_not_null_without_default\` (docs/reference/data/migrations.md).
 --   - Use \`ADD CONSTRAINT ... NOT VALID\` for FK / CHECK, then \`VALIDATE\` later.
 --   - Use \`CREATE INDEX CONCURRENTLY\` in a \`migration-transaction: none\` migration.
 --

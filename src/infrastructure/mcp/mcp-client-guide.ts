@@ -89,8 +89,8 @@ The active organization is implicit (from the token), so routes are flat:
   (team-organization create, membership create, transfer-ownership, invitation create,
   subscription create / change-plan / cancel / resume).
 - \`X-CSRF-Token\` — required on \`POST /api/v1/auth/refresh\`.
-- \`X-Captcha-Token\` — required on public auth forms (login, register, email verification
-  code, password reset).
+- \`X-Captcha-Token\` — required on the public auth forms once Turnstile is configured: login,
+  email code send + login, password forgot + reset, MFA login and passkey sign-in options.
 
 ## 6. Status codes
 

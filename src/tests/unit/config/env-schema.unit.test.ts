@@ -670,13 +670,7 @@ describe('env-schema', () => {
     expect(withToken.success).toBe(true);
   });
 
-  it('accepts a public FRONTEND_URL across all NODE_ENV values (magic-link inline-token leak removed)', () => {
-    /**
-     * Previously, non-production runtimes were forced to use a localhost
-     * FRONTEND_URL because the magic-link service inlined the raw token in
-     * API responses. That leak has been eliminated, so deployed non-production
-     * environments may now use real public URLs identical to production.
-     */
+  it('accepts a public FRONTEND_URL across all NODE_ENV values', () => {
     const parsedDevelopment = envSchema.safeParse({
       ...commonRequiredBase,
       NODE_ENV: 'development',

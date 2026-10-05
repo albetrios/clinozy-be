@@ -34,7 +34,7 @@ export const TURNSTILE_ALWAYS_PASS_TEST_SECRET = '1x0000000000000000000000000000
  * Maximum active (non-revoked) auth-method rows a single user may hold.
  *
  * @remarks
- * `POST /auth/me/auth-methods` only ever inserts credential-less `MAGIC_LINK` rows, so the risk is
+ * `POST /auth/me/auth-methods` only ever inserts credential-less `EMAIL_CODE` rows, so the risk is
  * benign self-bloat (a user accumulating rows that also truncate their own capped list view) rather
  * than a credential issue. This ceiling — enforced under the credential-mutation advisory lock so
  * concurrent creates cannot overshoot — bounds that growth well above any legitimate need.

@@ -50,7 +50,7 @@ export const authRoutesPlugin: FastifyPluginAsync = async (app) => {
   // the cap by rotating spoofed IPs (defense in depth alongside Turnstile CAPTCHA).
   const perEmailRateLimit = app.rateLimit(STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS);
 
-  // Public — strict rate limits on login/magic-link/password endpoints
+  // Public — strict rate limits on login/email-code/password endpoints
   zodApplication.post('/login', {
     ...STRICT_PUBLIC_RATE_LIMIT,
     preHandler: [perEmailRateLimit, captchaPreHandler],
@@ -469,7 +469,7 @@ export const authRoutesPlugin: FastifyPluginAsync = async (app) => {
       schema: {
         summary: 'List my auth methods',
         description:
-          'Returns all authentication methods (password, OAuth, magic link) linked to the authenticated user.',
+          'Returns all authentication methods (password, OAuth, email code) linked to the authenticated user.',
         tags: ['Auth Method'],
       },
     },

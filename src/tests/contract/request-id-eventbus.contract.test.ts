@@ -46,7 +46,7 @@ vi.mock('@/infrastructure/mail/mail.service.js', () => ({
 }));
 
 describe('Request id event-bus to mail worker contract', () => {
-  const correlationRequestId = 'req-api-magic-link-correlation';
+  const correlationRequestId = 'req-api-email-code-correlation';
   const loggerInfoSpy = vi.spyOn(logger, 'info');
 
   beforeAll(async () => {

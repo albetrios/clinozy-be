@@ -233,7 +233,7 @@ export class UserService {
     //   (1) revoke sessions → kills any in-flight bearer immediately, so no concurrent request
     //       can race the purge steps below and create orphan PENDING rows (sec-U8).
     //   (2) revoke auth methods → no fresh login can re-mint a session.
-    //   (3) invalidate verification tokens → magic-link / password-reset issued seconds before
+    //   (3) invalidate verification tokens → email-code / password-reset issued seconds before
     //       deletion can no longer mint a session for the soon-to-be-deleted user (sec-U1).
     //   (4) purge data-exports + uploads → now that sessions/tokens are dead, no concurrent
     //       writer can re-introduce rows.
@@ -312,7 +312,7 @@ export class UserService {
    * - **Failure modes:** propagates a Postgres email-unique violation on a rare create race; never throws
    *   `NotFoundError` (find-or-create always resolves to a user).
    * - **Side effects:** may INSERT one `auth.users` row (its own transaction via `createFromOAuth`).
-   * - **Notes:** the invitee *claims* the account on first OAuth/magic-link login — both already
+   * - **Notes:** the invitee *claims* the account on first OAuth/email-code login — both already
    *   find-or-create by email, so they reuse this row and attach the auth method, then accept the
    *   invitation. Call this OUTSIDE any organization context so the public-id retry can open its own
    *   transaction (a pinned organization transaction would abort on the rare public-id collision).

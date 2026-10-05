@@ -10,7 +10,7 @@ import { SEVEN_DAYS } from '@/shared/constants/ttl.constants.js';
 
 /**
  * sec-D5: verification tokens age out 7 days after they expire — used or
- * unused. Magic-link, password-reset, and email-verify rows hold plaintext
+ * unused. Email-code, password-reset, and email-verify rows hold plaintext
  * email + token-hash; once past expiry they have no auth value and only add
  * GDPR / SOC2 retention exposure.
  */

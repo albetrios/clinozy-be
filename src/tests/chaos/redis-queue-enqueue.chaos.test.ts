@@ -49,7 +49,7 @@ describe('Chaos resilience: Redis outage while enqueueing transactional email wo
   it('surfaces user-visible successes while post-commit mail dispatch logs durable failures gracefully', async () => {
     const mailEnqueueObservationSpyListening = vi.spyOn(logger, 'error');
 
-    const userSendingOutboundMagicLinks = await createTestUser({
+    const userRequestingEmailCodes = await createTestUser({
       email: `chaos-email-code-enqueue-${randomUUID()}@example.com`,
     });
 
@@ -57,17 +57,17 @@ describe('Chaos resilience: Redis outage while enqueueing transactional email wo
       await withTemporaryListeningProxyAdministrativelyDisabledForChaosAssertion(
         CHAOS_REDIS_PROXY_NAME,
         async () => {
-          const magicLinkResponseAwaitingObservation =
+          const emailCodeResponseAwaitingObservation =
             await chaosListeningFastifyApplication.inject({
               method: 'POST',
               url: testApiPath('/auth/email/send-code'),
-              payload: JSON.stringify({ email: userSendingOutboundMagicLinks.email }),
+              payload: JSON.stringify({ email: userRequestingEmailCodes.email }),
               headers: {
                 'content-type': 'application/json',
               },
             });
 
-          expect(magicLinkResponseAwaitingObservation.statusCode).toBe(200);
+          expect(emailCodeResponseAwaitingObservation.statusCode).toBe(200);
           await expect(
             waitForMailDispatchFailureLog(mailEnqueueObservationSpyListening),
           ).resolves.toBe(true);

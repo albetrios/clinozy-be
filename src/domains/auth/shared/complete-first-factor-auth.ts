@@ -22,7 +22,7 @@ export interface FirstFactorAuthUser {
   is_mfa_enabled: boolean;
 }
 
-/** Result of a successful first-factor authentication step (password, magic link, OAuth, WebAuthn). */
+/** Result of a successful first-factor authentication step (password, email code, OAuth, WebAuthn). */
 export type FirstFactorAuthResult =
   | { access_token: string; session_public_id: string; session_refresh_secret: string }
   | { mfa_required: true; mfa_session_token: string };
@@ -31,7 +31,7 @@ export type FirstFactorAuthResult =
  * Central post-first-factor gate: enforces organization MFA policy before issuing a JWT/session.
  *
  * @remarks
- * Password login, magic link, OAuth, and WebAuthn must all call this helper so tenant-required MFA
+ * Password login, email code, OAuth, and WebAuthn must all call this helper so tenant-required MFA
  * cannot be bypassed by alternate authentication methods.
  *
  * `ensurePersonalOrganizationOnMiss` (item #5) opts a caller into self-healing: when the user

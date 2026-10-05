@@ -411,7 +411,7 @@ export class WebauthnService {
    * - **Side effects:** writes `revoked_at` on the credential row; the partial unique index keeps the
    *   raw `credential_id` re-registrable afterwards.
    * - **Notes:** sec-r5-M3 — wires the previously-orphaned `revokeByUserId`. A user with a password /
-   *   OAuth / magic-link method may remove every passkey.
+   *   OAuth / email-code method may remove every passkey.
    */
   async revokeCredential(userPublicId: string, credentialPublicId: string): Promise<void> {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);

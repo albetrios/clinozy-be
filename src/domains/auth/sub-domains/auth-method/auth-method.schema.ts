@@ -95,5 +95,4 @@ export const auth_methods = authSchema
   )
   .enableRLS();
 
-// Note: magic_link_tokens table has been replaced by the unified verification_tokens table.
 // See verification-token.schema.ts for the new schema.

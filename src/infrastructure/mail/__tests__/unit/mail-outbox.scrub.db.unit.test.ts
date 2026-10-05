@@ -11,7 +11,7 @@ import {
 import { mail_outbox } from '@/infrastructure/mail/mail-outbox.schema.js';
 
 /**
- * audit-#10: rendered email bodies embed live single-use tokens (password-reset, magic-link,
+ * audit-#10: rendered email bodies embed live single-use tokens (password-reset, email-code,
  * invitation, email-verification). The body must be scrubbed on EVERY terminal state — both a
  * successful send and a permanent failure — so a snapshot reader / leaked console / SQLi cannot
  * recover a still-live token from a `failed` row.

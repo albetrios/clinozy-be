@@ -166,7 +166,7 @@ export function buildOpenApiDocument(localeStrings: OpenApiLocaleStrings): OpenA
       name: 'Authentication',
       tags: [
         'Auth',
-        'Magic Link',
+        'Email Login',
         'OAuth',
         'Password',
         'Email Verification',

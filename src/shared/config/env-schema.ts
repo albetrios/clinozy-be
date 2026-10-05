@@ -1279,11 +1279,8 @@ export const envSchema = envSchemaBase
   .refine(
     (data) => {
       /**
-       * `FRONTEND_URL` must be a valid http(s) URL whenever it is set. The previous
-       * localhost-only restriction for non-production environments existed because
-       * the magic-link service inlined the raw token in API responses outside
-       * production. That leak has been removed (see `magic-link.service.ts`), so
-       * any deployed environment may now use a real public `FRONTEND_URL`.
+       * `FRONTEND_URL` must be a valid http(s) URL whenever it is set; any environment may
+       * use a real public URL.
        */
       if (!data.FRONTEND_URL) {
         return true;
@@ -1351,7 +1348,7 @@ export const envSchema = envSchemaBase
     (data) => {
       // When Resend is configured, EMAIL_FROM_ADDRESS must be set explicitly. There is no
       // hardcoded sender fallback: a default `from` on an unverified domain is silently
-      // rejected by Resend, so auth mail (magic link, verification, invitations) never arrives.
+      // rejected by Resend, so auth mail (email codes, verification, invitations) never arrives.
       if (!data.RESEND_API_KEY) {
         return true;
       }

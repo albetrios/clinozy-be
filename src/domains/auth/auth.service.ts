@@ -155,7 +155,7 @@ export class AuthService {
     // equalized between unknown-email and wrong-password, but the wrong-password branch
     // additionally performs a Postgres write (registerFailedLoginAttempt) that the
     // unknown-email branch lacks — a residual timing oracle the other anti-enumeration
-    // endpoints (magic-link, forgot-password) already mask. Measure from before the
+    // endpoints (email code, forgot-password) already mask. Measure from before the
     // branch divergence (the user lookup) so both paths share the same floor.
     const startedAtMillis = Date.now();
 

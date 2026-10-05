@@ -30,7 +30,7 @@ function serializeAuthMethod(item: AuthMethodResponseInput) {
   };
 }
 
-/** Function-based serializers that shape HTTP response bodies for the auth domain (access token, MFA challenge, magic-link confirmation, etc.). */
+/** Function-based serializers that shape HTTP response bodies for the auth domain (access token, MFA challenge, email-code confirmation, etc.). */
 export const AuthSerializer = {
   accessToken(data: { access_token: string; session_public_id?: string }) {
     return {

@@ -39,9 +39,9 @@ export type ChangePlanInput = z.infer<typeof ChangePlanDto>;
  * `limit` is capped at Stripe's page maximum (MAX_LIMIT = 100).
  *
  * @remarks
- * `limit` is `.optional()` (not `.default`) so the OpenAPI query param stays optional — these
- * params are newly added to a pre-existing route, and a defaulted param serializes as `required`,
- * which is a breaking contract change. The default is applied in the service instead.
+ * `limit` is `.optional()` (not `.default`): a defaulted param serializes as `required` in the
+ * OpenAPI document, which misdescribes an optional parameter. The default is applied in the
+ * service instead.
  */
 export const listInvoicesQueryDto = z
   .object({

@@ -10,7 +10,7 @@
     "Health": "Server health and readiness probes",
     "MCP": "Model Context Protocol — tools and resources for agents (requires admin JWT when ENABLE_MCP_SERVER=true)",
     "Auth": "Authentication — login, logout, password management",
-    "Magic Link": "Passwordless authentication via magic link emails",
+    "Email Login": "Passwordless sign-in with an emailed verification code",
     "OAuth": "OAuth 2.0 social login flows",
     "Password": "Password management (forgot, reset, change)",
     "Email Verification": "Email address verification",
