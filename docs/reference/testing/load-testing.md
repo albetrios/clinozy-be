@@ -225,7 +225,7 @@ every route is the signature that you measured the machine instead of the code.
 | Metric | What it tells you |
 | --- | --- |
 | Per-route p95 | The user-visible effect. Read this **before** the aggregate — a change to three routes barely moves a mix of sixteen. |
-| `pg_pool_waiting` | Requests queued for a connection. This is the ceiling a transaction-count change is aimed at. |
+| `db_pool_connections{state="waiting"}` | Requests queued for a connection. This is the ceiling a transaction-count change is aimed at. |
 | `database_rls_active_checkouts` | Should fall if contexts were folded. |
 | `database_rls_checkout_hold_seconds` | How long each checkout pins its connection. |
 | `read_cache_requests_total{cache,result}` | The hit ratio, per cache. |

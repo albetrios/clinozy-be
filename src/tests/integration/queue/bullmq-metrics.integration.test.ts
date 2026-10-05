@@ -90,7 +90,6 @@ describe.runIf(runRedisTests)('Integration: BullMQ Prometheus metrics', () => {
     expect(metricsText).toContain(`queue="${queueName}"`);
     expect(metricsText).toContain('job_name="metrics-smoke"');
     expect(metricsText).toContain('bullmq_queue_waiting');
-    expect(metricsText).toContain('bullmq_jobs_waiting');
     expect(metricsText).toContain('bullmq_queue_active');
     expect(metricsText).toContain('bullmq_queue_delayed');
     expect(metricsText).toContain('bullmq_queue_failed');

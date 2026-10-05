@@ -45,9 +45,6 @@ describe('db-pool-metrics integration', () => {
     expect(body).toMatch(/db_pool_connections\{state="active"[^}]*\} \d+/);
     expect(body).toMatch(/db_pool_connections\{state="idle"[^}]*\} \d+/);
     expect(body).toMatch(/db_pool_connections\{state="waiting"[^}]*\} \d+/);
-    expect(body).toContain('# TYPE pg_pool_active gauge');
-    expect(body).toContain('pg_pool_active{');
-    expect(body).toContain('pg_pool_idle{');
-    expect(body).toContain('pg_pool_waiting{');
+    expect(body).toContain('# TYPE db_pool_connections gauge');
   }, 15_000);
 });

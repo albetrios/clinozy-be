@@ -23,10 +23,6 @@ let bullmqJobDurationSeconds: Histogram<'queue' | 'job_name'> | null = null;
 let postgresPoolMaxConnections: Gauge | null = null;
 let postgresPoolMetricsAvailable: Gauge | null = null;
 let dbPoolConnections: Gauge<'state'> | null = null;
-let pgPoolActive: Gauge | null = null;
-let pgPoolIdle: Gauge | null = null;
-let pgPoolWaiting: Gauge | null = null;
-let bullmqJobsWaiting: Gauge<'queue'> | null = null;
 let eventLoopLagMilliseconds: Gauge | null = null;
 let stripeWebhookEventsFailed: Gauge | null = null;
 let mailOutboxPending: Gauge | null = null;
@@ -39,7 +35,6 @@ let commitDispatchDurabilityFallbacksTotal: Counter | null = null;
 let readCacheRequestsTotal: Counter<'cache' | 'result'> | null = null;
 let databaseUnscopedQueriesTotal: Counter | null = null;
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: single registration site for all Prometheus instruments — boilerplate, intentionally long
 function registerOn(registry: Registry): void {
   httpRequestsTotal = new Counter({
     name: 'http_requests_total',
@@ -108,31 +103,6 @@ function registerOn(registry: Registry): void {
     name: 'db_pool_connections',
     help: 'Postgres connections for the current database user sampled from pg_stat_activity',
     labelNames: ['state'],
-    registers: [registry],
-  });
-
-  pgPoolActive = new Gauge({
-    name: 'pg_pool_active',
-    help: 'Postgres connections in active state (alias of db_pool_connections{state="active"})',
-    registers: [registry],
-  });
-
-  pgPoolIdle = new Gauge({
-    name: 'pg_pool_idle',
-    help: 'Postgres connections in idle state (alias of db_pool_connections{state="idle"})',
-    registers: [registry],
-  });
-
-  pgPoolWaiting = new Gauge({
-    name: 'pg_pool_waiting',
-    help: 'Postgres connections waiting (alias of db_pool_connections{state="waiting"})',
-    registers: [registry],
-  });
-
-  bullmqJobsWaiting = new Gauge({
-    name: 'bullmq_jobs_waiting',
-    help: 'BullMQ jobs waiting in queue (alias of bullmq_queue_waiting)',
-    labelNames: ['queue'],
     registers: [registry],
   });
 
@@ -227,10 +197,6 @@ function bindMetricHandlesFromRegistry(registry: Registry): void {
     'postgres_pool_metrics_available',
   ) as Gauge;
   dbPoolConnections = registry.getSingleMetric('db_pool_connections') as Gauge<'state'>;
-  pgPoolActive = registry.getSingleMetric('pg_pool_active') as Gauge;
-  pgPoolIdle = registry.getSingleMetric('pg_pool_idle') as Gauge;
-  pgPoolWaiting = registry.getSingleMetric('pg_pool_waiting') as Gauge;
-  bullmqJobsWaiting = registry.getSingleMetric('bullmq_jobs_waiting') as Gauge<'queue'>;
   eventLoopLagMilliseconds = registry.getSingleMetric('event_loop_lag_ms') as Gauge;
   stripeWebhookEventsFailed = registry.getSingleMetric('stripe_webhook_events_failed') as Gauge;
   mailOutboxPending = registry.getSingleMetric('mail_outbox_pending') as Gauge;
@@ -298,9 +264,9 @@ export function recordHttpRequest(
 }
 
 /**
- * Updates the `bullmq_queue_{waiting,active,delayed,failed}` gauges (plus the
- * legacy `bullmq_jobs_waiting` alias) for a single queue from a freshly read
- * `getJobCounts` payload. Called by {@link refreshBullMQQueueGauges}.
+ * Updates the `bullmq_queue_{waiting,active,delayed,failed}` gauges for a single
+ * queue from a freshly read `getJobCounts` payload. Called by
+ * {@link refreshBullMQQueueGauges}.
  */
 export function setBullMQQueueCounts(
   queueName: string,
@@ -312,7 +278,6 @@ export function setBullMQQueueCounts(
   }
   const label = { queue: queueName };
   bullmqQueueWaiting.set(label, counts.waiting);
-  bullmqJobsWaiting?.set(label, counts.waiting);
   bullmqQueueActive.set(label, counts.active);
   bullmqQueueDelayed.set(label, counts.delayed);
   bullmqQueueFailed.set(label, counts.failed);
@@ -354,9 +319,9 @@ export function setPostgresPoolConfigMetrics(options: {
 }
 
 /**
- * Sets the `db_pool_connections{state=...}` gauge plus the legacy
- * `pg_pool_{active,idle,waiting}` aliases from a fresh `pg_stat_activity` sample.
- * Missing states default to 0 so dashboards see a stable schema.
+ * Sets the `db_pool_connections{state=...}` gauge from a fresh `pg_stat_activity` sample.
+ * Every state is written on each sample — a state missing from it reads 0 — so a drained
+ * state never keeps a stale value and dashboards see a stable schema.
  */
 export function setPostgresPoolConnectionCounts(
   samples: ReadonlyArray<{ state: 'active' | 'idle' | 'waiting'; count: number }>,
@@ -371,13 +336,11 @@ export function setPostgresPoolConnectionCounts(
   };
 
   for (const sample of samples) {
-    dbPoolConnections.set({ state: sample.state }, sample.count);
     countsByState[sample.state] = sample.count;
   }
-
-  pgPoolActive?.set(countsByState.active);
-  pgPoolIdle?.set(countsByState.idle);
-  pgPoolWaiting?.set(countsByState.waiting);
+  for (const [state, count] of Object.entries(countsByState)) {
+    dbPoolConnections.set({ state }, count);
+  }
 }
 
 /**
