@@ -115,8 +115,8 @@ Run locally:
 ```bash
 pnpm compose:up && pnpm compose:wait   # local Postgres + Redis
 pnpm db:migrate
-pnpm dev                                # API; loads .env.development
-pnpm dev:worker                         # worker; same .env.development
+pnpm dev                                # API; NODE_ENV unset = local, loads .env.local
+pnpm dev:worker                         # worker; same .env.local
 ```
 
 The loader (`src/shared/config/load-env-files.ts`) picks `.env.${NODE_ENV}`, strips
@@ -136,8 +136,8 @@ production without needing a runtime guard.
 
 | Task              | How                                                                                                    |
 | ----------------- | ------------------------------------------------------------------------------------------------------ |
-| Change a value    | edit `.env.development` and restart `pnpm dev`                                                         |
-| See what's loaded | the dotenv loader logs `injected env (<n>) from .env.development` at startup                           |
+| Change a value    | edit `.env.local` and restart `pnpm dev`                                                               |
+| See what's loaded | the dotenv loader logs `injected env (<n>) from .env.local` at startup                                 |
 | Switch profile    | `NODE_ENV=production pnpm dev` to test prod settings locally (requires `.env.production` to be filled) |
 | Add a new env file | add the environment to `tooling/setup/setup.config.json`, run `pnpm tool:generate-project-identity`, then `pnpm github:sync` |
 
@@ -230,7 +230,7 @@ Step by step:
 Local-only change (does not touch GitHub):
 
 ```bash
-$EDITOR .env.development        # edit value
+$EDITOR .env.local              # edit value
 # restart pnpm dev / pnpm dev:worker to pick it up
 ```
 
@@ -306,7 +306,7 @@ Run `pnpm github:sync --check`, `pnpm tool:sync-env-example`, and (when pushing 
 | A new env var landed in GitHub as a Variable but should be a Secret                                     | `classifyKey()` decides by **name**, not by `.env.example` half — the name has no Secret suffix | Rename the key to carry a Secret suffix (`*_TOKEN` / `*_SECRET` / `*_API_KEY` / `*_KEY`) or add it to `classifyKey()`; moving the `.env.example` half alone does nothing. Then delete the stale Variable and re-sync |
 | A workflow step acts as if a secret/variable is empty (e.g. an upload silently skips, an API call 401s)  | The step reads it from the wrong context — `secrets.NAME` for a Variable, or `vars.NAME` for a Secret | Match the access context to the classification: Secret → `${{ secrets.NAME }}`, Variable → `${{ vars.NAME }}`. `grep .github/workflows/` for the name      |
 | A deployed container logs `unable to determine transport target for "pino-pretty"` and exits on boot | An image built before the `buildPinoPrettyTransport` guard, running with `LOG_PRETTY=true`: `pino-pretty` is a devDependency and the runtime stage installs `--prod` | Set `LOG_PRETTY=false` for that environment (`pnpm github:sync <environment>`) and redeploy an image that includes the guard — current images degrade to JSON logs and warn instead of exiting |
-| Local tests fail with `REDIS_BULLMQ_URL must be unset or point to the same Redis endpoint as REDIS_URL` | `REDIS_BULLMQ_URL` is set to a different host than `REDIS_URL`    | Leave `REDIS_BULLMQ_URL=` empty in `.env.development` (single-Redis topology)                                                                              |
+| Local tests fail with `REDIS_BULLMQ_URL must be unset or point to the same Redis endpoint as REDIS_URL` | `REDIS_BULLMQ_URL` is set to a different host than `REDIS_URL`    | Leave `REDIS_BULLMQ_URL=` empty in `.env.local` (single-Redis topology)                                                                              |
 
 ## 10. Adding a new hosted environment
 
@@ -392,7 +392,7 @@ This section is specifically the **dev / load-test → production delta**.
 - **Var registry (allowed values + description manifest, Zod derived):** `ENV_VAR_REGISTRY` in `src/shared/config/env-schema.ts` via the DSL in `src/shared/config/env-var-registry.ts`
 - **Catalog (generated):** [reference/env-catalog.md](../../reference/env-catalog.md) — every variable's allowed values · default · required/optional · description (`pnpm env:catalog`, verified in sync by the registry policy test)
 - **Template (committed):** `.env.example`
-- **Operator templates (gitignored):** `.env.development`, `.env.production`
+- **Operator files (gitignored):** `.env.development`, `.env.production` (hosted environments); `.env.local` (your machine, `pnpm setup:local`)
 - **Loader:** `src/shared/config/load-env-files.ts`
 - **Setup manifest (canonical):** `tooling/setup/setup.config.json`
 - **GitHub push:** `tooling/setup/github/sync.ts` (`pnpm github:sync`)

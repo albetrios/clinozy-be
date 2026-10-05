@@ -17,7 +17,7 @@
 ## ✨ Features
 
 - **Multi-tenancy** — organization-scoped data with Postgres RLS as defense-in-depth
-- **Authentication** — passwords (argon2id), magic links, OAuth, MFA (TOTP), WebAuthn, RS256 JWT
+- **Authentication** — passwords (argon2id), email verification codes, OAuth, MFA (TOTP), WebAuthn, RS256 JWT
 - **Billing** — Stripe-backed plans and subscriptions with webhook reconciliation
 - **Notifications** — in-app, email (Resend), and outbound webhooks via transactional outbox
 - **Audit** — append-only audit log for security- and governance-relevant actions
@@ -54,7 +54,7 @@ pnpm dev:worker   # BullMQ worker (separate terminal)
 
 **One-command local bootstrap:** `pnpm setup:local` (Docker + env + migrate + dev). Full clone-to-running guide: [SETUP.md](SETUP.md).
 
-**Environment:** copy values from [`.env.example`](.env.example) into `.env.development`, or run `pnpm github:sync` to bootstrap env files. Hosted infrastructure (Neon, Redis, S3, Sentry, Railway, GitHub) is provisioned from a separate infrastructure repository.
+**Environment:** `pnpm setup:local` scaffolds a self-contained `.env.local` from [`.env.example`](.env.example) — the file `pnpm dev` reads; `pnpm github:sync` manages the hosted environments' files. Hosted infrastructure (Neon, Redis, S3, Sentry, Railway, GitHub) is provisioned from a separate infrastructure repository.
 
 ---
 
