@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ValidationError } from '@/shared/errors/index.js';
 import {
   PRINCIPAL_SCOPE,
   type OrganizationPrincipalDatabaseScope,

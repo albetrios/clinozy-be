@@ -47,7 +47,6 @@ import {
   NotFoundError,
   ServiceUnavailableError,
   UnprocessableEntityError,
-  ValidationError,
 } from '@/shared/errors/index.js';
 import {
   PRINCIPAL_SCOPE,
