@@ -56,7 +56,8 @@
     "avatarInvalidContentType": "Tipo de contenido de avatar no válido: {{contentType}}",
     "avatarKeyNotOwned": "La clave de avatar no pertenece a este usuario",
     "logoKeyNotOwned": "La clave de logo no pertenece a esta organización",
-    "uploadNotConfirmed": "La carga debe confirmarse antes de poder adjuntarse"
+    "uploadNotConfirmed": "La carga debe confirmarse antes de poder adjuntarse",
+    "unrecognizedKey": "Clave no reconocida: \"{{key}}\""
   },
   "missingSessionCookie": "Falta la cookie de sesión",
   "disposableEmail": "Este dominio de correo no está permitido.",

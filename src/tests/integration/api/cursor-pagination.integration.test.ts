@@ -75,10 +75,11 @@ describe('Cursor pagination — integration', () => {
     const body = response.json() as {
       error: { type: string; errors?: Array<{ field: string; message: string }> };
     };
-    // `page` is not a list parameter: the strict query schema refuses it like any unknown key.
+    // `page` is not a list parameter: the strict query schema refuses it like any unknown key,
+    // naming it as the field.
     expect(body.error.type).toBe('validation_error');
     expect(body.error.errors).toEqual([
-      { field: 'querystring', message: expect.stringContaining('"page"') },
+      { field: 'querystring.page', message: 'Unrecognized key: "page"' },
     ]);
   });
 });

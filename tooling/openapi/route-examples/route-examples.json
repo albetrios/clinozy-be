@@ -1675,7 +1675,7 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "querystring",
+              "field": "querystring.page",
               "message": "Unrecognized key: \"page\""
             }
           ]
@@ -2572,7 +2572,7 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "querystring",
+              "field": "querystring.page",
               "message": "Unrecognized key: \"page\""
             }
           ]
@@ -2838,7 +2838,7 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "body",
+              "field": "body.__proto__",
               "message": "Unrecognized key: \"__proto__\""
             }
           ]
@@ -3094,7 +3094,7 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "body",
+              "field": "body.unexpected",
               "message": "Unrecognized key: \"unexpected\""
             }
           ]
@@ -3165,7 +3165,7 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "body",
+              "field": "body.unexpected_key",
               "message": "Unrecognized key: \"unexpected_key\""
             }
           ]
@@ -3240,7 +3240,7 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "body",
+              "field": "body.unknown_field",
               "message": "Unrecognized key: \"unknown_field\""
             }
           ]
@@ -3383,7 +3383,7 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "body",
+              "field": "body.unknown_field",
               "message": "Unrecognized key: \"unknown_field\""
             }
           ]
@@ -3430,7 +3430,7 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "body",
+              "field": "body.unknown_field",
               "message": "Unrecognized key: \"unknown_field\""
             }
           ]
@@ -3653,8 +3653,12 @@
               "message": "Invalid input: expected \"EMAIL_CODE\""
             },
             {
-              "field": "body",
-              "message": "Unrecognized keys: \"__fuzz\", \"unexpected\""
+              "field": "body.__fuzz",
+              "message": "Unrecognized key: \"__fuzz\""
+            },
+            {
+              "field": "body.unexpected",
+              "message": "Unrecognized key: \"unexpected\""
             }
           ]
         },
@@ -3701,8 +3705,12 @@
               "message": "Invalid input: expected \"MFA_TOTP\""
             },
             {
-              "field": "body",
-              "message": "Unrecognized keys: \"__fuzz\", \"unexpected\""
+              "field": "body.__fuzz",
+              "message": "Unrecognized key: \"__fuzz\""
+            },
+            {
+              "field": "body.unexpected",
+              "message": "Unrecognized key: \"unexpected\""
             }
           ]
         },
@@ -3760,8 +3768,12 @@
               "message": "Invalid input: expected string, received undefined"
             },
             {
-              "field": "body",
-              "message": "Unrecognized keys: \"__fuzz\", \"unexpected\""
+              "field": "body.__fuzz",
+              "message": "Unrecognized key: \"__fuzz\""
+            },
+            {
+              "field": "body.unexpected",
+              "message": "Unrecognized key: \"unexpected\""
             }
           ]
         },
@@ -3882,8 +3894,12 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "body",
-              "message": "Unrecognized keys: \"__fuzz\", \"unexpected\""
+              "field": "body.__fuzz",
+              "message": "Unrecognized key: \"__fuzz\""
+            },
+            {
+              "field": "body.unexpected",
+              "message": "Unrecognized key: \"unexpected\""
             }
           ]
         },
@@ -5815,7 +5831,7 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "body",
+              "field": "body.public_id",
               "message": "Unrecognized key: \"public_id\""
             }
           ]
@@ -6436,7 +6452,7 @@
               "message": "Invalid input: expected array, received undefined"
             },
             {
-              "field": "body",
+              "field": "body.unknown_field",
               "message": "Unrecognized key: \"unknown_field\""
             }
           ]

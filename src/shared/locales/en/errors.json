@@ -56,7 +56,8 @@
     "avatarInvalidContentType": "Invalid avatar content type: {{contentType}}",
     "avatarKeyNotOwned": "Avatar key does not belong to this user",
     "logoKeyNotOwned": "Logo key does not belong to this organization",
-    "uploadNotConfirmed": "Upload must be confirmed before it can be attached"
+    "uploadNotConfirmed": "Upload must be confirmed before it can be attached",
+    "unrecognizedKey": "Unrecognized key: \"{{key}}\""
   },
   "missingSessionCookie": "Missing session cookie",
   "disposableEmail": "This email domain is not allowed.",

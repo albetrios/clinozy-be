@@ -84,8 +84,11 @@ function translateDetail(
 }
 
 type FastifyValidationIssue = {
+  /** The failed rule — for a Zod schema the issue code (`invalid_type`, `unrecognized_keys`, …). */
+  keyword?: string;
   instancePath?: string;
-  params?: { missingProperty?: string };
+  /** `keys` carries a strict schema's unknown keys (`unrecognized_keys`). */
+  params?: { missingProperty?: string; keys?: unknown };
   message?: string;
 };
 
@@ -119,6 +122,41 @@ function mapFastifyValidationField(
     return validationContext ? `${validationContext}.${pathSegment}` : pathSegment;
   }
   return validationContext ?? 'body';
+}
+
+/**
+ * The `errors[]` entries for one Fastify validation issue. A strict schema reports every key it
+ * does not declare in ONE `unrecognized_keys` issue at the parent object, which would name only
+ * the location (`querystring`); it becomes one entry per key, named like any other field
+ * (`querystring.page`), with a localized message. Any other issue maps one to one.
+ */
+function mapFastifyValidationIssue(options: {
+  issue: FastifyValidationIssue;
+  validationContext: string | undefined;
+  request: FastifyRequest;
+}): Array<{ field: string; message: string }> {
+  const { issue, validationContext, request } = options;
+  const field = mapFastifyValidationField(issue, validationContext);
+  const unknownKeys = issue.params?.keys;
+  if (
+    issue.keyword === 'unrecognized_keys' &&
+    Array.isArray(unknownKeys) &&
+    unknownKeys.length > 0
+  ) {
+    return unknownKeys.map((unknownKey) => {
+      const key = String(unknownKey);
+      return {
+        field: `${field}.${key}`,
+        message: translateDetail(
+          request,
+          'errors:validation.unrecognizedKey',
+          { key },
+          `Unrecognized key: "${key}"`,
+        ),
+      };
+    });
+  }
+  return [{ field, message: issue.message ?? 'Invalid' }];
 }
 
 interface ErrorResponseBody {
@@ -242,10 +280,9 @@ function handleFastifyValidationErrorResponse(
     {},
     'Invalid values for fields in request',
   );
-  const errors = error.validation.map((issue) => ({
-    field: mapFastifyValidationField(issue, error.validationContext),
-    message: issue.message ?? 'Invalid',
-  }));
+  const errors = error.validation.flatMap((issue) =>
+    mapFastifyValidationIssue({ issue, validationContext: error.validationContext, request }),
+  );
   return {
     error: buildErrorPayload('validation_error', 'invalid_field', detail, errors),
     meta: { request_id: requestId },
