@@ -1554,8 +1554,6 @@ src/
     │   ├── session/
     │   │   ├── cookie-session-origin.pre-handler.ts
     │   │   └── cookie.middleware.ts
-    │   ├── tenant/
-    │   │   └── organization-rls-transaction.middleware.ts
     │   └── index.ts
     ├── types/
     │   └── index.ts
@@ -2208,7 +2206,6 @@ src/
     │   │   ├── metrics.middleware.unit.test.ts
     │   │   ├── middleware-order.unit.test.ts
     │   │   ├── ops.middleware.unit.test.ts
-    │   │   ├── organization-rls-transaction.middleware.unit.test.ts
     │   │   ├── overload-guard.middleware.unit.test.ts
     │   │   ├── rate-limit-fallback-store.unit.test.ts
     │   │   ├── rate-limit-presets.constants.unit.test.ts

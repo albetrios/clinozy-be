@@ -39,8 +39,7 @@ import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js'
  * `PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId })`; the reuse predicate in
  * `database-context.ts` matches on the **organization public id alone**, not on scope kind, so the
  * nested call reuses the handle the outer context pinned rather than taking a second checkout.
- * (That outer pin is the service's own — `organization-rls-transaction.middleware.ts` is a no-op
- * stub today and pins nothing.) Narrow that predicate, move the seat count outside the context, or
+ * (That outer pin is the service's own — no request-wide transaction exists.) Narrow that predicate, move the seat count outside the context, or
  * have it resolve a different organization, and this route silently doubles its pool cost with
  * nothing else objecting. Hence the row.
  */

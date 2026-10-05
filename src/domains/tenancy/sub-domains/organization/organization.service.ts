@@ -379,7 +379,7 @@ export class OrganizationService {
    * so the `organizations_user_discovery` and `memberships_user_self_discovery`
    * RLS policies see `app.current_user_public_id` (introduced by migration
    * `20260520000004_organization_discovery_and_invitation_lookup_rls.sql`). Without
-   * this wrap the call returns empty when `DATABASE_RLS_SCOPED_CONTEXTS=true`.
+   * this wrap the call returns empty.
    */
   async listForUser(query: unknown, user_public_id: string) {
     const parsed = validateListOrganizationsQuery(query);

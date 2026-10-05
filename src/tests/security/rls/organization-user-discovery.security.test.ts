@@ -17,8 +17,7 @@ import { setLocalApplicationRole } from '@/infrastructure/database/contexts/data
 
 /**
  * Validates the user-discovery RLS policies and SECURITY DEFINER lookups that
- * unblock cross-organization and user-driven routes under
- * `DATABASE_RLS_SCOPED_CONTEXTS=true` (migration
+ * unblock cross-organization and user-driven routes (migration
  * `20260520000004_organization_discovery_and_invitation_lookup_rls.sql`).
  *
  * The fix-under-test is twofold:

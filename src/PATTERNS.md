@@ -150,7 +150,7 @@ Postgres Row-Level Security is the **defense-in-depth** layer for tenant isolati
 
 ### Implementation
 
-- HTTP requests get RLS via `tenant.middleware` + `organization-rls-transaction.middleware` opening a request-scoped transaction with `SET LOCAL app.current_organization_public_id = $1`.
+- HTTP requests get RLS per unit of work: `withAppDatabaseContext` opens a short transaction with `SET LOCAL app.current_organization_public_id = $1`.
 - Workers get RLS via `runOrganizationScopedWorkerJob` which **requires** `organizationPublicId` in the job payload and opens its own `withAppDatabaseContext` transaction (job-minted organization scope). Workers are forbidden from importing `database-context-runtime.ts` (enforced by `worker-database-guard.unit.test.ts` and global tests).
 - Global-scope workers (cross-organization sweeps) use `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, …)`, which sets a different GUC that RLS policies recognize as "global retention" — strictly limited to retention/cleanup operations.
 

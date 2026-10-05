@@ -37,7 +37,7 @@ Postgres connection management, the abstract `BaseRepository` (with cursor pagin
 
 ## Tuning parameters
 
-- `DATABASE_URL`, `DATABASE_POOL_SIZE`, `DATABASE_STATEMENT_TIMEOUT_MS`, `DATABASE_RLS_SCOPED_CONTEXTS` (feature flag for the scoped-context model).
+- `DATABASE_URL`, `DATABASE_POOL_SIZE`, `DATABASE_STATEMENT_TIMEOUT_MS`.
 
 ## Failure modes
 

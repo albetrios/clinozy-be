@@ -37,7 +37,7 @@ describe('database_rls_* checkout metrics', () => {
 
     ensurePrometheusMetricsRegistered(getMetricsRegistry());
     recordOrganizationRlsCheckoutHold({ path: 'scoped_context', durationSeconds: 0.02 });
-    recordOrganizationRlsCheckoutHold({ path: 'request_transaction', durationSeconds: 0.2 });
+    recordOrganizationRlsCheckoutHold({ path: 'maintenance_context', durationSeconds: 0.2 });
     setOrganizationRlsActiveCheckouts(3);
 
     const metricsBody = await renderMetrics();
@@ -45,7 +45,7 @@ describe('database_rls_* checkout metrics', () => {
       /database_rls_checkout_hold_seconds_bucket\{[^}]*path="scoped_context"/,
     );
     expect(metricsBody).toMatch(
-      /database_rls_checkout_hold_seconds_bucket\{[^}]*path="request_transaction"/,
+      /database_rls_checkout_hold_seconds_bucket\{[^}]*path="maintenance_context"/,
     );
     expect(metricsBody).toMatch(/database_rls_active_checkouts(\{[^}]*\})? 3/);
   });

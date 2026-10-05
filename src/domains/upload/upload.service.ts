@@ -339,8 +339,7 @@ export class UploadService {
       }
       /**
        * `requireOrganizationByPublicId` reads `tenancy.organizations` which is FORCE RLS.
-       * Under `DATABASE_RLS_SCOPED_CONTEXTS=true` the call needs either an active
-       * organization context or `app.current_user_public_id` + the `organizations_user_discovery`
+       * The call needs either an active organization context or `app.current_user_public_id` + the `organizations_user_discovery`
        * policy. The latter is appropriate here because we have just authorized the user.
        */
       const organization = await withAppDatabaseContext(

@@ -168,7 +168,7 @@ function registerOn(registry: Registry): void {
 
   databaseRlsCheckoutHoldSeconds = new Histogram({
     name: 'database_rls_checkout_hold_seconds',
-    help: 'Wall-clock seconds an organization-scoped RLS transaction held a pooled connection, by path (scoped_context | request_transaction)',
+    help: 'Wall-clock seconds an RLS transaction held a pooled connection, by path (scoped_context | session_context | maintenance_context)',
     labelNames: ['path'],
     buckets: DEFAULT_LATENCY_BUCKETS_SECONDS,
     registers: [registry],
@@ -428,10 +428,10 @@ export function setOrganizationRlsActiveCheckouts(count: number): void {
 }
 
 /**
- * Observes one completed organization-RLS checkout hold on the `database_rls_checkout_hold_seconds`
- * histogram, labelled by `path` (`scoped_context` unit of work vs legacy full-request
- * `request_transaction`). Wired via `registerOrganizationRlsCheckoutHoldObserver` so the hot
- * database-checkout paths stay free of a prom-client import. No-op when metrics are disabled.
+ * Observes one completed RLS checkout hold on the `database_rls_checkout_hold_seconds` histogram,
+ * labelled by `path` (`scoped_context` | `session_context` | `maintenance_context`). Wired via
+ * `registerOrganizationRlsCheckoutHoldObserver` so the hot database-checkout paths stay free of a
+ * prom-client import. No-op when metrics are disabled.
  */
 export function recordOrganizationRlsCheckoutHold(options: {
   path: OrganizationRlsCheckoutPath;

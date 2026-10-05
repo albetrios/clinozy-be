@@ -705,19 +705,6 @@ async function idempotencyOnSend(
 }
 
 /**
- * Options for {@link idempotencyOnResponse}. The request-lifecycle coordinator sets
- * `forceRelease` when a 2xx response was produced but the underlying RLS/business
- * transaction ultimately rolled back, so the cached entry must not be written.
- */
-export type IdempotencyOnResponseOptions = {
-  /**
-   * When true, always delete the in-flight placeholder and never persist a completed cache
-   * entry — used when the HTTP response was 2xx but the request DB transaction did not commit.
-   */
-  forceRelease?: boolean;
-};
-
-/**
  * Final-step Redis write. By running here (rather than in `onSend`) the completed cache
  * is only persisted after the request-level transaction has resolved — preventing the
  * documented "rolled-back write replays as 2xx" failure mode. Three terminal cases:
@@ -730,7 +717,6 @@ export type IdempotencyOnResponseOptions = {
 export async function idempotencyOnResponse(
   request: FastifyRequest,
   reply: FastifyReply,
-  options?: IdempotencyOnResponseOptions,
 ): Promise<void> {
   const requestWithIdempotency = request as RequestWithIdempotency;
   if (!requestWithIdempotency._idempotencyClaimed) return;
@@ -745,16 +731,6 @@ export async function idempotencyOnResponse(
 
   const statusCode = reply.statusCode;
   const pending = requestWithIdempotency._idempotencyPendingCompleted;
-  if (options?.forceRelease === true) {
-    delete requestWithIdempotency._idempotencyPendingCompleted;
-    try {
-      await redisConnection.del(cacheKey);
-    } catch (error) {
-      logger.warn({ error, idempotencyKey }, 'idempotency.cache.release.failed');
-    }
-    return;
-  }
-
   if (statusCode < 400 && pending !== undefined && requestFingerprint !== undefined) {
     const completed: CompletedIdempotencyEntry = {
       state: 'completed',

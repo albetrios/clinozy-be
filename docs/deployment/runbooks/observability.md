@@ -47,7 +47,7 @@ Dynamic gauges (pool, BullMQ depth, event loop) refresh on each scrape via [`ref
 | `event_loop_lag_ms` | Gauge | Node event-loop delay p99 (ms) |
 | `pg_pool_active`, `pg_pool_idle`, `pg_pool_waiting` | Gauge | Postgres connection pressure (sampled from `pg_stat_activity`) |
 | `database_rls_active_checkouts` | Gauge | In-process organization-scoped RLS transaction checkouts held now; alert near `DATABASE_POOL_MAX` |
-| `database_rls_checkout_hold_seconds` | Histogram (`path`) | How long an organization-RLS checkout pins a pooled connection (`scoped_context` unit of work vs legacy `request_transaction`) |
+| `database_rls_checkout_hold_seconds` | Histogram (`path`) | How long an RLS checkout pins a pooled connection, by path: `scoped_context` (a unit of work), `session_context` (pre-auth session artifact), `maintenance_context` (bypass) |
 | `http_request_duration_seconds` | Histogram | Per-route latency; p95 via `histogram_quantile` |
 | `bullmq_jobs_waiting` | Gauge (`queue`) | Queue backlog per BullMQ queue |
 | `read_cache_requests_total` | Counter (`cache`, `result`) | Read-through cache lookups by cache name and result (`hit` \| `miss`). Alert on a **sustained drop**, never an absolute value — the right ratio differs per cache. A ratio near zero means that cache is pure overhead (a Redis round trip to still ask Postgres); a ratio that collapses after a deploy usually means an invalidation became too broad. The label is the cache's name, never its key, so cardinality stays bounded. See [read-caching.md](../../reference/runtime/read-caching.md) |

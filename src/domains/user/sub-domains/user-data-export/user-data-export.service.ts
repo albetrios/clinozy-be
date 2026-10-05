@@ -171,7 +171,7 @@ export class UserDataExportService {
     const expiresAt = computeArtifactExpiresAt();
 
     // auth.user_data_exports is FORCE RLS keyed on app.current_user_public_id — insert inside the user
-    // context so the row passes the owner-access policy in default scoped-RLS mode.
+    // context so the row passes the owner-access policy.
     let row: Awaited<ReturnType<UserDataExportRepository['create']>>;
     try {
       row = await withAppDatabaseContext(scope, () =>
@@ -448,7 +448,7 @@ export class UserDataExportService {
   async deleteAllExportsForUser(userInternalId: number, userPublicId: string): Promise<void> {
     // auth.user_data_exports is FORCE RLS keyed on app.current_user_public_id. Offboarding can be initiated
     // by an admin, so pin the context to the TARGET user (not the caller) so the owner-access policy
-    // matches and the rows are actually removed in default scoped-RLS mode.
+    // matches and the rows are actually removed.
     //
     // sec-r4-R2: stream the user's export S3 keys in bounded keyset batches and
     // delete the objects with bounded concurrency. The previous version loaded
