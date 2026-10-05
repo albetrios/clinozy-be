@@ -131,10 +131,9 @@ catalog, subscription reads, Stripe webhook), `/notify/*`,
 
 ### Switching mode after launch
 
-- **`PERSONAL` off → on** (B2B → hybrid): existing users have no personal organization. The read-path
-  self-heal provisions one lazily on each user's next `GET /users/me` / `switch-to-personal`,
-  so no backfill is strictly required; run `pnpm tool:backfill-personal-orgs` to provision them
-  all up front (idempotent) rather than on first access.
+- **`PERSONAL` off → on** (B2B → hybrid): existing users have no personal organization. The
+  self-heal provisions one lazily — on a sign-in that resolves no other organization, on
+  `GET /users/me` and on `switch-to-personal` — so no backfill is needed.
 - **`TEAM` on → off** (hybrid → B2C): `POST /tenancy/organizations` returns
   `403 teamOrganizationsDisabled`; existing team organizations are not deleted, only no longer
   creatable. The frontend hides team UI based on its own `VITE_TEAM_ORGANIZATIONS` build flag.
@@ -169,10 +168,6 @@ account deletion (transfer or delete the team first); the personal organization 
   personal-enabled user lacking a personal organization gets one provisioned on their next
   `GET /users/me` / `POST /auth/switch-to-personal`. No operator action is required to
   unstick existing users.
-- `pnpm tool:backfill-personal-orgs` — optionally provisions the personal organization for **all**
-  existing users lacking one up front (idempotent), for when `PERSONAL_ORGANIZATION_ENABLED`
-  is turned on after launch. The self-heal covers the same gap lazily; the backfill just does
-  it eagerly.
 
 ## Route shape (active organization = token claim)
 

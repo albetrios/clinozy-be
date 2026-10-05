@@ -165,7 +165,8 @@ export async function completeOAuthUserSession(parameters: {
   // in a SEPARATE global-admin transaction (its own pool connection) which cannot see an uncommitted
   // user, so doing it inside the transaction above always FK-failed and was silently swallowed;
   // post-commit it succeeds. Best-effort + idempotent (the partial unique index makes a retry a no-op
-  // and tool:backfill-personal-organizations recovers a miss). Team-only mode skips it.
+  // and the self-heal on the next sign-in or `GET /users/me` recovers a miss). Team-only mode
+  // skips it.
   if ((isNewUser || claimedBareAccount) && env.PERSONAL_ORGANIZATION_ENABLED) {
     try {
       await ensurePersonalOrganization(user);

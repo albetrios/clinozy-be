@@ -1371,13 +1371,10 @@ src/
     ├── admin/
     │   ├── admin-token.ts
     │   ├── api-sign-in.util.ts
-    │   ├── audit-bcrypt-password-hashes.ts
-    │   ├── backfill-personal-organizations.ts
     │   ├── dlq-replay.ts
     │   ├── load-test-credential-pool.ts
     │   ├── load-test-credentials.ts
     │   ├── load-test-reset.ts
-    │   ├── rotate-field-secrets.ts
     │   ├── stripe-webhook-replay.ts
     │   ├── worker-health.ts
     │   └── worker-readiness.ts
@@ -2252,7 +2249,6 @@ src/
     │   │   ├── lint-migrations-rollback.unit.test.ts
     │   │   ├── lint-migrations-row-security-guc.unit.test.ts
     │   │   ├── lint-migrations-timestamp.unit.test.ts
-    │   │   ├── rotate-field-secrets.unit.test.ts
     │   │   ├── route-catalog-registry.unit.test.ts
     │   │   ├── route-http-coverage-validation.unit.test.ts
     │   │   ├── route-schema-docs-validation.unit.test.ts
