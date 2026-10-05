@@ -1,5 +1,4 @@
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { parseCursorPaginatedQuery } from '@/shared/utils/http/pagination.util.js';
 import {
   CreateWebhookDto,
   listWebhookDeliveryAttemptsQueryDto,
@@ -16,7 +15,7 @@ import {
  * string with {@link listWebhooksQueryDto}; throws `ValidationError('errors:invalidInput')`.
  */
 export function validateListWebhooksQuery(data: unknown): ListWebhooksQueryInput {
-  return parseCursorPaginatedQuery(listWebhooksQueryDto, data);
+  return parseWithSchema(listWebhooksQueryDto, data);
 }
 
 /**
@@ -26,7 +25,7 @@ export function validateListWebhooksQuery(data: unknown): ListWebhooksQueryInput
 export function validateListWebhookDeliveryAttemptsQuery(
   data: unknown,
 ): ListWebhookDeliveryAttemptsQueryInput {
-  return parseCursorPaginatedQuery(listWebhookDeliveryAttemptsQueryDto, data);
+  return parseWithSchema(listWebhookDeliveryAttemptsQueryDto, data);
 }
 
 /**

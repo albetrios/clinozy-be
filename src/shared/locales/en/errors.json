@@ -51,7 +51,6 @@
     "invitationAlreadyAccepted": "Invitation already accepted",
     "invitationExpired": "Invitation expired",
     "invalidPagination": "Invalid pagination",
-    "legacyPageNotSupported": "Legacy `page` pagination is no longer supported on this route. Use cursor-based pagination via `limit` and `after` (opaque cursor from `meta.pagination.next`).",
     "logoNotFound": "Logo object not found in storage",
     "avatarNotFound": "Avatar file not found in storage",
     "avatarInvalidContentType": "Invalid avatar content type: {{contentType}}",

@@ -1,5 +1,4 @@
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { parseCursorPaginatedQuery } from '@/shared/utils/http/pagination.util.js';
 import {
   createMembershipDto,
   updateMembershipDto,
@@ -37,11 +36,7 @@ export function validateUpdateMembership(data: unknown): UpdateMembershipInput {
  * {@link listMembershipsQueryDto}.
  */
 export function validateListMembershipsQuery(data: unknown): ListMembershipsQueryInput {
-  return parseCursorPaginatedQuery(
-    listMembershipsQueryDto,
-    data,
-    'errors:validation.invalidPagination',
-  );
+  return parseWithSchema(listMembershipsQueryDto, data, 'errors:validation.invalidPagination');
 }
 
 /**

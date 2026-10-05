@@ -1,5 +1,4 @@
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { parseCursorPaginatedQuery } from '@/shared/utils/http/pagination.util.js';
 import {
   createOrganizationApiKeyDto,
   updateOrganizationApiKeyDto,
@@ -28,7 +27,7 @@ export function validateUpdateOrganizationApiKey(data: unknown): UpdateOrganizat
 export function validateListOrganizationApiKeysQuery(
   data: unknown,
 ): ListOrganizationApiKeysQueryInput {
-  return parseCursorPaginatedQuery(
+  return parseWithSchema(
     listOrganizationApiKeysQueryDto,
     data,
     'errors:validation.invalidPagination',

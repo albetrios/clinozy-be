@@ -16,7 +16,6 @@ import { createOrganizationApiKeyController } from './organization-api-key/organ
 import { createOrganizationSettingsController } from './organization-settings/organization-settings.controller.js';
 import { createOrganizationNotificationPolicyController } from './organization-notification-policy/organization-notification-policy.controller.js';
 import { requireOrganizationPermission } from '@/shared/utils/auth/authorization.util.js';
-import { rejectLegacyPagePagination } from '@/shared/utils/http/pagination.util.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { AUDIT_PERMISSIONS } from '@/domains/audit/audit.permissions.js';
 import {
@@ -210,7 +209,6 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
           querystring: ListAuditLogsQueryDto,
         },
         onRequest: [app.authenticate],
-        preValidation: [rejectLegacyPagePagination],
         preHandler: [requireOrganizationPermission(AUDIT_PERMISSIONS.AUDIT_LOG_READ)],
       },
       organizationController.listOrganizationAuditLogs,
@@ -261,7 +259,6 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
           querystring: listOrganizationApiKeysQueryDto,
         },
         onRequest: [app.authenticate],
-        preValidation: [rejectLegacyPagePagination],
         preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.API_KEY_READ)],
       },
       apiKeyController.listApiKeys,

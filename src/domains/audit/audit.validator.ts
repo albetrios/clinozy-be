@@ -1,4 +1,4 @@
-import { parseCursorPaginatedQuery } from '@/shared/utils/http/pagination.util.js';
+import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 import { ListAuditLogsQueryDto, type ListAuditLogsQuery } from './audit.dto.js';
 
 /**
@@ -7,5 +7,5 @@ import { ListAuditLogsQueryDto, type ListAuditLogsQuery } from './audit.dto.js';
  * Throws a `ValidationError` with field errors on bad input.
  */
 export function validateListAuditLogsQuery(query: unknown): ListAuditLogsQuery {
-  return parseCursorPaginatedQuery(ListAuditLogsQueryDto, query);
+  return parseWithSchema(ListAuditLogsQueryDto, query);
 }

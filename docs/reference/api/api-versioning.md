@@ -39,23 +39,4 @@ Constants and helpers live in **`src/shared/utils/http/api-versioning.util.ts`**
 
 **Cursor list pagination:** All paginated list endpoints (organizations, memberships, member roles, member invitations, organization API keys, audit logs, webhooks, webhook delivery attempts, notifications, users) use cursor pagination only. Pass `limit` and optional `after` (opaque cursor from `meta.pagination.next`). The cursor is encrypted server-side (it carries the keyset position, never readable): pass it back unchanged — an edited or foreign cursor reads as the first page.
 
-The legacy `page` query parameter has been removed. Sending it returns **HTTP 400** with a `validation_error`:
-
-```json
-{
-  "error": {
-    "type": "validation_error",
-    "code": "validation_error",
-    "detail": "Legacy `page` pagination is no longer supported on this route. Use cursor-based pagination via `limit` and `after` (opaque cursor from `meta.pagination.next`).",
-    "errors": [
-      {
-        "field": "page",
-        "message": "Legacy `page` pagination is no longer supported on this route. Use cursor-based pagination via `limit` and `after` (opaque cursor from `meta.pagination.next`)."
-      }
-    ]
-  },
-  "meta": { "request_id": "..." }
-}
-```
-
-The guard is implemented by `ensureCursorOnlyPagination` in `src/shared/utils/http/pagination.util.ts` and invoked by every list query validator before Zod parsing.
+There is no `page` parameter: list query schemas are strict, so `page` (like any unknown parameter) is a **400** `validation_error`.

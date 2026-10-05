@@ -6,7 +6,6 @@ import {
 } from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
 import { GLOBAL_ROLES } from '@/shared/constants/index.js';
 import { requireRole } from '@/shared/utils/auth/authorization.util.js';
-import { rejectLegacyPagePagination } from '@/shared/utils/http/pagination.util.js';
 import { listOrganizationsQueryDto } from '@/domains/tenancy/sub-domains/organization/organization.dto.js';
 import { createUserController } from './user.controller.js';
 import { createUserDataExportController } from './sub-domains/user-data-export/user-data-export.controller.js';
@@ -147,7 +146,6 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
     '/me/organizations',
     {
       onRequest: [app.authenticate],
-      preValidation: [rejectLegacyPagePagination],
       schema: {
         summary: 'List my organizations',
         description:

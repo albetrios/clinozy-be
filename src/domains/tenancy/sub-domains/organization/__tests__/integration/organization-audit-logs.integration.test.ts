@@ -219,9 +219,9 @@ describe('GET /api/v1/tenancy/organization/audit-logs — Integration', () => {
     expect(entry?.id).not.toBe(String(row.id));
   });
 
-  it('rejects legacy page-based pagination with 400', async () => {
-    // The route mounts `rejectLegacyPagePagination` in preValidation; cursor pagination is the
-    // only supported mode and a `?page=` caller must be told so rather than silently paging.
+  it('rejects a page query parameter with 400', async () => {
+    // Cursor pagination is the only mode; the strict query schema refuses `page` like any other
+    // unknown key rather than silently ignoring it.
     const { token } = await createContext();
     const response = await injectAuthenticated(app, {
       method: 'GET',

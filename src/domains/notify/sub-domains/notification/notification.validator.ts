@@ -1,4 +1,4 @@
-import { parseCursorPaginatedQuery } from '@/shared/utils/http/pagination.util.js';
+import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 import { listNotificationsQueryDto, type ListNotificationsQueryInput } from './notification.dto.js';
 
 /**
@@ -6,5 +6,5 @@ import { listNotificationsQueryDto, type ListNotificationsQueryInput } from './n
  * {@link listNotificationsQueryDto}; throws `ValidationError('errors:invalidInput')` on failure.
  */
 export function validateListNotificationsQuery(query: unknown): ListNotificationsQueryInput {
-  return parseCursorPaginatedQuery(listNotificationsQueryDto, query);
+  return parseWithSchema(listNotificationsQueryDto, query);
 }

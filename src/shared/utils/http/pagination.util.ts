@@ -1,74 +1,10 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { and, eq, gt, lt, ne, or, type AnyColumn, type SQL } from 'drizzle-orm';
-import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import type { ZodType } from 'zod';
 import { PAGINATION } from '@/shared/constants/pagination.constants.js';
 import { AES_GCM_ALGORITHM, AES_GCM_IV_LENGTH } from '@/shared/constants/security.constants.js';
-import { ValidationError } from '@/shared/errors/index.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
-import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 import { deriveSecretsSubKey } from '@/shared/utils/security/secrets-sub-key.util.js';
-
-/** i18n key for the friendly error when a legacy `page` query parameter is sent. */
-export const LEGACY_PAGE_NOT_SUPPORTED_MESSAGE_KEY = 'errors:validation.legacyPageNotSupported';
-/** English fallback for {@link LEGACY_PAGE_NOT_SUPPORTED_MESSAGE_KEY}, used when no i18n context is available. */
-export const LEGACY_PAGE_NOT_SUPPORTED_MESSAGE =
-  'Legacy `page` pagination is no longer supported on this route. Use cursor-based pagination via `limit` and `after` (opaque cursor from `meta.pagination.next`).';
-
-/**
- * Throws a clear ValidationError when the request query contains the legacy
- * `page` parameter. List endpoints accept cursor pagination only (`limit` +
- * `after`); the older offset-based `page` is no longer supported.
- */
-export function ensureCursorOnlyPagination(query: unknown): void {
-  if (
-    query !== null &&
-    typeof query === 'object' &&
-    !Array.isArray(query) &&
-    Object.hasOwn(query, 'page')
-  ) {
-    throw new ValidationError(
-      LEGACY_PAGE_NOT_SUPPORTED_MESSAGE_KEY,
-      undefined,
-      LEGACY_PAGE_NOT_SUPPORTED_MESSAGE,
-      [
-        {
-          field: 'page',
-          messageKey: LEGACY_PAGE_NOT_SUPPORTED_MESSAGE_KEY,
-          message: LEGACY_PAGE_NOT_SUPPORTED_MESSAGE,
-        },
-      ],
-    );
-  }
-}
-
-/** Fastify preHandler wrapper for {@link ensureCursorOnlyPagination}; throws on legacy `page`. */
-export async function rejectLegacyPagePagination(
-  request: Pick<FastifyRequest, 'query'>,
-): Promise<void> {
-  ensureCursorOnlyPagination(request.query);
-}
-
-/**
- * Reject legacy `page` pagination, then parse `query` with `schema` — the
- * combined form of the `ensureCursorOnlyPagination(query)` + `parseWithSchema(...)`
- * pair that every list-query validator repeated.
- *
- * @remarks
- * The legacy-`page` guard runs first, so offset-style requests fail with the
- * dedicated {@link LEGACY_PAGE_NOT_SUPPORTED_MESSAGE_KEY} before Zod parses the
- * query; `errorKey` (default `errors:invalidInput`) applies to the schema-parse
- * failure.
- */
-export function parseCursorPaginatedQuery<T>(
-  schema: ZodType<T>,
-  query: unknown,
-  errorKey?: string,
-): T {
-  ensureCursorOnlyPagination(query);
-  return parseWithSchema(schema, query, errorKey);
-}
 
 /**
  * Cursor-based pagination query schema.
