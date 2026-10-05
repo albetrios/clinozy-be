@@ -194,6 +194,16 @@ The canonical exports live under [src/shared/constants/](src/shared/constants/) 
   - Increasing → orphaned events take longer to recover after a worker crash.
 - **Last reviewed**: 2026-10-05
 
+## STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS
+
+- **Value**: 25 attempts
+- **Source**: [src/shared/constants/billing.constants.ts](src/shared/constants/billing.constants.ts)
+- **Rationale**: A Stripe webhook event whose handler keeps failing was reclaimed every five minutes forever, and every reclaim cycle that ran out of BullMQ attempts raised another alert. After this many attempts — counted only when our handler ran, so a Stripe outage costs none — the ledger row turns `abandoned`, the reclaim stops, and one alert fires. Five BullMQ attempts per cycle make it about five cycles (~30 minutes) of a handler failing every time. A failure no retry fixes (conflicting organization metadata, `resource_missing`) is abandoned at once.
+- **Consequences of change**:
+  - Decreasing → transient bugs or brief data races abandon events sooner (an operator then retries them with `tool:stripe-webhook-replay -- --retry`).
+  - Increasing → a broken event retries longer before anyone is told.
+- **Last reviewed**: 2026-10-05
+
 ## PAGINATION
 
 - **Value**: `{ DEFAULT_LIMIT: 25, MAX_LIMIT: 100 }`

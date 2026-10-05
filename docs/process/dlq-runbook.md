@@ -21,7 +21,7 @@ When a BullMQ job fails for good — it used its last attempt, or it threw `Unre
 
 | Command | Purpose |
 | ------- | ------- |
-| `pnpm tool:dlq-replay -- --list` | List jobs in all **replayable** DLQs (`webhook-delivery`, `notification`, `stripe-webhook`) |
+| `pnpm tool:dlq-replay -- --list` | List jobs in all **replayable** DLQs (`webhook-delivery`, `notification`) |
 | `pnpm tool:dlq-replay -- --list notification-dlq` | List jobs in one DLQ |
 | `pnpm tool:dlq-replay -- --replay notification-dlq --job-id <id> --actor-user-public-id <usr> [--dry-run]` | Re-enqueue one job through its source queue (its attempts and retention apply; writes a `queue.dlq.replayed` audit row) and remove it from the DLQ |
 | `pnpm tool:dlq-replay -- --replay-all webhook-delivery-dlq --actor-user-public-id <usr> --limit 10 [--dry-run]` | Replay up to N jobs |
@@ -36,7 +36,7 @@ The full list of source queues (work + retention/cleanup + observability) is in 
 | --- | ------------------------- | --------------- |
 | `mail-dlq` | Not replayable — a record, not a work list (inspect it in Bull Board or the ledger). | A `failed` row's body is scrubbed and cannot be re-sent — the user requests a new email; a row released to `pending` (circuit open on the last attempt) is re-enqueued by the outbox sweeper on its own |
 | `webhook-delivery-dlq` | `{ deliveryAttemptPublicId, organizationPublicId }` | Fix URL/secret, then replay — the attempt re-claims its `FAILED` row (a `SENT` one is skipped) |
-| `stripe-webhook-dlq` | `{ stripeEventId }` — worker fetches event from Stripe API | Reclaim ledger row (`pnpm tool:stripe-webhook-replay`) if needed |
+| `stripe-webhook-dlq` | Not replayable — the `billing.stripe_webhook_events` ledger reclaim is the retry path (a record here). | A `failed` row is reclaimed on its own; an `abandoned` one (attempt cap or permanent failure) waits for `pnpm tool:stripe-webhook-replay -- --retry <event id>` once the cause is fixed |
 | `notification-dlq` | `{ notificationPublicId, organizationPublicId, userPublicId }` (`organizationPublicId` is `null` for a notification without one; the recipient's public id scopes that read) — worker reloads content from `notify.notifications` | Fix the cause, then replay |
 
 ## Operational checklist

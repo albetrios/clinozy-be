@@ -2,7 +2,6 @@ import type Stripe from 'stripe';
 import type { SubscriptionRepository } from '@/domains/billing/sub-domains/subscription/subscription.repository.js';
 import { createWorkerSubscriptionRepository } from '@/domains/billing/sub-domains/subscription/subscription.repository.js';
 import type { SubscriptionService } from '@/domains/billing/sub-domains/subscription/subscription.service.js';
-import { ConflictError } from '@/shared/errors/index.js';
 import { isPostgresUniqueViolation } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { captureMessage } from '@/infrastructure/observability/sentry/sentry.js';
@@ -14,6 +13,12 @@ import type {
 } from './stripe-webhook-event.repository.js';
 import { enqueueStripeWebhook } from './queues/stripe-webhook.queue.js';
 import { runStripeWebhookHandlerWithOrganizationContext } from './stripe-webhook-organization.util.js';
+import {
+  StripeWebhookEventAbandonedError,
+  StripeWebhookPermanentError,
+  StripeWebhookRetryLaterError,
+} from './stripe-webhook.types.js';
+import { STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS } from '@/shared/constants/billing.constants.js';
 import {
   MAINTENANCE_SCOPE,
   withMaintenanceDatabaseContext,
@@ -156,12 +161,19 @@ export class StripeWebhookService {
         return;
       }
 
-      if (claimResult === 'still_processing_within_lease') {
-        throw new ConflictError(
-          'errors:stripeWebhookEventInFlight',
-          { eventId: event.id },
-          `Stripe webhook event ${event.id} is still processing within the lease window`,
+      if (claimResult === 'abandoned') {
+        // Given up on — never retried on its own; an operator retries it with the replay tool.
+        logger.warn(
+          { eventId: event.id, eventType: event.type },
+          'stripe.webhook.abandoned_skipped',
         );
+        return;
+      }
+
+      if (claimResult === 'still_processing_within_lease') {
+        // Another execution holds the event; if it died, the reclaim sweep picks the row up once
+        // the lease passes — so running out of attempts here needs no page.
+        throw new StripeWebhookRetryLaterError(`stripe.webhook.event_in_flight:${event.id}`);
       }
 
       if (claimResult === 'reclaimed') {
@@ -193,18 +205,60 @@ export class StripeWebhookService {
           );
         }
       } catch (error) {
-        const failureReason = error instanceof Error ? error.message : String(error);
-        // sec-new-D2: detect no-op writes (ledger row unexpectedly absent)
-        const marked = await this.stripeWebhookEventRepository.markFailed(event.id, failureReason);
-        if (!marked) {
-          logger.warn(
-            { eventId: event.id, eventType: event.type, failureReason },
-            'stripe.webhook.mark_failed.no_row',
-          );
-        }
-        throw error;
+        throw await this.settleFailedEvent(event, error);
       }
     });
+  }
+
+  /**
+   * Records a failed processing attempt and returns the error the job should throw.
+   *
+   * @remarks
+   * - **Algorithm:** a {@link StripeWebhookPermanentError} abandons the event at once. Otherwise
+   *   the row turns `failed`; on its last attempt ({@link STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS})
+   *   it is abandoned too. An abandoned event returns {@link StripeWebhookEventAbandonedError}
+   *   (the worker fails the job for good — recorded and alerted once); any other failure returns
+   *   {@link StripeWebhookRetryLaterError} (the ledger retries it — no page).
+   * - **Failure modes:** a ledger write error propagates (the job retries).
+   * - **Side effects:** writes the ledger row's status and failure reason.
+   */
+  private async settleFailedEvent(event: Stripe.Event, error: unknown): Promise<Error> {
+    const failureReason = error instanceof Error ? error.message : String(error);
+    const logFields = { eventId: event.id, eventType: event.type, failureReason };
+
+    if (error instanceof StripeWebhookPermanentError) {
+      await this.stripeWebhookEventRepository.markAbandoned(event.id, failureReason);
+      return new StripeWebhookEventAbandonedError(
+        `stripe.webhook.abandoned:${event.id}: ${failureReason}`,
+        { cause: error },
+      );
+    }
+
+    const failedRow = await this.stripeWebhookEventRepository.markFailed(event.id, failureReason);
+    if (!failedRow) {
+      // sec-new-D2: the ledger row is unexpectedly absent — nothing to retry from; let BullMQ.
+      logger.warn(logFields, 'stripe.webhook.mark_failed.no_row');
+    } else if (failedRow.attemptCount >= STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS) {
+      await this.stripeWebhookEventRepository.markAbandoned(event.id, failureReason);
+      return new StripeWebhookEventAbandonedError(
+        `stripe.webhook.abandoned_after_attempts:${event.id}: ${failureReason}`,
+        { cause: error },
+      );
+    }
+    return new StripeWebhookRetryLaterError(
+      `stripe.webhook.processing_failed:${event.id}: ${failureReason}`,
+      { cause: error },
+    );
+  }
+
+  /**
+   * Abandons an event the worker cannot process at all — Stripe no longer has it — so the reclaim
+   * sweep stops retrying its ledger row (if one exists).
+   */
+  async abandonEvent(options: { stripeEventId: string; failureReason: string }): Promise<void> {
+    await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, () =>
+      this.stripeWebhookEventRepository.markAbandoned(options.stripeEventId, options.failureReason),
+    );
   }
 
   private async dispatchEvent(

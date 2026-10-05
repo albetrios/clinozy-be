@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type Stripe from 'stripe';
 import { StripeWebhookService } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook.service.js';
-import { ConflictError } from '@/shared/errors/index.js';
+import {
+  StripeWebhookEventAbandonedError,
+  StripeWebhookPermanentError,
+  StripeWebhookRetryLaterError,
+} from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook.types.js';
+import { STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS } from '@/shared/constants/billing.constants.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import type { SubscriptionService } from '@/domains/billing/sub-domains/subscription/subscription.service.js';
 import type { StripeWebhookEventRepository } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-event.repository.js';
@@ -57,6 +62,7 @@ describe('StripeWebhookService', () => {
     tryClaimEvent: vi.fn(),
     markProcessed: vi.fn(),
     markFailed: vi.fn(),
+    markAbandoned: vi.fn(),
     // BILL-03: deletion-watermark tombstone methods.
     findSubscriptionDeletionTombstone: vi.fn().mockResolvedValue(null),
     recordSubscriptionDeletionTombstone: vi.fn().mockResolvedValue(undefined),
@@ -113,9 +119,11 @@ describe('StripeWebhookService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(stripeWebhookEventRepository.tryClaimEvent).mockResolvedValue('claimed');
-    // sec-new-D2: markProcessed/markFailed now return boolean (true = row found and updated)
+    // sec-new-D2: markProcessed returns whether a row was updated; markFailed returns the row's
+    // attempt count (null when no row matched).
     vi.mocked(stripeWebhookEventRepository.markProcessed).mockResolvedValue(true as never);
-    vi.mocked(stripeWebhookEventRepository.markFailed).mockResolvedValue(true as never);
+    vi.mocked(stripeWebhookEventRepository.markFailed).mockResolvedValue({ attemptCount: 1 });
+    vi.mocked(stripeWebhookEventRepository.markAbandoned).mockResolvedValue(true);
     vi.mocked(subscriptionService.syncFromStripeProviderSubscription).mockResolvedValue({
       id: 1,
     } as never);
@@ -165,18 +173,32 @@ describe('StripeWebhookService', () => {
       );
     });
 
-    it('throws ConflictError (so BullMQ retries) when another worker holds the lease', async () => {
+    it('retries later — without a page — when another worker holds the lease', async () => {
       vi.mocked(stripeWebhookEventRepository.tryClaimEvent).mockResolvedValue(
         'still_processing_within_lease',
       );
 
       const error = await service.handleEvent(buildEvent({ id: 'evt_inflight' })).catch((e) => e);
-      expect(error).toBeInstanceOf(ConflictError);
-      // The event id must be carried in the error params (used for the retry log/trace).
-      expect((error as ConflictError).messageParams).toEqual({ eventId: 'evt_inflight' });
+      expect(error).toBeInstanceOf(StripeWebhookRetryLaterError);
+      // If that worker died, the reclaim sweep picks the row up — so this needs no page.
+      expect((error as StripeWebhookRetryLaterError).expectedFinalFailure).toBe(true);
+      expect((error as Error).message).toContain('evt_inflight');
       // Thrown before the processing try/catch, so it must not touch the ledger as failed.
       expect(stripeWebhookEventRepository.markFailed).not.toHaveBeenCalled();
       expect(subscriptionService.syncFromStripeProviderSubscription).not.toHaveBeenCalled();
+    });
+
+    it('skips an abandoned event — only an operator retry runs it again', async () => {
+      vi.mocked(stripeWebhookEventRepository.tryClaimEvent).mockResolvedValue('abandoned');
+
+      await service.handleEvent(buildEvent({ id: 'evt_abandoned' }));
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ eventId: 'evt_abandoned' }),
+        'stripe.webhook.abandoned_skipped',
+      );
+      expect(subscriptionService.syncFromStripeProviderSubscription).not.toHaveBeenCalled();
+      expect(stripeWebhookEventRepository.markProcessed).not.toHaveBeenCalled();
     });
 
     it('processes (and logs) a reclaimed event rather than skipping it', async () => {
@@ -760,20 +782,53 @@ describe('StripeWebhookService', () => {
   });
 
   describe('failure handling', () => {
-    it('marks the ledger row failed with the error message and rethrows for retry', async () => {
-      vi.mocked(subscriptionService.syncFromStripeProviderSubscription).mockRejectedValue(
-        new Error('database unavailable'),
-      );
+    it('marks the ledger row failed and throws a retry-later error the ledger will reclaim', async () => {
+      const cause = new Error('database unavailable');
+      vi.mocked(subscriptionService.syncFromStripeProviderSubscription).mockRejectedValue(cause);
 
-      await expect(service.handleEvent(buildEvent({ id: 'evt_fail' }))).rejects.toThrow(
-        'database unavailable',
-      );
+      const error = await service.handleEvent(buildEvent({ id: 'evt_fail' })).catch((e) => e);
 
+      expect(error).toBeInstanceOf(StripeWebhookRetryLaterError);
+      expect((error as Error).message).toContain('database unavailable');
+      expect((error as Error).cause).toBe(cause);
       expect(stripeWebhookEventRepository.markFailed).toHaveBeenCalledWith(
         'evt_fail',
         'database unavailable',
       );
+      expect(stripeWebhookEventRepository.markAbandoned).not.toHaveBeenCalled();
       expect(stripeWebhookEventRepository.markProcessed).not.toHaveBeenCalled();
+    });
+
+    it('abandons the event when its last attempt fails — one alert, no more reclaims', async () => {
+      vi.mocked(subscriptionService.syncFromStripeProviderSubscription).mockRejectedValue(
+        new Error('handler keeps failing'),
+      );
+      vi.mocked(stripeWebhookEventRepository.markFailed).mockResolvedValue({
+        attemptCount: STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS,
+      });
+
+      const error = await service.handleEvent(buildEvent({ id: 'evt_last' })).catch((e) => e);
+
+      expect(error).toBeInstanceOf(StripeWebhookEventAbandonedError);
+      expect(stripeWebhookEventRepository.markAbandoned).toHaveBeenCalledWith(
+        'evt_last',
+        'handler keeps failing',
+      );
+    });
+
+    it('abandons a permanent failure at once, without counting it as a failed attempt', async () => {
+      vi.mocked(subscriptionService.syncFromStripeProviderSubscription).mockRejectedValue(
+        new StripeWebhookPermanentError('mismatched organization metadata'),
+      );
+
+      const error = await service.handleEvent(buildEvent({ id: 'evt_permanent' })).catch((e) => e);
+
+      expect(error).toBeInstanceOf(StripeWebhookEventAbandonedError);
+      expect(stripeWebhookEventRepository.markAbandoned).toHaveBeenCalledWith(
+        'evt_permanent',
+        'mismatched organization metadata',
+      );
+      expect(stripeWebhookEventRepository.markFailed).not.toHaveBeenCalled();
     });
 
     it('stringifies a non-Error throw value when recording the failure reason', async () => {
@@ -781,7 +836,7 @@ describe('StripeWebhookService', () => {
         'plain string failure',
       );
 
-      await expect(service.handleEvent(buildEvent({ id: 'evt_fail_str' }))).rejects.toBe(
+      await expect(service.handleEvent(buildEvent({ id: 'evt_fail_str' }))).rejects.toThrow(
         'plain string failure',
       );
 
@@ -791,8 +846,8 @@ describe('StripeWebhookService', () => {
       );
     });
 
-    // sec-new-D2: markProcessed/markFailed return a boolean so the caller can
-    // detect and warn when the ledger row was unexpectedly absent (no row updated).
+    // sec-new-D2: markProcessed returns a boolean and markFailed null so the caller can detect and
+    // warn when the ledger row was unexpectedly absent (no row updated).
     it('emits mark_processed.no_row warning when markProcessed returns false (sec-new-D2)', async () => {
       vi.mocked(stripeWebhookEventRepository.markProcessed).mockResolvedValueOnce(false as never);
 
@@ -808,7 +863,7 @@ describe('StripeWebhookService', () => {
       vi.mocked(subscriptionService.syncFromStripeProviderSubscription).mockRejectedValue(
         new Error('transient error'),
       );
-      vi.mocked(stripeWebhookEventRepository.markFailed).mockResolvedValueOnce(false as never);
+      vi.mocked(stripeWebhookEventRepository.markFailed).mockResolvedValueOnce(null);
 
       await expect(service.handleEvent(buildEvent({ id: 'evt_fail_no_row' }))).rejects.toThrow(
         'transient error',

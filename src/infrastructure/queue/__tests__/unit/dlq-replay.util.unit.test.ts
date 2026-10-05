@@ -39,7 +39,18 @@ describe('dlq-replay.util', () => {
     ).toBeNull();
   });
 
-  it('buildReplayJobPayload reconstructs webhook and stripe payloads one level down the lineage', () => {
+  it('does not offer Stripe webhooks for replay — the ledger reclaim is their one retry path', () => {
+    expect(DLQ_REPLAY_SOURCE_QUEUE_NAMES).not.toContain(STRIPE_WEBHOOK_QUEUE_NAME);
+    expect(
+      buildReplayJobPayload({
+        ...base,
+        original_queue: STRIPE_WEBHOOK_QUEUE_NAME,
+        original_data_summary: { stripe_event_id: 'evt_123' },
+      }),
+    ).toBeNull();
+  });
+
+  it('buildReplayJobPayload reconstructs a webhook payload one level down the lineage', () => {
     const webhookData: DeadLetterJobData = {
       ...base,
       original_queue: WEBHOOK_DELIVERY_QUEUE_NAME,
@@ -49,24 +60,12 @@ describe('dlq-replay.util', () => {
         organization_public_id: 'org_public_abc',
       },
     };
-    const stripeData: DeadLetterJobData = {
-      ...base,
-      original_queue: STRIPE_WEBHOOK_QUEUE_NAME,
-      original_job_name: 'process-stripe-webhook',
-      original_data_summary: { stripe_event_id: 'evt_123' },
-      replay_depth: 2,
-    };
 
     expect(buildReplayJobPayload(webhookData)).toEqual({
       deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
       organizationPublicId: 'org_public_abc',
       replayFromDlq: true,
       dlqReplayAttempt: 1,
-    });
-    expect(buildReplayJobPayload(stripeData)).toEqual({
-      stripeEventId: 'evt_123',
-      replayFromDlq: true,
-      dlqReplayAttempt: 3,
     });
   });
 
@@ -121,15 +120,6 @@ describe('dlq-replay.util', () => {
       }),
     ).toBeNull();
 
-    // Stripe missing stripe_event_id → cannot re-fetch the event.
-    expect(
-      buildReplayJobPayload({
-        ...base,
-        original_queue: STRIPE_WEBHOOK_QUEUE_NAME,
-        original_data_summary: {},
-      }),
-    ).toBeNull();
-
     // Notification missing its public id or recipient → nothing to load, no scope.
     expect(
       buildReplayJobPayload({
@@ -150,15 +140,19 @@ describe('dlq-replay.util', () => {
   it('buildReplayJobPayloadFromLedger maps ledger columns to a replay one level deeper', () => {
     expect(
       buildReplayJobPayloadFromLedger({
-        source_queue: STRIPE_WEBHOOK_QUEUE_NAME,
+        source_queue: WEBHOOK_DELIVERY_QUEUE_NAME,
         job_id: 'job-ledger-1',
-        job_name: 'process-stripe-webhook',
-        payload_summary: { stripe_event_id: 'evt_ledger' },
-        attempts_made: 5,
+        job_name: 'deliver-webhook',
+        payload_summary: {
+          delivery_attempt_public_id: 'wda_9z3rura5kqvcv8zggriym',
+          organization_public_id: 'org_public_abc',
+        },
+        attempts_made: 8,
         replay_depth: 2,
       }),
     ).toEqual({
-      stripeEventId: 'evt_ledger',
+      deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
+      organizationPublicId: 'org_public_abc',
       replayFromDlq: true,
       dlqReplayAttempt: 3,
     });

@@ -1,6 +1,9 @@
 import Stripe from 'stripe';
 import { describe, expect, it } from 'vitest';
-import { countsStripeErrorAsCircuitFailure } from '@/infrastructure/payment/stripe-error.util.js';
+import {
+  countsStripeErrorAsCircuitFailure,
+  isStripeResourceMissing,
+} from '@/infrastructure/payment/stripe-error.util.js';
 
 describe('countsStripeErrorAsCircuitFailure', () => {
   it.each([
@@ -39,5 +42,37 @@ describe('countsStripeErrorAsCircuitFailure', () => {
     ['an error that is not Stripe’s', new Error('socket hang up')],
   ])('counts %s against the circuit', (_label, error) => {
     expect(countsStripeErrorAsCircuitFailure(error)).toBe(true);
+  });
+});
+
+describe('isStripeResourceMissing', () => {
+  it('recognises Stripe answering that the object does not exist', () => {
+    expect(
+      isStripeResourceMissing(
+        new Stripe.errors.StripeInvalidRequestError({
+          message: "No such event: 'evt_missing'",
+          type: 'invalid_request_error',
+          code: 'resource_missing',
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    [
+      'another invalid request',
+      new Stripe.errors.StripeInvalidRequestError({
+        message: 'Invalid parameter',
+        type: 'invalid_request_error',
+        code: 'parameter_invalid_empty',
+      }),
+    ],
+    [
+      'an outage',
+      new Stripe.errors.StripeAPIError({ message: 'Internal error', type: 'api_error' }),
+    ],
+    ['an error that is not Stripe’s', new Error('resource_missing')],
+  ])('does not take %s for a missing object', (_label, error) => {
+    expect(isStripeResourceMissing(error)).toBe(false);
   });
 });

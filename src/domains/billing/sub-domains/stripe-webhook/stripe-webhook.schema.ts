@@ -11,6 +11,9 @@ export const stripeWebhookProcessingStatuses = [
   'processed',
   'skipped_duplicate',
   'failed',
+  // Given up on: STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS attempts, or a failure no retry can fix.
+  // Never reclaimed; an operator retries it with `tool:stripe-webhook-replay -- --retry`.
+  'abandoned',
 ] as const;
 
 /** Union of {@link stripeWebhookProcessingStatuses} values. */
@@ -52,7 +55,7 @@ export const stripe_webhook_events = billingSchema.table(
       .where(sql`${table.processing_status} IN ('failed', 'processing')`),
     check(
       'stripe_webhook_events_processing_status_check',
-      sql`${table.processing_status} IN ('processing', 'processed', 'skipped_duplicate', 'failed')`,
+      sql`${table.processing_status} IN ('processing', 'processed', 'skipped_duplicate', 'failed', 'abandoned')`,
     ),
   ],
 );

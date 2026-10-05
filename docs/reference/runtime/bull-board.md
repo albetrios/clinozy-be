@@ -47,7 +47,7 @@ When a job exhausts retries, the worker enqueues a snapshot to **`<queue-name>-d
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `mail-dlq`             | `auth.mail_outbox` row — a `failed` row's body is scrubbed (the user requests a new email); a `pending` row is re-enqueued by the outbox sweeper (`mailOutboxToken`) |
 | `webhook-delivery-dlq` | `notify.webhook_delivery_attempts` — fix the URL or secret, then replay (`deliveryAttemptPublicId` + `organizationPublicId`); the replay re-claims the `FAILED` row |
-| `stripe-webhook-dlq`   | `billing.stripe_webhook_events` — fix root cause, then re-enqueue verified Stripe event payload or replay from Stripe Dashboard     |
+| `stripe-webhook-dlq`   | `billing.stripe_webhook_events` — the ledger reclaim retries `failed` rows; an `abandoned` one is retried with `pnpm tool:stripe-webhook-replay -- --retry <event id>` |
 | Other `*-dlq`          | Bull Board **Retry** on the DLQ job after fixing code/config                                                                        |
 
 ## Access (auth required)

@@ -6,6 +6,7 @@ import {
 } from '@/infrastructure/database/contexts/database-context.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import type { StripeWebhookEventRepository } from './stripe-webhook-event.repository.js';
+import { StripeWebhookPermanentError } from './stripe-webhook.types.js';
 
 type StripeSubscriptionEvent =
   | Stripe.CustomerSubscriptionCreatedEvent
@@ -113,7 +114,8 @@ export async function resolveOrganizationPublicIdForStripeEvent(
   const fromDatabase = fromSubscription ?? fromCustomer;
 
   if (fromMetadata !== undefined && fromDatabase !== undefined && fromMetadata !== fromDatabase) {
-    throw new Error(
+    // Permanent: no retry of this event changes which organization its metadata names.
+    throw new StripeWebhookPermanentError(
       `Stripe webhook event ${event.id} (${event.type}) has mismatched organization metadata for subscription ${stripeSubscription.id}`,
     );
   }

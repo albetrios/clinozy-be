@@ -20,25 +20,23 @@ import {
   getNotificationQueue,
   NOTIFICATION_QUEUE_NAME,
 } from '@/domains/notify/sub-domains/notification/queues/notification.queue.js';
-import {
-  getStripeWebhookQueue,
-  STRIPE_WEBHOOK_QUEUE_NAME,
-} from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 /**
  * Source queues whose DLQ payloads {@link buildReplayJobPayload} knows how to reconstruct.
  * Retention/observability DLQs are intentionally excluded — their jobs carry no business
- * payload worth replaying, so operators must clear them manually. So is mail: a mail job that
- * failed for good left its row `failed` with the body scrubbed (it can never be re-sent — the
- * user asks for a new email), or — circuit open on the last attempt — `pending`, which the outbox
- * sweeper re-enqueues on its own. `mail-dlq` entries are a record, not a work list.
+ * payload worth replaying, so operators must clear them manually. So are mail and Stripe webhook
+ * jobs, whose rows carry their own retry: a mail job that failed for good left its row `failed`
+ * with the body scrubbed (it can never be re-sent — the user asks for a new email), or — circuit
+ * open on the last attempt — `pending`, which the outbox sweeper re-enqueues on its own; a Stripe
+ * event's ledger row is reclaimed by the `stripe-webhook-event-reclaim` sweep until it is
+ * processed or abandoned (`tool:stripe-webhook-replay -- --retry` restarts an abandoned one).
+ * Replaying them from the DLQ too would be a second retry path. Their DLQ entries are a record.
  */
 export const DLQ_REPLAY_SOURCE_QUEUE_NAMES = [
   WEBHOOK_DELIVERY_QUEUE_NAME,
   NOTIFICATION_QUEUE_NAME,
-  STRIPE_WEBHOOK_QUEUE_NAME,
 ] as const;
 
 /**
@@ -51,7 +49,6 @@ const REPLAY_SOURCE_QUEUE_PRODUCERS: Readonly<
 > = {
   [WEBHOOK_DELIVERY_QUEUE_NAME]: getWebhookDeliveryQueue,
   [NOTIFICATION_QUEUE_NAME]: getNotificationQueue,
-  [STRIPE_WEBHOOK_QUEUE_NAME]: getStripeWebhookQueue,
 };
 
 function getReplaySourceQueue(sourceQueueName: string): Queue | null {
@@ -120,12 +117,11 @@ export function buildReplayJobPayloadFromLedger(
 
 /**
  * Reconstructs the minimal job payload needed to re-enqueue a dead-lettered job onto its
- * original BullMQ queue. Webhook delivery, notification, and Stripe webhook jobs each pull their
- * required identifiers out of {@link DeadLetterJobData.original_data_summary}: webhook
- * (`delivery_attempt_public_id` + `organization_public_id`), notification
- * (`notification_public_id` + nullable `organization_public_id` + `user_public_id`), Stripe
- * (`stripe_event_id`). Every other queue — mail included, see
- * {@link DLQ_REPLAY_SOURCE_QUEUE_NAMES} — or a summary missing a required key returns `null` so
+ * original BullMQ queue. Webhook delivery and notification jobs pull their required identifiers
+ * out of {@link DeadLetterJobData.original_data_summary}: webhook (`delivery_attempt_public_id` +
+ * `organization_public_id`), notification (`notification_public_id` + nullable
+ * `organization_public_id` + `user_public_id`). Every other queue — mail and Stripe webhook
+ * included, see {@link DLQ_REPLAY_SOURCE_QUEUE_NAMES} — or a summary missing a required key returns `null` so
  * the caller skips the replay. The payload is tagged with {@link DlqReplayJobFields} markers:
  * `dlqReplayAttempt` is one deeper than the failure being replayed, so a replay that fails for
  * good again is recorded one level down its lineage.
@@ -160,12 +156,6 @@ export function buildReplayJobPayload(data: DeadLetterJobData): Record<string, u
           typeof organizationPublicId === 'string' ? organizationPublicId : null,
         userPublicId,
       };
-      break;
-    }
-    case STRIPE_WEBHOOK_QUEUE_NAME: {
-      const stripeEventId = summary.stripe_event_id;
-      if (typeof stripeEventId !== 'string') return null;
-      basePayload = { stripeEventId };
       break;
     }
     default:

@@ -269,6 +269,7 @@ sequenceDiagram
 - **Duplicate `event.id`** → silently no-op (unique constraint); Stripe retries are safe.
 - **Stripe API timeout (user-initiated path)** → response surfaces 502; Stripe will eventually send the webhook and the row reconciles. We do not optimistically write state.
 - **Worker crash mid-processing** → row stuck in `processing`; reclaim worker (`stripe-webhook-event-reclaim.processor`) restarts it after `STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES` (15 min).
+- **Event that keeps failing** → after `STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS` (25) handler attempts — or at once for a permanent failure — the row turns `abandoned` and one alert fires; the reclaim never selects it again.
 - **Stale event** (timestamp older than current row) → service rejects the update so out-of-order webhooks don't roll state backwards.
 
 ## dunning-flow

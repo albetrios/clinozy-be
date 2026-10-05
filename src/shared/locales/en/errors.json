@@ -152,7 +152,6 @@
   "missingStripeSignature": "Missing stripe-signature header",
   "missingRawBody": "Missing raw request body",
   "stripeWebhookVerificationFailed": "Webhook signature verification failed",
-  "stripeWebhookEventInFlight": "Stripe webhook event {{eventId}} is still being processed; retry shortly.",
   "subscriptionAlreadyExists": "An active subscription already exists for this organization",
   "subscriptionCreateInProgress": "A subscription is already being created for this organization; please retry shortly.",
   "seatLimitReached": "Your plan's seat limit ({{limit}}) has been reached. Upgrade your plan or remove a member before adding another.",

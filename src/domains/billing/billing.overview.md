@@ -74,6 +74,7 @@ stateDiagram-v2
 - **Stripe API timeout (user-initiated path)** → 502 to the client; subscription state is unchanged in DB; the Stripe webhook arrives later and reconciles.
 - **Invalid Stripe signature** → 400; Stripe retries with backoff.
 - **Worker crash mid-processing** → row stays in `processing`; reclaim worker (`stripe-webhook-event-reclaim.processor`) restarts after `STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES = 15`.
+- **Event that keeps failing** → abandoned after `STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS = 25` attempts (at once for a permanent failure), with one alert; never reclaimed again until an operator runs `tool:stripe-webhook-replay -- --retry`.
 - **DLQ** — `stripe-webhook-event-reclaim` and `stripe-webhook-event-retention` queues each have a sibling `<name>-dlq` for final-retry failures.
 
 ## Policy constants
@@ -81,6 +82,7 @@ stateDiagram-v2
 See [src/POLICIES.md](src/POLICIES.md) for the full rationale:
 
 - `STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES = 15`
+- `STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS = 25`
 - `IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS = 86 400` (mirrors Stripe's replay window)
 
 ## Related runbooks

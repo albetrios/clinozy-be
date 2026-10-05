@@ -22,3 +22,13 @@ export function countsStripeErrorAsCircuitFailure(error: unknown): boolean {
     error instanceof Stripe.errors.StripeIdempotencyError
   );
 }
+
+/**
+ * Whether Stripe answered that the requested object does not exist (`resource_missing`) — for an
+ * event, one from another account or mode, or older than Stripe keeps. No retry can fetch it.
+ */
+export function isStripeResourceMissing(error: unknown): boolean {
+  return (
+    error instanceof Stripe.errors.StripeInvalidRequestError && error.code === 'resource_missing'
+  );
+}

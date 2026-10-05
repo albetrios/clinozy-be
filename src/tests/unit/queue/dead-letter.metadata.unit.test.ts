@@ -168,7 +168,7 @@ describe('enqueueDeadLetter metadata', () => {
     expect(sentryCaptureExceptionMock).toHaveBeenCalledTimes(1);
   });
 
-  it('captures the replay keys for webhook, stripe, and notification jobs (bug 43)', async () => {
+  it('captures the summary keys of webhook, stripe and notification jobs (bug 43)', async () => {
     const { enqueueDeadLetter } = await import('@/infrastructure/queue/dlq/dead-letter.js');
     const { buildReplayJobPayload } = await import('@/infrastructure/queue/dlq/dlq-replay.util.js');
     const { WEBHOOK_DELIVERY_QUEUE_NAME } = await import(
@@ -205,7 +205,8 @@ describe('enqueueDeadLetter metadata', () => {
         jobName: 'process-stripe-webhook',
         data: { stripeEventId: 'evt_123', requestId: 'req-2' },
         expectedSummary: { stripe_event_id: 'evt_123' },
-        expectedReplay: { stripeEventId: 'evt_123' },
+        // A record only: the ledger reclaim is the Stripe retry path, not a DLQ replay.
+        expectedReplay: null,
       },
       {
         queue: NOTIFICATION_QUEUE_NAME,
@@ -244,8 +245,11 @@ describe('enqueueDeadLetter metadata', () => {
       expect(summary.secret).toBeUndefined();
 
       const replayPayload = buildReplayJobPayload(data as unknown as DeadLetterJobData);
-      expect(replayPayload).not.toBeNull();
-      expect(replayPayload).toMatchObject(testCase.expectedReplay);
+      if (testCase.expectedReplay === null) {
+        expect(replayPayload).toBeNull();
+      } else {
+        expect(replayPayload).toMatchObject(testCase.expectedReplay);
+      }
     }
   });
 
