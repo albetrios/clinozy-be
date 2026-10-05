@@ -145,12 +145,6 @@ Legend:
   <the 13 routes whose I column is `req` — listed automatically>
 
 ================================================================================
-  DEPRECATED ROUTES (<count>) — Sunset / Deprecation headers
-================================================================================
-
-  <routes carrying Sunset/Deprecation headers — today the Stripe webhook alias>
-
-================================================================================
   PERMISSION CODES REFERENCE
 ================================================================================
 
@@ -166,15 +160,14 @@ Legend:
 - **Access** column: label (`PUBLIC`, `AUTH`, `ROLE: …`, `PERM: …`, `TOKEN`)
 - Group routes within a domain by sub-domain using `— Sub-domain Name —` dividers
 - Within each group, order routes by path alphabetically, then by method (GET, POST, PATCH, PUT, DELETE)
-- Include the summary section, then the three **auto-generated footer sections** below
+- Include the summary section, then the two **auto-generated footer sections** below
 
 ### Auto-generated footer sections
 
-These three sections are derived programmatically — never hand-maintained:
+These two sections are derived programmatically — never hand-maintained:
 
-1. **IDEMPOTENCY-REQUIRED WRITES** — the 8 routes whose `I` column is `req` (the `idempotencyRequired` set); a missing or reused `X-Idempotency-Key` is rejected with 422.
-2. **DEPRECATED ROUTES** — routes that emit `Sunset` / `Deprecation` headers (none currently registered).
-3. **PERMISSION CODES REFERENCE** — every permission string grouped by domain, **auto-derived from the `*.permissions.ts` constants**. Because it reads the constants (not a hand-curated list), newly added codes such as `upload:manage` appear automatically.
+1. **IDEMPOTENCY-REQUIRED WRITES** — the routes whose `I` column is `req` (the `idempotencyRequired` set, 13 today); a missing or reused `X-Idempotency-Key` is rejected with 422.
+2. **PERMISSION CODES REFERENCE** — every permission string grouped by domain, **auto-derived from the `*.permissions.ts` constants**. Because it reads the constants (not a hand-curated list), newly added codes such as `upload:manage` appear automatically.
 
 ## Output
 

@@ -44,7 +44,7 @@ The script walks `auth.mfa_methods.encrypted_secret` and `notify.webhooks.encryp
 
 ## Envelope format
 
-Values are stored as `<version>:` + base64(AES-256-GCM with random IV and auth tag), where `<version>` is `v1` or `v2`. Legacy plaintext values (no recognised prefix) are still readable until rotated.
+Values are stored as `<version>:` + base64(AES-256-GCM with random IV and auth tag), where `<version>` is `v1` or `v2`. A non-empty value without a recognised prefix is rejected — decryption throws; there is no plaintext fallback. The empty string is the canonical "no secret" value and round-trips unchanged.
 
 ## Related
 

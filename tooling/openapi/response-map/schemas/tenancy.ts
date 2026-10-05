@@ -106,13 +106,13 @@ export const apiKeyCreatedExample = {
 export const notificationPolicySchema = {
   type: 'object',
   properties: {
-    id: { type: 'integer' },
+    id: { type: 'string', pattern: '^pol_[a-z0-9]{21}$' },
     organization_id: { type: 'string' },
     notification_type: { type: 'string' },
     channel: {
       type: 'string',
-      enum: ['EMAIL', 'SMS', 'PUSH', 'IN_APP'],
-      description: 'Possible values: EMAIL | SMS | PUSH | IN_APP',
+      enum: ['EMAIL', 'SMS', 'WEB_PUSH', 'IN_APP'],
+      description: 'Possible values: EMAIL | SMS | WEB_PUSH | IN_APP',
       example: 'EMAIL',
     },
     default_enabled: { type: 'boolean' },
@@ -124,10 +124,10 @@ export const notificationPolicySchema = {
 };
 
 export const notificationPolicyExample = {
-  id: 1,
+  id: 'pol_k7x9m2pqr4w8n1v3a5b6c',
   organization_id: 'org_k7x9m2pqr4w8n1v3a1b2c',
   notification_type: 'subscription.updated',
-  channel: 'email',
+  channel: 'EMAIL',
   default_enabled: true,
   is_mandatory: false,
   muted_until: null,

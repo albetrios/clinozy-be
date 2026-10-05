@@ -89,10 +89,8 @@ The active organization is implicit (from the token), so routes are flat:
   (team-organization create, membership create, transfer-ownership, invitation create,
   subscription create / change-plan / cancel / resume).
 - \`X-CSRF-Token\` — required on \`POST /api/v1/auth/refresh\`.
-- \`X-Captcha-Token\` — required on public auth forms (login, register, magic link).
-- \`X-Organization-Id\` — REMOVED. No route reads it; it is NOT
-  the organization selector for the flat routes. Do not use it to scope tenancy/billing/
-  notify calls — switch the token instead.
+- \`X-Captcha-Token\` — required on public auth forms (login, register, email verification
+  code, password reset).
 
 ## 6. Status codes
 

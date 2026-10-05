@@ -656,23 +656,6 @@ API on `localhost`:
 
 ---
 
-## Recent changes (active-organization claim model)
-
-The auth/tenancy flow was reshaped across mid-2026 — if you integrated against an older build, note:
-
-- **Active organization moved from the URL/header into the token.** Org-scoped routes were **flattened**: the
-  per-organization path segment (`/organizations/{id}/…`) and the path parser were removed; the
-  singular `/tenancy/organization` resource now sources the tenant from the signed **`org`** claim.
-- **Switch endpoints** `POST /auth/switch-to-personal` and `POST /auth/switch-to-organization` mint a
-  new token with a different `org` claim (and invalidate the previous one).
-- **The `X-Organization-Id` header was removed** — no route reads it; the organization rides the token claim.
-- **`/auth/mfa/login` now accepts `X-Captcha-Token`** (bot-protection at the MFA step).
-
-See [personal-vs-team-organizations.md](../architecture/personal-vs-team-organizations.md) for the full
-organization model and deployment modes.
-
----
-
 ## Related
 
 - [authentication.md](../security/authentication.md) — auth methods, rate limits, CAPTCHA boot guard
@@ -680,4 +663,4 @@ organization model and deployment modes.
 - [personal-vs-team-organizations.md](../architecture/personal-vs-team-organizations.md) — organization model, `org` claim, switching
 - [response-codes.md](response-codes.md) — method→status policy, error envelope
 - [idempotency.md](../reliability/idempotency.md) — idempotency-key semantics
-- [api-versioning.md](api-versioning.md) — `/api/v1`, deprecation headers
+- [api-versioning.md](api-versioning.md) — the `/api/v1` prefix and what counts as a breaking change
