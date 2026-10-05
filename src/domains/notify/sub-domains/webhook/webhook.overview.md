@@ -11,7 +11,7 @@ Customer-configured outbound webhook endpoints + the entire delivery pipeline: p
 ## Key invariants
 
 - **At-least-once delivery**: a PENDING `webhook_delivery_attempts` row is written inside the originating transaction (the outbox). The worker claims it (any status but `SENT`) and retries on failure; every POST of an attempt carries the same `X-Webhook-Delivery-Id`, so receivers dedupe redeliveries. Detail: [webhook-delivery](webhook-delivery/webhook-delivery.overview.md).
-- **Enqueue after commit**: the `WEBHOOK_DELIVERY_REQUESTED` handler calls `runEnqueueAfterCommit` so BullMQ jobs are not published until `eventBus.flushOnCommit` runs (HTTP `onResponse` after the request transaction commits). Workers and scripts without an HTTP onCommit scope enqueue immediately.
+- **Enqueue after commit**: the `WEBHOOK_DELIVERY_REQUESTED` handler calls `runEnqueueAfterCommit` so BullMQ jobs are not published until `eventBus.flushOnCommit` runs (the HTTP request's `onResponse`, after every unit of work has committed). Workers and scripts without an HTTP onCommit scope enqueue immediately.
 - **Delivery record**: the `webhook_delivery_attempts` row records status, HTTP status code, response body, `next_retry_at` and `attempt_count` (every claim, no upper bound); the delivery history is forensically queryable.
 - **Request-id propagation**: outbound deliveries carry the originating `X-Request-Id` so customers can correlate their server logs with our audit.
 - **HMAC signature on every payload**: each delivery is signed with the per-webhook secret; customers verify signature in their handler.

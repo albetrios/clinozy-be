@@ -646,12 +646,12 @@ function toIdempotencyCacheBody(payload: unknown): string {
 
 /**
  * Snapshots the outgoing response so the completed-cache write can run in `onResponse`,
- * after the request-level transaction (or any service-level transaction) has committed.
+ * after the response is sent. Every unit of work has committed by then: each one commits
+ * inside `withAppDatabaseContext` before the handler replies.
  *
  * This hook never writes to Redis directly. For error responses or oversize bodies it
- * marks the claim for release (handled in `onResponse`). For successful responses it
- * stashes the snapshot on the request; if the transaction later rolls back at the
- * framework boundary, the snapshot is dropped without persisting a fake replay entry.
+ * marks the claim for release (handled in `onResponse`); for a successful response it
+ * stashes the snapshot on the request.
  */
 async function idempotencyOnSend(
   request: FastifyRequest,
@@ -669,8 +669,8 @@ async function idempotencyOnSend(
      * Leave `_idempotencyClaimed = true` so `onResponse` releases the placeholder. We
      * intentionally do not delete here: `onResponse` is the single owner of Redis
      * mutations once the request enters the response lifecycle, which keeps the
-     * "completed cache written iff transaction committed" invariant simple to reason
-     * about and to test.
+     * "completed cache written only for a successful response" invariant simple to
+     * reason about and to test.
      */
     return payload;
   }
@@ -705,9 +705,8 @@ async function idempotencyOnSend(
 }
 
 /**
- * Final-step Redis write. By running here (rather than in `onSend`) the completed cache
- * is only persisted after the request-level transaction has resolved — preventing the
- * documented "rolled-back write replays as 2xx" failure mode. Three terminal cases:
+ * Final-step Redis write, run from the request-lifecycle `onResponse` hook once the
+ * response is sent. Three terminal cases:
  *
  *  1. statusCode < 400 + pending completion stashed -> overwrite placeholder with completed entry
  *  2. statusCode >= 400 or pending completion absent (handler threw, body too large) -> DEL
@@ -788,9 +787,9 @@ const idempotencyMiddlewarePlugin: FastifyPluginAsync = async (application) => {
 
   application.addHook('onRequest', idempotencyOnRequest);
   application.addHook('onSend', idempotencyOnSend);
-  // The post-response cache write is dispatched by request-lifecycle.middleware.ts so it
-  // runs strictly AFTER the RLS transaction has committed/rolled back. Registering an
-  // `onResponse` hook here would run too early (Fastify onResponse is FIFO).
+  // The post-response cache write is dispatched by request-lifecycle.middleware.ts, the one
+  // owner of post-response ordering (the idempotency entry, then the post-commit dispatch
+  // flush); this plugin registers no `onResponse` hook of its own.
 };
 
 /** Must break encapsulation so hooks apply to routes registered after middleware on the root app. */

@@ -144,7 +144,7 @@ Size the connection budget against Neon `max_connections` (see formula above).
 
 ### Row-level security (RLS) and the connection pool
 
-Organization-scoped HTTP routes hold **one pool checkout per unit of work** via `withAppDatabaseContext` (`BEGIN` + `SET LOCAL app.current_organization_public_id`, released at COMMIT) — the old request-pinned transaction middleware is a no-op stub.
+Organization-scoped HTTP routes hold **one pool checkout per unit of work** via `withAppDatabaseContext` (`BEGIN` + `SET LOCAL app.current_organization_public_id`, released at COMMIT).
 
 > **Throughput SLA (RLS ceiling).** Because each organization-scoped request holds its connection for the
 > whole request, a single process sustains at most `DATABASE_POOL_MAX` concurrent organization-scoped
@@ -173,7 +173,7 @@ Organization-scoped HTTP routes hold **one pool checkout per unit of work** via 
 | `DATABASE_POOL_ACQUIRE_TIMEOUT_MS`   | `10000` | Getting a pooled connection for a unit of work — 503 + `Retry-After` past it, and a late connection rolls back unrun; `0` disables |
 | `DATABASE_STATEMENT_TIMEOUT_MS`      | `30000` | Connection-level default for workers and long-running queries                                                                                                                                     |
 
-Org-scoped HTTP handlers wrap database work in `withAppDatabaseContext` — there is no per-request transaction pin. Keep Stripe / S3 / Resend calls **outside** those callbacks (enforced by ESLint).
+Org-scoped HTTP handlers wrap database work in `withAppDatabaseContext` — there is no per-request transaction pin. Keep Stripe / S3 / Resend calls **outside** those callbacks (enforced by `rls-context-network-isolation.global.test.ts`).
 
 Cross-organization reads (organization list/get/getBySlug/create) and invitation flows MUST use a user principal scope (`withAppDatabaseContext`) or the `tenancy.resolve_member_invitation_lookup_by_public_id` / `tenancy.list_pending_member_invitations_for_email` SECURITY DEFINER helpers (see migration `20260520000004_organization_discovery_and_invitation_lookup_rls.sql`).
 

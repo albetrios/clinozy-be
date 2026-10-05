@@ -76,7 +76,7 @@ export class AuditService {
    *    attribute the row and silently drop it (preserving the prior contract).
    * 2. Build the outbox payload from the supplied public ids and free-form
    *    metadata, then call {@link insertAuditOutboxRow} which enrolls in the
-   *    caller's request transaction.
+   *    caller's unit-of-work transaction when one is active.
    *
    * Failure modes:
    * - Missing actor → logged at warn, no-op (best-effort by contract).

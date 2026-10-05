@@ -104,7 +104,7 @@ export async function enqueueMailOutboxJob(
 }
 
 /**
- * Inserts a mail_outbox row using the active request transaction when present and returns its
+ * Inserts a mail_outbox row using the active unit-of-work transaction when present and returns its
  * token. Does **not** enqueue BullMQ — pair with `dispatchOutboxEmail` via `eventBus.onCommit`
  * for HTTP flows, or call `dispatchOutboxEmail` immediately in worker runtime.
  */

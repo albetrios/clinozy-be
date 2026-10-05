@@ -91,9 +91,9 @@ export class EventBus {
   }
 
   /**
-   * Schedules work to run after the active HTTP request transaction commits (or at
-   * `onResponse` for autocommit routes). Used by transactional outbox handlers to
-   * dispatch BullMQ jobs only after the outbox row is durable.
+   * Schedules work to run in the HTTP request's `onResponse` — every unit of work in the
+   * request has committed by then. Used by transactional outbox handlers to dispatch
+   * BullMQ jobs only after the outbox row is durable.
    *
    * Prefer {@link scheduleCommitDispatch} for production HTTP paths — it persists
    * serializable tasks to Redis immediately so a process crash cannot drop side effects.
@@ -263,7 +263,7 @@ export async function scheduleCommitDispatch(
 
 /**
  * Runs `callback` immediately when no HTTP onCommit scope is active (workers, scripts);
- * otherwise defers until {@link EventBus.flushOnCommit} after the request transaction commits.
+ * otherwise defers until {@link EventBus.flushOnCommit} runs in the request's `onResponse`.
  */
 export async function runEnqueueAfterCommit(callback: OnCommitTask): Promise<void> {
   if (onCommitStorage.getStore() === undefined) {

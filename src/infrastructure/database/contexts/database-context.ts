@@ -753,7 +753,7 @@ export async function withMaintenanceDatabaseContext<T>(
     // external I/O (mail sends, BullMQ re-enqueues). Outside worker runtime the
     // handle is passed straight through with no ALS pinning — an HTTP caller
     // (stripe-webhook service, commit-dispatch executor) must not have its
-    // request-pinned transaction handle shadowed by the bare pool.
+    // pinned unit-of-work handle shadowed by the bare pool.
     const maintenancePool = resolveMaintenancePool();
     if (!isWorkerRuntime()) {
       return callback(

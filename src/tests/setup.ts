@@ -102,15 +102,6 @@ pointHarnessAtLocalTestDatabase();
 applyRequestedDatabaseRole();
 process.env.DATABASE_SSL_ENABLED = 'false';
 /**
- * Mirror CI (which leaves this unset → schema default `true`). `.env.development` pins it to
- * `false` for the legacy request-pinned RLS transaction mode used by `pnpm dev`, but that mode
- * commits the per-request transaction in an `onResponse` hook — i.e. AFTER `fastify.inject()`
- * resolves. Tests that assert a DB side effect (e.g. an audit row) immediately after an
- * authenticated organization request then race the deferred commit and flake. Forcing the scoped-context
- * mode (inline `withAppDatabaseContext` commits) makes local runs deterministic and
- * match CI, the source of truth.
- */
-/**
  * Feature flags asserted by route registration and auth tests. `.env.development` sets
  * several of these to `'false'` for local dev ergonomics, but the test harness needs the
  * corresponding routes/handlers wired so each suite can assert its real-world behavior.

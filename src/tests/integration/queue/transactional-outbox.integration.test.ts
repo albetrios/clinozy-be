@@ -49,7 +49,7 @@ describe('Integration: transactional mail outbox', () => {
     expect(pendingCount).toBeGreaterThanOrEqual(1);
   });
 
-  it('does not persist outbox rows when the request transaction rolls back', async () => {
+  it('does not persist outbox rows when the enclosing transaction rolls back', async () => {
     const email = 'rollback@example.com';
 
     await expect(
@@ -78,7 +78,7 @@ describe('Integration: transactional mail outbox', () => {
     expect(dispatchOutboxEmailMock).not.toHaveBeenCalled();
   });
 
-  it('persists outbox row when the request transaction commits', async () => {
+  it('persists outbox row when the enclosing transaction commits', async () => {
     const email = 'committed@example.com';
     let mailOutboxToken = '';
 

@@ -9,11 +9,8 @@ import { authHeaders } from '../helpers/auth.js';
  *
  * Validates production-readiness audit item #5 (per-request RLS transaction pinning):
  * an organization-scoped (RLS) endpoint must sustain
- * concurrency well above DATABASE_POOL_MAX without failures. Under the legacy
- * request-pinned model each in-flight organization request held a pooled checkout for its whole
- * lifetime, so the API saturated at ~DATABASE_POOL_MAX concurrent requests. With scoped
- * contexts the checkout is only held for the actual unit-of-work, so the same pool should
- * absorb several multiples of concurrent requests.
+ * concurrency well above DATABASE_POOL_MAX without failures: the checkout is only held for
+ * the actual unit of work, so the pool should absorb several multiples of concurrent requests.
  *
  * Env:
  *   TEST_TOKEN, TEST_ORG_ID  (required — scenario is a no-op without them)

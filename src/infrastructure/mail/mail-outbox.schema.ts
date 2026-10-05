@@ -14,7 +14,7 @@ import { authSchema } from '@/infrastructure/database/pg-schemas.js';
 
 /**
  * Drizzle table for the transactional mail outbox (`auth.mail_outbox`). Inserts
- * commit with the request transaction; the mail worker claims `pending` rows,
+ * commit with the surrounding unit-of-work transaction; the mail worker claims `pending` rows,
  * sends via Resend, then marks them `sent`/`failed`. Status moves through
  * `pending → sending → sent|failed` and is enforced by `mail_outbox_status_check`.
  */

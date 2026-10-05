@@ -1,7 +1,7 @@
 /**
  * Database-context RUNTIME — the single plumbing module behind the three scope
  * patterns (principal / session / maintenance): the worker-context ALS, the
- * request-pinned-handle ALS, the `WorkerDatabaseContextError`, the worker
+ * pinned-handle ALS, the `WorkerDatabaseContextError`, the worker
  * statement/lock-timeout lift, and the repository handle-resolution guards.
  *
  * @remarks
@@ -190,8 +190,8 @@ export function workerDatabaseContextForUser(userPublicId: string): WorkerDataba
 }
 
 /**
- * Drizzle handle pinned to a single postgres.js checkout for the lifetime of an
- * HTTP request transaction or worker-scoped context — alias of
+ * Drizzle handle pinned to a single postgres.js checkout for the lifetime of a
+ * unit of work (an HTTP service transaction or a worker-scoped context) — alias of
  * {@link PostgresDatabaseHandle} carried through ALS by the helpers in this file.
  */
 export type RequestScopedPostgresDatabase = PostgresDatabaseHandle;

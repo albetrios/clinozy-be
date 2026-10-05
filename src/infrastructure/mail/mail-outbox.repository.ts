@@ -30,7 +30,7 @@ function mailOutboxDatabase() {
 
 /**
  * Inserts a `pending` row into `auth.mail_outbox` (transactional outbox pattern) —
- * enrolls in the active request transaction when present so the row commits only
+ * enrolls in the active unit-of-work transaction when present so the row commits only
  * if the surrounding business write succeeds. Returns the row's token
  * (`resend_idempotency_token`), the handle the BullMQ job carries.
  *

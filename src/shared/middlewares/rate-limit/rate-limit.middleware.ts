@@ -90,8 +90,8 @@ const RATE_LIMIT_ALLOWLISTED_PATHS = new Set(['/livez', '/readyz']);
  *
  * Wrapped with `fastify-plugin` so `@fastify/rate-limit` decorates the root app rather than an
  * encapsulated child context. This is required for two reasons: (1) the `global: true` limiter's
- * `onRequest` hook must apply to every route (and run before `organizationRlsTransactionMiddleware`
- * so throttled requests never open a DB transaction), and (2) per-route presets that build a second
+ * `onRequest` hook must apply to every route (and run before any handler opens a database
+ * transaction, so a throttled request never takes a pooled connection), and (2) per-route presets that build a second
  * limiter via `app.rateLimit(...)` (e.g. the per-email throttle in `auth.routes.ts`) need the
  * `rateLimit` decorator visible at the instance where routes register.
  */
