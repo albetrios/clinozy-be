@@ -2,11 +2,10 @@
  * Lists failed Stripe webhook ledger rows and optionally reclaims them for worker retry.
  *
  * Usage:
- *   pnpm stripe:webhook:replay -- --list
- *   pnpm stripe:webhook:replay -- --reclaim evt_123 [--dry-run]
- *
- * Run: pnpm stripe:webhook:replay
+ *   pnpm tool:stripe-webhook-replay -- --list
+ *   pnpm tool:stripe-webhook-replay -- --reclaim evt_123 [--dry-run]
  */
+import '@/shared/config/load-env-files.js';
 import { eq } from 'drizzle-orm';
 import { database } from '@/infrastructure/database/connection.js';
 import { closeDatabase } from '@/infrastructure/database/connection.js';

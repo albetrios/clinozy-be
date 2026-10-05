@@ -1289,7 +1289,6 @@ src/
     │   │   │   ├── commit-dispatch.executor.unit.test.ts
     │   │   │   ├── commit-dispatch.store.unit.test.ts
     │   │   │   ├── dlq-auto-retry-circuit.util.unit.test.ts
-    │   │   │   ├── dlq-auto-retry.store.unit.test.ts
     │   │   │   ├── dlq-replay.util.unit.test.ts
     │   │   │   ├── poison-job.util.unit.test.ts
     │   │   │   ├── worker-close.util.unit.test.ts
@@ -1314,7 +1313,6 @@ src/
     │   │   ├── dlq-auto-retry-circuit.util.ts
     │   │   ├── dlq-auto-retry.constants.ts
     │   │   ├── dlq-auto-retry.processor.ts
-    │   │   ├── dlq-auto-retry.store.ts
     │   │   ├── dlq-auto-retry.worker.ts
     │   │   ├── dlq-replay-job-fields.schema.ts
     │   │   ├── dlq-replay.util.ts
@@ -1862,6 +1860,7 @@ src/
     │   │   ├── bullmq-metrics.integration.test.ts
     │   │   ├── bullmq-noop-smoke.integration.test.ts
     │   │   ├── commit-dispatch-cleanup.integration.test.ts
+    │   │   ├── dlq-auto-retry.integration.test.ts
     │   │   ├── transactional-outbox.integration.test.ts
     │   │   └── worker-shutdown.integration.test.ts
     │   ├── runtime/

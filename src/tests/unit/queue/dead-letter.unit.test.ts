@@ -281,6 +281,91 @@ describe('dead-letter helpers', () => {
     });
   });
 
+  describe('attachDeadLetterAndAlerting — final failures that skip the retry budget', () => {
+    async function emitFailure(options: { error: Error; attemptsMade: number }) {
+      const { attachDeadLetterAndAlerting } = await import(
+        '@/infrastructure/queue/dlq/dead-letter.js'
+      );
+      const fakeWorker = new EventEmitter() as unknown as Worker;
+      attachDeadLetterAndAlerting(fakeWorker, 'webhook-delivery');
+      const job = {
+        id: 'wda_9z3rura5kqvcv8zggriym',
+        name: 'deliver-webhook',
+        data: { deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym', dlqReplayAttempt: 2 },
+        attemptsMade: options.attemptsMade,
+        opts: { attempts: 8 },
+      } as unknown as Job;
+      fakeWorker.emit('failed', job, options.error, 'active');
+      return job;
+    }
+
+    it('records and alerts an UnrecoverableError thrown on its first attempt', async () => {
+      // A job that can never succeed (a missing row, an unreadable secret) used to be logged and
+      // dropped: no ledger row, no alert, nothing for an operator to find.
+      const { UnrecoverableError } = await import('bullmq');
+      const error = new UnrecoverableError('webhook.delivery.signing_secret_unreadable');
+
+      await emitFailure({ error, attemptsMade: 1 });
+
+      await vi.waitFor(() => {
+        expect(insertDeadLetterJobMock).toHaveBeenCalledTimes(1);
+      });
+      expect(insertDeadLetterJobMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          failed_reason: 'webhook.delivery.signing_secret_unreadable',
+          // The failed job was the second replay of its lineage.
+          replay_depth: 2,
+        }),
+      );
+      expect(sentryCaptureExceptionMock).toHaveBeenCalledWith(error);
+    });
+
+    it('alerts a poison payload without recording it twice — the guard already did', async () => {
+      const { UnrecoverableError } = await import('bullmq');
+      const { markDeadLetterRecorded } = await import('@/infrastructure/queue/dlq/dead-letter.js');
+      const error = markDeadLetterRecorded(
+        new UnrecoverableError('bullmq.invalid_job_payload:webhook-delivery:{}'),
+      );
+
+      await emitFailure({ error, attemptsMade: 1 });
+
+      await vi.waitFor(() => {
+        expect(sentryCaptureExceptionMock).toHaveBeenCalledWith(error);
+      });
+      expect(insertDeadLetterJobMock).not.toHaveBeenCalled();
+      expect(queueAddMock).not.toHaveBeenCalled();
+    });
+
+    it('records an expected final failure without a Sentry page', async () => {
+      // A customer endpoint that never accepted the delivery: the job is dead and its owner sees
+      // it on the attempt row, but nobody on call can act on it.
+      const error = Object.assign(new Error('Webhook delivery failed with HTTP 500'), {
+        expectedFinalFailure: true,
+      });
+
+      await emitFailure({ error, attemptsMade: 8 });
+
+      await vi.waitFor(() => {
+        expect(insertDeadLetterJobMock).toHaveBeenCalledTimes(1);
+        expect(queueAddMock).toHaveBeenCalledTimes(1);
+      });
+      expect(sentryCaptureExceptionMock).not.toHaveBeenCalled();
+    });
+
+    it('retries an expected failure that still has attempts left', async () => {
+      const error = Object.assign(new Error('Webhook delivery failed with HTTP 500'), {
+        expectedFinalFailure: true,
+      });
+
+      await emitFailure({ error, attemptsMade: 3 });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(insertDeadLetterJobMock).not.toHaveBeenCalled();
+      expect(sentryCaptureExceptionMock).not.toHaveBeenCalled();
+    });
+  });
+
   // Regression: `audit.dead_letter_jobs` has CHECK (max_attempts >= 1). A cron job's terminal
   // failure used to be persisted with max_attempts = 0 (BullMQ's default), the insert violated the
   // constraint, and the durable ledger silently missed every scheduled-job dead-letter.

@@ -40,6 +40,7 @@ describe('insertDeadLetterJob', () => {
       attempts_made: 3,
       max_attempts: 3,
       failed_at: failedAt,
+      replay_depth: 2,
     });
 
     expect(insertMock).toHaveBeenCalledTimes(1);
@@ -56,6 +57,7 @@ describe('insertDeadLetterJob', () => {
       attempts_made: 3,
       max_attempts: 3,
       failed_at: failedAt,
+      replay_depth: 2,
     });
   });
 
@@ -71,6 +73,7 @@ describe('insertDeadLetterJob', () => {
       attempts_made: 0,
       max_attempts: 1,
       failed_at: new Date('2026-05-29T12:00:00.000Z'),
+      replay_depth: 0,
     });
 
     expect(valuesMock).toHaveBeenCalledWith(
@@ -93,6 +96,7 @@ describe('insertDeadLetterJob', () => {
         attempts_made: 1,
         max_attempts: 3,
         failed_at: new Date(),
+        replay_depth: 0,
       }),
     ).rejects.toThrow('postgres-down');
   });

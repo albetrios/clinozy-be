@@ -10,9 +10,12 @@ import { auditSchema } from '@/infrastructure/database/pg-schemas.js';
  * Redis (the common cause of the failures themselves) cannot also drop the record.
  *
  * @remarks
- * - **Append-only:** rows are never updated — each terminal failure (including a failed
- *   replay) is its own immutable record, so there is no `updated_at` (mirrors the audit
- *   log convention).
+ * - **Append-only:** a row's failure record is never updated — each terminal failure (including
+ *   a failed replay) is its own record, so there is no `updated_at` (mirrors the audit log
+ *   convention). The auto-retry sweeper only stamps `auto_retry_resolved_at`.
+ * - **Replay lineage:** `replay_depth` is how many dead-letter replays led to this failure (0 = the
+ *   original job). The sweeper replays each row at most once and stops at
+ *   `DLQ_AUTO_RETRY_MAX_COUNT` — the lineage lives here, not in a Redis counter.
  * - **No secrets:** `payload_summary` carries a hand-picked metadata summary only; raw
  *   job payloads, HTML bodies, and full webhook bodies are intentionally excluded.
  * - **Schema choice:** lives in the `audit` Postgres schema (operational failure record),
@@ -34,9 +37,12 @@ export const dead_letter_jobs = auditSchema.table(
     max_attempts: integer('max_attempts').notNull(),
     failed_at: timestamp('failed_at', { withTimezone: true }).notNull(),
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    // Stamped by the auto-retry sweeper once a row's retry budget is exhausted (or it is otherwise
-    // resolved). NULL = still auto-retry-eligible. Filtered out of the scan so exhausted rows can
-    // never permanently block the head of the queue or replay again after the Redis budget expires.
+    // How many dead-letter replays led to this failure: 0 for the original job, n for the job the
+    // n-th replay of its lineage enqueued (read from the failed job's `dlqReplayAttempt`).
+    replay_depth: integer('replay_depth').notNull().default(0),
+    // Stamped by the auto-retry sweeper once it has handled the row: replayed, not replayable, or
+    // at the replay-depth limit. NULL = still waiting. Filtered out of the scan so handled rows can
+    // never block the head of the queue or replay twice.
     auto_retry_resolved_at: timestamp('auto_retry_resolved_at', { withTimezone: true }),
   },
   (table) => [

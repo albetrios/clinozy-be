@@ -986,9 +986,13 @@ const envSchemaBase = z.object({
    * (sec-C1).
    */
   DLQ_AUTO_RETRY_ENABLED: booleanString('true'),
-  /** Maximum automated replays per `audit.dead_letter_jobs` row (Redis counter). */
+  /**
+   * How deep a replay lineage may go: the sweeper replays a dead-letter row only while its
+   * `replay_depth` (replays that led to it) is below this. Each row is replayed at most once; a
+   * replay that fails for good is a new row one level deeper. `0` disables automated replay.
+   */
   DLQ_AUTO_RETRY_MAX_COUNT: z.coerce.number().int().min(0).default(3),
-  /** Minimum minutes between failure (or last auto-retry) and the next automated replay. */
+  /** Minimum minutes between a final failure and its automated replay. */
   DLQ_AUTO_RETRY_COOLDOWN_MINUTES: z.coerce.number().int().min(1).default(30),
   /** Maximum ledger rows inspected per sweeper tick. */
   DLQ_AUTO_RETRY_BATCH_SIZE: z.coerce.number().int().min(1).default(20),

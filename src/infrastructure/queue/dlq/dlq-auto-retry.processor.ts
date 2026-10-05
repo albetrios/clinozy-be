@@ -4,11 +4,6 @@ import {
 } from '@/infrastructure/queue/dlq/dead-letter.repository.js';
 import { isDeadLetterSourceQueueCircuitClosed } from '@/infrastructure/queue/dlq/dlq-auto-retry-circuit.util.js';
 import {
-  getDlqAutoRetryState,
-  isDeadLetterJobEligibleForAutoRetry,
-  recordDlqAutoRetryAttempt,
-} from '@/infrastructure/queue/dlq/dlq-auto-retry.store.js';
-import {
   autoReplayDeadLetterFromLedger,
   DLQ_REPLAY_SOURCE_QUEUE_NAMES,
 } from '@/infrastructure/queue/dlq/dlq-replay.util.js';
@@ -23,40 +18,49 @@ import {
  * Outcome counters for one DLQ auto-retry sweeper pass.
  *
  * @remarks
- * - **Algorithm:** populated by {@link runDlqAutoRetryJob} after scanning ledger rows.
- * - **Failure modes:** counts are best-effort — skipped rows still increment `scannedCount`.
+ * - **Algorithm:** populated by {@link runDlqAutoRetryJob}; every scanned row lands in exactly one
+ *   of `replayedCount`, `replayLimitCount`, `notReplayableCount` or `failedCount`.
+ * - **Failure modes:** none from the type itself.
  * - **Side effects:** none from this type alone.
- * - **Notes:** logged at `info` when any row was replayed.
+ * - **Notes:** `circuitOpenQueueCount` counts source queues left out of the scan because their
+ *   outbound circuit is not closed; their rows wait for a later tick.
  */
 export type DlqAutoRetryJobResult = {
   scannedCount: number;
   replayedCount: number;
-  skippedCircuitOpenCount: number;
-  skippedCooldownCount: number;
-  skippedBudgetCount: number;
-  skippedPayloadCount: number;
+  replayLimitCount: number;
+  notReplayableCount: number;
+  failedCount: number;
+  circuitOpenQueueCount: number;
 };
 
 /**
- * Scans `audit.dead_letter_jobs` and re-enqueues replayable work when outbound circuits are
- * CLOSED, the cooldown has elapsed, and the auto-retry budget allows another attempt.
+ * Scans `audit.dead_letter_jobs` and replays each waiting row at most once, through its source
+ * queue, once the cooldown has passed and the queue's outbound circuit is closed.
  *
  * @remarks
- * - **Algorithm:** query oldest ledger rows past the cooldown cutoff, filter by Redis retry
- *   budget + circuit state, replay via {@link autoReplayDeadLetterFromLedger}, increment Redis counter.
- * - **Failure modes:** per-row replay errors log at warn; Postgres scan errors propagate to BullMQ.
- * - **Side effects:** BullMQ re-enqueue, optional DLQ mirror removal, audit log, Redis counter write.
- * - **Notes:** no-op when `DLQ_AUTO_RETRY_ENABLED` is false; bounded by `DLQ_AUTO_RETRY_BATCH_SIZE`.
+ * - **Algorithm:** keep the replayable source queues whose circuit is CLOSED (a queue that cannot
+ *   replay yet must not hold the head of the scan), read their unhandled rows older than the
+ *   cooldown, oldest first, and per row: a lineage at `DLQ_AUTO_RETRY_MAX_COUNT` replays is
+ *   marked handled without a replay; otherwise it is replayed (`dlqReplayAttempt` = its
+ *   `replay_depth` + 1) and marked handled; a payload that cannot be rebuilt is marked handled.
+ * - **Failure modes:** a replay that throws leaves the row waiting for the next tick (warn log);
+ *   Postgres scan errors propagate to BullMQ.
+ * - **Side effects:** BullMQ re-enqueue, DLQ mirror removal, audit log, ledger marker writes.
+ * - **Notes:** the replay lineage lives in the ledger (`replay_depth`), never in a Redis counter
+ *   keyed by the row's bigserial. A replay that fails for good writes a new row one level
+ *   deeper, which waits its own cooldown. No-op when `DLQ_AUTO_RETRY_ENABLED` is false; bounded
+ *   by `DLQ_AUTO_RETRY_BATCH_SIZE`.
  */
 export async function runDlqAutoRetryJob(): Promise<DlqAutoRetryJobResult> {
   if (!env.DLQ_AUTO_RETRY_ENABLED) {
     return {
       scannedCount: 0,
       replayedCount: 0,
-      skippedCircuitOpenCount: 0,
-      skippedCooldownCount: 0,
-      skippedBudgetCount: 0,
-      skippedPayloadCount: 0,
+      replayLimitCount: 0,
+      notReplayableCount: 0,
+      failedCount: 0,
+      circuitOpenQueueCount: 0,
     };
   }
 
@@ -65,73 +69,58 @@ export async function runDlqAutoRetryJob(): Promise<DlqAutoRetryJobResult> {
   );
 }
 
+async function listSourceQueuesWithClosedCircuit(): Promise<string[]> {
+  const circuitClosedByQueue = await Promise.all(
+    DLQ_REPLAY_SOURCE_QUEUE_NAMES.map(async (sourceQueue) => ({
+      sourceQueue,
+      closed: await isDeadLetterSourceQueueCircuitClosed(sourceQueue),
+    })),
+  );
+  return circuitClosedByQueue.filter((entry) => entry.closed).map((entry) => entry.sourceQueue);
+}
+
 async function runDlqAutoRetryJobInner(): Promise<DlqAutoRetryJobResult> {
   const cooldownMs = env.DLQ_AUTO_RETRY_COOLDOWN_MINUTES * 60_000;
-  const failedBefore = new Date(Date.now() - cooldownMs);
-  const batchSize = env.DLQ_AUTO_RETRY_BATCH_SIZE;
+  const replayableSourceQueues = await listSourceQueuesWithClosedCircuit();
 
   const ledgerRows = await findDeadLetterJobsForAutoRetry({
-    sourceQueues: DLQ_REPLAY_SOURCE_QUEUE_NAMES,
-    failedBefore,
-    limit: batchSize,
+    sourceQueues: replayableSourceQueues,
+    failedBefore: new Date(Date.now() - cooldownMs),
+    limit: env.DLQ_AUTO_RETRY_BATCH_SIZE,
   });
 
   const result: DlqAutoRetryJobResult = {
     scannedCount: ledgerRows.length,
     replayedCount: 0,
-    skippedCircuitOpenCount: 0,
-    skippedCooldownCount: 0,
-    skippedBudgetCount: 0,
-    skippedPayloadCount: 0,
+    replayLimitCount: 0,
+    notReplayableCount: 0,
+    failedCount: 0,
+    circuitOpenQueueCount: DLQ_REPLAY_SOURCE_QUEUE_NAMES.length - replayableSourceQueues.length,
   };
 
   for (const ledgerRow of ledgerRows) {
-    const state = await getDlqAutoRetryState(ledgerRow.id);
-    if ((state?.count ?? 0) >= env.DLQ_AUTO_RETRY_MAX_COUNT) {
-      result.skippedBudgetCount += 1;
-      // Budget exhausted: stamp the ledger row resolved so it leaves the scan permanently. Without
-      // this it would be re-fetched at the head every tick (starving newer rows) and would replay
-      // again once the Redis budget counter's TTL expires.
+    if (ledgerRow.replay_depth >= env.DLQ_AUTO_RETRY_MAX_COUNT) {
+      // The lineage has been replayed as often as allowed: leave this failure to an operator.
       await markDeadLetterJobAutoRetryResolved(ledgerRow.id);
-      continue;
-    }
-    if (
-      !isDeadLetterJobEligibleForAutoRetry({
-        state,
-        failedAt: ledgerRow.failed_at,
-        maxCount: env.DLQ_AUTO_RETRY_MAX_COUNT,
-        cooldownMs,
-      })
-    ) {
-      result.skippedCooldownCount += 1;
+      result.replayLimitCount += 1;
       continue;
     }
 
-    const circuitClosed = await isDeadLetterSourceQueueCircuitClosed(ledgerRow.source_queue);
-    if (!circuitClosed) {
-      result.skippedCircuitOpenCount += 1;
-      continue;
-    }
-
-    const nextAttemptCount = (state?.count ?? 0) + 1;
     try {
-      const replayResult = await autoReplayDeadLetterFromLedger({
-        ledgerRow,
-        autoRetryCount: nextAttemptCount,
-      });
+      const replayResult = await autoReplayDeadLetterFromLedger({ ledgerRow });
+      await markDeadLetterJobAutoRetryResolved(ledgerRow.id);
       if (replayResult.status === 'payload_not_reconstructable') {
-        result.skippedPayloadCount += 1;
-        continue;
+        result.notReplayableCount += 1;
+      } else {
+        result.replayedCount += 1;
       }
-
-      await recordDlqAutoRetryAttempt(ledgerRow.id);
-      result.replayedCount += 1;
     } catch (error) {
+      result.failedCount += 1;
       logger.warn({ error, deadLetterJobId: ledgerRow.id }, 'dlq-auto-retry.replay.failed');
     }
   }
 
-  if (result.replayedCount > 0 || result.scannedCount > 0) {
+  if (result.scannedCount > 0 || result.circuitOpenQueueCount > 0) {
     logger.info(result, 'dlq-auto-retry.completed');
   }
 

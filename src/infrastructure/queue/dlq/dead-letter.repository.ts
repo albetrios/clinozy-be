@@ -18,6 +18,8 @@ export interface DeadLetterJobInsert {
   attempts_made: number;
   max_attempts: number;
   failed_at: Date;
+  /** How many dead-letter replays led to this failure (0 = the original job). */
+  replay_depth: number;
 }
 
 /**
@@ -49,6 +51,7 @@ export async function insertDeadLetterJob(record: DeadLetterJobInsert): Promise<
     attempts_made: record.attempts_made,
     max_attempts: record.max_attempts,
     failed_at: record.failed_at,
+    replay_depth: record.replay_depth,
   });
 }
 
@@ -62,15 +65,18 @@ export type DeadLetterJobLedgerRow = {
   payload_summary: Record<string, unknown>;
   attempts_made: number;
   failed_at: Date;
+  replay_depth: number;
 };
 
 /**
- * Lists ledger rows eligible for age-based auto-replay scanning (cooldown and retry budget
- * are applied in application code via Redis).
+ * Lists ledger rows waiting for the auto-retry sweeper: unhandled, from the given source queues,
+ * failed at least the cooldown ago.
  *
  * @remarks
- * - **Algorithm:** filters by replayable `source_queue` values and `failed_at <= failedBefore`,
- *   oldest first, capped by `limit`.
+ * - **Algorithm:** filters by `source_queue`, `failed_at <= failedBefore` and an unset
+ *   `auto_retry_resolved_at`, oldest first, capped by `limit`. The caller passes only the queues
+ *   whose outbound circuit is closed, so rows of a queue that cannot replay yet do not hold the
+ *   head of the scan.
  * - **Failure modes:** propagates Postgres errors to the caller.
  * - **Side effects:** read-only.
  * - **Notes:** uses the base database connection independently of any pinned context.
@@ -94,15 +100,15 @@ export async function findDeadLetterJobsForAutoRetry(input: {
       payload_summary: dead_letter_jobs.payload_summary,
       attempts_made: dead_letter_jobs.attempts_made,
       failed_at: dead_letter_jobs.failed_at,
+      replay_depth: dead_letter_jobs.replay_depth,
     })
     .from(dead_letter_jobs)
     .where(
       and(
         inArray(dead_letter_jobs.source_queue, [...input.sourceQueues]),
         lte(dead_letter_jobs.failed_at, input.failedBefore),
-        // Exclude rows already resolved (budget exhausted) so exhausted rows at the head can never
-        // starve newer replayable rows, and a poison row can't replay again after its Redis budget
-        // counter expires.
+        // Exclude rows already handled (replayed, not replayable, at the depth limit) so they can
+        // never hold the head of the scan or replay twice.
         isNull(dead_letter_jobs.auto_retry_resolved_at),
       ),
     )
@@ -117,9 +123,9 @@ export async function findDeadLetterJobsForAutoRetry(input: {
 }
 
 /**
- * Marks a dead-letter ledger row as resolved for auto-retry, removing it from
- * {@link findDeadLetterJobsForAutoRetry}. Called when the row's retry budget is exhausted so it
- * can never re-enter the scan and starve newer rows. Idempotent (only stamps a NULL marker).
+ * Marks a dead-letter ledger row as handled by the auto-retry sweeper — replayed, not replayable,
+ * or at the replay-depth limit — removing it from {@link findDeadLetterJobsForAutoRetry} so it
+ * can never re-enter the scan or replay twice. Idempotent (only stamps a NULL marker).
  */
 export async function markDeadLetterJobAutoRetryResolved(id: number): Promise<void> {
   await database

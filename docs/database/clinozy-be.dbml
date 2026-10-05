@@ -69,6 +69,7 @@ Table audit.dead_letter_jobs {
   job_name text [not null]
   max_attempts int [not null]
   payload_summary jsonb [not null]
+  replay_depth int [not null]
   source_queue text [not null]
   indexes {
     (id) [pk]

@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { UnrecoverableError, type Job } from 'bullmq';
-import { recordDeadLetterFailure } from '@/infrastructure/queue/dlq/dead-letter.js';
+import {
+  markDeadLetterRecorded,
+  recordDeadLetterFailure,
+} from '@/infrastructure/queue/dlq/dead-letter.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 /** Inputs for {@link parseJobDataOrDeadLetter} — schema, the live BullMQ job, and queue name. */
@@ -18,12 +21,12 @@ export interface ParseJobDataOrDeadLetterOptions<T> {
  * - **Algorithm:** `schema.safeParse(job.data)`. On success returns the parsed payload. On
  *   failure builds a `bullmq.invalid_job_payload:<queue>` error, records the dead-letter via
  *   {@link recordDeadLetterFailure} (durable Postgres row + best-effort Redis mirror), then
- *   throws BullMQ's {@link UnrecoverableError} so the remaining attempts are skipped — a
- *   malformed payload can never succeed, so retrying with backoff only wastes worker time.
- * - **Failure modes:** always throws `UnrecoverableError` on a parse failure; the
- *   `attachDeadLetterAndAlerting` `failed` listener recognises that error and does not record a
- *   second dead-letter. {@link recordDeadLetterFailure} never rejects, so a degraded
- *   Postgres/Redis cannot turn a poison message back into a retryable one.
+ *   throws BullMQ's {@link UnrecoverableError} so the remaining attempts are skipped — a malformed
+ *   payload can never succeed, so retrying with backoff only wastes worker time.
+ * - **Failure modes:** always throws `UnrecoverableError` on a parse failure, marked with
+ *   `markDeadLetterRecorded`: the `attachDeadLetterAndAlerting` `failed` listener alerts on it
+ *   without recording a second dead-letter. {@link recordDeadLetterFailure} never rejects, so a degraded Postgres/Redis
+ *   cannot turn a poison message back into a retryable one.
  * - **Side effects:** on poison input, one structured `queue.job.poison_payload` log line plus
  *   the dead-letter writes; no side effects on valid input.
  * - **Notes:** call this at every worker processing entry point that reads `job.data`. The
@@ -41,8 +44,10 @@ export async function parseJobDataOrDeadLetter<T>({
   }
 
   const fieldErrors = z.flattenError(parsed.error).fieldErrors;
-  const error = new UnrecoverableError(
-    `bullmq.invalid_job_payload:${queueName}:${JSON.stringify(fieldErrors)}`,
+  const error = markDeadLetterRecorded(
+    new UnrecoverableError(
+      `bullmq.invalid_job_payload:${queueName}:${JSON.stringify(fieldErrors)}`,
+    ),
   );
 
   logger.error(

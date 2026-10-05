@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildReplayJobPayload,
   buildReplayJobPayloadFromLedger,
+  DLQ_REPLAY_SOURCE_QUEUE_NAMES,
   resolveDeadLetterQueueNames,
 } from '@/infrastructure/queue/dlq/dlq-replay.util.js';
 import type { DeadLetterJobData } from '@/infrastructure/queue/dlq/dead-letter.js';
@@ -10,129 +11,107 @@ import { WEBHOOK_DELIVERY_QUEUE_NAME } from '@/domains/notify/sub-domains/webhoo
 import { NOTIFICATION_QUEUE_NAME } from '@/domains/notify/sub-domains/notification/queues/notification.queue.js';
 import { STRIPE_WEBHOOK_QUEUE_NAME } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
 
+const base = {
+  original_job_id: 'job-x',
+  original_job_name: 'name-x',
+  failed_reason: 'error',
+  attempts_made: 5,
+  max_attempts: 5,
+  failed_at: new Date().toISOString(),
+  replay_depth: 0,
+} as const;
+
 describe('dlq-replay.util', () => {
   it('resolveDeadLetterQueueNames normalizes queue names', () => {
-    expect(resolveDeadLetterQueueNames('mail')).toEqual(['mail-dlq']);
+    expect(resolveDeadLetterQueueNames('notification')).toEqual(['notification-dlq']);
+    expect(resolveDeadLetterQueueNames('webhook-delivery-dlq')).toEqual(['webhook-delivery-dlq']);
   });
 
-  it('buildReplayJobPayload adds replayFromDlq and dlqReplayAttempt for mail', () => {
-    const data: DeadLetterJobData = {
-      original_queue: MAIL_QUEUE_NAME,
-      original_job_id: 'job-1',
-      original_job_name: 'send-mail',
-      original_data_summary: { mail_outbox_token: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f' },
-      failed_reason: 'error',
-      attempts_made: 5,
-      max_attempts: 5,
-      failed_at: new Date().toISOString(),
-      replay_attempt: 2,
-    };
-
-    expect(buildReplayJobPayload(data)).toEqual({
-      mailOutboxToken: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f',
-      replayFromDlq: true,
-      dlqReplayAttempt: 2,
-    });
+  it('does not offer mail for replay — a failed mail row is scrubbed, a pending one is re-enqueued by the sweeper', () => {
+    expect(DLQ_REPLAY_SOURCE_QUEUE_NAMES).not.toContain(MAIL_QUEUE_NAME);
+    expect(() => resolveDeadLetterQueueNames('mail')).toThrow(/Unknown DLQ queue/);
+    expect(
+      buildReplayJobPayload({
+        ...base,
+        original_queue: MAIL_QUEUE_NAME,
+        original_data_summary: { mail_outbox_token: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f' },
+      }),
+    ).toBeNull();
   });
 
-  it('buildReplayJobPayload reconstructs webhook and stripe payloads', () => {
+  it('buildReplayJobPayload reconstructs webhook and stripe payloads one level down the lineage', () => {
     const webhookData: DeadLetterJobData = {
+      ...base,
       original_queue: WEBHOOK_DELIVERY_QUEUE_NAME,
-      original_job_id: 'wh-1',
       original_job_name: 'deliver-webhook',
       original_data_summary: {
         delivery_attempt_public_id: 'wda_9z3rura5kqvcv8zggriym',
         organization_public_id: 'org_public_abc',
       },
-      failed_reason: 'error',
-      attempts_made: 5,
-      max_attempts: 5,
-      failed_at: new Date().toISOString(),
     };
-
     const stripeData: DeadLetterJobData = {
+      ...base,
       original_queue: STRIPE_WEBHOOK_QUEUE_NAME,
-      original_job_id: 'stripe-1',
       original_job_name: 'process-stripe-webhook',
       original_data_summary: { stripe_event_id: 'evt_123' },
-      failed_reason: 'error',
-      attempts_made: 5,
-      max_attempts: 5,
-      failed_at: new Date().toISOString(),
+      replay_depth: 2,
     };
 
-    expect(buildReplayJobPayload(webhookData)).toMatchObject({
+    expect(buildReplayJobPayload(webhookData)).toEqual({
       deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
       organizationPublicId: 'org_public_abc',
       replayFromDlq: true,
-      dlqReplayAttempt: 0,
+      dlqReplayAttempt: 1,
     });
-    expect(buildReplayJobPayload(stripeData)).toMatchObject({
+    expect(buildReplayJobPayload(stripeData)).toEqual({
       stripeEventId: 'evt_123',
       replayFromDlq: true,
+      dlqReplayAttempt: 3,
     });
   });
 
   it('buildReplayJobPayload reconstructs a tenant-scoped notification payload', () => {
-    const notificationData: DeadLetterJobData = {
-      original_queue: NOTIFICATION_QUEUE_NAME,
-      original_job_id: 'notif-1',
-      original_job_name: 'dispatch-notification',
-      original_data_summary: {
-        notification_public_id: 'ntf_000000000000000000077',
-        organization_public_id: 'org_public_abc',
-        user_public_id: 'usr_000000000000000000077',
-      },
-      failed_reason: 'error',
-      attempts_made: 3,
-      max_attempts: 3,
-      failed_at: new Date().toISOString(),
-      replay_attempt: 1,
-    };
-
-    expect(buildReplayJobPayload(notificationData)).toEqual({
+    expect(
+      buildReplayJobPayload({
+        ...base,
+        original_queue: NOTIFICATION_QUEUE_NAME,
+        original_job_name: 'dispatch-notification',
+        original_data_summary: {
+          notification_public_id: 'ntf_000000000000000000077',
+          organization_public_id: 'org_public_abc',
+          user_public_id: 'usr_000000000000000000077',
+        },
+        replay_depth: 1,
+      }),
+    ).toEqual({
       notificationPublicId: 'ntf_000000000000000000077',
       organizationPublicId: 'org_public_abc',
       userPublicId: 'usr_000000000000000000077',
+      replayFromDlq: true,
+      dlqReplayAttempt: 2,
+    });
+  });
+
+  it('buildReplayJobPayload reconstructs a notification without an organization (null scope)', () => {
+    expect(
+      buildReplayJobPayload({
+        ...base,
+        original_queue: NOTIFICATION_QUEUE_NAME,
+        original_data_summary: {
+          notification_public_id: 'ntf_000000000000000000088',
+          user_public_id: 'usr_000000000000000000088',
+        },
+      }),
+    ).toEqual({
+      notificationPublicId: 'ntf_000000000000000000088',
+      organizationPublicId: null,
+      userPublicId: 'usr_000000000000000000088',
       replayFromDlq: true,
       dlqReplayAttempt: 1,
     });
   });
 
-  it('buildReplayJobPayload reconstructs a global notification with null organization scope', () => {
-    const notificationData: DeadLetterJobData = {
-      original_queue: NOTIFICATION_QUEUE_NAME,
-      original_job_id: 'notif-2',
-      original_job_name: 'dispatch-notification',
-      original_data_summary: {
-        notification_public_id: 'ntf_000000000000000000088',
-        user_public_id: 'usr_000000000000000000088',
-      },
-      failed_reason: 'error',
-      attempts_made: 3,
-      max_attempts: 3,
-      failed_at: new Date().toISOString(),
-    };
-
-    expect(buildReplayJobPayload(notificationData)).toEqual({
-      notificationPublicId: 'ntf_000000000000000000088',
-      organizationPublicId: null,
-      userPublicId: 'usr_000000000000000000088',
-      replayFromDlq: true,
-      dlqReplayAttempt: 0,
-    });
-  });
-
   it('buildReplayJobPayload returns null when required replay keys are missing', () => {
-    const base = {
-      original_job_id: 'job-x',
-      original_job_name: 'name-x',
-      failed_reason: 'error',
-      attempts_made: 5,
-      max_attempts: 5,
-      failed_at: new Date().toISOString(),
-    } as const;
-
     // Webhook missing organization_public_id → cannot scope replay.
     expect(
       buildReplayJobPayload({
@@ -151,7 +130,7 @@ describe('dlq-replay.util', () => {
       }),
     ).toBeNull();
 
-    // Notification missing notification_public_id → nothing to load.
+    // Notification missing its public id or recipient → nothing to load, no scope.
     expect(
       buildReplayJobPayload({
         ...base,
@@ -159,22 +138,29 @@ describe('dlq-replay.util', () => {
         original_data_summary: { organization_public_id: 'org_public_abc' },
       }),
     ).toBeNull();
+    expect(
+      buildReplayJobPayload({
+        ...base,
+        original_queue: NOTIFICATION_QUEUE_NAME,
+        original_data_summary: { notification_public_id: 'ntf_000000000000000000088' },
+      }),
+    ).toBeNull();
   });
 
-  it('buildReplayJobPayloadFromLedger maps ledger columns to replay payload', () => {
+  it('buildReplayJobPayloadFromLedger maps ledger columns to a replay one level deeper', () => {
     expect(
       buildReplayJobPayloadFromLedger({
-        source_queue: MAIL_QUEUE_NAME,
+        source_queue: STRIPE_WEBHOOK_QUEUE_NAME,
         job_id: 'job-ledger-1',
-        job_name: 'send-mail',
-        payload_summary: { mail_outbox_token: '0d3c2b1a-9f8e-4d7c-8b6a-5f4e3d2c1b0a' },
+        job_name: 'process-stripe-webhook',
+        payload_summary: { stripe_event_id: 'evt_ledger' },
         attempts_made: 5,
-        auto_retry_count: 2,
+        replay_depth: 2,
       }),
     ).toEqual({
-      mailOutboxToken: '0d3c2b1a-9f8e-4d7c-8b6a-5f4e3d2c1b0a',
+      stripeEventId: 'evt_ledger',
       replayFromDlq: true,
-      dlqReplayAttempt: 2,
+      dlqReplayAttempt: 3,
     });
   });
 });

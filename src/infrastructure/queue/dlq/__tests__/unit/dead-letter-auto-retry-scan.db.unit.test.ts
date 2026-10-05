@@ -9,8 +9,8 @@ import {
 
 /**
  * Regression for the DLQ auto-retry starvation fix: the scan must exclude rows already marked
- * `auto_retry_resolved_at`, so budget-exhausted rows can never re-enter the head of the queue and
- * starve newer replayable rows (nor replay again after the Redis budget counter expires).
+ * `auto_retry_resolved_at`, so handled rows (replayed, not replayable, at the depth limit) can
+ * never re-enter the head of the queue, starve newer rows, or replay twice.
  */
 async function seedDeadLetterRow(overrides: Partial<typeof dead_letter_jobs.$inferInsert> = {}) {
   const oneHourAgo = new Date(Date.now() - 3_600_000);
@@ -66,5 +66,14 @@ describe('DLQ auto-retry scan — resolved-row exclusion', () => {
     // Idempotent: a second mark is a harmless no-op.
     await expect(markDeadLetterJobAutoRetryResolved(row.id)).resolves.toBeUndefined();
     expect((await scan()).map((found) => found.id)).not.toContain(row.id);
+  });
+
+  it('returns each row with its replay depth — the lineage lives on the ledger row', async () => {
+    const original = await seedDeadLetterRow({ failed_reason: 'original' });
+    const replayed = await seedDeadLetterRow({ failed_reason: 'second replay', replay_depth: 2 });
+
+    const depthById = new Map((await scan()).map((row) => [row.id, row.replay_depth]));
+    expect(depthById.get(original.id)).toBe(0);
+    expect(depthById.get(replayed.id)).toBe(2);
   });
 });

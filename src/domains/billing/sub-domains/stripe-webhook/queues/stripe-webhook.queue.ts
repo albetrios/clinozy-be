@@ -22,7 +22,12 @@ export type StripeWebhookJobData = StripeWebhookJobDataValidated;
 
 let stripeWebhookQueue: Queue<StripeWebhookJobData> | null = null;
 
-function getStripeWebhookQueue(): Queue<StripeWebhookJobData> {
+/**
+ * The process-wide `stripe-webhook` producer (lazily created) — its default job options (five
+ * attempts, the custom backoff, bounded retention) apply to every job added through it, including
+ * dead-letter replays.
+ */
+export function getStripeWebhookQueue(): Queue<StripeWebhookJobData> {
   if (stripeWebhookQueue) return stripeWebhookQueue;
   stripeWebhookQueue = new Queue<StripeWebhookJobData>(STRIPE_WEBHOOK_QUEUE_NAME, {
     connection: getBullMQProducerConnectionOptions(),

@@ -5,7 +5,8 @@ import { z } from 'zod';
 const recordDeadLetterFailureMock = vi.fn().mockResolvedValue(undefined);
 const loggerErrorMock = vi.fn();
 
-vi.mock('@/infrastructure/queue/dlq/dead-letter.js', () => ({
+vi.mock('@/infrastructure/queue/dlq/dead-letter.js', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   recordDeadLetterFailure: (...arguments_: unknown[]) => recordDeadLetterFailureMock(...arguments_),
 }));
 
@@ -18,6 +19,7 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
 }));
 
 import { parseJobDataOrDeadLetter } from '@/infrastructure/queue/dlq/poison-job.util.js';
+import { isDeadLetterAlreadyRecorded } from '@/infrastructure/queue/dlq/dead-letter.js';
 
 const schema = z.object({ mailOutboxToken: z.uuid() });
 
@@ -40,17 +42,19 @@ describe('parseJobDataOrDeadLetter', () => {
     expect(recordDeadLetterFailureMock).not.toHaveBeenCalled();
   });
 
-  it('routes a poison payload straight to the DLQ and throws UnrecoverableError (no retry)', async () => {
+  it('routes a poison payload straight to the DLQ and throws UnrecoverableError (no retry), marked as recorded', async () => {
     const job = buildJob({ mailOutboxToken: 'not-a-uuid' });
 
-    await expect(
-      parseJobDataOrDeadLetter({ schema, job, queueName: 'mail' }),
-    ).rejects.toBeInstanceOf(UnrecoverableError);
+    await expect(parseJobDataOrDeadLetter({ schema, job, queueName: 'mail' })).rejects.toSatisfy(
+      (error: unknown) => error instanceof UnrecoverableError && isDeadLetterAlreadyRecorded(error),
+    );
 
     expect(recordDeadLetterFailureMock).toHaveBeenCalledTimes(1);
     expect(recordDeadLetterFailureMock).toHaveBeenCalledWith(
       'mail',
       job,
+      // An UnrecoverableError, so BullMQ skips the remaining attempts; the recorded marker tells
+      // the failed listener the record is already written.
       expect.any(UnrecoverableError),
     );
     expect(loggerErrorMock).toHaveBeenCalledTimes(1);

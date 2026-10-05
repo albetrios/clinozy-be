@@ -21,7 +21,12 @@ export type NotificationJobData = NotificationJobDataValidated;
 
 let notificationQueue: Queue<NotificationJobData> | null = null;
 
-function getNotificationQueue(): Queue<NotificationJobData> {
+/**
+ * The process-wide `notification` producer (lazily created) — its default job options (three
+ * attempts, exponential backoff, bounded retention) apply to every job added through it,
+ * including dead-letter replays.
+ */
+export function getNotificationQueue(): Queue<NotificationJobData> {
   if (notificationQueue) return notificationQueue;
   notificationQueue = new Queue<NotificationJobData>(NOTIFICATION_QUEUE_NAME, {
     connection: getBullMQProducerConnectionOptions(),

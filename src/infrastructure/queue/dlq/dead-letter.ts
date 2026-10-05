@@ -1,6 +1,8 @@
 /**
- * Dead-letter queues: after a job exhausts retries, enqueue a snapshot to `<source>-dlq`
- * and emit one Sentry issue (grouped by queue + job name).
+ * Dead-letter queues: when a job fails for good — its retries exhausted, or it threw
+ * `UnrecoverableError` — record it in `audit.dead_letter_jobs`, mirror a snapshot to
+ * `<source>-dlq`, and emit one Sentry issue (grouped by queue + job name) unless the failure is an
+ * expected one.
  */
 
 import { Queue, UnrecoverableError, type Job, type Worker } from 'bullmq';
@@ -39,7 +41,8 @@ export interface DeadLetterJobData {
   original_queue: string;
   original_job_id?: string;
   original_job_name: string;
-  replay_attempt?: number;
+  /** How many dead-letter replays led to this failure (0 = the original job). */
+  replay_depth: number;
   /** Metadata only — never store secrets, HTML, or full webhook payloads in Redis. */
   original_data_summary: Record<string, unknown>;
   failed_reason: string;
@@ -84,6 +87,54 @@ function summarizeJobDataForDeadLetter(data: unknown): Record<string, unknown> {
   // Stripe event id is required to re-fetch and replay a Stripe webhook job.
   if (record.stripeEventId !== undefined) summary.stripe_event_id = record.stripeEventId;
   return summary;
+}
+
+/**
+ * Marks an error whose dead-letter record the thrower already wrote, and returns it.
+ *
+ * @remarks
+ * The poison-job guard records a malformed payload before throwing, so the record exists even if
+ * the worker dies; the `failed` listener then alerts on the error without recording it a second
+ * time ({@link isDeadLetterAlreadyRecorded}). A marker property rather than a subclass, like
+ * `expectedFinalFailure`: the guard still throws BullMQ's own `UnrecoverableError`.
+ */
+export function markDeadLetterRecorded<TError extends Error>(error: TError): TError {
+  return Object.assign(error, { deadLetterRecorded: true });
+}
+
+/** Whether {@link markDeadLetterRecorded} marked this error — its dead-letter record exists. */
+export function isDeadLetterAlreadyRecorded(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { deadLetterRecorded?: unknown }).deadLetterRecorded === true
+  );
+}
+
+/**
+ * Whether a final failure is an expected one: the error declares `expectedFinalFailure: true`
+ * (for example a customer webhook endpoint that never accepted the delivery).
+ *
+ * @remarks
+ * Such a failure is recorded in the dead-letter ledger like any other — the job is still dead —
+ * but logged at warn and kept out of Sentry: it is somebody else's fault and nobody on call can act
+ * on it. Errors on our side never set the flag.
+ */
+export function isExpectedFinalFailure(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { expectedFinalFailure?: unknown }).expectedFinalFailure === true
+  );
+}
+
+/** How many dead-letter replays led to this job: its `dlqReplayAttempt`, 0 for an original job. */
+function readReplayDepth(jobData: unknown): number {
+  if (typeof jobData !== 'object' || jobData === null) return 0;
+  const replayAttempt = (jobData as { dlqReplayAttempt?: unknown }).dlqReplayAttempt;
+  return typeof replayAttempt === 'number' && Number.isInteger(replayAttempt) && replayAttempt > 0
+    ? replayAttempt
+    : 0;
 }
 
 /** Resolves the BullMQ dead-letter queue name (`<source>-dlq`) for a source queue. */
@@ -191,6 +242,7 @@ export async function enqueueDeadLetter(
     original_job_id: job.id ?? undefined,
     original_job_name: job.name,
     original_data_summary: summarizeJobDataForDeadLetter(job.data),
+    replay_depth: readReplayDepth(job.data),
     // audit-#W2: scrub URL/query-embedded secrets from the free-text error fields before they land
     // in the 30-day Redis mirror, mirroring the Sentry `beforeSend` path (payload_summary is already
     // whitelisted). Latent today, but a future error message interpolating a token must not persist.
@@ -257,6 +309,7 @@ async function persistDeadLetterFailureToPostgres(
       attempts_made: job.attemptsMade,
       max_attempts: maxAttempts,
       failed_at: new Date(),
+      replay_depth: readReplayDepth(job.data),
     });
 
     logger.info(
@@ -358,13 +411,21 @@ function captureDeadLetterPersistFailureInSentry(
 }
 
 /**
- * Subscribes once to `failed`: warn on transient retries; on final failure, persist the
- * durable Postgres record + mirror to Redis + alert Sentry.
+ * Subscribes once to `failed`: warn on transient retries; on a final failure, persist the durable
+ * Postgres record + mirror to Redis + alert Sentry.
  *
  * @remarks
- * - **Notes:** `UnrecoverableError` is treated as already-handled — the poison-job guard
- *   (`parseJobDataOrDeadLetter`) records the dead-letter and skips BullMQ's retry path, so this
- *   listener logs `queue.job.unrecoverable` and returns without recording a second time.
+ * - **Algorithm:** a failure is final when the job used its last attempt or threw BullMQ's
+ *   `UnrecoverableError` (which skips the remaining attempts). Then:
+ *   - already recorded ({@link isDeadLetterAlreadyRecorded} — the poison-job guard): alert only;
+ *   - an expected failure ({@link isExpectedFinalFailure}) — record it, log at warn, no Sentry;
+ *   - anything else — record it, log at error, one Sentry event.
+ * - **Failure modes:** never throws out of the listener — the record write is fire-and-forget
+ *   and swallows its own errors.
+ * - **Side effects:** structured logs, `audit.dead_letter_jobs` + `<source>-dlq` writes, Sentry.
+ * - **Notes:** an `UnrecoverableError` is a job that can never succeed — a missing row, an
+ *   unreadable secret, a corrupt payload. It used to be logged and dropped: no ledger row, no
+ *   alert, nothing for an operator to find.
  */
 export function attachDeadLetterAndAlerting(worker: Worker, queueName: string): void {
   worker.on('failed', (job, error) => {
@@ -375,15 +436,8 @@ export function attachDeadLetterAndAlerting(worker: Worker, queueName: string): 
       return;
     }
 
-    if (error instanceof UnrecoverableError) {
-      logger.error(
-        { queue: queueName, jobId: job.id, jobName: job.name, error: errorMessage },
-        'queue.job.unrecoverable',
-      );
-      return;
-    }
-
-    if (!isFinalJobFailure(job)) {
+    const unrecoverable = error instanceof UnrecoverableError;
+    if (!(unrecoverable || isFinalJobFailure(job))) {
       logger.warn(
         {
           queue: queueName,
@@ -398,23 +452,36 @@ export function attachDeadLetterAndAlerting(worker: Worker, queueName: string): 
       return;
     }
 
-    logger.error(
-      {
-        queue: queueName,
-        jobId: job.id,
-        jobName: job.name,
-        attemptsMade: job.attemptsMade,
-        maxAttempts: resolveJobMaxAttempts(job),
-        error: errorMessage,
-      },
-      'queue.job.final_failure',
-    );
+    const logFields = {
+      queue: queueName,
+      jobId: job.id,
+      jobName: job.name,
+      attemptsMade: job.attemptsMade,
+      maxAttempts: resolveJobMaxAttempts(job),
+      unrecoverable,
+      error: errorMessage,
+    };
+
+    if (isDeadLetterAlreadyRecorded(error)) {
+      logger.error(logFields, 'queue.job.final_failure');
+      captureFinalFailureInSentry(queueName, job, error);
+      return;
+    }
+
+    const expected = isExpectedFinalFailure(error);
+    if (expected) {
+      logger.warn(logFields, 'queue.job.final_failure_expected');
+    } else {
+      logger.error(logFields, 'queue.job.final_failure');
+    }
 
     void recordDeadLetterFailure(queueName, job, error).catch((err) => {
       logger.error({ err, queue: queueName, jobId: job?.id }, 'queue.dead_letter.record_failed');
     });
 
-    captureFinalFailureInSentry(queueName, job, error);
+    if (!expected) {
+      captureFinalFailureInSentry(queueName, job, error);
+    }
   });
 }
 
