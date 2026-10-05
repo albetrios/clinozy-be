@@ -4,7 +4,6 @@ import { randomUUID } from 'node:crypto';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
   injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
   injectUnauthenticated,
 } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -224,7 +223,7 @@ describe('Notify Domain — Integration', () => {
         userId: user.public_id,
         organizationPublicId: organization.public_id,
       });
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/notify/webhooks'),
         token,
@@ -271,7 +270,7 @@ describe('Notify Domain — Integration', () => {
         createdByUserId: user.id,
       });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/notify/webhooks/${webhook.public_id}/test`),
         token: readToken,
@@ -289,7 +288,7 @@ describe('Notify Domain — Integration', () => {
         createdByUserId: user.id,
       });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/notify/webhooks/${webhook.public_id}/test`),
         token,
@@ -306,7 +305,7 @@ describe('Notify Domain — Integration', () => {
 
     it('should return 404 for non-existent webhook', async () => {
       const { token } = await createAuthorizedNotifyContext();
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/notify/webhooks/whk_wwwwwwwwwwwwwwwwwwwww/test'),
         token,

@@ -2,10 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
-import {
-  injectAuthenticatedOrganizationMutation,
-  injectRoute,
-} from '@/tests/helpers/test-http-inject.helper.js';
+import { injectAuthenticated, injectRoute } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -94,7 +91,7 @@ describe('Billing subscription — happy paths (mocked payment provider)', () =>
     const { token } = await createAuthorizedBillingContext();
     const plan = await createTestPlan();
 
-    const response = await injectAuthenticatedOrganizationMutation(app, {
+    const response = await injectAuthenticated(app, {
       method: 'POST',
       url: testApiPath('/billing/subscriptions'),
       token,

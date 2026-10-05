@@ -5,7 +5,6 @@ import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
   injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
   injectUnauthenticated,
 } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -206,7 +205,7 @@ describe('Membership Sub-Domain — Integration', () => {
       // REQ-1: add-member-by-email always creates an INVITED membership (status is no longer an
       // accepted input). Initial activation must come from invitation acceptance — a manager cannot
       // mint an already-active member. The new INVITED row keeps joined_at null.
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/tenancy/organization/memberships`),
         token: adminToken,
@@ -276,7 +275,7 @@ describe('Membership Sub-Domain — Integration', () => {
       adminToken: string,
       memberRolePublicId: string,
     ) {
-      return injectAuthenticatedOrganizationMutation(app, {
+      return injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/memberships'),
         token: adminToken,
@@ -350,7 +349,7 @@ describe('Membership Sub-Domain — Integration', () => {
         roleId: memberRoleId,
         status: 'SUSPENDED',
       });
-      return injectAuthenticatedOrganizationMutation(app, {
+      return injectAuthenticated(app, {
         method: 'PATCH',
         url: testApiPath(`/tenancy/organization/memberships/${suspended.public_id}`),
         token: adminToken,
@@ -504,7 +503,7 @@ describe('Membership Sub-Domain — Integration', () => {
     it('rejects a manager PATCH that tries to activate a never-joined membership', async () => {
       const { organization, token, inviteeMembership } = await createPendingInvitation();
 
-      const patchResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const patchResponse = await injectAuthenticated(app, {
         method: 'PATCH',
         url: testApiPath(`/tenancy/organization/memberships/${inviteeMembership.public_id}`),
         token,
@@ -548,7 +547,7 @@ describe('Membership Sub-Domain — Integration', () => {
         })
         .returning();
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PATCH',
         url: testApiPath(`/tenancy/organization/memberships/${membership!.public_id}`),
         token,
@@ -612,7 +611,7 @@ describe('Membership Sub-Domain — Integration', () => {
     it('admin revokes a pending invitation (204 + revoked_at set, auto-created INVITED membership soft-deleted)', async () => {
       const { organization, adminToken, invitation, inviteeMembership } =
         await createPendingInvitationForAdminRevoke();
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'DELETE',
         url: testApiPath(`/tenancy/organization/invitations/${invitation.public_id}`),
         token: adminToken,
@@ -1268,7 +1267,7 @@ describe('Membership Sub-Domain — Integration', () => {
       const membershipsBefore = await countMemberships(organization.id);
       expect(membershipsBefore).toBe(1); // only the owner
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/memberships'),
         token,
@@ -1306,7 +1305,7 @@ describe('Membership Sub-Domain — Integration', () => {
       // Reuse the owner role (full permission set) so the privilege-escalation guard also passes.
       const ownerRolePublicId = await rolePublicId(team.roleId);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/memberships'),
         token,

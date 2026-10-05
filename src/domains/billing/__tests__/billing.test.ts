@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
   injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
   injectUnauthenticated,
 } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -139,7 +138,7 @@ describe('Billing Domain — Route gates (e2e)', () => {
   describe('POST /api/v1/billing/subscriptions', () => {
     it('should return 400 for missing body', async () => {
       const { token } = await createAuthorizedBillingContext();
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/billing/subscriptions'),
         token,

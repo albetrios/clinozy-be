@@ -35,7 +35,7 @@ Triggered by `be-testing-conventions.mdc` when test-related or pure-layer files 
 - **Vitest** — runner, assertions, coverage (`pnpm test`, `pnpm test:unit`, `pnpm test:e2e`, …)
 - **fastify.inject()** — in-process HTTP via helpers in `src/tests/helpers/test-http-inject.helper.ts` (`createTestApp()` in `src/tests/helpers/test-app.ts`)
 
-Use `injectAuthenticated`, `injectUnauthenticated`, `injectAuthenticatedOrganizationMutation`, or `injectWithCookies` (for session cookies) from `src/tests/helpers/test-http-inject.helper.ts`.
+Use `injectAuthenticated`, `injectUnauthenticated`, or `injectWithCookies` (for session cookies) from `src/tests/helpers/test-http-inject.helper.ts`. Each one waits for the response's `onResponse` work (idempotency entry, post-commit dispatch) before returning — a bare `app.inject()` does not.
 
 ## Test layout (non-negotiable)
 
@@ -255,7 +255,7 @@ describe('<Domain> Domain — Integration', () => {
     expect(response.statusCode).toBe(401);
   });
 
-  // ... route tests with injectAuthenticated / injectAuthenticatedOrganizationMutation ...
+  // ... route tests with injectAuthenticated / injectUnauthenticated ...
 });
 ```
 

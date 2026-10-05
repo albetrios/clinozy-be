@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
   injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
   injectUnauthenticated,
 } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -298,7 +297,7 @@ describe('Tenancy Domain — flows (memberships, leave, roles)', () => {
   describe('POST /api/v1/tenancy/organization/memberships', () => {
     it('should return 400 for missing body', async () => {
       const { token } = await createAuthorizedUserAndOrganization();
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/memberships'),
         token,
@@ -357,7 +356,7 @@ describe('Tenancy Domain — flows (memberships, leave, roles)', () => {
         userId: user.public_id,
         organizationPublicId: organization.public_id,
       });
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/roles'),
         token,
@@ -369,7 +368,7 @@ describe('Tenancy Domain — flows (memberships, leave, roles)', () => {
 
     it('should create role with manage permission', async () => {
       const { token } = await createAuthorizedUserAndOrganization();
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/roles'),
         token,

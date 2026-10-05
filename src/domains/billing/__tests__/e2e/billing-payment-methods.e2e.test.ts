@@ -1,10 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
-import {
-  injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
-} from '@/tests/helpers/test-http-inject.helper.js';
+import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
@@ -114,7 +111,7 @@ describe('Billing payment methods (e2e)', () => {
 
   it('POST /billing/payment-methods/setup returns 200', async () => {
     const { token } = await createBillingContext();
-    const response = await injectAuthenticatedOrganizationMutation(app, {
+    const response = await injectAuthenticated(app, {
       method: 'POST',
       url: testApiPath('/billing/payment-methods/setup'),
       token,

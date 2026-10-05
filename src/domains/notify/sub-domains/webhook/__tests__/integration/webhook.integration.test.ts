@@ -13,7 +13,6 @@ import { buildInFlightIdempotencyEntry } from '@/tests/helpers/idempotency-entry
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
   injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
   injectUnauthenticated,
 } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -376,7 +375,7 @@ describe('Webhook Sub-Domain — Integration', () => {
         createdByUserId: user.id,
       });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PATCH',
         url: testApiPath(`/notify/webhooks/${webhook.public_id}`),
         token,
@@ -442,7 +441,7 @@ describe('Webhook Sub-Domain — Integration', () => {
         createdByUserId: user.id,
       });
 
-      const firstRotation = await injectAuthenticatedOrganizationMutation(app, {
+      const firstRotation = await injectAuthenticated(app, {
         method: 'PATCH',
         url: testApiPath(`/notify/webhooks/${webhook.public_id}`),
         token,

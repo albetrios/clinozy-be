@@ -3,7 +3,6 @@ import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
   injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
   injectUnauthenticated,
 } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -168,7 +167,7 @@ describe('Billing Subscription Mutations — Integration', () => {
       // subscription lookup, so the refusal is the validator's own.
       const { organization, subscription, token } = await createBillingMutationContext();
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
         token,
@@ -183,7 +182,7 @@ describe('Billing Subscription Mutations — Integration', () => {
       const { organization, subscription, token } = await createBillingMutationContext();
       const newPlan = await createTestPlan({ name: 'New Plan' });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
         token,
@@ -228,7 +227,7 @@ describe('Billing Subscription Mutations — Integration', () => {
       });
 
       const oneSeatPlan = await createTestPlan({ name: 'Solo Plan', includedSeats: 1 });
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
         token,
@@ -267,7 +266,7 @@ describe('Billing Subscription Mutations — Integration', () => {
       } = await createBillingMutationContext();
       const zeroSeatPlan = await createTestPlan({ name: 'Tiny Plan', includedSeats: 0 });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
         token,
@@ -295,7 +294,7 @@ describe('Billing Subscription Mutations — Integration', () => {
       const { organization, subscription, token } = await createBillingMutationContext();
       const fittingPlan = await createTestPlan({ name: 'Roomy Plan', includedSeats: 5 });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
         token,
@@ -385,7 +384,7 @@ describe('Billing Subscription Mutations — Integration', () => {
         status: 'ACTIVE',
       });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token,
@@ -466,7 +465,7 @@ describe('Billing Subscription Mutations — Integration', () => {
       });
 
       // First cancel — sets cancel_at_period_end=true
-      await injectAuthenticatedOrganizationMutation(app, {
+      await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token,
@@ -476,7 +475,7 @@ describe('Billing Subscription Mutations — Integration', () => {
 
       // Second cancel — subscription is still ACTIVE in the DB (just cancel_at_period_end=true),
       // so the service can fetch it and set cancel_at_period_end=true again → 200.
-      const secondCancelResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const secondCancelResponse = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token,
@@ -497,7 +496,7 @@ describe('Billing Subscription Mutations — Integration', () => {
       });
 
       // First cancel to set cancel_at_period_end=true
-      await injectAuthenticatedOrganizationMutation(app, {
+      await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token,
@@ -505,7 +504,7 @@ describe('Billing Subscription Mutations — Integration', () => {
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/resume`),
         token,
@@ -589,7 +588,7 @@ describe('Billing Subscription Mutations — Integration', () => {
         status: 'ACTIVE',
       });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/resume`),
         token,
@@ -630,7 +629,7 @@ describe('Billing Subscription Mutations — Integration', () => {
       expect(initialBody.data?.cancel_at_period_end).toBe(false);
 
       // 2. Cancel — sets cancel_at_period_end=true.
-      const cancelResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const cancelResponse = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscriptionId}/cancel`),
         token,
@@ -657,7 +656,7 @@ describe('Billing Subscription Mutations — Integration', () => {
       expect(afterCancelBody.data?.cancel_at_period_end).toBe(true);
 
       // 4. Resume — sets cancel_at_period_end=false and status=ACTIVE.
-      const resumeResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const resumeResponse = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscriptionId}/resume`),
         token,
@@ -866,7 +865,7 @@ describe('Billing Subscription Mutations — Integration', () => {
         providerSubscriptionId: `sub_test_${generatePublicId('subscription')}`,
       });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token,
@@ -883,7 +882,7 @@ describe('Billing Subscription Mutations — Integration', () => {
         providerSubscriptionId: `sub_test_${generatePublicId('subscription')}`,
       });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/resume`),
         token,
@@ -901,7 +900,7 @@ describe('Billing Subscription Mutations — Integration', () => {
       });
 
       // Stripe-backed cancel fails closed → 503.
-      const cancelResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const cancelResponse = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token,

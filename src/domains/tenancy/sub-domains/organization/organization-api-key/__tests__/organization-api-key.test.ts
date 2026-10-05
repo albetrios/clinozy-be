@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
   injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
   injectUnauthenticated,
 } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -159,7 +158,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
         TENANCY_PERMISSIONS.API_KEY_MANAGE,
       ]);
 
-      const created = await injectAuthenticatedOrganizationMutation(app, {
+      const created = await injectAuthenticated(app, {
         method: 'POST',
         url: API_KEYS_COLLECTION_PATH,
         token,
@@ -195,7 +194,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
         TENANCY_PERMISSIONS.API_KEY_READ,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: API_KEYS_COLLECTION_PATH,
         token,
@@ -209,7 +208,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
         TENANCY_PERMISSIONS.API_KEY_MANAGE,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: API_KEYS_COLLECTION_PATH,
         token,
@@ -223,7 +222,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
         TENANCY_PERMISSIONS.API_KEY_MANAGE,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: API_KEYS_COLLECTION_PATH,
         token,
@@ -237,7 +236,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
         TENANCY_PERMISSIONS.API_KEY_MANAGE,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: API_KEYS_COLLECTION_PATH,
         token,
@@ -251,7 +250,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
         TENANCY_PERMISSIONS.API_KEY_MANAGE,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: API_KEYS_COLLECTION_PATH,
         token,
@@ -280,7 +279,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
       const managerContext = await createAuthorizedOrganizationContext(
         API_KEY_MANAGER_WITH_READ_GRANT,
       );
-      const createResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const createResponse = await injectAuthenticated(app, {
         method: 'POST',
         url: API_KEYS_COLLECTION_PATH,
         token: managerContext.token,
@@ -307,7 +306,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
         organizationPublicId: managerContext.organization.public_id,
       });
 
-      const patchResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const patchResponse = await injectAuthenticated(app, {
         method: 'PATCH',
         url: apiKeysResourcePath(apiKeyPublicId),
         token: readOnlyToken,
@@ -319,7 +318,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
     it('should return 400 when status value is invalid', async () => {
       const { token } = await createAuthorizedOrganizationContext(API_KEY_MANAGER_WITH_READ_GRANT);
 
-      const createResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const createResponse = await injectAuthenticated(app, {
         method: 'POST',
         url: API_KEYS_COLLECTION_PATH,
         token,
@@ -329,7 +328,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
       const createBody = createResponse.json() as { data: { api_key: { id: string } } };
       const apiKeyPublicId = createBody.data.api_key.id;
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PATCH',
         url: apiKeysResourcePath(apiKeyPublicId),
         token,
@@ -341,7 +340,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
     it('should update api key with manage permission', async () => {
       const { token } = await createAuthorizedOrganizationContext(API_KEY_MANAGER_WITH_READ_GRANT);
 
-      const createResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const createResponse = await injectAuthenticated(app, {
         method: 'POST',
         url: API_KEYS_COLLECTION_PATH,
         token,
@@ -351,7 +350,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
       const createBody = createResponse.json() as { data: { api_key: { id: string } } };
       const apiKeyPublicId = createBody.data.api_key.id;
 
-      const patchResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const patchResponse = await injectAuthenticated(app, {
         method: 'PATCH',
         url: apiKeysResourcePath(apiKeyPublicId),
         token,
@@ -377,7 +376,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
       const managerContext = await createAuthorizedOrganizationContext(
         API_KEY_MANAGER_WITH_READ_GRANT,
       );
-      const createResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const createResponse = await injectAuthenticated(app, {
         method: 'POST',
         url: API_KEYS_COLLECTION_PATH,
         token: managerContext.token,
@@ -404,7 +403,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
         organizationPublicId: managerContext.organization.public_id,
       });
 
-      const deleteResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const deleteResponse = await injectAuthenticated(app, {
         method: 'DELETE',
         url: apiKeysResourcePath(apiKeyPublicId),
         token: readOnlyToken,
@@ -417,7 +416,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
         TENANCY_PERMISSIONS.API_KEY_MANAGE,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'DELETE',
         url: apiKeysResourcePath('key_yyyyyyyyyyyyyyyyyyyyy'),
         token,
@@ -431,7 +430,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
         TENANCY_PERMISSIONS.API_KEY_MANAGE,
       ]);
 
-      const createResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const createResponse = await injectAuthenticated(app, {
         method: 'POST',
         url: API_KEYS_COLLECTION_PATH,
         token,
@@ -441,7 +440,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
       const createBody = createResponse.json() as { data: { api_key: { id: string } } };
       const apiKeyPublicId = createBody.data.api_key.id;
 
-      const deleteResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const deleteResponse = await injectAuthenticated(app, {
         method: 'DELETE',
         url: apiKeysResourcePath(apiKeyPublicId),
         token,
@@ -474,7 +473,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
       const managerContext = await createAuthorizedOrganizationContext(
         API_KEY_MANAGER_WITH_READ_GRANT,
       );
-      const createResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const createResponse = await injectAuthenticated(app, {
         method: 'POST',
         url: API_KEYS_COLLECTION_PATH,
         token: managerContext.token,
@@ -501,7 +500,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
         organizationPublicId: managerContext.organization.public_id,
       });
 
-      const rotateResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const rotateResponse = await injectAuthenticated(app, {
         method: 'POST',
         url: `${apiKeysResourcePath(apiKeyPublicId)}/rotate`,
         token: readOnlyToken,
@@ -514,7 +513,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
         TENANCY_PERMISSIONS.API_KEY_MANAGE,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: `${apiKeysResourcePath('key_yyyyyyyyyyyyyyyyyyyyy')}/rotate`,
         token,
@@ -528,7 +527,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
         TENANCY_PERMISSIONS.API_KEY_MANAGE,
       ]);
 
-      const createResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const createResponse = await injectAuthenticated(app, {
         method: 'POST',
         url: API_KEYS_COLLECTION_PATH,
         token,
@@ -541,7 +540,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
       const firstRawKey = createBody.data.raw_key;
       const apiKeyPublicIdBeforeRotation = createBody.data.api_key.id;
 
-      const rotateResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const rotateResponse = await injectAuthenticated(app, {
         method: 'POST',
         url: `${apiKeysResourcePath(apiKeyPublicIdBeforeRotation)}/rotate`,
         token,
@@ -582,7 +581,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
         TENANCY_PERMISSIONS.API_KEY_MANAGE,
       ]);
 
-      const createResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const createResponse = await injectAuthenticated(app, {
         method: 'POST',
         url: API_KEYS_COLLECTION_PATH,
         token,
@@ -593,7 +592,7 @@ describe('Tenancy Organization API Key Sub-Domain — Integration', () => {
         .api_key.id;
 
       const rotateOnce = () =>
-        injectAuthenticatedOrganizationMutation(app, {
+        injectAuthenticated(app, {
           method: 'POST',
           url: `${apiKeysResourcePath(apiKeyPublicId)}/rotate`,
           token,

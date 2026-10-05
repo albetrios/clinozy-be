@@ -1,10 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
-import {
-  injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
-} from '@/tests/helpers/test-http-inject.helper.js';
+import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -323,7 +320,7 @@ describe('Storage-backed attach routes — refusals (mocked S3 port)', () => {
       });
 
       const caller = await createOrganizationManager();
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PUT',
         url: testApiPath(ORGANIZATION_LOGO_URL),
         token: caller.token,
@@ -346,7 +343,7 @@ describe('Storage-backed attach routes — refusals (mocked S3 port)', () => {
         organizationPublicId: caller.organizationPublicId,
       });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PUT',
         url: testApiPath(ORGANIZATION_LOGO_URL),
         token: caller.token,

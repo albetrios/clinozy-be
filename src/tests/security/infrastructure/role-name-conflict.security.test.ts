@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
-import { injectAuthenticatedOrganizationMutation } from '@/tests/helpers/test-http-inject.helper.js';
+import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -62,7 +62,7 @@ describe('Security: role-name uniqueness conflict', () => {
   }
 
   async function createRole(token: string, name: string) {
-    return injectAuthenticatedOrganizationMutation(app, {
+    return injectAuthenticated(app, {
       method: 'POST',
       url: testApiPath('/tenancy/organization/roles'),
       token,
