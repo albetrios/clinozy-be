@@ -22,3 +22,13 @@ eslint.config.mjs
 drizzle.config.ts
 # Local DB Viewer runtime history (gitignored in-module; keep out of build context)
 tooling/db-viewer/.db-viewer-history/
+
+# Local agent, editor and tool state — never part of the image (and .claude alone is gigabytes)
+.claude/
+.codegraph/
+.cache/
+.dashboards/
+.stryker-tmp/
+outputs/
+reports/
+coverage-*/
