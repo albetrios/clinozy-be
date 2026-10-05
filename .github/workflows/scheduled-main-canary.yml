@@ -39,6 +39,7 @@ jobs:
     # ALLOWED_ORIGINS, …) come from the shared test-env action below.
     env:
       DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
       REDIS_URL: redis://localhost:6379
     steps:
       - name: Checkout

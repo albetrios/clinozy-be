@@ -150,6 +150,7 @@ jobs:
         env:
           NODE_ENV: development
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
+          DATABASE_MAINTENANCE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
           REDIS_URL: redis://localhost:6379
         run: pnpm docs:check
 
@@ -285,6 +286,7 @@ jobs:
       HOST: 0.0.0.0
       PORT: 3000
       DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
       REDIS_URL: redis://localhost:6379
       RATE_LIMIT_MAX: 1000
       RATE_LIMIT_WINDOW_MS: 60000
@@ -354,6 +356,7 @@ jobs:
       HOST: 0.0.0.0
       PORT: 3000
       DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
       REDIS_URL: redis://localhost:6379
       RATE_LIMIT_MAX: 1000
       RATE_LIMIT_WINDOW_MS: 60000
@@ -374,6 +377,8 @@ jobs:
       - name: Run migrations
         run: pnpm db:migrate
 
+      # The harness opens the pool under test as clinozy_be_app and the maintenance pool as
+      # clinozy_be_maintenance (`-c role=` on each URL), so both run the production RLS posture.
       - name: Run e2e + integration as the RLS-subject application role
         run: |
           set -euo pipefail

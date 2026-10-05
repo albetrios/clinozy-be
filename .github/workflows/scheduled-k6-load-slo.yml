@@ -59,6 +59,7 @@ jobs:
       HOST: 0.0.0.0
       PORT: 3000
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
       REDIS_URL: redis://localhost:6379
       ENABLE_MCP_SERVER: 'true'
       BASE_URL: http://localhost:3000

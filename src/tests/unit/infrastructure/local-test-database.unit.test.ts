@@ -74,7 +74,7 @@ describe('local test database harness', () => {
       );
     });
 
-    it('never keeps a remote URL: required ones fall back to the local test database, optional ones are dropped', () => {
+    it('never keeps a remote URL: required ones fall back to the local test database, the optional operator is dropped', () => {
       process.env.DATABASE_URL = 'postgresql://app_login@db.example.com:5432/devdb';
       process.env.DATABASE_MIGRATION_URL = 'postgresql://owner_login@db.example.com:5432/devdb';
       process.env.DATABASE_MAINTENANCE_URL = 'postgresql://maintenance@db.example.com:5432/devdb';
@@ -84,11 +84,11 @@ describe('local test database harness', () => {
 
       expect(process.env.DATABASE_URL).toBe(LOCAL_TEST_DATABASE_URL);
       expect(process.env.DATABASE_MIGRATION_URL).toBe(LOCAL_TEST_DATABASE_URL);
-      expect(process.env.DATABASE_MAINTENANCE_URL).toBeUndefined();
+      expect(process.env.DATABASE_MAINTENANCE_URL).toBe(LOCAL_TEST_DATABASE_URL);
       expect(process.env.DATABASE_OPERATOR_URL).toBeUndefined();
     });
 
-    it('drops a remote maintenance login even when the main login is local', () => {
+    it('replaces a remote maintenance login even when the main login is local', () => {
       process.env.DATABASE_URL = 'postgresql://app_login@127.0.0.1:5432/devdb';
       process.env.DATABASE_MAINTENANCE_URL = 'postgresql://maintenance@db.example.com:5432/devdb';
 
@@ -97,7 +97,7 @@ describe('local test database harness', () => {
       expect(process.env.DATABASE_URL).toBe(
         `postgresql://app_login@127.0.0.1:5432/${LOCAL_TEST_DATABASE_NAME}`,
       );
-      expect(process.env.DATABASE_MAINTENANCE_URL).toBeUndefined();
+      expect(process.env.DATABASE_MAINTENANCE_URL).toBe(LOCAL_TEST_DATABASE_URL);
     });
 
     it('leaves a provided database alone', () => {

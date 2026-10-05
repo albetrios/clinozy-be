@@ -100,6 +100,7 @@ jobs:
       - name: Run migrations on restored branch
         env:
           DATABASE_URL: ${{ steps.neon_drill.outputs.database_url }}
+          DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.database_url }}
         run: pnpm db:migrate
 
       # The DR runbook's step after migrating (docs/process/dr-runbook.md): move every id sequence
@@ -107,11 +108,13 @@ jobs:
       - name: Advance id sequences on restored branch
         env:
           DATABASE_URL: ${{ steps.neon_drill.outputs.database_url }}
+          DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.database_url }}
         run: pnpm db:sequences:advance
 
       - name: Integration smoke on restored database
         env:
           DATABASE_URL: ${{ steps.neon_drill.outputs.database_url }}
+          DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.database_url }}
         run: pnpm test:integration -- --run src/domains/auth/__tests__/integration/auth.integration.test.ts
 
       - name: Record restore duration and assert RTO

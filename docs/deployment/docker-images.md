@@ -159,6 +159,7 @@ docker run --rm -p 3000:3000 \
   -e DATABASE_CONNECTION_BUDGET_ENFORCED=false -e REDIS_TLS_ENFORCED=false -e TRUST_PROXY_REQUIRED=false \
   -e HOST=0.0.0.0 -e PORT=3000 \
   -e DATABASE_URL=postgresql://clinozy:clinozy@host.docker.internal:5432/clinozy \
+  -e DATABASE_MAINTENANCE_URL=postgresql://clinozy:clinozy@host.docker.internal:5432/clinozy \
   -e REDIS_URL=redis://host.docker.internal:6379 \
   -e JWT_PRIVATE_KEY="$(cat /tmp/jwt-private.pem)" -e JWT_PUBLIC_KEY="$(cat /tmp/jwt-public.pem)" \
   -e SECRETS_ENCRYPTION_KEY="$(openssl rand -hex 32)" -e METRICS_ENABLED=false \

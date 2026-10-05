@@ -218,14 +218,12 @@ const envSchemaBase = z.object({
   DATABASE_URL: z.string().min(1),
   DATABASE_MIGRATION_URL: z.string().min(1).optional(), // elevated-privilege user for migrations
   /**
-   * Dedicated connection string for maintenance (RLS-bypass) database contexts,
-   * connecting as the `clinozy_be_maintenance` role. Unset (the default) keeps every
-   * maintenance context on DATABASE_URL / `clinozy_be_app` — current behavior. Once every
-   * hosted environment provisions it (see docs/deployment/runbooks/maintenance-database-role.md),
-   * the bypass policy arms can be tightened to `current_user = 'clinozy_be_maintenance'`,
-   * making bypass authority a connection-level property instead of a GUC-only one.
+   * Connection string for maintenance (RLS-bypass) database contexts, connecting as the
+   * `clinozy_be_maintenance` role — the only role the bypass policy arms admit, so a bypass GUC
+   * armed on any other connection grants nothing. Provisioning:
+   * docs/deployment/runbooks/maintenance-database-role.md.
    */
-  DATABASE_MAINTENANCE_URL: z.string().min(1).optional(),
+  DATABASE_MAINTENANCE_URL: z.string().min(1),
   /**
    * Elevated LOCAL/CI connection for the test harness, full/bulk seeds, and fixture
    * tooling, connecting as `clinozy_be_operator` (member of `clinozy_be_owner`; local

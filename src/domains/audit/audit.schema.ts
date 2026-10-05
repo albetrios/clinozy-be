@@ -10,7 +10,7 @@ import {
   check,
   pgPolicy,
 } from 'drizzle-orm/pg-core';
-import { auditSchema } from '@/infrastructure/database/pg-schemas.js';
+import { auditSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { api_keys } from '@/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.schema.js';
@@ -110,8 +110,8 @@ export const logs = auditSchema
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR current_setting('app.global_retention_cleanup', true) = 'true'
-          OR current_setting('app.global_admin', true) = 'true'`,
+          OR ${maintenanceBypassArm('app.global_retention_cleanup')}
+          OR ${maintenanceBypassArm('app.global_admin')}`,
       }),
       pgPolicy('audit_logs_tenant_isolation_insert', {
         as: 'permissive',
@@ -133,14 +133,14 @@ export const logs = auditSchema
           )
           OR (
             ${table.organization_id} IS NULL
-            AND current_setting('app.system_audit_insert', true) = 'true'
+            AND ${maintenanceBypassArm('app.system_audit_insert')}
           )`,
       }),
       pgPolicy('audit_logs_tenant_isolation_delete', {
         as: 'permissive',
         for: 'delete',
         to: 'public',
-        using: sql`current_setting('app.global_retention_cleanup', true) = 'true'`,
+        using: sql`${maintenanceBypassArm('app.global_retention_cleanup')}`,
       }),
       pgPolicy('audit_logs_user_export_select', {
         as: 'permissive',

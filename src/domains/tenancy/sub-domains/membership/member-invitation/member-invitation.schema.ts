@@ -9,7 +9,7 @@ import {
   check,
   pgPolicy,
 } from 'drizzle-orm/pg-core';
-import { tenancySchema } from '@/infrastructure/database/pg-schemas.js';
+import { maintenanceBypassArm, tenancySchema } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 
@@ -84,7 +84,7 @@ export const member_invitations = tenancySchema
               WHERE public_id = current_setting('app.current_organization_public_id', true)
             )
           )
-          OR current_setting('app.global_retention_cleanup', true) = 'true'`,
+          OR ${maintenanceBypassArm('app.global_retention_cleanup')}`,
         withCheck: sql`${table.membership_id} IN (
             SELECT id FROM tenancy.memberships
             WHERE organization_id = (

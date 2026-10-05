@@ -32,7 +32,8 @@ import { DATABASE_APP_ROLE } from '@/shared/constants/project-identity.constants
  *
  * The fix opens the matching context inside `AuditService.record`: organization rows under
  * `withAppDatabaseContext`, tenantless rows under `withMaintenanceDatabaseContext`. These
- * tests prove the policy behavior under `SET LOCAL ROLE clinozy_be_app`.
+ * tests prove the policy behavior under the production roles: `SET LOCAL ROLE clinozy_be_app`
+ * for request paths, `clinozy_be_maintenance` for the system-audit-insert context.
  */
 
 /** Minimal valid outbox row (satisfies chk_audit_outbox_actor_present + status/severity checks). */
@@ -128,13 +129,13 @@ describe('Security: audit.outbox INSERT RLS (audit R10)', () => {
     expect(rows[0]?.count).toBe('1');
   });
 
-  it('R10 FIX: clinozy_be_app under system-audit-insert context CAN INSERT the tenantless outbox row', async () => {
+  it('R10 FIX: the system-audit-insert context (clinozy_be_maintenance) CAN INSERT the tenantless outbox row', async () => {
     let caught: unknown;
     try {
       await withMaintenanceDatabaseContext(
         MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
         (databaseHandle) => databaseHandle.execute(outboxInsertSql(null)),
-        { useApplicationDatabaseRole: true },
+        { useMaintenanceDatabaseRole: true },
       );
     } catch (error) {
       caught = error;

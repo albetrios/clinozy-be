@@ -35,6 +35,7 @@ WORKDIR /app
 # value) so the placeholder secrets above pass the schema (production-only refines reject them).
 ENV NODE_ENV=development \
   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/clinozy \
+  DATABASE_MAINTENANCE_URL=postgresql://postgres:postgres@localhost:5432/clinozy \
   REDIS_URL=redis://localhost:6379 \
   JWT_PRIVATE_KEY=test-private-key \
   JWT_PUBLIC_KEY=test-public-key \

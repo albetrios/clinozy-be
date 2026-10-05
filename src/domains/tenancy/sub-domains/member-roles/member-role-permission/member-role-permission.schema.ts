@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { bigint, varchar, timestamp, index, primaryKey, pgPolicy } from 'drizzle-orm/pg-core';
-import { tenancySchema } from '@/infrastructure/database/pg-schemas.js';
+import { maintenanceBypassArm, tenancySchema } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
 import { permissions } from '@/domains/tenancy/sub-domains/permission/permission.schema.js';
@@ -48,7 +48,7 @@ export const role_permissions = tenancySchema
               WHERE public_id = current_setting('app.current_organization_public_id', true)
             )
           )
-          OR current_setting('app.global_retention_cleanup', true) = 'true'`,
+          OR ${maintenanceBypassArm('app.global_retention_cleanup')}`,
         withCheck: sql`${table.role_id} IN (
             SELECT id FROM tenancy.roles
             WHERE organization_id = (

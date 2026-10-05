@@ -1,11 +1,18 @@
-import { LOCAL_DATABASE_NAME } from '@/shared/constants/project-identity.constants.js';
+import {
+  DATABASE_MAINTENANCE_ROLE,
+  LOCAL_DATABASE_NAME,
+} from '@/shared/constants/project-identity.constants.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const sqlMock = vi.fn();
+const maintenanceExecuteMock = vi.fn();
 const getEnvMock = vi.fn();
 
 vi.mock('@/infrastructure/database/connection.js', () => ({
   sql: (...arguments_: unknown[]) => sqlMock(...arguments_),
+  getMaintenanceDatabase: () => ({
+    execute: (...arguments_: unknown[]) => maintenanceExecuteMock(...arguments_),
+  }),
 }));
 
 vi.mock('@/shared/config/env.config.js', () => ({
@@ -124,6 +131,91 @@ describe('assertDatabaseRoleRlsSafety', () => {
 
     await expect(assertDatabaseRoleRlsSafety()).rejects.toThrow(
       /database\.rls_safety\.session_role_not_found/,
+    );
+  });
+
+  it('throws when DATABASE_URL acts as the maintenance role (the bypass arms would open)', async () => {
+    sqlMock.mockResolvedValue([
+      {
+        rolname: DATABASE_MAINTENANCE_ROLE,
+        rolsuper: false,
+        rolbypassrls: false,
+        acting_role: DATABASE_MAINTENANCE_ROLE,
+      },
+    ]);
+    getEnvMock.mockReturnValue({ DATABASE_RLS_SAFETY_ENFORCED: true });
+
+    const { assertDatabaseRoleRlsSafety } = await import(
+      '@/infrastructure/database/safety/assert-database-rls-safety.js'
+    );
+
+    await expect(assertDatabaseRoleRlsSafety()).rejects.toThrow(
+      /database\.rls_safety\.runtime_is_maintenance_role/,
+    );
+  });
+});
+
+describe('assertMaintenanceDatabaseRoleRlsSafety', () => {
+  beforeEach(() => {
+    maintenanceExecuteMock.mockReset();
+    getEnvMock.mockReset();
+    vi.resetModules();
+  });
+
+  async function loadAssertion() {
+    const { assertMaintenanceDatabaseRoleRlsSafety } = await import(
+      '@/infrastructure/database/safety/assert-database-rls-safety.js'
+    );
+    return assertMaintenanceDatabaseRoleRlsSafety;
+  }
+
+  it('resolves when the pool acts as the RLS-subject maintenance role', async () => {
+    maintenanceExecuteMock.mockResolvedValue([
+      {
+        rolname: DATABASE_MAINTENANCE_ROLE,
+        rolsuper: false,
+        rolbypassrls: false,
+        acting_role: DATABASE_MAINTENANCE_ROLE,
+      },
+    ]);
+    getEnvMock.mockReturnValue({ DATABASE_RLS_SAFETY_ENFORCED: true });
+
+    await expect((await loadAssertion())()).resolves.toBeUndefined();
+  });
+
+  it('throws when the pool acts as another role — every maintenance context would match no rows', async () => {
+    maintenanceExecuteMock.mockResolvedValue([
+      { rolname: 'app_login', rolsuper: false, rolbypassrls: false, acting_role: 'app_login' },
+    ]);
+    getEnvMock.mockReturnValue({ DATABASE_RLS_SAFETY_ENFORCED: true });
+
+    await expect((await loadAssertion())()).rejects.toThrow(
+      /database\.rls_safety\.maintenance_wrong_role/,
+    );
+  });
+
+  it('throws when the maintenance login is exempt from RLS', async () => {
+    maintenanceExecuteMock.mockResolvedValue([
+      { rolname: 'postgres', rolsuper: true, rolbypassrls: false, acting_role: 'postgres' },
+    ]);
+    getEnvMock.mockReturnValue({ DATABASE_RLS_SAFETY_ENFORCED: true });
+
+    await expect((await loadAssertion())()).rejects.toThrow(
+      /database\.rls_safety\.maintenance_unsafe_role/,
+    );
+  });
+
+  it('warns (without throwing) on a superuser maintenance pool when enforcement is off', async () => {
+    maintenanceExecuteMock.mockResolvedValue([
+      { rolname: 'postgres', rolsuper: true, rolbypassrls: false, acting_role: 'postgres' },
+    ]);
+    getEnvMock.mockReturnValue({ DATABASE_RLS_SAFETY_ENFORCED: false });
+
+    const { logger } = await import('@/shared/utils/infrastructure/logger.util.js');
+    await expect((await loadAssertion())()).resolves.toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ rolname: 'postgres', acting_role: 'postgres' }),
+      expect.stringContaining('database.rls_safety.maintenance_unsafe_role_local'),
     );
   });
 });

@@ -11,7 +11,7 @@ import {
   check,
   pgPolicy,
 } from 'drizzle-orm/pg-core';
-import { authSchema } from '@/infrastructure/database/pg-schemas.js';
+import { authSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 import { AUTH_METHOD_TYPES } from './auth-method.constants.js';
 
@@ -80,7 +80,7 @@ export const auth_methods = authSchema
             WHERE public_id = current_setting('app.current_user_public_id', true)
               AND deleted_at IS NULL
           )
-          OR current_setting('app.global_admin', true) = 'true'
+          OR ${maintenanceBypassArm('app.global_admin')}
         )`,
         withCheck: sql`(
           ${table.user_id} = (
@@ -88,7 +88,7 @@ export const auth_methods = authSchema
             WHERE public_id = current_setting('app.current_user_public_id', true)
               AND deleted_at IS NULL
           )
-          OR current_setting('app.global_admin', true) = 'true'
+          OR ${maintenanceBypassArm('app.global_admin')}
         )`,
       }),
     ],

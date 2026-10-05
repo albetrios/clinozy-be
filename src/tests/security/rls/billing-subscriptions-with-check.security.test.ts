@@ -104,7 +104,7 @@ describe('Security: subscriptions RLS WITH CHECK confines cross-organization wri
               `UPDATE "billing"."subscriptions" SET organization_id = ${organizationAInternalId} WHERE id = ${rowIds.organizationB} RETURNING id`,
             ),
           ),
-        { useApplicationDatabaseRole: true },
+        { useMaintenanceDatabaseRole: true },
       );
     } catch (error) {
       caught = error;
@@ -131,7 +131,7 @@ describe('Security: subscriptions RLS WITH CHECK confines cross-organization wri
         const rows = Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? []);
         return rows.length;
       },
-      { useApplicationDatabaseRole: true },
+      { useMaintenanceDatabaseRole: true },
     );
 
     expect(deletedCount).toBe(1);

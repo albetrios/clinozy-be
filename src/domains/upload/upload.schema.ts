@@ -11,7 +11,7 @@ import {
   check,
   pgPolicy,
 } from 'drizzle-orm/pg-core';
-import { uploadSchema } from '@/infrastructure/database/pg-schemas.js';
+import { maintenanceBypassArm, uploadSchema } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 
@@ -78,7 +78,7 @@ export const uploads = uploadSchema
               WHERE public_id = current_setting('app.current_organization_public_id', true)
             )
           )
-          OR current_setting('app.global_retention_cleanup', true) = 'true'`,
+          OR ${maintenanceBypassArm('app.global_retention_cleanup')}`,
         // The retention bypass appears in WITH CHECK too (unlike billing.subscriptions,
         // which is read/delete-only under retention): the pending-sweep worker UPDATEs
         // rows (auto-confirm / mark-FAILED) under the global-retention context, and
@@ -91,7 +91,7 @@ export const uploads = uploadSchema
               WHERE public_id = current_setting('app.current_organization_public_id', true)
             )
           )
-          OR current_setting('app.global_retention_cleanup', true) = 'true'`,
+          OR ${maintenanceBypassArm('app.global_retention_cleanup')}`,
       }),
       // Owner access for user-scoped (NULL-organization) uploads such as avatars. Permissive → OR'd with
       // the tenant-isolation policy. Org-scoped rows (organization_id IS NOT NULL) are excluded

@@ -84,7 +84,7 @@ describe('Security: tenant-isolation WITH CHECK propagation confines cross-organ
                 `UPDATE "${schemaName}"."${tableName}" SET organization_id = ${organizationAInternalId} WHERE id = ${rowIds!.organizationB} RETURNING id`,
               ),
             ),
-          { useApplicationDatabaseRole: true },
+          { useMaintenanceDatabaseRole: true },
         );
       } catch (error) {
         caught = error;
@@ -138,7 +138,7 @@ describe('Security: tenant-isolation WITH CHECK propagation confines cross-organ
         const rows = Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? []);
         return rows.length;
       },
-      { useApplicationDatabaseRole: true },
+      { useMaintenanceDatabaseRole: true },
     );
 
     expect(deletedCount).toBe(1);

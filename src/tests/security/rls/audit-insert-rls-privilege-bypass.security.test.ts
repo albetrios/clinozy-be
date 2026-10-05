@@ -11,7 +11,7 @@ import { createTestOrganization } from '@/tests/factories/organization.factory.j
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import {
   grantClinozyBeAppRoleForTests,
-  executeAsClinozyBeAppGlobalAdmin,
+  executeAsGlobalAdmin,
 } from '@/tests/helpers/rls-matrix.helper.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
@@ -76,7 +76,7 @@ describe('Security: audit.logs INSERT RLS rejects privilege-bypass contexts (sec
 
     let caught: unknown;
     try {
-      await executeAsClinozyBeAppGlobalAdmin(async (transaction) => {
+      await executeAsGlobalAdmin(async (transaction) => {
         // No app.current_organization_public_id set — only global_admin is active.
         // Before the fix this would succeed (global_admin bypassed WITH CHECK).
         // After the fix RLS rejects it.
@@ -113,7 +113,7 @@ describe('Security: audit.logs INSERT RLS rejects privilege-bypass contexts (sec
                        VALUES (${generatePublicId('auditLog')}, ${organization.id}, 'test.d1.retention', 'test', '127.0.0.1', 'vitest', '{}'::jsonb)`,
           );
         },
-        { useApplicationDatabaseRole: true },
+        { useMaintenanceDatabaseRole: true },
       );
     } catch (error) {
       caught = error;

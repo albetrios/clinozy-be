@@ -14,9 +14,8 @@ vi.mock('@/infrastructure/database/connection.js', () => ({
 describe('maintenance context pool selection', () => {
   it('non-transactional maintenance kinds hand the callback the maintenance pool handle', async () => {
     // Outside worker runtime the system_table_worker kind passes the pool straight
-    // through — routing it via getMaintenanceDatabase() is what lets an operator
-    // move ALL bypass contexts onto the dedicated clinozy_be_maintenance connection
-    // by provisioning DATABASE_MAINTENANCE_URL (no code change).
+    // through — every maintenance kind runs on getMaintenanceDatabase(), the dedicated
+    // clinozy_be_maintenance connection the bypass policy arms are bound to.
     await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, async (handle) => {
       expect(handle).toBe(maintenancePoolHandle);
     });

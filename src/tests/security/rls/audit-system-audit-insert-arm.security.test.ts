@@ -29,9 +29,9 @@ import { DATABASE_APP_ROLE } from '@/shared/constants/project-identity.constants
  * arm requires `organization_id IS NULL`, a process that flips this GUC
  * cannot impersonate a tenant — only tenantless rows can be written.
  *
- * These tests MUST run under `SET LOCAL ROLE clinozy_be_app` (provided by the
- * context helper's `useApplicationDatabaseRole` option) so the harness's
- * Compose superuser bypass does not silently mask RLS regressions.
+ * The context tests MUST run under `SET LOCAL ROLE clinozy_be_maintenance` (the context
+ * helper's `useMaintenanceDatabaseRole` option) — the role the arm is bound to — so the
+ * harness's Compose superuser bypass does not silently mask RLS regressions.
  */
 async function isSystemAuditInsertArmApplied(): Promise<boolean> {
   const rows = await sql<{ with_check: string | null }[]>`
@@ -73,7 +73,7 @@ describe('Security: audit.logs INSERT system-audit arm (sec-r5-async-queue-1)', 
                        VALUES (${generatePublicId('auditLog')}, NULL, NULL, 'test.r5.system_audit', 'test', '{}'::jsonb, 'INFO')`,
           );
         },
-        { useApplicationDatabaseRole: true },
+        { useMaintenanceDatabaseRole: true },
       );
     } catch (error) {
       caught = error;
@@ -109,7 +109,7 @@ describe('Security: audit.logs INSERT system-audit arm (sec-r5-async-queue-1)', 
                        VALUES (${generatePublicId('auditLog')}, ${organization.id}, NULL, 'test.r5.impersonate', 'test', '{}'::jsonb, 'INFO')`,
           );
         },
-        { useApplicationDatabaseRole: true },
+        { useMaintenanceDatabaseRole: true },
       );
     } catch (error) {
       caught = error;

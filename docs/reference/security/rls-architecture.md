@@ -138,8 +138,8 @@ out of organization routes or un-types 102 field reads).
                                                 │
                                                 ▼
 ┌──────────────────────────── RUNTIME LAYER  (contexts/database-context-runtime.ts) ───────────────────┐
-│  ─ opens ONE transaction on the right pool (shared pool; maintenance pool when                       │
-│    DATABASE_MAINTENANCE_URL is provisioned)                                                          │
+│  ─ opens ONE transaction on the right pool (shared pool; maintenance pool on                         │
+│    DATABASE_MAINTENANCE_URL for maintenance scopes)                                                  │
 │  ─ SET LOCAL statement/lock timeouts (worker budget, bulk kinds only)                                │
 │  ─ set_config('app.…', value, true)   ← transaction-scoped; dies at COMMIT/ROLLBACK                  │
 │  ─ pins the handle in AsyncLocalStorage (getRequestDatabase() resolves to it;                        │
@@ -335,7 +335,7 @@ LOGIN when provisioned and act as connection users.
 | `clinozy_be_owner` | never (NOLOGIN group) | subject (FORCE binds owners) | owns every app schema/table/sequence — DDL + TRUNCATE authority lives here; migrator/operator act through membership |
 | `clinozy_be_migrator` | `DATABASE_MIGRATION_URL` (local + hosted; locally the bootstrap superuser is needed ONLY for a fresh clone's first migrate, before the roles exist — hosted, clinozy-infra pre-creates it and it runs the first migrate too) | subject locally; **BYPASSRLS** hosted (granted by clinozy-infra so the SECURITY DEFINER resolvers it creates keep working) | migrations/DDL (owner-member, `CREATEROLE`, ledger read/write) |
 | `clinozy_be_app` | `DATABASE_URL` | **subject** | ALL runtime traffic — local `pnpm dev` now connects as it too (production parity; boot logs `rls_safety.ok` locally) |
-| `clinozy_be_maintenance` | `DATABASE_MAINTENANCE_URL` | **subject** | maintenance (bypass) contexts — authority comes only from the GUC arms, never the connection |
+| `clinozy_be_maintenance` | `DATABASE_MAINTENANCE_URL` | **subject** | maintenance (bypass) contexts — every bypass arm requires this role AND its GUC, so the GUC alone opens nothing on any other connection |
 | `clinozy_be_operator` | `DATABASE_OPERATOR_URL` (**local/CI only — never hosted**) | **BYPASSRLS** | test-harness fixtures, full/bulk seeds, ops scratch; owner-member + member of app/maintenance so suites can `SET LOCAL ROLE clinozy_be_app` to exercise real policies |
 
 Locks: `role-taxonomy.db.unit.test.ts` pins the role set, non-superuser/non-BYPASSRLS

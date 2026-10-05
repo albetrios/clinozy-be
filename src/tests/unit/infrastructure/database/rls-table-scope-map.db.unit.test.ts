@@ -6,6 +6,7 @@ import {
   SESSION_CONTEXTS,
 } from '@/infrastructure/database/contexts/database-context.js';
 import { EXPECTED_FORCE_RLS_TABLES } from '@/infrastructure/database/utils/force-rls-tables.constants.js';
+import { DATABASE_MAINTENANCE_ROLE } from '@/shared/constants/project-identity.constants.js';
 
 /**
  * Phase 8 — the table→required-scope map. For every FORCE-RLS table this pins
@@ -19,6 +20,10 @@ import { EXPECTED_FORCE_RLS_TABLES } from '@/infrastructure/database/utils/force
  * - the LIVE database (`pg_policies.qual` / `with_check`) — final post-migration
  *   state, robust to later migrations replacing earlier policies;
  * - the scope registries in `database-context.ts` — the only legal GUC universe.
+ *
+ * Every maintenance (bypass) GUC arm is also pinned to the maintenance role: the arm opens only
+ * while `current_user` is the role `DATABASE_MAINTENANCE_URL` connects as
+ * (migration 20261005170000_bind_bypass_arms_to_maintenance_role.sql).
  */
 const RLS_TABLE_SCOPE_MAP: Record<string, readonly string[]> = {
   // Tables whose policies carry no app.* GUC (application-access or claim-based
@@ -103,6 +108,17 @@ const RLS_TABLE_SCOPE_MAP: Record<string, readonly string[]> = {
   ],
 };
 
+/**
+ * One bypass arm as `pg_policies` prints it once bound to the maintenance role — the shape the
+ * binding migration writes and `maintenanceBypassArm` declares in the Drizzle schemas.
+ */
+function boundBypassArm(guc: string): string {
+  return (
+    `(( SELECT current_setting('${guc}'::text, true) AS current_setting) = 'true'::text) AND ` +
+    `(( SELECT CURRENT_USER AS "current_user") = '${DATABASE_MAINTENANCE_ROLE}'::name)`
+  );
+}
+
 /** Identity GUCs set by the principal pattern (`buildIdentityGucStatement`). */
 const PRINCIPAL_GUCS = ['app.current_organization_public_id', 'app.current_user_public_id'];
 
@@ -145,6 +161,43 @@ describe('RLS table → required-scope map (Phase 8)', () => {
     }
 
     expect(actual).toEqual(RLS_TABLE_SCOPE_MAP);
+  });
+
+  it('every bypass GUC arm also requires the maintenance role', async () => {
+    const bypassGucs = Object.values(MAINTENANCE_CONTEXTS).flatMap((definition) =>
+      definition.guc === null ? [] : [definition.guc],
+    );
+    const rows = await database.execute<{ policy: string; expression: string }>(
+      drizzleSql`
+        SELECT schemaname || '.' || tablename || ' ' || policyname AS policy,
+               COALESCE(qual, '') || ' ' || COALESCE(with_check, '') AS expression
+        FROM pg_policies
+      `,
+    );
+    const resultRows = Array.isArray(rows)
+      ? rows
+      : ((rows as { rows?: { policy: string; expression: string }[] }).rows ?? []);
+
+    let boundArmCount = 0;
+    const unboundArms: string[] = [];
+    for (const row of resultRows) {
+      let remaining = row.expression;
+      for (const guc of bypassGucs) {
+        const parts = remaining.split(boundBypassArm(guc));
+        boundArmCount += parts.length - 1;
+        remaining = parts.join('');
+      }
+      for (const guc of bypassGucs) {
+        if (remaining.includes(`'${guc}'`)) unboundArms.push(`${row.policy}: ${guc}`);
+      }
+    }
+
+    expect(boundArmCount).toBeGreaterThan(0);
+    expect(
+      unboundArms,
+      'A bypass arm that any role can open — bind it to the maintenance role the way ' +
+        'migration 20261005170000 does (maintenanceBypassArm in the Drizzle schema).',
+    ).toEqual([]);
   });
 
   it('the map covers exactly the FORCE-RLS table set', () => {

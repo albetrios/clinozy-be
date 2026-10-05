@@ -14,17 +14,18 @@
 import { sql as drizzleSql } from 'drizzle-orm';
 import * as databaseConnection from '@/infrastructure/database/connection.js';
 import { database } from '@/infrastructure/database/connection.js';
+import type { MaintenanceBypassGuc } from '@/infrastructure/database/pg-schemas.js';
 
 /**
- * Pool selector for maintenance (bypass) contexts: the dedicated maintenance
- * pool when `DATABASE_MAINTENANCE_URL` is provisioned, else the shared pool.
- * Accessed via the module namespace with an optional call so unit tests that
- * mock `connection.js` with only `database` keep working unchanged.
+ * Pool selector for maintenance (bypass) contexts: the dedicated maintenance pool on
+ * `DATABASE_MAINTENANCE_URL`. Accessed via the module namespace with an optional call so unit
+ * suites that mock `connection.js` with only `database` run their maintenance contexts on
+ * that mock.
  */
 function resolveMaintenancePool(): typeof database {
   // try/catch (not just optional call): a Vitest module mock THROWS on access to
   // an export its factory did not define, and many suites mock connection.js with
-  // only `database` — they must keep the historical shared-pool behavior.
+  // only `database`.
   try {
     return (
       (databaseConnection.getMaintenanceDatabase?.() as typeof database | undefined) ?? database
@@ -40,7 +41,7 @@ import {
   runWithPinnedDatabaseHandle,
   runWithPinnedOrganizationDatabaseSession,
   runWithWorkerDatabaseContext,
-  setLocalApplicationRole,
+  setLocalMaintenanceRole,
   setLocalDatabaseConfig,
   workerDatabaseContextForOrganization,
   workerDatabaseContextForUser,
@@ -595,7 +596,7 @@ export async function withAppDatabaseContext<T>(
 /** One row of the maintenance-context registry — the GUC it arms and how its transaction is tuned. */
 interface MaintenanceContextDefinition {
   /** The `app.*` GUC this kind sets to `'true'` — `null` for system-table kinds that require no tenant/user session GUC; role-based RLS may still apply. */
-  readonly guc: string | null;
+  readonly guc: MaintenanceBypassGuc | null;
   /** Open a Postgres transaction (default behavior). `false` = pin the shared pool handle without a transaction — for callbacks that perform external I/O and must not hold a checkout across network calls. */
   readonly opensTransaction: boolean;
   /** ALS context kind pinned for worker-runtime assertions. */
@@ -613,9 +614,10 @@ interface MaintenanceContextDefinition {
  * can enter {@link withMaintenanceDatabaseContext}.
  *
  * @remarks
- * - **Notes:** GUC-backed kinds enable specific RLS bypass policy arms; system-table
- *   kinds rely on existing database-role grants and policies. Scopes are static frozen
- *   singletons (there is nothing per-request about maintenance authority), and
+ * - **Notes:** GUC-backed kinds enable specific RLS bypass policy arms — and only on the
+ *   maintenance pool, since every arm also requires `current_user = 'clinozy_be_maintenance'`;
+ *   system-table kinds rely on existing database-role grants and policies. Scopes are static
+ *   frozen singletons (there is nothing per-request about maintenance authority), and
  *   which files may use each kind is pinned by
  *   `maintenance-context-confinement.policy.unit.test.ts`. Adding a kind means
  *   adding a row here and a confinement entry, plus a migration if new grants or
@@ -714,8 +716,8 @@ export const MAINTENANCE_SCOPE: {
 
 /** Options for {@link withMaintenanceDatabaseContext}. */
 export type MaintenanceDatabaseContextOptions = {
-  /** When true, switch to the application role (`setLocalApplicationRole`) so tests connected as the privileged owner role exercise production RLS. */
-  useApplicationDatabaseRole?: boolean;
+  /** When true, switch to the maintenance role (`setLocalMaintenanceRole`) so tests whose maintenance pool is privileged (the CI superuser) exercise the production bypass posture. */
+  useMaintenanceDatabaseRole?: boolean;
 };
 
 /**
@@ -733,7 +735,8 @@ export type MaintenanceDatabaseContextOptions = {
  * - **Side effects:** transactional kinds open one Postgres transaction; configured
  *   kinds lift HTTP statement/lock timeouts to the worker budget. Nontransactional
  *   kinds hold no transaction or connection checkout across the callback.
- * - **SECURITY:** GUC-backed kinds enable specific RLS bypass policy arms;
+ * - **SECURITY:** GUC-backed kinds enable specific RLS bypass policy arms, which also require
+ *   the maintenance role — so they open only on the maintenance pool;
  *   system-table kinds rely on existing database-role grants and policies.
  *   Enter only from paths allowed by the confinement policy test: worker
  *   processors, admin-authorized routes, and trusted system flows. Never enter
@@ -781,7 +784,7 @@ export async function withMaintenanceDatabaseContext<T>(
             databaseHandle: transaction as unknown as RequestScopedPostgresDatabase,
             claimConnection,
             definition,
-            useApplicationDatabaseRole: options?.useApplicationDatabaseRole === true,
+            useMaintenanceDatabaseRole: options?.useMaintenanceDatabaseRole === true,
             callback,
           }),
         ),
@@ -791,20 +794,20 @@ export async function withMaintenanceDatabaseContext<T>(
 
 /**
  * The body of a transactional maintenance unit of work once its transaction is open: claim the
- * connection, drop to the RLS-subject role when asked, lift the statement caps when the kind does,
+ * connection, drop to the maintenance role when asked, lift the statement caps when the kind does,
  * arm the kind's bypass GUC, and run the callback on the pinned handle.
  */
 async function runMaintenanceTransaction<T>(options: {
   databaseHandle: RequestScopedPostgresDatabase;
   claimConnection: () => void;
   definition: MaintenanceContextDefinition;
-  useApplicationDatabaseRole: boolean;
+  useMaintenanceDatabaseRole: boolean;
   callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>;
 }): Promise<T> {
   const { databaseHandle, definition, callback } = options;
   options.claimConnection();
-  if (options.useApplicationDatabaseRole) {
-    await setLocalApplicationRole(databaseHandle);
+  if (options.useMaintenanceDatabaseRole) {
+    await setLocalMaintenanceRole(databaseHandle);
   }
   if (definition.appliesWorkerStatementTimeout) {
     await applyWorkerStatementTimeout(databaseHandle);

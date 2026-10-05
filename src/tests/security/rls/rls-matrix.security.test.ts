@@ -10,7 +10,7 @@ import {
   countRowsAsTenant,
   countRowsAsUser,
   deleteRowAsTenant,
-  executeAsClinozyBeAppGlobalAdmin,
+  executeAsGlobalAdmin,
   executeAsClinozyBeAppTenant,
   executeAsClinozyBeAppUser,
   grantClinozyBeAppRoleForTests,
@@ -423,8 +423,8 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
     it('exposes audit.logs across tenants under the app.global_admin escape hatch (audit #21)', async () => {
       // The admin audit-log listing (AuditService.listForAdmin) reads cross-tenant under
       // withMaintenanceDatabaseContext. The tenant-isolation policy must honour app.global_admin
-      // so the listing is RLS-correct under the least-privilege role instead of relying on the
-      // table-owner bypass.
+      // so the listing is RLS-correct under the RLS-subject maintenance role instead of relying on
+      // the table-owner bypass.
       const userA = await createTestUser();
       const userB = await createTestUser();
       const organizationA = await createTestOrganization({ ownerUserId: userA.id });
@@ -450,7 +450,7 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
         })
         .returning();
 
-      await executeAsClinozyBeAppGlobalAdmin(async (transaction) => {
+      await executeAsGlobalAdmin(async (transaction) => {
         const result = await transaction.execute(
           drizzleSql`SELECT count(*)::int AS count FROM audit.logs WHERE id IN (${logA!.id}, ${logB!.id})`,
         );

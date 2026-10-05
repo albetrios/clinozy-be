@@ -79,6 +79,7 @@ jobs:
       HOST: 0.0.0.0
       PORT: 3000
       DATABASE_URL: postgresql://clinozy:clinozy@localhost:25432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@localhost:25432/clinozy
       REDIS_URL: redis://localhost:26379
       FRONTEND_URL: http://localhost:3000
       RUN_DB_TESTS: 1

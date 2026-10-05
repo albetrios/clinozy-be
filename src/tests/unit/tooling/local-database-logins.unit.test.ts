@@ -17,7 +17,11 @@ import {
 } from '@tooling/setup/codegen/project-identity.util.js';
 
 const SUPERUSER_URL = 'postgresql://owner:owner@localhost:5432/appdb';
-const LOGINS = localDatabaseLogins({ appRole: 'app_be_app', sqlStem: 'app_be' });
+const LOGINS = localDatabaseLogins({
+  appRole: 'app_be_app',
+  maintenanceRole: 'app_be_maintenance',
+  sqlStem: 'app_be',
+});
 
 function fixedPasswords() {
   let counter = 0;
@@ -112,7 +116,7 @@ describe('local database logins stay in step with the migrations', () => {
   it('covers exactly the roles the migrations create', () => {
     const config = loadConfig();
     const sqlStem = resolveSqlIdentifierStem(config);
-    const { databaseAppRole } = resolveDerivedNames(config);
+    const { databaseAppRole, databaseMaintenanceRole } = resolveDerivedNames(config);
     const migrationsDirectory = join(process.cwd(), 'migrations');
     const createdRoles = new Set<string>();
     for (const file of readdirSync(migrationsDirectory).filter((name) => name.endsWith('.sql'))) {
@@ -122,7 +126,11 @@ describe('local database logins stay in step with the migrations', () => {
       }
     }
     const declared = [
-      ...localDatabaseLogins({ appRole: databaseAppRole, sqlStem }).map((login) => login.role),
+      ...localDatabaseLogins({
+        appRole: databaseAppRole,
+        maintenanceRole: databaseMaintenanceRole,
+        sqlStem,
+      }).map((login) => login.role),
       ...rolesWithoutLocalLogin(sqlStem),
     ];
     expect(createdRoles.size).toBeGreaterThan(0);

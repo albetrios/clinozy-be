@@ -93,23 +93,16 @@ let maintenanceSql: ReturnType<typeof postgres> | undefined;
 let maintenanceDatabaseHandle: ReturnType<typeof drizzle> | undefined;
 
 /**
- * Drizzle handle for maintenance (RLS-bypass) database contexts. When
- * `DATABASE_MAINTENANCE_URL` is set, this is a separate lazily-created pool
- * connecting as the dedicated `clinozy_be_maintenance` role; when unset (the
- * default), it is the shared {@link database} pool — identical to historical
- * behavior.
+ * Drizzle handle for maintenance (RLS-bypass) database contexts — a separate, lazily created
+ * pool on `DATABASE_MAINTENANCE_URL`, connecting as the dedicated `clinozy_be_maintenance` role.
  *
  * @remarks
- * - **Notes:** the split exists so bypass authority can eventually be gated at
- *   the CONNECTION level (`current_user = 'clinozy_be_maintenance'` policy arms),
- *   not only via `app.*` GUCs. Provisioning steps:
- *   `docs/deployment/runbooks/maintenance-database-role.md`. The lazy pool uses
- *   the same tuned {@link buildPostgresOptions} as the primary pool.
+ * - **Notes:** bypass authority is a CONNECTION-level property: every bypass policy arm requires
+ *   `current_user = 'clinozy_be_maintenance'` as well as its `app.*` GUC, so the arms only open
+ *   on this pool. Provisioning steps: `docs/deployment/runbooks/maintenance-database-role.md`.
+ *   The lazy pool uses the same tuned {@link buildPostgresOptions} as the primary pool.
  */
 export function getMaintenanceDatabase(): ReturnType<typeof drizzle> {
-  if (!env.DATABASE_MAINTENANCE_URL) {
-    return database;
-  }
   if (maintenanceDatabaseHandle === undefined) {
     maintenanceSql = postgres(
       env.DATABASE_MAINTENANCE_URL,

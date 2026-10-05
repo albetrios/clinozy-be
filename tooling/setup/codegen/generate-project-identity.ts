@@ -138,6 +138,9 @@ export const REDIS_KEY_PREFIX_STEM = '${derived.redisKeyPrefix}';
 /** Restricted Postgres role the app connects as, under RLS. */
 export const DATABASE_APP_ROLE = '${derived.databaseAppRole}';
 
+/** Postgres role the maintenance (bypass) contexts connect as — the only role the bypass policy arms admit. */
+export const DATABASE_MAINTENANCE_ROLE = '${derived.databaseMaintenanceRole}';
+
 /** Human-facing project name for OpenAPI, MCP and CI reports. */
 export const PROJECT_DISPLAY_NAME = '${escapedDisplay}';
 

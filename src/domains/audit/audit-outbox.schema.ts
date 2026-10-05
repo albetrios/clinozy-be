@@ -11,7 +11,7 @@ import {
   timestamp,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { auditSchema } from '@/infrastructure/database/pg-schemas.js';
+import { auditSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 
 /**
  * Transactional outbox for {@link logs}. An audit row is staged here INSIDE the
@@ -115,7 +115,7 @@ export const audit_outbox = auditSchema
         withCheck: sql`${table.organization_public_id} = current_setting('app.current_organization_public_id', true)
           OR (
             ${table.organization_public_id} IS NULL
-            AND current_setting('app.system_audit_insert', true) = 'true'
+            AND ${maintenanceBypassArm('app.system_audit_insert')}
           )`,
       }),
       /**
@@ -128,20 +128,20 @@ export const audit_outbox = auditSchema
         as: 'permissive',
         for: 'select',
         to: 'public',
-        using: sql`current_setting('app.audit_outbox_drain', true) = 'true'`,
+        using: sql`${maintenanceBypassArm('app.audit_outbox_drain')}`,
       }),
       pgPolicy('audit_outbox_drain_update', {
         as: 'permissive',
         for: 'update',
         to: 'public',
-        using: sql`current_setting('app.audit_outbox_drain', true) = 'true'`,
-        withCheck: sql`current_setting('app.audit_outbox_drain', true) = 'true'`,
+        using: sql`${maintenanceBypassArm('app.audit_outbox_drain')}`,
+        withCheck: sql`${maintenanceBypassArm('app.audit_outbox_drain')}`,
       }),
       pgPolicy('audit_outbox_drain_delete', {
         as: 'permissive',
         for: 'delete',
         to: 'public',
-        using: sql`current_setting('app.audit_outbox_drain', true) = 'true'`,
+        using: sql`${maintenanceBypassArm('app.audit_outbox_drain')}`,
       }),
     ],
   )

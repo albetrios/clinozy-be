@@ -145,7 +145,7 @@ describe('Security: audit.logs is append-only at the DB layer (sec-U3)', () => {
       async (databaseHandle) => {
         await databaseHandle.execute(drizzleSql`DELETE FROM audit.logs WHERE id = ${rowId}`);
       },
-      { useApplicationDatabaseRole: true },
+      { useMaintenanceDatabaseRole: true },
     );
 
     const after = await database.select({ id: logs.id }).from(logs).where(eq(logs.id, rowId));

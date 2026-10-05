@@ -26,10 +26,10 @@ function distinctOperatorUrl(): string | undefined {
  * not do.
  *
  * @remarks
- * Same shape as `getMaintenanceDatabase()` in `connection.ts`: a lazily-created pool on a
- * separate URL, built with the same {@link buildPostgresOptions}, falling back to the shared
- * {@link sql} when no distinct URL is configured. So outside the RLS lane this returns the
- * existing client and nothing changes. Used for `cleanupDatabase`'s TRUNCATE, which has no
+ * A lazily-created pool on a separate URL, built with the same {@link buildPostgresOptions} as
+ * `getMaintenanceDatabase()` in `connection.ts`, falling back to the shared {@link sql} when no
+ * distinct URL is configured. So outside the RLS lane this returns the existing client and
+ * nothing changes. Used for `cleanupDatabase`'s TRUNCATE, which has no
  * Drizzle equivalent.
  */
 export function getOperatorSql(): ReturnType<typeof postgres> {
@@ -49,9 +49,8 @@ export function getOperatorSql(): ReturnType<typeof postgres> {
  *   to row-level security. Fixtures seed preconditions — often deliberately cross-tenant ones —
  *   and the harness truncates every table between suites; neither is something the application
  *   role may do. Seed on the operator, assert through the application's own pool.
- * - **Algorithm:** mirrors `getMaintenanceDatabase()` — the shared {@link database} when there
- *   is no distinct operator URL, otherwise a lazily-created Drizzle handle over
- *   {@link getOperatorSql}.
+ * - **Algorithm:** the shared {@link database} when there is no distinct operator URL, otherwise
+ *   a lazily-created Drizzle handle over {@link getOperatorSql}.
  * - **Notes:** the two root factories, `user.factory.ts` and `organization.factory.ts`,
  *   deliberately insert through the application's own context instead — for the tables every
  *   other fixture hangs off, "can this row be created the way production creates it" is itself

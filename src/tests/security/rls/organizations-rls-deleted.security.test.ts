@@ -7,7 +7,10 @@ import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
-import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
+import {
+  setLocalApplicationRole,
+  setLocalMaintenanceRole,
+} from '@/infrastructure/database/contexts/database-context-runtime.js';
 
 /**
  * Checks whether the `organizations_tenant_isolation` policy has been patched
@@ -131,8 +134,9 @@ describe('Security: organizations RLS — soft-deleted organizations excluded (s
       .where(eq(organizations.id, organization.id));
 
     await database.transaction(async (transaction) => {
-      await setLocalApplicationRole(transaction);
-      // Retention workers set global_retention_cleanup instead of an organization-scoped id.
+      // Retention workers run on the maintenance pool, as the one role the arm admits, and set
+      // global_retention_cleanup instead of an organization-scoped id.
+      await setLocalMaintenanceRole(transaction);
       await transaction.execute(
         drizzleSql`SELECT set_config('app.global_retention_cleanup', 'true', true)`,
       );

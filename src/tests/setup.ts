@@ -1,7 +1,10 @@
 import '@/shared/config/load-env-files.js';
 import '@/tests/helpers/harness-provider-env.js';
 import { DEFAULT_FRONTEND_URL } from '@/shared/constants/index.js';
-import { REDIS_KEY_PREFIX_STEM } from '@/shared/constants/project-identity.constants.js';
+import {
+  DATABASE_MAINTENANCE_ROLE,
+  REDIS_KEY_PREFIX_STEM,
+} from '@/shared/constants/project-identity.constants.js';
 import {
   LOCAL_TEST_DATABASE_URL,
   pointHarnessAtLocalTestDatabase,
@@ -75,7 +78,11 @@ process.env.SENTRY_DEBUG ??= 'true';
  * machine-local env file is loaded with `override: true` and would clobber an injected URL —
  * silently putting the lane back on the bypassing role while still reporting green.
  *
- * Only the pool under test moves. The original URL is kept in `DATABASE_OPERATOR_URL` — the
+ * The maintenance pool moves with it, onto {@link DATABASE_MAINTENANCE_ROLE}: the bypass policy
+ * arms admit only that role, so the lane runs maintenance contexts in their production posture
+ * too (a no-op where the URL already logs in as the maintenance role).
+ *
+ * The original URL is kept in `DATABASE_OPERATOR_URL` — the
  * harness's existing elevated connection, the same one this file and `global-setup.ts` already
  * prefer — for `src/tests/helpers/operator-database.ts`, because the harness truncates every
  * table between suites and seeds cross-tenant fixtures, neither of which the application role
@@ -91,11 +98,22 @@ function applyRequestedDatabaseRole(): void {
   if (!current) return;
 
   process.env.DATABASE_OPERATOR_URL ??= current;
-  const url = new URL(current);
-  // libpq applies `options` at connection time, so the role covers every statement on the
-  // connection — including ones inside the application's own transactions.
-  url.searchParams.set('options', `-c role=${role}`);
-  process.env.DATABASE_URL = url.toString();
+  process.env.DATABASE_URL = withConnectionRole(current, role);
+  const maintenance = process.env.DATABASE_MAINTENANCE_URL;
+  if (maintenance) {
+    process.env.DATABASE_MAINTENANCE_URL = withConnectionRole(
+      maintenance,
+      DATABASE_MAINTENANCE_ROLE,
+    );
+  }
+}
+
+/** `url` with a connection-time role: libpq applies `options` when the connection opens, so the
+ * role covers every statement on it — including ones inside the application's own transactions. */
+function withConnectionRole(url: string, role: string): string {
+  const parsed = new URL(url);
+  parsed.searchParams.set('options', `-c role=${role}`);
+  return parsed.toString();
 }
 
 pointHarnessAtLocalTestDatabase();
@@ -249,6 +267,7 @@ process.env.HTTP_BIND_HOST = '127.0.0.1';
 // Local fallback — tests run against the same Docker Postgres dev uses (see docker-compose.yml).
 // CI overrides DATABASE_URL to its ephemeral service-container Postgres.
 process.env.DATABASE_URL ??= LOCAL_TEST_DATABASE_URL;
+process.env.DATABASE_MAINTENANCE_URL ??= LOCAL_TEST_DATABASE_URL;
 process.env.REDIS_URL ??= 'redis://localhost:6379';
 process.env.RUN_REDIS_TESTS ??= '1';
 process.env.SECRETS_ENCRYPTION_KEY ??= 'a'.repeat(64);

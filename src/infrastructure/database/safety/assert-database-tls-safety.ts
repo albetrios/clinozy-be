@@ -13,10 +13,11 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
  * `sslmode=verify-full` in `DATABASE_URL` or `DATABASE_SSL_REJECT_UNAUTHORIZED=true`.
  *
  * @remarks
- * - **Algorithm:** computes {@link isStrictDatabaseTlsVerification} from `DATABASE_URL` +
- *   `DATABASE_SSL_REJECT_UNAUTHORIZED`. When strict, logs `database.tls_safety.ok` and
- *   returns. When not strict and `DATABASE_TLS_ENFORCED` is true, throws. Otherwise
- *   (local/CI) logs a warning so plaintext/unverified local Docker databases keep working.
+ * - **Algorithm:** computes {@link isStrictDatabaseTlsVerification} for `DATABASE_URL` and
+ *   `DATABASE_MAINTENANCE_URL` with `DATABASE_SSL_REJECT_UNAUTHORIZED`. When strict, logs
+ *   `database.tls_safety.ok` and returns. When not strict and `DATABASE_TLS_ENFORCED` is true,
+ *   throws. Otherwise (local/CI) logs a warning so plaintext/unverified local Docker databases
+ *   keep working.
  * - **Failure modes:** throws `database.tls_safety.unverified` on hosted deployments
  *   without strict verification.
  * - **Side effects:** emits one `database.tls_safety.*` log line; performs no I/O.
@@ -25,12 +26,9 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
  */
 export function assertDatabaseTlsVerification(): void {
   assertUrlTlsVerification('DATABASE_URL', env.DATABASE_URL);
-  // The optional maintenance pool carries the same bypass-context traffic and must meet
-  // the same TLS bar — checked here (not in a separate boot step) so the two URLs can
-  // never drift in posture.
-  if (env.DATABASE_MAINTENANCE_URL) {
-    assertUrlTlsVerification('DATABASE_MAINTENANCE_URL', env.DATABASE_MAINTENANCE_URL);
-  }
+  // The maintenance pool carries the bypass-context traffic and must meet the same TLS bar —
+  // checked here (not in a separate boot step) so the two URLs can never drift in posture.
+  assertUrlTlsVerification('DATABASE_MAINTENANCE_URL', env.DATABASE_MAINTENANCE_URL);
 }
 
 function assertUrlTlsVerification(label: string, databaseUrl: string): void {

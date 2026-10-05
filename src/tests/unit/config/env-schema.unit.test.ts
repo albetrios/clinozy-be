@@ -22,6 +22,7 @@ const productionRedisTopology = {
 
 const commonRequiredBase = {
   DATABASE_URL: DATABASE_URL_FIXTURE,
+  DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
   REDIS_URL: REDIS_URL_FIXTURE,
   JWT_PRIVATE_KEY: REAL_RSA_KEY_PAIR.privateKey,
   JWT_PUBLIC_KEY: REAL_RSA_KEY_PAIR.publicKey,
@@ -192,6 +193,18 @@ describe('env-schema', () => {
     });
   });
 
+  it('requires DATABASE_MAINTENANCE_URL — the only connection the bypass policy arms admit', () => {
+    const { DATABASE_MAINTENANCE_URL: _omitted, ...withoutMaintenanceUrl } = commonRequiredBase;
+    const parsed = envSchema.safeParse({ ...withoutMaintenanceUrl, NODE_ENV: 'development' });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.map((issue) => issue.path.join('.'))).toContain(
+        'DATABASE_MAINTENANCE_URL',
+      );
+    }
+  });
+
   it('exports schema keys for tooling sync', () => {
     expect(envSchemaKeys.length).toBeGreaterThan(0);
     expect(envSchemaKeys).toContain('DATABASE_URL');
@@ -202,6 +215,7 @@ describe('env-schema', () => {
     const parsed = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       AUDIT_RETENTION_DAYS: '30',
@@ -220,6 +234,7 @@ describe('env-schema', () => {
     const parsed = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       PORT: '4000',
       NODE_ENV: 'development',
@@ -413,6 +428,7 @@ describe('env-schema', () => {
     const parsed = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       AUDIT_RETENTION_DAYS: '30',
@@ -430,6 +446,7 @@ describe('env-schema', () => {
     const parsed = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       TRUST_PROXY: 'true',
@@ -445,6 +462,7 @@ describe('env-schema', () => {
     const disabled = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       TRUST_PROXY: '0',
@@ -472,6 +490,7 @@ describe('env-schema', () => {
     const parsed = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       JWT_PRIVATE_KEY: 'test-private-key',
@@ -485,6 +504,7 @@ describe('env-schema', () => {
     const enabled = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       ENABLE_RESPONSE_ENCRYPTION: 'true',
@@ -493,6 +513,7 @@ describe('env-schema', () => {
     const disabled = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       ENABLE_RESPONSE_ENCRYPTION: '0',
@@ -506,6 +527,7 @@ describe('env-schema', () => {
     const parsed = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       IDEMPOTENCY_CARDINALITY_WARN_THRESHOLD: '100',
@@ -518,6 +540,7 @@ describe('env-schema', () => {
   it('requires RS256 keys in production', () => {
     const parsed = envSchema.safeParse({
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'production',
     });
@@ -528,6 +551,7 @@ describe('env-schema', () => {
   it('rejects an env missing both RS256 key parts', () => {
     const parsed = envSchema.safeParse({
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
     });
@@ -539,6 +563,7 @@ describe('env-schema', () => {
     const parsed = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       AUDIT_RETENTION_DAYS: '30',
@@ -778,6 +803,7 @@ describe('env-schema', () => {
   it('rejects FRONTEND_URL that is not a valid http(s) URL', () => {
     const parsed = envSchema.safeParse({
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       FRONTEND_URL: 'not-a-url',
@@ -1288,6 +1314,7 @@ describe('envSchemaDefaults', () => {
     // A key with no resolvable default is ABSENT from the map, so github:sync always pushes it —
     // it can never be mistaken for a schema default and dropped.
     expect(envSchemaDefaults).not.toHaveProperty('DATABASE_URL'); // required
+    expect(envSchemaDefaults).not.toHaveProperty('DATABASE_MAINTENANCE_URL'); // required
     expect(envSchemaDefaults).not.toHaveProperty('REDIS_URL'); // required
     expect(envSchemaDefaults).not.toHaveProperty('JWT_PRIVATE_KEY'); // required
     expect(envSchemaDefaults).not.toHaveProperty('CAPTCHA_SECRET'); // optional, no default

@@ -4,7 +4,10 @@ import { sql as drizzleSql } from 'drizzle-orm';
 import { database, sql } from '@/infrastructure/database/connection.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
-import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
+import {
+  setLocalApplicationRole,
+  setLocalMaintenanceRole,
+} from '@/infrastructure/database/contexts/database-context-runtime.js';
 
 /**
  * Offboarding erases uploads through `UploadService.tombstoneAllBy{User,Organization}Id`, and
@@ -18,11 +21,12 @@ import { setLocalApplicationRole } from '@/infrastructure/database/contexts/data
  * superuser, and the local operator role carries `rolbypassrls` — both bypass RLS, so the rows
  * came back in dev and CI and only vanished where it mattered.
  *
- * This suite pins the invariant the fix rests on, as `clinozy_be_app` (the production role, which
- * is RLS-subject):
+ * This suite pins the invariant the fix rests on, as the production roles (both RLS-subject):
  *
- *   1. with NO GUC set, an upload row is invisible — the exact production failure;
- *   2. under the `app.global_retention_cleanup` arm the offboarding sweep now uses, the same
+ *   1. as `clinozy_be_app` with NO GUC set, an upload row is invisible — the exact production
+ *      failure;
+ *   2. under the `app.global_retention_cleanup` arm the offboarding sweep now uses — on the
+ *      maintenance pool, as `clinozy_be_maintenance`, the only role the arm admits — the same
  *      row is both readable and tombstonable;
  *   3. that arm covers organization-scoped AND user-scoped (`organization_id IS NULL`) rows,
  *      because `uploads_owner_access` alone cannot see the former and the tenant arm alone
@@ -34,12 +38,14 @@ type SeededUploads = {
   userScopedId: number;
 };
 
-async function runAsApplicationRole<T>(
+/** Runs `callback` in a transaction as `role` (the runtime or the maintenance role) with `guc` armed. */
+async function runAsRole<T>(
+  role: typeof setLocalApplicationRole,
   guc: { name: string; value: string } | null,
   callback: (transaction: typeof database) => Promise<T>,
 ): Promise<T> {
   return database.transaction(async (transaction) => {
-    await setLocalApplicationRole(transaction);
+    await role(transaction);
     if (guc) {
       await transaction.execute(drizzleSql`SELECT set_config(${guc.name}, ${guc.value}, true)`);
     }
@@ -57,15 +63,15 @@ async function countVisibleUploads(transaction: typeof database): Promise<number
   return Number(rows[0]?.count ?? 0);
 }
 
-describe('uploads offboarding RLS (as clinozy_be_app — the production role)', () => {
+describe('uploads offboarding RLS (as the production roles)', () => {
   let seeded: SeededUploads;
 
   beforeAll(async () => {
     await cleanupDatabase();
     await grantClinozyBeAppRoleForTests();
 
-    // Seeded through the privileged harness connection; the assertions below all run as
-    // `clinozy_be_app`, which is subject to RLS.
+    // Seeded through the privileged harness connection; the assertions below all run as an
+    // RLS-subject production role.
     const seedEmail = 'uploads-rls@example.test';
     const [user] = await sql<{ id: number }[]>`
       INSERT INTO auth.users (public_id, email, email_hash, is_email_verified)
@@ -104,7 +110,7 @@ describe('uploads offboarding RLS (as clinozy_be_app — the production role)', 
   });
 
   it('sees NOTHING with no GUC set — the silent-erasure failure the offboarding sweep had', async () => {
-    const visible = await runAsApplicationRole(null, countVisibleUploads);
+    const visible = await runAsRole(setLocalApplicationRole, null, countVisibleUploads);
 
     // This is the whole bug in one assertion: the sweep read this same zero and concluded there
     // was nothing to erase.
@@ -116,7 +122,8 @@ describe('uploads offboarding RLS (as clinozy_be_app — the production role)', 
     // only the user GUC can never reach an organization-scoped row — the tenant arm needs the
     // organization GUC, which a user scope does not set. Any read path that arms only the user
     // scope therefore 404s every organization-scoped upload, including organization logos.
-    const visible = await runAsApplicationRole(
+    const visible = await runAsRole(
+      setLocalApplicationRole,
       { name: 'app.current_user_public_id', value: 'usr_uploadsrlsseeduser01' },
       countVisibleUploads,
     );
@@ -126,7 +133,8 @@ describe('uploads offboarding RLS (as clinozy_be_app — the production role)', 
   });
 
   it('reads and tombstones both scopes under the retention arm the sweep now runs in', async () => {
-    const visibleUnderRetention = await runAsApplicationRole(
+    const visibleUnderRetention = await runAsRole(
+      setLocalMaintenanceRole,
       { name: 'app.global_retention_cleanup', value: 'true' },
       countVisibleUploads,
     );
@@ -135,7 +143,8 @@ describe('uploads offboarding RLS (as clinozy_be_app — the production role)', 
     // covers both, which is why the sweep needs this one.
     expect(visibleUnderRetention).toBe(2);
 
-    const tombstoned = await runAsApplicationRole(
+    const tombstoned = await runAsRole(
+      setLocalMaintenanceRole,
       { name: 'app.global_retention_cleanup', value: 'true' },
       async (transaction) => {
         const result = await transaction.execute(

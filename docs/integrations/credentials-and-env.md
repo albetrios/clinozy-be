@@ -315,6 +315,7 @@ ordering and grouping below mirrors `.env.example`:
 ```bash
 # --- under # GitHub Secrets ---
 DATABASE_URL=postgresql://...
+DATABASE_MAINTENANCE_URL=postgresql://...   # same host, user clinozy_be_maintenance
 REDIS_URL=redis://...
 JWT_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----
 SECRETS_ENCRYPTION_KEY=<64 hex chars; node -e "console.log(require('crypto').randomBytes(32).toString('hex'))">

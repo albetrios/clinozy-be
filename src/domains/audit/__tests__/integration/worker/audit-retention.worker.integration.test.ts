@@ -67,10 +67,9 @@ describe('audit-retention.worker — purge', () => {
 
     await ensureAuditLogPartitionsForTimestamps([staleCreatedAt, recentCreatedAt]);
 
-    // Fixture seeding uses the raw superuser test pool: the retention context grants
-    // read/delete only (no INSERT arm), and with DATABASE_MAINTENANCE_URL provisioned
-    // locally the maintenance pool is RLS-subject clinozy_be_maintenance — seeding through
-    // it is (correctly) rejected by the audit.logs INSERT policy.
+    // Fixture seeding uses the operator pool: the retention context grants read/delete only
+    // (no INSERT arm), and the maintenance pool is the RLS-subject clinozy_be_maintenance —
+    // seeding through it is (correctly) rejected by the audit.logs INSERT policy.
     await getOperatorDatabase()
       .insert(logs)
       .values([

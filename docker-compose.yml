@@ -64,6 +64,7 @@ services:
       HOST: 0.0.0.0
       PORT: 3000
       DATABASE_URL: postgresql://clinozy:clinozy@postgres:5432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@postgres:5432/clinozy
       REDIS_URL: redis://redis:6379
       # JWT_PRIVATE_KEY / JWT_PUBLIC_KEY come from the entrypoint below: the boot parses the RS256
       # pair (assertJwtKeyMaterial), so a placeholder string cannot start the API.

@@ -24,8 +24,12 @@ const DATABASE_URL_KEYS = [
   'DATABASE_OPERATOR_URL',
 ] as const;
 
-/** The two `DATABASE_*URL`s the harness cannot run without; the other two are optional pools. */
-const REQUIRED_DATABASE_URL_KEYS = new Set<string>(['DATABASE_URL', 'DATABASE_MIGRATION_URL']);
+/** The `DATABASE_*URL`s the harness cannot run without; the operator URL is an optional pool. */
+const REQUIRED_DATABASE_URL_KEYS = new Set<string>([
+  'DATABASE_URL',
+  'DATABASE_MIGRATION_URL',
+  'DATABASE_MAINTENANCE_URL',
+]);
 
 /**
  * Whether the harness runs on a database it was handed rather than the local test database: a
@@ -50,9 +54,9 @@ export function isHarnessOnProvidedDatabase(): boolean {
  *   harness's cross-tenant fixtures nor `TRUNCATE`), else the env file's own local `DATABASE_URL`,
  *   else the Compose superuser. Every local `DATABASE_*URL` then has its database renamed to the
  *   test database, keeping its login — role passwords are cluster-wide, so each login works there.
- *   A URL that is not local is never the test database: the main and migration logins fall back
- *   to the Compose superuser, and the optional operator / maintenance logins are dropped so their
- *   pools fall back to the main one — a remote URL left in place was truncated by every suite.
+ *   A URL that is not local is never the test database: the main, migration and maintenance
+ *   logins fall back to the Compose superuser, and the optional operator login is dropped so its
+ *   pool falls back to the main one — a remote URL left in place was truncated by every suite.
  * - **Failure modes:** none.
  * - **Side effects:** rewrites or unsets `process.env.DATABASE_URL`, `DATABASE_MIGRATION_URL`,
  *   `DATABASE_MAINTENANCE_URL` and `DATABASE_OPERATOR_URL`.

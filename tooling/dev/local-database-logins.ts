@@ -28,6 +28,7 @@ export type LocalDatabaseLogin = {
  */
 export function localDatabaseLogins(roles: {
   appRole: string;
+  maintenanceRole: string;
   sqlStem: string;
 }): readonly LocalDatabaseLogin[] {
   return [
@@ -38,7 +39,7 @@ export function localDatabaseLogins(roles: {
       purpose: 'runtime — row-level security enforced, like production',
     },
     {
-      role: `${roles.sqlStem}_maintenance`,
+      role: roles.maintenanceRole,
       envKey: 'DATABASE_MAINTENANCE_URL',
       attributes: 'LOGIN',
       purpose: 'maintenance (bypass) contexts — row-level security enforced',

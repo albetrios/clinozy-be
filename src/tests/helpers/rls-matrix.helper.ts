@@ -30,7 +30,10 @@ import {
   forceRlsTableKey as tableKey,
   type ForceRlsTableRef,
 } from '@/infrastructure/database/utils/force-rls-tables.constants.js';
-import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
+import {
+  setLocalApplicationRole,
+  setLocalMaintenanceRole,
+} from '@/infrastructure/database/contexts/database-context-runtime.js';
 
 export type { ForceRlsTableRef };
 export { EXPECTED_FORCE_RLS_TABLES, tableKey };
@@ -199,16 +202,16 @@ export async function countRowsAsUser(
 }
 
 /**
- * Runs `callback` as the least-privilege `clinozy_be_app` role with `app.global_admin = 'true'`, the
- * admin escape hatch set in production by {@link withMaintenanceDatabaseContext}. Used to prove the
- * cross-user admin branch of the `auth.users` / `auth.auth_methods` policies (audit #7) under a
- * non-superuser connection.
+ * Runs `callback` with `app.global_admin = 'true'` as `clinozy_be_maintenance` — exactly what
+ * production's {@link withMaintenanceDatabaseContext} global-admin scope does on the maintenance
+ * pool, the only role the escape hatch admits. Used to prove the cross-user admin branch of the
+ * `auth.users` / `auth.auth_methods` policies (audit #7) under an RLS-subject connection.
  */
-export async function executeAsClinozyBeAppGlobalAdmin<T>(
+export async function executeAsGlobalAdmin<T>(
   callback: (transaction: typeof database) => Promise<T>,
 ): Promise<T> {
   return database.transaction(async (transaction) => {
-    await setLocalApplicationRole(transaction);
+    await setLocalMaintenanceRole(transaction);
     await transaction.execute(drizzleSql`SELECT set_config('app.global_admin', 'true', true)`);
     return callback(transaction as unknown as typeof database);
   });
@@ -219,7 +222,7 @@ export async function countRowsAsGlobalAdmin(
   schemaName: string,
   tableName: string,
 ): Promise<number> {
-  return executeAsClinozyBeAppGlobalAdmin(async (transaction) =>
+  return executeAsGlobalAdmin(async (transaction) =>
     queryCountInTransaction(transaction, schemaName, tableName),
   );
 }

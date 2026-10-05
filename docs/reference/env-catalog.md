@@ -40,7 +40,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `DATABASE_HTTP_STATEMENT_TIMEOUT_MS` | — | `5000` |  | — |
 | `DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS` | — | — *(optional)* |  | — |
 | `DATABASE_LOCK_TIMEOUT_MS` | — | `3000` |  | — |
-| `DATABASE_MAINTENANCE_URL` | — | — *(optional)* |  | — |
+| `DATABASE_MAINTENANCE_URL` | — | — *(required)* |  | — |
 | `DATABASE_MIGRATION_URL` | — | — *(optional)* |  | — |
 | `DATABASE_OPERATOR_URL` | — | — *(optional)* |  | — |
 | `DATABASE_POOL_ACQUIRE_TIMEOUT_MS` | integer 0–60000 (ms; 0 disables) | `10000` | ✓ | Deadline for a unit of work to get a pooled connection. Past it the caller gets 503 + Retry-After, and a connection that arrives later rolls the transaction back unrun. |

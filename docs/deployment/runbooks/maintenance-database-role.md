@@ -3,37 +3,42 @@
 Maintenance (RLS-bypass) database contexts — `withMaintenanceDatabaseContext` with a
 `MAINTENANCE_SCOPE.<kind>` in
 [`src/infrastructure/database/contexts/database-context.ts`](../../../src/infrastructure/database/contexts/database-context.ts)
-— can run on a **dedicated connection pool** with its own Postgres role, so bypass
-authority becomes a connection-level property instead of a GUC-only one.
+— run on a **dedicated connection pool** with its own Postgres role, and bypass authority is a
+connection-level property: every bypass policy arm requires BOTH its `app.*` GUC and
+`current_user = 'clinozy_be_maintenance'`.
 
-## Current state (groundwork shipped, gating not yet enforced)
+## How it is enforced
 
-- Migration `20260827010000_clinozy_be_maintenance_role.sql` creates `clinozy_be_maintenance`
-  **NOLOGIN** with data-plane grants mirroring `clinozy_be_app`.
-- Migration `20260827020000_maintenance_role_policy_access.sql` extends the six
-  role-scoped `*_app_access` system-table policies to both application roles (without it a
-  maintenance-pool connection hits `deny_all` on the mail outbox / Stripe ledger / DLQ
-  ledger) and grants `clinozy_be_app` membership so `SET LOCAL ROLE clinozy_be_app` tooling
-  keeps working on maintenance connections.
-- **Local development is provisioned**: `pnpm setup:local` enables the
-  `clinozy_be_maintenance` login and writes `DATABASE_MAINTENANCE_URL` to the gitignored
-  local env file — local runs exercise maintenance contexts as `clinozy_be_maintenance`
-  (production-like RLS instead of the superuser-exempt pool). See
-  [Local parity provisioning](#local-parity-provisioning-all-roles).
-- **Hosted environments are provisioned by clinozy-infra**: its Neon provisioning creates
-  `clinozy_be_maintenance` as a `LOGIN NOBYPASSRLS` user on each environment's branch
-  before the first deploy (next to `clinozy_be_app` and `clinozy_be_migrator` — see
-  [Database runtime role](resource-limits.md#database-runtime-role-row-level-security-safety))
-  and writes `DATABASE_MAINTENANCE_URL` (pooled host).
-- `DATABASE_MAINTENANCE_URL` (optional env var) selects the pool: unset → maintenance
-  contexts use the shared `DATABASE_URL` pool exactly as before; set → they use a lazy
-  second pool built from the same tuned options
-  ([`connection.ts`](../../../src/infrastructure/database/connection.ts) →
-  `getMaintenanceDatabase()`).
-- Bypass policy arms still accept the `app.*` GUCs from any role. Tightening is the
-  final step below.
+- Migration `20261005170000_bind_bypass_arms_to_maintenance_role.sql` binds the five bypass
+  arms (`app.global_retention_cleanup`, `app.session_retention_cleanup`, `app.global_admin`,
+  `app.system_audit_insert`, `app.audit_outbox_drain`) to the role. A `clinozy_be_app` connection
+  that sets a bypass GUC opens nothing — a compromised request connection cannot read or purge
+  across tenants. The Drizzle schemas declare the same arms through `maintenanceBypassArm`
+  ([`pg-schemas.ts`](../../../src/infrastructure/database/pg-schemas.ts)).
+- `DATABASE_MAINTENANCE_URL` is **required** (env schema). Maintenance contexts always use its
+  lazily created pool ([`connection.ts`](../../../src/infrastructure/database/connection.ts) →
+  `getMaintenanceDatabase()`), built with the same tuned options as `DATABASE_URL`.
+- Boot guards (`assert-database-rls-safety.ts`, fail-closed where `DATABASE_RLS_SAFETY_ENFORCED`):
+  the maintenance URL must act as `clinozy_be_maintenance` and stay RLS-subject — on any other
+  role every maintenance context would silently match no rows — and `DATABASE_URL` must never act
+  as `clinozy_be_maintenance`. The maintenance URL meets the same TLS bar as `DATABASE_URL`.
+- Migration `20260827010000_clinozy_be_maintenance_role.sql` creates the role **NOLOGIN** with
+  data-plane grants mirroring `clinozy_be_app`; `20260827020000_maintenance_role_policy_access.sql`
+  extends the six role-scoped `*_app_access` system-table policies to both application roles
+  (without it a maintenance connection hits `deny_all` on the mail outbox / Stripe ledger / DLQ
+  ledger) and grants it `clinozy_be_app` membership.
+- Locks: `rls-table-scope-map.db.unit.test.ts` fails on any bypass arm not bound to the role;
+  `bypass-arm-role-binding.security.test.ts` proves each bypass GUC opens nothing for
+  `clinozy_be_app` and opens for `clinozy_be_maintenance`.
 
 ## Operator steps (per environment)
+
+Hosted environments are provisioned by clinozy-infra: its Neon provisioning creates
+`clinozy_be_maintenance` as a `LOGIN NOBYPASSRLS` user on each environment's branch before the
+first deploy (next to `clinozy_be_app` and `clinozy_be_migrator` — see
+[Database runtime role](resource-limits.md#database-runtime-role-row-level-security-safety)) and
+writes `DATABASE_MAINTENANCE_URL` (pooled host). The deploy's pre-flight
+(`pnpm validate:github-env-runtime`) refuses an environment without it.
 
 1. Create the login on the environment's Postgres — clinozy-infra's Neon provisioning
    does this via SQL as `neondb_owner` (never the Neon console/CLI/REST API, which add
@@ -49,15 +54,8 @@ authority becomes a connection-level property instead of a GUC-only one.
    `DATABASE_URL`, user `clinozy_be_maintenance`) — clinozy-infra writes it into
    `.env.<environment>`; `pnpm github:sync` pushes it.
 
-3. Deploy and verify workers: retention/cleanup jobs must keep succeeding (they now run
-   on the maintenance pool).
-
-4. **Only after every hosted environment has completed 1–3**: ship the arm-tightening
-   migration adding `current_user = 'clinozy_be_maintenance'` to the bypass policy arms
-   (`app.global_retention_cleanup`, `app.session_retention_cleanup`, `app.global_admin`,
-   `app.system_audit_insert`, `app.audit_outbox_drain`) and update the
-   `rls-table-scope-map` expectations. From then on a compromised `clinozy_be_app`
-   connection cannot use a bypass GUC at all.
+3. Deploy and verify workers: retention/cleanup jobs must keep succeeding, and the boot log
+   shows `database.rls_safety.maintenance_ok`.
 
 ## Local parity provisioning (all roles)
 
@@ -121,12 +119,16 @@ canary). A deleted-and-recreated database therefore needs exactly three steps:
 `.github/workflows/scheduled-rls-parity.yml` re-runs the DB suites every night with this
 exact role posture provisioned in CI (operator fixtures, RLS-subject maintenance pool,
 `SET LOCAL ROLE clinozy_be_app` suites) — a policy/plan regression that only bites
-RLS-subject roles opens a `ci-failure` issue by morning instead of surfacing at deploy.
+RLS-subject roles opens a `ci-failure` issue by morning instead of surfacing at deploy. The
+PR lane `pnpm test:rls-role` opens the pool under test as `clinozy_be_app` and the maintenance
+pool as `clinozy_be_maintenance` (`-c role=` on each URL).
 
 ## Related
 
 - Bypass-kind registry + per-path usage allowlists:
   `MAINTENANCE_CONTEXTS` in `database-context.ts`,
   `src/tests/unit/infrastructure/database/maintenance-context-confinement.policy.unit.test.ts`
-- Per-table policy GUC lock:
+- Per-table policy GUC lock + role binding:
   `src/tests/unit/infrastructure/database/rls-table-scope-map.db.unit.test.ts`
+- Bypass GUCs on the runtime role:
+  `src/tests/security/rls/bypass-arm-role-binding.security.test.ts`

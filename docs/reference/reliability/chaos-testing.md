@@ -12,6 +12,8 @@ replay) against **live Postgres + Redis**, with failures injected by
    - `pnpm chaos:up` (or `docker compose --profile chaos up -d toxiproxy`)
 2. Point the **API process** at proxied ports (**not** the defaults in `.env` unless you override):
    - `DATABASE_URL=postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy`
+   - `DATABASE_MAINTENANCE_URL` on the same `127.0.0.1:25432` listener (the suite reroutes it
+     itself, keeping its login)
    - `REDIS_URL=redis://127.0.0.1:26379`
    - `TOXIPROXY_URL=http://127.0.0.1:8474` (administration API for scripts)
 3. Register listeners (idempotent):

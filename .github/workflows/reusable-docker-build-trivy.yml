@@ -327,12 +327,14 @@ jobs:
       - name: Boot API container and verify /readyz
         env:
           DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+          DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
           REDIS_URL: redis://localhost:6379
         run: |
           set -euo pipefail
           docker run --rm --network host \
             -e NODE_ENV=development \
             -e DATABASE_URL="$DATABASE_URL" \
+            -e DATABASE_MAINTENANCE_URL="$DATABASE_MAINTENANCE_URL" \
             -e DATABASE_SSL_ENABLED="$DATABASE_SSL_ENABLED" \
             -e REDIS_URL="$REDIS_URL" \
             -e JWT_PRIVATE_KEY="$JWT_PRIVATE_KEY" \
@@ -352,6 +354,7 @@ jobs:
             -e HOST=0.0.0.0 \
             -e PORT=3000 \
             -e DATABASE_URL="$DATABASE_URL" \
+            -e DATABASE_MAINTENANCE_URL="$DATABASE_MAINTENANCE_URL" \
             -e REDIS_URL="$REDIS_URL" \
             -e DATABASE_SSL_ENABLED="$DATABASE_SSL_ENABLED" \
             -e DATABASE_TLS_ENFORCED=false \
