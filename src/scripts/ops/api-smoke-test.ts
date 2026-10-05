@@ -471,8 +471,10 @@ const healthProbes: RouteProbe[] = [
  * generic tolerance is wrong for a documented reason. Keep minimal.
  */
 const SWEEP_EXPECTED_OVERRIDES: Record<string, number[]> = {
-  // 403 for the demo (non-admin) user; 404 when ENABLE_MCP_SERVER=false in the target env.
-  'GET /api/v1/mcp': [403, 404],
+  // 403 for a non-admin smoke user; 404 when ENABLE_MCP_SERVER=false in the target env; 406 when
+  // the smoke user is a super_admin (GLOBAL_ADMIN_EMAILS): past the role check, the streamable-HTTP
+  // transport refuses a GET that does not accept `text/event-stream`, which this sweep never sends.
+  'GET /api/v1/mcp': [403, 404, 406],
 };
 
 import {
