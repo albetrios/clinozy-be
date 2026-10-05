@@ -16,7 +16,6 @@ import idempotencyMiddleware from './core/idempotency.middleware.js';
 import encryptionMiddleware from './security/encryption.middleware.js';
 import authMiddleware from './core/auth.middleware.js';
 import zodTypeProviderMiddleware from './core/zod-type-provider.middleware.js';
-import requestStatementTimeoutMiddleware from './core/request-statement-timeout.middleware.js';
 import healthMiddleware from './core/health.middleware.js';
 import httpMetricsPlugin from '@/infrastructure/observability/metrics/http-metrics.plugin.js';
 import metricsMiddleware from './core/metrics.middleware.js';
@@ -57,7 +56,6 @@ export const middlewarePlugins = [
   // `rateLimitMiddleware` runs after auth so per-user / per-organization keys are available
   // (the global limiter is keyed on `request.ip`, but per-route limits need the principal).
   rateLimitMiddleware,
-  requestStatementTimeoutMiddleware,
   healthMiddleware,
   httpMetricsPlugin,
   metricsMiddleware,

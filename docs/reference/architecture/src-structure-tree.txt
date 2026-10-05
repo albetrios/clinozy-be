@@ -1529,7 +1529,6 @@ src/
     │   │   ├── recent-step-up.middleware.ts
     │   │   ├── request-context.middleware.ts
     │   │   ├── request-lifecycle.middleware.ts
-    │   │   ├── request-statement-timeout.middleware.ts
     │   │   ├── response-format.middleware.ts
     │   │   ├── server-timing.middleware.ts
     │   │   ├── shutdown.middleware.ts
@@ -2205,7 +2204,6 @@ src/
     │   │   ├── rate-limit-telemetry-throttle.unit.test.ts
     │   │   ├── rate-limit.middleware.unit.test.ts
     │   │   ├── request-lifecycle.middleware.unit.test.ts
-    │   │   ├── request-statement-timeout.middleware.unit.test.ts
     │   │   ├── response-format.middleware.hook.unit.test.ts
     │   │   ├── response-format.middleware.unit.test.ts
     │   │   ├── server-timing.middleware.unit.test.ts
