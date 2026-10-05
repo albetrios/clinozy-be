@@ -53,10 +53,10 @@ import { applyLocalCaptcha, TURNSTILE_ALWAYS_PASS_TEST_SITE_KEY } from './local-
 import {
   alterRoleStatement,
   applyLocalDatabaseLogins,
-  isLocalDatabaseUrl,
   localDatabaseLogins,
   planLocalDatabaseLogins,
 } from './local-database-logins.js';
+import { isLocalDatabaseUrl } from '@/infrastructure/database/utils/connection-url.util.js';
 import dotenv from 'dotenv';
 import postgres from 'postgres';
 import {

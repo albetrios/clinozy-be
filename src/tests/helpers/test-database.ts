@@ -1,6 +1,7 @@
 import { database } from '@/infrastructure/database/connection.js';
 import { sql } from '@/infrastructure/database/connection.js';
 import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { assertConnectedToTestDatabase } from '@/tests/helpers/local-test-database.js';
 import { env } from '@/shared/config/env.config.js';
 import { resetPlanCatalogMemoForTests } from '@/domains/billing/sub-domains/plan/plan-catalog-memo.js';
 import { resetPermissionCatalogMemoForTests } from '@/domains/tenancy/sub-domains/permission/permission-catalog-memo.js';
@@ -12,26 +13,30 @@ const CLEANUP_RETRY_DELAY_MS = 100;
 /**
  * Whether wiping all rows is acceptable, gated on the single `TEST_MODE` flag (this is a test run).
  * `TEST_MODE` defaults false and a schema refine forbids `true` in production, so a deployed data store
- * can never be truncated. The test harness sets it true; a developer sets it in `.env.local` to wipe a
- * local development database.
+ * can never be truncated; the test harness sets it true.
  */
 function isDataWipeAllowed(): boolean {
   return env.TEST_MODE;
 }
 
+/** The once-per-process check that the wipe target is the test database. */
+let wipeTargetCheck: Promise<void> | undefined;
+
 /**
  * Clean up all test data from the database.
  * Uses a single TRUNCATE ... CASCADE (built in PL/pgSQL) to reduce deadlock risk; retries on deadlock.
- * Only use in `test` or a non-hosted `development` environment (see {@link isDataWipeAllowed}).
+ * Requires `TEST_MODE` (see {@link isDataWipeAllowed}) and, on a developer machine, a connection to
+ * the local test database ({@link assertConnectedToTestDatabase}, checked once per process).
  */
 export async function cleanupDatabase(): Promise<void> {
   if (!isDataWipeAllowed()) {
     throw new Error(
-      'cleanupDatabase is disabled: it requires TEST_MODE=true. ' +
-        'The Vitest harness sets it; for a manual run set it in .env.local (NODE_ENV=local/development). ' +
+      'cleanupDatabase is disabled: it requires TEST_MODE=true, which the Vitest harness sets. ' +
         'TEST_MODE is refine-forbidden in production, so this can never truncate a deployed database.',
     );
   }
+  wipeTargetCheck ??= assertConnectedToTestDatabase(getOperatorSql());
+  await wipeTargetCheck;
 
   for (let attempt = 1; attempt <= MAX_CLEANUP_RETRIES; attempt++) {
     try {

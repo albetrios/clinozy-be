@@ -16,8 +16,8 @@ replay) against **live Postgres + Redis**, with failures injected by
    - `TOXIPROXY_URL=http://127.0.0.1:8474` (administration API for scripts)
 3. Register listeners (idempotent):
    - `pnpm chaos:provision`
-4. Migrate + run the focused suite:
-   - `pnpm db:migrate`
+4. Run the focused suite — it creates and migrates the harness's own `<local database>_test` over the
+   direct connection first, and takes the same database lock as `pnpm test`:
    - `pnpm test:chaos`
 
 On profile `chaos`, `docker-compose.yml` **builds** the Toxiproxy image locally from the official
@@ -34,7 +34,9 @@ via a GitHub Actions service container (see below), so this local build affects 
 > needed when you run the **API process** by hand against the proxies (not for the test suite). The chaos
 > bootstrap forces `NODE_ENV=development`, hard-disables captcha (`CAPTCHA_PROVIDER=disabled`, as the main
 > suite's `src/tests/setup.ts` does), forces its own Redis key prefix (`<product>:test:`, so chaos jobs and
-> `cleanupTestRedis` never touch a running `pnpm dev`'s keys) and sets the test-affordance flags —
+> `cleanupTestRedis` never touch a running `pnpm dev`'s keys), imports the shared
+> `src/tests/helpers/harness-provider-env.ts` (fake provider keys, no telemetry — the main suite
+> loads the same module) and sets the test-affordance flags —
 > `TEST_MODE=true`, the single gate for `cleanupDatabase`/`cleanupTestRedis` — so the suite behaves the same
 > locally and in CI.
 

@@ -1,4 +1,5 @@
 import '@/shared/config/load-env-files.js';
+import '@/tests/helpers/harness-provider-env.js';
 import { DEFAULT_FRONTEND_URL } from '@/shared/constants/index.js';
 import { REDIS_KEY_PREFIX_STEM } from '@/shared/constants/project-identity.constants.js';
 import {
@@ -263,47 +264,6 @@ process.env.RUN_REDIS_TESTS ??= '1';
 process.env.SECRETS_ENCRYPTION_KEY ??= 'a'.repeat(64);
 process.env.METRICS_SCRAPE_TOKEN ??= 'test-metrics-bearer-token-min-32-chars';
 process.env.COOKIE_SECURE ??= 'false';
-/** Local `.env` may set a short Stripe webhook signing secret — HMAC helpers require plausible length under test */
-if (
-  process.env.STRIPE_WEBHOOK_SECRET !== undefined &&
-  process.env.STRIPE_WEBHOOK_SECRET.length > 0 &&
-  process.env.STRIPE_WEBHOOK_SECRET.length < 32
-) {
-  process.env.STRIPE_WEBHOOK_SECRET =
-    'whsec_test_contract_fixture_fallback_when_local_secret_below_32_xx';
-}
-
-/**
- * Isolated outbound contract slice (`pnpm test:contract`): force placeholders so `.env`
- * sandbox keys / bucket names / regions never leak into mocks (or vice versa).
- */
-if (process.env.CONTRACT_TESTS_ENABLED === 'true') {
-  process.env.STRIPE_SECRET_KEY = 'sk_test_contract_fixture_key_for_nock_stubs';
-  process.env.STRIPE_WEBHOOK_SECRET =
-    'whsec_test_contract_fixture_webhook_signing_must_be_minimum_32characters';
-  process.env.RESEND_API_KEY = 're_test_contract_fixture_key';
-  process.env.EMAIL_FROM_ADDRESS = 'noreply@example.com';
-  process.env.S3_BUCKET = 'contract-test-bucket';
-  process.env.S3_REGION = 'us-east-1';
-  process.env.S3_ACCESS_KEY_ID = 'AKIAIOSFODNN7EXAMPLE';
-  process.env.S3_SECRET_ACCESS_KEY = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
-}
-
-/**
- * Offline contract tests — infra wrappers require env before nock stubs network (non-overriding baseline).
- */
-process.env.STRIPE_SECRET_KEY ??= 'sk_test_contract_fixture_key';
-process.env.STRIPE_WEBHOOK_SECRET ??=
-  'whsec_test_contract_fixture_secret_minimum_length_32_chars_xx';
-process.env.RESEND_API_KEY ??= 're_test_contract_fixture_key';
-// EMAIL_FROM_ADDRESS is required by env-schema whenever RESEND_API_KEY is set (no hardcoded
-// sender fallback in mail.service); provide a baseline so the parsed `env` validates in tests.
-process.env.EMAIL_FROM_ADDRESS ??= 'noreply@example.com';
-process.env.S3_BUCKET ??= 'contract-test-bucket';
-process.env.S3_REGION ??= 'us-east-1';
-process.env.S3_ACCESS_KEY_ID ??= 'AKIAIOSFODNN7EXAMPLE';
-process.env.S3_SECRET_ACCESS_KEY ??= 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
-
 // Hard-set (not `??=`) so a developer's `.env.local` ALLOWED_ORIGINS (e.g. a dashboards / clinozy-fe
 // origin) cannot break the auth origin/CSRF e2e tests, which assert against `http://localhost:3000`.
 process.env.ALLOWED_ORIGINS = 'http://localhost:3000';

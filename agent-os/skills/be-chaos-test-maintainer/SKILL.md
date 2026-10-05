@@ -22,8 +22,7 @@ Keeps **Toxiproxy** fault-injection tests and provision scripts aligned. See `do
 docker compose up -d postgres redis   # Docker daemon must be running (docker info)
 pnpm chaos:up                         # builds tooling/chaos/toxiproxy.Dockerfile on first run
 pnpm chaos:provision                  # default upstreams postgres:5432 / redis:6379 (compose net)
-pnpm db:migrate
-pnpm test:chaos                        # self-contained: forces NODE_ENV=development, sets proxied URLs itself
+pnpm test:chaos                        # self-contained: migrates <local database>_test, forces NODE_ENV=development, sets proxied URLs itself
 ```
 
 Proxied defaults: Postgres `25432`, Redis `26379`, Toxiproxy admin `8474`.
@@ -46,6 +45,10 @@ Most chaos "failures" on a fresh machine are environment, not code. Check these 
   (`REDIS_KEY_PREFIX = '<product>:test:'` — with `??=` an env file's prefix won and the chaos jobs and
   `cleanupTestRedis` ran inside the dev namespace), and sets the explicit flags the suite needs
   (`TEST_MODE` — the single gate for `cleanupDatabase`/`cleanupTestRedis`; `RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED`).
+  Provider keys come from the shared `src/tests/helpers/harness-provider-env.ts` (forced fakes, no
+  telemetry), the same module `src/tests/setup.ts` loads — never add provider keys to the bootstrap.
+  The chaos global setup takes the same database suite lock as the main suite: both truncate this
+  machine's one `<local database>_test`, so they cannot run at once.
   NODE_ENV is `local` | `development` | `production`; never downgrade the hard-forces to `||=`.
 - **Provision upstreams are in-network defaults.** With Toxiproxy in the compose network, `chaos:provision`
   uses `postgres:5432` / `redis:6379`. Only set `CHAOS_TOXIPROXY_POSTGRES_UPSTREAM` / `..._REDIS_UPSTREAM`

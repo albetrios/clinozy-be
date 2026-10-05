@@ -29,7 +29,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-chaos-test-maintainer/SKILL.md",
-      "computedHash": "a8230d0f976d53d1937787d57ae70a997ca8af9a124f8b26ad61d2ec692ec561"
+      "computedHash": "aefd15fae12c2fd2312b73323101e2cd3e260d87b618f1e13392f1e4e6bb84d0"
     },
     "be-ci-investigation": {
       "source": "local",
@@ -185,7 +185,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-read-cache-guard/SKILL.md",
-      "computedHash": "d5dd63b29668f1cbf1cced800d28ef23f3af57cd3aef692eb6c038cf70ed07dd"
+      "computedHash": "10b8e96237cb4650ac00544a882f9b4ad301cb430a3558904f0c7ec3295a4fd9"
     },
     "be-rls-tenant-isolation-guard": {
       "source": "local",

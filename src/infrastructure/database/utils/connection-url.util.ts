@@ -73,3 +73,27 @@ export function isStrictDatabaseTlsVerification({
     sslMode === 'verify-ca' || sslMode === 'verify-full' || rejectUnauthorizedOverride === true
   );
 }
+
+/** Hostnames that are this machine, with IPv6 brackets stripped. */
+const LOCAL_DATABASE_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
+
+/**
+ * Whether a Postgres connection URL points at this machine (a loopback host).
+ *
+ * @remarks
+ * - **Algorithm:** parses the URL and compares its hostname — IPv6 brackets stripped, so
+ *   `[::1]` counts — with localhost, 127.0.0.1 and ::1.
+ * - **Failure modes:** an unset or unparseable value is not local.
+ * - **Side effects:** none — pure string parsing.
+ * - **Notes:** the one check the test harness's local-database switch, the bulk-seed guard and
+ *   `pnpm setup:local` share.
+ */
+export function isLocalDatabaseUrl(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const hostname = new URL(value).hostname.replace(/^\[(.*)\]$/, '$1');
+    return LOCAL_DATABASE_HOSTNAMES.has(hostname);
+  } catch {
+    return false;
+  }
+}

@@ -1,4 +1,5 @@
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
+import { buildPrefixedScanPattern } from '@/infrastructure/cache/redis-scan.util.js';
 import { captureMessage } from '@/infrastructure/observability/sentry/sentry.js';
 import { env } from '@/shared/config/env.config.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
@@ -37,7 +38,7 @@ export interface IdempotencyCardinalitySampleResult {
  * and raises Sentry alerts when growth crosses warn/critical thresholds.
  *
  * @remarks
- * - **Algorithm:** iterates `SCAN MATCH IDEMPOTENCY_CACHE_KEY_MATCH_PATTERN COUNT 1000`
+ * - **Algorithm:** iterates `SCAN MATCH <key prefix>IDEMPOTENCY_CACHE_KEY_MATCH_PATTERN COUNT 1000`
  *   until cursor returns to `'0'` or `observedCount >= IDEMPOTENCY_CARDINALITY_SCAN_MAX`,
  *   then writes the observed total to `IDEMPOTENCY_CLAIM_COUNTER_LOGICAL_KEY`.
  * - **Failure modes:** scan errors are logged and rethrown (so BullMQ retries);
@@ -56,6 +57,11 @@ export async function sampleIdempotencyCardinality(): Promise<IdempotencyCardina
   // pages, so normal truncation still trips on the observedCount cap first.
   const maxIterations =
     Math.ceil(maxKeys / IDEMPOTENCY_SCAN_COUNT) + IDEMPOTENCY_SCAN_ITERATION_SLACK;
+  // ioredis does not prefix a SCAN pattern: without the prefix this matched no key at all.
+  const scanPattern = buildPrefixedScanPattern({
+    redis: redisConnection,
+    logicalPattern: IDEMPOTENCY_CACHE_KEY_MATCH_PATTERN,
+  });
   let cursor = '0';
   let observedCount = 0;
   let scanTruncated = false;
@@ -67,7 +73,7 @@ export async function sampleIdempotencyCardinality(): Promise<IdempotencyCardina
       const [nextCursor, keys] = await redisConnection.scan(
         cursor,
         'MATCH',
-        IDEMPOTENCY_CACHE_KEY_MATCH_PATTERN,
+        scanPattern,
         'COUNT',
         IDEMPOTENCY_SCAN_COUNT,
       );

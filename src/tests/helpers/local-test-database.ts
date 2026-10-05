@@ -1,4 +1,5 @@
 import postgres from 'postgres';
+import { isLocalDatabaseUrl } from '@/infrastructure/database/utils/connection-url.util.js';
 import { LOCAL_DATABASE_NAME } from '@/shared/constants/project-identity.constants.js';
 
 /**
@@ -23,19 +24,20 @@ const DATABASE_URL_KEYS = [
   'DATABASE_OPERATOR_URL',
 ] as const;
 
-function isHarnessOnHostedDatabase(): boolean {
-  return process.env.CI === 'true' || process.env.ALLOW_HOSTED_TEST_DATABASE === 'true';
-}
+/** The two `DATABASE_*URL`s the harness cannot run without; the other two are optional pools. */
+const REQUIRED_DATABASE_URL_KEYS = new Set<string>(['DATABASE_URL', 'DATABASE_MIGRATION_URL']);
 
-/** Whether a Postgres connection URL points at this machine (a loopback host). */
-export function isLocalDatabaseUrl(value: string | undefined): boolean {
-  if (!value) return false;
-  try {
-    const { hostname } = new URL(value);
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
-  } catch {
-    return false;
-  }
+/**
+ * Whether the harness runs on a database it was handed rather than the local test database: a
+ * GitHub Actions runner's service container, or a dedicated hosted test database opted into with
+ * `ALLOW_HOSTED_TEST_DATABASE=true`.
+ *
+ * @remarks
+ * `GITHUB_ACTIONS`, not `CI`: a developer shell often exports `CI=true` (many tools read it to turn
+ * off prompts), and that alone must never point the harness at the developer's own database.
+ */
+export function isHarnessOnProvidedDatabase(): boolean {
+  return process.env.GITHUB_ACTIONS === 'true' || process.env.ALLOW_HOSTED_TEST_DATABASE === 'true';
 }
 
 /**
@@ -48,13 +50,16 @@ export function isLocalDatabaseUrl(value: string | undefined): boolean {
  *   harness's cross-tenant fixtures nor `TRUNCATE`), else the env file's own local `DATABASE_URL`,
  *   else the Compose superuser. Every local `DATABASE_*URL` then has its database renamed to the
  *   test database, keeping its login — role passwords are cluster-wide, so each login works there.
- * - **Failure modes:** none — a URL that is not local is left alone.
- * - **Side effects:** rewrites `process.env.DATABASE_URL`, `DATABASE_MIGRATION_URL`,
+ *   A URL that is not local is never the test database: the main and migration logins fall back
+ *   to the Compose superuser, and the optional operator / maintenance logins are dropped so their
+ *   pools fall back to the main one — a remote URL left in place was truncated by every suite.
+ * - **Failure modes:** none.
+ * - **Side effects:** rewrites or unsets `process.env.DATABASE_URL`, `DATABASE_MIGRATION_URL`,
  *   `DATABASE_MAINTENANCE_URL` and `DATABASE_OPERATOR_URL`.
- * - **Notes:** a no-op when `CI=true` or `ALLOW_HOSTED_TEST_DATABASE=true`.
+ * - **Notes:** a no-op when {@link isHarnessOnProvidedDatabase}.
  */
 export function pointHarnessAtLocalTestDatabase(): void {
-  if (isHarnessOnHostedDatabase()) return;
+  if (isHarnessOnProvidedDatabase()) return;
 
   const operatorUrl = process.env.DATABASE_OPERATOR_URL;
   if (operatorUrl && isLocalDatabaseUrl(operatorUrl)) {
@@ -67,10 +72,42 @@ export function pointHarnessAtLocalTestDatabase(): void {
 
   for (const key of DATABASE_URL_KEYS) {
     const value = process.env[key];
-    if (!isLocalDatabaseUrl(value)) continue;
-    const url = new URL(value as string);
+    if (!value) continue;
+    if (!isLocalDatabaseUrl(value)) {
+      if (REQUIRED_DATABASE_URL_KEYS.has(key)) {
+        process.env[key] = LOCAL_TEST_DATABASE_URL;
+      } else {
+        delete process.env[key];
+      }
+      continue;
+    }
+    const url = new URL(value);
     url.pathname = `/${LOCAL_TEST_DATABASE_NAME}`;
     process.env[key] = url.toString();
+  }
+}
+
+/**
+ * Throws unless a connection is on the local test database — the guard in front of every wipe.
+ *
+ * @remarks
+ * - **Algorithm:** asks the server for `current_database()` and compares it with
+ *   {@link LOCAL_TEST_DATABASE_NAME}; skipped when {@link isHarnessOnProvidedDatabase}.
+ * - **Failure modes:** throws, naming the database it refused, so no suite can `TRUNCATE` the
+ *   database `pnpm dev` serves — or a remote one — whatever an env file says.
+ * - **Side effects:** one read-only query.
+ */
+export async function assertConnectedToTestDatabase(
+  query: ReturnType<typeof postgres>,
+): Promise<void> {
+  if (isHarnessOnProvidedDatabase()) return;
+  const [row] = await query<{ name: string }[]>`SELECT current_database() AS name`;
+  if (row?.name !== LOCAL_TEST_DATABASE_NAME) {
+    throw new Error(
+      `Refusing to wipe database "${String(row?.name)}": on a developer machine test cleanup only ` +
+        `runs against "${LOCAL_TEST_DATABASE_NAME}". Check the DATABASE_*URL values in your env ` +
+        'files, or set ALLOW_HOSTED_TEST_DATABASE=true for a dedicated hosted test database.',
+    );
   }
 }
 
@@ -83,10 +120,11 @@ export function pointHarnessAtLocalTestDatabase(): void {
  *   that created it first (`42P04 duplicate_database`) counts as success.
  * - **Failure modes:** connection errors propagate.
  * - **Side effects:** may create one database.
- * - **Notes:** a no-op on CI / hosted runs and when the migration URL is not local.
+ * - **Notes:** a no-op when {@link isHarnessOnProvidedDatabase} and when the migration URL is not
+ *   local.
  */
 export async function ensureLocalTestDatabaseExists(): Promise<void> {
-  if (isHarnessOnHostedDatabase()) return;
+  if (isHarnessOnProvidedDatabase()) return;
   const migrationUrl = process.env.DATABASE_MIGRATION_URL ?? LOCAL_TEST_DATABASE_URL;
   if (!isLocalDatabaseUrl(migrationUrl)) return;
 
@@ -116,8 +154,9 @@ export async function ensureLocalTestDatabaseExists(): Promise<void> {
  *   the test-database URLs passed down win.
  * - **Failure modes:** none.
  * - **Side effects:** none — returns a copy of `process.env`.
- * - **Notes:** CI / hosted runs get `process.env` unchanged (no `.env.local` exists there).
+ * - **Notes:** a run on a provided database gets `process.env` unchanged (no `.env.local`
+ *   exists there).
  */
 export function buildMigrationChildEnvironment(): NodeJS.ProcessEnv {
-  return isHarnessOnHostedDatabase() ? process.env : { ...process.env, NODE_ENV: 'local' };
+  return isHarnessOnProvidedDatabase() ? process.env : { ...process.env, NODE_ENV: 'local' };
 }

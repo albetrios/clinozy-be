@@ -311,7 +311,7 @@ sequenceDiagram
   comment naming the fail-safe reason — `member-invitation-accepted.event-handlers.ts`
   documents its choice exactly that way, and is the model to copy.
 - **Invalidate after commit**, at *every* write choke point for that key, including worker paths. A writer that cannot name the scope (a retention sweep deleting by `created_at`) cannot invalidate — that is what the TTL bounds, and the direction of the resulting error belongs in the cache module's TSDoc.
-- **Register the key prefix** in `TEST_REDIS_PREFIXES` ([test-redis.ts](src/tests/helpers/test-redis.ts)). Test teardown recycles ids, so an un-cleared entry — or its tombstone, which blocks the next `SET NX` — leaks into the next case.
+- **Nothing to register for tests**: [`cleanupTestRedis`](src/tests/helpers/test-redis.ts) deletes every key under the harness's `<product>:test:` namespace except BullMQ's before each case, so a new cache's entries — and their `NX`-blocking tombstones — cannot leak into the next case through recycled ids.
 - **Tests, five of them**: a hit serving a value Postgres has since changed; invalidation on each write path; scope isolation with two warm callers; the route's own gate (401/403) refusing while the entry is warm; and Redis-down falling back. Worked example: [notification-unread-count-cache.integration.test.ts](src/domains/notify/sub-domains/notification/__tests__/integration/notification-unread-count-cache.integration.test.ts).
 - **Metric**: the cache module records `read_cache_requests_total{cache,result}` so its hit ratio is observable. A cache nobody measured is a cache nobody can defend.
 - No environment kill switch. A ≤ 60 s TTL self-heals and reverting the caller is the switch; a flag would be one more untested branch on a hot path.

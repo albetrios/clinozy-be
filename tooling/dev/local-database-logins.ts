@@ -146,12 +146,6 @@ export function applyLocalDatabaseLogins(options: {
   return content;
 }
 
-/** Whether a database URL points at this machine. */
-export function isLocalDatabaseUrl(value: string | undefined): boolean {
-  const url = parseUrl(value);
-  return url !== undefined && ['localhost', '127.0.0.1', '[::1]', '::1'].includes(url.hostname);
-}
-
 function parseUrl(value: string | undefined): URL | undefined {
   if (!value) return undefined;
   try {

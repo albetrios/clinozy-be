@@ -19,22 +19,34 @@ const repoRoot = resolve(here, '../../../..');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3001';
 const API = `${BASE_URL}/api/v1`;
 const POOL_PATH = resolve(here, 'data/credential-pool.json');
+const OVERRIDES_PATH = resolve(here, 'data/loadtest-overrides.env');
 const TARGET_VUS = Number(process.env.VUS || '100'); // checks the pool is big enough for this
 
-function envFromLocal(key) {
+function readEnvFileValue(path, key) {
   try {
-    const line = readFileSync(resolve(repoRoot, '.env.local'), 'utf8')
+    const line = readFileSync(path, 'utf8')
       .split('\n')
       .find((l) => l.startsWith(`${key}=`));
-    return line
-      ? line
-          .slice(key.length + 1)
-          .trim()
-          .replace(/^["']|["']$/g, '')
-      : undefined;
+    if (!line) return undefined;
+    const value = line
+      .slice(key.length + 1)
+      .trim()
+      .replace(/^["']|["']$/g, '');
+    return value === '' ? undefined : value;
   } catch {
     return undefined;
   }
+}
+
+// The value the load-test cluster runs with: its process environment (setup-loadtest.sh exports
+// the overrides into this checker too), then the overrides file, then the machine-local env file
+// the server loads underneath them.
+function loadTestSetting(key) {
+  return (
+    process.env[key] ||
+    readEnvFileValue(OVERRIDES_PATH, key) ||
+    readEnvFileValue(resolve(repoRoot, '.env.local'), key)
+  );
 }
 
 const results = [];
@@ -63,7 +75,7 @@ try {
     fail(
       'credential pool',
       `${pool.length} users < ${TARGET_VUS} VU (some are MFA-blocked too)`,
-      `Seed more: ALLOW_BULK_SEED=1 BULK_ORGS=20 BULK_USERS_PER_ORG=12 pnpm db:seed:bulk && pnpm tool:load-test-credential-pool`,
+      `Seed more: BULK_ORGS=20 BULK_USERS_PER_ORG=12 pnpm db:seed:bulk && pnpm tool:load-test-credential-pool`,
     );
 } catch {
   fail('credential pool', `${POOL_PATH} missing`, 'Run: pnpm db:seed:loadtest');
@@ -108,7 +120,7 @@ if (serverUp && pool.length) {
         fail(
           'captcha fail-open',
           'login blocked by captcha',
-          'Set CAPTCHA_PROVIDER=disabled, or keep CAPTCHA on with CAPTCHA_BYPASS_ALLOWED=true (pnpm setup:local --with-captcha sets both); plus NODE_ENV=development + RATE_LIMIT_RELAXED_CAPS=true — then restart the server',
+          'Set CAPTCHA_PROVIDER=disabled, or keep CAPTCHA on with CAPTCHA_BYPASS_ALLOWED=true (pnpm setup:local --with-captcha sets both); plus RATE_LIMIT_RELAXED_CAPS=true (setup-loadtest.sh writes these) — then restart the server',
         );
         break;
       }
@@ -142,7 +154,7 @@ if (serverUp && pool.length) {
       : fail(
           'captcha fail-open + login',
           'no sampled user got a token',
-          'Check NODE_ENV=development + RATE_LIMIT_RELAXED_CAPS=true + credential pool passwords',
+          'Check CAPTCHA_PROVIDER=disabled + RATE_LIMIT_RELAXED_CAPS=true + credential pool passwords',
         );
     scopedReadOk
       ? ok('org-scoped read', 'GET /tenancy/organization/memberships → 200')
@@ -163,7 +175,9 @@ if (serverUp && pool.length) {
 }
 
 // 6 + 7. Postgres: max_connections + role-cap headroom
-const dbUrl = process.env.DATABASE_URL || envFromLocal('DATABASE_URL');
+// The operator login: row-level security shows the application role no rows without an
+// organization context, so the role-cap query below would read 0 on it and always pass.
+const dbUrl = loadTestSetting('DATABASE_OPERATOR_URL') || loadTestSetting('DATABASE_URL');
 if (dbUrl) {
   const sql = postgres(dbUrl, { max: 1, connect_timeout: 5 });
   try {
@@ -177,10 +191,10 @@ if (dbUrl) {
         );
     // Connection budget the server asserts at boot — catch it here, not at boot:
     //   (API replicas + worker replicas) × DATABASE_POOL_MAX ≤ max_connections − reserved
-    const poolMax = Number(envFromLocal('DATABASE_POOL_MAX') || '10');
-    const apiReplicas = Number(envFromLocal('DEPLOYMENT_API_REPLICA_COUNT') || '1');
-    const workerReplicas = Number(envFromLocal('DEPLOYMENT_WORKER_REPLICA_COUNT') || '1');
-    const reserved = Number(envFromLocal('POSTGRES_RESERVED_CONNECTIONS') || '10');
+    const poolMax = Number(loadTestSetting('DATABASE_POOL_MAX') || '10');
+    const apiReplicas = Number(loadTestSetting('DEPLOYMENT_API_REPLICA_COUNT') || '1');
+    const workerReplicas = Number(loadTestSetting('DEPLOYMENT_WORKER_REPLICA_COUNT') || '1');
+    const reserved = Number(loadTestSetting('POSTGRES_RESERVED_CONNECTIONS') || '10');
     const required = (apiReplicas + workerReplicas) * poolMax;
     const available = mc - reserved;
     const fitPool = Math.floor(available / (apiReplicas + workerReplicas));
@@ -194,7 +208,7 @@ if (dbUrl) {
           `needs ${required} > ${available} (max ${mc} − reserved ${reserved}) → server won't boot`,
           `Set DATABASE_POOL_MAX ≤ ${fitPool} (or raise POSTGRES_MAX_CONNECTIONS / lower replica counts)`,
         );
-    const cap = Number(envFromLocal('MEMBER_ROLE_MAX_PER_ORG') || '50');
+    const cap = Number(loadTestSetting('MEMBER_ROLE_MAX_PER_ORG') || '50');
     const maxRoles = Number(
       (
         await sql`select coalesce(max(c),0) m from (select organization_id, count(*) c from tenancy.roles group by organization_id) z`
@@ -216,7 +230,7 @@ if (dbUrl) {
   fail(
     'postgres checks',
     'DATABASE_URL not found',
-    'Set DATABASE_URL or run from repo root with .env.local present',
+    'Set DATABASE_OPERATOR_URL (pnpm setup:local writes it) or DATABASE_URL',
   );
 }
 
@@ -225,7 +239,7 @@ if (dbUrl) {
 // `docker exec redis-cli ping` would still PONG, but the server fails to boot with
 // ioredis "Connection is closed". Probe exactly the way the app does.
 {
-  const redisUrl = process.env.REDIS_URL || envFromLocal('REDIS_URL') || 'redis://localhost:6379';
+  const redisUrl = loadTestSetting('REDIS_URL') || 'redis://localhost:6379';
   const client = new Redis(redisUrl, {
     maxRetriesPerRequest: 1,
     retryStrategy: () => null,
@@ -240,13 +254,13 @@ if (dbUrl) {
       : fail(
           'redis reachable',
           `unexpected ping reply: ${pong}`,
-          'Restart Redis: docker restart clinozy-be-redis',
+          'Restart Redis: docker compose restart redis',
         );
   } catch (e) {
     fail(
       'redis reachable',
       `${redisUrl} host port-forward closed (${e.message})`,
-      'Forward half-open — restart the container: docker restart clinozy-be-redis (in-container redis-cli still PONGs, so check from the host)',
+      'Forward half-open — restart the container: docker compose restart redis (an in-container ping still PONGs, so check from the host)',
     );
   } finally {
     client.disconnect();

@@ -1,30 +1,9 @@
-import { resolveRedisKeyPrefix } from '@/infrastructure/cache/redis-prefix.util.js';
 import { connectRedis, redisConnection } from '@/infrastructure/cache/redis.client.js';
+import { scanLogicalKeys } from '@/infrastructure/cache/redis-scan.util.js';
 import { env } from '@/shared/config/env.config.js';
 
-/** Redis key prefixes cleared between integration tests (Postgres truncate does not touch Redis). */
-/** Logical prefixes (redisConnection applies the ioredis `keyPrefix` — `<stem>:test:` under the harness). */
-const TEST_REDIS_PREFIXES = [
-  'perm:',
-  'idempotency:',
-  'oauth:state:',
-  'session:tok:',
-  // Auth OTP/send cooldowns + verify-attempt counters. `TRUNCATE ... RESTART IDENTITY` resets the
-  // user-id sequence, so user-keyed cooldowns/counters (and email-keyed send cooldowns when a test
-  // reuses an address) would otherwise leak across cases and nondeterministically skip a send.
-  'auth:email_code_send_cooldown:',
-  'auth:password_reset_cooldown:',
-  'auth:email_verify_resend_cooldown:',
-  'auth:email_code_verify_attempts:',
-  'auth:email_otp_verify_attempts:',
-  // Read caches keyed on a public id. `TRUNCATE ... RESTART IDENTITY` recycles ids, so one case's
-  // cached count (or its invalidation tombstone, which blocks the next `SET NX`) would otherwise
-  // be served to the next case's user of the same id.
-  'notify:unread-count:',
-  // Not a cache — the once-a-minute claim that gates the API-key `last_used_at` write. A leftover
-  // claim makes the next case's key skip its write and fail an assertion about `last_used_at`.
-  'apikey:last-used:',
-] as const;
+/** Key families kept between cases: BullMQ's own keys under `<prefix>bull:`. */
+const KEPT_KEY_PREFIX = 'bull:';
 
 /**
  * Whether flushing test-scoped Redis keys is acceptable (the same gate as the Postgres wipe): the
@@ -36,46 +15,44 @@ function isRedisWipeAllowed(): boolean {
 }
 
 /**
- * `@fastify/rate-limit` stores counters under `<keyPrefix>fastify-rate-limit-<key>`. Every
- * test injects from the same socket, so the global limiter and the per-route presets all key on
- * IP `127.0.0.1`; on a fast machine a single 60s window accumulates enough requests across cases
- * to trip the cap and emit nondeterministic 429s (which cascade into 401s on dependent requests).
- * Clearing these between tests gives each case a fresh budget.
+ * Delete every key the harness wrote under its own prefix, except BullMQ's.
  *
- * The match pattern uses a leading wildcard because ioredis does NOT apply its `keyPrefix` to a
- * SCAN `MATCH` argument; SCAN returns fully-qualified keys, which are then stripped of the prefix
- * before DEL (which re-applies it). This stays correct whether or not a prefix is configured.
+ * @remarks
+ * - **Algorithm:** {@link scanLogicalKeys} over `*` under the client's prefix, then DEL, which
+ *   re-applies it. Everything goes — caches, idempotency records, cooldowns, MFA counters,
+ *   commit-dispatch tasks, rate-limit counters — so a key family added later is cleared too.
+ *   BullMQ keys stay: a suite's queues and workers live across its cases.
+ * - **Failure modes:** throws unless the prefix ends in `:test:` (the harness forces
+ *   `<stem>:test:`), so this can never empty a running `pnpm dev`'s namespace.
+ * - **Notes:** clearing per key family (`perm:*`, `idempotency:*`, …) is what let keys leak
+ *   between cases: a SCAN pattern needs the prefix ioredis does not add, and a family list goes
+ *   stale the day a new family is added.
  */
-async function clearRateLimitCounters(): Promise<void> {
-  const keyPrefix = resolveRedisKeyPrefix();
-  let cursor = '0';
-  do {
-    const [nextCursor, keys] = await redisConnection.scan(
-      cursor,
-      'MATCH',
-      '*fastify-rate-limit-*',
-      'COUNT',
-      500,
+async function deleteHarnessKeys(): Promise<void> {
+  // The prefix the client actually writes under, not a fresh resolution of the env.
+  const keyPrefix = redisConnection.options.keyPrefix ?? '';
+  if (!keyPrefix.endsWith(':test:')) {
+    throw new Error(
+      `Refusing to clear Redis keys under "${keyPrefix}": the test harness only clears its own ` +
+        '`<stem>:test:` namespace (src/tests/setup.ts and the chaos bootstrap force it).',
     );
-    cursor = nextCursor;
-    if (keys.length > 0) {
-      const unprefixedKeys = keys.map((key) =>
-        keyPrefix && key.startsWith(keyPrefix) ? key.slice(keyPrefix.length) : key,
-      );
-      await redisConnection.del(...unprefixedKeys);
+  }
+  for await (const keys of scanLogicalKeys({ redis: redisConnection, logicalPattern: '*' })) {
+    const deletable = keys.filter((key) => !key.startsWith(KEPT_KEY_PREFIX));
+    if (deletable.length > 0) {
+      await redisConnection.del(...deletable);
     }
-  } while (cursor !== '0');
+  }
 }
 
 /**
- * Delete test-scoped Redis keys so permission cache, idempotency, and OAuth state
- * do not leak across Vitest cases in the same worker process.
+ * Delete test-scoped Redis keys so caches, counters and stored state do not leak across Vitest
+ * cases in the same worker process (Postgres truncation does not touch Redis).
  */
 export async function cleanupTestRedis(): Promise<void> {
   if (!isRedisWipeAllowed()) {
     throw new Error(
-      'cleanupTestRedis is disabled: it requires TEST_MODE=true. ' +
-        'The Vitest harness sets it; for a manual run set it in .env.local (NODE_ENV=local/development). ' +
+      'cleanupTestRedis is disabled: it requires TEST_MODE=true, which the Vitest harness sets. ' +
         'TEST_MODE is refine-forbidden in production, so this can never flush a deployed Redis.',
     );
   }
@@ -90,22 +67,5 @@ export async function cleanupTestRedis(): Promise<void> {
     return;
   }
 
-  for (const prefix of TEST_REDIS_PREFIXES) {
-    let cursor = '0';
-    do {
-      const [nextCursor, keys] = await redisConnection.scan(
-        cursor,
-        'MATCH',
-        `${prefix}*`,
-        'COUNT',
-        200,
-      );
-      cursor = nextCursor;
-      if (keys.length > 0) {
-        await redisConnection.del(...keys);
-      }
-    } while (cursor !== '0');
-  }
-
-  await clearRateLimitCounters();
+  await deleteHarnessKeys();
 }

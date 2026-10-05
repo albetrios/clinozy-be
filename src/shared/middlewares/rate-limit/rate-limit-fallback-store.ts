@@ -25,7 +25,11 @@ interface RateLimitChildOptions {
   routeInfo?: { method?: string; url?: string };
 }
 
-const DEFAULT_KEY_PREFIX = 'fastify-rate-limit-';
+/**
+ * Logical key prefix of every rate-limit counter (route-scoped children append
+ * `<METHOD><url>-`); the Redis client adds its own namespace prefix in front.
+ */
+export const RATE_LIMIT_KEY_PREFIX = 'fastify-rate-limit-';
 const LOCAL_COUNTER_MAX_KEYS = 10_000;
 const FAILOVER_LOG_INTERVAL_MS = 5_000;
 
@@ -143,7 +147,7 @@ class RedisFallbackRateLimitStore {
 export function createRedisFallbackRateLimitStore(redis: Redis): new (params: unknown) => unknown {
   return class BoundRedisFallbackRateLimitStore extends RedisFallbackRateLimitStore {
     constructor(_params: unknown) {
-      super(redis, DEFAULT_KEY_PREFIX);
+      super(redis, RATE_LIMIT_KEY_PREFIX);
     }
   };
 }

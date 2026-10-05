@@ -5,7 +5,6 @@ import dotenv from 'dotenv';
 import {
   alterRoleStatement,
   applyLocalDatabaseLogins,
-  isLocalDatabaseUrl,
   localDatabaseLogins,
   passwordFromUrl,
   planLocalDatabaseLogins,
@@ -104,13 +103,6 @@ describe('setup:local — the local database logins', () => {
       alterRoleStatement({ ...app!, password: "x'; DROP ROLE app_be_app; --" }),
     ).toThrow();
     expect(() => alterRoleStatement({ ...app!, role: 'App"Role' })).toThrow();
-  });
-
-  it('recognises a local database URL', () => {
-    expect(isLocalDatabaseUrl('postgresql://u:p@localhost:5432/db')).toBe(true);
-    expect(isLocalDatabaseUrl('postgresql://u:p@127.0.0.1:5432/db')).toBe(true);
-    expect(isLocalDatabaseUrl('postgresql://u:p@db.example.test:5432/db')).toBe(false);
-    expect(isLocalDatabaseUrl(undefined)).toBe(false);
   });
 });
 

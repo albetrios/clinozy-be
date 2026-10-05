@@ -4,6 +4,7 @@
  * loader, same as the API and worker entrypoints.
  */
 import '../../shared/config/load-env-files.js';
+import '../helpers/harness-provider-env.js';
 
 // Force NODE_ENV=development (mirrors src/tests/setup.ts) so a developer's `.env.local` cannot leak a
 // different value through load-env-files. NODE_ENV is `local` | `development` | `production`; the chaos
@@ -72,18 +73,6 @@ process.env.ENABLE_MCP_SERVER ??= 'true';
 process.env.BLOCK_DISPOSABLE_EMAIL ??= 'false';
 
 /**
- * Mirrors `src/tests/setup.ts` placeholders so outbound providers stay deterministic under Vitest chaos.
- */
-process.env.STRIPE_SECRET_KEY ??= 'sk_test_contract_fixture_key_for_nock_stubs';
-process.env.STRIPE_WEBHOOK_SECRET ??=
-  'whsec_test_contract_fixture_fallback_when_local_secret_below_32_xx';
-process.env.RESEND_API_KEY ??= 're_test_contract_fixture_for_chaos_testing_queue_only';
-process.env.EMAIL_FROM_ADDRESS ??= 'noreply@example.com';
-process.env.S3_BUCKET ??= 'contract-test-bucket';
-process.env.S3_REGION ??= 'us-east-1';
-process.env.S3_ACCESS_KEY_ID ??= 'AKIAIOSFODNN7EXAMPLE';
-process.env.S3_SECRET_ACCESS_KEY ??= 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
-
 /**
  * Always point at Toxiproxy listener ports for this Vitest profile. A developer `.env` often
  * sets direct `localhost:5432` / `6379` URLs; `||=` would skip the override and chaos traffic
@@ -95,7 +84,7 @@ process.env.S3_SECRET_ACCESS_KEY ??= 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
  * the primary one.
  */
 process.env.DATABASE_URL =
-  process.env.CI === 'true'
+  process.env.GITHUB_ACTIONS === 'true'
     ? 'postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy'
     : 'postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy_test';
 

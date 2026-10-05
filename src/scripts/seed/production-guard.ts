@@ -1,10 +1,9 @@
+import { isLocalDatabaseUrl } from '@/infrastructure/database/utils/connection-url.util.js';
+
 /**
  * Guard that keeps the bulk seeder from ever writing to a hosted/production database.
  * The orchestrator calls {@link assertBulkSeedAllowed} before any write.
  */
-
-/** Hostnames treated as safe (local Docker / loopback) for bulk seeding. */
-const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 
 /**
  * Throws unless bulk seeding is safe to run. `ALLOW_BULK_SEED=1` is an explicit override.
@@ -26,12 +25,12 @@ export function assertBulkSeedAllowed(env: NodeJS.ProcessEnv): void {
 
   let host: string;
   try {
-    host = new URL(databaseUrl).hostname.replace(/(?:^\[)|(?:\]$)/g, '');
+    host = new URL(databaseUrl).hostname;
   } catch {
     throw new Error('Refusing to bulk-seed: DATABASE_URL is not a valid URL.');
   }
 
-  if (!LOCAL_HOSTS.has(host)) {
+  if (!isLocalDatabaseUrl(databaseUrl)) {
     throw new Error(
       `Refusing to bulk-seed: DATABASE_URL host "${host}" is not local. ` +
         'Set ALLOW_BULK_SEED=1 to override deliberately.',

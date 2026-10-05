@@ -8,15 +8,15 @@ export interface CreateTestSubscriptionOptions {
   status?: string;
   billingCycle?: string;
   /**
-   * Provider name. Pass `null` for a local-only (non-Stripe) subscription. When
-   * omitted, defaults to `'stripe'`.
+   * Provider name. When omitted: `'stripe'` for a Stripe-backed row (a
+   * `providerSubscriptionId` is given), else `null`.
    */
   provider?: string | null;
   /**
-   * Provider subscription id. Pass `null` for a local-only subscription so the
-   * service skips the external Stripe network call (cancel/resume/change-plan
-   * mutate the row directly and return 200). When omitted, defaults to a synthetic
-   * `sub_test_*` id, which makes the fail-closed service attempt a Stripe call.
+   * Provider subscription id. Omitted (the default), the row is local-only and
+   * cancel/resume/change-plan mutate it directly. Pass an id for a Stripe-backed
+   * row — the service then calls Stripe, so the suite must stub
+   * `@/infrastructure/payment/stripe.client.js`; no test may reach the real API.
    */
   providerSubscriptionId?: string | null;
   /**
@@ -32,25 +32,21 @@ export interface CreateTestSubscriptionOptions {
  * Insert a subscription row for tests.
  *
  * @remarks
- * - **Stripe-backed (default):** with a `provider_subscription_id` present, the
- *   subscription service performs an external Stripe call on cancel/resume/
- *   change-plan and is fail-closed — it surfaces `ServiceUnavailableError` (503)
- *   when Stripe is unconfigured or unreachable (the case in CI and local test
- *   runs). Use this to exercise the fail-closed negative path.
- * - **Local-only:** pass `providerSubscriptionId: null` (and optionally
- *   `provider: null`) to skip the Stripe call entirely so mutation endpoints
- *   exercise the database transition logic and return 200 deterministically.
+ * - **Local-only (default):** no `provider_subscription_id`, so mutation endpoints
+ *   exercise the database transition logic and never call Stripe.
+ * - **Stripe-backed:** pass `providerSubscriptionId`. The subscription service then
+ *   calls Stripe on cancel/resume/change-plan and is fail-closed — a failed call
+ *   surfaces as `ServiceUnavailableError` (503). Stub the Stripe client in that
+ *   suite (see billing-subscription-mutations.integration.test.ts).
  */
 export async function createTestSubscription(options: CreateTestSubscriptionOptions) {
   const now = new Date();
   const periodEnd = new Date(now);
   periodEnd.setMonth(periodEnd.getMonth() + 1);
 
-  const provider = options.provider !== undefined ? options.provider : 'stripe';
-  const providerSubscriptionId =
-    options.providerSubscriptionId !== undefined
-      ? options.providerSubscriptionId
-      : `sub_test_${generatePublicId('subscription')}`;
+  const providerSubscriptionId = options.providerSubscriptionId ?? null;
+  const provider =
+    options.provider !== undefined ? options.provider : providerSubscriptionId ? 'stripe' : null;
 
   const [subscription] = await getOperatorDatabase()
     .insert(subscriptions)

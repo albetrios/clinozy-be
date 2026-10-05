@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isLocalDatabaseUrl,
   isNeonPoolerConnection,
   isStrictDatabaseTlsVerification,
   parseSslMode,
@@ -58,6 +59,23 @@ describe('connection-url.util', () => {
 
     it('is NOT strict with no sslmode and no override', () => {
       expect(isStrictDatabaseTlsVerification({ databaseUrl: 'postgresql://h/db' })).toBe(false);
+    });
+  });
+
+  describe('isLocalDatabaseUrl', () => {
+    it('recognises every loopback host, IPv6 in brackets included', () => {
+      expect(isLocalDatabaseUrl('postgresql://u:p@localhost:5432/db')).toBe(true);
+      expect(isLocalDatabaseUrl('postgresql://u:p@127.0.0.1:5432/db')).toBe(true);
+      expect(isLocalDatabaseUrl('postgresql://u:p@[::1]:5432/db')).toBe(true);
+      expect(isLocalDatabaseUrl('postgres://localhost/db')).toBe(true);
+    });
+
+    it('treats remote hosts, missing and unparseable values as not local', () => {
+      expect(isLocalDatabaseUrl('postgresql://u:p@db.example.test:5432/db')).toBe(false);
+      expect(isLocalDatabaseUrl('postgresql://u:p@host.docker.internal:5432/db')).toBe(false);
+      expect(isLocalDatabaseUrl(undefined)).toBe(false);
+      expect(isLocalDatabaseUrl('')).toBe(false);
+      expect(isLocalDatabaseUrl('not a url')).toBe(false);
     });
   });
 });

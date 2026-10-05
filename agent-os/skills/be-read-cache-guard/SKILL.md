@@ -54,8 +54,7 @@ Do **not** add a generic cache abstraction — `cache.overview.md` rules one out
 | 13 | TTL ≤ 60 s, own literal in `ttl.constants.ts` (not aliased to an unrelated cache), entry in `POLICIES.md` | Retuning one cache silently retuning another |
 | 14 | Stored shape is JSON-safe — no `Date`, no class instances | `"2026-09-21T…"` read back where a `Date` was expected |
 | 15 | Module records `read_cache_requests_total{cache,result}` with the cache **name** as the label, not the key | An unfalsifiable cache; or unbounded metric cardinality |
-| 16 | Key prefix registered in `TEST_REDIS_PREFIXES` (`src/tests/helpers/test-redis.ts`) | Recycled ids leak one case's entry — or its `NX`-blocking tombstone — into the next |
-| 17 | No environment kill switch | One more untested branch on a hot path; a ≤ 60 s TTL self-heals and the revert is the switch |
+| 16 | No environment kill switch | One more untested branch on a hot path; a ≤ 60 s TTL self-heals and the revert is the switch |
 
 ## The five tests every cache owes
 

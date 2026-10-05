@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
@@ -22,6 +22,23 @@ import { memberships } from '@/domains/tenancy/sub-domains/membership/membership
 import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+
+// Stripe is unreachable for every Stripe-backed mutation here: the calls the payment provider makes
+// fail the way a network error does, so its fail-closed 503 path runs without ever reaching the
+// real Stripe API (the harness's placeholder key would otherwise make it a live, failing call).
+vi.mock('@/infrastructure/payment/stripe.client.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/infrastructure/payment/stripe.client.js')>();
+  const unreachable = async (): Promise<never> => {
+    throw new Error('Stripe is unreachable (test stub)');
+  };
+  return {
+    ...actual,
+    cancelStripeSubscription: unreachable,
+    resumeStripeSubscription: unreachable,
+    updateStripeSubscription: unreachable,
+    updateStripeSubscriptionQuantity: unreachable,
+  };
+});
 
 /**
  * Billing permissions imported inline to avoid cross-domain coupling in test setup.
@@ -836,10 +853,10 @@ describe('Billing Subscription Mutations — Integration', () => {
   // When a subscription carries a `provider_subscription_id`, the service performs
   // an external Stripe call before mutating local state and is fail-closed: a
   // provider failure surfaces as ServiceUnavailableError (503) and the local row
-  // is NOT mutated. Stripe is unconfigured in CI and local test runs, so a
-  // Stripe-backed cancel/resume deterministically returns 503 here.
+  // is NOT mutated. The Stripe client is stubbed above to fail like a network
+  // error, so a Stripe-backed cancel/resume deterministically returns 503 here.
   describe('Stripe-backed subscription — fail-closed when the provider is unreachable', () => {
-    it('should return 503 when cancelling a Stripe-backed subscription with Stripe unconfigured', async () => {
+    it('should return 503 when cancelling a Stripe-backed subscription while Stripe is unreachable', async () => {
       const { organization, subscription, token } = await createBillingMutationContext({
         status: 'ACTIVE',
         providerSubscriptionId: `sub_test_${generatePublicId('subscription')}`,
@@ -856,7 +873,7 @@ describe('Billing Subscription Mutations — Integration', () => {
       expect(response.statusCode).toBe(503);
     });
 
-    it('should return 503 when resuming a Stripe-backed subscription with Stripe unconfigured', async () => {
+    it('should return 503 when resuming a Stripe-backed subscription while Stripe is unreachable', async () => {
       const { organization, subscription, token } = await createBillingMutationContext({
         status: 'ACTIVE',
         providerSubscriptionId: `sub_test_${generatePublicId('subscription')}`,

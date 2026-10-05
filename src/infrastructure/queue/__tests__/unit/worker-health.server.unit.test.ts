@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import http from 'node:http';
+import net from 'node:net';
 import {
   markWorkerHealthNotReady,
   markWorkerHealthReady,
@@ -72,14 +73,33 @@ function getHealth(
   });
 }
 
+/** A loopback port nothing listens on — never the configured 9090 a running `pnpm dev:worker` holds. */
+function findFreeLoopbackPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const address = probe.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
 describe('worker-health.server', () => {
-  const host = env.HTTP_BIND_HOST === '0.0.0.0' ? '127.0.0.1' : env.HTTP_BIND_HOST;
-  const baseUrl = `http://${host}:${env.WORKER_HEALTH_PORT}`;
-  const liveUrl = `${baseUrl}/livez`;
-  const readyUrl = `${baseUrl}/readyz`;
-  const metricsUrl = `${baseUrl}/metrics`;
+  let liveUrl = '';
+  let readyUrl = '';
+  let metricsUrl = '';
 
   beforeAll(async () => {
+    const port = await findFreeLoopbackPort();
+    vi.stubEnv('WORKER_HEALTH_PORT', String(port));
+    vi.stubEnv('HTTP_BIND_HOST', '127.0.0.1');
+    resetEnvCacheForTests();
+    const baseUrl = `http://127.0.0.1:${port}`;
+    liveUrl = `${baseUrl}/livez`;
+    readyUrl = `${baseUrl}/readyz`;
+    metricsUrl = `${baseUrl}/metrics`;
     markWorkerHealthNotReady();
     await startWorkerHealthServer();
   });
@@ -87,6 +107,8 @@ describe('worker-health.server', () => {
   afterAll(async () => {
     markWorkerHealthNotReady();
     await stopWorkerHealthServer();
+    vi.unstubAllEnvs();
+    resetEnvCacheForTests();
   });
 
   it('returns 200 on /livez regardless of worker readiness', async () => {
