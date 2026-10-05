@@ -200,8 +200,10 @@ export interface PreviousIdentityLeftover {
  *   such as `acmeFeatures` or `AcmeBehavior`.
  * - A previous slug written as a display wordmark: its two halves joined by a typographic separator
  *   (`acme·be`, `ACME • BE`, `acme&middot;be`), markup around the separator allowed
- *   (`acme<span class="…">·</span>be`). Plain spaces and dots are left alone — "let the legacy be"
- *   is English, not a leftover.
+ *   (`acme<span class="…">·</span>be`).
+ * - A previous slug whose halves are joined by a plain dot or a single space (`acme.be`,
+ *   `Acme BE`), case-insensitive and word-bounded. Detection only: prose shares this shape ("let
+ *   the legacy be"), so the rename pass never rewrites it and a hit is left for a human to reword.
  * - A previous BACKEND slug's sibling infrastructure repository (`acme-be` → `acme-infra`), in
  *   every slug spelling.
  * - A previous BACKEND slug's database name (`acme-be` → `acme`) only where it IS the database:
@@ -233,6 +235,16 @@ export function previousIdentityPatterns(
 
     const wordmark = wordmarkPattern(name);
     if (wordmark) patterns.push({ previous: name, pattern: wordmark });
+
+    const separatorIndex = name.lastIndexOf('-');
+    if (separatorIndex > 0) {
+      const head = escapeRegExp(name.slice(0, separatorIndex));
+      const tail = escapeRegExp(name.slice(separatorIndex + 1));
+      patterns.push({
+        previous: name,
+        pattern: new RegExp(`(?<![A-Za-z0-9])${head}[. ]${tail}(?![A-Za-z0-9])`, 'i'),
+      });
+    }
 
     if (!name.endsWith('-be')) continue;
     // The sibling infrastructure repository shares the stem (`acme-be` → `acme-infra`).

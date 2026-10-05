@@ -242,12 +242,32 @@ describe('project identity — previous identity gate', () => {
       '<title>legacy·be — control room</title>',
       'LEGACY • BE',
       'legacy&middot;be',
+      'legacy&#183;be',
+      'Legacy∙BE',
       '<div>legacy<span class="text-brand">·</span>be</div>',
     ]) {
       expect(flags(line), line).toBe(true);
     }
-    // A space or dot is ordinary text, and the tail must end the word.
-    for (const line of ['let the legacy be', 'legacy.be', 'legacy·bean']) {
+    // The tail must end the word.
+    for (const line of ['legacy·bean', 'legacy&middot;beans']) {
+      expect(flags(line), line).toBe(false);
+    }
+  });
+
+  it('flags a previous slug joined by a plain dot or a single space, for a human to reword', () => {
+    // Detection only — the rename pass leaves this shape alone (see the next describe), because
+    // prose shares it: a hit is a line someone rewords, never an automatic rewrite.
+    for (const line of [
+      'legacy.be',
+      'https://legacy.be/docs',
+      'Legacy BE control room',
+      'LEGACY.FE',
+      'let the legacy be',
+    ]) {
+      expect(flags(line), line).toBe(true);
+    }
+    // Exactly one separator character, and the halves must stand as whole words.
+    for (const line of ['legacy..be', 'legacy  be', 'legacy.bean', 'xlegacy be', 'legacy.bed']) {
       expect(flags(line), line).toBe(false);
     }
   });
