@@ -39,6 +39,8 @@ const productionRequiredBase = {
   NODE_ENV: 'production',
   // Production requires absolute https origins (no plaintext http / wildcard).
   ALLOWED_ORIGINS: 'https://app.example.com',
+  // Production builds emailed links from it, so it is required there, over https.
+  FRONTEND_URL: 'https://app.example.com',
   CAPTCHA_PROVIDER: 'turnstile',
   CAPTCHA_SECRET: 'turnstile-secret',
   ...productionRedisTopology,
@@ -693,6 +695,30 @@ describe('env-schema', () => {
       METRICS_SCRAPE_TOKEN: 'b'.repeat(32),
     });
     expect(withToken.success).toBe(true);
+  });
+
+  it.each([
+    ['unset', undefined],
+    ['plaintext http', 'http://app.example.com'],
+    ['the local-dev fallback', 'http://localhost:5173'],
+  ])('rejects production with FRONTEND_URL %s (emailed links would break)', (_case, value) => {
+    const { FRONTEND_URL: _frontendUrl, ...withoutFrontendUrl } = productionRequiredBase;
+    void _frontendUrl;
+    const parsed = envSchema.safeParse({
+      ...withoutFrontendUrl,
+      ...(value === undefined ? {} : { FRONTEND_URL: value }),
+    });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.flatten().fieldErrors.FRONTEND_URL).toBeDefined();
+    }
+  });
+
+  it('accepts production with an https FRONTEND_URL, and an unset one outside production', () => {
+    expect(envSchema.safeParse(productionRequiredBase).success).toBe(true);
+    expect(envSchema.safeParse({ ...commonRequiredBase, NODE_ENV: 'development' }).success).toBe(
+      true,
+    );
   });
 
   it('accepts a public FRONTEND_URL across all NODE_ENV values', () => {

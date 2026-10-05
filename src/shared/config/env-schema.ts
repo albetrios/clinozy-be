@@ -473,6 +473,7 @@ const envSchemaBase = z.object({
   WEBAUTHN_RP_NAME: z.string().min(1).optional(),
 
   // App URLs
+  // Required (https) in production — see the FRONTEND_URL production refine below.
   FRONTEND_URL: z.url().optional(),
   API_DOCS_BASE_URL: z.url().optional(),
 
@@ -1292,6 +1293,31 @@ export const envSchema = envSchemaBase
     },
     {
       message: 'FRONTEND_URL must be a valid http(s) URL.',
+      path: ['FRONTEND_URL'],
+    },
+  )
+  .refine(
+    (data) => {
+      /**
+       * Every emailed link (verification code, password reset, invitation) and the OAuth callback
+       * fallback is built from `FRONTEND_URL`; unset, they point at the local-dev fallback
+       * `DEFAULT_FRONTEND_URL` (http://localhost:5173). Production requires it, over https.
+       */
+      if (data.NODE_ENV !== 'production') {
+        return true;
+      }
+      if (!data.FRONTEND_URL) {
+        return false;
+      }
+      try {
+        return new URL(data.FRONTEND_URL).protocol === 'https:';
+      } catch {
+        return false;
+      }
+    },
+    {
+      message:
+        'FRONTEND_URL must be set to an https URL in production (emailed links and the OAuth callback are built from it).',
       path: ['FRONTEND_URL'],
     },
   )

@@ -88,7 +88,7 @@ For each environment (development, production), add Environment secrets:
 | PORT                 | 3000                                              |
 | HOST                 | 0.0.0.0                                           |
 | LOG_LEVEL            | debug or info                                     |
-| FRONTEND_URL         | Frontend URL for that env                         |
+| FRONTEND_URL         | Frontend URL for that env (production: required, https) |
 | RATE_LIMIT_MAX       | 10000 (development), 100 (production)             |
 | RATE_LIMIT_WINDOW_MS | 60000                                             |
 
