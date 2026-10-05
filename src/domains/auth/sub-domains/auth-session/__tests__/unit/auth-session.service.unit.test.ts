@@ -428,13 +428,13 @@ describe('AuthSessionService', () => {
   it('refreshSessionCredentials treats the stored previous secret as proof of issuance even when its MAC no longer verifies', async () => {
     // A SECRETS_ENCRYPTION_KEY rotation invalidates every issuance MAC; the stored hash of the
     // previous secret still proves the server issued it.
-    const legacySecret = 'previous-secret-whose-mac-no-longer-verifies';
+    const rotatedOutSecret = 'previous-secret-whose-mac-no-longer-verifies';
     vi.mocked(sessionRepository.findByPublicIdIncludingRevoked).mockResolvedValue({
       public_id: 'session_public',
       user_id: user.id,
       token_hash: 'current-token-hash',
       refresh_token_hash: 'current-refresh-hash',
-      previous_refresh_token_hash: createHash('sha256').update(legacySecret).digest('hex'),
+      previous_refresh_token_hash: createHash('sha256').update(rotatedOutSecret).digest('hex'),
       is_revoked: false,
     } as never);
     vi.mocked(sessionRepository.rotateSessionCredentials).mockResolvedValue(null as never);
@@ -444,7 +444,7 @@ describe('AuthSessionService', () => {
       service.refreshSessionCredentials({
         sessionPublicId: 'session_public',
         userPublicId: user.public_id,
-        refreshSecret: legacySecret,
+        refreshSecret: rotatedOutSecret,
         nextAccessToken: 'next-access-token',
       }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
