@@ -212,7 +212,7 @@ export const authRoutesPlugin: FastifyPluginAsync = async (app) => {
       schema: {
         summary: 'Refresh access token',
         description:
-          'Exchanges a valid session cookie for a new short-lived access token. The session_id httpOnly cookie is sent automatically by the browser. When ALLOWED_ORIGINS is set, requests that include an Origin header must match that allowlist (403 otherwise); requests without Origin are allowed for non-browser clients.',
+          'Exchanges a valid session cookie for a new short-lived access token. The session_id httpOnly cookie is sent automatically by the browser. When ALLOWED_ORIGINS is set, an Origin header must match that allowlist (403 otherwise); a request without Origin (a non-browser client) must send X-CSRF-Token matching the csrf_token cookie (403 otherwise).',
         tags: ['Token'],
       },
     },

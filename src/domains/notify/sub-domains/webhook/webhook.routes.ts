@@ -117,7 +117,7 @@ export function webhookRoutes(
         schema: {
           summary: 'Delete webhook',
           description:
-            'Permanently deletes a webhook endpoint. Requires WEBHOOK_MANAGE permission.',
+            'Deletes a webhook endpoint: deliveries stop at once and the row is hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90); registering the same URL again restores it. Requires WEBHOOK_MANAGE permission.',
           tags: ['Webhook'],
           params: webhookIdParamsDto,
         },

@@ -151,7 +151,7 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         schema: {
           summary: 'Delete organization',
           description:
-            'Permanently deletes an organization and all its data. Requires ORGANIZATION_DELETE permission. This action is irreversible.',
+            'Deletes an organization: it disappears from every read at once, its uploads are tombstoned and its subscription is canceled, and the rows are hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires ORGANIZATION_DELETE permission.',
           tags: ['Organization'],
         },
         onRequest: [app.authenticate],
@@ -324,7 +324,8 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.API_KEY_MANAGE)],
         schema: {
           summary: 'Delete API key',
-          description: 'Permanently deletes an API key. Requires API_KEY_MANAGE permission.',
+          description:
+            'Deletes an API key: it stops authenticating at once and the row is hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires API_KEY_MANAGE permission.',
           tags: ['API Key'],
           params: apiKeyIdParamsDto,
         },

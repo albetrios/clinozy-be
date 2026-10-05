@@ -90,7 +90,8 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN)],
       schema: {
         summary: 'Delete user (admin)',
-        description: 'Permanently deletes a user account. Requires the SUPER_ADMIN role.',
+        description:
+          'Deletes a user account: sessions are revoked and the account disappears at once; the rows are hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires the SUPER_ADMIN role.',
         tags: ['User Management'],
         params: userIdParamsDto,
       },
@@ -205,7 +206,7 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       schema: {
         summary: 'Delete my account',
         description:
-          "Permanently deletes the authenticated user's account and all associated data. This action is irreversible.",
+          "Deletes the authenticated user's account: sessions are revoked and the account disappears at once; the rows are hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90).",
         tags: ['User'],
       },
     },
