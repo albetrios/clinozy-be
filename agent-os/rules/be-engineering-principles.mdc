@@ -77,7 +77,10 @@ Route large, low-signal text — long command/CI/test output, logs, whole-file r
 ## Git and refactoring
 
 - Make minimal, focused changes; do not rewrite unrelated code.
-- Preserve backward compatibility unless instructed otherwise.
+- Nothing is released yet: add no backward-compatibility code — no aliases, shims, deprecated paths,
+  fallbacks for legacy values or backfills of old data. Change the contract and the data model directly
+  and update every consumer (clinozy-fe included) in the same change. Once a release ships, preserve the
+  released API contract and data unless instructed otherwise.
 - When refactoring: improve clarity, reduce duplication, preserve behavior, keep diffs clean.
 - Do not create git commits unless the user explicitly asks.
 
