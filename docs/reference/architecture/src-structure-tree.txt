@@ -1840,6 +1840,7 @@ src/
     │   ├── billing/
     │   │   └── plans.integration.test.ts
     │   ├── database/
+    │   │   ├── constraint-validation.integration.test.ts
     │   │   ├── database-constraints.integration.test.ts
     │   │   ├── index-hygiene.integration.test.ts
     │   │   ├── migration-rollback.integration.test.ts
