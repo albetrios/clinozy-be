@@ -59,7 +59,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-cursor-global-skills/SKILL.md",
-      "computedHash": "2aa0c48114c82c0d1525f3d784df5f42c707fd8fe9d8589e1febd3a2dc6ec3d4"
+      "computedHash": "6ea51281f50c9a9fb4f02bbac883ebb543fc21abba58a84c1668e63bb7447017"
     },
     "be-db-migration-maintainer": {
       "source": "local",
@@ -151,12 +151,6 @@
       "skillPath": "agent-os/skills/be-openapi-multilingual/SKILL.md",
       "computedHash": "63dc34e3b281cb993e84c02435672696895de29db5615b276be7296545be7a05"
     },
-    "be-openapi-route-sync": {
-      "source": "local",
-      "sourceType": "local",
-      "skillPath": "agent-os/skills/be-openapi-route-sync/SKILL.md",
-      "computedHash": "0e1efcec8d3de44914e53999c361c00d4d77390eeca049740f6d20cdbb999d6a"
-    },
     "be-overview-doc-maintainer": {
       "source": "local",
       "sourceType": "local",
@@ -197,13 +191,13 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-route-catalog/SKILL.md",
-      "computedHash": "5738bdae0651589acc58e561433f8ca177b0277e2c24b3481812f180478095c0"
+      "computedHash": "ba93f9e5186d8da7219a93facf0f14ca35f39f068ae730c87d2897e1582b5f8e"
     },
     "be-route-schema-doc-guard": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-route-schema-doc-guard/SKILL.md",
-      "computedHash": "6bbf8641707bf97113b1667d02403d5017edbe3644553db5dde83d0c65ca04fa"
+      "computedHash": "5bc72b537e36ee1626721b39c90959d16032aebf3b97ea4688393ffb32d41d05"
     },
     "be-schema-generator": {
       "source": "local",
@@ -221,7 +215,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-skill-index/SKILL.md",
-      "computedHash": "46cb584648304618925509af1ecc390744982f902ed6dd9dba73090e94bf535e"
+      "computedHash": "1e591531096e5e47dcead308c77093565440f8745722bd5e6c81058840e4177f"
     },
     "be-split-to-prs": {
       "source": "local",
@@ -239,7 +233,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-structure-maintainer/SKILL.md",
-      "computedHash": "722c222517300dc3d790a86760382c7736377a44678f617a4c37a8e901e463ce"
+      "computedHash": "cc958eb8f91c4162e00a1a5b127fb3563fe6cabea780f2dfebed1f7cf7950f8e"
     },
     "be-supabase-porting": {
       "source": "local",

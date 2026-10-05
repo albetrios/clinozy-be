@@ -219,7 +219,7 @@ When the requirement comes from a design iteration ([iterations/README.md](../..
 
 1. **be-supabase-porting** — `.cursor/skills/be-supabase-porting/SKILL.md`
 2. **be-domain-generator** or extend existing domain
-3. **be-route-catalog** + **be-openapi-route-sync**
+3. **be-route-schema-doc-guard** + **be-route-catalog**
 4. **be-test-generator**
 5. **be-structure-maintainer**
 6. **be-code-smells-and-best-practices**

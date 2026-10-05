@@ -218,10 +218,9 @@ When any of the above conventions change, update these files so they remain accu
 - `agent-os/skills/be-supabase-porting/SKILL.md` (Supabase porting)
 - `agent-os/skills/be-db-migration-maintainer/SKILL.md` (SQL migrations)
 - `agent-os/skills/be-test-generator/SKILL.md` (testing pyramid and layout)
-- `agent-os/skills/be-openapi-route-sync/SKILL.md` (OpenAPI route metadata)
 - `agent-os/skills/be-cursor-global-skills/SKILL.md` (Cursor built-in skills reference)
 - `agent-os/skills/be-route-catalog/SKILL.md` (route listing conventions)
-- `agent-os/skills/be-code-quality-guard/SKILL.md` (ESLint, pre-commit, CI security pipeline)
+- `agent-os/skills/be-code-quality-guard/SKILL.md` (Biome, pre-commit, CI security pipeline)
 - Any other `agent-os/skills/*/SKILL.md` that references paths or layer names
 - **Docs**: When docs are reorganized or renamed, run **be-docs-maintainer** to update `docs/README.md` and cross-links (see `agent-os/skills/be-docs-maintainer/SKILL.md`).
 - **Load-test docs**: `docs/reference/testing/load-testing.md` and `src/tests/load/k6/README.md` must stay in sync when k6 scenarios (`src/tests/load/k6/scenarios/*.js`), load-test scripts (`src/scripts/admin/load-test-credentials.ts`, `src/scripts/admin/admin-token.ts`), or npm scripts (`load:health`, `load:auth`, `tool:load-test-credentials`, `tool:admin-token`; legacy `scripts:*`) change.

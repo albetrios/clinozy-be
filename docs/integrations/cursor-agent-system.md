@@ -25,9 +25,9 @@ flowchart LR
 
 ---
 
-## Project skills (47)
+## Project skills (46)
 
-**47 total** — consult [be-skill-index](../../agent-os/skills/be-skill-index/SKILL.md) first. Includes **be-skill-index** (meta) and **be-cursor-global-skills** (reference to Cursor built-ins).
+**46 total** — consult [be-skill-index](../../agent-os/skills/be-skill-index/SKILL.md) first. Includes **be-skill-index** (meta) and **be-cursor-global-skills** (reference to Cursor built-ins).
 
 Common chains:
 
@@ -37,8 +37,6 @@ Common chains:
 | New domain | be-domain-generator → be-schema-generator → be-sql-design-guard → be-db-migration-maintainer → … |
 | Env var | be-env-schema-add |
 | Hand-written doc under `docs/` | be-docs-maintainer |
-
-**be-openapi-route-sync** is legacy (tag locales only). Use **be-route-schema-doc-guard** for route `schema` blocks.
 
 ---
 

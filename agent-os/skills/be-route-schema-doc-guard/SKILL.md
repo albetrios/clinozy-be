@@ -104,7 +104,7 @@ If you find yourself adding HTTP routes outside `*.routes.ts` and outside those 
 ## Related references
 
 - OpenAPI extractor: [`tooling/openapi/extractors/route-schema-metadata.ts`](../../../tooling/openapi/extractors/route-schema-metadata.ts)
-- Existing skills that touched this contract: **be-openapi-route-sync**, **be-openapi-multilingual**, **be-route-catalog**.
+- Existing skills that touch this contract: **be-openapi-multilingual**, **be-route-catalog**.
 
 ---
 

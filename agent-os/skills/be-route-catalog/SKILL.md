@@ -187,7 +187,7 @@ Related gates that keep the annotation columns honest:
 
 After updating `docs/routes.txt`:
 
-1. **be-route-schema-doc-guard** — add/update `schema: { summary, description, tags }` on the Fastify route registration. (The legacy **be-openapi-route-sync** skill is preserved for compatibility but the canonical authoring is be-route-schema-doc-guard.)
+1. **be-route-schema-doc-guard** — add/update `schema: { summary, description, tags }` on the Fastify route registration.
 2. **be-openapi-multilingual** — add tag translations to all locales when a new tag is introduced; run `pnpm docs:generate:multilang`.
 3. **be-seed-maintainer** — align seeds when routes were added or removed.
 4. **be-test-generator** — domain e2e tests for new/changed routes.

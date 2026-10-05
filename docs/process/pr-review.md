@@ -239,7 +239,7 @@ flowchart LR
 | ------- | ------ |
 | After workflow renames | Grep `docs/` and skills for old job/workflow names |
 | Quarterly | `pnpm tool:generate-dbdiagram`; spot-check `docs/reviews/` snapshots vs current code |
-| Per route change | Already handled by **be-route-catalog** + **be-openapi-route-sync** |
+| Per route change | Already handled by **be-route-schema-doc-guard** + **be-route-catalog** |
 
 ---
 
