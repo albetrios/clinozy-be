@@ -1,9 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
-import { createTestOrganization } from '@/tests/factories/organization.factory.js';
-import { database } from '@/infrastructure/database/connection.js';
-import { user_notification_preferences } from '@/domains/user/sub-domains/user-notification-preferences/user-notification-preferences.schema.js';
 import { UserNotificationPreferencesRepository } from '@/domains/user/sub-domains/user-notification-preferences/user-notification-preferences.repository.js';
 import {
   PRINCIPAL_SCOPE,
@@ -29,13 +26,11 @@ describe('UserNotificationPreferencesRepository (database)', () => {
         {
           notification_type: 'SUBSCRIPTION_UPDATED',
           channel: 'EMAIL',
-          organization_id: null,
           is_enabled: true,
         },
         {
           notification_type: 'INVITATION',
           channel: 'IN_APP',
-          organization_id: null,
           is_enabled: false,
         },
       ],
@@ -50,7 +45,6 @@ describe('UserNotificationPreferencesRepository (database)', () => {
       {
         notification_type: 'SUBSCRIPTION_UPDATED',
         channel: 'EMAIL',
-        organization_id: null,
         is_enabled: false,
       },
     ]);
@@ -70,13 +64,11 @@ describe('UserNotificationPreferencesRepository (database)', () => {
       {
         notification_type: 'SUBSCRIPTION_UPDATED',
         channel: 'EMAIL',
-        organization_id: null,
         is_enabled: true,
       },
       {
         notification_type: 'SUBSCRIPTION_UPDATED',
         channel: 'EMAIL',
-        organization_id: null,
         is_enabled: false,
       },
     ]);
@@ -85,36 +77,6 @@ describe('UserNotificationPreferencesRepository (database)', () => {
     expect(rows[0]!.is_enabled).toBe(false); // last occurrence wins
     const listed = await repository.listByUserId(user.id);
     expect(listed).toHaveLength(1);
-  });
-
-  // sec-U7: defense-in-depth pin on `organization_id`. The original RLS
-  // policy carried an organization branch that only verified the `app.current_organization_public_id`
-  // GUC matched, NOT membership — a future route wrapping this table in
-  // `withAppDatabaseContext` would have let any user write
-  // preferences against any organization id they could assert (historically the removed header),
-  // bypassing membership entirely. The schema-level CHECK constraint
-  // (`chk_user_notif_prefs_no_org`) refuses non-null `organization_id`
-  // outright so even a direct raw-SQL bypass of the application guard
-  // cannot land a row scoped to an organization.
-  it('rejects a direct insert with non-null organization_id via the CHECK constraint (sec-U7)', async () => {
-    const user = await createTestUser();
-    const organization = await createTestOrganization({ ownerUserId: user.id });
-
-    // Raw insert via the privileged test connection — RLS does not apply at
-    // this role, so only the CHECK constraint can refuse the write. This
-    // simulates a future hostile/buggy code path attempting to persist an
-    // organization-scoped preference outside the membership-gated route.
-    await expect(
-      database.insert(user_notification_preferences).values({
-        user_id: user.id,
-        organization_id: organization.id,
-        notification_type: 'SUBSCRIPTION_UPDATED',
-        channel: 'EMAIL',
-        is_enabled: true,
-      }),
-    ).rejects.toMatchObject({
-      cause: expect.objectContaining({ constraint_name: 'chk_user_notif_prefs_no_org' }),
-    });
   });
 
   // load-test regression: PUT /users/me/notification-preferences returned HTTP 500 under
@@ -128,13 +90,11 @@ describe('UserNotificationPreferencesRepository (database)', () => {
       {
         notification_type: 'SUBSCRIPTION_UPDATED',
         channel: 'EMAIL',
-        organization_id: null,
         is_enabled: enabled,
       },
       {
         notification_type: 'INVITATION',
         channel: 'IN_APP',
-        organization_id: null,
         is_enabled: enabled,
       },
     ];

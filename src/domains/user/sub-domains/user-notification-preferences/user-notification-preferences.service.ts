@@ -56,17 +56,6 @@ export class UserNotificationPreferencesService {
   ): Promise<NotificationPreferenceOutput[]> {
     const user_public_id = scope.userPublicId;
     const parsed = validatePutUserNotificationPreferences(body);
-    // This is the user-scoped endpoint (/users/me/*) with no tenant context, so a non-null
-    // organization_id can never satisfy the organization branch of the RLS WITH CHECK policy and would
-    // surface as a raw 42501 -> 500. Reject it as a 400 instead. Organization-scoped notification
-    // policy is a separate tenancy feature (organization-notification-policy); user-level prefs
-    // here are global.
-    if (parsed.preferences.some((preference) => preference.organization_id != null)) {
-      throw new ValidationError('errors:validation.invalidInput', undefined, {
-        organization_id:
-          'Organization-scoped notification preferences are not settable on this endpoint',
-      });
-    }
     const rows = await withAppDatabaseContext(scope, async () => {
       const userId = await this.requireUserIdInContext(user_public_id);
       return this.repository.replaceAll(
@@ -74,7 +63,6 @@ export class UserNotificationPreferencesService {
         parsed.preferences.map((preference) => ({
           notification_type: preference.notification_type,
           channel: preference.channel,
-          organization_id: preference.organization_id ?? null,
           is_enabled: preference.is_enabled,
         })),
         userId,

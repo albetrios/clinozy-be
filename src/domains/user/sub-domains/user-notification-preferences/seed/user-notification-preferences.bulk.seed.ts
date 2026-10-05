@@ -44,7 +44,6 @@ export async function seedUserNotificationPreferencesBulk(context: SeedContext):
     const profile = generateBulkNotificationPreference(context.faker);
     await database.insert(user_notification_preferences).values({
       user_id: user.id,
-      organization_id: null,
       notification_type: profile.notification_type,
       channel: profile.channel,
       is_enabled: profile.is_enabled,

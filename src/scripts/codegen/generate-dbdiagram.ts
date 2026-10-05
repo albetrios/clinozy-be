@@ -283,8 +283,9 @@ function processMigrationSql(sql: string): void {
   const addColumnPattern =
     /alter\s+table\s+"?([a-z_][a-z0-9_]*)"?\."?([a-z_][a-z0-9_]*)"?\s+add\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?\s+([^;]+)/gi;
   for (const addColumnMatch of sql.matchAll(addColumnPattern)) {
+    // A definition can span lines (`... NOT NULL\n  DEFAULT (...)`); the parser reads one line.
     const parsed = parseColumnDefinitionLine(
-      `${addColumnMatch[3] ?? ''} ${addColumnMatch[4] ?? ''}`,
+      `${addColumnMatch[3] ?? ''} ${(addColumnMatch[4] ?? '').replace(/\s+/g, ' ')}`,
     );
     if (!(parsed && addColumnMatch[1] && addColumnMatch[2])) continue;
     const tableDefinition = getOrCreateTable(addColumnMatch[1], addColumnMatch[2]);
@@ -295,6 +296,20 @@ function processMigrationSql(sql: string): void {
         reference: parsed.foreignKey,
       });
     }
+  }
+
+  // ALTER TABLE schema.table DROP COLUMN [IF EXISTS] col — the column's foreign key goes with it.
+  const dropColumnPattern =
+    /alter\s+table\s+"?([a-z_][a-z0-9_]*)"?\."?([a-z_][a-z0-9_]*)"?\s+drop\s+column\s+(?:if\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?/gi;
+  for (const dropColumnMatch of sql.matchAll(dropColumnPattern)) {
+    const [, schema, table, column] = dropColumnMatch;
+    if (!(schema && table && column)) continue;
+    const tableDefinition = tables.get(qualifiedTableKey(schema, table));
+    if (!tableDefinition) continue;
+    tableDefinition.columns.delete(column);
+    tableDefinition.foreignKeys = tableDefinition.foreignKeys.filter(
+      (foreignKey) => foreignKey.column !== column,
+    );
   }
 
   // ALTER TABLE schema.table ADD PRIMARY KEY (col1, col2)

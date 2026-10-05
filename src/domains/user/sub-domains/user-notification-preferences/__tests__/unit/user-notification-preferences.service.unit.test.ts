@@ -46,7 +46,6 @@ const preferenceRow = {
   id: 2,
   notification_type: 'subscription.updated',
   channel: 'EMAIL',
-  organization_id: null,
   is_enabled: true,
 };
 
@@ -99,10 +98,9 @@ describe('UserNotificationPreferencesService', () => {
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it('put rejects organization-scoped preferences (org_id is unsettable on this user-scoped endpoint)', async () => {
-    // This user-scoped endpoint has no tenant context, so a non-null organization_id can never
-    // satisfy the organization RLS branch (would surface as 42501 -> 500). It must be rejected with a 400
-    // before reaching the repository.
+  it('put rejects an organization_id field — preferences are global, the field does not exist', async () => {
+    // Organization-scoped preferences are tenancy notification policies; the strict body schema
+    // refuses the unknown key before the repository is reached.
     await expect(
       service.put(asUserScope('user_public'), {
         preferences: [
@@ -119,7 +117,7 @@ describe('UserNotificationPreferencesService', () => {
     expect(preferencesRepository.replaceAll).not.toHaveBeenCalled();
   });
 
-  it('put persists user-wide preferences when organization_id is omitted', async () => {
+  it('put persists the user-wide preferences', async () => {
     await service.put(asUserScope('user_public'), {
       preferences: [
         { notification_type: 'subscription.updated', channel: 'EMAIL', is_enabled: true },
@@ -132,7 +130,6 @@ describe('UserNotificationPreferencesService', () => {
         {
           notification_type: 'subscription.updated',
           channel: 'EMAIL',
-          organization_id: null,
           is_enabled: true,
         },
       ],

@@ -78,7 +78,6 @@ describe('UserNotificationPreferencesRepository', () => {
         id: 2,
         notification_type: 'SUBSCRIPTION_UPDATED',
         channel: 'EMAIL',
-        organization_id: null,
         is_enabled: true,
       },
     ]);
@@ -89,7 +88,6 @@ describe('UserNotificationPreferencesRepository', () => {
         {
           notification_type: 'SUBSCRIPTION_UPDATED',
           channel: 'EMAIL',
-          organization_id: null,
           is_enabled: true,
         },
       ],
