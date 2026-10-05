@@ -392,13 +392,22 @@ function processMigrationSql(sql: string): void {
     }
   }
 
+  // CREATE and DROP POLICY in file order: a migration often drops a policy and re-creates it under
+  // the same name, and a dropped one must leave the diagram.
   const policyPattern =
-    /create\s+policy\s+"?([a-z_][a-z0-9_]*)"?\s+on\s+"?([a-z_][a-z0-9_]*)"?\."?([a-z_][a-z0-9_]*)"?/gi;
+    /(create|drop)\s+policy\s+(?:if\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?\s+on\s+"?([a-z_][a-z0-9_]*)"?\."?([a-z_][a-z0-9_]*)"?/gi;
   for (const policyMatch of sql.matchAll(policyPattern)) {
-    if (!(policyMatch[1] && policyMatch[2] && policyMatch[3])) continue;
-    const tableDefinition = getOrCreateTable(policyMatch[2], policyMatch[3]);
-    if (!tableDefinition.rowLevelSecurityPolicies.includes(policyMatch[1])) {
-      tableDefinition.rowLevelSecurityPolicies.push(policyMatch[1]);
+    const [, verb, policyName, schema, table] = policyMatch;
+    if (!(verb && policyName && schema && table)) continue;
+    if (verb.toLowerCase() === 'drop') {
+      const policies = tables.get(qualifiedTableKey(schema, table))?.rowLevelSecurityPolicies;
+      const index = policies?.indexOf(policyName) ?? -1;
+      if (policies && index >= 0) policies.splice(index, 1);
+      continue;
+    }
+    const tableDefinition = getOrCreateTable(schema, table);
+    if (!tableDefinition.rowLevelSecurityPolicies.includes(policyName)) {
+      tableDefinition.rowLevelSecurityPolicies.push(policyName);
     }
     tableDefinition.rowLevelSecurityEnabled = true;
   }
