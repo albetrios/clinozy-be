@@ -25,6 +25,7 @@ import type { FastifyInstance } from 'fastify';
  * in both.
  */
 interface SerializedAuditEntry {
+  id: string;
   action: string;
   resource_type: string;
   severity: string;
@@ -137,6 +138,7 @@ describe('Audit Domain — Integration', () => {
         'action',
         'actor_user_id',
         'created_at',
+        'id',
         'ip_address',
         'metadata',
         'organization_id',
@@ -145,6 +147,8 @@ describe('Audit Domain — Integration', () => {
         'target_user_id',
         'user_agent',
       ]);
+      // The row is identified by its public id, never the bigserial.
+      expect(entry!.id).toMatch(/^aud_[a-z0-9]{21}$/);
     });
 
     /**

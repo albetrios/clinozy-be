@@ -18,6 +18,7 @@ import { getRequestDatabase } from '@/infrastructure/database/contexts/database-
 import { logs, type AuditLogInsert } from '@/domains/audit/audit.schema.js';
 import type { SeedContext, SeededOrg } from '@/scripts/seed/seed-contract.js';
 import { generateBulkAudit } from './audit.faker.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 /** Number of audit rows inserted per batch (bounded so large months stay within statement limits). */
 const INSERT_BATCH_SIZE = 500;
@@ -170,6 +171,7 @@ async function seedOrganizationMonth(options: {
   for (let index = 0; index < missing; index += 1) {
     const profile = generateBulkAudit(context.faker, monthWindow.start, monthWindow.next);
     values.push({
+      public_id: generatePublicId('auditLog'),
       organization_id: organization.id,
       actor_user_id: organization.ownerUserId,
       action: profile.action,

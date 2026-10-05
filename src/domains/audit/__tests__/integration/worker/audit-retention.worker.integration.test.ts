@@ -20,6 +20,7 @@ import { createTestUser } from '@/tests/factories/user.factory.js';
 import { env } from '@/shared/config/env.config.js';
 import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 /**
  * Verifies the audit retention worker purges rows older than AUDIT_RETENTION_DAYS.
@@ -74,12 +75,14 @@ describe('audit-retention.worker — purge', () => {
       .insert(logs)
       .values([
         {
+          public_id: generatePublicId('auditLog'),
           actor_user_id: user.id,
           action: 'user.login.stale',
           resource_type: 'user',
           created_at: staleCreatedAt,
         },
         {
+          public_id: generatePublicId('auditLog'),
           actor_user_id: user.id,
           action: 'user.login.recent',
           resource_type: 'user',
@@ -123,12 +126,14 @@ describe('audit-retention.worker — purge', () => {
       .insert(logs)
       .values([
         {
+          public_id: generatePublicId('auditLog'),
           actor_user_id: user.id,
           action: 'user.login.just_past_cutoff',
           resource_type: 'user',
           created_at: justPastCutoff,
         },
         {
+          public_id: generatePublicId('auditLog'),
           actor_user_id: user.id,
           action: 'user.login.just_inside_retention',
           resource_type: 'user',

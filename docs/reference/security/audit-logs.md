@@ -52,9 +52,10 @@ Actions use dot-separated names: `<domain>.<resource>.<verb>`.
 
 ## Row shape
 
+- `public_id` — the row's own public id (`aud_…`), minted by every writer; the list API returns it as `id` and the S3 export writes it as each line's `id`. The bigserial `id` never leaves the database.
 - `actor_user_id` — resolved from JWT `userId` (public id).
 - `organization_id` — set when the mutation is organization-scoped (resolved from the access token's `org` claim).
-- `metadata` — public ids and non-PII context (no passwords or tokens). The list API runs `sanitizeAuditLogMetadata` so internal numeric `*_id` keys (except `*_public_id`), underscore-prefixed keys, and credential-like fields are stripped from responses.
+- `metadata` — public ids and non-PII context (no passwords or tokens). The list API and the export run `sanitizeAuditMetadata` (`audit.serializer.ts`): the internal-id keys `auth_method_id` / `mfa_method_id` are dropped, and a value under a credential-like key (`password`, `secret`, `token`, `api_key`, …, but never a `*public_id` key) is replaced by `[REDACTED]`.
 
 ## Storage & partitioning
 

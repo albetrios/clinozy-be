@@ -68,10 +68,9 @@ A restore rewinds every table's id counter along with its rows, so the database 
 
 | Where                         | What still holds an id from the lost window                                                         |
 | ----------------------------- | --------------------------------------------------------------------------------------------------- |
-| S3 — audit exports            | Each NDJSON row's `organization_id`, `actor_user_id` and `resource_id`                              |
 | Logs, Sentry                  | Ids in log lines and event context                                                                  |
 
-A reissued id points those at a different row: an audit export attributes one user's actions to another. Queued jobs, their job ids, post-commit dispatch tasks and the Redis auth counters (MFA failures, TOTP replay marks, email-code attempts) are not at risk — they carry public ids or the mail row's random token, never a row id — and neither are keys sent to other services (Resend idempotency keys, email markers, audit export paths): a restore brings all of those back unchanged.
+A reissued id points those at a different row: a log line about one user reads as another's. Queued jobs, their job ids, post-commit dispatch tasks, the Redis auth counters (MFA failures, TOTP replay marks, email-code attempts) and the S3 audit exports are not at risk — they carry public ids or the mail row's random token, never a row id — and neither are keys sent to other services (Resend idempotency keys, email markers, audit export paths): a restore brings all of those back unchanged.
 
 Jump every sequence far past anything issued before the incident. Ids are `bigint`, so a jump of one billion costs nothing and covers any lost window. Run this once, over the same connection `pnpm db:migrate` used in step 3 (`DATABASE_MIGRATION_URL` — the role that owns the sequences):
 

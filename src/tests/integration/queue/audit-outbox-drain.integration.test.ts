@@ -14,6 +14,7 @@ import { users } from '@/domains/user/user.schema.js';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { setLocalDatabaseConfig } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 /** Stable actor public id reused across runs (truncated by cleanupDatabase each test). */
 const ACTOR_PUBLIC_ID = 'usr_auditoutboxdrain00001';
@@ -179,6 +180,7 @@ describe('Integration: audit transactional outbox drain', () => {
           await databaseHandle.transaction(async (savepoint) => {
             await setLocalDatabaseConfig(savepoint, 'app.system_audit_insert', 'true');
             await savepoint.insert(logs).values({
+              public_id: generatePublicId('auditLog'),
               actor_user_id: actor!.id,
               organization_id: null,
               action: 'poison.savepoint',
@@ -195,6 +197,7 @@ describe('Integration: audit transactional outbox drain', () => {
         // The outer batch transaction must still be usable: this VALID insert commits.
         await setLocalDatabaseConfig(databaseHandle, 'app.system_audit_insert', 'true');
         await databaseHandle.insert(logs).values({
+          public_id: generatePublicId('auditLog'),
           actor_user_id: actor!.id,
           organization_id: null,
           action: 'recovered.savepoint',

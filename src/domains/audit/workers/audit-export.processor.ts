@@ -1,7 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { and, asc, eq, gt, gte, isNotNull, lt } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { logs } from '@/domains/audit/audit.schema.js';
+import { sanitizeAuditMetadata } from '@/domains/audit/audit.serializer.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
+import { users } from '@/domains/user/user.schema.js';
 import { getDefaultS3ObjectStorageAdapter } from '@/infrastructure/storage/s3-adapter.js';
 import { gzipBufferAsync } from '@/shared/utils/infrastructure/gzip.util.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
@@ -11,7 +14,11 @@ import {
   AUDIT_EXPORT_MANIFEST_FILENAME,
   AUDIT_EXPORT_SCHEMA_VERSION,
   type AuditExportManifest,
+  type AuditExportRow,
 } from '@/domains/audit/workers/audit-export.constants.js';
+
+const actorUsers = alias(users, 'actor_users');
+const targetUsers = alias(users, 'target_users');
 
 function previousUtcDayRange(referenceDate = new Date()): {
   start: Date;
@@ -202,19 +209,23 @@ async function collectOrganizationAuditBatches(options: {
   const manifestObjects: AuditExportManifest['objects'] = [];
 
   while (true) {
+    // The global-retention context reads auth.users (it has a retention arm), so actor and
+    // target resolve to public ids here; a user hard-deleted since leaves the column null.
     const rows = await databaseHandle
       .select({
         id: logs.id,
-        organization_id: logs.organization_id,
-        actor_user_id: logs.actor_user_id,
+        public_id: logs.public_id,
+        actor_user_public_id: actorUsers.public_id,
+        target_user_public_id: targetUsers.public_id,
         action: logs.action,
         resource_type: logs.resource_type,
-        resource_id: logs.resource_id,
         severity: logs.severity,
         metadata: logs.metadata,
         created_at: logs.created_at,
       })
       .from(logs)
+      .leftJoin(actorUsers, eq(logs.actor_user_id, actorUsers.id))
+      .leftJoin(targetUsers, eq(logs.target_user_id, targetUsers.id))
       .where(
         and(
           eq(logs.organization_id, organizationId),
@@ -228,7 +239,9 @@ async function collectOrganizationAuditBatches(options: {
 
     if (rows.length === 0) break;
 
-    const lines = rows.map((row) => `${JSON.stringify(row)}\n`);
+    const lines = rows.map(
+      (row) => `${JSON.stringify(toAuditExportRow({ row, organizationPublicId }))}\n`,
+    );
     const body = await gzipBufferAsync(Buffer.from(lines.join(''), 'utf8'));
     const sha256 = createHash('sha256').update(body).digest('hex');
     const batchPartId = randomUUID();
@@ -261,4 +274,48 @@ async function collectOrganizationAuditBatches(options: {
   }
 
   return manifestObjects;
+}
+
+/** Inputs for {@link toAuditExportRow}: one selected `audit.logs` row and its organization. */
+interface ToAuditExportRowOptions {
+  row: {
+    public_id: string;
+    actor_user_public_id: string | null;
+    target_user_public_id: string | null;
+    action: string;
+    resource_type: string;
+    severity: string;
+    metadata: unknown;
+    created_at: Date;
+  };
+  organizationPublicId: string;
+}
+
+/**
+ * One NDJSON line of the export: public ids only — the archive outlives the database, and a
+ * restore reissues bigserials — and metadata sanitized exactly as the audit API returns it.
+ *
+ * @remarks
+ * - **Algorithm:** maps the selected row (actor/target already joined to public ids) and the
+ *   organization's public id onto {@link AuditExportRow}; `metadata` goes through
+ *   `sanitizeAuditMetadata`.
+ * - **Failure modes:** none — pure mapping.
+ * - **Side effects:** none.
+ * - **Notes:** IP address, user agent and the internal `resource_id` are never exported.
+ */
+export function toAuditExportRow({
+  row,
+  organizationPublicId,
+}: ToAuditExportRowOptions): AuditExportRow {
+  return {
+    id: row.public_id,
+    organization_id: organizationPublicId,
+    actor_user_id: row.actor_user_public_id,
+    target_user_id: row.target_user_public_id,
+    action: row.action,
+    resource_type: row.resource_type,
+    severity: row.severity,
+    metadata: sanitizeAuditMetadata(row.metadata),
+    created_at: row.created_at.toISOString(),
+  };
 }

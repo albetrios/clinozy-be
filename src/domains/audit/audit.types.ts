@@ -19,8 +19,8 @@ export interface AuditLogFilters {
   include_total?: boolean;
 }
 
-/** Row shape for inserting into `audit.logs` (Drizzle insert). */
-export type NewAuditLog = AuditLogInsert;
+/** Row shape for inserting into `audit.logs` — {@link AuditRepository.insert} mints the public id. */
+export type NewAuditLog = Omit<AuditLogInsert, 'public_id'>;
 
 /**
  * Server-internal audit input. After P0-#2 (audit outbox) this carries only

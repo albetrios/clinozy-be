@@ -19,6 +19,7 @@ import { AUDIT_PERMISSIONS } from '@/domains/audit/audit.permissions.js';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { logs } from '@/domains/audit/audit.schema.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 /**
  * `GET /tenancy/organization/audit-logs` was the only tenancy route in the catalog with **no
@@ -88,6 +89,7 @@ describe('GET /api/v1/tenancy/organization/audit-logs — Integration', () => {
     const [row] = await getOperatorDatabase()
       .insert(logs)
       .values({
+        public_id: generatePublicId('auditLog'),
         organization_id: options.organizationId,
         actor_user_id: options.actorUserId,
         action: options.action,

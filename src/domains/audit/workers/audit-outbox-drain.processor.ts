@@ -13,6 +13,7 @@ import {
   DEFAULT_AUDIT_OUTBOX_DRAIN_BATCH_SIZE,
   DEFAULT_AUDIT_OUTBOX_DRAIN_MAX_ATTEMPTS,
 } from '@/domains/audit/workers/audit-outbox-drain.constants.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 /**
  * Summary returned by {@link runAuditOutboxDrainJob} for observability.
@@ -137,6 +138,7 @@ async function buildResolutionMaps(
 }
 
 interface ResolvedAuditLogInsertRow {
+  public_id: string;
   actor_user_id: number | null;
   actor_api_key_id: number | null;
   target_user_id: number | null;
@@ -180,6 +182,7 @@ function resolveRowInserts(
 
   return {
     row: {
+      public_id: generatePublicId('auditLog'),
       actor_user_id,
       actor_api_key_id,
       target_user_id,

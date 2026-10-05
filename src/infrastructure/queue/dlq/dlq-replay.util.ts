@@ -22,6 +22,7 @@ import {
 } from '@/domains/notify/sub-domains/notification/queues/notification.queue.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 /**
  * Source queues whose DLQ payloads {@link buildReplayJobPayload} knows how to reconstruct.
@@ -208,6 +209,7 @@ export async function recordDlqReplayAuditEntry(input: {
     MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
     async (databaseHandle) => {
       await databaseHandle.insert(logs).values({
+        public_id: generatePublicId('auditLog'),
         actor_user_id: actorRow.id,
         action: 'queue.dlq.replayed',
         resource_type: 'bullmq_dead_letter_job',
@@ -267,6 +269,7 @@ export async function recordDlqAutoRetryAuditEntry(input: {
     MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
     async (databaseHandle) => {
       await databaseHandle.insert(logs).values({
+        public_id: generatePublicId('auditLog'),
         actor_user_id: null,
         action: 'queue.dlq.auto_retried',
         resource_type: 'bullmq_dead_letter_job',

@@ -17,6 +17,7 @@ import {
 } from '@/domains/audit/workers/audit-export.constants.js';
 import { buildManifestKey } from '@/domains/audit/workers/audit-export.processor.js';
 import type * as EnvConfigModule from '@/shared/config/env.config.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 const { headObjectMock, putObjectMock } = vi.hoisted(() => ({
   headObjectMock: vi.fn(),
@@ -87,7 +88,9 @@ describe('audit-export.worker — S3 NDJSON export', () => {
     const { start, dateLabel } = getPreviousUtcDayRange();
     const createdAt = new Date(start.getTime() + 3_600_000);
 
+    const auditPublicId = generatePublicId('auditLog');
     await getOperatorDatabase().insert(logs).values({
+      public_id: auditPublicId,
       organization_id: organization.id,
       actor_user_id: user.id,
       action: 'organization.updated',
@@ -123,12 +126,19 @@ describe('audit-export.worker — S3 NDJSON export', () => {
     expect(gzipPut.metadata?.sha256).toBe(expectedSha256);
 
     const decompressed = gunzipSync(gzipPut.body).toString('utf8');
-    const parsed = JSON.parse(decompressed.trim().split('\n')[0]!) as {
-      action: string;
-      organization_id: number;
-    };
-    expect(parsed.action).toBe('organization.updated');
-    expect(parsed.organization_id).toBe(organization.id);
+    const parsed = JSON.parse(decompressed.trim().split('\n')[0]!) as Record<string, unknown>;
+    // Public ids only — the archive outlives the database, whose bigserials a restore reissues.
+    expect(parsed).toEqual({
+      id: auditPublicId,
+      organization_id: organization.public_id,
+      actor_user_id: user.public_id,
+      target_user_id: null,
+      action: 'organization.updated',
+      resource_type: 'organization',
+      severity: 'INFO',
+      metadata: {},
+      created_at: createdAt.toISOString(),
+    });
 
     const manifestPut = putObjectMock.mock.calls.find(
       (call) => call[0]!.contentType === 'application/json',
@@ -162,6 +172,7 @@ describe('audit-export.worker — S3 NDJSON export', () => {
       .insert(logs)
       .values([
         {
+          public_id: generatePublicId('auditLog'),
           organization_id: organizationA.id,
           actor_user_id: user.id,
           action: 'organization.updated',
@@ -169,6 +180,7 @@ describe('audit-export.worker — S3 NDJSON export', () => {
           created_at: createdAt,
         },
         {
+          public_id: generatePublicId('auditLog'),
           organization_id: organizationB.id,
           actor_user_id: user.id,
           action: 'membership.created',
@@ -226,13 +238,16 @@ describe('audit-export.worker — S3 NDJSON export', () => {
     const { start, dateLabel } = getPreviousUtcDayRange();
     const createdAt = new Date(start.getTime() + 3_600_000);
 
-    await getOperatorDatabase().insert(logs).values({
-      organization_id: organization.id,
-      actor_user_id: user.id,
-      action: 'membership.created',
-      resource_type: 'membership',
-      created_at: createdAt,
-    });
+    await getOperatorDatabase()
+      .insert(logs)
+      .values({
+        public_id: generatePublicId('auditLog'),
+        organization_id: organization.id,
+        actor_user_id: user.id,
+        action: 'membership.created',
+        resource_type: 'membership',
+        created_at: createdAt,
+      });
 
     const manifestKey = buildManifestKey({
       organizationPublicId: organization.public_id,
@@ -263,13 +278,16 @@ describe('audit-export.worker — S3 NDJSON export', () => {
     const { end } = getPreviousUtcDayRange();
     const todayLogTime = new Date(end.getTime() + 3_600_000);
 
-    await getOperatorDatabase().insert(logs).values({
-      organization_id: organization.id,
-      actor_user_id: user.id,
-      action: 'user.login',
-      resource_type: 'user',
-      created_at: todayLogTime,
-    });
+    await getOperatorDatabase()
+      .insert(logs)
+      .values({
+        public_id: generatePublicId('auditLog'),
+        organization_id: organization.id,
+        actor_user_id: user.id,
+        action: 'user.login',
+        resource_type: 'user',
+        created_at: todayLogTime,
+      });
 
     const result = await withMaintenanceDatabaseContext(
       MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,

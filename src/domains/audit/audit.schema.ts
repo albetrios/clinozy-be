@@ -37,6 +37,9 @@ export const logs = auditSchema
     'logs',
     {
       id: bigserial('id', { mode: 'number' }).primaryKey(),
+      // The row's identity outside Postgres (audit API `id`, export line `id`); minted by writers
+      // with generatePublicId('auditLog'). Not unique-indexed: see 20261005160000.
+      public_id: varchar('public_id', { length: 28 }).notNull(),
       actor_user_id: bigint('actor_user_id', { mode: 'number' }).references(() => users.id, {
         onDelete: 'set null',
       }),

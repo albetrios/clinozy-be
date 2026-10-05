@@ -13,6 +13,7 @@ import {
   grantClinozyBeAppRoleForTests,
   executeAsClinozyBeAppGlobalAdmin,
 } from '@/tests/helpers/rls-matrix.helper.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 /**
  * Checks whether the sec-r4-D1 migration has been applied by verifying the
@@ -79,8 +80,8 @@ describe('Security: audit.logs INSERT RLS rejects privilege-bypass contexts (sec
         // Before the fix this would succeed (global_admin bypassed WITH CHECK).
         // After the fix RLS rejects it.
         await transaction.execute(
-          drizzleSql`INSERT INTO audit.logs (organization_id, action, resource_type, ip_address, user_agent, metadata)
-                     VALUES (${organization.id}, 'test.d1.admin', 'test', '127.0.0.1', 'vitest', '{}'::jsonb)`,
+          drizzleSql`INSERT INTO audit.logs (public_id, organization_id, action, resource_type, ip_address, user_agent, metadata)
+                     VALUES (${generatePublicId('auditLog')}, ${organization.id}, 'test.d1.admin', 'test', '127.0.0.1', 'vitest', '{}'::jsonb)`,
         );
       });
     } catch (error) {
@@ -107,8 +108,8 @@ describe('Security: audit.logs INSERT RLS rejects privilege-bypass contexts (sec
           // is active. Before the fix this would succeed. After the fix, RLS
           // rejects it.
           await databaseHandle.execute(
-            drizzleSql`INSERT INTO audit.logs (organization_id, action, resource_type, ip_address, user_agent, metadata)
-                       VALUES (${organization.id}, 'test.d1.retention', 'test', '127.0.0.1', 'vitest', '{}'::jsonb)`,
+            drizzleSql`INSERT INTO audit.logs (public_id, organization_id, action, resource_type, ip_address, user_agent, metadata)
+                       VALUES (${generatePublicId('auditLog')}, ${organization.id}, 'test.d1.retention', 'test', '127.0.0.1', 'vitest', '{}'::jsonb)`,
           );
         },
         { useApplicationDatabaseRole: true },
@@ -146,8 +147,8 @@ describe('Security: audit.logs INSERT RLS rejects privilege-bypass contexts (sec
           drizzleSql`SELECT set_config('app.current_organization_public_id', ${organization.public_id}, true)`,
         );
         await transaction.execute(
-          drizzleSql`INSERT INTO audit.logs (organization_id, action, resource_type, ip_address, user_agent, metadata)
-                     VALUES (${organization.id}, 'test.d1.tenant', 'test', '127.0.0.1', 'vitest', '{}'::jsonb)`,
+          drizzleSql`INSERT INTO audit.logs (public_id, organization_id, action, resource_type, ip_address, user_agent, metadata)
+                     VALUES (${generatePublicId('auditLog')}, ${organization.id}, 'test.d1.tenant', 'test', '127.0.0.1', 'vitest', '{}'::jsonb)`,
         );
       });
     } catch (error) {

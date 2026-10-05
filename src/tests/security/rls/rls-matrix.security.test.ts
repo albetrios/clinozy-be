@@ -33,6 +33,7 @@ import {
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { PermissionRepository } from '@/domains/tenancy/sub-domains/permission/permission.repository.js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 function countFromExecuteResult(result: unknown): number {
   const rows = Array.isArray(result)
@@ -368,6 +369,7 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
       const organizationA = await createTestOrganization({ ownerUserId: userA.id });
       const organizationB = await createTestOrganization({ ownerUserId: userB.id });
       await database.insert(logs).values({
+        public_id: generatePublicId('auditLog'),
         organization_id: organizationA.id,
         actor_user_id: userA.id,
         action: 'test.action',
@@ -376,6 +378,7 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
       const [logB] = await database
         .insert(logs)
         .values({
+          public_id: generatePublicId('auditLog'),
           organization_id: organizationB.id,
           actor_user_id: userB.id,
           action: 'test.action',
@@ -402,6 +405,7 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
       const user = await createTestUser();
       const organization = await createTestOrganization({ ownerUserId: user.id });
       await database.insert(logs).values({
+        public_id: generatePublicId('auditLog'),
         organization_id: organization.id,
         actor_user_id: user.id,
         action: 'test.action',
@@ -428,6 +432,7 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
       const [logA] = await database
         .insert(logs)
         .values({
+          public_id: generatePublicId('auditLog'),
           organization_id: organizationA.id,
           actor_user_id: userA.id,
           action: 'test.action',
@@ -437,6 +442,7 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
       const [logB] = await database
         .insert(logs)
         .values({
+          public_id: generatePublicId('auditLog'),
           organization_id: organizationB.id,
           actor_user_id: userB.id,
           action: 'test.action',

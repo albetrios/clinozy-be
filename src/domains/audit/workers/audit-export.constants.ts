@@ -6,6 +6,28 @@ export const AUDIT_EXPORT_MANIFEST_FILENAME = 'manifest.json';
 /** Manifest schema version literal — bump when the manifest shape changes incompatibly. */
 export const AUDIT_EXPORT_SCHEMA_VERSION = '1';
 
+/**
+ * One line of an export part (NDJSON). Every id is a public id — the archive outlives the
+ * database, whose bigserials a restore reissues.
+ *
+ * @remarks
+ * `id` is the audit row's own public id (`aud_…`, the dedupe key for a re-run's duplicate
+ * parts); `organization_id`, `actor_user_id` and `target_user_id` are the public ids the audit
+ * API returns (`null` when the row has none, or the user was hard-deleted since). `metadata` is
+ * sanitized like the API's: internal-id keys dropped, secret-looking values redacted.
+ */
+export interface AuditExportRow {
+  id: string;
+  organization_id: string;
+  actor_user_id: string | null;
+  target_user_id: string | null;
+  action: string;
+  resource_type: string;
+  severity: string;
+  metadata: unknown;
+  created_at: string;
+}
+
 /** One uploaded object entry inside an {@link AuditExportManifest} (single NDJSON.gz part). */
 export interface AuditExportManifestObject {
   key: string;

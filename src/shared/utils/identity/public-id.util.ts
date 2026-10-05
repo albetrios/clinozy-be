@@ -28,6 +28,7 @@ export const PUBLIC_ID_PREFIXES = {
   upload: 'upl',
   userDataExport: 'exp',
   webhookDeliveryAttempt: 'wda',
+  auditLog: 'aud',
 } as const;
 
 /** Entity keys of {@link PUBLIC_ID_PREFIXES}. */

@@ -417,6 +417,7 @@ export async function seedRlsMatrixFixtures(): Promise<RlsTenantFixture> {
   const [auditA] = await database
     .insert(logs)
     .values({
+      public_id: generatePublicId('auditLog'),
       organization_id: organizationA.id,
       actor_user_id: ownerA.id,
       action: 'test.action',
@@ -426,6 +427,7 @@ export async function seedRlsMatrixFixtures(): Promise<RlsTenantFixture> {
   const [auditB] = await database
     .insert(logs)
     .values({
+      public_id: generatePublicId('auditLog'),
       organization_id: organizationB.id,
       actor_user_id: ownerB.id,
       action: 'test.action',

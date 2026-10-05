@@ -30,7 +30,15 @@ function isPublicIdMetadataKey(key: string): boolean {
   return key.endsWith('public_id');
 }
 
-function sanitizeMetadata(metadata: unknown): unknown {
+/**
+ * The audit `metadata` as it may leave the database: internal-id keys
+ * ({@link SENSITIVE_INTERNAL_METADATA_KEYS}) dropped, secret-looking values redacted.
+ *
+ * @remarks
+ * Shared by the audit API serializer and the daily S3 export, so both surfaces strip the same
+ * keys. Non-object metadata passes through unchanged.
+ */
+export function sanitizeAuditMetadata(metadata: unknown): unknown {
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
     return metadata;
   }
@@ -52,6 +60,9 @@ function sanitizeMetadata(metadata: unknown): unknown {
  * automatically dropped from the response — see `serializeOne`.
  */
 interface AuditLogRow {
+  /** The row's public id — surfaced as `id`. */
+  public_id: string;
+
   // Internal ids used to resolve public ids — dropped from the response.
   actor_user_id?: number | null;
   target_user_id?: number | null;
@@ -102,7 +113,7 @@ function serializeOne<T extends AuditLogRow>(row: T, resolution: AuditLogPublicI
   // useful enumeration vector for the same class).
   //
   // We DROP every internal numeric id and surface the resolved public id where
-  // we have one. `actor_api_key_id` / `resource_id` are intentionally not
+  // we have one — the row itself is identified by its own public id (`id`). `actor_api_key_id` / `resource_id` are intentionally not
   // resolved here — admins correlate via `metadata` (which already carries
   // public ids the writer captured) and `resource_type`; surfacing the bigint
   // would just re-open the leak.
@@ -110,6 +121,7 @@ function serializeOne<T extends AuditLogRow>(row: T, resolution: AuditLogPublicI
   const targetInternalId = row.target_user_id ?? null;
   const organizationInternalId = row.organization_id ?? null;
   return {
+    id: row.public_id,
     actor_user_id:
       actorInternalId !== null ? (resolution.userPublicIds.get(actorInternalId) ?? null) : null,
     target_user_id:
@@ -123,7 +135,7 @@ function serializeOne<T extends AuditLogRow>(row: T, resolution: AuditLogPublicI
     ip_address: row.ip_address ?? null,
     user_agent: row.user_agent ?? null,
     severity: row.severity,
-    metadata: sanitizeMetadata(row.metadata),
+    metadata: sanitizeAuditMetadata(row.metadata),
     created_at: toIsoString(row.created_at),
   };
 }

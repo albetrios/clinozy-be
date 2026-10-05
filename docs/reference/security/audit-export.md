@@ -30,11 +30,13 @@ Per organization and UTC date:
 | Data | `s3://{bucket}/{prefix}/organization_public_id={org public id}/dt=YYYY-MM-DD/part-{uuid}.jsonl.gz` |
 | Manifest | `s3://{bucket}/{prefix}/organization_public_id={org public id}/dt=YYYY-MM-DD/manifest.json` |
 
-- **Data format:** gzip-compressed NDJSON (one JSON object per line)
+- **Data format:** gzip-compressed NDJSON (one JSON object per line):
+  `{ id, organization_id, actor_user_id, target_user_id, action, resource_type, severity, metadata, created_at }`.
+  Every id is a **public id** — `id` is the audit row's own `aud_…` id (the dedupe key when a re-run after a partial failure leaves duplicate parts), `organization_id` the organization's `org_…`, `actor_user_id` / `target_user_id` the users' `usr_…` (`null` when the row has none, or the user was hard-deleted since). `metadata` is sanitized exactly as the audit API returns it (`sanitizeAuditMetadata`). IP address, user agent and the internal `resource_id` are not exported.
 - **Data metadata:** `format=ndjson`, `schema_version=1`, `export_date`, `row_count`, `sha256` (hex digest of the gzip bytes)
 - **Manifest:** JSON with `schema_version`, `export_date`, `organization_public_id`, and `objects[]` (`key`, `row_count`, `sha256`, `format`, `content_type`)
 - **Idempotency:** skips organization+date when `manifest.json` already exists (`HeadObject` on manifest key)
-- **Why the public id:** the archive outlives the database. An organization's bigserial restarts at 1 after a restore or reset, and every database writing to a shared bucket counts from 1, so partitions keyed by it put two organizations in one folder and the second one's day was skipped as already exported. The NDJSON rows still carry the database's own `organization_id` / `actor_user_id` for joins back to that database.
+- **Why public ids:** the archive outlives the database. A bigserial restarts at 1 after a reset and is reissued after a restore, and every database writing to a shared bucket counts from 1 — partitions keyed by it put two organizations in one folder, and a line keyed by it would point at a different event. `tooling/audit/verify-export-ndjson.mjs` rejects a line whose ids are not public ids.
 
 ## Environment
 

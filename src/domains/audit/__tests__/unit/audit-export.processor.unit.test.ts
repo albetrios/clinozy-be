@@ -39,26 +39,27 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+/** One row as the processor's keyset query selects it (actor/target joined to public ids). */
 interface AuditRowFixture {
   id: number;
-  organization_id: number;
-  actor_user_id: number | null;
+  public_id: string;
+  actor_user_public_id: string | null;
+  target_user_public_id: string | null;
   action: string;
   resource_type: string;
-  resource_id: number | null;
   severity: string;
   metadata: Record<string, unknown>;
   created_at: Date;
 }
 
-function buildAuditRow(id: number, organizationId: number): AuditRowFixture {
+function buildAuditRow(id: number, _organizationId: number): AuditRowFixture {
   return {
     id,
-    organization_id: organizationId,
-    actor_user_id: 7,
+    public_id: `aud_${String(id).padStart(21, '0')}`,
+    actor_user_public_id: 'usr_actor000000000000000',
+    target_user_public_id: null,
     action: 'user.login',
     resource_type: 'user',
-    resource_id: null,
     severity: 'INFO',
     metadata: { source: 'audit-export.unit' },
     created_at: new Date('2024-05-01T12:00:00.000Z'),
@@ -111,16 +112,20 @@ function buildDatabaseHandle(options: {
     })),
   }));
 
+  const keysetQuery = {
+    where: vi.fn(() => ({
+      orderBy: vi.fn(() => ({
+        limit: vi.fn(async (limit: number) => {
+          requestedLimits.push(limit);
+          return remainingBatches.shift() ?? [];
+        }),
+      })),
+    })),
+  };
+  // `from(logs).leftJoin(actor).leftJoin(target).where(...)`.
   const select = vi.fn(() => ({
     from: vi.fn(() => ({
-      where: vi.fn(() => ({
-        orderBy: vi.fn(() => ({
-          limit: vi.fn(async (limit: number) => {
-            requestedLimits.push(limit);
-            return remainingBatches.shift() ?? [];
-          }),
-        })),
-      })),
+      leftJoin: vi.fn(() => ({ leftJoin: vi.fn(() => keysetQuery) })),
     })),
   }));
 
@@ -323,12 +328,45 @@ describe('audit-export.processor', () => {
       // NDJSON: one JSON object per line, trailing newline on every line.
       const lines = gunzipSync(part.body).toString('utf8').split('\n').filter(Boolean);
       expect(lines).toHaveLength(object.row_count);
-      expect((JSON.parse(lines[0]!) as { id: number }).id).toBeGreaterThan(0);
+      expect((JSON.parse(lines[0]!) as { id: string }).id).toMatch(/^aud_[a-z0-9]{21}$/);
       // The object metadata a consumer reads from S3 HEAD must agree with the manifest.
       expect(part.metadata?.sha256).toBe(object.sha256);
       expect(part.metadata?.row_count).toBe(String(object.row_count));
       expect(part.metadata?.schema_version).toBe(AUDIT_EXPORT_SCHEMA_VERSION);
     }
+  });
+
+  /**
+   * The archive outlives the database, and a restore reissues bigserials: an exported line keyed
+   * by them would point at a different event. Every id on a line is a public id, and metadata is
+   * sanitized like the audit API's (internal-id keys dropped, secrets redacted).
+   */
+  it('writes lines that carry public ids only and sanitized metadata', async () => {
+    const row = {
+      ...buildAuditRow(1, 42),
+      target_user_public_id: 'usr_target00000000000000',
+      metadata: { mfa_method_id: 99, api_token: 'live-secret', member_public_id: 'mem_x' },
+    };
+    const databaseHandle = buildDatabaseHandle({ organizationIds: [42], batches: [[row]] });
+
+    await runAuditExportJob(asWorkerHandle(databaseHandle));
+
+    const [part] = partCalls();
+    const line = JSON.parse(gunzipSync(part!.body).toString('utf8').split('\n')[0]!) as Record<
+      string,
+      unknown
+    >;
+    expect(line).toEqual({
+      id: 'aud_000000000000000000001',
+      organization_id: organizationPublicIdFor(42),
+      actor_user_id: 'usr_actor000000000000000',
+      target_user_id: 'usr_target00000000000000',
+      action: 'user.login',
+      resource_type: 'user',
+      severity: 'INFO',
+      metadata: { api_token: '[REDACTED]', member_public_id: 'mem_x' },
+      created_at: '2024-05-01T12:00:00.000Z',
+    });
   });
 
   /**
