@@ -1812,6 +1812,7 @@ src/
     │   ├── principal-scope.helper.ts
     │   ├── redis-mock.helper.ts
     │   ├── registered-route.util.ts
+    │   ├── response-settlement.helper.ts
     │   ├── rls-matrix.helper.ts
     │   ├── route-authorization-model.ts
     │   ├── route-catalog-auth.ts
@@ -2024,7 +2025,6 @@ src/
     │   │   ├── billing-subscriptions-with-check.security.test.ts
     │   │   ├── bola-cross-tenant.security.test.ts
     │   │   ├── clinozy-be-app-role-privileges.security.test.ts
-    │   │   ├── data-migration-as-owner.security.test.ts
     │   │   ├── force-rls-policies-restrict.security.test.ts
     │   │   ├── membership-name-sort-resolver.security.test.ts
     │   │   ├── membership-search-resolver.security.test.ts
