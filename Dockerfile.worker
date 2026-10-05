@@ -34,6 +34,7 @@ WORKDIR /app
 # value) so the placeholder secrets above pass the schema (production-only refines reject them).
 ENV NODE_ENV=development \
   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/clinozy \
+  DATABASE_MAINTENANCE_URL=postgresql://postgres:postgres@localhost:5432/clinozy \
   REDIS_URL=redis://localhost:6379 \
   JWT_PRIVATE_KEY=test-private-key \
   JWT_PUBLIC_KEY=test-public-key \
@@ -46,6 +47,8 @@ ENV NODE_ENV=development \
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# pnpm validates every patchedDependencies file (pnpm-workspace.yaml) at install, used or not.
+COPY patches ./patches
 RUN pnpm install --frozen-lockfile
 
 COPY . .
@@ -78,6 +81,7 @@ COPY --from=build /app/src/infrastructure/resilience/lua ./dist/src/infrastructu
 COPY --from=build /app/migrations ./migrations
 COPY --from=build /app/src/shared/locales ./src/shared/locales
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+COPY --from=build /app/patches ./patches
 
 # pnpm 12 caches the registry metadata it checks the lockfile against (~140 MB) in
 # /root/.cache/pnpm — delete it with the package-manager binaries so it never ships.

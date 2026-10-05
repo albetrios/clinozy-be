@@ -33,6 +33,8 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# pnpm validates every patchedDependencies file (pnpm-workspace.yaml) at install, used or not.
+COPY patches ./patches
 
 RUN corepack enable \
   && corepack prepare pnpm@12.8.1 --activate
