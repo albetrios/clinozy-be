@@ -19,9 +19,8 @@ export function validateUpdateOrganizationApiKey(data: unknown): UpdateOrganizat
 }
 
 /**
- * Validates the `GET /organization/api-keys` query string — first
- * rejects legacy `page` / `per_page` keys, then parses with
- * {@link listOrganizationApiKeysQueryDto}. Throws
+ * Validates the `GET /organization/api-keys` query string against the strict
+ * {@link listOrganizationApiKeysQueryDto} (cursor pagination only). Throws
  * `ValidationError('errors:validation.invalidPagination')` on failure.
  */
 export function validateListOrganizationApiKeysQuery(

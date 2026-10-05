@@ -41,8 +41,7 @@ rationale and a concrete plan for each.
   recreates `tenancy.list_pending_member_invitations_for_email` with
   `(created_at, id)` keyset params + the invitation id + soft-delete guards;
   repository/service/controller page with `limit` + opaque `after` and expose
-  `has_more` / `next_cursor`; the route declares the cursor querystring and
-  rejects legacy `page`.
+  `has_more` / `next_cursor`; the route declares a strict cursor querystring.
 - **Tests:** service unit test — paginated page shape, cursor + limit forwarded to
   the repo; controller forwards `request.query` and emits pagination meta.
 

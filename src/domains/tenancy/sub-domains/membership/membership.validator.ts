@@ -31,9 +31,8 @@ export function validateUpdateMembership(data: unknown): UpdateMembershipInput {
 }
 
 /**
- * Validates the `GET /organization/memberships` query string. Rejects
- * legacy page-number pagination first, then parses against
- * {@link listMembershipsQueryDto}.
+ * Validates the `GET /organization/memberships` query string against the strict
+ * {@link listMembershipsQueryDto} (cursor pagination only).
  */
 export function validateListMembershipsQuery(data: unknown): ListMembershipsQueryInput {
   return parseWithSchema(listMembershipsQueryDto, data, 'errors:validation.invalidPagination');

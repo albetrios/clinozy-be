@@ -26,9 +26,9 @@ let permissionRepository: PermissionRepository | null = null;
  * - **Side effects:** mutates a module-level variable; safe to call multiple
  *   times (last write wins). Called by `tenancy.container.ts` during boot and
  *   by every `new AuthorizationService(...)` for test isolation.
- * - **Notes:** prefer the class-based {@link AuthorizationService} in new code;
- *   the function-style API exists for legacy preHandlers that ran before DI
- *   was introduced.
+ * - **Notes:** services take the class-based {@link AuthorizationService} through DI; the
+ *   function-style API serves the route preHandler (`requireOrganizationPermission`), which is
+ *   built at route registration without the container.
  */
 export function configureAuthorization(permissionRepositoryInstance: PermissionRepository): void {
   permissionRepository = permissionRepositoryInstance;
@@ -110,8 +110,8 @@ async function resolvePermissionsWithRepository(
  *   takes a brief recompute lock; transient Postgres GUC mutation through
  *   `withAppDatabaseContext`.
  * - **Notes:** module-level wrapper around the class-based
- *   {@link AuthorizationService} so legacy preHandlers without DI can still
- *   call it. Cache entries are invalidated via
+ *   {@link AuthorizationService} for the route preHandler, which has no container. Cache
+ *   entries are invalidated via
  *   {@link invalidatePermissions} on role/permission changes.
  */
 export async function resolveUserOrganizationPermissions(

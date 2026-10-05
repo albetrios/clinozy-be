@@ -704,8 +704,8 @@ export class UploadService {
       /**
        * `findOrganizationByInternalId` hits `tenancy.organizations` (FORCE RLS). When
        * we have a user public id, wrap so the `organizations_user_discovery` policy
-       * is satisfied; otherwise fall back to the bare call (works under legacy mode
-       * and for callers that already pin an organization context).
+       * is satisfied; otherwise make the bare call (for callers that already pin an
+       * organization context).
        */
       const organization =
         userPublicId !== undefined && userPublicId.length > 0

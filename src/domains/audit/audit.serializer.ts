@@ -152,10 +152,8 @@ function serializeOne<T extends AuditLogRow>(row: T, resolution: AuditLogPublicI
  * zero rows) and `organization_id` via a join on `tenancy.organizations`. The serializer
  * itself is a pure function so it can be unit-tested without touching the database.
  *
- * When no resolution is supplied (or a particular id is missing from the map), the serializer
- * emits `null` for that public id. This keeps the response contract stable for the
- * legacy admin path until the resolver is wired through — better to surface `null` than to
- * accidentally regress the sec-re-08 strip with a partial map.
+ * An id missing from the resolution map (a user hard-deleted since) is emitted as `null` —
+ * never the internal id (sec-re-08).
  */
 export const AuditSerializer = {
   many<T extends AuditLogRow>(

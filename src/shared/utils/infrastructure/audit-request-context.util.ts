@@ -36,11 +36,8 @@ type ScopedAuditInput = Omit<
   'ip_address' | 'user_agent' | 'organization_public_id'
 > & {
   /**
-   * Organization public id, recorded verbatim on the outbox row. Replaces the legacy
-   * `organizationPublicId → internal organization_id` resolution (which used to issue
-   * a per-request `findOrganizationByPublicId` lookup inside `withAppDatabaseContext`).
-   * After P0-#2 the drain worker resolves public ids out-of-band, so the request handler
-   * never pays for that lookup.
+   * Organization public id, recorded verbatim on the outbox row. The drain worker resolves
+   * it to the internal id out-of-band, so the request never pays for that lookup (P0-#2).
    */
   organizationPublicId?: string;
 };

@@ -11,12 +11,10 @@ export type ProtectedRouteFromCatalog = {
 
 const ROUTE_CATALOG_PATH = join(process.cwd(), 'docs', 'routes.txt');
 
-// Path, then the optional columnar S/I/O block (success status · idempotency ·
-// organization scope), then the access token. The middle block is optional so this
-// matches both the legacy `PATH ACCESS` and the columnar `PATH S I O ACCESS`
-// catalog formats.
+// Path, then the S/I/O columns (success status · idempotency · organization scope), then the
+// access token — the catalog's `PATH S I O ACCESS` line format.
 const ROUTE_LINE_PATTERN =
-  /^\s+(GET|POST|PATCH|PUT|DELETE)\s+(\S+)\s+(?:(?:\d{3}|\?\?\?)\s+(?:req|-)\s+(?:both|team)\s+)?(PUBLIC|AUTH|ROLE:|PERM:|TOKEN:)/;
+  /^\s+(GET|POST|PATCH|PUT|DELETE)\s+(\S+)\s+(?:\d{3}|\?\?\?)\s+(?:req|-)\s+(?:both|team)\s+(PUBLIC|AUTH|ROLE:|PERM:|TOKEN:)/;
 
 /** Placeholder for path params (21-char public_id style). */
 const PATH_PARAM_PLACEHOLDER = '000000000000000000000';

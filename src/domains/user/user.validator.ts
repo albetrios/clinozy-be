@@ -16,8 +16,8 @@ export function validateUpdateMe(body: unknown): UpdateMeInput {
 }
 
 /**
- * Validate the admin `GET /api/v1/users` query string. Rejects legacy
- * `page`/`offset` params with a typed error before Zod parses the query.
+ * Validate the admin `GET /api/v1/users` query string against the strict {@link ListUsersDto}
+ * (cursor pagination only — an unknown key such as `page` is a validation error).
  */
 export function validateListUsers(query: unknown): ListUsersInput {
   return parseWithSchema(ListUsersDto, query);

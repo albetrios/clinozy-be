@@ -1671,12 +1671,12 @@
         "error": {
           "type": "validation_error",
           "code": "invalid_field",
-          "detail": "Legacy `page` pagination is no longer supported on this route. Use cursor-based pagination via `limit` and `after` (opaque cursor from `meta.pagination.next`).",
+          "detail": "Invalid values for fields in request",
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "page",
-              "message": "Legacy `page` pagination is no longer supported on this route. Use cursor-based pagination via `limit` and `after` (opaque cursor from `meta.pagination.next`)."
+              "field": "querystring",
+              "message": "Unrecognized key: \"page\""
             }
           ]
         },
@@ -2568,12 +2568,12 @@
         "error": {
           "type": "validation_error",
           "code": "invalid_field",
-          "detail": "Legacy `page` pagination is no longer supported on this route. Use cursor-based pagination via `limit` and `after` (opaque cursor from `meta.pagination.next`).",
+          "detail": "Invalid values for fields in request",
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "page",
-              "message": "Legacy `page` pagination is no longer supported on this route. Use cursor-based pagination via `limit` and `after` (opaque cursor from `meta.pagination.next`)."
+              "field": "querystring",
+              "message": "Unrecognized key: \"page\""
             }
           ]
         },

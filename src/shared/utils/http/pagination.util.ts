@@ -135,8 +135,7 @@ export function decodeListCursor(cursor: string): ListCursorPayload | null {
 /**
  * Parses the `after` query parameter into a {@link ParsedListCursor}.
  * Returns `null` (first page) when `after` is absent, empty, or cannot be
- * decoded as a valid opaque cursor. Legacy bare-integer `after` values are no
- * longer accepted — they exposed internal auto-increment IDs to callers.
+ * decoded as a cursor this server issued (an encrypted, opaque token — never a bare id).
  */
 export function parseListCursor(after: string | undefined): ParsedListCursor | null {
   if (after === undefined || after.length === 0) {

@@ -11,15 +11,15 @@ import {
 } from './webhook.dto.js';
 
 /**
- * Reject legacy page/per_page callers, then parse the `GET /notify/webhooks` query
- * string with {@link listWebhooksQueryDto}; throws `ValidationError('errors:invalidInput')`.
+ * Parses the `GET /notify/webhooks` query string with the strict {@link listWebhooksQueryDto}
+ * (cursor pagination only); throws `ValidationError('errors:invalidInput')`.
  */
 export function validateListWebhooksQuery(data: unknown): ListWebhooksQueryInput {
   return parseWithSchema(listWebhooksQueryDto, data);
 }
 
 /**
- * Reject legacy page/per_page callers, then parse the delivery-attempts list query string with
+ * Parses the delivery-attempts list query string with the strict
  * {@link listWebhookDeliveryAttemptsQueryDto}; throws `ValidationError('errors:invalidInput')`.
  */
 export function validateListWebhookDeliveryAttemptsQuery(
