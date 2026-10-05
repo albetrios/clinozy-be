@@ -12,7 +12,7 @@ Notify **outbound webhooks** (customer URLs) use a separate **in-memory** [oposs
 | ----------- | ------- | ------------------------ |
 | **Stripe** | All SDK calls in [`stripe.client.ts`](../../../src/infrastructure/payment/stripe.client.ts) except webhook HMAC | `constructStripeWebhookEvent` (local signature verify) |
 | **Resend** | `sendEmail` in [`mail.service.ts`](../../../src/infrastructure/mail/mail.service.ts) | — |
-| **S3** | `headObject`, `getObject`, `putObject`, `deleteObject` in [`s3-adapter.ts`](../../../src/infrastructure/storage/s3-adapter.ts) and [`storage.service.ts`](../../../src/infrastructure/storage/storage.service.ts) | `createPresignedUploadUrl` (local signing only) |
+| **S3** | every call in [`s3-adapter.ts`](../../../src/infrastructure/storage/s3-adapter.ts), the one implementation of `ObjectStoragePort` (a 4xx answer to one request — 404, 412, 416 — does not count against the circuit: `countsS3ErrorAsCircuitFailure`) | `createPresignedUploadUrl` (local signing only) |
 | **Notify webhooks** | `fetchWebhookWithCircuitBreaker` (opossum, per process) | — |
 
 OAuth provider `fetch` calls (Google/GitHub) are **not** circuit-wrapped today.

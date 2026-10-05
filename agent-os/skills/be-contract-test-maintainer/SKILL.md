@@ -40,7 +40,7 @@ Runs in **Quality** CI (`pnpm test:contract`). Default `pnpm test` **excludes** 
 - [ ] Stripe uses **fetch HTTP client** under contract-only runs (see contract-tests doc)
 - [ ] nock matchers handle `application/x-www-form-urlencoded` parsed bodies (`helpers/stripe-form.ts`)
 - [ ] Fixtures updated when external API shape changes
-- [ ] No real network in CI
+- [ ] No real network in CI — the shared harness module (`src/tests/helpers/harness-provider-env.ts`) refuses non-loopback hosts for every run; only `CONTRACT_RECORD=true` re-enables them
 
 ## Related skills
 

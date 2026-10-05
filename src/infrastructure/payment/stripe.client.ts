@@ -65,27 +65,6 @@ export function isStripeWebhookIngressConfigured(): boolean {
   return Boolean(env.STRIPE_WEBHOOK_SECRET);
 }
 
-/**
- * Whether a Stripe error counts against the `stripe` circuit.
- *
- * @remarks
- * - **Algorithm:** Stripe refusing this one request — a declined card (`StripeCardError`), an
- *   invalid or not-found request (`StripeInvalidRequestError`, `resource_missing` included), an
- *   idempotency-key conflict (`StripeIdempotencyError`) — does not count: Stripe answered.
- *   Outages, timeouts, connection, authentication and permission errors and rate limits do.
- * - **Failure modes:** none — pure predicate.
- * - **Side effects:** none.
- * - **Notes:** passed to every Stripe `outboundCall`, so a burst of declined cards or
- *   not-found lookups cannot open the circuit for every other billing call.
- */
-export function countsStripeErrorAsCircuitFailure(error: unknown): boolean {
-  return !(
-    error instanceof Stripe.errors.StripeCardError ||
-    error instanceof Stripe.errors.StripeInvalidRequestError ||
-    error instanceof Stripe.errors.StripeIdempotencyError
-  );
-}
-
 // ── Customer helpers ──────────────────────────────────────────
 
 /**
@@ -106,7 +85,6 @@ export async function createStripeCustomer(options: {
       requestId: options.requestId,
       enforceAbortTimeout: false,
       rethrowIf: (error) => error instanceof Stripe.errors.StripeError,
-      countsAsCircuitFailure: countsStripeErrorAsCircuitFailure,
       operation: async () => {
         const stripe = getStripeClient();
         // A deterministic idempotency key prevents a retried subscription-create (which mints the
@@ -142,7 +120,6 @@ export async function getStripeCustomer(
         requestId,
         enforceAbortTimeout: false,
         rethrowIf: (error) => error instanceof Stripe.errors.StripeError,
-        countsAsCircuitFailure: countsStripeErrorAsCircuitFailure,
         operation: async () => {
           const customer = await stripe.customers.retrieve(customerId);
           if (customer.deleted) return null;
@@ -186,7 +163,6 @@ export async function retrieveStripeEvent(
       // configured outbound-call window for real.
       enforceAbortTimeout: true,
       rethrowIf: (error) => error instanceof Stripe.errors.StripeError,
-      countsAsCircuitFailure: countsStripeErrorAsCircuitFailure,
       operation: async () => {
         const stripe = getStripeClient();
         return stripe.events.retrieve(stripeEventId, undefined, {
@@ -222,7 +198,6 @@ export async function listRecentStripeEvents(options: {
       requestId,
       enforceAbortTimeout: true,
       rethrowIf: (error) => error instanceof Stripe.errors.StripeError,
-      countsAsCircuitFailure: countsStripeErrorAsCircuitFailure,
       operation: async () => {
         const stripe = getStripeClient();
         const page = await stripe.events.list(
@@ -256,7 +231,6 @@ export async function createStripeSubscription(options: {
       requestId: options.requestId,
       enforceAbortTimeout: false,
       rethrowIf: (error) => error instanceof Stripe.errors.StripeError,
-      countsAsCircuitFailure: countsStripeErrorAsCircuitFailure,
       operation: async () => {
         const stripe = getStripeClient();
         return stripe.subscriptions.create(
@@ -290,7 +264,6 @@ export async function cancelStripeSubscription(
       requestId: options?.requestId,
       enforceAbortTimeout: false,
       rethrowIf: (error) => error instanceof Stripe.errors.StripeError,
-      countsAsCircuitFailure: countsStripeErrorAsCircuitFailure,
       operation: async () => {
         const stripe = getStripeClient();
         if (cancelAtPeriodEnd) {
@@ -326,7 +299,6 @@ export async function resumeStripeSubscription(
       requestId: options?.requestId,
       enforceAbortTimeout: false,
       rethrowIf: (error) => error instanceof Stripe.errors.StripeError,
-      countsAsCircuitFailure: countsStripeErrorAsCircuitFailure,
       operation: async () => {
         const stripe = getStripeClient();
         return stripe.subscriptions.update(
@@ -361,7 +333,6 @@ export async function updateStripeSubscription(
       requestId: options.requestId,
       enforceAbortTimeout: false,
       rethrowIf: (error) => error instanceof Stripe.errors.StripeError,
-      countsAsCircuitFailure: countsStripeErrorAsCircuitFailure,
       operation: async () => {
         const stripe = getStripeClient();
         const params: Stripe.SubscriptionUpdateParams = {};
@@ -413,7 +384,6 @@ export async function updateStripeSubscriptionQuantity(
       requestId: options?.requestId,
       enforceAbortTimeout: false,
       rethrowIf: (error) => error instanceof Stripe.errors.StripeError,
-      countsAsCircuitFailure: countsStripeErrorAsCircuitFailure,
       operation: async () => {
         const stripe = getStripeClient();
         const subscription = await stripe.subscriptions.retrieve(subscriptionId);
@@ -456,7 +426,6 @@ export async function listStripeInvoices(
       requestId: options?.requestId,
       enforceAbortTimeout: false,
       rethrowIf: (error) => error instanceof Stripe.errors.StripeError,
-      countsAsCircuitFailure: countsStripeErrorAsCircuitFailure,
       operation: async () => {
         const stripe = getStripeClient();
         const page = await stripe.invoices.list(
@@ -486,7 +455,6 @@ export async function listStripePaymentMethods(
       requestId: options?.requestId,
       enforceAbortTimeout: false,
       rethrowIf: (error) => error instanceof Stripe.errors.StripeError,
-      countsAsCircuitFailure: countsStripeErrorAsCircuitFailure,
       operation: async () => {
         const stripe = getStripeClient();
         const page = await stripe.paymentMethods.list(
@@ -515,7 +483,6 @@ export async function retrieveStripeCustomerDefaultPaymentMethodId(
       requestId,
       enforceAbortTimeout: false,
       rethrowIf: (error) => error instanceof Stripe.errors.StripeError,
-      countsAsCircuitFailure: countsStripeErrorAsCircuitFailure,
       operation: async () => {
         const stripe = getStripeClient();
         const customer = await stripe.customers.retrieve(customerId);
@@ -541,7 +508,6 @@ export async function createStripeSetupIntent(
       requestId: options?.requestId,
       enforceAbortTimeout: false,
       rethrowIf: (error) => error instanceof Stripe.errors.StripeError,
-      countsAsCircuitFailure: countsStripeErrorAsCircuitFailure,
       operation: async () => {
         const stripe = getStripeClient();
         const intent = await stripe.setupIntents.create(
@@ -576,7 +542,6 @@ export async function retrieveStripeSubscriptionPaymentClientSecret(
       requestId,
       enforceAbortTimeout: false,
       rethrowIf: (error) => error instanceof Stripe.errors.StripeError,
-      countsAsCircuitFailure: countsStripeErrorAsCircuitFailure,
       operation: async () => {
         const stripe = getStripeClient();
         const subscription = await stripe.subscriptions.retrieve(subscriptionId, {

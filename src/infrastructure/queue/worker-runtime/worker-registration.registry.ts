@@ -209,7 +209,7 @@ const WORKER_QUEUE_REGISTRATION_DEFINITIONS: WorkerQueueRegistrationDefinition[]
     usesPostgres: true,
     scheduled: false,
     criticality: 'throughput',
-    holdsConnectionDuringExternalIo: true,
+    holdsConnectionDuringExternalIo: false,
     resolvePostgresConcurrency: () => getWorkerConcurrencyNotify(),
     create: (workerContainers) =>
       createUserDataExportWorker(workerContainers.userDomain.userDataExportService),
@@ -370,21 +370,21 @@ const WORKER_QUEUE_REGISTRATION_DEFINITIONS: WorkerQueueRegistrationDefinition[]
     queueName: UPLOAD_TOMBSTONE_RETENTION_QUEUE_NAME,
     family: 'retention',
     logLabel: 'upload tombstone retention worker',
-    holdsConnectionDuringExternalIo: true,
+    holdsConnectionDuringExternalIo: false,
     create: () => createUploadTombstoneRetentionWorker(),
   }),
   retentionDefinition({
     queueName: UPLOAD_PENDING_SWEEP_QUEUE_NAME,
     family: 'retention',
     logLabel: 'upload pending sweep worker',
-    holdsConnectionDuringExternalIo: true,
+    holdsConnectionDuringExternalIo: false,
     create: () => createUploadPendingSweepWorker(),
   }),
   retentionDefinition({
     queueName: USER_DATA_EXPORT_RETENTION_QUEUE_NAME,
     family: 'retention',
     logLabel: 'user data export retention worker',
-    holdsConnectionDuringExternalIo: true,
+    holdsConnectionDuringExternalIo: false,
     create: () => createUserDataExportRetentionWorker(),
   }),
   {

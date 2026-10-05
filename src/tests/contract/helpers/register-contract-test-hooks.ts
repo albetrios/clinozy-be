@@ -21,7 +21,11 @@ export function registerThirdPartyContractTestIsolationHooks(): void {
     if (!nock.isActive()) {
       nock.activate();
     }
-    if (!isContractFixtureRecordingEnabled()) {
+    // The harness (`harness-provider-env.ts`) refuses every non-loopback host for all runs;
+    // recording real provider responses is the one case that needs them back.
+    if (isContractFixtureRecordingEnabled()) {
+      nock.enableNetConnect();
+    } else {
       nock.disableNetConnect();
     }
   });

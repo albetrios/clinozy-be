@@ -1280,6 +1280,7 @@ src/
     │   └── outbound.overview.md
     ├── payment/
     │   ├── payment.overview.md
+    │   ├── stripe-error.util.ts
     │   └── stripe.client.ts
     ├── queue/
     │   ├── __tests__/
@@ -1358,16 +1359,14 @@ src/
     │       │   ├── s3-adapter.unit.test.ts
     │       │   ├── s3-client-config.unit.test.ts
     │       │   ├── s3-error.util.unit.test.ts
-    │       │   ├── storage.service.presigned-put.unit.test.ts
-    │       │   ├── storage.service.put-object-buffer.unit.test.ts
-    │       │   └── storage.service.unconfigured.unit.test.ts
+    │       │   └── stored-object-purge.util.unit.test.ts
     │   ├── object-storage.port.ts
     │   ├── public-media-url.util.ts
     │   ├── s3-adapter.ts
     │   ├── s3-client-config.util.ts
     │   ├── s3-error.util.ts
     │   ├── storage.overview.md
-    │   └── storage.service.ts
+    │   └── stored-object-purge.util.ts
 ├── scripts/
     ├── admin/
     │   ├── admin-token.ts
@@ -1726,7 +1725,6 @@ src/
     │   ├── request-id-eventbus.contract.test.ts
     │   ├── resend.contract.test.ts
     │   ├── s3-object-storage-adapter.contract.test.ts
-    │   ├── s3.contract.test.ts
     │   ├── stripe-billing-account.contract.test.ts
     │   ├── stripe-webhook.contract.test.ts
     │   ├── stripe.contract.test.ts

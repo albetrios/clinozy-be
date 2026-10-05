@@ -53,7 +53,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-contract-test-maintainer/SKILL.md",
-      "computedHash": "2c28b47031ffc160e930751c7f1d3626fb0bcb63022ac2732bcb28b64e230eb1"
+      "computedHash": "e5399e59b4d1b9e2bec53292368ca674817a3ec4e618651f2721cf6b8317d79f"
     },
     "be-cursor-global-skills": {
       "source": "local",
@@ -239,7 +239,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-structure-maintainer/SKILL.md",
-      "computedHash": "26921201cb7de139dcf9003f21d5298731c354b209506a2a60e569a72a82548d"
+      "computedHash": "e3864c574edab7e2119a22a14db200237149da5915ad620ecdd32817756992b2"
     },
     "be-supabase-porting": {
       "source": "local",
@@ -269,7 +269,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-workers-events/SKILL.md",
-      "computedHash": "7a4963e15ccd97a87a61cb13029943b27b56c14e946aa4259d3f027f3f8c1fd3"
+      "computedHash": "8f8823c2319e8d4b5931e5a9dfd17869f36363b5d0a77997c22352a784bcbbc2"
     },
     "ponytail": {
       "source": "DietrichGebert/ponytail",

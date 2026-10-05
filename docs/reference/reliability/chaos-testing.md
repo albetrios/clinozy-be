@@ -35,8 +35,8 @@ via a GitHub Actions service container (see below), so this local build affects 
 > bootstrap forces `NODE_ENV=development`, hard-disables captcha (`CAPTCHA_PROVIDER=disabled`, as the main
 > suite's `src/tests/setup.ts` does), forces its own Redis key prefix (`<product>:test:`, so chaos jobs and
 > `cleanupTestRedis` never touch a running `pnpm dev`'s keys), imports the shared
-> `src/tests/helpers/harness-provider-env.ts` (fake provider keys, no telemetry — the main suite
-> loads the same module) and sets the test-affordance flags —
+> `src/tests/helpers/harness-provider-env.ts` (fake provider keys, no telemetry, no network beyond
+> loopback — the main suite loads the same module) and sets the test-affordance flags —
 > `TEST_MODE=true`, the single gate for `cleanupDatabase`/`cleanupTestRedis` — so the suite behaves the same
 > locally and in CI.
 

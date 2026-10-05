@@ -10,14 +10,18 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 import { env } from '@/shared/config/env.config.js';
 import { outboundCall } from '@/infrastructure/outbound/index.js';
+import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
+import { ConfigurationError } from '@/shared/errors/index.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { type S3HeadResult, isS3NotFoundError } from '@/infrastructure/storage/s3-error.util.js';
 import { buildPublicMediaUrl } from '@/infrastructure/storage/public-media-url.util.js';
 import { buildSharedS3ClientConfig } from '@/infrastructure/storage/s3-client-config.util.js';
 import type {
+  ObjectDeleteResult,
   ObjectStoragePort,
   PresignedUploadPost,
   UploadedObjectMetadata,
+  UploadedObjectVerdict,
 } from '@/infrastructure/storage/object-storage.port.js';
 
 let s3Client: S3Client | null = null;
@@ -40,7 +44,7 @@ function getS3Client(): S3Client {
 
 function requireBucket(): string {
   const bucket = env.S3_BUCKET;
-  if (!bucket) throw new Error('S3_BUCKET is not configured');
+  if (!bucket) throw new ConfigurationError('S3_BUCKET is not configured');
   return bucket;
 }
 
@@ -131,30 +135,29 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
   async verifyUploadedObject(
     key: string,
     expected: { contentType: string; contentLength: number },
-  ): Promise<UploadedObjectMetadata> {
+  ): Promise<UploadedObjectVerdict> {
     const head = await this.headObjectResult(key);
-    // audit-#5: a transient storage failure must NOT look like a verification failure. Re-throw
-    // the underlying ExternalServiceError (503, retryable) so the confirm path leaves the upload
-    // PENDING/retryable instead of marking a perfectly valid object FAILED.
+    // audit-#5: a storage failure is not a verdict on the object. Rethrow what the call threw (an
+    // ExternalServiceError, or the CircuitBreakerOpenError of an open circuit) so the confirm path
+    // leaves the upload PENDING instead of marking a perfectly valid object FAILED.
     if (head.kind === 'transient_error') {
-      throw head.cause instanceof Error
-        ? head.cause
-        : new Error('upload object head transient error');
+      throw head.cause;
     }
     if (head.kind === 'not_found') {
-      throw new Error('upload object not found in storage');
+      return { kind: 'rejected', reason: 'not_found' };
     }
-
-    const metadata = head.metadata;
-    if (metadata.contentType && metadata.contentType !== expected.contentType) {
-      throw new Error('upload object content type mismatch');
+    const { metadata } = head;
+    if (metadata.contentLength === undefined) {
+      return { kind: 'rejected', reason: 'content_length_unknown' };
     }
-
-    if (metadata.contentLength !== undefined && metadata.contentLength !== expected.contentLength) {
-      throw new Error('upload object content length mismatch');
+    if (metadata.contentLength !== expected.contentLength) {
+      return { kind: 'rejected', reason: 'content_length_mismatch' };
     }
-
-    return metadata;
+    // S3 may not echo a content type; only a reported one can mismatch.
+    if (metadata.contentType !== undefined && metadata.contentType !== expected.contentType) {
+      return { kind: 'rejected', reason: 'content_type_mismatch' };
+    }
+    return { kind: 'verified', metadata };
   }
 
   getObjectUrl(key: string): string {
@@ -210,9 +213,7 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
     }
   }
 
-  async headObject(
-    key: string,
-  ): Promise<{ contentType: string | undefined; contentLength: number | undefined } | null> {
+  async headObject(key: string): Promise<UploadedObjectMetadata | null> {
     const result = await this.headObjectResult(key);
     if (result.kind === 'transient_error') throw result.cause;
     return result.kind === 'found' ? result.metadata : null;
@@ -252,15 +253,12 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
     body: Buffer;
     contentType: string | undefined;
     /**
-     * S3 object ETag at the time the magic-byte HEAD was read. sec-re-10:
-     * the caller threads this back into {@link copyObject} as
-     * `CopySourceIfMatch` so S3 rejects the COPY with `PreconditionFailed`
-     * when an attacker replays the presigned PUT/POST between the
-     * verify and the copy, replacing the verified bytes with hostile
-     * content. May be omitted on unversioned mocks; the caller treats a
-     * missing ETag as the legacy unprotected path.
+     * S3 object ETag at the time the bytes were read. sec-re-10: the caller threads this back
+     * into {@link copyObject} as `CopySourceIfMatch` so S3 rejects the COPY with
+     * `PreconditionFailed` when the presigned PUT/POST is replayed between the verify and the
+     * copy, replacing the verified bytes with hostile content.
      */
-    eTag?: string;
+    eTag: string;
   } | null> {
     const bucket = requireBucket();
     try {
@@ -279,14 +277,14 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
           if (!body) {
             throw new Error('upload object body empty');
           }
+          // Without the ETag the copy cannot be pinned to the verified bytes: fail closed.
+          if (!response.ETag) {
+            throw new Error('upload object read returned no ETag');
+          }
           return {
             body: Buffer.from(body),
             contentType: response.ContentType,
-            // `exactOptionalPropertyTypes` distinguishes "key absent" from
-            // "key present with value undefined"; spread the eTag only when
-            // S3 actually returned one so the optional field stays absent
-            // for the legacy unprotected path.
-            ...(response.ETag ? { eTag: response.ETag } : {}),
+            eTag: response.ETag,
           };
         },
       });
@@ -367,7 +365,7 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
     });
   }
 
-  async deleteObject(key: string): Promise<boolean> {
+  async deleteObject(key: string): Promise<ObjectDeleteResult> {
     const bucket = requireBucket();
 
     try {
@@ -383,10 +381,10 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
           );
         },
       });
-      return true;
+      return { kind: 'deleted' };
     } catch (error) {
       logger.error({ error, key, bucket }, 's3.deleteObject.failed');
-      return false;
+      return { kind: 'failed', circuitOpen: error instanceof CircuitBreakerOpenError };
     }
   }
 }

@@ -9,7 +9,15 @@ vi.mock('@/infrastructure/resilience/circuit-breaker.js', () => ({
   },
   // outboundCall references `error instanceof CircuitBreakerOpenError` in its error
   // path; provide a stub so the not-found-vs-transient classification (UPLOAD-03) runs.
-  CircuitBreakerOpenError: class CircuitBreakerOpenError extends Error {},
+  CircuitBreakerOpenError: class CircuitBreakerOpenError extends Error {
+    constructor(
+      readonly circuitName: string,
+      readonly retryAfterMs: number,
+      message: string,
+    ) {
+      super(message);
+    }
+  },
 }));
 
 vi.mock('@aws-sdk/client-s3', () => {
@@ -46,7 +54,7 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
 
 const { mockEnv } = vi.hoisted(() => ({
   mockEnv: {
-    S3_BUCKET: 'test-bucket',
+    S3_BUCKET: 'test-bucket' as string | undefined,
     S3_REGION: 'eu-west-1',
     S3_MAX_ATTEMPTS: 3,
     LOG_LEVEL: 'silent',
@@ -69,6 +77,11 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
 }));
 
 import { S3ObjectStorageAdapter } from '@/infrastructure/storage/s3-adapter.js';
+import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
+import { ConfigurationError } from '@/shared/errors/index.js';
+
+const notFound = (name: 'NotFound' | 'NoSuchKey') =>
+  Object.assign(new Error('not found'), { name, $metadata: { httpStatusCode: 404 } });
 
 describe('S3ObjectStorageAdapter', () => {
   let adapter: S3ObjectStorageAdapter;
@@ -163,12 +176,7 @@ describe('S3ObjectStorageAdapter', () => {
   });
 
   it('UPLOAD-03: headObject returns null for a genuine NotFound (404)', async () => {
-    sendMock.mockRejectedValueOnce(
-      Object.assign(new Error('not found'), {
-        name: 'NotFound',
-        $metadata: { httpStatusCode: 404 },
-      }),
-    );
+    sendMock.mockRejectedValueOnce(notFound('NotFound'));
 
     const metadata = await adapter.headObject('uploads/missing.png');
 
@@ -188,24 +196,118 @@ describe('S3ObjectStorageAdapter', () => {
   });
 
   it('UPLOAD-03: getObjectFirstBytes returns null for a genuine NoSuchKey (404)', async () => {
-    sendMock.mockRejectedValueOnce(
-      Object.assign(new Error('no such key'), {
-        name: 'NoSuchKey',
-        $metadata: { httpStatusCode: 404 },
-      }),
-    );
+    sendMock.mockRejectedValueOnce(notFound('NoSuchKey'));
 
     const result = await adapter.getObjectFirstBytes('uploads/missing.png', 16);
 
     expect(result).toBeNull();
   });
 
-  it('deleteObject returns false when S3 delete fails', async () => {
+  it('deleteObject reports a deleted object', async () => {
+    sendMock.mockResolvedValueOnce({});
+
+    expect(await adapter.deleteObject('uploads/file.png')).toEqual({ kind: 'deleted' });
+  });
+
+  it('deleteObject reports a failed delete without throwing', async () => {
     sendMock.mockRejectedValueOnce(new Error('access denied'));
 
-    const deleted = await adapter.deleteObject('uploads/missing.png');
+    expect(await adapter.deleteObject('uploads/missing.png')).toEqual({
+      kind: 'failed',
+      circuitOpen: false,
+    });
+  });
 
-    expect(deleted).toBe(false);
+  it('deleteObject says when the circuit is open, so a batch can stop', async () => {
+    sendMock.mockRejectedValueOnce(new CircuitBreakerOpenError('s3', 1_000, 'open'));
+
+    expect(await adapter.deleteObject('uploads/file.png')).toEqual({
+      kind: 'failed',
+      circuitOpen: true,
+    });
+  });
+
+  it('getObjectFirstBytes returns the bytes with the ETag the copy is pinned to', async () => {
+    sendMock.mockResolvedValueOnce({
+      Body: { transformToByteArray: async () => new Uint8Array([0x89, 0x50]) },
+      ContentType: 'image/png',
+      ETag: '"etag-1"',
+    });
+
+    const result = await adapter.getObjectFirstBytes('pending/file.png', 32);
+
+    expect(result).toEqual({
+      body: Buffer.from([0x89, 0x50]),
+      contentType: 'image/png',
+      eTag: '"etag-1"',
+    });
+  });
+
+  it('getObjectFirstBytes fails closed on a response without an ETag', async () => {
+    sendMock.mockResolvedValueOnce({
+      Body: { transformToByteArray: async () => new Uint8Array([0x89, 0x50]) },
+      ContentType: 'image/png',
+    });
+
+    await expect(adapter.getObjectFirstBytes('pending/file.png', 32)).rejects.toBeTruthy();
+  });
+
+  describe('verifyUploadedObject', () => {
+    const expected = { contentType: 'image/png', contentLength: 2048 };
+
+    it('verifies an object matching the declared length and type', async () => {
+      sendMock.mockResolvedValueOnce({ ContentType: 'image/png', ContentLength: 2048 });
+
+      expect(await adapter.verifyUploadedObject('pending/file.png', expected)).toEqual({
+        kind: 'verified',
+        metadata: { contentType: 'image/png', contentLength: 2048 },
+      });
+    });
+
+    it('verifies when S3 echoes no content type', async () => {
+      sendMock.mockResolvedValueOnce({ ContentLength: 2048 });
+
+      expect(await adapter.verifyUploadedObject('pending/file.png', expected)).toMatchObject({
+        kind: 'verified',
+      });
+    });
+
+    it.each([
+      ['not_found', () => Promise.reject(notFound('NotFound'))],
+      ['content_length_unknown', () => Promise.resolve({ ContentType: 'image/png' })],
+      [
+        'content_length_mismatch',
+        () => Promise.resolve({ ContentType: 'image/png', ContentLength: 10 }),
+      ],
+      [
+        'content_type_mismatch',
+        () => Promise.resolve({ ContentType: 'text/html', ContentLength: 2048 }),
+      ],
+    ])('rejects with reason %s', async (reason, response) => {
+      sendMock.mockImplementationOnce(response);
+
+      expect(await adapter.verifyUploadedObject('pending/file.png', expected)).toEqual({
+        kind: 'rejected',
+        reason,
+      });
+    });
+
+    it('throws on a storage failure — never a verdict on the object', async () => {
+      sendMock.mockRejectedValueOnce(new Error('connection reset by peer'));
+
+      await expect(adapter.verifyUploadedObject('pending/file.png', expected)).rejects.toBeTruthy();
+    });
+  });
+
+  it('refuses every call with a ConfigurationError when S3_BUCKET is unset', async () => {
+    mockEnv.S3_BUCKET = undefined;
+    try {
+      await expect(adapter.headObject('uploads/file.png')).rejects.toBeInstanceOf(
+        ConfigurationError,
+      );
+    } finally {
+      mockEnv.S3_BUCKET = 'test-bucket';
+    }
   });
 
   it('copyObject issues a server-side copy that replaces the content-type', async () => {

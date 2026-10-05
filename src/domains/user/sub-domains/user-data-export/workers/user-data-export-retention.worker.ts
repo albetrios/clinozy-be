@@ -1,9 +1,5 @@
 import { Worker } from 'bullmq';
 import {
-  MAINTENANCE_SCOPE,
-  withMaintenanceDatabaseContext,
-} from '@/infrastructure/database/contexts/database-context.js';
-import {
   getBullMQConnectionOptions,
   getBullMQKeyPrefix,
 } from '@/infrastructure/queue/connection.js';
@@ -22,9 +18,8 @@ import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
  * repeatable schedule registered in `src/infrastructure/queue/scheduler.ts`.
  *
  * @remarks
- * - **Algorithm:** every scheduled tick wraps the processor in
- *   `withMaintenanceDatabaseContext`, which strips per-tenant RLS so the cleanup runs
- *   against the global retention session.
+ * - **Algorithm:** every scheduled tick runs the processor, which opens a short global-retention
+ *   context per page (no per-tenant RLS) and keeps every S3 call outside them.
  * - **Failure modes:** unexpected errors propagate to BullMQ retries / DLQ; `stalled` events are
  *   logged for observability.
  * - **Side effects:** Redis (queue lease), Postgres (row deletes), S3 (object deletes), logger.
@@ -34,10 +29,7 @@ import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
 export function createUserDataExportRetentionWorker(): WorkerHandle {
   const worker = new Worker(
     USER_DATA_EXPORT_RETENTION_QUEUE_NAME,
-    async () =>
-      withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, (databaseHandle) =>
-        runUserDataExportRetentionJob(databaseHandle),
-      ),
+    async () => runUserDataExportRetentionJob(),
     {
       connection: getBullMQConnectionOptions(),
       prefix: getBullMQKeyPrefix(),

@@ -387,8 +387,8 @@ export class UserDataExportService {
     s3Key: string,
     context: { exportPublicId: string; userInternalId: number },
   ): Promise<void> {
-    const objectDeleted = await this.objectStorage.deleteObject(s3Key);
-    if (!objectDeleted) {
+    const objectDelete = await this.objectStorage.deleteObject(s3Key);
+    if (objectDelete.kind !== 'deleted') {
       logger.warn({ ...context, s3Key }, 'user-data-export.complete.s3DeleteFailed');
     }
   }
@@ -499,8 +499,8 @@ export class UserDataExportService {
       const chunk = s3Keys.slice(index, index + USER_DATA_EXPORT_OFFBOARDING_DELETE_CONCURRENCY);
       await Promise.all(
         chunk.map(async (s3Key) => {
-          const objectDeleted = await this.objectStorage.deleteObject(s3Key);
-          if (!objectDeleted) {
+          const objectDelete = await this.objectStorage.deleteObject(s3Key);
+          if (objectDelete.kind !== 'deleted') {
             logger.warn({ userInternalId, s3Key }, 'user-data-export.offboarding.s3DeleteFailed');
           }
         }),

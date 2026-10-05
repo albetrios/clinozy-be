@@ -1,6 +1,6 @@
 # Outbound contract tests (Stripe, Resend, S3)
 
-Vitest specs under **`src/tests/contract/`** assert our wrappers stay aligned with third-party HTTP behavior using **nock 14** and **curated JSON fixtures**—no real network in CI.
+Vitest specs under **`src/tests/contract/`** assert our wrappers stay aligned with third-party HTTP behavior using **nock 14** and **curated JSON fixtures**—no real network in CI. Every Vitest run, not just this slice, refuses non-loopback hosts (`src/tests/helpers/harness-provider-env.ts`); fixture recording (`CONTRACT_RECORD=true`) is the one mode that re-enables the network, in `registerThirdPartyContractTestIsolationHooks`.
 
 ## Commands
 

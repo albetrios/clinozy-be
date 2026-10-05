@@ -162,8 +162,8 @@ export class UserService {
     if (!avatar_url) return;
     const expectedPrefix = buildUserAvatarKeyPrefix(public_id);
     if (!avatar_url.startsWith(expectedPrefix)) return;
-    const objectDeleted = await this.objectStorage.deleteObject(avatar_url);
-    if (!objectDeleted) {
+    const objectDelete = await this.objectStorage.deleteObject(avatar_url);
+    if (objectDelete.kind !== 'deleted') {
       logger.warn({ publicId: public_id, avatarKey: avatar_url }, 'user.avatar.deleteFailed');
     }
   }
@@ -440,41 +440,40 @@ export class UserService {
     if (!this.offboardingUploadService) {
       throw new Error('UploadService is not wired for avatar-attach confirmation');
     }
-    // External I/O (S3) runs outside the DB context; the confirmed-status read of the
-    // user-scoped upload row runs in the user context so the owner RLS policy applies.
-    const objectInfo = await this.objectStorage.headObject(avatarKey);
-    if (!objectInfo) {
-      throw new ValidationError('errors:validation.avatarNotFound');
-    }
-    if (
-      objectInfo.contentType &&
-      !ALLOWED_AVATAR_CONTENT_TYPES.includes(
-        objectInfo.contentType as (typeof ALLOWED_AVATAR_CONTENT_TYPES)[number],
-      )
-    ) {
-      throw new ValidationError(
-        'errors:validation.avatarInvalidContentType',
-        { contentType: objectInfo.contentType },
-        `Invalid avatar content type: ${objectInfo.contentType}`,
-      );
-    }
-    // Bind the upload row to this owner explicitly (not just via the key prefix) so the ownership
-    // check survives any future caller that doesn't derive the key from the prefix convention.
-    // Both the id lookup and the check it feeds run in ONE context — the lookup used to open its
-    // own transaction first, for a value this method was handed the public id for.
-    await withAppDatabaseContext(
+    // The database first: the key is caller-supplied, and only a confirmed upload of THIS owner
+    // may cost a storage call. The row is bound to the owner explicitly (not just via the key
+    // prefix) so the check survives a future caller that doesn't derive the key from the prefix
+    // convention; it runs in the user context so the owner RLS policy applies.
+    const { mimeType } = await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ userPublicId: ownerPublicId }),
       async () => {
         const ownerInternalId = await this.resolveInternalIdByPublicId(ownerPublicId);
         if (ownerInternalId === null) {
           throw new ValidationError('errors:validation.avatarNotFound');
         }
-        await this.offboardingUploadService!.assertKeyConfirmedForOwner({
+        return this.offboardingUploadService!.assertKeyConfirmedForOwner({
           fileKey: avatarKey,
           userInternalId: ownerInternalId,
         });
       },
     );
+    // The type verified at confirm (magic bytes included), not an S3 header.
+    if (
+      !ALLOWED_AVATAR_CONTENT_TYPES.includes(
+        mimeType as (typeof ALLOWED_AVATAR_CONTENT_TYPES)[number],
+      )
+    ) {
+      throw new ValidationError(
+        'errors:validation.avatarInvalidContentType',
+        { contentType: mimeType },
+        `Invalid avatar content type: ${mimeType}`,
+      );
+    }
+    // External I/O (S3) runs outside the DB context. Confirmed, yet gone from storage: refuse.
+    const objectInfo = await this.objectStorage.headObject(avatarKey);
+    if (!objectInfo) {
+      throw new ValidationError('errors:validation.avatarNotFound');
+    }
   }
 
   /**

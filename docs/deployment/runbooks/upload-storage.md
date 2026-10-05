@@ -53,33 +53,43 @@ Applied in [src/domains/upload/upload.validator.ts](../../../src/domains/upload/
 
 `POST /api/v1/uploads/{upload_id}/confirm` runs:
 
-1. `HEAD` the S3 object via the storage port.
-2. Compare reported `Content-Length` and (when present) `Content-Type` with the declared values.
-3. Mark the row `UPLOADED` on a match, `FAILED` on a mismatch; either way the row stops being PENDING.
+1. Refuse a row whose `file_key` lacks the `pending/` prefix (`FAILED`) — every upload is created on a pending key.
+2. Ask the storage port for a **verdict**: the object exists, its `Content-Length` equals the declared size, and its `Content-Type` (when S3 reports one) equals the declared type.
+3. Publish: magic-byte types (PNG, JPEG, WebP, PDF) have their first 32 bytes read back with a ranged GET and checked, then are server-side copied to the final key **pinned to the ETag just read** (`CopySourceIfMatch`), so a replayed presigned PUT between check and copy fails the copy; SVG is downloaded, sanitized and written to the final key; other types are copied as-is.
+4. Mark the row `UPLOADED`, repointing `file_key` at the final key in the same update; then delete the pending object (best-effort).
 
-`UploadService.assertKeyConfirmed(fileKey)` is called by avatar / organization-logo attach paths and refuses any key that is not in `UPLOADED` status. **Never** add a consumer that attaches an upload key without going through this gate.
+Only a **verdict** marks the row `FAILED`: missing object, size or type mismatch, wrong magic bytes, an SVG that sanitizes to nothing. A storage failure — timeout, throttling, a 403, an **open S3 circuit** — is an error response and leaves the row `PENDING`, so the client can retry confirm and the sweeper reconciles it if it never does.
+
+Avatar and organization-logo attach call `UploadService.assertKeyConfirmedForOwner` **before any storage call**: the key is caller-supplied, and only a confirmed upload of that user or organization may cost an S3 request. The content type checked is the confirmed row's verified type, not an S3 header; a HEAD afterwards only proves the object still exists. **Never** add a consumer that attaches an upload key without going through this gate.
 
 ## PENDING sweeper (orphan reconciliation)
 
 Hourly BullMQ repeatable, defined in [src/domains/upload/workers/upload-pending-sweep.worker.ts](../../../src/domains/upload/workers/upload-pending-sweep.worker.ts) and scheduled from [src/infrastructure/queue/scheduler.ts](../../../src/infrastructure/queue/scheduler.ts). Cron pattern: `UPLOAD_PENDING_SWEEP_CRON` (default `15 * * * *`).
 
-For each PENDING row older than `PRESIGNED_URL_EXPIRY_SECONDS + UPLOAD_PENDING_SWEEP_GRACE_SECONDS` (default 15 min + 1 h = 75 minutes):
+For each PENDING row older than `PRESIGNED_URL_EXPIRY_SECONDS + UPLOAD_PENDING_SWEEP_GRACE_SECONDS` (default 15 min + 1 h = 75 minutes — every presigned URL of a candidate has expired):
 
-| Verdict        | Trigger                                                                                           | Action                                                 |
-| -------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `auto_confirm` | S3 `HEAD` succeeds **and** reported `Content-Length` equals `file_size` (and type when reported). | `UPDATE uploads SET status='UPLOADED'`                 |
-| `fail`         | S3 `HEAD` succeeds but metadata does not match.                                                   | `UPDATE uploads SET status='FAILED'`                   |
-| `orphan`       | S3 `HEAD` returns `null` (object missing or HEAD failed).                                         | Idempotent `deleteObject`, then `DELETE FROM uploads`. |
+| Verdict        | Trigger                                                                                                                                  | Action                                                                                         |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `auto_confirm` | `HEAD` finds the object, size matches, type matches when reported, and magic bytes verify (magic-byte types).                            | Copy pending → final key (pinned to the ETag read), set `UPLOADED` + final `file_key`, delete the pending object. |
+| `fail`         | No `pending/` prefix, SVG (published only through confirm, which sanitizes), size/type mismatch, no size reported, wrong magic bytes.    | `UPDATE uploads SET status='FAILED'`.                                                          |
+| `orphan`       | `HEAD` answers 404 — or the object is gone by the time its bytes are read.                                                               | Idempotent `deleteObject`, then `DELETE FROM uploads`.                                         |
+| `transient`    | `HEAD`, the magic-byte read or the copy failed (timeout, throttling, 403, open circuit).                                                 | Nothing — the row stays `PENDING` for the next sweep. Never deleted or failed on an outage.    |
 
 Log lines for ops:
 
 - `upload-pending-sweep.starting` — start of a sweep (cutoff + counts).
-- `upload-pending-sweep.autoConfirmed` — per row that was promoted to `UPLOADED`.
-- `upload-pending-sweep.metadataMismatch` — per row demoted to `FAILED`.
-- `upload-pending-sweep.s3DeleteFailed` — best-effort S3 delete on an orphan returned `false`; the DB row is still hard-deleted.
-- `upload-pending-sweep.completed` — final counts (`scannedCount`, `autoConfirmedCount`, `failedCount`, `deletedCount`).
+- `upload-pending-sweep.autoConfirmed` — per row promoted to `UPLOADED`.
+- `upload-pending-sweep.verificationFailed` — per row demoted to `FAILED`.
+- `upload-pending-sweep.transientStorageSkipped`, `upload-pending-sweep.magicByteReadFailed`, `upload-pending-sweep.copyToFinalKeyFailed` — per row left `PENDING` because storage failed.
+- `upload-pending-sweep.s3DeleteFailed` — the defensive delete of an orphan's object failed; the row is still deleted (S3 had already reported the object missing).
+- `upload-pending-sweep.pendingDeleteFailedAfterPublish` — the pending copy of an auto-confirmed upload could not be removed (the lifecycle rule below reaps it).
+- `upload-pending-sweep.completed` — final counts (`scannedCount`, `autoConfirmedCount`, `failedCount`, `deletedCount`, `transientCount`).
 
-Worker context: runs under `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP)`, so the RLS tenant policy on `upload.uploads` is satisfied without per-tenant fan-out.
+Database context: every database step runs in its own short `MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP` context, so the RLS tenant policy on `upload.uploads` is satisfied without per-tenant fan-out — and every S3 call runs outside them, so no pooled connection or open transaction waits on S3.
+
+## Tombstone retention
+
+`upload-tombstone-retention` hard-deletes uploads soft-deleted more than `TOMBSTONE_RETENTION_DAYS` ago, and **deletes a row only once its object is gone**: a failed S3 delete keeps the row for the next run (`upload-tombstone-retention.objectDeleteFailed`), because a row deleted first would leave an object nothing references — user content kept past its deletion date. An open S3 circuit ends the run early. The GDPR export retention (`user-data-export-retention`) follows the same rule for expired export bundles. Both page by id, each page read and deleted in its own short context with the S3 deletes outside.
 
 ## S3 bucket lifecycle policy (defense in depth)
 

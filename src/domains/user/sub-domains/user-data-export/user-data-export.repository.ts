@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNotNull } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNotNull, lt } from 'drizzle-orm';
 import { DEFAULT_REPOSITORY_LIST_LIMIT } from '@/shared/constants/query-limits.constants.js';
 import { capListWithWarning } from '@/shared/utils/infrastructure/list-cap.util.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
@@ -161,6 +161,47 @@ export class UserDataExportRepository {
       .returning({ id: user_data_exports.id });
     return deleted.length;
   }
+}
+
+/**
+ * One keyset page of exports whose download window closed before `cutoff` and that still name an
+ * object, by ascending id after `afterId` — export retention's read (maintenance context).
+ */
+export async function findExpiredExportsWithObjectBefore(
+  databaseHandle: WorkerDatabaseHandle,
+  page: { cutoff: Date; afterId: number; limit: number },
+): Promise<Array<{ id: number; public_id: string; s3_key: string }>> {
+  const rows = await databaseHandle
+    .select({
+      id: user_data_exports.id,
+      public_id: user_data_exports.public_id,
+      s3_key: user_data_exports.s3_key,
+    })
+    .from(user_data_exports)
+    .where(
+      and(
+        isNotNull(user_data_exports.expires_at),
+        lt(user_data_exports.expires_at, page.cutoff),
+        isNotNull(user_data_exports.s3_key),
+        gt(user_data_exports.id, page.afterId),
+      ),
+    )
+    .orderBy(asc(user_data_exports.id))
+    .limit(page.limit);
+  return rows.flatMap((row) => (row.s3_key === null ? [] : [{ ...row, s3_key: row.s3_key }]));
+}
+
+/** Hard-deletes export rows by internal id — after their objects are gone (maintenance context). */
+export async function hardDeleteExportsByInternalIds(
+  databaseHandle: WorkerDatabaseHandle,
+  ids: readonly number[],
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  const rows = await databaseHandle
+    .delete(user_data_exports)
+    .where(inArray(user_data_exports.id, ids))
+    .returning({ id: user_data_exports.id });
+  return rows.length;
 }
 
 /** Worker-only factory — requires an explicit handle from `withAppDatabaseContext (user scope)`. */

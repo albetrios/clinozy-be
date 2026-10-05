@@ -13,7 +13,6 @@ const OUTBOUND_BYPASS_ALLOWLIST = [
   'src/infrastructure/outbound/',
   'src/infrastructure/payment/stripe.client.ts',
   'src/infrastructure/mail/mail.service.ts',
-  'src/infrastructure/storage/storage.service.ts',
   'src/infrastructure/storage/s3-adapter.ts',
   'src/shared/utils/security/webhook-outbound-fetch.util.ts',
   'src/shared/utils/security/turnstile-verifier.util.ts',

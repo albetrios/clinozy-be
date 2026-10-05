@@ -11,17 +11,22 @@ export function createObjectStoragePortMock(
       url: 'https://presigned.example/post',
       fields: { key: 'k', 'Content-Type': 'image/png' },
     }),
-    verifyUploadedObject: vi
-      .fn()
-      .mockResolvedValue({ contentType: 'image/png', contentLength: 100 }),
+    verifyUploadedObject: vi.fn().mockResolvedValue({
+      kind: 'verified',
+      metadata: { contentType: 'image/png', contentLength: 100 },
+    }),
+    headObjectResult: vi.fn().mockResolvedValue({
+      kind: 'found',
+      metadata: { contentType: 'image/png', contentLength: 100 },
+    }),
     headObject: vi.fn().mockResolvedValue({ contentType: 'image/png', contentLength: 100 }),
-    deleteObject: vi.fn().mockResolvedValue(true),
+    deleteObject: vi.fn().mockResolvedValue({ kind: 'deleted' }),
     putObject: vi.fn().mockResolvedValue(undefined),
     copyObject: vi.fn().mockResolvedValue(undefined),
     getObject: vi.fn().mockResolvedValue({ body: Buffer.from(''), contentType: 'image/png' }),
     getObjectFirstBytes: vi
       .fn()
-      .mockResolvedValue({ body: Buffer.from(''), contentType: 'image/png' }),
+      .mockResolvedValue({ body: Buffer.from(''), contentType: 'image/png', eTag: '"etag"' }),
     getObjectUrl: vi.fn().mockReturnValue('https://cdn.example/object'),
     createPresignedDownloadUrl: vi.fn().mockResolvedValue('https://presigned.example/download'),
     ...overrides,

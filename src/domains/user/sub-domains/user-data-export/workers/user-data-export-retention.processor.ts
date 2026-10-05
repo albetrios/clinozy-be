@@ -1,77 +1,64 @@
-import { and, inArray, isNotNull, lt } from 'drizzle-orm';
-import { user_data_exports } from '@/domains/user/sub-domains/user-data-export/user-data-export.schema.js';
-import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
-import { deleteObject } from '@/infrastructure/storage/storage.service.js';
+import {
+  findExpiredExportsWithObjectBefore,
+  hardDeleteExportsByInternalIds,
+} from '@/domains/user/sub-domains/user-data-export/user-data-export.repository.js';
+import { runGlobalRetentionWorkerJob } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
+import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
+import { getDefaultS3ObjectStorageAdapter } from '@/infrastructure/storage/s3-adapter.js';
+import {
+  purgeRowsAfterTheirObjects,
+  type StoredObjectPurgeResult,
+} from '@/infrastructure/storage/stored-object-purge.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 const PURGE_BATCH_SIZE = 500;
 
 /**
- * Purge GDPR export rows whose presigned download window has elapsed and remove the matching S3
- * objects (defense-in-depth alongside the bucket lifecycle policy).
+ * Purges GDPR export rows whose download window has closed, each only once its S3 object is gone.
  *
  * @remarks
- * - **Algorithm:** loop in batches of `PURGE_BATCH_SIZE` (500); each batch selects expired rows
- *   that still have an `s3_key`, deletes the S3 object, then deletes the row by id; exits when a
- *   batch comes back smaller than the limit.
- * - **Failure modes:** S3 delete failures are logged at `warn` and do not block the row delete
- *   (lifecycle rules will eventually reap the object); database errors propagate to BullMQ.
- * - **Side effects:** deletes from `auth.user_data_exports` and the S3 GDPR prefix; emits
- *   `info` start/end logs and per-failure `warn` logs.
- * - **Notes:** runs inside `withMaintenanceDatabaseContext` (no per-tenant RLS); idempotent
- *   — re-running yields zero deletions once cleanup is complete.
+ * - **Algorithm:** {@link purgeRowsAfterTheirObjects} over keyset pages of
+ *   {@link PURGE_BATCH_SIZE} expired rows that still name an object; each page is read, and its
+ *   rows deleted, in its own short global-retention context, with the S3 deletes outside both.
+ * - **Failure modes:** a failed S3 delete keeps the row for the next run — the export is the
+ *   user's personal data, and a row-less object would outlive its expiry with nothing pointing at
+ *   it. An open S3 circuit ends the run early. Database errors propagate to BullMQ.
+ * - **Side effects:** deletes S3 objects under the export prefix, then rows from
+ *   `auth.user_data_exports`; `info` start/end logs and a `warn` per kept row.
+ * - **Notes:** idempotent — once clean, a run deletes nothing. `objectStorage` is injectable for
+ *   tests.
  */
 export async function runUserDataExportRetentionJob(
-  databaseHandle: WorkerDatabaseHandle,
-): Promise<{ deletedCount: number }> {
-  const cutoffDate = new Date();
-  let deletedCount = 0;
+  objectStorage: ObjectStoragePort = getDefaultS3ObjectStorageAdapter(),
+): Promise<StoredObjectPurgeResult> {
+  const cutoff = new Date();
 
-  logger.info({ cutoffDate: cutoffDate.toISOString() }, 'user-data-export-retention.starting');
+  logger.info({ cutoffDate: cutoff.toISOString() }, 'user-data-export-retention.starting');
 
-  for (;;) {
-    const batch = await databaseHandle
-      .select({
-        id: user_data_exports.id,
-        public_id: user_data_exports.public_id,
-        s3_key: user_data_exports.s3_key,
-      })
-      .from(user_data_exports)
-      .where(
-        and(
-          isNotNull(user_data_exports.expires_at),
-          lt(user_data_exports.expires_at, cutoffDate),
-          isNotNull(user_data_exports.s3_key),
-        ),
-      )
-      .limit(PURGE_BATCH_SIZE);
+  const result = await purgeRowsAfterTheirObjects({
+    objectStorage,
+    batchSize: PURGE_BATCH_SIZE,
+    readBatch: ({ afterId, limit }) =>
+      runGlobalRetentionWorkerJob(async (databaseHandle) => {
+        const rows = await findExpiredExportsWithObjectBefore(databaseHandle, {
+          cutoff,
+          afterId,
+          limit,
+        });
+        return rows.map((row) => ({ id: row.id, objectKey: row.s3_key, publicId: row.public_id }));
+      }),
+    deleteRows: async (ids) => {
+      await runGlobalRetentionWorkerJob((databaseHandle) =>
+        hardDeleteExportsByInternalIds(databaseHandle, ids),
+      );
+    },
+    onObjectKept: (row) =>
+      logger.warn(
+        { exportPublicId: row.publicId, s3Key: row.objectKey },
+        'user-data-export-retention.objectDeleteFailed',
+      ),
+  });
 
-    if (batch.length === 0) {
-      break;
-    }
-
-    for (const row of batch) {
-      const objectDeleted = await deleteObject(row.s3_key!);
-      if (!objectDeleted) {
-        logger.warn(
-          { exportPublicId: row.public_id, s3Key: row.s3_key },
-          'user-data-export-retention.s3ObjectDeleteFailed',
-        );
-      }
-    }
-
-    const identifiers = batch.map((row) => row.id);
-    await databaseHandle
-      .delete(user_data_exports)
-      .where(inArray(user_data_exports.id, identifiers));
-    deletedCount += batch.length;
-
-    if (batch.length < PURGE_BATCH_SIZE) {
-      break;
-    }
-  }
-
-  logger.info({ deletedCount }, 'user-data-export-retention.completed');
-
-  return { deletedCount };
+  logger.info(result, 'user-data-export-retention.completed');
+  return result;
 }

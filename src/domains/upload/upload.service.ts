@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
-import { ExternalServiceError } from '@/infrastructure/outbound/index.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { getEnv } from '@/shared/config/env.config.js';
 import {
@@ -29,6 +28,7 @@ import { getCanonicalExtensionForContentType } from './utils/upload-content-type
 import { isSvgContentType, sanitizeSvgBuffer } from './utils/upload-svg.util.js';
 import {
   isMagicByteVerifiable,
+  MAGIC_BYTE_PREFIX_LENGTH,
   verifyFileMagicBytes,
 } from '@/shared/utils/validation/file-magic.util.js';
 import { UPLOAD_PERMISSIONS } from './upload.permissions.js';
@@ -101,14 +101,14 @@ interface ReservePendingUploadSlotParams {
  *   inserts/updates `upload.uploads`, and emits no in-process events.
  *   Storage access is abstracted behind {@link ObjectStoragePort} so tests
  *   can substitute an in-memory adapter.
- * - **Notes:** offboarding hooks
+ * - **Notes:** both offboarding hooks
  *   ({@link UploadService.tombstoneAllByUserId} /
- *   {@link UploadService.tombstoneAllByOrganizationId}) only soft-delete rows;
- *   user offboarding additionally attempts per-object S3 deletes, while
- *   organization tombstones defer object removal to the retention worker.
- *   `assertKeyConfirmed` is the gate cross-domain consumers (avatar/logo
- *   attach) call before linking an upload — it never authorizes ownership,
- *   which the caller enforces by key prefix.
+ *   {@link UploadService.tombstoneAllByOrganizationId}) delete the objects
+ *   inline with bounded concurrency, then soft-delete the rows; an object
+ *   delete that fails is retried by tombstone retention, which hard-deletes a
+ *   row only once its object is gone. {@link UploadService.assertKeyConfirmedForOwner}
+ *   is the gate cross-domain consumers (avatar/logo attach) call before touching
+ *   storage — it binds the confirmed upload to its owner.
  */
 export class UploadService {
   constructor(
@@ -352,42 +352,23 @@ export class UploadService {
   }
 
   /**
-   * Gate for cross-domain consumers (avatar/logo attach): the upload row for this storage key
-   * must exist and be in UPLOADED status — i.e. it went through confirmUpload. Ownership is
-   * enforced by the caller via the key prefix, so this only asserts the finalization state.
-   */
-  async assertKeyConfirmed(fileKey: string): Promise<void> {
-    const row = await this.repository.findByFileKey(fileKey);
-    if (!row) {
-      throw new ValidationError('errors:validation.uploadNotConfirmed', undefined, {
-        key: ['No upload exists for this key'],
-      });
-    }
-    if (row.status !== UPLOAD_STATUS.UPLOADED) {
-      throw new ValidationError('errors:validation.uploadNotConfirmed', undefined, {
-        key: ['Upload has not been confirmed'],
-      });
-    }
-  }
-
-  /**
-   * Stronger variant of {@link assertKeyConfirmed} that also binds the row to a
-   * specific owner (sec-UP5). Callers must supply either `userInternalId`
-   * (user-scoped uploads like avatars) or `organizationInternalId` (organization-scoped
-   * uploads like logos / organization files). Mismatch yields a ValidationError with the
-   * same key as a missing/un-confirmed row, so callers do not leak whether the
-   * row exists.
+   * Asserts that `fileKey` is a confirmed (UPLOADED) upload owned by the given user or
+   * organization (sec-UP5) and returns its declared content type. Callers must supply either
+   * `userInternalId` (user-scoped uploads like avatars) or `organizationInternalId`
+   * (organization-scoped uploads like logos). A mismatch yields the same ValidationError as a
+   * missing or unconfirmed row, so callers do not leak whether the row exists.
    *
-   * Use this in any code path that doesn't enforce ownership via key-prefix
-   * derivation from auth — particularly admin or worker contexts where RLS is
-   * bypassed. The existing `assertKeyConfirmed` remains for the legacy
-   * prefix-derived call sites, but new callers should prefer this overload.
+   * @remarks
+   * Attach paths call this BEFORE touching storage: the key is caller-supplied, and a storage
+   * request per guessed key would let anyone spend S3 calls (and, before 4xx answers stopped
+   * counting, open the circuit for everyone). The returned `mimeType` is the type verified at
+   * confirm — magic bytes included — so attach paths check it rather than an S3 header.
    */
   async assertKeyConfirmedForOwner(options: {
     fileKey: string;
     userInternalId?: number;
     organizationInternalId?: number;
-  }): Promise<void> {
+  }): Promise<{ mimeType: string }> {
     const { fileKey, userInternalId, organizationInternalId } = options;
     if (userInternalId === undefined && organizationInternalId === undefined) {
       throw new ValidationError('errors:validation.uploadNotConfirmed', undefined, {
@@ -406,6 +387,7 @@ export class UploadService {
     if (organizationInternalId !== undefined && row.organization_id !== organizationInternalId) {
       throw notConfirmed();
     }
+    return { mimeType: row.mime_type };
   }
 
   private async assertUserCanAccessOrgScopedUpload(
@@ -518,11 +500,13 @@ export class UploadService {
    * publishes the bytes from the pending key to the immutable final key.
    *
    * @remarks
-   * - **Algorithm:** HEAD the object; require it to exist, match the declared length, and (when S3
-   *   echoes one) match the declared content type; on success publish/sanitize to `finalKey`.
-   * - **Failure modes:** rethrows a transient {@link ExternalServiceError} (surfaces as 503; the
-   *   row stays PENDING for retry); any other verification failure resolves to `false` so the
-   *   caller marks the row FAILED.
+   * - **Algorithm:** the storage verdict (exists, declared length, declared type when S3 echoes
+   *   one); when verified, publish/sanitize to `finalKey`.
+   * - **Failure modes:** `false` only for a verdict on the object — missing, wrong length or type,
+   *   wrong magic bytes, an SVG that sanitizes to nothing — so the caller marks the row FAILED.
+   *   Anything thrown is storage failing (an `ExternalServiceError`, or the `CircuitBreakerOpenError`
+   *   of an open circuit — audit-#5) or a bug, and propagates: the row stays PENDING and the client
+   *   can retry confirm. Marking a valid upload FAILED because S3 was down cannot be undone.
    * - **Side effects:** one storage HEAD; on success the publish/sanitize copy plus structured logs.
    */
   private async verifyAndPublishUploadedObject(options: {
@@ -533,34 +517,22 @@ export class UploadService {
     publicId: string;
   }): Promise<boolean> {
     const { sourceKey, finalKey, mimeType, fileSize, publicId } = options;
-    try {
-      const metadata = await this.objectStorage.verifyUploadedObject(sourceKey, {
-        contentType: mimeType,
-        contentLength: fileSize,
-      });
-      const objectExists = metadata.contentLength !== undefined;
-      const lengthMatches = metadata.contentLength === fileSize;
-      // S3 may not echo a content type; only fail on type when one is reported.
-      const typeMatches = metadata.contentType === undefined || metadata.contentType === mimeType;
-      if (!(objectExists && lengthMatches && typeMatches)) {
-        return false;
-      }
-      return await this.publishConfirmedObject(sourceKey, finalKey, mimeType);
-    } catch (error) {
-      // audit-#5: a transient storage failure (timeout / throttle / circuit-open / IAM) must NOT
-      // mark a valid upload FAILED. Re-throw it (surfaces as 503) so the client can retry confirm;
-      // the row stays PENDING and the sweeper / a retry reconciles it. Only genuine verification
-      // failures (not-found, type/size mismatch, magic-byte rejection) fall through to FAILED.
-      if (error instanceof ExternalServiceError) {
-        logger.warn(
-          { id: publicId, fileKey: sourceKey, error },
-          'upload.confirm.transientStorageError',
-        );
-        throw error;
-      }
-      logger.warn({ id: publicId, fileKey: sourceKey, error }, 'upload.confirm.verifyFailed');
+    const verdict = await this.objectStorage.verifyUploadedObject(sourceKey, {
+      contentType: mimeType,
+      contentLength: fileSize,
+    });
+    if (verdict.kind === 'rejected') {
+      logger.warn(
+        { id: publicId, fileKey: sourceKey, reason: verdict.reason },
+        'upload.confirm.verifyFailed',
+      );
       return false;
     }
+    const published = await this.publishConfirmedObject(sourceKey, finalKey, mimeType);
+    if (!published) {
+      logger.warn({ id: publicId, fileKey: sourceKey }, 'upload.confirm.contentRejected');
+    }
+    return published;
   }
 
   /**
@@ -643,8 +615,8 @@ export class UploadService {
     if (!updated) throw new NotFoundError('Upload');
 
     // Best-effort: drop the now-published pending object so it is not billed or swept.
-    const pendingObjectDeleted = await this.objectStorage.deleteObject(sourceKey);
-    if (!pendingObjectDeleted) {
+    const pendingObjectDelete = await this.objectStorage.deleteObject(sourceKey);
+    if (pendingObjectDelete.kind !== 'deleted') {
       logger.warn(
         { id: validatedPublicId, pendingKey: sourceKey },
         'upload.confirm.pendingObjectDeleteFailed',
@@ -659,7 +631,8 @@ export class UploadService {
    * transit (and rejected when hostile/empty); magic-byte-verifiable types have their leading bytes
    * checked against the declared content-type, then the object is server-side copied to `finalKey`
    * (always a different key: `confirmUpload` refuses a row without the pending prefix). Returns
-   * false when magic-byte verification fails so the caller marks the row FAILED.
+   * false when the content is rejected — wrong magic bytes, an SVG that sanitizes to nothing, an
+   * object gone since the HEAD — so the caller marks the row FAILED; storage failures throw.
    */
   private async publishConfirmedObject(
     sourceKey: string,
@@ -669,14 +642,16 @@ export class UploadService {
     // SVGs are active content: an uploaded <svg onload=…> served with an image/svg+xml type would
     // execute as stored XSS. Neutralise the bytes before publishing them to the servable key.
     if (isSvgContentType(contentType)) {
-      await this.publishSanitizedSvg(sourceKey, finalKey, contentType);
-      return true;
+      return this.publishSanitizedSvg(sourceKey, finalKey, contentType);
     }
     // HEAD only echoes the client-declared content-type, which is trivially spoofable (e.g. an
     // HTML/script payload uploaded as image/png). Verify the actual leading bytes before the object
     // becomes servable. Ranged GET (first 32 bytes) avoids buffering the full upload.
     if (isMagicByteVerifiable(contentType)) {
-      const header = await this.objectStorage.getObjectFirstBytes(sourceKey, 32);
+      const header = await this.objectStorage.getObjectFirstBytes(
+        sourceKey,
+        MAGIC_BYTE_PREFIX_LENGTH,
+      );
       if (!(header && verifyFileMagicBytes(header.body, contentType))) {
         return false;
       }
@@ -691,7 +666,7 @@ export class UploadService {
         sourceKey,
         destinationKey: finalKey,
         contentType,
-        ...(header.eTag ? { sourceETag: header.eTag } : {}),
+        sourceETag: header.eTag,
       });
       return true;
     }
@@ -701,18 +676,20 @@ export class UploadService {
 
   /**
    * Fetches the pending SVG, strips XSS vectors (scripts, event handlers, hostile filters) via
-   * {@link sanitizeSvgBuffer}, and writes the sanitized bytes to `finalKey`. Throws when
-   * sanitization yields an empty document so the caller fails verification for hostile or
+   * {@link sanitizeSvgBuffer}, and writes the sanitized bytes to `finalKey`. Returns false when
+   * sanitization yields an empty document, so the caller fails verification for hostile or
    * zero-byte SVGs.
    */
   private async publishSanitizedSvg(
     sourceKey: string,
     finalKey: string,
     contentType: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const object = await this.objectStorage.getObject(sourceKey);
     const sanitized = sanitizeSvgBuffer(object.body);
+    if (!sanitized) return false;
     await this.objectStorage.putObject({ key: finalKey, body: sanitized, contentType });
+    return true;
   }
 
   private async toUploadDetail(row: UploadRow, userPublicId?: string): Promise<UploadDetailOutput> {
@@ -750,9 +727,10 @@ export class UploadService {
       organizationPublicId,
     });
 
-    // S3 delete runs outside the DB context.
-    const objectDeleted = await this.objectStorage.deleteObject(row.file_key);
-    if (!objectDeleted) {
+    // S3 delete runs outside the DB context. A failure leaves the object for tombstone retention,
+    // which deletes the row only once its object is gone.
+    const objectDelete = await this.objectStorage.deleteObject(row.file_key);
+    if (objectDelete.kind !== 'deleted') {
       logger.warn(
         { id: validatedPublicId, fileKey: row.file_key },
         'upload.delete.s3ObjectDeleteFailed',
@@ -831,8 +809,8 @@ export class UploadService {
       const chunk = fileKeys.slice(index, index + UPLOAD_OFFBOARDING_DELETE_CONCURRENCY);
       await Promise.all(
         chunk.map(async (fileKey) => {
-          const objectDeleted = await this.objectStorage.deleteObject(fileKey);
-          if (!objectDeleted) {
+          const objectDelete = await this.objectStorage.deleteObject(fileKey);
+          if (objectDelete.kind !== 'deleted') {
             logger.warn(
               { userId, organizationId, fileKey },
               'upload.offboarding.s3ObjectDeleteFailed',

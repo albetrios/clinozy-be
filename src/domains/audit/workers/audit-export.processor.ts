@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { and, asc, eq, gt, gte, isNotNull, lt } from 'drizzle-orm';
 import { logs } from '@/domains/audit/audit.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
-import { headObject, putObjectBuffer } from '@/infrastructure/storage/storage.service.js';
+import { getDefaultS3ObjectStorageAdapter } from '@/infrastructure/storage/s3-adapter.js';
 import { gzipBufferAsync } from '@/shared/utils/infrastructure/gzip.util.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { env } from '@/shared/config/env.config.js';
@@ -61,7 +61,7 @@ export function buildExportKey(options: {
  *
  * @remarks
  * The manifest is the idempotency key for this job: the processor checks the
- * manifest's existence before exporting (`headObject(manifestKey)`) and writes
+ * manifest's existence before exporting (a HEAD of `manifestKey`) and writes
  * it last, after all data parts have been uploaded successfully. A retry that
  * sees the manifest skips the tenant entirely — which is why it is keyed by the
  * organization's public id (see {@link buildExportKey}).
@@ -137,7 +137,9 @@ export async function runAuditExportJob(databaseHandle: WorkerDatabaseHandle): P
     if (organizationId === null) continue;
 
     const manifestKey = buildManifestKey({ organizationPublicId, dateLabel });
-    const existingManifest = await headObject(manifestKey);
+    // A failed HEAD throws (the job retries): read as "no manifest" it re-exported the day under
+    // fresh part ids, leaving the first export's parts behind as duplicates.
+    const existingManifest = await getDefaultS3ObjectStorageAdapter().headObject(manifestKey);
     if (existingManifest) {
       skipped += 1;
       continue;
@@ -164,7 +166,7 @@ export async function runAuditExportJob(databaseHandle: WorkerDatabaseHandle): P
       objects: manifestObjects,
     };
 
-    await putObjectBuffer({
+    await getDefaultS3ObjectStorageAdapter().putObject({
       key: manifestKey,
       body: Buffer.from(JSON.stringify(manifest), 'utf8'),
       contentType: 'application/json',
@@ -232,7 +234,7 @@ async function collectOrganizationAuditBatches(options: {
     const batchPartId = randomUUID();
     const objectKey = buildExportKey({ organizationPublicId, dateLabel, partId: batchPartId });
 
-    await putObjectBuffer({
+    await getDefaultS3ObjectStorageAdapter().putObject({
       key: objectKey,
       body,
       contentType: 'application/gzip',

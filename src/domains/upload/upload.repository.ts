@@ -1,4 +1,15 @@
-import { and, asc, count, eq, gt, inArray, isNull, lt, sql as drizzleSql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  sql as drizzleSql,
+} from 'drizzle-orm';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
@@ -374,6 +385,28 @@ export async function markConfirmedByInternalId(
     .update(uploads)
     .set({ status: 'UPLOADED', file_key: finalFileKey, updated_at: databaseNowTimestamp })
     .where(and(eq(uploads.id, id), isNull(uploads.deleted_at), eq(uploads.status, 'PENDING')));
+}
+
+/**
+ * One keyset page of uploads soft-deleted before `cutoff`, by ascending id after `afterId` —
+ * tombstone retention's read.
+ */
+export async function findTombstonedUploadsBefore(
+  databaseHandle: WorkerDatabaseHandle,
+  page: { cutoff: Date; afterId: number; limit: number },
+): Promise<Array<{ id: number; public_id: string; file_key: string }>> {
+  return databaseHandle
+    .select({ id: uploads.id, public_id: uploads.public_id, file_key: uploads.file_key })
+    .from(uploads)
+    .where(
+      and(
+        isNotNull(uploads.deleted_at),
+        lt(uploads.deleted_at, page.cutoff),
+        gt(uploads.id, page.afterId),
+      ),
+    )
+    .orderBy(asc(uploads.id))
+    .limit(page.limit);
 }
 
 /** Hard-deletes upload rows by internal id (caller must remove S3 objects first when needed). */

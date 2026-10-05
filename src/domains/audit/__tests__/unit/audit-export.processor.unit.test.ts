@@ -26,11 +26,13 @@ vi.mock('@/infrastructure/database/connection.js', () => ({
 }));
 
 const headObjectMock = vi.hoisted(() => vi.fn());
-const putObjectBufferMock = vi.hoisted(() => vi.fn());
+const putObjectMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@/infrastructure/storage/storage.service.js', () => ({
-  headObject: (...args: unknown[]) => headObjectMock(...args),
-  putObjectBuffer: (...args: unknown[]) => putObjectBufferMock(...args),
+vi.mock('@/infrastructure/storage/s3-adapter.js', () => ({
+  getDefaultS3ObjectStorageAdapter: () => ({
+    headObject: (...args: unknown[]) => headObjectMock(...args),
+    putObject: (...args: unknown[]) => putObjectMock(...args),
+  }),
 }));
 
 vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
@@ -135,7 +137,7 @@ function asWorkerHandle(handle: FakeDatabaseHandle) {
 }
 
 function putCalls(): PutObjectCall[] {
-  return putObjectBufferMock.mock.calls.map(([argument]) => argument as PutObjectCall);
+  return putObjectMock.mock.calls.map(([argument]) => argument as PutObjectCall);
 }
 
 function manifestCall(): PutObjectCall | undefined {
@@ -161,7 +163,7 @@ describe('audit-export.processor', () => {
     environmentMock.AUDIT_EXPORT_BATCH_SIZE = 2;
     // Default: nothing has been exported yet for this organization+date.
     headObjectMock.mockResolvedValue(null);
-    putObjectBufferMock.mockResolvedValue(undefined);
+    putObjectMock.mockResolvedValue(undefined);
   });
 
   it('skips when export is disabled', async () => {
@@ -172,7 +174,7 @@ describe('audit-export.processor', () => {
 
     expect(result).toEqual({ exportedOrganizations: 0, skipped: 0 });
     expect(databaseHandle.selectDistinct).not.toHaveBeenCalled();
-    expect(putObjectBufferMock).not.toHaveBeenCalled();
+    expect(putObjectMock).not.toHaveBeenCalled();
   });
 
   /**
@@ -272,7 +274,7 @@ describe('audit-export.processor', () => {
     const result = await runAuditExportJob(asWorkerHandle(databaseHandle));
 
     expect(result).toEqual({ exportedOrganizations: 0, skipped: 1 });
-    expect(putObjectBufferMock).not.toHaveBeenCalled();
+    expect(putObjectMock).not.toHaveBeenCalled();
   });
 
   /**
@@ -285,7 +287,7 @@ describe('audit-export.processor', () => {
       organizationIds: [42],
       batches: [[buildAuditRow(1, 42)]],
     });
-    putObjectBufferMock.mockRejectedValueOnce(new Error('s3-put-failed'));
+    putObjectMock.mockRejectedValueOnce(new Error('s3-put-failed'));
 
     await expect(runAuditExportJob(asWorkerHandle(databaseHandle))).rejects.toThrow(
       's3-put-failed',
@@ -365,6 +367,6 @@ describe('audit-export.processor', () => {
 
     expect(result).toEqual({ exportedOrganizations: 0, skipped: 1 });
     expect(databaseHandle.batchQueryCount()).toBe(0);
-    expect(putObjectBufferMock).not.toHaveBeenCalled();
+    expect(putObjectMock).not.toHaveBeenCalled();
   });
 });

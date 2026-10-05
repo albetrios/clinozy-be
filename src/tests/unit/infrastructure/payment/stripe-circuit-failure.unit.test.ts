@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import { describe, expect, it } from 'vitest';
-import { countsStripeErrorAsCircuitFailure } from '@/infrastructure/payment/stripe.client.js';
+import { countsStripeErrorAsCircuitFailure } from '@/infrastructure/payment/stripe-error.util.js';
 
 describe('countsStripeErrorAsCircuitFailure', () => {
   it.each([

@@ -46,13 +46,13 @@ export function sanitizeSvgContent(svgMarkup: string): string {
 
 /**
  * Buffer-shaped wrapper around `sanitizeSvgContent` for use on raw S3 bytes.
- * Throws when sanitization yields an empty document so the caller can refuse
+ * Returns `null` when sanitization yields an empty document, so the caller can refuse
  * to serve hostile or zero-byte SVGs.
  */
-export function sanitizeSvgBuffer(buffer: Buffer): Buffer {
+export function sanitizeSvgBuffer(buffer: Buffer): Buffer | null {
   const sanitized = sanitizeSvgContent(buffer.toString('utf8'));
   if (!sanitized.trim()) {
-    throw new Error('svg sanitization produced empty content');
+    return null;
   }
   return Buffer.from(sanitized, 'utf8');
 }

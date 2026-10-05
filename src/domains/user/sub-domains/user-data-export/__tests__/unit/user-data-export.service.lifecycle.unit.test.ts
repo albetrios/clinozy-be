@@ -217,7 +217,7 @@ describe('UserDataExportService — markProcessing and cleanup branches', () => 
       { id: 1, s3_key: 'exports/1/a.json.gz' },
     ]);
     exportRepository.deleteAllByUserId.mockResolvedValue(1);
-    vi.mocked(objectStorage.deleteObject).mockResolvedValue(false);
+    vi.mocked(objectStorage.deleteObject).mockResolvedValue({ kind: 'failed', circuitOpen: false });
 
     await service.deleteAllExportsForUser(1, 'user_public');
 
@@ -234,7 +234,7 @@ describe('UserDataExportService — markProcessing and cleanup branches', () => 
       { id: 1, s3_key: 'exports/1/a.json.gz' },
     ]);
     exportRepository.deleteAllByUserId.mockResolvedValue(1);
-    vi.mocked(objectStorage.deleteObject).mockResolvedValue(true);
+    vi.mocked(objectStorage.deleteObject).mockResolvedValue({ kind: 'deleted' });
 
     await service.deleteAllExportsForUser(1, 'user_public');
 

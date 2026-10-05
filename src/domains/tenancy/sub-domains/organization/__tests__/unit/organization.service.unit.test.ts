@@ -105,8 +105,7 @@ describe('OrganizationService', () => {
     service.wireOffboardingUploadService({
       deleteObject: vi.fn(),
       tombstoneAllByOrganizationId: vi.fn().mockResolvedValue(0),
-      assertKeyConfirmed: vi.fn().mockResolvedValue(undefined),
-      assertKeyConfirmedForOwner: vi.fn().mockResolvedValue(undefined),
+      assertKeyConfirmedForOwner: vi.fn().mockResolvedValue({ mimeType: 'image/png' }),
     } as never);
     vi.mocked(objectStorage.headObject).mockResolvedValue({
       contentLength: 100,
@@ -252,10 +251,10 @@ describe('OrganizationService', () => {
   it('uploadLogo rejects an SVG logo (stored-XSS defense) and never persists it', async () => {
     // The organization-logo attach path carries its own independent content-type gate — an SVG logo is
     // served inline and is a stored-XSS vector. The upload domain's SVG tests do not cover this
-    // path; here headObject reports the confirmed object as image/svg+xml.
-    vi.mocked(objectStorage.headObject).mockResolvedValueOnce({
-      contentType: 'image/svg+xml',
-      contentLength: 512,
+    // path; here the confirmed upload's verified type is image/svg+xml.
+    service.wireOffboardingUploadService({
+      deleteObject: vi.fn(),
+      assertKeyConfirmedForOwner: vi.fn().mockResolvedValue({ mimeType: 'image/svg+xml' }),
     } as never);
     const key = `organization-logos/${organizationRow.public_id}/logo.svg`;
 
@@ -263,6 +262,7 @@ describe('OrganizationService', () => {
       service.uploadLogo(asScope(organizationRow.public_id), { key }, 'owner_public'),
     ).rejects.toBeInstanceOf(ValidationError);
     expect(repository.update).not.toHaveBeenCalled();
+    expect(objectStorage.headObject).not.toHaveBeenCalled();
   });
 
   it('update throws when repository update returns null', async () => {
@@ -295,6 +295,8 @@ describe('OrganizationService', () => {
       service.uploadLogo(asScope(organizationRow.public_id), { key }, 'owner_public'),
     ).rejects.toBeInstanceOf(ValidationError);
     expect(repository.update).not.toHaveBeenCalled();
+    // The key is caller-supplied: an unconfirmed one never costs a storage call.
+    expect(objectStorage.headObject).not.toHaveBeenCalled();
   });
 
   it('getBySlug throws when organization missing', async () => {
@@ -422,7 +424,10 @@ describe('OrganizationService', () => {
   it('route-audit L1: deleteLogo reclaims the object and still clears the column when the object is already gone', async () => {
     // Pre-fix deleteLogo only HEAD-checked and THREW if the object was missing, orphaning the bytes
     // on the normal path. Now it best-effort DELETES the object and clears the column regardless.
-    vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce(false); // object already gone
+    vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce({
+      kind: 'failed',
+      circuitOpen: false,
+    }); // object already gone
     vi.mocked(repository.findByPublicId).mockResolvedValue({
       ...organizationRow,
       logo_url: `https://cdn.example/organization-logos/${organizationRow.public_id}/logo.png`,
@@ -520,7 +525,7 @@ describe('OrganizationService', () => {
   });
 
   it('delete clears logo when storage key uses direct prefix path', async () => {
-    vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce(true);
+    vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce({ kind: 'deleted' });
     const logoKey = `organization-logos/${organizationRow.public_id}/logo.png`;
     vi.mocked(repository.findByPublicId).mockResolvedValue({
       ...organizationRow,
@@ -541,7 +546,10 @@ describe('OrganizationService', () => {
   });
 
   it('delete logs warning when logo object deletion fails', async () => {
-    vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce(false);
+    vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce({
+      kind: 'failed',
+      circuitOpen: false,
+    });
     vi.mocked(repository.findByPublicId).mockResolvedValue({
       ...organizationRow,
       logo_url: `organization-logos/${organizationRow.public_id}/logo.png`,
@@ -551,7 +559,7 @@ describe('OrganizationService', () => {
   });
 
   it('delete fails when logo clear update cannot see the organization in RLS context', async () => {
-    vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce(true);
+    vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce({ kind: 'deleted' });
     vi.mocked(repository.findByPublicId).mockResolvedValue({
       ...organizationRow,
       logo_url: `organization-logos/${organizationRow.public_id}/logo.png`,
@@ -631,7 +639,7 @@ describe('OrganizationService', () => {
 
   it('route-audit L1: deleteLogo reclaims the extractable storage key before clearing the column', async () => {
     const logoPath = `organization-logos/${organizationRow.public_id}/logo.png`;
-    vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce(true);
+    vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce({ kind: 'deleted' });
     vi.mocked(repository.findByPublicId).mockResolvedValue({
       ...organizationRow,
       logo_url: `https://cdn.example/${logoPath}`,

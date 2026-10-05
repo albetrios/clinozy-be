@@ -222,8 +222,9 @@ src/infrastructure/
   payment/
     stripe.client.ts          # Stripe SDK client + helpers (customer, subscription, webhook)
   storage/
-    storage.service.ts        # S3 storage service (presigned URLs, head object)
-    s3-adapter.ts             # S3 adapter behind object-storage.port.ts (+ public-media-url.util.ts, s3-error.util.ts)
+    object-storage.port.ts    # ObjectStoragePort — the one storage contract (services inject it; workers use the default adapter)
+    s3-adapter.ts             # Its S3 implementation, getDefaultS3ObjectStorageAdapter() (+ s3-error.util.ts: not-found +
+                              #   circuit classifier, stored-object-purge.util.ts, public-media-url.util.ts)
   outbound/                   # Hardened outbound HTTP for third-party calls: outbound-fetch.ts (timeouts, redaction),
                               # outbound-call.ts, outbound-defaults.ts, outbound-error.ts, outbound-redaction.ts, index.ts
   resilience/                 # Circuit breaker + retry-with-backoff for outbound/third-party calls (circuit-breaker.ts, retry-with-backoff.util.ts, lua/)
@@ -406,7 +407,7 @@ See [docs/reference/architecture/documentation-system.md](docs/reference/archite
 ## Testing
 
 - **Test framework**: Vitest + `fastify.inject()` (helpers in `src/tests/helpers/test-http-inject.helper.ts`)
-- **Local test database**: local runs use their own `<local database>_test`, created and migrated by the global setup ([`local-test-database.ts`](src/tests/helpers/local-test-database.ts)) — never the database `pnpm dev` serves, so suites' `TRUNCATE ... RESTART IDENTITY` cannot wipe dev data and `pnpm dev` can keep running. A remote `DATABASE_*URL` is never used, and every wipe first checks `current_database()` and refuses anything else. A GitHub Actions runner (`GITHUB_ACTIONS=true`, not `CI`) keeps its service-container database; a dedicated hosted test database needs `ALLOW_HOSTED_TEST_DATABASE=true`. Every run also gets fake provider keys and no telemetry ([`harness-provider-env.ts`](src/tests/helpers/harness-provider-env.ts)), and Redis cleanup is confined to the `<product>:test:` namespace.
+- **Local test database**: local runs use their own `<local database>_test`, created and migrated by the global setup ([`local-test-database.ts`](src/tests/helpers/local-test-database.ts)) — never the database `pnpm dev` serves, so suites' `TRUNCATE ... RESTART IDENTITY` cannot wipe dev data and `pnpm dev` can keep running. A remote `DATABASE_*URL` is never used, and every wipe first checks `current_database()` and refuses anything else. A GitHub Actions runner (`GITHUB_ACTIONS=true`, not `CI`) keeps its service-container database; a dedicated hosted test database needs `ALLOW_HOSTED_TEST_DATABASE=true`. Every run also gets fake provider keys, no telemetry and no network beyond loopback — nock refuses any other host ([`harness-provider-env.ts`](src/tests/helpers/harness-provider-env.ts)) — and Redis cleanup is confined to the `<product>:test:` namespace.
 - **Cross-cutting tests**: `src/tests/` — helpers, shared factories, security, performance, chaos, contract, cross-cutting e2e flows (`src/tests/e2e/` — signup, billing onboarding, data-export deletion), smoke (`src/tests/smoke/`), bench (`src/tests/bench/`), SQL fixtures (`src/tests/fixtures/`); k6 under `src/tests/load/k6/`
 - **Domain tests** (co-located with code):
   - **Bundled e2e**: `src/domains/<domain>/__tests__/<domain>.test.ts` (auth, billing, notify, user, tenancy, audit, upload)

@@ -75,8 +75,9 @@ export interface OutboundCallOptions<T> {
   rethrowIf?: (error: unknown) => boolean;
   /**
    * Returns false for a third-party error that is the upstream refusing this one request (Stripe
-   * declining a card, say): the error is tagged `countsAsCircuitFailure: false`, so the circuit
-   * counts the call as a success. Our own error classes carry that property themselves.
+   * declining a card, S3 answering 404, say): the error is tagged `countsAsCircuitFailure: false`,
+   * so the circuit counts the call as a success. Defaults to the integration's classifier
+   * (`outbound-defaults.ts`); our own error classes carry the property themselves.
    */
   countsAsCircuitFailure?: (error: unknown) => boolean;
   operation: (signal: AbortSignal) => Promise<T>;
@@ -173,7 +174,8 @@ export async function outboundCall<T>(options: OutboundCallOptions<T>): Promise<
       );
 
     if (circuit) {
-      const { countsAsCircuitFailure } = resolved;
+      const countsAsCircuitFailure =
+        resolved.countsAsCircuitFailure ?? defaults.countsAsCircuitFailure;
       if (!countsAsCircuitFailure) {
         return circuit.execute(run);
       }

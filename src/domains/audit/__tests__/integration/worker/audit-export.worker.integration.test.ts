@@ -18,14 +18,16 @@ import {
 import { buildManifestKey } from '@/domains/audit/workers/audit-export.processor.js';
 import type * as EnvConfigModule from '@/shared/config/env.config.js';
 
-const { headObjectMock, putObjectBufferMock } = vi.hoisted(() => ({
+const { headObjectMock, putObjectMock } = vi.hoisted(() => ({
   headObjectMock: vi.fn(),
-  putObjectBufferMock: vi.fn(),
+  putObjectMock: vi.fn(),
 }));
 
-vi.mock('@/infrastructure/storage/storage.service.js', () => ({
-  headObject: headObjectMock,
-  putObjectBuffer: putObjectBufferMock,
+vi.mock('@/infrastructure/storage/s3-adapter.js', () => ({
+  getDefaultS3ObjectStorageAdapter: () => ({
+    headObject: headObjectMock,
+    putObject: putObjectMock,
+  }),
 }));
 
 vi.mock('@/shared/config/env.config.js', async (importOriginal) => {
@@ -74,7 +76,7 @@ describe('audit-export.worker — S3 NDJSON export', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     headObjectMock.mockResolvedValue(null);
-    putObjectBufferMock.mockResolvedValue(undefined);
+    putObjectMock.mockResolvedValue(undefined);
     await cleanupDatabase();
   });
 
@@ -101,9 +103,9 @@ describe('audit-export.worker — S3 NDJSON export', () => {
 
     expect(result.exportedOrganizations).toBe(1);
     expect(result.skipped).toBe(0);
-    expect(putObjectBufferMock).toHaveBeenCalledTimes(2);
+    expect(putObjectMock).toHaveBeenCalledTimes(2);
 
-    const gzipPut = putObjectBufferMock.mock.calls.find(
+    const gzipPut = putObjectMock.mock.calls.find(
       (call) => call[0]!.contentType === 'application/gzip',
     )![0]!;
     expect(gzipPut.key).toMatch(
@@ -128,7 +130,7 @@ describe('audit-export.worker — S3 NDJSON export', () => {
     expect(parsed.action).toBe('organization.updated');
     expect(parsed.organization_id).toBe(organization.id);
 
-    const manifestPut = putObjectBufferMock.mock.calls.find(
+    const manifestPut = putObjectMock.mock.calls.find(
       (call) => call[0]!.contentType === 'application/json',
     )![0]!;
     expect(manifestPut.key).toBe(
@@ -182,9 +184,9 @@ describe('audit-export.worker — S3 NDJSON export', () => {
 
     expect(result.exportedOrganizations).toBe(2);
     expect(result.skipped).toBe(0);
-    expect(putObjectBufferMock).toHaveBeenCalledTimes(4);
+    expect(putObjectMock).toHaveBeenCalledTimes(4);
 
-    const gzipKeys = putObjectBufferMock.mock.calls
+    const gzipKeys = putObjectMock.mock.calls
       .filter((call) => call[0]!.contentType === 'application/gzip')
       .map((call) => call[0]!.key);
 
@@ -205,7 +207,7 @@ describe('audit-export.worker — S3 NDJSON export', () => {
       ]),
     );
 
-    const manifestKeys = putObjectBufferMock.mock.calls
+    const manifestKeys = putObjectMock.mock.calls
       .filter((call) => call[0]!.key.endsWith(`/${AUDIT_EXPORT_MANIFEST_FILENAME}`))
       .map((call) => call[0]!.key);
 
@@ -250,7 +252,7 @@ describe('audit-export.worker — S3 NDJSON export', () => {
 
     expect(result.exportedOrganizations).toBe(0);
     expect(result.skipped).toBe(1);
-    expect(putObjectBufferMock).not.toHaveBeenCalled();
+    expect(putObjectMock).not.toHaveBeenCalled();
     expect(headObjectMock).toHaveBeenCalledWith(manifestKey);
   });
 
@@ -275,6 +277,6 @@ describe('audit-export.worker — S3 NDJSON export', () => {
     );
 
     expect(result).toEqual({ exportedOrganizations: 0, skipped: 0 });
-    expect(putObjectBufferMock).not.toHaveBeenCalled();
+    expect(putObjectMock).not.toHaveBeenCalled();
   });
 });

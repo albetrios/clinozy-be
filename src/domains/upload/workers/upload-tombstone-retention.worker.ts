@@ -1,9 +1,5 @@
 import { Worker } from 'bullmq';
 import {
-  MAINTENANCE_SCOPE,
-  withMaintenanceDatabaseContext,
-} from '@/infrastructure/database/contexts/database-context.js';
-import {
   getBullMQConnectionOptions,
   getBullMQKeyPrefix,
 } from '@/infrastructure/queue/connection.js';
@@ -22,14 +18,14 @@ import { UPLOAD_TOMBSTONE_RETENTION_QUEUE_NAME } from './upload-tombstone-retent
  * Removes S3 objects before deleting rows.
  *
  * @remarks
- * - **Algorithm:** wraps each job in
- *   {@link withMaintenanceDatabaseContext} (so RLS allows
- *   cross-tenant deletes) and delegates to {@link runUploadTombstoneRetentionJob}.
+ * - **Algorithm:** delegates to {@link runUploadTombstoneRetentionJob}, which opens a short
+ *   global-retention context per page (so RLS allows cross-tenant deletes) and keeps every S3
+ *   call outside them.
  * - **Failure modes:** processor errors are bubbled to BullMQ for retry;
  *   stalled jobs are surfaced via a `stalled` log warning. DLQ + Sentry hook
  *   is attached by the queue bootstrap.
- * - **Side effects:** none beyond what the processor performs (DB hard-deletes
- *   + best-effort S3 object deletes).
+ * - **Side effects:** none beyond what the processor performs (S3 object deletes, then the
+ *   hard-deletes of the rows whose objects are gone).
  * - **Notes:** concurrency capped at {@link RETENTION_WORKER_CONCURRENCY};
  *   stall/lock tuning from {@link getRetentionWorkerOptions} accommodates
  *   long purge runs.
@@ -37,10 +33,7 @@ import { UPLOAD_TOMBSTONE_RETENTION_QUEUE_NAME } from './upload-tombstone-retent
 export function createUploadTombstoneRetentionWorker(): WorkerHandle {
   const worker = new Worker(
     UPLOAD_TOMBSTONE_RETENTION_QUEUE_NAME,
-    async () =>
-      withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, (databaseHandle) =>
-        runUploadTombstoneRetentionJob(databaseHandle),
-      ),
+    async () => runUploadTombstoneRetentionJob(),
     {
       connection: getBullMQConnectionOptions(),
       prefix: getBullMQKeyPrefix(),

@@ -116,6 +116,50 @@ describe('outboundCall', () => {
     vi.useFakeTimers();
   });
 
+  it('applies the integration default classifier when the call site gives none (S3 404)', async () => {
+    vi.useRealTimers();
+    const circuit = new CircuitBreaker({ name: 's3-default-classifier', failureThreshold: 1 });
+    const notFound = Object.assign(new Error('NotFound'), {
+      name: 'NotFound',
+      $metadata: { httpStatusCode: 404 },
+    });
+
+    await expect(
+      outboundCall({
+        name: 's3',
+        circuit,
+        operation: async () => {
+          throw notFound;
+        },
+      }),
+    ).rejects.toBeInstanceOf(ExternalServiceError);
+
+    expect(notFound).toMatchObject({ countsAsCircuitFailure: false });
+    expect(await circuit.getState()).toBe('CLOSED');
+    vi.useFakeTimers();
+  });
+
+  it('still counts an S3 outage under the integration default classifier', async () => {
+    vi.useRealTimers();
+    const circuit = new CircuitBreaker({ name: 's3-default-outage', failureThreshold: 1 });
+
+    await expect(
+      outboundCall({
+        name: 's3',
+        circuit,
+        operation: async () => {
+          throw Object.assign(new Error('InternalError'), {
+            name: 'InternalError',
+            $metadata: { httpStatusCode: 500 },
+          });
+        },
+      }),
+    ).rejects.toBeInstanceOf(ExternalServiceError);
+
+    expect(await circuit.getState()).toBe('OPEN');
+    vi.useFakeTimers();
+  });
+
   it('maps CircuitBreakerOpenError to ExternalServiceError circuit_open', async () => {
     const circuit = new CircuitBreaker({
       name: 'open-fast',

@@ -50,7 +50,7 @@ below show where the value comes from; the runbook above shows the workflow.
 
 ## 1. S3 (AWS) — uploads / presigned URLs
 
-**Used for:** `POST /api/v1/uploads` (presigned upload URLs).
+**Used for:** uploads (presigned PUT/POST, confirm-time HEAD + magic-byte read + publish copy), avatars and organization logos, GDPR data exports, the audit cold export, and the retention jobs that delete objects.
 
 | .env variable          | Where to get it                 |
 | ---------------------- | ------------------------------- |
@@ -64,7 +64,35 @@ below show where the value comes from; the runbook above shows the workflow.
 1. Go to [AWS Console](https://console.aws.amazon.com/) → **S3** → **Create bucket**.
 2. Pick a name (e.g. `myapp-uploads-dev`), choose region (e.g. `us-east-1`), create.
 3. Go to **IAM** → **Users** → **Create user** (e.g. `s3-upload-app`).
-4. Attach policy (e.g. inline) that allows `s3:PutObject`, `s3:GetObject` on that bucket (and optionally `s3:ListBucket`).
+4. Attach an inline policy with exactly these permissions (replace the bucket name):
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+         "Resource": "arn:aws:s3:::myapp-uploads-dev/*"
+       },
+       {
+         "Effect": "Allow",
+         "Action": "s3:ListBucket",
+         "Resource": "arn:aws:s3:::myapp-uploads-dev"
+       }
+     ]
+   }
+   ```
+
+   - `s3:ListBucket` is **required**, not optional: without it S3 answers a HEAD or GET for a
+     missing key with **403 AccessDenied** instead of 404. The app can only treat a 403 as storage
+     failing — an upload whose object never landed then stays PENDING forever instead of failing,
+     the pending-upload sweep never removes it, and the 403s count against the S3 circuit.
+   - `s3:DeleteObject`: confirm removes the pending copy, and offboarding plus the retention jobs
+     delete objects — a retention row is deleted only once its object is, so without this
+     permission tombstoned rows are never purged.
+   - `s3:GetObject` + `s3:PutObject` also cover the server-side copy that publishes a confirmed
+     upload (read the source, write the destination).
 5. **Security credentials** → **Create access key** → choose "Application running outside AWS" → create.
 6. Copy **Access key ID** → `S3_ACCESS_KEY_ID`; **Secret access key** → `S3_SECRET_ACCESS_KEY`.
 7. In `.env`:  

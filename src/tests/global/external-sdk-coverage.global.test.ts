@@ -8,9 +8,10 @@ const SRC_DIR = join(ROOT, 'src');
 /** Runtime SDK wrappers — only these files may import stripe, resend, or @aws-sdk/client-s3. */
 const EXTERNAL_SDK_ALLOWLIST = [
   'src/infrastructure/payment/stripe.client.ts',
+  // Classifies Stripe's error classes for the circuit breaker — `instanceof`, no calls.
+  'src/infrastructure/payment/stripe-error.util.ts',
   'src/infrastructure/mail/mail.service.ts',
   'src/infrastructure/storage/s3-adapter.ts',
-  'src/infrastructure/storage/storage.service.ts',
   'src/infrastructure/outbound/',
 ] as const;
 
@@ -77,7 +78,6 @@ describe('External SDK coverage (circuit breaker audit)', () => {
       'src/infrastructure/payment/stripe.client.ts',
       'src/infrastructure/mail/mail.service.ts',
       'src/infrastructure/storage/s3-adapter.ts',
-      'src/infrastructure/storage/storage.service.ts',
     ] as const;
 
     for (const relativePath of sdkWrapperFiles) {

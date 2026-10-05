@@ -11,6 +11,8 @@ import {
   turnstileCircuit,
   type CircuitBreaker,
 } from '@/infrastructure/resilience/circuit-breaker.js';
+import { countsStripeErrorAsCircuitFailure } from '@/infrastructure/payment/stripe-error.util.js';
+import { countsS3ErrorAsCircuitFailure } from '@/infrastructure/storage/s3-error.util.js';
 
 /**
  * Closed set of external integrations that {@link outboundCall} understands. Adding a
@@ -31,6 +33,13 @@ export type OutboundIntegrationName =
 export interface OutboundIntegrationDefaults {
   timeoutMs: number;
   circuit?: CircuitBreaker;
+  /**
+   * False for an error that is the upstream refusing one request rather than failing: the circuit
+   * counts it as a success (see `outboundCall`). Set for every integration whose client turns a
+   * 4xx answer into a thrown error — otherwise a burst of not-founds or declines opens the
+   * circuit for every caller.
+   */
+  countsAsCircuitFailure?: (error: unknown) => boolean;
 }
 
 const OAUTH_HTTP_TIMEOUT_MS = TEN_SECONDS_MS;
@@ -46,10 +55,12 @@ const OUTBOUND_DEFAULT_FACTORIES: Record<OutboundIntegrationName, OutboundDefaul
   stripe: () => ({
     timeoutMs: env.STRIPE_HTTP_TIMEOUT_MS,
     circuit: stripeCircuit,
+    countsAsCircuitFailure: countsStripeErrorAsCircuitFailure,
   }),
   s3: () => ({
     timeoutMs: S3_HTTP_TIMEOUT_MS,
     circuit: s3Circuit,
+    countsAsCircuitFailure: countsS3ErrorAsCircuitFailure,
   }),
   resend: () => ({
     timeoutMs: env.RESEND_HTTP_TIMEOUT_MS,

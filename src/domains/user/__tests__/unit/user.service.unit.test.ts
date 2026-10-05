@@ -132,8 +132,7 @@ describe('UserService', () => {
       } as never,
       uploadService: {
         tombstoneAllByUserId: vi.fn().mockResolvedValue(0),
-        assertKeyConfirmed: vi.fn().mockResolvedValue(undefined),
-        assertKeyConfirmedForOwner: vi.fn().mockResolvedValue(undefined),
+        assertKeyConfirmedForOwner: vi.fn().mockResolvedValue({ mimeType: 'image/png' }),
       } as never,
       userDataExportService: {
         deleteAllExportsForUser: vi.fn().mockResolvedValue(undefined),
@@ -290,6 +289,8 @@ describe('UserService', () => {
       service.uploadAvatar(userRow.public_id, { avatar_key: avatarKey }),
     ).rejects.toBeInstanceOf(ValidationError);
     expect(repository.update).not.toHaveBeenCalled();
+    // The key is caller-supplied: an unconfirmed one never costs a storage call.
+    expect(objectStorage.headObject).not.toHaveBeenCalled();
   });
 
   it('deleteMe runs offboarding when dependencies attached', async () => {
@@ -367,7 +368,7 @@ describe('UserService', () => {
     });
     vi.mocked(objectStorage.deleteObject).mockImplementation(async () => {
       callOrder.push('avatarDelete');
-      return true;
+      return { kind: 'deleted' };
     });
     service.wireOffboardingServices({
       authSessionService: {
@@ -461,15 +462,25 @@ describe('UserService', () => {
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
-  it('uploadAvatar rejects invalid content type from storage metadata', async () => {
-    vi.mocked(objectStorage.headObject).mockResolvedValueOnce({
-      contentType: 'application/pdf',
-      contentLength: 10,
+  it('uploadAvatar rejects a confirmed upload whose verified type is not an avatar type', async () => {
+    service.wireOffboardingServices({
+      authSessionService: { revokeAllSessions: vi.fn() } as never,
+      authMethodService: {
+        revokeAllForUser: vi.fn(),
+        invalidateAllVerificationTokensForUser: vi.fn().mockResolvedValue(undefined),
+      } as never,
+      uploadService: {
+        tombstoneAllByUserId: vi.fn().mockResolvedValue(0),
+        assertKeyConfirmedForOwner: vi.fn().mockResolvedValue({ mimeType: 'application/pdf' }),
+      } as never,
+      userDataExportService: { deleteAllExportsForUser: vi.fn() } as never,
     });
     const avatarKey = `avatars/${userRow.public_id}/avatar.png`;
     await expect(
       service.uploadAvatar(userRow.public_id, { avatar_key: avatarKey }),
     ).rejects.toBeInstanceOf(ValidationError);
+    // Refused on the database's verified type, before any storage call.
+    expect(objectStorage.headObject).not.toHaveBeenCalled();
   });
 
   it('updateMe can set avatar from storage key (stored as key, returned as signed URL)', async () => {
@@ -692,7 +703,10 @@ describe('UserService', () => {
       ...userRow,
       avatar_url: avatarKey,
     } as never);
-    vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce(false);
+    vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce({
+      kind: 'failed',
+      circuitOpen: false,
+    });
     const authSessionService = {
       revokeAllSessions: vi.fn().mockResolvedValue(undefined),
     };
@@ -717,7 +731,7 @@ describe('UserService', () => {
     });
   });
 
-  it('uploadAvatar accepts objects without contentType metadata', async () => {
+  it('uploadAvatar checks the verified type, not the S3 content-type header', async () => {
     vi.mocked(objectStorage.headObject).mockResolvedValueOnce({
       contentType: undefined,
       contentLength: 100,
