@@ -52,7 +52,7 @@ import { MILLISECONDS_PER_MINUTE } from '@/shared/constants/ttl.constants.js';
 /** Token category persisted in `verification_tokens.token_type` for the email verification-code login flow. */
 const EMAIL_CODE_TOKEN_TYPE = 'EMAIL_CODE';
 
-/** Redis key prefix for the per-user email verification-code attempt counter (brute-force cap). */
+/** Redis key prefix for the per-user (public id) email verification-code attempt counter (brute-force cap). */
 const EMAIL_CODE_VERIFY_ATTEMPT_KEY_PREFIX = 'auth:email_code_verify_attempts:';
 
 /** Redis key prefix for the per-email verification-code send cooldown (anti-mail-bomb spacing). */
@@ -256,7 +256,11 @@ export class EmailLoginService {
    * most recently emailed code is the only redeemable one (the per-email send cooldown spaces issuance
    * so an in-flight code is not invalidated by an accidental rapid re-request).
    */
-  private async issueVerificationCode(user: { id: number; email: string }): Promise<string> {
+  private async issueVerificationCode(user: {
+    id: number;
+    public_id: string;
+    email: string;
+  }): Promise<string> {
     const code = generateVerificationCode();
     const expiresAt = new Date(
       Date.now() + VERIFICATION_CODE_TTL_MINUTES * MILLISECONDS_PER_MINUTE,
@@ -293,7 +297,7 @@ export class EmailLoginService {
     // means an attacker who burned the cap cannot keep the legitimate owner locked out — requesting a
     // new code restores their attempts. Brute-force is unaffected (each code is an independent random
     // target over a large keyspace, and `sendCode` is itself per-email + per-IP rate-limited).
-    await this.clearVerifyAttemptCounter(user.id);
+    await this.clearVerifyAttemptCounter(user.public_id);
     return code;
   }
 
@@ -307,9 +311,9 @@ export class EmailLoginService {
    * warning rather than throwing (which, under enableOfflineQueue:false, would otherwise turn a
    * successful issue/login into a 500).
    */
-  private async clearVerifyAttemptCounter(userId: number): Promise<void> {
+  private async clearVerifyAttemptCounter(userPublicId: string): Promise<void> {
     try {
-      await this.redis.del(`${EMAIL_CODE_VERIFY_ATTEMPT_KEY_PREFIX}${userId}`);
+      await this.redis.del(`${EMAIL_CODE_VERIFY_ATTEMPT_KEY_PREFIX}${userPublicId}`);
     } catch (error) {
       logger.warn({ err: error }, 'email_login.verify_attempt_reset_unavailable');
     }
@@ -337,7 +341,7 @@ export class EmailLoginService {
       throw new UnauthorizedError('errors:invalidOrExpiredVerificationCode');
     }
 
-    const attemptKey = `${EMAIL_CODE_VERIFY_ATTEMPT_KEY_PREFIX}${user.id}`;
+    const attemptKey = `${EMAIL_CODE_VERIFY_ATTEMPT_KEY_PREFIX}${user.public_id}`;
     const attempts = await incrementWithExpiryOnFirst(
       this.redis,
       attemptKey,
@@ -431,7 +435,7 @@ export class EmailLoginService {
     });
 
     // Clear the attempt counter so a verified user's later legitimate flows are never pre-throttled.
-    await this.clearVerifyAttemptCounter(user.id);
+    await this.clearVerifyAttemptCounter(user.public_id);
 
     // On the first successful login, ensure the personal organization exists — a bare invited
     // placeholder is created WITHOUT one, so an email-code claimer would otherwise have no personal
@@ -485,7 +489,7 @@ export class EmailLoginService {
     // (checked AFTER the MFA/password guards so a legitimate wrong-method rejection is not counted as
     // a guess), not just the route rate limit. Shares the EMAIL_CODE_VERIFY_ATTEMPT counter so login
     // and step-up draw from one budget.
-    const attemptKey = `${EMAIL_CODE_VERIFY_ATTEMPT_KEY_PREFIX}${user.id}`;
+    const attemptKey = `${EMAIL_CODE_VERIFY_ATTEMPT_KEY_PREFIX}${user.public_id}`;
     const attempts = await incrementWithExpiryOnFirst(
       this.redis,
       attemptKey,
@@ -506,6 +510,6 @@ export class EmailLoginService {
     if (!record) throw new UnauthorizedError('errors:invalidOrExpiredVerificationCode');
     await this.verificationTokenRepository.invalidateAllForUser(user.id, EMAIL_CODE_TOKEN_TYPE);
     // Clear the shared attempt counter so a later legitimate login/step-up is not pre-throttled.
-    await this.clearVerifyAttemptCounter(user.id);
+    await this.clearVerifyAttemptCounter(user.public_id);
   }
 }

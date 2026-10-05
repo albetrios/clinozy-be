@@ -251,7 +251,7 @@ describe('EmailLoginService', () => {
 
     await service.sendCode({ email: user.email });
 
-    expect(redis.del).toHaveBeenCalledWith(`auth:email_code_verify_attempts:${user.id}`);
+    expect(redis.del).toHaveBeenCalledWith(`auth:email_code_verify_attempts:${user.public_id}`);
   });
 
   it('sendCode skips issuing (no signup, no email) when the per-email cooldown is already held', async () => {
