@@ -326,6 +326,16 @@ The canonical exports live under [src/shared/constants/](src/shared/constants/) 
 - **Consequences of change**: See `BULLMQ_DEFAULT_LOCK_DURATION_MS`.
 - **Last reviewed**: 2026-05-28
 
+## QUEUE_RETRY_JITTER_RATIO
+
+- **Value**: 0.2 (up to 20% added to every queue retry delay)
+- **Source**: [src/infrastructure/queue/queue.constants.ts](src/infrastructure/queue/queue.constants.ts) — BullMQ's `jitter` on the built-in exponential backoff; `addRetryJitter` ([retry-jitter.util.ts](src/infrastructure/queue/retry-jitter.util.ts)) on the custom ones (mail, Stripe webhook, webhook delivery)
+- **Rationale**: Jobs that fail together must not retry together. When a provider's circuit opens, every failing job waits exactly the circuit's remaining open time; without jitter the whole backlog hits the half-open probe in the same instant and opens the circuit again. A delay is never shortened, only lengthened.
+- **Consequences of change**:
+  - Increasing → retries spread wider, but the schedule stretches (the Stripe webhook curve's ~5-minute dead-letter window grows by up to the ratio).
+  - Decreasing → retries bunch up again; 0 restores lockstep retries.
+- **Last reviewed**: 2026-10-05
+
 ## DEFAULT_BATCH_DELETE_ROW_COUNT
 
 - **Value**: 5 000 rows per batch

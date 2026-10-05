@@ -65,6 +65,7 @@ export interface OutboundCallRetryOptions {
  */
 export interface OutboundCallOptions<T> {
   name: OutboundIntegrationName;
+  /** Per attempt: each retry gets its own timeout (the integration default when omitted). */
   timeoutMs?: number;
   circuit?: CircuitBreaker | null;
   retry?: OutboundCallRetryOptions;
@@ -93,14 +94,19 @@ function resolveAbortSignal(options: {
   return AbortSignal.timeout(options.timeoutMs);
 }
 
+/**
+ * Runs the operation — once, or under `retry` — giving every attempt its own timeout signal. One
+ * signal shared across attempts let a first attempt that timed out abort every retry at once, so
+ * retrying after a timeout never actually retried.
+ */
 async function runOperationWithOptionalRetry<T>(options: {
   operation: (signal: AbortSignal) => Promise<T>;
-  signal: AbortSignal;
+  createAttemptSignal: () => AbortSignal;
   retry?: OutboundCallRetryOptions;
 }): Promise<T> {
-  const { operation, signal, retry } = options;
+  const { operation, createAttemptSignal, retry } = options;
   if (!retry) {
-    return operation(signal);
+    return operation(createAttemptSignal());
   }
 
   const retryOptions = omitUndefined({
@@ -114,7 +120,7 @@ async function runOperationWithOptionalRetry<T>(options: {
         !(error instanceof CircuitBreakerOpenError) && isTransientNetworkError(error)),
   }) as RetryWithBackoffOptions;
 
-  return retryWithBackoff(() => operation(signal), retryOptions);
+  return retryWithBackoff(() => operation(createAttemptSignal()), retryOptions);
 }
 
 /** Tags a third-party error so the circuit breaker counts it as a success (see `countsAsCircuitFailure`). */
@@ -151,7 +157,8 @@ function logOutboundFailure(options: {
 
 /**
  * Executes an outbound operation with optional circuit breaker, timeout, retry, and
- * uniform error classification. Retry runs inside a single circuit `execute()` when both are set.
+ * uniform error classification. Retry runs inside a single circuit `execute()` when both are set;
+ * the timeout applies to each attempt, not to the call as a whole.
  */
 export async function outboundCall<T>(options: OutboundCallOptions<T>): Promise<T> {
   const resolved = buildOutboundCallOptions(options);
@@ -160,7 +167,6 @@ export async function outboundCall<T>(options: OutboundCallOptions<T>): Promise<
   const timeoutMs = resolved.timeoutMs ?? defaults.timeoutMs;
   const circuit = resolved.circuit === null ? undefined : (resolved.circuit ?? defaults.circuit);
   const enforceAbortTimeout = resolved.enforceAbortTimeout ?? true;
-  const signal = resolveAbortSignal({ timeoutMs, enforceAbortTimeout });
   const startedAt = Date.now();
 
   const executeOnce = async (): Promise<T> => {
@@ -168,7 +174,7 @@ export async function outboundCall<T>(options: OutboundCallOptions<T>): Promise<
       runOperationWithOptionalRetry(
         omitUndefined({
           operation: resolved.operation,
-          signal,
+          createAttemptSignal: () => resolveAbortSignal({ timeoutMs, enforceAbortTimeout }),
           retry: resolved.retry,
         }),
       );

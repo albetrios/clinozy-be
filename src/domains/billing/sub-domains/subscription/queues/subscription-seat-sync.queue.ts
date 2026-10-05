@@ -4,7 +4,10 @@ import {
   getBullMQKeyPrefix,
   getBullMQProducerConnectionOptions,
 } from '@/infrastructure/queue/connection.js';
-import { DEFAULT_JOB_RETENTION_COUNT } from '@/infrastructure/queue/queue.constants.js';
+import {
+  DEFAULT_JOB_RETENTION_COUNT,
+  QUEUE_RETRY_JITTER_RATIO,
+} from '@/infrastructure/queue/queue.constants.js';
 import { captureTraceContextForPropagation } from '@/infrastructure/observability/tracing/trace-context.util.js';
 import { parseBullMQJobData } from '@/shared/utils/validation/bullmq-job-validation.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
@@ -34,7 +37,7 @@ function getSubscriptionSeatSyncQueue(): Queue<SubscriptionSeatSyncJobData> {
         removeOnComplete: { count: DEFAULT_JOB_RETENTION_COUNT, age: SEVEN_DAYS_SECONDS },
         removeOnFail: { count: DEFAULT_JOB_RETENTION_COUNT, age: SEVEN_DAYS_SECONDS },
         attempts: 5,
-        backoff: { type: 'exponential', delay: FIVE_SECONDS_MS },
+        backoff: { type: 'exponential', delay: FIVE_SECONDS_MS, jitter: QUEUE_RETRY_JITTER_RATIO },
       },
     },
   );

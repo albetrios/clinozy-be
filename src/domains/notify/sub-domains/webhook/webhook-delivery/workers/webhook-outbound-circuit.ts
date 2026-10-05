@@ -1,9 +1,9 @@
-import { randomInt } from 'node:crypto';
 import CircuitBreaker from 'opossum';
 import type { WebhookDeliveryFetch } from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery.worker.js';
 import { safeWebhookUrlForLogs } from '@/shared/utils/security/safe-webhook-url-for-logs.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { webhookDeliveryRetryBaseDelayMs } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
+import { addRetryJitter } from '@/infrastructure/queue/retry-jitter.util.js';
 import {
   FIVE_SECONDS_MS,
   MILLISECONDS_PER_HOUR,
@@ -25,8 +25,6 @@ const WEBHOOK_CIRCUIT_ERROR_THRESHOLD_PERCENTAGE = 50;
 const WEBHOOK_CIRCUIT_RESET_TIMEOUT_MS = MILLISECONDS_PER_MINUTE;
 /** Minimum calls in the rolling window before the error percentage is evaluated. */
 const WEBHOOK_CIRCUIT_VOLUME_THRESHOLD = 5;
-/** Maximum jitter added to delivery backoff, as a fraction of the base delay. */
-const WEBHOOK_DELIVERY_BACKOFF_JITTER_RATIO = 0.2;
 
 /** Cache entry pairing a breaker with the last time it was accessed (for idle-TTL eviction). */
 type WebhookCircuitCacheEntry = {
@@ -189,18 +187,11 @@ export function invalidateWebhookOutboundCircuit(webhookPublicId: string): void 
  * @remarks
  * The base delay comes from `webhookDeliveryRetryBaseDelayMs` (one minute, rising to ten hours —
  * about a day over every retry), the same function the worker uses for the attempt row's
- * `next_retry_at`. Jitter decorrelates retries across worker concurrency slots so simultaneous
- * failures don't all fire at the same wall clock; it is NOT a security primitive. Uses
- * `crypto.randomInt` (never `Math.random`) so static analysis doesn't flag a weak-PRNG hotspot —
- * the draw happens once per failed delivery, so the synchronous CSPRNG cost is negligible. Every
- * base delay is at least a minute, so the jitter ceiling is ≥ 1 and the `randomInt` range is
- * always valid.
+ * `next_retry_at`. Jitter ({@link addRetryJitter}) decorrelates retries across worker concurrency
+ * slots so simultaneous failures don't all fire at the same wall clock.
  */
 export function webhookDeliveryBackoffWithJitter(attemptsMade: number): number {
-  const baseDelayMs = webhookDeliveryRetryBaseDelayMs(attemptsMade);
-  const jitterCeilingMs = Math.floor(baseDelayMs * WEBHOOK_DELIVERY_BACKOFF_JITTER_RATIO);
-  const jitterMs = randomInt(0, jitterCeilingMs + 1);
-  return baseDelayMs + jitterMs;
+  return addRetryJitter(webhookDeliveryRetryBaseDelayMs(attemptsMade));
 }
 
 /** Clears per-webhook circuits between tests (not for production use). */

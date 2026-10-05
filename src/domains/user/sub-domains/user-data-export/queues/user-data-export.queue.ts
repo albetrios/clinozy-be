@@ -3,7 +3,10 @@ import {
   getBullMQKeyPrefix,
   getBullMQProducerConnectionOptions,
 } from '@/infrastructure/queue/connection.js';
-import { DEFAULT_JOB_RETENTION_COUNT } from '@/infrastructure/queue/queue.constants.js';
+import {
+  DEFAULT_JOB_RETENTION_COUNT,
+  QUEUE_RETRY_JITTER_RATIO,
+} from '@/infrastructure/queue/queue.constants.js';
 import { captureTraceContextForPropagation } from '@/infrastructure/observability/tracing/trace-context.util.js';
 import { parseBullMQJobData } from '@/shared/utils/validation/bullmq-job-validation.util.js';
 import { FIVE_SECONDS_MS, SEVEN_DAYS_SECONDS } from '@/shared/constants/ttl.constants.js';
@@ -26,7 +29,7 @@ function getUserDataExportQueue(): Queue<UserDataExportJobData> {
       removeOnComplete: { count: DEFAULT_JOB_RETENTION_COUNT, age: SEVEN_DAYS_SECONDS },
       removeOnFail: { count: DEFAULT_JOB_RETENTION_COUNT, age: SEVEN_DAYS_SECONDS },
       attempts: 3,
-      backoff: { type: 'exponential', delay: FIVE_SECONDS_MS },
+      backoff: { type: 'exponential', delay: FIVE_SECONDS_MS, jitter: QUEUE_RETRY_JITTER_RATIO },
     },
   });
   return userDataExportQueue;

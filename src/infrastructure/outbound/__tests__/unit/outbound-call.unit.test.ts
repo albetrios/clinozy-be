@@ -41,6 +41,39 @@ describe('outboundCall', () => {
     await expect(promise).rejects.toBeInstanceOf(ExternalServiceError);
   });
 
+  it('gives every retry attempt its own timeout — a timed-out first attempt does not abort the retry', async () => {
+    vi.useRealTimers();
+    const attemptSignals: AbortSignal[] = [];
+
+    const result = await outboundCall({
+      name: 'resend',
+      timeoutMs: 40,
+      circuit: null,
+      retry: { maxAttempts: 2, baseDelayMs: 1, shouldRetry: () => true },
+      operation: async (signal) => {
+        attemptSignals.push(signal);
+        if (attemptSignals.length === 1) {
+          // The first attempt hangs until its own timeout aborts it.
+          await new Promise<void>((_resolve, reject) => {
+            signal.addEventListener('abort', () => {
+              const error = new Error('The operation was aborted due to timeout');
+              error.name = 'TimeoutError';
+              reject(error);
+            });
+          });
+        }
+        // A shared signal would already be aborted here, failing the retry before it started.
+        expect(signal.aborted).toBe(false);
+        return 'delivered';
+      },
+    });
+
+    expect(result).toBe('delivered');
+    expect(attemptSignals).toHaveLength(2);
+    expect(attemptSignals[0]).not.toBe(attemptSignals[1]);
+    vi.useFakeTimers();
+  });
+
   it('runs retry inside circuit execute', async () => {
     vi.useRealTimers();
     let attempts = 0;

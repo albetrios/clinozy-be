@@ -159,7 +159,8 @@ src/
     │   │   │   │   │   │   │   ├── github-oauth.provider.unit.test.ts
     │   │   │   │   │   │   │   └── google-oauth.provider.unit.test.ts
     │   │   │   │   │   ├── github-oauth.provider.ts
-    │   │   │   │   │   └── google-oauth.provider.ts
+    │   │   │   │   │   ├── google-oauth.provider.ts
+    │   │   │   │   │   └── oauth-provider-failure.util.ts
     │   │   │   │   ├── oauth-pkce.ts
     │   │   │   │   ├── oauth-state.ts
     │   │   │   │   ├── oauth-user-session.ts
@@ -1292,6 +1293,7 @@ src/
     │   │   │   ├── dlq-auto-retry-circuit.util.unit.test.ts
     │   │   │   ├── dlq-replay.util.unit.test.ts
     │   │   │   ├── poison-job.util.unit.test.ts
+    │   │   │   ├── retry-jitter.util.unit.test.ts
     │   │   │   ├── worker-close.util.unit.test.ts
     │   │   │   ├── worker-health.server.unit.test.ts
     │   │   │   └── worker-queue-heartbeat.unit.test.ts
@@ -1344,6 +1346,7 @@ src/
     │   ├── queue-dashboard.ts
     │   ├── queue.constants.ts
     │   ├── queue.overview.md
+    │   ├── retry-jitter.util.ts
     │   └── scheduler.ts
     ├── resilience/
     │   ├── lua/
