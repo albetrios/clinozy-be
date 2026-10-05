@@ -62,18 +62,6 @@ export function createSubscriptionController(service: SubscriptionService) {
       );
       return successResponse(SubscriptionSerializer.one(data), getRequestIdentifier(request));
     },
-    updateSubscription: async (
-      request: FastifyRequest<{ Params: { subscription_id: string } }>,
-      _reply: FastifyReply,
-    ) => {
-      requirePrincipal(request);
-      const data = await service.update(
-        requireOrganizationScope(request),
-        validatePublicIdParam(request.params.subscription_id, 'subscription_id'),
-        request.body,
-      );
-      return successResponse(SubscriptionSerializer.one(data), getRequestIdentifier(request));
-    },
     changePlan: async (
       request: FastifyRequest<{ Params: { subscription_id: string } }>,
       _reply: FastifyReply,

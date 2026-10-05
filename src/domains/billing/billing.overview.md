@@ -11,7 +11,7 @@ What it owns:
 - The `billing.plans`, `billing.subscriptions`, `billing.stripe_webhook_events`, and `billing.stripe_subscription_tombstones` tables.
 - The Stripe client wrapper and webhook signature verification.
 - Idempotent inbound webhook ingestion (the `transactional-outbox` pattern, applied inbound).
-- The user-facing subscription HTTP API (`POST`/`PATCH`; cancellation is `POST .../cancel`, there is no DELETE) that proxies to Stripe.
+- The user-facing subscription HTTP API (create, change-plan, cancel and resume are all `POST`; there is no PATCH or DELETE) that proxies to Stripe.
 
 What it does not own: invoicing UI; customer dunning emails (Stripe's own dunning handles the retries and emails); an audit trail (billing emits no audit events today).
 

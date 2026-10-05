@@ -231,30 +231,6 @@ describe('Security: Tenant isolation', () => {
       expect(response.statusCode).not.toBe(200);
     });
 
-    it('returns 404 when patching a subscription in another organization', async () => {
-      const fixture = await seedTwoOrganizationsWithSubscriptions();
-      const tokenScopedToA = await mintOrganizationAScopedTokenA(fixture);
-
-      // Empty body passes UpdateSubscriptionDto (`.strict()` rejects unknown keys
-      // with a 400 before the organization-scoped lookup runs) so the request reaches the
-      // isolation boundary and the lookup in organization A cannot find B's row → 404.
-      const response = await injectAuthenticated(app, {
-        method: 'PATCH',
-        url: testApiPath(`/billing/subscriptions/${fixture.subscriptionInB.public_id}`),
-        token: tokenScopedToA,
-        payload: {},
-      });
-
-      expect([403, 404]).toContain(response.statusCode);
-      expect(response.statusCode).not.toBe(200);
-
-      const [row] = await database
-        .select({ status: subscriptions.status })
-        .from(subscriptions)
-        .where(eq(subscriptions.id, fixture.subscriptionInB.id));
-      expect(row?.status).toBe(fixture.subscriptionInB.status);
-    });
-
     it('returns 404 when canceling a subscription in another organization', async () => {
       const fixture = await seedTwoOrganizationsWithSubscriptions();
       const tokenScopedToA = await mintOrganizationAScopedTokenA(fixture);

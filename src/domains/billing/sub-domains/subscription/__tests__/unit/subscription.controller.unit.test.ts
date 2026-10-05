@@ -100,17 +100,6 @@ describe('createSubscriptionController', () => {
     expect(createCall?.[3]).toBe('idem-key-123456789012');
   });
 
-  it('updateSubscription delegates to service', async () => {
-    await controller.updateSubscription(
-      mockRequest({
-        params: { organization_id: organizationPublicId, subscription_id: subscriptionPublicId },
-        body: { cancel_at_period_end: true },
-      }),
-      mockReply(),
-    );
-    expect(service.update).toHaveBeenCalled();
-  });
-
   it('changePlan passes idempotency key to service', async () => {
     await controller.changePlan(
       mockRequest({
@@ -172,20 +161,6 @@ describe('createSubscriptionController', () => {
         'getSubscription',
         async () => {
           await controller.getSubscription(
-            mockRequest({
-              params: {
-                organization_id: organizationPublicId,
-                subscription_id: malformedSubscriptionId,
-              },
-            }),
-            mockReply(),
-          );
-        },
-      ],
-      [
-        'updateSubscription',
-        async () => {
-          await controller.updateSubscription(
             mockRequest({
               params: {
                 organization_id: organizationPublicId,

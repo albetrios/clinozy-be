@@ -3,11 +3,9 @@ import {
   ChangePlanDto,
   CreateSubscriptionDto,
   listInvoicesQueryDto,
-  UpdateSubscriptionDto,
   type ChangePlanInput,
   type CreateSubscriptionInput,
   type ListInvoicesQueryInput,
-  type UpdateSubscriptionInput,
 } from './subscription.dto.js';
 
 /**
@@ -17,14 +15,6 @@ import {
  */
 export function validateCreateSubscription(data: unknown): CreateSubscriptionInput {
   return parseWithSchema(CreateSubscriptionDto, data);
-}
-
-/**
- * Parses the subscription PATCH body against {@link UpdateSubscriptionDto},
- * throwing `ValidationError` with field-level details on failure.
- */
-export function validateUpdateSubscription(data: unknown): UpdateSubscriptionInput {
-  return parseWithSchema(UpdateSubscriptionDto, data);
 }
 
 /**

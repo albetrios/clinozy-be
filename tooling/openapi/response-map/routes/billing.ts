@@ -51,14 +51,6 @@ export const billingRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.subscriptionSchema, schemas.subscriptionExample),
     example: null,
   },
-  'PATCH /api/v1/billing/subscriptions/{subscription_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.subscriptionSchema, {
-      ...schemas.subscriptionExample,
-      cancel_at_period_end: true,
-    }),
-    example: null,
-  },
   'POST /api/v1/billing/subscriptions/{subscription_id}/change-plan': {
     statusCode: 200,
     schema: wrapSuccess(schemas.subscriptionSchema, {

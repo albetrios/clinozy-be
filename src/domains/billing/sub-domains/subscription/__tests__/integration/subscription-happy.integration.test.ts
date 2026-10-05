@@ -104,25 +104,7 @@ describe('Billing subscription — happy paths (mocked payment provider)', () =>
     expect(response.statusCode, response.body).toBe(200);
   });
 
-  it('PATCH /billing/subscriptions/:subscription_id returns the subscription (200)', async () => {
-    const { organization, token } = await createAuthorizedBillingContext();
-    const plan = await createTestPlan();
-    const subscription = await createTestSubscription({
-      organizationId: organization.id,
-      planId: plan.id,
-      providerSubscriptionId: `sub_patch_${Date.now()}`,
-    });
-
-    const response = await injectAuthenticatedOrganizationMutation(app, {
-      method: 'PATCH',
-      url: testApiPath(`/billing/subscriptions/${subscription.public_id}`),
-      token,
-      payload: {},
-    });
-    expect(response.statusCode, response.body).toBe(200);
-  });
-
-  it('POST /billing/webhook (legacy alias) accepts a signed Stripe event (200)', async () => {
+  it('POST /billing/webhook accepts a signed Stripe event (200)', async () => {
     const webhookSigningSecret = env.STRIPE_WEBHOOK_SECRET;
     if (!webhookSigningSecret) {
       // Mirrors the sibling stripe-webhook suite: skip without a signing secret.

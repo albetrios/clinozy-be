@@ -68,7 +68,6 @@
   "GET /livez": "both",
   "GET /metrics": "both",
   "GET /readyz": "both",
-  "PATCH /api/v1/billing/subscriptions/:subscription_id": "both",
   "PATCH /api/v1/notify/notifications/:notification_id/read": "both",
   "PATCH /api/v1/notify/webhooks/:webhook_id": "both",
   "PATCH /api/v1/tenancy/organization": "both",

@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 132
+  Total routes: 131
 ================================================================================
 
 Legend:
@@ -59,7 +59,7 @@ Legend:
 
 ================================================================================
   DOMAIN: BILLING (/api/v1/billing)
-  Routes: 14
+  Routes: 13
 ================================================================================
 
   — Sub Domains —
@@ -71,7 +71,6 @@ Legend:
   GET    /api/v1/billing/subscriptions                            200  -    both  PERM: subscription:read
   POST   /api/v1/billing/subscriptions                            200  req  team  PERM: subscription:manage
   GET    /api/v1/billing/subscriptions/:subscription_id           200  -    both  PERM: subscription:read
-  PATCH  /api/v1/billing/subscriptions/:subscription_id           200  -    both  PERM: subscription:manage
   POST   /api/v1/billing/subscriptions/:subscription_id/cancel    200  req  team  PERM: subscription:manage
   POST   /api/v1/billing/subscriptions/:subscription_id/change-plan  200  req  team  PERM: subscription:manage
   GET    /api/v1/billing/subscriptions/:subscription_id/payment-setup  200  -    both  PERM: subscription:read
@@ -216,11 +215,11 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 132
+  Total routes    : 131
   Public          : 16
   Authenticated   : 50
   Role-guarded    : 9
-  Perm-guarded    : 52
+  Perm-guarded    : 51
   Token-guarded   : 5
   Team-only (O)   : 9
 

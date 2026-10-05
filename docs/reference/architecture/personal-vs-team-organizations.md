@@ -126,7 +126,7 @@ The 422s come from the organization-type guard: `personalOrganizationNoMembers`
 a personal organization cannot manage billing). All other routes — auth,
 `/users/*`, the rest of `/tenancy/organization/*` (settings, logo, api-keys, audit-logs,
 notification-policies, membership / role reads, leave), the rest of `/billing/*` (plan
-catalog, subscription reads + PATCH update, Stripe webhook), `/notify/*`,
+catalog, subscription reads, Stripe webhook), `/notify/*`,
 `/uploads/*`, `/audit/*` — behave identically in all three modes.
 
 ### Switching mode after launch

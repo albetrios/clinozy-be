@@ -59,7 +59,6 @@ Every protected by-id route (plus the two owner-tier routes) and the authorizati
 | GET | `/api/v1/tenancy/organization/roles/:role_id` | — |
 | GET | `/api/v1/tenancy/organization/roles/:role_id/permissions` | — |
 | GET | `/api/v1/tenancy/organizations/by-slug/:slug` | — |
-| PATCH | `/api/v1/billing/subscriptions/:subscription_id` | yes |
 | PATCH | `/api/v1/notify/webhooks/:webhook_id` | yes |
 | PATCH | `/api/v1/tenancy/organization/api-keys/:api_key_id` | yes |
 | PATCH | `/api/v1/tenancy/organization/notification-policies/:notification_policy_id` | yes |

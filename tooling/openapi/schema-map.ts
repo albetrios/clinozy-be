@@ -75,7 +75,6 @@ import { putMemberRolePermissionsDto } from '@/domains/tenancy/sub-domains/membe
 // ─── Billing ───────────────────────────────────────────────────────────
 import {
   CreateSubscriptionDto,
-  UpdateSubscriptionDto,
   ChangePlanDto,
 } from '@/domains/billing/sub-domains/subscription/subscription.dto.js';
 
@@ -150,7 +149,6 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
 
   // ── Billing: Subscriptions ──
   'POST /api/v1/billing/subscriptions': CreateSubscriptionDto,
-  'PATCH /api/v1/billing/subscriptions/{subscription_id}': UpdateSubscriptionDto,
   'POST /api/v1/billing/subscriptions/{subscription_id}/change-plan': ChangePlanDto,
 
   // ── Webhooks ──

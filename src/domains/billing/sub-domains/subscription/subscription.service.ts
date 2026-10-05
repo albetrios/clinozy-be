@@ -96,7 +96,6 @@ import {
   validateChangePlan,
   validateCreateSubscription,
   validateListInvoicesQuery,
-  validateUpdateSubscription,
 } from './subscription.validator.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import {
@@ -731,28 +730,6 @@ export class SubscriptionService {
       }
       throw error;
     }
-  }
-
-  async update(
-    scope: OrganizationPrincipalDatabaseScope,
-    subscription_public_id: string,
-    body: unknown,
-  ) {
-    const organization_public_id = scope.organizationPublicId;
-    // sec-B1: validateUpdateSubscription enforces an empty-body DTO. Any client trying to
-    // PATCH `cancel_at_period_end` (or other billing-state fields) is rejected with 422
-    // and must use the dedicated /cancel and /resume routes (which DO call Stripe).
-    validateUpdateSubscription(body);
-    const existing = await withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationByPublicId(organization_public_id);
-      const found = await this.repository.findByPublicId(subscription_public_id, organization.id);
-      if (!found) throw new NotFoundError('Subscription');
-      return found;
-    });
-    // REQ-4: keep the response shape consistent with list/get/create.
-    const [decorated] = await this.decorateWithSeatCounts(organization_public_id, [existing]);
-    return decorated!;
   }
 
   /**

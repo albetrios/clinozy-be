@@ -59,16 +59,6 @@ describe('createSubscriptionController auth matrix', () => {
     expect(service.create).not.toHaveBeenCalled();
   });
 
-  it('updateSubscription throws UnauthorizedError when request.auth is null', async () => {
-    await expect(
-      controller.updateSubscription(
-        buildRequest({ auth: null as never, body: { cancel_at_period_end: true } }),
-        buildReply(),
-      ),
-    ).rejects.toBeInstanceOf(UnauthorizedError);
-    expect(service.update).not.toHaveBeenCalled();
-  });
-
   it('cancelSubscription throws UnauthorizedError when request.auth is null', async () => {
     await expect(
       controller.cancelSubscription(buildRequest({ auth: null as never }), buildReply()),

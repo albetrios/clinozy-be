@@ -24,12 +24,16 @@ import type { FastifyInstance } from 'fastify';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 // Stripe is unreachable for every Stripe-backed mutation here: the calls the payment provider makes
-// fail the way a network error does, so its fail-closed 503 path runs without ever reaching the
-// real Stripe API (the harness's placeholder key would otherwise make it a live, failing call).
+// fail with the Stripe SDK's own connection error — what a network failure surfaces as — so its
+// fail-closed 503 path runs without ever reaching the real Stripe API (the harness's placeholder
+// key would otherwise make it a live, failing call).
 vi.mock('@/infrastructure/payment/stripe.client.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/infrastructure/payment/stripe.client.js')>();
+  const { default: Stripe } = await import('stripe');
   const unreachable = async (): Promise<never> => {
-    throw new Error('Stripe is unreachable (test stub)');
+    throw new Stripe.errors.StripeConnectionError({
+      message: 'Stripe is unreachable (test stub)',
+    });
   };
   return {
     ...actual,

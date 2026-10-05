@@ -91,7 +91,6 @@ Answers "is every route — organization-level included — covered, and what is
 | GET | `/api/v1/billing/subscriptions` | PERM: subscription:read | `org-collection` | ✅ BFLA (matrix) |
 | POST | `/api/v1/billing/subscriptions` | PERM: subscription:manage | `org-collection` | ✅ BFLA (matrix) |
 | GET | `/api/v1/billing/subscriptions/:subscription_id` | PERM: subscription:read | `org-by-id` | ✅ BFLA + cross-organization |
-| PATCH | `/api/v1/billing/subscriptions/:subscription_id` | PERM: subscription:manage | `org-by-id` | ✅ BFLA + cross-organization |
 | POST | `/api/v1/billing/subscriptions/:subscription_id/cancel` | PERM: subscription:manage | `org-by-id` | ✅ BFLA + cross-organization |
 | POST | `/api/v1/billing/subscriptions/:subscription_id/change-plan` | PERM: subscription:manage | `org-by-id` | ✅ BFLA + cross-organization |
 | POST | `/api/v1/billing/subscriptions/:subscription_id/resume` | PERM: subscription:manage | `org-by-id` | ✅ BFLA + cross-organization |

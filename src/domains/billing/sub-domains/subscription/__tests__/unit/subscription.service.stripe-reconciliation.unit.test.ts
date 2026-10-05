@@ -146,22 +146,6 @@ describe('SubscriptionService — Stripe reconciliation (sec-B1+B2+B3+B4)', () =
     });
   });
 
-  // ── sec-B1 ──────────────────────────────────────────────────────────────────────────
-  it('PATCH rejects cancel_at_period_end so clients must use /cancel and /resume (sec-B1)', async () => {
-    await expect(
-      service.update(scope, 'sub_public', { cancel_at_period_end: true }),
-    ).rejects.toBeInstanceOf(ValidationError);
-
-    expect(repository.update).not.toHaveBeenCalled();
-    // Stripe is not called for the rejected PATCH either — the request never reaches the
-    // provider, so the subscription cannot diverge silently.
-    expect(paymentProvider.cancelSubscriptionAtPeriodEnd).not.toHaveBeenCalled();
-  });
-
-  it('PATCH with empty body succeeds as a no-op (idempotent shape preserved)', async () => {
-    await expect(service.update(scope, 'sub_public', {})).resolves.toBeDefined();
-  });
-
   // ── sec-B2 ──────────────────────────────────────────────────────────────────────────
   it('create() stamps last_stripe_event_created_at so late Stripe events cannot clobber (sec-B2)', async () => {
     await service.create(scope, { plan_id: 'plan_pro', billing_cycle: 'monthly' }, 'created_by');

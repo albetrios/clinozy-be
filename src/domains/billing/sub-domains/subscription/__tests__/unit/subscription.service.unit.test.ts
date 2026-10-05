@@ -270,22 +270,6 @@ describe('SubscriptionService', () => {
     expect(createPayload.provider_subscription_id).toBe('sub_stripe');
   });
 
-  it('update rejects cancel_at_period_end (sec-B1: use /cancel + /resume instead)', async () => {
-    await expect(
-      service.update(scope, 'sub_public', { cancel_at_period_end: true }),
-    ).rejects.toBeInstanceOf(ValidationError);
-    expect(repository.update).not.toHaveBeenCalled();
-  });
-
-  it('update with empty body returns the existing subscription (no-op)', async () => {
-    const result = await service.update(scope, 'sub_public', {});
-    // REQ-4: the row is now decorated with seats_total / seats_used, so it is a superset of the
-    // repository row — assert the original fields survived rather than exact equality.
-    expect(result).toMatchObject(subscriptionRow);
-    expect(result).toHaveProperty('seats_used');
-    expect(repository.update).not.toHaveBeenCalled();
-  });
-
   it('changePlan updates plan on subscription', async () => {
     await service.changePlan(scope, 'sub_public', { plan_id: 'plan_public' });
     expect(repository.update).toHaveBeenCalled();
@@ -510,11 +494,6 @@ describe('SubscriptionService', () => {
       ServiceUnavailableError,
     );
     expect(repository.update).not.toHaveBeenCalled();
-  });
-
-  it('update with empty body throws NotFoundError when subscription is missing', async () => {
-    vi.mocked(repository.findByPublicId).mockResolvedValue(null);
-    await expect(service.update(scope, 'sub_public', {})).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('changePlan throws when subscription is missing', async () => {
