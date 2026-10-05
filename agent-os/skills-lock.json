@@ -221,7 +221,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-skill-index/SKILL.md",
-      "computedHash": "8fb63675d8c637d13a02ebd82aa5a16e4f40bf39df5e7bdcb919fc250c864211"
+      "computedHash": "46cb584648304618925509af1ecc390744982f902ed6dd9dba73090e94bf535e"
     },
     "be-split-to-prs": {
       "source": "local",
@@ -257,7 +257,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-test-generator/SKILL.md",
-      "computedHash": "35f20c6d6bafd08d2d70cbebefeaaa0ed1888b07f164b8c62290c27ec3f61a77"
+      "computedHash": "fd6b9641ef3d3b920936236a8bd1cc1a02759e212dd3cac7c72aa568a0d4e5be"
     },
     "be-tsdoc-export-guard": {
       "source": "local",

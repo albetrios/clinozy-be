@@ -135,7 +135,7 @@ OAuth-provider avatar (Google / GitHub), which is returned as-is.
 | `UPLOAD_MAX_PENDING_PER_USER`        | `100`        | Per-user cap on concurrent PENDING uploads. New `createUpload` calls return `400 errors:uploadPendingQuotaExceeded` at the cap. |
 | `UPLOAD_PENDING_SWEEP_CRON`          | `15 * * * *` | Cron pattern for the PENDING sweeper.                                                                                           |
 | `UPLOAD_PENDING_SWEEP_GRACE_SECONDS` | `3600`       | Extra seconds beyond presigned URL expiry before a PENDING row becomes eligible for sweeping.                                   |
-| `UPLOAD_TOMBSTONE_RETENTION_CRON`    | `52 5 * * *` | Cron for hard-deleting soft-deleted uploads after `TOMBSTONE_RETENTION_DAYS`.                                                   |
+| `UPLOAD_TOMBSTONE_RETENTION_CRON`    | `45 5 * * *` | Cron for hard-deleting soft-deleted uploads after `TOMBSTONE_RETENTION_DAYS`.                                                   |
 | `TOMBSTONE_RETENTION_DAYS`           | `90`         | TTL for soft-deleted upload rows (and their S3 objects).                                                                        |
 
 ## Troubleshooting

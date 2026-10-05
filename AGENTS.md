@@ -55,7 +55,7 @@ can hang/fail at the compose step. To bring up the stack manually:
   `domain threaded`, so containers requesting the memory controller fail with `cannot enter cgroupv2
   ... threaded mode`. Bring up with an override that sets `network_mode: host`, `cgroup: host`,
   `mem_limit: 0` (postgres), and `ports: !reset []`, then `pnpm db:migrate && pnpm db:seed`.
-- **Worker:** `pnpm dev:worker` fails the connection-budget guard with default `DATABASE_POOL_MAX=20`
+- **Worker:** `pnpm dev:worker` fails the connection-budget guard with default `DATABASE_POOL_MAX=30`
   (monolithic worker demand is ~47). Start it as
   `DATABASE_POOL_MAX=60 POSTGRES_MAX_CONNECTIONS=500 pnpm dev:worker`. A cloud session runs with
   `NODE_ENV` unset (`local`): `.env.local` is the primary file, loaded without override, so the shell

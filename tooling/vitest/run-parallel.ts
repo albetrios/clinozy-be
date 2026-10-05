@@ -1,14 +1,12 @@
 #!/usr/bin/env tsx
 /**
- * Parallel test driver — runs the parallel-safe Vitest projects (`fast`) and
- * the DB-bound projects (`db-bound`) in two concurrent processes, then waits
- * for both to finish.
+ * Test driver behind `pnpm test` — runs the `fast` lane (unit, property, global; files run
+ * concurrently inside it), then the `db-bound` lane, one after the other so a single local
+ * Postgres is never driven by two processes. It stops at the first failing lane, so a unit
+ * failure skips the DB lanes.
  *
- * Wall-clock time = max(fast tier, db-bound tier) instead of sum.
- *
- * Use locally to verify CI parallelism ergonomics. CI uses a matrix split
- * (`.github/workflows/reusable-vitest-postgres-redis.yml`) with the same project
- * filters so each shard runs on its own runner.
+ * CI uses a matrix split (`.github/workflows/reusable-vitest-postgres-redis.yml`) with the same
+ * project filters so each shard runs on its own runner, in parallel.
  *
  * Usage:
  *   pnpm test:parallel               # tests only, no coverage

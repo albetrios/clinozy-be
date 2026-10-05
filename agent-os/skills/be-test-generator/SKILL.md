@@ -125,7 +125,7 @@ k6 scenarios and helpers live in `src/tests/load/k6/` (`.js` files, not Vitest).
 | **Global regression** | `pnpm test:global` (alias: `pnpm test:regression`) | Route catalog, domain consistency                                                         |
 | **Unit (DB-bound)**   | `pnpm test:unit-db`                                | DB-bound unit tests (`*.db.unit.test.ts`) — repositories and DB-touching unit specs       |
 | **Property**          | `pnpm test:property`                               | Fast-check property tests (`*.property.unit.test.ts`)                                     |
-| **Full CI gate**      | `pnpm test`                                        | Runs fast projects (unit, property, global) and DB-bound projects (unit-db, e2e, integration, security, performance) in two parallel groups via `run-parallel.ts`. **Excludes** contract, chaos, smoke, load, and bench tests. |
+| **Full CI gate**      | `pnpm test`                                        | Runs the fast projects (unit, property, global), then the DB-bound projects (unit-db, e2e, integration, security, performance) via `run-parallel.ts` — one lane after the other, stopping at the first failing lane (a unit failure skips the DB lanes). **Excludes** contract, chaos, smoke, load, and bench tests. |
 
 ## What to unit-test vs not (by design)
 

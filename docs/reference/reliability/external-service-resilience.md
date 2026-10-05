@@ -32,7 +32,7 @@ HTTP handlers do **not** pin a Postgres checkout for the full request: each unit
 ## How to verify (audit #9)
 
 - **CI guard:** `pnpm test:global` runs [`external-sdk-coverage.global.test.ts`](../../../src/tests/global/external-sdk-coverage.global.test.ts) — fails if `stripe`, `resend`, or `@aws-sdk/client-s3` are imported outside the four infrastructure wrapper modules (type-only `stripe` imports elsewhere are allowed).
-- **Editor guard:** ESLint `no-restricted-imports` mirrors the same allowlist under `src/` (excluding tests and scripts).
+- **Editor guard:** Biome's `noRestrictedImports` (`biome.json`) mirrors the same allowlist under `src/` (excluding tests and scripts).
 - **Contract / chaos:** `pnpm test:contract` resets breaker state between specs; `pnpm test:chaos` includes Redis-partition circuit behavior.
 
 ---

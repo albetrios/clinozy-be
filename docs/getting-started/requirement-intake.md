@@ -435,7 +435,7 @@ flowchart LR
 
 **Canonical inventory:** [be-skill-index → Always-applied rules, Policy rules, and Auto-trigger rules](../../.cursor/skills/be-skill-index/SKILL.md#auto-trigger-rules).
 
-Rules auto-attach by file glob when you edit matching paths. Always-on: **be-engineering-principles.mdc**, **be-project-identity.mdc**. All others are scoped — see be-skill-index for the full table (44 rules).
+Rules auto-attach by file glob when you edit matching paths. Ten rules are always on and the other 37 are scoped — 47 in all; be-skill-index lists every one.
 
 ---
 

@@ -295,6 +295,13 @@ Some changes trigger multiple skills. Run them in this order:
 | `be-engineering-principles.mdc` | Every session — general engineering behavior (simplicity, quality, security, output style). Does not invoke a skill; complements CLAUDE.md and file-scoped rules below. |
 | `be-project-identity.mdc`       | Every session — product slug, image names, branch/env mapping via `project-identity.constants.ts`; never hardcode manifest-derived literals in `src/`, workflows, or tooling. |
 | `be-change-completeness.mdc`    | Every session — definition-of-done: a code change is done only when its own tests, cross-cutting suites, docs, rules, and skills have all moved with it. Mirrors **be-change-completeness-guard**. |
+| `be-agent-behavior.mdc`        | Every session — finish all dependent work (tests, route/OpenAPI registration, docs, lint, i18n) in the same change without asking. |
+| `be-ai-guardrails.mdc`         | Every session — protected paths, secrets, cross-domain imports, env handling (advisory). |
+| `be-git-branch-naming.mdc`     | Every session — `<type>/<short-description>` working branches; `main` is the only long-lived branch. |
+| `be-headroom-context-compression.mdc` | Every session — compress large output, logs, files and search chunks through the Headroom MCP before loading them. |
+| `be-no-digits-in-names.mdc`    | Every session — identifiers we own carry no digits. |
+| `be-skill-router.mdc`          | Every session — the task → skill routing table. |
+| `be-token-efficient-navigation.mdc` | Every session — prefer the code index (codegraph) and compression over whole-file reads and broad greps. |
 
 ## Policy rules (glob-scoped, not always-on)
 

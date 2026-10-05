@@ -20,7 +20,7 @@ Mention versions in prompts so Context7 returns docs for the versions we use:
 
 - **Fastify 5** — routes, auth, plugins
 - **Drizzle 0.45** — postgres schema, queries, indexes
-- **BullMQ 5** — redis queues, jobs, workers
+- **BullMQ 6** — redis queues, jobs, workers
 - **Postgres** — pooling, connections, SQL
 - **Node.js** — runtime, modules, async
 
@@ -29,7 +29,7 @@ Example prompts:
 ```
 How do I add rate limiting in Fastify 5? use context7
 Drizzle 0.45 migration for adding a column. use context7
-BullMQ 5 job retry configuration. use context7
+BullMQ 6 job retry configuration. use context7
 ```
 
 ## Library IDs (skip resolution)

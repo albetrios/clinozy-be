@@ -199,7 +199,7 @@ src/
     │   │   │   │   │   ├── auth-mfa-recovery-code.repository.db.unit.test.ts
     │   │   │   │   │   ├── auth-mfa-recovery-code.util.unit.test.ts
     │   │   │   │   │   ├── auth-mfa.repository.unit.test.ts
-    │   │   │   │   │   ├── auth-mfa.service.org-policy-on-delete.unit.test.ts
+    │   │   │   │   │   ├── auth-mfa.service.organization-policy-on-delete.unit.test.ts
     │   │   │   │   │   ├── auth-mfa.service.unit.test.ts
     │   │   │   │   │   └── auth-mfa.validator.unit.test.ts
     │   │   │   ├── seed/
@@ -542,7 +542,7 @@ src/
     │   │   │       │   ├── webhook.repository.unit.test.ts
     │   │   │       │   ├── webhook.serializer.no-secret.unit.test.ts
     │   │   │       │   ├── webhook.serializer.unit.test.ts
-    │   │   │       │   ├── webhook.service.max-per-org.unit.test.ts
+    │   │   │       │   ├── webhook.service.max-per-organization.unit.test.ts
     │   │   │       │   ├── webhook.service.ssrf-guard.unit.test.ts
     │   │   │       │   ├── webhook.service.unit.test.ts
     │   │   │       │   └── webhook.validator.unit.test.ts
@@ -893,7 +893,7 @@ src/
     │   │   │       │   ├── permission-cache-no-scan.policy.unit.test.ts
     │   │   │       │   ├── permission-cache.service.invalidation.unit.test.ts
     │   │   │       │   ├── permission.controller.unit.test.ts
-    │   │   │       │   ├── permission.repository.cross-org.db.unit.test.ts
+    │   │   │       │   ├── permission.repository.cross-organization.db.unit.test.ts
     │   │   │       │   ├── permission.repository.db.unit.test.ts
     │   │   │       │   ├── permission.serializer.unit.test.ts
     │   │   │       │   └── permission.service.unit.test.ts
@@ -938,7 +938,7 @@ src/
     │   │   │   ├── upload.repository.user-isolation.db.unit.test.ts
     │   │   │   ├── upload.serializer.unit.test.ts
     │   │   │   ├── upload.service.assert-key-confirmed.unit.test.ts
-    │   │   │   ├── upload.service.org-quota-concurrency.db.unit.test.ts
+    │   │   │   ├── upload.service.organization-quota-concurrency.db.unit.test.ts
     │   │   │   ├── upload.service.quota-concurrency.db.unit.test.ts
     │   │   │   ├── upload.service.unit.test.ts
     │   │   │   ├── upload.validator.mime-and-size.unit.test.ts
@@ -1728,7 +1728,7 @@ src/
     │   ├── data-export-deletion.e2e.test.ts
     │   ├── e2e.overview.md
     │   ├── signup-flow.e2e.test.ts
-    │   └── tenancy-billing-org.e2e.test.ts
+    │   └── tenancy-billing-organization.e2e.test.ts
     ├── factories/
     │   ├── mfa-method.factory.ts
     │   ├── notification.factory.ts
@@ -1915,8 +1915,8 @@ src/
     │   │   │   ├── member-role-permission-list.js
     │   │   │   ├── notification-policy-crud.js
     │   │   │   ├── notification-write.js
-    │   │   │   ├── org-membership-list.js
     │   │   │   ├── organization-api-key-lifecycle.js
+    │   │   │   ├── organization-membership-list.js
     │   │   │   ├── organization-settings-write.js
     │   │   │   ├── passwordless-signup.js
     │   │   │   ├── permission-cached.js
@@ -1967,8 +1967,8 @@ src/
     │   │   ├── admin-only.security.test.ts
     │   │   ├── auth-token-flow.security.test.ts
     │   │   ├── billing-privilege.security.test.ts
-    │   │   ├── cross-org-mutation.security.test.ts
-    │   │   ├── cross-org-resource.security.test.ts
+    │   │   ├── cross-organization-mutation.security.test.ts
+    │   │   ├── cross-organization-resource.security.test.ts
     │   │   ├── invitation-email.security.test.ts
     │   │   ├── invitation-flow-abuse.security.test.ts
     │   │   ├── notify-isolation.security.test.ts
@@ -2352,7 +2352,7 @@ src/
     │   ├── workers/
     │   │   ├── tenant-scoped-job-data.policy.unit.test.ts
     │   │   └── webhook-worker-no-schema-import.policy.unit.test.ts
-    │   ├── per-org-row-caps.unit.test.ts
+    │   ├── per-organization-row-caps.unit.test.ts
     │   └── unit.overview.md
     ├── database-suite-lock.ts
     ├── global-setup.ts
