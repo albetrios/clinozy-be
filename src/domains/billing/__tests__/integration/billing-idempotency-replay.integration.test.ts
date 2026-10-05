@@ -16,6 +16,11 @@ import {
 import { createTestSubscription } from '@/domains/billing/__tests__/factories/subscription.factory.js';
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { buildIdempotencyCacheKey } from '@/shared/utils/idempotency/idempotency-key.util.js';
+import {
+  buildCompletedIdempotencyEntry,
+  buildInFlightIdempotencyEntry,
+  type IdempotencySeedRequest,
+} from '@/tests/helpers/idempotency-entry.helper.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 /**
@@ -100,18 +105,14 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
     idempotencyKey: string;
     userPublicId: string;
     organizationPublicId: string;
+    request: IdempotencySeedRequest;
   }): Promise<void> {
     const cacheKey = buildIdempotencyCacheKey(options.idempotencyKey, {
       userId: options.userPublicId,
       organizationId: options.organizationPublicId,
     });
     seededCacheKeys.push(cacheKey);
-    await redisConnection.set(
-      cacheKey,
-      JSON.stringify({ state: 'in_flight', claimedAt: Date.now(), requestId: 'req-first-caller' }),
-      'EX',
-      60,
-    );
+    await redisConnection.set(cacheKey, buildInFlightIdempotencyEntry(options.request), 'EX', 60);
   }
 
   function expectInFlightConflict(response: { statusCode: number; json: () => unknown }): void {
@@ -130,6 +131,11 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
       idempotencyKey,
       userPublicId: user.public_id,
       organizationPublicId: organization.public_id,
+      request: {
+        method: 'POST',
+        routePath: testApiPath('/billing/subscriptions'),
+        body: { plan_id: plan.public_id, billing_cycle: 'monthly' },
+      },
     });
 
     const response = await injectAuthenticated(app, {
@@ -151,6 +157,11 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
       idempotencyKey,
       userPublicId: user.public_id,
       organizationPublicId: organization.public_id,
+      request: {
+        method: 'POST',
+        routePath: testApiPath('/billing/subscriptions/:subscription_id/change-plan'),
+        body: { plan_id: newPlan.public_id },
+      },
     });
 
     const response = await injectAuthenticated(app, {
@@ -171,6 +182,11 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
       idempotencyKey,
       userPublicId: user.public_id,
       organizationPublicId: organization.public_id,
+      request: {
+        method: 'POST',
+        routePath: testApiPath('/billing/subscriptions/:subscription_id/cancel'),
+        body: undefined,
+      },
     });
 
     const response = await injectAuthenticated(app, {
@@ -190,6 +206,11 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
       idempotencyKey,
       userPublicId: user.public_id,
       organizationPublicId: organization.public_id,
+      request: {
+        method: 'POST',
+        routePath: testApiPath('/billing/subscriptions/:subscription_id/resume'),
+        body: undefined,
+      },
     });
 
     const response = await injectAuthenticated(app, {
@@ -209,6 +230,11 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
       idempotencyKey,
       userPublicId: user.public_id,
       organizationPublicId: organization.public_id,
+      request: {
+        method: 'POST',
+        routePath: testApiPath('/billing/payment-methods/setup'),
+        body: {},
+      },
     });
 
     const response = await injectAuthenticated(app, {
@@ -235,11 +261,14 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
     seededCacheKeys.push(cacheKey);
     await redisConnection.set(
       cacheKey,
-      JSON.stringify({
-        state: 'completed',
+      buildCompletedIdempotencyEntry({
+        request: {
+          method: 'POST',
+          routePath: testApiPath('/billing/payment-methods/setup'),
+          body: {},
+        },
         statusCode: 200,
-        body: JSON.stringify({ data: { replayed: true } }),
-        headers: { 'content-type': 'application/json' },
+        responseBody: JSON.stringify({ data: { replayed: true } }),
       }),
       'EX',
       60,
@@ -273,6 +302,11 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
       idempotencyKey,
       userPublicId: otherUser.public_id,
       organizationPublicId: organization.public_id,
+      request: {
+        method: 'POST',
+        routePath: testApiPath('/billing/payment-methods/setup'),
+        body: {},
+      },
     });
 
     const response = await injectAuthenticated(app, {

@@ -108,7 +108,7 @@ interface CompletedIdempotencyEntry {
   body: string;
   headers: Record<string, string>;
   /** Fingerprint (method + route + body) of the request that produced this entry; used to reject key reuse with a different payload. */
-  fingerprint?: string;
+  fingerprint: string;
 }
 
 interface InFlightIdempotencyEntry {
@@ -116,10 +116,22 @@ interface InFlightIdempotencyEntry {
   claimedAt: number;
   requestId?: string;
   /** Fingerprint of the in-flight request; a later request reusing the key with a different fingerprint is rejected. */
-  fingerprint?: string;
+  fingerprint: string;
 }
 
-type IdempotencyEntry = CompletedIdempotencyEntry | InFlightIdempotencyEntry;
+/**
+ * An entry that is not one this middleware writes (corrupt, or missing its fingerprint): never
+ * replayed — its payload cannot be compared — and never overwritten; the key answers 409 until
+ * the entry expires.
+ */
+interface UnreadableIdempotencyEntry {
+  state: 'unreadable';
+}
+
+type IdempotencyEntry =
+  | CompletedIdempotencyEntry
+  | InFlightIdempotencyEntry
+  | UnreadableIdempotencyEntry;
 
 interface PendingIdempotencyCompletion {
   statusCode: number;
@@ -139,8 +151,8 @@ interface RequestWithIdempotency extends FastifyRequest {
 
 /**
  * Reads a `completed` entry's stored response, or null when it is not well-formed. Only an entry
- * that carries `state: 'completed'` and a complete response is ever replayed —
- * {@link parseIdempotencyEntry} treats anything else as `in_flight`, so a corrupt or unknown
+ * that carries `state: 'completed'`, a complete response and its fingerprint is ever replayed —
+ * {@link parseIdempotencyEntry} treats anything else as unreadable, so a corrupt or unknown
  * entry can never be served as a real response.
  */
 function parseCompletedIdempotencyEntry(
@@ -151,42 +163,50 @@ function parseCompletedIdempotencyEntry(
     typeof completed.statusCode === 'number' &&
     typeof completed.body === 'string' &&
     completed.headers !== null &&
-    typeof completed.headers === 'object'
+    typeof completed.headers === 'object' &&
+    typeof completed.fingerprint === 'string'
   ) {
     return {
       state: 'completed',
       statusCode: completed.statusCode,
       body: completed.body,
       headers: completed.headers,
-      ...(typeof completed.fingerprint === 'string' ? { fingerprint: completed.fingerprint } : {}),
+      fingerprint: completed.fingerprint,
     };
   }
   return null;
 }
 
-function parseInFlightIdempotencyEntry(parsed: Record<string, unknown>): InFlightIdempotencyEntry {
+/** Reads an `in_flight` entry, or null when it carries no fingerprint to compare against. */
+function parseInFlightIdempotencyEntry(
+  parsed: Record<string, unknown>,
+): InFlightIdempotencyEntry | null {
   const inFlight = parsed as Partial<InFlightIdempotencyEntry>;
+  if (typeof inFlight.fingerprint !== 'string') {
+    return null;
+  }
   return {
     state: 'in_flight',
     claimedAt: typeof inFlight.claimedAt === 'number' ? inFlight.claimedAt : 0,
     ...(typeof inFlight.requestId === 'string' ? { requestId: inFlight.requestId } : {}),
-    ...(typeof inFlight.fingerprint === 'string' ? { fingerprint: inFlight.fingerprint } : {}),
+    fingerprint: inFlight.fingerprint,
   };
 }
+
+const UNREADABLE_IDEMPOTENCY_ENTRY: UnreadableIdempotencyEntry = { state: 'unreadable' };
 
 function parseIdempotencyEntry(raw: string): IdempotencyEntry {
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     if (parsed && typeof parsed === 'object' && parsed.state === 'completed') {
-      const completed = parseCompletedIdempotencyEntry(parsed);
-      if (completed) return completed;
+      return parseCompletedIdempotencyEntry(parsed) ?? UNREADABLE_IDEMPOTENCY_ENTRY;
     }
     if (parsed && typeof parsed === 'object' && parsed.state === 'in_flight') {
-      return parseInFlightIdempotencyEntry(parsed);
+      return parseInFlightIdempotencyEntry(parsed) ?? UNREADABLE_IDEMPOTENCY_ENTRY;
     }
-    return { state: 'in_flight', claimedAt: 0 };
+    return UNREADABLE_IDEMPOTENCY_ENTRY;
   } catch {
-    return { state: 'in_flight', claimedAt: 0 };
+    return UNREADABLE_IDEMPOTENCY_ENTRY;
   }
 }
 
@@ -478,16 +498,23 @@ async function idempotencyClaimPreHandler(
   }
 }
 
-/** Replays/cached-conflicts a hit: fingerprint mismatch → 422, completed → replay, else in-flight 409. */
+/**
+ * Replays/cached-conflicts a hit: unreadable → in-flight 409, fingerprint mismatch → 422,
+ * completed → replay, else in-flight 409.
+ */
 function serveIdempotencyCacheHit(
   request: FastifyRequest,
   reply: FastifyReply,
   entry: IdempotencyEntry,
   requestFingerprint: string,
 ): FastifyReply {
+  if (entry.state === 'unreadable') {
+    logger.warn({ requestId: request.id }, 'idempotency.cache.unreadable_entry');
+    sendInFlightConflict(request, reply);
+    return reply;
+  }
   // Same key, different payload → reject (do not execute a divergent second operation).
-  // Entries written before this rollout carry no fingerprint; skip the check for them.
-  if (entry.fingerprint !== undefined && entry.fingerprint !== requestFingerprint) {
+  if (entry.fingerprint !== requestFingerprint) {
     sendIdempotencyKeyReuseConflict(request, reply);
     return reply;
   }
@@ -551,7 +578,11 @@ async function handleIdempotencyClaimRace(
   } catch (raceError) {
     logger.warn({ error: raceError, idempotencyKey }, 'idempotency.cache.race.read.failed');
   }
-  if (raceEntry?.fingerprint !== undefined && raceEntry.fingerprint !== requestFingerprint) {
+  if (
+    raceEntry !== null &&
+    raceEntry.state !== 'unreadable' &&
+    raceEntry.fingerprint !== requestFingerprint
+  ) {
     sendIdempotencyKeyReuseConflict(request, reply);
     return reply;
   }
@@ -724,13 +755,13 @@ export async function idempotencyOnResponse(
     return;
   }
 
-  if (statusCode < 400 && pending !== undefined) {
+  if (statusCode < 400 && pending !== undefined && requestFingerprint !== undefined) {
     const completed: CompletedIdempotencyEntry = {
       state: 'completed',
       statusCode: pending.statusCode,
       body: pending.body,
       headers: pending.headers,
-      ...(requestFingerprint !== undefined ? { fingerprint: requestFingerprint } : {}),
+      fingerprint: requestFingerprint,
     };
     try {
       await redisConnection.set(

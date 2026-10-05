@@ -18,6 +18,10 @@ import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { buildIdempotencyCacheKey } from '@/shared/utils/idempotency/idempotency-key.util.js';
+import {
+  buildInFlightIdempotencyEntry,
+  type IdempotencySeedRequest,
+} from '@/tests/helpers/idempotency-entry.helper.js';
 
 /**
  * Six tenancy writes are registered with `config.idempotencyRequired = true` (the `I = req` column
@@ -301,31 +305,33 @@ describe('Tenancy idempotency contract — Integration', () => {
       idempotencyKey: string;
       userPublicId: string;
       organizationPublicId: string;
+      request: IdempotencySeedRequest;
     }): Promise<void> {
       const cacheKey = buildIdempotencyCacheKey(options.idempotencyKey, {
         userId: options.userPublicId,
         organizationId: options.organizationPublicId,
       });
       seededCacheKeys.push(cacheKey);
-      await redisConnection.set(
-        cacheKey,
-        JSON.stringify({
-          state: 'in_flight',
-          claimedAt: Date.now(),
-          requestId: 'req-first-caller',
-        }),
-        'EX',
-        60,
-      );
+      await redisConnection.set(cacheKey, buildInFlightIdempotencyEntry(options.request), 'EX', 60);
     }
 
     it('POST /tenancy/organization/notification-policies returns 409, not 422, mid-flight', async () => {
       const { user, organization, token } = await createOwnerContext();
       const idempotencyKey = `idem-${randomUUID()}`;
+      const payload = {
+        notification_type: NOTIFICATION_TYPES[0],
+        channel: NOTIFICATION_CHANNELS[0],
+      };
       await seedInFlightClaim({
         idempotencyKey,
         userPublicId: user.public_id,
         organizationPublicId: organization.public_id,
+        request: {
+          method: 'POST',
+          routePath: testApiPath('/tenancy/organization/notification-policies'),
+          // The fingerprint covers the body as validated, schema defaults included.
+          body: { ...payload, default_enabled: true, is_mandatory: false },
+        },
       });
 
       const response = await injectAuthenticated(app, {
@@ -334,7 +340,7 @@ describe('Tenancy idempotency contract — Integration', () => {
         token,
         organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': idempotencyKey },
-        payload: { notification_type: NOTIFICATION_TYPES[0], channel: NOTIFICATION_CHANNELS[0] },
+        payload,
       });
 
       expect(response.statusCode, response.body).toBe(409);
@@ -347,10 +353,20 @@ describe('Tenancy idempotency contract — Integration', () => {
     it('POST /tenancy/organization/transfer-ownership returns 409, not 422, mid-flight', async () => {
       const { user, organization, token } = await createOwnerContext();
       const idempotencyKey = `idem-${randomUUID()}`;
+      // Valid-shaped body: this route's Fastify schema validates BEFORE preHandlers (an empty
+      // body 400s without ever reaching the idempotency guard — observed while writing this).
+      // The target user does not exist, which proves the 409 fires before any ownership lookup:
+      // reaching the handler would have produced a 404/400, never a conflict.
+      const payload = { new_owner_user_id: generatePublicId('user') };
       await seedInFlightClaim({
         idempotencyKey,
         userPublicId: user.public_id,
         organizationPublicId: organization.public_id,
+        request: {
+          method: 'POST',
+          routePath: testApiPath('/tenancy/organization/transfer-ownership'),
+          body: payload,
+        },
       });
 
       const response = await injectAuthenticated(app, {
@@ -359,11 +375,7 @@ describe('Tenancy idempotency contract — Integration', () => {
         token,
         organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': idempotencyKey },
-        // Valid-shaped body: this route's Fastify schema validates BEFORE preHandlers (an empty
-        // body 400s without ever reaching the idempotency guard — observed while writing this).
-        // The target user does not exist, which proves the 409 fires before any ownership lookup:
-        // reaching the handler would have produced a 404/400, never a conflict.
-        payload: { new_owner_user_id: generatePublicId('user') },
+        payload,
       });
 
       expect(response.statusCode, response.body).toBe(409);
