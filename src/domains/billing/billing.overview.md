@@ -67,11 +67,11 @@ stateDiagram-v2
 
 ## External integrations
 
-- **Stripe** — subscriptions, invoices, customer portal links, webhooks. Wrapped by [src/infrastructure/payment/stripe.client.ts](src/infrastructure/payment/stripe.client.ts) which adds an `opossum` circuit breaker + Sentry instrumentation.
+- **Stripe** — subscriptions, invoices, customer portal links, webhooks. Wrapped by [src/infrastructure/payment/stripe.client.ts](src/infrastructure/payment/stripe.client.ts), which runs every call through `outboundCall` behind the shared Redis-backed `stripe` circuit.
 
 ## Failure modes
 
-- **Stripe API timeout (user-initiated path)** → 502 to the client; subscription state is unchanged in DB; the Stripe webhook arrives later and reconciles.
+- **Stripe API timeout or outage (user-initiated path)** → 503 `paymentProviderUnavailable` (with `Retry-After` while the circuit is open); nothing is written locally; if Stripe did apply the change, its webhook reconciles the row.
 - **Invalid Stripe signature** → 400; Stripe retries with backoff.
 - **Worker crash mid-processing** → row stays in `processing`; reclaim worker (`stripe-webhook-event-reclaim.processor`) restarts after `STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES = 15`.
 - **Event that keeps failing** → abandoned after `STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS = 25` attempts (at once for a permanent failure), with one alert; never reclaimed again until an operator runs `tool:stripe-webhook-replay -- --retry`.

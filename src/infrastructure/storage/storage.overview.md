@@ -20,7 +20,7 @@ S3-compatible object storage client. Owns the AWS SDK v3 client instance, presig
 
 ## Operational concerns
 
-- **Presigned URL TTL**: aligned with `PRESIGNED_URL_EXPIRY_SECONDS = 900` (15 min) for upload presigns; 24 h for GDPR export downloads.
+- **Presigned URL TTL**: `PRESIGNED_URL_EXPIRY_SECONDS = 900` (15 min) for upload presigns; `USER_DATA_EXPORT_PRESIGNED_DOWNLOAD_EXPIRY_SECONDS = 900` (15 min) for GDPR export downloads.
 - **Region pinning**: `S3_REGION` env. Cross-region transfers should not happen in normal operation.
 - **CORS configuration on the bucket** must permit the platform's origin and the presigned-POST headers. Documented in setup runbooks.
 - **Signed URLs and SigV4**: AWS caps presigned URL TTL at 7 days for SigV4 signers; the platform runs at much shorter TTLs.

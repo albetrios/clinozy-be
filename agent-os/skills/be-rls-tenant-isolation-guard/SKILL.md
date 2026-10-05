@@ -79,12 +79,12 @@ A `with*DatabaseContext` wrapper sets **one** GUC and grants access only on tabl
 | --- | --- | --- |
 | `withAppDatabaseContext` (organization scope) | `app.current_organization_public_id` | tenant-scoped tables (`*_tenant_isolation`) |
 | `withAppDatabaseContext` (user scope) | `app.current_user_public_id` | user-owned rows (`auth.*`, uploads, notifications) **and** the tenancy discovery policies (`organizations_user_discovery`, `memberships_user_self_discovery`) |
-| `withGlobalAdminDatabaseContext` | `app.global_admin` | **`auth.*` and `audit.logs` ONLY** |
+| `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_ADMIN)` | `app.global_admin` | **`auth.*` and `audit.logs` ONLY** |
 | `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP)` | `app.global_retention_cleanup` | retention-sweep tables |
 
 **`app.global_admin` is NOT a tenancy bypass.** No `tenancy.*` policy carries that arm, so the admin context reads zero rows from `tenancy.organizations` / `tenancy.memberships` and fails their `WITH CHECK` on write. (The `WITH CHECK` checklist item above warns about a `global_admin` arm leaking from `USING` — that concerns tables where such an arm exists, e.g. `audit.logs`; on tenancy tables there is none to leak.) This shipped to production three times — organization provisioning (42501), active-organization resolution at login (zero rows → no `org` claim, empty permissions), and the `OrganizationRepository` user-id resolvers (`null` → permission-cache purge skipped, attribution nulled).
 
-- **Never import `withGlobalAdminDatabaseContext` under `src/domains/tenancy/**`** — enforced by `no-global-admin-in-tenancy.global.test.ts`. The policy fact itself is pinned by `tenancy-global-admin-invisibility.security.test.ts`.
+- **Never use `MAINTENANCE_SCOPE.GLOBAL_ADMIN` under `src/domains/tenancy/**`** — enforced by `no-global-admin-in-tenancy.global.test.ts`. The policy fact itself is pinned by `tenancy-global-admin-invisibility.security.test.ts`.
 - For an auth-flow read that has no organization GUC yet (login, MFA, organization switch, refresh), use `withAppDatabaseContext` with a user scope (verified minter on auth flows) — the tenancy discovery policies are keyed on `app.current_user_public_id`, so the caller sees exactly their own organizations and memberships.
 - The joined-table rule above applies to **any** context that cannot satisfy the target policy — organization-only context *and* post-commit paths running with no GUC at all (a frequent miss: `sec-R11`-style "invalidate AFTER commit, outside the organization block" code).
 
@@ -108,7 +108,7 @@ Do **not** try to enforce this with a blanket "no `set_config` inside a nested t
 1. **`ENABLE` without `FORCE`** → table owner bypasses RLS → cross-organization leak. (Tell: not added to `EXPECTED_FORCE_RLS_TABLES`.)
 2. **`USING`-only policy on a writable table** → rows moved/planted into another tenant (no `WITH CHECK`).
 3. **GUC-less query path** → RLS returns zero rows (silent broken query), or a dev "fixes" it by reaching for the unpinned pool → `WorkerDatabaseContextError`.
-3b. **Wrong-GUC query path** → same silent zero rows, but harder to spot because a context *is* present and looks authoritative. Canonical case: reaching for `withGlobalAdminDatabaseContext` on a `tenancy.*` read because the flow has no organization yet. (Tell: a `null`/empty result that the caller treats as "not found" and swallows — e.g. `if (userPublicId)` guarding a cache purge.)
+3b. **Wrong-GUC query path** → same silent zero rows, but harder to spot because a context *is* present and looks authoritative. Canonical case: reaching for `MAINTENANCE_SCOPE.GLOBAL_ADMIN` on a `tenancy.*` read because the flow has no organization yet. (Tell: a `null`/empty result that the caller treats as "not found" and swallows — e.g. `if (userPublicId)` guarding a cache purge.)
 4. **Superuser/`BYPASSRLS` `DATABASE_URL`** → Postgres skips FORCE RLS silently; only caught on hosted by `assert-database-rls-safety`.
 5. **DB context held across external I/O** → pool exhaustion under load.
 

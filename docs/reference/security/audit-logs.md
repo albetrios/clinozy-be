@@ -5,7 +5,7 @@ Clinozy-be records security-relevant mutations in `audit.logs` via `recordScoped
 ## Query API
 
 - `GET /api/v1/tenancy/organization/audit-logs` — requires `audit-log:read`, scoped to the active organization carried by the access token's `org` claim (`withAppDatabaseContext`, organization scope).
-- `GET /api/v1/audit/logs` — global admin only (`SUPER_ADMIN` / `ADMIN`); cross-tenant listing runs under `withGlobalAdminDatabaseContext` (`app.global_admin = true`) so FORCE RLS / `clinozy_be_app` see all tenants explicitly.
+- `GET /api/v1/audit/logs` — global `SUPER_ADMIN` only; cross-tenant listing runs under `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_ADMIN)` (`app.global_admin = true`) so FORCE RLS / `clinozy_be_app` see all tenants explicitly.
 
 ## Action naming
 

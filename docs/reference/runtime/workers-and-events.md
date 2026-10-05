@@ -15,7 +15,7 @@ Event bus (in-process) and BullMQ workers (durable) are **not the same thing**. 
 
 **Typical flow:** `service` → `eventBus.emit` → handler → `recordOutboxEmail()` (+ `dispatchOutboxEmail()` on commit) → mail worker.
 
-Workers and scripts (no request transaction) call `recordOutboxEmail()` + `dispatchOutboxEmail()` directly — see [Post-commit enqueue](#post-commit-enqueue-transactional-outbox).
+Workers and scripts (no HTTP request) call `recordOutboxEmail()` + `dispatchOutboxEmail()` directly — see [Post-commit enqueue](#post-commit-enqueue-transactional-outbox).
 
 ```mermaid
 flowchart LR
@@ -94,12 +94,22 @@ Queue depth gauges scrape the monitored queue list in `src/infrastructure/observ
 
 ---
 
-## Default resilience settings
+## Resilience settings
 
-- `attempts: 3`
-- exponential backoff starting at 1000ms
-- `removeOnComplete` capped
-- `removeOnFail` capped
+There is no project-wide default: every queue sets `attempts` and `backoff` in its enqueue
+options, caps `removeOnComplete` / `removeOnFail`, and adds retry jitter
+(`QUEUE_RETRY_JITTER_RATIO`, 20%). Current settings:
+
+| Queue | Attempts | Backoff |
+| ----- | -------- | ------- |
+| `notification`, `user-data-export` | 3 | exponential from 5 s |
+| `subscription-seat-sync` | 5 | exponential from 5 s |
+| `stripe-webhook` | 5 | custom, doubling from 10 s (`stripe-webhook-backoff.util.ts`) |
+| `mail` | 8 | custom, doubling from 5 s (`mail-backoff.util.ts`) |
+| `webhook-delivery` | 8 | custom schedule, 1 min → 10 h (`WEBHOOK_DELIVERY_RETRY_DELAYS_MS`) |
+
+A mail or Stripe-webhook job failing on an open circuit waits the breaker's `retryAfterMs` instead of
+its next backoff step.
 
 ---
 

@@ -23,12 +23,22 @@ Event handler failure must **not** fail the HTTP request (log and continue).
 - **Public handles only**: event and job payloads, `jobId`s, commit-dispatch tasks and dead-letter summaries carry public ids (`<entity>PublicId` / `<entity>_public_id`) or a per-row random token — never a bigserial. Queued jobs outlive a restore that restarts the sequence, and a reused id loads (or dedupes against) a different row. Use the public id as the BullMQ `jobId` when the contract is one job per row; a job whose row is gone completes as skipped unless that is our fault
 - **Full names only**: `repository` not `repo`, `organization` not `org`, `database` not `db`
 
-## Default resilience settings
+## Resilience settings
 
-- `attempts: 3`
-- exponential backoff starting at 1000ms
-- `removeOnComplete` capped
-- `removeOnFail` capped
+There is no project-wide default: every queue sets `attempts` and `backoff` in its enqueue
+options, caps `removeOnComplete` / `removeOnFail`, and adds retry jitter
+(`QUEUE_RETRY_JITTER_RATIO`, 20%). Current settings:
+
+| Queue | Attempts | Backoff |
+| ----- | -------- | ------- |
+| `notification`, `user-data-export` | 3 | exponential from 5 s |
+| `subscription-seat-sync` | 5 | exponential from 5 s |
+| `stripe-webhook` | 5 | custom, doubling from 10 s (`stripe-webhook-backoff.util.ts`) |
+| `mail` | 8 | custom, doubling from 5 s (`mail-backoff.util.ts`) |
+| `webhook-delivery` | 8 | custom schedule, 1 min → 10 h (`WEBHOOK_DELIVERY_RETRY_DELAYS_MS`) |
+
+A mail or Stripe-webhook job failing on an open circuit waits the breaker's `retryAfterMs` instead of
+its next backoff step.
 
 ## Files/locations
 
@@ -83,20 +93,23 @@ auth/sub-domains/auth-method/events/*.ts  →  recordOutboxEmail() + onCommit(di
 auth/events/index.ts  →  registerAuthEventHandlers()
 ```
 
-**Notify — cross-domain notifications** (billing subscription lifecycle)
+**Notify — in-app notification** (invitation accepted)
 
 ```text
-stripe-webhook / subscription.service  →  emit billing.subscription.created|updated|canceled|payment_failed
-notify/sub-domains/notification/events/billing-notification.event-handlers.ts  →  createAndDispatchNotification()
+member-invitation.service  →  eventBus.emit(tenancy.member_invitation.accepted)
+notify/sub-domains/notification/events/member-invitation-accepted.event-handlers.ts  →  notification row + enqueue
 ```
+
+Billing emits no domain events today (`billing.overview.md`).
 
 **Notify — outbound webhook delivery**
 
 ```text
-emitWebhookDeliveryRequested()  →  notify/sub-domains/webhook/events/
+emitWebhookDeliveryRequested()  →  notify/sub-domains/webhook/webhook-delivery/events/webhook-delivery-emit.ts
 notify/sub-domains/webhook/webhook-delivery/events/webhook-delivery.event-handlers.ts  →  enqueueWebhookDelivery()
-billing events  →  notify/sub-domains/webhook/events/billing-webhook.event-handlers.ts
 ```
+
+`notify/events/notify.event-handlers.ts` registers exactly these two notify handlers.
 
 `src/core/events/register-event-handlers.ts` calls each domain’s `register*EventHandlers()` (from `buildApp()` before routes).
 

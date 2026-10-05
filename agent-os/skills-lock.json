@@ -191,7 +191,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-rls-tenant-isolation-guard/SKILL.md",
-      "computedHash": "529011a667e405d3e7ca7570dae8a90850e09ffb84d6d6060f4761526e6df71f"
+      "computedHash": "34d25781bb5ecac2c41bbe4c7a48477623d0ec78a2e73e5e2ff1d4a5385708b3"
     },
     "be-route-catalog": {
       "source": "local",
@@ -269,7 +269,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-workers-events/SKILL.md",
-      "computedHash": "661ef9ef5ad319a75a7d0b9fb2e7e39dbc7efef568269e8071033f1a79488eac"
+      "computedHash": "22e1a0456362c74bdee75d5a6ef8c07560c9c2afcca95f612e59cd28875ef3c1"
     },
     "ponytail": {
       "source": "DietrichGebert/ponytail",

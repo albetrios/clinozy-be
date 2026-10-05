@@ -38,18 +38,21 @@ There is **no signup endpoint** — account creation is folded into the unified 
 - `POST /api/v1/auth/password/forgot`
 - `POST /api/v1/auth/password/reset`
 - `POST /api/v1/auth/mfa/login`
-- `GET /api/v1/auth/oauth/:provider` (OAuth initiation)
+- `POST /api/v1/auth/webauthn/authenticate/options` (passkey sign-in)
+
+OAuth initiation (`GET /api/v1/auth/oauth/:provider`) carries no captcha: it only returns the
+provider's authorization URL, and the provider authenticates the user.
 
 Schema default is `CAPTCHA_PROVIDER=disabled` (no check; production requires `turnstile`). A missing token is **401** `errors:captchaRequired`; a token Cloudflare refuses is **401** `errors:captchaInvalid`. When Cloudflare cannot answer — an outage, a non-200 or unreadable siteverify response, or the `turnstile` circuit open — the request is **503** `errors:captchaProviderUnavailable` (with `Retry-After` while the circuit is open): the client retries rather than re-solving a captcha that was never judged. `CAPTCHA_FAIL_OPEN=true` skips the check during such an outage instead; the schema rejects it in production. Optional `CAPTCHA_BYPASS_HEADER` (with `CAPTCHA_BYPASS_ALLOWED`, non-production only) allows local testing.
 
-**Production boot guard.** A production deploy with the default `CAPTCHA_PROVIDER=disabled` would run login, email verification-code (send + login), password recovery, MFA challenge, and OAuth initiation without any captcha. Boot fails in production unless Turnstile is fully configured (see `src/shared/config/env-schema.ts`):
+**Production boot guard.** A production deploy with the default `CAPTCHA_PROVIDER=disabled` would run login, email verification-code (send + login), password recovery, MFA challenge, and passkey sign-in without any captcha. Boot fails in production unless Turnstile is fully configured (see `src/shared/config/env-schema.ts`):
 
 | Posture                   | Required env                                    | Auth-route behavior                                                   |
 | ------------------------- | ----------------------------------------------- | --------------------------------------------------------------------- |
 | **Production (required)** | `CAPTCHA_PROVIDER=turnstile` + `CAPTCHA_SECRET` | Verify `X-Captcha-Token`; fail-closed on missing or invalid tokens.   |
-| **Development**           | Default `CAPTCHA_PROVIDER=disabled`             | Middleware fail-opens; optional `CAPTCHA_BYPASS_HEADER` for local UX. |
+| **Development**           | Default `CAPTCHA_PROVIDER=disabled`             | No check runs; optional `CAPTCHA_BYPASS_HEADER` for local UX.         |
 
-Outside production (`development`), the middleware fail-opens by default when Turnstile is not configured.
+With `CAPTCHA_PROVIDER=disabled` (the default outside production) the middleware skips the check entirely.
 
 **Local CAPTCHA (opt-in).** `pnpm setup:local --only-env --with-captcha` turns Turnstile on locally with Cloudflare's published always-pass **test** keys (the real widget and siteverify round trip on `localhost`) and sets `CAPTCHA_BYPASS_ALLOWED=true` so k6 and the API smoke test pass with the dev `X-Captcha-Bypass` header; `--without-captcha` turns it off. A test secret's results always name the hostname `example.com`, so the verifier skips its hostname pin for Cloudflare test secrets only — and **production boot rejects a Cloudflare test `CAPTCHA_SECRET`** (`1x…AA` / `2x…AA` / `3x…AA`), so a deployed backend always pins and never runs on a secret that passes every token.
 

@@ -28,7 +28,7 @@ Redis client management. Owns the singleton `ioredis` client used by domain-leve
 
 ## Tuning parameters
 
-- `REDIS_URL`, `REDIS_TLS` (when not in URL), `REDIS_FAMILY` (4 / 6).
+- `REDIS_URL`, `REDIS_BULLMQ_URL` (separate BullMQ endpoint), `REDIS_KEY_PREFIX` (override), `REDIS_TLS_ENFORCED`, `REDIS_READY_CHECK_ENABLED`, `REDIS_MEMORY_WARN_RATIO` / `REDIS_MEMORY_CRITICAL_RATIO`.
 
 ## Failure modes
 
