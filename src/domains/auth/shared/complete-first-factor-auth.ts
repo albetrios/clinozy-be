@@ -69,7 +69,7 @@ export async function completeFirstFactorAuth(options: {
     options.ensurePersonalOrganizationOnMiss &&
     env.PERSONAL_ORGANIZATION_ENABLED
   ) {
-    organizationPublicId = await ensurePersonalOrganizationPublicId(options.user.id);
+    organizationPublicId = await ensurePersonalOrganizationPublicId(options.user);
   }
 
   const jsonWebToken = await signAccessToken({

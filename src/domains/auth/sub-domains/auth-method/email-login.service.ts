@@ -228,7 +228,7 @@ export class EmailLoginService {
 
     if (env.PERSONAL_ORGANIZATION_ENABLED) {
       try {
-        await ensurePersonalOrganization(user.id);
+        await ensurePersonalOrganization(user);
       } catch (error) {
         logger.error(
           { err: error, userId: user.public_id },
@@ -445,7 +445,7 @@ export class EmailLoginService {
     // force-provision. Best-effort + idempotent (partial unique index), matching signup / OAuth.
     if (isFirstVerification && env.PERSONAL_ORGANIZATION_ENABLED) {
       try {
-        await ensurePersonalOrganization(user.id);
+        await ensurePersonalOrganization(user);
       } catch (error) {
         logger.error(
           { err: error, userId: user.public_id },

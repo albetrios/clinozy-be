@@ -562,7 +562,9 @@ describe('EmailLoginService', () => {
 
       await service.login({ email: user.email, code: 'ABCDEF' }, '127.0.0.1', 'vitest');
 
-      expect(vi.mocked(ensurePersonalOrganization)).toHaveBeenCalledWith(user.id);
+      expect(vi.mocked(ensurePersonalOrganization)).toHaveBeenCalledWith(
+        expect.objectContaining({ id: user.id, public_id: user.public_id }),
+      );
     } finally {
       env.PERSONAL_ORGANIZATION_ENABLED = false;
     }

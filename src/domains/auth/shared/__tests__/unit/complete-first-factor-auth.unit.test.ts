@@ -60,7 +60,9 @@ describe('completeFirstFactorAuth — personal-organization self-heal (item #5)'
       ensurePersonalOrganizationOnMiss: true,
     });
 
-    expect(ensurePersonalOrganizationPublicId).toHaveBeenCalledWith(user.id);
+    expect(ensurePersonalOrganizationPublicId).toHaveBeenCalledWith(
+      expect.objectContaining({ id: user.id, public_id: user.public_id }),
+    );
     expect(signAccessToken).toHaveBeenCalledWith(
       expect.objectContaining({ organizationPublicId: 'org_personalnew' }),
     );

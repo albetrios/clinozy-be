@@ -232,7 +232,9 @@ describe('UserService', () => {
       vi.mocked(ensurePersonalOrganizationPublicId).mockResolvedValueOnce('org_personalxxxxxxxxxx');
       const me = await service.getMe(asUserScope(userRow.public_id));
       expect(me.personal_organization_id).toBe('org_personalxxxxxxxxxx');
-      expect(ensurePersonalOrganizationPublicId).toHaveBeenCalledWith(userRow.id);
+      expect(ensurePersonalOrganizationPublicId).toHaveBeenCalledWith(
+        expect.objectContaining({ id: userRow.id, public_id: userRow.public_id }),
+      );
     } finally {
       env.PERSONAL_ORGANIZATION_ENABLED = original;
     }

@@ -670,7 +670,9 @@ describe('AuthService', () => {
       sessionPublicId: 'session_public',
     });
 
-    expect(resolve.ensurePersonalOrganization).toHaveBeenCalledWith(user.id);
+    expect(resolve.ensurePersonalOrganization).toHaveBeenCalledWith(
+      expect.objectContaining({ id: user.id, public_id: user.public_id }),
+    );
     expect(result.access_token).toBe('jwt-access-token');
     expect(authSessionService.rebindAccessToken).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -168,7 +168,7 @@ export async function completeOAuthUserSession(parameters: {
   // and tool:backfill-personal-organizations recovers a miss). Team-only mode skips it.
   if ((isNewUser || claimedBareAccount) && env.PERSONAL_ORGANIZATION_ENABLED) {
     try {
-      await ensurePersonalOrganization(user.id);
+      await ensurePersonalOrganization(user);
       logger.info({ userId: user.public_id, provider }, 'oauth.user.personal_org_provisioned');
     } catch (error) {
       logger.error(

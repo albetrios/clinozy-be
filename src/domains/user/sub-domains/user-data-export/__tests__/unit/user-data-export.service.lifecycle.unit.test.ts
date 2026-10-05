@@ -194,7 +194,7 @@ describe('UserDataExportService — markProcessing and cleanup branches', () => 
     await service.deleteAllExportsForUser(1, 'user_public');
 
     expect(loggerInfoMock).toHaveBeenCalledWith(
-      { userInternalId: 1, deletedCount: 3 },
+      { userPublicId: 'user_public', deletedCount: 3 },
       'user-data-export.offboarding.deleted',
     );
   });
@@ -222,7 +222,7 @@ describe('UserDataExportService — markProcessing and cleanup branches', () => 
     await service.deleteAllExportsForUser(1, 'user_public');
 
     expect(loggerWarnMock).toHaveBeenCalledWith(
-      { userInternalId: 1, s3Key: 'exports/1/a.json.gz' },
+      { userPublicId: 'user_public', s3Key: 'exports/1/a.json.gz' },
       'user-data-export.offboarding.s3DeleteFailed',
     );
     // The database delete must still happen despite the storage failure.

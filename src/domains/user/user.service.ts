@@ -519,7 +519,7 @@ export class UserService {
     const personalOrganizationId =
       existingPersonalOrganizationId ??
       (env.PERSONAL_ORGANIZATION_ENABLED
-        ? ((await ensurePersonalOrganizationPublicId(user.id)) ?? null)
+        ? ((await ensurePersonalOrganizationPublicId(user)) ?? null)
         : null);
     return {
       ...(await this.toUserOutput(user)),

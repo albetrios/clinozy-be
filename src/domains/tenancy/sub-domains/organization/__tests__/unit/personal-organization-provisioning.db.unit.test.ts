@@ -120,7 +120,7 @@ describe('personal organization provisioning (database)', () => {
       // Precondition: no personal organization (signup-time provision failed/was skipped).
       expect(await resolvePersonalOrganizationPublicId(user.id)).toBeUndefined();
 
-      const ensured = await ensurePersonalOrganization(user.id);
+      const ensured = await ensurePersonalOrganization(user);
 
       expect(ensured).toBeDefined();
       expect(ensured!.public_id).toMatch(/^org_[a-z0-9]{21}$/);
@@ -133,7 +133,7 @@ describe('personal organization provisioning (database)', () => {
       const user = await createTestUser();
       const { organization } = await provisionPersonalOrganization(user.id);
 
-      const ensured = await ensurePersonalOrganization(user.id);
+      const ensured = await ensurePersonalOrganization(user);
 
       expect(ensured!.public_id).toBe(organization.public_id);
     });
@@ -142,8 +142,8 @@ describe('personal organization provisioning (database)', () => {
       env.PERSONAL_ORGANIZATION_ENABLED = true;
       const user = await createTestUser();
 
-      const first = await ensurePersonalOrganization(user.id);
-      const second = await ensurePersonalOrganization(user.id);
+      const first = await ensurePersonalOrganization(user);
+      const second = await ensurePersonalOrganization(user);
 
       expect(first!.public_id).toBe(second!.public_id);
     });
@@ -152,7 +152,7 @@ describe('personal organization provisioning (database)', () => {
       env.PERSONAL_ORGANIZATION_ENABLED = false;
       const user = await createTestUser();
 
-      expect(await ensurePersonalOrganization(user.id)).toBeUndefined();
+      expect(await ensurePersonalOrganization(user)).toBeUndefined();
       // No organization created — switch-to-personal legitimately stays a 404.
       expect(await resolvePersonalOrganizationPublicId(user.id)).toBeUndefined();
     });
@@ -160,12 +160,12 @@ describe('personal organization provisioning (database)', () => {
     it('ensurePersonalOrganizationPublicId returns the id (enabled) / undefined (disabled)', async () => {
       env.PERSONAL_ORGANIZATION_ENABLED = true;
       const enabledUser = await createTestUser();
-      const id = await ensurePersonalOrganizationPublicId(enabledUser.id);
+      const id = await ensurePersonalOrganizationPublicId(enabledUser);
       expect(id).toMatch(/^org_[a-z0-9]{21}$/);
 
       env.PERSONAL_ORGANIZATION_ENABLED = false;
       const disabledUser = await createTestUser();
-      expect(await ensurePersonalOrganizationPublicId(disabledUser.id)).toBeUndefined();
+      expect(await ensurePersonalOrganizationPublicId(disabledUser)).toBeUndefined();
     });
   });
 
@@ -193,7 +193,7 @@ describe('personal organization provisioning (database)', () => {
       const user = await createTestUser();
 
       // provisioning FK-fails, but the read-safe variant swallows it → undefined (→ null id).
-      await expect(ensurePersonalOrganizationPublicId(user.id)).resolves.toBeUndefined();
+      await expect(ensurePersonalOrganizationPublicId(user)).resolves.toBeUndefined();
       // No personal organization was created (the provision genuinely failed).
       expect(await resolvePersonalOrganizationPublicId(user.id)).toBeUndefined();
     });
@@ -202,7 +202,7 @@ describe('personal organization provisioning (database)', () => {
       env.PERSONAL_ORGANIZATION_ENABLED = true;
       const user = await createTestUser();
 
-      await expect(ensurePersonalOrganization(user.id)).rejects.toThrow();
+      await expect(ensurePersonalOrganization(user)).rejects.toThrow();
     });
   });
 });

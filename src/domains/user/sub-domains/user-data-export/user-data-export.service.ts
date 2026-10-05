@@ -472,7 +472,7 @@ export class UserDataExportService {
       }
       await this.deleteS3ObjectsWithBoundedConcurrency({
         s3Keys: rows.map((row) => row.s3_key).filter((s3Key): s3Key is string => s3Key !== null),
-        userInternalId,
+        userPublicId,
       });
       afterId = rows[rows.length - 1]!.id;
       if (rows.length < USER_DATA_EXPORT_OFFBOARDING_DELETE_BATCH_SIZE) {
@@ -484,7 +484,7 @@ export class UserDataExportService {
       () => this.exportRepository.deleteAllByUserId(userInternalId),
     );
     if (deletedCount > 0) {
-      logger.info({ userInternalId, deletedCount }, 'user-data-export.offboarding.deleted');
+      logger.info({ userPublicId, deletedCount }, 'user-data-export.offboarding.deleted');
     }
   }
 
@@ -496,9 +496,9 @@ export class UserDataExportService {
    */
   private async deleteS3ObjectsWithBoundedConcurrency(options: {
     s3Keys: readonly string[];
-    userInternalId: number;
+    userPublicId: string;
   }): Promise<void> {
-    const { s3Keys, userInternalId } = options;
+    const { s3Keys, userPublicId } = options;
     for (
       let index = 0;
       index < s3Keys.length;
@@ -509,7 +509,7 @@ export class UserDataExportService {
         chunk.map(async (s3Key) => {
           const objectDelete = await this.objectStorage.deleteObject(s3Key);
           if (objectDelete.kind !== 'deleted') {
-            logger.warn({ userInternalId, s3Key }, 'user-data-export.offboarding.s3DeleteFailed');
+            logger.warn({ userPublicId, s3Key }, 'user-data-export.offboarding.s3DeleteFailed');
           }
         }),
       );

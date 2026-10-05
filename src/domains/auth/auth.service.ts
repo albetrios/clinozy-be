@@ -426,7 +426,7 @@ export class AuthService {
     // Self-heal: provision the personal organization on demand when personal is enabled but missing,
     // so this can no longer 404 for a personal-enabled deployment. Returns undefined only when
     // personal organizations are disabled → 404 as before.
-    const personal = await ensurePersonalOrganization(user.id);
+    const personal = await ensurePersonalOrganization(user);
     if (!personal) throw new NotFoundError('Personal organization');
     return this.mintForActiveOrganization(user, sessionPublicId, personal);
   }

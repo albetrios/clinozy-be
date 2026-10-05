@@ -266,7 +266,9 @@ describe('completeOAuthUserSession', () => {
 
     await callCompleteOAuthUserSession();
 
-    expect(vi.mocked(ensurePersonalOrganization)).toHaveBeenCalledWith(1);
+    expect(vi.mocked(ensurePersonalOrganization)).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 1, public_id: expect.any(String) }),
+    );
   });
 
   it('still issues a session when personal-organization provisioning fails (best-effort)', async () => {
