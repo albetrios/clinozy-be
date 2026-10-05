@@ -410,7 +410,6 @@ describe('Security: Tenant isolation', () => {
         method: 'POST',
         url: testApiPath('/uploads'),
         token: fixture.userA.token,
-        organizationPublicId: fixture.organizationA.public_id,
         payload: {
           purpose: UPLOAD_PURPOSES.ORGANIZATION_FILE,
           for: UPLOAD_TARGETS.ORGANIZATION,

@@ -15,23 +15,6 @@ import { UPLOAD_PERMISSIONS } from '@/domains/upload/upload.permissions.js';
 import { uploads } from '@/domains/upload/upload.schema.js';
 import { getEnv } from '@/shared/config/env.config.js';
 
-/**
- * Generate a test organization public ID for use in tests.
- * Legacy header helper — the X-Organization-Id header was removed; kept only where a suite deliberately sends an inert header.
- */
-export function generateTestOrganizationId(): string {
-  return generatePublicId('organization');
-}
-
-/**
- * Build standard organization headers for test requests.
- */
-export function organizationHeaders(organizationId: string): Record<string, string> {
-  return {
-    'x-organization-id': organizationId,
-  };
-}
-
 const DEFAULT_BILLING_PERMISSION_CODES = [
   BILLING_PERMISSIONS.SUBSCRIPTION_READ,
   BILLING_PERMISSIONS.SUBSCRIPTION_MANAGE,

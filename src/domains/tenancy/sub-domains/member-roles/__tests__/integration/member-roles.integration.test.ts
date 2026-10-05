@@ -154,12 +154,11 @@ describe('Member Roles Sub-Domain — Integration', () => {
     // cannot fire and the refusal is the validator's own.
 
     it('POST /roles returns 400 when name is missing', async () => {
-      const { organization, token } = await createAuthorizedContext();
+      const { token } = await createAuthorizedContext();
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/roles'),
         token,
-        organizationPublicId: organization.public_id,
         payload: {},
       });
       expect(response.statusCode, response.body).toBe(400);
@@ -222,7 +221,6 @@ describe('Member Roles Sub-Domain — Integration', () => {
         method: 'POST',
         url: testApiPath('/tenancy/organization/roles'),
         token,
-        organizationPublicId: organization.public_id,
         payload: { name: roleName, permission_codes: [TENANCY_PERMISSIONS.ORGANIZATION_READ] },
       });
 
@@ -251,7 +249,6 @@ describe('Member Roles Sub-Domain — Integration', () => {
         method: 'POST',
         url: testApiPath('/tenancy/organization/roles'),
         token,
-        organizationPublicId: organization.public_id,
         payload: { name: roleName, permission_codes: [TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE] },
       });
 
@@ -305,7 +302,6 @@ describe('Member Roles Sub-Domain — Integration', () => {
         method: 'POST',
         url: testApiPath('/tenancy/organization/roles'),
         token,
-        organizationPublicId: provisioned.organization.public_id,
         payload: { name: `Personal Custom Role ${randomUUID()}` },
       });
 
@@ -345,7 +341,6 @@ describe('Member Roles Sub-Domain — Integration', () => {
         method: 'POST',
         url: testApiPath('/tenancy/organization/roles'),
         token,
-        organizationPublicId: team.organization.public_id,
         payload: { name: `Team Custom Role ${randomUUID()}` },
       });
 

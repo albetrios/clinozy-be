@@ -47,8 +47,8 @@ const SUBSCRIPTION_PERMISSIONS = ['subscription:read', 'subscription:manage'];
 
 /**
  * Happy paths for subscription create (200) and update (200) with the payment
- * provider mocked at the PaymentProvider port implementation, plus the legacy
- * `POST /billing/webhook` alias with a properly signed Stripe event (200).
+ * provider mocked at the PaymentProvider port implementation, plus
+ * `POST /billing/webhook` with a properly signed Stripe event (200).
  */
 describe('Billing subscription — happy paths (mocked payment provider)', () => {
   let app: FastifyInstance;

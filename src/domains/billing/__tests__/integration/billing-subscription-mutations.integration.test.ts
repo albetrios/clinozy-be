@@ -165,13 +165,12 @@ describe('Billing Subscription Mutations — Integration', () => {
       // ChangePlanDto's refusal was unit-proven only — no 400 was ever observed on this route.
       // Key supplied → the idempotency 422 cannot fire; the body validator runs before the
       // subscription lookup, so the refusal is the validator's own.
-      const { organization, subscription, token } = await createBillingMutationContext();
+      const { subscription, token } = await createBillingMutationContext();
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
         token,
-        organizationPublicId: organization.public_id,
         payload: {},
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
@@ -179,14 +178,13 @@ describe('Billing Subscription Mutations — Integration', () => {
     });
 
     it('should change the plan and return 200 with a valid X-Idempotency-Key', async () => {
-      const { organization, subscription, token } = await createBillingMutationContext();
+      const { subscription, token } = await createBillingMutationContext();
       const newPlan = await createTestPlan({ name: 'New Plan' });
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
         token,
-        organizationPublicId: organization.public_id,
         payload: { plan_id: newPlan.public_id },
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
@@ -231,7 +229,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
         token,
-        organizationPublicId: organization.public_id,
         payload: { plan_id: oneSeatPlan.public_id },
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
@@ -270,7 +267,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
         token,
-        organizationPublicId: organization.public_id,
         payload: { plan_id: zeroSeatPlan.public_id },
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
@@ -291,14 +287,13 @@ describe('Billing Subscription Mutations — Integration', () => {
     });
 
     it('allows the downgrade when the new plan still has enough seats for the active members (F2)', async () => {
-      const { organization, subscription, token } = await createBillingMutationContext();
+      const { subscription, token } = await createBillingMutationContext();
       const fittingPlan = await createTestPlan({ name: 'Roomy Plan', includedSeats: 5 });
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
         token,
-        organizationPublicId: organization.public_id,
         payload: { plan_id: fittingPlan.public_id },
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
@@ -335,7 +330,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
         token: unprivilegedToken,
-        organizationPublicId: organization.public_id,
         payload: { plan_id: newPlan.public_id },
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
@@ -344,7 +338,7 @@ describe('Billing Subscription Mutations — Integration', () => {
     });
 
     it('should return 404 for a non-existent subscriptionId', async () => {
-      const { organization, token } = await createBillingMutationContext();
+      const { token } = await createBillingMutationContext();
       const newPlan = await createTestPlan();
       const nonExistentSubscriptionId = generatePublicId('subscription');
 
@@ -352,7 +346,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${nonExistentSubscriptionId}/change-plan`),
         token,
-        organizationPublicId: organization.public_id,
         payload: { plan_id: newPlan.public_id },
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
@@ -361,14 +354,13 @@ describe('Billing Subscription Mutations — Integration', () => {
     });
 
     it('should return 422 when the X-Idempotency-Key header is missing', async () => {
-      const { organization, subscription, token } = await createBillingMutationContext();
+      const { subscription, token } = await createBillingMutationContext();
       const newPlan = await createTestPlan();
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
         token,
-        organizationPublicId: organization.public_id,
         payload: { plan_id: newPlan.public_id },
       });
 
@@ -380,7 +372,7 @@ describe('Billing Subscription Mutations — Integration', () => {
 
   describe('POST /api/v1/billing/subscriptions/:subscription_id/cancel', () => {
     it('should cancel an active subscription and return 200 with a valid X-Idempotency-Key', async () => {
-      const { organization, subscription, token } = await createBillingMutationContext({
+      const { subscription, token } = await createBillingMutationContext({
         status: 'ACTIVE',
       });
 
@@ -388,7 +380,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 
@@ -421,7 +412,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token: unprivilegedToken,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 
@@ -429,14 +419,13 @@ describe('Billing Subscription Mutations — Integration', () => {
     });
 
     it('should return 404 for a non-existent subscriptionId', async () => {
-      const { organization, token } = await createBillingMutationContext();
+      const { token } = await createBillingMutationContext();
       const nonExistentSubscriptionId = generatePublicId('subscription');
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${nonExistentSubscriptionId}/cancel`),
         token,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 
@@ -444,13 +433,12 @@ describe('Billing Subscription Mutations — Integration', () => {
     });
 
     it('should return 422 when the X-Idempotency-Key header is missing', async () => {
-      const { organization, subscription, token } = await createBillingMutationContext();
+      const { subscription, token } = await createBillingMutationContext();
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token,
-        organizationPublicId: organization.public_id,
       });
 
       expect(response.statusCode).toBe(422);
@@ -460,7 +448,7 @@ describe('Billing Subscription Mutations — Integration', () => {
       // The service sets cancel_at_period_end=true but does NOT change status to CANCELED.
       // A subscription with cancel_at_period_end=true is still ACTIVE — cancel is idempotent
       // from the perspective of the service (it sets the same flag again).
-      const { organization, subscription, token } = await createBillingMutationContext({
+      const { subscription, token } = await createBillingMutationContext({
         status: 'ACTIVE',
       });
 
@@ -469,7 +457,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 
@@ -479,7 +466,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 
@@ -491,7 +477,7 @@ describe('Billing Subscription Mutations — Integration', () => {
 
   describe('POST /api/v1/billing/subscriptions/:subscription_id/resume', () => {
     it('should resume a cancelled (cancel_at_period_end) subscription and return 200 with a valid X-Idempotency-Key', async () => {
-      const { organization, subscription, token } = await createBillingMutationContext({
+      const { subscription, token } = await createBillingMutationContext({
         status: 'ACTIVE',
       });
 
@@ -500,7 +486,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 
@@ -508,7 +493,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/resume`),
         token,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 
@@ -544,7 +528,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/resume`),
         token: unprivilegedToken,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 
@@ -552,14 +535,13 @@ describe('Billing Subscription Mutations — Integration', () => {
     });
 
     it('should return 404 for a non-existent subscriptionId', async () => {
-      const { organization, token } = await createBillingMutationContext();
+      const { token } = await createBillingMutationContext();
       const nonExistentSubscriptionId = generatePublicId('subscription');
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${nonExistentSubscriptionId}/resume`),
         token,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 
@@ -567,13 +549,12 @@ describe('Billing Subscription Mutations — Integration', () => {
     });
 
     it('should return 422 when the X-Idempotency-Key header is missing', async () => {
-      const { organization, subscription, token } = await createBillingMutationContext();
+      const { subscription, token } = await createBillingMutationContext();
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/resume`),
         token,
-        organizationPublicId: organization.public_id,
       });
 
       expect(response.statusCode).toBe(422);
@@ -584,7 +565,7 @@ describe('Billing Subscription Mutations — Integration', () => {
       // optionally call Stripe, then set cancel_at_period_end=false + status=ACTIVE.
       // An already-ACTIVE subscription with cancel_at_period_end=false satisfies
       // findByPublicId, so the update succeeds and returns 200.
-      const { organization, subscription, token } = await createBillingMutationContext({
+      const { subscription, token } = await createBillingMutationContext({
         status: 'ACTIVE',
       });
 
@@ -592,7 +573,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/resume`),
         token,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 
@@ -608,10 +588,9 @@ describe('Billing Subscription Mutations — Integration', () => {
 
   describe('Full lifecycle: create ACTIVE → cancel → resume', () => {
     it('should transition cancel_at_period_end from false → true → false across cancel and resume', async () => {
-      const { organization, subscription, token } = await createBillingMutationContext({
+      const { subscription, token } = await createBillingMutationContext({
         status: 'ACTIVE',
       });
-      const organizationId = organization.public_id;
       const subscriptionId = subscription.public_id;
 
       // 1. Confirm initial state via GET.
@@ -619,7 +598,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'GET',
         url: testApiPath(`/billing/subscriptions/${subscriptionId}`),
         token,
-        organizationPublicId: organizationId,
       });
       expect(getResponse.statusCode).toBe(200);
       const initialBody = getResponse.json() as {
@@ -633,7 +611,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscriptionId}/cancel`),
         token,
-        organizationPublicId: organizationId,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
       expect(cancelResponse.statusCode).toBe(200);
@@ -647,7 +624,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'GET',
         url: testApiPath(`/billing/subscriptions/${subscriptionId}`),
         token,
-        organizationPublicId: organizationId,
       });
       expect(getAfterCancelResponse.statusCode).toBe(200);
       const afterCancelBody = getAfterCancelResponse.json() as {
@@ -660,7 +636,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscriptionId}/resume`),
         token,
-        organizationPublicId: organizationId,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
       expect(resumeResponse.statusCode).toBe(200);
@@ -675,7 +650,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'GET',
         url: testApiPath(`/billing/subscriptions/${subscriptionId}`),
         token,
-        organizationPublicId: organizationId,
       });
       expect(getAfterResumeResponse.statusCode).toBe(200);
       const afterResumeBody = getAfterResumeResponse.json() as {
@@ -730,7 +704,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath('/billing/payment-methods/setup'),
         token: readOnlyToken,
-        organizationPublicId: organization.public_id,
         payload: {},
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
@@ -739,13 +712,12 @@ describe('Billing Subscription Mutations — Integration', () => {
     });
 
     it('should return 422 when the X-Idempotency-Key header is missing', async () => {
-      const { organization, token } = await createBillingMutationContext();
+      const { token } = await createBillingMutationContext();
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/billing/payment-methods/setup'),
         token,
-        organizationPublicId: organization.public_id,
         payload: {},
       });
 
@@ -753,13 +725,12 @@ describe('Billing Subscription Mutations — Integration', () => {
     });
 
     it('should return 422 for a PERSONAL organization (team-only route)', async () => {
-      const { organization, token } = await createPersonalOrganizationContext();
+      const { token } = await createPersonalOrganizationContext();
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/billing/payment-methods/setup'),
         token,
-        organizationPublicId: organization.public_id,
         payload: {},
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
@@ -775,13 +746,12 @@ describe('Billing Subscription Mutations — Integration', () => {
   // resolution, and the organization RLS context.
   describe('PERSONAL organization is refused on every team-scoped billing mutation', () => {
     it('POST /billing/subscriptions returns 422', async () => {
-      const { organization, plan, token } = await createPersonalOrganizationContext();
+      const { plan, token } = await createPersonalOrganizationContext();
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/billing/subscriptions'),
         token,
-        organizationPublicId: organization.public_id,
         payload: { plan_id: plan.public_id, billing_cycle: 'monthly' },
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
@@ -790,14 +760,13 @@ describe('Billing Subscription Mutations — Integration', () => {
     });
 
     it('POST /billing/subscriptions/:subscription_id/change-plan returns 422', async () => {
-      const { organization, subscription, token } = await createPersonalOrganizationContext();
+      const { subscription, token } = await createPersonalOrganizationContext();
       const newPlan = await createTestPlan({ name: 'Personal Guard Plan' });
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
         token,
-        organizationPublicId: organization.public_id,
         payload: { plan_id: newPlan.public_id },
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
@@ -806,13 +775,12 @@ describe('Billing Subscription Mutations — Integration', () => {
     });
 
     it('POST /billing/subscriptions/:subscription_id/cancel returns 422', async () => {
-      const { organization, subscription, token } = await createPersonalOrganizationContext();
+      const { subscription, token } = await createPersonalOrganizationContext();
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 
@@ -820,13 +788,12 @@ describe('Billing Subscription Mutations — Integration', () => {
     });
 
     it('POST /billing/subscriptions/:subscription_id/resume returns 422', async () => {
-      const { organization, subscription, token } = await createPersonalOrganizationContext();
+      const { subscription, token } = await createPersonalOrganizationContext();
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/resume`),
         token,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 
@@ -838,13 +805,12 @@ describe('Billing Subscription Mutations — Integration', () => {
       // something incidental to how the personal-organization fixture is built (a missing membership, an
       // unresolvable permission, a bad token claim). `GET /billing/subscriptions` is declared
       // `both` in route-organization-scope.json and carries no team guard, so it must still be 200.
-      const { organization, token } = await createPersonalOrganizationContext();
+      const { token } = await createPersonalOrganizationContext();
 
       const response = await injectAuthenticated(app, {
         method: 'GET',
         url: testApiPath('/billing/subscriptions'),
         token,
-        organizationPublicId: organization.public_id,
       });
 
       expect(response.statusCode).toBe(200);
@@ -860,7 +826,7 @@ describe('Billing Subscription Mutations — Integration', () => {
   // error, so a Stripe-backed cancel/resume deterministically returns 503 here.
   describe('Stripe-backed subscription — fail-closed when the provider is unreachable', () => {
     it('should return 503 when cancelling a Stripe-backed subscription while Stripe is unreachable', async () => {
-      const { organization, subscription, token } = await createBillingMutationContext({
+      const { subscription, token } = await createBillingMutationContext({
         status: 'ACTIVE',
         providerSubscriptionId: `sub_test_${generatePublicId('subscription')}`,
       });
@@ -869,7 +835,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 
@@ -877,7 +842,7 @@ describe('Billing Subscription Mutations — Integration', () => {
     });
 
     it('should return 503 when resuming a Stripe-backed subscription while Stripe is unreachable', async () => {
-      const { organization, subscription, token } = await createBillingMutationContext({
+      const { subscription, token } = await createBillingMutationContext({
         status: 'ACTIVE',
         providerSubscriptionId: `sub_test_${generatePublicId('subscription')}`,
       });
@@ -886,7 +851,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/resume`),
         token,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 
@@ -894,7 +858,7 @@ describe('Billing Subscription Mutations — Integration', () => {
     });
 
     it('should NOT mutate the local row when the Stripe cancel call fails (fail-closed)', async () => {
-      const { organization, subscription, token } = await createBillingMutationContext({
+      const { subscription, token } = await createBillingMutationContext({
         status: 'ACTIVE',
         providerSubscriptionId: `sub_test_${generatePublicId('subscription')}`,
       });
@@ -904,7 +868,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
       expect(cancelResponse.statusCode).toBe(503);
@@ -914,7 +877,6 @@ describe('Billing Subscription Mutations — Integration', () => {
         method: 'GET',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}`),
         token,
-        organizationPublicId: organization.public_id,
       });
       expect(getResponse.statusCode).toBe(200);
       const body = getResponse.json() as { data?: { cancel_at_period_end?: boolean } };

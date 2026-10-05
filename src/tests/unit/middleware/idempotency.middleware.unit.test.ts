@@ -572,7 +572,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     expect((request as { _idempotencyKey?: string })._idempotencyKey).toBeUndefined();
   });
 
-  it('claimPreHandler prefers request.organizationId over header value', async () => {
+  it('claimPreHandler scopes the key by the claim-derived request.organizationId', async () => {
     const organizationPublicId = generatePublicId('organization');
     mockRedisSet.mockResolvedValue('OK');
     const { claimPreHandler } = await registerIdempotencyHooks();
@@ -580,7 +580,6 @@ describe('idempotency middleware happy paths and conflicts', () => {
       method: 'POST',
       headers: {
         [IDEMPOTENCY_KEY_HEADER]: IDEMPOTENCY_TEST_KEY,
-        'x-organization-id': 'header-org',
       },
       auth: { kind: 'user' as const, userId: TEST_USER_PUBLIC_ID },
       organizationId: organizationPublicId,
@@ -978,7 +977,6 @@ describe('idempotency middleware happy paths and conflicts', () => {
       method: 'POST',
       headers: {
         [IDEMPOTENCY_KEY_HEADER]: IDEMPOTENCY_TEST_KEY,
-        'x-organization-id': 'unverified-org',
       },
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
     } as unknown as FastifyRequest & { _idempotencyClaimed?: boolean };

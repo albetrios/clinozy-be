@@ -165,14 +165,13 @@ describe('Subscription Sub-Domain — Integration', () => {
         method: 'GET',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/payment-setup`),
         token: outsiderToken,
-        organizationPublicId: organization.public_id,
       });
 
       expect(response.statusCode).toBe(403);
     });
 
     it('should return 404 for an unknown subscription id', async () => {
-      const { organization, token } = await createContextWithSubscription();
+      const { token } = await createContextWithSubscription();
 
       const response = await injectAuthenticated(app, {
         method: 'GET',
@@ -180,7 +179,6 @@ describe('Subscription Sub-Domain — Integration', () => {
           `/billing/subscriptions/${generatePublicId('subscription')}/payment-setup`,
         ),
         token,
-        organizationPublicId: organization.public_id,
       });
 
       expect(response.statusCode).toBe(404);

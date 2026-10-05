@@ -133,7 +133,6 @@ export async function injectRoute(
 
 export type InjectAuthenticatedOptions = InjectRouteOptions & {
   token: string;
-  organizationPublicId?: string;
   extraHeaders?: Record<string, string>;
 };
 
@@ -146,12 +145,10 @@ export async function injectAuthenticated(
     ...options.headers,
     authorization: `Bearer ${options.token}`,
   };
-  // organizationPublicId is accepted-and-ignored: the X-Organization-Id header was
-  // removed — the active organization rides ONLY the token's signed `org` claim, so
-  // suites scope requests by minting the right token, never by header.
-  const { token, organizationPublicId, extraHeaders, ...routeOptions } = options;
+  // The active organization rides the token's signed `org` claim: a suite scopes a request by
+  // minting the right token.
+  const { token, extraHeaders, ...routeOptions } = options;
   void token;
-  void organizationPublicId;
   void extraHeaders;
   return injectRoute(application, { ...routeOptions, headers });
 }

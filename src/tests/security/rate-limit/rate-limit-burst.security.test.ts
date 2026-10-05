@@ -124,7 +124,7 @@ describe('Security: Rate limit burst (429)', () => {
     const organizationBFirst = await app.inject({
       method: 'GET',
       url: '/burst-test',
-      headers: { 'x-organization-id': 'org_public_b' },
+      headers: { 'x-test-organization': 'org_public_b' },
     });
 
     expect(organizationAFirst.statusCode).toBe(200);

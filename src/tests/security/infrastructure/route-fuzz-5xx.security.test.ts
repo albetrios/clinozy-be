@@ -109,7 +109,6 @@ describe('Security: route fuzz — authenticated junk never 5xx', () => {
         method: route.method,
         url: materializeRoutePath(route.path, organizationPublicId),
         token,
-        organizationPublicId,
         ...(isMutating
           ? {
               payload: FUZZ_PAYLOAD,

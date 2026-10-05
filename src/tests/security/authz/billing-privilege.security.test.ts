@@ -97,26 +97,24 @@ describe('Security: billing privilege separation', () => {
       // Establishes that the 403s below are about the missing MANAGE permission, not a broken
       // fixture — without this the three refusals would pass even if the member were unable to
       // authenticate at all.
-      const { organization, readOnlyToken } = await createReadOnlyMemberContext();
+      const { readOnlyToken } = await createReadOnlyMemberContext();
 
       const response = await injectAuthenticated(app, {
         method: 'GET',
         url: testApiPath('/billing/subscriptions'),
         token: readOnlyToken,
-        organizationPublicId: organization.public_id,
       });
 
       expect(response.statusCode).toBe(200);
     });
 
     it('is refused (403) on POST /billing/subscriptions', async () => {
-      const { organization, plan, readOnlyToken } = await createReadOnlyMemberContext();
+      const { plan, readOnlyToken } = await createReadOnlyMemberContext();
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/billing/subscriptions'),
         token: readOnlyToken,
-        organizationPublicId: organization.public_id,
         payload: { plan_id: plan.public_id, billing_cycle: 'monthly' },
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
@@ -125,14 +123,13 @@ describe('Security: billing privilege separation', () => {
     });
 
     it('is refused (403) on POST /billing/subscriptions/:subscription_id/change-plan', async () => {
-      const { organization, subscription, readOnlyToken } = await createReadOnlyMemberContext();
+      const { subscription, readOnlyToken } = await createReadOnlyMemberContext();
       const newPlan = await createTestPlan({ name: 'Privilege Escalation Plan' });
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
         token: readOnlyToken,
-        organizationPublicId: organization.public_id,
         payload: { plan_id: newPlan.public_id },
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
@@ -141,13 +138,12 @@ describe('Security: billing privilege separation', () => {
     });
 
     it('is refused (403) on POST /billing/subscriptions/:subscription_id/cancel', async () => {
-      const { organization, subscription, readOnlyToken } = await createReadOnlyMemberContext();
+      const { subscription, readOnlyToken } = await createReadOnlyMemberContext();
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token: readOnlyToken,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 
@@ -157,13 +153,12 @@ describe('Security: billing privilege separation', () => {
     it('leaves the subscription untouched after the refused mutations', async () => {
       // The refusal must happen before any state change — a 403 emitted *after* a partial write
       // would still be a breach.
-      const { organization, subscription, readOnlyToken } = await createReadOnlyMemberContext();
+      const { subscription, readOnlyToken } = await createReadOnlyMemberContext();
 
       await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/cancel`),
         token: readOnlyToken,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
 

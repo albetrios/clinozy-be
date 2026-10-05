@@ -185,7 +185,6 @@ describe('Storage-backed routes — happy paths (mocked S3 port)', () => {
       method: 'PUT',
       url: testApiPath('/tenancy/organization/logo'),
       token,
-      organizationPublicId: organization.public_id,
       payload: { key },
     });
     expect(response.statusCode, response.body).toBe(200);

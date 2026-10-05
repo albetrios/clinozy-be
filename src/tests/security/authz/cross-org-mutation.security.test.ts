@@ -269,7 +269,6 @@ describe('Security: cross-organization mutation isolation (model: organization â
         method,
         url: testApiPath(`/billing/subscriptions/${fixture.subscriptionInB.public_id}${suffix}`),
         token: tokenScopedToOrgA,
-        organizationPublicId: fixture.organizationA.public_id,
         extraHeaders: { 'x-idempotency-key': randomUUID() },
         payload,
       });

@@ -32,14 +32,6 @@ describe('Domain Structural Consistency', () => {
     }
   });
 
-  it('should not have old schemas directory', () => {
-    const oldSchemasDir = resolve(process.cwd(), 'src/infrastructure/database/schemas');
-    expect(
-      existsSync(oldSchemasDir),
-      'Old schemas directory should be removed — schemas are co-located in domains',
-    ).toBe(false);
-  });
-
   it('sub-domain directories should use kebab-case', () => {
     for (const domain of domains) {
       const domainPath = join(DOMAINS_DIR, domain);

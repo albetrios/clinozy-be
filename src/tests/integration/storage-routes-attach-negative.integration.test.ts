@@ -324,7 +324,6 @@ describe('Storage-backed attach routes — refusals (mocked S3 port)', () => {
         method: 'PUT',
         url: testApiPath(ORGANIZATION_LOGO_URL),
         token: caller.token,
-        organizationPublicId: caller.organizationPublicId,
         payload: { key: foreignKey },
       });
 
@@ -347,7 +346,6 @@ describe('Storage-backed attach routes — refusals (mocked S3 port)', () => {
         method: 'PUT',
         url: testApiPath(ORGANIZATION_LOGO_URL),
         token: caller.token,
-        organizationPublicId: caller.organizationPublicId,
         payload: { key },
       });
 

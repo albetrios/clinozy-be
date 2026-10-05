@@ -338,7 +338,6 @@ describe('Tenancy idempotency contract — Integration', () => {
         method: 'POST',
         url: testApiPath('/tenancy/organization/notification-policies'),
         token,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': idempotencyKey },
         payload,
       });
@@ -373,7 +372,6 @@ describe('Tenancy idempotency contract — Integration', () => {
         method: 'POST',
         url: testApiPath('/tenancy/organization/transfer-ownership'),
         token,
-        organizationPublicId: organization.public_id,
         headers: { 'x-idempotency-key': idempotencyKey },
         payload,
       });

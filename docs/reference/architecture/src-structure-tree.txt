@@ -637,7 +637,6 @@ src/
     │   │   │   ├── tenancy-team-only-routes.integration.test.ts
     │   │   │   └── tenancy.integration.test.ts
     │   │   ├── unit/
-    │   │   │   ├── legacy-public-organizations.policy.unit.test.ts
     │   │   │   └── tenancy-identifiers.property.unit.test.ts
     │   │   └── tenancy.test.ts
     │   ├── events/
@@ -1142,10 +1141,10 @@ src/
     │   │   │   ├── assert-connection-budget.unit.test.ts
     │   │   │   ├── assert-database-rls-safety.unit.test.ts
     │   │   │   ├── assert-database-tls-safety.unit.test.ts
-    │   │   │   ├── database-context-runtime.test.ts
-    │   │   │   ├── maintenance-pool-selection.test.ts
-    │   │   │   ├── principal-checkout-accounting.test.ts
-    │   │   │   ├── principal-database-context.test.ts
+    │   │   │   ├── database-context-runtime.unit.test.ts
+    │   │   │   ├── maintenance-pool-selection.unit.test.ts
+    │   │   │   ├── principal-checkout-accounting.unit.test.ts
+    │   │   │   ├── principal-database-context.unit.test.ts
     │   │   │   └── worker-context-database-handle.unit.test.ts
     │   ├── contexts/
     │   │   ├── database-context-runtime.ts
@@ -2087,7 +2086,6 @@ src/
     │   │   ├── hosted-docs-publish.policy.unit.test.ts
     │   │   ├── k6-coverage.policy.unit.test.ts
     │   │   ├── openapi-drift-check.policy.unit.test.ts
-    │   │   ├── password-hashing-dependency.policy.unit.test.ts
     │   │   ├── post-merge-ci.policy.unit.test.ts
     │   │   ├── pr-quality-gate.policy.unit.test.ts
     │   │   ├── pr-rls-security-gate.policy.unit.test.ts

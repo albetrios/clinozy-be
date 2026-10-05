@@ -127,19 +127,6 @@ describe('System Validation', () => {
   // ─── Domain Schema Co-location ─────────────────────────────
 
   describe('Schema Co-location', () => {
-    it('should not have old centralized schemas directory (except barrel)', () => {
-      const oldSchemasDir = resolve(ROOT, 'src/infrastructure/database/schemas');
-      if (existsSync(oldSchemasDir)) {
-        // If it exists, it should only contain index.ts (barrel file)
-        const files = readdirSync(oldSchemasDir);
-        const nonBarrelFiles = files.filter((file) => file !== 'index.ts');
-        expect(
-          nonBarrelFiles.length,
-          'Old schemas directory should only contain barrel index.ts',
-        ).toBe(0);
-      }
-    });
-
     it('should have pg-schemas.ts for shared schema definitions', () => {
       const pgSchemasPath = resolve(ROOT, 'src/infrastructure/database/pg-schemas.ts');
       expect(existsSync(pgSchemasPath)).toBe(true);

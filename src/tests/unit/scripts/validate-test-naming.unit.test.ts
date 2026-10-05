@@ -12,20 +12,21 @@ describe('validate-test-naming helpers', () => {
     expect(detectTier('auth.test.ts')).toBeUndefined();
   });
 
-  it('exempts bundled domain e2e and legacy validator tests', () => {
-    expect(isExemptFromTierSuffix('domains/auth/__tests__/auth.test.ts', 'auth.test.ts')).toBe(
-      true,
-    );
+  it('exempts only bundled domain e2e and sub-domain route suites', () => {
+    expect(isExemptFromTierSuffix('domains/auth/__tests__/auth.test.ts')).toBe(true);
     expect(
       isExemptFromTierSuffix(
         'domains/auth/sub-domains/auth-mfa/__tests__/unit/auth-mfa.validator.test.ts',
-        'auth-mfa.validator.test.ts',
       ),
-    ).toBe(true);
+    ).toBe(false);
+    expect(
+      isExemptFromTierSuffix(
+        'infrastructure/database/__tests__/unit/principal-database-context.test.ts',
+      ),
+    ).toBe(false);
     expect(
       isExemptFromTierSuffix(
         'domains/auth/sub-domains/auth-method/events/__tests__/handler.test.ts',
-        'handler.test.ts',
       ),
     ).toBe(false);
   });
