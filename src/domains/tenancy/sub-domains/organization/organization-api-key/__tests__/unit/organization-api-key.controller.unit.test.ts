@@ -46,7 +46,7 @@ describe('createOrganizationApiKeyController', () => {
   function mockRequest(overrides: Partial<FastifyRequest> = {}): FastifyRequest {
     return attachPrincipalScope({
       auth: { userId: userPublicId },
-      params: { organization_id: organizationPublicId, api_key_id: apiKeyPublicId },
+      params: { api_key_id: apiKeyPublicId },
       body: {},
       query: {},
       headers: {},

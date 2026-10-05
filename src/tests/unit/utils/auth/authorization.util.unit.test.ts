@@ -27,8 +27,13 @@ const mockedOrganizationRequiresMfa = vi.mocked(organizationRequiresMfa);
 
 function mockRequest(overrides: Partial<FastifyRequest> = {}): FastifyRequest {
   return attachPrincipalScope({
-    auth: { kind: 'user' as const, userId: 'user-1', role: GLOBAL_ROLES.USER },
-    params: { organization_id: 'org-public' },
+    auth: {
+      kind: 'user' as const,
+      userId: 'user-1',
+      role: GLOBAL_ROLES.USER,
+      organizationPublicId: 'org-public',
+    },
+    params: {},
     ...overrides,
   }) as FastifyRequest;
 }
@@ -111,6 +116,7 @@ describe('authorization.util', () => {
             kind: 'user' as const,
             userId: 'user-1',
             role: GLOBAL_ROLES.USER,
+            organizationPublicId: 'org-public',
             mfaVerified: true,
           },
         });
@@ -131,20 +137,30 @@ describe('authorization.util', () => {
       });
     });
 
-    it('throws ForbiddenError when organization id param is missing', async () => {
-      const handler = requireOrganizationPermission('membership:read');
-      await expect(handler(mockRequest({ params: {} }), mockReply)).rejects.toThrow(ForbiddenError);
-    });
-
-    it('throws ForbiddenError when only a differently-named param is present (no fallback)', async () => {
+    it('throws ForbiddenError when the token carries no active organization', async () => {
       const handler = requireOrganizationPermission('membership:read');
       await expect(
-        handler(mockRequest({ params: { id: 'org-by-id' } as Record<string, string> }), mockReply),
+        handler(
+          mockRequest({
+            auth: { kind: 'user' as const, userId: 'user-1', role: GLOBAL_ROLES.USER },
+          }),
+          mockReply,
+        ),
       ).rejects.toThrow(ForbiddenError);
       expect(mockedResolvePermissions).not.toHaveBeenCalled();
     });
 
-    it('falls back to the token organization claim when the route carries no path param', async () => {
+    it('ignores an organization_id path parameter — the token claim is the only source', async () => {
+      mockedResolvePermissions.mockResolvedValue(['membership:read']);
+      const handler = requireOrganizationPermission('membership:read');
+      const pathParameters: Record<string, string> = { organization_id: 'org-from-path' };
+      await expect(
+        handler(mockRequest({ params: pathParameters }), mockReply),
+      ).resolves.toBeUndefined();
+      expect(mockedResolvePermissions).toHaveBeenCalledWith('user-1', 'org-public');
+    });
+
+    it('resolves the organization from the token claim', async () => {
       mockedResolvePermissions.mockResolvedValue(['membership:read']);
       const handler = requireOrganizationPermission('membership:read');
       await expect(
@@ -161,7 +177,6 @@ describe('authorization.util', () => {
           mockReply,
         ),
       ).resolves.toBeUndefined();
-      // Resolved against the claim organization, not a path param.
       expect(mockedResolvePermissions).toHaveBeenCalledWith('user-1', 'org-from-claim');
     });
 
@@ -185,26 +200,8 @@ describe('authorization.util', () => {
       await expect(handler(request, mockReply)).resolves.toBeUndefined();
     });
 
-    it('defensive fallback: rejects an API key when a legacy {organization_id} path param disagrees with the key org', async () => {
-      // NOTE: post-flatten NO production route carries an `{organization_id}` path param, so this
-      // mismatch cannot occur in production — the key's organization IS the active organization. This exercises the
-      // belt-and-suspenders `params[paramName] ?? claim` fallback only; the mockRequest default
-      // injects `params.organization_id: 'org-public'`, which differs from the key's `other-org`.
-      const handler = requireOrganizationPermission('membership:read');
-      const request = mockRequest({
-        auth: {
-          kind: 'apiKey' as const,
-          apiKeyPublicId: 'key-1',
-          apiKeyScopes: ['membership:read'],
-          organizationPublicId: 'other-org',
-        },
-      } as Partial<FastifyRequest>);
-      await expect(handler(request, mockReply)).rejects.toThrow(ForbiddenError);
-    });
-
-    it('production path: an API key with no path param is scoped to its own claim organization and passes when scoped', async () => {
-      // The real post-flatten shape: no `organization_id` path param, so the organization resolves to the
-      // key's pinned `organizationPublicId` (the claim). A correctly-scoped key is authorized.
+    it('scopes an API key to its own claim organization and passes when scoped', async () => {
+      // The organization resolves to the key's pinned `organizationPublicId` (the claim).
       const handler = requireOrganizationPermission('membership:read');
       const request = mockRequest({
         params: {} as Record<string, string>,
@@ -218,7 +215,7 @@ describe('authorization.util', () => {
       await expect(handler(request, mockReply)).resolves.toBeUndefined();
     });
 
-    it('production path: an API key with no path param is rejected when its scope lacks the permission', async () => {
+    it('rejects an API key whose scope lacks the permission', async () => {
       const handler = requireOrganizationPermission('membership:manage');
       const request = mockRequest({
         params: {} as Record<string, string>,

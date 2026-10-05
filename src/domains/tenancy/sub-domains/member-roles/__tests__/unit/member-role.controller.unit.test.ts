@@ -6,9 +6,24 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import type { MemberRoleService } from '@/domains/tenancy/sub-domains/member-roles/member-role.service.js';
 import { attachPrincipalScope } from '@/tests/helpers/principal-scope.helper.js';
 
+/** The active organization every fake request's token claims (no route carries one). */
+const ACTIVE_ORGANIZATION_PUBLIC_ID = generatePublicId('organization');
+
+/** A user whose token carries no active organization (`org` claim). */
+const NO_ACTIVE_ORGANIZATION_AUTH = {
+  kind: 'user',
+  userId: generatePublicId('user'),
+  role: 'user',
+} as never;
+
 function mockRequest(overrides: Partial<FastifyRequest> = {}): FastifyRequest {
   return attachPrincipalScope({
-    auth: { kind: 'user' as const, userId: generatePublicId('user'), role: 'USER' },
+    auth: {
+      kind: 'user' as const,
+      userId: generatePublicId('user'),
+      role: 'USER',
+      organizationPublicId: ACTIVE_ORGANIZATION_PUBLIC_ID,
+    },
     params: {},
     body: {},
     query: {},
@@ -31,7 +46,7 @@ function mockReply(): FastifyReply {
 }
 
 describe('createMemberRoleController', () => {
-  const organizationPublicId = generatePublicId('organization');
+  const organizationPublicId = ACTIVE_ORGANIZATION_PUBLIC_ID;
   const rolePublicId = generatePublicId('memberRole');
   const role = { public_id: rolePublicId, name: 'Admin' };
 
@@ -59,10 +74,7 @@ describe('createMemberRoleController', () => {
       has_more: true,
       next_cursor: 'role_cursor_2',
     } as never);
-    const response = await controller.listRoles(
-      mockRequest({ params: { organization_id: organizationPublicId } }),
-      mockReply(),
-    );
+    const response = await controller.listRoles(mockRequest({ params: {} }), mockReply());
     expect(service.list).toHaveBeenCalledWith(
       expect.objectContaining({ organizationPublicId: organizationPublicId }),
       { limit: 25 },
@@ -74,10 +86,7 @@ describe('createMemberRoleController', () => {
   });
 
   it('getRole delegates to service', async () => {
-    await controller.getRole(
-      mockRequest({ params: { organization_id: organizationPublicId, role_id: rolePublicId } }),
-      mockReply(),
-    );
+    await controller.getRole(mockRequest({ params: { role_id: rolePublicId } }), mockReply());
     expect(service.getByPublicId).toHaveBeenCalledWith(
       expect.objectContaining({ organizationPublicId: organizationPublicId }),
       rolePublicId,
@@ -88,7 +97,7 @@ describe('createMemberRoleController', () => {
     const reply = mockReply();
     await controller.createRole(
       mockRequest({
-        params: { organization_id: organizationPublicId },
+        params: {},
         body: { name: 'Editor', permission_codes: ['organization:read'] },
       }),
       reply,
@@ -102,7 +111,7 @@ describe('createMemberRoleController', () => {
   it('updateRole delegates to service', async () => {
     await controller.updateRole(
       mockRequest({
-        params: { organization_id: organizationPublicId, role_id: rolePublicId },
+        params: { role_id: rolePublicId },
         body: { name: 'Updated' },
       }),
       mockReply(),
@@ -112,10 +121,7 @@ describe('createMemberRoleController', () => {
 
   it('deleteRole returns 204', async () => {
     const reply = mockReply();
-    await controller.deleteRole(
-      mockRequest({ params: { organization_id: organizationPublicId, role_id: rolePublicId } }),
-      reply,
-    );
+    await controller.deleteRole(mockRequest({ params: { role_id: rolePublicId } }), reply);
     expect(service.delete).toHaveBeenCalledWith(
       expect.objectContaining({ organizationPublicId: organizationPublicId }),
       rolePublicId,
@@ -131,33 +137,39 @@ describe('createMemberRoleController', () => {
       has_more: false,
       next_cursor: null,
     } as never);
-    const response = await controller.listRoles(
-      mockRequest({ params: { organization_id: organizationPublicId } }),
-      mockReply(),
-    );
+    const response = await controller.listRoles(mockRequest({ params: {} }), mockReply());
     expect(response).toMatchObject({
       meta: { pagination: expect.objectContaining({ has_more: false }) },
     });
   });
 
   it('createRole rejects missing organization id when params omit id', async () => {
-    // No organization_id path param and no auth.organizationPublicId claim → no organization in scope.
+    // The token carries no active organization → no organization in scope.
     await expect(
-      controller.createRole(mockRequest({ params: {}, body: { name: 'X' } }), mockReply()),
+      controller.createRole(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: {}, body: { name: 'X' } }),
+        mockReply(),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenError);
   });
 
   it('rejects missing organization id on listRoles and createRole with ForbiddenError', async () => {
-    // Missing param or empty-string param → no organization in scope.
+    // The token carries no active organization → no organization in scope.
     await expect(
-      controller.listRoles(mockRequest({ params: {} }), mockReply()),
+      controller.listRoles(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: {} }),
+        mockReply(),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenError);
     await expect(
-      controller.listRoles(mockRequest({ params: { organization_id: '' } }), mockReply()),
+      controller.listRoles(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: {} }),
+        mockReply(),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenError);
     await expect(
       controller.createRole(
-        mockRequest({ params: { organization_id: '' }, body: { name: 'X' } }),
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: {}, body: { name: 'X' } }),
         mockReply(),
       ),
     ).rejects.toBeInstanceOf(ForbiddenError);
@@ -173,7 +185,7 @@ describe('createMemberRoleController', () => {
           role: 'user',
           organizationPublicId,
         },
-        params: { organization_id: 'invalid' },
+        params: {},
       }),
       mockReply(),
     );
@@ -185,10 +197,7 @@ describe('createMemberRoleController', () => {
 
   it('getRole with valid organization id uses params without fallback', async () => {
     vi.mocked(service.getByPublicId).mockClear();
-    await controller.getRole(
-      mockRequest({ params: { organization_id: organizationPublicId, role_id: rolePublicId } }),
-      mockReply(),
-    );
+    await controller.getRole(mockRequest({ params: { role_id: rolePublicId } }), mockReply());
     expect(service.getByPublicId).toHaveBeenCalledWith(
       expect.objectContaining({ organizationPublicId: organizationPublicId }),
       rolePublicId,
@@ -200,7 +209,7 @@ describe('createMemberRoleController', () => {
     await expect(
       controller.getRole(
         mockRequest({
-          params: { organization_id: organizationPublicId, role_id: 'not_a_valid_id!!' },
+          params: { role_id: 'not_a_valid_id!!' },
         }),
         mockReply(),
       ),
@@ -217,7 +226,7 @@ describe('createMemberRoleController', () => {
           role: 'user',
           organizationPublicId,
         },
-        params: { organization_id: '../../etc', role_id: rolePublicId },
+        params: { role_id: rolePublicId },
       }),
       mockReply(),
     );
@@ -228,9 +237,12 @@ describe('createMemberRoleController', () => {
   });
 
   it('getRole rejects empty params with ForbiddenError (sec-new-T3)', async () => {
-    // undefined params → no organization in scope → ForbiddenError.
+    // The token carries no active organization → no organization in scope.
     await expect(
-      controller.getRole(mockRequest({ params: undefined }), mockReply()),
+      controller.getRole(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: undefined }),
+        mockReply(),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenError);
   });
 
@@ -238,7 +250,7 @@ describe('createMemberRoleController', () => {
     await expect(
       controller.updateRole(
         mockRequest({
-          params: { organization_id: organizationPublicId, role_id: '' },
+          params: { role_id: '' },
           body: { name: 'X' },
         }),
         mockReply(),
@@ -256,7 +268,7 @@ describe('createMemberRoleController', () => {
           role: 'user',
           organizationPublicId,
         },
-        params: { organization_id: 'bad id', role_id: rolePublicId },
+        params: { role_id: rolePublicId },
         body: { name: 'X' },
       }),
       mockReply(),
@@ -271,17 +283,17 @@ describe('createMemberRoleController', () => {
 
   it('deleteRole rejects malformed roleId (sec-new-T3)', async () => {
     await expect(
-      controller.deleteRole(
-        mockRequest({ params: { organization_id: organizationPublicId, role_id: '' } }),
-        mockReply(),
-      ),
+      controller.deleteRole(mockRequest({ params: { role_id: '' } }), mockReply()),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('deleteRole rejects empty params with ForbiddenError (sec-new-T3)', async () => {
-    // undefined params → no organization in scope → ForbiddenError.
+    // The token carries no active organization → no organization in scope.
     await expect(
-      controller.deleteRole(mockRequest({ params: undefined }), mockReply()),
+      controller.deleteRole(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: undefined }),
+        mockReply(),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenError);
   });
 });

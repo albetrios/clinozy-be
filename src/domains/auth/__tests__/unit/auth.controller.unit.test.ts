@@ -290,10 +290,7 @@ describe('createAuthController', () => {
     );
     await controller.listSessions(mockRequest(), mockReply());
     const revokeReply = mockReply();
-    await controller.revokeSession(
-      mockRequest({ params: { organization_id: generatePublicId('organization') } }),
-      revokeReply,
-    );
+    await controller.revokeSession(mockRequest({ params: {} }), revokeReply);
     expect(authMethodService.list).toHaveBeenCalled();
     expect(authSessionService.revoke).toHaveBeenCalled();
   });

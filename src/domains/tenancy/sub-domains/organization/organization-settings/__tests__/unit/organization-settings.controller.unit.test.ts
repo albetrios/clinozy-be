@@ -6,9 +6,16 @@ import { NotFoundError, UnauthorizedError } from '@/shared/errors/index.js';
 import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.js';
 import { attachPrincipalScope } from '@/tests/helpers/principal-scope.helper.js';
 
+/** The active organization every fake request's token claims (no route carries one). */
+const ACTIVE_ORGANIZATION_PUBLIC_ID = generatePublicId('organization');
 function mockRequest(overrides: Partial<FastifyRequest> = {}): FastifyRequest {
   return attachPrincipalScope({
-    auth: { kind: 'user', userId: generatePublicId('user'), role: 'user' },
+    auth: {
+      kind: 'user',
+      userId: generatePublicId('user'),
+      role: 'user',
+      organizationPublicId: ACTIVE_ORGANIZATION_PUBLIC_ID,
+    },
     params: {},
     body: {},
     headers: {},
@@ -22,7 +29,7 @@ function mockReply(): FastifyReply {
 }
 
 describe('createOrganizationSettingsController', () => {
-  const organizationPublicId = generatePublicId('organization');
+  const organizationPublicId = ACTIVE_ORGANIZATION_PUBLIC_ID;
   const settingsRow = {
     organization_id: organizationPublicId,
     is_email_notifications_enabled: true,
@@ -42,10 +49,7 @@ describe('createOrganizationSettingsController', () => {
   const controller = createOrganizationSettingsController(service);
 
   it('getSettings delegates to service and returns settings', async () => {
-    const response = await controller.getSettings(
-      mockRequest({ params: { organization_id: organizationPublicId } }),
-      mockReply(),
-    );
+    const response = await controller.getSettings(mockRequest({ params: {} }), mockReply());
     expect(service.get).toHaveBeenCalledWith(
       expect.objectContaining({ organizationPublicId, source: 'request' }),
     );
@@ -55,21 +59,15 @@ describe('createOrganizationSettingsController', () => {
   it('getSettings propagates NotFoundError when organization is missing', async () => {
     vi.mocked(service.get).mockRejectedValueOnce(new NotFoundError('Organization'));
     await expect(
-      controller.getSettings(
-        mockRequest({ params: { organization_id: organizationPublicId } }),
-        mockReply(),
-      ),
+      controller.getSettings(mockRequest({ params: {} }), mockReply()),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('getSettings propagates generic error', async () => {
     vi.mocked(service.get).mockRejectedValueOnce(new Error('Database error'));
-    await expect(
-      controller.getSettings(
-        mockRequest({ params: { organization_id: organizationPublicId } }),
-        mockReply(),
-      ),
-    ).rejects.toThrow('Database error');
+    await expect(controller.getSettings(mockRequest({ params: {} }), mockReply())).rejects.toThrow(
+      'Database error',
+    );
   });
 
   it('updateSettings delegates to service with body and user', async () => {
@@ -77,9 +75,9 @@ describe('createOrganizationSettingsController', () => {
     const userId = generatePublicId('user');
     const response = await controller.updateSettings(
       mockRequest({
-        params: { organization_id: organizationPublicId },
+        params: {},
         body,
-        auth: { kind: 'user', userId, role: 'user' } as never,
+        auth: { kind: 'user', userId, role: 'user', organizationPublicId } as never,
       }),
       mockReply(),
     );
@@ -95,7 +93,7 @@ describe('createOrganizationSettingsController', () => {
     await expect(
       controller.updateSettings(
         mockRequest({
-          params: { organization_id: organizationPublicId },
+          params: {},
           auth: undefined as never,
         }),
         mockReply(),
@@ -106,10 +104,7 @@ describe('createOrganizationSettingsController', () => {
   it('updateSettings propagates NotFoundError from service', async () => {
     vi.mocked(service.update).mockRejectedValueOnce(new NotFoundError('Organization'));
     await expect(
-      controller.updateSettings(
-        mockRequest({ params: { organization_id: organizationPublicId }, body: {} }),
-        mockReply(),
-      ),
+      controller.updateSettings(mockRequest({ params: {}, body: {} }), mockReply()),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 });

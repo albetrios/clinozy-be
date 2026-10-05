@@ -45,8 +45,13 @@ describe('authorization.util — permission-deny audit (sec-U13)', () => {
 
   function mockRequest(overrides: Partial<FastifyRequest> = {}): FastifyRequest {
     return attachPrincipalScope({
-      auth: { kind: 'user' as const, userId: 'user-1', role: GLOBAL_ROLES.USER },
-      params: { organization_id: 'org-public' },
+      auth: {
+        kind: 'user' as const,
+        userId: 'user-1',
+        role: GLOBAL_ROLES.USER,
+        organizationPublicId: 'org-public',
+      },
+      params: {},
       routeOptions: { url: '/api/v1/admin/test' },
       url: '/api/v1/admin/test',
       method: 'GET',

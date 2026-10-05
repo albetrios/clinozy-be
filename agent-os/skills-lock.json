@@ -197,7 +197,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-route-catalog/SKILL.md",
-      "computedHash": "6d78b16e1925992957dea4c5db6399eb301a023322854fe1f39252afaa2b332b"
+      "computedHash": "d137db8b7150c015a67a15e7e65743c430d5125515a5fe885e3086cb8002e92f"
     },
     "be-route-schema-doc-guard": {
       "source": "local",

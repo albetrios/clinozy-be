@@ -14,7 +14,7 @@ import type { MembershipService } from './membership.service.js';
  * Builds the HTTP handler map for the active-organization membership routes
  * under `/organization/memberships` plus the self-service `leave` and
  * `transfer-ownership` actions. The active organization is resolved from the
- * signed JWT `org` claim via {@link resolveActiveOrganizationId}.
+ * signed JWT `org` claim via `requireOrganizationScope`.
  */
 export function createMembershipController(service: MembershipService) {
   return {

@@ -5,9 +5,24 @@ import { createMembershipController } from '@/domains/tenancy/sub-domains/member
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { attachPrincipalScope } from '@/tests/helpers/principal-scope.helper.js';
 
+/** The active organization every fake request's token claims (no route carries one). */
+const ACTIVE_ORGANIZATION_PUBLIC_ID = generatePublicId('organization');
+
+/** A user whose token carries no active organization (`org` claim). */
+const NO_ACTIVE_ORGANIZATION_AUTH = {
+  kind: 'user',
+  userId: generatePublicId('user'),
+  role: 'user',
+} as never;
+
 function mockRequest(overrides: Partial<FastifyRequest> = {}): FastifyRequest {
   return attachPrincipalScope({
-    auth: { kind: 'user' as const, userId: generatePublicId('user'), role: 'USER' },
+    auth: {
+      kind: 'user' as const,
+      userId: generatePublicId('user'),
+      role: 'USER',
+      organizationPublicId: ACTIVE_ORGANIZATION_PUBLIC_ID,
+    },
     params: {},
     body: {},
     query: { limit: 20 },
@@ -25,7 +40,7 @@ function mockReply(): FastifyReply {
 }
 
 describe('createMembershipController', () => {
-  const organizationPublicId = generatePublicId('organization');
+  const organizationPublicId = ACTIVE_ORGANIZATION_PUBLIC_ID;
   const membershipPublicId = generatePublicId('membership');
   const membership = { id: membershipPublicId };
   const service = {
@@ -49,7 +64,7 @@ describe('createMembershipController', () => {
 
   it('listMemberships returns paginated memberships', async () => {
     const response = await controller.listMemberships(
-      mockRequest({ params: { organization_id: organizationPublicId } }),
+      mockRequest({ params: {} }),
       {} as FastifyReply,
     );
     expect(service.list).toHaveBeenCalled();
@@ -63,7 +78,7 @@ describe('createMembershipController', () => {
   it('getMembership returns membership', async () => {
     await controller.getMembership(
       mockRequest({
-        params: { organization_id: organizationPublicId, membership_id: membershipPublicId },
+        params: { membership_id: membershipPublicId },
       }),
       {} as FastifyReply,
     );
@@ -74,7 +89,7 @@ describe('createMembershipController', () => {
     const reply = { code: vi.fn().mockReturnThis(), send: vi.fn() };
     await controller.createMembership(
       mockRequest({
-        params: { organization_id: organizationPublicId },
+        params: {},
         body: { email: 'invitee@example.com', role_id: generatePublicId('memberRole') },
       }),
       reply as unknown as FastifyReply,
@@ -87,7 +102,7 @@ describe('createMembershipController', () => {
   it('updateMembership and deleteMembership delegate to service', async () => {
     await controller.updateMembership(
       mockRequest({
-        params: { organization_id: organizationPublicId, membership_id: membershipPublicId },
+        params: { membership_id: membershipPublicId },
         body: { status: 'ACTIVE' },
       }),
       {} as FastifyReply,
@@ -95,7 +110,7 @@ describe('createMembershipController', () => {
     const reply = { code: vi.fn().mockReturnThis(), send: vi.fn() };
     await controller.deleteMembership(
       mockRequest({
-        params: { organization_id: organizationPublicId, membership_id: membershipPublicId },
+        params: { membership_id: membershipPublicId },
       }),
       reply as unknown as FastifyReply,
     );
@@ -106,18 +121,18 @@ describe('createMembershipController', () => {
   it('getMembershipPermissions leave and transferOwnership delegate to service', async () => {
     await controller.getMembershipPermissions(
       mockRequest({
-        params: { organization_id: organizationPublicId, membership_id: membershipPublicId },
+        params: { membership_id: membershipPublicId },
       }),
       {} as FastifyReply,
     );
     const leaveReply = { code: vi.fn().mockReturnThis(), send: vi.fn() };
     await controller.leaveOrganization(
-      mockRequest({ params: { organization_id: organizationPublicId } }),
+      mockRequest({ params: {} }),
       leaveReply as unknown as FastifyReply,
     );
     await controller.transferOwnership(
       mockRequest({
-        params: { organization_id: organizationPublicId },
+        params: {},
         body: { new_owner_user_id: generatePublicId('user') },
       }),
       {} as FastifyReply,
@@ -135,35 +150,44 @@ describe('createMembershipController', () => {
       has_more: false,
       next_cursor: null,
     } as never);
-    const response = await controller.listMemberships(
-      mockRequest({ params: { organization_id: organizationPublicId } }),
-      mockReply(),
-    );
+    const response = await controller.listMemberships(mockRequest({ params: {} }), mockReply());
     expect(response).toMatchObject({
       meta: { pagination: expect.objectContaining({ has_more: false }) },
     });
   });
 
   it('rejects missing organization id on validated handlers with ForbiddenError', async () => {
-    // No organization_id path param and no auth.organizationPublicId claim → no organization in scope.
+    // The token carries no active organization → no organization in scope.
     await expect(
-      controller.listMemberships(mockRequest({ params: {} }), mockReply()),
-    ).rejects.toBeInstanceOf(ForbiddenError);
-    await expect(
-      controller.createMembership(mockRequest({ params: {}, body: {} }), mockReply()),
-    ).rejects.toBeInstanceOf(ForbiddenError);
-    // Empty-string organization_id also resolves to "no organization in scope".
-    await expect(
-      controller.createMembership(
-        mockRequest({ params: { organization_id: '' }, body: {} }),
+      controller.listMemberships(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: {} }),
         mockReply(),
       ),
     ).rejects.toBeInstanceOf(ForbiddenError);
     await expect(
-      controller.leaveOrganization(mockRequest({ params: {} }), mockReply()),
+      controller.createMembership(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: {}, body: {} }),
+        mockReply(),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    // Empty-string organization_id also resolves to "no organization in scope".
+    await expect(
+      controller.createMembership(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: {}, body: {} }),
+        mockReply(),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenError);
     await expect(
-      controller.transferOwnership(mockRequest({ params: {} }), mockReply()),
+      controller.leaveOrganization(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: {} }),
+        mockReply(),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(
+      controller.transferOwnership(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: {} }),
+        mockReply(),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenError);
   });
 
@@ -177,7 +201,7 @@ describe('createMembershipController', () => {
           role: 'user',
           organizationPublicId,
         },
-        params: { organization_id: 'not-a-public-id' },
+        params: {},
       }),
       mockReply(),
     );
@@ -190,7 +214,7 @@ describe('createMembershipController', () => {
   it('getMembershipPermissions delegates to service with valid params', async () => {
     await controller.getMembershipPermissions(
       mockRequest({
-        params: { organization_id: organizationPublicId, membership_id: membershipPublicId },
+        params: { membership_id: membershipPublicId },
       }),
       mockReply(),
     );
@@ -204,7 +228,7 @@ describe('createMembershipController', () => {
     const reply = mockReply();
     await controller.createMembership(
       mockRequest({
-        params: { organization_id: organizationPublicId },
+        params: {},
         body: {
           email: 'invitee@example.com',
           role_id: generatePublicId('memberRole'),
@@ -222,7 +246,10 @@ describe('createMembershipController', () => {
   it('listMemberships rejects with ForbiddenError when params omit organization id', async () => {
     vi.mocked(service.list).mockClear();
     await expect(
-      controller.listMemberships(mockRequest({ params: {} }), mockReply()),
+      controller.listMemberships(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: {} }),
+        mockReply(),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenError);
   });
 
@@ -230,21 +257,27 @@ describe('createMembershipController', () => {
     // Prior behaviour: missing organization id collapsed to undefined / '' and was
     // forwarded to the service (which would then fail elsewhere with unbounded
     // cardinality on the observability path). sec-re-18 binds at the boundary so
-    // the request is rejected before the service is reached. With no organization_id
-    // path param and no auth.organizationPublicId claim, the organization is out of scope and
-    // resolveActiveOrganizationId throws ForbiddenError.
+    // the request is rejected before the service is reached: with no `org` claim in the token
+    // the organization is out of scope and requireOrganizationScope throws ForbiddenError.
     vi.mocked(service.update).mockClear();
     vi.mocked(service.delete).mockClear();
     await expect(
       controller.updateMembership(
-        mockRequest({ params: { membership_id: membershipPublicId }, body: { status: 'ACTIVE' } }),
+        mockRequest({
+          auth: NO_ACTIVE_ORGANIZATION_AUTH,
+          params: { membership_id: membershipPublicId },
+          body: { status: 'ACTIVE' },
+        }),
         mockReply(),
       ),
     ).rejects.toBeInstanceOf(ForbiddenError);
     expect(service.update).not.toHaveBeenCalled();
     await expect(
       controller.deleteMembership(
-        mockRequest({ params: { membership_id: membershipPublicId } }),
+        mockRequest({
+          auth: NO_ACTIVE_ORGANIZATION_AUTH,
+          params: { membership_id: membershipPublicId },
+        }),
         mockReply(),
       ),
     ).rejects.toBeInstanceOf(ForbiddenError);
@@ -258,18 +291,28 @@ describe('createMembershipController', () => {
     vi.mocked(service.getPermissions).mockClear();
 
     await expect(
-      controller.getMembership(mockRequest({ params: undefined }), {} as FastifyReply),
+      controller.getMembership(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: undefined }),
+        {} as FastifyReply,
+      ),
     ).rejects.toBeInstanceOf(ForbiddenError);
     expect(service.getByPublicId).not.toHaveBeenCalled();
 
     await expect(
-      controller.getMembershipPermissions(mockRequest({ params: undefined }), {} as FastifyReply),
+      controller.getMembershipPermissions(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: undefined }),
+        {} as FastifyReply,
+      ),
     ).rejects.toBeInstanceOf(ForbiddenError);
     expect(service.getPermissions).not.toHaveBeenCalled();
 
     await expect(
       controller.updateMembership(
-        mockRequest({ params: undefined, body: { status: 'ACTIVE' } }),
+        mockRequest({
+          auth: NO_ACTIVE_ORGANIZATION_AUTH,
+          params: undefined,
+          body: { status: 'ACTIVE' },
+        }),
         {} as FastifyReply,
       ),
     ).rejects.toBeInstanceOf(ForbiddenError);
@@ -278,7 +321,7 @@ describe('createMembershipController', () => {
     const deleteReply = { code: vi.fn().mockReturnThis(), send: vi.fn() };
     await expect(
       controller.deleteMembership(
-        mockRequest({ params: undefined }),
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: undefined }),
         deleteReply as unknown as FastifyReply,
       ),
     ).rejects.toBeInstanceOf(ForbiddenError);
@@ -293,7 +336,7 @@ describe('createMembershipController', () => {
     await expect(
       controller.getMembership(
         mockRequest({
-          params: { organization_id: organizationPublicId, membership_id: 'not-a-public-id' },
+          params: { membership_id: 'not-a-public-id' },
         }),
         {} as FastifyReply,
       ),
@@ -302,7 +345,7 @@ describe('createMembershipController', () => {
     await expect(
       controller.getMembershipPermissions(
         mockRequest({
-          params: { organization_id: organizationPublicId, membership_id: 'not-a-public-id' },
+          params: { membership_id: 'not-a-public-id' },
         }),
         {} as FastifyReply,
       ),

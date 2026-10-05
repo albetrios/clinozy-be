@@ -47,7 +47,7 @@ The three annotation columns (`S`, `I`, `O`) print **after the path** and before
 | No options / no `preHandler`                                     | `PUBLIC`                                               |
 | `[app.authenticate]` only                                        | `AUTH`                                                 |
 | `[app.authenticate, requireRole(GLOBAL_ROLES.X, ...)]`           | `ROLE: super_admin` (list the roles)            |
-| `[app.authenticate, requireOrganizationPermission(PERM.X, ...)]` | `PERM: <permission_code>` (e.g. `organization:update`) |
+| `[app.authenticate, requireOrganizationPermission(PERM.X)]` | `PERM: <permission_code>` (e.g. `organization:update`) |
 
 To resolve permission codes, look at the constant imported (e.g. `TENANCY_PERMISSIONS.ORGANIZATION_UPDATE`). Map these to their string values. Common mappings:
 

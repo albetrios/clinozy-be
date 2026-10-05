@@ -7,13 +7,20 @@ import type { OrganizationService } from '@/domains/tenancy/sub-domains/organiza
 import type { AuditService } from '@/domains/audit/audit.service.js';
 import { attachPrincipalScope } from '@/tests/helpers/principal-scope.helper.js';
 
+/** A user whose token carries no active organization (`org` claim). */
+const NO_ACTIVE_ORGANIZATION_AUTH = {
+  kind: 'user',
+  userId: generatePublicId('user'),
+  role: 'user',
+} as never;
+
 describe('createOrganizationController', () => {
   const organizationPublicId = generatePublicId('organization');
   const userPublicId = generatePublicId('user');
 
   function mockRequest(overrides: Partial<FastifyRequest> = {}): FastifyRequest {
     return attachPrincipalScope({
-      auth: { kind: 'user' as const, userId: userPublicId, role: 'USER' },
+      auth: { kind: 'user' as const, userId: userPublicId, role: 'USER', organizationPublicId },
       params: {},
       body: {},
       query: {},
@@ -62,10 +69,7 @@ describe('createOrganizationController', () => {
   const controller = createOrganizationController(service, auditService);
 
   it('getOrganization delegates to service', async () => {
-    await controller.getOrganization(
-      mockRequest({ params: { organization_id: organizationPublicId } }),
-      mockReply(),
-    );
+    await controller.getOrganization(mockRequest({ params: {} }), mockReply());
     expect(service.getByPublicId).toHaveBeenCalledWith(organizationPublicId, userPublicId);
   });
 
@@ -88,7 +92,7 @@ describe('createOrganizationController', () => {
 
   it('updateOrganization delegates to service', async () => {
     await controller.updateOrganization(
-      mockRequest({ params: { organization_id: organizationPublicId }, body: { name: 'New' } }),
+      mockRequest({ params: {}, body: { name: 'New' } }),
       mockReply(),
     );
     expect(service.update).toHaveBeenCalled();
@@ -96,10 +100,7 @@ describe('createOrganizationController', () => {
 
   it('deleteOrganization returns 204', async () => {
     const reply = mockReply();
-    await controller.deleteOrganization(
-      mockRequest({ params: { organization_id: organizationPublicId } }),
-      reply,
-    );
+    await controller.deleteOrganization(mockRequest({ params: {} }), reply);
     expect(service.delete).toHaveBeenCalledWith(
       expect.objectContaining({ organizationPublicId: organizationPublicId }),
     );
@@ -109,17 +110,14 @@ describe('createOrganizationController', () => {
   it('uploadLogo and deleteLogo delegate to service', async () => {
     await controller.uploadLogo(
       mockRequest({
-        params: { organization_id: organizationPublicId },
+        params: {},
         body: { key: `organization-logos/${organizationPublicId}/logo.png` },
       }),
       mockReply(),
     );
     expect(service.uploadLogo).toHaveBeenCalled();
 
-    await controller.deleteLogo(
-      mockRequest({ params: { organization_id: organizationPublicId } }),
-      mockReply(),
-    );
+    await controller.deleteLogo(mockRequest({ params: {} }), mockReply());
     expect(service.deleteLogo).toHaveBeenCalled();
   });
 
@@ -132,7 +130,7 @@ describe('createOrganizationController', () => {
       next_cursor: 'audit_cursor_2',
     } as never);
     const response = await controller.listOrganizationAuditLogs(
-      mockRequest({ params: { organization_id: organizationPublicId }, query: { limit: '20' } }),
+      mockRequest({ params: {}, query: { limit: '20' } }),
       mockReply(),
     );
     expect(auditService.listForOrganization).toHaveBeenCalled();
@@ -152,7 +150,7 @@ describe('createOrganizationController', () => {
           role: 'user',
           organizationPublicId,
         },
-        params: { organization_id: 'not-a-public-id' },
+        params: {},
       }),
       mockReply(),
     );
@@ -160,26 +158,44 @@ describe('createOrganizationController', () => {
   });
 
   it('rejects a missing organization context with ForbiddenError on each validated handler', async () => {
-    // No path param and no `org` token claim → "organization context required" (403), matching
+    // The token carries no active organization → no organization in scope.
     // requireOrganizationPermission. On real flattened routes the active organization arrives via the signed
     // claim; the mock principal here carries none, and an empty path segment cannot reach a handler.
     await expect(
-      controller.getOrganization(mockRequest({ params: {} }), mockReply()),
+      controller.getOrganization(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: {} }),
+        mockReply(),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenError);
     await expect(
-      controller.updateOrganization(mockRequest({ params: {}, body: { name: 'X' } }), mockReply()),
+      controller.updateOrganization(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: {}, body: { name: 'X' } }),
+        mockReply(),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenError);
     await expect(
-      controller.deleteOrganization(mockRequest({ params: { organization_id: '' } }), mockReply()),
+      controller.deleteOrganization(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: {} }),
+        mockReply(),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenError);
     await expect(
-      controller.uploadLogo(mockRequest({ params: {}, body: { key: 'k' } }), mockReply()),
+      controller.uploadLogo(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: {}, body: { key: 'k' } }),
+        mockReply(),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenError);
     await expect(
-      controller.deleteLogo(mockRequest({ params: { organization_id: '' } }), mockReply()),
+      controller.deleteLogo(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: {} }),
+        mockReply(),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenError);
     await expect(
-      controller.listOrganizationAuditLogs(mockRequest({ params: {} }), mockReply()),
+      controller.listOrganizationAuditLogs(
+        mockRequest({ auth: NO_ACTIVE_ORGANIZATION_AUTH, params: {} }),
+        mockReply(),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenError);
   });
 
@@ -198,7 +214,7 @@ describe('createOrganizationController', () => {
       next_cursor: null,
     } as never);
     const response = await controller.listOrganizationAuditLogs(
-      mockRequest({ params: { organization_id: organizationPublicId }, query: { after: '100' } }),
+      mockRequest({ params: {}, query: { after: '100' } }),
       mockReply(),
     );
     expect(response).toMatchObject({
@@ -209,10 +225,7 @@ describe('createOrganizationController', () => {
   it('listOrganizationAuditLogs throws when audit service is not configured', async () => {
     const controllerWithoutAudit = createOrganizationController(service);
     await expect(
-      controllerWithoutAudit.listOrganizationAuditLogs(
-        mockRequest({ params: { organization_id: organizationPublicId } }),
-        mockReply(),
-      ),
+      controllerWithoutAudit.listOrganizationAuditLogs(mockRequest({ params: {} }), mockReply()),
     ).rejects.toThrow('Audit service not configured');
   });
 });

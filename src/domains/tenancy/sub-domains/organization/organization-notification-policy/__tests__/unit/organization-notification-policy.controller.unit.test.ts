@@ -8,7 +8,7 @@ import { attachPrincipalScope } from '@/tests/helpers/principal-scope.helper.js'
 
 function mockRequest(overrides: Partial<FastifyRequest> = {}): FastifyRequest {
   return attachPrincipalScope({
-    auth: { kind: 'user', userId: generatePublicId('user'), role: 'user' },
+    auth: { kind: 'user', userId: generatePublicId('user'), role: 'user', organizationPublicId },
     params: {},
     body: {},
     headers: {},
@@ -49,10 +49,7 @@ describe('createOrganizationNotificationPolicyController', () => {
   const controller = createOrganizationNotificationPolicyController(service);
 
   it('listPolicies delegates to service and returns policies', async () => {
-    const response = await controller.listPolicies(
-      mockRequest({ params: { organization_id: organizationPublicId } }),
-      mockReply(),
-    );
+    const response = await controller.listPolicies(mockRequest({ params: {} }), mockReply());
     expect(service.list).toHaveBeenCalledWith(
       expect.objectContaining({ organizationPublicId: organizationPublicId }),
     );
@@ -62,10 +59,7 @@ describe('createOrganizationNotificationPolicyController', () => {
   it('listPolicies propagates NotFoundError when organization is missing', async () => {
     vi.mocked(service.list).mockRejectedValueOnce(new NotFoundError('Organization'));
     await expect(
-      controller.listPolicies(
-        mockRequest({ params: { organization_id: organizationPublicId } }),
-        mockReply(),
-      ),
+      controller.listPolicies(mockRequest({ params: {} }), mockReply()),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -73,7 +67,6 @@ describe('createOrganizationNotificationPolicyController', () => {
     const response = await controller.getPolicy(
       mockRequest({
         params: {
-          organization_id: organizationPublicId,
           notification_policy_id: 'pol_a1b2c3d4e5f6g7h8i9j0k',
         },
       }),
@@ -94,7 +87,6 @@ describe('createOrganizationNotificationPolicyController', () => {
       controller.getPolicy(
         mockRequest({
           params: {
-            organization_id: organizationPublicId,
             notification_policy_id: 'pol_a1b2c3d4e5f6g7h8i9j0k',
           },
         }),
@@ -114,9 +106,9 @@ describe('createOrganizationNotificationPolicyController', () => {
     const reply = mockReply();
     const response = await controller.createPolicy(
       mockRequest({
-        params: { organization_id: organizationPublicId },
+        params: {},
         body,
-        auth: { kind: 'user', userId, role: 'user' } as never,
+        auth: { kind: 'user', userId, role: 'user', organizationPublicId } as never,
       }),
       reply,
     );
@@ -135,7 +127,7 @@ describe('createOrganizationNotificationPolicyController', () => {
     await expect(
       controller.createPolicy(
         mockRequest({
-          params: { organization_id: organizationPublicId },
+          params: {},
           auth: undefined as never,
         }),
         mockReply(),
@@ -149,11 +141,10 @@ describe('createOrganizationNotificationPolicyController', () => {
     const response = await controller.updatePolicy(
       mockRequest({
         params: {
-          organization_id: organizationPublicId,
           notification_policy_id: 'pol_a1b2c3d4e5f6g7h8i9j0k',
         },
         body,
-        auth: { kind: 'user', userId, role: 'user' } as never,
+        auth: { kind: 'user', userId, role: 'user', organizationPublicId } as never,
       }),
       mockReply(),
     );
@@ -171,7 +162,6 @@ describe('createOrganizationNotificationPolicyController', () => {
       controller.updatePolicy(
         mockRequest({
           params: {
-            organization_id: organizationPublicId,
             notification_policy_id: 'pol_a1b2c3d4e5f6g7h8i9j0k',
           },
           auth: undefined as never,
@@ -189,7 +179,6 @@ describe('createOrganizationNotificationPolicyController', () => {
       controller.updatePolicy(
         mockRequest({
           params: {
-            organization_id: organizationPublicId,
             notification_policy_id: 'pol_a1b2c3d4e5f6g7h8i9j0k',
           },
           body: {},
@@ -204,7 +193,6 @@ describe('createOrganizationNotificationPolicyController', () => {
     await controller.deletePolicy(
       mockRequest({
         params: {
-          organization_id: organizationPublicId,
           notification_policy_id: 'pol_a1b2c3d4e5f6g7h8i9j0k',
         },
       }),
@@ -223,7 +211,6 @@ describe('createOrganizationNotificationPolicyController', () => {
       controller.deletePolicy(
         mockRequest({
           params: {
-            organization_id: organizationPublicId,
             notification_policy_id: 'pol_a1b2c3d4e5f6g7h8i9j0k',
           },
           auth: undefined as never,
@@ -241,7 +228,6 @@ describe('createOrganizationNotificationPolicyController', () => {
       controller.deletePolicy(
         mockRequest({
           params: {
-            organization_id: organizationPublicId,
             notification_policy_id: 'pol_a1b2c3d4e5f6g7h8i9j0k',
           },
         }),
