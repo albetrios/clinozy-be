@@ -29,8 +29,9 @@ const { findWebhook, baseDeliveryContext } = vi.hoisted(() => {
   const baseDeliveryContext = {
     deliveryAttemptId: 42,
     // sec-new-B2: opaque public id used as the X-Webhook-Delivery-Id header value.
-    deliveryAttemptPublicId: 'wa0y8vf3ktxqnhcm1ze21',
+    deliveryAttemptPublicId: 'wda_0y8vf3ktxqnhcm1ze21ab',
     webhookId: 1,
+    webhookPublicId: 'wh_0y8vf3ktxqnhcm1ze21ab',
     webhookUrl: 'https://example.com/hook',
     encryptedSecret: 'enc:current',
     eventType: 'webhook.test',
@@ -51,7 +52,6 @@ vi.mock(
     createWorkerWebhookDeliveryQueries: vi.fn(() => ({
       findWebhookDeliveryAttemptWithWebhook: findWebhook,
     })),
-    findWebhookDeliveryAttemptWithWebhook: findWebhook,
   }),
 );
 
@@ -104,13 +104,13 @@ describe('processWebhookDeliveryAttempt — webhook secret rotation overlap (sec
   it('omits X-Webhook-Signature-Previous when no rotation has happened (default)', async () => {
     findWebhook.mockResolvedValue({ ...baseDeliveryContext });
     const repository = createDeliveryAttemptRepositoryMock();
-    await processWebhookDeliveryAttempt(
-      42,
-      'org_public_1',
-      { id: 'job-no-rotation', attemptsMade: 0 },
-      fetchMock,
-      repository as never,
-    );
+    await processWebhookDeliveryAttempt({
+      deliveryAttemptPublicId: baseDeliveryContext.deliveryAttemptPublicId,
+      organizationPublicId: 'org_public_1',
+      jobContext: { id: 'job-no-rotation', attemptsMade: 0 },
+      fetchImplementation: fetchMock,
+      deliveryAttemptRepository: repository as never,
+    });
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(requestInit.headers).not.toHaveProperty('X-Webhook-Signature-Previous');
   });
@@ -123,13 +123,13 @@ describe('processWebhookDeliveryAttempt — webhook secret rotation overlap (sec
       secretRotatedAt: new Date(Date.now() - 60 * 60 * 1000),
     });
     const repository = createDeliveryAttemptRepositoryMock();
-    await processWebhookDeliveryAttempt(
-      42,
-      'org_public_1',
-      { id: 'job-rotation-in-window', attemptsMade: 0 },
-      fetchMock,
-      repository as never,
-    );
+    await processWebhookDeliveryAttempt({
+      deliveryAttemptPublicId: baseDeliveryContext.deliveryAttemptPublicId,
+      organizationPublicId: 'org_public_1',
+      jobContext: { id: 'job-rotation-in-window', attemptsMade: 0 },
+      fetchImplementation: fetchMock,
+      deliveryAttemptRepository: repository as never,
+    });
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(requestInit.headers).toHaveProperty('X-Webhook-Signature-Previous');
     const previousHeader = (requestInit.headers as Record<string, string>)[
@@ -150,13 +150,13 @@ describe('processWebhookDeliveryAttempt — webhook secret rotation overlap (sec
       secretRotatedAt: new Date(Date.now() - 100 * 60 * 60 * 1000),
     });
     const repository = createDeliveryAttemptRepositoryMock();
-    await processWebhookDeliveryAttempt(
-      42,
-      'org_public_1',
-      { id: 'job-rotation-stale', attemptsMade: 0 },
-      fetchMock,
-      repository as never,
-    );
+    await processWebhookDeliveryAttempt({
+      deliveryAttemptPublicId: baseDeliveryContext.deliveryAttemptPublicId,
+      organizationPublicId: 'org_public_1',
+      jobContext: { id: 'job-rotation-stale', attemptsMade: 0 },
+      fetchImplementation: fetchMock,
+      deliveryAttemptRepository: repository as never,
+    });
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(requestInit.headers).not.toHaveProperty('X-Webhook-Signature-Previous');
   });
@@ -188,13 +188,13 @@ describe('processWebhookDeliveryAttempt — signature value (HMAC-SHA256 contrac
     findWebhook.mockResolvedValue({ ...baseDeliveryContext });
     const repository = createDeliveryAttemptRepositoryMock();
 
-    await processWebhookDeliveryAttempt(
-      42,
-      'org_public_1',
-      { id: 'job-signature-value', attemptsMade: 0 },
-      fetchMock,
-      repository as never,
-    );
+    await processWebhookDeliveryAttempt({
+      deliveryAttemptPublicId: baseDeliveryContext.deliveryAttemptPublicId,
+      organizationPublicId: 'org_public_1',
+      jobContext: { id: 'job-signature-value', attemptsMade: 0 },
+      fetchImplementation: fetchMock,
+      deliveryAttemptRepository: repository as never,
+    });
 
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
     const headers = requestInit.headers as Record<string, string>;
@@ -224,13 +224,13 @@ describe('processWebhookDeliveryAttempt — signature value (HMAC-SHA256 contrac
     });
     const repository = createDeliveryAttemptRepositoryMock();
 
-    await processWebhookDeliveryAttempt(
-      42,
-      'org_public_1',
-      { id: 'job-signature-value-prev', attemptsMade: 0 },
-      fetchMock,
-      repository as never,
-    );
+    await processWebhookDeliveryAttempt({
+      deliveryAttemptPublicId: baseDeliveryContext.deliveryAttemptPublicId,
+      organizationPublicId: 'org_public_1',
+      jobContext: { id: 'job-signature-value-prev', attemptsMade: 0 },
+      fetchImplementation: fetchMock,
+      deliveryAttemptRepository: repository as never,
+    });
 
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
     const headers = requestInit.headers as Record<string, string>;

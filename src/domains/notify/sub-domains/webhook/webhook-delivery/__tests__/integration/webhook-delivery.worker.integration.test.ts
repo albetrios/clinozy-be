@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Queue, QueueEvents } from 'bullmq';
-import { desc, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
-import { webhook_delivery_attempts } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
+import {
+  webhook_delivery_attempts,
+  webhooks,
+} from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
 import {
   createWebhookDeliveryWorker,
   processWebhookDeliveryAttempt,
@@ -21,12 +24,35 @@ import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
-import { createTestWebhook } from '@/tests/factories/webhook.factory.js';
-import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import {
+  createTestWebhook,
+  createTestWebhookDeliveryAttempt,
+} from '@/tests/factories/webhook.factory.js';
 
 vi.mock('@/shared/utils/security/webhook-url.util.js', () => ({
   validateWebhookUrl: vi.fn().mockResolvedValue(undefined),
 }));
+
+async function readAttempt(deliveryAttemptId: number) {
+  const [row] = await getOperatorDatabase()
+    .select()
+    .from(webhook_delivery_attempts)
+    .where(eq(webhook_delivery_attempts.id, deliveryAttemptId));
+  return row;
+}
+
+async function createDeliveryFixture(urlSuffix: string) {
+  const user = await createTestUser();
+  const organization = await createTestOrganization({ ownerUserId: user.id });
+  const webhook = await createTestWebhook({
+    organizationId: organization.id,
+    url: `https://example.com/${urlSuffix}`,
+    events: ['webhook.test'],
+    createdByUserId: user.id,
+  });
+  const deliveryAttempt = await createTestWebhookDeliveryAttempt({ webhookId: webhook.id });
+  return { user, organization, webhook, deliveryAttempt };
+}
 
 /**
  * End-to-end check for the webhook delivery worker. Without this, a CHECK
@@ -67,28 +93,8 @@ describe('webhook-delivery.worker — status transitions', () => {
     await cleanupDatabase();
   });
 
-  it('records SENT after a successful delivery', async () => {
-    const user = await createTestUser();
-    const organization = await createTestOrganization({ ownerUserId: user.id });
-    const webhook = await createTestWebhook({
-      organizationId: organization.id,
-      url: 'https://example.com/webhook-delivery-success',
-      events: ['webhook.test'],
-      createdByUserId: user.id,
-    });
-
-    const [pendingAttempt] = await getOperatorDatabase()
-      .insert(webhook_delivery_attempts)
-      .values({
-        public_id: generatePublicId('webhook'),
-        webhook_id: webhook.id,
-        event_type: 'webhook.test',
-        payload: { hello: 'world' },
-        status: 'PENDING',
-        attempt_count: 0,
-      })
-      .returning({ id: webhook_delivery_attempts.id });
-
+  it('records SENT after a successful delivery and counts the attempt', async () => {
+    const { organization, deliveryAttempt } = await createDeliveryFixture('delivery-success');
     const fetchMock = vi.fn(async () => {
       return new Response(JSON.stringify({ ok: true }), {
         status: 200,
@@ -96,92 +102,116 @@ describe('webhook-delivery.worker — status transitions', () => {
       });
     });
 
-    await processWebhookDeliveryAttempt(
-      pendingAttempt!.id,
-      organization.public_id,
-      { id: 'unit-test', attemptsMade: 0 },
-      fetchMock,
-    );
-
-    expect(fetchMock).toHaveBeenCalledOnce();
-
-    const rows = await getOperatorDatabase()
-      .select()
-      .from(webhook_delivery_attempts)
-      .where(eq(webhook_delivery_attempts.webhook_id, webhook.id))
-      .orderBy(desc(webhook_delivery_attempts.created_at));
-
-    expect(rows.length).toBeGreaterThanOrEqual(1);
-    expect(rows[0]?.status).toBe('SENT');
-    expect(rows[0]?.http_status_code).toBe(200);
-  });
-
-  it('records FAILED when the destination returns a non-2xx response', async () => {
-    const user = await createTestUser();
-    const organization = await createTestOrganization({ ownerUserId: user.id });
-    const webhook = await createTestWebhook({
-      organizationId: organization.id,
-      url: 'https://example.com/webhook-delivery-failure',
-      events: ['webhook.test'],
-      createdByUserId: user.id,
+    const result = await processWebhookDeliveryAttempt({
+      deliveryAttemptPublicId: deliveryAttempt.publicId,
+      organizationPublicId: organization.public_id,
+      jobContext: { id: 'unit-test', attemptsMade: 0 },
+      fetchImplementation: fetchMock,
     });
 
-    const [pendingAttempt] = await getOperatorDatabase()
-      .insert(webhook_delivery_attempts)
-      .values({
-        public_id: generatePublicId('webhook'),
-        webhook_id: webhook.id,
-        event_type: 'webhook.test',
-        payload: { hello: 'world' },
-        status: 'PENDING',
-        attempt_count: 0,
-      })
-      .returning({ id: webhook_delivery_attempts.id });
+    expect(result).toEqual({ outcome: 'delivered', httpStatus: 200 });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const row = await readAttempt(deliveryAttempt.id);
+    expect(row?.status).toBe('SENT');
+    expect(row?.http_status_code).toBe(200);
+    expect(row?.attempt_count).toBe(1);
+  });
 
+  it('records FAILED with the next retry time when the destination returns a non-2xx response', async () => {
+    const { organization, deliveryAttempt } = await createDeliveryFixture('delivery-failure');
     const fetchMock = vi.fn(async () => new Response('upstream rejected', { status: 500 }));
 
     await expect(
-      processWebhookDeliveryAttempt(
-        pendingAttempt!.id,
-        organization.public_id,
-        { id: `wh-test-failure-${randomUUID()}`, attemptsMade: 0 },
-        fetchMock,
-      ),
+      processWebhookDeliveryAttempt({
+        deliveryAttemptPublicId: deliveryAttempt.publicId,
+        organizationPublicId: organization.public_id,
+        jobContext: { id: `wh-test-failure-${randomUUID()}`, attemptsMade: 0 },
+        fetchImplementation: fetchMock,
+      }),
     ).rejects.toThrow(/HTTP 500/);
 
     expect(fetchMock).toHaveBeenCalledOnce();
+    const row = await readAttempt(deliveryAttempt.id);
+    expect(row?.status).toBe('FAILED');
+    expect(row?.http_status_code).toBe(500);
+    // First of eight attempts failed: the next one is a minute out (the backoff adds jitter on top).
+    expect(row?.next_retry_at).toBeInstanceOf(Date);
+    expect(row!.next_retry_at!.getTime()).toBeGreaterThan(Date.now() + 50_000);
+  });
 
-    const rows = await getOperatorDatabase()
-      .select()
-      .from(webhook_delivery_attempts)
-      .where(eq(webhook_delivery_attempts.id, pendingAttempt!.id));
+  it('the next attempt of the job re-claims its FAILED row and delivers it', async () => {
+    const { organization, deliveryAttempt } = await createDeliveryFixture('delivery-retry');
 
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.status).toBe('FAILED');
+    await expect(
+      processWebhookDeliveryAttempt({
+        deliveryAttemptPublicId: deliveryAttempt.publicId,
+        organizationPublicId: organization.public_id,
+        jobContext: { id: 'retry-job', attemptsMade: 0 },
+        fetchImplementation: vi.fn(async () => new Response('busy', { status: 503 })),
+      }),
+    ).rejects.toThrow(/HTTP 503/);
+
+    const result = await processWebhookDeliveryAttempt({
+      deliveryAttemptPublicId: deliveryAttempt.publicId,
+      organizationPublicId: organization.public_id,
+      jobContext: { id: 'retry-job', attemptsMade: 1 },
+      fetchImplementation: vi.fn(async () => new Response('ok', { status: 200 })),
+    });
+
+    expect(result).toEqual({ outcome: 'delivered', httpStatus: 200 });
+    const row = await readAttempt(deliveryAttempt.id);
+    expect(row?.status).toBe('SENT');
+    expect(row?.attempt_count).toBe(2);
+    expect(row?.next_retry_at).toBeNull();
+  });
+
+  it('never POSTs a SENT attempt again — a duplicate job completes as already_sent', async () => {
+    const { organization, deliveryAttempt } = await createDeliveryFixture('delivery-duplicate');
+    await processWebhookDeliveryAttempt({
+      deliveryAttemptPublicId: deliveryAttempt.publicId,
+      organizationPublicId: organization.public_id,
+      jobContext: { id: 'first-job', attemptsMade: 0 },
+      fetchImplementation: vi.fn(async () => new Response('ok', { status: 200 })),
+    });
+
+    const duplicateFetch = vi.fn(async () => new Response('ok', { status: 200 }));
+    const result = await processWebhookDeliveryAttempt({
+      deliveryAttemptPublicId: deliveryAttempt.publicId,
+      organizationPublicId: organization.public_id,
+      jobContext: { id: 'duplicate-job', attemptsMade: 0 },
+      fetchImplementation: duplicateFetch,
+    });
+
+    expect(result).toEqual({ outcome: 'skipped', reason: 'already_sent' });
+    expect(duplicateFetch).not.toHaveBeenCalled();
+    expect((await readAttempt(deliveryAttempt.id))?.attempt_count).toBe(1);
+  });
+
+  it('410 Gone fails the attempt for good and turns the webhook off', async () => {
+    const { organization, webhook, deliveryAttempt } = await createDeliveryFixture('delivery-gone');
+
+    const result = await processWebhookDeliveryAttempt({
+      deliveryAttemptPublicId: deliveryAttempt.publicId,
+      organizationPublicId: organization.public_id,
+      jobContext: { id: 'gone-job', attemptsMade: 0 },
+      fetchImplementation: vi.fn(async () => new Response('gone', { status: 410 })),
+    });
+
+    // Completes (no throw): retrying an endpoint that said it is gone only repeats the 410.
+    expect(result).toEqual({ outcome: 'endpoint_gone', httpStatus: 410 });
+    const row = await readAttempt(deliveryAttempt.id);
+    expect(row?.status).toBe('FAILED');
+    expect(row?.http_status_code).toBe(410);
+    expect(row?.next_retry_at).toBeNull();
+    const [webhookRow] = await getOperatorDatabase()
+      .select({ is_enabled: webhooks.is_enabled })
+      .from(webhooks)
+      .where(eq(webhooks.id, webhook.id));
+    expect(webhookRow?.is_enabled).toBe(false);
   });
 
   it('emits a failed queue event when BullMQ delivery exhausts attempts', async () => {
-    const user = await createTestUser();
-    const organization = await createTestOrganization({ ownerUserId: user.id });
-    const webhook = await createTestWebhook({
-      organizationId: organization.id,
-      url: 'https://example.com/webhook-delivery-failure-queue',
-      events: ['webhook.test'],
-      createdByUserId: user.id,
-    });
-
-    const [pendingAttempt] = await getOperatorDatabase()
-      .insert(webhook_delivery_attempts)
-      .values({
-        public_id: generatePublicId('webhook'),
-        webhook_id: webhook.id,
-        event_type: 'webhook.test',
-        payload: { hello: 'world' },
-        status: 'PENDING',
-        attempt_count: 0,
-      })
-      .returning({ id: webhook_delivery_attempts.id });
-
+    const { organization, deliveryAttempt } = await createDeliveryFixture('delivery-failure-queue');
     const queueReference = queue;
     const queueEventsReference = queueEvents;
     if (!(queueReference && queueEventsReference)) {
@@ -192,17 +222,21 @@ describe('webhook-delivery.worker — status transitions', () => {
       'fetch',
       vi.fn(async () => new Response('upstream rejected', { status: 500 })),
     );
-    const jobId = `wh-test-failure-${randomUUID()}`;
+    const jobId = deliveryAttempt.publicId;
     const failure = waitForJobFailure(queueEventsReference, jobId);
 
     await queueReference.add(
       'deliver-webhook',
-      { deliveryAttemptId: pendingAttempt!.id, organizationPublicId: organization.public_id },
+      {
+        deliveryAttemptPublicId: deliveryAttempt.publicId,
+        organizationPublicId: organization.public_id,
+      },
       { jobId, attempts: 1 },
     );
 
     await failure;
     vi.unstubAllGlobals();
+    expect((await readAttempt(deliveryAttempt.id))?.status).toBe('FAILED');
   });
 
   it('does not load a delivery attempt under another organization context', async () => {
@@ -221,27 +255,20 @@ describe('webhook-delivery.worker — status transitions', () => {
       events: ['webhook.test'],
       createdByUserId: user.id,
     });
-
-    const [pendingAttempt] = await getOperatorDatabase()
-      .insert(webhook_delivery_attempts)
-      .values({
-        public_id: generatePublicId('webhook'),
-        webhook_id: webhook.id,
-        event_type: 'webhook.test',
-        payload: { tenant: 'isolation' },
-        status: 'PENDING',
-        attempt_count: 0,
-      })
-      .returning({ id: webhook_delivery_attempts.id });
+    const deliveryAttempt = await createTestWebhookDeliveryAttempt({
+      webhookId: webhook.id,
+      payload: { tenant: 'isolation' },
+    });
 
     await expect(
-      processWebhookDeliveryAttempt(
-        pendingAttempt!.id,
-        organizationB.public_id,
-        { id: 'tenant-isolation', attemptsMade: 0 },
-        vi.fn(async () => new Response('ok', { status: 200 })),
-      ),
+      processWebhookDeliveryAttempt({
+        deliveryAttemptPublicId: deliveryAttempt.publicId,
+        organizationPublicId: organizationB.public_id,
+        jobContext: { id: 'tenant-isolation', attemptsMade: 0 },
+        fetchImplementation: vi.fn(async () => new Response('ok', { status: 200 })),
+      }),
     ).rejects.toThrow(/attempt_not_found/);
+    expect((await readAttempt(deliveryAttempt.id))?.status).toBe('PENDING');
   });
 });
 

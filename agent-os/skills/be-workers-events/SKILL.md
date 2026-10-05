@@ -92,7 +92,7 @@ notify/sub-domains/notification/events/billing-notification.event-handlers.ts  �
 
 ```text
 emitWebhookDeliveryRequested()  →  notify/sub-domains/webhook/events/
-notify/sub-domains/webhook/events/webhook-delivery.event-handlers.ts  →  enqueueWebhookDeliveryByAttemptId()
+notify/sub-domains/webhook/webhook-delivery/events/webhook-delivery.event-handlers.ts  →  enqueueWebhookDelivery()
 billing events  →  notify/sub-domains/webhook/events/billing-webhook.event-handlers.ts
 ```
 

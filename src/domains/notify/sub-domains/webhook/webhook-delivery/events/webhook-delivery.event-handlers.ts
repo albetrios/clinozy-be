@@ -1,7 +1,7 @@
 import { eventBus, runEnqueueAfterCommit, type DomainEvent } from '@/core/events/event-bus.js';
-import { enqueueWebhookDeliveryByAttemptId } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
+import { enqueueWebhookDelivery } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
 import {
-  findOrganizationPublicIdByDeliveryAttemptId,
+  findOrganizationPublicIdByDeliveryAttemptPublicId,
   markDeliveryAttemptEnqueueFailed,
 } from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
@@ -13,36 +13,30 @@ import {
 
 async function onWebhookDeliveryRequestedEvent(event: DomainEvent): Promise<void> {
   const payload = event.payload as WebhookDeliveryRequestedPayload;
+  const deliveryAttemptPublicId = payload.delivery_attempt_public_id;
   try {
-    const organization_public_id = await findOrganizationPublicIdByDeliveryAttemptId(
-      payload.delivery_attempt_id,
-    );
+    const organization_public_id =
+      await findOrganizationPublicIdByDeliveryAttemptPublicId(deliveryAttemptPublicId);
     if (!organization_public_id) {
-      throw new Error(
-        `webhook.delivery.organization_not_found:${String(payload.delivery_attempt_id)}`,
-      );
+      throw new Error(`webhook.delivery.organization_not_found:${deliveryAttemptPublicId}`);
     }
     await runEnqueueAfterCommit(async () => {
       try {
-        await enqueueWebhookDeliveryByAttemptId(
+        await enqueueWebhookDelivery(
           omitUndefined({
-            deliveryAttemptId: payload.delivery_attempt_id,
-            deliveryAttemptPublicId: payload.delivery_attempt_public_id,
+            deliveryAttemptPublicId,
             organizationPublicId: organization_public_id,
             requestId: event.requestId,
           }),
         );
       } catch (error) {
-        logger.error(
-          { error, deliveryAttemptId: payload.delivery_attempt_id },
-          'notify.webhook_delivery.enqueue.failed',
-        );
-        await markDeliveryAttemptEnqueueFailed(payload.delivery_attempt_id);
+        logger.error({ error, deliveryAttemptPublicId }, 'notify.webhook_delivery.enqueue.failed');
+        await markDeliveryAttemptEnqueueFailed(deliveryAttemptPublicId);
       }
     });
   } catch (error) {
     logger.warn(
-      { error, eventType: event.type, deliveryAttemptId: payload.delivery_attempt_id },
+      { error, eventType: event.type, deliveryAttemptPublicId },
       'notify.webhook_delivery.enqueue.failed',
     );
   }

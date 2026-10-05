@@ -80,7 +80,6 @@ stateDiagram-v2
 
 See [src/POLICIES.md](src/POLICIES.md) for the full rationale:
 
-- `STUCK_SENDING_LEASE_MINUTES = 15`
 - `STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES = 15`
 - `IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS = 86 400` (mirrors Stripe's replay window)
 

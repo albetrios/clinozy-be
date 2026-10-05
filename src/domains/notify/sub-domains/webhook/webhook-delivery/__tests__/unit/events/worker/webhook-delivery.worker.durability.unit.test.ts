@@ -29,8 +29,9 @@ const { activeContextFixture, disabledContextFixture, deletedContextFixture, fin
     const activeContextFixture = {
       deliveryAttemptId: 42,
       // sec-new-B2: opaque public id used as the X-Webhook-Delivery-Id header value.
-      deliveryAttemptPublicId: 'wa0y8vf3ktxqnhcm1ze21',
+      deliveryAttemptPublicId: 'wda_0y8vf3ktxqnhcm1ze21ab',
       webhookId: 1,
+      webhookPublicId: 'wh_0y8vf3ktxqnhcm1ze21ab',
       webhookUrl: 'https://example.com/hook',
       encryptedSecret: 'v1:secret',
       eventType: 'webhook.test',
@@ -61,7 +62,6 @@ vi.mock(
     createWorkerWebhookDeliveryQueries: vi.fn(() => ({
       findWebhookDeliveryAttemptWithWebhook: findWebhook,
     })),
-    findWebhookDeliveryAttemptWithWebhook: findWebhook,
   }),
 );
 
@@ -87,7 +87,7 @@ function createDeliveryAttemptRepositoryMock() {
  * `webhooks.deleted_at`, so BullMQ retries continued firing signed POSTs to a
  * URL operators had just disabled or soft-deleted. The worker now treats the
  * disabled state as a terminal outcome: record FAILED with `webhook_disabled`
- * + `next_retry_at: null` AND return normally (no throw) so BullMQ does not
+ * + `next_retry_at: null` AND return a skip (no throw) so BullMQ does not
  * re-attempt. The test asserts both: outcome recorded AND no outbound POST.
  *
  * sec-N3 (Medium): outbound headers carried `X-Webhook-Signature`,
@@ -122,19 +122,19 @@ describe('processWebhookDeliveryAttempt — notify durability (sec-N1 + sec-N3)'
     findWebhook.mockResolvedValue(activeContextFixture);
     const repository = createDeliveryAttemptRepositoryMock();
 
-    await processWebhookDeliveryAttempt(
-      42,
-      'org_public_1',
-      { id: 'job-1', attemptsMade: 0 },
-      fetchMock,
-      repository as never,
-    );
+    await processWebhookDeliveryAttempt({
+      deliveryAttemptPublicId: activeContextFixture.deliveryAttemptPublicId,
+      organizationPublicId: 'org_public_1',
+      jobContext: { id: 'job-1', attemptsMade: 0 },
+      fetchImplementation: fetchMock,
+      deliveryAttemptRepository: repository as never,
+    });
 
     expect(fetchMock).toHaveBeenCalledOnce();
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
     // sec-new-B2: must be the opaque public_id — not the numeric bigserial.
     expect(requestInit.headers).toMatchObject({
-      'X-Webhook-Delivery-Id': 'wa0y8vf3ktxqnhcm1ze21',
+      'X-Webhook-Delivery-Id': 'wda_0y8vf3ktxqnhcm1ze21ab',
     });
     const headers = requestInit.headers as Record<string, string>;
     expect(headers['X-Webhook-Delivery-Id']).not.toBe('42');
@@ -144,16 +144,16 @@ describe('processWebhookDeliveryAttempt — notify durability (sec-N1 + sec-N3)'
     findWebhook.mockResolvedValue(disabledContextFixture);
     const repository = createDeliveryAttemptRepositoryMock();
 
-    const result = await processWebhookDeliveryAttempt(
-      43,
-      'org_public_1',
-      { id: 'job-disabled', attemptsMade: 0 },
-      fetchMock,
-      repository as never,
-    );
+    const result = await processWebhookDeliveryAttempt({
+      deliveryAttemptPublicId: activeContextFixture.deliveryAttemptPublicId,
+      organizationPublicId: 'org_public_1',
+      jobContext: { id: 'job-disabled', attemptsMade: 0 },
+      fetchImplementation: fetchMock,
+      deliveryAttemptRepository: repository as never,
+    });
 
     // Returns normally (no throw) → BullMQ does NOT re-attempt the job.
-    expect(result).toEqual({ httpStatus: 200, success: true });
+    expect(result).toEqual({ outcome: 'skipped', reason: 'webhook_disabled' });
     // No outbound POST — the attacker URL is not contacted again.
     expect(fetchMock).not.toHaveBeenCalled();
     // Outcome recorded as terminal FAILED (no further retry).
@@ -171,15 +171,15 @@ describe('processWebhookDeliveryAttempt — notify durability (sec-N1 + sec-N3)'
     findWebhook.mockResolvedValue(deletedContextFixture);
     const repository = createDeliveryAttemptRepositoryMock();
 
-    const result = await processWebhookDeliveryAttempt(
-      44,
-      'org_public_1',
-      { id: 'job-deleted', attemptsMade: 0 },
-      fetchMock,
-      repository as never,
-    );
+    const result = await processWebhookDeliveryAttempt({
+      deliveryAttemptPublicId: activeContextFixture.deliveryAttemptPublicId,
+      organizationPublicId: 'org_public_1',
+      jobContext: { id: 'job-deleted', attemptsMade: 0 },
+      fetchImplementation: fetchMock,
+      deliveryAttemptRepository: repository as never,
+    });
 
-    expect(result).toEqual({ httpStatus: 200, success: true });
+    expect(result).toEqual({ outcome: 'skipped', reason: 'webhook_disabled' });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(repository.recordOutcome).toHaveBeenCalledExactlyOnceWith(44, {
       status: 'FAILED',

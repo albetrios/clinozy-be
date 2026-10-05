@@ -5,8 +5,6 @@ import { Queue, QueueEvents } from 'bullmq';
 
 import { createWebhookDeliveryWorker } from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery.worker.js';
 import { WEBHOOK_DELIVERY_QUEUE_NAME } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
-import { webhook_delivery_attempts } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
-import { database } from '@/infrastructure/database/connection.js';
 import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
 import {
   getBullMQConnectionOptions,
@@ -23,8 +21,10 @@ import {
 } from '@/tests/chaos/helpers/toxiproxy.client.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
-import { createTestWebhook } from '@/tests/factories/webhook.factory.js';
-import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import {
+  createTestWebhook,
+  createTestWebhookDeliveryAttempt,
+} from '@/tests/factories/webhook.factory.js';
 
 /**
  * `postgres-webhook-queue-retry` proves the HAPPY end of the retry ladder (a transient
@@ -66,17 +66,11 @@ describe('Chaos resilience: webhook delivery dead-letters after retry exhaustion
       url: 'https://example.org/api/v1/chaos_fixture_webhooks_for_dlq_observation/ingest',
       events: ['chaos.webhooks.dlq.probe'],
     });
-    const [pendingAttemptForDlqExhaustion] = await database
-      .insert(webhook_delivery_attempts)
-      .values({
-        public_id: generatePublicId('webhook'),
-        webhook_id: webhookForDlqExhaustionFixture.id,
-        event_type: 'chaos.webhooks.dlq.probe',
-        payload: { simulatedEvent: true },
-        status: 'PENDING',
-        attempt_count: 0,
-      })
-      .returning({ id: webhook_delivery_attempts.id });
+    const pendingAttemptForDlqExhaustion = await createTestWebhookDeliveryAttempt({
+      webhookId: webhookForDlqExhaustionFixture.id,
+      eventType: 'chaos.webhooks.dlq.probe',
+      payload: { simulatedEvent: true },
+    });
 
     webhookDeliveryWorkerHandleAwaitingExhaustion = createWebhookDeliveryWorker();
     const workerReferenceForDlqAttachment = webhookDeliveryWorkerHandleAwaitingExhaustion.worker;
@@ -119,7 +113,7 @@ describe('Chaos resilience: webhook delivery dead-letters after retry exhaustion
       await enqueueQueueAwaitingExhaustion.add(
         'deliver-webhook',
         {
-          deliveryAttemptId: pendingAttemptForDlqExhaustion!.id,
+          deliveryAttemptPublicId: pendingAttemptForDlqExhaustion.publicId,
           organizationPublicId: organizationForDlqExhaustionFixture.public_id,
         },
         {

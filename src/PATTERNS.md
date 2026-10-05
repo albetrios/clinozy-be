@@ -235,7 +235,7 @@ sequenceDiagram
 ```
 
 - **Atomic claim**: the worker uses an `UPDATE ... WHERE status = 'pending' RETURNING id` to prevent two workers from claiming the same row.
-- **Stuck-row reclaim**: the sweeper processor reclaims rows stuck in `sending` for longer than `STUCK_SENDING_LEASE_MINUTES` (15 min) so a crashed worker doesn't strand outbox rows forever.
+- **Stuck-row reclaim**: the sweeper processor reclaims rows stuck in `sending` for longer than `MAIL_OUTBOX_RECLAIM_SENDING_MINUTES` (env, default 30 min; widened while the Resend circuit is open) so a crashed worker doesn't strand outbox rows forever.
 - **DLQ**: failed deliveries with exhausted retries land in the per-queue `<name>-dlq` registered by [src/infrastructure/queue/dlq/](src/infrastructure/queue/dlq/).
 
 ### How to apply

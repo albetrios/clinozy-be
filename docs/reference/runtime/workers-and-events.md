@@ -63,7 +63,7 @@ HTTP handlers pass `getRequestIdentifier(request)` into services as `context.req
 await eventBus.emit(buildDomainEvent(EVENT_TYPE, payload, { requestId: context?.requestId }));
 ```
 
-Event handlers read `event.requestId` and pass it to `recordOutboxEmail()`, `enqueueNotification()`, `enqueueWebhookDeliveryByAttemptId()`, etc. Job payloads store `requestId` (Zod-validated); workers log it on `mail.worker.processing` and **`email.sent`** so worker logs correlate with API `request.complete` (`requestId` field).
+Event handlers read `event.requestId` and pass it to `recordOutboxEmail()`, `enqueueNotification()`, `enqueueWebhookDelivery()`, etc. Job payloads store `requestId` (Zod-validated); workers log it on `mail.worker.processing` and **`email.sent`** so worker logs correlate with API `request.complete` (`requestId` field).
 
 ### Post-commit enqueue (transactional outbox)
 
@@ -110,7 +110,7 @@ When the same BullMQ job can be processed concurrently (retries, stalls, or mult
 | Worker               | Claim mechanism                                                                              | Terminal skip                                                                                  |
 | -------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | **Stripe webhook**   | `StripeWebhookEventRepository.tryClaimEvent()` — insert ledger with `ON CONFLICT DO NOTHING` | `processed_duplicate` → no handler                                                             |
-| **Webhook delivery** | `WebhookDeliveryAttemptRepository.tryMarkSending()` — `PENDING` → `SENDING` update           | `already_sent` → no HTTP; stale `SENDING` (by `sent_at` lease) reclaimed to `PENDING` on retry |
+| **Webhook delivery** | `WebhookDeliveryAttemptRepository.tryMarkSending()` — any status but `SENT` → `SENDING` (`attempt_count + 1`) | `already_sent` → no HTTP; a `SENDING` row is re-claimed at once (BullMQ runs one execution per job id, so it belongs to a crashed one); receivers dedupe on `X-Webhook-Delivery-Id` |
 | **Mail**             | `tryClaimPendingMailOutbox()` — `pending` → `sending` update                                 | `already_sent` → no Resend call                                                                |
 
 Stuck `sending` rows (worker crash after claim) are reclaimed to `pending` by the repeatable **mail-outbox-sweeper** job (`reclaimStaleSendingMailOutboxIds`) before re-enqueue.
@@ -235,7 +235,7 @@ billing/sub-domains/stripe-webhook/workers/stripe-webhook.worker.ts  →  proces
 
 ```text
 emitWebhookDeliveryRequested()  →  notify/sub-domains/webhook/events/
-webhook-delivery.event-handlers.ts  →  enqueueWebhookDeliveryByAttemptId()
+webhook-delivery.event-handlers.ts  →  enqueueWebhookDelivery()
 ```
 
 **Outbound webhook SSRF:** `webhook-delivery.worker` uses `createPinnedWebhookFetch()` (`src/shared/utils/security/webhook-outbound-fetch.util.ts`). DNS is resolved once per delivery via `resolveAndPinWebhookUrl()`; the HTTP client connects to the pinned public IP while sending the original `Host` / TLS SNI. `validateWebhookUrl()` at create/update time uses `ipaddr.js` to normalize IPv4-mapped IPv6 literals (e.g. `[::ffff:127.0.0.1]`) before range checks, and rejects private, link-local, CGNAT, loopback, and other non-routable targets. Optional `WEBHOOK_URL_ALLOWLIST` (comma-separated host suffixes) further restricts hostnames in production.

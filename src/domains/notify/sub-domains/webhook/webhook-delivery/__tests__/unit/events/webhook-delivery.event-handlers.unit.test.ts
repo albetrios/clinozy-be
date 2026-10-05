@@ -1,22 +1,23 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const enqueueWebhookDeliveryByAttemptIdMock = vi.fn();
-const findOrganizationPublicIdByDeliveryAttemptIdMock = vi.fn();
+const enqueueWebhookDeliveryMock = vi.fn();
+const findOrganizationPublicIdByDeliveryAttemptPublicIdMock = vi.fn();
+const markDeliveryAttemptEnqueueFailedMock = vi.fn();
 
 vi.mock(
   '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js',
   () => ({
-    WEBHOOK_DELIVERY_JOB_ATTEMPTS: 5,
-    enqueueWebhookDeliveryByAttemptId: (...arguments_: unknown[]) =>
-      enqueueWebhookDeliveryByAttemptIdMock(...arguments_),
+    enqueueWebhookDelivery: (...arguments_: unknown[]) => enqueueWebhookDeliveryMock(...arguments_),
   }),
 );
 
 vi.mock(
   '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.js',
   () => ({
-    findOrganizationPublicIdByDeliveryAttemptId: (...arguments_: unknown[]) =>
-      findOrganizationPublicIdByDeliveryAttemptIdMock(...arguments_),
+    findOrganizationPublicIdByDeliveryAttemptPublicId: (...arguments_: unknown[]) =>
+      findOrganizationPublicIdByDeliveryAttemptPublicIdMock(...arguments_),
+    markDeliveryAttemptEnqueueFailed: (...arguments_: unknown[]) =>
+      markDeliveryAttemptEnqueueFailedMock(...arguments_),
   }),
 );
 
@@ -42,24 +43,27 @@ describe('webhook delivery event handlers', () => {
   }, 60_000);
 
   beforeEach(() => {
-    enqueueWebhookDeliveryByAttemptIdMock.mockReset();
-    findOrganizationPublicIdByDeliveryAttemptIdMock.mockReset();
-    findOrganizationPublicIdByDeliveryAttemptIdMock.mockResolvedValue('org_public_test_99');
+    enqueueWebhookDeliveryMock.mockReset();
+    markDeliveryAttemptEnqueueFailedMock.mockReset();
+    findOrganizationPublicIdByDeliveryAttemptPublicIdMock.mockReset();
+    findOrganizationPublicIdByDeliveryAttemptPublicIdMock.mockResolvedValue('org_public_test_99');
   });
 
   it('enqueues webhook delivery on notify.webhook_delivery.requested', async () => {
     await runWithOnCommitScope(async () => {
       await eventBus.emit({
         type: NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED,
-        payload: { delivery_attempt_id: 99, delivery_attempt_public_id: 'wda_attempt99' },
+        payload: { delivery_attempt_public_id: 'wda_attempt99' },
         timestamp: new Date(),
       });
       await eventBus.flushOnCommit();
     });
 
-    expect(enqueueWebhookDeliveryByAttemptIdMock).toHaveBeenCalledOnce();
-    expect(enqueueWebhookDeliveryByAttemptIdMock).toHaveBeenCalledWith({
-      deliveryAttemptId: 99,
+    expect(findOrganizationPublicIdByDeliveryAttemptPublicIdMock).toHaveBeenCalledWith(
+      'wda_attempt99',
+    );
+    // The public id is the only handle the job carries — no bigserial crosses into Redis.
+    expect(enqueueWebhookDeliveryMock).toHaveBeenCalledExactlyOnceWith({
       deliveryAttemptPublicId: 'wda_attempt99',
       organizationPublicId: 'org_public_test_99',
     });
@@ -68,16 +72,42 @@ describe('webhook delivery event handlers', () => {
   it('enqueues webhook delivery immediately when no HTTP onCommit scope is active', async () => {
     await eventBus.emit({
       type: NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED,
-      payload: { delivery_attempt_id: 42, delivery_attempt_public_id: 'wda_attempt42' },
+      payload: { delivery_attempt_public_id: 'wda_attempt42' },
       timestamp: new Date(),
     });
 
-    expect(enqueueWebhookDeliveryByAttemptIdMock).toHaveBeenCalledOnce();
-    expect(enqueueWebhookDeliveryByAttemptIdMock).toHaveBeenCalledWith({
-      deliveryAttemptId: 42,
+    expect(enqueueWebhookDeliveryMock).toHaveBeenCalledExactlyOnceWith({
       deliveryAttemptPublicId: 'wda_attempt42',
       organizationPublicId: 'org_public_test_99',
     });
+  });
+
+  it('forwards the originating request id so the delivery logs join the request', async () => {
+    await eventBus.emit({
+      type: NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED,
+      payload: { delivery_attempt_public_id: 'wda_attempt43' },
+      timestamp: new Date(),
+      requestId: 'request-43',
+    });
+
+    expect(enqueueWebhookDeliveryMock).toHaveBeenCalledExactlyOnceWith({
+      deliveryAttemptPublicId: 'wda_attempt43',
+      organizationPublicId: 'org_public_test_99',
+      requestId: 'request-43',
+    });
+  });
+
+  it('marks the attempt enqueue_failed when the enqueue itself fails (a Redis blip)', async () => {
+    // Without this backstop the row would sit PENDING forever: nothing else ever enqueues it.
+    enqueueWebhookDeliveryMock.mockRejectedValueOnce(new Error('redis down'));
+
+    await eventBus.emit({
+      type: NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED,
+      payload: { delivery_attempt_public_id: 'wda_attempt44' },
+      timestamp: new Date(),
+    });
+
+    expect(markDeliveryAttemptEnqueueFailedMock).toHaveBeenCalledExactlyOnceWith('wda_attempt44');
   });
 
   it('does not enqueue an unscoped delivery when the attempt has no resolvable organization', async () => {
@@ -85,14 +115,14 @@ describe('webhook delivery event handlers', () => {
     // makes it throw `organization_not_found`, which the handler CATCHES and logs — it must never
     // enqueue an organization-less delivery, and the throw must not escape the event bus (a failing
     // handler must not fail the originating request).
-    findOrganizationPublicIdByDeliveryAttemptIdMock.mockResolvedValue(null);
+    findOrganizationPublicIdByDeliveryAttemptPublicIdMock.mockResolvedValue(null);
 
     await eventBus.emit({
       type: NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED,
-      payload: { delivery_attempt_id: 7, delivery_attempt_public_id: 'wda_attempt7' },
+      payload: { delivery_attempt_public_id: 'wda_attempt7' },
       timestamp: new Date(),
     });
 
-    expect(enqueueWebhookDeliveryByAttemptIdMock).not.toHaveBeenCalled();
+    expect(enqueueWebhookDeliveryMock).not.toHaveBeenCalled();
   });
 });

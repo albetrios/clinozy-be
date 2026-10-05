@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, lt, ne, type SQL } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne, sql, type SQL } from 'drizzle-orm';
 import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
@@ -11,8 +11,6 @@ import {
   webhooks,
   webhook_delivery_attempts,
 } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
-import { WEBHOOK_DELIVERY_STUCK_SENDING_LEASE_MINUTES } from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.constants.js';
-import { MILLISECONDS_PER_MINUTE } from '@/shared/constants/ttl.constants.js';
 import {
   buildDescendingCreatedAtIdCursorCondition,
   createOpaqueCursorFromRow,
@@ -20,11 +18,11 @@ import {
 } from '@/shared/utils/http/pagination.util.js';
 
 /**
- * Outcome of {@link WebhookDeliveryAttemptRepository.tryMarkSending}. `claimed` means the
- * worker now owns the attempt; `in_flight` means another worker still holds a fresh lease;
- * `already_sent` means a previous attempt succeeded and the worker should no-op.
+ * Outcome of {@link WebhookDeliveryAttemptRepository.tryMarkSending}: `claimed` means this
+ * execution now sends the attempt; `already_sent` means a previous one succeeded and the worker
+ * should no-op.
  */
-export type WebhookDeliverySendingClaimResult = 'claimed' | 'in_flight' | 'already_sent';
+export type WebhookDeliverySendingClaimResult = 'claimed' | 'already_sent';
 
 /** Keyset pagination input for listing delivery attempts in the dashboard. */
 export interface WebhookDeliveryAttemptListPagination {
@@ -141,43 +139,29 @@ export class WebhookDeliveryAttemptRepository {
   }
 
   /**
-   * Atomically claims a delivery attempt for outbound HTTP (`PENDING` → `SENDING`,
-   * `FAILED` → `SENDING` when BullMQ advances to the next retry, or reclaims a
-   * stale `SENDING` row after the lease expires).
+   * Claims a delivery attempt for this execution: any status but `SENT` moves to `SENDING`,
+   * counting the attempt and clearing the previous outcome.
+   *
+   * @remarks
+   * - **Algorithm:** one `UPDATE … WHERE status <> 'SENT' RETURNING`; `attempt_count` counts
+   *   every send ever started for the row, across retries and DLQ replays.
+   * - **Why no lease:** BullMQ runs one execution of a job at a time, and the job id is the
+   *   attempt's public id, so an execution that finds the row `SENDING` is looking at one that
+   *   died mid-send (crash, lost lock) or at the last attempt of a job that ended mid-send before
+   *   a replay. Treating that as "in flight" and returning success — as this used to — completed
+   *   the job and the delivery never happened; a DLQ replay of a `FAILED` row was skipped the same
+   *   way. Re-claiming is the only way such a delivery completes. If a stalled execution was in
+   *   fact still alive, the receiver sees the event twice — the at-least-once contract it already
+   *   dedupes with `X-Webhook-Delivery-Id`.
+   * - **Failure modes:** none beyond database errors.
+   * - **Side effects:** updates one `webhook_delivery_attempts` row.
    */
-  async tryMarkSending(
-    deliveryAttemptId: number,
-    attemptCount: number,
-  ): Promise<WebhookDeliverySendingClaimResult> {
-    const staleSendingBefore = new Date(
-      Date.now() - WEBHOOK_DELIVERY_STUCK_SENDING_LEASE_MINUTES * MILLISECONDS_PER_MINUTE,
-    );
-    const requestDatabase = this.db();
-
-    const claimedFromPending = await requestDatabase
+  async tryMarkSending(deliveryAttemptId: number): Promise<WebhookDeliverySendingClaimResult> {
+    const claimedRows = await this.db()
       .update(webhook_delivery_attempts)
       .set({
         status: 'SENDING',
-        attempt_count: attemptCount,
-        sent_at: new Date(),
-      })
-      .where(
-        and(
-          eq(webhook_delivery_attempts.id, deliveryAttemptId),
-          eq(webhook_delivery_attempts.status, 'PENDING'),
-        ),
-      )
-      .returning({ id: webhook_delivery_attempts.id });
-
-    if (claimedFromPending.length > 0) {
-      return 'claimed';
-    }
-
-    const reclaimedFailedRetry = await requestDatabase
-      .update(webhook_delivery_attempts)
-      .set({
-        status: 'SENDING',
-        attempt_count: attemptCount,
+        attempt_count: sql`${webhook_delivery_attempts.attempt_count} + 1`,
         sent_at: new Date(),
         http_status_code: null,
         response_body: null,
@@ -186,47 +170,12 @@ export class WebhookDeliveryAttemptRepository {
       .where(
         and(
           eq(webhook_delivery_attempts.id, deliveryAttemptId),
-          eq(webhook_delivery_attempts.status, 'FAILED'),
-          lt(webhook_delivery_attempts.attempt_count, attemptCount),
+          ne(webhook_delivery_attempts.status, 'SENT'),
         ),
       )
       .returning({ id: webhook_delivery_attempts.id });
 
-    if (reclaimedFailedRetry.length > 0) {
-      return 'claimed';
-    }
-
-    const reclaimedStaleSending = await requestDatabase
-      .update(webhook_delivery_attempts)
-      .set({
-        status: 'SENDING',
-        attempt_count: attemptCount,
-        sent_at: new Date(),
-      })
-      .where(
-        and(
-          eq(webhook_delivery_attempts.id, deliveryAttemptId),
-          eq(webhook_delivery_attempts.status, 'SENDING'),
-          lt(webhook_delivery_attempts.sent_at, staleSendingBefore),
-        ),
-      )
-      .returning({ id: webhook_delivery_attempts.id });
-
-    if (reclaimedStaleSending.length > 0) {
-      return 'claimed';
-    }
-
-    const statusRows = await requestDatabase
-      .select({ status: webhook_delivery_attempts.status })
-      .from(webhook_delivery_attempts)
-      .where(eq(webhook_delivery_attempts.id, deliveryAttemptId))
-      .limit(1);
-
-    if (statusRows[0]?.status === 'SENT') {
-      return 'already_sent';
-    }
-
-    return 'in_flight';
+    return claimedRows.length > 0 ? 'claimed' : 'already_sent';
   }
 
   /**

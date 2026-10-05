@@ -6,6 +6,7 @@ import {
   resetWebhookOutboundCircuitsForTesting,
   webhookDeliveryBackoffWithJitter,
 } from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-outbound-circuit.js';
+import { WEBHOOK_DELIVERY_RETRY_DELAYS_MS } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
 
 /** Mirrors WEBHOOK_CIRCUIT_CACHE_MAX_ENTRIES in webhook-outbound-circuit.ts. */
 const WEBHOOK_CIRCUIT_CACHE_MAX_ENTRIES = 5_000;
@@ -15,16 +16,22 @@ describe('webhook-outbound-circuit', () => {
     resetWebhookOutboundCircuitsForTesting();
   });
 
-  it('webhookDeliveryBackoffWithJitter returns base delay plus jitter for attempt 1', () => {
-    const delayMs = webhookDeliveryBackoffWithJitter(1);
-    expect(delayMs).toBeGreaterThanOrEqual(10_000);
-    expect(delayMs).toBeLessThanOrEqual(13_000);
-  });
+  it.each(
+    WEBHOOK_DELIVERY_RETRY_DELAYS_MS.map((baseDelayMs, index) => [index + 1, baseDelayMs] as const),
+  )(
+    'webhookDeliveryBackoffWithJitter after failure %i waits the schedule delay plus at most 20%%',
+    (attemptsMade, baseDelayMs) => {
+      for (let draw = 0; draw < 20; draw += 1) {
+        const delayMs = webhookDeliveryBackoffWithJitter(attemptsMade);
+        expect(delayMs).toBeGreaterThanOrEqual(baseDelayMs);
+        expect(delayMs).toBeLessThanOrEqual(baseDelayMs * 1.2);
+      }
+    },
+  );
 
-  it('webhookDeliveryBackoffWithJitter returns base delay plus jitter for attempt 2', () => {
-    const delayMs = webhookDeliveryBackoffWithJitter(2);
-    expect(delayMs).toBeGreaterThanOrEqual(20_000);
-    expect(delayMs).toBeLessThanOrEqual(26_000);
+  it('webhookDeliveryBackoffWithJitter starts at a minute and tops out at ten hours', () => {
+    expect(webhookDeliveryBackoffWithJitter(1)).toBeLessThanOrEqual(72_000);
+    expect(webhookDeliveryBackoffWithJitter(99)).toBeGreaterThanOrEqual(10 * 60 * 60_000);
   });
 
   it('opens circuit for a failing webhook without affecting a healthy webhook', async () => {

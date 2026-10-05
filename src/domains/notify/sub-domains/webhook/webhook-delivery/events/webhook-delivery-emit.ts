@@ -25,14 +25,15 @@ export interface RequestWebhookDeliveryInput {
 
 /**
  * Persist a PENDING delivery attempt and emit async delivery via the event bus.
- * Handlers call {@link enqueueWebhookDeliveryByAttemptId} — not domain services directly.
+ * Handlers call {@link enqueueWebhookDelivery} — not domain services directly. Emits nothing when
+ * the logical event is already being delivered (see {@link createPendingWebhookDeliveryAttempt}).
  */
 export async function emitWebhookDeliveryRequested(
   input: RequestWebhookDeliveryInput,
 ): Promise<void> {
   const deliveryAttempt = await createPendingWebhookDeliveryAttempt(input);
+  if (deliveryAttempt === null) return;
   const payload: WebhookDeliveryRequestedPayload = {
-    delivery_attempt_id: deliveryAttempt.id,
     delivery_attempt_public_id: deliveryAttempt.publicId,
   };
   await eventBus.emit({

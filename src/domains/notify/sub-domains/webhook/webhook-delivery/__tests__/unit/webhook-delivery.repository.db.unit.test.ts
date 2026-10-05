@@ -8,7 +8,8 @@ import { webhook_delivery_attempts } from '@/domains/notify/sub-domains/webhook/
 import { WebhookRepository } from '@/domains/notify/sub-domains/webhook/webhook.repository.js';
 import {
   createPendingWebhookDeliveryAttempt,
-  findOrganizationPublicIdByDeliveryAttemptId,
+  disableWebhookAfterEndpointGone,
+  findOrganizationPublicIdByDeliveryAttemptPublicId,
   findOrganizationPublicIdByWebhookId,
   findWebhookDeliveryAttemptWithWebhook,
   markDeliveryAttemptEnqueueFailed,
@@ -40,22 +41,22 @@ describe('webhook-delivery.repository (database)', () => {
       eventType: 'subscription.updated',
       payload: { subscription_id: 'sub_1' },
     });
-    // The public id is the BullMQ job id, so the creator hands it back with the bigserial.
-    expect(deliveryAttempt.publicId).toMatch(/^wda_[a-z0-9]{21}$/);
+    // The public id is the BullMQ job id and the job payload — the only handle the creator returns.
+    expect(deliveryAttempt).toEqual({ publicId: expect.stringMatching(/^wda_[a-z0-9]{21}$/) });
 
-    const organizationByAttempt = await findOrganizationPublicIdByDeliveryAttemptId(
-      deliveryAttempt.id,
+    const organizationByAttempt = await findOrganizationPublicIdByDeliveryAttemptPublicId(
+      deliveryAttempt!.publicId,
     );
     expect(organizationByAttempt).toBe(organization.public_id);
 
     const delivery = await findWebhookDeliveryAttemptWithWebhook(
-      deliveryAttempt.id,
+      deliveryAttempt!.publicId,
       organization.public_id,
     );
     expect(delivery?.webhookUrl).toBe('https://example.com/webhooks');
     expect(delivery?.eventType).toBe('subscription.updated');
     expect(delivery?.payload).toEqual({ subscription_id: 'sub_1' });
-    expect(delivery?.deliveryAttemptPublicId).toBe(deliveryAttempt.publicId);
+    expect(delivery?.deliveryAttemptPublicId).toBe(deliveryAttempt!.publicId);
     // Keys the outbound circuit breaker — the webhook's public id, not its bigserial.
     expect(delivery?.webhookPublicId).toBe(webhook.public_id);
   });
@@ -78,7 +79,7 @@ describe('webhook-delivery.repository (database)', () => {
     });
 
     const missing = await findWebhookDeliveryAttemptWithWebhook(
-      deliveryAttempt.id,
+      deliveryAttempt!.publicId,
       'org_does_not_match',
     );
     expect(missing).toBeNull();
@@ -89,8 +90,10 @@ describe('webhook-delivery.repository (database)', () => {
     expect(result).toBeNull();
   });
 
-  it('findOrganizationPublicIdByDeliveryAttemptId returns null when attempt missing', async () => {
-    const result = await findOrganizationPublicIdByDeliveryAttemptId(999_999);
+  it('findOrganizationPublicIdByDeliveryAttemptPublicId returns null when attempt missing', async () => {
+    const result = await findOrganizationPublicIdByDeliveryAttemptPublicId(
+      'wda_missingmissingmissing',
+    );
     expect(result).toBeNull();
   });
 
@@ -112,16 +115,33 @@ describe('webhook-delivery.repository (database)', () => {
       payload: { subscription_id: 'sub_enqueue_fail' },
     });
 
-    await markDeliveryAttemptEnqueueFailed(deliveryAttempt.id);
+    await markDeliveryAttemptEnqueueFailed(deliveryAttempt!.publicId);
 
     const [row] = await database
       .select()
       .from(webhook_delivery_attempts)
-      .where(eq(webhook_delivery_attempts.id, deliveryAttempt.id));
+      .where(eq(webhook_delivery_attempts.public_id, deliveryAttempt!.publicId));
     expect(row?.status).toBe('FAILED');
     expect(row?.response_body).toBe('enqueue_failed');
     expect(row?.http_status_code).toBeNull();
     // next_retry_at null so the retention/retry paths never re-pick a terminally-enqueue-failed row.
     expect(row?.next_retry_at).toBeNull();
+  });
+
+  it('disableWebhookAfterEndpointGone turns the webhook off (410 Gone from its endpoint)', async () => {
+    const owner = await createTestUser();
+    const organization = await createTestOrganization({ ownerUserId: owner.id });
+    const webhook = await webhookRepository.create({
+      organization_id: organization.id,
+      url: 'https://example.com/gone',
+      events: ['subscription.updated'],
+      encrypted_secret: 'sample-webhook-secret-gone',
+      created_by_user_id: owner.id,
+    });
+
+    await disableWebhookAfterEndpointGone(webhook.id);
+
+    const reloaded = await webhookRepository.findByPublicId(webhook.public_id, organization.id);
+    expect(reloaded?.is_enabled).toBe(false);
   });
 });

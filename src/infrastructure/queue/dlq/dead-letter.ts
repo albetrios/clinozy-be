@@ -53,7 +53,7 @@ export interface DeadLetterJobData {
  * Extracts the non-secret replay keys from a failed job's data into the DLQ summary.
  *
  * Each replayable queue type contributes the identifiers {@link buildReplayJobPayload} needs
- * to reconstruct its job: mail (`mail_outbox_id`), webhook delivery (`delivery_attempt_id` +
+ * to reconstruct its job: mail (`mail_outbox_id`), webhook delivery (`delivery_attempt_public_id` +
  * `organization_public_id`), notification (`notification_id` + `organization_public_id`), and
  * Stripe webhook (`stripe_event_id`). These are public/internal identifiers only — full
  * payloads, HTML bodies, signing secrets, and PII are deliberately left out so nothing
@@ -66,8 +66,8 @@ function summarizeJobDataForDeadLetter(data: unknown): Record<string, unknown> {
   const record = data as Record<string, unknown>;
   const summary: Record<string, unknown> = {};
   if (record.mailOutboxId !== undefined) summary.mail_outbox_id = record.mailOutboxId;
-  if (record.deliveryAttemptId !== undefined) {
-    summary.delivery_attempt_id = record.deliveryAttemptId;
+  if (record.deliveryAttemptPublicId !== undefined) {
+    summary.delivery_attempt_public_id = record.deliveryAttemptPublicId;
   }
   if (record.webhookId !== undefined) summary.webhook_id = record.webhookId;
   if (record.eventType !== undefined) summary.event_type = record.eventType;

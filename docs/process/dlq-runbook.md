@@ -33,7 +33,7 @@ The full list of source queues (work + retention/cleanup + observability) is in 
 | DLQ | Reconstructed job payload | If replay fails |
 | --- | ------------------------- | --------------- |
 | `mail-dlq` | `{ mailOutboxId }` from `original_data_summary` | Fix `auth.mail_outbox` row, then replay |
-| `webhook-delivery-dlq` | `{ deliveryAttemptId, organizationPublicId }` | Fix URL/secret; create a new attempt if the row is terminal |
+| `webhook-delivery-dlq` | `{ deliveryAttemptPublicId, organizationPublicId }` | Fix URL/secret, then replay — the attempt re-claims its `FAILED` row (a `SENT` one is skipped) |
 | `stripe-webhook-dlq` | `{ stripeEventId }` — worker fetches event from Stripe API | Reclaim ledger row (`pnpm tool:stripe-webhook-replay`) if needed |
 | `notification-dlq` | `{ notificationId, organizationPublicId }` (`organizationPublicId` is `null` for global notifications) — worker reloads content from `notify.notifications` | Fix the notification row, then replay |
 

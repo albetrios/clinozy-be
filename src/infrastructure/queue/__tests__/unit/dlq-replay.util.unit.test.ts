@@ -41,7 +41,7 @@ describe('dlq-replay.util', () => {
       original_job_id: 'wh-1',
       original_job_name: 'deliver-webhook',
       original_data_summary: {
-        delivery_attempt_id: 9,
+        delivery_attempt_public_id: 'wda_9z3rura5kqvcv8zggriym',
         organization_public_id: 'org_public_abc',
       },
       failed_reason: 'error',
@@ -62,7 +62,7 @@ describe('dlq-replay.util', () => {
     };
 
     expect(buildReplayJobPayload(webhookData)).toMatchObject({
-      deliveryAttemptId: 9,
+      deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
       organizationPublicId: 'org_public_abc',
       replayFromDlq: true,
       dlqReplayAttempt: 0,
@@ -132,7 +132,7 @@ describe('dlq-replay.util', () => {
       buildReplayJobPayload({
         ...base,
         original_queue: WEBHOOK_DELIVERY_QUEUE_NAME,
-        original_data_summary: { delivery_attempt_id: 9 },
+        original_data_summary: { delivery_attempt_public_id: 'wda_9z3rura5kqvcv8zggriym' },
       }),
     ).toBeNull();
 

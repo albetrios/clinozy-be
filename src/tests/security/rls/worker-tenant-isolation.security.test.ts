@@ -9,7 +9,10 @@ import { webhook_delivery_attempts } from '@/domains/notify/sub-domains/webhook/
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
-import { createTestWebhook } from '@/tests/factories/webhook.factory.js';
+import {
+  createTestWebhook,
+  createTestWebhookDeliveryAttempt,
+} from '@/tests/factories/webhook.factory.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 vi.mock('@/shared/utils/security/webhook-url.util.js', () => ({
@@ -62,31 +65,25 @@ describe('Security: Worker tenant isolation', () => {
       createdByUserId: user.id,
     });
 
-    const [pendingAttempt] = await database
-      .insert(webhook_delivery_attempts)
-      .values({
-        public_id: generatePublicId('organization'),
-        webhook_id: webhook.id,
-        event_type: 'security.test',
-        payload: { probe: true },
-        status: 'PENDING',
-        attempt_count: 0,
-      })
-      .returning({ id: webhook_delivery_attempts.id });
+    const pendingAttempt = await createTestWebhookDeliveryAttempt({
+      webhookId: webhook.id,
+      eventType: 'security.test',
+      payload: { probe: true },
+    });
 
     await expect(
-      processWebhookDeliveryAttempt(
-        pendingAttempt!.id,
-        organizationB.public_id,
-        { id: 'security-test', attemptsMade: 0 },
-        vi.fn(),
-      ),
+      processWebhookDeliveryAttempt({
+        deliveryAttemptPublicId: pendingAttempt.publicId,
+        organizationPublicId: organizationB.public_id,
+        jobContext: { id: 'security-test', attemptsMade: 0 },
+        fetchImplementation: vi.fn(),
+      }),
     ).rejects.toThrow(/attempt_not_found/);
 
     const [row] = await database
       .select({ status: webhook_delivery_attempts.status })
       .from(webhook_delivery_attempts)
-      .where(eq(webhook_delivery_attempts.id, pendingAttempt!.id));
+      .where(eq(webhook_delivery_attempts.id, pendingAttempt.id));
 
     expect(row?.status).toBe('PENDING');
   });

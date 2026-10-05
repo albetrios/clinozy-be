@@ -111,18 +111,21 @@ describe('Chaos resilience: webhook delivery circuit breaker isolates misbehavin
     });
     await queueEvents.waitUntilReady();
 
-    const { id: misbehavingAttemptId } = await createPendingWebhookDeliveryAttempt({
+    const misbehavingAttempt = await createPendingWebhookDeliveryAttempt({
       webhookId: misbehavingWebhook.id,
       eventType: 'chaos.webhook.misbehaving',
       payload: { probe: 'misbehaving' },
     });
 
-    const { id: healthyAttemptId } = await createPendingWebhookDeliveryAttempt({
+    const healthyAttempt = await createPendingWebhookDeliveryAttempt({
       webhookId: healthyWebhook.id,
       eventType: 'chaos.webhook.healthy',
       payload: { probe: 'healthy' },
     });
 
+    if (!(misbehavingAttempt && healthyAttempt)) {
+      throw new Error('webhook_delivery.chaos_fixture_attempt_was_not_created');
+    }
     const healthyJobId = `chaos-webhook-healthy-${randomUUID()}`;
     const misbehavingJobId = `chaos-webhook-misbehaving-${randomUUID()}`;
 
@@ -132,7 +135,7 @@ describe('Chaos resilience: webhook delivery circuit breaker isolates misbehavin
     await enqueueQueue.add(
       'deliver-webhook',
       {
-        deliveryAttemptId: misbehavingAttemptId,
+        deliveryAttemptPublicId: misbehavingAttempt.publicId,
         organizationPublicId: organization.public_id,
       },
       {
@@ -145,7 +148,7 @@ describe('Chaos resilience: webhook delivery circuit breaker isolates misbehavin
     await enqueueQueue.add(
       'deliver-webhook',
       {
-        deliveryAttemptId: healthyAttemptId,
+        deliveryAttemptPublicId: healthyAttempt.publicId,
         organizationPublicId: organization.public_id,
       },
       { jobId: healthyJobId },

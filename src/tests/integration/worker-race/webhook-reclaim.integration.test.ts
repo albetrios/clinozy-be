@@ -8,20 +8,28 @@ import {
   withAppDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
 import { WebhookDeliveryAttemptRepository } from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery-attempt.repository.js';
-import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
-import { createTestWebhook } from '@/tests/factories/webhook.factory.js';
+import {
+  createTestWebhook,
+  createTestWebhookDeliveryAttempt,
+} from '@/tests/factories/webhook.factory.js';
 
-describe('Integration: webhook delivery sending reclaim', () => {
+/**
+ * BullMQ runs one execution of a job at a time and the job id is the attempt's public id, so an
+ * execution that finds its row `SENDING` is looking at one that crashed or lost its lock mid-send.
+ * The claim must take the row back: the old lease reported such a row as "in flight", the job
+ * completed, and the event was never delivered.
+ */
+describe('Integration: webhook delivery re-claim', () => {
   const repository = new WebhookDeliveryAttemptRepository();
 
   beforeEach(async () => {
     await cleanupDatabase();
   });
 
-  it('reclaims stale SENDING rows to PENDING on the next tryMarkSending', async () => {
+  it('a new execution re-claims the SENDING row a crashed execution left behind', async () => {
     const user = await createTestUser();
     const organization = await createTestOrganization({ ownerUserId: user.id });
     const webhook = await createTestWebhook({
@@ -30,47 +38,30 @@ describe('Integration: webhook delivery sending reclaim', () => {
       events: ['webhook.test'],
       createdByUserId: user.id,
     });
-
-    const [pendingAttempt] = await getOperatorDatabase()
-      .insert(webhook_delivery_attempts)
-      .values({
-        public_id: generatePublicId('webhook'),
-        webhook_id: webhook.id,
-        event_type: 'webhook.test',
-        payload: { reclaim: true },
-        status: 'PENDING',
-        attempt_count: 0,
-      })
-      .returning({ id: webhook_delivery_attempts.id });
-
-    expect(
-      await withAppDatabaseContext(
+    const deliveryAttempt = await createTestWebhookDeliveryAttempt({
+      webhookId: webhook.id,
+      payload: { reclaim: true },
+    });
+    const claimUnderJobScope = () =>
+      withAppDatabaseContext(
         PRINCIPAL_SCOPE.JOB({ organizationPublicId: organization.public_id }),
-        () => repository.tryMarkSending(pendingAttempt!.id, 1),
-      ),
-    ).toBe('claimed');
+        () => repository.tryMarkSending(deliveryAttempt.id),
+      );
 
-    await getOperatorDatabase()
-      .update(webhook_delivery_attempts)
-      .set({ sent_at: new Date(Date.now() - 60 * 60_000) })
-      .where(eq(webhook_delivery_attempts.id, pendingAttempt!.id));
+    // The first execution claims and dies before recording an outcome; the next one — no wait,
+    // no lease to run out — claims the same row straight away.
+    expect(await claimUnderJobScope()).toBe('claimed');
+    expect(await claimUnderJobScope()).toBe('claimed');
 
-    expect(
-      await withAppDatabaseContext(
-        PRINCIPAL_SCOPE.JOB({ organizationPublicId: organization.public_id }),
-        () => repository.tryMarkSending(pendingAttempt!.id, 2),
-      ),
-    ).toBe('claimed');
-
-    const rows = await getOperatorDatabase()
+    const [row] = await getOperatorDatabase()
       .select({
         status: webhook_delivery_attempts.status,
         attempt_count: webhook_delivery_attempts.attempt_count,
       })
       .from(webhook_delivery_attempts)
-      .where(eq(webhook_delivery_attempts.id, pendingAttempt!.id));
+      .where(eq(webhook_delivery_attempts.id, deliveryAttempt.id));
 
-    expect(rows[0]?.status).toBe('SENDING');
-    expect(rows[0]?.attempt_count).toBe(2);
+    expect(row?.status).toBe('SENDING');
+    expect(row?.attempt_count).toBe(2);
   });
 });

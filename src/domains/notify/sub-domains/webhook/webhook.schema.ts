@@ -150,10 +150,9 @@ export const webhook_delivery_attempts = notifySchema
         'chk_webhook_attempts_status',
         sql`${table.status} IN ('PENDING', 'SENDING', 'SENT', 'FAILED')`,
       ),
-      check(
-        'chk_webhook_attempts_count',
-        sql`${table.attempt_count} >= 0 AND ${table.attempt_count} <= 5`,
-      ),
+      // Every send ever started for the attempt — across retries and dead-letter replays — so
+      // only the lower bound describes valid data.
+      check('chk_webhook_attempts_count', sql`${table.attempt_count} >= 0`),
       pgPolicy('webhook_delivery_attempts_tenant_isolation', {
         as: 'permissive',
         for: 'all',

@@ -184,23 +184,15 @@ The canonical exports live under [src/shared/constants/](src/shared/constants/) 
   - Increasing → more support pressure on legitimate-user lockouts.
 - **Last reviewed**: 2026-05-28
 
-## STUCK_SENDING_LEASE_MINUTES
+## STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES
 
 - **Value**: 15 minutes
 - **Source**: [src/shared/constants/billing.constants.ts](src/shared/constants/billing.constants.ts)
-- **Rationale**: Mail outbox + Stripe webhook event reclaim lease. Rows stuck in `sending` / `processing` for longer than this are presumed orphaned (worker crashed or pod evicted) and may be reclaimed for retry. 15 minutes is the upper bound on a legitimate Stripe API call + Resend send.
+- **Rationale**: Stripe webhook event reclaim lease. Events stuck in `processing` for longer than this are presumed orphaned (worker crashed or pod evicted) and may be reclaimed for retry. 15 minutes is the upper bound on one legitimate processing run. The mail outbox reclaims `sending` rows on its own env-driven window (`MAIL_OUTBOX_RECLAIM_SENDING_MINUTES`); webhook deliveries need no lease — BullMQ runs one execution per job, so a new execution re-claims any attempt that is not yet `SENT`.
 - **Consequences of change**:
-  - Decreasing → reclaim races with slow legitimate sends; may produce duplicate emails or duplicate Stripe processing.
-  - Increasing → orphaned rows take longer to recover after a worker crash.
-- **Last reviewed**: 2026-05-28
-
-## STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES
-
-- **Value**: 15 minutes (alias of `STUCK_SENDING_LEASE_MINUTES`)
-- **Source**: [src/shared/constants/billing.constants.ts](src/shared/constants/billing.constants.ts)
-- **Rationale**: Same trade-offs as `STUCK_SENDING_LEASE_MINUTES`; kept aliased so the two lease windows always move together.
-- **Consequences of change**: See `STUCK_SENDING_LEASE_MINUTES`.
-- **Last reviewed**: 2026-05-28
+  - Decreasing → reclaim races with slow legitimate processing; may produce duplicate Stripe processing (absorbed by the event ledger's claim).
+  - Increasing → orphaned events take longer to recover after a worker crash.
+- **Last reviewed**: 2026-10-05
 
 ## PAGINATION
 

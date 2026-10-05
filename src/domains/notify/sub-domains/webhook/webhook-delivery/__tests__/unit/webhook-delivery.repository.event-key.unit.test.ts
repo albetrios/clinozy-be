@@ -10,7 +10,7 @@ const {
   fromMock,
   selectMock,
 } = vi.hoisted(() => {
-  const returningMock = vi.fn().mockResolvedValue([{ id: 7 }]);
+  const returningMock = vi.fn().mockResolvedValue([{ publicId: 'wda_insertedrow0000000001' }]);
   const onConflictDoNothingMock = vi.fn().mockReturnValue({ returning: returningMock });
   const valuesMock = vi.fn().mockReturnValue({
     onConflictDoNothing: onConflictDoNothingMock,
@@ -18,7 +18,7 @@ const {
   });
   const insertMock = vi.fn().mockReturnValue({ values: valuesMock });
 
-  const limitMock = vi.fn().mockResolvedValue([{ id: 99 }]);
+  const limitMock = vi.fn().mockResolvedValue([{ publicId: 'wda_existingpendingrow0099' }]);
   const whereMock = vi.fn().mockReturnValue({ limit: limitMock });
   const fromMock = vi.fn().mockReturnValue({ where: whereMock });
   const selectMock = vi.fn().mockReturnValue({ from: fromMock });
@@ -63,8 +63,8 @@ import { createPendingWebhookDeliveryAttempt } from '@/domains/notify/sub-domain
  * The fix plumbs an optional `eventKey` through the input and, when present,
  * inserts `event_key` and uses `onConflictDoNothing({ target: [webhook_id,
  * event_key] })` so a retry of the same logical event is a no-op against the
- * existing PENDING row. Calls without `eventKey` keep today's plain-insert
- * shape (backward compatible).
+ * existing PENDING row. Events without a stable upstream id (`eventKey`
+ * omitted) always insert a new row.
  */
 describe('createPendingWebhookDeliveryAttempt — event_key dedupe (sec-N2)', () => {
   beforeEach(() => {
@@ -72,12 +72,12 @@ describe('createPendingWebhookDeliveryAttempt — event_key dedupe (sec-N2)', ()
     valuesMock.mockClear();
     onConflictDoNothingMock.mockClear();
     returningMock.mockClear();
-    returningMock.mockResolvedValue([{ id: 7 }]);
+    returningMock.mockResolvedValue([{ publicId: 'wda_insertedrow0000000001' }]);
     selectMock.mockClear();
     fromMock.mockClear();
     whereMock.mockClear();
     limitMock.mockClear();
-    limitMock.mockResolvedValue([{ id: 99 }]);
+    limitMock.mockResolvedValue([{ publicId: 'wda_existingpendingrow0099' }]);
   });
 
   it('persists event_key when provided and applies onConflictDoNothing(webhook_id, event_key)', async () => {
@@ -98,7 +98,7 @@ describe('createPendingWebhookDeliveryAttempt — event_key dedupe (sec-N2)', ()
     expect(onConflictDoNothingMock).toHaveBeenCalledTimes(1);
   });
 
-  it('does NOT use onConflictDoNothing when no eventKey is provided (backward compatible)', async () => {
+  it('does NOT use onConflictDoNothing when no eventKey is provided', async () => {
     await createPendingWebhookDeliveryAttempt({
       webhookId: 1,
       eventType: 'subscription.updated',
@@ -129,15 +129,29 @@ describe('createPendingWebhookDeliveryAttempt — event_key dedupe (sec-N2)', ()
 
   it('sec-new-D4: fallback SELECT returns the found pending row id', async () => {
     returningMock.mockResolvedValue([]);
-    limitMock.mockResolvedValue([{ id: 42, publicId: 'wda_existingpendingrow0001' }]);
+    limitMock.mockResolvedValue([{ publicId: 'wda_existingpendingrow0001' }]);
     const result = await createPendingWebhookDeliveryAttempt({
       webhookId: 5,
       eventType: 'customer.updated',
       payload: { ok: true },
       eventKey: 'evt_for_existing',
     });
-    // The existing row's public id comes back too — it is the BullMQ job id, so the caller
+    // The existing row's public id comes back — it is the BullMQ job id, so the caller
     // enqueues against the SAME attempt instead of minting a second one.
-    expect(result).toEqual({ id: 42, publicId: 'wda_existingpendingrow0001' });
+    expect(result).toEqual({ publicId: 'wda_existingpendingrow0001' });
+  });
+
+  it('returns null when the conflicting row already left PENDING (a worker claimed it)', async () => {
+    returningMock.mockResolvedValue([]);
+    limitMock.mockResolvedValue([]);
+    const result = await createPendingWebhookDeliveryAttempt({
+      webhookId: 5,
+      eventType: 'customer.updated',
+      payload: { ok: true },
+      eventKey: 'evt_already_claimed',
+    });
+    // The event is already being delivered by that row: nothing to enqueue. It used to return
+    // `undefined` typed as a row, and the caller crashed reading its id.
+    expect(result).toBeNull();
   });
 });

@@ -115,7 +115,7 @@ Deliberate business, UX, and security trade-offs encoded as constants. Full rati
 - **`PERMISSION_CACHE_DEFAULT_TTL_SECONDS = 300`** — safety net for cross-process permission-cache invalidation.
 - **`NOTIFICATION_UNREAD_COUNT_CACHE_TTL_SECONDS = 60`** — backstop on the polled unread badge, for the two writers that cannot name a user.
 - **`CACHE_INVALIDATION_TOMBSTONE_TTL_SECONDS = 15`** — how long a freshness tombstone blocks repopulation; sized to the in-flight read, not to the cache.
-- **`STUCK_SENDING_LEASE_MINUTES = 15`** — outbox + Stripe-webhook reclaim window after worker crash.
+- **`STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES = 15`** — Stripe-webhook reclaim window after a worker crash (the mail outbox uses `MAIL_OUTBOX_RECLAIM_SENDING_MINUTES`; webhook deliveries need no lease — a new execution re-claims any row not yet `SENT`).
 - **`PAGINATION = { DEFAULT_LIMIT: 25, MAX_LIMIT: 100 }`** — list endpoint defaults; cursor pagination only.
 - **`GDPR_EXPORT_MAX_ROWS_PER_TABLE = 1 000`** — bounded export bundle size.
 
