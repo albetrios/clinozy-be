@@ -23,16 +23,18 @@
  */
 import http from 'k6/http';
 import { PUBLIC_AUTH_FORM_HEADERS } from '../helpers/config.js';
+import { idempotencyKey } from '../helpers/idempotency.js';
 import { sleep } from 'k6';
 import { SharedArray } from 'k6/data';
-import { Trend, Counter } from 'k6/metrics';
+import { Trend, Counter, Rate } from 'k6/metrics';
 
 const BASE = __ENV.BASE_URL || 'http://localhost:3001';
 const API = `${BASE}/api/v1`;
 const VUS = Number(__ENV.VUS || '1');
 const DURATION = __ENV.DURATION || '60s';
 const THINK = Number(__ENV.THINK ?? '0.4'); // seconds of think-time between phases
-const RUN = (__ENV.RUN || 'r').replace(/[^a-z0-9]/gi, ''); // run id -> unique resource names across runs
+// Run id -> unique resource names across runs (a fixed default reused every name on the next run).
+const RUN = (__ENV.RUN || Date.now().toString(36)).replace(/[^a-z0-9]/gi, '');
 const REAUTH = (__ENV.REAUTH || 'false') === 'true'; // re-login on 401 (off for capacity runs — see req())
 const WRITE_EVERY = Number(__ENV.WRITE_EVERY || '1'); // run write phases every Nth iteration (read-dominant when >1)
 
@@ -58,6 +60,9 @@ const pool = new SharedArray('creds', () => JSON.parse(open('../data/credential-
 export const options = {
   summaryTrendStats: ['avg', 'min', 'med', 'p(90)', 'p(95)', 'p(99)', 'max', 'count'],
   setupTimeout: '300s', // mint all pool tokens once, sequentially, before VUs start
+  // Back-pressure (429/503) is a capacity finding and only shows in the table; anything else that
+  // is not 2xx means the journey itself is broken, so it fails the run instead of exiting 0.
+  thresholds: { unexpected_failures: ['rate<0.01'] },
   scenarios: {
     journey: {
       executor: 'ramping-vus',
@@ -207,10 +212,13 @@ for (const n of OP_NAMES) {
   c4xx[n] = new Counter(`s4xx_${slug(n)}`);
 }
 
+// Every request that is neither a success nor back-pressure (429 limiter, 503 shed): a wrong body,
+// a missing header, a server fault. Capacity limits show in the table; these fail the run.
+const unexpectedFailures = new Rate('unexpected_failures');
+
 // ---- per-VU auth state ----
 let token = null;
 let cred = null;
-let idemCounter = 0;
 
 function pick() {
   return pool[(__VU - 1) % pool.length];
@@ -224,7 +232,9 @@ function serverTimingMs(res) {
 }
 
 function record(name, res) {
-  if (res.status >= 200 && res.status < 300) {
+  const succeeded = res.status >= 200 && res.status < 300;
+  unexpectedFailures.add(!succeeded && res.status !== 429 && res.status !== 503);
+  if (succeeded) {
     trends[name].add(res.timings.duration);
     wait[name].add(res.timings.waiting);
     const s = serverTimingMs(res);
@@ -271,7 +281,7 @@ function doLogin() {
 
 function req(name, method, path, body, idempotent) {
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-  if (idempotent) headers['X-Idempotency-Key'] = `idem-${RUN}-${__VU}-${__ITER}-${idemCounter++}`;
+  if (idempotent) headers['X-Idempotency-Key'] = idempotencyKey(name);
   const payload = body ? JSON.stringify(body) : null;
   let res = http.request(method, `${API}${path}`, payload, { headers, tags: { name } });
   // Token-expiry re-auth — OFF by default (REAUTH=true to enable). Disabled for capacity runs:
@@ -279,8 +289,7 @@ function req(name, method, path, body, idempotent) {
   if (REAUTH && res.status === 401) {
     doLogin();
     const retryHeaders = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-    if (idempotent)
-      retryHeaders['X-Idempotency-Key'] = `idem-${RUN}-${__VU}-${__ITER}-${idemCounter++}`;
+    if (idempotent) retryHeaders['X-Idempotency-Key'] = idempotencyKey(`${name}-retry`);
     res = http.request(method, `${API}${path}`, payload, { headers: retryHeaders, tags: { name } });
   }
   record(name, res);
