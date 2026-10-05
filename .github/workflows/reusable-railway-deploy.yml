@@ -741,24 +741,17 @@ jobs:
           deploy_service_from_image "$RAILWAY_WORKER_SERVICE_ID" "$WORKER_IMAGE" "worker"
           echo "Worker deployment reached terminal SUCCESS (Railway only flips to SUCCESS once the in-pod HEALTHCHECK passes)."
 
-      - name: Retag production images as previous
+      - name: Rotate production live-image tags (:current / :previous)
         if: success() && needs.resolve-environment.outputs.environment == 'production'
         env:
           API_IMAGE: ${{ steps.ghcr_images.outputs.api_image }}
           WORKER_IMAGE: ${{ steps.ghcr_images.outputs.worker_image }}
+        # :previous must be the release BEFORE the live one — rollback-deploy.yml redeploys it.
+        # Tagging the just-deployed image as :previous made a rollback redeploy the bad release.
         run: |
           set -euo pipefail
-          npm install -g @railway/cli >/dev/null 2>&1 || true
           echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          API_BASE="${API_IMAGE%:*}"
-          WORKER_BASE="${WORKER_IMAGE%:*}"
-          docker pull "${API_IMAGE}"
-          docker pull "${WORKER_IMAGE}"
-          docker tag "${API_IMAGE}" "${API_BASE}:previous"
-          docker tag "${WORKER_IMAGE}" "${WORKER_BASE}:previous"
-          docker push "${API_BASE}:previous"
-          docker push "${WORKER_BASE}:previous"
-          echo "Retagged ${API_BASE}:previous and ${WORKER_BASE}:previous"
+          bash tooling/ci/rotate-live-image-tags.sh "${API_IMAGE}" "${WORKER_IMAGE}"
 
       - name: Retag failed deploy images for triage
         if: failure()

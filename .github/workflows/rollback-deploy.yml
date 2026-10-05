@@ -1,6 +1,8 @@
-# One-click rollback: redeploy the `:previous` GHCR images (retagged by the last
-# successful production deploy in reusable-railway-deploy.yml) instead of building
-# anything. Turns a bad-release incident into a ~3-minute dispatch + approval.
+# One-click rollback: redeploy the `:previous` GHCR images — the release that was live
+# before the current one; every successful production deploy rotates `:current` /
+# `:previous` (tooling/ci/rotate-live-image-tags.sh, from reusable-railway-deploy.yml) —
+# instead of building anything. Turns a bad-release incident into a ~3-minute dispatch
+# + approval.
 #
 # Scope and caveats (see docs/deployment/runbooks/rollback-deploy.md):
 #   - Rolls back APPLICATION CODE only. Database migrations are forward-only and
