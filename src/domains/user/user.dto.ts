@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PAGINATION } from '@/shared/constants/pagination.constants.js';
 import {
   trimmedString,
   trimmedStringMinMax,
@@ -75,8 +76,13 @@ export type UploadAvatarInput = z.infer<typeof UploadAvatarDto>;
 export const ListUsersDto = z
   .object({
     // sec-new-U1: cap cursor length so an unbounded string cannot reach the service layer.
-    after: z.string().max(512).optional(),
-    limit: z.coerce.number().int().min(1).max(100).default(25),
+    after: z.string().max(PAGINATION.MAX_CURSOR_LENGTH).optional(),
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(PAGINATION.MAX_LIMIT)
+      .default(PAGINATION.DEFAULT_LIMIT),
     status: z.enum(['ACTIVE', 'SUSPENDED', 'DELETED']).optional(),
     search: trimmedString().max(255).optional(),
     // Opt in to the expensive count(*); defaults to false so the admin list stays keyset-only.
