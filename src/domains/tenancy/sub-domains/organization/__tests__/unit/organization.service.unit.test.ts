@@ -230,14 +230,12 @@ describe('OrganizationService', () => {
       'owner_public',
     );
     expect(result).toBeDefined();
-    // TEN-07: the private object KEY is persisted (signed-on-read), never an unsigned
-    // permanent S3 URL via getObjectUrl.
+    // TEN-07: the private object KEY is persisted (signed-on-read), never a permanent URL.
     expect(repository.update).toHaveBeenCalledWith(
       organizationRow.public_id,
       { logo_url: key },
       expect.anything(),
     );
-    expect(objectStorage.getObjectUrl).not.toHaveBeenCalled();
   });
 
   it('uploadLogo throws when object is missing in storage', async () => {
@@ -319,10 +317,10 @@ describe('OrganizationService', () => {
     ).rejects.toBeInstanceOf(ConflictError);
   });
 
-  it('deleteLogo clears logo when organization has logo url', async () => {
+  it('deleteLogo clears logo when organization has a stored logo key', async () => {
     vi.mocked(repository.findByPublicId).mockResolvedValue({
       ...organizationRow,
-      logo_url: `https://cdn.example/organization-logos/${organizationRow.public_id}/logo.png`,
+      logo_url: `organization-logos/${organizationRow.public_id}/logo.png`,
     } as never);
     vi.mocked(repository.update).mockResolvedValue({
       ...organizationRow,
@@ -430,7 +428,7 @@ describe('OrganizationService', () => {
     }); // object already gone
     vi.mocked(repository.findByPublicId).mockResolvedValue({
       ...organizationRow,
-      logo_url: `https://cdn.example/organization-logos/${organizationRow.public_id}/logo.png`,
+      logo_url: `organization-logos/${organizationRow.public_id}/logo.png`,
     } as never);
     vi.mocked(repository.update).mockResolvedValue({
       ...organizationRow,
@@ -463,7 +461,9 @@ describe('OrganizationService', () => {
     expect(result).toBeNull();
   });
 
-  it('delete clears logo from CDN-style logo_url during offboarding', async () => {
+  it('delete never reclaims an absolute logo URL, even one naming the organization prefix', async () => {
+    // The column holds the object KEY written by uploadLogo; a URL is not a key, so the S3
+    // reclaim is skipped while offboarding still clears the column and tombstones uploads.
     const uploadService = { tombstoneAllByOrganizationId: vi.fn().mockResolvedValue(0) };
     service.wireOffboardingUploadService(uploadService as never);
     vi.mocked(repository.findByPublicId).mockResolvedValue({
@@ -471,6 +471,12 @@ describe('OrganizationService', () => {
       logo_url: `https://cdn.example/organization-logos/${organizationRow.public_id}/logo.png`,
     } as never);
     await service.delete(asScope(organizationRow.public_id));
+    expect(objectStorage.deleteObject).not.toHaveBeenCalled();
+    expect(repository.update).toHaveBeenCalledWith(
+      organizationRow.public_id,
+      { logo_url: null },
+      null,
+    );
     expect(uploadService.tombstoneAllByOrganizationId).toHaveBeenCalledWith(organizationRow.id);
   });
 
@@ -508,14 +514,13 @@ describe('OrganizationService', () => {
     expect(result.logo_url).toBeNull();
   });
 
-  it('delete removes logo from CDN-style url during offboarding', async () => {
-    const uploadService = { tombstoneAllByOrganizationId: vi.fn().mockResolvedValue(0) };
-    service.wireOffboardingUploadService(uploadService as never);
+  it("delete never reclaims a logo key under another organization's prefix", async () => {
     vi.mocked(repository.findByPublicId).mockResolvedValue({
       ...organizationRow,
-      logo_url: `https://cdn.example.com/organization-logos/${organizationRow.public_id}/logo.png`,
+      logo_url: 'organization-logos/org_otherorganization0000000/logo.png',
     } as never);
     await service.delete(asScope(organizationRow.public_id));
+    expect(objectStorage.deleteObject).not.toHaveBeenCalled();
     expect(repository.update).toHaveBeenCalled();
   });
 
@@ -572,7 +577,7 @@ describe('OrganizationService', () => {
     expect(repository.softDelete).not.toHaveBeenCalled();
   });
 
-  it('deleteLogo skips storage head check when logo url has no extractable key', async () => {
+  it('deleteLogo skips storage work when the stored value is not a key under the organization prefix', async () => {
     vi.mocked(objectStorage.headObject).mockClear();
     vi.mocked(repository.findByPublicId).mockResolvedValue({
       ...organizationRow,
@@ -580,6 +585,7 @@ describe('OrganizationService', () => {
     } as never);
     const result = await service.deleteLogo(asScope(organizationRow.public_id), 'owner_public');
     expect(objectStorage.headObject).not.toHaveBeenCalled();
+    expect(objectStorage.deleteObject).not.toHaveBeenCalled();
     expect(result.logo_url).toBeNull();
   });
 
@@ -637,12 +643,12 @@ describe('OrganizationService', () => {
     expect(repository.update).toHaveBeenCalled();
   });
 
-  it('route-audit L1: deleteLogo reclaims the extractable storage key before clearing the column', async () => {
+  it('route-audit L1: deleteLogo reclaims the stored logo key before clearing the column', async () => {
     const logoPath = `organization-logos/${organizationRow.public_id}/logo.png`;
     vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce({ kind: 'deleted' });
     vi.mocked(repository.findByPublicId).mockResolvedValue({
       ...organizationRow,
-      logo_url: `https://cdn.example/${logoPath}`,
+      logo_url: logoPath,
     } as never);
     vi.mocked(repository.update).mockResolvedValue({
       ...organizationRow,

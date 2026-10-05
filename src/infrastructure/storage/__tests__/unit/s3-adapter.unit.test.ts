@@ -58,13 +58,10 @@ const { mockEnv } = vi.hoisted(() => ({
     S3_REGION: 'eu-west-1',
     S3_MAX_ATTEMPTS: 3,
     LOG_LEVEL: 'silent',
-    // audit-#13: unset → getObjectUrl falls back to the virtual-hosted S3 URL.
-    PUBLIC_MEDIA_BASE_URL: undefined as string | undefined,
   },
 }));
 vi.mock('@/shared/config/env.config.js', () => ({
   env: mockEnv,
-  // audit-#13: buildPublicMediaUrl reads PUBLIC_MEDIA_BASE_URL via getEnv() (re-read-friendly).
   getEnv: () => mockEnv,
 }));
 
@@ -91,12 +88,6 @@ describe('S3ObjectStorageAdapter', () => {
     sendMock.mockReset();
     getSignedUrlMock.mockClear();
     getSignedUrlMock.mockResolvedValue('https://signed.example/put');
-  });
-
-  it('getObjectUrl builds a regional virtual-hosted-style URL', () => {
-    expect(adapter.getObjectUrl('avatars/user-1/avatar.png')).toBe(
-      'https://test-bucket.s3.eu-west-1.amazonaws.com/avatars/user-1/avatar.png',
-    );
   });
 
   it('createPresignedDownloadUrl returns a signed GET URL', async () => {

@@ -1357,13 +1357,11 @@ src/
     └── storage/
     │   ├── __tests__/
     │       └── unit/
-    │       │   ├── public-media-url.util.unit.test.ts
     │       │   ├── s3-adapter.unit.test.ts
     │       │   ├── s3-client-config.unit.test.ts
     │       │   ├── s3-error.util.unit.test.ts
     │       │   └── stored-object-purge.util.unit.test.ts
     │   ├── object-storage.port.ts
-    │   ├── public-media-url.util.ts
     │   ├── s3-adapter.ts
     │   ├── s3-client-config.util.ts
     │   ├── s3-error.util.ts

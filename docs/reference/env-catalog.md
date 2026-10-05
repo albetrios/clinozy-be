@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**13 / 237** variables migrated to an explicit `{ allowed, description }` entry.
+**13 / 236** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -146,7 +146,6 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `POSTMAN_API_KEY` | — | — *(optional)* |  | — |
 | `POSTMAN_WORKSPACE_ID` | — | — *(optional)* |  | — |
 | `PROCESS_RSS_WARN_THRESHOLD_MB` | — | `512` |  | — |
-| `PUBLIC_MEDIA_BASE_URL` | — | — *(optional)* |  | — |
 | `QUEUE_DASHBOARD_ALLOW_PRODUCTION` | — | `false` |  | — |
 | `QUEUE_WAITING_DEPTH_WARN_THRESHOLD` | — | `1000` |  | — |
 | `RAILWAY_GIT_COMMIT_SHA` | — | — *(optional)* |  | — |

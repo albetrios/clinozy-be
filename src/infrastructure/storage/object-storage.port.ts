@@ -128,7 +128,5 @@ export interface ObjectStoragePort {
     byteCount: number,
   ): Promise<{ body: Buffer; contentType: string | undefined; eTag: string } | null>;
 
-  getObjectUrl(key: string): string;
-
   createPresignedDownloadUrl(options: { key: string; expiresInSeconds: number }): Promise<string>;
 }

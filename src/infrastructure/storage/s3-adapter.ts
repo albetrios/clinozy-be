@@ -18,7 +18,6 @@ import {
   isS3NotFoundError,
   isS3PreconditionFailedError,
 } from '@/infrastructure/storage/s3-error.util.js';
-import { buildPublicMediaUrl } from '@/infrastructure/storage/public-media-url.util.js';
 import { buildSharedS3ClientConfig } from '@/infrastructure/storage/s3-client-config.util.js';
 import type {
   ObjectCopyResult,
@@ -163,15 +162,6 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
       return { kind: 'rejected', reason: 'content_type_mismatch' };
     }
     return { kind: 'verified', metadata };
-  }
-
-  getObjectUrl(key: string): string {
-    // audit-#13: refuse public URLs for non-public-media keys and prefer the PUBLIC_MEDIA_BASE_URL
-    // distribution so the bucket can keep Block-Public-Access on (private files stay presigned-only).
-    return buildPublicMediaUrl(key, {
-      bucket: env.S3_BUCKET,
-      region: env.S3_REGION ?? 'us-east-1',
-    });
   }
 
   async createPresignedDownloadUrl(options: {

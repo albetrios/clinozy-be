@@ -224,7 +224,7 @@ src/infrastructure/
   storage/
     object-storage.port.ts    # ObjectStoragePort — the one storage contract (services inject it; workers use the default adapter)
     s3-adapter.ts             # Its S3 implementation, getDefaultS3ObjectStorageAdapter() (+ s3-error.util.ts: not-found +
-                              #   circuit classifier, stored-object-purge.util.ts, public-media-url.util.ts)
+                              #   circuit classifier, stored-object-purge.util.ts)
   outbound/                   # Hardened outbound HTTP for third-party calls: outbound-fetch.ts (timeouts, redaction),
                               # outbound-call.ts, outbound-defaults.ts, outbound-error.ts, outbound-redaction.ts, index.ts
   resilience/                 # Circuit breaker + retry-with-backoff for outbound/third-party calls (circuit-breaker.ts, retry-with-backoff.util.ts, lua/)

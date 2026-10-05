@@ -123,8 +123,7 @@ export class OrganizationService {
    * Serializes an organization row to {@link OrganizationOutput} with `logo_url`
    * resolved to a short-lived signed read URL (TEN-07: private bucket +
    * signed-on-read). The presign is a network-free local signature, so it is safe
-   * to call from within a database context. Legacy rows that stored an absolute
-   * public URL are returned as-is.
+   * to call from within a database context.
    */
   private async toOrganizationOutput(
     row: Parameters<typeof serializeOrganization>[0],
@@ -136,31 +135,20 @@ export class OrganizationService {
     };
   }
 
-  private extractOrganizationLogoStorageKey(
-    public_id: string,
-    logo_url: string | null,
-  ): string | null {
-    if (!logo_url) return null;
-    const prefix = buildOrganizationLogoKeyPrefix(public_id);
-    if (logo_url.startsWith(prefix)) return logo_url;
-    const keyMatch = /organization-logos\/[^?#]+/.exec(logo_url);
-    return keyMatch?.[0] ?? null;
-  }
-
   /**
-   * Best-effort reclaim of the S3 object backing an owned organization-logo URL. Prefix-guarded
-   * (external URLs are ignored). Does NOT mutate the column — callers decide what to write — so it
-   * is reused by per-asset delete, logo replacement, and offboarding.
+   * Best-effort reclaim of the S3 object behind the stored organization-logo key. The column only
+   * ever holds a key written by `uploadLogo`; the prefix guard keeps a reclaim from reaching any
+   * object outside this organization's logo prefix. Does NOT mutate the column — callers decide
+   * what to write — so it is reused by per-asset delete, logo replacement, and offboarding.
    */
   private async deleteOwnedOrganizationLogoObject(
     public_id: string,
     logo_url: string | null,
   ): Promise<void> {
-    const storageKey = this.extractOrganizationLogoStorageKey(public_id, logo_url);
-    if (!storageKey) return;
-    const objectDelete = await this.objectStorage.deleteObject(storageKey);
+    if (!logo_url?.startsWith(buildOrganizationLogoKeyPrefix(public_id))) return;
+    const objectDelete = await this.objectStorage.deleteObject(logo_url);
     if (objectDelete.kind !== 'deleted') {
-      logger.warn({ publicId: public_id, logoKey: storageKey }, 'organization.logo.deleteFailed');
+      logger.warn({ publicId: public_id, logoKey: logo_url }, 'organization.logo.deleteFailed');
     }
   }
 

@@ -48,7 +48,6 @@ vi.mock('@/infrastructure/storage/s3-adapter.js', () => {
       contentType: 'image/png',
       eTag: '"fake-etag"',
     }),
-    getObjectUrl: (key: string) => `https://fake-s3.local/${key}`,
     createPresignedDownloadUrl: async () => 'https://fake-s3.local/presigned-get',
   };
   return {

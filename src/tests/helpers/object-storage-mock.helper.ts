@@ -27,7 +27,6 @@ export function createObjectStoragePortMock(
     getObjectFirstBytes: vi
       .fn()
       .mockResolvedValue({ body: Buffer.from(''), contentType: 'image/png', eTag: '"etag"' }),
-    getObjectUrl: vi.fn().mockReturnValue('https://cdn.example/object'),
     createPresignedDownloadUrl: vi.fn().mockResolvedValue('https://presigned.example/download'),
     ...overrides,
   } as Mocked<ObjectStoragePort>;
