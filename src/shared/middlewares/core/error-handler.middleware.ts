@@ -329,8 +329,10 @@ function handleUnhandledErrorResponse(
 /**
  * Stable client-error payloads for Fastify framework errors that already carry a
  * 4xx status — content-type-parser failures such as `FST_ERR_CTP_BODY_TOO_LARGE`
- * (413) and `FST_ERR_CTP_UNSUPPORTED_MEDIA_TYPE` (415). Other 4xx framework codes
- * fall back to a generic invalid-request payload.
+ * (413) and `FST_ERR_CTP_UNSUPPORTED_MEDIA_TYPE` (415), and the 429 that
+ * `@fastify/rate-limit` throws (its `Retry-After` / `X-RateLimit-*` headers are already
+ * on the reply) — the documented `rate_limited` envelope, not a generic one. Other 4xx
+ * framework codes fall back to a generic invalid-request payload.
  */
 const FASTIFY_CLIENT_ERRORS: Record<number, { code: string; key: string; fallback: string }> = {
   413: {
@@ -342,6 +344,11 @@ const FASTIFY_CLIENT_ERRORS: Record<number, { code: string; key: string; fallbac
     code: 'unsupported_media_type',
     key: 'errors:invalidInput',
     fallback: 'Unsupported media type',
+  },
+  429: {
+    code: 'rate_limited',
+    key: 'errors:rateLimited',
+    fallback: 'Too many requests',
   },
 };
 

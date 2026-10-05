@@ -3,6 +3,7 @@ import type { Redis } from 'ioredis';
 import {
   ForbiddenError,
   NotFoundError,
+  RateLimitedError,
   UnauthorizedError,
   ValidationError,
 } from '@/shared/errors/index.js';
@@ -80,6 +81,9 @@ export type LoginResult =
  *   missing user, locked account, expired session, inactive user all throw
  *   `UnauthorizedError` with i18n keys (`errors:invalidEmailOrPassword`,
  *   `errors:accountLocked`, `errors:invalidOrExpiredSession`, `errors:accountNotActive`).
+ *   An IP over its failed-login budget ({@link IP_FAILED_LOGIN_THRESHOLD} per
+ *   {@link IP_FAILED_LOGIN_WINDOW_SECONDS}) gets `RateLimitedError` (429, `Retry-After` = the
+ *   window's remaining seconds) before any credential work.
  * - **Side effects:** increments / clears `users.failed_login_count` and sets
  *   `account_locked_until` after {@link MAX_FAILED_LOGIN_ATTEMPTS} failures; rehashes the
  *   stored password when argon2 parameters drift; creates and rotates rows in
@@ -101,16 +105,29 @@ export class AuthService {
     return `${IP_FAILED_LOGIN_KEY_PREFIX}${createHash('sha256').update(ipAddress).digest('hex')}`;
   }
 
+  /**
+   * Refuses the login with 429 + `Retry-After` (the counter's remaining TTL) once this IP has
+   * {@link IP_FAILED_LOGIN_THRESHOLD} failures in the window. Too fast, not unauthenticated: the
+   * caller can retry the same credentials after the wait. Fails open on Redis errors.
+   */
   private async checkIpLoginLimit(ipAddress: string): Promise<void> {
+    const key = this.buildIpKey(ipAddress);
+    let retryAfterSeconds: number | null = null;
     try {
-      const raw = await this.redis.get(this.buildIpKey(ipAddress));
+      const raw = await this.redis.get(key);
       if (raw !== null && Number(raw) >= IP_FAILED_LOGIN_THRESHOLD) {
-        throw new UnauthorizedError('errors:rateLimited');
+        // TTL is whole seconds: 0 in the last second, -2 if the window just ended, -1 never (the
+        // counter always gets its expiry with its first increment) — fall back to the full window.
+        const remainingSeconds = await this.redis.ttl(key);
+        retryAfterSeconds =
+          remainingSeconds === -1 ? IP_FAILED_LOGIN_WINDOW_SECONDS : Math.max(1, remainingSeconds);
       }
     } catch (error) {
-      if (error instanceof UnauthorizedError) throw error;
       // Redis unavailable — fail open; per-user lockout and rate-limit middleware still protect.
       logger.warn({ error }, 'auth.ip_limit.check.failed');
+    }
+    if (retryAfterSeconds !== null) {
+      throw new RateLimitedError().withRetryAfter(retryAfterSeconds);
     }
   }
 

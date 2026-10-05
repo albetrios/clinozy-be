@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import errorHandlerMiddleware from '@/shared/middlewares/core/error-handler.middleware.js';
@@ -69,6 +70,11 @@ async function createApp(): Promise<FastifyInstance> {
     if (code) error.code = code;
     throw error;
   });
+  // The real limiter: on an exceeded window it sets its headers, then throws a 429 into the handler.
+  await app.register(rateLimit, { global: false });
+  app.get('/rate-limited', { config: { rateLimit: { max: 1, timeWindow: 60_000 } } }, async () => ({
+    ok: true,
+  }));
   app.get('/request-timeout', async () => {
     const error = new Error('timed out') as Error & { code: string };
     error.code = 'FST_ERR_REQ_TIMEOUT';
@@ -224,9 +230,25 @@ describe('error-handler.middleware status + body mapping', () => {
       expect(response.json().error.code).toBe('unsupported_media_type');
     });
 
-    it('honors an unmapped 4xx framework status with a generic invalid_request code', async () => {
-      const response = await app.inject({ method: 'GET', url: '/framework?status=429' });
+    it("maps the rate limiter's 429 to the documented rate_limited envelope, keeping its headers", async () => {
+      const allowed = await app.inject({ method: 'GET', url: '/rate-limited' });
+      const response = await app.inject({ method: 'GET', url: '/rate-limited' });
+      const body = response.json();
+      expect(allowed.statusCode).toBe(200);
       expect(response.statusCode).toBe(429);
+      expect(Number(response.headers['retry-after'])).toBeGreaterThan(0);
+      expect(response.headers['x-ratelimit-limit']).toBe('1');
+      expect(body.error).toMatchObject({
+        type: 'request_error',
+        code: 'rate_limited',
+        detail: 'translated:errors:rateLimited',
+      });
+      expect(mockedCaptureException).not.toHaveBeenCalled();
+    });
+
+    it('honors an unmapped 4xx framework status with a generic invalid_request code', async () => {
+      const response = await app.inject({ method: 'GET', url: '/framework?status=418' });
+      expect(response.statusCode).toBe(418);
       expect(response.json().error.code).toBe('invalid_request');
     });
 

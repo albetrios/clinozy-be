@@ -79,10 +79,10 @@ export const MAX_ACTIVE_SESSIONS_PER_USER = 30;
  */
 export const MAX_MFA_VERIFICATION_ATTEMPTS = 10;
 
-/** Failed login attempts from a single IP before that IP is blocked for the window. */
+/** Failed login attempts from a single IP after which every login from it gets 429 for the rest of the window. */
 export const IP_FAILED_LOGIN_THRESHOLD = 50;
 
-/** Sliding window duration for the per-IP failed-login counter (seconds). */
+/** Window of the per-IP failed-login counter (seconds), fixed from the IP's first failure. */
 export const IP_FAILED_LOGIN_WINDOW_SECONDS = 15 * 60;
 
 /**
