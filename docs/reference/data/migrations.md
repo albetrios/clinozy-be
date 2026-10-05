@@ -94,6 +94,16 @@ Rules and guardrails (enforced by `pnpm db:migrate:lint`):
 
 These tables are **plain (non-partitioned)** tables. Growth is bounded by row-level retention workers (`audit-retention`, `notification-retention`) that batch-`DELETE` rows older than the configured window — there is no partition lifecycle to maintain. New indexes on these tables follow the same rules as any other high-write table: prefer `CREATE INDEX CONCURRENTLY` in a non-transactional migration. The composite keyset indexes added in [`20260520000006_keyset_pagination_indexes.sql`](../../../migrations/20260520000006_keyset_pagination_indexes.sql) were created with a plain `CREATE INDEX` only because the baseline seeds those tables empty (instant build, before any live traffic).
 
+### Before the first release
+
+Nothing is deployed yet, so no database holds data a migration must protect. A migration never
+carries a backfill, a data fix or a rename of old values: a new column is `NOT NULL` from the
+start, and an allowed value is stated in its final form where the table is created. The runner
+records each applied file by name, so editing an existing file changes fresh databases only — a
+rewrite is proven by migrating a fresh database before and after and diffing
+`pg_dump --schema-only`. Expand / contract and "never edit merged migrations" bind once a release
+ships.
+
 ### Expand / contract (keep deploys backward-compatible)
 
 Production runs `pnpm db:migrate` **before** the new application version is rolled out, while the old version still serves traffic. Schema changes must therefore stay compatible with the **currently running** code:

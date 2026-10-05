@@ -59,7 +59,7 @@ const ruleFixHints: Record<MigrationSafetyRuleId, string> = {
   disable_row_security_guc:
     'Migrations must not SET / RESET the `row_security` GUC. Postgres enforces RLS on FORCE ROW LEVEL SECURITY tables for any non-privileged session role; SECURITY DEFINER functions already run as their owner and bypass RLS through ownership, not by toggling row_security. Drop the SET row_security clause and rely on SECURITY DEFINER + GRANT EXECUTE.',
   force_rls_data_migration_without_owner_bracket:
-    'The migrator is RLS-subject (clinozy_be_migrator is a member of clinozy_be_owner and FORCE ROW LEVEL SECURITY binds owners), so a data migration that touches a FORCE RLS table is either rejected (writes) or silently handed zero rows (reads). Bracket EVERY FORCE RLS table the file writes OR reads with `ALTER TABLE <table> NO FORCE ROW LEVEL SECURITY` before the data statements and `ALTER TABLE <table> FORCE ROW LEVEL SECURITY` after, in a transactional migration so a failure rolls FORCE back too. Model: 20260921000000_team_owner_notify_permissions_backfill.sql.',
+    'The migrator is RLS-subject (clinozy_be_migrator is a member of clinozy_be_owner and FORCE ROW LEVEL SECURITY binds owners), so a data migration that touches a FORCE RLS table is either rejected (writes) or silently handed zero rows (reads). Bracket EVERY FORCE RLS table the file writes OR reads with `ALTER TABLE <table> NO FORCE ROW LEVEL SECURITY` before the data statements and `ALTER TABLE <table> FORCE ROW LEVEL SECURITY` after, in a transactional migration so a failure rolls FORCE back too.',
   drop_column:
     'Stop application writes, deploy, then drop the column in a later migration (contract phase).',
   drop_index_without_concurrently:
@@ -535,31 +535,6 @@ const rowSecurityGucPattern =
 const statementBreakpointPattern = /\n--> statement-breakpoint\s*\n?/g;
 
 /**
- * Grandfathered filenames that pre-date the rule's introduction. Adding a file
- * here is the equivalent of `-- migration-safety: allow <rule>` for migrations
- * that were already applied to deployed environments before the rule existed
- * (modifying an already-applied migration would lie about history).
- *
- * @remarks
- * - **drop_index_without_concurrently:**
- *   `20260606010000_user_notif_prefs_drop_org_branch.sql` uses
- *   `DROP INDEX IF EXISTS auth.idx_user_notif_prefs_org` inside a transactional
- *   migration. The lock window was small (single-column dead index) and the
- *   correct-pattern follow-up `20260608060000_user_notif_prefs_drop_org_index_concurrently.sql`
- *   exists; we grandfather this one file rather than retroactively editing
- *   applied history.
- */
-const ruleFilenameAllowlist: Partial<Record<MigrationSafetyRuleId, ReadonlySet<string>>> = {
-  drop_index_without_concurrently: new Set<string>([
-    '20260606010000_user_notif_prefs_drop_org_branch.sql',
-  ]),
-};
-
-function isFilenameAllowlistedForRule(filename: string, ruleId: MigrationSafetyRuleId): boolean {
-  return ruleFilenameAllowlist[ruleId]?.has(filename) ?? false;
-}
-
-/**
  * Flags non-transactional migrations whose `--> statement-breakpoint` segments
  * contain more than one statement. The runner sends each segment to Postgres as
  * a single command, so a segment with two statements becomes an implicit
@@ -597,12 +572,6 @@ function findNonTransactionalBreakpointViolations(
 }
 
 /**
- * Migrations applied after the role taxonomy run under an RLS-subject migrator, so this rule
- * only binds them. Earlier files ran as a role that bypassed RLS and are historical record.
- */
-const RLS_SUBJECT_MIGRATOR_SINCE = '20260827050000';
-
-/**
  * A statement that moves rows: INSERT INTO, DELETE FROM, MERGE INTO, or an UPDATE whose target is
  * followed by SET. A bare `update` would also match `CREATE POLICY ... FOR UPDATE` and an FK's
  * `ON UPDATE CASCADE` — DDL that names a FORCE RLS table but moves no rows.
@@ -630,16 +599,14 @@ function stripSqlLineComments(fileContent: string): string {
  *   RLS table is rejected; a READ from one returns zero rows. The second is the dangerous case:
  *   an `INSERT ... SELECT` whose source is FORCE RLS inserts nothing and reports success.
  *   Hosted migrations run as a `clinozy_be_migrator` login that also holds BYPASSRLS, so both pass
- *   there and fail only where the migrator is RLS-subject — which is exactly how
- *   `20260921000000_team_owner_notify_permissions_backfill` blocked every later migration.
- * - **Algorithm:** skip files before {@link RLS_SUBJECT_MIGRATOR_SINCE} and files with no data
- *   statement. Otherwise every FORCE RLS table named anywhere in the SQL — write target or read
- *   source — must be lifted with `NO FORCE` and re-applied with `FORCE` in the same file.
+ *   there and fail only where the migrator is RLS-subject.
+ * - **Algorithm:** skip files with no data statement. Otherwise every FORCE RLS table named
+ *   anywhere in the SQL — write target or read source — must be lifted with `NO FORCE` and
+ *   re-applied with `FORCE` in the same file.
  * - **Notes:** the table list is {@link EXPECTED_FORCE_RLS_TABLES}, the same source the RLS
  *   matrix asserts against, so a newly forced table is covered here without a second list.
  */
 function findForceRlsDataMigrationViolations(filename: string, fileContent: string): Violation[] {
-  if (filename.slice(0, RLS_SUBJECT_MIGRATOR_SINCE.length) <= RLS_SUBJECT_MIGRATOR_SINCE) return [];
   const sqlOnly = stripSqlLineComments(fileContent);
   if (!dataWriteStatementPattern.test(sqlOnly)) return [];
 
@@ -818,14 +785,12 @@ export function lintMigrationFileContent(
     }
 
     // DROP INDEX must use CONCURRENTLY inside a transactional migration —
-    // sec-r4-D5 follow-up. Pre-existing transactional migrations are
-    // grandfathered via `ruleFilenameAllowlist`.
+    // sec-r4-D5 follow-up.
     const dropIndexInfo = parseDropIndexPrefix(normalized);
     if (
       dropIndexInfo.isDropIndex &&
       !dropIndexInfo.hasConcurrently &&
-      executionMode.transactional &&
-      !isFilenameAllowlistedForRule(filename, 'drop_index_without_concurrently')
+      executionMode.transactional
     ) {
       const violation = emitViolationIfNotAllowed(
         allows,

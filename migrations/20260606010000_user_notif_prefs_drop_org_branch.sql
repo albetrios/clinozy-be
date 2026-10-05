@@ -13,9 +13,9 @@
 -- (`user-notification-preferences.service.ts:put → ValidationError`) already
 -- rejects non-null `organization_id` on the only route that writes this table,
 -- so no production data currently carries a non-null org id. Tighten the
--- schema-level invariant to match: drop the org branch from the policy, add
--- a CHECK constraint pinning `organization_id` to NULL, and drop the dead
--- index that was only useful when the column was populated.
+-- schema-level invariant to match: drop the org branch from the policy and add
+-- a CHECK constraint pinning `organization_id` to NULL. The dead index on the
+-- column is dropped concurrently by 20260608060000.
 -- Organization-scoped notification policy lives in
 -- `tenancy.organization_notification_policies` — a separate, properly
 -- membership-gated table.
@@ -26,13 +26,7 @@
 --
 -- Idempotent: every clause uses IF EXISTS / IF NOT EXISTS.
 
--- 1. Drop the dead index (it indexed organization_id which is always NULL
---    after this migration; the existing user/type/channel index covers every
---    read path).
-DROP INDEX IF EXISTS auth.idx_user_notif_prefs_org;
---> statement-breakpoint
-
--- 2. Replace the RLS policy with the user-only version (no org branch). DROP
+-- 1. Replace the RLS policy with the user-only version (no org branch). DROP
 --    the prior policy first so the new one carries the freshly-tightened
 --    USING/WITH CHECK clauses without an in-place ALTER POLICY that some
 --    Postgres versions reject.
@@ -70,7 +64,7 @@ CREATE POLICY "user_notification_preferences_user_access"
   );
 --> statement-breakpoint
 
--- 3. Defense-in-depth CHECK constraint. With the RLS branch gone, any caller
+-- 2. Defense-in-depth CHECK constraint. With the RLS branch gone, any caller
 --    that bypasses the application-level guard (raw SQL, a future direct
 --    repository write) still cannot persist a non-null organization_id. The
 --    constraint is NOT VALIDATED retroactively because production data is

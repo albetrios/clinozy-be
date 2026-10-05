@@ -29,11 +29,4 @@
 -- Nullable, no default: NULL = not yet onboarded.
 ALTER TABLE auth.users
   ADD COLUMN IF NOT EXISTS onboarding_completed_at timestamptz;
---> statement-breakpoint
--- Backfill the existing base as already-onboarded (stamped at account creation)
--- so a deployed population is never re-sent through the wizard on next sign-in.
--- Only users created AFTER this migration keep the NULL default and onboard once.
-UPDATE auth.users
-  SET onboarding_completed_at = created_at
-  WHERE onboarding_completed_at IS NULL;
 
