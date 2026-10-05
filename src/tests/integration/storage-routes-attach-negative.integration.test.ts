@@ -60,7 +60,7 @@ vi.mock('@/infrastructure/storage/s3-adapter.js', () => {
     }),
     deleteObject: async () => true,
     putObject: async () => {},
-    copyObject: async () => {},
+    copyObject: async () => ({ kind: 'copied' as const }),
     getObject: async () => ({ body: PNG_MAGIC_BYTES, contentType: 'image/png' }),
     getObjectFirstBytes: async () => ({
       body: storageMock.magicBytesValid ? PNG_MAGIC_BYTES : NOT_PNG_BYTES,

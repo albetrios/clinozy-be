@@ -4,6 +4,7 @@ import {
   classifyOutboundError,
   ExternalServiceError,
   isOutboundRetryable,
+  toClientFacingOutboundError,
 } from '@/infrastructure/outbound/outbound-error.js';
 
 describe('outbound-error', () => {
@@ -40,5 +41,38 @@ describe('outbound-error', () => {
       status: 401,
     });
     expect(isOutboundRetryable(error)).toBe(false);
+  });
+
+  it('ExternalServiceError carries Retry-After when the dependency says when to come back', () => {
+    const error = classifyOutboundError(new CircuitBreakerOpenError('s3', 2_400, 'open'), 's3');
+    expect(error.retryAfterSeconds).toBe(3);
+  });
+
+  it('ExternalServiceError for Stripe reads as the payment provider being unavailable', () => {
+    const error = new ExternalServiceError({ integration: 'stripe', category: 'timeout' });
+    expect(error.messageKey).toBe('errors:paymentProviderUnavailable');
+    expect(new ExternalServiceError({ integration: 's3', category: 'timeout' }).messageKey).toBe(
+      'errors:externalServiceUnavailable',
+    );
+  });
+
+  it('toClientFacingOutboundError maps a raw open circuit to a 503 with Retry-After', () => {
+    const stripeOpen = toClientFacingOutboundError(
+      new CircuitBreakerOpenError('stripe', 500, 'open'),
+    );
+    expect(stripeOpen?.statusCode).toBe(503);
+    expect(stripeOpen?.messageKey).toBe('errors:paymentProviderUnavailable');
+    // Rounded up, never below one second.
+    expect(stripeOpen?.retryAfterSeconds).toBe(1);
+
+    const resendOpen = toClientFacingOutboundError(
+      new CircuitBreakerOpenError('resend', 30_000, 'open'),
+    );
+    expect(resendOpen?.messageKey).toBe('errors:externalServiceUnavailable');
+    expect(resendOpen?.retryAfterSeconds).toBe(30);
+  });
+
+  it('toClientFacingOutboundError leaves an error that is not a third-party failure alone', () => {
+    expect(toClientFacingOutboundError(new Error('our bug'))).toBeNull();
   });
 });

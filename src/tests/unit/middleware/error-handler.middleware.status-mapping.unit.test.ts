@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import errorHandlerMiddleware from '@/shared/middlewares/core/error-handler.middleware.js';
 import { captureException } from '@/infrastructure/observability/sentry/sentry.js';
+import Stripe from 'stripe';
 import { AppError, ConflictError, ServiceUnavailableError } from '@/shared/errors/index.js';
+import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
 
 vi.mock('@/infrastructure/observability/sentry/sentry.js', () => ({
   captureException: vi.fn(),
@@ -115,6 +117,24 @@ async function createApp(): Promise<FastifyInstance> {
 
   app.get('/app-error-503-retry-after', async () => {
     throw new ServiceUnavailableError().withRetryAfter(5);
+  });
+
+  // Raw third-party failures — what outboundCall rethrows as-is.
+  app.get('/circuit-open', async () => {
+    throw new CircuitBreakerOpenError('s3', 12_300, 'Circuit breaker "s3" is OPEN');
+  });
+  app.get('/stripe-card-declined', async () => {
+    throw new Stripe.errors.StripeCardError({ message: 'declined', type: 'card_error' });
+  });
+  app.get('/stripe-outage', async () => {
+    throw new Stripe.errors.StripeAPIError({ message: 'Internal error', type: 'api_error' });
+  });
+  app.get('/stripe-bad-request', async () => {
+    throw new Stripe.errors.StripeInvalidRequestError({
+      message: 'Invalid integer',
+      type: 'invalid_request_error',
+      code: 'parameter_invalid_integer',
+    });
   });
 
   await app.ready();
@@ -320,6 +340,41 @@ describe('error-handler.middleware status + body mapping', () => {
       expect(
         body.error.errors.some((entry: { field: string }) => entry.field.endsWith('age')),
       ).toBe(true);
+    });
+  });
+
+  describe('raw third-party failures', () => {
+    it('maps an open circuit to 503 with Retry-After and no Sentry event', async () => {
+      // outboundCall rethrows CircuitBreakerOpenError raw (workers read retryAfterMs); it used to
+      // land in the 500 branch and page on every request during an outage.
+      const response = await app.inject({ method: 'GET', url: '/circuit-open' });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.headers['retry-after']).toBe('13');
+      expect(response.json().error.detail).toBe('translated:errors:externalServiceUnavailable');
+      expect(mockedCaptureException).not.toHaveBeenCalled();
+    });
+
+    it('maps a declined card to 422 with a reason the frontend can branch on', async () => {
+      const response = await app.inject({ method: 'GET', url: '/stripe-card-declined' });
+
+      expect(response.statusCode).toBe(422);
+      expect(response.json().error.reason).toBe('payment_declined');
+      expect(mockedCaptureException).not.toHaveBeenCalled();
+    });
+
+    it('maps a Stripe outage to 503', async () => {
+      const response = await app.inject({ method: 'GET', url: '/stripe-outage' });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json().error.detail).toBe('translated:errors:paymentProviderUnavailable');
+    });
+
+    it('keeps a Stripe error that is our own bug a 500 that reaches Sentry', async () => {
+      const response = await app.inject({ method: 'GET', url: '/stripe-bad-request' });
+
+      expect(response.statusCode).toBe(500);
+      expect(mockedCaptureException).toHaveBeenCalledTimes(1);
     });
   });
 });

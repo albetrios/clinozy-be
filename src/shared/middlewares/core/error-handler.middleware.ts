@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import i18next from 'i18next';
 import { randomUUID } from 'node:crypto';
@@ -13,6 +13,7 @@ import { EXTERNAL_ERROR_MESSAGE } from '@/shared/constants/index.js';
 import { isPostgresLockTimeout } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { captureException } from '@/infrastructure/observability/sentry/sentry.js';
+import { toClientFacingOutboundError } from '@/infrastructure/outbound/outbound-error.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import { env } from '@/shared/config/env.config.js';
 import {
@@ -141,12 +142,21 @@ function buildTimeoutResponse(
   };
 }
 
+/** HTTP status for a dependency that is down or the service shedding load — degraded mode, not a bug. */
+const SERVICE_UNAVAILABLE_STATUS = 503;
+
 function handleAppErrorResponse(
   error: AppError,
   request: FastifyRequest,
   requestId: string,
 ): ErrorResponseBody {
-  if (error.statusCode >= 500) {
+  // A 503 is degraded mode the client should retry (a dependency down, a circuit open, load being
+  // shed), already signalled where it happens — the circuit opening alerts once. Capturing it per
+  // request paged Sentry on every call during an outage, and masking its detail hid the message
+  // the client needs ("the payment provider is temporarily unavailable"). Only a real server
+  // error stays masked and captured.
+  const isServerError = error.statusCode >= 500 && error.statusCode !== SERVICE_UNAVAILABLE_STATUS;
+  if (isServerError) {
     captureException(
       error,
       omitUndefined({
@@ -155,13 +165,14 @@ function handleAppErrorResponse(
         organizationId: request.auth?.organizationPublicId ?? request.organizationId ?? undefined,
       }),
     );
+  } else if (error.statusCode === SERVICE_UNAVAILABLE_STATUS) {
+    logger.warn({ requestId, messageKey: error.messageKey }, 'request.service_unavailable');
   }
   const code = ERROR_CODE_TO_SNAKE[error.code];
   const isValidation = error instanceof ValidationError;
-  const detail =
-    error.statusCode >= 500
-      ? translateDetail(request, 'errors:internal', {}, EXTERNAL_ERROR_MESSAGE)
-      : translateDetail(request, error.messageKey, error.messageParams, error.message);
+  const detail = isServerError
+    ? translateDetail(request, 'errors:internal', {}, EXTERNAL_ERROR_MESSAGE)
+    : translateDetail(request, error.messageKey, error.messageParams, error.message);
   const errors =
     isValidation && error.errors
       ? error.errors.map((item) => ({
@@ -184,7 +195,8 @@ function handleAppErrorResponse(
       code,
       detail,
       errors,
-      // 5xx detail is masked, so omit the reason there too; only surface it on client-facing 4xx.
+      // Reasons are 4xx sub-codes the client can act on; a 5xx carries none (a 500's detail is
+      // masked, a 503's names the outage).
       error.statusCode >= 500 ? undefined : error.reason,
     ),
     meta: { request_id: requestId },
@@ -333,6 +345,59 @@ function handleFastifyClientErrorResponse(
   };
 }
 
+/** Inputs for {@link resolveAppError}. */
+interface ResolveAppErrorOptions {
+  error: unknown;
+  requestId: string;
+}
+
+/**
+ * The {@link AppError} to answer with: the error itself, or — for a third-party failure that
+ * arrived raw — the status it means. A raw open circuit (rethrown as-is so workers can read its
+ * retry time) or Stripe error maps to 503 with `Retry-After`, 409 or 422 instead of a 500 and a
+ * Sentry event; anything else (our own fault) is `undefined`, a 500.
+ */
+function resolveAppError({ error, requestId }: ResolveAppErrorOptions): AppError | undefined {
+  if (error instanceof AppError) {
+    return error;
+  }
+  const clientFacing = toClientFacingOutboundError(error);
+  if (!clientFacing) {
+    return undefined;
+  }
+  logger.warn(
+    {
+      requestId,
+      errorName: error instanceof Error ? error.name : undefined,
+      statusCode: clientFacing.statusCode,
+    },
+    'request.outbound_failure',
+  );
+  return clientFacing;
+}
+
+/** Inputs for {@link replyWithAppError}. */
+interface ReplyWithAppErrorOptions {
+  appError: AppError;
+  request: FastifyRequest;
+  reply: FastifyReply;
+  requestId: string;
+}
+
+/** Sets the status (and `Retry-After` when the error knows the wait) and builds the error body. */
+function replyWithAppError({
+  appError,
+  request,
+  reply,
+  requestId,
+}: ReplyWithAppErrorOptions): ErrorResponseBody {
+  reply.status(appError.statusCode);
+  if (appError.retryAfterSeconds !== undefined) {
+    reply.header('Retry-After', String(appError.retryAfterSeconds));
+  }
+  return handleAppErrorResponse(appError, request, requestId);
+}
+
 const errorHandlerMiddlewarePlugin: FastifyPluginAsync = async (app) => {
   app.setNotFoundHandler(async (request, reply) => {
     const requestId = getRequestId(request as { id?: string });
@@ -373,17 +438,17 @@ const errorHandlerMiddlewarePlugin: FastifyPluginAsync = async (app) => {
     // the response-codes decision guide — "valid request colliding with current state, retrying may
     // succeed" — rather than 503, which is reserved for a dependency being unavailable.
     if (isPostgresLockTimeout(error)) {
-      const conflictError = new ConflictError('errors:resourceBusy');
-      reply.status(conflictError.statusCode);
-      return handleAppErrorResponse(conflictError, request, currentRequestId);
+      return replyWithAppError({
+        appError: new ConflictError('errors:resourceBusy'),
+        request,
+        reply,
+        requestId: currentRequestId,
+      });
     }
 
-    if (error instanceof AppError) {
-      reply.status(error.statusCode);
-      if (error.retryAfterSeconds !== undefined) {
-        reply.header('Retry-After', String(error.retryAfterSeconds));
-      }
-      return handleAppErrorResponse(error, request, currentRequestId);
+    const appError = resolveAppError({ error, requestId: currentRequestId });
+    if (appError) {
+      return replyWithAppError({ appError, request, reply, requestId: currentRequestId });
     }
 
     if (error instanceof ZodError) {

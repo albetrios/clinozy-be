@@ -22,7 +22,7 @@ export function createObjectStoragePortMock(
     headObject: vi.fn().mockResolvedValue({ contentType: 'image/png', contentLength: 100 }),
     deleteObject: vi.fn().mockResolvedValue({ kind: 'deleted' }),
     putObject: vi.fn().mockResolvedValue(undefined),
-    copyObject: vi.fn().mockResolvedValue(undefined),
+    copyObject: vi.fn().mockResolvedValue({ kind: 'copied' }),
     getObject: vi.fn().mockResolvedValue({ body: Buffer.from(''), contentType: 'image/png' }),
     getObjectFirstBytes: vi
       .fn()

@@ -1,9 +1,13 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
+import { ExternalServiceError } from '@/infrastructure/outbound/outbound-error.js';
 import { captureMessage } from '@/infrastructure/observability/sentry/sentry.js';
 import { getEnv } from '@/shared/config/env.config.js';
-import { UnauthorizedError } from '@/shared/errors/index.js';
-import { verifyTurnstileToken } from '@/shared/utils/security/turnstile-verifier.util.js';
+import { ServiceUnavailableError, UnauthorizedError } from '@/shared/errors/index.js';
+import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import {
+  type TurnstileVerifyResult,
+  verifyTurnstileToken,
+} from '@/shared/utils/security/turnstile-verifier.util.js';
 
 /** Throttle window for outage-class Sentry alerts so a sustained Turnstile outage cannot flood Sentry. */
 const CAPTCHA_PROVIDER_UNAVAILABLE_ALERT_INTERVAL_MS = 30_000;
@@ -43,11 +47,23 @@ function firstHeaderValue(rawHeader: string | string[] | undefined): string | un
 }
 
 function isCaptchaFailOpen(): boolean {
-  // Safety valve for the TURNSTILE path: when CAPTCHA_PROVIDER=turnstile but the verify call errors
-  // (a Turnstile outage), fail OPEN (skip) vs CLOSED (block, the hardened default). It is NOT a
-  // co-flag for turning captcha off — `CAPTCHA_PROVIDER=disabled` does that on its own. The
-  // env-schema refine requires turnstile + secret in production, so this valve is dev/self-hosted only.
+  // Safety valve for the TURNSTILE path: when CAPTCHA_PROVIDER=turnstile but Cloudflare cannot
+  // answer (an outage or an open circuit), fail OPEN (skip) vs CLOSED (503, the hardened default).
+  // It is NOT a co-flag for turning captcha off — `CAPTCHA_PROVIDER=disabled` does that on its own.
+  // The env-schema refine rejects it in production, so this valve is local/development only.
   return getEnv().CAPTCHA_FAIL_OPEN;
+}
+
+/** Whole seconds until an open circuit lets a call through again, for `Retry-After`. */
+function retryAfterSecondsFor(error: unknown): number | undefined {
+  if (
+    error instanceof ExternalServiceError &&
+    error.category === 'circuit_open' &&
+    error.retryAfterMs !== undefined
+  ) {
+    return Math.max(1, Math.ceil(error.retryAfterMs / 1000));
+  }
+  return undefined;
 }
 
 function isCaptchaBypassAllowed(request: FastifyRequest): boolean {
@@ -70,8 +86,9 @@ function isCaptchaBypassAllowed(request: FastifyRequest): boolean {
 
 /**
  * Validates the Cloudflare Turnstile token from `X-Captcha-Token` on public auth routes.
- * `CAPTCHA_PROVIDER=disabled` skips unconditionally (off is off — one flag, no co-flag); a
- * misconfigured / erroring turnstile is governed by `CAPTCHA_FAIL_OPEN` (skip vs block).
+ * `CAPTCHA_PROVIDER=disabled` skips unconditionally (off is off — one flag, no co-flag). A token
+ * Cloudflare refuses is a 401; Cloudflare failing (or its circuit open) is a 503 with
+ * `Retry-After` when known — or, with `CAPTCHA_FAIL_OPEN` (never in production), a skipped check.
  * Production always enforces (the env-schema refine requires turnstile + secret there).
  */
 export async function captchaPreHandler(
@@ -99,27 +116,29 @@ export async function captchaPreHandler(
     throw new UnauthorizedError('errors:captchaRequired');
   }
 
+  let result: TurnstileVerifyResult;
   try {
-    const result = await verifyTurnstileToken({
+    result = await verifyTurnstileToken({
       token: captchaToken,
       remoteIp: request.ip,
       requestId: request.id,
     });
-    if (!result.success) {
-      throw new UnauthorizedError('errors:captchaInvalid');
-    }
   } catch (error) {
-    if (error instanceof UnauthorizedError) {
-      throw error;
-    }
-    if (error instanceof CircuitBreakerOpenError) {
-      alertCaptchaProviderUnavailable('breaker_open');
-      throw new UnauthorizedError('errors:captchaProviderUnavailable');
-    }
+    const retryAfterSeconds = retryAfterSecondsFor(error);
+    alertCaptchaProviderUnavailable(
+      retryAfterSeconds === undefined ? 'verify_error' : 'breaker_open',
+    );
     if (isCaptchaFailOpen()) {
+      logger.warn({ requestId: request.id }, 'captcha.provider_unavailable.fail_open');
       return;
     }
-    alertCaptchaProviderUnavailable('verify_error');
-    throw new UnauthorizedError('errors:captchaProviderUnavailable');
+    // The client did nothing wrong: 503 says "try again", where a 401 would say "bad captcha".
+    const unavailable = new ServiceUnavailableError('errors:captchaProviderUnavailable');
+    throw retryAfterSeconds === undefined
+      ? unavailable
+      : unavailable.withRetryAfter(retryAfterSeconds);
+  }
+  if (!result.success) {
+    throw new UnauthorizedError('errors:captchaInvalid');
   }
 }

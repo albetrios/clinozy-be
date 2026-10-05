@@ -329,4 +329,55 @@ describe('S3ObjectStorageAdapter', () => {
       MetadataDirective: 'REPLACE',
     });
   });
+
+  it('copyObject reports the copy done', async () => {
+    sendMock.mockResolvedValueOnce({});
+
+    await expect(
+      adapter.copyObject({
+        sourceKey: 'pending/avatars/u/x.png',
+        destinationKey: 'avatars/u/x.png',
+        contentType: 'image/png',
+        sourceETag: '"verified-etag"',
+      }),
+    ).resolves.toEqual({ kind: 'copied' });
+    const command = sendMock.mock.calls[0]?.[0] as { input: Record<string, unknown> };
+    expect(command.input).toMatchObject({ CopySourceIfMatch: '"verified-etag"' });
+  });
+
+  it('copyObject reports source_changed when S3 refuses the ETag-pinned copy (412) — not a storage failure', async () => {
+    sendMock.mockRejectedValueOnce(
+      Object.assign(new Error('At least one of the pre-conditions you specified did not hold'), {
+        name: 'PreconditionFailed',
+        $metadata: { httpStatusCode: 412 },
+      }),
+    );
+
+    await expect(
+      adapter.copyObject({
+        sourceKey: 'pending/avatars/u/x.png',
+        destinationKey: 'avatars/u/x.png',
+        contentType: 'image/png',
+        sourceETag: '"verified-etag"',
+      }),
+    ).resolves.toEqual({ kind: 'source_changed' });
+  });
+
+  it('copyObject still throws a storage failure', async () => {
+    sendMock.mockRejectedValueOnce(
+      Object.assign(new Error('Service Unavailable'), {
+        name: 'ServiceUnavailable',
+        $metadata: { httpStatusCode: 503 },
+      }),
+    );
+
+    await expect(
+      adapter.copyObject({
+        sourceKey: 'pending/avatars/u/x.png',
+        destinationKey: 'avatars/u/x.png',
+        contentType: 'image/png',
+        sourceETag: '"verified-etag"',
+      }),
+    ).rejects.toBeDefined();
+  });
 });

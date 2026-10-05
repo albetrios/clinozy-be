@@ -154,7 +154,7 @@ export async function runUploadPendingSweepJob(
  * sec-UP finding #20: the HTTP confirm path guarantees a servable row never references the
  * overwritable `pending/` key (sec-UP1); the sweep keeps the same invariant — copy the bytes to
  * the final key, then flip status and `file_key` in one UPDATE. Returns false (row stays PENDING)
- * when the copy fails.
+ * when the copy fails or the pending object was written again since it was verified.
  */
 async function publishPendingUpload(options: {
   row: PendingUploadSweepRow;
@@ -164,12 +164,21 @@ async function publishPendingUpload(options: {
   const { row, objectStorage, verdict } = options;
   const finalKey = stripPendingObjectKeyPrefix(row.file_key);
   try {
-    await objectStorage.copyObject({
+    const copy = await objectStorage.copyObject({
       sourceKey: row.file_key,
       destinationKey: finalKey,
       contentType: row.mime_type,
       ...(verdict.sourceETag === undefined ? {} : { sourceETag: verdict.sourceETag }),
     });
+    if (copy.kind === 'source_changed') {
+      // Written again since it was verified: leave it PENDING so the next pass verifies the new
+      // bytes instead of publishing unverified ones.
+      logger.info(
+        { uploadPublicId: row.public_id, fileKey: row.file_key },
+        'upload-pending-sweep.sourceChangedSinceVerify',
+      );
+      return false;
+    }
   } catch (copyError) {
     logger.warn(
       { uploadPublicId: row.public_id, fileKey: row.file_key, error: copyError },

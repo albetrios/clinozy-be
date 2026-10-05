@@ -222,6 +222,32 @@ describe('upload-pending-sweep.processor', () => {
     );
   });
 
+  it('leaves a verified row PENDING when its pending object was written again since the verify', async () => {
+    const row = makeRow({
+      id: 56,
+      file_key: 'pending/avatars/owner/raced.png',
+      file_size: 2048,
+    });
+    findPendingUploadsOlderThanMock.mockResolvedValueOnce([row]);
+    objectStorage.headObjectResult.mockResolvedValueOnce(
+      foundHead({ contentType: 'image/png', contentLength: 2048 }),
+    );
+    objectStorage.getObjectFirstBytes.mockResolvedValueOnce(leadingBytes(validPngBody));
+    objectStorage.copyObject.mockResolvedValueOnce({ kind: 'source_changed' });
+
+    const result = await runUploadPendingSweepJob(objectStorage);
+
+    // Unverified bytes are never published; the next pass verifies what is there now.
+    expect(markConfirmedByInternalIdMock).not.toHaveBeenCalled();
+    expect(setUploadStatusByInternalIdMock).not.toHaveBeenCalled();
+    expect(objectStorage.deleteObject).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ autoConfirmedCount: 0, failedCount: 0, transientCount: 1 });
+    expect(loggerMocks.info).toHaveBeenCalledWith(
+      expect.objectContaining({ uploadPublicId: 'upl_public_1' }),
+      'upload-pending-sweep.sourceChangedSinceVerify',
+    );
+  });
+
   it('marks rows FAILED when magic bytes do not match declared content type', async () => {
     const row = makeRow({ id: 6, file_key: 'pending/avatars/owner/spoof.png', file_size: 100 });
     findPendingUploadsOlderThanMock.mockResolvedValueOnce([row]);

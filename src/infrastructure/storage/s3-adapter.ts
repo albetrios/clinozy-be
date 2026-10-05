@@ -13,10 +13,15 @@ import { outboundCall } from '@/infrastructure/outbound/index.js';
 import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
 import { ConfigurationError } from '@/shared/errors/index.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
-import { type S3HeadResult, isS3NotFoundError } from '@/infrastructure/storage/s3-error.util.js';
+import {
+  type S3HeadResult,
+  isS3NotFoundError,
+  isS3PreconditionFailedError,
+} from '@/infrastructure/storage/s3-error.util.js';
 import { buildPublicMediaUrl } from '@/infrastructure/storage/public-media-url.util.js';
 import { buildSharedS3ClientConfig } from '@/infrastructure/storage/s3-client-config.util.js';
 import type {
+  ObjectCopyResult,
   ObjectDeleteResult,
   ObjectStoragePort,
   PresignedUploadPost,
@@ -340,29 +345,40 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
      * ~15 minutes the presigned PUT remains replayable.
      */
     sourceETag?: string;
-  }): Promise<void> {
+  }): Promise<ObjectCopyResult> {
     const bucket = requireBucket();
-    await outboundCall({
-      name: 's3',
-      operation: async (signal) => {
-        await getS3Client().send(
-          new CopyObjectCommand({
-            Bucket: bucket,
-            // CopySource is `<bucket>/<key>`; our keys use only URL-safe path characters.
-            CopySource: `${bucket}/${options.sourceKey}`,
-            Key: options.destinationKey,
-            ContentType: options.contentType,
-            MetadataDirective: 'REPLACE',
-            // sec-U11: explicit SSE-S3 on the destination object so a copy
-            // does not bypass the encryption requirement if the bucket
-            // default is misconfigured.
-            ServerSideEncryption: 'AES256',
-            ...(options.sourceETag ? { CopySourceIfMatch: options.sourceETag } : {}),
-          }),
-          { abortSignal: signal },
-        );
-      },
-    });
+    try {
+      await outboundCall({
+        name: 's3',
+        operation: async (signal) => {
+          await getS3Client().send(
+            new CopyObjectCommand({
+              Bucket: bucket,
+              // CopySource is `<bucket>/<key>`; our keys use only URL-safe path characters.
+              CopySource: `${bucket}/${options.sourceKey}`,
+              Key: options.destinationKey,
+              ContentType: options.contentType,
+              MetadataDirective: 'REPLACE',
+              // sec-U11: explicit SSE-S3 on the destination object so a copy
+              // does not bypass the encryption requirement if the bucket
+              // default is misconfigured.
+              ServerSideEncryption: 'AES256',
+              ...(options.sourceETag ? { CopySourceIfMatch: options.sourceETag } : {}),
+            }),
+            { abortSignal: signal },
+          );
+        },
+      });
+      return { kind: 'copied' };
+    } catch (error) {
+      // S3 answered 412 to `CopySourceIfMatch`: the source was written again since its ETag was
+      // read. That is the caller's race to handle, not a storage outage (and not a circuit
+      // failure — `countsS3ErrorAsCircuitFailure` skips a 412).
+      if (options.sourceETag !== undefined && isS3PreconditionFailedError(error)) {
+        return { kind: 'source_changed' };
+      }
+      throw error;
+    }
   }
 
   async deleteObject(key: string): Promise<ObjectDeleteResult> {

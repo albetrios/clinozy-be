@@ -4,6 +4,7 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { getEnv } from '@/shared/config/env.config.js';
 import {
   ConfigurationError,
+  ConflictError,
   ForbiddenError,
   NotFoundError,
   ValidationError,
@@ -632,7 +633,9 @@ export class UploadService {
    * checked against the declared content-type, then the object is server-side copied to `finalKey`
    * (always a different key: `confirmUpload` refuses a row without the pending prefix). Returns
    * false when the content is rejected — wrong magic bytes, an SVG that sanitizes to nothing, an
-   * object gone since the HEAD — so the caller marks the row FAILED; storage failures throw.
+   * object gone since the HEAD — so the caller marks the row FAILED; storage failures throw, and
+   * so does a pending object written again between the verify and the copy (409, row stays
+   * PENDING so the client can confirm again and the new bytes get verified).
    */
   private async publishConfirmedObject(
     sourceKey: string,
@@ -647,6 +650,7 @@ export class UploadService {
     // HEAD only echoes the client-declared content-type, which is trivially spoofable (e.g. an
     // HTML/script payload uploaded as image/png). Verify the actual leading bytes before the object
     // becomes servable. Ranged GET (first 32 bytes) avoids buffering the full upload.
+    let sourceETag: string | undefined;
     if (isMagicByteVerifiable(contentType)) {
       const header = await this.objectStorage.getObjectFirstBytes(
         sourceKey,
@@ -658,19 +662,22 @@ export class UploadService {
       // sec-re-10: pin the COPY to the exact object bytes we just verified.
       // The presigned PUT/POST that minted `pending/<key>` remains replayable
       // for the lifetime of the upload URL (~15 min), so an authenticated
-      // client could race a second PUT between this HEAD and the copy and
+      // client could race a second PUT between this read and the copy and
       // have the COPY pick up hostile bytes. `CopySourceIfMatch` makes S3
-      // reject that race with `PreconditionFailed` so the publish fails
-      // fast and we never serve unverified bytes from `finalKey`.
-      await this.objectStorage.copyObject({
-        sourceKey,
-        destinationKey: finalKey,
-        contentType,
-        sourceETag: header.eTag,
-      });
-      return true;
+      // refuse that race, so unverified bytes never reach `finalKey`.
+      sourceETag = header.eTag;
     }
-    await this.objectStorage.copyObject({ sourceKey, destinationKey: finalKey, contentType });
+    const copy = await this.objectStorage.copyObject({
+      sourceKey,
+      destinationKey: finalKey,
+      contentType,
+      ...(sourceETag === undefined ? {} : { sourceETag }),
+    });
+    if (copy.kind === 'source_changed') {
+      throw new ConflictError('errors:uploadChangedDuringConfirm').withReason(
+        'upload_changed_during_confirm',
+      );
+    }
     return true;
   }
 

@@ -166,6 +166,32 @@ describe('env-schema', () => {
     });
   });
 
+  // A Turnstile outage is exactly when credential stuffing is cheapest to hide in; production
+  // answers 503 instead of skipping the check.
+  describe('CAPTCHA_FAIL_OPEN', () => {
+    it('defaults to false (fail closed)', () => {
+      const parsed = envSchema.parse({ ...commonRequiredBase, NODE_ENV: 'local' });
+      expect(parsed.CAPTCHA_FAIL_OPEN).toBe(false);
+    });
+
+    it('rejects CAPTCHA_FAIL_OPEN=true in production', () => {
+      const result = envSchema.safeParse({ ...productionRequiredBase, CAPTCHA_FAIL_OPEN: 'true' });
+      expect(result.success).toBe(false);
+      expect(JSON.stringify(result.error?.issues)).toContain('CAPTCHA_FAIL_OPEN');
+    });
+
+    it('allows true outside production', () => {
+      for (const NODE_ENV of ['local', 'development'] as const) {
+        const result = envSchema.safeParse({
+          ...commonRequiredBase,
+          NODE_ENV,
+          CAPTCHA_FAIL_OPEN: 'true',
+        });
+        expect(result.success, `${NODE_ENV} should allow it`).toBe(true);
+      }
+    });
+  });
+
   it('exports schema keys for tooling sync', () => {
     expect(envSchemaKeys.length).toBeGreaterThan(0);
     expect(envSchemaKeys).toContain('DATABASE_URL');

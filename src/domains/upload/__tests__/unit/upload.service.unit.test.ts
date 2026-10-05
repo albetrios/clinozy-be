@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ForbiddenError, NotFoundError, ValidationError } from '@/shared/errors/index.js';
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '@/shared/errors/index.js';
 import { ExternalServiceError } from '@/infrastructure/outbound/index.js';
 import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
 import { UploadService } from '@/domains/upload/upload.service.js';
@@ -363,7 +368,7 @@ describe('UploadService', () => {
       contentType: 'image/png',
       eTag: '"etag"',
     });
-    vi.mocked(objectStorage.copyObject).mockResolvedValueOnce(undefined);
+    vi.mocked(objectStorage.copyObject).mockResolvedValueOnce({ kind: 'copied' });
     vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce({ kind: 'deleted' });
     vi.mocked(repository.markConfirmedByPublicId).mockResolvedValue({
       ...uploadRow,
@@ -522,7 +527,7 @@ describe('UploadService', () => {
       contentType: 'image/png',
       eTag: '"etag"',
     });
-    vi.mocked(objectStorage.copyObject).mockResolvedValueOnce(undefined);
+    vi.mocked(objectStorage.copyObject).mockResolvedValueOnce({ kind: 'copied' });
     vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce({ kind: 'deleted' });
     vi.mocked(repository.markConfirmedByPublicId).mockResolvedValue({
       ...uploadRow,
@@ -628,11 +633,44 @@ describe('UploadService', () => {
       eTag: '"etag"',
     });
     vi.mocked(objectStorage.copyObject).mockRejectedValueOnce(
-      new ExternalServiceError({ integration: 's3', category: 'http_4xx', status: 412 }),
+      new ExternalServiceError({ integration: 's3', category: 'http_5xx', status: 503 }),
     );
 
     await expect(service.confirmUpload(uploadPublicId, userPublicId)).rejects.toBeInstanceOf(
       ExternalServiceError,
+    );
+    expect(repository.markStatusByPublicId).not.toHaveBeenCalled();
+    expect(repository.markConfirmedByPublicId).not.toHaveBeenCalled();
+  });
+
+  it('confirmUpload answers 409 and leaves the upload PENDING when the pending object changed after verify', async () => {
+    // sec-re-10: the copy is pinned to the verified ETag; a second PUT through the still-valid
+    // presigned URL makes S3 refuse it. That is a race the client can resolve by confirming
+    // again (the new bytes get verified) — not a storage outage (503) and not a FAILED upload.
+    vi.mocked(repository.findByPublicId).mockResolvedValue({
+      ...uploadRow,
+      file_key: `pending/${uploadRow.file_key}`,
+      status: 'PENDING',
+    } as never);
+    vi.mocked(objectStorage.getObjectFirstBytes).mockResolvedValueOnce({
+      body: PNG_MAGIC,
+      contentType: 'image/png',
+      eTag: '"verified-etag"',
+    });
+    vi.mocked(objectStorage.copyObject).mockResolvedValueOnce({ kind: 'source_changed' });
+
+    const error = await service
+      .confirmUpload(uploadPublicId, userPublicId)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ConflictError);
+    expect(error).toMatchObject({
+      statusCode: 409,
+      messageKey: 'errors:uploadChangedDuringConfirm',
+      reason: 'upload_changed_during_confirm',
+    });
+    expect(objectStorage.copyObject).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceETag: '"verified-etag"' }),
     );
     expect(repository.markStatusByPublicId).not.toHaveBeenCalled();
     expect(repository.markConfirmedByPublicId).not.toHaveBeenCalled();
@@ -911,7 +949,7 @@ describe('UploadService', () => {
         contentType: 'image/png',
         eTag: '"etag"',
       });
-      vi.mocked(objectStorage.copyObject).mockResolvedValueOnce(undefined);
+      vi.mocked(objectStorage.copyObject).mockResolvedValueOnce({ kind: 'copied' });
       vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce({ kind: 'deleted' });
       const scopesAtWrite: unknown[] = [];
       vi.mocked(repository.markConfirmedByPublicId).mockImplementation((async () => {

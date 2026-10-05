@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { UnauthorizedError } from '@/shared/errors/index.js';
+import { ExternalServiceError } from '@/infrastructure/outbound/outbound-error.js';
+import { ServiceUnavailableError, UnauthorizedError } from '@/shared/errors/index.js';
 import {
   buildGoogleOAuthRedirectUrl,
   exchangeGoogleOAuthCode,
@@ -20,15 +21,25 @@ vi.mock('@/shared/config/env.config.js', async () => {
   };
 });
 
-const outboundFetch = vi.fn();
+const outboundFetchJson = vi.fn();
 
 vi.mock('@/infrastructure/outbound/index.js', () => ({
-  outboundFetch: (...args: unknown[]) => outboundFetch(...args),
+  outboundFetchJson: (...args: unknown[]) => outboundFetchJson(...args),
   buildOutboundFetchOptions: (options: unknown) => options,
 }));
 
-function jsonResponse(body: unknown) {
-  return { json: async () => body } as Response;
+/** What `outboundFetch*` throws for a provider answer outside the expected status. */
+function providerAnswered(status: number): ExternalServiceError {
+  return new ExternalServiceError({
+    integration: 'oauth-google',
+    category: status >= 500 ? 'http_5xx' : 'http_4xx',
+    status,
+  });
+}
+
+/** What `outboundFetch*` throws when the provider cannot be reached. */
+function providerUnreachable(): ExternalServiceError {
+  return new ExternalServiceError({ integration: 'oauth-google', category: 'network' });
 }
 
 describe('exchangeGoogleOAuthCode', () => {
@@ -59,17 +70,15 @@ describe('exchangeGoogleOAuthCode', () => {
   });
 
   it('returns a normalised profile when Google reports a verified email', async () => {
-    outboundFetch
-      .mockResolvedValueOnce(jsonResponse({ access_token: 'google-access-token' }))
-      .mockResolvedValueOnce(
-        jsonResponse({
-          sub: 'google-sub-123',
-          email: 'user@example.com',
-          email_verified: true,
-          name: 'Example User',
-          picture: 'https://example.com/avatar.png',
-        }),
-      );
+    outboundFetchJson
+      .mockResolvedValueOnce({ access_token: 'google-access-token' })
+      .mockResolvedValueOnce({
+        sub: 'google-sub-123',
+        email: 'user@example.com',
+        email_verified: true,
+        name: 'Example User',
+        picture: 'https://example.com/avatar.png',
+      });
 
     const profile = await exchangeGoogleOAuthCode({ code: 'auth-code', codeVerifier: 'verifier' });
 
@@ -80,21 +89,21 @@ describe('exchangeGoogleOAuthCode', () => {
       provider_user_id: 'google-sub-123',
     });
 
-    const tokenRequest = outboundFetch.mock.calls[0]?.[0] as { init: { body: URLSearchParams } };
+    const tokenRequest = outboundFetchJson.mock.calls[0]?.[0] as {
+      init: { body: URLSearchParams };
+    };
     expect(tokenRequest.init.body.get('code_verifier')).toBe('verifier');
   });
 
   it('rejects when email_verified is false (account-takeover guard)', async () => {
-    outboundFetch
-      .mockResolvedValueOnce(jsonResponse({ access_token: 'google-access-token' }))
-      .mockResolvedValueOnce(
-        jsonResponse({
-          sub: 'attacker-sub',
-          email: 'victim@example.com',
-          email_verified: false,
-          name: 'Attacker',
-        }),
-      );
+    outboundFetchJson
+      .mockResolvedValueOnce({ access_token: 'google-access-token' })
+      .mockResolvedValueOnce({
+        sub: 'attacker-sub',
+        email: 'victim@example.com',
+        email_verified: false,
+        name: 'Attacker',
+      });
 
     const error = await exchangeGoogleOAuthCode({
       code: 'auth-code',
@@ -106,14 +115,65 @@ describe('exchangeGoogleOAuthCode', () => {
   });
 
   it('rejects when email_verified is absent (defaults to unverified)', async () => {
-    outboundFetch
-      .mockResolvedValueOnce(jsonResponse({ access_token: 'google-access-token' }))
-      .mockResolvedValueOnce(jsonResponse({ sub: 'google-sub-456', email: 'victim@example.com' }));
+    outboundFetchJson
+      .mockResolvedValueOnce({ access_token: 'google-access-token' })
+      .mockResolvedValueOnce({ sub: 'google-sub-456', email: 'victim@example.com' });
 
     await expect(
       exchangeGoogleOAuthCode({ code: 'auth-code', codeVerifier: 'verifier' }),
     ).rejects.toMatchObject({
       messageKey: 'errors:googleEmailNotVerified',
     });
+  });
+
+  it('answers 401 when Google refuses the authorization code', async () => {
+    outboundFetchJson.mockRejectedValueOnce(providerAnswered(400));
+
+    const error = await exchangeGoogleOAuthCode({
+      code: 'expired-code',
+      codeVerifier: 'verifier',
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(UnauthorizedError);
+    expect(error).toMatchObject({ messageKey: 'errors:googleExchangeFailed' });
+  });
+
+  it('answers 401 when Google refuses the access token on userinfo', async () => {
+    outboundFetchJson
+      .mockResolvedValueOnce({ access_token: 'google-access-token' })
+      .mockRejectedValueOnce(providerAnswered(401));
+
+    await expect(
+      exchangeGoogleOAuthCode({ code: 'auth-code', codeVerifier: 'verifier' }),
+    ).rejects.toMatchObject({ statusCode: 401, messageKey: 'errors:googleFetchUserFailed' });
+  });
+
+  it.each([
+    ['unreachable', providerUnreachable()],
+    ['failing with a 5xx', providerAnswered(502)],
+    ['throttling with a 429', providerAnswered(429)],
+  ])('answers 503 when Google is %s — the user did nothing wrong', async (_label, failure) => {
+    outboundFetchJson.mockRejectedValueOnce(failure);
+
+    const error = await exchangeGoogleOAuthCode({
+      code: 'auth-code',
+      codeVerifier: 'verifier',
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ServiceUnavailableError);
+    expect(error).toMatchObject({
+      statusCode: 503,
+      messageKey: 'errors:oauthProviderUnavailable',
+    });
+  });
+
+  it('answers 503 when userinfo fails after a good token exchange', async () => {
+    outboundFetchJson
+      .mockResolvedValueOnce({ access_token: 'google-access-token' })
+      .mockRejectedValueOnce(providerUnreachable());
+
+    await expect(
+      exchangeGoogleOAuthCode({ code: 'auth-code', codeVerifier: 'verifier' }),
+    ).rejects.toMatchObject({ statusCode: 503, messageKey: 'errors:oauthProviderUnavailable' });
   });
 });

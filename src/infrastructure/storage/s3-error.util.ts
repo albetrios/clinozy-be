@@ -15,6 +15,54 @@ export type S3HeadResult<TMetadata> =
   | { kind: 'not_found' }
   | { kind: 'transient_error'; cause: unknown };
 
+/** The AWS SDK markers of one S3 answer: its error codes and its HTTP status. */
+interface S3ErrorSignature {
+  codes: ReadonlySet<string>;
+  httpStatusCode: number;
+}
+
+const S3_NOT_FOUND_SIGNATURE: S3ErrorSignature = {
+  codes: new Set(['NotFound', 'NoSuchKey']),
+  httpStatusCode: 404,
+};
+
+const S3_PRECONDITION_FAILED_SIGNATURE: S3ErrorSignature = {
+  codes: new Set(['PreconditionFailed']),
+  httpStatusCode: 412,
+};
+
+/** Inputs for {@link matchesS3ErrorSignature}. */
+interface MatchesS3ErrorSignatureOptions {
+  error: unknown;
+  signature: S3ErrorSignature;
+}
+
+/**
+ * True when `error` — or, for an {@link ExternalServiceError} produced by `outboundCall`, the
+ * AWS SDK error on its `cause` — carries the signature's `name` / `Code` or HTTP status.
+ */
+function matchesS3ErrorSignature({ error, signature }: MatchesS3ErrorSignatureOptions): boolean {
+  const candidates: unknown[] = [error];
+  if (error instanceof ExternalServiceError && error.cause !== undefined) {
+    candidates.push(error.cause);
+  }
+  return candidates.some((candidate) => {
+    if (typeof candidate !== 'object' || candidate === null) {
+      return false;
+    }
+    const sdkError = candidate as {
+      name?: unknown;
+      Code?: unknown;
+      $metadata?: { httpStatusCode?: unknown };
+    };
+    return (
+      (typeof sdkError.name === 'string' && signature.codes.has(sdkError.name)) ||
+      (typeof sdkError.Code === 'string' && signature.codes.has(sdkError.Code)) ||
+      sdkError.$metadata?.httpStatusCode === signature.httpStatusCode
+    );
+  });
+}
+
 /**
  * True only when `error` is an explicit S3 "object does not exist" response (`NotFound` /
  * `NoSuchKey` / HTTP 404), unwrapping an {@link ExternalServiceError} produced by `outboundCall`
@@ -27,29 +75,20 @@ export type S3HeadResult<TMetadata> =
  *   (timeout, network, circuit-open, throttling, 5xx) so those are never treated as not-found.
  */
 export function isS3NotFoundError(error: unknown): boolean {
-  const candidates: unknown[] = [error];
-  if (error instanceof ExternalServiceError && error.cause !== undefined) {
-    candidates.push(error.cause);
-  }
-  return candidates.some(matchesS3NotFoundSignature);
+  return matchesS3ErrorSignature({ error, signature: S3_NOT_FOUND_SIGNATURE });
 }
 
-function matchesS3NotFoundSignature(candidate: unknown): boolean {
-  if (typeof candidate !== 'object' || candidate === null) {
-    return false;
-  }
-  const error = candidate as {
-    name?: unknown;
-    Code?: unknown;
-    $metadata?: { httpStatusCode?: unknown };
-  };
-  return (
-    error.name === 'NotFound' ||
-    error.name === 'NoSuchKey' ||
-    error.Code === 'NotFound' ||
-    error.Code === 'NoSuchKey' ||
-    error.$metadata?.httpStatusCode === 404
-  );
+/**
+ * True only when `error` is S3 refusing a conditional request (`PreconditionFailed` / HTTP 412) —
+ * for a COPY with `CopySourceIfMatch`, the source object changed since its ETag was read.
+ *
+ * @remarks
+ * - **Algorithm:** the same unwrapping as {@link isS3NotFoundError}, for the `PreconditionFailed`
+ *   code or `$metadata.httpStatusCode === 412`.
+ * - **Failure modes:** returns `false` for every other failure, which stays a storage failure.
+ */
+export function isS3PreconditionFailedError(error: unknown): boolean {
+  return matchesS3ErrorSignature({ error, signature: S3_PRECONDITION_FAILED_SIGNATURE });
 }
 
 /**

@@ -13,8 +13,24 @@ import {
   updateStripeSubscriptionQuantity,
 } from '@/infrastructure/payment/stripe.client.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
-import { ConfigurationError, ServiceUnavailableError } from '@/shared/errors/index.js';
+import { AppError, ConfigurationError } from '@/shared/errors/index.js';
+import { toClientFacingOutboundError } from '@/infrastructure/outbound/outbound-error.js';
 import { env } from '@/shared/config/env.config.js';
+
+/**
+ * The error a failed Stripe mutation surfaces as — the status it means rather than a blanket 503.
+ *
+ * @remarks
+ * An open circuit or a raw Stripe error maps through `toClientFacingOutboundError` (a declined
+ * card → 422, a record Stripe no longer has → 409, an outage → 503 with `Retry-After`); a timeout
+ * or network failure is already a 503 from `outboundCall`. One that is our own fault — a bad
+ * request, bad credentials — stays the original error: a 500 that reaches Sentry instead of a 503
+ * that reads as a Stripe outage.
+ */
+function toPaymentProviderFailure(error: unknown): unknown {
+  if (error instanceof AppError) return error;
+  return toClientFacingOutboundError(error) ?? error;
+}
 
 /**
  * Builds the Stripe customer email address from the platform's outbound
@@ -142,7 +158,7 @@ export class StripePaymentProvider implements PaymentProvider {
       };
     } catch (error) {
       logger.error({ error }, 'stripe.subscription.create.failed');
-      throw new ServiceUnavailableError('errors:paymentProviderUnavailable');
+      throw toPaymentProviderFailure(error);
     }
   }
 
@@ -159,7 +175,7 @@ export class StripePaymentProvider implements PaymentProvider {
       );
     } catch (error) {
       logger.error({ error }, 'stripe.subscription.cancel.failed');
-      throw new ServiceUnavailableError('errors:paymentProviderUnavailable');
+      throw toPaymentProviderFailure(error);
     }
   }
 
@@ -178,7 +194,7 @@ export class StripePaymentProvider implements PaymentProvider {
       );
     } catch (error) {
       logger.error({ error }, 'stripe.subscription.cancel_immediate.failed');
-      throw new ServiceUnavailableError('errors:paymentProviderUnavailable');
+      throw toPaymentProviderFailure(error);
     }
   }
 
@@ -191,7 +207,7 @@ export class StripePaymentProvider implements PaymentProvider {
       );
     } catch (error) {
       logger.error({ error }, 'stripe.subscription.resume.failed');
-      throw new ServiceUnavailableError('errors:paymentProviderUnavailable');
+      throw toPaymentProviderFailure(error);
     }
   }
 
@@ -211,7 +227,7 @@ export class StripePaymentProvider implements PaymentProvider {
       );
     } catch (error) {
       logger.error({ error }, 'stripe.subscription.change_plan.failed');
-      throw new ServiceUnavailableError('errors:paymentProviderUnavailable');
+      throw toPaymentProviderFailure(error);
     }
   }
 
@@ -229,7 +245,7 @@ export class StripePaymentProvider implements PaymentProvider {
       );
     } catch (error) {
       logger.error({ error }, 'stripe.subscription.update_quantity.failed');
-      throw new ServiceUnavailableError('errors:paymentProviderUnavailable');
+      throw toPaymentProviderFailure(error);
     }
   }
 

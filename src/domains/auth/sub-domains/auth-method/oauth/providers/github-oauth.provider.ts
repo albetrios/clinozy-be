@@ -1,8 +1,11 @@
 import { NotImplementedError, UnauthorizedError } from '@/shared/errors/index.js';
 import { env } from '@/shared/config/env.config.js';
 import { DEFAULT_FRONTEND_URL } from '@/shared/constants/index.js';
-import { buildOutboundFetchOptions, outboundFetch } from '@/infrastructure/outbound/index.js';
-import { ExternalServiceError } from '@/infrastructure/outbound/outbound-error.js';
+import { buildOutboundFetchOptions, outboundFetchJson } from '@/infrastructure/outbound/index.js';
+import {
+  isOAuthProviderRejection,
+  toOAuthProviderFailure,
+} from '@/domains/auth/sub-domains/auth-method/oauth/providers/oauth-provider-failure.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import type { OAuthProfile } from '@/domains/auth/sub-domains/auth-method/oauth/oauth.types.js';
 
@@ -10,6 +13,26 @@ const GITHUB_AUTH_URL = 'https://github.com/login/oauth/authorize';
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const GITHUB_USER_URL = 'https://api.github.com/user';
 const GITHUB_EMAILS_URL = 'https://api.github.com/user/emails';
+
+/** The token endpoint's answer: GitHub reports a refused code as `error` in a 200 body. */
+type GitHubTokenResponse = {
+  access_token?: string;
+  error?: string;
+};
+
+/** The profile fields the sign-in reads. */
+type GitHubUser = {
+  id?: number;
+  name?: string;
+  avatar_url?: string;
+};
+
+/** One entry of `GET /user/emails`. */
+type GitHubEmail = {
+  email: string;
+  primary: boolean;
+  verified: boolean;
+};
 
 function getGitHubRedirectUri(): string {
   // The redirect URI is the SPA's provider-specific /callback/github page: the browser
@@ -46,7 +69,7 @@ export interface ExchangeGitHubOAuthCodeOptions {
   requestId?: string;
 }
 
-/** Trades the GitHub authorization code for an access token, then fetches the user profile and requires a primary + verified email from the emails endpoint before returning a normalised {@link OAuthProfile}. Unverified or non-primary addresses are rejected to prevent find-or-link account takeover. Translates outbound failures to `UnauthorizedError` with provider-specific i18n keys. */
+/** Trades the GitHub authorization code for an access token, then fetches the user profile and requires a primary + verified email from the emails endpoint before returning a normalised {@link OAuthProfile}. Unverified or non-primary addresses are rejected to prevent find-or-link account takeover. GitHub refusing the code or token is a 401 with a provider-specific i18n key; GitHub failing (network, timeout, 5xx, a body that is not JSON) is a 503 (`toOAuthProviderFailure`). */
 export async function exchangeGitHubOAuthCode(
   options: ExchangeGitHubOAuthCodeOptions,
 ): Promise<OAuthProfile> {
@@ -56,9 +79,9 @@ export async function exchangeGitHubOAuthCode(
     throw new NotImplementedError('errors:githubOAuthNotConfigured');
   }
 
-  let tokenResponse: Response;
+  let tokenData: GitHubTokenResponse;
   try {
-    tokenResponse = await outboundFetch(
+    tokenData = await outboundFetchJson<GitHubTokenResponse>(
       buildOutboundFetchOptions({
         name: 'oauth-github',
         url: GITHUB_TOKEN_URL,
@@ -80,16 +103,9 @@ export async function exchangeGitHubOAuthCode(
       }),
     );
   } catch (error) {
-    if (error instanceof ExternalServiceError) {
-      throw new UnauthorizedError('errors:githubExchangeFailed');
-    }
-    throw error;
+    throw toOAuthProviderFailure({ error, rejectedMessageKey: 'errors:githubExchangeFailed' });
   }
 
-  const tokenData = (await tokenResponse.json()) as {
-    access_token?: string;
-    error?: string;
-  };
   if (tokenData.error || !tokenData.access_token) {
     throw new UnauthorizedError(
       'errors:githubTokenMissing',
@@ -98,67 +114,53 @@ export async function exchangeGitHubOAuthCode(
     );
   }
 
-  let userResponse: Response;
+  const authorizedInit = {
+    headers: {
+      Authorization: `Bearer ${tokenData.access_token}`,
+      Accept: 'application/vnd.github+json',
+    },
+  };
+
+  let userInfo: GitHubUser;
   try {
-    userResponse = await outboundFetch(
+    userInfo = await outboundFetchJson<GitHubUser>(
       buildOutboundFetchOptions({
         name: 'oauth-github',
         url: GITHUB_USER_URL,
         requestId: options.requestId,
         expectedStatus: 200,
-        init: {
-          headers: {
-            Authorization: `Bearer ${tokenData.access_token}`,
-            Accept: 'application/vnd.github+json',
-          },
-        },
+        init: authorizedInit,
       }),
     );
   } catch (error) {
-    if (error instanceof ExternalServiceError) {
-      throw new UnauthorizedError('errors:githubFetchUserFailed');
-    }
-    throw error;
+    throw toOAuthProviderFailure({ error, rejectedMessageKey: 'errors:githubFetchUserFailed' });
   }
-
-  const userInfo = (await userResponse.json()) as {
-    id?: number;
-    name?: string;
-    avatar_url?: string;
-  };
 
   // Always resolve the email from the dedicated emails endpoint and require a
   // primary + verified address. The top-level `user.email` field and any
   // unverified fallback are intentionally ignored: linking by an
   // attacker-controlled unverified address would enable account takeover.
-  let primaryVerifiedEmail: string | undefined;
+  let emails: GitHubEmail[] = [];
   try {
-    const emailsResponse = await outboundFetch(
+    emails = await outboundFetchJson<GitHubEmail[]>(
       buildOutboundFetchOptions({
         name: 'oauth-github',
         url: GITHUB_EMAILS_URL,
         requestId: options.requestId,
         expectedStatus: 200,
-        init: {
-          headers: {
-            Authorization: `Bearer ${tokenData.access_token}`,
-            Accept: 'application/vnd.github+json',
-          },
-        },
+        init: authorizedInit,
       }),
     );
-
-    const emails = (await emailsResponse.json()) as {
-      email: string;
-      primary: boolean;
-      verified: boolean;
-    }[];
-    primaryVerifiedEmail = emails.find(
-      (emailRecord) => emailRecord.primary && emailRecord.verified,
-    )?.email;
-  } catch {
-    // Email list is optional; the missing/unverified guard below handles it.
+  } catch (error) {
+    // GitHub refusing the list (e.g. the token lacks `user:email`) leaves no verified email —
+    // the guard below answers 401. GitHub failing is a 503, not a misleading 401.
+    if (!isOAuthProviderRejection(error)) {
+      throw toOAuthProviderFailure({ error, rejectedMessageKey: 'errors:githubFetchUserFailed' });
+    }
   }
+  const primaryVerifiedEmail = Array.isArray(emails)
+    ? emails.find((emailRecord) => emailRecord.primary && emailRecord.verified)?.email
+    : undefined;
 
   if (!(primaryVerifiedEmail && userInfo.id)) {
     throw new UnauthorizedError('errors:githubUserMissingVerifiedEmail');

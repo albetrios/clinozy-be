@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import Stripe from 'stripe';
 
 // REQ-4: stub the seat-sync producer queue so changePlan's best-effort enqueue never opens Redis.
+
+/** What the Stripe client rethrows when Stripe itself is failing — the provider maps it to a 503. */
+function stripeOutage(message: string): Error {
+  return new Stripe.errors.StripeAPIError({ message, type: 'api_error' });
+}
+
 vi.mock(
   '@/domains/billing/sub-domains/subscription/queues/subscription-seat-sync.queue.js',
   () => ({
@@ -467,7 +474,7 @@ describe('SubscriptionService', () => {
       ...plan,
       stripe_price_monthly_id: 'price_monthly',
     } as never);
-    stripeMocks.createStripeSubscription.mockRejectedValueOnce(new Error('stripe down'));
+    stripeMocks.createStripeSubscription.mockRejectedValueOnce(stripeOutage('stripe down'));
 
     await expect(
       service.create(scope, { plan_id: 'plan_public', billing_cycle: 'monthly' }, 'user_public'),
@@ -489,8 +496,12 @@ describe('SubscriptionService', () => {
       ...subscriptionRow,
       provider_subscription_id: 'sub_stripe',
     } as never);
-    stripeMocks.cancelStripeSubscription.mockRejectedValueOnce(new Error('stripe cancel failed'));
-    stripeMocks.resumeStripeSubscription.mockRejectedValueOnce(new Error('stripe resume failed'));
+    stripeMocks.cancelStripeSubscription.mockRejectedValueOnce(
+      stripeOutage('stripe cancel failed'),
+    );
+    stripeMocks.resumeStripeSubscription.mockRejectedValueOnce(
+      stripeOutage('stripe resume failed'),
+    );
 
     await expect(service.cancel(scope, 'sub_public')).rejects.toBeInstanceOf(
       ServiceUnavailableError,
@@ -687,7 +698,9 @@ describe('SubscriptionService', () => {
       ...plan,
       stripe_price_monthly_id: 'price_new',
     } as never);
-    stripeMocks.updateStripeSubscription.mockRejectedValueOnce(new Error('stripe update failed'));
+    stripeMocks.updateStripeSubscription.mockRejectedValueOnce(
+      stripeOutage('stripe update failed'),
+    );
 
     await expect(
       service.changePlan(scope, 'sub_public', { plan_id: 'plan_public' }),

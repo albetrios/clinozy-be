@@ -51,6 +51,7 @@ The upload domain is consumed by other domains rather than driving any flow itse
 
 - **Confirm before upload landed** → S3 HEAD answers 404, a verdict on the object: the row is marked `failed` (422); the client creates a new upload.
 - **Confirm during an S3 outage** (timeout, throttling, open circuit) → error response; the row stays `pending`, so the client retries confirm — a storage failure is never a verdict on the upload.
+- **Pending object written again between verify and publish** (a second PUT through the still-valid presigned URL) → the ETag-pinned copy is refused: 409 `upload_changed_during_confirm`, the row stays `pending`, and confirming again verifies the new bytes. The pending sweep leaves such a row for its next pass.
 - **Confirm of a row that doesn't belong to the caller** → 404 (we deliberately don't reveal existence).
 - **Presign TTL exceeded** → S3 rejects the upload with a SignatureDoesNotMatch / ExpiredToken response; client must request a fresh presign.
 - **Delete after S3 outage** → DB row tombstones; the retention worker retries the S3 object delete on each pass and keeps the row until it succeeds.

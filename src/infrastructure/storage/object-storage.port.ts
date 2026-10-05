@@ -31,6 +31,13 @@ export type UploadedObjectVerdict =
  */
 export type ObjectDeleteResult = { kind: 'deleted' } | { kind: 'failed'; circuitOpen: boolean };
 
+/**
+ * Outcome of {@link ObjectStoragePort.copyObject}: `source_changed` when the copy was pinned to a
+ * `sourceETag` and the source object no longer has it (someone wrote it again since it was read).
+ * A storage failure is never an outcome — it is thrown.
+ */
+export type ObjectCopyResult = { kind: 'copied' } | { kind: 'source_changed' };
+
 /** Browser-postable presigned upload: a form `url` plus hidden `fields` to submit with the file. */
 export interface PresignedUploadPost {
   url: string;
@@ -96,15 +103,16 @@ export interface ObjectStoragePort {
    * served object can never be overwritten via the client's still-valid presigned upload URL. The
    * destination `contentType` is set on the copy so the served object carries the verified type.
    * `sourceETag` (sec-re-10) is the S3 ETag captured at the verify step; when supplied the
-   * adapter passes it as `CopySourceIfMatch` so the COPY fails with `PreconditionFailed` if the
-   * source bytes changed between verify and copy (closes the pending-PUT replay TOCTOU window).
+   * adapter passes it as `CopySourceIfMatch`, and a source whose bytes changed between verify and
+   * copy reports `source_changed` instead of being copied (closes the pending-PUT replay TOCTOU
+   * window). Storage failures throw.
    */
   copyObject(options: {
     sourceKey: string;
     destinationKey: string;
     contentType: string;
     sourceETag?: string;
-  }): Promise<void>;
+  }): Promise<ObjectCopyResult>;
 
   getObject(key: string): Promise<{ body: Buffer; contentType: string | undefined }>;
 

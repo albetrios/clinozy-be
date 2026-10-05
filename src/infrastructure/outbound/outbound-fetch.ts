@@ -77,35 +77,44 @@ async function readResponseBodyForClassification(response: Response): Promise<st
   }
 }
 
+/** Inputs for {@link runOutboundFetch}: the fetch to make and how to read its response. */
+interface RunOutboundFetchOptions<T> {
+  fetchOptions: OutboundFetchOptions;
+  readResponse: (response: Response) => Promise<T>;
+}
+
 /**
- * HTTP outbound helper: timeout, optional circuit/retry via {@link outboundCall}, request-id header,
- * and status-based {@link ExternalServiceError} classification.
+ * One outbound fetch with the integration's timeout and circuit; `readResponse` runs inside the
+ * same call, so the timeout and the error classification cover reading the body too.
  */
-export async function outboundFetch(options: OutboundFetchOptions): Promise<Response> {
-  const defaults = resolveOutboundDefaults(options.name);
-  const fetchImplementation = options.fetchImplementation ?? globalThis.fetch.bind(globalThis);
+async function runOutboundFetch<T>({
+  fetchOptions,
+  readResponse,
+}: RunOutboundFetchOptions<T>): Promise<T> {
+  const defaults = resolveOutboundDefaults(fetchOptions.name);
+  const fetchImplementation = fetchOptions.fetchImplementation ?? globalThis.fetch.bind(globalThis);
   const headers = buildHeaders({
-    ...(options.init !== undefined ? { init: options.init } : {}),
-    ...(options.requestId !== undefined ? { requestId: options.requestId } : {}),
+    ...(fetchOptions.init !== undefined ? { init: fetchOptions.init } : {}),
+    ...(fetchOptions.requestId !== undefined ? { requestId: fetchOptions.requestId } : {}),
   });
 
   return outboundCall(
     buildOutboundCallOptions({
-      name: options.name,
+      name: fetchOptions.name,
       timeoutMs: defaults.timeoutMs,
       circuit: defaults.circuit ?? null,
-      requestId: options.requestId,
+      requestId: fetchOptions.requestId,
       operation: async (signal) => {
-        const response = await fetchImplementation(options.url, {
-          ...options.init,
+        const response = await fetchImplementation(fetchOptions.url, {
+          ...fetchOptions.init,
           headers,
           signal,
         });
 
-        const expectedStatus = options.expectedStatus;
+        const expectedStatus = fetchOptions.expectedStatus;
         if (expectedStatus !== undefined && !isExpectedStatus(response.status, expectedStatus)) {
           const body = await readResponseBodyForClassification(response);
-          const customError = options.classifyResponseError?.(response, body);
+          const customError = fetchOptions.classifyResponseError?.(response, body);
           if (customError) {
             throw customError;
           }
@@ -113,21 +122,55 @@ export async function outboundFetch(options: OutboundFetchOptions): Promise<Resp
           const category = response.status >= 500 ? 'http_5xx' : 'http_4xx';
           const upstreamRequestId = response.headers.get(REQUEST_ID_HEADER);
           throw new ExternalServiceError({
-            integration: options.name,
+            integration: fetchOptions.name,
             category,
             status: response.status,
             ...(upstreamRequestId ? { upstreamRequestId } : {}),
-            fallbackMessage: `Outbound fetch to ${options.name} returned HTTP ${response.status}`,
+            fallbackMessage: `Outbound fetch to ${fetchOptions.name} returned HTTP ${response.status}`,
           });
         }
 
-        return response;
+        return readResponse(response);
       },
     }),
   ).catch((error) => {
     if (error instanceof ExternalServiceError) {
       throw error;
     }
-    throw classifyOutboundError(error, options.name);
+    throw classifyOutboundError(error, fetchOptions.name);
+  });
+}
+
+/**
+ * HTTP outbound helper: timeout, optional circuit/retry via {@link outboundCall}, request-id header,
+ * and status-based {@link ExternalServiceError} classification.
+ *
+ * @remarks
+ * - **Algorithm:** fetches with the integration's timeout and circuit; a status outside
+ *   `expectedStatus` throws `ExternalServiceError` (`http_4xx` / `http_5xx`).
+ * - **Failure modes:** every failure is an `ExternalServiceError` (503 at the HTTP layer).
+ * - **Side effects:** one HTTP request; adds `X-Request-Id` when a request id is given.
+ * - **Notes:** the timeout does not cover reading the body afterwards — read JSON with
+ *   {@link outboundFetchJson}.
+ */
+export async function outboundFetch(options: OutboundFetchOptions): Promise<Response> {
+  return runOutboundFetch({ fetchOptions: options, readResponse: async (response) => response });
+}
+
+/**
+ * {@link outboundFetch} that also reads the JSON body inside the outbound call.
+ *
+ * @remarks
+ * - **Algorithm:** the same fetch, then `response.json()` under the same timeout.
+ * - **Failure modes:** a body that times out or is not JSON is the integration failing — an
+ *   `ExternalServiceError` like any other outbound failure, never a raw `SyntaxError` /
+ *   `TimeoutError` that would surface as a 500.
+ * - **Side effects:** one HTTP request.
+ * - **Notes:** the payload is cast, not validated — check the fields you rely on.
+ */
+export async function outboundFetchJson<T>(options: OutboundFetchOptions): Promise<T> {
+  return runOutboundFetch({
+    fetchOptions: options,
+    readResponse: async (response) => (await response.json()) as T,
   });
 }

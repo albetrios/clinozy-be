@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   countsS3ErrorAsCircuitFailure,
   isS3NotFoundError,
+  isS3PreconditionFailedError,
 } from '@/infrastructure/storage/s3-error.util.js';
 import { ExternalServiceError } from '@/infrastructure/outbound/index.js';
 
@@ -46,6 +47,29 @@ describe('isS3NotFoundError', () => {
     expect(isS3NotFoundError(null)).toBe(false);
     expect(isS3NotFoundError(undefined)).toBe(false);
     expect(isS3NotFoundError('NotFound')).toBe(false);
+  });
+});
+
+describe('isS3PreconditionFailedError', () => {
+  it('detects S3 refusing a conditional copy, raw or wrapped by outboundCall', () => {
+    const sdkError = { name: 'PreconditionFailed', $metadata: { httpStatusCode: 412 } };
+    expect(isS3PreconditionFailedError(sdkError)).toBe(true);
+    expect(isS3PreconditionFailedError({ Code: 'PreconditionFailed' })).toBe(true);
+    expect(isS3PreconditionFailedError({ $metadata: { httpStatusCode: 412 } })).toBe(true);
+    expect(
+      isS3PreconditionFailedError(
+        new ExternalServiceError({ integration: 's3', category: 'unknown', cause: sdkError }),
+      ),
+    ).toBe(true);
+  });
+
+  it('returns false for not-found, outages and non-object values', () => {
+    expect(
+      isS3PreconditionFailedError({ name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } }),
+    ).toBe(false);
+    expect(isS3PreconditionFailedError({ $metadata: { httpStatusCode: 503 } })).toBe(false);
+    expect(isS3PreconditionFailedError('PreconditionFailed')).toBe(false);
+    expect(isS3PreconditionFailedError(null)).toBe(false);
   });
 });
 

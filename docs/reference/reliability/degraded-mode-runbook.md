@@ -35,24 +35,26 @@ availability — that reintroduces double-execution risk for writes.
 ## Cloudflare Turnstile down → captcha-gated auth fails closed
 
 **Behavior.** In production the captcha pre-handler
-(`src/shared/middlewares/security/captcha.middleware.ts`) fails **closed**: if Turnstile cannot be
-reached (including when the per-provider circuit breaker is open) the request is rejected with `401
-captchaProviderUnavailable`. Captcha-gated routes — login, email verification-code, password-reset
-request — are therefore unavailable during a Turnstile outage. Fail-open is intentionally **not**
-available in production (it would invite credential stuffing during the outage); the bypass header is
-honored only in non-production.
+(`src/shared/middlewares/security/captcha.middleware.ts`) fails **closed**: if Turnstile cannot
+answer — network or timeout, a non-200 or unreadable siteverify response, or the `turnstile` circuit
+breaker open — the request is rejected with **`503 captchaProviderUnavailable`** (with `Retry-After`
+while the circuit is open). Captcha-gated routes — login, email verification-code, password-reset
+request, MFA challenge, OAuth initiation — are therefore unavailable during a Turnstile outage, and
+clients see a retryable 503 rather than a "bad captcha" 401. Fail-open (`CAPTCHA_FAIL_OPEN`) is
+rejected by the env schema in production (it would invite credential stuffing during the outage); the
+bypass header is honored only in non-production.
 
 **Signals.**
 
 - Sentry: `captcha.provider_unavailable` (error) — throttled to one event / 30s; `extra.reason` is
-  `breaker_open`, `verify_error`, or `not_configured`.
-- A spike of `401` on public auth routes with `errors:captchaProviderUnavailable`.
+  `breaker_open` or `verify_error`. The 503s themselves are not Sentry events.
+- A spike of `503` on public auth routes with `errors:captchaProviderUnavailable`, and
+  `outbound.call.failed` logs for the `captcha-turnstile` integration.
 
-**Operator response.** Confirm the Turnstile outage (Cloudflare status) vs. a local
-misconfiguration (`reason: not_configured` means `CAPTCHA_SECRET` is unset/`CAPTCHA_PROVIDER` is not
-`turnstile` in a production deploy — fix the env, do not ship a fail-open). For a confirmed
-third-party outage, communicate the auth degradation; recovery is automatic when Turnstile returns
-and the circuit breaker closes.
+**Operator response.** Confirm the Turnstile outage (Cloudflare status). Misconfiguration cannot
+reach here — the env schema requires `CAPTCHA_PROVIDER=turnstile` and `CAPTCHA_SECRET` in
+production, so a bad config fails at boot. For a confirmed third-party outage, communicate the auth
+degradation; recovery is automatic when Turnstile returns and the circuit breaker closes.
 
 ## Quick reference
 
@@ -60,4 +62,4 @@ and the circuit breaker closes.
 | --- | --- | --- | --- |
 | Redis | writes that require `X-Idempotency-Key` | fail closed (`503` retryable) | `idempotency.cache.unavailable` (Sentry) |
 | Redis | global + per-route rate limits | graceful (per-process counter) | `rate_limit.redis_failover.local` (log) |
-| Turnstile | captcha-gated auth routes | fail closed (`401`) | `captcha.provider_unavailable` (Sentry) |
+| Turnstile | captcha-gated auth routes | fail closed (`503`, `Retry-After` while the circuit is open) | `captcha.provider_unavailable` (Sentry) |

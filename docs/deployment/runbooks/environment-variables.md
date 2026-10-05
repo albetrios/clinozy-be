@@ -341,15 +341,16 @@ instead of running insecure — you cannot ship the dev value:
 filled — boot fails loudly on any violation. The deploy workflow's `validate:github-env-runtime`
 step confirms the required keys exist in the GitHub Environment before anything deploys.
 
-### 11.2 Layer 2 — `NODE_ENV` selects each policy flag's default (it is not itself a runtime switch)
+### 11.2 Layer 2 — policy flags with static production-safe defaults (`NODE_ENV` is not a runtime switch)
 
-Runtime code never branches on `NODE_ENV`; it reads explicit **policy flags**, and `NODE_ENV` only
-**selects each flag's default** in `env-schema.ts`. The two most safety-relevant flags —
-`RATE_LIMIT_RELAXED_CAPS` (lifts every per-route cap to 5000, `rate-limit-presets.constants.ts`) and
-`CAPTCHA_FAIL_OPEN` (captcha skips when Turnstile is unconfigured, `captcha.middleware.ts`) — default
-relaxed on a local `development` runtime, and a schema refine **rejects the relaxed value in
-production at boot**. So even a leaked `.env` cannot ship relaxed caps or fail-open captcha to
-a deployed environment — config validation fails closed. The boot-time safety checks
+Runtime code never branches on `NODE_ENV`; it reads explicit **policy flags**, each with a **static
+production-safe default** in `env-schema.ts` — `NODE_ENV` selects no default. The local value ships
+active in the committed template. The two most safety-relevant flags — `RATE_LIMIT_RELAXED_CAPS`
+(lifts every per-route cap to 5000, `rate-limit-presets.constants.ts`) and `CAPTCHA_FAIL_OPEN` (skip
+the captcha check while Cloudflare Turnstile is down instead of answering 503,
+`captcha.middleware.ts`) — default to the hardened value, and a schema refine **rejects the relaxed
+value in production at boot**. So even a leaked env file cannot ship relaxed caps or fail-open
+captcha to a deployed environment — config validation fails closed. The boot-time safety checks
 (`DATABASE_TLS_ENFORCED`, `DATABASE_RLS_SAFETY_ENFORCED`, `REDIS_TLS_ENFORCED`, `TRUST_PROXY_REQUIRED`,
 `DATABASE_CONNECTION_BUDGET_ENFORCED`) follow the same rule: default enforced when deployed, locked on
 in production. You also normally cannot ship the wrong `NODE_ENV` — the Dockerfile sets

@@ -300,10 +300,11 @@ const envSchemaBase = z.object({
   //    an unsafe override in production. Relaxed dev/test values are set explicitly (env
   //    file / test harness) so nothing silently weakens on a deployed environment.
   /**
-   * Category-A. Safety valve for the TURNSTILE path only: when CAPTCHA_PROVIDER=turnstile but
-   * verification cannot complete (CAPTCHA_SECRET unset, or the verify call errors), fail OPEN (skip)
-   * instead of blocking auth. Defaults false (fail closed, production-safe); development and the
-   * test harness set it true in `.env`. `CAPTCHA_PROVIDER=disabled` turns captcha off on its own and
+   * Category-B (security). Safety valve for the TURNSTILE path only: when CAPTCHA_PROVIDER=turnstile
+   * but Cloudflare cannot answer (the verify call fails or its circuit is open), fail OPEN (skip the
+   * check) instead of answering 503. Defaults false (fail closed); the refine rejects `true` in
+   * production, where an outage must never switch off the credential-stuffing control. Development
+   * and the test harness set it true. `CAPTCHA_PROVIDER=disabled` turns captcha off on its own and
    * does NOT require this flag (one behaviour, one variable).
    */
   CAPTCHA_FAIL_OPEN: booleanString('false'),
@@ -1463,6 +1464,11 @@ export const envSchema = envSchemaBase
     message:
       'CAPTCHA_BYPASS_ALLOWED must be false in production (captcha bypass is a dev/test affordance only).',
     path: ['CAPTCHA_BYPASS_ALLOWED'],
+  })
+  .refine((data) => data.NODE_ENV !== 'production' || data.CAPTCHA_FAIL_OPEN === false, {
+    message:
+      'CAPTCHA_FAIL_OPEN must be false in production (a Turnstile outage must not switch captcha off).',
+    path: ['CAPTCHA_FAIL_OPEN'],
   })
   .refine((data) => data.NODE_ENV !== 'production' || data.SESSION_ORIGIN_CSRF_REQUIRED === true, {
     message:

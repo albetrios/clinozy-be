@@ -40,9 +40,9 @@ There is **no signup endpoint** — account creation is folded into the unified 
 - `POST /api/v1/auth/mfa/login`
 - `GET /api/v1/auth/oauth/:provider` (OAuth initiation)
 
-Schema default is `CAPTCHA_PROVIDER=disabled`. In `development`, verification is skipped when Turnstile is not configured (via the `CAPTCHA_FAIL_OPEN` flag). Optional `CAPTCHA_BYPASS_HEADER` (non-production only) allows local testing. Failures return **401** with `errors:captchaRequired` or `errors:captchaInvalid`.
+Schema default is `CAPTCHA_PROVIDER=disabled` (no check; production requires `turnstile`). A missing token is **401** `errors:captchaRequired`; a token Cloudflare refuses is **401** `errors:captchaInvalid`. When Cloudflare cannot answer — an outage, a non-200 or unreadable siteverify response, or the `turnstile` circuit open — the request is **503** `errors:captchaProviderUnavailable` (with `Retry-After` while the circuit is open): the client retries rather than re-solving a captcha that was never judged. `CAPTCHA_FAIL_OPEN=true` skips the check during such an outage instead; the schema rejects it in production. Optional `CAPTCHA_BYPASS_HEADER` (with `CAPTCHA_BYPASS_ALLOWED`, non-production only) allows local testing.
 
-**Production boot guard.** Because `captchaPreHandler` fail-closes when CAPTCHA is unconfigured, a production deploy with the default `CAPTCHA_PROVIDER=disabled` would turn login, email verification-code (send + login), password recovery, MFA challenge, and OAuth initiation into **401**s. Boot fails in production unless Turnstile is fully configured (see `src/shared/config/env-schema.ts`):
+**Production boot guard.** A production deploy with the default `CAPTCHA_PROVIDER=disabled` would run login, email verification-code (send + login), password recovery, MFA challenge, and OAuth initiation without any captcha. Boot fails in production unless Turnstile is fully configured (see `src/shared/config/env-schema.ts`):
 
 | Posture                   | Required env                                    | Auth-route behavior                                                   |
 | ------------------------- | ----------------------------------------------- | --------------------------------------------------------------------- |

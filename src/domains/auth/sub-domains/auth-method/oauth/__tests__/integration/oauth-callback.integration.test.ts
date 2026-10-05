@@ -3,6 +3,7 @@ import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { injectUnauthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
+import { ServiceUnavailableError } from '@/shared/errors/index.js';
 import type { OAuthProfile } from '@/domains/auth/sub-domains/auth-method/oauth/oauth.types.js';
 import type { FastifyInstance } from 'fastify';
 
@@ -129,5 +130,24 @@ describe('GET /api/v1/auth/oauth/:provider/callback — Integration', () => {
     // The querystring schema is the first gate — a missing code must not reach the service.
     expect(response.statusCode, response.body).toBe(400);
     expect(exchangeGoogleOAuthCodeMock).not.toHaveBeenCalled();
+  });
+
+  it('answers 503 when the provider is down — a retryable outage, not a refused sign-in', async () => {
+    const { state, nonce } = await beginAuthorizeFlow();
+    exchangeGoogleOAuthCodeMock.mockRejectedValueOnce(
+      new ServiceUnavailableError('errors:oauthProviderUnavailable'),
+    );
+
+    const response = await injectUnauthenticated(app, {
+      method: 'GET',
+      url: testApiPath(`/auth/oauth/google/callback?code=provider-code&state=${state}`),
+      cookies: { [OAUTH_NONCE_COOKIE]: nonce },
+    });
+
+    expect(response.statusCode, response.body).toBe(503);
+    expect((response.json() as { error: { detail: string } }).error.detail).toBe(
+      'Sign-in with this provider is temporarily unavailable. Please try again.',
+    );
+    expect(response.cookies.session_id).toBeUndefined();
   });
 });
