@@ -147,20 +147,20 @@ function phaseProfile(authed) {
 }
 
 function phaseOrg(authed) {
-  const listOrgsRes = http.get(`${API_PREFIX}/users/me/organizations`, {
+  const listOrganizationsRes = http.get(`${API_PREFIX}/users/me/organizations`, {
     headers: authed,
-    tags: { name: 'list-orgs' },
+    tags: { name: 'list-organizations' },
   });
-  checkOk(listOrgsRes, 'list-orgs');
-  checkResponseTime(listOrgsRes, 500, 'list-orgs');
+  checkOk(listOrganizationsRes, 'list-organizations');
+  checkResponseTime(listOrganizationsRes, 500, 'list-organizations');
   sleep(0.2);
 
-  const getOrgRes = http.get(`${API_PREFIX}/tenancy/organization`, {
+  const getOrganizationRes = http.get(`${API_PREFIX}/tenancy/organization`, {
     headers: authed,
-    tags: { name: 'get-org' },
+    tags: { name: 'get-organization' },
   });
-  checkOk(getOrgRes, 'get-org');
-  checkResponseTime(getOrgRes, 400, 'get-org');
+  checkOk(getOrganizationRes, 'get-organization');
+  checkResponseTime(getOrganizationRes, 400, 'get-organization');
   sleep(0.2);
 
   const organizationSettingsRes = http.get(`${API_PREFIX}/tenancy/organization/settings`, {

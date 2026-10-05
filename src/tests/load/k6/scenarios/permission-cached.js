@@ -36,12 +36,12 @@ export function permissionCachedList() {
 
   http.get(`${API_PREFIX}/users/me/organizations`, {
     headers,
-    tags: { name: 'permission-cached-orgs' },
+    tags: { name: 'permission-cached-organizations' },
   });
 
   const response = http.get(`${API_PREFIX}/users/me/organizations`, {
     headers,
-    tags: { name: 'permission-cached-orgs' },
+    tags: { name: 'permission-cached-organizations' },
   });
   checkStatus(response, 200, 'organizations-list');
   checkResponseTime(response, 600, 'organizations-list');
