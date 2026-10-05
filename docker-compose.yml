@@ -54,6 +54,8 @@ services:
       # the boot-time safety checks default hardened, so relax them for the compose Postgres/Redis
       # (plaintext, single replica, no reverse proxy).
       NODE_ENV: development
+      # The compose Postgres is plaintext: no TLS on the connection, no TLS boot check.
+      DATABASE_SSL_ENABLED: 'false'
       DATABASE_TLS_ENFORCED: 'false'
       DATABASE_RLS_SAFETY_ENFORCED: 'false'
       DATABASE_CONNECTION_BUDGET_ENFORCED: 'false'
@@ -63,16 +65,8 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://clinozy:clinozy@postgres:5432/clinozy
       REDIS_URL: redis://redis:6379
-      # sec-r4-C5: JWT_SECRET is not a recognized env key (env-schema uses RS256
-      # via JWT_PRIVATE_KEY / JWT_PUBLIC_KEY). Set the real keys explicitly here
-      # so the env-schema required fields are visible to anyone reading this
-      # file — the Dockerfile only carries placeholders for `pnpm build` and
-      # those would silently leak through if compose forgot to override.
-      # These placeholder strings pass the schema (min(1)) and let the API
-      # container boot for health-endpoint smoke; any test that actually exercises
-      # token signing must supply real PEMs.
-      JWT_PRIVATE_KEY: smoke-test-private-key-placeholder
-      JWT_PUBLIC_KEY: smoke-test-public-key-placeholder
+      # JWT_PRIVATE_KEY / JWT_PUBLIC_KEY come from the entrypoint below: the boot parses the RS256
+      # pair (assertJwtKeyMaterial), so a placeholder string cannot start the API.
       # Required in every runtime by the env schema; a fixed all-zero test key is fine for smoke.
       SECRETS_ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
       ALLOWED_ORIGINS: http://localhost:3000
@@ -81,6 +75,14 @@ services:
       # Disable metrics for smoke so a METRICS_SCRAPE_TOKEN is not required at boot.
       METRICS_ENABLED: 'false'
       LOG_LEVEL: info
+    # Mint a throwaway RS256 pair at start-up (no key is committed), then run the image's command.
+    entrypoint:
+      - sh
+      - -c
+      - |
+        node -e "const { generateKeyPairSync } = require('node:crypto'); const fs = require('node:fs'); const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 }); fs.writeFileSync('/tmp/jwt-private.pem', privateKey.export({ type: 'pkcs8', format: 'pem' })); fs.writeFileSync('/tmp/jwt-public.pem', publicKey.export({ type: 'spki', format: 'pem' }));"
+        export JWT_PRIVATE_KEY="$$(cat /tmp/jwt-private.pem)" JWT_PUBLIC_KEY="$$(cat /tmp/jwt-public.pem)"
+        exec node dist/src/server.js
 
   toxiproxy:
     # Built locally from the official release binary (see tooling/chaos/toxiproxy.Dockerfile):
