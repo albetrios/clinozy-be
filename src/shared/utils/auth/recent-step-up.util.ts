@@ -86,9 +86,8 @@ export async function hasRecentStepUp(
  *
  * @remarks Excludes `email_code` bootstrap windows: a passwordless account may open a step-up
  * window with an email code to enroll its first MFA/passkey, but must NOT be able to revoke
- * sessions or delete credentials on that weaker factor. Fails closed on a missing session id,
- * and on a legacy sentinel written before factors were tracked (its value is a session id, not a
- * factor, so it reads as non-strong until the 10-minute TTL lapses).
+ * sessions or delete credentials on that weaker factor. Fails closed on a missing session id and
+ * on any stored value that is not a strong factor.
  */
 export async function hasRecentStrongStepUp(
   redis: Redis,

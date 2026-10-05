@@ -18,8 +18,8 @@ export type AccountActiveInput = {
  * Rejects any account that is not eligible to mint or refresh an authenticated session.
  *
  * Centralises the suspended/locked/deleted guard shared by every session-issuance path
- * (password login, magic-link verify, OAuth completion, WebAuthn verify, and MFA login
- * completion) so a non-active user can never obtain a fresh access token. Throws
+ * (password login, email verification-code login, OAuth completion, WebAuthn verify, and MFA
+ * login completion) so a non-active user can never obtain a fresh access token. Throws
  * `UnauthorizedError('errors:accountNotActive')` when the account is not `ACTIVE` OR
  * when the row carries `deleted_at !== null` (sec-U1 — defense in depth against a
  * token issued seconds before soft-delete being redeemed for a session). Callers
@@ -27,15 +27,13 @@ export type AccountActiveInput = {
  * a session row.
  *
  * @remarks
- * Backward-compatible: callers that still pass a bare status string get the original
- * status-only check. Pass `{ status, deleted_at }` to get the soft-delete check too.
+ * Takes the loaded row, never a bare status, so the tombstone is always checked with it.
  */
-export function assertUserAccountActive(input: string | AccountActiveInput): void {
-  const normalized: AccountActiveInput = typeof input === 'string' ? { status: input } : input;
-  if (normalized.status !== ACTIVE_USER_STATUS) {
+export function assertUserAccountActive(input: AccountActiveInput): void {
+  if (input.status !== ACTIVE_USER_STATUS) {
     throw new UnauthorizedError('errors:accountNotActive');
   }
-  if (normalized.deleted_at !== undefined && normalized.deleted_at !== null) {
+  if (input.deleted_at !== undefined && input.deleted_at !== null) {
     throw new UnauthorizedError('errors:accountNotActive');
   }
 }

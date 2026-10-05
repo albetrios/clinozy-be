@@ -46,11 +46,8 @@ describe('recent-step-up util — factor gating', () => {
     await expect(hasRecentStrongStepUp(mockRedis, 'u', undefined)).resolves.toBe(false);
   });
 
-  it('a legacy sentinel (session-id value, written before factors) reads as non-strong', async () => {
-    // A window opened just before this change stored the session id as the value, not a factor.
-    // It must still satisfy the enroll gate but fail the strong gate until its 10-minute TTL lapses.
-    store.set('step-up:u:s', 's');
-    await expect(hasRecentStepUp(mockRedis, 'u', 's')).resolves.toBe(true);
+  it('fails the strong gate closed on a stored value that is not a strong factor', async () => {
+    store.set('step-up:u:s', 'not-a-factor');
     await expect(hasRecentStrongStepUp(mockRedis, 'u', 's')).resolves.toBe(false);
   });
 });

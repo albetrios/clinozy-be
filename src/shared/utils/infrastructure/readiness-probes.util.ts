@@ -12,9 +12,6 @@ import {
 } from '@/shared/constants/ttl.constants.js';
 import { readinessProbeTimeout } from '@/shared/utils/infrastructure/readiness-probe-timeout.util.js';
 
-/** Re-export of {@link HEALTH_READINESS_PROBE_TIMEOUT_MS} kept for legacy import paths. */
-export const HEALTH_READINESS_PROBE_TIMEOUT_MILLISECONDS = HEALTH_READINESS_PROBE_TIMEOUT_MS;
-
 /** Components a readiness probe checks: Postgres, primary Redis, BullMQ Redis. */
 export type ReadinessComponentName = 'database' | 'redis' | 'bullmq';
 
@@ -49,11 +46,7 @@ async function runReadinessProbe(
 ): Promise<SuccessfulProbeOutcome | FailedProbeOutcome> {
   const startedAtMilliseconds = performance.now();
   try {
-    await readinessProbeTimeout(
-      probe(),
-      HEALTH_READINESS_PROBE_TIMEOUT_MILLISECONDS,
-      readinessComponentName,
-    );
+    await readinessProbeTimeout(probe(), HEALTH_READINESS_PROBE_TIMEOUT_MS, readinessComponentName);
     return {
       readinessComponentName,
       latencyMilliseconds: Math.round(performance.now() - startedAtMilliseconds),
@@ -99,7 +92,7 @@ let inFlightReadinessProbe: Promise<ReadinessProbeSummary> | null = null;
 
 /**
  * Runs Postgres, Redis, and BullMQ readiness probes in parallel under a shared
- * {@link HEALTH_READINESS_PROBE_TIMEOUT_MILLISECONDS} budget and returns
+ * {@link HEALTH_READINESS_PROBE_TIMEOUT_MS} budget and returns
  * `status: 'ok'` only when every probe succeeded. Used by the worker process
  * readiness signal and as the uncached source for
  * {@link getCachedDependencyReadinessProbes}.
