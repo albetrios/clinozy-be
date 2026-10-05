@@ -3,16 +3,18 @@ import type {
   NotificationRepository,
   CreateNotificationInput,
 } from '@/domains/notify/sub-domains/notification/notification.repository.js';
-import { ConfigurationError } from '@/shared/errors/index.js';
+import { ConfigurationError, NotFoundError } from '@/shared/errors/index.js';
 
 /**
  * Composition-root collaborator that hides the persist-then-enqueue choreography from event
  * handlers, so cross-domain emitters can request a notification with a single call.
  *
  * @remarks
- * - **Algorithm:** resolve the organization public id, then atomically persist the notification
- *   row, then enqueue dispatch on the post-commit hook of the surrounding event-bus transaction.
- * - **Failure modes:** a missing organization or insert error short-circuits before any enqueue;
+ * - **Algorithm:** resolve the organization's and the recipient's public ids, then atomically
+ *   persist the notification row, then enqueue dispatch on the post-commit hook of the surrounding
+ *   event-bus transaction.
+ * - **Failure modes:** a missing organization or recipient, or an insert error, short-circuits
+ *   before any enqueue;
  *   enqueue failures (post-commit) surface via the standard event-bus error channel.
  * - **Side effects:** writes to `notify.notifications`; enqueues a job on the
  *   `notification` BullMQ queue once the surrounding transaction commits.
@@ -33,8 +35,9 @@ export type NotificationDispatch = {
  * {@link configureNotificationDispatch} in the notify container).
  *
  * @remarks
- * - **Algorithm:** resolves `organization_public_id` first so a missing organization fails fast before any
- *   write; inserts the row; on commit, enqueues `enqueueNotification(id, organization_public_id)`.
+ * - **Algorithm:** resolves the organization's and the recipient's public ids first so a missing
+ *   one fails fast before any write; inserts the row; on commit, enqueues
+ *   `enqueueNotification` with the three public ids (never the bigserials).
  * - **Failure modes:** lookup or insert errors propagate to the caller; enqueue errors are
  *   deferred to post-commit and bubble through the event-bus failure path.
  * - **Side effects:** Postgres insert into `notify.notifications` and BullMQ enqueue.
@@ -58,13 +61,21 @@ export function createNotificationDispatch(
           : await notificationRepository.findOrganizationPublicIdByOrganizationId(
               input.organization_id,
             );
+      // The recipient's public id scopes the worker's read of a notification without an
+      // organization (`notifications_owner_access`), so the job never needs the bigserial.
+      const [user_public_id] = await notificationRepository.resolveUserPublicIdsByInternalIds([
+        input.user_id,
+      ]);
+      if (user_public_id === undefined) {
+        throw new NotFoundError('User');
+      }
       const notification = await notificationRepository.create(input);
       await scheduleCommitDispatch(
         {
           type: 'notification',
-          notificationId: notification.id,
           notificationPublicId: notification.publicId,
           organizationPublicId: organization_public_id,
+          userPublicId: user_public_id,
         },
         options?.requestId !== undefined ? { requestId: options.requestId } : undefined,
       );

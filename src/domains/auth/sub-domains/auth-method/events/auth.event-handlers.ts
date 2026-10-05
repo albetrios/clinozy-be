@@ -20,12 +20,12 @@ async function recordAndScheduleOutboxEmail(
   data: MailEnqueueInput,
   options?: { requestId?: string },
 ): Promise<void> {
-  const mailOutboxId = await recordOutboxEmail(data);
+  const mailOutboxToken = await recordOutboxEmail(data);
   const requestId = options?.requestId;
   await scheduleCommitDispatch(
     {
       type: 'mail_outbox',
-      mailOutboxId,
+      mailOutboxToken,
       requestId,
     },
     requestId !== undefined ? { requestId } : undefined,

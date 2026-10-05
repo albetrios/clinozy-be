@@ -190,17 +190,19 @@ describe('trace context propagation (API → mail enqueue → worker)', () => {
 
     await tracer.startActiveSpan('http.request', async (parentSpan) => {
       const { enqueueMailOutboxJob } = await import('@/infrastructure/mail/queues/mail.queue.js');
-      await enqueueMailOutboxJob(99, { requestId: 'req-trace-test' });
+      await enqueueMailOutboxJob('6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f', {
+        requestId: 'req-trace-test',
+      });
       parentSpan.end();
     });
 
     expect(addMock).toHaveBeenCalledOnce();
     const jobPayload = addMock.mock.calls[0]?.[1] as {
-      mailOutboxId: number;
+      mailOutboxToken: string;
       requestId: string;
       traceparent?: string;
     };
-    expect(jobPayload.mailOutboxId).toBe(99);
+    expect(jobPayload.mailOutboxToken).toBe('6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f');
     expect(jobPayload.requestId).toBe('req-trace-test');
     expect(jobPayload.traceparent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-0[1-9a-f]$/);
 

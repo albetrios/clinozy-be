@@ -16,7 +16,7 @@ import {
 /** BullMQ queue name for asynchronous notification dispatch (in-app + email fan-out). */
 export const NOTIFICATION_QUEUE_NAME = 'notification';
 
-/** Only ids are stored in Redis; content is loaded in the worker from Postgres with organization scoping. */
+/** Only public ids are stored in Redis; content is loaded in the worker from Postgres, scoped by them. */
 export type NotificationJobData = NotificationJobDataValidated;
 
 let notificationQueue: Queue<NotificationJobData> | null = null;
@@ -40,18 +40,19 @@ function getNotificationQueue(): Queue<NotificationJobData> {
  * Enqueue a notification for async delivery across configured channels.
  */
 export async function enqueueNotification(options: {
-  notificationId: number;
   notificationPublicId: string;
   organizationPublicId: string | null;
+  userPublicId: string;
   requestId?: string;
 }): Promise<void> {
-  const { notificationId, notificationPublicId, organizationPublicId, requestId } = options;
+  const { notificationPublicId, organizationPublicId, userPublicId, requestId } = options;
   const queue = getNotificationQueue();
   const jobData = parseBullMQJobData(
     notificationJobDataSchema,
     omitUndefined({
-      notificationId,
+      notificationPublicId,
       organizationPublicId,
+      userPublicId,
       requestId,
       ...captureTraceContextForPropagation(),
     }),

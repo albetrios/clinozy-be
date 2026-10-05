@@ -51,7 +51,11 @@ function buildJob(overrides: Partial<Job> = {}): Job {
   return {
     id: 'job-1',
     name: 'dispatch-notification',
-    data: { webhookId: 'webhook-99', eventType: 'invoice.paid' },
+    data: {
+      notificationPublicId: 'ntf_000000000000000000099',
+      organizationPublicId: 'org_public_abc',
+      userPublicId: 'usr_000000000000000000099',
+    },
     attemptsMade: 3,
     opts: { attempts: 3 },
     ...overrides,
@@ -206,9 +210,22 @@ describe('enqueueDeadLetter metadata', () => {
       {
         queue: NOTIFICATION_QUEUE_NAME,
         jobName: 'dispatch-notification',
-        data: { notificationId: 77, organizationPublicId: 'org_public_xyz', requestId: 'req-3' },
-        expectedSummary: { notification_id: 77, organization_public_id: 'org_public_xyz' },
-        expectedReplay: { notificationId: 77, organizationPublicId: 'org_public_xyz' },
+        data: {
+          notificationPublicId: 'ntf_000000000000000000077',
+          organizationPublicId: 'org_public_xyz',
+          userPublicId: 'usr_000000000000000000077',
+          requestId: 'req-3',
+        },
+        expectedSummary: {
+          notification_public_id: 'ntf_000000000000000000077',
+          organization_public_id: 'org_public_xyz',
+          user_public_id: 'usr_000000000000000000077',
+        },
+        expectedReplay: {
+          notificationPublicId: 'ntf_000000000000000000077',
+          organizationPublicId: 'org_public_xyz',
+          userPublicId: 'usr_000000000000000000077',
+        },
       },
     ];
 

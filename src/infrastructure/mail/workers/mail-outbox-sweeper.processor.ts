@@ -1,6 +1,6 @@
 import {
-  findStalePendingMailOutboxIds,
-  reclaimStaleSendingMailOutboxIds,
+  findStalePendingMailOutboxTokens,
+  reclaimStaleSendingMailOutboxTokens,
 } from '@/infrastructure/mail/mail-outbox.repository.js';
 import { enqueueMailOutboxJob } from '@/infrastructure/mail/queues/mail.queue.js';
 import { MAIL_OUTBOX_RECLAIM_CIRCUIT_OPEN_MULTIPLIER } from '@/infrastructure/mail/workers/mail-outbox-sweeper.constants.js';
@@ -21,7 +21,7 @@ const DEFAULT_SWEEP_BATCH_SIZE = 100;
  *
  * @remarks
  * - **Algorithm:** populated by {@link runMailOutboxSweeperJob} after reclaim +
- *   pending scan + per-id enqueue.
+ *   pending scan + per-row enqueue.
  * - **Failure modes:** counts are best-effort — a failed enqueue still increments
  *   `scannedCount` but not `reEnqueuedCount`.
  * - **Side effects:** none from this type alone; it's a return shape.
@@ -41,7 +41,7 @@ export type MailOutboxSweeperJobResult = {
  * - **Algorithm:** runs inside a `system_table` worker context (no tenant RLS);
  *   reclaims rows stuck in `sending` beyond `MAIL_OUTBOX_RECLAIM_SENDING_MINUTES`
  *   (a cutoff comfortably above worst-case delivery time), then scans `pending`
- *   rows older than `MAIL_OUTBOX_SWEEP_PENDING_MINUTES`, and re-enqueues each id.
+ *   rows older than `MAIL_OUTBOX_SWEEP_PENDING_MINUTES`, and re-enqueues each row by its token.
  *   Resend idempotency keys (set in the mail processor) de-duplicate any send
  *   that overlaps a premature reclaim (audit #20).
  * - **Circuit-aware:** when the Resend circuit breaker is OPEN the sending-reclaim
@@ -75,21 +75,24 @@ async function runMailOutboxSweeperJobInner(): Promise<MailOutboxSweeperJobResul
   const sendingCutoff = new Date(Date.now() - effectiveReclaimSendingMinutes * 60_000);
   const batchSize = env.MAIL_OUTBOX_SWEEP_BATCH_SIZE ?? DEFAULT_SWEEP_BATCH_SIZE;
 
-  const reclaimedSendingIds = await reclaimStaleSendingMailOutboxIds(sendingCutoff, batchSize);
-  const pendingBatchSize = Math.max(0, batchSize - reclaimedSendingIds.length);
-  const stalePendingIds =
+  const reclaimedSendingTokens = await reclaimStaleSendingMailOutboxTokens(
+    sendingCutoff,
+    batchSize,
+  );
+  const pendingBatchSize = Math.max(0, batchSize - reclaimedSendingTokens.length);
+  const stalePendingTokens =
     pendingBatchSize > 0
-      ? await findStalePendingMailOutboxIds(pendingCutoff, pendingBatchSize)
+      ? await findStalePendingMailOutboxTokens(pendingCutoff, pendingBatchSize)
       : [];
-  const staleMailOutboxIds = [...reclaimedSendingIds, ...stalePendingIds];
+  const staleMailOutboxTokens = [...reclaimedSendingTokens, ...stalePendingTokens];
   let reEnqueuedCount = 0;
 
-  for (const mailOutboxId of staleMailOutboxIds) {
+  for (const mailOutboxToken of staleMailOutboxTokens) {
     try {
-      await enqueueMailOutboxJob(mailOutboxId, { requestId: 'mail-outbox-sweeper' });
+      await enqueueMailOutboxJob(mailOutboxToken, { requestId: 'mail-outbox-sweeper' });
       reEnqueuedCount += 1;
     } catch (error) {
-      logger.warn({ error, mailOutboxId }, 'mail-outbox-sweeper.re_enqueue.failed');
+      logger.warn({ error, mailOutboxToken }, 'mail-outbox-sweeper.re_enqueue.failed');
     }
   }
 
@@ -99,16 +102,16 @@ async function runMailOutboxSweeperJobInner(): Promise<MailOutboxSweeperJobResul
       reclaimSendingOlderThanMinutes,
       resendCircuitState,
       effectiveReclaimSendingMinutes,
-      scannedCount: staleMailOutboxIds.length,
-      reclaimedSendingCount: reclaimedSendingIds.length,
+      scannedCount: staleMailOutboxTokens.length,
+      reclaimedSendingCount: reclaimedSendingTokens.length,
       reEnqueuedCount,
     },
     'mail-outbox-sweeper.completed',
   );
 
   return {
-    scannedCount: staleMailOutboxIds.length,
-    reclaimedSendingCount: reclaimedSendingIds.length,
+    scannedCount: staleMailOutboxTokens.length,
+    reclaimedSendingCount: reclaimedSendingTokens.length,
     reEnqueuedCount,
   };
 }

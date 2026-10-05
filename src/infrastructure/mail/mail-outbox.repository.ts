@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray, isNotNull, lt, sql } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNotNull, lt } from 'drizzle-orm';
 import {
   assertWorkerDatabaseContext,
   isWorkerRuntime,
@@ -31,17 +31,18 @@ function mailOutboxDatabase() {
 /**
  * Inserts a `pending` row into `auth.mail_outbox` (transactional outbox pattern) —
  * enrolls in the active request transaction when present so the row commits only
- * if the surrounding business write succeeds. Returns the generated `id` used as
- * the BullMQ job payload.
+ * if the surrounding business write succeeds. Returns the row's token
+ * (`resend_idempotency_token`), the handle the BullMQ job carries.
  *
  * @remarks
  * reaudit-#4: when `data.dedupeKey` is supplied, the insert is idempotent on that key
  * (`ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`). A concurrent
- * producer using the same key gets back the EXISTING row's id instead of creating a
+ * producer using the same key gets back the EXISTING row's token instead of creating a
  * second row, so two redelivered runs of the same notification converge on one outbox
- * row → one email. No lost-email risk: the insert is always attempted.
+ * row → one email. No lost-email risk: the insert is always attempted. The token, not the
+ * bigserial, leaves Postgres: the id restarts after a restore while queued jobs live on.
  */
-export async function insertMailOutbox(data: MailEnqueueInput): Promise<number> {
+export async function insertMailOutbox(data: MailEnqueueInput): Promise<string> {
   const toAddresses = Array.isArray(data.to) ? data.to : [data.to];
   const insertQuery = mailOutboxDatabase().insert(mail_outbox).values({
     to_addresses: toAddresses,
@@ -59,32 +60,32 @@ export async function insertMailOutbox(data: MailEnqueueInput): Promise<number> 
           target: mail_outbox.dedupe_key,
           where: isNotNull(mail_outbox.dedupe_key),
         })
-        .returning({ id: mail_outbox.id })
-    : await insertQuery.returning({ id: mail_outbox.id });
+        .returning({ token: mail_outbox.resend_idempotency_token })
+    : await insertQuery.returning({ token: mail_outbox.resend_idempotency_token });
 
-  let mailOutboxId = rows[0]?.id;
-  if (mailOutboxId === undefined && data.dedupeKey) {
-    // Conflict — another producer already recorded this dedupe_key. Resolve to that row's id
+  let mailOutboxToken = rows[0]?.token;
+  if (mailOutboxToken === undefined && data.dedupeKey) {
+    // Conflict — another producer already recorded this dedupe_key. Resolve to that row's token
     // so the caller dispatches the SAME (idempotent) outbox row rather than failing.
     const existing = await mailOutboxDatabase()
-      .select({ id: mail_outbox.id })
+      .select({ token: mail_outbox.resend_idempotency_token })
       .from(mail_outbox)
-      .where(sql`${mail_outbox.dedupe_key} = ${data.dedupeKey}`)
+      .where(eq(mail_outbox.dedupe_key, data.dedupeKey))
       .limit(1);
-    mailOutboxId = existing[0]?.id;
+    mailOutboxToken = existing[0]?.token;
   }
-  if (mailOutboxId === undefined) {
+  if (mailOutboxToken === undefined) {
     throw new Error('Failed to insert mail outbox row');
   }
-  return mailOutboxId;
+  return mailOutboxToken;
 }
 
-/** Loads one outbox row by id, or `null` when the row has been retention-pruned. */
-export async function findMailOutboxById(mailOutboxId: number) {
+/** Loads one outbox row by its token, or `null` when the row is gone (retention, a restore). */
+export async function findMailOutboxByToken(mailOutboxToken: string) {
   const rows = await mailOutboxDatabase()
     .select()
     .from(mail_outbox)
-    .where(eq(mail_outbox.id, mailOutboxId))
+    .where(eq(mail_outbox.resend_idempotency_token, mailOutboxToken))
     .limit(1);
   return rows[0] ?? null;
 }
@@ -93,19 +94,24 @@ export async function findMailOutboxById(mailOutboxId: number) {
  * Atomically claims a pending outbox row for delivery (`pending` → `sending`).
  */
 export async function tryClaimPendingMailOutbox(
-  mailOutboxId: number,
+  mailOutboxToken: string,
 ): Promise<MailOutboxClaimResult> {
   const claimedRows = await mailOutboxDatabase()
     .update(mail_outbox)
     .set({ status: 'sending', updated_at: new Date() })
-    .where(and(eq(mail_outbox.id, mailOutboxId), eq(mail_outbox.status, 'pending')))
+    .where(
+      and(
+        eq(mail_outbox.resend_idempotency_token, mailOutboxToken),
+        eq(mail_outbox.status, 'pending'),
+      ),
+    )
     .returning({ id: mail_outbox.id });
 
   if (claimedRows.length > 0) {
     return 'claimed';
   }
 
-  const existingRow = await findMailOutboxById(mailOutboxId);
+  const existingRow = await findMailOutboxByToken(mailOutboxToken);
   if (!existingRow) {
     return 'not_found';
   }
@@ -121,11 +127,11 @@ export async function tryClaimPendingMailOutbox(
   return 'in_flight';
 }
 
-/** Moves stuck `sending` rows back to `pending` for the outbox sweeper. */
-export async function reclaimStaleSendingMailOutboxIds(
+/** Moves stuck `sending` rows back to `pending` for the outbox sweeper; returns their tokens. */
+export async function reclaimStaleSendingMailOutboxTokens(
   stuckSendingBefore: Date,
   limit: number,
-): Promise<number[]> {
+): Promise<string[]> {
   const staleRows = await mailOutboxDatabase()
     .select({ id: mail_outbox.id })
     .from(mail_outbox)
@@ -148,23 +154,23 @@ export async function reclaimStaleSendingMailOutboxIds(
         lt(mail_outbox.updated_at, stuckSendingBefore),
       ),
     )
-    .returning({ id: mail_outbox.id });
+    .returning({ token: mail_outbox.resend_idempotency_token });
 
-  return reclaimedRows.map((row) => row.id);
+  return reclaimedRows.map((row) => row.token);
 }
 
-/** Pending rows older than the cutoff (for the outbox sweeper repeatable job). */
-export async function findStalePendingMailOutboxIds(
+/** Tokens of pending rows older than the cutoff (for the outbox sweeper repeatable job). */
+export async function findStalePendingMailOutboxTokens(
   pendingOlderThan: Date,
   limit: number,
-): Promise<number[]> {
+): Promise<string[]> {
   const rows = await mailOutboxDatabase()
-    .select({ id: mail_outbox.id })
+    .select({ token: mail_outbox.resend_idempotency_token })
     .from(mail_outbox)
     .where(and(eq(mail_outbox.status, 'pending'), lt(mail_outbox.created_at, pendingOlderThan)))
     .orderBy(asc(mail_outbox.created_at))
     .limit(limit);
-  return rows.map((row) => row.id);
+  return rows.map((row) => row.token);
 }
 
 /**
@@ -172,7 +178,7 @@ export async function findStalePendingMailOutboxIds(
  * called after a successful Resend `emails.send` in {@link processMailOutboxJob}.
  */
 export async function markMailOutboxSent(
-  mailOutboxId: number,
+  mailOutboxToken: string,
   resendMessageId: string,
 ): Promise<void> {
   await mailOutboxDatabase()
@@ -195,14 +201,14 @@ export async function markMailOutboxSent(
       html: '',
       text_body: null,
     })
-    .where(eq(mail_outbox.id, mailOutboxId));
+    .where(eq(mail_outbox.resend_idempotency_token, mailOutboxToken));
 }
 
 /**
- * Marks the row `failed` after BullMQ has exhausted all attempts — terminal state,
- * the DLQ hook captures the final-failure event for operator follow-up.
+ * Marks the row `failed` — terminal: BullMQ exhausted its attempts, Resend refused the email, or
+ * the row itself is unusable. The DLQ hook captures the final-failure event for operator follow-up.
  */
-export async function markMailOutboxFailed(mailOutboxId: number): Promise<void> {
+export async function markMailOutboxFailed(mailOutboxToken: string): Promise<void> {
   await mailOutboxDatabase()
     .update(mail_outbox)
     .set({
@@ -219,15 +225,20 @@ export async function markMailOutboxFailed(mailOutboxId: number): Promise<void> 
       html: '',
       text_body: null,
     })
-    .where(eq(mail_outbox.id, mailOutboxId));
+    .where(eq(mail_outbox.resend_idempotency_token, mailOutboxToken));
 }
 
 /** Reverts a claimed row to `pending` so BullMQ retries can call Resend again. */
-export async function releaseMailOutboxClaim(mailOutboxId: number): Promise<void> {
+export async function releaseMailOutboxClaim(mailOutboxToken: string): Promise<void> {
   await mailOutboxDatabase()
     .update(mail_outbox)
     .set({ status: 'pending', updated_at: new Date() })
-    .where(and(eq(mail_outbox.id, mailOutboxId), eq(mail_outbox.status, 'sending')));
+    .where(
+      and(
+        eq(mail_outbox.resend_idempotency_token, mailOutboxToken),
+        eq(mail_outbox.status, 'sending'),
+      ),
+    );
 }
 
 /** Pending-row gauge for health/observability endpoints and the outbox sweeper. */

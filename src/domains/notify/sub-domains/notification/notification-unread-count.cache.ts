@@ -98,7 +98,8 @@ export async function setCachedUnreadNotificationCount(
  * - **Notes:** every path that changes `is_read` or removes a row for a KNOWN user calls this —
  *   mark-read, mark-all-read, delete (only when a row actually went; a 404 changes no count, and
  *   tombstoning on one would let a caller cold-start their own cache by deleting ids that do not
- *   exist), and the invite-accepted producer, per recipient, after its transaction commits. User
+ *   exist), the invite-accepted producer, per recipient, after its transaction commits, and the
+ *   post-commit dispatch's clean-up of a notification whose enqueue failed. User
  *   offboarding deliberately does NOT: it revokes every session first, and a revoked bearer is
  *   refused by the session-token tombstone, so no request can reach this cache to read the entry.
  */

@@ -96,9 +96,9 @@ export function buildReplayJobPayloadFromLedger(
  * Reconstructs the minimal job payload needed to re-enqueue a dead-lettered job onto its
  * original BullMQ queue. Mail, webhook delivery, notification, and Stripe webhook jobs each
  * pull their required identifiers out of {@link DeadLetterJobData.original_data_summary}:
- * mail (`mail_outbox_id`), webhook (`delivery_attempt_public_id` + `organization_public_id`),
- * notification (`notification_id` + nullable `organization_public_id`), Stripe
- * (`stripe_event_id`). Queues without a known shape (retention/observability DLQs), or whose
+ * mail (`mail_outbox_token`), webhook (`delivery_attempt_public_id` + `organization_public_id`),
+ * notification (`notification_public_id` + nullable `organization_public_id` +
+ * `user_public_id`), Stripe (`stripe_event_id`). Queues without a known shape (retention/observability DLQs), or whose
  * summary is missing a required key, return `null` so the caller skips the replay. The
  * resulting payload is tagged with {@link DlqReplayJobFields} markers so the receiving worker
  * can detect a replay.
@@ -109,9 +109,9 @@ export function buildReplayJobPayload(data: DeadLetterJobData): Record<string, u
 
   switch (data.original_queue) {
     case MAIL_QUEUE_NAME: {
-      const mailOutboxId = summary.mail_outbox_id;
-      if (typeof mailOutboxId !== 'number') return null;
-      basePayload = { mailOutboxId };
+      const mailOutboxToken = summary.mail_outbox_token;
+      if (typeof mailOutboxToken !== 'string') return null;
+      basePayload = { mailOutboxToken };
       break;
     }
     case WEBHOOK_DELIVERY_QUEUE_NAME: {
@@ -124,15 +124,20 @@ export function buildReplayJobPayload(data: DeadLetterJobData): Record<string, u
       break;
     }
     case NOTIFICATION_QUEUE_NAME: {
-      const notificationId = summary.notification_id;
-      if (typeof notificationId !== 'number') return null;
-      // Notification jobs carry a nullable organization scope; preserve null (global notifications)
-      // and only forward a concrete public id when present.
+      const notificationPublicId = summary.notification_public_id;
+      const userPublicId = summary.user_public_id;
+      if (typeof notificationPublicId !== 'string' || typeof userPublicId !== 'string') {
+        return null;
+      }
+      // Notification jobs carry a nullable organization scope; preserve null (a notification
+      // without an organization, scoped by its recipient) and only forward a concrete public id
+      // when present.
       const organizationPublicId = summary.organization_public_id;
       basePayload = {
-        notificationId,
+        notificationPublicId,
         organizationPublicId:
           typeof organizationPublicId === 'string' ? organizationPublicId : null,
+        userPublicId,
       };
       break;
     }

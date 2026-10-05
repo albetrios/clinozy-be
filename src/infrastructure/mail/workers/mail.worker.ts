@@ -28,8 +28,8 @@ import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
  * - **Algorithm:** parses + validates the job payload with `mailJobDataSchema`,
  *   then invokes the processor with BullMQ attempt metadata so terminal-attempt
  *   semantics are correct; concurrency is set from `WORKER_CONCURRENCY_MAIL`.
- * - **Failure modes:** schema-validation failures bubble to BullMQ (retried per
- *   the queue's default attempts); transient Resend errors are retried via the
+ * - **Failure modes:** a malformed payload is dead-lettered at once
+ *   (`parseJobDataOrDeadLetter`); transient Resend errors are retried via the
  *   custom `mailBackoffStrategy`; final failures land in the per-source DLQ.
  * - **Side effects:** see processor — talks to Postgres (`auth.mail_outbox`)
  *   and Resend HTTP; logs `mail.worker.{stalled,completed}`.

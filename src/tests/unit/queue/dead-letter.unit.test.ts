@@ -197,7 +197,7 @@ describe('dead-letter helpers', () => {
       const job = {
         id: 'job-1',
         name: 'dispatch-notification',
-        data: { notificationId: 1 },
+        data: { notificationPublicId: 'ntf_000000000000000000001' },
         attemptsMade: 1,
         opts: { attempts: 3 },
       } as Job;
@@ -223,7 +223,7 @@ describe('dead-letter helpers', () => {
       const job = {
         id: 'job-2',
         name: 'dispatch-notification',
-        data: { notificationId: 2 },
+        data: { notificationPublicId: 'ntf_000000000000000000002' },
         attemptsMade: 3,
         opts: { attempts: 3 },
       } as Job;
@@ -244,7 +244,7 @@ describe('dead-letter helpers', () => {
           failed_reason: 'permanent',
           attempts_made: 3,
           max_attempts: 3,
-          payload_summary: { notification_id: 2 },
+          payload_summary: { notification_public_id: 'ntf_000000000000000000002' },
         }),
       );
       expect(sentryCaptureExceptionMock).toHaveBeenCalledWith(finalError);
@@ -264,7 +264,7 @@ describe('dead-letter helpers', () => {
       const job = {
         id: 'job-3',
         name: 'dispatch-notification',
-        data: { notificationId: 3 },
+        data: { notificationPublicId: 'ntf_000000000000000000003' },
         attemptsMade: 3,
         opts: { attempts: 3 },
       } as Job;

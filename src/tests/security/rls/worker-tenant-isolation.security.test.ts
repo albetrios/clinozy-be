@@ -33,7 +33,7 @@ describe('Security: Worker tenant isolation', () => {
     const [notificationRow] = await database
       .insert(notifications)
       .values({
-        public_id: generatePublicId('organization'),
+        public_id: generatePublicId('notification'),
         user_id: user.id,
         organization_id: organizationA.id,
         type: 'security.test',
@@ -41,11 +41,11 @@ describe('Security: Worker tenant isolation', () => {
         message: 'Tenant isolation check',
         data: { channels: ['in_app'] },
       })
-      .returning({ id: notifications.id });
+      .returning({ publicId: notifications.public_id });
 
     const repository = new NotificationRepository();
-    const dispatchRow = await repository.findByIdForDispatch(
-      notificationRow!.id,
+    const dispatchRow = await repository.findByPublicIdForDispatch(
+      notificationRow!.publicId,
       organizationB.public_id,
     );
 

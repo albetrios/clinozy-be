@@ -1861,6 +1861,7 @@ src/
     │   │   ├── audit-outbox-drain.integration.test.ts
     │   │   ├── bullmq-metrics.integration.test.ts
     │   │   ├── bullmq-noop-smoke.integration.test.ts
+    │   │   ├── commit-dispatch-cleanup.integration.test.ts
     │   │   ├── transactional-outbox.integration.test.ts
     │   │   └── worker-shutdown.integration.test.ts
     │   ├── runtime/

@@ -36,6 +36,11 @@ function getUserDataExportQueue(): Queue<UserDataExportJobData> {
  * Enqueue a `process-user-data-export` job. Payload is re-validated against
  * {@link userDataExportJobDataSchema} so a malformed payload fails before it lands in Redis.
  * Default options: 3 attempts with exponential backoff (5s base) and bounded retention.
+ *
+ * @remarks
+ * The job id is the export's public id: a second enqueue for the same export — the post-commit
+ * recovery sweeper replaying a dispatch that already ran — is dropped while the first job is
+ * retained, instead of building and uploading the export a second time.
  */
 export async function enqueueUserDataExport(jobData: UserDataExportJobData): Promise<void> {
   const queue = getUserDataExportQueue();
@@ -44,7 +49,7 @@ export async function enqueueUserDataExport(jobData: UserDataExportJobData): Pro
     { ...jobData, ...captureTraceContextForPropagation() },
     USER_DATA_EXPORT_QUEUE_NAME,
   );
-  await queue.add('process-user-data-export', validated);
+  await queue.add('process-user-data-export', validated, { jobId: validated.exportPublicId });
 }
 
 /** Disconnect the queue's BullMQ client during graceful shutdown / test teardown. */

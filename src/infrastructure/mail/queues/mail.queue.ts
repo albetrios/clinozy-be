@@ -18,7 +18,7 @@ export const MAIL_QUEUE_NAME = 'mail';
 /** BullMQ attempts — extra headroom for Resend circuit-open deferred retries. */
 export const MAIL_QUEUE_MAX_ATTEMPTS = 8;
 
-/** Payload stored in Postgres mail_outbox; only the row id is stored in Redis. */
+/** Payload stored in Postgres mail_outbox; only the row's token is stored in Redis. */
 export type MailJobData = MailJobDataValidated;
 
 /** Input for enqueueing — persisted to auth.mail_outbox before the BullMQ job is added. */
@@ -32,7 +32,8 @@ export interface MailEnqueueInput {
   /**
    * reaudit-#4: optional idempotency key. When set, {@link recordOutboxEmail} dedupes the
    * insert at the DB level so concurrent producers cannot create two outbox rows for the same
-   * logical email. Used by the notification worker (`notification:<id>:email:<recipient>`).
+   * logical email. Used by the notification worker
+   * (`notification:<notification public id>:email:<recipient>`).
    */
   dedupeKey?: string;
 }
@@ -58,10 +59,11 @@ function getMailQueue(): Queue<MailJobData> {
 }
 
 /**
- * Enqueue a BullMQ send job for an existing mail_outbox row (no new Postgres insert).
+ * Enqueue a BullMQ send job for an existing mail_outbox row (no new Postgres insert), named by
+ * the row's token.
  */
 export async function enqueueMailOutboxJob(
-  mailOutboxId: number,
+  mailOutboxToken: string,
   options?: { requestId?: string },
 ): Promise<void> {
   let deadlineTimer: NodeJS.Timeout | undefined;
@@ -70,7 +72,7 @@ export async function enqueueMailOutboxJob(
     const jobData = parseBullMQJobData(
       mailJobDataSchema,
       omitUndefined({
-        mailOutboxId,
+        mailOutboxToken,
         requestId: options?.requestId,
         ...captureTraceContextForPropagation(),
       }),
@@ -94,7 +96,7 @@ export async function enqueueMailOutboxJob(
         });
     });
   } catch (error) {
-    logger.error({ error, mailOutboxId }, 'mail.enqueue.failed');
+    logger.error({ error, mailOutboxToken }, 'mail.enqueue.failed');
     throw error;
   } finally {
     if (deadlineTimer) clearTimeout(deadlineTimer);
@@ -102,11 +104,11 @@ export async function enqueueMailOutboxJob(
 }
 
 /**
- * Inserts a mail_outbox row using the active request transaction when present.
- * Does **not** enqueue BullMQ — pair with `dispatchOutboxEmail` via `eventBus.onCommit`
+ * Inserts a mail_outbox row using the active request transaction when present and returns its
+ * token. Does **not** enqueue BullMQ — pair with `dispatchOutboxEmail` via `eventBus.onCommit`
  * for HTTP flows, or call `dispatchOutboxEmail` immediately in worker runtime.
  */
-export async function recordOutboxEmail(data: MailEnqueueInput): Promise<number> {
+export async function recordOutboxEmail(data: MailEnqueueInput): Promise<string> {
   return insertMailOutbox(data);
 }
 
@@ -114,10 +116,10 @@ export async function recordOutboxEmail(data: MailEnqueueInput): Promise<number>
  * Enqueues async delivery for an existing mail_outbox row (post-commit side effect).
  */
 export async function dispatchOutboxEmail(
-  mailOutboxId: number,
+  mailOutboxToken: string,
   options?: { requestId?: string },
 ): Promise<void> {
-  await enqueueMailOutboxJob(mailOutboxId, options);
+  await enqueueMailOutboxJob(mailOutboxToken, options);
 }
 
 /**

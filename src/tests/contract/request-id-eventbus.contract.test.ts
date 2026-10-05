@@ -12,7 +12,11 @@ import { processMailOutboxJob } from '@/infrastructure/mail/workers/mail.process
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 const enqueueMailOutboxJobMock = vi.fn();
-const findMailOutboxByIdMock = vi.fn();
+// Hoisted with the vi.mock factories below, which read it.
+const { MAIL_OUTBOX_TOKEN } = vi.hoisted(() => ({
+  MAIL_OUTBOX_TOKEN: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f',
+}));
+const findMailOutboxByTokenMock = vi.fn();
 const tryClaimPendingMailOutboxMock = vi.fn();
 const markMailOutboxSentMock = vi.fn();
 const sendEmailMock = vi.fn();
@@ -20,16 +24,16 @@ const sendEmailMock = vi.fn();
 vi.mock('@/infrastructure/mail/queues/mail.queue.js', () => ({
   MAIL_QUEUE_NAME: 'mail',
   MAIL_QUEUE_MAX_ATTEMPTS: 8,
-  recordOutboxEmail: vi.fn().mockResolvedValue(501),
-  dispatchOutboxEmail: async (mailOutboxId: number, options?: { requestId?: string }) => {
-    await enqueueMailOutboxJobMock(mailOutboxId, options);
+  recordOutboxEmail: vi.fn().mockResolvedValue(MAIL_OUTBOX_TOKEN),
+  dispatchOutboxEmail: async (mailOutboxToken: string, options?: { requestId?: string }) => {
+    await enqueueMailOutboxJobMock(mailOutboxToken, options);
   },
   enqueueMailOutboxJob: (...arguments_: unknown[]) => enqueueMailOutboxJobMock(...arguments_),
 }));
 
 vi.mock('@/infrastructure/mail/mail-outbox.repository.js', () => ({
-  insertMailOutbox: vi.fn().mockResolvedValue(501),
-  findMailOutboxById: (...arguments_: unknown[]) => findMailOutboxByIdMock(...arguments_),
+  insertMailOutbox: vi.fn().mockResolvedValue(MAIL_OUTBOX_TOKEN),
+  findMailOutboxByToken: (...arguments_: unknown[]) => findMailOutboxByTokenMock(...arguments_),
   tryClaimPendingMailOutbox: (...arguments_: unknown[]) =>
     tryClaimPendingMailOutboxMock(...arguments_),
   markMailOutboxSent: (...arguments_: unknown[]) => markMailOutboxSentMock(...arguments_),
@@ -60,7 +64,7 @@ describe('Request id event-bus to mail worker contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     registerAuthMethodEventHandlers();
-    findMailOutboxByIdMock.mockResolvedValue({
+    findMailOutboxByTokenMock.mockResolvedValue({
       id: 501,
       status: 'pending',
       to_addresses: ['user@example.com'],
@@ -90,19 +94,19 @@ describe('Request id event-bus to mail worker contract', () => {
     await eventBus.flushOnCommit();
 
     expect(enqueueMailOutboxJobMock).toHaveBeenCalledWith(
-      501,
+      MAIL_OUTBOX_TOKEN,
       expect.objectContaining({ requestId: correlationRequestId }),
     );
 
     await processMailOutboxJob(
-      { mailOutboxId: 501, requestId: correlationRequestId },
+      { mailOutboxToken: MAIL_OUTBOX_TOKEN, requestId: correlationRequestId },
       { jobId: 'job-mail-correlation', requestId: correlationRequestId },
     );
 
     expect(loggerInfoSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         requestId: correlationRequestId,
-        mailOutboxId: 501,
+        mailOutboxToken: MAIL_OUTBOX_TOKEN,
         resendMessageId: 'msg_correlation',
       }),
       'email.sent',

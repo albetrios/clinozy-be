@@ -65,7 +65,11 @@ describe('Chaos resilience: mail outbox sweeper drains rows stranded by a Redis 
     );
 
     const [strandedOutboxRowAwaitingSweep] = await database
-      .select({ id: mail_outbox.id, status: mail_outbox.status })
+      .select({
+        id: mail_outbox.id,
+        token: mail_outbox.resend_idempotency_token,
+        status: mail_outbox.status,
+      })
       .from(mail_outbox)
       .where(
         drizzleSql`${mail_outbox.to_addresses}::text LIKE ${`%${userAwaitingStrandedVerificationEmail.email}%`}`,
@@ -90,7 +94,7 @@ describe('Chaos resilience: mail outbox sweeper drains rows stranded by a Redis 
     const sweeperPassResultAfterRecovery = await runMailOutboxSweeperJob();
     expect(sweeperPassResultAfterRecovery.reEnqueuedCount).toBeGreaterThanOrEqual(1);
 
-    // The stranded row's id is now a live job on the mail queue — the mail worker (not
+    // The stranded row's token is now a live job on the mail queue — the mail worker (not
     // running here) would claim and send it. Scan a bounded window of queue states so a
     // leftover job from another suite cannot mask a missing re-enqueue.
     const mailQueueHandleForRecoveryAssertion = new Queue(MAIL_QUEUE_NAME, {
@@ -105,8 +109,8 @@ describe('Chaos resilience: mail outbox sweeper drains rows stranded by a Redis 
       );
       const reEnqueuedJobForStrandedRow = enqueuedMailJobsAfterSweep.find(
         (job) =>
-          (job.data as { mailOutboxId?: number }).mailOutboxId ===
-          strandedOutboxRowAwaitingSweep!.id,
+          (job.data as { mailOutboxToken?: string }).mailOutboxToken ===
+          strandedOutboxRowAwaitingSweep!.token,
       );
       expect(reEnqueuedJobForStrandedRow).toBeDefined();
     } finally {

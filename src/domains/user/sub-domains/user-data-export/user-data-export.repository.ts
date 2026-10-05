@@ -8,7 +8,10 @@ import {
   resolveRepositoryDatabaseHandle,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { user_data_exports } from '@/domains/user/sub-domains/user-data-export/user-data-export.schema.js';
-import type { UserDataExportStatus } from '@/domains/user/sub-domains/user-data-export/user-data-export.types.js';
+import {
+  USER_DATA_EXPORT_STATUSES,
+  type UserDataExportStatus,
+} from '@/domains/user/sub-domains/user-data-export/user-data-export.types.js';
 
 /** Row payload accepted by {@link UserDataExportRepository.create} when enqueuing a new export. */
 export type UserDataExportInsert = {
@@ -152,6 +155,31 @@ export class UserDataExportRepository {
       )
       .returning();
     return updated ?? null;
+  }
+
+  /**
+   * Fails an export whose job never reached the queue (its post-commit enqueue failed), keyed by
+   * the export's public id. Runs under the owner's scope — RLS limits the update to that user's
+   * rows — and only while the export is still `pending`, so one a worker already picked up is
+   * left alone. Returns whether a row changed.
+   */
+  async markEnqueueFailed(export_public_id: string): Promise<boolean> {
+    const rows = await this.db()
+      .update(user_data_exports)
+      .set({
+        status: USER_DATA_EXPORT_STATUSES.FAILED,
+        failed_at: new Date(),
+        error_code: 'enqueue_failed',
+        updated_at: new Date(),
+      })
+      .where(
+        and(
+          eq(user_data_exports.public_id, export_public_id),
+          eq(user_data_exports.status, USER_DATA_EXPORT_STATUSES.PENDING),
+        ),
+      )
+      .returning({ id: user_data_exports.id });
+    return rows.length > 0;
   }
 
   async deleteAllByUserId(user_id: number): Promise<number> {

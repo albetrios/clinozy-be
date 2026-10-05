@@ -13,10 +13,12 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
  * never pin a Postgres connection.
  *
  * @remarks
- * - **Algorithm:** check cancellation → mark `processing` → re-check cancellation → build the
- *   GDPR payload and gzip outside any transaction → resolve the S3 key in a fresh user context →
- *   upload → mark `completed` in another short context. Each cancellation check covers the user
- *   being soft-deleted or the export row being purged by offboarding.
+ * - **Algorithm:** in the owner's scope, read the owner's internal id (the job carries public ids
+ *   only), check cancellation, mark `processing`, re-check cancellation → build the GDPR payload
+ *   and gzip outside any transaction → resolve the S3 key in a fresh user context → upload →
+ *   mark `completed` in another short context. Each cancellation check covers the user being
+ *   soft-deleted or the export row being purged by offboarding; an owner that no longer exists
+ *   at all cancels the job too.
  * - **Failure modes:** {@link UserDataExportCancelledError} short-circuits to a no-op (no retry,
  *   no failure status). All other errors are logged, mark the row `failed` with `error_code`
  *   `export_failed`, and re-throw so BullMQ applies the queue's retry/backoff and DLQ policy.
@@ -28,47 +30,45 @@ export async function runUserDataExportJob(
   jobData: UserDataExportJobData,
   userDataExportService: UserDataExportService,
 ): Promise<void> {
-  const { exportPublicId, userPublicId, userInternalId } = jobData;
+  const { exportPublicId, userPublicId } = jobData;
+  const ownerScope = PRINCIPAL_SCOPE.JOB({ userPublicId: userPublicId });
 
   try {
-    const shouldContinue = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.JOB({ userPublicId: userPublicId }),
-      async (databaseHandle) => {
-        const cancelledBeforeStart = await userDataExportService.isExportJobCancelled({
+    const userInternalId = await withAppDatabaseContext(ownerScope, async (databaseHandle) => {
+      const ownerInternalId =
+        await userDataExportService.resolveExportOwnerInternalId(userPublicId);
+      if (ownerInternalId === null) {
+        logger.info({ exportPublicId, userPublicId }, 'user-data-export.worker.cancelled');
+        return null;
+      }
+      const isCancelled = () =>
+        userDataExportService.isExportJobCancelled({
           exportPublicId,
-          userInternalId,
+          userInternalId: ownerInternalId,
           userPublicId,
           databaseHandle,
         });
-        if (cancelledBeforeStart) {
-          logger.info({ exportPublicId, userPublicId }, 'user-data-export.worker.cancelled');
-          return false;
-        }
+      if (await isCancelled()) {
+        logger.info({ exportPublicId, userPublicId }, 'user-data-export.worker.cancelled');
+        return null;
+      }
 
-        await userDataExportService.markProcessing(
-          exportPublicId,
-          userInternalId,
-          databaseHandle,
-          userPublicId,
-        );
+      await userDataExportService.markProcessing(
+        exportPublicId,
+        ownerInternalId,
+        databaseHandle,
+        userPublicId,
+      );
 
-        if (
-          await userDataExportService.isExportJobCancelled({
-            exportPublicId,
-            userInternalId,
-            userPublicId,
-            databaseHandle,
-          })
-        ) {
-          logger.info({ exportPublicId, userPublicId }, 'user-data-export.worker.cancelled');
-          return false;
-        }
+      if (await isCancelled()) {
+        logger.info({ exportPublicId, userPublicId }, 'user-data-export.worker.cancelled');
+        return null;
+      }
 
-        return true;
-      },
-    );
+      return ownerInternalId;
+    });
 
-    if (!shouldContinue) {
+    if (userInternalId === null) {
       return;
     }
 
@@ -90,16 +90,17 @@ export async function runUserDataExportJob(
       return;
     }
     logger.error({ error, exportPublicId, userPublicId }, 'user-data-export.worker.failed');
-    await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.JOB({ userPublicId: userPublicId }),
-      (databaseHandle) =>
-        userDataExportService.failExportJob(
-          exportPublicId,
-          userInternalId,
-          'export_failed',
-          databaseHandle,
-        ),
-    );
+    await withAppDatabaseContext(ownerScope, async (databaseHandle) => {
+      const ownerInternalId =
+        await userDataExportService.resolveExportOwnerInternalId(userPublicId);
+      if (ownerInternalId === null) return;
+      await userDataExportService.failExportJob(
+        exportPublicId,
+        ownerInternalId,
+        'export_failed',
+        databaseHandle,
+      );
+    });
     throw error;
   }
 }

@@ -38,11 +38,12 @@ export const mail_outbox = authSchema.table(
     // concurrent producers (e.g. a stalled-then-redelivered notification job) cannot create
     // two outbox rows → two emails. NULL for the common case (no dedup needed).
     dedupe_key: varchar('dedupe_key', { length: 255 }),
-    // Random per-row token behind the Resend Idempotency-Key (`mail-outbox-<token>`). Not the
-    // bigserial `id`: that restarts at 1 after TRUNCATE ... RESTART IDENTITY or on a fresh
-    // database, and Resend rejects a key reused with a different body for 24 hours per account,
-    // so the email is never delivered. A uuid because the key must be unique across databases
-    // and Postgres generates it on insert (see buildMailOutboxIdempotencyKey).
+    // The row's handle outside Postgres: the mail job, the outbox sweeper and the post-commit
+    // dispatch name the row by it, and it is the Resend Idempotency-Key (`mail-outbox-<token>`).
+    // Not the bigserial `id`: that restarts at 1 after TRUNCATE ... RESTART IDENTITY or a restore
+    // while queued jobs live on in Redis (a job would load another row), and Resend rejects a key
+    // reused with a different body for 24 hours per account. A uuid because it must be unique
+    // across databases and Postgres generates it on insert (see buildMailOutboxIdempotencyKey).
     resend_idempotency_token: uuid('resend_idempotency_token').notNull().defaultRandom(),
   },
   (table) => [
@@ -50,6 +51,7 @@ export const mail_outbox = authSchema.table(
     uniqueIndex('idx_mail_outbox_dedupe_key')
       .on(table.dedupe_key)
       .where(sql`${table.dedupe_key} IS NOT NULL`),
+    uniqueIndex('idx_mail_outbox_resend_idempotency_token').on(table.resend_idempotency_token),
     check(
       'mail_outbox_status_check',
       sql`${table.status} IN ('pending', 'sending', 'sent', 'failed')`,

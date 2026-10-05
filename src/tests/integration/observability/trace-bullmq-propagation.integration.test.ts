@@ -27,16 +27,16 @@ describe('Integration: trace context propagation to BullMQ', () => {
       '@/domains/notify/sub-domains/notification/queues/notification.queue.js'
     );
     await enqueueNotification({
-      notificationId: 42,
       notificationPublicId: 'ntf_9z3rura5kqvcv8zggriym',
       organizationPublicId: 'org_public_123',
+      userPublicId: 'usr_0y8vf3ktxqnhcm1ze21ab',
       requestId: 'req-correlation-abc',
     });
 
     expect(addMock).toHaveBeenCalledWith(
       'dispatch-notification',
       expect.objectContaining({
-        notificationId: 42,
+        notificationPublicId: 'ntf_9z3rura5kqvcv8zggriym',
         organizationPublicId: 'org_public_123',
         requestId: 'req-correlation-abc',
       }),

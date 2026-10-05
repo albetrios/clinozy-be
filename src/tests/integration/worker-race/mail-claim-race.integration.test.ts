@@ -15,14 +15,14 @@ describe('Integration: mail outbox claim race', () => {
   });
 
   it('allows only one pending → sending claim when ten workers race', async () => {
-    const mailOutboxId = await insertMailOutbox({
+    const mailOutboxToken = await insertMailOutbox({
       to: ['race@example.com'],
       subject: 'Claim race',
       html: '<p>Hi</p>',
     });
 
     const claimResults = await Promise.all(
-      Array.from({ length: 10 }, () => tryClaimPendingMailOutbox(mailOutboxId)),
+      Array.from({ length: 10 }, () => tryClaimPendingMailOutbox(mailOutboxToken)),
     );
 
     expect(claimResults.filter((result) => result === 'claimed')).toHaveLength(1);
@@ -31,7 +31,7 @@ describe('Integration: mail outbox claim race', () => {
     const rows = await getOperatorDatabase()
       .select({ status: mail_outbox.status })
       .from(mail_outbox)
-      .where(eq(mail_outbox.id, mailOutboxId));
+      .where(eq(mail_outbox.resend_idempotency_token, mailOutboxToken));
 
     expect(rows[0]?.status).toBe('sending');
   });

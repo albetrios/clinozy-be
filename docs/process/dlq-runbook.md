@@ -32,10 +32,10 @@ The full list of source queues (work + retention/cleanup + observability) is in 
 
 | DLQ | Reconstructed job payload | If replay fails |
 | --- | ------------------------- | --------------- |
-| `mail-dlq` | `{ mailOutboxId }` from `original_data_summary` | Fix `auth.mail_outbox` row, then replay |
+| `mail-dlq` | `{ mailOutboxToken }` (the row's `resend_idempotency_token`) from `original_data_summary` | A `failed` row's body is scrubbed and cannot be re-sent — the user requests a new email; a row released to `pending` (circuit open on the last attempt) is re-enqueued by the outbox sweeper |
 | `webhook-delivery-dlq` | `{ deliveryAttemptPublicId, organizationPublicId }` | Fix URL/secret, then replay — the attempt re-claims its `FAILED` row (a `SENT` one is skipped) |
 | `stripe-webhook-dlq` | `{ stripeEventId }` — worker fetches event from Stripe API | Reclaim ledger row (`pnpm tool:stripe-webhook-replay`) if needed |
-| `notification-dlq` | `{ notificationId, organizationPublicId }` (`organizationPublicId` is `null` for global notifications) — worker reloads content from `notify.notifications` | Fix the notification row, then replay |
+| `notification-dlq` | `{ notificationPublicId, organizationPublicId, userPublicId }` (`organizationPublicId` is `null` for a notification without one; the recipient's public id scopes that read) — worker reloads content from `notify.notifications` | Fix the cause, then replay |
 
 ## Operational checklist
 

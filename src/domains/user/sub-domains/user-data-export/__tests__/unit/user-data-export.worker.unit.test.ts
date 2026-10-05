@@ -76,7 +76,6 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
 const JOB_DATA = {
   exportPublicId: 'ude_aaaaaaaaaaaaaaaaaaaaa',
   userPublicId: 'usr_bbbbbbbbbbbbbbbbbbbbb',
-  userInternalId: 42,
   traceparent: '00-trace-span-01',
   tracestate: 'vendor=1',
 };

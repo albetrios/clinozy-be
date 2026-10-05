@@ -24,6 +24,8 @@ import { enqueueNotification } from '@/domains/notify/sub-domains/notification/q
 
 const NOTIFICATION_PUBLIC_ID = 'ntf_9z3rura5kqvcv8zggriym';
 
+const USER_PUBLIC_ID = 'usr_0y8vf3ktxqnhcm1ze21ab';
+
 describe('enqueueNotification', () => {
   beforeEach(() => {
     addMock.mockClear();
@@ -33,50 +35,49 @@ describe('enqueueNotification', () => {
   // cannot dispatch (and email) the same notification twice.
   it('adds the job with the notification public id as its jobId for dedup', async () => {
     await enqueueNotification({
-      notificationId: 123,
       notificationPublicId: NOTIFICATION_PUBLIC_ID,
       organizationPublicId: 'org_public_id',
+      userPublicId: USER_PUBLIC_ID,
       requestId: 'request-1',
     });
 
     expect(addMock).toHaveBeenCalledTimes(1);
     const [jobName, jobData, options] = addMock.mock.calls[0]!;
     expect(jobName).toBe('dispatch-notification');
-    expect(jobData).toMatchObject({
-      notificationId: 123,
+    // Public ids only — the bigserial never reaches Redis.
+    expect(jobData).toEqual({
+      notificationPublicId: NOTIFICATION_PUBLIC_ID,
       organizationPublicId: 'org_public_id',
+      userPublicId: USER_PUBLIC_ID,
       requestId: 'request-1',
     });
     expect(options).toEqual({ jobId: NOTIFICATION_PUBLIC_ID });
   });
 
-  it('derives the jobId from the public id for tenant-less notifications too', async () => {
+  it('carries the recipient public id for a notification without an organization', async () => {
     await enqueueNotification({
-      notificationId: 456,
       notificationPublicId: NOTIFICATION_PUBLIC_ID,
       organizationPublicId: null,
+      userPublicId: USER_PUBLIC_ID,
     });
 
     const [, jobData, options] = addMock.mock.calls[0]!;
-    expect(jobData).toMatchObject({ notificationId: 456, organizationPublicId: null });
+    expect(jobData).toEqual({
+      notificationPublicId: NOTIFICATION_PUBLIC_ID,
+      organizationPublicId: null,
+      userPublicId: USER_PUBLIC_ID,
+    });
     expect(options).toEqual({ jobId: NOTIFICATION_PUBLIC_ID });
   });
 
-  it('gives the same bigserial in two databases different job ids', async () => {
-    // The bigserial restarts at 1 after TRUNCATE ... RESTART IDENTITY or a restore while BullMQ
-    // keeps finished jobs for 7 days — and drops an add whose job id still exists.
-    await enqueueNotification({
-      notificationId: 1,
-      notificationPublicId: NOTIFICATION_PUBLIC_ID,
-      organizationPublicId: null,
-    });
-    await enqueueNotification({
-      notificationId: 1,
-      notificationPublicId: 'ntf_bchnclznbnkn5db2qocfh',
-      organizationPublicId: null,
-    });
-
-    const [firstOptions, secondOptions] = addMock.mock.calls.map((call) => call[2]);
-    expect(firstOptions).not.toEqual(secondOptions);
+  it('rejects a payload without the recipient at the producer boundary', async () => {
+    await expect(
+      enqueueNotification({
+        notificationPublicId: NOTIFICATION_PUBLIC_ID,
+        organizationPublicId: null,
+        userPublicId: '',
+      }),
+    ).rejects.toThrow(/bullmq\.invalid_job_payload:notification/);
+    expect(addMock).not.toHaveBeenCalled();
   });
 });

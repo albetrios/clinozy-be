@@ -29,8 +29,12 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
   logger: { info: loggerInfoMock, warn: vi.fn(), error: loggerErrorMock },
 }));
 
+/** The owner's internal id — read inside the job's user scope, never carried by the job. */
+const OWNER_INTERNAL_ID = 42;
+
 function createServiceMock() {
   return {
+    resolveExportOwnerInternalId: vi.fn().mockResolvedValue(OWNER_INTERNAL_ID),
     isExportJobCancelled: vi.fn(),
     markProcessing: vi.fn(),
     buildExportPayload: vi.fn(),
@@ -42,7 +46,6 @@ function createServiceMock() {
 const jobData = {
   exportPublicId: 'exp_public_id_001',
   userPublicId: 'usr_public_id_001',
-  userInternalId: 42,
 };
 
 describe('user-data-export.processor', () => {
@@ -60,18 +63,19 @@ describe('user-data-export.processor', () => {
 
     await runUserDataExportJob(jobData, service as never);
 
+    expect(service.resolveExportOwnerInternalId).toHaveBeenCalledWith(jobData.userPublicId);
     expect(service.isExportJobCancelled).toHaveBeenCalledTimes(2);
     expect(service.isExportJobCancelled).toHaveBeenCalledWith(
       expect.objectContaining({
         exportPublicId: jobData.exportPublicId,
-        userInternalId: jobData.userInternalId,
+        userInternalId: OWNER_INTERNAL_ID,
         userPublicId: jobData.userPublicId,
         databaseHandle: fakeDatabaseHandle,
       }),
     );
     expect(service.markProcessing).toHaveBeenCalledWith(
       jobData.exportPublicId,
-      jobData.userInternalId,
+      OWNER_INTERNAL_ID,
       fakeDatabaseHandle,
       jobData.userPublicId,
     );
@@ -84,10 +88,21 @@ describe('user-data-export.processor', () => {
       body: Buffer;
     };
     expect(completeArguments.exportPublicId).toBe(jobData.exportPublicId);
-    expect(completeArguments.userInternalId).toBe(jobData.userInternalId);
+    expect(completeArguments.userInternalId).toBe(OWNER_INTERNAL_ID);
     expect(completeArguments.userPublicId).toBe(jobData.userPublicId);
     expect(Buffer.isBuffer(completeArguments.body)).toBe(true);
     expect(service.completeExportJob.mock.calls[0]?.[1]).toBeUndefined();
+    expect(service.failExportJob).not.toHaveBeenCalled();
+  });
+
+  it('exits without retry when the owner no longer exists', async () => {
+    const service = createServiceMock();
+    service.resolveExportOwnerInternalId.mockResolvedValue(null);
+
+    await expect(runUserDataExportJob(jobData, service as never)).resolves.toBeUndefined();
+
+    expect(service.isExportJobCancelled).not.toHaveBeenCalled();
+    expect(service.markProcessing).not.toHaveBeenCalled();
     expect(service.failExportJob).not.toHaveBeenCalled();
   });
 
@@ -138,7 +153,7 @@ describe('user-data-export.processor', () => {
 
     expect(service.failExportJob).toHaveBeenCalledWith(
       jobData.exportPublicId,
-      jobData.userInternalId,
+      OWNER_INTERNAL_ID,
       'export_failed',
       fakeDatabaseHandle,
     );

@@ -3,14 +3,15 @@ import { traceContextJobFieldsSchema } from '@/infrastructure/observability/trac
 import { dlqReplayJobFieldsSchema } from '@/infrastructure/queue/dlq/dlq-replay-job-fields.schema.js';
 
 /**
- * Zod schema for the BullMQ `mail/send-email` job payload — only the outbox row
- * id is persisted in Redis; the full email body lives in `auth.mail_outbox`.
+ * Zod schema for the BullMQ `mail/send-email` job payload — only the outbox row's token
+ * (`resend_idempotency_token`) is persisted in Redis; the full email body lives in
+ * `auth.mail_outbox`. Never the bigserial: it restarts after a restore while the job lives on.
  * Includes W3C trace context (`traceparent`/`tracestate`) for cross-process
  * distributed tracing and the shared DLQ replay envelope.
  */
 export const mailJobDataSchema = z
   .object({
-    mailOutboxId: z.number().int().positive(),
+    mailOutboxToken: z.uuid(),
     requestId: z.string().min(1).max(128).optional(),
   })
   .extend(traceContextJobFieldsSchema.shape)

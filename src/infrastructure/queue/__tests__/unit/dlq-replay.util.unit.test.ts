@@ -20,7 +20,7 @@ describe('dlq-replay.util', () => {
       original_queue: MAIL_QUEUE_NAME,
       original_job_id: 'job-1',
       original_job_name: 'send-mail',
-      original_data_summary: { mail_outbox_id: 42 },
+      original_data_summary: { mail_outbox_token: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f' },
       failed_reason: 'error',
       attempts_made: 5,
       max_attempts: 5,
@@ -29,7 +29,7 @@ describe('dlq-replay.util', () => {
     };
 
     expect(buildReplayJobPayload(data)).toEqual({
-      mailOutboxId: 42,
+      mailOutboxToken: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f',
       replayFromDlq: true,
       dlqReplayAttempt: 2,
     });
@@ -79,8 +79,9 @@ describe('dlq-replay.util', () => {
       original_job_id: 'notif-1',
       original_job_name: 'dispatch-notification',
       original_data_summary: {
-        notification_id: 77,
+        notification_public_id: 'ntf_000000000000000000077',
         organization_public_id: 'org_public_abc',
+        user_public_id: 'usr_000000000000000000077',
       },
       failed_reason: 'error',
       attempts_made: 3,
@@ -90,8 +91,9 @@ describe('dlq-replay.util', () => {
     };
 
     expect(buildReplayJobPayload(notificationData)).toEqual({
-      notificationId: 77,
+      notificationPublicId: 'ntf_000000000000000000077',
       organizationPublicId: 'org_public_abc',
+      userPublicId: 'usr_000000000000000000077',
       replayFromDlq: true,
       dlqReplayAttempt: 1,
     });
@@ -102,7 +104,10 @@ describe('dlq-replay.util', () => {
       original_queue: NOTIFICATION_QUEUE_NAME,
       original_job_id: 'notif-2',
       original_job_name: 'dispatch-notification',
-      original_data_summary: { notification_id: 88 },
+      original_data_summary: {
+        notification_public_id: 'ntf_000000000000000000088',
+        user_public_id: 'usr_000000000000000000088',
+      },
       failed_reason: 'error',
       attempts_made: 3,
       max_attempts: 3,
@@ -110,8 +115,9 @@ describe('dlq-replay.util', () => {
     };
 
     expect(buildReplayJobPayload(notificationData)).toEqual({
-      notificationId: 88,
+      notificationPublicId: 'ntf_000000000000000000088',
       organizationPublicId: null,
+      userPublicId: 'usr_000000000000000000088',
       replayFromDlq: true,
       dlqReplayAttempt: 0,
     });
@@ -145,7 +151,7 @@ describe('dlq-replay.util', () => {
       }),
     ).toBeNull();
 
-    // Notification missing notification_id → nothing to load.
+    // Notification missing notification_public_id → nothing to load.
     expect(
       buildReplayJobPayload({
         ...base,
@@ -161,12 +167,12 @@ describe('dlq-replay.util', () => {
         source_queue: MAIL_QUEUE_NAME,
         job_id: 'job-ledger-1',
         job_name: 'send-mail',
-        payload_summary: { mail_outbox_id: 99 },
+        payload_summary: { mail_outbox_token: '0d3c2b1a-9f8e-4d7c-8b6a-5f4e3d2c1b0a' },
         attempts_made: 5,
         auto_retry_count: 2,
       }),
     ).toEqual({
-      mailOutboxId: 99,
+      mailOutboxToken: '0d3c2b1a-9f8e-4d7c-8b6a-5f4e3d2c1b0a',
       replayFromDlq: true,
       dlqReplayAttempt: 2,
     });

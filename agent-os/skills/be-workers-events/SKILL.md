@@ -20,6 +20,7 @@ Event handler failure must **not** fail the HTTP request (log and continue).
 - **Queue names**: `"<domain>"` (e.g. `organization`)
 - **Job names**: `"<domain>.<action>"` (e.g. `organization.created`)
 - **Payload fields**: prefer **snake_case** for identifiers in event payloads (e.g. `organization_id`, `created_by`)
+- **Public handles only**: event and job payloads, `jobId`s, commit-dispatch tasks and dead-letter summaries carry public ids (`<entity>PublicId` / `<entity>_public_id`) or a per-row random token — never a bigserial. Queued jobs outlive a restore that restarts the sequence, and a reused id loads (or dedupes against) a different row. Use the public id as the BullMQ `jobId` when the contract is one job per row; a job whose row is gone completes as skipped unless that is our fault
 - **Full names only**: `repository` not `repo`, `organization` not `org`, `database` not `db`
 
 ## Default resilience settings
@@ -95,8 +96,6 @@ emitWebhookDeliveryRequested()  →  notify/sub-domains/webhook/events/
 notify/sub-domains/webhook/webhook-delivery/events/webhook-delivery.event-handlers.ts  →  enqueueWebhookDelivery()
 billing events  →  notify/sub-domains/webhook/events/billing-webhook.event-handlers.ts
 ```
-
-**Notify — direct enqueue** (unused today): `notification.service.dispatchNotification()` → `enqueueNotification()` for rows that already exist.
 
 `src/core/events/register-event-handlers.ts` calls each domain’s `register*EventHandlers()` (from `buildApp()` before routes).
 

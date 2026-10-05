@@ -68,13 +68,11 @@ A restore rewinds every table's id counter along with its rows, so the database 
 
 | Where                         | What still holds an id from the lost window                                                         |
 | ----------------------------- | --------------------------------------------------------------------------------------------------- |
-| Redis — queues                | Waiting, delayed and retrying jobs carry the row id in their payload (notification, webhook delivery, mail outbox) |
-| Redis — commit-dispatch tasks | Post-commit dispatch tasks waiting for recovery (kept 24 hours)                                     |
 | Redis — MFA counters          | `mfa:verify:fail:<user id>` and `mfa:totp:consumed:<user id>:…`                                     |
 | S3 — audit exports            | Each NDJSON row's `organization_id`, `actor_user_id` and `resource_id`                              |
 | Logs, Sentry                  | Ids in log lines and event context                                                                  |
 
-A reissued id points those at a different row: a stale job dispatches another notification, and an audit export attributes one user's actions to another. Keys sent to other services are not at risk — Resend idempotency keys, queue job ids, email markers and audit export paths use public ids or a per-row random token, which a restore brings back unchanged.
+A reissued id points those at a different row: an audit export attributes one user's actions to another. Queued jobs, their job ids and post-commit dispatch tasks are not at risk — they carry public ids or the mail row's random token, never a row id — and neither are keys sent to other services (Resend idempotency keys, email markers, audit export paths): a restore brings all of those back unchanged.
 
 Jump every sequence far past anything issued before the incident. Ids are `bigint`, so a jump of one billion costs nothing and covers any lost window. Run this once, over the same connection `pnpm db:migrate` used in step 3 (`DATABASE_MIGRATION_URL` — the role that owns the sequences):
 
@@ -84,7 +82,7 @@ DATABASE_MIGRATION_URL=<restored database URL> pnpm db:sequences:advance
 
 It prints one `<sequence>: old -> new` line per sequence — keep them in the incident record — and refuses to run when the role cannot read a sequence. Sequence changes are not transactional, and the command only moves values forward, so running it twice just jumps again, which is harmless. The monthly and weekly [restore drills](backup-drills.md) run the same command right after migrating, so it is exercised against a real restore.
 
-The Redis key prefix (`<project>:<environment>:`) does not change on a restore, which is why the old jobs and counters are still there. After the worker restarts, jobs whose row was lost in the window fail with a not-found error (`notification.not_found:<id>`, `webhook.delivery.attempt_not_found:<id>`, `mail.outbox.not_found:<id>`); discard any that reach the dead-letter queue rather than replaying them ([dlq-runbook.md](dlq-runbook.md)).
+The Redis key prefix (`<project>:<environment>:`) does not change on a restore, which is why the old jobs and counters are still there. After the worker restarts, a notification or mail job whose row was lost in the window completes as skipped (`notification.worker.not_found`, `mail.worker.not_found` at warn); a webhook delivery whose attempt row was lost fails with `webhook.delivery.attempt_not_found:<public id>` and reaches the dead-letter ledger — discard it rather than replaying it ([dlq-runbook.md](dlq-runbook.md)).
 
 ### 2. Redis (Railway Redis database)
 

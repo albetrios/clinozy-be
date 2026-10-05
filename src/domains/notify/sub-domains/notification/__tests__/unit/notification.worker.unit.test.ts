@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { processNotificationDispatchJob } from '@/domains/notify/sub-domains/notification/workers/notification.worker.js';
+import {
+  processNotificationDispatchJob,
+  processNotificationJob,
+} from '@/domains/notify/sub-domains/notification/workers/notification.worker.js';
 import type { NotificationRepository } from '@/domains/notify/sub-domains/notification/notification.repository.js';
 
 vi.mock('@/infrastructure/database/contexts/database-context.js', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
-    // Per-kind dispatch: only global_admin routes to its spy; system_table_worker
-    // (the queue-drain shell) is a plain passthrough so it never pollutes the
-    // global-admin call-count assertions.
+    // Per-kind dispatch: only global_admin routes to its spy (the dispatch must never enter it);
+    // system_table_worker (the mail-outbox write) is a plain passthrough.
     withMaintenanceDatabaseContext: vi.fn(
       (scope: { kind: string }, callback: (handle: unknown) => Promise<unknown>) =>
         scope.kind === 'GLOBAL_ADMIN'
@@ -72,15 +74,29 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
 
 function createNotificationRepository(row: unknown): NotificationRepository {
   return {
-    findByIdForDispatch: vi.fn().mockResolvedValue(row),
+    findByPublicIdForDispatch: vi.fn().mockResolvedValue(row),
   } as unknown as NotificationRepository;
 }
 
 const NOTIFICATION_PUBLIC_ID = 'ntf_9z3rura5kqvcv8zggriym';
+const MAIL_OUTBOX_TOKEN = '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f';
+
+function dispatch(options: {
+  organizationPublicId?: string | null;
+  jobContext?: { id?: string; requestId?: string };
+  notificationRepository: NotificationRepository;
+}) {
+  return processNotificationDispatchJob({
+    notificationPublicId: NOTIFICATION_PUBLIC_ID,
+    organizationPublicId:
+      options.organizationPublicId === undefined ? 'org_public_id' : options.organizationPublicId,
+    jobContext: options.jobContext ?? { id: 'job-1' },
+    notificationRepository: options.notificationRepository,
+  });
+}
 
 function buildNotificationRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    id: 10,
     publicId: NOTIFICATION_PUBLIC_ID,
     type: 'billing.invoice_ready',
     title: 'Invoice ready',
@@ -100,7 +116,7 @@ describe('notification.worker', () => {
     isNotificationEmailDispatchedMock.mockReset();
     markNotificationEmailDispatchedMock.mockReset();
     isMailConfiguredMock.mockReturnValue(true);
-    recordOutboxEmailMock.mockResolvedValue(501);
+    recordOutboxEmailMock.mockResolvedValue(MAIL_OUTBOX_TOKEN);
     dispatchOutboxEmailMock.mockResolvedValue(undefined);
     isNotificationEmailDispatchedMock.mockResolvedValue(false);
     markNotificationEmailDispatchedMock.mockResolvedValue(undefined);
@@ -109,12 +125,11 @@ describe('notification.worker', () => {
   it('queues email and returns in-app channel result when both channels are requested', async () => {
     const repository = createNotificationRepository(buildNotificationRow());
 
-    const result = await processNotificationDispatchJob(
-      10,
-      'organization_public_id',
-      { id: 'job-1', requestId: 'request-1' },
-      repository,
-    );
+    const result = await dispatch({
+      organizationPublicId: 'org_public_id',
+      jobContext: { id: 'job-1', requestId: 'request-1' },
+      notificationRepository: repository,
+    });
 
     expect(recordOutboxEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -123,8 +138,13 @@ describe('notification.worker', () => {
         tags: [{ name: 'category', value: 'notification-billing.invoice_ready' }],
       }),
     );
-    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith(501, { requestId: 'request-1' });
-    expect(result).toEqual({ channels: ['email:queued', 'in_app:persisted'] });
+    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith(MAIL_OUTBOX_TOKEN, {
+      requestId: 'request-1',
+    });
+    expect(result).toEqual({
+      outcome: 'dispatched',
+      channels: ['email:queued', 'in_app:persisted'],
+    });
   });
 
   it('sec-N7: sends to the joined row recipient, never a producer-supplied data.email (email-hijack guard)', async () => {
@@ -138,12 +158,11 @@ describe('notification.worker', () => {
       }),
     );
 
-    await processNotificationDispatchJob(
-      10,
-      'organization_public_id',
-      { id: 'job-hijack', requestId: 'request-1' },
-      repository,
-    );
+    await dispatch({
+      organizationPublicId: 'org_public_id',
+      jobContext: { id: 'job-hijack', requestId: 'request-1' },
+      notificationRepository: repository,
+    });
 
     expect(recordOutboxEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({ to: 'real@user.com' }),
@@ -157,12 +176,11 @@ describe('notification.worker', () => {
     isNotificationEmailDispatchedMock.mockResolvedValue(true);
     const repository = createNotificationRepository(buildNotificationRow());
 
-    const result = await processNotificationDispatchJob(
-      10,
-      'organization_public_id',
-      { id: 'job-retry', requestId: 'request-1' },
-      repository,
-    );
+    const result = await dispatch({
+      organizationPublicId: 'org_public_id',
+      jobContext: { id: 'job-retry', requestId: 'request-1' },
+      notificationRepository: repository,
+    });
 
     // Keyed by the public id: the bigserial (10) restarts after an id reset while the marker lives.
     expect(isNotificationEmailDispatchedMock).toHaveBeenCalledWith({
@@ -172,7 +190,10 @@ describe('notification.worker', () => {
     expect(recordOutboxEmailMock).not.toHaveBeenCalled();
     expect(dispatchOutboxEmailMock).not.toHaveBeenCalled();
     expect(markNotificationEmailDispatchedMock).not.toHaveBeenCalled();
-    expect(result).toEqual({ channels: ['email:deduplicated', 'in_app:persisted'] });
+    expect(result).toEqual({
+      outcome: 'dispatched',
+      channels: ['email:deduplicated', 'in_app:persisted'],
+    });
   });
 
   it('marks dispatched AFTER persisting the outbox row, and returns email:outbox_pending when the BullMQ enqueue fails (audit-#7 / #45)', async () => {
@@ -184,12 +205,11 @@ describe('notification.worker', () => {
     dispatchOutboxEmailMock.mockRejectedValueOnce(new Error('redis down'));
     const repository = createNotificationRepository(buildNotificationRow());
 
-    const result = await processNotificationDispatchJob(
-      10,
-      'organization_public_id',
-      { id: 'job-1' },
-      repository,
-    );
+    const result = await dispatch({
+      organizationPublicId: 'org_public_id',
+      jobContext: { id: 'job-1' },
+      notificationRepository: repository,
+    });
 
     expect(recordOutboxEmailMock).toHaveBeenCalledTimes(1);
     // The dedup marker is set ONLY after the durable insert succeeds.
@@ -201,8 +221,10 @@ describe('notification.worker', () => {
       markNotificationEmailDispatchedMock.mock.invocationCallOrder[0]!,
     );
     expect(dispatchOutboxEmailMock).toHaveBeenCalledTimes(1);
-    expect(result.channels).toContain('email:outbox_pending');
-    expect(result.channels).not.toContain('email:queued');
+    expect(result).toEqual({
+      outcome: 'dispatched',
+      channels: ['email:outbox_pending', 'in_app:persisted'],
+    });
   });
 
   it('rethrows and does NOT mark dispatched when the outbox INSERT itself fails so BullMQ retries (audit-#7)', async () => {
@@ -213,7 +235,11 @@ describe('notification.worker', () => {
     const repository = createNotificationRepository(buildNotificationRow());
 
     await expect(
-      processNotificationDispatchJob(10, 'organization_public_id', { id: 'job-1' }, repository),
+      dispatch({
+        organizationPublicId: 'org_public_id',
+        jobContext: { id: 'job-1' },
+        notificationRepository: repository,
+      }),
     ).rejects.toThrow('postgres down');
 
     expect(markNotificationEmailDispatchedMock).not.toHaveBeenCalled();
@@ -230,12 +256,11 @@ describe('notification.worker', () => {
       }),
     );
 
-    await processNotificationDispatchJob(
-      10,
-      'organization_public_id',
-      { id: 'job-1', requestId: 'request-1' },
-      repository,
-    );
+    await dispatch({
+      organizationPublicId: 'org_public_id',
+      jobContext: { id: 'job-1', requestId: 'request-1' },
+      notificationRepository: repository,
+    });
 
     const emailPayload = recordOutboxEmailMock.mock.calls[0]?.[0] as { html: string };
     expect(emailPayload.html).not.toContain('<script>alert(1)</script>');
@@ -249,53 +274,63 @@ describe('notification.worker', () => {
     isMailConfiguredMock.mockReturnValue(false);
     const repository = createNotificationRepository(buildNotificationRow());
 
-    const result = await processNotificationDispatchJob(
-      10,
-      'organization_public_id',
-      { id: 'job-1' },
-      repository,
-    );
+    const result = await dispatch({
+      organizationPublicId: 'org_public_id',
+      jobContext: { id: 'job-1' },
+      notificationRepository: repository,
+    });
 
     expect(recordOutboxEmailMock).not.toHaveBeenCalled();
     expect(dispatchOutboxEmailMock).not.toHaveBeenCalled();
-    expect(result).toEqual({ channels: ['in_app:persisted'] });
+    expect(result).toEqual({ outcome: 'dispatched', channels: ['in_app:persisted'] });
   });
 
   it('defaults to in-app delivery when channels are absent', async () => {
     const repository = createNotificationRepository(buildNotificationRow({ data: {} }));
 
-    const result = await processNotificationDispatchJob(10, null, { id: 'job-1' }, repository);
+    const result = await dispatch({
+      organizationPublicId: null,
+      jobContext: { id: 'job-1' },
+      notificationRepository: repository,
+    });
 
     expect(recordOutboxEmailMock).not.toHaveBeenCalled();
-    expect(result).toEqual({ channels: ['in_app:persisted'] });
+    expect(result).toEqual({ outcome: 'dispatched', channels: ['in_app:persisted'] });
   });
 
-  it('throws when the notification cannot be loaded', async () => {
+  it('completes as skipped when the notification is gone (deleted, erased, lost to a restore)', async () => {
     const repository = createNotificationRepository(null);
 
-    await expect(
-      processNotificationDispatchJob(999, null, { id: 'job-1' }, repository),
-    ).rejects.toThrow('notification.not_found:999');
+    const result = await dispatch({
+      organizationPublicId: null,
+      notificationRepository: repository,
+    });
+
+    expect(result).toEqual({ outcome: 'skipped', reason: 'not_found' });
+    expect(recordOutboxEmailMock).not.toHaveBeenCalled();
   });
 
-  describe('sec-re-01: tenant-less notifications enter loadNotificationForScope', () => {
-    // The sec-D #10 fix added a `loadNotificationForScope` flow that pins
-    // `withAppDatabaseContext (user scope)` for tenant-less notifications (instead of the prior
-    // `runGlobalRetentionWorkerJob` retention GUC). The sec-re-01 regression caught
-    // that the worker wiring still injected a repository, which short-circuited the
-    // new flow at `notificationRepository !== undefined` so production behavior was
-    // unchanged from before PR #450. These tests pin the recipient-resolution and
-    // narrow-context behavior so future wiring changes can't silently re-introduce
-    // the dead-code path.
+  it('dedupes the outbox row on the notification public id, never the bigserial', async () => {
+    const repository = createNotificationRepository(
+      buildNotificationRow({ data: { channels: ['email'] } }),
+    );
+
+    await dispatch({ notificationRepository: repository });
+
+    expect(recordOutboxEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dedupeKey: `notification:${NOTIFICATION_PUBLIC_ID}:email:user@example.com`,
+      }),
+    );
+  });
+
+  describe('processNotificationJob — the scope comes from the job, never a lookup (sec-D #10)', () => {
     beforeEach(() => {
       globalAdminMaintenanceContextMock.mockReset();
       userPrincipalContextMock.mockReset();
       organizationPrincipalContextMock.mockReset();
       createWorkerNotificationRepositoryMock.mockReset();
 
-      globalAdminMaintenanceContextMock.mockImplementation(
-        async (callback: (handle: unknown) => Promise<unknown>) => callback({}),
-      );
       userPrincipalContextMock.mockImplementation(
         async (_userPublicId: string, callback: (handle: unknown) => Promise<unknown>) =>
           callback({}),
@@ -306,66 +341,54 @@ describe('notification.worker', () => {
       );
     });
 
-    it('resolves the recipient user public id under global_admin scope and pins withAppDatabaseContext (user scope)', async () => {
-      const findUserPublicIdMock = vi.fn().mockResolvedValue('usr_public_id_42');
-      const findByIdMock = vi.fn().mockResolvedValue(buildNotificationRow({ data: {} }));
+    it("reads a notification without an organization under its recipient's scope", async () => {
+      const findByPublicIdMock = vi.fn().mockResolvedValue(buildNotificationRow({ data: {} }));
       createWorkerNotificationRepositoryMock.mockReturnValue({
-        findUserPublicIdForNotificationDispatch: findUserPublicIdMock,
-        findByIdForDispatch: findByIdMock,
+        findByPublicIdForDispatch: findByPublicIdMock,
       });
 
-      const result = await processNotificationDispatchJob(
-        42,
-        null,
-        { id: 'job-1', requestId: 'req-1' },
-        // NB: no 4th argument — this is the wiring shape after sec-re-01.
-      );
+      const result = await processNotificationJob({
+        jobData: {
+          notificationPublicId: NOTIFICATION_PUBLIC_ID,
+          organizationPublicId: null,
+          userPublicId: 'usr_public_id_42',
+          requestId: 'req-1',
+        },
+        jobId: 'job-1',
+      });
 
-      expect(globalAdminMaintenanceContextMock).toHaveBeenCalledTimes(1);
-      expect(findUserPublicIdMock).toHaveBeenCalledWith(42);
       expect(userPrincipalContextMock).toHaveBeenCalledWith(
         'usr_public_id_42',
         expect.any(Function),
       );
-      expect(findByIdMock).toHaveBeenCalledWith(42, null);
-      // No tenant scope means withAppDatabaseContext is never touched.
+      expect(findByPublicIdMock).toHaveBeenCalledWith(NOTIFICATION_PUBLIC_ID, null);
+      // No tenant scope, and never the wide global-admin maintenance scope.
       expect(organizationPrincipalContextMock).not.toHaveBeenCalled();
-      expect(result).toEqual({ channels: ['in_app:persisted'] });
+      expect(globalAdminMaintenanceContextMock).not.toHaveBeenCalled();
+      expect(result).toEqual({ outcome: 'dispatched', channels: ['in_app:persisted'] });
     });
 
-    it('throws notification.user_unknown when the SECURITY DEFINER lookup returns null', async () => {
+    it("reads an organization's notification under the organization scope", async () => {
+      const findByPublicIdMock = vi.fn().mockResolvedValue(buildNotificationRow({ data: {} }));
       createWorkerNotificationRepositoryMock.mockReturnValue({
-        findUserPublicIdForNotificationDispatch: vi.fn().mockResolvedValue(null),
-        findByIdForDispatch: vi.fn(),
+        findByPublicIdForDispatch: findByPublicIdMock,
       });
 
-      await expect(processNotificationDispatchJob(999, null, { id: 'job-1' })).rejects.toThrow(
-        'notification.user_unknown:999',
-      );
-    });
-
-    it('uses withAppDatabaseContext (not the user-scope path) when organizationPublicId is set and no repo is injected', async () => {
-      const findByIdMock = vi.fn().mockResolvedValue(buildNotificationRow({ data: {} }));
-      createWorkerNotificationRepositoryMock.mockReturnValue({
-        findUserPublicIdForNotificationDispatch: vi.fn(),
-        findByIdForDispatch: findByIdMock,
+      await processNotificationJob({
+        jobData: {
+          notificationPublicId: NOTIFICATION_PUBLIC_ID,
+          organizationPublicId: 'org_public_id',
+          userPublicId: 'usr_public_id_42',
+        },
       });
-
-      await processNotificationDispatchJob(
-        7,
-        'organization_public_id',
-        { id: 'job-1' },
-        // No injected repo — exercises loadNotificationForScope's tenant branch.
-      );
 
       expect(organizationPrincipalContextMock).toHaveBeenCalledWith(
-        'organization_public_id',
+        'org_public_id',
         expect.any(Function),
       );
-      // The global-admin / user pair are exclusive to the tenant-less branch.
-      expect(globalAdminMaintenanceContextMock).not.toHaveBeenCalled();
       expect(userPrincipalContextMock).not.toHaveBeenCalled();
-      expect(findByIdMock).toHaveBeenCalledWith(7, 'organization_public_id');
+      expect(globalAdminMaintenanceContextMock).not.toHaveBeenCalled();
+      expect(findByPublicIdMock).toHaveBeenCalledWith(NOTIFICATION_PUBLIC_ID, 'org_public_id');
     });
   });
 });

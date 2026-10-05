@@ -35,7 +35,6 @@ import {
 const JOB_DATA = {
   exportPublicId: 'ude_aaaaaaaaaaaaaaaaaaaaa',
   userPublicId: 'usr_bbbbbbbbbbbbbbbbbbbbb',
-  userInternalId: 42,
 };
 
 describe('user-data-export.queue', () => {
@@ -48,13 +47,22 @@ describe('user-data-export.queue', () => {
     expect(USER_DATA_EXPORT_QUEUE_NAME).toBe('user-data-export');
   });
 
-  it('adds a process-user-data-export job carrying the export and user identifiers', async () => {
+  it('adds a process-user-data-export job carrying the export and user public ids only', async () => {
     await enqueueUserDataExport(JOB_DATA);
 
     expect(addMock).toHaveBeenCalledTimes(1);
     const [jobName, jobData] = addMock.mock.calls[0]!;
     expect(jobName).toBe('process-user-data-export');
-    expect(jobData).toMatchObject(JOB_DATA);
+    expect(jobData).toEqual({ ...JOB_DATA, traceparent: '00-trace-span-01' });
+  });
+
+  it('keys the job on the export public id so a replayed dispatch cannot build it twice', async () => {
+    // The post-commit recovery sweeper may re-run a dispatch that already enqueued: BullMQ drops
+    // an add whose job id is still retained, instead of building and uploading the export again.
+    await enqueueUserDataExport(JOB_DATA);
+
+    const [, , options] = addMock.mock.calls[0]!;
+    expect(options).toEqual({ jobId: JOB_DATA.exportPublicId });
   });
 
   it('stamps the captured trace context onto the payload so the worker span links back', async () => {
@@ -65,9 +73,7 @@ describe('user-data-export.queue', () => {
   });
 
   it('rejects a malformed payload before it reaches Redis', async () => {
-    await expect(
-      enqueueUserDataExport({ ...JOB_DATA, userInternalId: -1 } as never),
-    ).rejects.toThrow();
+    await expect(enqueueUserDataExport({ ...JOB_DATA, userPublicId: '' })).rejects.toThrow();
     expect(addMock).not.toHaveBeenCalled();
   });
 

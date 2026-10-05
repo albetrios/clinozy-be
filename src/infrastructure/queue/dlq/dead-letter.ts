@@ -53,11 +53,13 @@ export interface DeadLetterJobData {
  * Extracts the non-secret replay keys from a failed job's data into the DLQ summary.
  *
  * Each replayable queue type contributes the identifiers {@link buildReplayJobPayload} needs
- * to reconstruct its job: mail (`mail_outbox_id`), webhook delivery (`delivery_attempt_public_id` +
- * `organization_public_id`), notification (`notification_id` + `organization_public_id`), and
- * Stripe webhook (`stripe_event_id`). These are public/internal identifiers only — full
- * payloads, HTML bodies, signing secrets, and PII are deliberately left out so nothing
- * sensitive sits in Redis or `audit.dead_letter_jobs` past the retention window.
+ * to reconstruct its job: mail (`mail_outbox_token`), webhook delivery
+ * (`delivery_attempt_public_id` + `organization_public_id`), notification
+ * (`notification_public_id` + `organization_public_id` + `user_public_id`), and Stripe webhook
+ * (`stripe_event_id`); a data-export job's `export_public_id` + `user_public_id` are kept for the
+ * operator. Public handles only — never a bigserial, and full payloads, HTML bodies, signing
+ * secrets and PII are deliberately left out so nothing sensitive sits in Redis or
+ * `audit.dead_letter_jobs` past the retention window.
  */
 function summarizeJobDataForDeadLetter(data: unknown): Record<string, unknown> {
   if (typeof data !== 'object' || data === null) {
@@ -65,17 +67,20 @@ function summarizeJobDataForDeadLetter(data: unknown): Record<string, unknown> {
   }
   const record = data as Record<string, unknown>;
   const summary: Record<string, unknown> = {};
-  if (record.mailOutboxId !== undefined) summary.mail_outbox_id = record.mailOutboxId;
+  if (record.mailOutboxToken !== undefined) summary.mail_outbox_token = record.mailOutboxToken;
   if (record.deliveryAttemptPublicId !== undefined) {
     summary.delivery_attempt_public_id = record.deliveryAttemptPublicId;
   }
-  if (record.webhookId !== undefined) summary.webhook_id = record.webhookId;
-  if (record.eventType !== undefined) summary.event_type = record.eventType;
-  if (record.notificationId !== undefined) summary.notification_id = record.notificationId;
+  if (record.notificationPublicId !== undefined) {
+    summary.notification_public_id = record.notificationPublicId;
+  }
+  if (record.exportPublicId !== undefined) summary.export_public_id = record.exportPublicId;
   // Tenant scope for webhook + notification replay (notification jobs may carry an explicit null).
   if (record.organizationPublicId !== undefined) {
     summary.organization_public_id = record.organizationPublicId;
   }
+  // The recipient / owner — scopes a notification without an organization, and an export.
+  if (record.userPublicId !== undefined) summary.user_public_id = record.userPublicId;
   // Stripe event id is required to re-fetch and replay a Stripe webhook job.
   if (record.stripeEventId !== undefined) summary.stripe_event_id = record.stripeEventId;
   return summary;

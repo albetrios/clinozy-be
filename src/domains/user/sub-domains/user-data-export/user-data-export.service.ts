@@ -205,7 +205,6 @@ export class UserDataExportService {
         type: 'user_data_export',
         exportPublicId,
         userPublicId,
-        userInternalId,
       },
       options?.requestId !== undefined ? { requestId: options.requestId } : undefined,
     );
@@ -245,6 +244,15 @@ export class UserDataExportService {
     }
 
     return serializeUserDataExport(row, { download_url: downloadUrl });
+  }
+
+  /**
+   * The export owner's internal id for a worker job, or `null` when no such user exists. The job
+   * carries public ids only. MUST run inside the job's user-scoped database context — it joins
+   * that transaction (see {@link UserService.resolveInternalIdByPublicId}).
+   */
+  async resolveExportOwnerInternalId(userPublicId: string): Promise<number | null> {
+    return this.userService.resolveInternalIdByPublicId(userPublicId);
   }
 
   /**

@@ -138,12 +138,11 @@ describe('UserDataExportService', () => {
     expect(enqueueUserDataExport).not.toHaveBeenCalled();
 
     await eventBus.flushOnCommit();
-    expect(enqueueUserDataExport).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userPublicId: 'user_public',
-        userInternalId: userRecord.id,
-      }),
-    );
+    // Public ids only: the export job never carries the owner's bigserial.
+    expect(enqueueUserDataExport).toHaveBeenCalledWith({
+      exportPublicId: expect.stringMatching(/^[a-z]+_[a-z0-9]{21}$/),
+      userPublicId: 'user_public',
+    });
     expect(result.status).toBe(USER_DATA_EXPORT_STATUSES.PENDING);
   });
 
