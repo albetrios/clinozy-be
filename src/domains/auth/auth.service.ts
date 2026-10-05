@@ -359,6 +359,7 @@ export class AuthService {
 
     const rotated = await this.authSessionService.refreshSessionCredentials({
       sessionPublicId,
+      userPublicId: user.public_id,
       refreshSecret,
       nextAccessToken: jsonWebToken,
     });
