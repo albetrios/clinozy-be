@@ -232,7 +232,7 @@ export function mcpTemplateRules(): readonly TextRewriteRule[] {
 }
 
 /**
- * Postgres identifiers built from the slug: the two roles, the local database,
+ * Postgres identifiers built from the slug: the application role, the local database,
  * its user and password, and the CI dry-run database.
  *
  * @remarks
@@ -249,10 +249,6 @@ export function sqlIdentityRules(): readonly TextRewriteRule[] {
     {
       pattern: /\b[a-z][a-z0-9]*_be_app\b/g,
       replace: (snapshot) => snapshot.derived.databaseAppRole,
-    },
-    {
-      pattern: /\b[a-z][a-z0-9]*_be_runtime\b/g,
-      replace: (snapshot) => snapshot.derived.databaseRuntimeRole,
     },
     {
       pattern: /\b[a-z][a-z0-9]*_dryrun\b/g,
@@ -306,10 +302,13 @@ export function localDatabaseRules(): readonly TextRewriteRule[] {
  *   is renamed only when it equals `previousDatabaseName`. `<stem>:<stem>@…/<stem>` becomes
  *   the new stem; `<role>:<secret>@…/<stem>` keeps its role and secret and gets the new
  *   database; `user:password@host/db` is left exactly as written.
- * - `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` set to the previous name, so a CI
- *   service container keeps matching the URLs beside it.
+ * - `postgres://` too, and a URL without credentials or port (`postgres://localhost/acme`).
+ * - `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` and libpq's `PGUSER` / `PGPASSWORD` /
+ *   `PGDATABASE` set to the previous name, so a CI service container keeps matching the URLs
+ *   beside it.
  * - `-U` / `-d` flags (`pg_isready`, `psql`) and `CREATE DATABASE`, with any `_suffix`
- *   such as `_dryrun` preserved.
+ *   such as `_dryrun` or `_test` preserved.
+ * - The local credential pair written out (`acme:acme`), as in a CI comment.
  */
 export function rewritePreviousDatabaseName(
   contents: string,
@@ -321,26 +320,56 @@ export function rewritePreviousDatabaseName(
   }
   const renamePart = (part: string): string => (part === previous ? next : part);
   const escaped = previous.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // The name ends where a letter or digit cannot follow: `acme_test` / `acme_dryrun` keep their
+  // suffix and are renamed with it, `acmes` is a different word.
+  const name = `${escaped}(?![A-Za-z0-9])`;
   return contents
     .replace(
-      /postgresql:\/\/([^:@/\s]+):([^@/\s]+)@([^:/\s]+):(\d+)\/([a-z0-9]+)(_[a-z0-9_]+)?/g,
+      /(postgres(?:ql)?):\/\/(?:([^:@/\s'"`]+)(?::([^@/\s'"`]+))?@)?([^:/\s'"`]+)(?::(\d+))?\/([a-z0-9]+)(_[a-z0-9_]+)?/g,
       (
         _match,
-        user: string,
-        password: string,
+        scheme: string,
+        user: string | undefined,
+        password: string | undefined,
         host: string,
-        port: string,
+        port: string | undefined,
         database: string,
         suffix = '',
-      ) =>
-        `postgresql://${renamePart(user)}:${renamePart(password)}@${host}:${port}/${renamePart(database)}${suffix}`,
+      ) => {
+        const credentials =
+          user === undefined
+            ? ''
+            : `${renamePart(user)}${password === undefined ? '' : `:${renamePart(password)}`}@`;
+        const hostAndPort = port === undefined ? host : `${host}:${port}`;
+        return `${scheme}://${credentials}${hostAndPort}/${renamePart(database)}${suffix}`;
+      },
     )
     .replace(
-      new RegExp(`(POSTGRES_(?:USER|PASSWORD|DB)\\s*[:=]\\s*['"]?)${escaped}\\b`, 'g'),
+      new RegExp(
+        `((?:POSTGRES_(?:USER|PASSWORD|DB)|PG(?:USER|PASSWORD|DATABASE))\\s*[:=]\\s*['"]?)${name}`,
+        'g',
+      ),
       `$1${next}`,
     )
-    .replace(new RegExp(`(\\s-[Ud]\\s+)${escaped}\\b`, 'g'), `$1${next}`)
-    .replace(new RegExp(`(CREATE DATABASE\\s+)${escaped}(?=\\b|_)`, 'g'), `$1${next}`);
+    .replace(new RegExp(`(\\s-[Ud]\\s+)${name}`, 'g'), `$1${next}`)
+    .replace(new RegExp(`(CREATE DATABASE\\s+)${escaped}(?=\\b|_)`, 'g'), `$1${next}`)
+    .replace(new RegExp(`(?<![A-Za-z0-9_])${escaped}:${name}`, 'g'), `${next}:${next}`);
+}
+
+/**
+ * The sibling infrastructure repository's slug for a backend slug (`acme-be` → `acme-infra`), or
+ * null when the slug does not end in `-be`.
+ *
+ * @remarks
+ * - **Algorithm:** swaps the `-be` suffix for `-infra` — the naming the backend, frontend and
+ *   infrastructure repositories share.
+ * - **Failure modes:** none — pure.
+ * - **Side effects:** none.
+ * - **Notes:** shared by the previous-identity gate (flags a previous stem's `-infra`) and the
+ *   `pnpm init:project` rename (rewrites it), so whatever the gate flags, the rename rewrites.
+ */
+export function infraSlugFor(backendSlug: string): string | null {
+  return backendSlug.endsWith('-be') ? `${backendSlug.slice(0, -'-be'.length)}-infra` : null;
 }
 
 function escapeRegExpLiteral(value: string): string {
@@ -349,8 +378,8 @@ function escapeRegExpLiteral(value: string): string {
 
 /**
  * Matches `<stem>:` where it IS a Redis key prefix: directly followed by a template placeholder,
- * an environment name or a quote (`` `acme:${NODE_ENV}:` ``, `acme:dev:`, `'acme:'`). Only the
- * `<stem>:` itself is consumed.
+ * a documented placeholder, an environment name or a quote (`` `acme:${NODE_ENV}:` ``,
+ * `acme:<NODE_ENV>:`, `acme:dev:`, `'acme:'`). Only the `<stem>:` itself is consumed.
  *
  * @remarks
  * - **Algorithm:** the stem must start a token (not after a letter, digit, `_`, `/`, `@`, `.` or
@@ -363,7 +392,7 @@ function escapeRegExpLiteral(value: string): string {
  */
 export function redisKeyPrefixStemPattern(stem: string, flags = ''): RegExp {
   return new RegExp(
-    `(?<![A-Za-z0-9_/@.-])${escapeRegExpLiteral(stem)}:(?=\\$\\{|(?:local|development|production|dev|prod|test|staging)(?![A-Za-z0-9])|['"\`])`,
+    `(?<![A-Za-z0-9_/@.-])${escapeRegExpLiteral(stem)}:(?=\\$\\{|<|(?:local|development|production|dev|prod|test|staging)(?![A-Za-z0-9])|['"\`])`,
     flags,
   );
 }

@@ -4,6 +4,7 @@ import { sql as drizzleSql } from 'drizzle-orm';
 import { database, sql } from '@/infrastructure/database/connection.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
+import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
 /**
  * Offboarding erases uploads through `UploadService.tombstoneAllBy{User,Organization}Id`, and
@@ -38,7 +39,7 @@ async function runAsApplicationRole<T>(
   callback: (transaction: typeof database) => Promise<T>,
 ): Promise<T> {
   return database.transaction(async (transaction) => {
-    await transaction.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+    await setLocalApplicationRole(transaction);
     if (guc) {
       await transaction.execute(drizzleSql`SELECT set_config(${guc.name}, ${guc.value}, true)`);
     }

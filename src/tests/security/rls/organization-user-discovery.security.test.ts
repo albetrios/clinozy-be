@@ -13,6 +13,7 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { member_invitations } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.schema.js';
 import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
+import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
 /**
  * Validates the user-discovery RLS policies and SECURITY DEFINER lookups that
@@ -31,7 +32,7 @@ import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper
  *      in `withAppDatabaseContext`.
  *
  * All assertions run under `clinozy_be_app` so RLS is enforced (the test runner role
- * `core` typically inherits BYPASSRLS, which would mask regressions).
+ * the Compose superuser typically inherits BYPASSRLS, which would mask regressions).
  */
 
 async function executeAsClinozyBeAppUser<T>(
@@ -39,7 +40,7 @@ async function executeAsClinozyBeAppUser<T>(
   callback: (transaction: typeof database) => Promise<T>,
 ): Promise<T> {
   return database.transaction(async (transaction) => {
-    await transaction.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+    await setLocalApplicationRole(transaction);
     const value = userPublicId ?? '';
     await transaction.execute(
       drizzleSql`SELECT set_config('app.current_user_public_id', ${value}, true)`,

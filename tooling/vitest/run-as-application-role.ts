@@ -1,11 +1,6 @@
 import '@/shared/config/load-env-files.js';
 import { spawnSync } from 'node:child_process';
-
-/**
- * The Postgres role the application runs as in production. Unlike the roles the harness
- * normally connects with, it is **subject to row-level security**.
- */
-export const APPLICATION_DATABASE_ROLE = 'clinozy_be_app';
+import { DATABASE_APP_ROLE } from '@/shared/constants/project-identity.constants.js';
 
 /**
  * The projects this lane covers.
@@ -24,7 +19,9 @@ export const APPLICATION_DATABASE_ROLE = 'clinozy_be_app';
 const DEFAULT_PROJECTS = ['--project', 'e2e', '--project', 'integration'];
 
 /**
- * Runs Vitest with the pool under test opened as {@link APPLICATION_DATABASE_ROLE}.
+ * Runs Vitest with the pool under test opened as {@link DATABASE_APP_ROLE} — the role the
+ * application runs as in production, which, unlike the roles the harness normally connects with,
+ * is **subject to row-level security**.
  *
  * @remarks
  * - **Why:** every other lane connects with a role that BYPASSES RLS — Compose creates
@@ -46,7 +43,7 @@ export function runVitestAsApplicationRole(vitestArguments: readonly string[]): 
   const projectArguments = vitestArguments.length > 0 ? vitestArguments : DEFAULT_PROJECTS;
   const result = spawnSync('pnpm', ['vitest', 'run', ...projectArguments], {
     stdio: 'inherit',
-    env: { ...process.env, TEST_DATABASE_ROLE: APPLICATION_DATABASE_ROLE },
+    env: { ...process.env, TEST_DATABASE_ROLE: DATABASE_APP_ROLE },
   });
   return result.status ?? 1;
 }

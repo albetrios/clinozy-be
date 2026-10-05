@@ -27,6 +27,7 @@ import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/
 import type { ProjectIdentitySnapshot } from './project-identity.util.js';
 import {
   identityTokenPattern,
+  infraSlugFor,
   redisKeyPrefixStemPattern,
   slugSpellings,
   wordmarkPattern,
@@ -201,12 +202,18 @@ export interface PreviousIdentityLeftover {
  *   (`acme·be`, `ACME • BE`, `acme&middot;be`), markup around the separator allowed
  *   (`acme<span class="…">·</span>be`). Plain spaces and dots are left alone — "let the legacy be"
  *   is English, not a leftover.
+ * - A previous BACKEND slug's sibling infrastructure repository (`acme-be` → `acme-infra`), in
+ *   every slug spelling.
  * - A previous BACKEND slug's database name (`acme-be` → `acme`) only where it IS the database:
- *   `POSTGRES_USER/PASSWORD/DB`, `-U`/`-d` flags, a connection string's database segment and
- *   `CREATE DATABASE`. The bare word is left alone, so a folder or English word spelled the same is never flagged.
+ *   `POSTGRES_USER/PASSWORD/DB`, libpq's `PGUSER/PGPASSWORD/PGDATABASE`, `-U`/`-d` flags, a
+ *   `postgres://` or `postgresql://` connection string's database segment (with or without
+ *   credentials), `CREATE DATABASE`, and the local `acme:acme` credential pair — a `_suffix`
+ *   such as `_test` included. The bare word is
+ *   left alone, so a folder or English word spelled the same is never flagged.
  * - The same stem where it IS a Redis key prefix: `acme:` directly followed by a template
- *   placeholder, an environment name or a quote (`` `acme:${NODE_ENV}:` ``, `acme:dev:`,
- *   `'acme:'`) — the form a rename missed in `resolveRedisKeyPrefix()`.
+ *   placeholder, a documented `<placeholder>`, an environment name or a quote
+ *   (`` `acme:${NODE_ENV}:` ``, `acme:<NODE_ENV>:`, `acme:dev:`, `'acme:'`) — the form a rename
+ *   missed in `resolveRedisKeyPrefix()`.
  * - A previous owner, case-sensitive, as a whole token.
  *
  * A previous value the CURRENT identity still contains is skipped, or the gate could never pass.
@@ -228,6 +235,13 @@ export function previousIdentityPatterns(
     if (wordmark) patterns.push({ previous: name, pattern: wordmark });
 
     if (!name.endsWith('-be')) continue;
+    // The sibling infrastructure repository shares the stem (`acme-be` → `acme-infra`).
+    const infra = infraSlugFor(name);
+    if (infra && infra !== infraSlugFor(snapshot.slug)) {
+      for (const spelling of slugSpellings(infra)) {
+        patterns.push({ previous: infra, pattern: identityTokenPattern(spelling) });
+      }
+    }
     const database = name.slice(0, -'-be'.length);
     if (database === snapshot.derived.databaseName) continue;
     const word = `${escapeRegExp(database)}(?![A-Za-z0-9])`;
@@ -235,10 +249,12 @@ export function previousIdentityPatterns(
       previous: name,
       pattern: new RegExp(
         [
-          `POSTGRES_(?:USER|PASSWORD|DB)\\s*[:=]\\s*['"]?${word}`,
+          `(?:POSTGRES_(?:USER|PASSWORD|DB)|PG(?:USER|PASSWORD|DATABASE))\\s*[:=]\\s*['"]?${word}`,
           `\\s-[Ud]\\s+${word}`,
-          `postgresql://[^\\s'"\`]*@[^/\\s]+/${word}`,
+          `postgres(?:ql)?://(?:[^\\s'"\`@/]*@)?[^/\\s'"\`]+/${word}`,
           `CREATE DATABASE\\s+${word}`,
+          // The local credential pair written out (`acme:acme`), as in a CI comment.
+          `(?<![A-Za-z0-9_])${escapeRegExp(database)}:${word}`,
         ].join('|'),
       ),
     });

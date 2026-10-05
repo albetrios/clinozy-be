@@ -13,6 +13,7 @@ import {
   executeAsClinozyBeAppTenant,
 } from '@/tests/helpers/rls-matrix.helper.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import { DATABASE_APP_ROLE } from '@/shared/constants/project-identity.constants.js';
 
 /**
  * Regression for audit R10.
@@ -27,7 +28,7 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
  * used to call `insertAuditOutboxRow` on the bare pool with NO GUC set. Under the production
  * `clinozy_be_app` role (FORCE/ENABLE RLS, NOBYPASSRLS) the WITH CHECK rejected EVERY such INSERT, and
  * `recordAuditEvent` swallowed the error — so the production audit trail was silently dropped. The
- * harness never caught it because tests run as the superuser `core` owner role, which bypasses RLS.
+ * harness never caught it because tests run as the Compose superuser, which bypasses RLS.
  *
  * The fix opens the matching context inside `AuditService.record`: organization rows under
  * `withAppDatabaseContext`, tenantless rows under `withMaintenanceDatabaseContext`. These
@@ -72,7 +73,7 @@ describe('Security: audit.outbox INSERT RLS (audit R10)', () => {
     let caught: unknown;
     try {
       await sql.begin(async (transaction) => {
-        await transaction`SET LOCAL ROLE clinozy_be_app`;
+        await transaction`SET LOCAL ROLE ${transaction(DATABASE_APP_ROLE)}`;
         await transaction`
           INSERT INTO audit.outbox
             (status, actor_user_public_id, organization_public_id, action, resource_type, severity, metadata)
@@ -94,7 +95,7 @@ describe('Security: audit.outbox INSERT RLS (audit R10)', () => {
     let caught: unknown;
     try {
       await sql.begin(async (transaction) => {
-        await transaction`SET LOCAL ROLE clinozy_be_app`;
+        await transaction`SET LOCAL ROLE ${transaction(DATABASE_APP_ROLE)}`;
         await transaction`
           INSERT INTO audit.outbox
             (status, actor_user_public_id, organization_public_id, action, resource_type, severity, metadata)

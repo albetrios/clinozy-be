@@ -17,6 +17,7 @@ import { database } from '@/infrastructure/database/connection.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import type { FastifyInstance } from 'fastify';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
+import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
 /**
  * RLS session variable + HTTP tenant header alignment (FORCE ROW LEVEL SECURITY migrations).
@@ -56,7 +57,7 @@ describe('Security: Organization RLS session', () => {
     const organizationB = await createTestOrganization({ ownerUserId: ownerB.id });
 
     await database.transaction(async (transaction) => {
-      await transaction.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+      await setLocalApplicationRole(transaction);
       await transaction.execute(
         drizzleSql`SELECT set_config('app.current_organization_public_id', ${organizationA.public_id}, true)`,
       );

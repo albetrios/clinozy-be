@@ -6,6 +6,7 @@ import { createTestUser } from '@/tests/factories/user.factory.js';
 import { provisionPersonalOrganization } from '@/domains/tenancy/sub-domains/organization/organization-provisioning.js';
 import { seedAllPermissions } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
+import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
 /**
  * Pins the policy fact behind PRs #1105 / #1106: **`app.global_admin` grants nothing on tenancy
@@ -32,7 +33,7 @@ async function executeAsGlobalAdminOnly<T>(
   callback: (transaction: typeof database) => Promise<T>,
 ): Promise<T> {
   return database.transaction(async (transaction) => {
-    await transaction.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+    await setLocalApplicationRole(transaction);
     await transaction.execute(drizzleSql`SELECT set_config('app.global_admin', 'true', true)`);
     return callback(transaction as unknown as typeof database);
   });

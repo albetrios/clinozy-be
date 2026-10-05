@@ -246,7 +246,7 @@ const envSchemaBase = z.object({
    */
   REDIS_BULLMQ_URL: z.string().min(1).optional(),
   /**
-   * Redis key prefix for cache, idempotency, rate limits, and BullMQ (default `core:<NODE_ENV>:`).
+   * Redis key prefix for cache, idempotency, rate limits, and BullMQ (default `<product>:<NODE_ENV>:`).
    * Override to isolate environments on a shared Redis cluster.
    */
   REDIS_KEY_PREFIX: z

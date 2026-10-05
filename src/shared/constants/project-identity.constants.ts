@@ -36,9 +36,6 @@ export const REDIS_KEY_PREFIX_STEM = 'clinozy';
 /** Restricted Postgres role the app connects as, under RLS. */
 export const DATABASE_APP_ROLE = 'clinozy_be_app';
 
-/** Postgres role owning runtime objects. */
-export const DATABASE_RUNTIME_ROLE = 'clinozy_be_runtime';
-
 /** Human-facing project name for OpenAPI, MCP and CI reports. */
 export const PROJECT_DISPLAY_NAME = 'Clinozy Backend';
 

@@ -7,6 +7,7 @@ import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
+import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
 /**
  * Checks whether the `organizations_tenant_isolation` policy has been patched
@@ -75,7 +76,7 @@ describe('Security: organizations RLS — soft-deleted organizations excluded (s
 
     // Open a tenant-scoped transaction (clinozy_be_app role + app.current_organization_public_id).
     await database.transaction(async (transaction) => {
-      await transaction.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+      await setLocalApplicationRole(transaction);
       await transaction.execute(
         drizzleSql`SELECT set_config('app.current_organization_public_id', ${organization.public_id}, true)`,
       );
@@ -100,7 +101,7 @@ describe('Security: organizations RLS — soft-deleted organizations excluded (s
     const organization = await createTestOrganization({ ownerUserId: owner.id });
 
     await database.transaction(async (transaction) => {
-      await transaction.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+      await setLocalApplicationRole(transaction);
       await transaction.execute(
         drizzleSql`SELECT set_config('app.current_organization_public_id', ${organization.public_id}, true)`,
       );
@@ -130,7 +131,7 @@ describe('Security: organizations RLS — soft-deleted organizations excluded (s
       .where(eq(organizations.id, organization.id));
 
     await database.transaction(async (transaction) => {
-      await transaction.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+      await setLocalApplicationRole(transaction);
       // Retention workers set global_retention_cleanup instead of an organization-scoped id.
       await transaction.execute(
         drizzleSql`SELECT set_config('app.global_retention_cleanup', 'true', true)`,

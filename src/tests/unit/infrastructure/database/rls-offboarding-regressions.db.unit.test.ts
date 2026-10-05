@@ -1,6 +1,7 @@
 import { sql as drizzleSql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { database } from '@/infrastructure/database/connection.js';
+import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
 /**
  * Regressions for the superuser-masked RLS bugs fixed by migration
@@ -11,7 +12,7 @@ import { database } from '@/infrastructure/database/connection.js';
  */
 async function executeAsAppRole<T>(statements: (tx: typeof database) => Promise<T>): Promise<T> {
   return database.transaction(async (transaction) => {
-    await transaction.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+    await setLocalApplicationRole(transaction);
     const result = await statements(transaction as unknown as typeof database);
     // Roll back so fixtures never leak between cases.
     throw new RollbackSignal(result);

@@ -1,4 +1,4 @@
-import { pgRole, pgSchema } from 'drizzle-orm/pg-core';
+import { pgSchema } from 'drizzle-orm/pg-core';
 
 /**
  * Shared Postgres schema definitions.
@@ -18,10 +18,3 @@ export const notifySchema = pgSchema('notify');
 export const auditSchema = pgSchema('audit');
 /** Drizzle handle for the Postgres `upload` schema — S3 upload metadata + tombstone retention. */
 export const uploadSchema = pgSchema('upload');
-
-/**
- * Drizzle reference to the unprivileged application role used by RLS policies.
- * Migrations and tests `SET LOCAL ROLE clinozy_be_app` to assert tenant isolation
- * against the same role the runtime uses.
- */
-export const clinozyBeAppRole = pgRole('clinozy_be_app');

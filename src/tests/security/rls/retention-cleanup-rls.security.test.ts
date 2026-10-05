@@ -3,7 +3,7 @@ import {
   MAINTENANCE_SCOPE,
   withMaintenanceDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
-import { sql as drizzleSql, and, eq, isNotNull, lt } from 'drizzle-orm';
+import { and, eq, isNotNull, lt } from 'drizzle-orm';
 import { sql } from '@/infrastructure/database/connection.js';
 import { database } from '@/infrastructure/database/connection.js';
 import type { RequestScopedPostgresDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
@@ -14,6 +14,7 @@ import { createTestWebhook } from '@/tests/factories/webhook.factory.js';
 import { deleteInBatchesByCondition } from '@/infrastructure/database/utils/batch-delete.util.js';
 import { webhooks } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
 import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
+import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
 async function hasGlobalRetentionCleanupPolicyOnWebhooks(): Promise<boolean> {
   const rows = await sql<{ has_policy: boolean }[]>`
@@ -67,7 +68,7 @@ describe('Security: retention cleanup RLS', () => {
 
     const withoutRetentionGuc = await database.transaction(async (transaction) => {
       const databaseHandle = transaction as unknown as RequestScopedPostgresDatabase;
-      await databaseHandle.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+      await setLocalApplicationRole(databaseHandle);
       return deleteInBatchesByCondition({
         databaseHandle,
         table: webhooks,

@@ -14,6 +14,7 @@ import {
   executeAsClinozyBeAppGlobalAdmin,
 } from '@/tests/helpers/rls-matrix.helper.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
 /**
  * Checks whether the sec-r4-D1 migration has been applied by verifying the
@@ -142,7 +143,7 @@ describe('Security: audit.logs INSERT RLS rejects privilege-bypass contexts (sec
     let caught: unknown;
     try {
       await database.transaction(async (transaction) => {
-        await transaction.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+        await setLocalApplicationRole(transaction);
         await transaction.execute(
           drizzleSql`SELECT set_config('app.current_organization_public_id', ${organization.public_id}, true)`,
         );

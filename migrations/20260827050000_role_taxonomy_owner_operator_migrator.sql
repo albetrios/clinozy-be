@@ -17,7 +17,7 @@
 -- a definer executes as its OWNER, and FORCE RLS binds a non-exempt owner — reassigning
 -- would make every resolver (billing/tenancy/notify/audit resolve_*) silently return
 -- ZERO rows (empirically reproduced). Functions stay owned by the migration-executing
--- role: local `core` (superuser, exempt) / hosted `clinozy_be_migrator` (BYPASSRLS,
+-- role: local Compose superuser (exempt) / hosted `clinozy_be_migrator` (BYPASSRLS,
 -- granted by clinozy-infra's provisioning). Verify resolver behavior after hosted provisioning —
 -- the rls-offboarding-regressions db.unit suite asserts it as clinozy_be_app.
 -- PG16+ (hosted 42501 fix): make creator self-grants SET-capable for roles created

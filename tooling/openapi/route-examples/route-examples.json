@@ -3913,7 +3913,7 @@
           "options": {
             "challenge": "DoCdzM664nBLBCC4YXqy5zGzGa2ZYaDK_K-T0l0tjEc",
             "rp": {
-              "name": "Clinozy",
+              "name": "Example App",
               "id": "localhost"
             },
             "user": {

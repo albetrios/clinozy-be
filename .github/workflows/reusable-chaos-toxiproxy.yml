@@ -38,9 +38,10 @@ jobs:
     timeout-minutes: 45
 
     services:
-      # core:core, as in docker-compose.yml and every other CI Postgres service: the chaos harness
-      # (src/tests/chaos/bootstrap-env.ts) always connects through the Toxiproxy listener as
-      # core:core, so a service created with other credentials fails every test on authentication.
+      # The Compose credentials (user, password and database all the project's database name), as
+      # in docker-compose.yml and every other CI Postgres service: the chaos harness
+      # (src/tests/chaos/bootstrap-env.ts) always connects through the Toxiproxy listener with
+      # them, so a service created with other credentials fails every test on authentication.
       postgres:
         image: postgres:17.10-alpine
         ports:

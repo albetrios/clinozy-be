@@ -2,6 +2,7 @@ import { sql as drizzleSql } from 'drizzle-orm';
 import { sql } from '@/infrastructure/database/connection.js';
 import { env } from '@/shared/config/env.config.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { DATABASE_APP_ROLE } from '@/shared/constants/project-identity.constants.js';
 
 /**
  * Row returned by the boot-time `pg_roles` lookup for the current session user.
@@ -62,7 +63,7 @@ export async function assertDatabaseRoleRlsSafety(): Promise<void> {
         `rolsuper=${rolsuper} rolbypassrls=${rolbypassrls}. PostgreSQL skips Row Level Security ` +
         'for superusers and roles with BYPASSRLS, which silently collapses tenant isolation on ' +
         'every RLS-only read path. Point DATABASE_URL at a dedicated non-superuser login role ' +
-        'that has been granted `clinozy_be_app` (or make `clinozy_be_app` LOGIN and connect as it). ' +
+        `that has been granted \`${DATABASE_APP_ROLE}\` (or make \`${DATABASE_APP_ROLE}\` LOGIN and connect as it). ` +
         'See docs/deployment/runbooks/resource-limits.md.',
     );
   }

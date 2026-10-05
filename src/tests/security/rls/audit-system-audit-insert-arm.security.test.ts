@@ -10,6 +10,7 @@ import { createTestOrganization } from '@/tests/factories/organization.factory.j
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import { DATABASE_APP_ROLE } from '@/shared/constants/project-identity.constants.js';
 
 /**
  * Regression for sec-r5-async-queue-1.
@@ -30,7 +31,7 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
  *
  * These tests MUST run under `SET LOCAL ROLE clinozy_be_app` (provided by the
  * context helper's `useApplicationDatabaseRole` option) so the harness's
- * superuser `core` role bypass does not silently mask RLS regressions.
+ * Compose superuser bypass does not silently mask RLS regressions.
  */
 async function isSystemAuditInsertArmApplied(): Promise<boolean> {
   const rows = await sql<{ with_check: string | null }[]>`
@@ -130,7 +131,7 @@ describe('Security: audit.logs INSERT system-audit arm (sec-r5-async-queue-1)', 
     let caught: unknown;
     try {
       await sql.begin(async (transaction) => {
-        await transaction`SET LOCAL ROLE clinozy_be_app`;
+        await transaction`SET LOCAL ROLE ${transaction(DATABASE_APP_ROLE)}`;
         await transaction`
           INSERT INTO audit.logs (public_id, organization_id, actor_user_id, action, resource_type, metadata, severity)
           VALUES (${generatePublicId('auditLog')}, NULL, NULL, 'test.r5.bare', 'test', '{}'::jsonb, 'INFO')

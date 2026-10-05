@@ -30,6 +30,7 @@ import {
   forceRlsTableKey as tableKey,
   type ForceRlsTableRef,
 } from '@/infrastructure/database/utils/force-rls-tables.constants.js';
+import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
 export type { ForceRlsTableRef };
 export { EXPECTED_FORCE_RLS_TABLES, tableKey };
@@ -134,7 +135,7 @@ export async function executeAsClinozyBeAppTenant<T>(
   callback: (transaction: typeof database) => Promise<T>,
 ): Promise<T> {
   return database.transaction(async (transaction) => {
-    await transaction.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+    await setLocalApplicationRole(transaction);
     const tenantValue = organizationPublicId ?? '';
     await transaction.execute(
       drizzleSql`SELECT set_config('app.current_organization_public_id', ${tenantValue}, true)`,
@@ -178,7 +179,7 @@ export async function executeAsClinozyBeAppUser<T>(
   callback: (transaction: typeof database) => Promise<T>,
 ): Promise<T> {
   return database.transaction(async (transaction) => {
-    await transaction.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+    await setLocalApplicationRole(transaction);
     await transaction.execute(
       drizzleSql`SELECT set_config('app.current_user_public_id', ${userPublicId ?? ''}, true)`,
     );
@@ -207,7 +208,7 @@ export async function executeAsClinozyBeAppGlobalAdmin<T>(
   callback: (transaction: typeof database) => Promise<T>,
 ): Promise<T> {
   return database.transaction(async (transaction) => {
-    await transaction.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+    await setLocalApplicationRole(transaction);
     await transaction.execute(drizzleSql`SELECT set_config('app.global_admin', 'true', true)`);
     return callback(transaction as unknown as typeof database);
   });

@@ -63,7 +63,7 @@ tests. Holding a scope IS the authority.
 | `app.current_organization_id` | `app.current_organization_public_id` | the GUC carries a PUBLIC id (`org_…`), never the internal bigserial — the name now says so (migration `20260827060000`, all 30 policies ALTERed) |
 | `app.current_user_id` | `app.current_user_public_id` | same reasoning (`usr_…`) |
 | `app.current_session_refresh_token_hash` | *(removed)* | dead policy arm no code ever set — dropped by the InitPlan-hygiene migration |
-| local superuser runtime (`core`) | `clinozy_be_app` login | local↔live parity: `pnpm dev` now connects RLS-subject exactly like production |
+| local superuser runtime (the Compose `POSTGRES_USER`) | `clinozy_be_app` login | local↔live parity: `pnpm dev` now connects RLS-subject exactly like production |
 | implicit superuser fixtures | `clinozy_be_operator` (BYPASSRLS, local/CI only) | fixture power is a named, auditable role instead of a superuser side effect |
 | "provider superuser" mental model | `clinozy_be_owner` NOLOGIN group + `clinozy_be_migrator` | ownership and DDL authority are named roles; managed Postgres has no true superusers anyway |
 | `withPrincipalDatabaseContext` / `withSessionDatabaseContext` | `withAppDatabaseContext` | one wrapper per connection role: the name states the pool (`clinozy_be_app` vs `clinozy_be_maintenance`), the scope states the GUCs — principal and session stay distinct as SCOPE types (branded, separately confined), not as wrappers |
@@ -346,7 +346,7 @@ must `ALTER TABLE … OWNER TO clinozy_be_owner`), and membership edges.
 **SECURITY DEFINER nuance (empirically proven):** a definer function executes as its
 OWNER, and FORCE RLS binds a non-exempt owner — so resolver functions are deliberately
 NOT owned by `clinozy_be_owner` (they would silently return zero rows). They stay owned by
-the per-environment migration role: local `core` (superuser) / hosted `clinozy_be_migrator`
+the per-environment migration role: local Compose superuser / hosted `clinozy_be_migrator`
 (BYPASSRLS, granted by clinozy-infra's provisioning). Verify resolver behavior after
 provisioning any new hosted environment.
 

@@ -17,10 +17,11 @@ import {
   isForceRlsTable,
   type ForceRlsTableRef,
 } from '@/infrastructure/database/utils/force-rls-tables.constants.js';
-import { sql as drizzleSql } from 'drizzle-orm';
+import { sql as drizzleSql, type SQL } from 'drizzle-orm';
 import { database } from '@/infrastructure/database/connection.js';
 import type { PostgresDatabaseHandle } from '@/infrastructure/database/utils/database-handle.types.js';
 import { getEnv } from '@/shared/config/env.config.js';
+import { DATABASE_APP_ROLE } from '@/shared/constants/project-identity.constants.js';
 import { recordUnscopedDatabaseAccess } from '@/infrastructure/database/pool/unscoped-query-counter.js';
 
 /**
@@ -323,6 +324,29 @@ export async function setLocalDatabaseConfig(
   value: string,
 ): Promise<void> {
   await databaseHandle.execute(drizzleSql`SELECT set_config(${key}, ${value}, true)`);
+}
+
+/** Anything that runs a Drizzle statement on one connection: a database or transaction handle. */
+export interface SqlStatementRunner {
+  execute: (query: SQL) => PromiseLike<unknown>;
+}
+
+/**
+ * Switches the surrounding transaction to the application role ({@link DATABASE_APP_ROLE}) — the
+ * RLS-subject role production connects as — so a connection opened as a privileged role
+ * (the local superuser, the operator) exercises production RLS until the transaction ends.
+ *
+ * @remarks
+ * - **Algorithm:** `SET LOCAL ROLE <DATABASE_APP_ROLE>`, the role name quoted as an identifier.
+ * - **Failure modes:** rejects when the connected role is not a member of the application role.
+ * - **Side effects:** the role switch lasts until the transaction commits or rolls back.
+ * - **Notes:** the one place the role name is spelled — from the generated identity constant —
+ *   for the maintenance contexts' `useApplicationDatabaseRole` and every RLS test.
+ */
+export async function setLocalApplicationRole(databaseHandle: SqlStatementRunner): Promise<void> {
+  await databaseHandle.execute(
+    drizzleSql`SET LOCAL ROLE ${drizzleSql.identifier(DATABASE_APP_ROLE)}`,
+  );
 }
 
 /**

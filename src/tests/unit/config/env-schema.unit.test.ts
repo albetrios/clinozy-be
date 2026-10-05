@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { envSchema, envSchemaDefaults, envSchemaKeys } from '@/shared/config/env-schema.js';
 
-const DATABASE_URL_FIXTURE = 'postgres://localhost:5432/core';
+const DATABASE_URL_FIXTURE = 'postgres://localhost:5432/fixture';
 const REDIS_URL_FIXTURE = 'redis://localhost:6379';
 
 // audit #8: the deployed runtime (production) now requires real RSA PEMs ≥2048-bit, so the

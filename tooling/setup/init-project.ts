@@ -30,10 +30,12 @@ import {
   resolveFrontendSlug,
 } from '@tooling/setup/codegen/project-identity.util.js';
 import {
+  infraSlugFor,
   replaceIdentityToken,
   rewritePreviousDatabaseName,
   rewritePreviousRedisKeyPrefix,
   rewritePreviousWordmark,
+  slugSpellings,
 } from '@tooling/setup/codegen/text-identity-rewrites.js';
 import {
   loadConfigIfExists,
@@ -375,6 +377,20 @@ function rewriteProseIdentity(options: {
       [options.previousOwner, options.nextOwner],
     ] as Array<[string, string]>
   ).filter(([from, to]) => from && to && from !== to);
+
+  // The sibling infrastructure repository shares the stem (`<stem>-infra`); every spelling the
+  // previous-identity gate flags for it, in the order the gate's slugSpellings lists them.
+  const previousInfra = infraSlugFor(options.previousSlug);
+  const nextInfra = infraSlugFor(options.nextSlug);
+  if (previousInfra && nextInfra && previousInfra !== nextInfra) {
+    const nextInfraSpellings = slugSpellings(nextInfra);
+    basePairs.unshift(
+      ...slugSpellings(previousInfra).map((spelling, index): [string, string] => [
+        spelling,
+        nextInfraSpellings[index] ?? spelling,
+      ]),
+    );
+  }
 
   // Prose capitalizes the slug at the start of a sentence ("Acme-be records…"),
   // so the lowercase pass alone leaves those behind. Each pair therefore gets a

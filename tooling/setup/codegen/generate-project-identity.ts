@@ -138,9 +138,6 @@ export const REDIS_KEY_PREFIX_STEM = '${derived.redisKeyPrefix}';
 /** Restricted Postgres role the app connects as, under RLS. */
 export const DATABASE_APP_ROLE = '${derived.databaseAppRole}';
 
-/** Postgres role owning runtime objects. */
-export const DATABASE_RUNTIME_ROLE = '${derived.databaseRuntimeRole}';
-
 /** Human-facing project name for OpenAPI, MCP and CI reports. */
 export const PROJECT_DISPLAY_NAME = '${escapedDisplay}';
 

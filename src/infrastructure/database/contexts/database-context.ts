@@ -40,6 +40,7 @@ import {
   runWithPinnedDatabaseHandle,
   runWithPinnedOrganizationDatabaseSession,
   runWithWorkerDatabaseContext,
+  setLocalApplicationRole,
   setLocalDatabaseConfig,
   workerDatabaseContextForOrganization,
   workerDatabaseContextForUser,
@@ -714,7 +715,7 @@ export const MAINTENANCE_SCOPE: {
 
 /** Options for {@link withMaintenanceDatabaseContext}. */
 export type MaintenanceDatabaseContextOptions = {
-  /** When true, `SET LOCAL ROLE clinozy_be_app` so tests connected as the privileged owner role exercise production RLS. */
+  /** When true, switch to the application role (`setLocalApplicationRole`) so tests connected as the privileged owner role exercise production RLS. */
   useApplicationDatabaseRole?: boolean;
 };
 
@@ -804,7 +805,7 @@ async function runMaintenanceTransaction<T>(options: {
   const { databaseHandle, definition, callback } = options;
   options.claimConnection();
   if (options.useApplicationDatabaseRole) {
-    await databaseHandle.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+    await setLocalApplicationRole(databaseHandle);
   }
   if (definition.appliesWorkerStatementTimeout) {
     await applyWorkerStatementTimeout(databaseHandle);

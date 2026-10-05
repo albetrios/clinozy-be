@@ -20,6 +20,7 @@ import {
 } from '@tooling/setup/codegen/repository-identity-artifacts.js';
 import {
   applyTextRewrites,
+  infraSlugFor,
   localDatabaseRules,
   mcpTemplateRules,
   replaceIdentityToken,
@@ -211,6 +212,14 @@ describe('project identity — previous identity gate', () => {
       '--health-cmd="pg_isready -U legacy -d legacy"',
       'DATABASE_URL: postgresql://user:pass@localhost:5432/legacy_dryrun',
       'CREATE DATABASE legacy;',
+      // Forms a rename once missed: libpq variables, the `postgres://` scheme, a URL without
+      // credentials (an env-schema test fixture), and a `_test` database behind `-d`.
+      'PGUSER=legacy',
+      'PGDATABASE: legacy_test',
+      "DATABASE_URL: 'postgres://localhost:5432/legacy'",
+      'postgres://legacy@localhost/legacy_test',
+      'psql -d legacy_test -c "select 1"',
+      '# legacy:legacy, as in docker-compose.yml',
     ]) {
       expect(flags(line), line).toBe(true);
     }
@@ -219,6 +228,8 @@ describe('project identity — previous identity gate', () => {
       'src/legacy/events/event-bus.ts',
       'the legacy layer',
       'POSTGRES_USER: postgres',
+      'PGUSER=postgres',
+      'postgres://localhost:5432/legacyish',
     ]) {
       expect(flags(line), line).toBe(false);
     }
@@ -241,6 +252,21 @@ describe('project identity — previous identity gate', () => {
     }
   });
 
+  it("finds the previous backend slug's sibling infrastructure repository", () => {
+    // CI comments and two policy tests kept naming the old `<stem>-infra` repository after the
+    // rename — no previous name covered it.
+    for (const line of [
+      'the deploy path calls legacy-infra',
+      'LEGACY-INFRA PROVISIONING',
+      'legacy_infra_bucket',
+    ]) {
+      expect(flags(line), line).toBe(true);
+    }
+    expect(flags('infra-only keys are dropped')).toBe(false);
+    expect(infraSlugFor('legacy-be')).toBe('legacy-infra');
+    expect(infraSlugFor('acme-api')).toBeNull();
+  });
+
   it('finds the previous backend stem only where it is a Redis key prefix', () => {
     // resolveRedisKeyPrefix() kept the old stem as its `<stem>:<NODE_ENV>:` default after the
     // rename, so every Redis key and BullMQ queue carried the old name.
@@ -249,6 +275,8 @@ describe('project identity — previous identity gate', () => {
       'REDIS_KEY_PREFIX=legacy:dev:',
       "process.env.REDIS_KEY_PREFIX = 'legacy:test:';",
       "keyPrefix: 'legacy:'",
+      // The documented default in an env-schema comment.
+      'Redis key prefix (default `legacy:<NODE_ENV>:`).',
     ]) {
       expect(flags(line), line).toBe(true);
     }
@@ -326,7 +354,7 @@ describe('project identity — the rename pass rewrites what the previous-identi
   /** The `pnpm init:project` prose transforms for legacy-* → globex-*, in the order it runs them. */
   const rename = (line: string): string => {
     let updated = line;
-    for (const [previous, next] of slugPairs) {
+    for (const [previous, next] of [['legacy-infra', 'globex-infra'], ...slugPairs] as const) {
       const nextSpellings = slugSpellings(next);
       updated = slugSpellings(previous).reduce(
         (text, from, index) => replaceIdentityToken(text, from, nextSpellings[index] ?? from),
@@ -407,6 +435,15 @@ describe('project identity — the rename pass rewrites what the previous-identi
       'REDIS_KEY_PREFIX=legacy:dev:',
       "process.env.REDIS_KEY_PREFIX = 'legacy:test:';",
       "keyPrefix: 'legacy:'",
+      'Redis key prefix (default `legacy:<NODE_ENV>:`).',
+      'PGUSER=legacy',
+      'PGDATABASE: legacy_test',
+      "DATABASE_URL: 'postgres://localhost:5432/legacy'",
+      'postgres://legacy@localhost/legacy_test',
+      'psql -d legacy_test -c "select 1"',
+      'the deploy path calls legacy-infra',
+      'LEGACY-INFRA PROVISIONING',
+      '# legacy:legacy, as in docker-compose.yml',
     ]) {
       expect(flags(line), line).toBe(true);
       expect(flags(rename(line)), `${line} → ${rename(line)}`).toBe(false);
@@ -516,6 +553,16 @@ describe('project identity — local database rename', () => {
     );
     expect(rename('pg_isready -U legacy -d legacy')).toBe('pg_isready -U globex -d globex');
     expect(rename('CREATE DATABASE legacy_dryrun;')).toBe('CREATE DATABASE globex_dryrun;');
+    // A `_test` database behind `-d`, libpq variables, and URLs without credentials or port.
+    expect(rename('psql -U legacy -d legacy_test')).toBe('psql -U globex -d globex_test');
+    expect(rename('PGUSER=legacy PGPASSWORD=legacy PGDATABASE=legacy_test')).toBe(
+      'PGUSER=globex PGPASSWORD=globex PGDATABASE=globex_test',
+    );
+    expect(rename('postgres://localhost:5432/legacy')).toBe('postgres://localhost:5432/globex');
+    expect(rename('postgres://legacy@localhost/legacy_test')).toBe(
+      'postgres://globex@localhost/globex_test',
+    );
+    expect(rename('postgres://user:pass@host/db')).toBe('postgres://user:pass@host/db');
     // The same word outside those anchors is not the database.
     expect(rename('POSTGRES_USER: postgres')).toBe('POSTGRES_USER: postgres');
     expect(rename('the legacy layer')).toBe('the legacy layer');

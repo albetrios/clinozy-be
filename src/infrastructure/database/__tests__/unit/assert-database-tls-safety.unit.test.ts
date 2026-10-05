@@ -67,7 +67,7 @@ describe('assertDatabaseTlsVerification', () => {
   it('warns (without throwing) when DATABASE_TLS_ENFORCED is false and verification is off', async () => {
     getEnvMock.mockReturnValue({
       DATABASE_TLS_ENFORCED: false,
-      DATABASE_URL: 'postgresql://u:p@localhost:5432/clinozy',
+      DATABASE_URL: 'postgresql://u:p@localhost:5432/fixture',
     });
     const { logger } = await import('@/shared/utils/infrastructure/logger.util.js');
     const { assertDatabaseTlsVerification } = await import(

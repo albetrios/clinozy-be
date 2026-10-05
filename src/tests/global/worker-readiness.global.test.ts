@@ -58,7 +58,7 @@ describe('Worker readiness (global)', () => {
     // and invoked directly — the workflow must not check out or delegate to any
     // external repository for the deploy path.
     expect(existsSync(resolve(ROOT, 'tooling/setup/railway/deploy-image.ts'))).toBe(true);
-    expect(workflow).not.toContain('core-infra');
+    expect(workflow).not.toMatch(/\b[a-z0-9]+-infra\b/);
   });
 
   it('deploy workflow probes API health and relies on Railway terminal status for the worker', () => {
