@@ -1209,7 +1209,8 @@ src/
     │   │   └── verification-code.template.ts
     │   ├── workers/
     │   │   ├── __tests__/
-    │   │   │   └── mail.worker.unit.test.ts
+    │   │   │   └── unit/
+    │   │   │   │   └── mail.worker.unit.test.ts
     │   │   ├── mail-outbox-sweeper.constants.ts
     │   │   ├── mail-outbox-sweeper.processor.ts
     │   │   ├── mail-outbox-sweeper.worker.ts
@@ -1231,13 +1232,13 @@ src/
     │   └── mcp.overview.md
     ├── observability/
     │   ├── __tests__/
-    │   │   ├── unit/
+    │   │   └── unit/
     │   │   │   ├── bullmq-trace-propagation.unit.test.ts
+    │   │   │   ├── opentelemetry.unit.test.ts
     │   │   │   ├── posthog.unit.test.ts
+    │   │   │   ├── sentry.unit.test.ts
     │   │   │   ├── trace-context.util.unit.test.ts
     │   │   │   └── unhandled-rejection.handler.unit.test.ts
-    │   │   ├── opentelemetry.unit.test.ts
-    │   │   └── sentry.unit.test.ts
     │   ├── dlq-depth/
     │   │   ├── __tests__/
     │   │   │   └── unit/
@@ -1311,10 +1312,10 @@ src/
     │   │   └── commit-dispatch.types.ts
     │   ├── dlq/
     │   │   ├── __tests__/
-    │   │   │   ├── unit/
+    │   │   │   └── unit/
     │   │   │   │   ├── dead-letter-auto-retry-scan.db.unit.test.ts
-    │   │   │   │   └── dlq-auto-retry.processor.unit.test.ts
-    │   │   │   └── dlq-auto-retry.worker.unit.test.ts
+    │   │   │   │   ├── dlq-auto-retry.processor.unit.test.ts
+    │   │   │   │   └── dlq-auto-retry.worker.unit.test.ts
     │   │   ├── dead-letter.repository.ts
     │   │   ├── dead-letter.schema.ts
     │   │   ├── dead-letter.ts
@@ -1387,7 +1388,8 @@ src/
     │   └── worker-readiness.ts
     ├── codegen/
     │   ├── __tests__/
-    │   │   └── hosted-docs-upload.unit.test.ts
+    │   │   └── unit/
+    │   │   │   └── hosted-docs-upload.unit.test.ts
     │   ├── check-api-docs-sync.ts
     │   ├── generate-dbdiagram.ts
     │   ├── generate-migration.ts
@@ -1439,8 +1441,9 @@ src/
     │   └── run-pre-commit-guard.ts
     └── validators/
     │   ├── __tests__/
-    │       ├── constants-centralization.unit.test.ts
-    │       └── validate-test-api-prefix.unit.test.ts
+    │       └── unit/
+    │       │   ├── constants-centralization.unit.test.ts
+    │       │   └── validate-test-api-prefix.unit.test.ts
     │   ├── code/
     │       ├── constants-centralization.util.ts
     │       ├── validate-constants-centralization.ts

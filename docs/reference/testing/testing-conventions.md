@@ -140,6 +140,14 @@ pnpm test:rls-role
 | `*.e2e.test.ts`         | `email-login-flow.e2e.test.ts`        |
 | `*.smoke.test.ts`       | `health.smoke.test.ts`                |
 
+The suffix decides the folder, and the folder decides whether the suite runs at all: each Vitest
+project collects only its own folders (`tooling/vitest/projects.ts`). A `*.unit.test.ts` lives under
+`__tests__/unit/` or `src/tests/unit/`; a `*.integration.test.ts` under `__tests__/integration/` or
+`src/tests/integration/`; `*.db.unit` and `*.property.unit` suites may live anywhere under `src/`
+(their projects collect them anywhere). `pnpm validate:test-naming` fails on any other placement — a
+file outside every project's folders is collected by none and never runs, which is how seven unit
+suites (the mail worker and DLQ auto-retry worker among them) went unexecuted.
+
 ---
 
 ## API version in tests (CI: `pnpm validate:test-api-prefix`)

@@ -49,24 +49,30 @@ export function detectTier(fileName: string): TierSuffix | undefined {
   return undefined;
 }
 
-/** Returns whether a test file path is allowed for the given Vitest tier suffix. */
+/**
+ * Returns whether a test file path is allowed for the given Vitest tier suffix.
+ *
+ * @remarks
+ * The allowed folders mirror the Vitest projects' `include` globs (`tooling/vitest/projects.ts`):
+ * a file outside them is collected by no project and never runs. Seven unit suites — the mail
+ * worker, DLQ auto-retry worker, Sentry and OpenTelemetry among them — sat in a `__tests__/`
+ * folder without `unit/` because `infrastructure/` and `scripts/` were allowed anywhere. A
+ * `*.db.unit` or `*.property.unit` file is collected anywhere under `src/` by its own project.
+ */
 export function isPathAllowedForTier(relativePath: string, tier: TierSuffix): boolean {
   const normalized = relativePath.replaceAll('\\', '/');
   switch (tier) {
     case 'unit':
       return (
+        normalized.endsWith('.db.unit.test.ts') ||
+        normalized.endsWith('.property.unit.test.ts') ||
         normalized.includes('/__tests__/unit/') ||
-        normalized.startsWith('tests/unit/') ||
-        normalized.startsWith('tests/helpers/') ||
-        normalized.includes('/unit/events/') ||
-        normalized.startsWith('infrastructure/') ||
-        normalized.startsWith('scripts/')
+        normalized.startsWith('tests/unit/')
       );
     case 'integration':
       return (
         normalized.includes('/__tests__/integration/') ||
-        normalized.startsWith('tests/integration/') ||
-        normalized.startsWith('scripts/')
+        normalized.startsWith('tests/integration/')
       );
     case 'e2e':
       return normalized.includes('/__tests__/e2e/') || normalized.startsWith('tests/e2e/');
