@@ -32,10 +32,8 @@ import {
   getBullMQConnectionOptions,
   getBullMQKeyPrefix,
 } from '@/infrastructure/queue/connection.js';
-import {
-  readWorkerQueueHeartbeats,
-  WORKER_THROUGHPUT_QUEUE_NAMES,
-} from '@/infrastructure/queue/worker-runtime/worker-queue-heartbeat.js';
+import { readWorkerQueueHeartbeats } from '@/infrastructure/queue/worker-runtime/worker-queue-heartbeat.js';
+import { WORKER_THROUGHPUT_QUEUE_NAMES } from '@/infrastructure/queue/queue-catalog.js';
 import { parsePositiveIntegerEnv, resolveQueueNames } from './settle-check.config.js';
 import {
   evaluateSettleCheck,

@@ -400,7 +400,7 @@ export async function registerScheduledJobs(
   try {
     for (const job of jobs) {
       // sec-Q1: bounded retention on cron-driven queues. Without this,
-      // 17 cron queues each piling completed/failed jobs forever grows
+      // every cron queue piling completed/failed jobs forever grows
       // Redis indefinitely and eventually exhausts maxmemory on a shared
       // cache+BullMQ instance.
       const queue = new Queue(job.queueName, {

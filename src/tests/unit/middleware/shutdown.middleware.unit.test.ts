@@ -28,6 +28,12 @@ vi.mock('@/infrastructure/mail/queues/mail.queue.js', () => ({
   closeMailQueue: vi.fn().mockResolvedValue(undefined),
 }));
 
+// The queue catalog reads each queue module's name constant, which the mocks above leave out.
+vi.mock('@/infrastructure/queue/queue-catalog.js', () => ({
+  WORKER_QUEUE_NAMES: [],
+  WORKER_THROUGHPUT_QUEUE_NAMES: [],
+}));
+
 vi.mock('@/domains/notify/sub-domains/notification/queues/notification.queue.js', () => ({
   closeNotificationQueue: vi.fn().mockResolvedValue(undefined),
 }));

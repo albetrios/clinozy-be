@@ -6,7 +6,6 @@ import {
   WaitingError,
   Worker,
   type Job,
-  type Queue,
   type RateLimiterOptions,
   type WorkerOptions,
 } from 'bullmq';
@@ -17,6 +16,7 @@ import {
   type ManagedCircuitBreakerName,
 } from '@/infrastructure/resilience/circuit-breaker.js';
 import { getBullMQKeyPrefix } from '@/infrastructure/queue/connection.js';
+import { PAUSE_SENTINEL_MAX_JOBS } from '@/infrastructure/queue/worker-runtime/provider-pause.util.js';
 import { recordProviderOutageParkedJob } from '@/infrastructure/observability/metrics/prometheus-metrics.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import {
@@ -73,31 +73,6 @@ export class ProviderOutageError extends Error {
     this.provider = options.provider;
     this.retryAfterMs = options.retryAfterMs ?? null;
   }
-}
-
-/**
- * A `max` no counter reaches: BullMQ's manual pause stores `Number.MAX_SAFE_INTEGER` in the limiter
- * key, so asking for the rate-limit TTL at this `max` reports the pause and never the limiter's
- * ordinary per-second count.
- */
-const PAUSE_SENTINEL_MAX_JOBS = Number.MAX_SAFE_INTEGER;
-
-/**
- * Milliseconds left on a queue's provider pause, or 0 when it is not paused.
- *
- * @remarks
- * - **Algorithm:** BullMQ `getRateLimitTtl(Number.MAX_SAFE_INTEGER)` — the pause sets the limiter
- *   key to that value; the limiter's own per-second counter never gets near it.
- * - **Failure modes:** a Redis error propagates.
- * - **Side effects:** one Redis script call.
- * - **Notes:** read by worker readiness, so a paused queue with work waiting is not "stalled", and
- *   reported per queue on the `/readyz` body.
- */
-export async function getProviderPauseLeftMs(
-  queue: Pick<Queue, 'getRateLimitTtl'>,
-): Promise<number> {
-  const pauseLeftMs = await queue.getRateLimitTtl(PAUSE_SENTINEL_MAX_JOBS);
-  return pauseLeftMs > 0 ? pauseLeftMs : 0;
 }
 
 /** BullMQ's own control-flow errors and `UnrecoverableError` — never an outage, always passed on. */

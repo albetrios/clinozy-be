@@ -105,7 +105,7 @@ export type WorkerQueueRegistrationDefinition = {
   /**
    * `true` when this worker is driven by a repeatable cron in `scheduler.ts`.
    * `false` for event-driven workers (`mail`, `webhook-delivery`, `notification`,
-   * `user-data-export`, `stripe-webhook`) and worker-without-cron orphans.
+   * `user-data-export`, `stripe-webhook`, `subscription-seat-sync`) and worker-without-cron orphans.
    *
    * Cross-checked against `scheduler.ts` at startup
    * (`auditSchedulerRegistryConsistency()`); mismatches are logged.

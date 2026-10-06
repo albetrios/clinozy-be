@@ -31,14 +31,6 @@ export type WorkerQueueHeartbeat = {
   last_job_at: string | null;
 };
 
-/** Throughput queues whose heartbeats indicate the worker is processing jobs. */
-export const WORKER_THROUGHPUT_QUEUE_NAMES = [
-  'mail',
-  'webhook-delivery',
-  'notification',
-  'stripe-webhook',
-] as const;
-
 /**
  * True when every recorded throughput heartbeat is older than `stallTimeoutMs`.
  * Returns false when no jobs have completed yet (cold start / idle before first job).
@@ -102,15 +94,27 @@ export async function readWorkerQueueHeartbeats(
 }
 
 /**
+ * Shortest gap between two heartbeat writes for one queue in one process. The stall window is at
+ * least a minute, so a write per completed job would only add a Redis command per job at peak.
+ */
+export const WORKER_QUEUE_HEARTBEAT_MIN_INTERVAL_MS = 5_000;
+
+/**
  * Subscribes to the BullMQ `completed` event on `worker` and best-effort writes a Redis
- * heartbeat via {@link recordWorkerQueueJobCompleted}. Heartbeat write failures are
+ * heartbeat via {@link recordWorkerQueueJobCompleted}, at most once per
+ * {@link WORKER_QUEUE_HEARTBEAT_MIN_INTERVAL_MS}. Heartbeat write failures are
  * intentionally swallowed so a transient Redis blip cannot poison job completion.
  */
 export function attachWorkerQueueHeartbeat(
   worker: { on(event: 'completed', listener: () => void): void },
   queueName: string,
+  nowMilliseconds: () => number = Date.now,
 ): void {
+  let lastWrittenAt = Number.NEGATIVE_INFINITY;
   worker.on('completed', () => {
+    const now = nowMilliseconds();
+    if (now - lastWrittenAt < WORKER_QUEUE_HEARTBEAT_MIN_INTERVAL_MS) return;
+    lastWrittenAt = now;
     void recordWorkerQueueJobCompleted(queueName).catch(() => {
       /* heartbeat is best-effort */
     });

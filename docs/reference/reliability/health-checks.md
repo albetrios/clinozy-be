@@ -63,9 +63,19 @@ Response **200** when dependencies are healthy:
   "draining": false,
   "worker_queues": [
     { "queue": "mail", "last_job_at": "2026-05-20T12:00:00.000Z" }
-  ]
+  ],
+  "circuit_breakers": [{ "name": "resend", "state": "OPEN" }],
+  "queue_depths": [
+    { "queue": "mail", "waiting": 42, "delayed": 3, "provider_pause_ms": 241000 }
+  ],
+  "degraded": true
 }
 ```
+
+`queue_depths` covers the throughput queues; `provider_pause_ms` is the time left on a queue's
+provider-outage pause (0 when it is not paused — see
+[workers-and-events.md → Provider outage pause](../runtime/workers-and-events.md#provider-outage-pause)).
+`degraded` is true while any managed circuit is OPEN.
 
 | HTTP | When |
 | ---- | ---- |
@@ -139,7 +149,7 @@ Response **200** when the worker is ready and dependencies are healthy:
 | ---- | ------ | ---- |
 | 200 | `ok` | Worker marked ready, dependencies connected, throughput not stalled |
 | 503 | `starting` | Worker process has not called `markWorkerHealthReady()` |
-| 503 | `stalled` | Throughput queue heartbeats are older than `WORKER_HEALTH_STALL_TIMEOUT_MS` |
+| 503 | `stalled` | Every recorded throughput-queue heartbeat is older than `WORKER_HEALTH_STALL_TIMEOUT_MS` while jobs wait in a throughput queue that is not paused for its provider (a paused queue's work waits by design) |
 | 503 | `error` | Any dependency unavailable |
 
 ## Metrics

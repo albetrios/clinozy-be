@@ -5,10 +5,8 @@ import {
 } from '@/infrastructure/queue/connection.js';
 import { getDefaultWorkerOptions } from '@/infrastructure/queue/worker-runtime/worker-options.js';
 import { buildWorkerHandle } from '@/infrastructure/queue/worker-runtime/worker-close.util.js';
-import {
-  SOURCE_QUEUE_NAMES_FOR_DLQ_MONITORING,
-  sampleDeadLetterQueueDepths,
-} from '@/infrastructure/observability/dlq-depth/dlq-depth.service.js';
+import { sampleDeadLetterQueueDepths } from '@/infrastructure/observability/dlq-depth/dlq-depth.service.js';
+import { WORKER_QUEUE_NAMES } from '@/infrastructure/queue/queue-catalog.js';
 import { trimDeadLetterQueueMirrors } from '@/infrastructure/queue/dlq/dead-letter.js';
 import {
   sampleBullMqSourceQueueWaitingDepth,
@@ -41,7 +39,7 @@ export function createDlqDepthWorker(): WorkerHandle {
     async () => {
       const result = await sampleDeadLetterQueueDepths();
       const trimmedDeadLetterCount = await trimDeadLetterQueueMirrors({
-        sourceQueueNames: SOURCE_QUEUE_NAMES_FOR_DLQ_MONITORING,
+        sourceQueueNames: WORKER_QUEUE_NAMES,
       });
       const waitingDepth = await sampleBullMqSourceQueueWaitingDepth();
       const memory = await sampleRedisMemorySaturation();

@@ -39,7 +39,7 @@ Workers are grouped into six families in the [worker registry](../../reference/r
 
 | When to split                                              | Why                                                                                                                     |
 | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Monolithic worker exceeds `DATABASE_POOL_MAX`              | Default demand is ~38 Postgres slots; splitting reduces per-process demand and avoids contention.                       |
+| Monolithic worker exceeds `DATABASE_POOL_MAX`              | Default demand is 47 Postgres slots; splitting reduces per-process demand and avoids contention.                       |
 | Retention crons compete with throughput jobs at peak hours | Isolate `retention` to its own service so audit/tombstone runs do not steal connections from `mail`/`webhook`/`stripe`. |
 | Need to size memory or replicas differently per workload   | Throughput families benefit from more replicas; retention typically needs only one replica.                             |
 
@@ -49,7 +49,7 @@ Recommended layout (see [resource-limits.md → Example Railway split](resource-
 | ---------------------- | ---------------------------- | ------------------- | -------------------------------------------------------------------------------- |
 | `worker-throughput`    | `mail,notify,webhook,stripe` | `false`             | Horizontal-scale freely; replicas multiply pool demand.                          |
 | `worker-retention`     | `retention`                  | `true`              | Run **one replica** — cron jobs are not idempotent across overlapping processes. |
-| `worker-observability` | `observability`              | `true`              | Redis-only; tiny resource footprint.                                             |
+| `worker-observability` | `observability`              | `true`              | Mostly Redis-only (`dlq-auto-retry` takes one Postgres connection); tiny footprint. |
 
 `SCHEDULER_ENABLED=true` on **exactly one service** per environment registers the BullMQ repeatable jobs. The scheduler in each process only registers crons for queues whose workers are active in that process, so a misconfigured second scheduler-bearing service is bounded but still wasteful — keep the contract clean.
 

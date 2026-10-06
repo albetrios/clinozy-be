@@ -6,16 +6,16 @@ import {
 } from '@/infrastructure/observability/metrics/metrics.js';
 import { env, getEnv } from '@/shared/config/env.config.js';
 import { isBearerTokenValid } from '@/shared/utils/security/bearer-token.util.js';
-import {
-  getQueuesWaitingJobCount,
-  MONITORED_BULLMQ_QUEUE_NAMES,
-} from '@/infrastructure/observability/metrics/bullmq-metrics.js';
+import { getQueuesWaitingJobCount } from '@/infrastructure/observability/metrics/bullmq-metrics.js';
 import {
   isWorkerStalled,
   isWorkerThroughputStalled,
   readWorkerQueueHeartbeats,
-  WORKER_THROUGHPUT_QUEUE_NAMES,
 } from '@/infrastructure/queue/worker-runtime/worker-queue-heartbeat.js';
+import {
+  WORKER_QUEUE_NAMES,
+  WORKER_THROUGHPUT_QUEUE_NAMES,
+} from '@/infrastructure/queue/queue-catalog.js';
 import { runDependencyReadinessProbes } from '@/shared/utils/infrastructure/readiness-probes.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
@@ -92,7 +92,7 @@ function handleLivenessProbe(response: http.ServerResponse): void {
 async function handleReadinessProbe(response: http.ServerResponse): Promise<void> {
   const [readiness, worker_queues, throughputHeartbeats] = await Promise.all([
     runDependencyReadinessProbes(),
-    readWorkerQueueHeartbeats(MONITORED_BULLMQ_QUEUE_NAMES),
+    readWorkerQueueHeartbeats(WORKER_QUEUE_NAMES),
     readWorkerQueueHeartbeats(WORKER_THROUGHPUT_QUEUE_NAMES),
   ]);
   const throughputStalled = isWorkerThroughputStalled(

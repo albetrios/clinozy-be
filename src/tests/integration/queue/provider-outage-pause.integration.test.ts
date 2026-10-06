@@ -9,8 +9,8 @@ import { getDefaultWorkerOptions } from '@/infrastructure/queue/worker-runtime/w
 import {
   ProviderOutageError,
   createProviderPausableWorker,
-  getProviderPauseLeftMs,
 } from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
+import { getProviderPauseLeftMs } from '@/infrastructure/queue/worker-runtime/provider-pause.util.js';
 import {
   CircuitBreakerOpenError,
   resendCircuit,

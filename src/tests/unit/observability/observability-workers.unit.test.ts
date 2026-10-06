@@ -45,9 +45,12 @@ vi.mock(
 );
 
 vi.mock('@/infrastructure/observability/dlq-depth/dlq-depth.service.js', () => ({
-  SOURCE_QUEUE_NAMES_FOR_DLQ_MONITORING: ['mail', 'notification'],
   sampleDeadLetterQueueDepths: (...parameters: unknown[]) =>
     sampleDeadLetterQueueDepthsMock(...parameters),
+}));
+
+vi.mock('@/infrastructure/queue/queue-catalog.js', () => ({
+  WORKER_QUEUE_NAMES: ['mail', 'notification'],
 }));
 
 vi.mock('@/infrastructure/queue/dlq/dead-letter.js', () => ({

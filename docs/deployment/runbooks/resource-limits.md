@@ -117,7 +117,7 @@ registry outgrows the template pool, or the template budget no longer fits the C
 
 | Service              | `WORKER_QUEUE_FAMILIES`      | `SCHEDULER_ENABLED` | Postgres demand      | Suggested `DATABASE_POOL_MAX`                           |
 | -------------------- | ---------------------------- | ------------------- | -------------------- | ------------------------------------------------------- |
-| Worker throughput    | `mail,notify,webhook,stripe` | `false`             | `5 + 8 + 4 + 6 = 23` | `24`–`28`                                               |
+| Worker throughput    | `mail,notify,webhook,stripe` | `false`             | `5 + 8 + 4 + 11 = 28` | `29`–`35`                                               |
 | Worker retention     | `retention`                  | `true`              | `18`                 | `19`–`24`                                               |
 | Worker observability | `observability`              | `true`              | `1`                  | `4` (mostly Redis-only; `dlq-auto-retry` uses Postgres) |
 

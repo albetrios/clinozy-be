@@ -78,10 +78,10 @@ When **`METRICS_ENABLED=true`**, workers export BullMQ telemetry to the shared P
 | Metric                                                | Source                                                                                                         |
 | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `bullmq_queue_{waiting,active,delayed,failed}{queue}` | `refreshBullMQQueueGauges()` — called from `refreshMetricsBeforeScrape()` before `GET /metrics`                |
-| `bullmq_job_duration_seconds{queue,job_name}`         | `attachBullMQJobMetrics()` on worker `completed` — wired via `attachDeadLetterAndAlerting()` in `bootstrap.ts` |
+| `bullmq_job_duration_seconds{queue,job_name}`         | `attachBullMQJobMetrics()` on worker `completed` — attached to every worker by `bootstrap.ts`, with the dead-letter hook and the heartbeat |
 | `bullmq_provider_outage_parked_jobs_total{queue,provider,reason}` | `createProviderPausableWorker` — each job parked by a provider outage or throttle ([Provider outage pause](#provider-outage-pause)) |
 
-Queue depth gauges scrape the monitored queue list in `src/infrastructure/observability/metrics/bullmq-metrics.ts` (`MONITORED_BULLMQ_QUEUE_NAMES`). See [observability runbook](../../deployment/runbooks/observability.md) for scrape setup and metric names.
+Queue depth gauges cover every worker queue — `WORKER_QUEUE_NAMES` in [`queue-catalog.ts`](../../../src/infrastructure/queue/queue-catalog.ts), the one list the gauges, the DLQ depth sampler and trim, the heartbeat read-out and Bull Board share, pinned to the registry by `queue-catalog.coverage.unit.test.ts`. See [observability runbook](../../deployment/runbooks/observability.md) for scrape setup and metric names.
 
 ---
 
@@ -161,6 +161,9 @@ minutes until the provider is back; then everything that waited is processed.
   parked job, the queue's `delayed` and `waiting` counts growing, and the circuit-breaker transitions.
   `getProviderPauseLeftMs(queue)` (BullMQ `getRateLimitTtl(Number.MAX_SAFE_INTEGER)`, which never
   reports the limiter's ordinary per-second count) answers how long a queue's pause has left.
+- **Readiness:** a paused queue's waiting jobs do not count toward a "stalled" worker
+  (`getQueuesWaitingJobCount` skips it) — its work waits by design, and a worker restarted for it
+  would only pause again. `/readyz` reports `provider_pause_ms` per throughput queue.
 - **Not paused:** scheduled sweeps (a failed run retries on the next tick) and `webhook-delivery` —
   one customer's endpoint being down is not an outage of every other customer's.
 
@@ -216,7 +219,9 @@ Every BullMQ worker is registered exactly once in [`worker-registration.registry
 | `isEnabled()`                     | Optional skip (e.g. mail/Stripe disabled by env)                                                                                                                                                                                                                                        |
 | `create()`                        | Factory invoked by bootstrap                                                                                                                                                                                                                                                            |
 
-Currently **32 workers** are registered (**29** use Postgres, **3** are Redis-only — `idempotency-cardinality`, `dlq-depth`, `commit-dispatch-recovery`; **26** are cron-scheduled, **6** are event-driven). Add a new worker by appending one entry — bootstrap, scheduler filtering, connection budgeting, and the scheduler-registry audit pick it up automatically.
+Currently **32 workers** are registered (**29** use Postgres, **3** are Redis-only — `idempotency-cardinality`, `dlq-depth`, `commit-dispatch-recovery`; **26** are cron-scheduled, **6** are event-driven). Add a new worker by appending one entry — bootstrap, scheduler filtering, connection budgeting, and the scheduler-registry audit pick it up automatically — and add its queue constant to `WORKER_QUEUE_NAMES` in [`queue-catalog.ts`](../../../src/infrastructure/queue/queue-catalog.ts) (plus `WORKER_THROUGHPUT_QUEUE_NAMES` for a throughput worker), which gives it a depth gauge, a sampled and trimmed DLQ, a heartbeat read-out and a Bull Board entry. `queue-catalog.coverage.unit.test.ts` fails until you do.
+
+Every worker the bootstrap starts carries three hooks: the dead-letter + Sentry `failed` listener, the job-duration histogram, and the queue heartbeat (`worker:queue:<name>:last_job_at`, written at most every 5 s per queue). `/readyz` answers `stalled` when every recorded throughput heartbeat is older than `WORKER_HEALTH_STALL_TIMEOUT_MS` while jobs wait in a throughput queue that is not paused for its provider.
 
 The worker's `/readyz` reports `workersRegistered` as the handles its process started: the repeatable-job scheduler plus each worker of its `WORKER_QUEUE_FAMILIES` that is enabled. A process running every family with every secret set therefore shows one more than the registry; a worker skipped for a missing secret (`mail` without `RESEND_API_KEY`, `stripe-webhook` without `STRIPE_WEBHOOK_SECRET`) or a family not selected shows fewer ([health-checks.md](../reliability/health-checks.md#worker-get-livez-and-get-readyz)).
 

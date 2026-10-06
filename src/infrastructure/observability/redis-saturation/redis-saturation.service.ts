@@ -1,25 +1,9 @@
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { getOrCreateQueueClient } from '@/infrastructure/observability/metrics/bullmq-metrics.js';
 import { captureMessage } from '@/infrastructure/observability/sentry/sentry.js';
-import { MAIL_QUEUE_NAME } from '@/infrastructure/mail/queues/mail.queue.js';
-import { WEBHOOK_DELIVERY_QUEUE_NAME } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
-import { NOTIFICATION_QUEUE_NAME } from '@/domains/notify/sub-domains/notification/queues/notification.queue.js';
-import { STRIPE_WEBHOOK_QUEUE_NAME } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
 import { env } from '@/shared/config/env.config.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
-
-/**
- * Throughput / event-driven BullMQ queues whose backlog grows fastest during a worker
- * outage. A runaway `waiting + delayed` depth on a shared Redis can fill memory and, under
- * `maxmemory-policy=noeviction`, start rejecting the write-critical cache / idempotency /
- * rate-limit commands — turning a worker problem into an API write outage.
- */
-const SOURCE_QUEUE_NAMES_FOR_WAITING_DEPTH_MONITORING = [
-  MAIL_QUEUE_NAME,
-  WEBHOOK_DELIVERY_QUEUE_NAME,
-  NOTIFICATION_QUEUE_NAME,
-  STRIPE_WEBHOOK_QUEUE_NAME,
-] as const;
+import { WORKER_THROUGHPUT_QUEUE_NAMES } from '@/infrastructure/queue/queue-catalog.js';
 
 /**
  * Parsed subset of Redis `INFO memory` — `usedMemory` and the configured `maxMemory`
@@ -136,7 +120,10 @@ export async function sampleRedisMemorySaturation(): Promise<RedisMemorySaturati
  *
  * @remarks
  * - **Algorithm:** the `depths` array preserves the order of
- *   `SOURCE_QUEUE_NAMES_FOR_WAITING_DEPTH_MONITORING`.
+ *   `WORKER_THROUGHPUT_QUEUE_NAMES` — the queues whose backlog grows fastest during a worker
+ *   outage. A runaway `waiting + delayed` depth on a shared Redis can fill memory and, under
+ *   `maxmemory-policy=noeviction`, start rejecting the write-critical cache / idempotency /
+ *   rate-limit commands — turning a worker problem into an API write outage.
  * - **Failure modes:** a per-queue probe error is logged and recorded as depth `0`, so one
  *   unreachable queue does not abort the others.
  * - **Side effects:** none from the type itself.
@@ -169,12 +156,12 @@ export async function sampleBullMqSourceQueueWaitingDepth(): Promise<QueueWaitin
   const depths: QueueWaitingDepthSampleResult['depths'][number][] = [];
 
   // Probed together on pooled clients rather than one at a time on throwaway ones. Every queue
-  // here is already in `MONITORED_BULLMQ_QUEUE_NAMES`, so sharing that pool adds no Redis
+  // here is already in `WORKER_QUEUE_NAMES`, so sharing that pool adds no Redis
   // connection — it removes a connect + script-load + close per queue per pass, which is the
   // same cost `getDeadLetterQueueClient` pools to avoid (sec-DLQ-scrape). Each probe keeps its
   // own try/catch, so one failing queue still reports 0 without aborting the others.
   const sampled = await Promise.all(
-    SOURCE_QUEUE_NAMES_FOR_WAITING_DEPTH_MONITORING.map(async (queueName) => {
+    WORKER_THROUGHPUT_QUEUE_NAMES.map(async (queueName) => {
       try {
         const counts = await getOrCreateQueueClient(queueName).getJobCounts('waiting', 'delayed');
         const waiting = counts.waiting ?? 0;

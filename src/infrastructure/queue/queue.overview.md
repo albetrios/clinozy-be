@@ -19,13 +19,14 @@ BullMQ + Redis runtime for the platform. Owns connection management, the worker 
 - **Automated replay**: the `dlq-auto-retry` sweeper replays each ledger row of a replayable queue once, after the cooldown, through the source queue's own producer, one level deeper in its lineage; a lineage stops at `DLQ_AUTO_RETRY_MAX_COUNT`. No counter lives in Redis.
 - **Shared job-options policy**: cross-queue defaults that are not queue-specific (e.g. completed/failed job retention count) live in [queue.constants.ts](src/infrastructure/queue/queue.constants.ts) so every event-driven domain producer queue stays consistent; queue-specific options (attempts, backoff, failure caps) remain in each domain's queue file.
 - **Workers must use `runOrganizationScopedWorkerJob` / `runGlobalRetentionWorkerJob` / `runUserScopedWorkerJob`** from [worker-runtime/worker-processor.util.ts](src/infrastructure/queue/worker-runtime/worker-processor.util.ts). Workers never call `getRequestDatabase()`: it throws in worker runtime (the guard in [contexts/database-context-runtime.ts](src/infrastructure/database/contexts/database-context-runtime.ts)), and `no-direct-db-in-services.global.test.ts` scans for it.
-- **Heartbeat keys in Redis**: each worker publishes a heartbeat with `WORKER_QUEUE_HEARTBEAT_TTL_SECONDS = 86 400`; the admin worker-readiness script consumes them.
+- **One queue catalog**: `WORKER_QUEUE_NAMES` / `WORKER_THROUGHPUT_QUEUE_NAMES` in [queue-catalog.ts](src/infrastructure/queue/queue-catalog.ts) are the only queue lists — depth gauges, the DLQ sampler and trim, the heartbeat read-out and Bull Board all read them, and `queue-catalog.coverage.unit.test.ts` pins them to the worker registry. Five hand-kept lists had drifted: 14 queues had no gauge and 6 DLQs were never sampled.
+- **Heartbeat keys in Redis**: bootstrap attaches a heartbeat to every worker (`worker:queue:<name>:last_job_at`, TTL `WORKER_QUEUE_HEARTBEAT_TTL_SECONDS = 86 400`, written at most every 5 s per queue); worker `/readyz` and the admin worker-readiness script read them. Until bootstrap attached it, no worker wrote one and `/readyz` could never report `stalled`.
 
 ## Operational concerns
 
 - **Worker stall detection**: `BULLMQ_STALLED_INTERVAL_MS = 30 000` and `BULLMQ_DEFAULT_LOCK_DURATION_MS = 30 000`. Webhook delivery uses a longer 60 000 ms lock; retention sweepers use 120 000 ms.
 - **Graceful shutdown**: the worker process drains in-flight jobs and closes connections within `FIFTEEN_SECONDS_MS`. The shutdown-timing util records the exact phase durations for post-incident review.
-- **Connection-budget enforcement**: [worker-runtime/worker-connection-budget.ts](src/infrastructure/queue/worker-runtime/worker-connection-budget.ts) caps the per-process Redis connection count.
+- **Connection-budget enforcement**: [worker-runtime/worker-connection-budget.ts](src/infrastructure/queue/worker-runtime/worker-connection-budget.ts) sums each process's Postgres demand from the registry; the boot check fails a worker whose demand exceeds `DATABASE_POOL_MAX`.
 - **Queue dashboard**: optional Bull Board UI mounted by [queue-dashboard.ts](src/infrastructure/queue/queue-dashboard.ts) when `ENABLE_QUEUE_DASHBOARD=true`. Authenticated; admin-only.
 
 ## External dependencies

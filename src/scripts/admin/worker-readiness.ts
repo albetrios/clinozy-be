@@ -31,9 +31,9 @@ import { closeRedis, connectRedis } from '@/infrastructure/cache/redis.client.js
 import { closeDatabase } from '@/infrastructure/database/connection.js';
 import {
   readWorkerQueueHeartbeats,
-  WORKER_THROUGHPUT_QUEUE_NAMES,
   type WorkerQueueHeartbeat,
 } from '@/infrastructure/queue/worker-runtime/worker-queue-heartbeat.js';
+import { WORKER_THROUGHPUT_QUEUE_NAMES } from '@/infrastructure/queue/queue-catalog.js';
 import { runDependencyReadinessProbes } from '@/shared/utils/infrastructure/readiness-probes.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 

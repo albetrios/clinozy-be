@@ -1240,9 +1240,6 @@ src/
     │   │   │   ├── trace-context.util.unit.test.ts
     │   │   │   └── unhandled-rejection.handler.unit.test.ts
     │   ├── dlq-depth/
-    │   │   ├── __tests__/
-    │   │   │   └── unit/
-    │   │   │   │   └── dlq-depth.coverage.unit.test.ts
     │   │   ├── db-pool-alert.service.ts
     │   │   ├── dlq-depth.constants.ts
     │   │   ├── dlq-depth.service.ts
@@ -1293,12 +1290,14 @@ src/
     ├── queue/
     │   ├── __tests__/
     │   │   └── unit/
+    │   │   │   ├── bootstrap.unit.test.ts
     │   │   │   ├── commit-dispatch-recovery.processor.unit.test.ts
     │   │   │   ├── commit-dispatch.executor.unit.test.ts
     │   │   │   ├── commit-dispatch.store.unit.test.ts
     │   │   │   ├── dlq-auto-retry-circuit.util.unit.test.ts
     │   │   │   ├── dlq-replay.util.unit.test.ts
     │   │   │   ├── poison-job.util.unit.test.ts
+    │   │   │   ├── queue-catalog.coverage.unit.test.ts
     │   │   │   ├── retry-jitter.util.unit.test.ts
     │   │   │   ├── worker-close.util.unit.test.ts
     │   │   │   ├── worker-health.server.unit.test.ts
@@ -1336,6 +1335,7 @@ src/
     │   │   │   │   ├── worker-queue-family.util.unit.test.ts
     │   │   │   │   └── worker-registration.registry.unit.test.ts
     │   │   ├── provider-outage-pause.util.ts
+    │   │   ├── provider-pause.util.ts
     │   │   ├── scheduler-registry-audit.ts
     │   │   ├── shutdown-timing.util.ts
     │   │   ├── worker-close.util.ts
@@ -1351,6 +1351,7 @@ src/
     │   ├── bootstrap.ts
     │   ├── connection.ts
     │   ├── health.ts
+    │   ├── queue-catalog.ts
     │   ├── queue-dashboard.ts
     │   ├── queue.constants.ts
     │   ├── queue.overview.md
@@ -1873,6 +1874,7 @@ src/
     │   │   ├── mail-delivery-lanes.integration.test.ts
     │   │   ├── mail-enqueue-dedupe.integration.test.ts
     │   │   ├── provider-outage-pause.integration.test.ts
+    │   │   ├── readiness-provider-pause.integration.test.ts
     │   │   ├── transactional-outbox.integration.test.ts
     │   │   └── worker-shutdown.integration.test.ts
     │   ├── runtime/
