@@ -23,7 +23,8 @@ what to do, why, and what enforces it. The mechanisms behind the rules are expla
    `src/domains/<domain>/sub-domains/<sub-domain>/queues/<name>.queue.ts` + `<name>.job.schema.ts`.
    Worker and processor: `.../workers/<name>.worker.ts` + `<name>.processor.ts`; a cron's queue name
    in `<name>.constants.ts`. Never in `src/shared/` or `src/infrastructure/` — only the shared
-   machinery is there (connection, scheduler, bootstrap, dead letters, mail, commit dispatch).
+   machinery is there (connection, scheduler, bootstrap, dead letters, mail, commit dispatch, the
+   observability samplers).
 2. Register the worker **once** in
    [`worker-registration.registry.ts`](../../../src/infrastructure/queue/worker-runtime/worker-registration.registry.ts)
    — never start it in `bootstrap.ts`. The entry drives startup, the Postgres connection budget and
