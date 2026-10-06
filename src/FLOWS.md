@@ -115,6 +115,7 @@ sequenceDiagram
 ### Failure modes
 
 - **Wrong password** → 401, generic message; failed-attempt counter incremented.
+- **Too many failed logins from one IP** (50 within 15 minutes of its first failure) → 429 `rate_limited` with `Retry-After` for the rest of that window, for every login from the IP; fails open when Redis errors.
 - **Account locked + wrong password** → `errors:accountLocked` until the lockout window passes; a correct password during the window authenticates and lifts the lock.
 - **MFA challenge expired** → 401 `errors:mfaSessionExpired`; client must re-login.
 - **Disabled or unverified user** → 401 with the appropriate message key; behavior identical to wrong-password from the client's perspective for non-existent emails (anti-enumeration).
@@ -196,7 +197,7 @@ sequenceDiagram
   Inv->>DB: UPDATE member_invitations SET accepted_at=NOW() WHERE token_hash=$1 (atomic, single-use)
   Inv->>DB: UPDATE memberships SET status=ACTIVE, joined_at=NOW() (activateForInvitationAccept)
   Inv->>DB: COMMIT
-  Inv-->>Invitee: 201 {invitation}
+  Inv-->>Invitee: 200 {invitation}
 ```
 
 ### Side effects
@@ -224,7 +225,7 @@ Two paths:
 - **Inbound (authoritative)**: Stripe sends `customer.subscription.updated` → `POST /api/v1/billing/webhook`.
 - **User-initiated**: organization admin calls `POST /api/v1/billing/subscriptions/:subscription_id/change-plan` (active organization from the JWT `org` claim). The service calls Stripe; the inbound webhook lands shortly after and reconciles state.
 
-State changes always flow Stripe webhook → service → DB. We never write subscription state to DB without a Stripe-confirmed webhook behind it.
+A plan change or cancel writes the local row right after Stripe accepts the call (stamping `last_stripe_event_created_at` so an older webhook cannot roll it back); the webhook that follows is authoritative and reconciles anything that drifted.
 
 ### Sequence
 
@@ -267,8 +268,9 @@ sequenceDiagram
 
 - **Invalid Stripe signature** → 400; Stripe retries.
 - **Duplicate `event.id`** → silently no-op (unique constraint); Stripe retries are safe.
-- **Stripe API timeout (user-initiated path)** → response surfaces 502; Stripe will eventually send the webhook and the row reconciles. We do not optimistically write state.
+- **Stripe API timeout or outage (user-initiated path)** → 503 `paymentProviderUnavailable`; nothing is written locally. If Stripe did apply the change, its webhook reconciles the row.
 - **Worker crash mid-processing** → row stuck in `processing`; reclaim worker (`stripe-webhook-event-reclaim.processor`) restarts it after `STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES` (15 min).
+- **Event that keeps failing** → after `STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS` (25) handler attempts — or at once for a permanent failure — the row turns `abandoned` and one alert fires; the reclaim never selects it again.
 - **Stale event** (timestamp older than current row) → service rejects the update so out-of-order webhooks don't roll state backwards.
 
 ## dunning-flow

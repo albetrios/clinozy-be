@@ -266,12 +266,14 @@ describe('completeOAuthUserSession', () => {
 
     await callCompleteOAuthUserSession();
 
-    expect(vi.mocked(ensurePersonalOrganization)).toHaveBeenCalledWith(1);
+    expect(vi.mocked(ensurePersonalOrganization)).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 1, public_id: expect.any(String) }),
+    );
   });
 
   it('still issues a session when personal-organization provisioning fails (best-effort)', async () => {
-    // Provisioning is deliberately best-effort — `tool:backfill-personal-orgs` and the
-    // self-heal path recover a miss. A failure here must never cost the user their login.
+    // Provisioning is deliberately best-effort — the self-heal path recovers a miss. A failure
+    // here must never cost the user their login.
     userService.findByEmail.mockResolvedValue(null);
     vi.mocked(ensurePersonalOrganization).mockRejectedValueOnce(new Error('provisioning down'));
 

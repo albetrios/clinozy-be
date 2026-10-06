@@ -140,6 +140,14 @@ pnpm test:rls-role
 | `*.e2e.test.ts`         | `email-login-flow.e2e.test.ts`        |
 | `*.smoke.test.ts`       | `health.smoke.test.ts`                |
 
+The suffix decides the folder, and the folder decides whether the suite runs at all: each Vitest
+project collects only its own folders (`tooling/vitest/projects.ts`). A `*.unit.test.ts` lives under
+`__tests__/unit/` or `src/tests/unit/`; a `*.integration.test.ts` under `__tests__/integration/` or
+`src/tests/integration/`; `*.db.unit` and `*.property.unit` suites may live anywhere under `src/`
+(their projects collect them anywhere). `pnpm validate:test-naming` fails on any other placement — a
+file outside every project's folders is collected by none and never runs, which is how seven unit
+suites (the mail worker and DLQ auto-retry worker among them) went unexecuted.
+
 ---
 
 ## API version in tests (CI: `pnpm validate:test-api-prefix`)
@@ -205,7 +213,7 @@ See also [api-versioning.md](../api/api-versioning.md).
 2. `beforeAll`: `createTestApp()`; `afterAll`: `await app.close()`.
 3. `beforeEach`: `cleanupDatabase()`; seed permissions if needed.
 4. Per route: 401, 403 (if gated), 200 (204 for DELETE), 400 validation.
-5. Run targeted `pnpm test:*`; stop `pnpm dev` on shared DB before `pnpm test:e2e`.
+5. Run targeted `pnpm test:*`. `pnpm dev` can keep running: local test runs use their own database (`<local database>_test`, created and migrated by the global setup — see `src/tests/helpers/local-test-database.ts`), never the one `pnpm dev` serves. A remote `DATABASE_*URL` in your env files is replaced (main and migration logins) or dropped (operator and maintenance logins), every wipe checks `current_database()` first, and Redis cleanup only ever touches the `<product>:test:` namespace. Provider keys are fakes forced by `src/tests/helpers/harness-provider-env.ts`, which also makes nock refuse every HTTP(S) and `fetch` connection to a non-loopback host — no suite can reach the real Stripe, Resend or S3, even by accident. Stub the client module in a suite that needs a provider call (a call that slips through fails at once with nock's `NetConnectNotAllowedError`).
 
 ---
 
@@ -319,7 +327,7 @@ describe("example.validator", () => {
 - Validator unit tests in `src/tests/unit/` for domain validators
 - Two domains in one `__tests__/` folder
 - Unit-testing services with real database or Redis
-- `pnpm test:e2e` while `pnpm dev` uses the same DB
+- Pointing a local test run at the database `pnpm dev` serves (e.g. `ALLOW_HOSTED_TEST_DATABASE=true` with your dev URL) — every suite truncates all tables with `RESTART IDENTITY`
 - Vitest files under `src/tests/load/` (k6-only)
 - Expecting `coverage/` after `pnpm test` (use `pnpm test:coverage`)
 

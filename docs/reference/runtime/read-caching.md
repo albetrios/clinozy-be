@@ -119,7 +119,6 @@ The asymmetry is what a failed **invalidation** means. For the unread count, it 
 - [ ] Stored shape is JSON-safe — serialize before caching, no `Date` objects or class instances.
 - [ ] Module exports the `getCached…` / `setCached…` / `invalidateCached…` trio and records `read_cache_requests_total{cache,result}`.
 - [ ] Every write choke point for that key invalidates **after commit** — in the API *and* in any worker. A writer that cannot name the scope (a retention sweep deleting by `created_at`) cannot invalidate; say so in the TSDoc, and state which direction the resulting error goes.
-- [ ] Key prefix registered in `TEST_REDIS_PREFIXES` ([`test-redis.ts`](../../../src/tests/helpers/test-redis.ts)). Test teardown recycles ids, so a leftover entry — or its tombstone, which blocks the next `SET NX` — leaks into the next case.
 - [ ] Five tests: a hit serving a value Postgres has since changed; invalidation on each write path; scope isolation with two warm callers; the route's gate (401/403) refusing while the entry is warm; Redis-down fallback.
 
 No environment kill switch. A ≤ 60 s TTL self-heals, and reverting the caller is the switch — a flag would be one more untested branch on a hot path.

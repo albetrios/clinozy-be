@@ -20,6 +20,28 @@ vi.mock('bullmq', () => ({
   },
 }));
 
+// The real factory adds the pause behaviour (its own suites cover it); here it only has to build
+// the worker through the mocked BullMQ above and record which provider the queue pauses for.
+const pausableWorkerState = vi.hoisted(() => ({ provider: undefined as string | undefined }));
+vi.mock('@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js', async () => {
+  const { Worker } = await import('bullmq');
+  return {
+    createProviderPausableWorker: (options: {
+      queueName: string;
+      provider: string;
+      processor: unknown;
+      workerOptions: unknown;
+    }) => {
+      pausableWorkerState.provider = options.provider;
+      return new (Worker as unknown as new (...arguments_: unknown[]) => unknown)(
+        options.queueName,
+        options.processor,
+        options.workerOptions,
+      );
+    },
+  };
+});
+
 vi.mock('@/infrastructure/queue/connection.js', () => ({
   getBullMQKeyPrefix: () => 'test:bull',
   getBullMQConnectionOptions: () => ({}),
@@ -91,6 +113,8 @@ describe('stripe-webhook.worker', () => {
 
     const handle = createStripeWebhookWorker(billingContainer);
     expect(handle.queueName).toBeDefined();
+    // While Stripe is down the queue pauses instead of spending attempts.
+    expect(pausableWorkerState.provider).toBe('stripe');
 
     const { retrieveStripeEvent } = await import('@/infrastructure/payment/stripe.client.js');
     const eventPayload = { id: 'evt_injected', type: 'customer.created', data: { object: {} } };

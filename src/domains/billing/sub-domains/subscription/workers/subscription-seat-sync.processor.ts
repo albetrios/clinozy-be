@@ -26,8 +26,9 @@ export type SubscriptionSeatSyncService = {
  * - **Algorithm:** pure delegate to {@link SubscriptionSeatSyncService.syncSeatQuantityForOrganization},
  *   which phases its own DB contexts around the Stripe call (no checkout held across the round trip).
  *   The worker logs the tenant-scoped boundary; this function just forwards the organization id + idempotency key.
- * - **Failure modes:** a Stripe outage propagates so BullMQ retries with backoff; each enqueue is a
- *   distinct job that re-reads the live member count, so the newest job reconciles the final state.
+ * - **Failure modes:** a Stripe outage propagates so the queue pauses and the job waits it out; each
+ *   run re-reads the live member count, and jobs for one organization never overlap (the queue's
+ *   per-organization deduplication), so the last run to finish read the newest count.
  * - **Side effects:** at most one Stripe update + one local `subscriptions.seats` write per run.
  * - **Notes:** the job carries `organizationPublicId`; the service (not this processor) establishes
  *   the organization RLS context, so no worker repository handle is threaded here.

@@ -11,7 +11,7 @@ What it owns:
 - The `billing.plans`, `billing.subscriptions`, `billing.stripe_webhook_events`, and `billing.stripe_subscription_tombstones` tables.
 - The Stripe client wrapper and webhook signature verification.
 - Idempotent inbound webhook ingestion (the `transactional-outbox` pattern, applied inbound).
-- The user-facing subscription HTTP API (`POST`/`PATCH`; cancellation is `POST .../cancel`, there is no DELETE) that proxies to Stripe.
+- The user-facing subscription HTTP API (create, change-plan, cancel and resume are all `POST`; there is no PATCH or DELETE) that proxies to Stripe.
 
 What it does not own: invoicing UI; customer dunning emails (Stripe's own dunning handles the retries and emails); an audit trail (billing emits no audit events today).
 
@@ -67,21 +67,22 @@ stateDiagram-v2
 
 ## External integrations
 
-- **Stripe** — subscriptions, invoices, customer portal links, webhooks. Wrapped by [src/infrastructure/payment/stripe.client.ts](src/infrastructure/payment/stripe.client.ts) which adds an `opossum` circuit breaker + Sentry instrumentation.
+- **Stripe** — subscriptions, invoices, customer portal links, webhooks. Wrapped by [src/infrastructure/payment/stripe.client.ts](src/infrastructure/payment/stripe.client.ts), which runs every call through `outboundCall` behind the shared Redis-backed `stripe` circuit.
 
 ## Failure modes
 
-- **Stripe API timeout (user-initiated path)** → 502 to the client; subscription state is unchanged in DB; the Stripe webhook arrives later and reconciles.
+- **Stripe API timeout or outage (user-initiated path)** → 503 `paymentProviderUnavailable` (with `Retry-After` while the circuit is open); nothing is written locally; if Stripe did apply the change, its webhook reconciles the row.
 - **Invalid Stripe signature** → 400; Stripe retries with backoff.
 - **Worker crash mid-processing** → row stays in `processing`; reclaim worker (`stripe-webhook-event-reclaim.processor`) restarts after `STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES = 15`.
+- **Event that keeps failing** → abandoned after `STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS = 25` attempts (at once for a permanent failure), with one alert; never reclaimed again until an operator runs `tool:stripe-webhook-replay -- --retry`.
 - **DLQ** — `stripe-webhook-event-reclaim` and `stripe-webhook-event-retention` queues each have a sibling `<name>-dlq` for final-retry failures.
 
 ## Policy constants
 
 See [src/POLICIES.md](src/POLICIES.md) for the full rationale:
 
-- `STUCK_SENDING_LEASE_MINUTES = 15`
 - `STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES = 15`
+- `STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS = 25`
 - `IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS = 86 400` (mirrors Stripe's replay window)
 
 ## Related runbooks

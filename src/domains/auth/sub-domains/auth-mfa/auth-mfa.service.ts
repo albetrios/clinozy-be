@@ -57,10 +57,10 @@ import {
 const ERROR_KEY_MFA_USER_NOT_FOUND = 'errors:mfaUserNotFound';
 const ERROR_KEY_MFA_INVALID_OR_EXPIRED_CODE = 'errors:mfaInvalidOrExpiredCode';
 
-/** Redis key prefix marking a TOTP code consumed by a user, used to reject replay within its validity window. */
+/** Redis key prefix marking a TOTP code consumed by a user (by public id), used to reject replay within its validity window. */
 const MFA_TOTP_CONSUMED_KEY_PREFIX = 'mfa:totp:consumed:';
 
-/** Redis key prefix for the per-user failed-MFA-verification counter (audit-#12 lockout). */
+/** Redis key prefix for the per-user (public id) failed-MFA-verification counter (audit-#12 lockout). */
 const MFA_VERIFICATION_FAILURE_KEY_PREFIX = 'mfa:verify:fail:';
 
 /**
@@ -142,7 +142,7 @@ export class MfaService {
       // burn TOTP attempts to also lock the victim out of their recovery path (victim DoS).
       // route-audit-#4: atomically count this attempt up-front so concurrent guesses can't
       // overspend the budget; a successful verify clears the counter below.
-      await this.consumeMfaVerificationAttempt(user.id);
+      await this.consumeMfaVerificationAttempt(user.public_id);
       // auth.auth_methods is FORCE RLS (audit #7); pin the owner context for every credential
       // read/write — the MFA session already authenticated this user.
       const totpMethod = await withAppDatabaseContext(
@@ -161,7 +161,7 @@ export class MfaService {
         // The attempt was already counted in consumeMfaVerificationAttempt above (route-audit-#4).
         throw new UnauthorizedError(ERROR_KEY_MFA_INVALID_OR_EXPIRED_CODE);
       }
-      await this.rejectReplayedTotpCode(user.id, parsed.totp_code);
+      await this.rejectReplayedTotpCode(user.public_id, parsed.totp_code);
       await withAppDatabaseContext(PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }), () =>
         this.authMethodService.updateAuthMethodLastUsedAt(totpMethod.id, user.id),
       );
@@ -189,7 +189,7 @@ export class MfaService {
     }
 
     // audit-#12: successful second factor clears the failure counter.
-    await this.clearMfaVerificationFailures(user.id);
+    await this.clearMfaVerificationFailures(user.public_id);
     const issued = await this.issueAccessTokenAndSession(user, ipAddress, userAgent);
     // Surface the factor so the handler can audit recovery-code use (the TOTP-bypass break-glass
     // path) distinctly from a normal TOTP second factor.
@@ -202,9 +202,9 @@ export class MfaService {
    * requests carrying the same valid code cannot both succeed; a replay surfaces
    * as the generic invalid-code error to avoid leaking that the code was valid.
    */
-  private async rejectReplayedTotpCode(userId: number, totpCode: string): Promise<void> {
+  private async rejectReplayedTotpCode(userPublicId: string, totpCode: string): Promise<void> {
     const codeHash = createHash('sha256').update(totpCode).digest('hex');
-    const key = `${MFA_TOTP_CONSUMED_KEY_PREFIX}${userId}:${codeHash}`;
+    const key = `${MFA_TOTP_CONSUMED_KEY_PREFIX}${userPublicId}:${codeHash}`;
     const stored = await this.redis.set(key, '1', 'EX', MFA_TOTP_CODE_REPLAY_TTL_SECONDS, 'NX');
     if (stored === null) {
       throw new UnauthorizedError(ERROR_KEY_MFA_INVALID_OR_EXPIRED_CODE);
@@ -226,8 +226,8 @@ export class MfaService {
    * {@link clearMfaVerificationFailures}), so legitimate retries never lock out. The response
    * stays the generic invalid-code error so the lockout is not an oracle; the lockout is logged.
    */
-  private async consumeMfaVerificationAttempt(userId: number): Promise<void> {
-    const key = `${MFA_VERIFICATION_FAILURE_KEY_PREFIX}${userId}`;
+  private async consumeMfaVerificationAttempt(userPublicId: string): Promise<void> {
+    const key = `${MFA_VERIFICATION_FAILURE_KEY_PREFIX}${userPublicId}`;
     // Atomic INCR + first-increment EXPIRE (route-audit C5) — a crash between a separate INCR and
     // EXPIRE would otherwise leave a no-TTL counter that locks the user out indefinitely.
     const count = await incrementWithExpiryOnFirst(
@@ -236,14 +236,14 @@ export class MfaService {
       MFA_VERIFICATION_LOCKOUT_TTL_SECONDS,
     );
     if (count > MAX_MFA_VERIFICATION_ATTEMPTS) {
-      logger.warn({ userId }, 'auth.mfa.verification_locked_out');
+      logger.warn({ userPublicId }, 'auth.mfa.verification_locked_out');
       throw new UnauthorizedError(ERROR_KEY_MFA_INVALID_OR_EXPIRED_CODE);
     }
   }
 
   /** Clears the per-user verification-attempt counter after a successful verification. */
-  private async clearMfaVerificationFailures(userId: number): Promise<void> {
-    await this.redis.del(`${MFA_VERIFICATION_FAILURE_KEY_PREFIX}${userId}`);
+  private async clearMfaVerificationFailures(userPublicId: string): Promise<void> {
+    await this.redis.del(`${MFA_VERIFICATION_FAILURE_KEY_PREFIX}${userPublicId}`);
   }
 
   private async issueAccessTokenAndSession(
@@ -301,7 +301,7 @@ export class MfaService {
     if (!user) throw new UnauthorizedError(ERROR_KEY_MFA_USER_NOT_FOUND);
     // audit-#12 / route-audit-#4: atomically count this attempt up-front and reject once the
     // per-user budget is exhausted — concurrent guesses can no longer overspend it.
-    await this.consumeMfaVerificationAttempt(user.id);
+    await this.consumeMfaVerificationAttempt(user.public_id);
     const totpMethod = await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
       () => this.authMethodService.findTotpByUserId(user.id),
@@ -318,9 +318,9 @@ export class MfaService {
       // Already counted in consumeMfaVerificationAttempt above (route-audit-#4).
       throw new UnauthorizedError(ERROR_KEY_MFA_INVALID_OR_EXPIRED_CODE);
     }
-    await this.rejectReplayedTotpCode(user.id, parsed.code);
+    await this.rejectReplayedTotpCode(user.public_id, parsed.code);
     // audit-#12: successful step-up clears the failure counter.
-    await this.clearMfaVerificationFailures(user.id);
+    await this.clearMfaVerificationFailures(user.public_id);
     await withAppDatabaseContext(PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }), () =>
       this.authMethodService.updateAuthMethodLastUsedAt(totpMethod.id, user.id),
     );
@@ -425,7 +425,7 @@ export class MfaService {
 
     // Mark the code consumed so it can't double as both an enroll-verify and an
     // immediate step-up verify within the replay window.
-    await this.rejectReplayedTotpCode(user.id, parsed.code);
+    await this.rejectReplayedTotpCode(user.public_id, parsed.code);
 
     const plaintextRecoveryCodes = generateMfaRecoveryCodes(MFA_RECOVERY_CODE_COUNT);
     const recoveryCodeHashes = plaintextRecoveryCodes.map(hashMfaRecoveryCode);

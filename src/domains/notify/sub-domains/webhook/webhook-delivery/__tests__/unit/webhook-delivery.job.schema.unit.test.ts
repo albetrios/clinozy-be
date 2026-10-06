@@ -14,7 +14,7 @@ import { webhookDeliveryJobDataSchema } from '@/domains/notify/sub-domains/webho
  */
 describe('webhookDeliveryJobDataSchema', () => {
   const validPayload = {
-    deliveryAttemptId: 7,
+    deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
     organizationPublicId: 'org_abcdefghijklmnopqrstu',
     requestId: 'request-1',
   };
@@ -24,7 +24,7 @@ describe('webhookDeliveryJobDataSchema', () => {
 
     expect(parsed.success).toBe(true);
     expect(parsed.success && parsed.data).toMatchObject({
-      deliveryAttemptId: 7,
+      deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
       organizationPublicId: 'org_abcdefghijklmnopqrstu',
       requestId: 'request-1',
     });
@@ -32,7 +32,7 @@ describe('webhookDeliveryJobDataSchema', () => {
 
   it('accepts a payload without the optional requestId', () => {
     const parsed = webhookDeliveryJobDataSchema.safeParse({
-      deliveryAttemptId: 7,
+      deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
       organizationPublicId: 'org_abcdefghijklmnopqrstu',
     });
 
@@ -56,7 +56,7 @@ describe('webhookDeliveryJobDataSchema', () => {
     });
   });
 
-  it('rejects a payload with no deliveryAttemptId', () => {
+  it('rejects a payload with no deliveryAttemptPublicId', () => {
     const parsed = webhookDeliveryJobDataSchema.safeParse({
       organizationPublicId: 'org_abcdefghijklmnopqrstu',
     });
@@ -68,7 +68,7 @@ describe('webhookDeliveryJobDataSchema', () => {
     // The worker opens withAppDatabaseContext from this value. A null here would mean the
     // attempt row is read outside the RLS scope it belongs to.
     const parsed = webhookDeliveryJobDataSchema.safeParse({
-      deliveryAttemptId: 7,
+      deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
       organizationPublicId: null,
     });
 
@@ -77,26 +77,35 @@ describe('webhookDeliveryJobDataSchema', () => {
 
   it.each([
     [
-      'a string deliveryAttemptId',
-      { deliveryAttemptId: '7', organizationPublicId: 'org_abcdefghijklmnopqrstu' },
+      'a numeric attempt id (a bigserial never travels in a job)',
+      { deliveryAttemptPublicId: 7, organizationPublicId: 'org_abcdefghijklmnopqrstu' },
     ],
     [
-      'a fractional deliveryAttemptId',
-      { deliveryAttemptId: 2.5, organizationPublicId: 'org_abcdefghijklmnopqrstu' },
+      'an empty deliveryAttemptPublicId',
+      { deliveryAttemptPublicId: '', organizationPublicId: 'org_abcdefghijklmnopqrstu' },
     ],
     [
-      'a zero deliveryAttemptId',
-      { deliveryAttemptId: 0, organizationPublicId: 'org_abcdefghijklmnopqrstu' },
+      'an over-long deliveryAttemptPublicId',
+      {
+        deliveryAttemptPublicId: 'w'.repeat(29),
+        organizationPublicId: 'org_abcdefghijklmnopqrstu',
+      },
     ],
-    ['an empty organizationPublicId', { deliveryAttemptId: 7, organizationPublicId: '' }],
+    [
+      'an empty organizationPublicId',
+      { deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym', organizationPublicId: '' },
+    ],
     [
       'an over-long organizationPublicId',
-      { deliveryAttemptId: 7, organizationPublicId: 'o'.repeat(29) },
+      {
+        deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
+        organizationPublicId: 'o'.repeat(29),
+      },
     ],
     [
       'an over-long requestId',
       {
-        deliveryAttemptId: 7,
+        deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
         organizationPublicId: 'org_abcdefghijklmnopqrstu',
         requestId: 'r'.repeat(129),
       },

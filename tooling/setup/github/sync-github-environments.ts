@@ -371,10 +371,11 @@ export function selectOnlyEntries<T extends { name: string; value: string }>(
  * keys the sync treats as secrets.
  */
 function classifyKey(key: string): 'secret' | 'variable' {
-  // Credential / signing material suffixes → Secret
+  // Credential / signing material suffixes → Secret (`_SECRET` covers every client, webhook and
+  // provider secret — CAPTCHA_SECRET, OAUTH_*_CLIENT_SECRET, STRIPE_WEBHOOK_SECRET, …)
+  if (key.endsWith('_SECRET')) return 'secret';
   if (key.endsWith('_API_KEY')) return 'secret';
   if (key.endsWith('_SECRET_KEY')) return 'secret';
-  if (key.endsWith('_WEBHOOK_SECRET')) return 'secret';
   if (key.endsWith('_PRIVATE_KEY')) return 'secret';
   if (key.endsWith('_ACCESS_KEY_ID')) return 'secret';
   if (key.endsWith('_SECRET_ACCESS_KEY')) return 'secret';
@@ -392,11 +393,6 @@ function classifyKey(key: string): 'secret' | 'variable' {
   if (key === 'DATABASE_MAINTENANCE_URL') return 'secret';
   if (key === 'DATABASE_OPERATOR_URL') return 'secret';
   if (key === 'REDIS_URL' || key === 'REDIS_BULLMQ_URL') return 'secret';
-
-  // Auth secrets → Secret
-  if (key === 'JWT_SECRET') return 'secret';
-  if (key.endsWith('_CLIENT_SECRET')) return 'secret';
-  if (key === 'CAPTCHA_SECRET') return 'secret';
 
   // Everything else → Variable (public ids, knobs, flags, URLs, keys with _PUBLIC_KEY, etc.)
   return 'variable';

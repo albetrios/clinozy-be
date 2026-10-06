@@ -78,9 +78,14 @@ describe('redis-set-ttl policy', () => {
     const { total, missingTtlBeforeAllowlist } = scanRedisSets();
     // There are well over a dozen Redis SET sites; a near-zero count means the detector broke.
     expect(total).toBeGreaterThan(10);
-    // The only no-TTL SET today is the allowlisted cardinality counter — proving the allowlist is live.
-    expect(missingTtlBeforeAllowlist).toContain(
-      'src/infrastructure/observability/idempotency-cardinality/idempotency-cardinality.service.ts:98',
-    );
+    // The only no-TTL SET today is the allowlisted cardinality counter — proving the allowlist is
+    // live. Matched by file, not line: an unrelated edit above the call must not fail this.
+    expect(
+      missingTtlBeforeAllowlist.some((location) =>
+        location.startsWith(
+          'src/infrastructure/observability/idempotency-cardinality/idempotency-cardinality.service.ts:',
+        ),
+      ),
+    ).toBe(true);
   });
 });

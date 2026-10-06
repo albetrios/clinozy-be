@@ -115,6 +115,7 @@ interface OutboxRowOverride {
   target_user_public_id?: string | null;
   organization_public_id?: string | null;
   attempt_count?: number;
+  metadata?: Record<string, unknown>;
 }
 
 function buildOutboxRow(overrides: OutboxRowOverride = {}): Record<string, unknown> {
@@ -140,7 +141,7 @@ function buildOutboxRow(overrides: OutboxRowOverride = {}): Record<string, unkno
     ip_address: '203.0.113.1',
     user_agent: 'test/1.0',
     severity: 'INFO',
-    metadata: {},
+    metadata: overrides.metadata ?? {},
     attempt_count: overrides.attempt_count ?? 1,
     last_error: null,
     created_at: new Date(),
@@ -278,6 +279,53 @@ describe('runAuditOutboxDrainJob', () => {
     expect(drainRepositoryMock.markPermanentlyFailed).toHaveBeenCalledExactlyOnceWith(
       105,
       expect.stringMatching(/organization_public_id org_gone did not resolve/),
+    );
+    expect(databaseHandle.insert).not.toHaveBeenCalled();
+  });
+
+  it('drains a declared-anonymous pre-authentication row (failed login) with null actors', async () => {
+    // auth.login_failure has no actor by design; it declares metadata.actor_kind = 'anonymous'.
+    // Treating "no actor" as "actor did not resolve" failed every one of these rows.
+    const row = buildOutboxRow({
+      id: 107,
+      action: 'auth.login_failure',
+      actor_user_public_id: null,
+      organization_public_id: null,
+      metadata: { source: 'password', actor_kind: 'anonymous' },
+    });
+    drainRepositoryMock.claimPendingBatch.mockResolvedValueOnce([row]);
+    let insertedRow: Record<string, unknown> | undefined;
+    const databaseHandle = buildDatabaseHandle({}, {}, {}, async (values) => {
+      insertedRow = values;
+    });
+
+    const result = await runAuditOutboxDrainJob(databaseHandle as never);
+
+    expect(result).toEqual({ drained: 1, transientFailed: 0, permanentlyFailed: 0 });
+    expect(insertedRow).toMatchObject({
+      action: 'auth.login_failure',
+      actor_user_id: null,
+      actor_api_key_id: null,
+      metadata: { source: 'password', actor_kind: 'anonymous' },
+    });
+    expect(drainRepositoryMock.markProcessed).toHaveBeenCalledExactlyOnceWith([107]);
+  });
+
+  it('still fails an actorless row that does NOT declare itself anonymous', async () => {
+    const row = buildOutboxRow({
+      id: 108,
+      actor_user_public_id: null,
+      organization_public_id: null,
+    });
+    drainRepositoryMock.claimPendingBatch.mockResolvedValueOnce([row]);
+    const databaseHandle = buildDatabaseHandle({}, {}, {});
+
+    const result = await runAuditOutboxDrainJob(databaseHandle as never);
+
+    expect(result).toEqual({ drained: 0, transientFailed: 0, permanentlyFailed: 1 });
+    expect(drainRepositoryMock.markPermanentlyFailed).toHaveBeenCalledExactlyOnceWith(
+      108,
+      expect.stringMatching(/actor public_id did not resolve/),
     );
     expect(databaseHandle.insert).not.toHaveBeenCalled();
   });

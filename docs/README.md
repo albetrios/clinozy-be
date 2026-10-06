@@ -161,6 +161,7 @@ Grouped index: **[deployment/README.md](deployment/README.md)** (`setup/`, `ci-c
 | [reference/data/user-data-export.md](reference/data/user-data-export.md)                                           | Async GDPR export to S3, presigned download, offboarding cleanup.                      |
 | [reference/data/migrations.md](reference/data/migrations.md) | Migration authoring, safety rules, and the migrate runner. |
 | [reference/runtime/workers-and-events.md](reference/runtime/workers-and-events.md) | In-process event bus vs BullMQ workers; registration paths. |
+| [reference/runtime/queue-and-worker-rules.md](reference/runtime/queue-and-worker-rules.md) | Every rule for adding a queue, worker, cron or sweep — job identity, enqueue after commit, provider pause, lost-enqueue sweeps, capacity — and what enforces each. |
 | [reference/security/authentication.md](reference/security/authentication.md)                                       | Auth methods, rate limits, CAPTCHA (Turnstile) production boot guard.                  |
 | [reference/security/csrf-and-session-cookies.md](reference/security/csrf-and-session-cookies.md)                   | Session cookie CSRF posture and Origin checks.                                         |
 | [reference/security/route-flow-audit-remediation.md](reference/security/route-flow-audit-remediation.md)           | Route-flow audit fixes, regression tests, and deferred-item plans.                     |

@@ -3,6 +3,12 @@
 export const PAGINATION = {
   DEFAULT_LIMIT: 25,
   MAX_LIMIT: 100,
+  /**
+   * Longest `after` cursor accepted. An encrypted cursor carrying the longest sort value (a
+   * 255-character name) and the filter fingerprint is about 650 characters; anything far longer
+   * was not minted here.
+   */
+  MAX_CURSOR_LENGTH: 1024,
 } as const;
 
 /**

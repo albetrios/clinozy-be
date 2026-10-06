@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { resetEnvCacheForTests } from '@/shared/config/env.config.js';
-import { UnauthorizedError } from '@/shared/errors/index.js';
+import { ExternalServiceError } from '@/infrastructure/outbound/outbound-error.js';
+import { ServiceUnavailableError, UnauthorizedError } from '@/shared/errors/index.js';
 import { captchaPreHandler } from '@/shared/middlewares/security/captcha.middleware.js';
 
 const verifyTurnstileTokenMock = vi.hoisted(() => vi.fn());
@@ -79,24 +80,87 @@ describe('captchaPreHandler', () => {
     });
   });
 
-  it('turnstile outage (verify throws) fails CLOSED when CAPTCHA_FAIL_OPEN=false', async () => {
+  it('refuses a token Cloudflare rejects with captchaInvalid (401)', async () => {
+    process.env.CAPTCHA_PROVIDER = 'turnstile';
+    process.env.CAPTCHA_SECRET = 'secret';
+    resetEnvCacheForTests();
+    verifyTurnstileTokenMock.mockResolvedValue({ success: false });
+
+    await expect(
+      captchaPreHandler(buildRequest({ 'x-captcha-token': 'tok' }), {} as FastifyReply),
+    ).rejects.toMatchObject({ statusCode: 401, messageKey: 'errors:captchaInvalid' });
+  });
+
+  it('turnstile outage fails CLOSED with a 503 when CAPTCHA_FAIL_OPEN=false — not a "bad captcha" 401', async () => {
     process.env.CAPTCHA_PROVIDER = 'turnstile';
     process.env.CAPTCHA_SECRET = 'secret';
     process.env.CAPTCHA_FAIL_OPEN = 'false';
     resetEnvCacheForTests();
-    verifyTurnstileTokenMock.mockRejectedValue(new Error('turnstile network error'));
+    verifyTurnstileTokenMock.mockRejectedValue(
+      new ExternalServiceError({ integration: 'captcha-turnstile', category: 'network' }),
+    );
+
+    const error = await captchaPreHandler(
+      buildRequest({ 'x-captcha-token': 'tok' }),
+      {} as FastifyReply,
+    ).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ServiceUnavailableError);
+    expect(error).toMatchObject({
+      statusCode: 503,
+      messageKey: 'errors:captchaProviderUnavailable',
+    });
+    expect((error as ServiceUnavailableError).retryAfterSeconds).toBeUndefined();
+  });
+
+  it('an open Turnstile circuit answers 503 with Retry-After when CAPTCHA_FAIL_OPEN=false', async () => {
+    process.env.CAPTCHA_PROVIDER = 'turnstile';
+    process.env.CAPTCHA_SECRET = 'secret';
+    process.env.CAPTCHA_FAIL_OPEN = 'false';
+    resetEnvCacheForTests();
+    verifyTurnstileTokenMock.mockRejectedValue(
+      new ExternalServiceError({
+        integration: 'captcha-turnstile',
+        category: 'circuit_open',
+        retryAfterMs: 12_300,
+      }),
+    );
 
     await expect(
       captchaPreHandler(buildRequest({ 'x-captcha-token': 'tok' }), {} as FastifyReply),
-    ).rejects.toBeInstanceOf(UnauthorizedError);
+    ).rejects.toMatchObject({
+      statusCode: 503,
+      messageKey: 'errors:captchaProviderUnavailable',
+      retryAfterSeconds: 13,
+    });
   });
 
-  it('turnstile outage (verify throws) fails OPEN (skips) when CAPTCHA_FAIL_OPEN=true', async () => {
+  it('turnstile outage fails OPEN (skips) when CAPTCHA_FAIL_OPEN=true', async () => {
     process.env.CAPTCHA_PROVIDER = 'turnstile';
     process.env.CAPTCHA_SECRET = 'secret';
     process.env.CAPTCHA_FAIL_OPEN = 'true';
     resetEnvCacheForTests();
-    verifyTurnstileTokenMock.mockRejectedValue(new Error('turnstile network error'));
+    verifyTurnstileTokenMock.mockRejectedValue(
+      new ExternalServiceError({ integration: 'captcha-turnstile', category: 'timeout' }),
+    );
+
+    await expect(
+      captchaPreHandler(buildRequest({ 'x-captcha-token': 'tok' }), {} as FastifyReply),
+    ).resolves.toBeUndefined();
+  });
+
+  it('an open Turnstile circuit honours CAPTCHA_FAIL_OPEN=true too — it is the same outage', async () => {
+    process.env.CAPTCHA_PROVIDER = 'turnstile';
+    process.env.CAPTCHA_SECRET = 'secret';
+    process.env.CAPTCHA_FAIL_OPEN = 'true';
+    resetEnvCacheForTests();
+    verifyTurnstileTokenMock.mockRejectedValue(
+      new ExternalServiceError({
+        integration: 'captcha-turnstile',
+        category: 'circuit_open',
+        retryAfterMs: 5_000,
+      }),
+    );
 
     await expect(
       captchaPreHandler(buildRequest({ 'x-captcha-token': 'tok' }), {} as FastifyReply),

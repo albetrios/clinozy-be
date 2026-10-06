@@ -26,18 +26,24 @@ describe('Integration: trace context propagation to BullMQ', () => {
     const { enqueueNotification } = await import(
       '@/domains/notify/sub-domains/notification/queues/notification.queue.js'
     );
-    await enqueueNotification(42, 'org_public_123', 'req-correlation-abc');
+    await enqueueNotification({
+      notificationPublicId: 'ntf_9z3rura5kqvcv8zggriym',
+      organizationPublicId: 'org_public_123',
+      userPublicId: 'usr_0y8vf3ktxqnhcm1ze21ab',
+      requestId: 'req-correlation-abc',
+    });
 
     expect(addMock).toHaveBeenCalledWith(
       'dispatch-notification',
       expect.objectContaining({
-        notificationId: 42,
+        notificationPublicId: 'ntf_9z3rura5kqvcv8zggriym',
         organizationPublicId: 'org_public_123',
         requestId: 'req-correlation-abc',
       }),
-      // enqueueNotification dedupes on a stable jobId (audit PR-5, commit f5649a2)
-      // so a redelivery of the same persisted notification is a BullMQ no-op.
-      expect.objectContaining({ jobId: 'notification-42' }),
+      // enqueueNotification dedupes on a stable jobId (audit PR-5, commit f5649a2) so a
+      // redelivery of the same persisted notification is a BullMQ no-op — the notification's
+      // public id, which stays unique when the bigserial restarts.
+      expect.objectContaining({ jobId: 'ntf_9z3rura5kqvcv8zggriym' }),
     );
   });
 });

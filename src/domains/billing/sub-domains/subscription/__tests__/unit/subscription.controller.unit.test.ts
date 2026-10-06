@@ -6,9 +6,16 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import type { SubscriptionService } from '@/domains/billing/sub-domains/subscription/subscription.service.js';
 import { attachPrincipalScope } from '@/tests/helpers/principal-scope.helper.js';
 
+/** The active organization every fake request's token claims (no route carries one). */
+const ACTIVE_ORGANIZATION_PUBLIC_ID = generatePublicId('organization');
 function mockRequest(overrides: Partial<FastifyRequest> = {}): never {
   return attachPrincipalScope({
-    auth: { userId: generatePublicId('user'), role: 'user' },
+    auth: {
+      kind: 'user',
+      userId: generatePublicId('user'),
+      role: 'user',
+      organizationPublicId: ACTIVE_ORGANIZATION_PUBLIC_ID,
+    },
     params: {},
     body: {},
     headers: {},
@@ -23,7 +30,7 @@ function mockReply(): FastifyReply {
 }
 
 describe('createSubscriptionController', () => {
-  const organizationPublicId = generatePublicId('organization');
+  const organizationPublicId = ACTIVE_ORGANIZATION_PUBLIC_ID;
   const subscriptionPublicId = generatePublicId('subscription');
   const service = {
     list: vi.fn().mockResolvedValue([]),
@@ -45,17 +52,14 @@ describe('createSubscriptionController', () => {
   const controller = createSubscriptionController(service);
 
   it('listSubscriptions delegates to service', async () => {
-    const response = await controller.listSubscriptions(
-      mockRequest({ params: { organization_id: organizationPublicId } }),
-      mockReply(),
-    );
+    const response = await controller.listSubscriptions(mockRequest({ params: {} }), mockReply());
     expect(service.list).toHaveBeenCalledWith(expect.objectContaining({ organizationPublicId }));
     expect(response).toMatchObject({ data: [] });
   });
 
   it('listInvoices maps the service page into a paginated envelope', async () => {
     const response = await controller.listInvoices(
-      mockRequest({ params: { organization_id: organizationPublicId }, query: { limit: 25 } }),
+      mockRequest({ params: {}, query: { limit: 25 } }),
       mockReply(),
     );
     // The Stripe cursor + limit are validated in the service; the controller forwards request.query.
@@ -72,7 +76,7 @@ describe('createSubscriptionController', () => {
   it('getSubscription delegates to service', async () => {
     await controller.getSubscription(
       mockRequest({
-        params: { organization_id: organizationPublicId, subscription_id: subscriptionPublicId },
+        params: { subscription_id: subscriptionPublicId },
       }),
       mockReply(),
     );
@@ -85,7 +89,7 @@ describe('createSubscriptionController', () => {
   it('createSubscription forwards the idempotency key to service.create', async () => {
     await controller.createSubscription(
       mockRequest({
-        params: { organization_id: organizationPublicId },
+        params: {},
         body: { plan_id: generatePublicId('plan'), billing_cycle: 'monthly' },
         headers: { 'x-idempotency-key': 'idem-key-123456789012' },
       }),
@@ -100,21 +104,10 @@ describe('createSubscriptionController', () => {
     expect(createCall?.[3]).toBe('idem-key-123456789012');
   });
 
-  it('updateSubscription delegates to service', async () => {
-    await controller.updateSubscription(
-      mockRequest({
-        params: { organization_id: organizationPublicId, subscription_id: subscriptionPublicId },
-        body: { cancel_at_period_end: true },
-      }),
-      mockReply(),
-    );
-    expect(service.update).toHaveBeenCalled();
-  });
-
   it('changePlan passes idempotency key to service', async () => {
     await controller.changePlan(
       mockRequest({
-        params: { organization_id: organizationPublicId, subscription_id: subscriptionPublicId },
+        params: { subscription_id: subscriptionPublicId },
         body: { plan_id: generatePublicId('plan') },
         headers: { 'x-idempotency-key': 'idem-key-123456789012' },
       }),
@@ -131,7 +124,7 @@ describe('createSubscriptionController', () => {
   it('cancelSubscription passes idempotency key to service', async () => {
     await controller.cancelSubscription(
       mockRequest({
-        params: { organization_id: organizationPublicId, subscription_id: subscriptionPublicId },
+        params: { subscription_id: subscriptionPublicId },
         headers: { 'x-idempotency-key': 'idem-key-123456789012' },
       }),
       mockReply(),
@@ -146,7 +139,7 @@ describe('createSubscriptionController', () => {
   it('resumeSubscription passes idempotency key to service', async () => {
     await controller.resumeSubscription(
       mockRequest({
-        params: { organization_id: organizationPublicId, subscription_id: subscriptionPublicId },
+        params: { subscription_id: subscriptionPublicId },
         headers: { 'x-idempotency-key': 'idem-key-123456789012' },
       }),
       mockReply(),
@@ -174,21 +167,6 @@ describe('createSubscriptionController', () => {
           await controller.getSubscription(
             mockRequest({
               params: {
-                organization_id: organizationPublicId,
-                subscription_id: malformedSubscriptionId,
-              },
-            }),
-            mockReply(),
-          );
-        },
-      ],
-      [
-        'updateSubscription',
-        async () => {
-          await controller.updateSubscription(
-            mockRequest({
-              params: {
-                organization_id: organizationPublicId,
                 subscription_id: malformedSubscriptionId,
               },
             }),
@@ -202,7 +180,6 @@ describe('createSubscriptionController', () => {
           await controller.changePlan(
             mockRequest({
               params: {
-                organization_id: organizationPublicId,
                 subscription_id: malformedSubscriptionId,
               },
               headers: { 'x-idempotency-key': 'idem-key-123456789012' },
@@ -217,7 +194,6 @@ describe('createSubscriptionController', () => {
           await controller.cancelSubscription(
             mockRequest({
               params: {
-                organization_id: organizationPublicId,
                 subscription_id: malformedSubscriptionId,
               },
               headers: { 'x-idempotency-key': 'idem-key-123456789012' },
@@ -232,7 +208,6 @@ describe('createSubscriptionController', () => {
           await controller.resumeSubscription(
             mockRequest({
               params: {
-                organization_id: organizationPublicId,
                 subscription_id: malformedSubscriptionId,
               },
               headers: { 'x-idempotency-key': 'idem-key-123456789012' },

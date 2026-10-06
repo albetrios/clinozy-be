@@ -1,8 +1,4 @@
-import { Worker } from 'bullmq';
-import {
-  getBullMQConnectionOptions,
-  getBullMQKeyPrefix,
-} from '@/infrastructure/queue/connection.js';
+import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
 import { getDefaultWorkerOptions } from '@/infrastructure/queue/worker-runtime/worker-options.js';
 import { processMailOutboxJob } from '@/infrastructure/mail/workers/mail.processor.js';
 import {
@@ -17,7 +13,10 @@ import { runWithPropagatedTraceContext } from '@/infrastructure/observability/tr
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import { buildWorkerHandle } from '@/infrastructure/queue/worker-runtime/worker-close.util.js';
+import { createProviderPausableWorker } from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
 import { getWorkerConcurrencyMail } from '@/shared/config/worker-concurrency.util.js';
+import { env } from '@/shared/config/env.config.js';
+import { MILLISECONDS_PER_SECOND } from '@/shared/constants/ttl.constants.js';
 import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
 
 /**
@@ -27,9 +26,13 @@ import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
  * @remarks
  * - **Algorithm:** parses + validates the job payload with `mailJobDataSchema`,
  *   then invokes the processor with BullMQ attempt metadata so terminal-attempt
- *   semantics are correct; concurrency is set from `WORKER_CONCURRENCY_MAIL`.
- * - **Failure modes:** schema-validation failures bubble to BullMQ (retried per
- *   the queue's default attempts); transient Resend errors are retried via the
+ *   semantics are correct; concurrency is set from `WORKER_CONCURRENCY_MAIL`, and the queue's
+ *   limiter paces sends to `RESEND_MAX_REQUESTS_PER_SECOND` across every replica, so a burst is
+ *   spread out instead of tripping Resend's rate limit.
+ * - **Failure modes:** a malformed payload is dead-lettered at once
+ *   (`parseJobDataOrDeadLetter`). While Resend is down the queue pauses on every replica and
+ *   probes every five minutes, spending no attempt (`createProviderPausableWorker`); a Resend
+ *   throttle pauses it for the `Retry-After` instead; other send errors are retried via the
  *   custom `mailBackoffStrategy`; final failures land in the per-source DLQ.
  * - **Side effects:** see processor — talks to Postgres (`auth.mail_outbox`)
  *   and Resend HTTP; logs `mail.worker.{stalled,completed}`.
@@ -37,9 +40,11 @@ import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
  *   can stop it cleanly on shutdown.
  */
 export function createMailWorker(): WorkerHandle {
-  const worker = new Worker<MailJobData>(
-    MAIL_QUEUE_NAME,
-    async (job) => {
+  const worker = createProviderPausableWorker<MailJobData>({
+    queueName: MAIL_QUEUE_NAME,
+    provider: 'resend',
+    limiter: { max: env.RESEND_MAX_REQUESTS_PER_SECOND, duration: MILLISECONDS_PER_SECOND },
+    processor: async (job) => {
       const jobData = await parseJobDataOrDeadLetter({
         schema: mailJobDataSchema,
         job,
@@ -58,16 +63,15 @@ export function createMailWorker(): WorkerHandle {
         ),
       );
     },
-    {
+    workerOptions: {
       connection: getBullMQConnectionOptions(),
-      prefix: getBullMQKeyPrefix(),
       concurrency: getWorkerConcurrencyMail(),
       ...getDefaultWorkerOptions(),
       settings: {
         backoffStrategy: mailBackoffStrategy,
       },
     },
-  );
+  });
 
   worker.on('stalled', (jobId) => {
     logger.warn({ jobId, queue: MAIL_QUEUE_NAME }, 'mail.worker.stalled');

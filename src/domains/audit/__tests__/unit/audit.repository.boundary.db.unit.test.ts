@@ -3,6 +3,7 @@ import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { sql } from '@/infrastructure/database/connection.js';
 import { AuditRepository } from '@/domains/audit/audit.repository.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 const ACTION = 'audit.boundary.test';
 const RESOURCE_TYPE = 'audit-boundary';
@@ -12,8 +13,9 @@ const RESOURCE_TYPE = 'audit-boundary';
  */
 async function insertAuditLogAt(actorUserId: number, createdAt: Date): Promise<number> {
   const rows = await sql<{ id: number }[]>`
-    INSERT INTO audit.logs (actor_user_id, action, resource_type, resource_id, created_at)
+    INSERT INTO audit.logs (public_id, actor_user_id, action, resource_type, resource_id, created_at)
     VALUES (
+      ${generatePublicId('auditLog')},
       ${actorUserId},
       ${ACTION},
       ${RESOURCE_TYPE},

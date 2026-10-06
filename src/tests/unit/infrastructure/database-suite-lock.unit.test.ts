@@ -8,8 +8,9 @@ import { PROJECT_SLUG } from '@/shared/constants/project-identity.constants.js';
 
 const TEST_DATABASE_URL = 'postgresql://lock-spec@localhost:5432/lock-spec';
 
-function lockPathFor(databaseUrl: string): string {
-  const fingerprint = createHash('sha256').update(databaseUrl).digest('hex').slice(0, 12);
+/** The lock file for a database target — `local/<database>` for any loopback login and port. */
+function lockPathFor(target: string): string {
+  const fingerprint = createHash('sha256').update(target).digest('hex').slice(0, 12);
   return join(tmpdir(), `${PROJECT_SLUG}-test-database-${fingerprint}.lock`);
 }
 
@@ -18,7 +19,7 @@ const IMPOSSIBLE_PID = 2_147_483_646;
 
 describe('database suite lock', () => {
   const originalDatabaseUrl = process.env.DATABASE_URL;
-  const lockPath = lockPathFor(TEST_DATABASE_URL);
+  const lockPath = lockPathFor('local/lock-spec');
 
   beforeEach(() => {
     process.env.DATABASE_URL = TEST_DATABASE_URL;
@@ -89,7 +90,7 @@ describe('database suite lock', () => {
     const release = acquireDatabaseSuiteLock();
 
     process.env.DATABASE_URL = 'postgresql://other@localhost:5432/other';
-    const otherLockPath = lockPathFor(process.env.DATABASE_URL);
+    const otherLockPath = lockPathFor('local/other');
     try {
       expect(() => acquireDatabaseSuiteLock()).not.toThrow();
     } finally {
@@ -97,6 +98,23 @@ describe('database suite lock', () => {
       process.env.DATABASE_URL = TEST_DATABASE_URL;
       release();
     }
+  });
+
+  it('shares one lock across every login and port that reaches the same local database', () => {
+    // The main suite (operator login, :5432), the chaos suite (superuser, Toxiproxy :25432) and a
+    // worktree checkout all truncate this machine's one test database — a URL-keyed lock let them
+    // run at once.
+    writeFileSync(
+      lockPath,
+      JSON.stringify({
+        pid: process.ppid,
+        startedAt: new Date().toISOString(),
+        command: 'vitest run --config tooling/vitest/chaos.config.ts',
+      }),
+    );
+
+    process.env.DATABASE_URL = 'postgresql://chaos-login@127.0.0.1:25432/lock-spec';
+    expect(() => acquireDatabaseSuiteLock()).toThrow(/Another test run is already using/);
   });
 
   it('never leaves a run unable to start when the lock file is unreadable', () => {

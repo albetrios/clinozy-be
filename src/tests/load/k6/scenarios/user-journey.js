@@ -7,7 +7,9 @@
  * Prerequisites:
  *   pnpm db:seed:loadtest          — seeds 12 organizations × 10 users with full domain data
  *                                    and writes src/tests/load/k6/data/credential-pool.json
- *   RATE_LIMIT_MAX=10000 pnpm dev  — raise the rate limit for load testing
+ *   RATE_LIMIT_MAX=10000 WEBHOOK_URL_ALLOWLIST=example.com pnpm dev
+ *                                  — raise the rate limit; allow the example.com webhooks the
+ *                                    journey creates (the template allowlist rejects them)
  *
  * Run:
  *   pnpm load:user-journey
@@ -38,6 +40,7 @@ import { randomString } from 'https://jslib.k6.io/k6-utils/1.4.0/index.js';
 import { API_PREFIX, SCENARIOS, STRICT_THRESHOLDS } from '../helpers/config.js';
 import { checkOk, checkResponseTime } from '../helpers/checks.js';
 import { authHeaders, switchToOrganization } from '../helpers/auth.js';
+import { idempotencyKey } from '../helpers/idempotency.js';
 import { credentialPool, mintTokenPool, vuToken } from '../helpers/pool.js';
 
 // ---------------------------------------------------------------------------
@@ -147,20 +150,20 @@ function phaseProfile(authed) {
 }
 
 function phaseOrg(authed) {
-  const listOrgsRes = http.get(`${API_PREFIX}/users/me/organizations`, {
+  const listOrganizationsRes = http.get(`${API_PREFIX}/users/me/organizations`, {
     headers: authed,
-    tags: { name: 'list-orgs' },
+    tags: { name: 'list-organizations' },
   });
-  checkOk(listOrgsRes, 'list-orgs');
-  checkResponseTime(listOrgsRes, 500, 'list-orgs');
+  checkOk(listOrganizationsRes, 'list-organizations');
+  checkResponseTime(listOrganizationsRes, 500, 'list-organizations');
   sleep(0.2);
 
-  const getOrgRes = http.get(`${API_PREFIX}/tenancy/organization`, {
+  const getOrganizationRes = http.get(`${API_PREFIX}/tenancy/organization`, {
     headers: authed,
-    tags: { name: 'get-org' },
+    tags: { name: 'get-organization' },
   });
-  checkOk(getOrgRes, 'get-org');
-  checkResponseTime(getOrgRes, 400, 'get-org');
+  checkOk(getOrganizationRes, 'get-organization');
+  checkResponseTime(getOrganizationRes, 400, 'get-organization');
   sleep(0.2);
 
   const organizationSettingsRes = http.get(`${API_PREFIX}/tenancy/organization/settings`, {
@@ -248,16 +251,19 @@ function phaseWebhooksAndWrites(authed, json) {
   sleep(0.2);
 
   // Create a webhook per VU+iteration then immediately delete it so the DB
-  // doesn't accumulate test rows across a long soak run.
+  // doesn't accumulate test rows across a long soak run. The SSRF guard accepts only
+  // allowlisted hosts (the load rigs allowlist example.com); nothing is delivered.
   const suffix = `${__VU}-${__ITER}-${randomString(4)}`;
   const createWebhookRes = http.post(
     `${API_PREFIX}/notify/webhooks`,
     JSON.stringify({
-      url: `https://httpbin.org/post?k6=${suffix}`,
-      events: ['*'],
-      description: `k6 journey ${suffix}`,
+      url: `https://example.com/k6-journey-${suffix}`,
+      events: ['subscription.updated'],
     }),
-    { headers: { ...authed, ...json }, tags: { name: 'create-webhook' } },
+    {
+      headers: { ...authed, ...json, 'X-Idempotency-Key': idempotencyKey('journey-webhook') },
+      tags: { name: 'create-webhook' },
+    },
   );
   check(createWebhookRes, { 'create-webhook 2xx': (r) => r.status >= 200 && r.status < 300 });
   checkResponseTime(createWebhookRes, 600, 'create-webhook');
@@ -274,15 +280,21 @@ function phaseWebhooksAndWrites(authed, json) {
   }
   sleep(0.3);
 
-  // Upload: request presigned URL only (no actual S3 upload in k6)
+  // Upload: request presigned URL only (no actual S3 upload in k6). The URL is signed
+  // locally; the pending row it creates is reaped by the upload-pending sweep.
   const uploadRes = http.post(
     `${API_PREFIX}/uploads`,
     JSON.stringify({
       file_name: `k6-${randomString(6)}.jpg`,
       content_type: 'image/jpeg',
       purpose: 'avatar',
+      for: 'user',
+      file_size: 2048,
     }),
-    { headers: { ...authed, ...json }, tags: { name: 'request-upload' } },
+    {
+      headers: { ...authed, ...json, 'X-Idempotency-Key': idempotencyKey('journey-upload') },
+      tags: { name: 'request-upload' },
+    },
   );
   check(uploadRes, { 'request-upload 2xx': (r) => r.status >= 200 && r.status < 300 });
   checkResponseTime(uploadRes, 600, 'request-upload');
@@ -291,7 +303,7 @@ function phaseWebhooksAndWrites(authed, json) {
   // Patch user settings
   const patchSettingsRes = http.patch(
     `${API_PREFIX}/users/me/settings`,
-    JSON.stringify({ marketing_emails_enabled: false }),
+    JSON.stringify({ is_notifications_enabled: true }),
     { headers: { ...authed, ...json }, tags: { name: 'patch-me-settings' } },
   );
   checkOk(patchSettingsRes, 'patch-me-settings');

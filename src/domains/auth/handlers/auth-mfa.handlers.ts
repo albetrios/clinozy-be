@@ -50,19 +50,12 @@ export function createAuthMfaHandlers({
       }
       setSessionCookie(reply, data.session_public_id, data.session_refresh_secret);
       // The session is minted HERE (after the second factor), so this is where the login is audited.
-      // The source encodes the factor; recovery-code use also emits a dedicated high-severity signal
-      // (the TOTP-bypass break-glass path an incident responder must be able to find).
+      // The source encodes the factor; for a recovery code, recordLoginAuditEvent also emits the
+      // dedicated high-severity `auth.mfa.recovery_code_used` signal (the TOTP-bypass break-glass
+      // path an incident responder must be able to find), attributed to the same user.
       const source: LoginAuditSource =
         data.factor === 'recovery_code' ? 'mfa_recovery_code' : 'mfa_totp';
       await recordLoginAuditEvent(request, data, source);
-      if (data.factor === 'recovery_code') {
-        await recordScopedAuditEvent(request, {
-          action: 'auth.mfa.recovery_code_used',
-          resource_type: 'mfa_method',
-          severity: 'WARNING',
-          metadata: { session_public_id: data.session_public_id },
-        });
-      }
       return successResponse(AuthSerializer.accessToken(data), getRequestIdentifier(request));
     },
     verifyMfa: async (request: FastifyRequest, _reply: FastifyReply) => {

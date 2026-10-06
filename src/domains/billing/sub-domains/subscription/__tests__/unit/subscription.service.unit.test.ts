@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import Stripe from 'stripe';
 
 // REQ-4: stub the seat-sync producer queue so changePlan's best-effort enqueue never opens Redis.
+
+/** What the Stripe client rethrows when Stripe itself is failing — the provider maps it to a 503. */
+function stripeOutage(message: string): Error {
+  return new Stripe.errors.StripeAPIError({ message, type: 'api_error' });
+}
+
 vi.mock(
   '@/domains/billing/sub-domains/subscription/queues/subscription-seat-sync.queue.js',
   () => ({
@@ -40,7 +47,6 @@ import {
   NotFoundError,
   ServiceUnavailableError,
   UnprocessableEntityError,
-  ValidationError,
 } from '@/shared/errors/index.js';
 import {
   PRINCIPAL_SCOPE,
@@ -263,22 +269,6 @@ describe('SubscriptionService', () => {
     expect(createPayload.provider_subscription_id).toBe('sub_stripe');
   });
 
-  it('update rejects cancel_at_period_end (sec-B1: use /cancel + /resume instead)', async () => {
-    await expect(
-      service.update(scope, 'sub_public', { cancel_at_period_end: true }),
-    ).rejects.toBeInstanceOf(ValidationError);
-    expect(repository.update).not.toHaveBeenCalled();
-  });
-
-  it('update with empty body returns the existing subscription (no-op)', async () => {
-    const result = await service.update(scope, 'sub_public', {});
-    // REQ-4: the row is now decorated with seats_total / seats_used, so it is a superset of the
-    // repository row — assert the original fields survived rather than exact equality.
-    expect(result).toMatchObject(subscriptionRow);
-    expect(result).toHaveProperty('seats_used');
-    expect(repository.update).not.toHaveBeenCalled();
-  });
-
   it('changePlan updates plan on subscription', async () => {
     await service.changePlan(scope, 'sub_public', { plan_id: 'plan_public' });
     expect(repository.update).toHaveBeenCalled();
@@ -467,7 +457,7 @@ describe('SubscriptionService', () => {
       ...plan,
       stripe_price_monthly_id: 'price_monthly',
     } as never);
-    stripeMocks.createStripeSubscription.mockRejectedValueOnce(new Error('stripe down'));
+    stripeMocks.createStripeSubscription.mockRejectedValueOnce(stripeOutage('stripe down'));
 
     await expect(
       service.create(scope, { plan_id: 'plan_public', billing_cycle: 'monthly' }, 'user_public'),
@@ -489,8 +479,12 @@ describe('SubscriptionService', () => {
       ...subscriptionRow,
       provider_subscription_id: 'sub_stripe',
     } as never);
-    stripeMocks.cancelStripeSubscription.mockRejectedValueOnce(new Error('stripe cancel failed'));
-    stripeMocks.resumeStripeSubscription.mockRejectedValueOnce(new Error('stripe resume failed'));
+    stripeMocks.cancelStripeSubscription.mockRejectedValueOnce(
+      stripeOutage('stripe cancel failed'),
+    );
+    stripeMocks.resumeStripeSubscription.mockRejectedValueOnce(
+      stripeOutage('stripe resume failed'),
+    );
 
     await expect(service.cancel(scope, 'sub_public')).rejects.toBeInstanceOf(
       ServiceUnavailableError,
@@ -499,11 +493,6 @@ describe('SubscriptionService', () => {
       ServiceUnavailableError,
     );
     expect(repository.update).not.toHaveBeenCalled();
-  });
-
-  it('update with empty body throws NotFoundError when subscription is missing', async () => {
-    vi.mocked(repository.findByPublicId).mockResolvedValue(null);
-    await expect(service.update(scope, 'sub_public', {})).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('changePlan throws when subscription is missing', async () => {
@@ -687,7 +676,9 @@ describe('SubscriptionService', () => {
       ...plan,
       stripe_price_monthly_id: 'price_new',
     } as never);
-    stripeMocks.updateStripeSubscription.mockRejectedValueOnce(new Error('stripe update failed'));
+    stripeMocks.updateStripeSubscription.mockRejectedValueOnce(
+      stripeOutage('stripe update failed'),
+    );
 
     await expect(
       service.changePlan(scope, 'sub_public', { plan_id: 'plan_public' }),

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type Stripe from 'stripe';
+import Stripe from 'stripe';
+import { UnrecoverableError } from 'bullmq';
 import { processStripeWebhookJob } from '@/domains/billing/sub-domains/stripe-webhook/workers/stripe-webhook.processor.js';
 import { StripeWebhookService } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook.service.js';
 import type { SubscriptionService } from '@/domains/billing/sub-domains/subscription/subscription.service.js';
@@ -21,6 +22,13 @@ const retrieveStripeEventMock = vi.fn();
 
 vi.mock('@/infrastructure/payment/stripe.client.js', () => ({
   retrieveStripeEvent: (...arguments_: unknown[]) => retrieveStripeEventMock(...arguments_),
+}));
+
+vi.mock('@/infrastructure/database/contexts/database-context.js', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  withMaintenanceDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
+    callback(),
+  ),
 }));
 
 vi.mock('@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-organization.util.js', () => ({
@@ -67,6 +75,7 @@ describe('stripe-webhook.processor duplicate job delivery', () => {
     tryClaimEvent: vi.fn(),
     markProcessed: vi.fn(),
     markFailed: vi.fn(),
+    markAbandoned: vi.fn(),
   } as unknown as StripeWebhookEventRepository;
 
   const stripeWebhookService = new StripeWebhookService(
@@ -116,5 +125,55 @@ describe('stripe-webhook.processor duplicate job delivery', () => {
     expect(retrieveStripeEventMock).toHaveBeenCalledTimes(2);
     expect(subscriptionService.syncFromStripeProviderSubscription).toHaveBeenCalledTimes(1);
     expect(stripeWebhookEventRepository.markProcessed).toHaveBeenCalledTimes(1);
+  });
+
+  it('abandons an event Stripe no longer has and fails the job for good — one alert, no retries', async () => {
+    retrieveStripeEventMock.mockRejectedValueOnce(
+      new Stripe.errors.StripeInvalidRequestError({
+        message: "No such event: 'evt_race_duplicate'",
+        type: 'invalid_request_error',
+        code: 'resource_missing',
+      }),
+    );
+    vi.mocked(stripeWebhookEventRepository.markAbandoned).mockResolvedValueOnce(true);
+
+    await expect(
+      processStripeWebhookJob(jobData, stripeWebhookService, 'job-missing'),
+    ).rejects.toBeInstanceOf(UnrecoverableError);
+
+    expect(stripeWebhookEventRepository.markAbandoned).toHaveBeenCalledWith(
+      'evt_race_duplicate',
+      'stripe_event_not_found',
+    );
+    expect(stripeWebhookEventRepository.tryClaimEvent).not.toHaveBeenCalled();
+  });
+
+  it('keeps retrying when Stripe itself is failing — an outage is not a missing event', async () => {
+    const outage = new Stripe.errors.StripeAPIError({
+      message: 'Internal error',
+      type: 'api_error',
+    });
+    retrieveStripeEventMock.mockRejectedValueOnce(outage);
+
+    await expect(processStripeWebhookJob(jobData, stripeWebhookService, 'job-outage')).rejects.toBe(
+      outage,
+    );
+    expect(stripeWebhookEventRepository.markAbandoned).not.toHaveBeenCalled();
+  });
+
+  it('fails the job for good once the service abandoned the event', async () => {
+    vi.mocked(stripeWebhookEventRepository.tryClaimEvent).mockResolvedValueOnce('claimed');
+    vi.mocked(subscriptionService.syncFromStripeProviderSubscription).mockRejectedValueOnce(
+      new Error('handler keeps failing'),
+    );
+    vi.mocked(stripeWebhookEventRepository.markFailed).mockResolvedValueOnce({ attemptCount: 25 });
+    vi.mocked(stripeWebhookEventRepository.markAbandoned).mockResolvedValueOnce(true);
+
+    const error = await processStripeWebhookJob(jobData, stripeWebhookService, 'job-last').catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(UnrecoverableError);
+    expect((error as Error).message).toContain('handler keeps failing');
   });
 });

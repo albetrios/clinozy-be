@@ -117,6 +117,33 @@ describe('recordLoginAuditEvent (sec-A8)', () => {
     );
   });
 
+  it('records auth.mfa.recovery_code_used (WARNING), attributed to the user, for a recovery-code login', async () => {
+    verifyAccessTokenSpy.mockResolvedValueOnce({ userId: 'user_carol', role: 'USER' });
+
+    await recordLoginAuditEvent(request, sessionResult, 'mfa_recovery_code');
+
+    expect(recordScopedAuditEventSpy).toHaveBeenCalledTimes(2);
+    expect(recordScopedAuditEventSpy).toHaveBeenNthCalledWith(
+      2,
+      request,
+      expect.objectContaining({
+        actorUserPublicId: 'user_carol',
+        action: 'auth.mfa.recovery_code_used',
+        resource_type: 'mfa_method',
+        severity: 'WARNING',
+        metadata: { session_public_id: 'sess_public_test' },
+      }),
+    );
+  });
+
+  it('does NOT emit the recovery-code event for a TOTP second factor (control case)', async () => {
+    verifyAccessTokenSpy.mockResolvedValueOnce({ userId: 'user_dave', role: 'USER' });
+
+    await recordLoginAuditEvent(request, sessionResult, 'mfa_totp');
+
+    expect(recordScopedAuditEventSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('swallows audit-pipeline errors so the user-visible login is never broken', async () => {
     verifyAccessTokenSpy.mockResolvedValueOnce({ userId: 'user_e', role: 'USER' });
     recordScopedAuditEventSpy.mockRejectedValueOnce(new Error('audit write failed'));
@@ -172,6 +199,8 @@ describe('recordLoginAuditEvent (sec-A8)', () => {
       // attacker's claim of identity, and naming a victim would leak existence.
       const [, payload] = recordScopedAuditEventSpy.mock.calls.at(-1) ?? [];
       expect((payload as { actorUserPublicId?: string })?.actorUserPublicId).toBeUndefined();
+      // ...and must declare that, or the audit service drops the row (it used to drop every one).
+      expect((payload as { anonymousActor?: true })?.anonymousActor).toBe(true);
     });
 
     it('falls back to error.name when no messageKey is present (plain Error)', async () => {

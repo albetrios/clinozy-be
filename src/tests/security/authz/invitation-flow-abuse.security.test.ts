@@ -4,10 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
-import {
-  injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
-} from '@/tests/helpers/test-http-inject.helper.js';
+import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -175,7 +172,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
       // branch is defense-in-depth behind that lookup, not the path a request actually takes.
       const context = await createPendingInvitation();
 
-      const revoke = await injectAuthenticatedOrganizationMutation(app, {
+      const revoke = await injectAuthenticated(app, {
         method: 'DELETE',
         url: testApiPath(`/tenancy/organization/invitations/${context.invitation.public_id}`),
         token: context.adminToken,
@@ -200,13 +197,13 @@ describe('Security: invitation lifecycle flow abuse', () => {
       // anyone holding invitation:manage — the audit trail would show a revoke that did not stick.
       const context = await createPendingInvitation();
 
-      await injectAuthenticatedOrganizationMutation(app, {
+      await injectAuthenticated(app, {
         method: 'DELETE',
         url: testApiPath(`/tenancy/organization/invitations/${context.invitation.public_id}`),
         token: context.adminToken,
       });
 
-      const resend = await injectAuthenticatedOrganizationMutation(app, {
+      const resend = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(
           `/tenancy/organization/invitations/${context.invitation.public_id}/resend`,
@@ -223,7 +220,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
     it('revoking soft-deletes the dangling INVITED membership so no ghost invitee remains', async () => {
       const context = await createPendingInvitation();
 
-      await injectAuthenticatedOrganizationMutation(app, {
+      await injectAuthenticated(app, {
         method: 'DELETE',
         url: testApiPath(`/tenancy/organization/invitations/${context.invitation.public_id}`),
         token: context.adminToken,
@@ -275,7 +272,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
         payload: { token: context.rawToken },
       });
 
-      const resend = await injectAuthenticatedOrganizationMutation(app, {
+      const resend = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(
           `/tenancy/organization/invitations/${context.invitation.public_id}/resend`,
@@ -295,7 +292,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
       // we think leaked" is security theatre.
       const context = await createPendingInvitation();
 
-      const resend = await injectAuthenticatedOrganizationMutation(app, {
+      const resend = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(
           `/tenancy/organization/invitations/${context.invitation.public_id}/resend`,
@@ -392,7 +389,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
     it('refuses to resend an expired invitation', async () => {
       const context = await createPendingInvitation({ expired: true });
 
-      const resend = await injectAuthenticatedOrganizationMutation(app, {
+      const resend = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath(
           `/tenancy/organization/invitations/${context.invitation.public_id}/resend`,

@@ -1,8 +1,12 @@
 # Dead-letter queue (DLQ) runbook
 
-When a BullMQ job exhausts retries, the worker copies a snapshot to **`<source-queue>-dlq`** (see [`dead-letter.ts`](../../src/infrastructure/queue/dlq/dead-letter.ts)). This runbook covers inspection and safe replay.
+When a BullMQ job fails for good — it used its last attempt, or it threw `UnrecoverableError` (a job that can never succeed: a missing row, an unreadable secret, a corrupt payload) — the worker records it in **`audit.dead_letter_jobs`** (the durable ledger) and copies a snapshot to **`<source-queue>-dlq`** (see [`dead-letter.ts`](../../src/infrastructure/queue/dlq/dead-letter.ts)). It also raises one Sentry event — except for an expected failure (a customer webhook endpoint that never accepted the delivery: warn log, no page; the webhook's owner sees it on the attempt row). This runbook covers inspection and safe replay.
 
-**Retention:** Dead-letter jobs are kept in Redis for **30 days** (age-based eviction via BullMQ `removeOnComplete` / `removeOnFail`), then automatically removed to prevent unbounded growth and OOM. Inspect and replay within this window — older entries are no longer recoverable from Redis.
+**Automated replay:** the `dlq-auto-retry` sweeper (`DLQ_AUTO_RETRY_*`) replays each ledger row of a replayable queue **once**, after `DLQ_AUTO_RETRY_COOLDOWN_MINUTES` and only while that queue's outbound circuit is closed. The replay carries how deep it is in its lineage (`dlqReplayAttempt`); if it fails for good again, the new ledger row records that depth (`replay_depth`) and waits its own cooldown. A lineage stops at `DLQ_AUTO_RETRY_MAX_COUNT` replays — those rows are left to an operator. Every handled row gets `auto_retry_resolved_at`. Once a replay is enqueued the row counts as handled even if removing its Redis mirror or writing the audit row fails (`dlq.auto_replay.follow_up_failed`) — before, such a failure left the row unresolved and the sweeper replayed the same failure again every tick.
+
+**Retention:** a `<source>-dlq` mirror keeps each snapshot for **30 days** — the DLQ-depth tick (every 15 minutes) removes older ones (`queue.dead_letter.trimmed`) — and holds at most **1,000** snapshots: past that a final failure is still recorded in `audit.dead_letter_jobs` and alerted, only not mirrored (`queue.dead_letter.mirror_full`). Inspect and replay within the window; the ledger row stays the record (`audit-retention` prunes the ledger on its own schedule). BullMQ's `removeOnComplete` / `removeOnFail` never applied here: nothing consumes a mirror, so its snapshots never complete or fail.
+
+**Provider outage (not a dead letter):** while Resend, Stripe or S3 is down, the queues that depend on it (`mail`; `stripe-webhook`, `subscription-seat-sync`; `user-data-export`) pause and retry every five minutes — their jobs wait, they are not dead-lettered. Signs: `queue.provider_outage.paused` logs, `bullmq_provider_outage_parked_jobs_total` rising, the queue's `delayed` + `waiting` counts growing, the circuit OPEN in `/readyz`. Once the provider is back the next probe succeeds and the backlog drains by itself, at most five minutes later; nothing to replay.
 
 ## When to use
 
@@ -19,9 +23,9 @@ When a BullMQ job exhausts retries, the worker copies a snapshot to **`<source-q
 
 | Command | Purpose |
 | ------- | ------- |
-| `pnpm tool:dlq-replay -- --list` | List jobs in all **work** DLQs (`mail`, `webhook-delivery`, `notification`, `stripe-webhook`) |
-| `pnpm tool:dlq-replay -- --list mail-dlq` | List jobs in one DLQ |
-| `pnpm tool:dlq-replay -- --replay mail-dlq --job-id <id> --actor-user-public-id <usr> [--dry-run]` | Re-enqueue one job (writes `queue.dlq.replayed` audit row) and remove it from the DLQ |
+| `pnpm tool:dlq-replay -- --list` | List jobs in all **replayable** DLQs (`webhook-delivery`, `notification`) |
+| `pnpm tool:dlq-replay -- --list notification-dlq` | List jobs in one DLQ |
+| `pnpm tool:dlq-replay -- --replay notification-dlq --job-id <id> --actor-user-public-id <usr> [--dry-run]` | Re-enqueue one job through its source queue (its attempts and retention apply; writes a `queue.dlq.replayed` audit row) and remove it from the DLQ |
 | `pnpm tool:dlq-replay -- --replay-all webhook-delivery-dlq --actor-user-public-id <usr> --limit 10 [--dry-run]` | Replay up to N jobs |
 
 Always run `--dry-run` first in production.
@@ -32,10 +36,10 @@ The full list of source queues (work + retention/cleanup + observability) is in 
 
 | DLQ | Reconstructed job payload | If replay fails |
 | --- | ------------------------- | --------------- |
-| `mail-dlq` | `{ mailOutboxId }` from `original_data_summary` | Fix `auth.mail_outbox` row, then replay |
-| `webhook-delivery-dlq` | `{ deliveryAttemptId, organizationPublicId }` | Fix URL/secret; create a new attempt if the row is terminal |
-| `stripe-webhook-dlq` | `{ stripeEventId }` — worker fetches event from Stripe API | Reclaim ledger row (`pnpm tool:stripe-webhook-replay`) if needed |
-| `notification-dlq` | `{ notificationId, organizationPublicId }` (`organizationPublicId` is `null` for global notifications) — worker reloads content from `notify.notifications` | Fix the notification row, then replay |
+| `mail-dlq` | Not replayable — a record, not a work list (inspect it in Bull Board or the ledger). | A `failed` row's body is scrubbed and cannot be re-sent — the user requests a new email; a row released to `pending` (circuit open on the last attempt) is re-enqueued by the outbox sweeper on its own |
+| `webhook-delivery-dlq` | `{ deliveryAttemptPublicId, organizationPublicId }` | Fix URL/secret, then replay — the attempt re-claims its `FAILED` row (a `SENT` one is skipped) |
+| `stripe-webhook-dlq` | Not replayable — the `billing.stripe_webhook_events` ledger reclaim is the retry path (a record here). | A `failed` row is reclaimed on its own; an `abandoned` one (attempt cap or permanent failure) waits for `pnpm tool:stripe-webhook-replay -- --retry <event id>` once the cause is fixed |
+| `notification-dlq` | `{ notificationPublicId, organizationPublicId, userPublicId }` (`organizationPublicId` is `null` for a notification without one; the recipient's public id scopes that read) — worker reloads content from `notify.notifications` | Fix the cause, then replay |
 
 ## Operational checklist
 

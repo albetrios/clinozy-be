@@ -10,7 +10,7 @@ import {
   check,
   pgPolicy,
 } from 'drizzle-orm/pg-core';
-import { auditSchema } from '@/infrastructure/database/pg-schemas.js';
+import { auditSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { api_keys } from '@/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.schema.js';
@@ -37,6 +37,9 @@ export const logs = auditSchema
     'logs',
     {
       id: bigserial('id', { mode: 'number' }).primaryKey(),
+      // The row's identity outside Postgres (audit API `id`, export line `id`); minted by writers
+      // with generatePublicId('auditLog'). Not unique-indexed: see 20261005160000.
+      public_id: varchar('public_id', { length: 28 }).notNull(),
       actor_user_id: bigint('actor_user_id', { mode: 'number' }).references(() => users.id, {
         onDelete: 'set null',
       }),
@@ -107,8 +110,8 @@ export const logs = auditSchema
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR current_setting('app.global_retention_cleanup', true) = 'true'
-          OR current_setting('app.global_admin', true) = 'true'`,
+          OR ${maintenanceBypassArm('app.global_retention_cleanup')}
+          OR ${maintenanceBypassArm('app.global_admin')}`,
       }),
       pgPolicy('audit_logs_tenant_isolation_insert', {
         as: 'permissive',
@@ -124,20 +127,27 @@ export const logs = auditSchema
         // flips this GUC cannot write to any tenant's audit log — only
         // tenantless rows. Used by `withMaintenanceDatabaseContext` for DLQ
         // replay and other system-level emitters that have no tenant.
+        //
+        // The organization arm resolves through the SECURITY DEFINER resolver, not a
+        // `tenancy.organizations` subquery: that table's RLS hides deleted organizations, so a
+        // deleted organization's pending outbox rows (its own delete event first) could never
+        // be written (20261006063350).
         withCheck: sql`${table.organization_id} = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
+            SELECT resolved.id
+            FROM audit.resolve_organization_ids_for_public_ids(
+              ARRAY[current_setting('app.current_organization_public_id', true)]
+            ) AS resolved
           )
           OR (
             ${table.organization_id} IS NULL
-            AND current_setting('app.system_audit_insert', true) = 'true'
+            AND ${maintenanceBypassArm('app.system_audit_insert')}
           )`,
       }),
       pgPolicy('audit_logs_tenant_isolation_delete', {
         as: 'permissive',
         for: 'delete',
         to: 'public',
-        using: sql`current_setting('app.global_retention_cleanup', true) = 'true'`,
+        using: sql`${maintenanceBypassArm('app.global_retention_cleanup')}`,
       }),
       pgPolicy('audit_logs_user_export_select', {
         as: 'permissive',

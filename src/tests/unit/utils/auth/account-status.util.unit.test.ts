@@ -7,19 +7,25 @@ import {
 
 describe('assertUserAccountActive', () => {
   it('allows an ACTIVE account', () => {
-    expect(() => assertUserAccountActive('ACTIVE')).not.toThrow();
+    expect(() => assertUserAccountActive({ status: 'ACTIVE', deleted_at: null })).not.toThrow();
   });
 
   it.each(['SUSPENDED', 'LOCKED', 'DELETED', ''])(
     'rejects non-active status %s with UnauthorizedError',
     (status) => {
-      expect(() => assertUserAccountActive(status)).toThrow(UnauthorizedError);
+      expect(() => assertUserAccountActive({ status })).toThrow(UnauthorizedError);
     },
   );
 
+  it('rejects a soft-deleted ACTIVE row (sec-U1)', () => {
+    expect(() => assertUserAccountActive({ status: 'ACTIVE', deleted_at: new Date() })).toThrow(
+      UnauthorizedError,
+    );
+  });
+
   it('throws the accountNotActive i18n key', () => {
     try {
-      assertUserAccountActive('SUSPENDED');
+      assertUserAccountActive({ status: 'SUSPENDED' });
       expect.unreachable('should have thrown');
     } catch (error) {
       expect(error).toBeInstanceOf(UnauthorizedError);

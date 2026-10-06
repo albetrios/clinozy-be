@@ -37,7 +37,7 @@ When a job exhausts retries, the worker enqueues a snapshot to **`<queue-name>-d
 1. Inspect failed jobs in Bull Board (`*-dlq` queues).
 2. Read `original_data_summary` (metadata only — no secrets or full payloads).
 3. Fix root cause (code, config, downstream vendor).
-4. Re-queue manually from Postgres source rows (mail outbox, webhook delivery attempts, `billing.stripe_webhook_events` with `processing_status = failed`) or replay with a one-off script — there is no automatic DLQ consumer.
+4. Re-queue manually from Postgres source rows (mail outbox, webhook delivery attempts, `billing.stripe_webhook_events` with `processing_status = failed`) or with `pnpm tool:dlq-replay`. The `dlq-auto-retry` sweeper replays `webhook-delivery` and `notification` ledger rows once on its own ([dlq-runbook.md](../../process/dlq-runbook.md)); nothing else consumes a `-dlq` mirror.
 5. Alert on Sentry fingerprint `worker_final_failure` for sustained failure rates.
 6. Watch scheduled **`queue.dlq.depth.high`** warnings (`DLQ_DEPTH_WARN_THRESHOLD`, default 10 jobs waiting + failed per DLQ).
 
@@ -45,9 +45,9 @@ When a job exhausts retries, the worker enqueues a snapshot to **`<queue-name>-d
 
 | DLQ queue              | Prefer replay from                                                                                                                  |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `mail-dlq`             | `auth.mail_outbox` row (`status = failed`) — re-enqueue mail job with `mailOutboxId`                                                |
-| `webhook-delivery-dlq` | `notify.webhook_delivery_attempts` — create new attempt or fix URL and re-enqueue with `deliveryAttemptId` + `organizationPublicId` |
-| `stripe-webhook-dlq`   | `billing.stripe_webhook_events` — fix root cause, then re-enqueue verified Stripe event payload or replay from Stripe Dashboard     |
+| `mail-dlq`             | `auth.mail_outbox` row — a `failed` row's body is scrubbed (the user requests a new email); a `pending` row is re-enqueued by the outbox sweeper (`mailOutboxToken`) |
+| `webhook-delivery-dlq` | `notify.webhook_delivery_attempts` — fix the URL or secret, then replay (`deliveryAttemptPublicId` + `organizationPublicId`); the replay re-claims the `FAILED` row |
+| `stripe-webhook-dlq`   | `billing.stripe_webhook_events` — the ledger reclaim retries `failed` rows; an `abandoned` one is retried with `pnpm tool:stripe-webhook-replay -- --retry <event id>` |
 | Other `*-dlq`          | Bull Board **Retry** on the DLQ job after fixing code/config                                                                        |
 
 ## Access (auth required)
@@ -88,36 +88,9 @@ Successful **mutating** Bull Board HTTP calls (`POST`, `PUT`, `PATCH`, `DELETE`)
 
 ## Queues shown
 
-Source queues (Bull Board adapters) registered in [`src/infrastructure/queue/queue-dashboard.ts`](../../../src/infrastructure/queue/queue-dashboard.ts) → `SOURCE_QUEUE_NAMES`:
+Bull Board shows every worker queue — `WORKER_QUEUE_NAMES` in [`src/infrastructure/queue/queue-catalog.ts`](../../../src/infrastructure/queue/queue-catalog.ts), the 33 queues of the [worker registry](workers-and-events.md#worker-registry-and-queue-families) (throughput: `mail`, `notification`, `user-data-export`, `webhook-delivery`, `stripe-webhook`, `subscription-seat-sync`; the cron and sweep queues of the `mail`, `webhook`, `stripe`, `retention` and `observability` families) — and next to each its dead-letter mirror `<source-queue-name>-dlq`. All of them share the dashboard's connections; the list is pinned to the registry by `queue-catalog.coverage.unit.test.ts`, so a new worker cannot be missing from the dashboard.
 
-**Work queues:**
-
-- `mail`
-- `webhook-delivery`
-- `notification`
-- `stripe-webhook`
-
-**Retention / cleanup queues:**
-
-- `audit-retention`
-- `session-cleanup`
-- `webhook-tombstone-retention`
-- `organization-notification-policy-tombstone-retention`
-- `user-tombstone-retention`
-- `organization-tombstone-retention`
-- `membership-tombstone-retention`
-- `member-role-tombstone-retention`
-- `organization-api-key-tombstone-retention`
-- `upload-tombstone-retention`
-
-**Observability queues:**
-
-- `idempotency-cardinality`
-- `dlq-depth`
-
-For each source queue, a **dead-letter** mirror named `<source-queue-name>-dlq` is also registered when the dashboard is enabled (except observability-only schedulers without DLQ consumers).
-
-When adding a new BullMQ queue, append its constant to `SOURCE_QUEUE_NAMES` in `queue-dashboard.ts` (and update this list). See **[be-workers-events skill](../../../.cursor/skills/be-workers-events/SKILL.md)** for the full registration checklist.
+When adding a new BullMQ worker, add its queue constant to `WORKER_QUEUE_NAMES` (and to `WORKER_THROUGHPUT_QUEUE_NAMES` for a throughput worker) — the coverage test fails until you do. See **[be-workers-events skill](../../../.cursor/skills/be-workers-events/SKILL.md)** for the full registration checklist.
 
 ## Production
 

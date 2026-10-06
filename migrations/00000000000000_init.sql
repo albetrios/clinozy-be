@@ -53,7 +53,7 @@ CREATE TABLE "auth"."auth_methods" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"revoked_at" timestamp with time zone,
 	"created_by_user_id" bigint,
-	CONSTRAINT "chk_auth_methods_type" CHECK ("auth"."auth_methods"."method_type" IN ('PASSWORD', 'MAGIC_LINK', 'OAUTH', 'MFA_TOTP', 'MFA_SMS', 'MFA_EMAIL'))
+	CONSTRAINT "chk_auth_methods_type" CHECK ("auth"."auth_methods"."method_type" IN ('PASSWORD', 'EMAIL_CODE', 'OAUTH', 'MFA_TOTP', 'MFA_SMS', 'MFA_EMAIL'))
 );
 --> statement-breakpoint
 CREATE TABLE "auth"."mail_outbox" (
@@ -359,7 +359,7 @@ CREATE TABLE "tenancy"."organization_notification_policies" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
 	"updated_by_user_id" bigint,
-	CONSTRAINT "chk_org_notif_channel" CHECK ("tenancy"."organization_notification_policies"."channel" IN ('EMAIL', 'SMS', 'PUSH', 'IN_APP')),
+	CONSTRAINT "chk_org_notif_channel" CHECK ("tenancy"."organization_notification_policies"."channel" IN ('EMAIL', 'SMS', 'WEB_PUSH', 'IN_APP')),
 	CONSTRAINT "chk_org_notif_muted" CHECK ("tenancy"."organization_notification_policies"."muted_until" IS NULL OR "tenancy"."organization_notification_policies"."muted_until" > now()),
 	CONSTRAINT "chk_org_notif_updated" CHECK ("tenancy"."organization_notification_policies"."updated_at" >= "tenancy"."organization_notification_policies"."created_at")
 );
@@ -459,7 +459,7 @@ CREATE TABLE "auth"."user_notification_preferences" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
 	"updated_by_user_id" bigint,
-	CONSTRAINT "chk_user_notif_prefs_channel" CHECK ("auth"."user_notification_preferences"."channel" IN ('EMAIL', 'SMS', 'PUSH', 'IN_APP')),
+	CONSTRAINT "chk_user_notif_prefs_channel" CHECK ("auth"."user_notification_preferences"."channel" IN ('EMAIL', 'SMS', 'WEB_PUSH', 'IN_APP')),
 	CONSTRAINT "chk_user_notif_prefs_updated" CHECK ("auth"."user_notification_preferences"."updated_at" >= "auth"."user_notification_preferences"."created_at")
 );
 --> statement-breakpoint

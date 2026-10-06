@@ -308,6 +308,7 @@ describe('AuthSessionService', () => {
 
     const result = await service.refreshSessionCredentials({
       sessionPublicId: 'session_public',
+      userPublicId: user.public_id,
       refreshSecret: 'presented-secret',
       nextAccessToken: 'next-access-token',
     });
@@ -340,8 +341,9 @@ describe('AuthSessionService', () => {
     await expect(
       service.refreshSessionCredentials({
         sessionPublicId: 'session_public',
+        userPublicId: user.public_id,
         // Issued by this server for the session's user (its MAC verifies), then rotated away.
-        refreshSecret: generateRefreshSecret({ userId: user.id }),
+        refreshSecret: generateRefreshSecret({ userPublicId: user.public_id }),
         nextAccessToken: 'next-access-token',
       }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
@@ -369,7 +371,8 @@ describe('AuthSessionService', () => {
     await expect(
       service.refreshSessionCredentials({
         sessionPublicId: 'session_public',
-        refreshSecret: generateRefreshSecret({ userId: user.id }),
+        userPublicId: user.public_id,
+        refreshSecret: generateRefreshSecret({ userPublicId: user.public_id }),
         nextAccessToken: 'next-access-token',
       }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
@@ -405,11 +408,12 @@ describe('AuthSessionService', () => {
     for (const fabricated of [
       'made-up-secret',
       'made-up~not-a-mac',
-      generateRefreshSecret({ userId: user.id + 1 }),
+      generateRefreshSecret({ userPublicId: 'user_someone_else' }),
     ]) {
       await expect(
         service.refreshSessionCredentials({
           sessionPublicId: 'session_public',
+          userPublicId: user.public_id,
           refreshSecret: fabricated,
           nextAccessToken: 'next-access-token',
         }),
@@ -421,14 +425,16 @@ describe('AuthSessionService', () => {
     expect(invalidateCachedSessionToken).not.toHaveBeenCalled();
   });
 
-  it('refreshSessionCredentials treats the stored previous secret as proof of issuance (pre-MAC secrets)', async () => {
-    const legacySecret = 'legacy-random-secret-minted-before-issuance-macs';
+  it('refreshSessionCredentials treats the stored previous secret as proof of issuance even when its MAC no longer verifies', async () => {
+    // A SECRETS_ENCRYPTION_KEY rotation invalidates every issuance MAC; the stored hash of the
+    // previous secret still proves the server issued it.
+    const rotatedOutSecret = 'previous-secret-whose-mac-no-longer-verifies';
     vi.mocked(sessionRepository.findByPublicIdIncludingRevoked).mockResolvedValue({
       public_id: 'session_public',
       user_id: user.id,
       token_hash: 'current-token-hash',
       refresh_token_hash: 'current-refresh-hash',
-      previous_refresh_token_hash: createHash('sha256').update(legacySecret).digest('hex'),
+      previous_refresh_token_hash: createHash('sha256').update(rotatedOutSecret).digest('hex'),
       is_revoked: false,
     } as never);
     vi.mocked(sessionRepository.rotateSessionCredentials).mockResolvedValue(null as never);
@@ -437,7 +443,8 @@ describe('AuthSessionService', () => {
     await expect(
       service.refreshSessionCredentials({
         sessionPublicId: 'session_public',
-        refreshSecret: legacySecret,
+        userPublicId: user.public_id,
+        refreshSecret: rotatedOutSecret,
         nextAccessToken: 'next-access-token',
       }),
     ).rejects.toBeInstanceOf(UnauthorizedError);

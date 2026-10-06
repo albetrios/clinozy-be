@@ -78,9 +78,8 @@ export const webhookEventExamples = [
 // ── Delivery Attempt ──
 // Mirrors WebhookDeliveryAttemptSerializer.many (the sec-r4-D6 list projection) field for
 // field. `id` and `webhook_id` are ABSENT on purpose: sec-T #17 strips both bigserials before
-// the response leaves the server, so documenting them told clients to read values that are
-// never sent — and implied the platform leaks internal ids. `payload` and `response_body` are
-// likewise excluded from the list shape.
+// the response leaves the server. `payload` and `response_body` are likewise excluded from the
+// list shape.
 export const deliveryAttemptSchema = {
   type: 'object',
   properties: {

@@ -6,9 +6,16 @@ import { NotFoundError, UnauthorizedError } from '@/shared/errors/index.js';
 import type { MemberRolePermissionService } from '@/domains/tenancy/sub-domains/member-roles/member-role-permission/member-role-permission.service.js';
 import { attachPrincipalScope } from '@/tests/helpers/principal-scope.helper.js';
 
+/** The active organization every fake request's token claims (no route carries one). */
+const ACTIVE_ORGANIZATION_PUBLIC_ID = generatePublicId('organization');
 function mockRequest(overrides: Partial<FastifyRequest> = {}): FastifyRequest {
   return attachPrincipalScope({
-    auth: { kind: 'user', userId: generatePublicId('user'), role: 'user' },
+    auth: {
+      kind: 'user',
+      userId: generatePublicId('user'),
+      role: 'user',
+      organizationPublicId: ACTIVE_ORGANIZATION_PUBLIC_ID,
+    },
     params: {},
     body: {},
     headers: {},
@@ -22,7 +29,7 @@ function mockReply(): FastifyReply {
 }
 
 describe('createMemberRolePermissionController', () => {
-  const organizationPublicId = generatePublicId('organization');
+  const organizationPublicId = ACTIVE_ORGANIZATION_PUBLIC_ID;
   const rolePublicId = generatePublicId('memberRole');
 
   const now = new Date('2026-01-01T00:00:00.000Z');
@@ -41,7 +48,7 @@ describe('createMemberRolePermissionController', () => {
 
   it('listRolePermissions delegates to service and returns paginated response', async () => {
     const response = await controller.listRolePermissions(
-      mockRequest({ params: { organization_id: organizationPublicId, role_id: rolePublicId } }),
+      mockRequest({ params: { role_id: rolePublicId } }),
       mockReply(),
     );
     expect(service.list).toHaveBeenCalledWith(
@@ -58,7 +65,7 @@ describe('createMemberRolePermissionController', () => {
     vi.mocked(service.list).mockRejectedValueOnce(new NotFoundError('Organization'));
     await expect(
       controller.listRolePermissions(
-        mockRequest({ params: { organization_id: organizationPublicId, role_id: rolePublicId } }),
+        mockRequest({ params: { role_id: rolePublicId } }),
         mockReply(),
       ),
     ).rejects.toBeInstanceOf(NotFoundError);
@@ -68,7 +75,7 @@ describe('createMemberRolePermissionController', () => {
     vi.mocked(service.list).mockRejectedValueOnce(new NotFoundError('Role'));
     await expect(
       controller.listRolePermissions(
-        mockRequest({ params: { organization_id: organizationPublicId, role_id: rolePublicId } }),
+        mockRequest({ params: { role_id: rolePublicId } }),
         mockReply(),
       ),
     ).rejects.toBeInstanceOf(NotFoundError);
@@ -77,7 +84,7 @@ describe('createMemberRolePermissionController', () => {
   it('listRolePermissions returns empty paginated response when no permissions', async () => {
     vi.mocked(service.list).mockResolvedValueOnce([]);
     const response = await controller.listRolePermissions(
-      mockRequest({ params: { organization_id: organizationPublicId, role_id: rolePublicId } }),
+      mockRequest({ params: { role_id: rolePublicId } }),
       mockReply(),
     );
     expect(response).toMatchObject({
@@ -91,9 +98,9 @@ describe('createMemberRolePermissionController', () => {
     const body = { permission_codes: ['tenancy:read'] };
     const response = await controller.putRolePermissions(
       mockRequest({
-        params: { organization_id: organizationPublicId, role_id: rolePublicId },
+        params: { role_id: rolePublicId },
         body,
-        auth: { kind: 'user', userId, role: 'user' } as never,
+        auth: { kind: 'user', userId, role: 'user', organizationPublicId } as never,
       }),
       mockReply(),
     );
@@ -112,7 +119,7 @@ describe('createMemberRolePermissionController', () => {
     await expect(
       controller.putRolePermissions(
         mockRequest({
-          params: { organization_id: organizationPublicId, role_id: rolePublicId },
+          params: { role_id: rolePublicId },
           auth: undefined as never,
         }),
         mockReply(),
@@ -125,7 +132,7 @@ describe('createMemberRolePermissionController', () => {
     await expect(
       controller.putRolePermissions(
         mockRequest({
-          params: { organization_id: organizationPublicId, role_id: rolePublicId },
+          params: { role_id: rolePublicId },
           body: { permission_codes: [] },
         }),
         mockReply(),
@@ -138,7 +145,7 @@ describe('createMemberRolePermissionController', () => {
     await expect(
       controller.putRolePermissions(
         mockRequest({
-          params: { organization_id: organizationPublicId, role_id: rolePublicId },
+          params: { role_id: rolePublicId },
           body: { permission_codes: ['tenancy:read'] },
         }),
         mockReply(),

@@ -13,7 +13,7 @@ import {
   pgPolicy,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { notifySchema } from '@/infrastructure/database/pg-schemas.js';
+import { maintenanceBypassArm, notifySchema } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 
@@ -90,7 +90,7 @@ export const webhooks = notifySchema
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR current_setting('app.global_retention_cleanup', true) = 'true'`,
+          OR ${maintenanceBypassArm('app.global_retention_cleanup')}`,
         withCheck: sql`${table.organization_id} = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
@@ -150,10 +150,9 @@ export const webhook_delivery_attempts = notifySchema
         'chk_webhook_attempts_status',
         sql`${table.status} IN ('PENDING', 'SENDING', 'SENT', 'FAILED')`,
       ),
-      check(
-        'chk_webhook_attempts_count',
-        sql`${table.attempt_count} >= 0 AND ${table.attempt_count} <= 5`,
-      ),
+      // Every send ever started for the attempt — across retries and dead-letter replays — so
+      // only the lower bound describes valid data.
+      check('chk_webhook_attempts_count', sql`${table.attempt_count} >= 0`),
       pgPolicy('webhook_delivery_attempts_tenant_isolation', {
         as: 'permissive',
         for: 'all',
@@ -165,7 +164,7 @@ export const webhook_delivery_attempts = notifySchema
               WHERE public_id = current_setting('app.current_organization_public_id', true)
             )
           )
-          OR current_setting('app.global_retention_cleanup', true) = 'true'`,
+          OR ${maintenanceBypassArm('app.global_retention_cleanup')}`,
         withCheck: sql`${table.webhook_id} IN (
             SELECT id FROM notify.webhooks
             WHERE organization_id = (

@@ -1,18 +1,18 @@
-import { sql } from 'drizzle-orm';
-import { bigint, bigserial, varchar, timestamp, index, pgPolicy } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, varchar, timestamp, index } from 'drizzle-orm/pg-core';
 import { authSchema } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 
 /**
- * Drizzle table for `auth.verification_tokens` — unified store for magic-link /
+ * Drizzle table for `auth.verification_tokens` — unified store for email-code /
  * password-reset / email-verification / email-change tokens. `token_hash` is
- * unique and indexed for replay-safe lookups; RLS is enabled with a
- * deliberately permissive `USING (true)` policy. See sec-D9 notes below.
+ * unique and indexed for replay-safe lookups; FORCE RLS is role-gated — deny-all
+ * for every role except the two runtime roles (`clinozy_be_app`,
+ * `clinozy_be_maintenance`), which get full access. See sec-D9 notes below.
  *
  * @remarks
  * **sec-D9 — application-trust safety model (read this before touching the
- * policy).** The `verification_tokens_application_access` policy grants
- * unrestricted access at the DB layer. The safety model is NOT enforced by
+ * policy).** The policies gate by ROLE, not by row: a runtime-role connection
+ * reads every row. Within those roles the safety model is NOT enforced by
  * RLS — it is enforced by three application-level invariants:
  *
  *   1. The `token_hash` column stores the SHA-256 of a 32-byte CSPRNG random
@@ -25,7 +25,7 @@ import { users } from '@/domains/user/user.schema.js';
  *   3. No untrusted SQL execution path exists. Every code path under
  *      `getRequestDatabase()` runs prepared statements through Drizzle.
  *
- * A future operational tool that browses for "all pending magic links" would
+ * A future operational tool that browses for "all pending email codes" would
  * break invariant #2 and leak `token_hash` + `user_id` + `email`. If such a
  * tool is added, replace the policy with a narrower predicate (e.g.
  * `USING (token_hash = current_setting('app.current_verification_token_hash', true))`
@@ -58,13 +58,11 @@ export const verification_tokens = authSchema
       // sec-D #11: covers the sec-D5 retention sweep
       // (`DELETE WHERE expires_at < cutoff`). Added by 20260607010000.
       index('idx_verification_tokens_expires_at').on(table.expires_at),
-      pgPolicy('verification_tokens_application_access', {
-        as: 'permissive',
-        for: 'all',
-        to: 'public',
-        using: sql`true`,
-        withCheck: sql`true`,
-      }),
+      // Role-gated like the other system tables, so the policies live only in migrations:
+      // `verification_tokens_deny_all` (TO PUBLIC, USING false) plus
+      // `verification_tokens_app_access` (TO clinozy_be_app, clinozy_be_maintenance) —
+      // 20260923120000 and 20261006022303. The permissive TO public policy this file used to
+      // declare was dropped by 20260923120000.
     ],
   )
   .enableRLS();

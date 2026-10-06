@@ -86,7 +86,7 @@ export async function completeOAuthUserSession(parameters: {
   } = parameters;
 
   // route-audit: normalize the provider email (case-insensitive mailbox) the SAME way every other
-  // entry point does (login/magic-link/forgot all use trimmedEmail → lowercase). Without this, OAuth
+  // entry point does (login/email-code/forgot all use trimmedEmail → lowercase). Without this, OAuth
   // find-or-create exact-matched the raw mixed-case email against the case-sensitive
   // `idx_users_email_unique`, so `Victim@x.com` FORKED a second account instead of matching the
   // existing `victim@x.com` — duplicating identity and sidestepping the link-into-verified guard.
@@ -165,10 +165,11 @@ export async function completeOAuthUserSession(parameters: {
   // in a SEPARATE global-admin transaction (its own pool connection) which cannot see an uncommitted
   // user, so doing it inside the transaction above always FK-failed and was silently swallowed;
   // post-commit it succeeds. Best-effort + idempotent (the partial unique index makes a retry a no-op
-  // and tool:backfill-personal-organizations recovers a miss). Team-only mode skips it.
+  // and the self-heal on the next sign-in or `GET /users/me` recovers a miss). Team-only mode
+  // skips it.
   if ((isNewUser || claimedBareAccount) && env.PERSONAL_ORGANIZATION_ENABLED) {
     try {
-      await ensurePersonalOrganization(user.id);
+      await ensurePersonalOrganization(user);
       logger.info({ userId: user.public_id, provider }, 'oauth.user.personal_org_provisioned');
     } catch (error) {
       logger.error(

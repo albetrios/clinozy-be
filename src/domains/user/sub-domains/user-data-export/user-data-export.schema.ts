@@ -9,7 +9,7 @@ import {
   check,
   pgPolicy,
 } from 'drizzle-orm/pg-core';
-import { authSchema } from '@/infrastructure/database/pg-schemas.js';
+import { authSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 
 /**
@@ -58,13 +58,13 @@ export const user_data_exports = authSchema
           WHERE public_id = current_setting('app.current_user_public_id', true)
             AND deleted_at IS NULL
         )
-        OR current_setting('app.global_retention_cleanup', true) = 'true'`,
+        OR ${maintenanceBypassArm('app.global_retention_cleanup')}`,
         withCheck: sql`${table.user_id} = (
           SELECT id FROM auth.users
           WHERE public_id = current_setting('app.current_user_public_id', true)
             AND deleted_at IS NULL
         )
-        OR current_setting('app.global_retention_cleanup', true) = 'true'`,
+        OR ${maintenanceBypassArm('app.global_retention_cleanup')}`,
       }),
     ],
   )

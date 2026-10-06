@@ -13,6 +13,7 @@ import {
   DEFAULT_AUDIT_OUTBOX_DRAIN_BATCH_SIZE,
   DEFAULT_AUDIT_OUTBOX_DRAIN_MAX_ATTEMPTS,
 } from '@/domains/audit/workers/audit-outbox-drain.constants.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 /**
  * Summary returned by {@link runAuditOutboxDrainJob} for observability.
@@ -137,6 +138,7 @@ async function buildResolutionMaps(
 }
 
 interface ResolvedAuditLogInsertRow {
+  public_id: string;
   actor_user_id: number | null;
   actor_api_key_id: number | null;
   target_user_id: number | null;
@@ -167,7 +169,12 @@ function resolveRowInserts(
     ? (maps.organizationIdsByPublicId.get(row.organization_public_id) ?? null)
     : null;
 
-  if (actor_user_id === null && actor_api_key_id === null) {
+  // A pre-authentication event (failed login) has no actor by design and says so; any other row
+  // must carry an actor that still resolves.
+  const declaresActor = row.actor_user_public_id !== null || row.actor_api_key_public_id !== null;
+  const isAnonymous =
+    !declaresActor && (row.metadata as Record<string, unknown> | null)?.actor_kind === 'anonymous';
+  if (!isAnonymous && actor_user_id === null && actor_api_key_id === null) {
     return {
       error: 'actor public_id did not resolve (user/api-key may have been hard-deleted)',
     };
@@ -180,6 +187,7 @@ function resolveRowInserts(
 
   return {
     row: {
+      public_id: generatePublicId('auditLog'),
       actor_user_id,
       actor_api_key_id,
       target_user_id,

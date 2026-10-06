@@ -135,42 +135,6 @@ describe('Subscription Sub-Domain — Integration', () => {
     });
   });
 
-  describe('PATCH /api/v1/billing/subscriptions/:subscription_id', () => {
-    it('should return 400 when the body carries cancel_at_period_end (sec-B1)', async () => {
-      // `validateUpdateSubscription` refuses `cancel_at_period_end` so a PATCH cannot flip the
-      // local flag without a matching Stripe call — clients must use /cancel and /resume. That
-      // refusal was unit-proven only; with no boundary case, a validator that stopped being
-      // wired into the route would let the divergence back in silently.
-      const { organization, token, subscription } = await createContextWithSubscription();
-
-      const response = await injectAuthenticated(app, {
-        method: 'PATCH',
-        url: testApiPath(`/billing/subscriptions/${subscription.public_id}`),
-        token,
-        organizationPublicId: organization.public_id,
-        payload: { cancel_at_period_end: true },
-      });
-
-      expect(response.statusCode).toBe(400);
-    });
-
-    it('should accept an empty body (no billing-state field is PATCHable)', async () => {
-      // The non-vacuous contrast: the 400 above is about the rejected FIELD, not about PATCH
-      // being broken.
-      const { organization, token, subscription } = await createContextWithSubscription();
-
-      const response = await injectAuthenticated(app, {
-        method: 'PATCH',
-        url: testApiPath(`/billing/subscriptions/${subscription.public_id}`),
-        token,
-        organizationPublicId: organization.public_id,
-        payload: {},
-      });
-
-      expect(response.statusCode).toBe(200);
-    });
-  });
-
   // ─── GET payment-setup ──────────────────────────────────────────────────────
   //
   // One case existed for this route (a 200 in `billing-payment-methods.e2e.test.ts`). It carries
@@ -201,14 +165,13 @@ describe('Subscription Sub-Domain — Integration', () => {
         method: 'GET',
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/payment-setup`),
         token: outsiderToken,
-        organizationPublicId: organization.public_id,
       });
 
       expect(response.statusCode).toBe(403);
     });
 
     it('should return 404 for an unknown subscription id', async () => {
-      const { organization, token } = await createContextWithSubscription();
+      const { token } = await createContextWithSubscription();
 
       const response = await injectAuthenticated(app, {
         method: 'GET',
@@ -216,7 +179,6 @@ describe('Subscription Sub-Domain — Integration', () => {
           `/billing/subscriptions/${generatePublicId('subscription')}/payment-setup`,
         ),
         token,
-        organizationPublicId: organization.public_id,
       });
 
       expect(response.statusCode).toBe(404);

@@ -3,12 +3,15 @@ import { eq } from 'drizzle-orm';
 
 const deleteWhereMock = vi.fn();
 const selectMock = vi.fn();
-const databaseHandle = {
+const databaseHandle: Record<string, unknown> = {
   select: selectMock,
   delete: () => ({
     where: deleteWhereMock,
   }),
 };
+// Every delete runs in a savepoint (a nested `transaction`); the fake runs it on itself.
+databaseHandle.transaction = (work: (savepoint: typeof databaseHandle) => Promise<unknown>) =>
+  work(databaseHandle);
 
 import { deleteInBatchesByCondition } from '@/infrastructure/database/utils/batch-delete.util.js';
 
@@ -42,6 +45,6 @@ describe('deleteInBatchesByCondition', () => {
       tableLabel: 'fake',
     });
 
-    expect(result).toEqual({ deletedCount: 1, blockedCount: 1 });
+    expect(result).toEqual({ deletedCount: 1, blockedCount: 1, hasMore: false });
   });
 });

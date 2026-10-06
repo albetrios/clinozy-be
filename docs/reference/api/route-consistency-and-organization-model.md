@@ -31,7 +31,7 @@ Every serialized organization response — get, list, create, patch — carries 
 
 - `type === 'TEAM'` ⇒ the nine team-only routes are available for the organization; `type === 'PERSONAL'` ⇒ none are. This is a property of the organization **type**, not the caller's permission — permissions and roles govern what the caller may do, separately.
 - A client gates a team-only action on **both**: `type === 'TEAM'` (the action exists for this organization) **and** the caller holding the relevant permission (e.g. `subscription:manage`). Never probe for a 422 to discover availability.
-- There is no `capabilities` object on the response — it was a redundant projection of `type` and was removed. The personal-vs-team rule lives only in the server-side guard (§1.2).
+- There is no `capabilities` object on the response — `type` is the signal. The personal-vs-team rule lives only in the server-side guard (§1.2).
 
 ### 1.2 The 9 team-only routes and the `assertTeamOrganization` backstop
 
@@ -114,9 +114,7 @@ MFA and WebAuthn routes split by **who the caller already is**:
   - `POST /api/v1/auth/webauthn/authenticate/options`
   - `POST /api/v1/auth/webauthn/authenticate/verify`
 
-The old `/auth/mfa*` (non-login) paths now return **404** — there are no deprecation aliases (pre-first-release).
-
-**MFA method public id:** MFA methods use the `am_` (auth-method) prefix; the legacy `mfa_` prefix was removed. The `mfa_method_id` param validates `^am_[a-z0-9]{21}$`.
+**MFA method public id:** MFA methods use the `am_` (auth-method) prefix. The `mfa_method_id` param validates `^am_[a-z0-9]{21}$`.
 
 ---
 

@@ -7,7 +7,7 @@ Thank you for improving this backend. This document is intentionally short—use
 - **Node.js** — version in [`.nvmrc`](.nvmrc) (project expects Node 24 per `package.json` `engines`)
 - **pnpm** — package manager used by this repo
 - **Docker** — Postgres and Redis (see [`docker-compose.yml`](docker-compose.yml))
-- **Environment** — new hosted env: add to `tooling/setup/setup.config.json` and `NODE_ENV` in the schema, then `pnpm tool:generate-project-identity` and `pnpm github:sync`. Fill in real values (defaults to `NODE_ENV=development` → `.env.development`). Push to GitHub: `pnpm github:sync <environment>`.
+- **Environment** — new hosted env: add to `tooling/setup/setup.config.json` and `NODE_ENV` in the schema, then `pnpm tool:generate-project-identity` and `pnpm github:sync`. Fill in real values in `.env.<environment>`. Push to GitHub: `pnpm github:sync <environment>`.
 
 ## Local setup
 
@@ -43,7 +43,7 @@ Committed files at the project root (not directories) group as follows:
 
 | Category           | Examples                                                                                           |
 | ------------------ | -------------------------------------------------------------------------------------------------- |
-| Package / Node     | `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig.json`, `.nvmrc`, `.node-version` |
+| Package / Node     | `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `patches/`, `tsconfig.json`, `.nvmrc`, `.node-version` |
 | Quality            | `biome.json`, `.biomeignore`, `.editorconfig`, `tooling/vitest/`                                   |
 | Data               | `drizzle.config.ts`, `migrations/`                                                                 |
 | Containers         | `Dockerfile`, `Dockerfile.worker`, `Dockerfile.agent`, `docker-bake.hcl`, `docker-compose.yml`     |

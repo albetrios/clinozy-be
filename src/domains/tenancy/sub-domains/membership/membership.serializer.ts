@@ -9,8 +9,9 @@ import type {
  * the membership's own `public_id`, the organization public id, plus the user and role summaries
  * resolved by the caller (their `id` fields are the user/role public ids). The internal sequential
  * `user_id`/`role_id` on the row are NEVER emitted (they leak enumerable ids and row counts). The
- * flat `user_id`/`role_id` mirror `user.id`/`role.id` for back-compat; `invitation` is the live
- * pending invite (present only on `INVITED` rows). Timestamps become ISO-8601.
+ * flat `user_id`/`role_id` repeat `user.id`/`role.id` — the frontend reads both forms, so both
+ * are part of the contract; `invitation` is the live pending invite (present only on `INVITED`
+ * rows). Timestamps become ISO-8601.
  */
 export function serializeMembership(
   row: {

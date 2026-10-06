@@ -11,7 +11,7 @@ import {
   check,
   pgPolicy,
 } from 'drizzle-orm/pg-core';
-import { billingSchema } from '@/infrastructure/database/pg-schemas.js';
+import { billingSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { plans } from '@/domains/billing/sub-domains/plan/plan.schema.js';
@@ -114,7 +114,7 @@ export const subscriptions = billingSchema
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR current_setting('app.global_retention_cleanup', true) = 'true'`,
+          OR ${maintenanceBypassArm('app.global_retention_cleanup')}`,
         withCheck: sql`${table.organization_id} = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)

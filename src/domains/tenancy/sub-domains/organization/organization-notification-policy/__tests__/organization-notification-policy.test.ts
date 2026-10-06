@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
   injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
   injectUnauthenticated,
 } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -153,7 +152,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
         TENANCY_PERMISSIONS.NOTIFICATION_POLICY_MANAGE,
       ]);
 
-      const created = await injectAuthenticatedOrganizationMutation(app, {
+      const created = await injectAuthenticated(app, {
         method: 'POST',
         url: NOTIFICATION_POLICIES_COLLECTION_PATH,
         token,
@@ -190,7 +189,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
         TENANCY_PERMISSIONS.NOTIFICATION_POLICY_READ,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: NOTIFICATION_POLICIES_COLLECTION_PATH,
         token,
@@ -204,7 +203,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
         TENANCY_PERMISSIONS.NOTIFICATION_POLICY_MANAGE,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: NOTIFICATION_POLICIES_COLLECTION_PATH,
         token,
@@ -218,7 +217,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
         TENANCY_PERMISSIONS.NOTIFICATION_POLICY_MANAGE,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: NOTIFICATION_POLICIES_COLLECTION_PATH,
         token,
@@ -234,7 +233,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
 
       // An unknown channel must be rejected by the DTO, not slip through to the
       // chk_org_notif_channel database check and surface as a 500.
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: NOTIFICATION_POLICIES_COLLECTION_PATH,
         token,
@@ -250,7 +249,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
         TENANCY_PERMISSIONS.NOTIFICATION_POLICY_MANAGE,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: NOTIFICATION_POLICIES_COLLECTION_PATH,
         token,
@@ -268,7 +267,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
         TENANCY_PERMISSIONS.NOTIFICATION_POLICY_MANAGE,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: NOTIFICATION_POLICIES_COLLECTION_PATH,
         token,
@@ -286,7 +285,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
         TENANCY_PERMISSIONS.NOTIFICATION_POLICY_MANAGE,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: NOTIFICATION_POLICIES_COLLECTION_PATH,
         token,
@@ -319,7 +318,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
       const manageContext = await createAuthorizedOrganizationContext([
         TENANCY_PERMISSIONS.NOTIFICATION_POLICY_MANAGE,
       ]);
-      const created = await injectAuthenticatedOrganizationMutation(app, {
+      const created = await injectAuthenticated(app, {
         method: 'POST',
         url: NOTIFICATION_POLICIES_COLLECTION_PATH,
         token: manageContext.token,
@@ -346,7 +345,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
         organizationPublicId: manageContext.organization.public_id,
       });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PATCH',
         url: notificationPolicyResourcePath(policyId),
         token: readOnlyToken,
@@ -360,7 +359,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
         TENANCY_PERMISSIONS.NOTIFICATION_POLICY_MANAGE,
       ]);
 
-      const created = await injectAuthenticatedOrganizationMutation(app, {
+      const created = await injectAuthenticated(app, {
         method: 'POST',
         url: NOTIFICATION_POLICIES_COLLECTION_PATH,
         token,
@@ -370,7 +369,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
       const createdBody = created.json() as { data: { id: string } };
       const policyId = createdBody.data.id;
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PATCH',
         url: notificationPolicyResourcePath(policyId),
         token,
@@ -384,7 +383,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
         TENANCY_PERMISSIONS.NOTIFICATION_POLICY_MANAGE,
       ]);
 
-      const created = await injectAuthenticatedOrganizationMutation(app, {
+      const created = await injectAuthenticated(app, {
         method: 'POST',
         url: NOTIFICATION_POLICIES_COLLECTION_PATH,
         token,
@@ -394,7 +393,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
       const createdBody = created.json() as { data: { id: string } };
       const policyId = createdBody.data.id;
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PATCH',
         url: notificationPolicyResourcePath(policyId),
         token,
@@ -408,7 +407,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
         TENANCY_PERMISSIONS.NOTIFICATION_POLICY_MANAGE,
       ]);
 
-      const created = await injectAuthenticatedOrganizationMutation(app, {
+      const created = await injectAuthenticated(app, {
         method: 'POST',
         url: NOTIFICATION_POLICIES_COLLECTION_PATH,
         token,
@@ -423,7 +422,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
       const createdBody = created.json() as { data: { id: string } };
       const policyId = createdBody.data.id;
 
-      const patched = await injectAuthenticatedOrganizationMutation(app, {
+      const patched = await injectAuthenticated(app, {
         method: 'PATCH',
         url: notificationPolicyResourcePath(policyId),
         token,
@@ -454,7 +453,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
       const manageContext = await createAuthorizedOrganizationContext([
         TENANCY_PERMISSIONS.NOTIFICATION_POLICY_MANAGE,
       ]);
-      const created = await injectAuthenticatedOrganizationMutation(app, {
+      const created = await injectAuthenticated(app, {
         method: 'POST',
         url: NOTIFICATION_POLICIES_COLLECTION_PATH,
         token: manageContext.token,
@@ -481,7 +480,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
         organizationPublicId: manageContext.organization.public_id,
       });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'DELETE',
         url: notificationPolicyResourcePath(policyId),
         token: readOnlyToken,
@@ -494,7 +493,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
         TENANCY_PERMISSIONS.NOTIFICATION_POLICY_MANAGE,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'DELETE',
         url: notificationPolicyResourcePath('pol_doesnotexist000000000'),
         token,
@@ -508,7 +507,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
         TENANCY_PERMISSIONS.NOTIFICATION_POLICY_MANAGE,
       ]);
 
-      const created = await injectAuthenticatedOrganizationMutation(app, {
+      const created = await injectAuthenticated(app, {
         method: 'POST',
         url: NOTIFICATION_POLICIES_COLLECTION_PATH,
         token,
@@ -525,7 +524,7 @@ describe('Tenancy Organization Notification Policy Sub-Domain — Integration', 
       expect(typeof policyId).toBe('string');
       expect(policyId.length).toBeGreaterThan(0);
 
-      const deleted = await injectAuthenticatedOrganizationMutation(app, {
+      const deleted = await injectAuthenticated(app, {
         method: 'DELETE',
         url: notificationPolicyResourcePath(policyId),
         token,

@@ -1,5 +1,6 @@
 import http from 'k6/http';
 import { PUBLIC_AUTH_FORM_HEADERS } from '../helpers/config.js';
+import { idempotencyKey } from '../helpers/idempotency.js';
 import { check, sleep } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
 import { SharedArray } from 'k6/data';
@@ -219,11 +220,6 @@ export const options = {
     orgs_leaked: ['count==0'],
   },
 };
-
-function idemKey(tag) {
-  // The idempotency header must be 16–255 characters, so keep this comfortably long.
-  return `k6-fe-${tag}-${__VU}-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
-}
 
 function record(name, res, expected) {
   const m = M[name];
@@ -471,7 +467,10 @@ function apiKeyBlock(auth, unique) {
   const created = http.post(
     `${API}/tenancy/organization/api-keys`,
     JSON.stringify({ name: `k6-fe-key-${unique}`, scopes: ['organization:read'] }),
-    { headers: { ...auth, 'X-Idempotency-Key': idemKey('key') }, tags: { name: '26-create-key' } },
+    {
+      headers: { ...auth, 'X-Idempotency-Key': idempotencyKey('fe-key') },
+      tags: { name: '26-create-key' },
+    },
   );
   const keyOk = record('26-create-key', created, [200, 201]);
   if (!keyOk) state.ok = false;
@@ -544,7 +543,7 @@ function webhookBlock(auth, unique) {
     `${API}/notify/webhooks`,
     JSON.stringify({ url: `https://example.com/k6-fe-${unique}`, events: [event] }),
     {
-      headers: { ...auth, 'X-Idempotency-Key': idemKey('webhook') },
+      headers: { ...auth, 'X-Idempotency-Key': idempotencyKey('fe-webhook') },
       tags: { name: '30-create-webhook' },
     },
   );
@@ -628,7 +627,7 @@ function roleBlock(auth, unique) {
     `${API}/tenancy/organization/roles`,
     JSON.stringify({ name: `k6-fe-role-${unique}`.slice(0, 100), description: 'k6 fe journey' }),
     {
-      headers: { ...auth, 'X-Idempotency-Key': idemKey('role') },
+      headers: { ...auth, 'X-Idempotency-Key': idempotencyKey('fe-role') },
       tags: { name: '37-create-role' },
     },
   );
@@ -747,7 +746,7 @@ function membershipBlock(auth, inviteeEmail, seatCeiling) {
     `${API}/tenancy/organization/memberships`,
     JSON.stringify({ email: inviteeEmail, role_id: member.id }),
     {
-      headers: { ...auth, 'X-Idempotency-Key': idemKey('invite') },
+      headers: { ...auth, 'X-Idempotency-Key': idempotencyKey('fe-invite') },
       tags: { name: '43-invite-member' },
     },
   );
@@ -1022,7 +1021,7 @@ export function feFullJourney() {
     `${API}/tenancy/organizations`,
     JSON.stringify({ name: `K6 FE ${unique}`, slug }),
     {
-      headers: { ...auth, 'X-Idempotency-Key': idemKey('org') },
+      headers: { ...auth, 'X-Idempotency-Key': idempotencyKey('fe-org') },
       tags: { name: '21-create-org' },
     },
   );

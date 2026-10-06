@@ -1,57 +1,67 @@
 /**
- * Lists failed Stripe webhook ledger rows and optionally reclaims them for worker retry.
+ * Lists failed and abandoned Stripe webhook ledger rows and retries one on request.
  *
  * Usage:
- *   pnpm stripe:webhook:replay -- --list
- *   pnpm stripe:webhook:replay -- --reclaim evt_123 [--dry-run]
+ *   pnpm tool:stripe-webhook-replay -- --list
+ *   pnpm tool:stripe-webhook-replay -- --retry evt_123 [--dry-run]
  *
- * Run: pnpm stripe:webhook:replay
+ * `--retry` gives a `failed` or `abandoned` event a fresh attempt budget (`failed`,
+ * `attempt_count` 0) and enqueues it; the worker claims it from there. The reclaim sweep retries
+ * `failed` rows on its own — this is for an abandoned event once its cause is fixed.
  */
-import { eq } from 'drizzle-orm';
-import { database } from '@/infrastructure/database/connection.js';
-import { closeDatabase } from '@/infrastructure/database/connection.js';
+import '@/shared/config/load-env-files.js';
+import { inArray } from 'drizzle-orm';
+import { database, closeDatabase } from '@/infrastructure/database/connection.js';
+import { connectRedis, closeRedis } from '@/infrastructure/cache/redis.client.js';
 import { stripe_webhook_events } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook.schema.js';
 import { StripeWebhookEventRepository } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-event.repository.js';
+import {
+  closeStripeWebhookQueue,
+  enqueueStripeWebhookByEventIdForReclaim,
+} from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
 
 const repository = new StripeWebhookEventRepository();
 
-async function listFailedEvents(): Promise<void> {
+async function listUnprocessedEvents(): Promise<void> {
   const rows = await database
     .select({
       stripe_event_id: stripe_webhook_events.stripe_event_id,
       event_type: stripe_webhook_events.event_type,
+      processing_status: stripe_webhook_events.processing_status,
       attempt_count: stripe_webhook_events.attempt_count,
       failure_reason: stripe_webhook_events.failure_reason,
-      updated_at: stripe_webhook_events.updated_at,
     })
     .from(stripe_webhook_events)
-    .where(eq(stripe_webhook_events.processing_status, 'failed'));
+    .where(inArray(stripe_webhook_events.processing_status, ['failed', 'abandoned']));
 
   if (rows.length === 0) {
-    console.log('No failed Stripe webhook events.');
+    console.log('No failed or abandoned Stripe webhook events.');
     return;
   }
 
   for (const row of rows) {
     console.log(
-      `${row.stripe_event_id}\t${row.event_type}\tattempts=${row.attempt_count}\t${row.failure_reason ?? ''}`,
+      `${row.stripe_event_id}\t${row.event_type}\t${row.processing_status}\tattempts=${row.attempt_count}\t${row.failure_reason ?? ''}`,
     );
   }
-  console.log(`Total failed: ${rows.length}`);
+  console.log(`Total: ${rows.length}`);
 }
 
-async function reclaimEvent(stripeEventId: string, dryRun: boolean): Promise<void> {
+async function retryEvent(stripeEventId: string, dryRun: boolean): Promise<void> {
   if (dryRun) {
-    console.log(`[dry-run] Would reclaim ${stripeEventId}`);
+    console.log(`[dry-run] Would reset and enqueue ${stripeEventId}`);
     return;
   }
 
-  const reclaimed = await repository.tryReclaimEvent(stripeEventId);
-  if (reclaimed) {
-    console.log(`Reclaimed ${stripeEventId} — enqueue a stripe-webhook job to process.`);
-  } else {
-    console.log(`Could not reclaim ${stripeEventId} (not failed or not stuck processing).`);
+  const reset = await repository.resetForOperatorRetry(stripeEventId);
+  if (!reset) {
+    console.error(`Cannot retry ${stripeEventId}: no failed or abandoned ledger row.`);
+    process.exitCode = 1;
+    return;
   }
+  await connectRedis();
+  await enqueueStripeWebhookByEventIdForReclaim(stripeEventId, 'stripe-webhook-replay');
+  console.log(`Reset and enqueued ${stripeEventId}.`);
 }
 
 async function main(): Promise<void> {
@@ -59,24 +69,18 @@ async function main(): Promise<void> {
   const dryRun = argumentsList.includes('--dry-run');
 
   if (argumentsList.includes('--list') || argumentsList.length === 0) {
-    await listFailedEvents();
+    await listUnprocessedEvents();
     return;
   }
 
-  const reclaimIndex = argumentsList.indexOf('--reclaim');
-  if (reclaimIndex >= 0) {
-    const stripeEventId = argumentsList[reclaimIndex + 1];
-    if (!stripeEventId || stripeEventId.startsWith('--')) {
-      console.error('Usage: pnpm stripe:webhook:replay -- --reclaim <stripe_event_id> [--dry-run]');
-      process.exitCode = 1;
-      return;
-    }
-    await reclaimEvent(stripeEventId, dryRun);
+  const retryIndex = argumentsList.indexOf('--retry');
+  const stripeEventId = retryIndex >= 0 ? argumentsList[retryIndex + 1] : undefined;
+  if (!stripeEventId || stripeEventId.startsWith('--')) {
+    console.error('Usage: pnpm tool:stripe-webhook-replay -- --list | --retry <id> [--dry-run]');
+    process.exitCode = 1;
     return;
   }
-
-  console.error('Usage: pnpm stripe:webhook:replay -- --list | --reclaim <id> [--dry-run]');
-  process.exitCode = 1;
+  await retryEvent(stripeEventId, dryRun);
 }
 
 main()
@@ -85,5 +89,7 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
+    await closeStripeWebhookQueue();
+    await closeRedis();
     await closeDatabase();
   });

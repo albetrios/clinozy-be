@@ -23,10 +23,6 @@ let bullmqJobDurationSeconds: Histogram<'queue' | 'job_name'> | null = null;
 let postgresPoolMaxConnections: Gauge | null = null;
 let postgresPoolMetricsAvailable: Gauge | null = null;
 let dbPoolConnections: Gauge<'state'> | null = null;
-let pgPoolActive: Gauge | null = null;
-let pgPoolIdle: Gauge | null = null;
-let pgPoolWaiting: Gauge | null = null;
-let bullmqJobsWaiting: Gauge<'queue'> | null = null;
 let eventLoopLagMilliseconds: Gauge | null = null;
 let stripeWebhookEventsFailed: Gauge | null = null;
 let mailOutboxPending: Gauge | null = null;
@@ -38,24 +34,10 @@ let eventBusHandlerFailuresTotal: Counter<'event_type'> | null = null;
 let commitDispatchDurabilityFallbacksTotal: Counter | null = null;
 let readCacheRequestsTotal: Counter<'cache' | 'result'> | null = null;
 let databaseUnscopedQueriesTotal: Counter | null = null;
+let bullmqProviderOutageParkedJobsTotal: Counter<'queue' | 'provider' | 'reason'> | null = null;
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: single registration site for all Prometheus instruments — boilerplate, intentionally long
-function registerOn(registry: Registry): void {
-  httpRequestsTotal = new Counter({
-    name: 'http_requests_total',
-    help: 'Total HTTP requests',
-    labelNames: ['method', 'route', 'status_code'],
-    registers: [registry],
-  });
-
-  httpRequestDurationSeconds = new Histogram({
-    name: 'http_request_duration_seconds',
-    help: 'HTTP request duration in seconds',
-    labelNames: ['method', 'route', 'status_code'],
-    buckets: DEFAULT_LATENCY_BUCKETS_SECONDS,
-    registers: [registry],
-  });
-
+/** The BullMQ queue and job metrics — split out of {@link registerOn} to keep each short. */
+function registerQueueMetrics(registry: Registry): void {
   bullmqQueueWaiting = new Gauge({
     name: 'bullmq_queue_waiting',
     help: 'BullMQ jobs waiting in queue',
@@ -92,6 +74,32 @@ function registerOn(registry: Registry): void {
     registers: [registry],
   });
 
+  bullmqProviderOutageParkedJobsTotal = new Counter({
+    name: 'bullmq_provider_outage_parked_jobs_total',
+    help: "Jobs parked because their third-party provider was down (reason=outage — each one re-arms the queue's five-minute pause) or throttling us (reason=throttle — paused for the provider's Retry-After), by queue and provider (resend | stripe | s3). An outage rate that keeps rising is an outage still in progress: the queue is waiting for the provider, not losing jobs",
+    labelNames: ['queue', 'provider', 'reason'],
+    registers: [registry],
+  });
+}
+
+function registerOn(registry: Registry): void {
+  httpRequestsTotal = new Counter({
+    name: 'http_requests_total',
+    help: 'Total HTTP requests',
+    labelNames: ['method', 'route', 'status_code'],
+    registers: [registry],
+  });
+
+  httpRequestDurationSeconds = new Histogram({
+    name: 'http_request_duration_seconds',
+    help: 'HTTP request duration in seconds',
+    labelNames: ['method', 'route', 'status_code'],
+    buckets: DEFAULT_LATENCY_BUCKETS_SECONDS,
+    registers: [registry],
+  });
+
+  registerQueueMetrics(registry);
+
   postgresPoolMaxConnections = new Gauge({
     name: 'postgres_pool_max_connections',
     help: 'Configured postgres.js pool max connections (DATABASE_POOL_MAX)',
@@ -108,31 +116,6 @@ function registerOn(registry: Registry): void {
     name: 'db_pool_connections',
     help: 'Postgres connections for the current database user sampled from pg_stat_activity',
     labelNames: ['state'],
-    registers: [registry],
-  });
-
-  pgPoolActive = new Gauge({
-    name: 'pg_pool_active',
-    help: 'Postgres connections in active state (alias of db_pool_connections{state="active"})',
-    registers: [registry],
-  });
-
-  pgPoolIdle = new Gauge({
-    name: 'pg_pool_idle',
-    help: 'Postgres connections in idle state (alias of db_pool_connections{state="idle"})',
-    registers: [registry],
-  });
-
-  pgPoolWaiting = new Gauge({
-    name: 'pg_pool_waiting',
-    help: 'Postgres connections waiting (alias of db_pool_connections{state="waiting"})',
-    registers: [registry],
-  });
-
-  bullmqJobsWaiting = new Gauge({
-    name: 'bullmq_jobs_waiting',
-    help: 'BullMQ jobs waiting in queue (alias of bullmq_queue_waiting)',
-    labelNames: ['queue'],
     registers: [registry],
   });
 
@@ -168,7 +151,7 @@ function registerOn(registry: Registry): void {
 
   databaseRlsCheckoutHoldSeconds = new Histogram({
     name: 'database_rls_checkout_hold_seconds',
-    help: 'Wall-clock seconds an organization-scoped RLS transaction held a pooled connection, by path (scoped_context | request_transaction)',
+    help: 'Wall-clock seconds an RLS transaction held a pooled connection, by path (scoped_context | session_context | maintenance_context)',
     labelNames: ['path'],
     buckets: DEFAULT_LATENCY_BUCKETS_SECONDS,
     registers: [registry],
@@ -227,10 +210,6 @@ function bindMetricHandlesFromRegistry(registry: Registry): void {
     'postgres_pool_metrics_available',
   ) as Gauge;
   dbPoolConnections = registry.getSingleMetric('db_pool_connections') as Gauge<'state'>;
-  pgPoolActive = registry.getSingleMetric('pg_pool_active') as Gauge;
-  pgPoolIdle = registry.getSingleMetric('pg_pool_idle') as Gauge;
-  pgPoolWaiting = registry.getSingleMetric('pg_pool_waiting') as Gauge;
-  bullmqJobsWaiting = registry.getSingleMetric('bullmq_jobs_waiting') as Gauge<'queue'>;
   eventLoopLagMilliseconds = registry.getSingleMetric('event_loop_lag_ms') as Gauge;
   stripeWebhookEventsFailed = registry.getSingleMetric('stripe_webhook_events_failed') as Gauge;
   mailOutboxPending = registry.getSingleMetric('mail_outbox_pending') as Gauge;
@@ -248,6 +227,9 @@ function bindMetricHandlesFromRegistry(registry: Registry): void {
   commitDispatchDurabilityFallbacksTotal = registry.getSingleMetric(
     'commit_dispatch_durability_fallbacks_total',
   ) as Counter;
+  bullmqProviderOutageParkedJobsTotal = registry.getSingleMetric(
+    'bullmq_provider_outage_parked_jobs_total',
+  ) as Counter<'queue' | 'provider' | 'reason'>;
   readCacheRequestsTotal = registry.getSingleMetric('read_cache_requests_total') as Counter<
     'cache' | 'result'
   >;
@@ -298,9 +280,9 @@ export function recordHttpRequest(
 }
 
 /**
- * Updates the `bullmq_queue_{waiting,active,delayed,failed}` gauges (plus the
- * legacy `bullmq_jobs_waiting` alias) for a single queue from a freshly read
- * `getJobCounts` payload. Called by {@link refreshBullMQQueueGauges}.
+ * Updates the `bullmq_queue_{waiting,active,delayed,failed}` gauges for a single
+ * queue from a freshly read `getJobCounts` payload. Called by
+ * {@link refreshBullMQQueueGauges}.
  */
 export function setBullMQQueueCounts(
   queueName: string,
@@ -312,7 +294,6 @@ export function setBullMQQueueCounts(
   }
   const label = { queue: queueName };
   bullmqQueueWaiting.set(label, counts.waiting);
-  bullmqJobsWaiting?.set(label, counts.waiting);
   bullmqQueueActive.set(label, counts.active);
   bullmqQueueDelayed.set(label, counts.delayed);
   bullmqQueueFailed.set(label, counts.failed);
@@ -354,9 +335,9 @@ export function setPostgresPoolConfigMetrics(options: {
 }
 
 /**
- * Sets the `db_pool_connections{state=...}` gauge plus the legacy
- * `pg_pool_{active,idle,waiting}` aliases from a fresh `pg_stat_activity` sample.
- * Missing states default to 0 so dashboards see a stable schema.
+ * Sets the `db_pool_connections{state=...}` gauge from a fresh `pg_stat_activity` sample.
+ * Every state is written on each sample — a state missing from it reads 0 — so a drained
+ * state never keeps a stale value and dashboards see a stable schema.
  */
 export function setPostgresPoolConnectionCounts(
   samples: ReadonlyArray<{ state: 'active' | 'idle' | 'waiting'; count: number }>,
@@ -371,13 +352,11 @@ export function setPostgresPoolConnectionCounts(
   };
 
   for (const sample of samples) {
-    dbPoolConnections.set({ state: sample.state }, sample.count);
     countsByState[sample.state] = sample.count;
   }
-
-  pgPoolActive?.set(countsByState.active);
-  pgPoolIdle?.set(countsByState.idle);
-  pgPoolWaiting?.set(countsByState.waiting);
+  for (const [state, count] of Object.entries(countsByState)) {
+    dbPoolConnections.set({ state }, count);
+  }
 }
 
 /**
@@ -428,10 +407,10 @@ export function setOrganizationRlsActiveCheckouts(count: number): void {
 }
 
 /**
- * Observes one completed organization-RLS checkout hold on the `database_rls_checkout_hold_seconds`
- * histogram, labelled by `path` (`scoped_context` unit of work vs legacy full-request
- * `request_transaction`). Wired via `registerOrganizationRlsCheckoutHoldObserver` so the hot
- * database-checkout paths stay free of a prom-client import. No-op when metrics are disabled.
+ * Observes one completed RLS checkout hold on the `database_rls_checkout_hold_seconds` histogram,
+ * labelled by `path` (`scoped_context` | `session_context` | `maintenance_context`). Wired via
+ * `registerOrganizationRlsCheckoutHoldObserver` so the hot database-checkout paths stay free of a
+ * prom-client import. No-op when metrics are disabled.
  */
 export function recordOrganizationRlsCheckoutHold(options: {
   path: OrganizationRlsCheckoutPath;
@@ -499,6 +478,29 @@ export function recordReadCacheRequest(cache: string, result: 'hit' | 'miss'): v
   ensurePrometheusMetricsRegistered(getMetricsRegistry());
   if (!readCacheRequestsTotal) return;
   readCacheRequestsTotal.inc({ cache, result });
+}
+
+/**
+ * Increments `bullmq_provider_outage_parked_jobs_total` for one job parked by a provider outage or
+ * throttle.
+ *
+ * @remarks
+ * Called by the provider-pausable worker each time a job waits out its provider. Every label is
+ * bounded: a queue name, one of three providers, `outage` or `throttle`.
+ */
+export function recordProviderOutageParkedJob(options: {
+  queue: string;
+  provider: string;
+  reason: 'outage' | 'throttle';
+}): void {
+  if (!isMetricsEnabled()) return;
+  ensurePrometheusMetricsRegistered(getMetricsRegistry());
+  if (!bullmqProviderOutageParkedJobsTotal) return;
+  bullmqProviderOutageParkedJobsTotal.inc({
+    queue: options.queue,
+    provider: options.provider,
+    reason: options.reason,
+  });
 }
 
 /**

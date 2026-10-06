@@ -1,6 +1,8 @@
 /**
- * Dead-letter queues: after a job exhausts retries, enqueue a snapshot to `<source>-dlq`
- * and emit one Sentry issue (grouped by queue + job name).
+ * Dead-letter queues: when a job fails for good — its retries exhausted, or it threw
+ * `UnrecoverableError` — record it in `audit.dead_letter_jobs`, mirror a snapshot to
+ * `<source>-dlq`, and emit one Sentry issue (grouped by queue + job name) unless the failure is an
+ * expected one.
  */
 
 import { Queue, UnrecoverableError, type Job, type Worker } from 'bullmq';
@@ -10,7 +12,7 @@ import {
   getBullMQKeyPrefix,
 } from '@/infrastructure/queue/connection.js';
 import { insertDeadLetterJob } from '@/infrastructure/queue/dlq/dead-letter.repository.js';
-import { THIRTY_DAYS_SECONDS } from '@/shared/constants/ttl.constants.js';
+import { MILLISECONDS_PER_SECOND, THIRTY_DAYS_SECONDS } from '@/shared/constants/ttl.constants.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import { redactSensitive } from '@/shared/utils/security/sensitive-redaction.util.js';
@@ -21,11 +23,17 @@ export const DLQ_QUEUE_SUFFIX = '-dlq';
 const DEAD_LETTER_JOB_NAME = 'dead-letter';
 
 /**
- * Dead-letter jobs are retained for 30 days so operators have time to inspect and replay
- * them, after which BullMQ evicts the records from Redis to prevent unbounded growth and
- * OOM. Replay flows must finish (or re-enqueue) within this window.
+ * How long a snapshot stays in a `<source>-dlq` mirror: 30 days to inspect and replay it, then
+ * {@link trimDeadLetterQueueMirrors} removes it. The Postgres ledger keeps its own retention.
  */
-const DEAD_LETTER_RETENTION_SECONDS = THIRTY_DAYS_SECONDS;
+export const DEAD_LETTER_MIRROR_RETENTION_MS = THIRTY_DAYS_SECONDS * MILLISECONDS_PER_SECOND;
+
+/**
+ * Most snapshots one `<source>-dlq` mirror holds. Past it a final failure is still recorded in
+ * `audit.dead_letter_jobs` and alerted, but not mirrored: a failure storm cannot fill Redis — the
+ * same Redis every queue runs on.
+ */
+export const DEAD_LETTER_MIRROR_MAX_JOBS = 1_000;
 
 const deadLetterQueuesByName = new Map<string, Queue>();
 
@@ -33,13 +41,14 @@ const deadLetterQueuesByName = new Map<string, Queue>();
  * Snapshot persisted on the `<source>-dlq` queue when a job exhausts its retry budget.
  * Carries only a hand-picked metadata summary (see {@link buildReplayJobPayload}) — the
  * original payload is intentionally not stored so secrets, HTML bodies, and full webhook
- * payloads never sit in Redis past the 30-day retention window.
+ * payloads never sit in Redis, not even within the 30-day mirror retention.
  */
 export interface DeadLetterJobData {
   original_queue: string;
   original_job_id?: string;
   original_job_name: string;
-  replay_attempt?: number;
+  /** How many dead-letter replays led to this failure (0 = the original job). */
+  replay_depth: number;
   /** Metadata only — never store secrets, HTML, or full webhook payloads in Redis. */
   original_data_summary: Record<string, unknown>;
   failed_reason: string;
@@ -53,11 +62,13 @@ export interface DeadLetterJobData {
  * Extracts the non-secret replay keys from a failed job's data into the DLQ summary.
  *
  * Each replayable queue type contributes the identifiers {@link buildReplayJobPayload} needs
- * to reconstruct its job: mail (`mail_outbox_id`), webhook delivery (`delivery_attempt_id` +
- * `organization_public_id`), notification (`notification_id` + `organization_public_id`), and
- * Stripe webhook (`stripe_event_id`). These are public/internal identifiers only — full
- * payloads, HTML bodies, signing secrets, and PII are deliberately left out so nothing
- * sensitive sits in Redis or `audit.dead_letter_jobs` past the retention window.
+ * to reconstruct its job: mail (`mail_outbox_token`), webhook delivery
+ * (`delivery_attempt_public_id` + `organization_public_id`), notification
+ * (`notification_public_id` + `organization_public_id` + `user_public_id`), and Stripe webhook
+ * (`stripe_event_id`); a data-export job's `export_public_id` + `user_public_id` are kept for the
+ * operator. Public handles only — never a bigserial, and full payloads, HTML bodies, signing
+ * secrets and PII are deliberately left out so nothing sensitive sits in Redis or
+ * `audit.dead_letter_jobs` past the retention window.
  */
 function summarizeJobDataForDeadLetter(data: unknown): Record<string, unknown> {
   if (typeof data !== 'object' || data === null) {
@@ -65,20 +76,71 @@ function summarizeJobDataForDeadLetter(data: unknown): Record<string, unknown> {
   }
   const record = data as Record<string, unknown>;
   const summary: Record<string, unknown> = {};
-  if (record.mailOutboxId !== undefined) summary.mail_outbox_id = record.mailOutboxId;
-  if (record.deliveryAttemptId !== undefined) {
-    summary.delivery_attempt_id = record.deliveryAttemptId;
+  if (record.mailOutboxToken !== undefined) summary.mail_outbox_token = record.mailOutboxToken;
+  if (record.deliveryAttemptPublicId !== undefined) {
+    summary.delivery_attempt_public_id = record.deliveryAttemptPublicId;
   }
-  if (record.webhookId !== undefined) summary.webhook_id = record.webhookId;
-  if (record.eventType !== undefined) summary.event_type = record.eventType;
-  if (record.notificationId !== undefined) summary.notification_id = record.notificationId;
+  if (record.notificationPublicId !== undefined) {
+    summary.notification_public_id = record.notificationPublicId;
+  }
+  if (record.exportPublicId !== undefined) summary.export_public_id = record.exportPublicId;
   // Tenant scope for webhook + notification replay (notification jobs may carry an explicit null).
   if (record.organizationPublicId !== undefined) {
     summary.organization_public_id = record.organizationPublicId;
   }
+  // The recipient / owner — scopes a notification without an organization, and an export.
+  if (record.userPublicId !== undefined) summary.user_public_id = record.userPublicId;
   // Stripe event id is required to re-fetch and replay a Stripe webhook job.
   if (record.stripeEventId !== undefined) summary.stripe_event_id = record.stripeEventId;
   return summary;
+}
+
+/**
+ * Marks an error whose dead-letter record the thrower already wrote, and returns it.
+ *
+ * @remarks
+ * The poison-job guard records a malformed payload before throwing, so the record exists even if
+ * the worker dies; the `failed` listener then alerts on the error without recording it a second
+ * time ({@link isDeadLetterAlreadyRecorded}). A marker property rather than a subclass, like
+ * `expectedFinalFailure`: the guard still throws BullMQ's own `UnrecoverableError`.
+ */
+export function markDeadLetterRecorded<TError extends Error>(error: TError): TError {
+  return Object.assign(error, { deadLetterRecorded: true });
+}
+
+/** Whether {@link markDeadLetterRecorded} marked this error — its dead-letter record exists. */
+export function isDeadLetterAlreadyRecorded(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { deadLetterRecorded?: unknown }).deadLetterRecorded === true
+  );
+}
+
+/**
+ * Whether a final failure is an expected one: the error declares `expectedFinalFailure: true`
+ * (for example a customer webhook endpoint that never accepted the delivery).
+ *
+ * @remarks
+ * Such a failure is recorded in the dead-letter ledger like any other — the job is still dead —
+ * but logged at warn and kept out of Sentry: it is somebody else's fault and nobody on call can act
+ * on it. Errors on our side never set the flag.
+ */
+export function isExpectedFinalFailure(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { expectedFinalFailure?: unknown }).expectedFinalFailure === true
+  );
+}
+
+/** How many dead-letter replays led to this job: its `dlqReplayAttempt`, 0 for an original job. */
+function readReplayDepth(jobData: unknown): number {
+  if (typeof jobData !== 'object' || jobData === null) return 0;
+  const replayAttempt = (jobData as { dlqReplayAttempt?: unknown }).dlqReplayAttempt;
+  return typeof replayAttempt === 'number' && Number.isInteger(replayAttempt) && replayAttempt > 0
+    ? replayAttempt
+    : 0;
 }
 
 /** Resolves the BullMQ dead-letter queue name (`<source>-dlq`) for a source queue. */
@@ -107,17 +169,12 @@ export function listDeadLetterQueueNames(sourceQueueNames: readonly string[]): s
 export function getDeadLetterQueueClient(deadLetterQueueName: string): Queue {
   const existing = deadLetterQueuesByName.get(deadLetterQueueName);
   if (existing) return existing;
+  // No worker consumes a mirror, so its snapshots stay `waiting` until a replay removes them:
+  // BullMQ's `removeOnComplete` / `removeOnFail` never fire for them. The bounds are
+  // DEAD_LETTER_MIRROR_MAX_JOBS (checked on write) and trimDeadLetterQueueMirrors (by age).
   const queue = new Queue(deadLetterQueueName, {
     connection: getBullMQConnectionOptions(),
     prefix: getBullMQKeyPrefix(),
-    // Queue-level default eviction so DLQ snapshots are bounded even when they sit
-    // in `waiting` state (BullMQ `removeOn{Complete,Fail}` per-add only fires on
-    // state transition; a DLQ job that never completes/fails would otherwise grow
-    // unbounded outside any retention policy).
-    defaultJobOptions: {
-      removeOnComplete: { age: DEAD_LETTER_RETENTION_SECONDS, count: 1_000 },
-      removeOnFail: { age: DEAD_LETTER_RETENTION_SECONDS, count: 1_000 },
-    },
   });
   deadLetterQueuesByName.set(deadLetterQueueName, queue);
   return queue;
@@ -157,13 +214,14 @@ export function isFinalJobFailure(job: Job | undefined): boolean {
  * @remarks
  * - **Algorithm:** lazily opens (or reuses) a BullMQ {@link Queue} for the DLQ, builds a
  *   safe {@link DeadLetterJobData} record via `summarizeJobDataForDeadLetter`, and adds a
- *   `dead-letter` job keyed by `dlq-<source>-<originalJobId>` for replay deduplication.
+ *   `dead-letter` job keyed by `dlq-<source>-<originalJobId>` for replay deduplication — unless
+ *   the mirror already holds {@link DEAD_LETTER_MIRROR_MAX_JOBS} snapshots, when it only logs
+ *   `queue.dead_letter.mirror_full` (the Postgres ledger has the record).
  * - **Failure modes:** any Redis error bubbles back to {@link attachDeadLetterAndAlerting},
  *   which logs `queue.dead_letter.enqueue_failed`; the original failed job remains in
  *   BullMQ's `failed` set so operators can still inspect it.
- * - **Side effects:** writes a row to the DLQ Redis stream with 30-day retention on
- *   `removeOnComplete` and `removeOnFail` (and queue-level defaults that also bound
- *   `waiting` jobs); no Postgres writes.
+ * - **Side effects:** one count and one add on the DLQ (a `waiting` job, removed by a replay or
+ *   by {@link trimDeadLetterQueueMirrors} after 30 days); no Postgres writes.
  * - **Notes:** the DLQ Redis `jobId` is `dlq-<source>-<originalJobId>-attempt-<attemptsMade>`
  *   so a replayed job that fails terminally again produces a FRESH snapshot rather than
  *   colliding with the prior failure's `failed_reason`/`error_stack`/`failed_at` (BullMQ's
@@ -178,6 +236,20 @@ export async function enqueueDeadLetter(
 ): Promise<void> {
   const deadLetterQueueName = getDeadLetterQueueName(sourceQueueName);
   const queue = getDeadLetterQueueClient(deadLetterQueueName);
+  const mirroredCount = await queue.getWaitingCount();
+  if (mirroredCount >= DEAD_LETTER_MIRROR_MAX_JOBS) {
+    logger.warn(
+      {
+        sourceQueue: sourceQueueName,
+        deadLetterQueue: deadLetterQueueName,
+        originalJobId: job.id,
+        mirroredCount,
+        maxMirroredJobs: DEAD_LETTER_MIRROR_MAX_JOBS,
+      },
+      'queue.dead_letter.mirror_full',
+    );
+    return;
+  }
   const errorObject = error instanceof Error ? error : new Error(String(error));
   const maxAttempts = resolveJobMaxAttempts(job);
 
@@ -186,6 +258,7 @@ export async function enqueueDeadLetter(
     original_job_id: job.id ?? undefined,
     original_job_name: job.name,
     original_data_summary: summarizeJobDataForDeadLetter(job.data),
+    replay_depth: readReplayDepth(job.data),
     // audit-#W2: scrub URL/query-embedded secrets from the free-text error fields before they land
     // in the 30-day Redis mirror, mirroring the Sentry `beforeSend` path (payload_summary is already
     // whitelisted). Latent today, but a future error message interpolating a token must not persist.
@@ -199,11 +272,7 @@ export async function enqueueDeadLetter(
   const safeOriginalJobIdentifier = job.id ?? job.opts.jobId ?? 'unknown';
   const deadLetterJobIdentifier = `dlq-${sourceQueueName}-${String(safeOriginalJobIdentifier)}-attempt-${String(job.attemptsMade)}`;
 
-  await queue.add(DEAD_LETTER_JOB_NAME, data, {
-    jobId: deadLetterJobIdentifier,
-    removeOnComplete: { age: DEAD_LETTER_RETENTION_SECONDS },
-    removeOnFail: { age: DEAD_LETTER_RETENTION_SECONDS },
-  });
+  await queue.add(DEAD_LETTER_JOB_NAME, data, { jobId: deadLetterJobIdentifier });
 
   logger.info(
     {
@@ -252,6 +321,7 @@ async function persistDeadLetterFailureToPostgres(
       attempts_made: job.attemptsMade,
       max_attempts: maxAttempts,
       failed_at: new Date(),
+      replay_depth: readReplayDepth(job.data),
     });
 
     logger.info(
@@ -353,13 +423,21 @@ function captureDeadLetterPersistFailureInSentry(
 }
 
 /**
- * Subscribes once to `failed`: warn on transient retries; on final failure, persist the
- * durable Postgres record + mirror to Redis + alert Sentry.
+ * Subscribes once to `failed`: warn on transient retries; on a final failure, persist the durable
+ * Postgres record + mirror to Redis + alert Sentry.
  *
  * @remarks
- * - **Notes:** `UnrecoverableError` is treated as already-handled — the poison-job guard
- *   (`parseJobDataOrDeadLetter`) records the dead-letter and skips BullMQ's retry path, so this
- *   listener logs `queue.job.unrecoverable` and returns without recording a second time.
+ * - **Algorithm:** a failure is final when the job used its last attempt or threw BullMQ's
+ *   `UnrecoverableError` (which skips the remaining attempts). Then:
+ *   - already recorded ({@link isDeadLetterAlreadyRecorded} — the poison-job guard): alert only;
+ *   - an expected failure ({@link isExpectedFinalFailure}) — record it, log at warn, no Sentry;
+ *   - anything else — record it, log at error, one Sentry event.
+ * - **Failure modes:** never throws out of the listener — the record write is fire-and-forget
+ *   and swallows its own errors.
+ * - **Side effects:** structured logs, `audit.dead_letter_jobs` + `<source>-dlq` writes, Sentry.
+ * - **Notes:** an `UnrecoverableError` is a job that can never succeed — a missing row, an
+ *   unreadable secret, a corrupt payload. It used to be logged and dropped: no ledger row, no
+ *   alert, nothing for an operator to find.
  */
 export function attachDeadLetterAndAlerting(worker: Worker, queueName: string): void {
   worker.on('failed', (job, error) => {
@@ -370,15 +448,8 @@ export function attachDeadLetterAndAlerting(worker: Worker, queueName: string): 
       return;
     }
 
-    if (error instanceof UnrecoverableError) {
-      logger.error(
-        { queue: queueName, jobId: job.id, jobName: job.name, error: errorMessage },
-        'queue.job.unrecoverable',
-      );
-      return;
-    }
-
-    if (!isFinalJobFailure(job)) {
+    const unrecoverable = error instanceof UnrecoverableError;
+    if (!(unrecoverable || isFinalJobFailure(job))) {
       logger.warn(
         {
           queue: queueName,
@@ -393,24 +464,83 @@ export function attachDeadLetterAndAlerting(worker: Worker, queueName: string): 
       return;
     }
 
-    logger.error(
-      {
-        queue: queueName,
-        jobId: job.id,
-        jobName: job.name,
-        attemptsMade: job.attemptsMade,
-        maxAttempts: resolveJobMaxAttempts(job),
-        error: errorMessage,
-      },
-      'queue.job.final_failure',
-    );
+    const logFields = {
+      queue: queueName,
+      jobId: job.id,
+      jobName: job.name,
+      attemptsMade: job.attemptsMade,
+      maxAttempts: resolveJobMaxAttempts(job),
+      unrecoverable,
+      error: errorMessage,
+    };
+
+    if (isDeadLetterAlreadyRecorded(error)) {
+      logger.error(logFields, 'queue.job.final_failure');
+      captureFinalFailureInSentry(queueName, job, error);
+      return;
+    }
+
+    const expected = isExpectedFinalFailure(error);
+    if (expected) {
+      logger.warn(logFields, 'queue.job.final_failure_expected');
+    } else {
+      logger.error(logFields, 'queue.job.final_failure');
+    }
 
     void recordDeadLetterFailure(queueName, job, error).catch((err) => {
       logger.error({ err, queue: queueName, jobId: job?.id }, 'queue.dead_letter.record_failed');
     });
 
-    captureFinalFailureInSentry(queueName, job, error);
+    if (!expected) {
+      captureFinalFailureInSentry(queueName, job, error);
+    }
   });
+}
+
+/**
+ * Removes the snapshots older than the mirror retention from each source queue's `<source>-dlq`.
+ *
+ * @remarks
+ * - **Algorithm:** `clean(retentionMs, DEAD_LETTER_MIRROR_MAX_JOBS, 'wait')` on every mirror,
+ *   concurrently through the pooled clients — at most one mirror's worth per queue per pass.
+ * - **Failure modes:** a Redis error on one mirror is logged (`queue.dead_letter.trim_failed`)
+ *   and leaves the others to finish; the next pass retries it.
+ * - **Side effects:** deletes Redis job hashes from the mirrors; never touches the Postgres
+ *   ledger, which `audit-retention` prunes on its own schedule.
+ * - **Notes:** run on every DLQ-depth tick. Returns the number of snapshots removed.
+ */
+export async function trimDeadLetterQueueMirrors(options: {
+  sourceQueueNames: readonly string[];
+  retentionMs?: number;
+}): Promise<number> {
+  const retentionMs = options.retentionMs ?? DEAD_LETTER_MIRROR_RETENTION_MS;
+  const removedCounts = await Promise.all(
+    options.sourceQueueNames.map(async (sourceQueueName) => {
+      const deadLetterQueueName = getDeadLetterQueueName(sourceQueueName);
+      try {
+        const removed = await getDeadLetterQueueClient(deadLetterQueueName).clean(
+          retentionMs,
+          DEAD_LETTER_MIRROR_MAX_JOBS,
+          'wait',
+        );
+        return removed.length;
+      } catch (error) {
+        logger.warn(
+          {
+            deadLetterQueue: deadLetterQueueName,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'queue.dead_letter.trim_failed',
+        );
+        return 0;
+      }
+    }),
+  );
+  const removedTotal = removedCounts.reduce((total, removed) => total + removed, 0);
+  if (removedTotal > 0) {
+    logger.info({ removedTotal, retentionMs }, 'queue.dead_letter.trimmed');
+  }
+  return removedTotal;
 }
 
 /**

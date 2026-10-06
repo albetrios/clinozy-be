@@ -2,7 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 /**
  * Minimum wall-clock duration (milliseconds) that email-dispatch endpoints with a
- * silent-success anti-enumeration response (magic-link request, forgot-password) spend
+ * silent-success anti-enumeration response (email-code request, forgot-password) spend
  * before replying, regardless of whether the target account exists.
  *
  * @remarks

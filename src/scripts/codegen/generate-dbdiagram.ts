@@ -283,8 +283,9 @@ function processMigrationSql(sql: string): void {
   const addColumnPattern =
     /alter\s+table\s+"?([a-z_][a-z0-9_]*)"?\."?([a-z_][a-z0-9_]*)"?\s+add\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?\s+([^;]+)/gi;
   for (const addColumnMatch of sql.matchAll(addColumnPattern)) {
+    // A definition can span lines (`... NOT NULL\n  DEFAULT (...)`); the parser reads one line.
     const parsed = parseColumnDefinitionLine(
-      `${addColumnMatch[3] ?? ''} ${addColumnMatch[4] ?? ''}`,
+      `${addColumnMatch[3] ?? ''} ${(addColumnMatch[4] ?? '').replace(/\s+/g, ' ')}`,
     );
     if (!(parsed && addColumnMatch[1] && addColumnMatch[2])) continue;
     const tableDefinition = getOrCreateTable(addColumnMatch[1], addColumnMatch[2]);
@@ -295,6 +296,20 @@ function processMigrationSql(sql: string): void {
         reference: parsed.foreignKey,
       });
     }
+  }
+
+  // ALTER TABLE schema.table DROP COLUMN [IF EXISTS] col — the column's foreign key goes with it.
+  const dropColumnPattern =
+    /alter\s+table\s+"?([a-z_][a-z0-9_]*)"?\."?([a-z_][a-z0-9_]*)"?\s+drop\s+column\s+(?:if\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?/gi;
+  for (const dropColumnMatch of sql.matchAll(dropColumnPattern)) {
+    const [, schema, table, column] = dropColumnMatch;
+    if (!(schema && table && column)) continue;
+    const tableDefinition = tables.get(qualifiedTableKey(schema, table));
+    if (!tableDefinition) continue;
+    tableDefinition.columns.delete(column);
+    tableDefinition.foreignKeys = tableDefinition.foreignKeys.filter(
+      (foreignKey) => foreignKey.column !== column,
+    );
   }
 
   // ALTER TABLE schema.table ADD PRIMARY KEY (col1, col2)
@@ -377,13 +392,22 @@ function processMigrationSql(sql: string): void {
     }
   }
 
+  // CREATE and DROP POLICY in file order: a migration often drops a policy and re-creates it under
+  // the same name, and a dropped one must leave the diagram.
   const policyPattern =
-    /create\s+policy\s+"?([a-z_][a-z0-9_]*)"?\s+on\s+"?([a-z_][a-z0-9_]*)"?\."?([a-z_][a-z0-9_]*)"?/gi;
+    /(create|drop)\s+policy\s+(?:if\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?\s+on\s+"?([a-z_][a-z0-9_]*)"?\."?([a-z_][a-z0-9_]*)"?/gi;
   for (const policyMatch of sql.matchAll(policyPattern)) {
-    if (!(policyMatch[1] && policyMatch[2] && policyMatch[3])) continue;
-    const tableDefinition = getOrCreateTable(policyMatch[2], policyMatch[3]);
-    if (!tableDefinition.rowLevelSecurityPolicies.includes(policyMatch[1])) {
-      tableDefinition.rowLevelSecurityPolicies.push(policyMatch[1]);
+    const [, verb, policyName, schema, table] = policyMatch;
+    if (!(verb && policyName && schema && table)) continue;
+    if (verb.toLowerCase() === 'drop') {
+      const policies = tables.get(qualifiedTableKey(schema, table))?.rowLevelSecurityPolicies;
+      const index = policies?.indexOf(policyName) ?? -1;
+      if (policies && index >= 0) policies.splice(index, 1);
+      continue;
+    }
+    const tableDefinition = getOrCreateTable(schema, table);
+    if (!tableDefinition.rowLevelSecurityPolicies.includes(policyName)) {
+      tableDefinition.rowLevelSecurityPolicies.push(policyName);
     }
     tableDefinition.rowLevelSecurityEnabled = true;
   }

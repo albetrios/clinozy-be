@@ -11,12 +11,14 @@ vi.mock('@/domains/notify/sub-domains/notification/queues/notification.queue.js'
   enqueueNotification: (...arguments_: unknown[]) => enqueueNotificationMock(...arguments_),
 }));
 
+const NOTIFICATION_PUBLIC_ID = 'ntf_9z3rura5kqvcv8zggriym';
+const RECIPIENT_PUBLIC_ID = 'usr_recipient00000000001';
+
 describe('NotificationDispatch', () => {
   const notificationRepository = {
-    create: vi.fn().mockResolvedValue(42),
+    create: vi.fn().mockResolvedValue({ publicId: NOTIFICATION_PUBLIC_ID }),
     findOrganizationPublicIdByOrganizationId: vi.fn().mockResolvedValue('org_public'),
-    deleteByInternalId: vi.fn().mockResolvedValue(undefined),
-    resolveUserPublicIdsByInternalIds: vi.fn().mockResolvedValue(['usr_one', 'usr_two']),
+    resolveUserPublicIdsByInternalIds: vi.fn(),
   } as unknown as NotificationRepository;
 
   const dispatch = createNotificationDispatch(notificationRepository);
@@ -25,6 +27,10 @@ describe('NotificationDispatch', () => {
     enqueueNotificationMock.mockClear();
     vi.mocked(notificationRepository.create).mockClear();
     vi.mocked(notificationRepository.findOrganizationPublicIdByOrganizationId).mockClear();
+    vi.mocked(notificationRepository.resolveUserPublicIdsByInternalIds).mockReset();
+    vi.mocked(notificationRepository.resolveUserPublicIdsByInternalIds).mockResolvedValue([
+      RECIPIENT_PUBLIC_ID,
+    ]);
   });
 
   it('defers enqueueNotification until flushOnCommit', async () => {
@@ -41,7 +47,13 @@ describe('NotificationDispatch', () => {
 
     await eventBus.flushOnCommit();
     expect(enqueueNotificationMock).toHaveBeenCalledOnce();
-    expect(enqueueNotificationMock).toHaveBeenCalledWith(42, 'org_public');
+    // Public ids only travel with the post-commit task: the job outlives an id restart.
+    expect(enqueueNotificationMock).toHaveBeenCalledWith({
+      notificationPublicId: NOTIFICATION_PUBLIC_ID,
+      organizationPublicId: 'org_public',
+      userPublicId: RECIPIENT_PUBLIC_ID,
+    });
+    expect(notificationRepository.resolveUserPublicIdsByInternalIds).toHaveBeenCalledWith([1]);
   });
 
   it('resolves organization public id before inserting the notification row', async () => {
@@ -52,9 +64,15 @@ describe('NotificationDispatch', () => {
       callOrder.push('lookup');
       return 'org_public';
     });
+    vi.mocked(notificationRepository.resolveUserPublicIdsByInternalIds).mockImplementationOnce(
+      async () => {
+        callOrder.push('recipient');
+        return [RECIPIENT_PUBLIC_ID];
+      },
+    );
     vi.mocked(notificationRepository.create).mockImplementationOnce(async () => {
       callOrder.push('create');
-      return 42;
+      return { publicId: NOTIFICATION_PUBLIC_ID };
     });
 
     enterOnCommitScope();
@@ -66,7 +84,7 @@ describe('NotificationDispatch', () => {
       message: 'Body',
     });
 
-    expect(callOrder).toEqual(['lookup', 'create']);
+    expect(callOrder).toEqual(['lookup', 'recipient', 'create']);
   });
 
   it('skips organization lookup and passes null public id for user-only notifications', async () => {
@@ -81,7 +99,26 @@ describe('NotificationDispatch', () => {
     expect(notificationRepository.findOrganizationPublicIdByOrganizationId).not.toHaveBeenCalled();
 
     await eventBus.flushOnCommit();
-    expect(enqueueNotificationMock).toHaveBeenCalledWith(42, null);
+    expect(enqueueNotificationMock).toHaveBeenCalledWith({
+      notificationPublicId: NOTIFICATION_PUBLIC_ID,
+      organizationPublicId: null,
+      userPublicId: RECIPIENT_PUBLIC_ID,
+    });
+  });
+
+  it('does not create the notification when the recipient does not resolve', async () => {
+    vi.mocked(notificationRepository.resolveUserPublicIdsByInternalIds).mockResolvedValueOnce([]);
+
+    await expect(
+      dispatch.createAndDispatchNotification({
+        user_id: 404,
+        type: 'system',
+        title: 'Test',
+        message: 'Body',
+      }),
+    ).rejects.toMatchObject({ statusCode: 404, messageParams: { resource: 'User' } });
+
+    expect(notificationRepository.create).not.toHaveBeenCalled();
   });
 
   it('does not create the notification when organization lookup fails', async () => {
@@ -107,6 +144,10 @@ describe('NotificationDispatch', () => {
     // The invite-accepted handler needs public ids to key each recipient's unread-count cache,
     // and it has only internal ids. This is the seam; it lives on the dispatch because that is
     // the repository handle a cross-domain event handler is allowed to reach.
+    vi.mocked(notificationRepository.resolveUserPublicIdsByInternalIds).mockResolvedValue([
+      'usr_one',
+      'usr_two',
+    ]);
     await expect(dispatch.resolveRecipientPublicIds([11, 22])).resolves.toEqual([
       'usr_one',
       'usr_two',
@@ -128,6 +169,10 @@ describe('NotificationDispatch', () => {
       /Notification dispatch is not configured/,
     );
 
+    vi.mocked(notificationRepository.resolveUserPublicIdsByInternalIds).mockResolvedValue([
+      'usr_one',
+      'usr_two',
+    ]);
     fresh.configureNotificationDispatch(fresh.createNotificationDispatch(notificationRepository));
     await expect(fresh.resolveNotificationRecipientPublicIds([11, 22])).resolves.toEqual([
       'usr_one',

@@ -170,7 +170,6 @@ describe('Security: Permission route matrix', () => {
         method: route.method,
         url: materializedPath,
         token,
-        organizationPublicId: organization.public_id,
         ...(headers ? { headers } : {}),
         ...(payload !== undefined ? { payload } : {}),
       });
@@ -210,7 +209,6 @@ describe('Security: Permission route matrix', () => {
         method: route.method,
         url: materializedPath,
         token,
-        organizationPublicId: organization.public_id,
         ...(headers ? { headers } : {}),
         ...(payload !== undefined ? { payload } : {}),
       });

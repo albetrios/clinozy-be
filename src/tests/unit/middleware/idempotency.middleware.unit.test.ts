@@ -5,6 +5,7 @@ import {
   IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS,
 } from '@/shared/constants/index.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import { buildIdempotencyRequestFingerprint } from '@/shared/utils/idempotency/idempotency-fingerprint.util.js';
 
 const IDEMPOTENCY_KEY_HEADER = 'x-idempotency-key';
 const IDEMPOTENCY_TEST_KEY = 'test-key-1234567890';
@@ -31,20 +32,32 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
   logger: { warn: vi.fn() },
 }));
 
-function buildCompletedEntry(statusCode: number, body: unknown): string {
+/** The fingerprint the middleware computes for a body-less request with no route template. */
+function fingerprintFor(method: string): string {
+  return buildIdempotencyRequestFingerprint({ method, routePath: '/', body: undefined });
+}
+
+function buildCompletedEntry(statusCode: number, body: unknown, method = 'POST'): string {
   return JSON.stringify({
     state: 'completed',
     statusCode,
     body: typeof body === 'string' ? body : JSON.stringify(body),
     headers: { 'content-type': 'application/json' },
+    fingerprint: fingerprintFor(method),
   });
 }
 
 function buildInFlightEntry(): string {
-  return JSON.stringify({ state: 'in_flight', claimedAt: Date.now(), requestId: 'req-other' });
+  return JSON.stringify({
+    state: 'in_flight',
+    claimedAt: Date.now(),
+    requestId: 'req-other',
+    fingerprint: fingerprintFor('POST'),
+  });
 }
 
-function buildLegacyPlaceholderEntry(): string {
+/** Not an entry this middleware writes: no `state`, no fingerprint. */
+function buildUnreadableEntry(): string {
   return JSON.stringify({ statusCode: 202, body: '{}', headers: {} });
 }
 
@@ -323,8 +336,8 @@ describe('idempotency middleware happy paths and conflicts', () => {
     expect(mockRedisSet).not.toHaveBeenCalled();
   });
 
-  it('treats legacy placeholder shape as in_flight (migration path)', async () => {
-    mockRedisGet.mockResolvedValue(buildLegacyPlaceholderEntry());
+  it('answers 409 in_flight for an entry it cannot read, never replaying or overwriting it', async () => {
+    mockRedisGet.mockResolvedValue(buildUnreadableEntry());
     const { claimPreHandler } = await registerIdempotencyHooks();
 
     const request = {
@@ -351,10 +364,81 @@ describe('idempotency middleware happy paths and conflicts', () => {
     );
   });
 
+  it('never replays a completed entry that carries no fingerprint — its payload cannot be compared', async () => {
+    mockRedisGet.mockResolvedValue(
+      JSON.stringify({
+        state: 'completed',
+        statusCode: 200,
+        body: JSON.stringify({ id: 'unverifiable' }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const { claimPreHandler } = await registerIdempotencyHooks();
+
+    const request = {
+      method: 'POST',
+      headers: { [IDEMPOTENCY_KEY_HEADER]: IDEMPOTENCY_TEST_KEY },
+      auth: { kind: 'user' as const, userId: TEST_USER_PUBLIC_ID },
+      _idempotencyKey: IDEMPOTENCY_TEST_KEY,
+    } as unknown as FastifyRequest;
+
+    const send = vi.fn();
+    const reply = {
+      sent: false,
+      status: vi.fn().mockReturnThis(),
+      header: vi.fn().mockReturnThis(),
+      send,
+    } as unknown as FastifyReply;
+
+    await claimPreHandler(request, reply);
+
+    expect(reply.status).toHaveBeenCalledWith(409);
+    expect(send).not.toHaveBeenCalledWith({ id: 'unverifiable' });
+    expect(mockRedisSet).not.toHaveBeenCalled();
+  });
+
+  it('rejects an in-flight entry for a different payload with 422, not 409', async () => {
+    mockRedisGet.mockResolvedValue(
+      JSON.stringify({
+        state: 'in_flight',
+        claimedAt: Date.now(),
+        requestId: 'req-other',
+        fingerprint: 'fingerprint-of-another-payload',
+      }),
+    );
+    const { claimPreHandler } = await registerIdempotencyHooks();
+
+    const request = {
+      id: 'req-test',
+      method: 'POST',
+      headers: { [IDEMPOTENCY_KEY_HEADER]: IDEMPOTENCY_TEST_KEY },
+      auth: { kind: 'user' as const, userId: TEST_USER_PUBLIC_ID },
+      _idempotencyKey: IDEMPOTENCY_TEST_KEY,
+    } as unknown as FastifyRequest;
+
+    const send = vi.fn();
+    const reply = {
+      sent: false,
+      status: vi.fn().mockReturnThis(),
+      header: vi.fn().mockReturnThis(),
+      send,
+    } as unknown as FastifyReply;
+
+    await claimPreHandler(request, reply);
+
+    expect(reply.status).toHaveBeenCalledWith(422);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.objectContaining({ code: 'idempotency_key_reuse' }),
+      }),
+    );
+  });
+
   it('returns translated conflict_in_flight detail when request.t is available', async () => {
     mockRedisGet.mockResolvedValue(buildInFlightEntry());
     const { claimPreHandler } = await registerIdempotencyHooks();
     const request = {
+      method: 'POST',
       headers: {},
       auth: { kind: 'user' as const, userId: TEST_USER_PUBLIC_ID },
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
@@ -450,6 +534,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: { userId: TEST_USER_PUBLIC_ID },
     } as unknown as FastifyRequest & { _idempotencyClaimed?: boolean };
     const reply = {
@@ -487,7 +572,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     expect((request as { _idempotencyKey?: string })._idempotencyKey).toBeUndefined();
   });
 
-  it('claimPreHandler prefers request.organizationId over header value', async () => {
+  it('claimPreHandler scopes the key by the claim-derived request.organizationId', async () => {
     const organizationPublicId = generatePublicId('organization');
     mockRedisSet.mockResolvedValue('OK');
     const { claimPreHandler } = await registerIdempotencyHooks();
@@ -495,7 +580,6 @@ describe('idempotency middleware happy paths and conflicts', () => {
       method: 'POST',
       headers: {
         [IDEMPOTENCY_KEY_HEADER]: IDEMPOTENCY_TEST_KEY,
-        'x-organization-id': 'header-org',
       },
       auth: { kind: 'user' as const, userId: TEST_USER_PUBLIC_ID },
       organizationId: organizationPublicId,
@@ -577,6 +661,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: {
         userId: TEST_USER_PUBLIC_ID,
         organizationId: TEST_ORGANIZATION_PUBLIC_ID,
@@ -599,6 +684,11 @@ describe('idempotency middleware happy paths and conflicts', () => {
       'EX',
       IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS,
     );
+    // The entry carries the claim's fingerprint, so a later replay can compare payloads.
+    const storedEntry = JSON.parse(mockRedisSet.mock.calls.at(-1)?.[1] as string) as {
+      fingerprint?: string;
+    };
+    expect(storedEntry.fingerprint).toBe(fingerprintFor('POST'));
   });
 
   it('caches responses at exactly 100KB after onResponse runs', async () => {
@@ -606,6 +696,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: {
         userId: TEST_USER_PUBLIC_ID,
         organizationId: TEST_ORGANIZATION_PUBLIC_ID,
@@ -634,6 +725,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: {
         userId: TEST_USER_PUBLIC_ID,
         organizationId: TEST_ORGANIZATION_PUBLIC_ID,
@@ -671,6 +763,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: {
         userId: TEST_USER_PUBLIC_ID,
         organizationId: TEST_ORGANIZATION_PUBLIC_ID,
@@ -704,7 +797,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
   it('replays a cached empty 204 entry without crashing on JSON.parse', async () => {
     // The stored body is JSON `null`; the replay path must `JSON.parse('null')` -> null and
     // send an empty body, not throw — guarding `sendCachedIdempotencyResponse` for 204s.
-    mockRedisGet.mockResolvedValue(buildCompletedEntry(204, 'null'));
+    mockRedisGet.mockResolvedValue(buildCompletedEntry(204, 'null', 'DELETE'));
     const { claimPreHandler } = await registerIdempotencyHooks();
 
     const request = {
@@ -767,6 +860,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
       headers: {},
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyRequestFingerprint: fingerprintFor('POST'),
       organizationId: 'org-from-request',
     } as unknown as FastifyRequest & { organizationId: string };
     const reply = {
@@ -786,6 +880,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: { userId: TEST_USER_PUBLIC_ID },
     } as unknown as FastifyRequest;
     const reply = {
@@ -805,6 +900,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: { userId: TEST_USER_PUBLIC_ID },
     } as unknown as FastifyRequest;
     const reply = {
@@ -881,7 +977,6 @@ describe('idempotency middleware happy paths and conflicts', () => {
       method: 'POST',
       headers: {
         [IDEMPOTENCY_KEY_HEADER]: IDEMPOTENCY_TEST_KEY,
-        'x-organization-id': 'unverified-org',
       },
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
     } as unknown as FastifyRequest & { _idempotencyClaimed?: boolean };
@@ -1033,6 +1128,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: { userId: TEST_USER_PUBLIC_ID },
     } as unknown as FastifyRequest & { _idempotencyClaimed?: boolean };
     const reply = { statusCode: 500 } as unknown as FastifyReply;
@@ -1049,6 +1145,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: { userId: TEST_USER_PUBLIC_ID },
     } as unknown as FastifyRequest & { _idempotencyClaimed?: boolean };
     const reply = { statusCode: 204 } as unknown as FastifyReply;
@@ -1057,28 +1154,5 @@ describe('idempotency middleware happy paths and conflicts', () => {
 
     expect(mockRedisDel).toHaveBeenCalled();
     expect(mockRedisSet).not.toHaveBeenCalled();
-  });
-
-  it('onResponse with forceRelease deletes placeholder and never caches a 2xx body', async () => {
-    const { onSend, onResponse } = await registerIdempotencyHooks();
-    const request = {
-      _idempotencyKey: IDEMPOTENCY_TEST_KEY,
-      _idempotencyClaimed: true,
-      _idempotencyScope: {
-        userId: TEST_USER_PUBLIC_ID,
-        organizationId: TEST_ORGANIZATION_PUBLIC_ID,
-      },
-    } as unknown as FastifyRequest & { _idempotencyPendingCompleted?: unknown };
-    const reply = {
-      statusCode: 200,
-      getHeader: vi.fn().mockReturnValue('application/json'),
-    } as unknown as FastifyReply;
-
-    await onSend(request, reply, { id: 'created' });
-    await onResponse(request, reply, { forceRelease: true });
-
-    expect(mockRedisDel).toHaveBeenCalled();
-    expect(mockRedisSet).not.toHaveBeenCalled();
-    expect(request._idempotencyPendingCompleted).toBeUndefined();
   });
 });

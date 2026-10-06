@@ -65,7 +65,7 @@ describe('UploadService — assertKeyConfirmed / assertKeyConfirmedForOwner', ()
   }
 
   /** Runs `operation` once, returning the ValidationError it must have thrown. */
-  async function captureRejection(operation: () => Promise<void>): Promise<ValidationError> {
+  async function captureRejection(operation: () => Promise<unknown>): Promise<ValidationError> {
     try {
       await operation();
     } catch (error) {
@@ -79,37 +79,10 @@ describe('UploadService — assertKeyConfirmed / assertKeyConfirmedForOwner', ()
     vi.clearAllMocks();
   });
 
-  describe('assertKeyConfirmed', () => {
-    it('throws when no upload row exists for the key', async () => {
-      findByFileKey.mockResolvedValue(null);
-
-      await expect(service.assertKeyConfirmed(FILE_KEY)).rejects.toBeInstanceOf(ValidationError);
-      expect(findByFileKey).toHaveBeenCalledWith(FILE_KEY);
-    });
-
-    it('throws when the row is still PENDING (client never confirmed)', async () => {
-      findByFileKey.mockResolvedValue(uploadRow({ status: UPLOAD_STATUS.PENDING }));
-
-      await expect(service.assertKeyConfirmed(FILE_KEY)).rejects.toBeInstanceOf(ValidationError);
-    });
-
-    it('throws when the row is FAILED (confirm ran and rejected the object)', async () => {
-      findByFileKey.mockResolvedValue(uploadRow({ status: UPLOAD_STATUS.FAILED }));
-
-      await expect(service.assertKeyConfirmed(FILE_KEY)).rejects.toBeInstanceOf(ValidationError);
-    });
-
-    it('resolves for an UPLOADED row', async () => {
-      findByFileKey.mockResolvedValue(uploadRow());
-
-      await expect(service.assertKeyConfirmed(FILE_KEY)).resolves.toBeUndefined();
-    });
-  });
-
   describe('assertKeyConfirmedForOwner', () => {
     it('throws when neither owner id is supplied', async () => {
       // Guard against a caller that forgets to bind an owner: without it the function
-      // would degrade into plain assertKeyConfirmed and silently lose the sec-UP5 check.
+      // would degrade into an unbound check and silently lose the sec-UP5 check.
       await expect(
         service.assertKeyConfirmedForOwner({ fileKey: FILE_KEY }),
       ).rejects.toBeInstanceOf(ValidationError);
@@ -173,7 +146,7 @@ describe('UploadService — assertKeyConfirmed / assertKeyConfirmedForOwner', ()
           fileKey: FILE_KEY,
           userInternalId: USER_INTERNAL_ID,
         }),
-      ).resolves.toBeUndefined();
+      ).resolves.toEqual({ mimeType: 'image/png' });
     });
 
     it('resolves for an UPLOADED row whose organization_id matches', async () => {
@@ -184,7 +157,7 @@ describe('UploadService — assertKeyConfirmed / assertKeyConfirmedForOwner', ()
           fileKey: FILE_KEY,
           organizationInternalId: ORGANIZATION_INTERNAL_ID,
         }),
-      ).resolves.toBeUndefined();
+      ).resolves.toEqual({ mimeType: 'image/png' });
     });
 
     /**

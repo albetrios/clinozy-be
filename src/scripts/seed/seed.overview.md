@@ -27,7 +27,7 @@ All three share the contract and the per-domain seeders:
 
 - **`bulk.ts`** — `MODULES` (one `DomainSeedModule` per domain), `runBulkSeed` (guard → resolve config → all `seedReference`, then all `seedBulk` in `dependsOn` order), `closeDatabase()` in `finally`.
 - **`bulk-config.ts`** — `PROFILES` (`demo` / `edge` / `load`) and `resolveCounts` (`BULK_PROFILE`, `SCALE` multiplier, per-knob `BULK_ORGS` / `BULK_USERS_PER_ORG` / `BULK_AUDIT_MONTHS` / `BULK_AUDIT_PER_ORG_PER_MONTH`). `HARD_CAP` keeps a run in the tens-of-thousands band — exceeding it is a fatal config error (the COPY-based load path is out of scope).
-- **`production-guard.ts`** — `assertBulkSeedAllowed`: refuses on `NODE_ENV=production` or a non-local `DATABASE_URL` unless `ALLOW_BULK_SEED=1`.
+- **`production-guard.ts`** — `assertBulkSeedAllowed`: refuses on a non-loopback `DATABASE_URL` unless `ALLOW_BULK_SEED=1` (a deliberate override; no script passes it).
 - **`seed-registry.ts`** — in-memory `createSeedRegistry()`.
 - **`faker-data.ts`** — `initFakerSeed()` and shared faker helpers. **`helpers.ts`** — re-exports such as `closeDatabase`.
 

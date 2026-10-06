@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { ValidationError } from '@/shared/errors/index.js';
-import { LEGACY_PAGE_NOT_SUPPORTED_MESSAGE_KEY } from '@/shared/utils/http/pagination.util.js';
 import {
   validateCreateOrganizationApiKey,
   validateListOrganizationApiKeysQuery,
@@ -25,14 +24,12 @@ describe('organization-api-key validators', () => {
     expect(validateListOrganizationApiKeysQuery({})).toMatchObject({ limit: 25 });
   });
 
-  it('validateListOrganizationApiKeysQuery rejects legacy page query parameter', () => {
-    try {
-      validateListOrganizationApiKeysQuery({ page: '1', limit: '5' });
-      expect.fail('expected ValidationError');
-    } catch (error) {
-      expect(error).toBeInstanceOf(ValidationError);
-      expect((error as ValidationError).messageKey).toBe(LEGACY_PAGE_NOT_SUPPORTED_MESSAGE_KEY);
-    }
+  it('validateListOrganizationApiKeysQuery rejects rejects a page query parameter (cursor-only, strict query)', () => {
+    // `page` is not a parameter of any list query — the strict schema refuses it like any other
+    // unknown key.
+    expect(() => validateListOrganizationApiKeysQuery({ page: '1', limit: '5' })).toThrow(
+      ValidationError,
+    );
   });
 
   it('validateCreateOrganizationApiKey throws for empty name', () => {

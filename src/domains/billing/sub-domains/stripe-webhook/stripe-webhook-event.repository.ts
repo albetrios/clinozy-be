@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lt, or, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lt, ne, or, sql } from 'drizzle-orm';
 import {
   assertWorkerDatabaseContext,
   getRequestDatabase,
@@ -7,6 +7,7 @@ import {
 import {
   MILLISECONDS_PER_MINUTE,
   STRIPE_WEBHOOK_FAILED_COUNT_CAP,
+  STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS,
   STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES,
 } from '@/shared/constants/index.js';
 import {
@@ -18,10 +19,28 @@ import {
 /** Max characters persisted for a Stripe webhook failure reason (bounds ledger storage). */
 const FAILURE_REASON_MAX_LENGTH = 2000;
 
+function truncateFailureReason(failure_reason: string): string {
+  return failure_reason.length > FAILURE_REASON_MAX_LENGTH
+    ? failure_reason.slice(0, FAILURE_REASON_MAX_LENGTH)
+    : failure_reason;
+}
+
+/** `failed`, or `processing` past the stuck lease — the rows a reclaim may pick up. */
+function reclaimableStatusCondition(stuckProcessingBefore: Date) {
+  return or(
+    eq(stripe_webhook_events.processing_status, 'failed'),
+    and(
+      eq(stripe_webhook_events.processing_status, 'processing'),
+      lt(stripe_webhook_events.updated_at, stuckProcessingBefore),
+    ),
+  );
+}
+
 /**
  * Outcome of {@link StripeWebhookEventRepository.tryClaimEvent}: `claimed` for a
  * brand-new event, `processed_duplicate` for an at-least-once redelivery,
- * `reclaimed` when a previously failed or stuck-processing row was retried, and
+ * `reclaimed` when a previously failed or stuck-processing row was retried,
+ * `abandoned` when the event was given up on (never retried on its own), and
  * `still_processing_within_lease` when another worker is actively processing the
  * event and the caller must back off.
  */
@@ -29,6 +48,7 @@ export type StripeWebhookEventClaimResult =
   | 'claimed'
   | 'processed_duplicate'
   | 'reclaimed'
+  | 'abandoned'
   | 'still_processing_within_lease';
 
 function stripeWebhookLedgerDatabase() {
@@ -113,6 +133,9 @@ export class StripeWebhookEventRepository {
     if (existing.processing_status === 'processed') {
       return 'processed_duplicate';
     }
+    if (existing.processing_status === 'abandoned') {
+      return 'abandoned';
+    }
 
     const reclaimed = await this.tryReclaimEvent(input.stripe_event_id);
     if (reclaimed) {
@@ -138,6 +161,8 @@ export class StripeWebhookEventRepository {
    *      to 1) guarantees only one worker can win this transition; a concurrent
    *      retry that arrived seconds later will see attempt_count=1 and
    *      updated_at fresh, neither matches, and gets `still_processing_within_lease`.
+   * A row that has used {@link STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS} is never reclaimed: the
+   * reclaim sweep abandons it instead ({@link abandonExhaustedEvents}).
    */
   async tryReclaimEvent(stripe_event_id: string): Promise<boolean> {
     const stuckProcessingBefore = new Date(
@@ -156,6 +181,7 @@ export class StripeWebhookEventRepository {
       .where(
         and(
           eq(stripe_webhook_events.stripe_event_id, stripe_event_id),
+          lt(stripe_webhook_events.attempt_count, STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS),
           or(
             eq(stripe_webhook_events.processing_status, 'failed'),
             and(
@@ -229,18 +255,102 @@ export class StripeWebhookEventRepository {
       .select({ stripe_event_id: stripe_webhook_events.stripe_event_id })
       .from(stripe_webhook_events)
       .where(
-        or(
-          eq(stripe_webhook_events.processing_status, 'failed'),
-          and(
-            eq(stripe_webhook_events.processing_status, 'processing'),
-            lt(stripe_webhook_events.updated_at, stuckProcessingBefore),
-          ),
+        and(
+          lt(stripe_webhook_events.attempt_count, STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS),
+          reclaimableStatusCondition(stuckProcessingBefore),
         ),
       )
       .orderBy(asc(stripe_webhook_events.updated_at))
       .limit(limit);
 
     return rows.map((row) => row.stripe_event_id);
+  }
+
+  /**
+   * Abandons the reclaimable rows that used every processing attempt — a handler that kept
+   * failing, or a worker that kept dying mid-event — and returns their ids and failure reasons.
+   *
+   * @remarks
+   * - **Algorithm:** one `UPDATE ... RETURNING` over `failed` / stale-`processing` rows with
+   *   `attempt_count >= STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS`, at most `limit`.
+   * - **Failure modes:** propagates Postgres errors to the sweep, which retries next tick.
+   * - **Side effects:** flips each row to `abandoned`; the caller alerts once per returned row.
+   * - **Notes:** the worker abandons a row itself when its last attempt fails; this catches the
+   *   rows whose attempts ran out without a recorded failure (a crash loop).
+   */
+  async abandonExhaustedEvents(
+    limit: number,
+  ): Promise<{ stripe_event_id: string; failure_reason: string | null }[]> {
+    const stuckProcessingBefore = new Date(
+      Date.now() - STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES * MILLISECONDS_PER_MINUTE,
+    );
+    const exhaustedRows = stripeWebhookLedgerDatabase()
+      .select({ stripe_event_id: stripe_webhook_events.stripe_event_id })
+      .from(stripe_webhook_events)
+      .where(
+        and(
+          gte(stripe_webhook_events.attempt_count, STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS),
+          reclaimableStatusCondition(stuckProcessingBefore),
+        ),
+      )
+      .limit(limit);
+    return stripeWebhookLedgerDatabase()
+      .update(stripe_webhook_events)
+      .set({
+        processing_status: 'abandoned' satisfies StripeWebhookProcessingStatus,
+        processed_at: new Date(),
+        updated_at: sql`NOW()`,
+      })
+      .where(inArray(stripe_webhook_events.stripe_event_id, exhaustedRows))
+      .returning({
+        stripe_event_id: stripe_webhook_events.stripe_event_id,
+        failure_reason: stripe_webhook_events.failure_reason,
+      });
+  }
+
+  /**
+   * Abandons one event — a failure no retry can fix, or its last attempt failed. Never touches a
+   * `processed` row. Returns whether a row changed.
+   */
+  async markAbandoned(stripe_event_id: string, failure_reason: string): Promise<boolean> {
+    const rows = await stripeWebhookLedgerDatabase()
+      .update(stripe_webhook_events)
+      .set({
+        processing_status: 'abandoned' satisfies StripeWebhookProcessingStatus,
+        processed_at: new Date(),
+        failure_reason: truncateFailureReason(failure_reason),
+        updated_at: sql`NOW()`,
+      })
+      .where(
+        and(
+          eq(stripe_webhook_events.stripe_event_id, stripe_event_id),
+          ne(stripe_webhook_events.processing_status, 'processed'),
+        ),
+      )
+      .returning({ stripe_event_id: stripe_webhook_events.stripe_event_id });
+    return rows.length > 0;
+  }
+
+  /**
+   * Gives a `failed` or `abandoned` event a fresh attempt budget for an operator retry: back to
+   * `failed` with `attempt_count` 0, so the next claim reclaims it. Returns whether a row changed.
+   */
+  async resetForOperatorRetry(stripe_event_id: string): Promise<boolean> {
+    const rows = await stripeWebhookLedgerDatabase()
+      .update(stripe_webhook_events)
+      .set({
+        processing_status: 'failed' satisfies StripeWebhookProcessingStatus,
+        attempt_count: 0,
+        updated_at: sql`NOW()`,
+      })
+      .where(
+        and(
+          eq(stripe_webhook_events.stripe_event_id, stripe_event_id),
+          inArray(stripe_webhook_events.processing_status, ['failed', 'abandoned']),
+        ),
+      )
+      .returning({ stripe_event_id: stripe_webhook_events.stripe_event_id });
+    return rows.length > 0;
   }
 
   /**
@@ -302,24 +412,26 @@ export class StripeWebhookEventRepository {
     };
   }
 
-  async markFailed(stripe_event_id: string, failure_reason: string): Promise<boolean> {
-    // sec-new-D2: return whether a row was actually updated so the caller can
-    // detect and log a no-op (e.g. the ledger row was unexpectedly absent).
-    const truncatedReason =
-      failure_reason.length > FAILURE_REASON_MAX_LENGTH
-        ? failure_reason.slice(0, FAILURE_REASON_MAX_LENGTH)
-        : failure_reason;
+  /**
+   * Records a failed processing attempt and returns the row's attempt count — the caller abandons
+   * the event once it reaches {@link STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS}. `null` when no row
+   * matched (sec-new-D2: the caller logs the no-op).
+   */
+  async markFailed(
+    stripe_event_id: string,
+    failure_reason: string,
+  ): Promise<{ attemptCount: number } | null> {
     const rows = await stripeWebhookLedgerDatabase()
       .update(stripe_webhook_events)
       .set({
         processing_status: 'failed' satisfies StripeWebhookProcessingStatus,
         processed_at: new Date(),
-        failure_reason: truncatedReason,
+        failure_reason: truncateFailureReason(failure_reason),
         updated_at: sql`NOW()`,
       })
       .where(eq(stripe_webhook_events.stripe_event_id, stripe_event_id))
-      .returning({ stripe_event_id: stripe_webhook_events.stripe_event_id });
-    return rows.length > 0;
+      .returning({ attemptCount: stripe_webhook_events.attempt_count });
+    return rows[0] ?? null;
   }
 
   /**

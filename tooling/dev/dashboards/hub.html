@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>core·be — control room</title>
+<title>__HUB_WORDMARK_NAME__·__HUB_WORDMARK_SUFFIX__ — control room</title>
 <script src="/_hub/tw.js"></script>
 <link rel="stylesheet" href="/_hub/gridstack.css" />
 <script src="/_hub/gridstack.js"></script>
@@ -111,7 +111,7 @@
         <div class="h-3 w-3 rounded-[3px] bg-brand"></div>
       </div>
       <div class="leading-tight">
-        <div class="text-[15px] font-semibold tracking-tight">core<span class="text-brand">·</span>be</div>
+        <div class="text-[15px] font-semibold tracking-tight">__HUB_WORDMARK_NAME__<span class="text-brand">·</span>__HUB_WORDMARK_SUFFIX__</div>
         <div class="font-mono text-[9.5px] uppercase tracking-[0.2em] text-muted-foreground">Control Room</div>
       </div>
       <div class="ml-auto flex items-center gap-2.5">
@@ -276,6 +276,9 @@ function parseMetrics(text) {
     if (!line || line[0] === '#') continue;
     const m = line.match(/^([a-zA-Z_:][\w:]*)(\{[^}]*\})?\s+(-?[\d.eE+]+)/);
     if (!m) continue; const v = parseFloat(m[3]); sums[m[1]] = (sums[m[1]] || 0) + (Number.isFinite(v) ? v : 0);
+    // Also keep a per-state sum (`db_pool_connections.active`, …) for gauges labelled by `state`.
+    const state = m[2] && /state="([^"]*)"/.exec(m[2]);
+    if (state) { const key = `${m[1]}.${state[1]}`; sums[key] = (sums[key] || 0) + (Number.isFinite(v) ? v : 0); }
   }
   return sums;
 }
@@ -391,8 +394,8 @@ const RUNTIME = [
     detail: (m) => `p50 ${toMS(m.nodejs_eventloop_lag_p50_seconds)} · p90 ${toMS(m.nodejs_eventloop_lag_p90_seconds)} · p99 ${toMS(m.nodejs_eventloop_lag_p99_seconds)} · max ${toMS(m.nodejs_eventloop_lag_max_seconds)}` },
   { key: 'cpu',    icon: 'cpu',    label: 'CPU', fmt: 'sec', spark: true, rate: true, get: (m) => m?.process_cpu_seconds_total,
     detail: (m) => `user ${toSec(m.process_cpu_user_seconds_total)} · system ${toSec(m.process_cpu_system_seconds_total)} · total ${toSec(m.process_cpu_seconds_total)}` },
-  { key: 'pool',   icon: 'pool',   label: 'DB pool', spark: false, bar: true, get: (m) => m?.pg_pool_active,
-    detail: (m) => `active ${m.pg_pool_active || 0} · idle ${m.pg_pool_idle || 0} · waiting ${m.pg_pool_waiting || 0} / max ${m.postgres_pool_max_connections || '?'}` },
+  { key: 'pool',   icon: 'pool',   label: 'DB pool', spark: false, bar: true, get: (m) => m?.['db_pool_connections.active'],
+    detail: (m) => `active ${m['db_pool_connections.active'] || 0} · idle ${m['db_pool_connections.idle'] || 0} · waiting ${m['db_pool_connections.waiting'] || 0} / max ${m.postgres_pool_max_connections || '?'}` },
   { key: 'uptime', icon: 'uptime', label: 'Uptime', fmt: 'uptime', spark: false, get: (m) => m?.process_start_time_seconds,
     detail: (m) => `started ${new Date(m.process_start_time_seconds * 1000).toLocaleString()} · GC ${Math.round(m.nodejs_gc_duration_seconds_count || 0).toLocaleString()} runs · ${Math.round(m.nodejs_active_handles_total || 0)} libuv handles` },
 ];
@@ -445,7 +448,7 @@ function runtimeCell(key, procSums, m, proc) {
   const line = el('div', 'flex items-center justify-end gap-1.5'); // sparkline/bar inline LEFT of the value → single-line rows
   if (m.bar) {
     const max = (procSums?.postgres_pool_max_connections) || 0;
-    const act = (procSums?.pg_pool_active) || 0, idle = (procSums?.pg_pool_idle) || 0, wait = (procSums?.pg_pool_waiting) || 0;
+    const act = (procSums?.['db_pool_connections.active']) || 0, idle = (procSums?.['db_pool_connections.idle']) || 0, wait = (procSums?.['db_pool_connections.waiting']) || 0;
     const bar = el('div', 'flex h-1.5 w-9 flex-none overflow-hidden rounded-full bg-muted');
     if (max) { const seg = (n, cls) => { if (!n) return; const s = el('div', cls); s.style.width = `${Math.min(100, (n / max) * 100)}%`; bar.appendChild(s); }; seg(wait, 'bg-destructive'); seg(act, 'bg-brand'); seg(idle, 'bg-muted-foreground/30'); }
     line.appendChild(bar);

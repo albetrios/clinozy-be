@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runMailOutboxSweeperJob } from '@/infrastructure/mail/workers/mail-outbox-sweeper.processor.js';
 
-const findStalePendingMailOutboxIdsMock = vi.fn();
-const reclaimStaleSendingMailOutboxIdsMock = vi.fn();
+const STALE_PENDING_TOKEN = '0b6d3f2a-1c4e-4a5b-8d7c-9e0f1a2b3c4d';
+const OTHER_STALE_PENDING_TOKEN = '1c7e4a3b-2d5f-4b6c-9e8d-0f1a2b3c4d5e';
+const STUCK_SENDING_TOKEN = '2d8f5b4c-3e6a-4c7d-8f9e-1a2b3c4d5e6f';
+
+const findStalePendingMailOutboxTokensMock = vi.fn();
+const reclaimStaleSendingMailOutboxTokensMock = vi.fn();
 const enqueueMailOutboxJobMock = vi.fn();
 const resendCircuitGetStateMock = vi.fn();
 
@@ -23,10 +27,10 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
 });
 
 vi.mock('@/infrastructure/mail/mail-outbox.repository.js', () => ({
-  findStalePendingMailOutboxIds: (...arguments_: unknown[]) =>
-    findStalePendingMailOutboxIdsMock(...arguments_),
-  reclaimStaleSendingMailOutboxIds: (...arguments_: unknown[]) =>
-    reclaimStaleSendingMailOutboxIdsMock(...arguments_),
+  findStalePendingMailOutboxTokens: (...arguments_: unknown[]) =>
+    findStalePendingMailOutboxTokensMock(...arguments_),
+  reclaimStaleSendingMailOutboxTokens: (...arguments_: unknown[]) =>
+    reclaimStaleSendingMailOutboxTokensMock(...arguments_),
 }));
 
 vi.mock('@/infrastructure/mail/queues/mail.queue.js', () => ({
@@ -48,11 +52,14 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
 
 describe('mail-outbox-sweeper.processor', () => {
   beforeEach(() => {
-    findStalePendingMailOutboxIdsMock.mockReset();
-    reclaimStaleSendingMailOutboxIdsMock.mockReset();
+    findStalePendingMailOutboxTokensMock.mockReset();
+    reclaimStaleSendingMailOutboxTokensMock.mockReset();
     enqueueMailOutboxJobMock.mockReset();
-    reclaimStaleSendingMailOutboxIdsMock.mockResolvedValue([]);
-    findStalePendingMailOutboxIdsMock.mockResolvedValue([101, 102]);
+    reclaimStaleSendingMailOutboxTokensMock.mockResolvedValue([]);
+    findStalePendingMailOutboxTokensMock.mockResolvedValue([
+      STALE_PENDING_TOKEN,
+      OTHER_STALE_PENDING_TOKEN,
+    ]);
     enqueueMailOutboxJobMock.mockResolvedValue(undefined);
     resendCircuitGetStateMock.mockReset();
     resendCircuitGetStateMock.mockResolvedValue('CLOSED');
@@ -61,10 +68,10 @@ describe('mail-outbox-sweeper.processor', () => {
   it('runMailOutboxSweeperJob re-enqueues stale pending rows', async () => {
     const result = await runMailOutboxSweeperJob();
 
-    expect(reclaimStaleSendingMailOutboxIdsMock).toHaveBeenCalledOnce();
-    expect(findStalePendingMailOutboxIdsMock).toHaveBeenCalledOnce();
+    expect(reclaimStaleSendingMailOutboxTokensMock).toHaveBeenCalledOnce();
+    expect(findStalePendingMailOutboxTokensMock).toHaveBeenCalledOnce();
     expect(enqueueMailOutboxJobMock).toHaveBeenCalledTimes(2);
-    expect(enqueueMailOutboxJobMock).toHaveBeenCalledWith(101, {
+    expect(enqueueMailOutboxJobMock).toHaveBeenCalledWith(STALE_PENDING_TOKEN, {
       requestId: 'mail-outbox-sweeper',
     });
     expect(result).toEqual({
@@ -75,12 +82,12 @@ describe('mail-outbox-sweeper.processor', () => {
   });
 
   it('runMailOutboxSweeperJob reclaims stuck sending rows before stale pending', async () => {
-    reclaimStaleSendingMailOutboxIdsMock.mockResolvedValue([201]);
-    findStalePendingMailOutboxIdsMock.mockResolvedValue([101]);
+    reclaimStaleSendingMailOutboxTokensMock.mockResolvedValue([STUCK_SENDING_TOKEN]);
+    findStalePendingMailOutboxTokensMock.mockResolvedValue([STALE_PENDING_TOKEN]);
 
     const result = await runMailOutboxSweeperJob();
 
-    expect(findStalePendingMailOutboxIdsMock).toHaveBeenCalledWith(expect.any(Date), 49);
+    expect(findStalePendingMailOutboxTokensMock).toHaveBeenCalledWith(expect.any(Date), 49);
     expect(enqueueMailOutboxJobMock).toHaveBeenCalledTimes(2);
     expect(result).toEqual({
       scannedCount: 2,
@@ -95,7 +102,7 @@ describe('mail-outbox-sweeper.processor', () => {
 
     await runMailOutboxSweeperJob();
 
-    const sendingCutoff = reclaimStaleSendingMailOutboxIdsMock.mock.calls[0]?.[0] as Date;
+    const sendingCutoff = reclaimStaleSendingMailOutboxTokensMock.mock.calls[0]?.[0] as Date;
     // CLOSED would put the cutoff ~10 min in the past; OPEN doubles the window to ~20 min, so far
     // fewer rows qualify for reclaim while Resend is down.
     const cutoffAgeMinutes = (before - sendingCutoff.getTime()) / 60_000;
@@ -108,7 +115,7 @@ describe('mail-outbox-sweeper.processor', () => {
 
     await runMailOutboxSweeperJob();
 
-    const sendingCutoff = reclaimStaleSendingMailOutboxIdsMock.mock.calls[0]?.[0] as Date;
+    const sendingCutoff = reclaimStaleSendingMailOutboxTokensMock.mock.calls[0]?.[0] as Date;
     const cutoffAgeMinutes = (before - sendingCutoff.getTime()) / 60_000;
     expect(cutoffAgeMinutes).toBeGreaterThanOrEqual(9);
     expect(cutoffAgeMinutes).toBeLessThan(15);

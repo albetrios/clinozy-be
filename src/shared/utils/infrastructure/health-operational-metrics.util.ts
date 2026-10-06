@@ -3,16 +3,18 @@ import { getTotalDeadLetterJobCount } from '@/infrastructure/observability/dlq-d
 import { countPendingMailOutbox } from '@/infrastructure/mail/mail-outbox.repository.js';
 import {
   getQueueDepths,
-  MONITORED_BULLMQ_QUEUE_NAMES,
   type QueueDepth,
 } from '@/infrastructure/observability/metrics/bullmq-metrics.js';
+import {
+  WORKER_QUEUE_NAMES,
+  WORKER_THROUGHPUT_QUEUE_NAMES,
+} from '@/infrastructure/queue/queue-catalog.js';
 import {
   getWorkerQueueOperationalManifest,
   type WorkerQueueOperationalManifestEntry,
 } from '@/infrastructure/queue/worker-runtime/worker-registration.registry.js';
 import {
   readWorkerQueueHeartbeats,
-  WORKER_THROUGHPUT_QUEUE_NAMES,
   type WorkerQueueHeartbeat,
 } from '@/infrastructure/queue/worker-runtime/worker-queue-heartbeat.js';
 import { MILLISECONDS_PER_MINUTE } from '@/shared/constants/index.js';
@@ -65,7 +67,7 @@ export async function getCachedHealthOperationalMetrics(): Promise<HealthOperati
     getLatestMigrationVersion(),
     countPendingMailOutbox(),
     getTotalDeadLetterJobCount(),
-    readWorkerQueueHeartbeats(MONITORED_BULLMQ_QUEUE_NAMES),
+    readWorkerQueueHeartbeats(WORKER_QUEUE_NAMES),
     snapshotManagedCircuitBreakers(),
     getQueueDepths(WORKER_THROUGHPUT_QUEUE_NAMES),
   ]);

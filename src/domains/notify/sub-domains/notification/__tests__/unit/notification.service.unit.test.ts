@@ -8,10 +8,6 @@ import { NotificationService } from '@/domains/notify/sub-domains/notification/n
 import type { NotificationRepository } from '@/domains/notify/sub-domains/notification/notification.repository.js';
 import type { UserService } from '@/domains/user/user.service.js';
 
-vi.mock('@/domains/notify/sub-domains/notification/queues/notification.queue.js', () => ({
-  enqueueNotification: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock('@/infrastructure/database/contexts/database-context.js', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
@@ -66,7 +62,6 @@ describe('NotificationService', () => {
     markAllReadForUser: vi.fn().mockResolvedValue(2),
     countUnreadForUser: vi.fn().mockResolvedValue(3),
     deleteByPublicIdForUser: vi.fn().mockResolvedValue(notification),
-    findOrganizationPublicIdByNotificationId: vi.fn().mockResolvedValue('org_public'),
   } as unknown as NotificationRepository;
 
   const service = new NotificationService(repository, userService);
@@ -117,14 +112,6 @@ describe('NotificationService', () => {
   it('getUnreadCount returns count', async () => {
     const result = await service.getUnreadCount(scope);
     expect(result).toBe(3);
-  });
-
-  it('dispatchNotification enqueues delivery job', async () => {
-    const { enqueueNotification } = await import(
-      '@/domains/notify/sub-domains/notification/queues/notification.queue.js'
-    );
-    await service.dispatchNotification(2);
-    expect(enqueueNotification).toHaveBeenCalledWith(2, 'org_public');
   });
 
   it('markAllRead and deleteNotification delegate to repository', async () => {

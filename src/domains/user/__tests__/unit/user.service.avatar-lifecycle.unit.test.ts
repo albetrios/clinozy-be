@@ -100,11 +100,10 @@ describe('UserService — avatar lifecycle', () => {
     vi.clearAllMocks();
     vi.mocked(repository.findByPublicId).mockResolvedValue(userRow() as never);
     vi.mocked(repository.update).mockResolvedValue(userRow() as never);
-    vi.mocked(objectStorage.deleteObject).mockResolvedValue(true);
+    vi.mocked(objectStorage.deleteObject).mockResolvedValue({ kind: 'deleted' });
     service.wireOffboardingServices({
       uploadService: {
-        assertKeyConfirmed: vi.fn().mockResolvedValue(undefined),
-        assertKeyConfirmedForOwner: vi.fn().mockResolvedValue(undefined),
+        assertKeyConfirmedForOwner: vi.fn().mockResolvedValue({ mimeType: 'image/png' }),
         tombstoneAllByUserId: vi.fn().mockResolvedValue(0),
       } as never,
     } as never);
@@ -156,7 +155,7 @@ describe('UserService — avatar lifecycle', () => {
     vi.mocked(repository.findByPublicId).mockResolvedValue(
       userRow({ avatar_url: OLD_AVATAR_KEY }) as never,
     );
-    vi.mocked(objectStorage.deleteObject).mockResolvedValue(false);
+    vi.mocked(objectStorage.deleteObject).mockResolvedValue({ kind: 'failed', circuitOpen: false });
 
     await service.uploadAvatar(USER_PUBLIC_ID, { avatar_key: NEW_AVATAR_KEY });
 

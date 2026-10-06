@@ -192,7 +192,7 @@ pnpm test:api-smoke    # smoke only (server + seed must already be in place)
 
 If organization-scoped routes return **403** after a permission seed change, run `pnpm db:seed:sync-demo` and retry.
 
-Optional env: `BASE_URL`, `TEST_EMAIL`, `TEST_PASSWORD` (defaults match full seed).
+Optional env: `BASE_URL`, `DEMO_EMAIL`, `DEMO_PASSWORD` (defaults `demo@example.com` / `DemoPassword123!` — seed with `DEMO_PASSWORD=DemoPassword123! pnpm db:seed:full`).
 
 **CI:** Every PR runs the same probes against ephemeral Postgres + Redis after migrate + full seed ([CI/CD and deployment](../deployment/ci-cd/cicd-and-deployment.md)).
 

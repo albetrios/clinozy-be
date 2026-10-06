@@ -38,7 +38,10 @@ describe('commit-dispatch.store', () => {
     const { appendCommitDispatchTask } = await import(
       '@/infrastructure/queue/commit-dispatch/commit-dispatch.store.js'
     );
-    const task: CommitDispatchTask = { type: 'mail_outbox', mailOutboxId: 42 };
+    const task: CommitDispatchTask = {
+      type: 'mail_outbox',
+      mailOutboxToken: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f',
+    };
 
     await appendCommitDispatchTask({ requestId: 'req-1', task });
 
@@ -54,8 +57,9 @@ describe('commit-dispatch.store', () => {
   it('reaudit-#2: consumeCommitDispatchTasks reads tasks WITHOUT removing them', async () => {
     const task: CommitDispatchTask = {
       type: 'notification',
-      notificationId: 7,
+      notificationPublicId: 'ntf_9z3rura5kqvcv8zggriym',
       organizationPublicId: 'org_abc',
+      userPublicId: 'usr_0y8vf3ktxqnhcm1ze21ab',
     };
     const raw = JSON.stringify(task);
     redisMock.lrange.mockResolvedValue([raw]);
@@ -73,7 +77,10 @@ describe('commit-dispatch.store', () => {
   });
 
   it('reaudit-#2: acknowledgeCommitDispatchTask LREMs the task and clears the index once empty', async () => {
-    const raw = JSON.stringify({ type: 'mail_outbox', mailOutboxId: 9 });
+    const raw = JSON.stringify({
+      type: 'mail_outbox',
+      mailOutboxToken: '0d3c2b1a-9f8e-4d7c-8b6a-5f4e3d2c1b0a',
+    });
     redisMock.llen.mockResolvedValue(0); // list empty after this LREM
 
     const { acknowledgeCommitDispatchTask } = await import(
@@ -88,7 +95,10 @@ describe('commit-dispatch.store', () => {
   });
 
   it('reaudit-#2: acknowledge leaves the recovery index intact while tasks remain', async () => {
-    const raw = JSON.stringify({ type: 'mail_outbox', mailOutboxId: 9 });
+    const raw = JSON.stringify({
+      type: 'mail_outbox',
+      mailOutboxToken: '0d3c2b1a-9f8e-4d7c-8b6a-5f4e3d2c1b0a',
+    });
     redisMock.llen.mockResolvedValue(2); // more tasks still pending
 
     const { acknowledgeCommitDispatchTask } = await import(
@@ -99,18 +109,5 @@ describe('commit-dispatch.store', () => {
     expect(redisMock.lrem).toHaveBeenCalledWith('commit-dispatch:pending:req-4', 1, raw);
     // The list is not yet empty, so the recovery index entry must remain (no del/zrem multi).
     expect(redisMock.multi).not.toHaveBeenCalled();
-  });
-
-  it('audit-#M2: purgeCommitDispatchTasks DELs the pending list and ZREMs the recovery index', async () => {
-    const { purgeCommitDispatchTasks } = await import(
-      '@/infrastructure/queue/commit-dispatch/commit-dispatch.store.js'
-    );
-    await purgeCommitDispatchTasks({ requestId: 'req-rolledback' });
-
-    // A rolled-back request purges its durable tasks entirely so the recovery sweeper never replays
-    // them against phantom rows.
-    const multi = redisMock.multi.mock.results.at(-1)?.value;
-    expect(multi.del).toHaveBeenCalledWith('commit-dispatch:pending:req-rolledback');
-    expect(multi.zrem).toHaveBeenCalledWith('commit-dispatch:recovery', 'req-rolledback');
   });
 });

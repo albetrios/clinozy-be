@@ -45,11 +45,12 @@ There is **one** source of truth for which keys exist and what kind each one is:
 ```
 
 `pnpm github:sync` classifies each key by **name** via `classifyKey()`
-(`tooling/setup/github/sync-github-environments.ts`): `*_API_KEY`, `*_TOKEN`,
-`*_SECRET`, `*_PRIVATE_KEY`, `*_DSN`, `*_WEBHOOK_SECRET`, `*_ACCESS_KEY_ID`,
-`*_SECRET_ACCESS_KEY`, `*_ENCRYPTION_KEY`, `*_WORKSPACE_ID`, `*_SERVICE_ID`,
-`*_CLIENT_SECRET`, connection URLs (`DATABASE_URL`, `REDIS_URL`), `JWT_SECRET`,
-`CAPTCHA_SECRET` → **Secret**; everything else → **Variable**. The `.env.example`
+(`tooling/setup/github/sync-github-environments.ts`): `*_SECRET` (every client, webhook and
+provider secret), `*_API_KEY`, `*_SECRET_KEY`, `*_TOKEN`, `*_PRIVATE_KEY`, `*_DSN`,
+`*_ACCESS_KEY_ID`, `*_SECRET_ACCESS_KEY`, `*_ENCRYPTION_KEY`, `*_WORKSPACE_ID`, `*_SERVICE_ID`
+and the connection URLs (`DATABASE_URL`, `DATABASE_MIGRATION_URL`, `DATABASE_MAINTENANCE_URL`,
+`DATABASE_OPERATOR_URL`, `REDIS_URL`, `REDIS_BULLMQ_URL`) → **Secret**; everything else →
+**Variable**. The `.env.example`
 half is the **human-readable mirror** of that rule — place each key under the half
 its name resolves to (the two halves are validated for existence, not per-key
 placement). The runtime schema (`src/shared/config/env-schema.ts`) declares Zod
@@ -114,8 +115,8 @@ Run locally:
 ```bash
 pnpm compose:up && pnpm compose:wait   # local Postgres + Redis
 pnpm db:migrate
-pnpm dev                                # API; loads .env.development
-pnpm dev:worker                         # worker; same .env.development
+pnpm dev                                # API; NODE_ENV unset = local, loads .env.local
+pnpm dev:worker                         # worker; same .env.local
 ```
 
 The loader (`src/shared/config/load-env-files.ts`) picks `.env.${NODE_ENV}`, strips
@@ -135,8 +136,8 @@ production without needing a runtime guard.
 
 | Task              | How                                                                                                    |
 | ----------------- | ------------------------------------------------------------------------------------------------------ |
-| Change a value    | edit `.env.development` and restart `pnpm dev`                                                         |
-| See what's loaded | the dotenv loader logs `injected env (<n>) from .env.development` at startup                           |
+| Change a value    | edit `.env.local` and restart `pnpm dev`                                                               |
+| See what's loaded | the dotenv loader logs `injected env (<n>) from .env.local` at startup                                 |
 | Switch profile    | `NODE_ENV=production pnpm dev` to test prod settings locally (requires `.env.production` to be filled) |
 | Add a new env file | add the environment to `tooling/setup/setup.config.json`, run `pnpm tool:generate-project-identity`, then `pnpm github:sync` |
 
@@ -181,7 +182,7 @@ Step by step:
      `PORT`, `LOG_LEVEL`, `WORKER_CONCURRENCY`, feature flags (`ENABLE_*`),
      URLs (`FRONTEND_URL`, `ALLOWED_ORIGINS`), public OAuth IDs
      (`OAUTH_*_CLIENT_ID`), public RP info (`WEBAUTHN_RP_ID`),
-     `JWT_PUBLIC_KEY`, `CAPTCHA_SITE_KEY`.
+     `JWT_PUBLIC_KEY`.
    - **Edge cases — `*_KEY`:** `_PRIVATE_KEY` / `_SECRET_KEY` / `_API_KEY` /
      `_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` → **Secret**. `_PUBLIC_KEY` /
      `_SITE_KEY` → **Variable**. AES raw-hex keys → **Secret**.
@@ -229,7 +230,7 @@ Step by step:
 Local-only change (does not touch GitHub):
 
 ```bash
-$EDITOR .env.development        # edit value
+$EDITOR .env.local              # edit value
 # restart pnpm dev / pnpm dev:worker to pick it up
 ```
 
@@ -305,7 +306,7 @@ Run `pnpm github:sync --check`, `pnpm tool:sync-env-example`, and (when pushing 
 | A new env var landed in GitHub as a Variable but should be a Secret                                     | `classifyKey()` decides by **name**, not by `.env.example` half — the name has no Secret suffix | Rename the key to carry a Secret suffix (`*_TOKEN` / `*_SECRET` / `*_API_KEY` / `*_KEY`) or add it to `classifyKey()`; moving the `.env.example` half alone does nothing. Then delete the stale Variable and re-sync |
 | A workflow step acts as if a secret/variable is empty (e.g. an upload silently skips, an API call 401s)  | The step reads it from the wrong context — `secrets.NAME` for a Variable, or `vars.NAME` for a Secret | Match the access context to the classification: Secret → `${{ secrets.NAME }}`, Variable → `${{ vars.NAME }}`. `grep .github/workflows/` for the name      |
 | A deployed container logs `unable to determine transport target for "pino-pretty"` and exits on boot | An image built before the `buildPinoPrettyTransport` guard, running with `LOG_PRETTY=true`: `pino-pretty` is a devDependency and the runtime stage installs `--prod` | Set `LOG_PRETTY=false` for that environment (`pnpm github:sync <environment>`) and redeploy an image that includes the guard — current images degrade to JSON logs and warn instead of exiting |
-| Local tests fail with `REDIS_BULLMQ_URL must be unset or point to the same Redis endpoint as REDIS_URL` | `REDIS_BULLMQ_URL` is set to a different host than `REDIS_URL`    | Leave `REDIS_BULLMQ_URL=` empty in `.env.development` (single-Redis topology)                                                                              |
+| Local tests fail with `REDIS_BULLMQ_URL must be unset or point to the same Redis endpoint as REDIS_URL` | `REDIS_BULLMQ_URL` is set to a different host than `REDIS_URL`    | Leave `REDIS_BULLMQ_URL=` empty in `.env.local` (single-Redis topology)                                                                              |
 
 ## 10. Adding a new hosted environment
 
@@ -331,6 +332,10 @@ instead of running insecure — you cannot ship the dev value:
 | `CAPTCHA_PROVIDER` + `CAPTCHA_SECRET` | `disabled`                | `turnstile` **and** `CAPTCHA_SECRET` required (public auth routes)                 |
 | `SECRETS_ENCRYPTION_KEY`              | all-zero placeholder      | high-entropy 32-byte key (`openssl rand -hex 32`); low-entropy rejected           |
 | `ALLOWED_ORIGINS`                     | `http://localhost:3000`   | absolute `https://` only; no `*`, path, userinfo, query, or trailing slash        |
+| `FRONTEND_URL`                        | optional (dev fallback)   | **required**, `https://` (emailed links and the OAuth callback are built from it) |
+| `S3_BUCKET` + `S3_REGION`             | optional                  | **required** (uploads and personal-data exports); the access-key pair is set together or not at all |
+| `RESEND_API_KEY`                      | optional (mail skipped)   | **required** (email codes, password resets, invitations) — and with it `EMAIL_FROM_ADDRESS` |
+| `WEBAUTHN_RP_ID`                      | `localhost` / fallback    | optional; when set, a bare hostname the `FRONTEND_URL` host equals or sits under (passkeys are bound to it) |
 | `COOKIE_SECURE`                       | `false`                   | `true` (cookies sent over HTTPS only)                                              |
 | `UPLOAD_USE_PRESIGNED_POST`           | may be `false`            | `true` (presigned PUT has no min-size enforcement)                                 |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`         | `http://…` ok             | `https://` (telemetry must not transmit SQL/paths in plaintext)                   |
@@ -341,15 +346,16 @@ instead of running insecure — you cannot ship the dev value:
 filled — boot fails loudly on any violation. The deploy workflow's `validate:github-env-runtime`
 step confirms the required keys exist in the GitHub Environment before anything deploys.
 
-### 11.2 Layer 2 — `NODE_ENV` selects each policy flag's default (it is not itself a runtime switch)
+### 11.2 Layer 2 — policy flags with static production-safe defaults (`NODE_ENV` is not a runtime switch)
 
-Runtime code never branches on `NODE_ENV`; it reads explicit **policy flags**, and `NODE_ENV` only
-**selects each flag's default** in `env-schema.ts`. The two most safety-relevant flags —
-`RATE_LIMIT_RELAXED_CAPS` (lifts every per-route cap to 5000, `rate-limit-presets.constants.ts`) and
-`CAPTCHA_FAIL_OPEN` (captcha skips when Turnstile is unconfigured, `captcha.middleware.ts`) — default
-relaxed on a local `development` runtime, and a schema refine **rejects the relaxed value in
-production at boot**. So even a leaked `.env` cannot ship relaxed caps or fail-open captcha to
-a deployed environment — config validation fails closed. The boot-time safety checks
+Runtime code never branches on `NODE_ENV`; it reads explicit **policy flags**, each with a **static
+production-safe default** in `env-schema.ts` — `NODE_ENV` selects no default. The local value ships
+active in the committed template. The two most safety-relevant flags — `RATE_LIMIT_RELAXED_CAPS`
+(lifts every per-route cap to 5000, `rate-limit-presets.constants.ts`) and `CAPTCHA_FAIL_OPEN` (skip
+the captcha check while Cloudflare Turnstile is down instead of answering 503,
+`captcha.middleware.ts`) — default to the hardened value, and a schema refine **rejects the relaxed
+value in production at boot**. So even a leaked env file cannot ship relaxed caps or fail-open
+captcha to a deployed environment — config validation fails closed. The boot-time safety checks
 (`DATABASE_TLS_ENFORCED`, `DATABASE_RLS_SAFETY_ENFORCED`, `REDIS_TLS_ENFORCED`, `TRUST_PROXY_REQUIRED`,
 `DATABASE_CONNECTION_BUDGET_ENFORCED`) follow the same rule: default enforced when deployed, locked on
 in production. You also normally cannot ship the wrong `NODE_ENV` — the Dockerfile sets
@@ -390,7 +396,7 @@ This section is specifically the **dev / load-test → production delta**.
 - **Var registry (allowed values + description manifest, Zod derived):** `ENV_VAR_REGISTRY` in `src/shared/config/env-schema.ts` via the DSL in `src/shared/config/env-var-registry.ts`
 - **Catalog (generated):** [reference/env-catalog.md](../../reference/env-catalog.md) — every variable's allowed values · default · required/optional · description (`pnpm env:catalog`, verified in sync by the registry policy test)
 - **Template (committed):** `.env.example`
-- **Operator templates (gitignored):** `.env.development`, `.env.production`
+- **Operator files (gitignored):** `.env.development`, `.env.production` (hosted environments); `.env.local` (your machine, `pnpm setup:local`)
 - **Loader:** `src/shared/config/load-env-files.ts`
 - **Setup manifest (canonical):** `tooling/setup/setup.config.json`
 - **GitHub push:** `tooling/setup/github/sync.ts` (`pnpm github:sync`)

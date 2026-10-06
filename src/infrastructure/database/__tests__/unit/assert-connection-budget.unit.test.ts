@@ -38,6 +38,9 @@ vi.mock('@/infrastructure/queue/worker-runtime/worker-connection-budget.js', () 
 const BUDGET_EXCEEDED_HEADLINE =
   'Postgres connection budget exceeded — DATABASE_POOL_MAX is too high for this database.';
 
+// Cases about the primary pool's arithmetic leave the maintenance pool at 0; the two cases at the
+// end are about it.
+
 describe('assertPostgresConnectionBudget', () => {
   beforeEach(() => {
     sqlMock.mockReset();
@@ -56,6 +59,7 @@ describe('assertPostgresConnectionBudget', () => {
   it('throws when deployment process count exceeds allowed connections', async () => {
     getEnvMock.mockReturnValue({
       DATABASE_POOL_MAX: 10,
+      DATABASE_MAINTENANCE_POOL_MAX: 0,
       POSTGRES_RESERVED_CONNECTIONS: 10,
       POSTGRES_MAX_CONNECTIONS: 50,
       DEPLOYMENT_TOTAL_REPLICA_COUNT: 5,
@@ -74,6 +78,7 @@ describe('assertPostgresConnectionBudget', () => {
   it('passes when deployment process count fits the budget', async () => {
     getEnvMock.mockReturnValue({
       DATABASE_POOL_MAX: 10,
+      DATABASE_MAINTENANCE_POOL_MAX: 0,
       POSTGRES_RESERVED_CONNECTIONS: 10,
       POSTGRES_MAX_CONNECTIONS: 100,
       DEPLOYMENT_TOTAL_REPLICA_COUNT: 2,
@@ -91,6 +96,7 @@ describe('assertPostgresConnectionBudget', () => {
   it('requires deployment process count when DATABASE_CONNECTION_BUDGET_ENFORCED', async () => {
     getEnvMock.mockReturnValue({
       DATABASE_POOL_MAX: 10,
+      DATABASE_MAINTENANCE_POOL_MAX: 0,
       POSTGRES_RESERVED_CONNECTIONS: 10,
       POSTGRES_MAX_CONNECTIONS: 100,
       DATABASE_CONNECTION_BUDGET_ENFORCED: true,
@@ -110,6 +116,7 @@ describe('assertPostgresConnectionBudget', () => {
   it('throws when split worker families exceed DATABASE_POOL_MAX', async () => {
     getEnvMock.mockReturnValue({
       DATABASE_POOL_MAX: 8,
+      DATABASE_MAINTENANCE_POOL_MAX: 0,
       POSTGRES_RESERVED_CONNECTIONS: 10,
       POSTGRES_MAX_CONNECTIONS: 100,
       DEPLOYMENT_TOTAL_REPLICA_COUNT: 1,
@@ -134,6 +141,7 @@ describe('assertPostgresConnectionBudget', () => {
   it('throws when monolithic worker demand exceeds DATABASE_POOL_MAX', async () => {
     getEnvMock.mockReturnValue({
       DATABASE_POOL_MAX: 8,
+      DATABASE_MAINTENANCE_POOL_MAX: 0,
       POSTGRES_RESERVED_CONNECTIONS: 10,
       POSTGRES_MAX_CONNECTIONS: 100,
       DEPLOYMENT_TOTAL_REPLICA_COUNT: 1,
@@ -159,6 +167,7 @@ describe('assertPostgresConnectionBudget', () => {
   it('warns (without throwing) when worker demand fits but lacks burst headroom', async () => {
     getEnvMock.mockReturnValue({
       DATABASE_POOL_MAX: 20,
+      DATABASE_MAINTENANCE_POOL_MAX: 0,
       POSTGRES_RESERVED_CONNECTIONS: 10,
       POSTGRES_MAX_CONNECTIONS: 100,
       DEPLOYMENT_TOTAL_REPLICA_COUNT: 1,
@@ -192,6 +201,7 @@ describe('assertPostgresConnectionBudget', () => {
   it('passes when split API and worker counts fit the budget', async () => {
     getEnvMock.mockReturnValue({
       DATABASE_POOL_MAX: 10,
+      DATABASE_MAINTENANCE_POOL_MAX: 0,
       POSTGRES_RESERVED_CONNECTIONS: 10,
       POSTGRES_MAX_CONNECTIONS: 100,
       DEPLOYMENT_API_REPLICA_COUNT: 1,
@@ -210,6 +220,7 @@ describe('assertPostgresConnectionBudget', () => {
   it('throws when split API and worker counts exceed the budget', async () => {
     getEnvMock.mockReturnValue({
       DATABASE_POOL_MAX: 10,
+      DATABASE_MAINTENANCE_POOL_MAX: 0,
       POSTGRES_RESERVED_CONNECTIONS: 10,
       POSTGRES_MAX_CONNECTIONS: 50,
       DEPLOYMENT_API_REPLICA_COUNT: 4,
@@ -234,6 +245,7 @@ describe('assertPostgresConnectionBudget', () => {
 
     getEnvMock.mockReturnValue({
       DATABASE_POOL_MAX: poolMax,
+      DATABASE_MAINTENANCE_POOL_MAX: 0,
       POSTGRES_RESERVED_CONNECTIONS: reserved,
       POSTGRES_MAX_CONNECTIONS: maxConnections,
       DEPLOYMENT_API_REPLICA_COUNT: apiReplicas,
@@ -264,6 +276,7 @@ describe('assertPostgresConnectionBudget', () => {
   it('omits the pool suggestion when no pool size fits the process count', async () => {
     getEnvMock.mockReturnValue({
       DATABASE_POOL_MAX: 10,
+      DATABASE_MAINTENANCE_POOL_MAX: 0,
       POSTGRES_RESERVED_CONNECTIONS: 10,
       POSTGRES_MAX_CONNECTIONS: 15,
       DEPLOYMENT_TOTAL_REPLICA_COUNT: 10,
@@ -285,6 +298,7 @@ describe('assertPostgresConnectionBudget', () => {
   it('requires both split counts when using either one', async () => {
     getEnvMock.mockReturnValue({
       DATABASE_POOL_MAX: 10,
+      DATABASE_MAINTENANCE_POOL_MAX: 0,
       POSTGRES_RESERVED_CONNECTIONS: 10,
       POSTGRES_MAX_CONNECTIONS: 100,
       DEPLOYMENT_API_REPLICA_COUNT: 2,
@@ -302,6 +316,7 @@ describe('assertPostgresConnectionBudget', () => {
   it('asserts local docker default of one API and one worker when counts are unset', async () => {
     getEnvMock.mockReturnValue({
       DATABASE_POOL_MAX: 10,
+      DATABASE_MAINTENANCE_POOL_MAX: 0,
       POSTGRES_RESERVED_CONNECTIONS: 10,
       POSTGRES_MAX_CONNECTIONS: 15,
       NODE_ENV: 'development',
@@ -319,6 +334,7 @@ describe('assertPostgresConnectionBudget', () => {
   it('uses local process defaults when DATABASE_CONNECTION_BUDGET_ENFORCED is false', async () => {
     getEnvMock.mockReturnValue({
       DATABASE_POOL_MAX: 10,
+      DATABASE_MAINTENANCE_POOL_MAX: 0,
       POSTGRES_RESERVED_CONNECTIONS: 10,
       POSTGRES_MAX_CONNECTIONS: 100,
       DATABASE_CONNECTION_BUDGET_ENFORCED: false,
@@ -332,5 +348,48 @@ describe('assertPostgresConnectionBudget', () => {
 
     // 1 API + 1 worker × pool 10 = 20 required ≤ (100 − 10) allowed → passes on local defaults.
     await expect(assertPostgresConnectionBudget()).resolves.toBeUndefined();
+  });
+
+  it('counts the maintenance pool: a budget that fits the primary pools alone can still exceed', async () => {
+    // 2 × 40 = 80 fits 100 − 10 = 90; with a 10-connection maintenance pool each, 2 × 50 = 100 does not.
+    getEnvMock.mockReturnValue({
+      DATABASE_POOL_MAX: 40,
+      DATABASE_MAINTENANCE_POOL_MAX: 10,
+      POSTGRES_RESERVED_CONNECTIONS: 10,
+      POSTGRES_MAX_CONNECTIONS: 100,
+      DEPLOYMENT_TOTAL_REPLICA_COUNT: 2,
+      NODE_ENV: 'development',
+      WORKER_CONCURRENCY: 4,
+    });
+
+    const { assertPostgresConnectionBudget } = await import(
+      '@/infrastructure/database/safety/assert-connection-budget.js'
+    );
+
+    await expect(assertPostgresConnectionBudget()).rejects.toThrow(BUDGET_EXCEEDED_HEADLINE);
+    await expect(assertPostgresConnectionBudget()).rejects.toThrow(/2 × \(40 \+ 10\) = 100/);
+  });
+
+  it('suggests the primary pool that fits once the maintenance pool is reserved', async () => {
+    getEnvMock.mockReturnValue({
+      DATABASE_POOL_MAX: 40,
+      DATABASE_MAINTENANCE_POOL_MAX: 10,
+      POSTGRES_RESERVED_CONNECTIONS: 10,
+      POSTGRES_MAX_CONNECTIONS: 100,
+      DEPLOYMENT_TOTAL_REPLICA_COUNT: 2,
+      NODE_ENV: 'development',
+      WORKER_CONCURRENCY: 4,
+    });
+
+    const { assertPostgresConnectionBudget } = await import(
+      '@/infrastructure/database/safety/assert-connection-budget.js'
+    );
+
+    // floor(90 / 2) = 45 per process, 10 of it the maintenance pool: DATABASE_POOL_MAX=35 fits.
+    await expect(assertPostgresConnectionBudget()).rejects.toThrow(/DATABASE_POOL_MAX=35\b/);
+    // Or grow the server to 2 × 50 + 10 = 110.
+    await expect(assertPostgresConnectionBudget()).rejects.toThrow(
+      /POSTGRES_MAX_CONNECTIONS=110\b/,
+    );
   });
 });

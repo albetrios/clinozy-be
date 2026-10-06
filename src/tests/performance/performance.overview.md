@@ -14,6 +14,7 @@ What this suite covers:
 - N+1 / scaling tripwires on the read-heavy list routes per domain: organizations + users (`n-plus-one`), memberships (`membership-list`), billing subscriptions + plans (`billing-list`), notification inbox + unread count (`notify-list`), auth session list (`auth-session-list`).
 - EXPLAIN-plan assertions that the migration-provided indexes actually serve the hot queries (`explain-analyze` — audit organization filter, user email trgm; `notify-list` — inbox keyset index).
 - Worker concurrency bulkheads stay independent per queue (`worker-bulkheads`).
+- The queue runtime at volume, on real Redis (`queue-throughput`): a 10,000-job burst drains across two replicas with every job processed exactly once, and a 2,000-job backlog built during a provider outage loses nothing — no failure, no attempt spent, a probe per slot per pause — then drains exactly once when the provider is back. The only test that drives the worker runtime at volume: the k6 suite runs no worker.
 
 What it does **not** cover: real-world traffic shape (see `load/` for k6 SLO scenarios), large-payload behavior (separate fixtures), failure modes (see `chaos/`).
 

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { envSchema, envSchemaDefaults, envSchemaKeys } from '@/shared/config/env-schema.js';
 
-const DATABASE_URL_FIXTURE = 'postgres://localhost:5432/core';
+const DATABASE_URL_FIXTURE = 'postgres://localhost:5432/fixture';
 const REDIS_URL_FIXTURE = 'redis://localhost:6379';
 
 // audit #8: the deployed runtime (production) now requires real RSA PEMs ≥2048-bit, so the
@@ -22,6 +22,7 @@ const productionRedisTopology = {
 
 const commonRequiredBase = {
   DATABASE_URL: DATABASE_URL_FIXTURE,
+  DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
   REDIS_URL: REDIS_URL_FIXTURE,
   JWT_PRIVATE_KEY: REAL_RSA_KEY_PAIR.privateKey,
   JWT_PUBLIC_KEY: REAL_RSA_KEY_PAIR.publicKey,
@@ -38,8 +39,16 @@ const productionRequiredBase = {
   NODE_ENV: 'production',
   // Production requires absolute https origins (no plaintext http / wildcard).
   ALLOWED_ORIGINS: 'https://app.example.com',
+  // Production builds emailed links from it, so it is required there, over https.
+  FRONTEND_URL: 'https://app.example.com',
   CAPTCHA_PROVIDER: 'turnstile',
   CAPTCHA_SECRET: 'turnstile-secret',
+  // Production cannot start without object storage or Resend; the WebAuthn relying party is optional.
+  S3_BUCKET: 'clinic-uploads',
+  S3_REGION: 'us-east-1',
+  RESEND_API_KEY: 're_production_fixture_key',
+  EMAIL_FROM_ADDRESS: 'noreply@example.com',
+  WEBAUTHN_RP_ID: 'app.example.com',
   ...productionRedisTopology,
 };
 
@@ -166,6 +175,44 @@ describe('env-schema', () => {
     });
   });
 
+  // A Turnstile outage is exactly when credential stuffing is cheapest to hide in; production
+  // answers 503 instead of skipping the check.
+  describe('CAPTCHA_FAIL_OPEN', () => {
+    it('defaults to false (fail closed)', () => {
+      const parsed = envSchema.parse({ ...commonRequiredBase, NODE_ENV: 'local' });
+      expect(parsed.CAPTCHA_FAIL_OPEN).toBe(false);
+    });
+
+    it('rejects CAPTCHA_FAIL_OPEN=true in production', () => {
+      const result = envSchema.safeParse({ ...productionRequiredBase, CAPTCHA_FAIL_OPEN: 'true' });
+      expect(result.success).toBe(false);
+      expect(JSON.stringify(result.error?.issues)).toContain('CAPTCHA_FAIL_OPEN');
+    });
+
+    it('allows true outside production', () => {
+      for (const NODE_ENV of ['local', 'development'] as const) {
+        const result = envSchema.safeParse({
+          ...commonRequiredBase,
+          NODE_ENV,
+          CAPTCHA_FAIL_OPEN: 'true',
+        });
+        expect(result.success, `${NODE_ENV} should allow it`).toBe(true);
+      }
+    });
+  });
+
+  it('requires DATABASE_MAINTENANCE_URL — the only connection the bypass policy arms admit', () => {
+    const { DATABASE_MAINTENANCE_URL: _omitted, ...withoutMaintenanceUrl } = commonRequiredBase;
+    const parsed = envSchema.safeParse({ ...withoutMaintenanceUrl, NODE_ENV: 'development' });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.map((issue) => issue.path.join('.'))).toContain(
+        'DATABASE_MAINTENANCE_URL',
+      );
+    }
+  });
+
   it('exports schema keys for tooling sync', () => {
     expect(envSchemaKeys.length).toBeGreaterThan(0);
     expect(envSchemaKeys).toContain('DATABASE_URL');
@@ -176,6 +223,7 @@ describe('env-schema', () => {
     const parsed = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       AUDIT_RETENTION_DAYS: '30',
@@ -194,6 +242,7 @@ describe('env-schema', () => {
     const parsed = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       PORT: '4000',
       NODE_ENV: 'development',
@@ -387,6 +436,7 @@ describe('env-schema', () => {
     const parsed = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       AUDIT_RETENTION_DAYS: '30',
@@ -404,6 +454,7 @@ describe('env-schema', () => {
     const parsed = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       TRUST_PROXY: 'true',
@@ -419,6 +470,7 @@ describe('env-schema', () => {
     const disabled = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       TRUST_PROXY: '0',
@@ -442,14 +494,11 @@ describe('env-schema', () => {
     }
   });
 
-  // sec-C5: JWT_SECRET removed from the schema (RS256 only). The
-  // "parses without JWT_SECRET" + "accepts optional pair alongside
-  // JWT_SECRET" tests are no longer applicable; the RS256-key acceptance
-  // test below covers the surviving path.
   it('parses with the RS256 key pair set', () => {
     const parsed = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       JWT_PRIVATE_KEY: 'test-private-key',
@@ -463,6 +512,7 @@ describe('env-schema', () => {
     const enabled = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       ENABLE_RESPONSE_ENCRYPTION: 'true',
@@ -471,6 +521,7 @@ describe('env-schema', () => {
     const disabled = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       ENABLE_RESPONSE_ENCRYPTION: '0',
@@ -484,6 +535,7 @@ describe('env-schema', () => {
     const parsed = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       IDEMPOTENCY_CARDINALITY_WARN_THRESHOLD: '100',
@@ -496,6 +548,7 @@ describe('env-schema', () => {
   it('requires RS256 keys in production', () => {
     const parsed = envSchema.safeParse({
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'production',
     });
@@ -504,12 +557,9 @@ describe('env-schema', () => {
   });
 
   it('rejects an env missing both RS256 key parts', () => {
-    // sec-C5: the original "rejects JWT_SECRET shorter than minimum length"
-    // assertion was actually pinning the "missing RS256 keys" rejection path
-    // (the env block omitted them too); rename to match what is actually
-    // being verified.
     const parsed = envSchema.safeParse({
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
     });
@@ -521,6 +571,7 @@ describe('env-schema', () => {
     const parsed = envSchema.safeParse({
       ...process.env,
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       AUDIT_RETENTION_DAYS: '30',
@@ -652,13 +703,100 @@ describe('env-schema', () => {
     expect(withToken.success).toBe(true);
   });
 
-  it('accepts a public FRONTEND_URL across all NODE_ENV values (magic-link inline-token leak removed)', () => {
-    /**
-     * Previously, non-production runtimes were forced to use a localhost
-     * FRONTEND_URL because the magic-link service inlined the raw token in
-     * API responses. That leak has been eliminated, so deployed non-production
-     * environments may now use real public URLs identical to production.
-     */
+  it.each([
+    ['unset', undefined],
+    ['plaintext http', 'http://app.example.com'],
+    ['the local-dev fallback', 'http://localhost:5173'],
+  ])('rejects production with FRONTEND_URL %s (emailed links would break)', (_case, value) => {
+    const { FRONTEND_URL: _frontendUrl, ...withoutFrontendUrl } = productionRequiredBase;
+    void _frontendUrl;
+    const parsed = envSchema.safeParse({
+      ...withoutFrontendUrl,
+      ...(value === undefined ? {} : { FRONTEND_URL: value }),
+    });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.flatten().fieldErrors.FRONTEND_URL).toBeDefined();
+    }
+  });
+
+  describe('settings production cannot start without', () => {
+    /** The production fixture with `key` removed. */
+    function productionWithout(key: keyof typeof productionRequiredBase) {
+      const environment: Record<string, unknown> = { ...productionRequiredBase };
+      delete environment[key];
+      return environment;
+    }
+
+    function fieldErrors(environment: Record<string, unknown>) {
+      const parsed = envSchema.safeParse(environment);
+      return parsed.success ? {} : parsed.error.flatten().fieldErrors;
+    }
+
+    it.each(['S3_BUCKET', 'S3_REGION'] as const)(
+      'rejects production without %s (uploads and data exports would fail at use)',
+      (key) => {
+        expect(fieldErrors(productionWithout(key)).S3_BUCKET).toBeDefined();
+      },
+    );
+
+    it('rejects production without RESEND_API_KEY (no email codes, resets or invitations)', () => {
+      expect(fieldErrors(productionWithout('RESEND_API_KEY')).RESEND_API_KEY).toBeDefined();
+    });
+
+    it('accepts production without WEBAUTHN_RP_ID (optional — falls back to ALLOWED_ORIGINS)', () => {
+      expect(envSchema.safeParse(productionWithout('WEBAUTHN_RP_ID')).success).toBe(true);
+    });
+
+    it.each([
+      ['a URL instead of a hostname', 'https://app.example.com'],
+      ['a hostname with a port', 'app.example.com:443'],
+      ['a domain the frontend host is not under', 'other.example.org'],
+      ['a sibling subdomain', 'admin.example.com'],
+    ])('rejects production with WEBAUTHN_RP_ID set to %s', (_case, value) => {
+      expect(
+        fieldErrors({ ...productionRequiredBase, WEBAUTHN_RP_ID: value }).WEBAUTHN_RP_ID,
+      ).toBeDefined();
+    });
+
+    it('accepts a WEBAUTHN_RP_ID equal to the frontend host or a parent domain of it', () => {
+      expect(envSchema.safeParse(productionRequiredBase).success).toBe(true);
+      expect(
+        envSchema.safeParse({ ...productionRequiredBase, WEBAUTHN_RP_ID: 'example.com' }).success,
+      ).toBe(true);
+    });
+
+    it('rejects half a storage credential in any environment', () => {
+      for (const environment of [
+        { ...productionRequiredBase, S3_ACCESS_KEY_ID: 'key-id-only' },
+        { ...commonRequiredBase, NODE_ENV: 'development', S3_SECRET_ACCESS_KEY: 'secret-only' },
+      ]) {
+        expect(fieldErrors(environment).S3_ACCESS_KEY_ID).toBeDefined();
+      }
+      expect(
+        envSchema.safeParse({
+          ...productionRequiredBase,
+          S3_ACCESS_KEY_ID: 'key-id',
+          S3_SECRET_ACCESS_KEY: 'secret',
+        }).success,
+      ).toBe(true);
+    });
+
+    it('still lets development start without storage or Resend', () => {
+      expect(envSchema.safeParse({ ...commonRequiredBase, NODE_ENV: 'development' }).success).toBe(
+        true,
+      );
+    });
+  });
+
+  it('accepts production with an https FRONTEND_URL, and an unset one outside production', () => {
+    expect(envSchema.safeParse(productionRequiredBase).success).toBe(true);
+    expect(envSchema.safeParse({ ...commonRequiredBase, NODE_ENV: 'development' }).success).toBe(
+      true,
+    );
+  });
+
+  it('accepts a public FRONTEND_URL across all NODE_ENV values', () => {
     const parsedDevelopment = envSchema.safeParse({
       ...commonRequiredBase,
       NODE_ENV: 'development',
@@ -766,6 +904,7 @@ describe('env-schema', () => {
   it('rejects FRONTEND_URL that is not a valid http(s) URL', () => {
     const parsed = envSchema.safeParse({
       DATABASE_URL: DATABASE_URL_FIXTURE,
+      DATABASE_MAINTENANCE_URL: DATABASE_URL_FIXTURE,
       REDIS_URL: REDIS_URL_FIXTURE,
       NODE_ENV: 'development',
       FRONTEND_URL: 'not-a-url',
@@ -1276,6 +1415,7 @@ describe('envSchemaDefaults', () => {
     // A key with no resolvable default is ABSENT from the map, so github:sync always pushes it —
     // it can never be mistaken for a schema default and dropped.
     expect(envSchemaDefaults).not.toHaveProperty('DATABASE_URL'); // required
+    expect(envSchemaDefaults).not.toHaveProperty('DATABASE_MAINTENANCE_URL'); // required
     expect(envSchemaDefaults).not.toHaveProperty('REDIS_URL'); // required
     expect(envSchemaDefaults).not.toHaveProperty('JWT_PRIVATE_KEY'); // required
     expect(envSchemaDefaults).not.toHaveProperty('CAPTCHA_SECRET'); // optional, no default

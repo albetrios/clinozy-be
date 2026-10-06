@@ -9,10 +9,6 @@ description: |
   `reusable-railway-deploy.yml` workflow from the matching GitHub Environment.
 
 inputs:
-  # sec-r4-C7: `jwt-secret` removed — JWT_SECRET is not a key consumed by the
-  # application (RS256 is the only signing path; env-schema uses
-  # JWT_PRIVATE_KEY / JWT_PUBLIC_KEY). The override was dead config that
-  # suggested HMAC-based JWT auth might still be active.
   allowed-origins:
     description: Override for ALLOWED_ORIGINS
     required: false

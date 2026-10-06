@@ -77,9 +77,8 @@ When it finishes, the API is at `http://localhost:3000` (`/livez`, `/readyz`).
 ### Option B — manual steps
 
 ```bash
-# 1. Environment files
-pnpm github:sync
-$EDITOR .env.development        # fill DATABASE_URL, REDIS_URL, JWT_* keypair, SECRETS_ENCRYPTION_KEY
+# 1. Environment file
+pnpm setup:local --only-env     # self-contained .env.local: DB/Redis URLs, JWT keypair, SECRETS_ENCRYPTION_KEY
 
 # 2. Start Postgres + Redis and wait until ready
 pnpm compose:up
@@ -108,14 +107,13 @@ Env files live at **project root only**. There is exactly one committed template
 | File                 | Status         | Purpose                                                                            |
 | -------------------- | -------------- | ---------------------------------------------------------------------------------- |
 | `.env.example`       | committed      | Single template; every schema key with its section and sub-section                 |
-| `.env.local.example` | committed      | Template for the local override; copy to `.env.local` for Docker dev               |
-| `.env.development`   | **gitignored** | Local + dev-environment values; source of truth for `pnpm github:sync development` |
+| `.env.development`   | **gitignored** | Hosted development values; source of truth for `pnpm github:sync development`      |
 | `.env.production`    | **gitignored** | Production values; source of truth for `pnpm github:sync production`               |
-| `.env.local`         | **gitignored** | Machine-specific override; wins over `.env.<NODE_ENV>` for local dev only          |
+| `.env.local`         | **gitignored** | Your machine: the file `pnpm dev` reads (scaffolded by `pnpm setup:local`)         |
 
 **Minimum required:** `DATABASE_URL`, `REDIS_URL`, `JWT_PRIVATE_KEY` / `JWT_PUBLIC_KEY` (RS256 PEM pair), `SECRETS_ENCRYPTION_KEY` (64 hex chars).
 
-The runtime loader reads `.env.${NODE_ENV}` (defaults to `.env.development`) then applies `.env.local` as an override (non-production only). This lets you point `DATABASE_URL` / `REDIS_URL` at Docker without editing `.env.development`.
+The runtime loader reads `.env.${NODE_ENV}`. `NODE_ENV` defaults to `local`, so a stock `pnpm dev` reads `.env.local` alone. With `NODE_ENV=development` or `production` it reads that file and layers `.env.local` on top as a per-machine override — useful to point `DATABASE_URL` / `REDIS_URL` at Docker while testing a deploy profile.
 
 `.env.example` is split into two halves (`# GitHub Secrets`, `# GitHub Variables`). The half a key sits in is its classification — `pnpm github:sync <environment>` pushes each half to GitHub Environment secrets or variables. See [credentials-and-env.md](docs/integrations/credentials-and-env.md) for per-provider credential acquisition and [environment-variables.md](docs/deployment/runbooks/environment-variables.md) for the full lifecycle.
 
@@ -169,6 +167,8 @@ Full detail (branch naming, PR flow, hotfixes, protected branches): [trunk-based
 
 Tests live under `src/tests/` (cross-cutting) and co-located `__tests__/` inside each domain. See [CLAUDE.md](CLAUDE.md) § Testing for the full layout.
 
+Local test runs use their own database, `<local database>_test` (the Compose database name plus `_test`), on the Compose Postgres — created and migrated automatically on the first run. Every suite truncates all tables with `RESTART IDENTITY`, so your `pnpm dev` data is never touched and `pnpm dev` can keep running while tests do. Test Redis keys use their own prefix (`<stem>:test:`) too. CI keeps its own service-container database.
+
 | Category                | Command                 | When to run                                         |
 | ----------------------- | ----------------------- | --------------------------------------------------- |
 | **Unit**                | `pnpm test:unit`        | Fast feedback before commit; no DB needed           |
@@ -198,43 +198,43 @@ CI does the same, so **no manual env is needed for `pnpm test*` or CI**.
 
 A **live server** is different: when an external suite drives a real clinozy-be over loopback —
 e.g. the **clinozy-fe Playwright E2E** suite, which boots `pnpm dev` on `:3000` and hits it as
-a browser client — the process runs under `NODE_ENV=development` and enforces the production
-defaults unless told otherwise. Set these in **`.env.development`** (the gitignored dev file
+a browser client — the process runs with `NODE_ENV` unset (`local`) and enforces the production
+defaults unless told otherwise. Set these in **`.env.local`** (the gitignored file
 that `pnpm setup:local` scaffolds from `.env.example` — **not** a plain `.env`, **not**
-`.env.local`, **not** ad-hoc shell prefixes; keep the pair below with the values you need):
+ad-hoc shell prefixes; keep the pair below with the values you need):
 
-| Env var (in `.env.development`)                               | Set to                                              | Why the live server needs it                                                                                                                                                                                                                                                                                                                                                                               |
+| Env var (in `.env.local`)                                     | Set to                                              | Why the live server needs it                                                                                                                                                                                                                                                                                                                                                                               |
 | ------------------------------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `RATE_LIMIT_RELAXED_CAPS`                                     | `true`                                              | Public-auth routes (`send-code`, login) default to **5 req/min per IP** (`STRICT_PUBLIC_RATE_LIMIT` / `STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS` in `src/shared/middlewares/rate-limit/rate-limit-presets.constants.ts`). A loopback E2E suite floods that → `429 send-code failed` and every authenticated flow fails. `true` lifts each cap to 5000. A schema refine keeps it **false in production**. |
 | `DATABASE_TLS_ENFORCED`                                       | `false`                                             | Local Docker Postgres is plaintext; `assertDatabaseTlsVerification` is fail-closed for hosted deployments only (its warn-path explicitly accepts local Docker).                                                                                                                                                                                                                                            |
-| `DATABASE_RLS_SAFETY_ENFORCED`                                | `false`                                             | The Docker `core` role is a superuser / `BYPASSRLS`; `assertDatabaseRoleRlsSafety` is fail-closed for hosted deployments only.                                                                                                                                                                                                                                                                             |
+| `DATABASE_RLS_SAFETY_ENFORCED`                                | `false`                                             | The Docker Compose superuser (`POSTGRES_USER`) bypasses RLS; `assertDatabaseRoleRlsSafety` is fail-closed for hosted deployments only.                                                                                                                                                                                                                                                                             |
 | `PERSONAL_ORGANIZATION_ENABLED` / `TEAM_ORGANIZATION_ENABLED` | match the mode under test (**at least one `true`**) | Selects the deployment mode (B2C / B2B / hybrid) the FE suite exercises. See [personal-vs-team-organizations.md](docs/reference/architecture/personal-vs-team-organizations.md).                                                                                                                                                                                                                           |
 
 The committed **[`.env.example`](.env.example)** already ships all four keys with these
-local values and the same production-safety notes — a fresh `.env.development` inherits them.
+local values and the same production-safety notes — a fresh `.env.local` inherits them.
 This section only matters if you've hardened your local file or run the server outside
 `pnpm setup:local`. See also the rate-limit posture in
 [authentication.md](docs/reference/security/authentication.md) and the flag
 model in [environment-variables.md](docs/deployment/runbooks/environment-variables.md).
 
-#### Why these live in `.env.development`, not a shell prefix
+#### Why these live in `.env.local`, not a shell prefix
 
 Set the flags in the file — **never** pass them inline on the command line
-(`DATABASE_TLS_ENFORCED=false … pnpm dev`) and never as a plain `.env` / `.env.local`:
+(`DATABASE_TLS_ENFORCED=false … pnpm dev`) and never as a plain `.env`:
 
 - **They are non-secret local-dev flags** (booleans, no keys or tokens), so they belong in
-  `.env.development` — the repo-owner-maintained dev file — where the local-safety decision is
+  `.env.local` — your machine's file — where the local-safety decision is
   made **once**, on the record, by a human. There is nothing sensitive to keep out of the file.
 - **An automated agent cannot boot the server with these flags on the command line.** A
   coding agent's safety classifier reads an inline `DATABASE_TLS_ENFORCED=false
 DATABASE_RLS_SAFETY_ENFORCED=false pnpm dev` as "disarm TLS / RLS" and **blocks** it, and the
   agent must not self-grant a permission rule to tunnel around that guard. Pre-setting the
-  flags in `.env.development` removes the bypass flags from the command entirely: boot is a
+  flags in `.env.local` removes the bypass flags from the command entirely: boot is a
   plain `pnpm dev` — nothing for the classifier to flag, no permission prompt, the agent just
   runs. So do not ask an agent to boot clinozy-be by passing these flags on the CLI.
 - **The production guardrail is unaffected.** `src/shared/config/env-schema.ts` pins
   `RATE_LIMIT_RELAXED_CAPS=false` and keeps the DB TLS / RLS guards enforced in production via a
-  schema refine that rejects the loosened value there. Setting them false in `.env.development`
+  schema refine that rejects the loosened value there. Setting them false in `.env.local`
   only loosens the **local Docker** stack; a deployed `.env` omits them and stays hardened.
 
 ---
@@ -274,4 +274,4 @@ Covers: what runs in CI, branch-to-environment mapping (`dev` → development, `
 - **Docker daemon not reachable** — start Docker Desktop / OrbStack, then re-run.
 - **Port 3000 in use** — stop the other process or set `PORT` in `.env.local`.
 - **Postgres never becomes ready** — tune `WAIT_FOR_POSTGRES_ATTEMPTS` / `WAIT_FOR_POSTGRES_INTERVAL_SECONDS`, or check `pnpm compose:up` logs.
-- **Missing env vars on boot** — ensure `DATABASE_URL`, `REDIS_URL`, the JWT keypair, and `SECRETS_ENCRYPTION_KEY` are set in `.env.development` (or `.env.local`).
+- **Missing env vars on boot** — ensure `DATABASE_URL`, `REDIS_URL`, the JWT keypair, and `SECRETS_ENCRYPTION_KEY` are set in `.env.local` (`pnpm setup:local --only-env` scaffolds them).

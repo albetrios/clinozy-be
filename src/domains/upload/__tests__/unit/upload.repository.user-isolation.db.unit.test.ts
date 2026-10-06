@@ -115,9 +115,8 @@ describe('UploadRepository user/organization isolation (database)', () => {
   // ───────────────────────────────────────────────────────────────────────────
   // findByFileKey — deliberately NOT owner-scoped in SQL.
   //
-  // Its two callers are `UploadService.assertKeyConfirmed` (ownership implied by
-  // the key prefix) and `UploadService.assertKeyConfirmedForOwner` (sec-UP5),
-  // which re-checks `user_id` / `organization_id` in application code. These two
+  // Its only caller, `UploadService.assertKeyConfirmedForOwner` (sec-UP5),
+  // re-checks `user_id` / `organization_id` in application code. These two
   // cases pin that split against real Postgres: the lookup itself hands back a
   // row belonging to somebody else, so the code-level owner check is
   // load-bearing and cannot be quietly dropped as "RLS already covers it".

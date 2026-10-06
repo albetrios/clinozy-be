@@ -1,10 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
-import {
-  injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
-} from '@/tests/helpers/test-http-inject.helper.js';
+import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -43,7 +40,7 @@ vi.mock('@/infrastructure/storage/s3-adapter.js', () => {
     }),
     deleteObject: async () => true,
     putObject: async () => {},
-    copyObject: async () => {},
+    copyObject: async () => ({ kind: 'copied' as const }),
     getObject: async () => ({ body: PNG_MAGIC_BYTES, contentType: 'image/png' }),
     getObjectFirstBytes: async () => ({
       body: PNG_MAGIC_BYTES,
@@ -184,11 +181,10 @@ describe('Storage-backed routes — happy paths (mocked S3 port)', () => {
       organizationPublicId: organization.public_id,
     });
 
-    const response = await injectAuthenticatedOrganizationMutation(app, {
+    const response = await injectAuthenticated(app, {
       method: 'PUT',
       url: testApiPath('/tenancy/organization/logo'),
       token,
-      organizationPublicId: organization.public_id,
       payload: { key },
     });
     expect(response.statusCode, response.body).toBe(200);

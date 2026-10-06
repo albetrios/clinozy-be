@@ -9,7 +9,7 @@ import { attachPrincipalScope } from '@/tests/helpers/principal-scope.helper.js'
 function mockRequest(overrides: Partial<FastifyRequest> = {}): FastifyRequest {
   return attachPrincipalScope({
     auth: { kind: 'user', userId: generatePublicId('user'), role: 'user' },
-    params: { organization_id: generatePublicId('organization') },
+    params: {},
     body: {},
     headers: {},
     id: 'request-id',

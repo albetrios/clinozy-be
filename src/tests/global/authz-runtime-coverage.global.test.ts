@@ -54,8 +54,6 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
     'cross-organization-resource: organization by-slug',
 
   // ── model: organization — cross-organization writes (cross-organization-mutation.security.test.ts) ────
-  'PATCH /api/v1/billing/subscriptions/:subscription_id':
-    'cross-organization-mutation: subscription PATCH',
   'POST /api/v1/billing/subscriptions/:subscription_id/cancel':
     'cross-organization-mutation: subscription cancel',
   'POST /api/v1/billing/subscriptions/:subscription_id/change-plan':

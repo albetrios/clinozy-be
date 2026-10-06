@@ -17,7 +17,7 @@
 ## ✨ Features
 
 - **Multi-tenancy** — organization-scoped data with Postgres RLS as defense-in-depth
-- **Authentication** — passwords (argon2id), magic links, OAuth, MFA (TOTP), WebAuthn, RS256 JWT
+- **Authentication** — passwords (argon2id), email verification codes, OAuth, MFA (TOTP), WebAuthn, RS256 JWT
 - **Billing** — Stripe-backed plans and subscriptions with webhook reconciliation
 - **Notifications** — in-app, email (Resend), and outbound webhooks via transactional outbox
 - **Audit** — append-only audit log for security- and governance-relevant actions
@@ -32,10 +32,10 @@
 | Layer | Technologies |
 | --- | --- |
 | **Runtime / HTTP** | [Node.js 24](https://nodejs.org/), [Fastify 5](https://fastify.dev), [Zod 4](https://zod.dev) |
-| **Data / Queue** | [Drizzle 0.45](https://orm.drizzle.team), [Postgres](https://www.postgresql.org/), [ioredis 5](https://github.com/redis/ioredis), [BullMQ 5](https://docs.bullmq.io) |
-| **Auth / Security** | [jose 6](https://github.com/panva/jose), [argon2id](https://github.com/ranisalt/node-argon2), [otplib](https://github.com/yeojz/otplib), [@simplewebauthn/server](https://simplewebauthn.dev), [opossum](https://nodeshift.dev/opossum/) |
-| **Integrations** | [Stripe 22](https://stripe.com), [Resend 6](https://resend.com), AWS SDK v3 S3 |
-| **Observability** | [Pino 10](https://getpino.io), [Sentry 10](https://sentry.io), [OpenTelemetry](https://opentelemetry.io), [prom-client](https://github.com/siimon/prom-client) |
+| **Data / Queue** | [Drizzle 0.45](https://orm.drizzle.team), [Postgres](https://www.postgresql.org/), [ioredis 6](https://github.com/redis/ioredis), [BullMQ 6](https://docs.bullmq.io) |
+| **Auth / Security** | [jose 6](https://github.com/panva/jose), [argon2id](https://github.com/ranisalt/node-argon2), [otplib](https://github.com/yeojz/otplib), [@simplewebauthn/server](https://simplewebauthn.dev) |
+| **Integrations** | [Stripe 23](https://stripe.com), [Resend 6](https://resend.com), AWS SDK v3 S3 |
+| **Observability** | [Pino 10](https://getpino.io), [Sentry 11](https://sentry.io), [OpenTelemetry](https://opentelemetry.io), [prom-client](https://github.com/siimon/prom-client) |
 | **Testing / Tooling** | [Vitest 5](https://vitest.dev), [k6](https://k6.io), [Toxiproxy](https://github.com/Shopify/toxiproxy), [Biome](https://biomejs.dev), [pnpm 12](https://pnpm.io), [Husky](https://typicode.github.io/husky/) |
 
 ---
@@ -54,7 +54,7 @@ pnpm dev:worker   # BullMQ worker (separate terminal)
 
 **One-command local bootstrap:** `pnpm setup:local` (Docker + env + migrate + dev). Full clone-to-running guide: [SETUP.md](SETUP.md).
 
-**Environment:** copy values from [`.env.example`](.env.example) into `.env.development`, or run `pnpm github:sync` to bootstrap env files. Hosted infrastructure (Neon, Redis, S3, Sentry, Railway, GitHub) is provisioned from a separate infrastructure repository.
+**Environment:** `pnpm setup:local` scaffolds a self-contained `.env.local` from [`.env.example`](.env.example) — the file `pnpm dev` reads; `pnpm github:sync` manages the hosted environments' files. Hosted infrastructure (Neon, Redis, S3, Sentry, Railway, GitHub) is provisioned from a separate infrastructure repository.
 
 ---
 

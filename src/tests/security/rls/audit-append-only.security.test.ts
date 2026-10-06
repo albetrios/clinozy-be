@@ -14,6 +14,7 @@ import {
   grantClinozyBeAppRoleForTests,
   executeAsClinozyBeAppTenant,
 } from '@/tests/helpers/rls-matrix.helper.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 /**
  * Regression for sec-U3 (High): `audit.logs` was RLS-isolated with a single
@@ -65,6 +66,7 @@ describe('Security: audit.logs is append-only at the DB layer (sec-U3)', () => {
     const inserted = await database
       .insert(logs)
       .values({
+        public_id: generatePublicId('auditLog'),
         actor_user_id: null,
         actor_api_key_id: null,
         target_user_id: null,
@@ -143,7 +145,7 @@ describe('Security: audit.logs is append-only at the DB layer (sec-U3)', () => {
       async (databaseHandle) => {
         await databaseHandle.execute(drizzleSql`DELETE FROM audit.logs WHERE id = ${rowId}`);
       },
-      { useApplicationDatabaseRole: true },
+      { useMaintenanceDatabaseRole: true },
     );
 
     const after = await database.select({ id: logs.id }).from(logs).where(eq(logs.id, rowId));
@@ -157,8 +159,8 @@ describe('Security: audit.logs is append-only at the DB layer (sec-U3)', () => {
 
     const result = await executeAsClinozyBeAppTenant(organization.public_id, async (transaction) =>
       transaction.execute(
-        drizzleSql`INSERT INTO audit.logs (organization_id, action, resource_type, ip_address, user_agent, metadata)
-                   VALUES (${organization.id}, 'test.regression', 'test', '127.0.0.1', 'vitest', '{}'::jsonb)
+        drizzleSql`INSERT INTO audit.logs (public_id, organization_id, action, resource_type, ip_address, user_agent, metadata)
+                   VALUES (${generatePublicId('auditLog')}, ${organization.id}, 'test.regression', 'test', '127.0.0.1', 'vitest', '{}'::jsonb)
                    RETURNING id`,
       ),
     );

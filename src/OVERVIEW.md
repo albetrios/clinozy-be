@@ -115,7 +115,8 @@ Deliberate business, UX, and security trade-offs encoded as constants. Full rati
 - **`PERMISSION_CACHE_DEFAULT_TTL_SECONDS = 300`** — safety net for cross-process permission-cache invalidation.
 - **`NOTIFICATION_UNREAD_COUNT_CACHE_TTL_SECONDS = 60`** — backstop on the polled unread badge, for the two writers that cannot name a user.
 - **`CACHE_INVALIDATION_TOMBSTONE_TTL_SECONDS = 15`** — how long a freshness tombstone blocks repopulation; sized to the in-flight read, not to the cache.
-- **`STUCK_SENDING_LEASE_MINUTES = 15`** — outbox + Stripe-webhook reclaim window after worker crash.
+- **`STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS = 25`** — handler attempts after which a Stripe event is abandoned (one alert) instead of reclaimed forever.
+- **`STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES = 15`** — Stripe-webhook reclaim window after a worker crash (the mail outbox uses `MAIL_OUTBOX_RECLAIM_SENDING_MINUTES`; webhook deliveries need no lease — a new execution re-claims any row not yet `SENT`).
 - **`PAGINATION = { DEFAULT_LIMIT: 25, MAX_LIMIT: 100 }`** — list endpoint defaults; cursor pagination only.
 - **`GDPR_EXPORT_MAX_ROWS_PER_TABLE = 1 000`** — bounded export bundle size.
 
@@ -124,14 +125,14 @@ Deliberate business, UX, and security trade-offs encoded as constants. Full rati
 - **Runtime**: Node.js ≥ 24 (single-process API + single-process worker)
 - **HTTP**: [Fastify 5](https://fastify.dev) with `fastify-type-provider-zod`, `@fastify/helmet`, `@fastify/cors`, `@fastify/cookie`, `@fastify/rate-limit`, `@fastify/compress`
 - **Validation**: [Zod 4](https://zod.dev) (HTTP DTOs + route schemas)
-- **ORM**: [Drizzle 0.45](https://orm.drizzle.team) over the [`postgres` 3.x](https://github.com/porsager/postgres) driver (Postgres 16, RLS-enforced)
-- **Cache + queue**: [ioredis 5](https://github.com/redis/ioredis) + [BullMQ 5](https://docs.bullmq.io)
+- **ORM**: [Drizzle 0.45](https://orm.drizzle.team) over the [`postgres` 3.x](https://github.com/porsager/postgres) driver (Postgres 17, RLS-enforced)
+- **Cache + queue**: [ioredis 6](https://github.com/redis/ioredis) + [BullMQ 6](https://docs.bullmq.io)
 - **Auth**: [jose 6](https://github.com/panva/jose) (RS256 JWT), [argon2id](https://github.com/ranisalt/node-argon2), [otplib](https://github.com/yeojz/otplib) (TOTP), [@simplewebauthn/server](https://simplewebauthn.dev) (WebAuthn)
-- **Payments**: [Stripe 22](https://stripe.com)
+- **Payments**: [Stripe 23](https://stripe.com)
 - **Email**: [Resend 6](https://resend.com)
 - **Storage**: AWS SDK v3 S3 (`@aws-sdk/client-s3`, `@aws-sdk/s3-presigned-post`, `@aws-sdk/s3-request-presigner`) — works against any S3-compatible store
-- **Observability**: [Pino 10](https://getpino.io), [Sentry 10](https://sentry.io) (errors + tracing + profiling), [OpenTelemetry](https://opentelemetry.io) traces, [prom-client](https://github.com/siimon/prom-client) metrics
-- **Resilience**: [opossum](https://nodeshift.dev/opossum/) circuit breakers around Stripe / S3 / Resend
+- **Observability**: [Pino 10](https://getpino.io), [Sentry 11](https://sentry.io) (errors + tracing + profiling), [OpenTelemetry](https://opentelemetry.io) traces, [prom-client](https://github.com/siimon/prom-client) metrics
+- **Resilience**: a Redis-backed, cluster-wide circuit breaker (`src/infrastructure/resilience/`) around Stripe / S3 / Resend / Turnstile; [opossum](https://nodeshift.dev/opossum/) per destination for customer webhooks
 - **i18n**: [i18next 26](https://www.i18next.com) with file-system backend (English + Spanish today)
 - **MCP**: [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/sdk) (optional dependency, gated by `ENABLE_MCP_SERVER`)
 - **Testing**: [Vitest 5](https://vitest.dev), [fast-check](https://fast-check.dev) (property-based), [nock](https://github.com/nock/nock) (contract), [Toxiproxy](https://github.com/Shopify/toxiproxy) (chaos), [k6](https://k6.io) (load), [Stryker](https://stryker-mutator.io) (mutation)

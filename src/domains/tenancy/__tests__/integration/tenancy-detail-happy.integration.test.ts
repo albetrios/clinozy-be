@@ -1,10 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
-import {
-  injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
-} from '@/tests/helpers/test-http-inject.helper.js';
+import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -78,7 +75,7 @@ describe('Tenancy role and membership detail — happy paths', () => {
     });
     expect(get.statusCode, get.body).toBe(200);
 
-    const patch = await injectAuthenticatedOrganizationMutation(app, {
+    const patch = await injectAuthenticated(app, {
       method: 'PATCH',
       url: testApiPath(basePath),
       token,
@@ -86,7 +83,7 @@ describe('Tenancy role and membership detail — happy paths', () => {
     });
     expect(patch.statusCode, patch.body).toBe(200);
 
-    const remove = await injectAuthenticatedOrganizationMutation(app, {
+    const remove = await injectAuthenticated(app, {
       method: 'DELETE',
       url: testApiPath(basePath),
       token,
@@ -117,7 +114,7 @@ describe('Tenancy role and membership detail — happy paths', () => {
     });
     expect(get.statusCode, get.body).toBe(200);
 
-    const patch = await injectAuthenticatedOrganizationMutation(app, {
+    const patch = await injectAuthenticated(app, {
       method: 'PATCH',
       url: testApiPath(basePath),
       token,
@@ -125,7 +122,7 @@ describe('Tenancy role and membership detail — happy paths', () => {
     });
     expect(patch.statusCode, patch.body).toBe(200);
 
-    const remove = await injectAuthenticatedOrganizationMutation(app, {
+    const remove = await injectAuthenticated(app, {
       method: 'DELETE',
       url: testApiPath(basePath),
       token,

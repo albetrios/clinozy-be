@@ -87,6 +87,27 @@ export class CircuitBreakerOpenError extends Error {
 }
 
 /**
+ * Whether an error an operation threw counts against its circuit.
+ *
+ * @remarks
+ * - **Algorithm:** every error counts unless it carries `countsAsCircuitFailure: false` — set by an
+ *   integration's own error for a refusal of this one request (a per-email rejection, say), which
+ *   proves the dependency is up and answering.
+ * - **Failure modes:** none — pure predicate.
+ * - **Side effects:** none.
+ * - **Notes:** {@link CircuitBreaker.execute} counts such a call as a success, so a burst of bad
+ *   requests can neither open the circuit nor keep it from closing.
+ */
+export function countsAsCircuitFailure(error: unknown): boolean {
+  return !(
+    typeof error === 'object' &&
+    error !== null &&
+    'countsAsCircuitFailure' in error &&
+    error.countsAsCircuitFailure === false
+  );
+}
+
+/**
  * Redis-backed circuit breaker for external service calls (Stripe, S3, Resend).
  * State is shared across all API instances so the circuit trips cluster-wide.
  * Falls back to in-memory state when Redis is unavailable.
@@ -290,13 +311,14 @@ export class CircuitBreaker {
 
     try {
       const result = await operation();
-      await this.mutateStateInRedis('record_success');
-      if (data.state === 'HALF_OPEN') {
-        logger.info({ circuit: this.name }, 'circuit-breaker.closed');
-        this.reportCircuitStateToSentry('CLOSED', 'info', { recoveredFrom: 'HALF_OPEN' });
-      }
+      await this.recordSuccess(data.state);
       return result;
     } catch (error) {
+      if (!countsAsCircuitFailure(error)) {
+        // The dependency answered and refused this one request — it is healthy.
+        await this.recordSuccess(data.state);
+        throw error;
+      }
       const snapshot = data;
       await this.mutateStateInRedis('record_failure');
       const newState = await this.getStateData();
@@ -305,6 +327,14 @@ export class CircuitBreaker {
         this.reportCircuitStateToSentry('OPEN', 'warning', { failures: newState.failures });
       }
       throw error;
+    }
+  }
+
+  private async recordSuccess(stateBeforeCall: CircuitState): Promise<void> {
+    await this.mutateStateInRedis('record_success');
+    if (stateBeforeCall === 'HALF_OPEN') {
+      logger.info({ circuit: this.name }, 'circuit-breaker.closed');
+      this.reportCircuitStateToSentry('CLOSED', 'info', { recoveredFrom: 'HALF_OPEN' });
     }
   }
 

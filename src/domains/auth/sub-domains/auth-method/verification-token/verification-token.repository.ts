@@ -68,7 +68,7 @@ export class VerificationTokenRepository {
    * sec-r5-L2: the `token_type` predicate is pinned into the atomic `UPDATE … WHERE` itself
    * rather than checked after consumption. Token hashes are globally unique, so cross-type
    * collision is practically impossible — but scoping the write by category means a token of
-   * the wrong flow (e.g. a `PASSWORD_RESET` token replayed against the magic-link verify path)
+   * the wrong flow (e.g. a `PASSWORD_RESET` token replayed against the email-code login path)
    * is never matched, locked, or burned in the first place, instead of relying on the caller's
    * surrounding transaction to roll the consume back. The match is fail-closed against the
    * caller's declared type.

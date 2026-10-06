@@ -48,18 +48,23 @@ describe('BullMQ trace-context propagation (API enqueue → worker processing)',
       const { enqueueNotification } = await import(
         '@/domains/notify/sub-domains/notification/queues/notification.queue.js'
       );
-      await enqueueNotification(42, 'org-public-1', 'req-notify-trace');
+      await enqueueNotification({
+        notificationPublicId: 'ntf_9z3rura5kqvcv8zggriym',
+        organizationPublicId: 'org-public-1',
+        userPublicId: 'usr_0y8vf3ktxqnhcm1ze21ab',
+        requestId: 'req-notify-trace',
+      });
       parentSpan.end();
     });
 
     expect(addMock).toHaveBeenCalledOnce();
     const jobPayload = addMock.mock.calls[0]?.[1] as {
-      notificationId: number;
+      notificationPublicId: string;
       requestId: string;
       traceparent?: string;
     };
 
-    expect(jobPayload.notificationId).toBe(42);
+    expect(jobPayload.notificationPublicId).toBe('ntf_9z3rura5kqvcv8zggriym');
     expect(jobPayload.requestId).toBe('req-notify-trace');
     expect(jobPayload.traceparent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-0[1-9a-f]$/);
 

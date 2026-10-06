@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**13 / 237** variables migrated to an explicit `{ allowed, description }` entry.
+**13 / 238** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -40,7 +40,8 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `DATABASE_HTTP_STATEMENT_TIMEOUT_MS` | — | `5000` |  | — |
 | `DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS` | — | — *(optional)* |  | — |
 | `DATABASE_LOCK_TIMEOUT_MS` | — | `3000` |  | — |
-| `DATABASE_MAINTENANCE_URL` | — | — *(optional)* |  | — |
+| `DATABASE_MAINTENANCE_POOL_MAX` | — | `10` |  | — |
+| `DATABASE_MAINTENANCE_URL` | — | — *(required)* |  | — |
 | `DATABASE_MIGRATION_URL` | — | — *(optional)* |  | — |
 | `DATABASE_OPERATOR_URL` | — | — *(optional)* |  | — |
 | `DATABASE_POOL_ACQUIRE_TIMEOUT_MS` | integer 0–60000 (ms; 0 disables) | `10000` | ✓ | Deadline for a unit of work to get a pooled connection. Past it the caller gets 503 + Retry-After, and a connection that arrives later rolls the transaction back unrun. |
@@ -106,7 +107,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `LOG_PRETTY` | — | `false` |  | — |
 | `MAIL_OUTBOX_RECLAIM_SENDING_MINUTES` | — | `30` |  | — |
 | `MAIL_OUTBOX_SWEEP_BATCH_SIZE` | — | `100` |  | — |
-| `MAIL_OUTBOX_SWEEP_PENDING_MINUTES` | — | `15` |  | — |
+| `MAIL_OUTBOX_SWEEP_PENDING_MINUTES` | — | `3` |  | — |
 | `MAIL_OUTBOX_SWEEPER_CRON` | — | — *(optional)* |  | — |
 | `MAX_TEAM_ORGANIZATIONS_PER_OWNER` | — | `20` |  | — |
 | `MCP_CALL_API_ALLOW_MUTATIONS` | — | `false` |  | — |
@@ -146,7 +147,6 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `POSTMAN_API_KEY` | — | — *(optional)* |  | — |
 | `POSTMAN_WORKSPACE_ID` | — | — *(optional)* |  | — |
 | `PROCESS_RSS_WARN_THRESHOLD_MB` | — | `512` |  | — |
-| `PUBLIC_MEDIA_BASE_URL` | — | — *(optional)* |  | — |
 | `QUEUE_DASHBOARD_ALLOW_PRODUCTION` | — | `false` |  | — |
 | `QUEUE_WAITING_DEPTH_WARN_THRESHOLD` | — | `1000` |  | — |
 | `RAILWAY_GIT_COMMIT_SHA` | — | — *(optional)* |  | — |
@@ -169,6 +169,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `RELEASE_PLEASE_TOKEN` | — | — *(optional)* |  | — |
 | `RESEND_API_KEY` | — | — *(optional)* |  | — |
 | `RESEND_HTTP_TIMEOUT_MS` | — | `30000` |  | — |
+| `RESEND_MAX_REQUESTS_PER_SECOND` | — | `10` |  | — |
 | `RESPONSE_ENCRYPTION_CURRENT_VERSION` | — | `v1` |  | — |
 | `RESPONSE_ENCRYPTION_KEY` | — | — *(optional)* |  | — |
 | `RESPONSE_ENCRYPTION_KEYS` | — | — *(optional)* |  | — |

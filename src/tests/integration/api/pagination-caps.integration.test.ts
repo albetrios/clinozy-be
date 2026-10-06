@@ -70,7 +70,6 @@ describe('Pagination caps — integration', () => {
       method: 'GET',
       url: testApiPath('/tenancy/organization/memberships'),
       token,
-      organizationPublicId: organization.public_id,
       query: { limit: '101' },
     });
     expect(response.statusCode).toBe(400);

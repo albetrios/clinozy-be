@@ -39,7 +39,7 @@ describe('env.config', () => {
       message = (error as Error).message;
     }
     expect(message).toMatch(/DATABASE_URL/);
-    expect(message).not.toMatch(/JWT_SECRET/);
+    expect(message).not.toMatch(/REDIS_URL/);
     parseSpy.mockRestore();
     resetEnvCacheForTests();
   });
@@ -64,8 +64,6 @@ describe('env.config', () => {
   });
 
   it('throws with a comma-separated list of invalid field names', () => {
-    // sec-C5: previously used JWT_SECRET as the invalid field; that key was
-    // removed from the schema. Use JWT_PRIVATE_KEY (still required) instead.
     const jwtPrivateKey = process.env.JWT_PRIVATE_KEY;
     const redisUrl = process.env.REDIS_URL;
     delete process.env.JWT_PRIVATE_KEY;

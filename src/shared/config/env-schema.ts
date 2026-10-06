@@ -218,14 +218,12 @@ const envSchemaBase = z.object({
   DATABASE_URL: z.string().min(1),
   DATABASE_MIGRATION_URL: z.string().min(1).optional(), // elevated-privilege user for migrations
   /**
-   * Dedicated connection string for maintenance (RLS-bypass) database contexts,
-   * connecting as the `clinozy_be_maintenance` role. Unset (the default) keeps every
-   * maintenance context on DATABASE_URL / `clinozy_be_app` — current behavior. Once every
-   * hosted environment provisions it (see docs/deployment/runbooks/maintenance-database-role.md),
-   * the bypass policy arms can be tightened to `current_user = 'clinozy_be_maintenance'`,
-   * making bypass authority a connection-level property instead of a GUC-only one.
+   * Connection string for maintenance (RLS-bypass) database contexts, connecting as the
+   * `clinozy_be_maintenance` role — the only role the bypass policy arms admit, so a bypass GUC
+   * armed on any other connection grants nothing. Provisioning:
+   * docs/deployment/runbooks/maintenance-database-role.md.
    */
-  DATABASE_MAINTENANCE_URL: z.string().min(1).optional(),
+  DATABASE_MAINTENANCE_URL: z.string().min(1),
   /**
    * Elevated LOCAL/CI connection for the test harness, full/bulk seeds, and fixture
    * tooling, connecting as `clinozy_be_operator` (member of `clinozy_be_owner`; local
@@ -246,7 +244,7 @@ const envSchemaBase = z.object({
    */
   REDIS_BULLMQ_URL: z.string().min(1).optional(),
   /**
-   * Redis key prefix for cache, idempotency, rate limits, and BullMQ (default `core:<NODE_ENV>:`).
+   * Redis key prefix for cache, idempotency, rate limits, and BullMQ (default `<product>:<NODE_ENV>:`).
    * Override to isolate environments on a shared Redis cluster.
    */
   REDIS_KEY_PREFIX: z
@@ -300,10 +298,11 @@ const envSchemaBase = z.object({
   //    an unsafe override in production. Relaxed dev/test values are set explicitly (env
   //    file / test harness) so nothing silently weakens on a deployed environment.
   /**
-   * Category-A. Safety valve for the TURNSTILE path only: when CAPTCHA_PROVIDER=turnstile but
-   * verification cannot complete (CAPTCHA_SECRET unset, or the verify call errors), fail OPEN (skip)
-   * instead of blocking auth. Defaults false (fail closed, production-safe); development and the
-   * test harness set it true in `.env`. `CAPTCHA_PROVIDER=disabled` turns captcha off on its own and
+   * Category-B (security). Safety valve for the TURNSTILE path only: when CAPTCHA_PROVIDER=turnstile
+   * but Cloudflare cannot answer (the verify call fails or its circuit is open), fail OPEN (skip the
+   * check) instead of answering 503. Defaults false (fail closed); the refine rejects `true` in
+   * production, where an outage must never switch off the credential-stuffing control. Development
+   * and the test harness set it true. `CAPTCHA_PROVIDER=disabled` turns captcha off on its own and
    * does NOT require this flag (one behaviour, one variable).
    */
   CAPTCHA_FAIL_OPEN: booleanString('false'),
@@ -468,12 +467,16 @@ const envSchemaBase = z.object({
   // CORS (comma-separated origins; required in every runtime)
   ALLOWED_ORIGINS: z.string().min(1),
 
-  /** WebAuthn RP ID (hostname). Defaults to first ALLOWED_ORIGINS hostname or localhost. */
+  /**
+   * WebAuthn RP ID (hostname). Optional: defaults to the first ALLOWED_ORIGINS hostname, then
+   * localhost. When production sets it, the WebAuthn refine below checks it against FRONTEND_URL.
+   */
   WEBAUTHN_RP_ID: z.string().min(1).optional(),
   /** WebAuthn relying party display name shown in passkey prompts. */
   WEBAUTHN_RP_NAME: z.string().min(1).optional(),
 
   // App URLs
+  // Required (https) in production — see the FRONTEND_URL production refine below.
   FRONTEND_URL: z.url().optional(),
   API_DOCS_BASE_URL: z.url().optional(),
 
@@ -563,9 +566,16 @@ const envSchemaBase = z.object({
   WEBHOOK_SECRET_ROTATION_OVERLAP_HOURS: z.coerce.number().int().min(1).max(720).default(24),
 
   // Email (Resend)
+  // Required in production — see the Resend refine below.
   RESEND_API_KEY: z.string().min(1).optional(),
   /** Outbound Resend API request timeout (ms). Forwarded to fetch via AbortSignal. */
   RESEND_HTTP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(180_000).default(30_000),
+  /**
+   * Most Resend requests per second the mail worker makes, across every replica (BullMQ's queue
+   * limiter). Resend allows 10 per second per team by default; set it to the team's limit, lower
+   * when other environments send through the same team.
+   */
+  RESEND_MAX_REQUESTS_PER_SECOND: z.coerce.number().int().min(1).max(1000).default(10),
   EMAIL_FROM_ADDRESS: z.email().optional(),
   EMAIL_FROM_NAME: z.string().min(1).optional(),
   // Category-B (security). Block disposable/temporary email domains. Defaults to the HARDENED value
@@ -587,8 +597,7 @@ const envSchemaBase = z.object({
 
   // Stripe
   STRIPE_SECRET_KEY: z.string().min(1).optional(),
-  // STRIPE_PUBLISHABLE_KEY is intentionally NOT in this schema: it is public, browser-only, and the
-  // backend never reads it. Provisioning writes it to `.env.<environment>` and surfaces it to clinozy-fe.
+  // The Stripe publishable key is clinozy-fe's (`VITE_STRIPE_PUBLISHABLE_KEY`); the backend has none.
   STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
   /** Stripe Node client per-request HTTP timeout (ms). */
   STRIPE_HTTP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(180_000).default(30_000),
@@ -612,8 +621,7 @@ const envSchemaBase = z.object({
 
   // Sentry
   SENTRY_DSN: z.url().optional(),
-  // SENTRY_FRONTEND_DSN is intentionally NOT in this schema: it is the public clinozy-fe project DSN,
-  // never read by the backend. Provisioning writes it to `.env.<environment>` and surfaces it to clinozy-fe.
+  // The frontend Sentry DSN is clinozy-fe's (`VITE_SENTRY_DSN`); the backend has none.
   SENTRY_ENVIRONMENT: z.string().min(1).optional(),
   SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).optional(),
   SENTRY_PROFILE_SAMPLE_RATE: z.coerce.number().min(0).max(1).optional(),
@@ -689,6 +697,7 @@ const envSchemaBase = z.object({
     .min(1_000)
     .max(3_600_000)
     .default(300_000),
+  // Required in production — see the object-storage refine below.
   S3_BUCKET: z.string().min(1).optional(),
   S3_REGION: z.string().min(1).optional(),
   S3_ACCESS_KEY_ID: z.string().min(1).optional(),
@@ -714,16 +723,6 @@ const envSchemaBase = z.object({
    * ignored unless `S3_ENDPOINT` is set.
    */
   S3_FORCE_PATH_STYLE: booleanString('false'),
-  /**
-   * audit-#13: public base URL (e.g. a CloudFront distribution) for PUBLIC media only
-   * (avatars, organization logos). When set, `getObjectUrl` builds links from this base instead
-   * of the raw `https://<bucket>.s3.<region>.amazonaws.com/<key>` form, so the S3 bucket can keep
-   * "Block all public access" enabled (the documented production posture) while public media is
-   * still reachable through a distribution scoped to the public prefixes. Leave unset in local/dev
-   * to fall back to the direct S3 URL. NEVER point this at a base that exposes private prefixes
-   * (`user-files/`, `organization-files/`) — `getObjectUrl` additionally refuses non-public keys.
-   */
-  PUBLIC_MEDIA_BASE_URL: z.url().optional(),
 
   // Ops knobs
   /** BullMQ worker concurrency fallback when per-queue overrides are unset (default 4). */
@@ -760,6 +759,12 @@ const envSchemaBase = z.object({
    * instances; see docs/deployment/runbooks/resource-limits.md.
    */
   DATABASE_POOL_MAX: z.coerce.number().int().min(1).default(30),
+  /**
+   * Pool size per process for the maintenance role's pool (`DATABASE_MAINTENANCE_URL`) — mail
+   * outbox and ledger workers, retention purges, system audit inserts. Its checkouts are short, so
+   * it is much smaller than `DATABASE_POOL_MAX`; both count against Postgres `max_connections`.
+   */
+  DATABASE_MAINTENANCE_POOL_MAX: z.coerce.number().int().min(1).max(500).default(10),
   /** Connections reserved for admin, migrations, and monitoring (subtracted from Postgres max_connections). */
   POSTGRES_RESERVED_CONNECTIONS: z.coerce.number().int().min(1).default(10),
   /** Override when SHOW max_connections is unavailable or wrong (e.g. behind pooler). */
@@ -909,7 +914,13 @@ const envSchemaBase = z.object({
   AUDIT_EXPORT_S3_PREFIX: z.string().min(1).default('audit/export'),
   AUDIT_EXPORT_BATCH_SIZE: z.coerce.number().int().min(100).max(50_000).default(5_000),
   AUDIT_EXPORT_CRON: z.string().min(1).optional(),
-  MAIL_OUTBOX_SWEEP_PENDING_MINUTES: z.coerce.number().int().min(1).default(15),
+  /**
+   * Minimum age (minutes) before the outbox sweeper re-enqueues a `pending` row — the recovery for
+   * an email whose post-commit enqueue was lost. Short on purpose: a sign-in code lives 15 minutes,
+   * and re-enqueueing a row whose job is still live is a no-op (the enqueue deduplicates on its
+   * token).
+   */
+  MAIL_OUTBOX_SWEEP_PENDING_MINUTES: z.coerce.number().int().min(1).default(3),
   /**
    * Minimum age (minutes) before a row stuck in `sending` is reclaimed to
    * `pending`. Must sit comfortably above worst-case Resend delivery time
@@ -986,9 +997,13 @@ const envSchemaBase = z.object({
    * (sec-C1).
    */
   DLQ_AUTO_RETRY_ENABLED: booleanString('true'),
-  /** Maximum automated replays per `audit.dead_letter_jobs` row (Redis counter). */
+  /**
+   * How deep a replay lineage may go: the sweeper replays a dead-letter row only while its
+   * `replay_depth` (replays that led to it) is below this. Each row is replayed at most once; a
+   * replay that fails for good is a new row one level deeper. `0` disables automated replay.
+   */
   DLQ_AUTO_RETRY_MAX_COUNT: z.coerce.number().int().min(0).default(3),
-  /** Minimum minutes between failure (or last auto-retry) and the next automated replay. */
+  /** Minimum minutes between a final failure and its automated replay. */
   DLQ_AUTO_RETRY_COOLDOWN_MINUTES: z.coerce.number().int().min(1).default(30),
   /** Maximum ledger rows inspected per sweeper tick. */
   DLQ_AUTO_RETRY_BATCH_SIZE: z.coerce.number().int().min(1).default(20),
@@ -1027,8 +1042,7 @@ const envSchemaBase = z.object({
   CAPTCHA_PROVIDER: z.enum(['turnstile', 'disabled']).default('disabled'),
   /** Turnstile secret key — required when CAPTCHA_PROVIDER=turnstile. */
   CAPTCHA_SECRET: z.string().min(1).optional(),
-  // CAPTCHA_SITE_KEY is intentionally NOT in this schema: it is the public Turnstile widget key,
-  // used only by the browser. Provisioning writes it to `.env.<environment>` and surfaces it to clinozy-fe.
+  // The public Turnstile site key is clinozy-fe's (`VITE_TURNSTILE_SITE_KEY`); the backend has none.
   /**
    * Dev/test only: request header name that bypasses CAPTCHA when value is true/1.
    * Ignored in production.
@@ -1175,11 +1189,41 @@ const envSchemaBase = z.object({
   SONAR_ADMIN_PASSWORD: z.string().min(1).optional(),
 });
 
+/** A bare DNS hostname — no scheme, port, path or trailing dot. */
+const BARE_HOSTNAME = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/i;
+
+/**
+ * `WEBAUTHN_RP_ID` is optional (unset, it falls back to the first `ALLOWED_ORIGINS` hostname).
+ * When production sets it, it must be a bare hostname that the `FRONTEND_URL` host equals or sits
+ * under — the WebAuthn registrable-suffix rule; any other value fails every passkey ceremony. An
+ * unset or unparseable `FRONTEND_URL` is left to its own refine.
+ */
+function isValidProductionWebauthnRelyingPartyId(data: {
+  NODE_ENV: string;
+  WEBAUTHN_RP_ID?: string | undefined;
+  FRONTEND_URL?: string | undefined;
+}): boolean {
+  if (data.NODE_ENV !== 'production') return true;
+  const relyingPartyId = data.WEBAUTHN_RP_ID;
+  if (!relyingPartyId) return true;
+  if (!BARE_HOSTNAME.test(relyingPartyId)) return false;
+  if (!data.FRONTEND_URL) return true;
+  let frontendHost: string;
+  try {
+    frontendHost = new URL(data.FRONTEND_URL).hostname;
+  } catch {
+    return true;
+  }
+  const relyingParty = relyingPartyId.toLowerCase();
+  return frontendHost === relyingParty || frontendHost.endsWith(`.${relyingParty}`);
+}
+
 /**
  * Process environment Zod schema. Refines `envSchemaBase` with cross-field invariants
  * (idempotency threshold ordering, METRICS_ENABLED → token, CAPTCHA configuration,
- * production Turnstile requirement, Redis topology, and FRONTEND_URL protocol) so
- * the API/worker boot fails fast on misconfiguration instead of surfacing partial
+ * production Turnstile requirement, Redis topology, FRONTEND_URL protocol, the settings
+ * production cannot start without — object storage and Resend — and a valid WebAuthn
+ * relying-party id when one is set) so the API/worker boot fails fast on misconfiguration instead of surfacing partial
  * failures at runtime.
  */
 export const envSchema = envSchemaBase
@@ -1284,11 +1328,8 @@ export const envSchema = envSchemaBase
   .refine(
     (data) => {
       /**
-       * `FRONTEND_URL` must be a valid http(s) URL whenever it is set. The previous
-       * localhost-only restriction for non-production environments existed because
-       * the magic-link service inlined the raw token in API responses outside
-       * production. That leak has been removed (see `magic-link.service.ts`), so
-       * any deployed environment may now use a real public `FRONTEND_URL`.
+       * `FRONTEND_URL` must be a valid http(s) URL whenever it is set; any environment may
+       * use a real public URL.
        */
       if (!data.FRONTEND_URL) {
         return true;
@@ -1305,6 +1346,75 @@ export const envSchema = envSchemaBase
       path: ['FRONTEND_URL'],
     },
   )
+  .refine(
+    (data) => {
+      /**
+       * Every emailed link (verification code, password reset, invitation) and the OAuth callback
+       * fallback is built from `FRONTEND_URL`; unset, they point at the local-dev fallback
+       * `DEFAULT_FRONTEND_URL` (http://localhost:5173). Production requires it, over https.
+       */
+      if (data.NODE_ENV !== 'production') {
+        return true;
+      }
+      if (!data.FRONTEND_URL) {
+        return false;
+      }
+      try {
+        return new URL(data.FRONTEND_URL).protocol === 'https:';
+      } catch {
+        return false;
+      }
+    },
+    {
+      message:
+        'FRONTEND_URL must be set to an https URL in production (emailed links and the OAuth callback are built from it).',
+      path: ['FRONTEND_URL'],
+    },
+  )
+  .refine(
+    (data) =>
+      /**
+       * Uploads (avatars, logos, organization files) and personal-data exports store their files
+       * in object storage; without a bucket and region both fail at use instead of at boot.
+       */
+      data.NODE_ENV !== 'production' || (Boolean(data.S3_BUCKET) && Boolean(data.S3_REGION)),
+    {
+      message:
+        'S3_BUCKET and S3_REGION must be set in production (uploads and personal-data exports store files there).',
+      path: ['S3_BUCKET'],
+    },
+  )
+  .refine(
+    (data) =>
+      /**
+       * The two halves of a storage credential: set together, or neither (the AWS SDK then uses
+       * its default credential chain). One alone always signs requests that S3 rejects.
+       */
+      (data.S3_ACCESS_KEY_ID === undefined) === (data.S3_SECRET_ACCESS_KEY === undefined),
+    {
+      message:
+        'S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are set together or not at all (unset, the AWS SDK default credential chain applies).',
+      path: ['S3_ACCESS_KEY_ID'],
+    },
+  )
+  .refine(
+    (data) =>
+      /**
+       * Email codes, password resets and invitations are sent through Resend. Without a key the
+       * mail worker never starts and every one of those mails waits in the outbox forever.
+       */
+      data.NODE_ENV !== 'production' || Boolean(data.RESEND_API_KEY),
+    {
+      message:
+        'RESEND_API_KEY must be set in production (email codes, password resets and invitations are sent through it).',
+      path: ['RESEND_API_KEY'],
+    },
+  )
+  .refine((data) => isValidProductionWebauthnRelyingPartyId(data), {
+    message:
+      'WEBAUTHN_RP_ID, when set in production, must be a bare hostname that the FRONTEND_URL host equals or sits under (every passkey is bound to it).',
+    path: ['WEBAUTHN_RP_ID'],
+  })
   .refine(
     (data) => {
       const origins = data.ALLOWED_ORIGINS.split(',')
@@ -1356,7 +1466,7 @@ export const envSchema = envSchemaBase
     (data) => {
       // When Resend is configured, EMAIL_FROM_ADDRESS must be set explicitly. There is no
       // hardcoded sender fallback: a default `from` on an unverified domain is silently
-      // rejected by Resend, so auth mail (magic link, verification, invitations) never arrives.
+      // rejected by Resend, so auth mail (email codes, verification, invitations) never arrives.
       if (!data.RESEND_API_KEY) {
         return true;
       }
@@ -1459,6 +1569,11 @@ export const envSchema = envSchemaBase
     message:
       'CAPTCHA_BYPASS_ALLOWED must be false in production (captcha bypass is a dev/test affordance only).',
     path: ['CAPTCHA_BYPASS_ALLOWED'],
+  })
+  .refine((data) => data.NODE_ENV !== 'production' || data.CAPTCHA_FAIL_OPEN === false, {
+    message:
+      'CAPTCHA_FAIL_OPEN must be false in production (a Turnstile outage must not switch captcha off).',
+    path: ['CAPTCHA_FAIL_OPEN'],
   })
   .refine((data) => data.NODE_ENV !== 'production' || data.SESSION_ORIGIN_CSRF_REQUIRED === true, {
     message:
@@ -1928,7 +2043,14 @@ export const envSchemaConditionallyRequiredKeys: ReadonlyArray<{
   },
   {
     key: 'EMAIL_FROM_ADDRESS',
-    condition: 'RESEND_API_KEY is set (no hardcoded sender fallback)',
+    condition: 'RESEND_API_KEY is set, so always in production (no hardcoded sender fallback)',
+  },
+  { key: 'RESEND_API_KEY', condition: 'NODE_ENV=production (email codes, resets, invitations)' },
+  { key: 'S3_BUCKET', condition: 'NODE_ENV=production (uploads and personal-data exports)' },
+  { key: 'S3_REGION', condition: 'NODE_ENV=production (uploads and personal-data exports)' },
+  {
+    key: 'FRONTEND_URL',
+    condition: 'NODE_ENV=production, as an https URL (emailed links and the OAuth callback use it)',
   },
 ];
 

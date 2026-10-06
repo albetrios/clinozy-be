@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runStripeWebhookEventReclaimJob } from '@/domains/billing/sub-domains/stripe-webhook/workers/stripe-webhook-event-reclaim.processor.js';
 
 const sweepReclaimableEventsMock = vi.fn();
+const abandonExhaustedEventsMock = vi.fn();
+const captureMessageMock = vi.fn();
 const countFailedEventsMock = vi.fn();
 const tryReclaimEventMock = vi.fn();
 const enqueueStripeWebhookByEventIdMock = vi.fn();
@@ -21,6 +23,7 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
 vi.mock('@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-event.repository.js', () => ({
   StripeWebhookEventRepository: class MockStripeWebhookEventRepository {
     sweepReclaimableEvents = sweepReclaimableEventsMock;
+    abandonExhaustedEvents = abandonExhaustedEventsMock;
     countFailedEvents = countFailedEventsMock;
     tryReclaimEvent = tryReclaimEventMock;
   },
@@ -38,6 +41,10 @@ vi.mock('@/infrastructure/observability/metrics/prometheus-metrics.js', () => ({
     setStripeWebhookEventsFailedCountMock(...arguments_),
 }));
 
+vi.mock('@/infrastructure/observability/sentry/sentry.js', () => ({
+  captureMessage: (...arguments_: unknown[]) => captureMessageMock(...arguments_),
+}));
+
 vi.mock('@/shared/config/env.config.js', () => ({
   env: { STRIPE_WEBHOOK_EVENT_RECLAIM_BATCH_SIZE: 50, LOG_LEVEL: 'silent' },
 }));
@@ -49,6 +56,9 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
 describe('stripe-webhook-event-reclaim.worker', () => {
   beforeEach(() => {
     sweepReclaimableEventsMock.mockReset();
+    abandonExhaustedEventsMock.mockReset();
+    abandonExhaustedEventsMock.mockResolvedValue([]);
+    captureMessageMock.mockReset();
     countFailedEventsMock.mockReset();
     tryReclaimEventMock.mockReset();
     enqueueStripeWebhookByEventIdMock.mockReset();
@@ -72,7 +82,28 @@ describe('stripe-webhook-event-reclaim.worker', () => {
       'stripe-webhook-event-reclaim',
     );
     expect(setStripeWebhookEventsFailedCountMock).toHaveBeenCalledWith(0);
-    expect(result).toEqual({ scannedCount: 2, enqueuedCount: 1 });
+    expect(result).toEqual({ scannedCount: 2, enqueuedCount: 1, abandonedCount: 0 });
+    expect(captureMessageMock).not.toHaveBeenCalled();
+  });
+
+  it('abandons the rows that used every attempt — one alert each — before reclaiming the rest', async () => {
+    // A worker that kept dying mid-event never recorded its last failure: the sweep gives up on
+    // the row instead of reclaiming it forever.
+    abandonExhaustedEventsMock.mockResolvedValue([
+      { stripe_event_id: 'evt_exhausted', failure_reason: 'boom' },
+    ]);
+
+    const result = await runStripeWebhookEventReclaimJob();
+
+    expect(abandonExhaustedEventsMock).toHaveBeenCalledWith(50);
+    expect(captureMessageMock).toHaveBeenCalledExactlyOnceWith('stripe.webhook.event_abandoned', {
+      level: 'error',
+      extra: { stripeEventId: 'evt_exhausted', failureReason: 'boom' },
+    });
+    expect(result.abandonedCount).toBe(1);
+    expect(abandonExhaustedEventsMock.mock.invocationCallOrder[0]!).toBeLessThan(
+      sweepReclaimableEventsMock.mock.invocationCallOrder[0]!,
+    );
   });
 
   it('sec-re-02: cron sweep does NOT pre-bump the ledger row state', async () => {

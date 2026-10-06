@@ -1,41 +1,14 @@
 import '@/shared/config/load-env-files.js';
+import '@/tests/helpers/harness-provider-env.js';
 import { DEFAULT_FRONTEND_URL } from '@/shared/constants/index.js';
 import {
-  LOCAL_DATABASE_NAME,
+  DATABASE_MAINTENANCE_ROLE,
   REDIS_KEY_PREFIX_STEM,
 } from '@/shared/constants/project-identity.constants.js';
-
-const LOCAL_TEST_DATABASE_URL = `postgresql://${LOCAL_DATABASE_NAME}:${LOCAL_DATABASE_NAME}@localhost:5432/${LOCAL_DATABASE_NAME}`;
-
-function isLocalDatabaseUrl(value: string | undefined): boolean {
-  if (!value) return false;
-  try {
-    const { hostname } = new URL(value);
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
-  } catch {
-    return false;
-  }
-}
-
-function forceLocalDatabaseForNonCiTestRun(): void {
-  if (process.env.CI === 'true' || process.env.ALLOW_HOSTED_TEST_DATABASE === 'true') return;
-
-  // Local↔live parity: the local env file's DATABASE_URL is the RLS-subject
-  // `clinozy_be_app` login (like production), which the harness's cross-tenant fixtures
-  // and TRUNCATE cleanup cannot run under. The elevated fixture connection is
-  // `clinozy_be_operator` via DATABASE_OPERATOR_URL — prefer it whenever provisioned.
-  const operatorUrl = process.env.DATABASE_OPERATOR_URL;
-  if (operatorUrl && isLocalDatabaseUrl(operatorUrl)) {
-    process.env.DATABASE_URL = operatorUrl;
-    process.env.DATABASE_MIGRATION_URL ??= LOCAL_TEST_DATABASE_URL;
-    return;
-  }
-
-  if (isLocalDatabaseUrl(process.env.DATABASE_URL)) return;
-
-  process.env.DATABASE_URL = LOCAL_TEST_DATABASE_URL;
-  process.env.DATABASE_MIGRATION_URL = LOCAL_TEST_DATABASE_URL;
-}
+import {
+  LOCAL_TEST_DATABASE_URL,
+  pointHarnessAtLocalTestDatabase,
+} from '@/tests/helpers/local-test-database.js';
 
 /**
  * The developer's `.env.local` is loaded before this file (via `load-env-files`, which defaults to
@@ -95,7 +68,7 @@ process.env.SENTRY_DEBUG ??= 'true';
  * stashing the elevated URL for the harness's own use first.
  *
  * @remarks
- * Applied AFTER {@link forceLocalDatabaseForNonCiTestRun}, which is the point: that function
+ * Applied AFTER {@link pointHarnessAtLocalTestDatabase}, which is the point: that function
  * deliberately swaps in the elevated `clinozy_be_operator` handle, and that role carries
  * `rolbypassrls`. So by default **no test in this repo has row-level security applied to it** —
  * a path that reaches a FORCE RLS table without a database context reads rows here and returns
@@ -105,7 +78,11 @@ process.env.SENTRY_DEBUG ??= 'true';
  * machine-local env file is loaded with `override: true` and would clobber an injected URL —
  * silently putting the lane back on the bypassing role while still reporting green.
  *
- * Only the pool under test moves. The original URL is kept in `DATABASE_OPERATOR_URL` — the
+ * The maintenance pool moves with it, onto {@link DATABASE_MAINTENANCE_ROLE}: the bypass policy
+ * arms admit only that role, so the lane runs maintenance contexts in their production posture
+ * too (a no-op where the URL already logs in as the maintenance role).
+ *
+ * The original URL is kept in `DATABASE_OPERATOR_URL` — the
  * harness's existing elevated connection, the same one this file and `global-setup.ts` already
  * prefer — for `src/tests/helpers/operator-database.ts`, because the harness truncates every
  * table between suites and seeds cross-tenant fixtures, neither of which the application role
@@ -121,25 +98,27 @@ function applyRequestedDatabaseRole(): void {
   if (!current) return;
 
   process.env.DATABASE_OPERATOR_URL ??= current;
-  const url = new URL(current);
-  // libpq applies `options` at connection time, so the role covers every statement on the
-  // connection — including ones inside the application's own transactions.
-  url.searchParams.set('options', `-c role=${role}`);
-  process.env.DATABASE_URL = url.toString();
+  process.env.DATABASE_URL = withConnectionRole(current, role);
+  const maintenance = process.env.DATABASE_MAINTENANCE_URL;
+  if (maintenance) {
+    process.env.DATABASE_MAINTENANCE_URL = withConnectionRole(
+      maintenance,
+      DATABASE_MAINTENANCE_ROLE,
+    );
+  }
 }
 
-forceLocalDatabaseForNonCiTestRun();
+/** `url` with a connection-time role: libpq applies `options` when the connection opens, so the
+ * role covers every statement on it — including ones inside the application's own transactions. */
+function withConnectionRole(url: string, role: string): string {
+  const parsed = new URL(url);
+  parsed.searchParams.set('options', `-c role=${role}`);
+  return parsed.toString();
+}
+
+pointHarnessAtLocalTestDatabase();
 applyRequestedDatabaseRole();
 process.env.DATABASE_SSL_ENABLED = 'false';
-/**
- * Mirror CI (which leaves this unset → schema default `true`). `.env.development` pins it to
- * `false` for the legacy request-pinned RLS transaction mode used by `pnpm dev`, but that mode
- * commits the per-request transaction in an `onResponse` hook — i.e. AFTER `fastify.inject()`
- * resolves. Tests that assert a DB side effect (e.g. an audit row) immediately after an
- * authenticated organization request then race the deferred commit and flake. Forcing the scoped-context
- * mode (inline `withAppDatabaseContext` commits) makes local runs deterministic and
- * match CI, the source of truth.
- */
 /**
  * Feature flags asserted by route registration and auth tests. `.env.development` sets
  * several of these to `'false'` for local dev ergonomics, but the test harness needs the
@@ -288,53 +267,12 @@ process.env.HTTP_BIND_HOST = '127.0.0.1';
 // Local fallback — tests run against the same Docker Postgres dev uses (see docker-compose.yml).
 // CI overrides DATABASE_URL to its ephemeral service-container Postgres.
 process.env.DATABASE_URL ??= LOCAL_TEST_DATABASE_URL;
+process.env.DATABASE_MAINTENANCE_URL ??= LOCAL_TEST_DATABASE_URL;
 process.env.REDIS_URL ??= 'redis://localhost:6379';
 process.env.RUN_REDIS_TESTS ??= '1';
-/** Deprecated optional no-op; RS256 keys below are authoritative for JWT. */
 process.env.SECRETS_ENCRYPTION_KEY ??= 'a'.repeat(64);
 process.env.METRICS_SCRAPE_TOKEN ??= 'test-metrics-bearer-token-min-32-chars';
 process.env.COOKIE_SECURE ??= 'false';
-/** Local `.env` may set a short Stripe webhook signing secret — HMAC helpers require plausible length under test */
-if (
-  process.env.STRIPE_WEBHOOK_SECRET !== undefined &&
-  process.env.STRIPE_WEBHOOK_SECRET.length > 0 &&
-  process.env.STRIPE_WEBHOOK_SECRET.length < 32
-) {
-  process.env.STRIPE_WEBHOOK_SECRET =
-    'whsec_test_contract_fixture_fallback_when_local_secret_below_32_xx';
-}
-
-/**
- * Isolated outbound contract slice (`pnpm test:contract`): force placeholders so `.env`
- * sandbox keys / bucket names / regions never leak into mocks (or vice versa).
- */
-if (process.env.CONTRACT_TESTS_ENABLED === 'true') {
-  process.env.STRIPE_SECRET_KEY = 'sk_test_contract_fixture_key_for_nock_stubs';
-  process.env.STRIPE_WEBHOOK_SECRET =
-    'whsec_test_contract_fixture_webhook_signing_must_be_minimum_32characters';
-  process.env.RESEND_API_KEY = 're_test_contract_fixture_key';
-  process.env.EMAIL_FROM_ADDRESS = 'noreply@example.com';
-  process.env.S3_BUCKET = 'contract-test-bucket';
-  process.env.S3_REGION = 'us-east-1';
-  process.env.S3_ACCESS_KEY_ID = 'AKIAIOSFODNN7EXAMPLE';
-  process.env.S3_SECRET_ACCESS_KEY = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
-}
-
-/**
- * Offline contract tests — infra wrappers require env before nock stubs network (non-overriding baseline).
- */
-process.env.STRIPE_SECRET_KEY ??= 'sk_test_contract_fixture_key';
-process.env.STRIPE_WEBHOOK_SECRET ??=
-  'whsec_test_contract_fixture_secret_minimum_length_32_chars_xx';
-process.env.RESEND_API_KEY ??= 're_test_contract_fixture_key';
-// EMAIL_FROM_ADDRESS is required by env-schema whenever RESEND_API_KEY is set (no hardcoded
-// sender fallback in mail.service); provide a baseline so the parsed `env` validates in tests.
-process.env.EMAIL_FROM_ADDRESS ??= 'noreply@example.com';
-process.env.S3_BUCKET ??= 'contract-test-bucket';
-process.env.S3_REGION ??= 'us-east-1';
-process.env.S3_ACCESS_KEY_ID ??= 'AKIAIOSFODNN7EXAMPLE';
-process.env.S3_SECRET_ACCESS_KEY ??= 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
-
 // Hard-set (not `??=`) so a developer's `.env.local` ALLOWED_ORIGINS (e.g. a dashboards / clinozy-fe
 // origin) cannot break the auth origin/CSRF e2e tests, which assert against `http://localhost:3000`.
 process.env.ALLOWED_ORIGINS = 'http://localhost:3000';

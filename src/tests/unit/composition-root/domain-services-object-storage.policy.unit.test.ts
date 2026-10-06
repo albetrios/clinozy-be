@@ -1,6 +1,6 @@
 /**
- * Policy: domain services depend on {@link ObjectStoragePort}, not storage.service or AWS SDK.
- * Backs plan #55 (`p2-storage-port`).
+ * Policy: domain services depend on {@link ObjectStoragePort} by injection — never on the S3
+ * adapter that implements it, nor on the AWS SDK. Backs plan #55 (`p2-storage-port`).
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -34,11 +34,11 @@ const ALL_DOMAIN_SERVICE_FILES = collectServiceFiles(DOMAINS_ROOT);
 
 describe('Policy: domain services use ObjectStoragePort injection', () => {
   it.each(TARGET_SERVICE_FILES)(
-    '%s imports ObjectStoragePort and not storage.service',
+    '%s imports ObjectStoragePort and not the S3 adapter',
     (servicePath) => {
       const source = readFileSync(join(PROJECT_ROOT, servicePath), 'utf8');
       expect(source).toMatch(/ObjectStoragePort/);
-      expect(source).not.toMatch(/from\s+['"]@\/infrastructure\/storage\/storage\.service/);
+      expect(source).not.toMatch(/from\s+['"]@\/infrastructure\/storage\/s3-adapter/);
       expect(source).not.toMatch(/from\s+['"]@aws-sdk\//);
     },
   );
@@ -51,10 +51,10 @@ describe('Policy: domain services use ObjectStoragePort injection', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('no domain *.service.ts imports storage.service facade', () => {
+  it('no domain *.service.ts imports the S3 adapter', () => {
     const offenders = ALL_DOMAIN_SERVICE_FILES.filter((servicePath) => {
       const source = readFileSync(join(PROJECT_ROOT, servicePath), 'utf8');
-      return /from\s+['"]@\/infrastructure\/storage\/storage\.service/.test(source);
+      return /from\s+['"]@\/infrastructure\/storage\/s3-adapter/.test(source);
     });
     expect(offenders).toEqual([]);
   });

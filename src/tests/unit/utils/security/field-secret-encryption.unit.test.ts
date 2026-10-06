@@ -12,7 +12,6 @@ describe('field-secret-encryption.util', () => {
   const originalSecretsKey = process.env.SECRETS_ENCRYPTION_KEY;
   const originalSecretsKeys = process.env.SECRETS_ENCRYPTION_KEYS;
   const originalCurrentVersion = process.env.SECRETS_ENCRYPTION_CURRENT_VERSION;
-  const originalJwtSecret = process.env.JWT_SECRET;
 
   function restoreEnvVar(name: string, original: string | undefined): void {
     if (original === undefined) {
@@ -26,7 +25,6 @@ describe('field-secret-encryption.util', () => {
     restoreEnvVar('SECRETS_ENCRYPTION_KEY', originalSecretsKey);
     restoreEnvVar('SECRETS_ENCRYPTION_KEYS', originalSecretsKeys);
     restoreEnvVar('SECRETS_ENCRYPTION_CURRENT_VERSION', originalCurrentVersion);
-    process.env.JWT_SECRET = originalJwtSecret ?? 'test-jwt-secret-for-field-encryption';
     resetEnvCacheForTests();
   });
 

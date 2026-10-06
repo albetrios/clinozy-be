@@ -40,7 +40,8 @@ flowchart TD
   D -->|Yes| F{App healthy?}
   F -->|No| G[Railway redeploy + env check]
   F -->|Yes| H[App-level triage: migrations, DLQ, Stripe]
-  C --> I[Replay migrations + smoke]
+  C --> S[Migrate, then advance id sequences]
+  S --> I[Replay migrations + smoke]
   E --> I
   G --> I
   H --> I
@@ -58,12 +59,33 @@ flowchart TD
 1. Open Neon console → production project → **Restore** or create branch from PITR **≤ 15 minutes** before failure.
 2. Update `DATABASE_URL` in Railway (API + worker) to the restored branch/endpoint.
 3. Run `pnpm db:migrate` against the restored database (idempotent; fixes schema drift).
-4. Verify row counts on critical tables (`tenancy.organizations`, `billing.subscriptions`, `auth.sessions`).
+4. **Advance the id sequences** ([below](#advance-the-id-sequences-after-a-restore)) before the API and worker serve traffic on the restored database — if they kept running through the restore, do it straight away.
+5. Verify row counts on critical tables (`tenancy.organizations`, `billing.subscriptions`, `auth.sessions`).
+
+#### Advance the id sequences after a restore
+
+A restore rewinds every table's id counter along with its rows, so the database would hand out again the ids it issued between the restore point and the incident. Logs do not rewind, and they still hold some of those ids:
+
+| Where | What still holds an id from the lost window |
+| ----- | ------------------------------------------- |
+| Logs  | The audit-outbox and dead-letter ledger row ids their workers log (internal work tables, no public id) |
+
+A reissued id points those at a different row: a log line about one outbox row reads as another's. Everything else logs public ids — users, organizations, audit rows, sessions, jobs — and Sentry events carry the public user and organization ids. Queued jobs, their job ids, post-commit dispatch tasks, the Redis auth counters (MFA failures, TOTP replay marks, email-code attempts) and the S3 audit exports are not at risk — they carry public ids or the mail row's random token, never a row id — and neither are keys sent to other services (Resend idempotency keys, email markers, audit export paths): a restore brings all of those back unchanged.
+
+Jump every sequence far past anything issued before the incident. Ids are `bigint`, so a jump of one billion costs nothing and covers any lost window. Run this once, over the same connection `pnpm db:migrate` used in step 3 (`DATABASE_MIGRATION_URL` — the role that owns the sequences):
+
+```bash
+DATABASE_MIGRATION_URL=<restored database URL> pnpm db:sequences:advance
+```
+
+It prints one `<sequence>: old -> new` line per sequence — keep them in the incident record — and refuses to run when the role cannot read a sequence. Sequence changes are not transactional, and the command only moves values forward, so running it twice just jumps again, which is harmless. The monthly and weekly [restore drills](backup-drills.md) run the same command right after migrating, so it is exercised against a real restore.
+
+The Redis key prefix (`<project>:<environment>:`) does not change on a restore, which is why the old jobs and counters are still there. After the worker restarts, a notification or mail job whose row was lost in the window completes as skipped (`notification.worker.not_found`, `mail.worker.not_found` at warn); a webhook delivery whose attempt row was lost fails with `webhook.delivery.attempt_not_found:<public id>` and reaches the dead-letter ledger — discard it rather than replaying it ([dlq-runbook.md](dlq-runbook.md)).
 
 ### 2. Redis (Railway Redis database)
 
-1. If Redis is unavailable, provision or restore the shared Redis instance (see [redis-topology.md](../deployment/runbooks/redis-topology.md)).
-2. Update `REDIS_URL` on API and worker services. Remove `REDIS_BULLMQ_URL` or set it to the same endpoint if it exists from an older split topology.
+1. If Redis is unavailable, provision or restore the Redis instance — or both, when queues have their own (see [redis-topology.md](../deployment/runbooks/redis-topology.md)).
+2. Update `REDIS_URL` on API and worker services, and `REDIS_BULLMQ_URL` too when queues run on a dedicated instance (the recommended production topology); unset, BullMQ uses `REDIS_URL`.
 3. Expect **cold** permission cache, idempotency keys, and session token cache — traffic may be slower until caches warm.
 4. Inspect DLQ depth after workers restart ([dlq-runbook.md](dlq-runbook.md)).
 

@@ -11,7 +11,7 @@ import {
   timestamp,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { auditSchema } from '@/infrastructure/database/pg-schemas.js';
+import { auditSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 
 /**
  * Transactional outbox for {@link logs}. An audit row is staged here INSIDE the
@@ -94,12 +94,15 @@ export const audit_outbox = auditSchema
       /**
        * Mirrors {@link logs} actor-required invariant: at least one of
        * actor_user_public_id / actor_api_key_public_id must be set so audit rows can
-       * always be attributed. The drain worker re-checks this at drain time to
-       * surface broken callers as FAILED rather than silently writing a bogus log.
+       * always be attributed — unless the row declares itself anonymous
+       * (`metadata.actor_kind = 'anonymous'`: pre-authentication events such as
+       * `auth.login_failure`, which have no actor by design). IS NOT DISTINCT FROM keeps
+       * a missing key from passing. The drain worker re-checks a declared actor at
+       * drain time to surface broken callers as FAILED rather than writing a bogus log.
        */
       check(
         'chk_audit_outbox_actor_present',
-        sql`${table.actor_user_public_id} IS NOT NULL OR ${table.actor_api_key_public_id} IS NOT NULL`,
+        sql`${table.actor_user_public_id} IS NOT NULL OR ${table.actor_api_key_public_id} IS NOT NULL OR (${table.metadata} ->> 'actor_kind') IS NOT DISTINCT FROM 'anonymous'`,
       ),
       check('chk_audit_outbox_attempt_count_nonneg', sql`${table.attempt_count} >= 0`),
       /**
@@ -115,7 +118,7 @@ export const audit_outbox = auditSchema
         withCheck: sql`${table.organization_public_id} = current_setting('app.current_organization_public_id', true)
           OR (
             ${table.organization_public_id} IS NULL
-            AND current_setting('app.system_audit_insert', true) = 'true'
+            AND ${maintenanceBypassArm('app.system_audit_insert')}
           )`,
       }),
       /**
@@ -128,20 +131,20 @@ export const audit_outbox = auditSchema
         as: 'permissive',
         for: 'select',
         to: 'public',
-        using: sql`current_setting('app.audit_outbox_drain', true) = 'true'`,
+        using: sql`${maintenanceBypassArm('app.audit_outbox_drain')}`,
       }),
       pgPolicy('audit_outbox_drain_update', {
         as: 'permissive',
         for: 'update',
         to: 'public',
-        using: sql`current_setting('app.audit_outbox_drain', true) = 'true'`,
-        withCheck: sql`current_setting('app.audit_outbox_drain', true) = 'true'`,
+        using: sql`${maintenanceBypassArm('app.audit_outbox_drain')}`,
+        withCheck: sql`${maintenanceBypassArm('app.audit_outbox_drain')}`,
       }),
       pgPolicy('audit_outbox_drain_delete', {
         as: 'permissive',
         for: 'delete',
         to: 'public',
-        using: sql`current_setting('app.audit_outbox_drain', true) = 'true'`,
+        using: sql`${maintenanceBypassArm('app.audit_outbox_drain')}`,
       }),
     ],
   )

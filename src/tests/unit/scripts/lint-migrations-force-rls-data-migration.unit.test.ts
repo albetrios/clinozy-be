@@ -8,10 +8,8 @@ import { lintMigrationFileContent } from '@/scripts/validators/migration/lint-mi
  * migrations run as a `clinozy_be_migrator` login that also holds BYPASSRLS, so both pass there
  * and fail only where the migrator is RLS-subject.
  *
- * Both failure modes happened for real on `20260921000000_team_owner_notify_permissions_backfill`:
- * the original file was rejected outright and blocked every later migration, and the first fix
- * lifted FORCE on the two tables it wrote but not the two it read from — so it would have
- * reported success while granting nothing. These cases are those two files, in miniature.
+ * The cases below are both failure modes in miniature: a write rejected outright, and a write
+ * whose FORCE RLS source is not lifted — it reports success while moving nothing.
  */
 
 const AFTER_TAXONOMY = '29990101000000_backfill.sql';
@@ -42,7 +40,7 @@ function flaggedTables(filename: string, sql: string): string[] {
 }
 
 describe('lint-migrations: force_rls_data_migration_without_owner_bracket', () => {
-  it('flags the original backfill — every FORCE RLS table it writes or reads', () => {
+  it('flags a backfill that leaves the FORCE RLS tables it writes or reads in force', () => {
     expect(flaggedTables(AFTER_TAXONOMY, BACKFILL_BODY)).toEqual([
       'tenancy.organizations',
       'tenancy.permissions',
@@ -81,13 +79,6 @@ describe('lint-migrations: force_rls_data_migration_without_owner_bracket', () =
 
     // Leaving FORCE off would keep the owner exempt from RLS on that table permanently.
     expect(flaggedTables(AFTER_TAXONOMY, liftedOnly)).toEqual(['tenancy.permissions']);
-  });
-
-  it('ignores migrations that predate the RLS-subject migrator', () => {
-    // Those ran as a role that bypassed RLS; they are historical record, not a risk.
-    expect(
-      flaggedTables('20260628150000_team_owner_billing_permissions_backfill.sql', BACKFILL_BODY),
-    ).toEqual([]);
   });
 
   it('ignores DDL-only migrations, including ones that change FORCE RLS policies', () => {

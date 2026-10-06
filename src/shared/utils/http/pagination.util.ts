@@ -1,78 +1,17 @@
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { and, eq, gt, lt, ne, or, type AnyColumn, type SQL } from 'drizzle-orm';
-import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import type { ZodType } from 'zod';
 import { PAGINATION } from '@/shared/constants/pagination.constants.js';
-import { ValidationError } from '@/shared/errors/index.js';
+import { AES_GCM_ALGORITHM, AES_GCM_IV_LENGTH } from '@/shared/constants/security.constants.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
-import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-
-/** i18n key for the friendly error when a legacy `page` query parameter is sent. */
-export const LEGACY_PAGE_NOT_SUPPORTED_MESSAGE_KEY = 'errors:validation.legacyPageNotSupported';
-/** English fallback for {@link LEGACY_PAGE_NOT_SUPPORTED_MESSAGE_KEY}, used when no i18n context is available. */
-export const LEGACY_PAGE_NOT_SUPPORTED_MESSAGE =
-  'Legacy `page` pagination is no longer supported on this route. Use cursor-based pagination via `limit` and `after` (opaque cursor from `meta.pagination.next`).';
-
-/**
- * Throws a clear ValidationError when the request query contains the legacy
- * `page` parameter. List endpoints accept cursor pagination only (`limit` +
- * `after`); the older offset-based `page` is no longer supported.
- */
-export function ensureCursorOnlyPagination(query: unknown): void {
-  if (
-    query !== null &&
-    typeof query === 'object' &&
-    !Array.isArray(query) &&
-    Object.hasOwn(query, 'page')
-  ) {
-    throw new ValidationError(
-      LEGACY_PAGE_NOT_SUPPORTED_MESSAGE_KEY,
-      undefined,
-      LEGACY_PAGE_NOT_SUPPORTED_MESSAGE,
-      [
-        {
-          field: 'page',
-          messageKey: LEGACY_PAGE_NOT_SUPPORTED_MESSAGE_KEY,
-          message: LEGACY_PAGE_NOT_SUPPORTED_MESSAGE,
-        },
-      ],
-    );
-  }
-}
-
-/** Fastify preHandler wrapper for {@link ensureCursorOnlyPagination}; throws on legacy `page`. */
-export async function rejectLegacyPagePagination(
-  request: Pick<FastifyRequest, 'query'>,
-): Promise<void> {
-  ensureCursorOnlyPagination(request.query);
-}
-
-/**
- * Reject legacy `page` pagination, then parse `query` with `schema` — the
- * combined form of the `ensureCursorOnlyPagination(query)` + `parseWithSchema(...)`
- * pair that every list-query validator repeated.
- *
- * @remarks
- * The legacy-`page` guard runs first, so offset-style requests fail with the
- * dedicated {@link LEGACY_PAGE_NOT_SUPPORTED_MESSAGE_KEY} before Zod parses the
- * query; `errorKey` (default `errors:invalidInput`) applies to the schema-parse
- * failure.
- */
-export function parseCursorPaginatedQuery<T>(
-  schema: ZodType<T>,
-  query: unknown,
-  errorKey?: string,
-): T {
-  ensureCursorOnlyPagination(query);
-  return parseWithSchema(schema, query, errorKey);
-}
+import { deriveSecretsSubKey } from '@/shared/utils/security/secrets-sub-key.util.js';
 
 /**
  * Cursor-based pagination query schema.
  * Use `after` as the opaque cursor from the previous page's `meta.pagination.next`.
  */
 export const cursorPaginationSchema = z.object({
-  after: z.string().max(512).optional(),
+  after: z.string().max(PAGINATION.MAX_CURSOR_LENGTH).optional(),
   limit: z.coerce.number().int().min(1).max(PAGINATION.MAX_LIMIT).default(PAGINATION.DEFAULT_LIMIT),
 });
 
@@ -107,8 +46,8 @@ export const listCursorPayloadSchema = z
      * cursor. Repositories that bind their filters to the cursor recompute
      * the fingerprint per request and reject mismatches, so an admin cannot
      * replay a cursor minted under filter set A against filter set B.
-     * Optional because most legacy callers don't bind; the audit-list path is
-     * the first opt-in.
+     * Optional: only lists whose filters change the result set bind one (the audit list and
+     * the shared keyset helper, `finishKeysetPage`).
      */
     filter_fingerprint: z
       .string()
@@ -135,16 +74,58 @@ export type ParsedListCursor = {
   filter_fingerprint?: string;
 };
 
-/** Encodes a cursor payload as a URL-safe base64 string. */
+/** Domain-separation label of the list-cursor key (a sub-key of `SECRETS_ENCRYPTION_KEY`). */
+const LIST_CURSOR_KEY_LABEL = 'list-cursor';
+const LIST_CURSOR_AUTH_TAG_LENGTH = 16;
+
+/**
+ * Encodes a cursor payload as an opaque token: AES-256-GCM under the `list-cursor` sub-key,
+ * `base64url(iv | authTag | ciphertext)`.
+ *
+ * @remarks
+ * - **Why encrypted:** the payload carries the row's internal id (the keyset tie-breaker) and
+ *   the filter fingerprint. Encrypted, the internal id never leaves the server readable, and the
+ *   auth tag makes a cursor that was not minted here — edited, forged, or minted under another
+ *   key — decode as nothing.
+ * - **Failure modes:** none — a random 12-byte IV per cursor.
+ * - **Side effects:** none.
+ * - **Notes:** rotating `SECRETS_ENCRYPTION_KEY` invalidates outstanding cursors; those lists
+ *   restart at the first page.
+ */
 export function encodeListCursor(payload: ListCursorPayload): string {
-  return Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const iv = randomBytes(AES_GCM_IV_LENGTH);
+  const cipher = createCipheriv(AES_GCM_ALGORITHM, deriveSecretsSubKey(LIST_CURSOR_KEY_LABEL), iv);
+  const ciphertext = Buffer.concat([
+    cipher.update(JSON.stringify(payload), 'utf8'),
+    cipher.final(),
+  ]);
+  return Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64url');
 }
 
-/** Decodes and validates an opaque cursor; returns `null` when the string is malformed or fails validation. */
+/**
+ * Decrypts and validates an opaque cursor; returns `null` when it is malformed, was not minted by
+ * {@link encodeListCursor} under the current key, or fails validation.
+ */
 export function decodeListCursor(cursor: string): ListCursorPayload | null {
   try {
-    const decoded = Buffer.from(cursor, 'base64url').toString('utf8');
-    const parsed = listCursorPayloadSchema.safeParse(JSON.parse(decoded));
+    const data = Buffer.from(cursor, 'base64url');
+    if (data.length <= AES_GCM_IV_LENGTH + LIST_CURSOR_AUTH_TAG_LENGTH) {
+      return null;
+    }
+    const iv = data.subarray(0, AES_GCM_IV_LENGTH);
+    const authTag = data.subarray(
+      AES_GCM_IV_LENGTH,
+      AES_GCM_IV_LENGTH + LIST_CURSOR_AUTH_TAG_LENGTH,
+    );
+    const ciphertext = data.subarray(AES_GCM_IV_LENGTH + LIST_CURSOR_AUTH_TAG_LENGTH);
+    const decipher = createDecipheriv(
+      AES_GCM_ALGORITHM,
+      deriveSecretsSubKey(LIST_CURSOR_KEY_LABEL),
+      iv,
+    );
+    decipher.setAuthTag(authTag);
+    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    const parsed = listCursorPayloadSchema.safeParse(JSON.parse(plaintext.toString('utf8')));
     return parsed.success ? parsed.data : null;
   } catch {
     return null;
@@ -154,8 +135,7 @@ export function decodeListCursor(cursor: string): ListCursorPayload | null {
 /**
  * Parses the `after` query parameter into a {@link ParsedListCursor}.
  * Returns `null` (first page) when `after` is absent, empty, or cannot be
- * decoded as a valid opaque cursor. Legacy bare-integer `after` values are no
- * longer accepted — they exposed internal auto-increment IDs to callers.
+ * decoded as a cursor this server issued (an encrypted, opaque token — never a bare id).
  */
 export function parseListCursor(after: string | undefined): ParsedListCursor | null {
   if (after === undefined || after.length === 0) {

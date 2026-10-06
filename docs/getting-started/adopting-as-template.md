@@ -175,9 +175,12 @@ the pre-commit guard. It fails when:
   separator (`acme-be`, `ACME-BE`, `ACME_BE`, `AcmeBe`) but only as a whole token — a genuine
   word that merely starts the same (`acmeFeatures`, `AcmeBehavior`, a folder named `acme`) is never
   flagged, and `init:project` never renames it — a previous backend's database name only
-  where it is the database (`POSTGRES_USER`, `-U`/`-d`, a connection string, `CREATE DATABASE`), and a
-  previous owner as a whole word. `CHANGELOG.md` and `docs/reviews/` are exempt:
-  they record what happened under the old name.
+  where it is the database (`POSTGRES_USER`, `-U`/`-d`, a connection string, `CREATE DATABASE`), the
+  same stem only where it is a Redis key prefix (`acme:dev:`, `` `acme:${NODE_ENV}:` ``), a previous
+  slug written as a wordmark (`acme·be`, `ACME • BE`), and a previous owner as a whole word.
+  `init:project` rewrites every one of these forms, so a rename leaves none for the check to find —
+  a policy test feeds each flagged form through the rename pass and expects nothing flagged after.
+  `CHANGELOG.md` and `docs/reviews/` are exempt: they record what happened under the old name.
 
 The allowlist lives in
 `tooling/setup/codegen/validate-project-identity-literals.ts`. Markdown, `docs/`, and the

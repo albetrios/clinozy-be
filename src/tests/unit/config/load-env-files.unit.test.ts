@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { applyDotenvFile } from '@/shared/config/load-env-files.js';
 
-const PREFIX = 'CLINOZY_PROBE_';
+const PREFIX = 'ENV_LOADER_PROBE_';
 
 /**
  * A blank `KEY=` line in an env file unsets that key — but only when the value in effect is

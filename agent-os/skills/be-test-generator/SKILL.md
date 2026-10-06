@@ -35,7 +35,7 @@ Triggered by `be-testing-conventions.mdc` when test-related or pure-layer files 
 - **Vitest** — runner, assertions, coverage (`pnpm test`, `pnpm test:unit`, `pnpm test:e2e`, …)
 - **fastify.inject()** — in-process HTTP via helpers in `src/tests/helpers/test-http-inject.helper.ts` (`createTestApp()` in `src/tests/helpers/test-app.ts`)
 
-Use `injectAuthenticated`, `injectUnauthenticated`, `injectAuthenticatedOrganizationMutation`, or `injectWithCookies` (for session cookies) from `src/tests/helpers/test-http-inject.helper.ts`.
+Use `injectAuthenticated`, `injectUnauthenticated`, or `injectWithCookies` (for session cookies) from `src/tests/helpers/test-http-inject.helper.ts`. Each one waits for the response's `onResponse` work (idempotency entry, post-commit dispatch) before returning — a bare `app.inject()` does not.
 
 ## Test layout (non-negotiable)
 
@@ -125,7 +125,7 @@ k6 scenarios and helpers live in `src/tests/load/k6/` (`.js` files, not Vitest).
 | **Global regression** | `pnpm test:global` (alias: `pnpm test:regression`) | Route catalog, domain consistency                                                         |
 | **Unit (DB-bound)**   | `pnpm test:unit-db`                                | DB-bound unit tests (`*.db.unit.test.ts`) — repositories and DB-touching unit specs       |
 | **Property**          | `pnpm test:property`                               | Fast-check property tests (`*.property.unit.test.ts`)                                     |
-| **Full CI gate**      | `pnpm test`                                        | Runs fast projects (unit, property, global) and DB-bound projects (unit-db, e2e, integration, security, performance) in two parallel groups via `run-parallel.ts`. **Excludes** contract, chaos, smoke, load, and bench tests. |
+| **Full CI gate**      | `pnpm test`                                        | Runs the fast projects (unit, property, global), then the DB-bound projects (unit-db, e2e, integration, security, performance) via `run-parallel.ts` — one lane after the other, stopping at the first failing lane (a unit failure skips the DB lanes). **Excludes** contract, chaos, smoke, load, and bench tests. |
 
 ## What to unit-test vs not (by design)
 
@@ -156,7 +156,7 @@ k6 scenarios and helpers live in `src/tests/load/k6/` (`.js` files, not Vitest).
 
 | Area                          | Default                                          | Add tests only when                                                  |
 | ----------------------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
-| **JWT RS256**                 | HS256 in unit tests (`JWT_SECRET` in test setup) | Prod/CI needs RS256 → one sign/verify smoke with test key pair in CI |
+| **JWT RS256**                 | Fixed RS256 test key pair (`src/tests/setup.ts`) | A new signing or verification path → its own sign/verify test        |
 | **Logger** (`logger.util.ts`) | Skip                                             | Custom redaction, PII rules, or non-default serializers              |
 | **Pass-through serializers**  | Smoke only                                       | API contract or shape regression risk                                |
 
@@ -182,7 +182,7 @@ k6 scenarios and helpers live in `src/tests/load/k6/` (`.js` files, not Vitest).
 - [ ] New/changed **route** → domain test file (see steps below)
 - [ ] **401** without token, **403** without permission (if gated), **200** success (**204** for DELETE), **400** invalid body
 - [ ] New **permission** → align seeds (`be-seed-maintainer`) and test with/without permission
-- [ ] Run e2e with dev server **stopped** on shared DB (avoid deadlocks with `pnpm dev`)
+- [ ] Run e2e freely while `pnpm dev` runs — local test runs use their own `<local database>_test` database (created and migrated by the global setup), never the one `pnpm dev` serves
 
 ### 3. Cross-cutting
 
@@ -255,7 +255,7 @@ describe('<Domain> Domain — Integration', () => {
     expect(response.statusCode).toBe(401);
   });
 
-  // ... route tests with injectAuthenticated / injectAuthenticatedOrganizationMutation ...
+  // ... route tests with injectAuthenticated / injectUnauthenticated ...
 });
 ```
 
@@ -296,7 +296,7 @@ describe('example.validator', () => {
 - Mixing **two domains** in one `__tests__/` folder
 - Duplicating the same behavior in unit **and** full e2e without reason
 - Unit-testing services with real `database` or Redis
-- Running `pnpm test:e2e` while `pnpm dev` uses the same DB
+- Pointing a local test run at the database `pnpm dev` serves — every suite truncates all tables with `RESTART IDENTITY`
 - Expecting `test:e2e` to run validator unit tests (use `pnpm test:unit`; e2e script excludes `__tests__/unit/`)
 - Adding Vitest files under `src/tests/load/` (k6-only)
 - Testing Pino/logger startup with no custom behavior

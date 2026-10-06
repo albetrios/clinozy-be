@@ -1,15 +1,25 @@
 import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
+import { addRetryJitter } from '@/infrastructure/queue/retry-jitter.util.js';
 import { TEN_SECONDS_MS } from '@/shared/constants/ttl.constants.js';
 
-/** BullMQ custom backoff for stripe-webhook jobs (Stripe circuit-open vs default exponential). */
+/**
+ * BullMQ custom backoff for stripe-webhook jobs: past the Stripe circuit's remaining open time when
+ * it is open, otherwise exponential from ten seconds — both with jitter ({@link addRetryJitter}),
+ * so a backlog that failed together does not hit the half-open probe together.
+ *
+ * @remarks
+ * A Stripe outage normally never reaches this curve: the worker pauses the queue and parks the job
+ * without spending an attempt (`createProviderPausableWorker`). The circuit branch covers the job
+ * whose pause could not be applied (Redis failed mid-pause) and retries it normally.
+ */
 export function stripeWebhookBackoffStrategy(
   attemptsMade: number,
   _type: string | undefined,
   error: Error | undefined,
 ): number {
   if (error instanceof CircuitBreakerOpenError) {
-    return error.retryAfterMs;
+    return addRetryJitter(error.retryAfterMs);
   }
   const attemptIndex = Math.max(attemptsMade, 1);
-  return TEN_SECONDS_MS * 2 ** (attemptIndex - 1);
+  return addRetryJitter(TEN_SECONDS_MS * 2 ** (attemptIndex - 1));
 }

@@ -63,6 +63,18 @@ export async function recordLoginAuditEvent(
         source,
       },
     });
+    if (source === 'mfa_recovery_code') {
+      // Break-glass visibility: a recovery code bypasses TOTP, so an incident responder must be
+      // able to find each use on its own. Attributed like the login it completed (the handler
+      // used to record it with no actor, and the audit service dropped every one).
+      await recordScopedAuditEvent(request, {
+        actorUserPublicId: payload.userId,
+        action: 'auth.mfa.recovery_code_used',
+        resource_type: 'mfa_method',
+        severity: 'WARNING',
+        metadata: { session_public_id: loginResult.session_public_id },
+      });
+    }
     if (payload.role === GLOBAL_ROLES.SUPER_ADMIN) {
       // Break-glass visibility: every platform super_admin token issuance is a
       // high-severity event regardless of the login surface that minted it.
@@ -108,7 +120,9 @@ function extractLoginFailureErrorCode(error: unknown): unknown {
  * `invalid_email_or_password`, `mfa_required`, `account_locked`).
  *
  * No `actorUserPublicId` is recorded — we deliberately do NOT know who they
- * tried to log in as. The IP / user-agent captured by
+ * tried to log in as — so the row is declared `anonymousActor` (stored with
+ * `metadata.actor_kind = 'anonymous'`); before that declaration existed the audit
+ * service dropped every one of these rows. The IP / user-agent captured by
  * {@link recordScopedAuditEvent}'s network helper is enough for "failed
  * logins from this IP in the last hour" detection without leaking which
  * accounts the attacker enumerated.
@@ -128,6 +142,8 @@ export async function recordLoginFailureAuditEvent(
     // than the raw stringified message which carries the user's locale.
     const errorCode = extractLoginFailureErrorCode(error);
     await recordScopedAuditEvent(request, {
+      // No actor by design (see above) — declared, so the row is kept instead of dropped.
+      anonymousActor: true,
       action: 'auth.login_failure',
       resource_type: 'session',
       severity: 'INFO',

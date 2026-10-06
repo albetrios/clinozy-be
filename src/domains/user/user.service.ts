@@ -162,8 +162,8 @@ export class UserService {
     if (!avatar_url) return;
     const expectedPrefix = buildUserAvatarKeyPrefix(public_id);
     if (!avatar_url.startsWith(expectedPrefix)) return;
-    const objectDeleted = await this.objectStorage.deleteObject(avatar_url);
-    if (!objectDeleted) {
+    const objectDelete = await this.objectStorage.deleteObject(avatar_url);
+    if (objectDelete.kind !== 'deleted') {
       logger.warn({ publicId: public_id, avatarKey: avatar_url }, 'user.avatar.deleteFailed');
     }
   }
@@ -233,7 +233,7 @@ export class UserService {
     //   (1) revoke sessions → kills any in-flight bearer immediately, so no concurrent request
     //       can race the purge steps below and create orphan PENDING rows (sec-U8).
     //   (2) revoke auth methods → no fresh login can re-mint a session.
-    //   (3) invalidate verification tokens → magic-link / password-reset issued seconds before
+    //   (3) invalidate verification tokens → email-code / password-reset issued seconds before
     //       deletion can no longer mint a session for the soon-to-be-deleted user (sec-U1).
     //   (4) purge data-exports + uploads → now that sessions/tokens are dead, no concurrent
     //       writer can re-introduce rows.
@@ -312,7 +312,7 @@ export class UserService {
    * - **Failure modes:** propagates a Postgres email-unique violation on a rare create race; never throws
    *   `NotFoundError` (find-or-create always resolves to a user).
    * - **Side effects:** may INSERT one `auth.users` row (its own transaction via `createFromOAuth`).
-   * - **Notes:** the invitee *claims* the account on first OAuth/magic-link login — both already
+   * - **Notes:** the invitee *claims* the account on first OAuth/email-code login — both already
    *   find-or-create by email, so they reuse this row and attach the auth method, then accept the
    *   invitation. Call this OUTSIDE any organization context so the public-id retry can open its own
    *   transaction (a pinned organization transaction would abort on the rare public-id collision).
@@ -440,41 +440,40 @@ export class UserService {
     if (!this.offboardingUploadService) {
       throw new Error('UploadService is not wired for avatar-attach confirmation');
     }
-    // External I/O (S3) runs outside the DB context; the confirmed-status read of the
-    // user-scoped upload row runs in the user context so the owner RLS policy applies.
-    const objectInfo = await this.objectStorage.headObject(avatarKey);
-    if (!objectInfo) {
-      throw new ValidationError('errors:validation.avatarNotFound');
-    }
-    if (
-      objectInfo.contentType &&
-      !ALLOWED_AVATAR_CONTENT_TYPES.includes(
-        objectInfo.contentType as (typeof ALLOWED_AVATAR_CONTENT_TYPES)[number],
-      )
-    ) {
-      throw new ValidationError(
-        'errors:validation.avatarInvalidContentType',
-        { contentType: objectInfo.contentType },
-        `Invalid avatar content type: ${objectInfo.contentType}`,
-      );
-    }
-    // Bind the upload row to this owner explicitly (not just via the key prefix) so the ownership
-    // check survives any future caller that doesn't derive the key from the prefix convention.
-    // Both the id lookup and the check it feeds run in ONE context — the lookup used to open its
-    // own transaction first, for a value this method was handed the public id for.
-    await withAppDatabaseContext(
+    // The database first: the key is caller-supplied, and only a confirmed upload of THIS owner
+    // may cost a storage call. The row is bound to the owner explicitly (not just via the key
+    // prefix) so the check survives a future caller that doesn't derive the key from the prefix
+    // convention; it runs in the user context so the owner RLS policy applies.
+    const { mimeType } = await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ userPublicId: ownerPublicId }),
       async () => {
         const ownerInternalId = await this.resolveInternalIdByPublicId(ownerPublicId);
         if (ownerInternalId === null) {
           throw new ValidationError('errors:validation.avatarNotFound');
         }
-        await this.offboardingUploadService!.assertKeyConfirmedForOwner({
+        return this.offboardingUploadService!.assertKeyConfirmedForOwner({
           fileKey: avatarKey,
           userInternalId: ownerInternalId,
         });
       },
     );
+    // The type verified at confirm (magic bytes included), not an S3 header.
+    if (
+      !ALLOWED_AVATAR_CONTENT_TYPES.includes(
+        mimeType as (typeof ALLOWED_AVATAR_CONTENT_TYPES)[number],
+      )
+    ) {
+      throw new ValidationError(
+        'errors:validation.avatarInvalidContentType',
+        { contentType: mimeType },
+        `Invalid avatar content type: ${mimeType}`,
+      );
+    }
+    // External I/O (S3) runs outside the DB context. Confirmed, yet gone from storage: refuse.
+    const objectInfo = await this.objectStorage.headObject(avatarKey);
+    if (!objectInfo) {
+      throw new ValidationError('errors:validation.avatarNotFound');
+    }
   }
 
   /**
@@ -520,7 +519,7 @@ export class UserService {
     const personalOrganizationId =
       existingPersonalOrganizationId ??
       (env.PERSONAL_ORGANIZATION_ENABLED
-        ? ((await ensurePersonalOrganizationPublicId(user.id)) ?? null)
+        ? ((await ensurePersonalOrganizationPublicId(user)) ?? null)
         : null);
     return {
       ...(await this.toUserOutput(user)),

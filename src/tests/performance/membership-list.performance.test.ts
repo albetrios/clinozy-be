@@ -111,7 +111,6 @@ describe('Performance: membership list', () => {
         method: 'GET',
         url: testApiPath('/tenancy/organization/memberships?limit=50'),
         token,
-        organizationPublicId: organization.public_id,
       });
       const duration = performance.now() - start;
 

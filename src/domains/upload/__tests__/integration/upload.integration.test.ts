@@ -3,6 +3,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { buildIdempotencyCacheKey } from '@/shared/utils/idempotency/idempotency-key.util.js';
+import { buildInFlightIdempotencyEntry } from '@/tests/helpers/idempotency-entry.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
   injectAuthenticated,
@@ -342,10 +343,10 @@ describe('Upload Domain — Integration', () => {
       const cacheKey = buildIdempotencyCacheKey(idempotencyKey, { userId: user.public_id });
       await redisConnection.set(
         cacheKey,
-        JSON.stringify({
-          state: 'in_flight',
-          claimedAt: Date.now(),
-          requestId: 'req-first-caller',
+        buildInFlightIdempotencyEntry({
+          method: 'POST',
+          routePath: testApiPath('/uploads'),
+          body: validAvatarPayload,
         }),
         'EX',
         60,

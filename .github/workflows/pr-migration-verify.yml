@@ -68,6 +68,7 @@ jobs:
       # Migrations connect to Postgres only; REDIS_URL / ALLOWED_ORIGINS are set to satisfy the
       # env-schema (both are required strings) — nothing here connects to Redis.
       DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
       REDIS_URL: redis://localhost:6379
       ALLOWED_ORIGINS: http://localhost:3000
 

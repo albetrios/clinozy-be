@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { PAGINATION } from '@/shared/constants/pagination.constants.js';
 import { ValidationError } from '@/shared/errors/index.js';
-import { LEGACY_PAGE_NOT_SUPPORTED_MESSAGE_KEY } from '@/shared/utils/http/pagination.util.js';
 import {
   validateAdminUpdateUser,
   validateListUsers,
@@ -53,23 +53,21 @@ describe('user.validator', () => {
     expect(() => validateListUsers({ status: 'INVALID' })).toThrow(ValidationError);
   });
 
-  it('sec-new-U1: validateListUsers rejects after cursor longer than 512 characters', () => {
-    expect(() => validateListUsers({ after: 'a'.repeat(513) })).toThrow(ValidationError);
+  it('sec-new-U1: validateListUsers rejects an after cursor longer than PAGINATION.MAX_CURSOR_LENGTH', () => {
+    expect(() =>
+      validateListUsers({ after: 'a'.repeat(PAGINATION.MAX_CURSOR_LENGTH + 1) }),
+    ).toThrow(ValidationError);
   });
 
-  it('sec-new-U1: validateListUsers accepts after cursor of exactly 512 characters', () => {
-    const result = validateListUsers({ after: 'a'.repeat(512) });
-    expect(result.after).toHaveLength(512);
+  it('sec-new-U1: validateListUsers accepts an after cursor of exactly PAGINATION.MAX_CURSOR_LENGTH', () => {
+    const result = validateListUsers({ after: 'a'.repeat(PAGINATION.MAX_CURSOR_LENGTH) });
+    expect(result.after).toHaveLength(PAGINATION.MAX_CURSOR_LENGTH);
   });
 
-  it('validateListUsers rejects legacy page query parameter', () => {
-    try {
-      validateListUsers({ page: '1', limit: '10' });
-      expect.fail('expected ValidationError');
-    } catch (error) {
-      expect(error).toBeInstanceOf(ValidationError);
-      expect((error as ValidationError).messageKey).toBe(LEGACY_PAGE_NOT_SUPPORTED_MESSAGE_KEY);
-    }
+  it('validateListUsers rejects rejects a page query parameter (cursor-only, strict query)', () => {
+    // `page` is not a parameter of any list query — the strict schema refuses it like any other
+    // unknown key.
+    expect(() => validateListUsers({ page: '1', limit: '10' })).toThrow(ValidationError);
   });
 
   it('validateUpdateMe rejects strict unknown keys', () => {

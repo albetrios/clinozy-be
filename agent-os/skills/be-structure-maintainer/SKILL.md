@@ -106,7 +106,7 @@ src/infrastructure/
     workers/
     templates/
   storage/
-    storage.service.ts        # + object-storage.port.ts, s3-adapter.ts, s3-error.util.ts, public-media-url.util.ts
+    object-storage.port.ts    # + s3-adapter.ts, s3-error.util.ts, stored-object-purge.util.ts
   payment/
     stripe.client.ts          # Stripe SDK client + helpers (customer, subscription, webhook)
   outbound/            # Outbound HTTP call safety (outbound-fetch / call / defaults / error / redaction)
@@ -130,7 +130,6 @@ src/shared/
     core/                     # auth, error-handler, health, request-context, …
     security/                 # cors, helmet, captcha, …
     session/                  # cookie session helpers
-    tenant/                   # organization-rls-transaction settlement stub (header middleware removed)
     rate-limit/               # global + route presets
     index.ts                  # registerMiddleware()
   locales/                    # i18next resources (en/, es/ — common, errors, mail, success, openapi)
@@ -169,7 +168,7 @@ tooling/
 
 ```text
 src/scripts/    # Build-time + operational scripts (may import @/, unlike tooling/)
-  admin/        # admin-token, load-test-credentials, dlq-replay, rotate-field-secrets, worker-health, …
+  admin/        # admin-token, load-test-credentials, dlq-replay, worker-health, …
   codegen/      # generate-openapi.ts → docs/openapi/openapi.json, generate-route-catalog.ts,
                 # generate-project-structure-tree.ts, generate-dbdiagram.ts, Postman/Scalar uploads, …
   ops/          # api-smoke-test, db-migrate-dry-run, jwt/secrets key rotation, memory-soak, settle-check, …
@@ -219,10 +218,9 @@ When any of the above conventions change, update these files so they remain accu
 - `agent-os/skills/be-supabase-porting/SKILL.md` (Supabase porting)
 - `agent-os/skills/be-db-migration-maintainer/SKILL.md` (SQL migrations)
 - `agent-os/skills/be-test-generator/SKILL.md` (testing pyramid and layout)
-- `agent-os/skills/be-openapi-route-sync/SKILL.md` (OpenAPI route metadata)
 - `agent-os/skills/be-cursor-global-skills/SKILL.md` (Cursor built-in skills reference)
 - `agent-os/skills/be-route-catalog/SKILL.md` (route listing conventions)
-- `agent-os/skills/be-code-quality-guard/SKILL.md` (ESLint, pre-commit, CI security pipeline)
+- `agent-os/skills/be-code-quality-guard/SKILL.md` (Biome, pre-commit, CI security pipeline)
 - Any other `agent-os/skills/*/SKILL.md` that references paths or layer names
 - **Docs**: When docs are reorganized or renamed, run **be-docs-maintainer** to update `docs/README.md` and cross-links (see `agent-os/skills/be-docs-maintainer/SKILL.md`).
 - **Load-test docs**: `docs/reference/testing/load-testing.md` and `src/tests/load/k6/README.md` must stay in sync when k6 scenarios (`src/tests/load/k6/scenarios/*.js`), load-test scripts (`src/scripts/admin/load-test-credentials.ts`, `src/scripts/admin/admin-token.ts`), or npm scripts (`load:health`, `load:auth`, `tool:load-test-credentials`, `tool:admin-token`; legacy `scripts:*`) change.

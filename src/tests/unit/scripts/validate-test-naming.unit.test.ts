@@ -12,20 +12,21 @@ describe('validate-test-naming helpers', () => {
     expect(detectTier('auth.test.ts')).toBeUndefined();
   });
 
-  it('exempts bundled domain e2e and legacy validator tests', () => {
-    expect(isExemptFromTierSuffix('domains/auth/__tests__/auth.test.ts', 'auth.test.ts')).toBe(
-      true,
-    );
+  it('exempts only bundled domain e2e and sub-domain route suites', () => {
+    expect(isExemptFromTierSuffix('domains/auth/__tests__/auth.test.ts')).toBe(true);
     expect(
       isExemptFromTierSuffix(
         'domains/auth/sub-domains/auth-mfa/__tests__/unit/auth-mfa.validator.test.ts',
-        'auth-mfa.validator.test.ts',
       ),
-    ).toBe(true);
+    ).toBe(false);
+    expect(
+      isExemptFromTierSuffix(
+        'infrastructure/database/__tests__/unit/principal-database-context.test.ts',
+      ),
+    ).toBe(false);
     expect(
       isExemptFromTierSuffix(
         'domains/auth/sub-domains/auth-method/events/__tests__/handler.test.ts',
-        'handler.test.ts',
       ),
     ).toBe(false);
   });
@@ -41,6 +42,30 @@ describe('validate-test-naming helpers', () => {
       true,
     );
     expect(isPathAllowedForTier('domains/user/foo.unit.test.ts', 'unit')).toBe(false);
+  });
+
+  it('rejects a unit suite no Vitest project collects, wherever it lives', () => {
+    // These sat outside `__tests__/unit/` and never ran in any lane.
+    expect(
+      isPathAllowedForTier(
+        'infrastructure/mail/workers/__tests__/mail.worker.unit.test.ts',
+        'unit',
+      ),
+    ).toBe(false);
+    expect(
+      isPathAllowedForTier(
+        'scripts/validators/__tests__/constants-centralization.unit.test.ts',
+        'unit',
+      ),
+    ).toBe(false);
+    expect(isPathAllowedForTier('scripts/foo.integration.test.ts', 'integration')).toBe(false);
+  });
+
+  it('allows db.unit and property.unit suites anywhere — their projects collect them anywhere', () => {
+    expect(
+      isPathAllowedForTier('infrastructure/database/utils/batch-delete.db.unit.test.ts', 'unit'),
+    ).toBe(true);
+    expect(isPathAllowedForTier('domains/billing/keys.property.unit.test.ts', 'unit')).toBe(true);
   });
 
   it('allows global tier only under tests/global', () => {

@@ -29,7 +29,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-chaos-test-maintainer/SKILL.md",
-      "computedHash": "f13a9cbb85a8b2dceba238fdad49887bf33fed2d0f99d1df9e6ca2e31b48d103"
+      "computedHash": "aefd15fae12c2fd2312b73323101e2cd3e260d87b618f1e13392f1e4e6bb84d0"
     },
     "be-ci-investigation": {
       "source": "local",
@@ -53,19 +53,19 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-contract-test-maintainer/SKILL.md",
-      "computedHash": "6b478623a3a7fb78773829a7ec10c42c235e89363a2e677f2b3489c9f3d01077"
+      "computedHash": "e5399e59b4d1b9e2bec53292368ca674817a3ec4e618651f2721cf6b8317d79f"
     },
     "be-cursor-global-skills": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-cursor-global-skills/SKILL.md",
-      "computedHash": "2aa0c48114c82c0d1525f3d784df5f42c707fd8fe9d8589e1febd3a2dc6ec3d4"
+      "computedHash": "6ea51281f50c9a9fb4f02bbac883ebb543fc21abba58a84c1668e63bb7447017"
     },
     "be-db-migration-maintainer": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-db-migration-maintainer/SKILL.md",
-      "computedHash": "16bf477551d91a23a2c27b9256d75f2803c360e095cef748c451d556db246cff"
+      "computedHash": "d901df32da58f17fe34ca67503f6cc89abf7a7e148497374713973585f3e23a0"
     },
     "be-delegate-search": {
       "source": "local",
@@ -101,7 +101,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-env-schema-add/SKILL.md",
-      "computedHash": "3639fe5bab96dd53aba965d0982619ae54cc73c7d40c3b881c670c31d4c19944"
+      "computedHash": "ca7ffdf46dda652677ee936f284d4e1833f9e17aab44a11a9eebb3ddde6c0bc6"
     },
     "be-find-skills": {
       "source": "local",
@@ -125,7 +125,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-idempotency-guard/SKILL.md",
-      "computedHash": "ea6a8f8992d430fe82050bfa4481e8dbb6c3542f9e1d58d9183535f46df67934"
+      "computedHash": "a3d2c140d564c9ce203a5ea09370f88c8f724347b8e6b70bd2b3f279df2f4e2e"
     },
     "be-iteration-planning": {
       "source": "local",
@@ -151,12 +151,6 @@
       "skillPath": "agent-os/skills/be-openapi-multilingual/SKILL.md",
       "computedHash": "63dc34e3b281cb993e84c02435672696895de29db5615b276be7296545be7a05"
     },
-    "be-openapi-route-sync": {
-      "source": "local",
-      "sourceType": "local",
-      "skillPath": "agent-os/skills/be-openapi-route-sync/SKILL.md",
-      "computedHash": "0e1efcec8d3de44914e53999c361c00d4d77390eeca049740f6d20cdbb999d6a"
-    },
     "be-overview-doc-maintainer": {
       "source": "local",
       "sourceType": "local",
@@ -179,31 +173,31 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-production-hardening-guard/SKILL.md",
-      "computedHash": "fa279c0548590302f0add70ad838180c5e3994972000b75305639fa4dfbe915c"
+      "computedHash": "3f81cdf214e32c9ac8eb4d13a596d80bd1a2acbf1ff71f1cd78c6cb728129549"
     },
     "be-read-cache-guard": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-read-cache-guard/SKILL.md",
-      "computedHash": "d5dd63b29668f1cbf1cced800d28ef23f3af57cd3aef692eb6c038cf70ed07dd"
+      "computedHash": "10b8e96237cb4650ac00544a882f9b4ad301cb430a3558904f0c7ec3295a4fd9"
     },
     "be-rls-tenant-isolation-guard": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-rls-tenant-isolation-guard/SKILL.md",
-      "computedHash": "529011a667e405d3e7ca7570dae8a90850e09ffb84d6d6060f4761526e6df71f"
+      "computedHash": "a04f11442208e71a62ec09460ec5bf7630e8e5ce20ddf58ebb327cd18ce7d651"
     },
     "be-route-catalog": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-route-catalog/SKILL.md",
-      "computedHash": "6d78b16e1925992957dea4c5db6399eb301a023322854fe1f39252afaa2b332b"
+      "computedHash": "ba93f9e5186d8da7219a93facf0f14ca35f39f068ae730c87d2897e1582b5f8e"
     },
     "be-route-schema-doc-guard": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-route-schema-doc-guard/SKILL.md",
-      "computedHash": "6bbf8641707bf97113b1667d02403d5017edbe3644553db5dde83d0c65ca04fa"
+      "computedHash": "5bc72b537e36ee1626721b39c90959d16032aebf3b97ea4688393ffb32d41d05"
     },
     "be-schema-generator": {
       "source": "local",
@@ -221,7 +215,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-skill-index/SKILL.md",
-      "computedHash": "8fb63675d8c637d13a02ebd82aa5a16e4f40bf39df5e7bdcb919fc250c864211"
+      "computedHash": "efee8edee74164b1c9cf5c6e8ddb7fbc49147efe35a6b86920076404e2dd211b"
     },
     "be-split-to-prs": {
       "source": "local",
@@ -239,7 +233,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-structure-maintainer/SKILL.md",
-      "computedHash": "26921201cb7de139dcf9003f21d5298731c354b209506a2a60e569a72a82548d"
+      "computedHash": "cc958eb8f91c4162e00a1a5b127fb3563fe6cabea780f2dfebed1f7cf7950f8e"
     },
     "be-supabase-porting": {
       "source": "local",
@@ -257,7 +251,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-test-generator/SKILL.md",
-      "computedHash": "deb82990622c9870ab3362cb9310cd4ae4240adac3a5681de2e1e0a87236b843"
+      "computedHash": "fd6b9641ef3d3b920936236a8bd1cc1a02759e212dd3cac7c72aa568a0d4e5be"
     },
     "be-tsdoc-export-guard": {
       "source": "local",
@@ -269,7 +263,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-workers-events/SKILL.md",
-      "computedHash": "7a4963e15ccd97a87a61cb13029943b27b56c14e946aa4259d3f027f3f8c1fd3"
+      "computedHash": "c320af80548415ebb249966c88abe166192312776818d5a31c5af84b78128cb0"
     },
     "ponytail": {
       "source": "DietrichGebert/ponytail",

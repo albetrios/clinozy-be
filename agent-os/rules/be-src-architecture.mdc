@@ -11,6 +11,6 @@ Owner: **CLAUDE.md** (Architecture Rules · Domain Structure · Dependency Rules
 - Layers: routes → controller → service → repository. Controllers **coordinate**; services express intent (may `withTransaction`) but own no SQL; repositories own SQL. Postgres is the only source of truth.
 - **Cross-domain** access goes through the other domain's **service** only (never its repository/schema). Imports use `@/` / `@tooling/`, never `../` (see be-import-paths).
 - Drizzle columns **snake_case**, tables plural; schema files co-located `*.schema.ts`.
-- Events (in-process bus) vs BullMQ workers (pull-based) — see the be-workers-events skill.
+- Events (in-process bus) vs BullMQ workers (pull-based) — see the be-workers-events skill; queue / worker / cron rules: `be-queue-worker-conventions.mdc` and `docs/reference/runtime/queue-and-worker-rules.md`.
 
 Full detail: CLAUDE.md. This rule is the glob-scoped Cursor pointer.

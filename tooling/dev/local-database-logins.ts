@@ -28,6 +28,7 @@ export type LocalDatabaseLogin = {
  */
 export function localDatabaseLogins(roles: {
   appRole: string;
+  maintenanceRole: string;
   sqlStem: string;
 }): readonly LocalDatabaseLogin[] {
   return [
@@ -38,7 +39,7 @@ export function localDatabaseLogins(roles: {
       purpose: 'runtime — row-level security enforced, like production',
     },
     {
-      role: `${roles.sqlStem}_maintenance`,
+      role: roles.maintenanceRole,
       envKey: 'DATABASE_MAINTENANCE_URL',
       attributes: 'LOGIN',
       purpose: 'maintenance (bypass) contexts — row-level security enforced',
@@ -144,12 +145,6 @@ export function applyLocalDatabaseLogins(options: {
     content = upsertEnvAssignment(content, 'DATABASE_MIGRATION_URL', options.superuserUrl);
   }
   return content;
-}
-
-/** Whether a database URL points at this machine. */
-export function isLocalDatabaseUrl(value: string | undefined): boolean {
-  const url = parseUrl(value);
-  return url !== undefined && ['localhost', '127.0.0.1', '[::1]', '::1'].includes(url.hostname);
 }
 
 function parseUrl(value: string | undefined): URL | undefined {

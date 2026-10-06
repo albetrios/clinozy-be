@@ -1,6 +1,7 @@
 import { enqueueStripeWebhookByEventIdForReclaim } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
 import { StripeWebhookEventRepository } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-event.repository.js';
 import { setStripeWebhookEventsFailedCount } from '@/infrastructure/observability/metrics/prometheus-metrics.js';
+import { captureMessage } from '@/infrastructure/observability/sentry/sentry.js';
 import { env } from '@/shared/config/env.config.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import {
@@ -25,6 +26,8 @@ import {
 export type StripeWebhookEventReclaimJobResult = {
   scannedCount: number;
   enqueuedCount: number;
+  /** Rows that used every processing attempt and were abandoned this run (one alert each). */
+  abandonedCount: number;
 };
 
 /**
@@ -33,7 +36,10 @@ export type StripeWebhookEventReclaimJobResult = {
  * retry them.
  *
  * @remarks
- * - **Algorithm:** Within {@link withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER)}, asks
+ * - **Algorithm:** Within {@link withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER)}, first
+ *   abandons the reclaimable rows that used every processing attempt
+ *   (`STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS` — a worker that kept dying mid-event never recorded
+ *   its last failure), alerting once per row; then asks
  *   {@link StripeWebhookEventRepository.sweepReclaimableEvents} for up to
  *   `env.STRIPE_WEBHOOK_EVENT_RECLAIM_BATCH_SIZE` candidate ids — a pure read,
  *   no row mutation (sec-re-02). For each candidate the processor enqueues a
@@ -65,6 +71,16 @@ async function runStripeWebhookEventReclaimJobInner(
   repository: StripeWebhookEventRepository,
 ): Promise<StripeWebhookEventReclaimJobResult> {
   const batchSize = env.STRIPE_WEBHOOK_EVENT_RECLAIM_BATCH_SIZE;
+  const abandonedRows = await repository.abandonExhaustedEvents(batchSize);
+  for (const abandonedRow of abandonedRows) {
+    // The one alert for this event: the reclaim never selects an abandoned row again.
+    const alertFields = {
+      stripeEventId: abandonedRow.stripe_event_id,
+      failureReason: abandonedRow.failure_reason,
+    };
+    logger.error(alertFields, 'stripe.webhook.event_abandoned');
+    captureMessage('stripe.webhook.event_abandoned', { level: 'error', extra: alertFields });
+  }
   const { scannedCount, candidateStripeEventIds } =
     await repository.sweepReclaimableEvents(batchSize);
 
@@ -93,9 +109,9 @@ async function runStripeWebhookEventReclaimJobInner(
   setStripeWebhookEventsFailedCount(failedCount);
 
   logger.info(
-    { scannedCount, enqueuedCount, failedCount },
+    { scannedCount, enqueuedCount, abandonedCount: abandonedRows.length, failedCount },
     'stripe-webhook-event-reclaim.completed',
   );
 
-  return { scannedCount, enqueuedCount };
+  return { scannedCount, enqueuedCount, abandonedCount: abandonedRows.length };
 }

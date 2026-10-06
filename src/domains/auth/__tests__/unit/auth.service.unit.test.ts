@@ -3,6 +3,7 @@ import type { Redis } from 'ioredis';
 import {
   ForbiddenError,
   NotFoundError,
+  RateLimitedError,
   UnauthorizedError,
   ValidationError,
 } from '@/shared/errors/index.js';
@@ -15,7 +16,12 @@ import type { MfaService } from '@/domains/auth/sub-domains/auth-mfa/auth-mfa.se
 import type { AuthMethodService } from '@/domains/auth/sub-domains/auth-method/auth-method.service.js';
 import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
-import { ACCOUNT_LOCKOUT_MINUTES, MAX_FAILED_LOGIN_ATTEMPTS } from '@/shared/constants/index.js';
+import {
+  ACCOUNT_LOCKOUT_MINUTES,
+  IP_FAILED_LOGIN_THRESHOLD,
+  IP_FAILED_LOGIN_WINDOW_SECONDS,
+  MAX_FAILED_LOGIN_ATTEMPTS,
+} from '@/shared/constants/index.js';
 
 vi.mock('@/shared/utils/text/email.util.js', () => ({
   isDisposableEmailBlocked: vi.fn(() => false),
@@ -145,6 +151,8 @@ describe('AuthService', () => {
     expire: vi.fn().mockResolvedValue(1),
     // route-audit C5: per-IP failed-login counter now uses an atomic INCR+EXPIRE Lua via redis.eval.
     eval: vi.fn().mockResolvedValue(1),
+    // Remaining seconds of the per-IP window — the throttled login's Retry-After.
+    ttl: vi.fn().mockResolvedValue(600),
   } as unknown as Redis;
 
   const authMethodService = {
@@ -169,6 +177,7 @@ describe('AuthService', () => {
     vi.mocked(redis.get).mockResolvedValue(null);
     vi.mocked(redis.incr).mockResolvedValue(1);
     vi.mocked(redis.expire).mockResolvedValue(1);
+    vi.mocked(redis.ttl).mockResolvedValue(600);
   });
 
   it('login returns mfa_required when user has MFA enabled', async () => {
@@ -218,9 +227,15 @@ describe('AuthService', () => {
 
     it('logs the user straight in (access token + session) after a successful reset', async () => {
       vi.mocked(authMethodService.resetPassword).mockResolvedValue(user as never);
-      const result = await service.resetPassword(resetBody, '127.0.0.1', 'agent');
+      const { userPublicId, loginResult } = await service.resetPassword(
+        resetBody,
+        '127.0.0.1',
+        'agent',
+      );
       expect(authMethodService.resetPassword).toHaveBeenCalledWith(resetBody);
-      expect('access_token' in result && result.access_token).toBe('jwt-access-token');
+      expect('access_token' in loginResult && loginResult.access_token).toBe('jwt-access-token');
+      // The reset is audited against this user (the controller cannot read it from an MFA challenge).
+      expect(userPublicId).toBe(user.public_id);
       expect(authSessionService.createSessionForUser).toHaveBeenCalled();
     });
 
@@ -229,11 +244,12 @@ describe('AuthService', () => {
         ...user,
         is_mfa_enabled: true,
       } as never);
-      const result = await service.resetPassword(resetBody, '127.0.0.1');
-      expect(result).toEqual({
+      const { userPublicId, loginResult } = await service.resetPassword(resetBody, '127.0.0.1');
+      expect(loginResult).toEqual({
         mfa_required: true,
         mfa_session_token: 'mfa_session_token',
       });
+      expect(userPublicId).toBe(user.public_id);
       expect(authSessionService.createSessionForUser).not.toHaveBeenCalled();
     });
 
@@ -670,7 +686,9 @@ describe('AuthService', () => {
       sessionPublicId: 'session_public',
     });
 
-    expect(resolve.ensurePersonalOrganization).toHaveBeenCalledWith(user.id);
+    expect(resolve.ensurePersonalOrganization).toHaveBeenCalledWith(
+      expect.objectContaining({ id: user.id, public_id: user.public_id }),
+    );
     expect(result.access_token).toBe('jwt-access-token');
     expect(authSessionService.rebindAccessToken).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -853,13 +871,53 @@ describe('AuthService', () => {
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
-  it('login blocks an IP that has exceeded the per-IP failure threshold', async () => {
-    vi.mocked(redis.get).mockResolvedValueOnce('50');
-    await expect(
-      service.login({ email: user.email, password: 'ValidPassword12!' }, '192.168.1.1'),
-    ).rejects.toBeInstanceOf(UnauthorizedError);
+  it('login answers 429 with the window remainder as Retry-After once the IP hits the threshold', async () => {
+    vi.mocked(redis.get).mockResolvedValueOnce(String(IP_FAILED_LOGIN_THRESHOLD));
+    vi.mocked(redis.ttl).mockResolvedValueOnce(742);
+    const error = await service
+      .login({ email: user.email, password: 'ValidPassword12!' }, '192.168.1.1')
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(RateLimitedError);
+    expect(error).toMatchObject({
+      statusCode: 429,
+      messageKey: 'errors:rateLimited',
+      retryAfterSeconds: 742,
+    });
     // Should reject before even checking the user
     expect(userService.findByEmail).not.toHaveBeenCalled();
+  });
+
+  it('login keeps the ordinary 401 one failure below the IP threshold', async () => {
+    vi.mocked(redis.get).mockResolvedValueOnce(String(IP_FAILED_LOGIN_THRESHOLD - 1));
+    const { verifyPassword } = await import('@/shared/utils/security/password.util.js');
+    vi.mocked(verifyPassword).mockResolvedValueOnce({ valid: false, needsRehash: false });
+    const error = await service
+      .login({ email: user.email, password: 'WrongPassword1!' }, '192.168.1.2')
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(UnauthorizedError);
+    expect(error).toMatchObject({ messageKey: 'errors:invalidEmailOrPassword' });
+  });
+
+  it.each([
+    { remaining: 0, retryAfter: 1, why: 'the last second of the window' },
+    { remaining: -2, retryAfter: 1, why: 'a window that ended between GET and TTL' },
+    { remaining: -1, retryAfter: IP_FAILED_LOGIN_WINDOW_SECONDS, why: 'a counter with no expiry' },
+  ])('login sends Retry-After $retryAfter for $why', async ({ remaining, retryAfter }) => {
+    vi.mocked(redis.get).mockResolvedValueOnce(String(IP_FAILED_LOGIN_THRESHOLD + 5));
+    vi.mocked(redis.ttl).mockResolvedValueOnce(remaining);
+    await expect(
+      service.login({ email: user.email, password: 'ValidPassword12!' }, '192.168.1.3'),
+    ).rejects.toMatchObject({ statusCode: 429, retryAfterSeconds: retryAfter });
+  });
+
+  it('login fails open when Redis errors while reading the throttle window', async () => {
+    vi.mocked(redis.get).mockResolvedValueOnce(String(IP_FAILED_LOGIN_THRESHOLD));
+    vi.mocked(redis.ttl).mockRejectedValueOnce(new Error('redis connection reset'));
+    const result = await service.login(
+      { email: user.email, password: 'ValidPassword12!' },
+      '127.0.0.1',
+    );
+    expect('access_token' in result && result.access_token).toBe('jwt-access-token');
   });
 
   it('login increments the per-IP counter on a failed password attempt', async () => {

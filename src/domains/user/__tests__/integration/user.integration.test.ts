@@ -41,14 +41,13 @@ vi.mock('@/infrastructure/storage/s3-adapter.js', () => {
     headObject: async () => ({ contentType: 'image/png', contentLength: FAKE_CONTENT_LENGTH }),
     deleteObject: async () => true,
     putObject: async () => {},
-    copyObject: async () => {},
+    copyObject: async () => ({ kind: 'copied' as const }),
     getObject: async () => ({ body: PNG_MAGIC_BYTES, contentType: 'image/png' }),
     getObjectFirstBytes: async () => ({
       body: PNG_MAGIC_BYTES,
       contentType: 'image/png',
       eTag: '"fake-etag"',
     }),
-    getObjectUrl: (key: string) => `https://fake-s3.local/${key}`,
     createPresignedDownloadUrl: async () => 'https://fake-s3.local/presigned-get',
   };
   return {

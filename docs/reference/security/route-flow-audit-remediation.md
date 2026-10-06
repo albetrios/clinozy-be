@@ -41,8 +41,7 @@ rationale and a concrete plan for each.
   recreates `tenancy.list_pending_member_invitations_for_email` with
   `(created_at, id)` keyset params + the invitation id + soft-delete guards;
   repository/service/controller page with `limit` + opaque `after` and expose
-  `has_more` / `next_cursor`; the route declares the cursor querystring and
-  rejects legacy `page`.
+  `has_more` / `next_cursor`; the route declares a strict cursor querystring.
 - **Tests:** service unit test — paginated page shape, cursor + limit forwarded to
   the repo; controller forwards `request.query` and emits pagination meta.
 
@@ -160,12 +159,11 @@ coverage already exists (and was extended where noted).
   `logo_url` to a short-lived **presigned GET URL** on every read via
   `resolveStoredMediaReadUrl` (`shared/utils/infrastructure/media-url.util.ts`) and
   the per-service `toUserOutput` / `toOrganizationOutput` resolvers (used by single
-  reads and list maps alike). External absolute URLs (OAuth-provider avatars, legacy
-  public logos) are returned as-is, never re-signed. The presign is a network-free
+  reads and list maps alike). An external absolute URL (an OAuth-provider avatar) is
+  returned as-is, never re-signed. The presign is a network-free
   local signature, so it stays clear of the RLS-context network-isolation guard.
 - **Tests:** `user.service.unit.test.ts` — avatar stored as key, returned as signed
-  URL; `organization.service.unit.test.ts` — TEN-07 logo stored as key (not via
-  `getObjectUrl`), returned signed.
+  URL; `organization.service.unit.test.ts` — TEN-07 logo stored as key, returned signed.
 
 ### TEN-06 / USER-04 / USER-09 — durable offboarding reconciler
 

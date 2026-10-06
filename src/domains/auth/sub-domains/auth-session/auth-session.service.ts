@@ -155,7 +155,7 @@ export class AuthSessionService {
   ): Promise<{ public_id: string; refresh_secret: string }> {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
-    const refreshSecret = generateRefreshSecret({ userId: user.id });
+    const refreshSecret = generateRefreshSecret({ userPublicId });
     const { session, evictedSessions } = await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
       async (_databaseHandle) => {
@@ -310,10 +310,13 @@ export class AuthSessionService {
 
   async refreshSessionCredentials({
     sessionPublicId,
+    userPublicId,
     refreshSecret,
     nextAccessToken,
   }: {
     sessionPublicId: string;
+    /** The session's user — the refresh secrets' issuance MACs are bound to it. */
+    userPublicId: string;
     refreshSecret: string;
     nextAccessToken: string;
   }): Promise<{ refresh_secret: string }> {
@@ -327,7 +330,7 @@ export class AuthSessionService {
         if (!existing?.refresh_token_hash) {
           return null;
         }
-        const minted = generateRefreshSecret({ userId: existing.user_id });
+        const minted = generateRefreshSecret({ userPublicId });
         const rotated = await this.sessionRepository.rotateSessionCredentials(
           sessionPublicId,
           currentRefreshHash,
@@ -353,10 +356,9 @@ export class AuthSessionService {
     // server ISSUED for the session's user, presented after it stopped rotating, is a replay of a
     // retired (possibly stolen) secret — revoke the user's entire session family so it cannot keep
     // or regain access on any device. Proof of issuance is required: the secret's MAC verifies
-    // (isIssuedRefreshSecret), or it is the session's stored previous secret (which also covers
-    // secrets minted before issuance MACs existed). A secret that merely differs from the current
-    // one proves nothing — anyone who learns a session id could invent one — so it only gets the
-    // 401 below, with no revocation and no cache change.
+    // (isIssuedRefreshSecret), or it is the session's stored previous secret. A secret that
+    // merely differs from the current one proves nothing — anyone who learns a session id could
+    // invent one — so it only gets the 401 below, with no revocation and no cache change.
     //
     // sec-A finding #9: include ALREADY-REVOKED rows in the lookup. A user who clicks "Log out
     // everywhere" revokes the row but an attacker may still hold the stale refresh secret; the
@@ -369,7 +371,7 @@ export class AuthSessionService {
         if (!existing?.refresh_token_hash) return null;
         if (refreshHashesEqual(existing.refresh_token_hash, currentRefreshHash)) return null;
         const provenIssued =
-          isIssuedRefreshSecret({ userId: existing.user_id, refreshSecret }) ||
+          isIssuedRefreshSecret({ userPublicId, refreshSecret }) ||
           (existing.previous_refresh_token_hash !== null &&
             refreshHashesEqual(existing.previous_refresh_token_hash, currentRefreshHash));
         return {

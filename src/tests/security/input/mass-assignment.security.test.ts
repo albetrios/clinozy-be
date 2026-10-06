@@ -2,10 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
-import {
-  injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
-} from '@/tests/helpers/test-http-inject.helper.js';
+import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -167,7 +164,7 @@ describe('Security: mass-assignment / over-posting', () => {
     it('rejects an injected owner_user_id (no privilege transfer via update)', async () => {
       const { token } = await createOrgAdminContext();
       const otherUser = await createTestUser();
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PATCH',
         url: testApiPath('/tenancy/organization'),
         token,
@@ -179,7 +176,7 @@ describe('Security: mass-assignment / over-posting', () => {
 
     it('rejects an injected public_id (identity is immutable)', async () => {
       const { token } = await createOrgAdminContext();
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PATCH',
         url: testApiPath('/tenancy/organization'),
         token,
@@ -191,7 +188,7 @@ describe('Security: mass-assignment / over-posting', () => {
 
     it('rejects an injected stripe_customer_id (billing-owned field)', async () => {
       const { token } = await createOrgAdminContext();
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PATCH',
         url: testApiPath('/tenancy/organization'),
         token,
@@ -207,7 +204,7 @@ describe('Security: mass-assignment / over-posting', () => {
   describe('PATCH /api/v1/tenancy/organization/settings', () => {
     it('rejects an injected organization_id (tenant binding is from the token claim)', async () => {
       const { token } = await createOrgAdminContext();
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PATCH',
         url: testApiPath('/tenancy/organization/settings'),
         token,
@@ -223,7 +220,7 @@ describe('Security: mass-assignment / over-posting', () => {
   describe('POST /api/v1/notify/webhooks', () => {
     it('rejects an injected organization_id (cross-tenant binding attempt)', async () => {
       const { token } = await createOrgAdminContext();
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/notify/webhooks'),
         token,
@@ -239,7 +236,7 @@ describe('Security: mass-assignment / over-posting', () => {
 
     it('rejects an injected encrypted_secret (server encrypts the plaintext secret)', async () => {
       const { token } = await createOrgAdminContext();
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/notify/webhooks'),
         token,

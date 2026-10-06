@@ -4,8 +4,6 @@ import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import { WebhookRepository } from '@/domains/notify/sub-domains/webhook/webhook.repository.js';
 import { WebhookDeliveryAttemptRepository } from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery-attempt.repository.js';
-import { WEBHOOK_DELIVERY_STUCK_SENDING_LEASE_MINUTES } from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.constants.js';
-import { MILLISECONDS_PER_MINUTE } from '@/shared/constants/ttl.constants.js';
 
 describe('WebhookDeliveryAttemptRepository.tryMarkSending (database)', () => {
   const webhookRepository = new WebhookRepository();
@@ -28,105 +26,91 @@ describe('WebhookDeliveryAttemptRepository.tryMarkSending (database)', () => {
     await cleanupDatabase();
   });
 
-  it('tryMarkSending claims pending attempt atomically', async () => {
+  async function createAttempt(options: {
+    webhookId: number;
+    status: 'PENDING' | 'SENDING' | 'FAILED' | 'SENT';
+    attemptCount: number;
+  }) {
+    return attemptRepository.create({
+      webhook_id: options.webhookId,
+      event_type: 'subscription.updated',
+      payload: { id: `sub_${options.status}` },
+      status: options.status,
+      http_status_code: options.status === 'FAILED' ? 500 : null,
+      response_body: options.status === 'FAILED' ? 'server error' : null,
+      sent_at: options.status === 'PENDING' ? null : new Date(),
+      attempt_count: options.attemptCount,
+    });
+  }
+
+  async function readAttempt(webhookId: number, attemptId: number) {
+    const { items } = await attemptRepository.listByWebhook(webhookId, { limit: 10 });
+    return items.find((item) => item.id === attemptId);
+  }
+
+  it('claims a PENDING attempt and counts it', async () => {
     const { webhook } = await createWebhookFixture('pending');
-    const attempt = await attemptRepository.create({
-      webhook_id: webhook.id,
-      event_type: 'subscription.updated',
-      payload: { id: 'sub_1' },
+    const attempt = await createAttempt({
+      webhookId: webhook.id,
       status: 'PENDING',
-      http_status_code: null,
-      response_body: null,
-      sent_at: null,
-      attempt_count: 0,
+      attemptCount: 0,
     });
 
-    const firstResult = await attemptRepository.tryMarkSending(attempt.id, 1);
-    expect(firstResult).toBe('claimed');
+    expect(await attemptRepository.tryMarkSending(attempt.id)).toBe('claimed');
 
-    const secondResult = await attemptRepository.tryMarkSending(attempt.id, 1);
-    expect(secondResult).toBe('in_flight');
+    const row = await readAttempt(webhook.id, attempt.id);
+    expect(row?.status).toBe('SENDING');
+    expect(row?.attempt_count).toBe(1);
   });
 
-  it('tryMarkSending returns in_flight for fresh SENDING row inside the lease window', async () => {
-    const { webhook } = await createWebhookFixture('in-flight');
-    const freshSentAt = new Date();
-    const attempt = await attemptRepository.create({
-      webhook_id: webhook.id,
-      event_type: 'subscription.updated',
-      payload: { id: 'sub_2' },
+  it('re-claims a SENDING attempt — the execution that claimed it died mid-send', async () => {
+    // BullMQ runs one execution per job and the job id is the attempt's public id, so a new
+    // execution that finds the row SENDING is looking at a crashed or lost one. Reporting it as
+    // "in flight" completed the job and the event was never delivered.
+    const { webhook } = await createWebhookFixture('sending');
+    const attempt = await createAttempt({
+      webhookId: webhook.id,
       status: 'SENDING',
-      http_status_code: null,
-      response_body: null,
-      sent_at: freshSentAt,
-      attempt_count: 1,
+      attemptCount: 1,
     });
 
-    const result = await attemptRepository.tryMarkSending(attempt.id, 2);
-    expect(result).toBe('in_flight');
+    expect(await attemptRepository.tryMarkSending(attempt.id)).toBe('claimed');
+    expect((await readAttempt(webhook.id, attempt.id))?.attempt_count).toBe(2);
   });
 
-  it('tryMarkSending reclaims stale SENDING row past the lease window', async () => {
-    const { webhook } = await createWebhookFixture('stale');
-    const staleSentAt = new Date(
-      Date.now() - (WEBHOOK_DELIVERY_STUCK_SENDING_LEASE_MINUTES + 1) * MILLISECONDS_PER_MINUTE,
-    );
-    const attempt = await attemptRepository.create({
-      webhook_id: webhook.id,
-      event_type: 'subscription.updated',
-      payload: { id: 'sub_3' },
-      status: 'SENDING',
-      http_status_code: null,
-      response_body: null,
-      sent_at: staleSentAt,
-      attempt_count: 1,
-    });
-
-    const result = await attemptRepository.tryMarkSending(attempt.id, 2);
-    expect(result).toBe('claimed');
-  });
-
-  it('tryMarkSending reclaims failed attempt for the next BullMQ retry only once', async () => {
-    const { webhook } = await createWebhookFixture('failed-retry');
-    const attempt = await attemptRepository.create({
-      webhook_id: webhook.id,
-      event_type: 'subscription.updated',
-      payload: { id: 'sub_failed_retry' },
+  it('re-claims a FAILED attempt — the next retry, or a DLQ replay starting its attempts over', async () => {
+    const { webhook } = await createWebhookFixture('failed');
+    const attempt = await createAttempt({
+      webhookId: webhook.id,
       status: 'FAILED',
-      http_status_code: 500,
-      response_body: 'server error',
-      sent_at: new Date(),
-      attempt_count: 1,
+      attemptCount: 8,
     });
 
-    const retryResult = await attemptRepository.tryMarkSending(attempt.id, 2);
-    expect(retryResult).toBe('claimed');
+    expect(await attemptRepository.tryMarkSending(attempt.id)).toBe('claimed');
 
-    const duplicateRetryResult = await attemptRepository.tryMarkSending(attempt.id, 2);
-    expect(duplicateRetryResult).toBe('in_flight');
+    const row = await readAttempt(webhook.id, attempt.id);
+    expect(row?.status).toBe('SENDING');
+    expect(row?.attempt_count).toBe(9);
+    // The previous outcome is cleared with the claim.
+    expect(row?.http_status_code).toBeNull();
+    expect(row?.next_retry_at).toBeNull();
   });
 
-  it('tryMarkSending returns already_sent for completed (SENT) attempt', async () => {
+  it('never claims a SENT attempt', async () => {
     const { webhook } = await createWebhookFixture('sent');
-    const attempt = await attemptRepository.create({
-      webhook_id: webhook.id,
-      event_type: 'subscription.updated',
-      payload: { id: 'sub_4' },
-      status: 'SENT',
-      http_status_code: 200,
-      response_body: 'ok',
-      sent_at: new Date(),
-      attempt_count: 1,
-    });
+    const attempt = await createAttempt({ webhookId: webhook.id, status: 'SENT', attemptCount: 1 });
 
-    const result = await attemptRepository.tryMarkSending(attempt.id, 2);
-    expect(result).toBe('already_sent');
+    expect(await attemptRepository.tryMarkSending(attempt.id)).toBe('already_sent');
+
+    const row = await readAttempt(webhook.id, attempt.id);
+    expect(row?.status).toBe('SENT');
+    expect(row?.attempt_count).toBe(1);
   });
 
   it('recordOutcome never overwrites a terminal SENT row (stale reclaim writer)', async () => {
-    // Race: worker A claims and POSTs slowly; the lease expires; worker B reclaims, re-sends,
-    // and records SENT. A's slow POST then returns and records FAILED. Without a guard A would
-    // flip an already-delivered webhook back to FAILED and trigger a spurious redelivery.
+    // Race: execution A claims and POSTs slowly and stalls; execution B re-claims, re-sends and
+    // records SENT. A's slow POST then returns and records FAILED. Without a guard A would flip
+    // an already-delivered webhook back to FAILED and trigger a spurious redelivery.
     const { webhook } = await createWebhookFixture('record-outcome-sent');
     const sentAttempt = await attemptRepository.create({
       webhook_id: webhook.id,

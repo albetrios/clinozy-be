@@ -1,10 +1,18 @@
 /** Billing and Stripe integration defaults. */
 
-/** BullMQ jobs stuck in `sending` / `processing` may be reclaimed after this lease (minutes). */
-export const STUCK_SENDING_LEASE_MINUTES = 15;
+/**
+ * Stripe webhook events stuck in `processing` may be reclaimed after this lease (minutes) — the
+ * upper bound on one legitimate processing run (a Stripe API read plus the local writes).
+ */
+export const STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES = 15;
 
-/** Stripe webhook events stuck in `processing` may be reclaimed after this lease (minutes). */
-export const STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES = STUCK_SENDING_LEASE_MINUTES;
+/**
+ * Processing attempts after which a Stripe webhook event is abandoned: the ledger row turns
+ * `abandoned`, the reclaim sweep stops retrying it, and one alert fires. Counts only attempts in
+ * which our handler ran (a Stripe outage fails before the claim and costs none) — five BullMQ
+ * attempts per reclaim cycle, so about five cycles of a handler that fails every time.
+ */
+export const STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS = 25;
 
 /**
  * Upper bound on the failed-event tally surfaced by the reclaim worker's

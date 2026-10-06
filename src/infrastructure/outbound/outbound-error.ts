@@ -2,6 +2,8 @@ import * as Sentry from '@sentry/node';
 import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
 import { isTransientNetworkError } from '@/infrastructure/resilience/retry-with-backoff.util.js';
 import { AppError } from '@/shared/errors/app.error.js';
+import { ServiceUnavailableError } from '@/shared/errors/index.js';
+import { toClientFacingStripeError } from '@/infrastructure/payment/stripe-error.util.js';
 import type { OutboundIntegrationName } from '@/infrastructure/outbound/outbound-defaults.js';
 
 /**
@@ -44,7 +46,10 @@ export class ExternalServiceError extends AppError {
     super(
       'SERVICE_UNAVAILABLE',
       503,
-      options.messageKey ?? 'errors:externalServiceUnavailable',
+      options.messageKey ??
+        (options.integration === 'stripe'
+          ? 'errors:paymentProviderUnavailable'
+          : 'errors:externalServiceUnavailable'),
       { integration: options.integration },
       options.fallbackMessage ??
         `Outbound call to ${options.integration} failed (${options.category})`,
@@ -56,6 +61,8 @@ export class ExternalServiceError extends AppError {
     }
     if (options.retryAfterMs !== undefined) {
       this.retryAfterMs = options.retryAfterMs;
+      // Sent as `Retry-After` by the error handler: when the dependency's circuit closes again.
+      this.withRetryAfter(retryAfterSecondsFrom(options.retryAfterMs));
     }
     if (options.upstreamRequestId !== undefined) {
       this.upstreamRequestId = options.upstreamRequestId;
@@ -64,6 +71,34 @@ export class ExternalServiceError extends AppError {
       this.cause = options.cause;
     }
   }
+}
+
+/** Whole seconds for a `Retry-After` header — at least 1, rounded up. */
+function retryAfterSecondsFrom(retryAfterMs: number): number {
+  return Math.max(1, Math.ceil(retryAfterMs / 1000));
+}
+
+/**
+ * The client-facing error for a third-party failure that reached the HTTP layer raw, or `null` to
+ * leave it to the generic 500.
+ *
+ * @remarks
+ * - **Algorithm:** an open circuit → 503 with `Retry-After` (the circuit's remaining open time;
+ *   `errors:paymentProviderUnavailable` for Stripe) — `outboundCall` rethrows it raw so workers
+ *   can read `retryAfterMs`. A raw Stripe error → its mapping (`toClientFacingStripeError`).
+ * - **Failure modes:** none — pure mapping.
+ * - **Side effects:** none.
+ * - **Notes:** called by the global error handler; before, both were 500s and Sentry events.
+ */
+export function toClientFacingOutboundError(error: unknown): AppError | null {
+  if (error instanceof CircuitBreakerOpenError) {
+    const unavailable =
+      error.circuitName === 'stripe'
+        ? new ServiceUnavailableError('errors:paymentProviderUnavailable')
+        : new ServiceUnavailableError('errors:externalServiceUnavailable');
+    return unavailable.withRetryAfter(retryAfterSecondsFrom(error.retryAfterMs));
+  }
+  return toClientFacingStripeError(error) ?? null;
 }
 
 /**

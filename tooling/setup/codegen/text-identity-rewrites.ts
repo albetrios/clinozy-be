@@ -130,10 +130,11 @@ export const TEXT_REWRITE_TARGETS: readonly TextRewriteTarget[] = [
         replace: (snapshot) => `$1=${snapshot.brandName}`,
       },
       {
-        // The VALUE beside the comment above. Without this rule the template shipped
-        // the base project's stem while its own comment named the new one.
-        pattern: /^REDIS_KEY_PREFIX=[a-z0-9_-]+(:[a-z0-9_-]+:)$/m,
-        replace: (snapshot) => `REDIS_KEY_PREFIX=${snapshot.derived.redisKeyPrefix}$1`,
+        // The example VALUE beside the comment above (commented out: the prefix is derived from
+        // the identity stem and NODE_ENV by default). Without this rule the template shipped the
+        // base project's stem while its own comment named the new one.
+        pattern: /^(# )?REDIS_KEY_PREFIX=[a-z0-9_-]+(:[a-z0-9_-]+:)$/m,
+        replace: (snapshot) => `$1REDIS_KEY_PREFIX=${snapshot.derived.redisKeyPrefix}$2`,
       },
       ...localDatabaseRules(),
     ],
@@ -190,7 +191,7 @@ export const TEXT_REWRITE_TARGETS: readonly TextRewriteTarget[] = [
     rules: [
       ...localDatabaseRules(),
       {
-        pattern: /(REDIS_KEY_PREFIX \?\?= ')[a-z0-9_-]+(:test:')/,
+        pattern: /(REDIS_KEY_PREFIX = ')[a-z0-9_-]+(:test:')/,
         replace: (snapshot) => `$1${snapshot.derived.redisKeyPrefix}$2`,
       },
     ],
@@ -231,7 +232,7 @@ export function mcpTemplateRules(): readonly TextRewriteRule[] {
 }
 
 /**
- * Postgres identifiers built from the slug: the two roles, the local database,
+ * Postgres identifiers built from the slug: the application role, the local database,
  * its user and password, and the CI dry-run database.
  *
  * @remarks
@@ -248,10 +249,6 @@ export function sqlIdentityRules(): readonly TextRewriteRule[] {
     {
       pattern: /\b[a-z][a-z0-9]*_be_app\b/g,
       replace: (snapshot) => snapshot.derived.databaseAppRole,
-    },
-    {
-      pattern: /\b[a-z][a-z0-9]*_be_runtime\b/g,
-      replace: (snapshot) => snapshot.derived.databaseRuntimeRole,
     },
     {
       pattern: /\b[a-z][a-z0-9]*_dryrun\b/g,
@@ -305,10 +302,13 @@ export function localDatabaseRules(): readonly TextRewriteRule[] {
  *   is renamed only when it equals `previousDatabaseName`. `<stem>:<stem>@…/<stem>` becomes
  *   the new stem; `<role>:<secret>@…/<stem>` keeps its role and secret and gets the new
  *   database; `user:password@host/db` is left exactly as written.
- * - `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` set to the previous name, so a CI
- *   service container keeps matching the URLs beside it.
+ * - `postgres://` too, and a URL without credentials or port (`postgres://localhost/acme`).
+ * - `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` and libpq's `PGUSER` / `PGPASSWORD` /
+ *   `PGDATABASE` set to the previous name, so a CI service container keeps matching the URLs
+ *   beside it.
  * - `-U` / `-d` flags (`pg_isready`, `psql`) and `CREATE DATABASE`, with any `_suffix`
- *   such as `_dryrun` preserved.
+ *   such as `_dryrun` or `_test` preserved.
+ * - The local credential pair written out (`acme:acme`), as in a CI comment.
  */
 export function rewritePreviousDatabaseName(
   contents: string,
@@ -320,26 +320,169 @@ export function rewritePreviousDatabaseName(
   }
   const renamePart = (part: string): string => (part === previous ? next : part);
   const escaped = previous.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // The name ends where a letter or digit cannot follow: `acme_test` / `acme_dryrun` keep their
+  // suffix and are renamed with it, `acmes` is a different word.
+  const name = `${escaped}(?![A-Za-z0-9])`;
   return contents
     .replace(
-      /postgresql:\/\/([^:@/\s]+):([^@/\s]+)@([^:/\s]+):(\d+)\/([a-z0-9]+)(_[a-z0-9_]+)?/g,
+      /(postgres(?:ql)?):\/\/(?:([^:@/\s'"`]+)(?::([^@/\s'"`]+))?@)?([^:/\s'"`]+)(?::(\d+))?\/([a-z0-9]+)(_[a-z0-9_]+)?/g,
       (
         _match,
-        user: string,
-        password: string,
+        scheme: string,
+        user: string | undefined,
+        password: string | undefined,
         host: string,
-        port: string,
+        port: string | undefined,
         database: string,
         suffix = '',
-      ) =>
-        `postgresql://${renamePart(user)}:${renamePart(password)}@${host}:${port}/${renamePart(database)}${suffix}`,
+      ) => {
+        const credentials =
+          user === undefined
+            ? ''
+            : `${renamePart(user)}${password === undefined ? '' : `:${renamePart(password)}`}@`;
+        const hostAndPort = port === undefined ? host : `${host}:${port}`;
+        return `${scheme}://${credentials}${hostAndPort}/${renamePart(database)}${suffix}`;
+      },
     )
     .replace(
-      new RegExp(`(POSTGRES_(?:USER|PASSWORD|DB)\\s*[:=]\\s*['"]?)${escaped}\\b`, 'g'),
+      new RegExp(
+        `((?:POSTGRES_(?:USER|PASSWORD|DB)|PG(?:USER|PASSWORD|DATABASE))\\s*[:=]\\s*['"]?)${name}`,
+        'g',
+      ),
       `$1${next}`,
     )
-    .replace(new RegExp(`(\\s-[Ud]\\s+)${escaped}\\b`, 'g'), `$1${next}`)
-    .replace(new RegExp(`(CREATE DATABASE\\s+)${escaped}(?=\\b|_)`, 'g'), `$1${next}`);
+    .replace(new RegExp(`(\\s-[Ud]\\s+)${name}`, 'g'), `$1${next}`)
+    .replace(new RegExp(`(CREATE DATABASE\\s+)${escaped}(?=\\b|_)`, 'g'), `$1${next}`)
+    .replace(new RegExp(`(?<![A-Za-z0-9_])${escaped}:${name}`, 'g'), `${next}:${next}`);
+}
+
+/**
+ * The sibling infrastructure repository's slug for a backend slug (`acme-be` → `acme-infra`), or
+ * null when the slug does not end in `-be`.
+ *
+ * @remarks
+ * - **Algorithm:** swaps the `-be` suffix for `-infra` — the naming the backend, frontend and
+ *   infrastructure repositories share.
+ * - **Failure modes:** none — pure.
+ * - **Side effects:** none.
+ * - **Notes:** shared by the previous-identity gate (flags a previous stem's `-infra`) and the
+ *   `pnpm init:project` rename (rewrites it), so whatever the gate flags, the rename rewrites.
+ */
+export function infraSlugFor(backendSlug: string): string | null {
+  return backendSlug.endsWith('-be') ? `${backendSlug.slice(0, -'-be'.length)}-infra` : null;
+}
+
+function escapeRegExpLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Matches `<stem>:` where it IS a Redis key prefix: directly followed by a template placeholder,
+ * a documented placeholder, an environment name or a quote (`` `acme:${NODE_ENV}:` ``,
+ * `acme:<NODE_ENV>:`, `acme:dev:`, `'acme:'`). Only the `<stem>:` itself is consumed.
+ *
+ * @remarks
+ * - **Algorithm:** the stem must start a token (not after a letter, digit, `_`, `/`, `@`, `.` or
+ *   `-`), so `acme: true`, `src/acme/…` and `@scope/acme:dev` never match.
+ * - **Failure modes:** none — pure regex builder.
+ * - **Side effects:** none.
+ * - **Notes:** the one definition the leftover check (detects a previous stem) and the rename
+ *   pass ({@link rewritePreviousRedisKeyPrefix}) share, so whatever the check flags, the rename
+ *   rewrites.
+ */
+export function redisKeyPrefixStemPattern(stem: string, flags = ''): RegExp {
+  return new RegExp(
+    `(?<![A-Za-z0-9_/@.-])${escapeRegExpLiteral(stem)}:(?=\\$\\{|<|(?:local|development|production|dev|prod|test|staging)(?![A-Za-z0-9])|['"\`])`,
+    flags,
+  );
+}
+
+/**
+ * Matches a slug written as a display wordmark: its halves around the last `-` joined by a
+ * typographic separator, markup around the separator allowed (`acme·be`, `ACME • BE`,
+ * `acme&middot;be`, `acme<span class="…">·</span>be`); case-insensitive. Null for a slug without
+ * a `-`.
+ *
+ * @remarks
+ * - **Algorithm:** captures the head, everything between head and tail (separator plus markup),
+ *   and the tail. Plain spaces and dots are not separators — "let the legacy be" is English — and
+ *   the tail must end the word (`acme·bean` does not match).
+ * - **Failure modes:** none — pure regex builder.
+ * - **Side effects:** none.
+ * - **Notes:** shared by the leftover check and the rename pass ({@link rewritePreviousWordmark}).
+ */
+export function wordmarkPattern(slug: string, flags = ''): RegExp | null {
+  const separatorIndex = slug.lastIndexOf('-');
+  if (separatorIndex <= 0) return null;
+  const head = escapeRegExpLiteral(slug.slice(0, separatorIndex));
+  const tail = escapeRegExpLiteral(slug.slice(separatorIndex + 1));
+  const markup = '(?:<[^>]*>)?';
+  return new RegExp(
+    `(?<![A-Za-z0-9])(${head})(\\s*${markup}\\s*(?:·|•|∙|&middot;|&#183;)\\s*${markup}\\s*)(${tail})(?![A-Za-z0-9])`,
+    `i${flags}`,
+  );
+}
+
+/** Spells `next` in the casing of `matched`: all capitals, a leading capital, or as given. */
+function inCasingOf(matched: string, next: string): string {
+  if (matched === matched.toUpperCase() && matched !== matched.toLowerCase()) {
+    return next.toUpperCase();
+  }
+  if (matched.charAt(0) !== matched.charAt(0).toLowerCase()) {
+    return next.charAt(0).toUpperCase() + next.slice(1);
+  }
+  return next;
+}
+
+/**
+ * Renames a previous stem where it is a Redis key prefix (`acme:dev:` → `globex:dev:`).
+ *
+ * @remarks
+ * - **Algorithm:** replaces each {@link redisKeyPrefixStemPattern} match of the previous stem;
+ *   the environment part and every other `acme` are left as they are.
+ * - **Failure modes:** none — a no-op when either stem is empty or they are equal.
+ * - **Side effects:** none — returns the rewritten text.
+ * - **Notes:** run by the `pnpm init:project` prose pass. No slug spelling covers a bare stem,
+ *   so before this a rename left `resolveRedisKeyPrefix()` and every example key on the old name.
+ */
+export function rewritePreviousRedisKeyPrefix(
+  contents: string,
+  options: { readonly previousStem: string; readonly nextStem: string },
+): string {
+  const { previousStem, nextStem } = options;
+  if (!(previousStem && nextStem) || previousStem === nextStem) return contents;
+  return contents.replace(redisKeyPrefixStemPattern(previousStem, 'g'), () => `${nextStem}:`);
+}
+
+/**
+ * Renames a previous slug's display wordmark (`acme·be` → `globex·be`), keeping its separator,
+ * markup and casing.
+ *
+ * @remarks
+ * - **Algorithm:** replaces head and tail of each {@link wordmarkPattern} match with the next
+ *   slug's halves, each spelled in the casing it replaces (`ACME • BE` → `GLOBEX • BE`).
+ * - **Failure modes:** none — a no-op when either slug is empty, they are equal, or either has
+ *   no `-`.
+ * - **Side effects:** none — returns the rewritten text.
+ * - **Notes:** run by the `pnpm init:project` prose pass. No slug spelling covers the separator,
+ *   so before this a rename left the dashboards hub titled with the old name.
+ */
+export function rewritePreviousWordmark(
+  contents: string,
+  options: { readonly previousSlug: string; readonly nextSlug: string },
+): string {
+  const { previousSlug, nextSlug } = options;
+  if (!(previousSlug && nextSlug) || previousSlug === nextSlug) return contents;
+  const pattern = wordmarkPattern(previousSlug, 'g');
+  const nextSeparatorIndex = nextSlug.lastIndexOf('-');
+  if (!pattern || nextSeparatorIndex <= 0) return contents;
+  const nextHead = nextSlug.slice(0, nextSeparatorIndex);
+  const nextTail = nextSlug.slice(nextSeparatorIndex + 1);
+  return contents.replace(
+    pattern,
+    (_match, head: string, separator: string, tail: string) =>
+      `${inCasingOf(head, nextHead)}${separator}${inCasingOf(tail, nextTail)}`,
+  );
 }
 
 /**

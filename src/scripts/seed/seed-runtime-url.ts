@@ -7,7 +7,7 @@
  *   login — cross-tenant seed inserts would be rejected under it. Elevated fixture
  *   work belongs to `clinozy_be_operator` (owner-member; BYPASSRLS locally), carried by
  *   the optional `DATABASE_OPERATOR_URL`. When it is set, seeds run on it; when unset
- *   (CI's superuser service container, legacy local setups) the plain `DATABASE_URL`
+ *   (CI's superuser service container) the plain `DATABASE_URL`
  *   keeps working unchanged. Mirrors the `DATABASE_MIGRATION_URL ?? DATABASE_URL`
  *   precedent in `migrate.ts`.
  */

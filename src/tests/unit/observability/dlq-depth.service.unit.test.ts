@@ -27,26 +27,28 @@ describe('sampleDeadLetterQueueDepths', () => {
   });
 
   it('returns depth samples for each dead-letter queue', async () => {
-    const { sampleDeadLetterQueueDepths, SOURCE_QUEUE_NAMES_FOR_DLQ_MONITORING } = await import(
+    const { sampleDeadLetterQueueDepths } = await import(
       '@/infrastructure/observability/dlq-depth/dlq-depth.service.js'
     );
+    const { WORKER_QUEUE_NAMES } = await import('@/infrastructure/queue/queue-catalog.js');
 
     const result = await sampleDeadLetterQueueDepths();
 
-    expect(result.depths.length).toBe(SOURCE_QUEUE_NAMES_FOR_DLQ_MONITORING.length);
+    expect(result.depths.length).toBe(WORKER_QUEUE_NAMES.length);
     expect(result.depths.map((entry) => entry.deadLetterQueueName)).toEqual(
-      SOURCE_QUEUE_NAMES_FOR_DLQ_MONITORING.map((name) => `${name}-dlq`),
+      WORKER_QUEUE_NAMES.map((name) => `${name}-dlq`),
     );
-    expect(mockGetJobCounts).toHaveBeenCalledTimes(SOURCE_QUEUE_NAMES_FOR_DLQ_MONITORING.length);
+    expect(mockGetJobCounts).toHaveBeenCalledTimes(WORKER_QUEUE_NAMES.length);
   });
 
   // sec-DLQ-scrape: a fresh connect + close per DLQ, run sequentially, took 30 s+ on a hosted
   // Redis and turned every /metrics scrape into an edge 502. The sampler must reuse the pooled
   // dead-letter clients (no per-call close) so repeated passes cost one round trip.
   it('reuses the pooled dead-letter clients across passes and never closes them', async () => {
-    const { sampleDeadLetterQueueDepths, SOURCE_QUEUE_NAMES_FOR_DLQ_MONITORING } = await import(
+    const { sampleDeadLetterQueueDepths } = await import(
       '@/infrastructure/observability/dlq-depth/dlq-depth.service.js'
     );
+    const { WORKER_QUEUE_NAMES } = await import('@/infrastructure/queue/queue-catalog.js');
     const constructionsBefore = mockQueueConstructor.mock.calls.length;
 
     await sampleDeadLetterQueueDepths();
@@ -54,16 +56,17 @@ describe('sampleDeadLetterQueueDepths', () => {
     await sampleDeadLetterQueueDepths();
 
     expect(constructionsAfterFirstPass - constructionsBefore).toBeLessThanOrEqual(
-      SOURCE_QUEUE_NAMES_FOR_DLQ_MONITORING.length,
+      WORKER_QUEUE_NAMES.length,
     );
     expect(mockQueueConstructor.mock.calls.length).toBe(constructionsAfterFirstPass);
     expect(mockClose).not.toHaveBeenCalled();
   });
 
   it('queries every dead-letter queue concurrently rather than one after another', async () => {
-    const { sampleDeadLetterQueueDepths, SOURCE_QUEUE_NAMES_FOR_DLQ_MONITORING } = await import(
+    const { sampleDeadLetterQueueDepths } = await import(
       '@/infrastructure/observability/dlq-depth/dlq-depth.service.js'
     );
+    const { WORKER_QUEUE_NAMES } = await import('@/infrastructure/queue/queue-catalog.js');
     let inFlight = 0;
     let peakInFlight = 0;
     mockGetJobCounts.mockImplementation(async () => {
@@ -76,7 +79,7 @@ describe('sampleDeadLetterQueueDepths', () => {
 
     const result = await sampleDeadLetterQueueDepths();
 
-    expect(peakInFlight).toBe(SOURCE_QUEUE_NAMES_FOR_DLQ_MONITORING.length);
+    expect(peakInFlight).toBe(WORKER_QUEUE_NAMES.length);
     expect(result.depths.every((entry) => entry.total === 3)).toBe(true);
   });
 });

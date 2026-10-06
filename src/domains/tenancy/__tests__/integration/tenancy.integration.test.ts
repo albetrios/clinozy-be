@@ -4,7 +4,6 @@ import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
   injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
   injectUnauthenticated,
 } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -134,7 +133,7 @@ describe('Tenancy Domain — Integration', () => {
         userId: user.public_id,
         organizationPublicId: createdId,
       });
-      const deleteResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const deleteResponse = await injectAuthenticated(app, {
         method: 'DELETE',
         url: testApiPath('/tenancy/organization'),
         token: ownerOrgToken,
@@ -271,7 +270,7 @@ describe('Tenancy Domain — Integration', () => {
 
     it('should soft-delete organization and hide it from subsequent reads', async () => {
       const { token } = await createAuthorizedUserAndOrganization();
-      const deleteResponse = await injectAuthenticatedOrganizationMutation(app, {
+      const deleteResponse = await injectAuthenticated(app, {
         method: 'DELETE',
         url: testApiPath('/tenancy/organization'),
         token: token,

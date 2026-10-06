@@ -1,12 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-vi.mock('@/infrastructure/storage/storage.service.js', () => ({
-  deleteObject: vi.fn().mockResolvedValue(true),
-  createPresignedUploadUrl: vi.fn(),
-  headObject: vi.fn(),
-  getObjectUrl: vi.fn(),
-}));
-
 vi.mock('@/domains/user/user.service.js', () => ({
   UserService: class UserService {},
 }));
@@ -35,13 +28,15 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
   };
 });
 
-import { deleteObject } from '@/infrastructure/storage/storage.service.js';
 import type { UploadRepository } from '@/domains/upload/upload.repository.js';
 import { UploadService } from '@/domains/upload/upload.service.js';
 
+/** The storage port's delete, the only storage call offboarding makes. */
+const deleteObject = vi.fn().mockResolvedValue({ kind: 'deleted' });
+
 describe('UploadService offboarding', () => {
   beforeEach(() => {
-    vi.mocked(deleteObject).mockClear();
+    deleteObject.mockClear();
   });
 
   it('tombstoneAllByUserId deletes S3 objects before tombstoning rows', async () => {

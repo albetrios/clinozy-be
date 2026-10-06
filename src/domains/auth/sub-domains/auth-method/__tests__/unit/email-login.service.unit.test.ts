@@ -251,7 +251,7 @@ describe('EmailLoginService', () => {
 
     await service.sendCode({ email: user.email });
 
-    expect(redis.del).toHaveBeenCalledWith(`auth:email_code_verify_attempts:${user.id}`);
+    expect(redis.del).toHaveBeenCalledWith(`auth:email_code_verify_attempts:${user.public_id}`);
   });
 
   it('sendCode skips issuing (no signup, no email) when the per-email cooldown is already held', async () => {
@@ -562,7 +562,9 @@ describe('EmailLoginService', () => {
 
       await service.login({ email: user.email, code: 'ABCDEF' }, '127.0.0.1', 'vitest');
 
-      expect(vi.mocked(ensurePersonalOrganization)).toHaveBeenCalledWith(user.id);
+      expect(vi.mocked(ensurePersonalOrganization)).toHaveBeenCalledWith(
+        expect.objectContaining({ id: user.id, public_id: user.public_id }),
+      );
     } finally {
       env.PERSONAL_ORGANIZATION_ENABLED = false;
     }

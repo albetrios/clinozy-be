@@ -25,6 +25,9 @@ vi.mock('bullmq', () => ({
     add = queueAddMock;
 
     close = queueCloseMock;
+
+    // The mirror is never full here — the size cap has its own suite (dead-letter.unit.test.ts).
+    getWaitingCount = async () => 0;
   },
   UnrecoverableError: class UnrecoverableError extends Error {},
 }));
@@ -51,7 +54,11 @@ function buildJob(overrides: Partial<Job> = {}): Job {
   return {
     id: 'job-1',
     name: 'dispatch-notification',
-    data: { webhookId: 'webhook-99', eventType: 'invoice.paid' },
+    data: {
+      notificationPublicId: 'ntf_000000000000000000099',
+      organizationPublicId: 'org_public_abc',
+      userPublicId: 'usr_000000000000000000099',
+    },
     attemptsMade: 3,
     opts: { attempts: 3 },
     ...overrides,
@@ -164,7 +171,7 @@ describe('enqueueDeadLetter metadata', () => {
     expect(sentryCaptureExceptionMock).toHaveBeenCalledTimes(1);
   });
 
-  it('captures the replay keys for webhook, stripe, and notification jobs (bug 43)', async () => {
+  it('captures the summary keys of webhook, stripe and notification jobs (bug 43)', async () => {
     const { enqueueDeadLetter } = await import('@/infrastructure/queue/dlq/dead-letter.js');
     const { buildReplayJobPayload } = await import('@/infrastructure/queue/dlq/dlq-replay.util.js');
     const { WEBHOOK_DELIVERY_QUEUE_NAME } = await import(
@@ -182,30 +189,47 @@ describe('enqueueDeadLetter metadata', () => {
         queue: WEBHOOK_DELIVERY_QUEUE_NAME,
         jobName: 'deliver-webhook',
         data: {
-          deliveryAttemptId: 9,
+          deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
           organizationPublicId: 'org_public_abc',
           requestId: 'req-1',
           secret: 'should-not-be-captured',
         },
         expectedSummary: {
-          delivery_attempt_id: 9,
+          delivery_attempt_public_id: 'wda_9z3rura5kqvcv8zggriym',
           organization_public_id: 'org_public_abc',
         },
-        expectedReplay: { deliveryAttemptId: 9, organizationPublicId: 'org_public_abc' },
+        expectedReplay: {
+          deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
+          organizationPublicId: 'org_public_abc',
+        },
       },
       {
         queue: STRIPE_WEBHOOK_QUEUE_NAME,
         jobName: 'process-stripe-webhook',
         data: { stripeEventId: 'evt_123', requestId: 'req-2' },
         expectedSummary: { stripe_event_id: 'evt_123' },
-        expectedReplay: { stripeEventId: 'evt_123' },
+        // A record only: the ledger reclaim is the Stripe retry path, not a DLQ replay.
+        expectedReplay: null,
       },
       {
         queue: NOTIFICATION_QUEUE_NAME,
         jobName: 'dispatch-notification',
-        data: { notificationId: 77, organizationPublicId: 'org_public_xyz', requestId: 'req-3' },
-        expectedSummary: { notification_id: 77, organization_public_id: 'org_public_xyz' },
-        expectedReplay: { notificationId: 77, organizationPublicId: 'org_public_xyz' },
+        data: {
+          notificationPublicId: 'ntf_000000000000000000077',
+          organizationPublicId: 'org_public_xyz',
+          userPublicId: 'usr_000000000000000000077',
+          requestId: 'req-3',
+        },
+        expectedSummary: {
+          notification_public_id: 'ntf_000000000000000000077',
+          organization_public_id: 'org_public_xyz',
+          user_public_id: 'usr_000000000000000000077',
+        },
+        expectedReplay: {
+          notificationPublicId: 'ntf_000000000000000000077',
+          organizationPublicId: 'org_public_xyz',
+          userPublicId: 'usr_000000000000000000077',
+        },
       },
     ];
 
@@ -224,8 +248,11 @@ describe('enqueueDeadLetter metadata', () => {
       expect(summary.secret).toBeUndefined();
 
       const replayPayload = buildReplayJobPayload(data as unknown as DeadLetterJobData);
-      expect(replayPayload).not.toBeNull();
-      expect(replayPayload).toMatchObject(testCase.expectedReplay);
+      if (testCase.expectedReplay === null) {
+        expect(replayPayload).toBeNull();
+      } else {
+        expect(replayPayload).toMatchObject(testCase.expectedReplay);
+      }
     }
   });
 

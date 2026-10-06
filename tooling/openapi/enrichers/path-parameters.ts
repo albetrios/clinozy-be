@@ -22,6 +22,7 @@ const ENTITY_LABELS: Record<PublicIdEntity, string> = {
   upload: 'upload',
   userDataExport: 'data export',
   webhookDeliveryAttempt: 'webhook delivery attempt',
+  auditLog: 'audit log entry',
 };
 
 /** Stable, realistic 21-char example core (alphabet [a-z0-9]). */

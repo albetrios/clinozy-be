@@ -68,7 +68,6 @@
   "GET /livez": 200,
   "GET /metrics": 200,
   "GET /readyz": 200,
-  "PATCH /api/v1/billing/subscriptions/:subscription_id": 200,
   "PATCH /api/v1/notify/notifications/:notification_id/read": 200,
   "PATCH /api/v1/notify/webhooks/:webhook_id": 200,
   "PATCH /api/v1/tenancy/organization": 200,

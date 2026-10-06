@@ -13,7 +13,7 @@ const planPublicId = generatePublicId('plan');
 function buildRequest(overrides: Record<string, unknown> = {}): never {
   return attachPrincipalScope({
     auth: { userId: generatePublicId('user'), role: 'user' },
-    params: { organization_id: organizationPublicId, subscription_id: subscriptionPublicId },
+    params: { subscription_id: subscriptionPublicId },
     body: {},
     headers: {},
     id: 'request-id',
@@ -59,16 +59,6 @@ describe('createSubscriptionController auth matrix', () => {
     expect(service.create).not.toHaveBeenCalled();
   });
 
-  it('updateSubscription throws UnauthorizedError when request.auth is null', async () => {
-    await expect(
-      controller.updateSubscription(
-        buildRequest({ auth: null as never, body: { cancel_at_period_end: true } }),
-        buildReply(),
-      ),
-    ).rejects.toBeInstanceOf(UnauthorizedError);
-    expect(service.update).not.toHaveBeenCalled();
-  });
-
   it('cancelSubscription throws UnauthorizedError when request.auth is null', async () => {
     await expect(
       controller.cancelSubscription(buildRequest({ auth: null as never }), buildReply()),
@@ -96,7 +86,7 @@ describe('createSubscriptionController auth matrix', () => {
   it('ignores an invalid organization path param on mutating handlers — the signed claim decides', async () => {
     const request = buildRequest({
       auth: { userId: generatePublicId('user'), role: 'user', organizationPublicId },
-      params: { organization_id: 'not-a-public-id', subscription_id: subscriptionPublicId },
+      params: { subscription_id: subscriptionPublicId },
     });
     await controller.cancelSubscription(request, buildReply());
     expect(service.cancel).toHaveBeenCalledWith(

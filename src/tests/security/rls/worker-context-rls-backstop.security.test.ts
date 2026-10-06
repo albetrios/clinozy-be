@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { sql as drizzleSql, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { database } from '@/infrastructure/database/connection.js';
 import { notifications } from '@/domains/notify/sub-domains/notification/notification.schema.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -11,6 +11,7 @@ import {
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
+import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
 /**
  * Worker context RLS backstop.
@@ -23,7 +24,7 @@ import {
  * the `app.current_organization_public_id` GUC and RLS engages.
  *
  * The production worker connects as the non-bypass `clinozy_be_app` role; the test connection is
- * the RLS-exempt `core` superuser, so each callback issues `SET LOCAL ROLE clinozy_be_app` to
+ * the RLS-exempt Compose superuser, so each callback issues `SET LOCAL ROLE clinozy_be_app` to
  * reproduce production faithfully (the wrapper has already set the organization GUC for the transaction).
  */
 describe('Security: worker context RLS backstop (wrong-organization context cannot reach another tenant)', () => {
@@ -64,7 +65,7 @@ describe('Security: worker context RLS backstop (wrong-organization context cann
     const visibleUnderB = await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationB.public_id }),
       async (handle) => {
-        await handle.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+        await setLocalApplicationRole(handle);
         return handle
           .select({ id: notifications.id })
           .from(notifications)
@@ -78,7 +79,7 @@ describe('Security: worker context RLS backstop (wrong-organization context cann
     const visibleUnderA = await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationA.public_id }),
       async (handle) => {
-        await handle.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+        await setLocalApplicationRole(handle);
         return handle
           .select({ id: notifications.id })
           .from(notifications)
@@ -97,7 +98,7 @@ describe('Security: worker context RLS backstop (wrong-organization context cann
     await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationB.public_id }),
       async (handle) => {
-        await handle.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+        await setLocalApplicationRole(handle);
         await handle
           .update(notifications)
           .set({ title: 'tampered by organization B' })

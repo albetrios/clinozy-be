@@ -45,15 +45,16 @@ Dynamic gauges (pool, BullMQ depth, event loop) refresh on each scrape via [`ref
 | Metric | Type | Use |
 | ------ | ---- | --- |
 | `event_loop_lag_ms` | Gauge | Node event-loop delay p99 (ms) |
-| `pg_pool_active`, `pg_pool_idle`, `pg_pool_waiting` | Gauge | Postgres connection pressure (sampled from `pg_stat_activity`) |
+| `db_pool_connections` | Gauge (`state`: `active` / `idle` / `waiting`) | Postgres connection pressure (sampled from `pg_stat_activity`) |
 | `database_rls_active_checkouts` | Gauge | In-process organization-scoped RLS transaction checkouts held now; alert near `DATABASE_POOL_MAX` |
-| `database_rls_checkout_hold_seconds` | Histogram (`path`) | How long an organization-RLS checkout pins a pooled connection (`scoped_context` unit of work vs legacy `request_transaction`) |
+| `database_rls_checkout_hold_seconds` | Histogram (`path`) | How long an RLS checkout pins a pooled connection, by path: `scoped_context` (a unit of work), `session_context` (pre-auth session artifact), `maintenance_context` (bypass) |
 | `http_request_duration_seconds` | Histogram | Per-route latency; p95 via `histogram_quantile` |
-| `bullmq_jobs_waiting` | Gauge (`queue`) | Queue backlog per BullMQ queue |
+| `bullmq_queue_waiting` | Gauge (`queue`) | Queue backlog per BullMQ queue (with `bullmq_queue_active` / `_delayed` / `_failed`) |
+| `bullmq_provider_outage_parked_jobs_total` | Counter (`queue`, `provider`, `reason`) | Jobs parked because their third-party provider (`resend`, `stripe`, `s3`) was down (`reason=outage` — each one re-arms the queue's five-minute pause) or throttling us (`reason=throttle` — paused for the provider's `Retry-After`). A steady `throttle` rate means `RESEND_MAX_REQUESTS_PER_SECOND` is above what the Resend team allows (another environment may share it). Alert when it keeps rising for more than ~15 minutes — the provider is still down and that queue's backlog is waiting (not lost). It drains on its own at most five minutes after the provider recovers. See [workers-and-events.md → Provider outage pause](../../reference/runtime/workers-and-events.md#provider-outage-pause) |
 | `read_cache_requests_total` | Counter (`cache`, `result`) | Read-through cache lookups by cache name and result (`hit` \| `miss`). Alert on a **sustained drop**, never an absolute value — the right ratio differs per cache. A ratio near zero means that cache is pure overhead (a Redis round trip to still ask Postgres); a ratio that collapses after a deploy usually means an invalidation became too broad. The label is the cache's name, never its key, so cardinality stays bounded. See [read-caching.md](../../reference/runtime/read-caching.md) |
 | `process_unhandled_rejections_total` | Counter (`process`) | Non-fatal `unhandledRejection` events tolerated by the burst handler (`process="api"` / `"worker"`); alert on a sustained sub-threshold rate — it hides a persistent failing path that never trips the fatal burst exit |
 
-Also exported: `db_pool_connections{state}`, `bullmq_queue_*`, `http_requests_total`, default Node metrics (`nodejs_eventloop_lag_*`, heap), and domain gauges (e.g. `stripe_webhook_events_failed`). See [health-checks.md](../../reference/reliability/health-checks.md) and [workers-and-events.md](../../reference/runtime/workers-and-events.md).
+Also exported: `postgres_pool_max_connections`, `http_requests_total`, default Node metrics (`nodejs_eventloop_lag_*`, heap), and domain gauges (e.g. `stripe_webhook_events_failed`). See [health-checks.md](../../reference/reliability/health-checks.md) and [workers-and-events.md](../../reference/runtime/workers-and-events.md).
 
 `database_rls_checkout_hold_seconds` is the primary scale signal for production-readiness finding #2 (per-request checkout pinning): a rising p95 on `path="scoped_context"` means units of work are holding pooled connections too long (often external I/O leaking into an RLS transaction), and `database_rls_active_checkouts` approaching `DATABASE_POOL_MAX` predicts checkout starvation before requests start queuing.
 
@@ -61,8 +62,8 @@ Also exported: `db_pool_connections{state}`, `bullmq_queue_*`, `http_requests_to
 
 ```promql
 histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, route))
-pg_pool_waiting
-bullmq_jobs_waiting
+db_pool_connections{state="waiting"}
+sum by (queue) (bullmq_queue_waiting)
 event_loop_lag_ms
 max_over_time(database_rls_active_checkouts[5m])
 histogram_quantile(0.95, sum(rate(database_rls_checkout_hold_seconds_bucket[5m])) by (le, path))
@@ -114,7 +115,7 @@ Production defaults (override with `SENTRY_TRACES_SAMPLE_RATE` / `SENTRY_PROFILE
 
 Health-check transactions are dropped. Fast successful requests use deterministic baseline sampling (~5% prod) so error and slow paths stay fully covered at lower volume.
 
-Unit tests: `src/infrastructure/observability/__tests__/sentry.unit.test.ts`.
+Unit tests: `src/infrastructure/observability/__tests__/unit/sentry.unit.test.ts`.
 
 ---
 

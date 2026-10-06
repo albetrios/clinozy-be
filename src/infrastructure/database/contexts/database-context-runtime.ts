@@ -1,7 +1,7 @@
 /**
  * Database-context RUNTIME — the single plumbing module behind the three scope
  * patterns (principal / session / maintenance): the worker-context ALS, the
- * request-pinned-handle ALS, the `WorkerDatabaseContextError`, the worker
+ * pinned-handle ALS, the `WorkerDatabaseContextError`, the worker
  * statement/lock-timeout lift, and the repository handle-resolution guards.
  *
  * @remarks
@@ -17,10 +17,14 @@ import {
   isForceRlsTable,
   type ForceRlsTableRef,
 } from '@/infrastructure/database/utils/force-rls-tables.constants.js';
-import { sql as drizzleSql } from 'drizzle-orm';
+import { sql as drizzleSql, type SQL } from 'drizzle-orm';
 import { database } from '@/infrastructure/database/connection.js';
 import type { PostgresDatabaseHandle } from '@/infrastructure/database/utils/database-handle.types.js';
 import { getEnv } from '@/shared/config/env.config.js';
+import {
+  DATABASE_APP_ROLE,
+  DATABASE_MAINTENANCE_ROLE,
+} from '@/shared/constants/project-identity.constants.js';
 import { recordUnscopedDatabaseAccess } from '@/infrastructure/database/pool/unscoped-query-counter.js';
 
 /**
@@ -189,8 +193,8 @@ export function workerDatabaseContextForUser(userPublicId: string): WorkerDataba
 }
 
 /**
- * Drizzle handle pinned to a single postgres.js checkout for the lifetime of an
- * HTTP request transaction or worker-scoped context — alias of
+ * Drizzle handle pinned to a single postgres.js checkout for the lifetime of a
+ * unit of work (an HTTP service transaction or a worker-scoped context) — alias of
  * {@link PostgresDatabaseHandle} carried through ALS by the helpers in this file.
  */
 export type RequestScopedPostgresDatabase = PostgresDatabaseHandle;
@@ -323,6 +327,47 @@ export async function setLocalDatabaseConfig(
   value: string,
 ): Promise<void> {
   await databaseHandle.execute(drizzleSql`SELECT set_config(${key}, ${value}, true)`);
+}
+
+/** Anything that runs a Drizzle statement on one connection: a database or transaction handle. */
+export interface SqlStatementRunner {
+  execute: (query: SQL) => PromiseLike<unknown>;
+}
+
+/**
+ * Switches the surrounding transaction to the application role ({@link DATABASE_APP_ROLE}) — the
+ * RLS-subject role production connects as — so a connection opened as a privileged role
+ * (the local superuser, the operator) exercises production RLS until the transaction ends.
+ *
+ * @remarks
+ * - **Algorithm:** `SET LOCAL ROLE <DATABASE_APP_ROLE>`, the role name quoted as an identifier.
+ * - **Failure modes:** rejects when the connected role is not a member of the application role.
+ * - **Side effects:** the role switch lasts until the transaction commits or rolls back.
+ * - **Notes:** the one place the role name is spelled — from the generated identity constant —
+ *   for every RLS test that drops to the runtime posture.
+ */
+export async function setLocalApplicationRole(databaseHandle: SqlStatementRunner): Promise<void> {
+  await databaseHandle.execute(
+    drizzleSql`SET LOCAL ROLE ${drizzleSql.identifier(DATABASE_APP_ROLE)}`,
+  );
+}
+
+/**
+ * Switches the surrounding transaction to the maintenance role ({@link DATABASE_MAINTENANCE_ROLE}) —
+ * the RLS-subject role the maintenance pool connects as, and the only role the bypass policy arms
+ * admit — so a connection opened as a privileged role (the CI superuser, the operator) exercises the
+ * production maintenance posture until the transaction ends.
+ *
+ * @remarks
+ * - **Algorithm:** `SET LOCAL ROLE <DATABASE_MAINTENANCE_ROLE>`, the role name quoted as an identifier.
+ * - **Failure modes:** rejects when the connected role is not a member of the maintenance role.
+ * - **Side effects:** the role switch lasts until the transaction commits or rolls back.
+ * - **Notes:** backs the maintenance contexts' `useMaintenanceDatabaseRole` test option.
+ */
+export async function setLocalMaintenanceRole(databaseHandle: SqlStatementRunner): Promise<void> {
+  await databaseHandle.execute(
+    drizzleSql`SET LOCAL ROLE ${drizzleSql.identifier(DATABASE_MAINTENANCE_ROLE)}`,
+  );
 }
 
 /**

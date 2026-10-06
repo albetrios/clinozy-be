@@ -10,28 +10,8 @@ import {
   setBullMQQueueCounts,
 } from '@/infrastructure/observability/metrics/prometheus-metrics.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
-
-/** Primary job queues scraped for depth gauges (excludes per-source DLQ queues). */
-export const MONITORED_BULLMQ_QUEUE_NAMES = [
-  'mail',
-  'mail-outbox-sweeper',
-  'webhook-delivery',
-  'notification',
-  'stripe-webhook',
-  'stripe-webhook-event-reclaim',
-  'audit-retention',
-  'session-cleanup',
-  'webhook-tombstone-retention',
-  'organization-notification-policy-tombstone-retention',
-  'user-tombstone-retention',
-  'organization-tombstone-retention',
-  'membership-tombstone-retention',
-  'member-role-tombstone-retention',
-  'organization-api-key-tombstone-retention',
-  'upload-tombstone-retention',
-  'idempotency-cardinality',
-  'dlq-depth',
-] as const;
+import { WORKER_QUEUE_NAMES } from '@/infrastructure/queue/queue-catalog.js';
+import { getProviderPauseLeftMs } from '@/infrastructure/queue/worker-runtime/provider-pause.util.js';
 
 const queueClientsByName = new Map<string, Queue>();
 
@@ -41,8 +21,8 @@ const queueClientsByName = new Map<string, Queue>();
  * @remarks
  * Exported because the Redis-saturation sampler probes the same queues on its own tick and
  * was opening, script-loading and closing a fresh client per queue per pass. Sharing this
- * pool costs it nothing: every queue it watches is already in
- * {@link MONITORED_BULLMQ_QUEUE_NAMES}. Same reasoning as `getDeadLetterQueueClient`.
+ * pool costs it nothing: every queue it watches is in `WORKER_QUEUE_NAMES`. Same reasoning as
+ * `getDeadLetterQueueClient`.
  * Released by {@link closeBullMQMetricsQueues} at shutdown.
  */
 export function getOrCreateQueueClient(queueName: string): Queue {
@@ -58,7 +38,7 @@ export function getOrCreateQueueClient(queueName: string): Queue {
 
 /**
  * Refreshes `bullmq_queue_{waiting,active,delayed,failed}` gauges for every
- * queue in {@link MONITORED_BULLMQ_QUEUE_NAMES}. No-op when metrics are
+ * queue in `WORKER_QUEUE_NAMES` (`queue-catalog.ts`). No-op when metrics are
  * disabled; per-queue Redis errors are logged at warn and do not abort the pass.
  */
 export async function refreshBullMQQueueGauges(): Promise<void> {
@@ -67,7 +47,7 @@ export async function refreshBullMQQueueGauges(): Promise<void> {
   }
 
   await Promise.all(
-    MONITORED_BULLMQ_QUEUE_NAMES.map(async (queueName) => {
+    WORKER_QUEUE_NAMES.map(async (queueName) => {
       try {
         const queue = getOrCreateQueueClient(queueName);
         const counts = await queue.getJobCounts('waiting', 'active', 'delayed', 'failed');
@@ -93,16 +73,30 @@ export async function refreshBullMQQueueGauges(): Promise<void> {
  * Not gated by `isMetricsEnabled()` — readiness must work regardless of `METRICS_ENABLED`.
  * Only `waiting` is counted: `delayed` jobs (future-scheduled backoff retries) are not yet due,
  * and counting them would re-introduce the idle false-positive this lookup exists to avoid.
+ * Nor is a queue paused for its provider (`getProviderPauseLeftMs`): its work waits by design,
+ * and a worker restarted for it would only pause again — during an outage that was a restart loop.
  */
 export async function getQueuesWaitingJobCount(queueNames: readonly string[]): Promise<number> {
   const counts = await Promise.all(
-    queueNames.map((queueName) => getOrCreateQueueClient(queueName).getWaitingCount()),
+    queueNames.map(async (queueName) => {
+      const queue = getOrCreateQueueClient(queueName);
+      if ((await getProviderPauseLeftMs(queue)) > 0) return 0;
+      return queue.getWaitingCount();
+    }),
   );
   return counts.reduce((total, count) => total + count, 0);
 }
 
-/** Per-queue `waiting`/`delayed` job depth, surfaced on the verbose `/readyz` body. */
-export type QueueDepth = { queue: string; waiting: number; delayed: number };
+/**
+ * Per-queue `waiting`/`delayed` job depth, surfaced on the verbose `/readyz` body, with how long the
+ * queue's provider pause has left (`provider_pause_ms`, 0 when it is not paused).
+ */
+export type QueueDepth = {
+  queue: string;
+  waiting: number;
+  delayed: number;
+  provider_pause_ms: number;
+};
 
 /**
  * Reads `waiting` and `delayed` job counts per queue, reusing the pooled queue clients.
@@ -114,8 +108,17 @@ export type QueueDepth = { queue: string; waiting: number; delayed: number };
 export async function getQueueDepths(queueNames: readonly string[]): Promise<QueueDepth[]> {
   return Promise.all(
     queueNames.map(async (queueName) => {
-      const counts = await getOrCreateQueueClient(queueName).getJobCounts('waiting', 'delayed');
-      return { queue: queueName, waiting: counts.waiting ?? 0, delayed: counts.delayed ?? 0 };
+      const queue = getOrCreateQueueClient(queueName);
+      const [counts, providerPauseMs] = await Promise.all([
+        queue.getJobCounts('waiting', 'delayed'),
+        getProviderPauseLeftMs(queue),
+      ]);
+      return {
+        queue: queueName,
+        waiting: counts.waiting ?? 0,
+        delayed: counts.delayed ?? 0,
+        provider_pause_ms: providerPauseMs,
+      };
     }),
   );
 }

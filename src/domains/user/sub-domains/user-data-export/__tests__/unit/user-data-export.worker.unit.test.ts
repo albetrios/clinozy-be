@@ -33,6 +33,28 @@ vi.mock('bullmq', () => ({
   }),
 }));
 
+// The real factory adds the pause behaviour (its own suites cover it); here it only has to build
+// the worker through the mocked BullMQ above and record which provider the queue pauses for.
+const pausableWorkerState = vi.hoisted(() => ({ provider: undefined as string | undefined }));
+vi.mock('@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js', async () => {
+  const { Worker } = await import('bullmq');
+  return {
+    createProviderPausableWorker: (options: {
+      queueName: string;
+      provider: string;
+      processor: unknown;
+      workerOptions: unknown;
+    }) => {
+      pausableWorkerState.provider = options.provider;
+      return new (Worker as unknown as new (...arguments_: unknown[]) => unknown)(
+        options.queueName,
+        options.processor,
+        options.workerOptions,
+      );
+    },
+  };
+});
+
 vi.mock('@/infrastructure/queue/connection.js', () => ({
   getBullMQKeyPrefix: () => 'test:bull',
   getBullMQConnectionOptions: () => ({ host: 'redis.test' }),
@@ -76,7 +98,6 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
 const JOB_DATA = {
   exportPublicId: 'ude_aaaaaaaaaaaaaaaaaaaaa',
   userPublicId: 'usr_bbbbbbbbbbbbbbbbbbbbb',
-  userInternalId: 42,
   traceparent: '00-trace-span-01',
   tracestate: 'vendor=1',
 };
@@ -117,6 +138,8 @@ describe('user-data-export.worker', () => {
     expect(workerState.queueName).toBe('user-data-export');
     expect(handle.queueName).toBe('user-data-export');
     expect(handle.worker).toBeDefined();
+    // While S3 is down the queue pauses instead of spending attempts.
+    expect(pausableWorkerState.provider).toBe('s3');
   });
 
   it('takes concurrency from getWorkerConcurrencyNotify and merges the default worker options', async () => {
@@ -133,7 +156,12 @@ describe('user-data-export.worker', () => {
     const createUserDataExportWorker = await importWorkerFactory();
 
     createUserDataExportWorker(service);
-    const job = { name: 'process-user-data-export', data: JOB_DATA };
+    const job = {
+      name: 'process-user-data-export',
+      data: JOB_DATA,
+      attemptsMade: 0,
+      opts: { attempts: 3 },
+    };
     await workerState.processor?.(job);
 
     expect(parseJobDataOrDeadLetterMock).toHaveBeenCalledWith(
@@ -144,7 +172,26 @@ describe('user-data-export.worker', () => {
       'process-user-data-export',
       expect.any(Function),
     );
-    expect(runUserDataExportJobMock).toHaveBeenCalledWith(JOB_DATA, service);
+    // Not the last of three attempts: a failure leaves the export processing for the retry.
+    expect(runUserDataExportJobMock).toHaveBeenCalledWith(JOB_DATA, service, {
+      isFinalAttempt: false,
+    });
+  });
+
+  it('tells the processor when this is the last attempt', async () => {
+    const createUserDataExportWorker = await importWorkerFactory();
+
+    createUserDataExportWorker(service);
+    await workerState.processor?.({
+      name: 'process-user-data-export',
+      data: JOB_DATA,
+      attemptsMade: 2,
+      opts: { attempts: 3 },
+    });
+
+    expect(runUserDataExportJobMock).toHaveBeenCalledWith(JOB_DATA, service, {
+      isFinalAttempt: true,
+    });
   });
 
   it('does not run the job when the payload fails validation (poison job is dead-lettered)', async () => {
@@ -179,7 +226,12 @@ describe('user-data-export.worker', () => {
     createUserDataExportWorker(service);
 
     await expect(
-      workerState.processor?.({ name: 'process-user-data-export', data: JOB_DATA }),
+      workerState.processor?.({
+        name: 'process-user-data-export',
+        data: JOB_DATA,
+        attemptsMade: 0,
+        opts: { attempts: 3 },
+      }),
     ).rejects.toThrow('export-bundling-failed');
   });
 });

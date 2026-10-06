@@ -6,16 +6,16 @@ import {
 } from '@/infrastructure/observability/metrics/metrics.js';
 import { env, getEnv } from '@/shared/config/env.config.js';
 import { isBearerTokenValid } from '@/shared/utils/security/bearer-token.util.js';
-import {
-  getQueuesWaitingJobCount,
-  MONITORED_BULLMQ_QUEUE_NAMES,
-} from '@/infrastructure/observability/metrics/bullmq-metrics.js';
+import { getQueuesWaitingJobCount } from '@/infrastructure/observability/metrics/bullmq-metrics.js';
 import {
   isWorkerStalled,
   isWorkerThroughputStalled,
   readWorkerQueueHeartbeats,
-  WORKER_THROUGHPUT_QUEUE_NAMES,
 } from '@/infrastructure/queue/worker-runtime/worker-queue-heartbeat.js';
+import {
+  WORKER_QUEUE_NAMES,
+  WORKER_THROUGHPUT_QUEUE_NAMES,
+} from '@/infrastructure/queue/queue-catalog.js';
 import { runDependencyReadinessProbes } from '@/shared/utils/infrastructure/readiness-probes.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
@@ -92,7 +92,7 @@ function handleLivenessProbe(response: http.ServerResponse): void {
 async function handleReadinessProbe(response: http.ServerResponse): Promise<void> {
   const [readiness, worker_queues, throughputHeartbeats] = await Promise.all([
     runDependencyReadinessProbes(),
-    readWorkerQueueHeartbeats(MONITORED_BULLMQ_QUEUE_NAMES),
+    readWorkerQueueHeartbeats(WORKER_QUEUE_NAMES),
     readWorkerQueueHeartbeats(WORKER_THROUGHPUT_QUEUE_NAMES),
   ]);
   const throughputStalled = isWorkerThroughputStalled(
@@ -188,7 +188,7 @@ async function handleHealthRequest(
 export async function startWorkerHealthServer(): Promise<void> {
   if (healthServer) return;
 
-  const port = env.WORKER_HEALTH_PORT;
+  const { WORKER_HEALTH_PORT: port, HTTP_BIND_HOST: host } = getEnv();
 
   healthServer = http.createServer((request, response) => {
     const url = request.url?.split('?')[0] ?? '';
@@ -202,10 +202,10 @@ export async function startWorkerHealthServer(): Promise<void> {
 
   await new Promise<void>((resolve, reject) => {
     healthServer?.once('error', reject);
-    healthServer?.listen(port, env.HTTP_BIND_HOST, () => resolve());
+    healthServer?.listen(port, host, () => resolve());
   });
 
-  logger.info({ port, host: env.HTTP_BIND_HOST }, 'worker.health.server.started');
+  logger.info({ port, host }, 'worker.health.server.started');
 }
 
 /**

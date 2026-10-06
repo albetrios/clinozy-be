@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runUserDataExportJob } from '@/domains/user/sub-domains/user-data-export/workers/user-data-export.processor.js';
 import { UserDataExportCancelledError } from '@/domains/user/sub-domains/user-data-export/user-data-export.types.js';
+import {
+  CircuitBreakerOpenError,
+  MANAGED_CIRCUIT_BREAKERS,
+} from '@/infrastructure/resilience/circuit-breaker.js';
 
 const fakeDatabaseHandle = { __fake: true } as const;
 
@@ -29,8 +33,12 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
   logger: { info: loggerInfoMock, warn: vi.fn(), error: loggerErrorMock },
 }));
 
+/** The owner's internal id — read inside the job's user scope, never carried by the job. */
+const OWNER_INTERNAL_ID = 42;
+
 function createServiceMock() {
   return {
+    resolveExportOwnerInternalId: vi.fn().mockResolvedValue(OWNER_INTERNAL_ID),
     isExportJobCancelled: vi.fn(),
     markProcessing: vi.fn(),
     buildExportPayload: vi.fn(),
@@ -42,7 +50,6 @@ function createServiceMock() {
 const jobData = {
   exportPublicId: 'exp_public_id_001',
   userPublicId: 'usr_public_id_001',
-  userInternalId: 42,
 };
 
 describe('user-data-export.processor', () => {
@@ -60,18 +67,19 @@ describe('user-data-export.processor', () => {
 
     await runUserDataExportJob(jobData, service as never);
 
+    expect(service.resolveExportOwnerInternalId).toHaveBeenCalledWith(jobData.userPublicId);
     expect(service.isExportJobCancelled).toHaveBeenCalledTimes(2);
     expect(service.isExportJobCancelled).toHaveBeenCalledWith(
       expect.objectContaining({
         exportPublicId: jobData.exportPublicId,
-        userInternalId: jobData.userInternalId,
+        userInternalId: OWNER_INTERNAL_ID,
         userPublicId: jobData.userPublicId,
         databaseHandle: fakeDatabaseHandle,
       }),
     );
     expect(service.markProcessing).toHaveBeenCalledWith(
       jobData.exportPublicId,
-      jobData.userInternalId,
+      OWNER_INTERNAL_ID,
       fakeDatabaseHandle,
       jobData.userPublicId,
     );
@@ -84,10 +92,21 @@ describe('user-data-export.processor', () => {
       body: Buffer;
     };
     expect(completeArguments.exportPublicId).toBe(jobData.exportPublicId);
-    expect(completeArguments.userInternalId).toBe(jobData.userInternalId);
+    expect(completeArguments.userInternalId).toBe(OWNER_INTERNAL_ID);
     expect(completeArguments.userPublicId).toBe(jobData.userPublicId);
     expect(Buffer.isBuffer(completeArguments.body)).toBe(true);
     expect(service.completeExportJob.mock.calls[0]?.[1]).toBeUndefined();
+    expect(service.failExportJob).not.toHaveBeenCalled();
+  });
+
+  it('exits without retry when the owner no longer exists', async () => {
+    const service = createServiceMock();
+    service.resolveExportOwnerInternalId.mockResolvedValue(null);
+
+    await expect(runUserDataExportJob(jobData, service as never)).resolves.toBeUndefined();
+
+    expect(service.isExportJobCancelled).not.toHaveBeenCalled();
+    expect(service.markProcessing).not.toHaveBeenCalled();
     expect(service.failExportJob).not.toHaveBeenCalled();
   });
 
@@ -138,9 +157,41 @@ describe('user-data-export.processor', () => {
 
     expect(service.failExportJob).toHaveBeenCalledWith(
       jobData.exportPublicId,
-      jobData.userInternalId,
+      OWNER_INTERNAL_ID,
       'export_failed',
       fakeDatabaseHandle,
     );
+  });
+
+  it('leaves the export processing on an attempt that is not the last — BullMQ retries it', async () => {
+    vi.spyOn(MANAGED_CIRCUIT_BREAKERS.s3, 'getState').mockResolvedValue('CLOSED');
+    const service = createServiceMock();
+    service.isExportJobCancelled.mockResolvedValue(false);
+    service.markProcessing.mockResolvedValue(undefined);
+    const failure = new Error('boom');
+    service.buildExportPayload.mockRejectedValue(failure);
+
+    await expect(
+      runUserDataExportJob(jobData, service as never, { isFinalAttempt: false }),
+    ).rejects.toBe(failure);
+
+    expect(service.failExportJob).not.toHaveBeenCalled();
+  });
+
+  it('never marks the export failed for an S3 outage, even on the last attempt', async () => {
+    // Marked failed, the user could request a second export while S3 was down; when the parked
+    // job resumed, two exports were built.
+    const service = createServiceMock();
+    service.isExportJobCancelled.mockResolvedValue(false);
+    service.markProcessing.mockResolvedValue(undefined);
+    service.buildExportPayload.mockResolvedValue({});
+    const outage = new CircuitBreakerOpenError('s3', 15_000, 'Circuit breaker "s3" is OPEN');
+    service.completeExportJob.mockRejectedValue(outage);
+
+    await expect(
+      runUserDataExportJob(jobData, service as never, { isFinalAttempt: true }),
+    ).rejects.toBe(outage);
+
+    expect(service.failExportJob).not.toHaveBeenCalled();
   });
 });

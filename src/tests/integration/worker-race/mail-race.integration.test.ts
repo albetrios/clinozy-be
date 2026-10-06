@@ -22,7 +22,7 @@ describe('Integration: mail worker concurrency race', () => {
   });
 
   it('sends email exactly once when parallel workers race the same outbox row', async () => {
-    const mailOutboxId = await insertMailOutbox({
+    const mailOutboxToken = await insertMailOutbox({
       to: ['race@example.com'],
       subject: 'Race test',
       html: '<p>Hello</p>',
@@ -36,7 +36,7 @@ describe('Integration: mail worker concurrency race', () => {
     const results = await Promise.allSettled(
       Array.from({ length: PARALLEL_WORKER_COUNT }, (_, index) =>
         processMailOutboxJob(
-          { mailOutboxId, requestId: `req-mail-race-${String(index)}` },
+          { mailOutboxToken, requestId: `req-mail-race-${String(index)}` },
           { jobId: `job-mail-race-${String(index)}`, requestId: `req-mail-race-${String(index)}` },
         ),
       ),
@@ -45,7 +45,8 @@ describe('Integration: mail worker concurrency race', () => {
     const sentOnce = results.some(
       (result) =>
         result.status === 'fulfilled' &&
-        (result.value as { messageId?: string }).messageId === 'msg_race_single',
+        result.value.outcome === 'sent' &&
+        result.value.messageId === 'msg_race_single',
     );
 
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
@@ -54,7 +55,7 @@ describe('Integration: mail worker concurrency race', () => {
     const rows = await getOperatorDatabase()
       .select()
       .from(mail_outbox)
-      .where(eq(mail_outbox.id, mailOutboxId));
+      .where(eq(mail_outbox.resend_idempotency_token, mailOutboxToken));
 
     expect(rows[0]?.status).toBe('sent');
     expect(rows[0]?.resend_message_id).toBe('msg_race_single');

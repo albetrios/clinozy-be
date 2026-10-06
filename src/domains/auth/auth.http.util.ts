@@ -72,42 +72,48 @@ const SESSION_COOKIE_SEPARATOR = '.';
 /** Separator between a refresh secret's random part and its issuance MAC. */
 const REFRESH_SECRET_MAC_SEPARATOR = '~';
 
-function refreshSecretMac(options: { userId: number; randomPart: string }): string {
+function refreshSecretMac(options: { userPublicId: string; randomPart: string }): string {
   return createHmac('sha256', deriveSecretsSubKey('refresh-secret-mac'))
-    .update(`refresh-secret:${options.userId}:${options.randomPart}`)
+    .update(`refresh-secret:${options.userPublicId}:${options.randomPart}`)
     .digest('base64url');
 }
 
 /**
  * Generates a refresh secret the server can later recognize as its own: 32 random bytes plus an
- * HMAC binding them to the session's user (`<random>~<mac>`, base64url parts).
+ * HMAC binding them to the session's user by public id (`<random>~<mac>`, base64url parts).
  *
  * @remarks
  * The MAC is what lets refresh-token reuse detection tell a REPLAYED issued secret (revoke the
  * user's session family) from a FABRICATED one (just 401) — see
  * {@link isIssuedRefreshSecret}. Without it, anyone who learns a session id could make up a
  * secret and log the user out everywhere. Bound to the user rather than the session because the
- * session's public id is assigned by the insert, after the first secret is minted.
+ * session's public id is assigned by the insert, after the first secret is minted; bound to the
+ * user's public id because the secret lives outside Postgres, where only public ids belong.
  */
-export function generateRefreshSecret(options: { userId: number }): string {
+export function generateRefreshSecret(options: { userPublicId: string }): string {
   const randomPart = randomBytes(32).toString('base64url');
-  return `${randomPart}${REFRESH_SECRET_MAC_SEPARATOR}${refreshSecretMac({ userId: options.userId, randomPart })}`;
+  return `${randomPart}${REFRESH_SECRET_MAC_SEPARATOR}${refreshSecretMac({ userPublicId: options.userPublicId, randomPart })}`;
 }
 
 /**
- * Whether `refreshSecret` was issued by this server for `userId` — its MAC verifies in constant
- * time. A secret minted before issuance MACs existed (no `~`) returns false.
+ * Whether `refreshSecret` was issued by this server for the user `userPublicId` — its MAC
+ * verifies in constant time. A secret without a `~<mac>` part returns false.
  *
  * @remarks
  * Proves issuance, not currency: a retired secret still verifies. Reuse detection combines it
  * with a failed rotation — an issued secret that no longer rotates is a replay.
  */
-export function isIssuedRefreshSecret(options: { userId: number; refreshSecret: string }): boolean {
+export function isIssuedRefreshSecret(options: {
+  userPublicId: string;
+  refreshSecret: string;
+}): boolean {
   const separatorIndex = options.refreshSecret.lastIndexOf(REFRESH_SECRET_MAC_SEPARATOR);
   if (separatorIndex <= 0) return false;
   const randomPart = options.refreshSecret.slice(0, separatorIndex);
   const presentedMac = Buffer.from(options.refreshSecret.slice(separatorIndex + 1));
-  const expectedMac = Buffer.from(refreshSecretMac({ userId: options.userId, randomPart }));
+  const expectedMac = Buffer.from(
+    refreshSecretMac({ userPublicId: options.userPublicId, randomPart }),
+  );
   return presentedMac.length === expectedMac.length && timingSafeEqual(presentedMac, expectedMac);
 }
 
@@ -116,7 +122,7 @@ export function formatSessionCookieValue(sessionPublicId: string, refreshSecret:
   return `${sessionPublicId}${SESSION_COOKIE_SEPARATOR}${refreshSecret}`;
 }
 
-/** Parses {@link SESSION_COOKIE_NAME}; returns null for legacy session-id-only cookies. */
+/** Parses {@link SESSION_COOKIE_NAME} (`<sessionPublicId>.<refreshSecret>`); returns null when either part is missing. */
 export function parseSessionCookieValue(
   rawValue: string,
 ): { sessionPublicId: string; refreshSecret: string } | null {

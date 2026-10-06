@@ -9,10 +9,10 @@ import type { FastifyInstance } from 'fastify';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { buildIdempotencyCacheKey } from '@/shared/utils/idempotency/idempotency-key.util.js';
+import { buildInFlightIdempotencyEntry } from '@/tests/helpers/idempotency-entry.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
   injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
   injectUnauthenticated,
 } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -375,7 +375,7 @@ describe('Webhook Sub-Domain — Integration', () => {
         createdByUserId: user.id,
       });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PATCH',
         url: testApiPath(`/notify/webhooks/${webhook.public_id}`),
         token,
@@ -441,7 +441,7 @@ describe('Webhook Sub-Domain — Integration', () => {
         createdByUserId: user.id,
       });
 
-      const firstRotation = await injectAuthenticatedOrganizationMutation(app, {
+      const firstRotation = await injectAuthenticated(app, {
         method: 'PATCH',
         url: testApiPath(`/notify/webhooks/${webhook.public_id}`),
         token,
@@ -496,9 +496,18 @@ describe('Webhook Sub-Domain — Integration', () => {
         userId: user.public_id,
         organizationId: organization.public_id,
       });
+      const payload = {
+        url: 'https://example.com/idem-in-flight',
+        events: ['subscription.updated'],
+      };
       await redisConnection.set(
         cacheKey,
-        JSON.stringify({ state: 'in_flight', claimedAt: Date.now() }),
+        buildInFlightIdempotencyEntry({
+          method: 'POST',
+          routePath: testApiPath('/notify/webhooks'),
+          // The fingerprint covers the body as validated, schema defaults included.
+          body: { ...payload, is_enabled: true },
+        }),
         'EX',
         60,
       );
@@ -508,7 +517,7 @@ describe('Webhook Sub-Domain — Integration', () => {
         url: testApiPath('/notify/webhooks'),
         token,
         headers: { 'x-idempotency-key': idempotencyKey },
-        payload: { url: 'https://example.com/idem-in-flight', events: ['subscription.updated'] },
+        payload,
       });
 
       expect(response.statusCode, response.body).toBe(409);

@@ -31,6 +31,7 @@ import { resolveStoredMediaReadUrl } from '@/shared/utils/infrastructure/media-u
 import { provisionOrganizationWithOwner } from './organization-provisioning.js';
 import { invalidateOrganizationPermissions } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
 import { buildOrganizationLogoKeyPrefix } from '@/domains/upload/upload.constants.js';
+import { isSvgContentType } from '@/domains/upload/utils/upload-svg.util.js';
 import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { isPostgresUniqueViolation } from '@/shared/utils/infrastructure/postgres-error.util.js';
@@ -64,7 +65,7 @@ export type OrganizationSubscriptionOffboardingPort = {
  *   (logo confirmation requires the upload service) or silently skip the
  *   upload-tombstone / subscription-cancel step.
  * - **Side effects:** none on construction; downstream calls invoke
- *   `UploadService.tombstoneAllByOrganizationId`, `assertKeyConfirmed`, and
+ *   `UploadService.tombstoneAllByOrganizationId`, `assertKeyConfirmedForOwner`, and
  *   `OrganizationSubscriptionOffboardingPort.cancelActiveForOrganizationOffboarding`.
  * - **Notes:** the public {@link OrganizationService.offboardingUploadService}
  *   reference exists for composition-root assertions only.
@@ -122,8 +123,7 @@ export class OrganizationService {
    * Serializes an organization row to {@link OrganizationOutput} with `logo_url`
    * resolved to a short-lived signed read URL (TEN-07: private bucket +
    * signed-on-read). The presign is a network-free local signature, so it is safe
-   * to call from within a database context. Legacy rows that stored an absolute
-   * public URL are returned as-is.
+   * to call from within a database context.
    */
   private async toOrganizationOutput(
     row: Parameters<typeof serializeOrganization>[0],
@@ -135,31 +135,20 @@ export class OrganizationService {
     };
   }
 
-  private extractOrganizationLogoStorageKey(
-    public_id: string,
-    logo_url: string | null,
-  ): string | null {
-    if (!logo_url) return null;
-    const prefix = buildOrganizationLogoKeyPrefix(public_id);
-    if (logo_url.startsWith(prefix)) return logo_url;
-    const keyMatch = /organization-logos\/[^?#]+/.exec(logo_url);
-    return keyMatch?.[0] ?? null;
-  }
-
   /**
-   * Best-effort reclaim of the S3 object backing an owned organization-logo URL. Prefix-guarded
-   * (external URLs are ignored). Does NOT mutate the column — callers decide what to write — so it
-   * is reused by per-asset delete, logo replacement, and offboarding.
+   * Best-effort reclaim of the S3 object behind the stored organization-logo key. The column only
+   * ever holds a key written by `uploadLogo`; the prefix guard keeps a reclaim from reaching any
+   * object outside this organization's logo prefix. Does NOT mutate the column — callers decide
+   * what to write — so it is reused by per-asset delete, logo replacement, and offboarding.
    */
   private async deleteOwnedOrganizationLogoObject(
     public_id: string,
     logo_url: string | null,
   ): Promise<void> {
-    const storageKey = this.extractOrganizationLogoStorageKey(public_id, logo_url);
-    if (!storageKey) return;
-    const objectDeleted = await this.objectStorage.deleteObject(storageKey);
-    if (!objectDeleted) {
-      logger.warn({ publicId: public_id, logoKey: storageKey }, 'organization.logo.deleteFailed');
+    if (!logo_url?.startsWith(buildOrganizationLogoKeyPrefix(public_id))) return;
+    const objectDelete = await this.objectStorage.deleteObject(logo_url);
+    if (objectDelete.kind !== 'deleted') {
+      logger.warn({ publicId: public_id, logoKey: logo_url }, 'organization.logo.deleteFailed');
     }
   }
 
@@ -378,7 +367,7 @@ export class OrganizationService {
    * so the `organizations_user_discovery` and `memberships_user_self_discovery`
    * RLS policies see `app.current_user_public_id` (introduced by migration
    * `20260520000004_organization_discovery_and_invitation_lookup_rls.sql`). Without
-   * this wrap the call returns empty when `DATABASE_RLS_SCOPED_CONTEXTS=true`.
+   * this wrap the call returns empty.
    */
   async listForUser(query: unknown, user_public_id: string) {
     const parsed = validateListOrganizationsQuery(query);
@@ -613,16 +602,26 @@ export class OrganizationService {
     if (!this.offboardingUploadService) {
       throw new Error('UploadService is not wired for logo-attach confirmation');
     }
-    // External I/O (S3) runs outside the DB context.
+    // The database first: the key is caller-supplied, and only a confirmed upload of THIS
+    // organization may cost a storage call. The type checked is the one verified at confirm.
+    const { mimeType } = await withAppDatabaseContext(scope, async () => {
+      const organization = await this.repository.findByPublicId(public_id);
+      if (!organization) throw new NotFoundError('Organization');
+      return this.offboardingUploadService!.assertKeyConfirmedForOwner({
+        fileKey: parsed.key,
+        organizationInternalId: organization.id,
+      });
+    });
+    if (isSvgContentType(mimeType)) {
+      throw new ValidationError('errors:uploadContentTypeNotAllowed', undefined, {
+        key: ['SVG logos are not allowed for security reasons'],
+      });
+    }
+    // External I/O (S3) runs outside the DB context. Confirmed, yet gone from storage: refuse.
     const metadata = await this.objectStorage.headObject(parsed.key);
     if (!metadata) {
       throw new ValidationError('errors:validation.logoNotFound', undefined, {
         key: ['Object does not exist'],
-      });
-    }
-    if (metadata.contentType === 'image/svg+xml') {
-      throw new ValidationError('errors:uploadContentTypeNotAllowed', undefined, {
-        key: ['SVG logos are not allowed for security reasons'],
       });
     }
     // TEN-07: store the object KEY (private bucket + signed-on-read), not a permanent
@@ -631,8 +630,8 @@ export class OrganizationService {
     const { serialized, previousLogoUrl } = await withAppDatabaseContext(scope, async () => {
       const organization = await this.repository.findByPublicId(public_id);
       if (!organization) throw new NotFoundError('Organization');
-      // Bind the upload row to THIS organization explicitly (route-audit L2) — not only via the
-      // key prefix — so the ownership check holds even for a future caller that doesn't derive it.
+      // Re-bound in the writing transaction (route-audit L2) — not only via the key prefix, and
+      // not only before the storage call — so the upload cannot be deleted between check and write.
       await this.offboardingUploadService!.assertKeyConfirmedForOwner({
         fileKey: parsed.key,
         organizationInternalId: organization.id,

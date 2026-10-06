@@ -1,12 +1,42 @@
+import type { S3HeadResult } from '@/infrastructure/storage/s3-error.util.js';
+
 /**
- * Subset of S3 `HeadObject` metadata that the upload domain trusts after a successful
- * `verifyUploadedObject` check. Either field may be `undefined` when the object exists
- * but the field is not surfaced (rare, e.g. some S3-compatible providers).
+ * Subset of S3 `HeadObject` metadata. Either field may be `undefined` when the object exists but
+ * the provider does not surface it.
  */
 export interface UploadedObjectMetadata {
   contentType: string | undefined;
   contentLength: number | undefined;
 }
+
+/**
+ * Outcome of {@link ObjectStoragePort.verifyUploadedObject}: the object matches what the client
+ * declared, or the reason it does not. A storage failure is never a verdict — it is thrown.
+ */
+export type UploadedObjectVerdict =
+  | { kind: 'verified'; metadata: UploadedObjectMetadata }
+  | {
+      kind: 'rejected';
+      reason:
+        | 'not_found'
+        | 'content_length_unknown'
+        | 'content_length_mismatch'
+        | 'content_type_mismatch';
+    };
+
+/**
+ * Outcome of {@link ObjectStoragePort.deleteObject}. S3 deletes are idempotent: a key that does
+ * not exist reports `deleted`. `circuitOpen` says storage is refusing every call right now, so a
+ * caller working through a batch should stop rather than walk the rest of it.
+ */
+export type ObjectDeleteResult = { kind: 'deleted' } | { kind: 'failed'; circuitOpen: boolean };
+
+/**
+ * Outcome of {@link ObjectStoragePort.copyObject}: `source_changed` when the copy was pinned to a
+ * `sourceETag` and the source object no longer has it (someone wrote it again since it was read).
+ * A storage failure is never an outcome — it is thrown.
+ */
+export type ObjectCopyResult = { kind: 'copied' } | { kind: 'source_changed' };
 
 /** Browser-postable presigned upload: a form `url` plus hidden `fields` to submit with the file. */
 export interface PresignedUploadPost {
@@ -39,16 +69,26 @@ export interface ObjectStoragePort {
     metadata?: Record<string, string>;
   }): Promise<PresignedUploadPost>;
 
+  /**
+   * HEADs `key` and compares it with what the client declared at create time. Throws only when
+   * storage itself fails (an `ExternalServiceError`, or the `CircuitBreakerOpenError` an open
+   * circuit raises) — never mark an upload FAILED on a throw.
+   */
   verifyUploadedObject(
     key: string,
     expected: { contentType: string; contentLength: number },
-  ): Promise<UploadedObjectMetadata>;
+  ): Promise<UploadedObjectVerdict>;
 
-  headObject(
-    key: string,
-  ): Promise<{ contentType: string | undefined; contentLength: number | undefined } | null>;
+  /**
+   * HEAD as a result: `found`, `not_found` (an explicit 404 — the only outcome that may drive
+   * destructive cleanup), or `transient_error` for every other failure.
+   */
+  headObjectResult(key: string): Promise<S3HeadResult<UploadedObjectMetadata>>;
 
-  deleteObject(key: string): Promise<boolean>;
+  /** HEAD for callers that only branch on existence: `null` when not found, throws on a failure. */
+  headObject(key: string): Promise<UploadedObjectMetadata | null>;
+
+  deleteObject(key: string): Promise<ObjectDeleteResult>;
 
   putObject(options: {
     key: string;
@@ -63,31 +103,30 @@ export interface ObjectStoragePort {
    * served object can never be overwritten via the client's still-valid presigned upload URL. The
    * destination `contentType` is set on the copy so the served object carries the verified type.
    * `sourceETag` (sec-re-10) is the S3 ETag captured at the verify step; when supplied the
-   * adapter passes it as `CopySourceIfMatch` so the COPY fails with `PreconditionFailed` if the
-   * source bytes changed between verify and copy (closes the pending-PUT replay TOCTOU window).
+   * adapter passes it as `CopySourceIfMatch`, and a source whose bytes changed between verify and
+   * copy reports `source_changed` instead of being copied (closes the pending-PUT replay TOCTOU
+   * window). Storage failures throw.
    */
   copyObject(options: {
     sourceKey: string;
     destinationKey: string;
     contentType: string;
     sourceETag?: string;
-  }): Promise<void>;
+  }): Promise<ObjectCopyResult>;
 
   getObject(key: string): Promise<{ body: Buffer; contentType: string | undefined }>;
 
   /**
-   * Fetches the first `byteCount` bytes of an S3 object via a ranged GET. Used for magic-byte
-   * verification so large uploads are not fully buffered in the process. Returns `null` on
-   * S3 errors (logged internally); throws when `S3_BUCKET` is unset. `eTag` (sec-re-10) is the
-   * S3 ETag of the object at the time of read; callers thread it into `copyObject` to close
-   * the verify→copy TOCTOU window.
+   * Fetches the first `byteCount` bytes of an object via a ranged GET, for magic-byte
+   * verification without buffering the whole upload. `null` when the object does not exist;
+   * throws on any other failure (including a response without an ETag). `eTag` (sec-re-10) is the
+   * object's ETag at the time of the read; callers pass it to `copyObject` to close the
+   * verify→copy TOCTOU window.
    */
   getObjectFirstBytes(
     key: string,
     byteCount: number,
-  ): Promise<{ body: Buffer; contentType: string | undefined; eTag?: string } | null>;
-
-  getObjectUrl(key: string): string;
+  ): Promise<{ body: Buffer; contentType: string | undefined; eTag: string } | null>;
 
   createPresignedDownloadUrl(options: { key: string; expiresInSeconds: number }): Promise<string>;
 }

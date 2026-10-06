@@ -12,7 +12,6 @@ import {
 } from 'drizzle-orm/pg-core';
 import { authSchema } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
-import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 
 /**
  * `auth.user_notification_preferences` — per-user opt-in/opt-out per
@@ -23,15 +22,8 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
  * `IN_APP` by check constraint.
  *
  * @remarks
- * sec-U7: the `organization_id` column is retained for migration rollback
- * safety, but the RLS policy no longer carries an organization branch and a
- * `chk_user_notif_prefs_no_org` CHECK constraint pins the column to NULL.
- * Organization-scoped notification preferences live in the
- * `tenancy.organization_notification_policies` table, which is
- * membership-gated. The schema column + FK are kept (rather than dropped) so
- * a rollback can re-permit organization-scoped rows without an ALTER TABLE rewrite if
- * the policy change needs to be undone; a follow-up cleanup PR may drop the
- * column once the soak window passes.
+ * Preferences are global to the user. Organization-scoped notification preferences live in
+ * `tenancy.organization_notification_policies`, which is membership-gated.
  */
 export const user_notification_preferences = authSchema
   .table(
@@ -41,10 +33,6 @@ export const user_notification_preferences = authSchema
       user_id: bigint('user_id', { mode: 'number' })
         .notNull()
         .references(() => users.id, { onDelete: 'cascade' }),
-      organization_id: bigint('organization_id', { mode: 'number' }).references(
-        () => organizations.id,
-        { onDelete: 'set null' },
-      ),
       notification_type: varchar('notification_type', { length: 50 }).notNull(),
       channel: varchar('channel', { length: 20 }).notNull(),
       is_enabled: boolean('is_enabled').notNull().default(true),
@@ -73,20 +61,11 @@ export const user_notification_preferences = authSchema
         table.notification_type,
         table.channel,
       ),
-      // Backs the organization_id FK for the organization tombstone purge. chk_user_notif_prefs_no_org
-      // keeps new rows NULL, so this stays near-empty. Added by migration 20260923152433.
-      index('idx_user_notification_preferences_organization_id')
-        .on(table.organization_id)
-        .where(sql`${table.organization_id} IS NOT NULL`),
       check(
         'chk_user_notif_prefs_channel',
         sql`${table.channel} IN ('EMAIL', 'SMS', 'WEB_PUSH', 'IN_APP')`,
       ),
       check('chk_user_notif_prefs_updated', sql`${table.updated_at} >= ${table.created_at}`),
-      // sec-U7: defense-in-depth pin — non-null org_id is rejected at the
-      // schema level even when application validation is bypassed (raw SQL,
-      // future direct repository write).
-      check('chk_user_notif_prefs_no_org', sql`${table.organization_id} IS NULL`),
       pgPolicy('user_notification_preferences_user_access', {
         as: 'permissive',
         for: 'all',

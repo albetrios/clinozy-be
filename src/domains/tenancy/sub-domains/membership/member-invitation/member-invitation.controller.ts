@@ -7,6 +7,10 @@ import {
   requirePrincipal,
 } from '@/shared/utils/http/request.util.js';
 import { validatePublicIdParam } from '@/shared/utils/identity/public-id-param.util.js';
+import {
+  buildAuditActorFields,
+  recordScopedAuditEvent,
+} from '@/shared/utils/infrastructure/audit-request-context.util.js';
 import type { MemberInvitationService } from './member-invitation.service.js';
 
 /**
@@ -14,7 +18,8 @@ import type { MemberInvitationService } from './member-invitation.service.js';
  * `revoke` / `resend` under `/organization/invitations/:invitation_id` and the invitee-facing
  * `/invitations/:invitation_id/accept`. Adding a member now issues the invitation via
  * `POST /organization/memberships`, so the standalone create/list, the invitee pending-list, and
- * decline routes were removed.
+ * decline routes were removed. Each handler records a scoped audit event — an acceptance in the
+ * joined organization's log, since the invitee's token carries no organization yet.
  */
 export function createMemberInvitationController(service: MemberInvitationService) {
   return {
@@ -31,19 +36,34 @@ export function createMemberInvitationController(service: MemberInvitationServic
       // sec-new-T2: reject malformed path params before reaching the service layer.
       const invitationId = validatePublicIdParam(rawAcceptId ?? '', 'invitation_id');
       const data = await service.accept(invitationId, request.body, auth.userId);
+      await recordScopedAuditEvent(request, {
+        actorUserPublicId: auth.userId,
+        action: 'tenancy.member_invitation.accept',
+        resource_type: 'member_invitation',
+        organizationPublicId: data.organization_id,
+        metadata: { invitation_public_id: invitationId, membership_public_id: data.membership_id },
+      });
       return successResponse(data, getRequestIdentifier(request));
     },
     revokeMemberInvitation: async (request: FastifyRequest, reply: FastifyReply) => {
-      requirePrincipal(request);
+      const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       // sec-new-T2: reject malformed path params before reaching the service layer.
       const { invitation_id: rawRevokeId } = request.params as { invitation_id: string };
       const invitationId = validatePublicIdParam(rawRevokeId ?? '', 'invitation_id');
       await service.revoke(scope, invitationId);
+      await recordScopedAuditEvent(request, {
+        ...buildAuditActorFields(auth),
+        action: 'tenancy.member_invitation.revoke',
+        resource_type: 'member_invitation',
+        organizationPublicId: scope.organizationPublicId,
+        metadata: { invitation_public_id: invitationId },
+      });
       return reply.code(204).send();
     },
     resendInvitation: async (request: FastifyRequest, _reply: FastifyReply) => {
+      const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       // sec-new-T2: reject malformed path params before reaching the service layer.
@@ -52,6 +72,13 @@ export function createMemberInvitationController(service: MemberInvitationServic
       // R1 / TEN-34: regenerated token is delivered only via email, never returned.
       const invitation = await service.resend(scope, invitationId, request.body, {
         requestId: getRequestIdentifier(request),
+      });
+      await recordScopedAuditEvent(request, {
+        ...buildAuditActorFields(auth),
+        action: 'tenancy.member_invitation.resend',
+        resource_type: 'member_invitation',
+        organizationPublicId: scope.organizationPublicId,
+        metadata: { invitation_public_id: invitationId },
       });
       return successResponse({ invitation }, getRequestIdentifier(request));
     },

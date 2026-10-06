@@ -1,10 +1,7 @@
-import { Worker } from 'bullmq';
-import {
-  getBullMQConnectionOptions,
-  getBullMQKeyPrefix,
-} from '@/infrastructure/queue/connection.js';
+import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
 import { getDefaultWorkerOptions } from '@/infrastructure/queue/worker-runtime/worker-options.js';
 import { buildWorkerHandle } from '@/infrastructure/queue/worker-runtime/worker-close.util.js';
+import { createProviderPausableWorker } from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
 import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
 import { getWorkerConcurrencyStripe } from '@/shared/config/worker-concurrency.util.js';
 import type { BillingContainer } from '@/domains/billing/billing.container.js';
@@ -41,8 +38,10 @@ export type SubscriptionSeatSyncWorkerBillingContainer = Pick<
  * - **Algorithm:** validates the job payload at the boundary via `parseJobDataOrDeadLetter`, then
  *   propagates the captured trace context and delegates to {@link processSubscriptionSeatSyncJob}.
  *   The subscription service phases its own DB contexts around the Stripe call.
- * - **Failure modes:** Stripe outages propagate so BullMQ honours its retry/backoff; stalled jobs
- *   are warn-logged; poison payloads are dead-lettered by `parseJobDataOrDeadLetter`.
+ * - **Failure modes:** while Stripe is down the queue pauses on every replica and probes every
+ *   five minutes, spending no attempt (`createProviderPausableWorker`); other failures take
+ *   BullMQ's retry/backoff; stalled jobs are warn-logged; poison payloads are dead-lettered by
+ *   `parseJobDataOrDeadLetter`.
  * - **Side effects:** holds a Redis connection until the returned {@link WorkerHandle} is closed.
  * - **Notes:** the subscription service must be sourced from the worker composition root; the worker
  *   never instantiates services itself. `usesPostgres` true (the service opens organization contexts).
@@ -51,9 +50,10 @@ export function createSubscriptionSeatSyncWorker(
   billingContainer: SubscriptionSeatSyncWorkerBillingContainer,
 ): WorkerHandle {
   const { subscriptionService } = billingContainer;
-  const worker = new Worker<SubscriptionSeatSyncJobData>(
-    SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME,
-    async (job) => {
+  const worker = createProviderPausableWorker<SubscriptionSeatSyncJobData>({
+    queueName: SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME,
+    provider: 'stripe',
+    processor: async (job) => {
       const jobData = await parseJobDataOrDeadLetter({
         schema: subscriptionSeatSyncJobDataSchema,
         job,
@@ -72,13 +72,12 @@ export function createSubscriptionSeatSyncWorker(
         () => processSubscriptionSeatSyncJob(jobData, subscriptionService),
       );
     },
-    {
+    workerOptions: {
       connection: getBullMQConnectionOptions(),
-      prefix: getBullMQKeyPrefix(),
       concurrency: getWorkerConcurrencyStripe(),
       ...getDefaultWorkerOptions(),
     },
-  );
+  });
 
   worker.on('stalled', (jobId) => {
     logger.warn(

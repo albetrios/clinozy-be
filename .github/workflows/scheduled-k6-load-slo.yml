@@ -59,6 +59,7 @@ jobs:
       HOST: 0.0.0.0
       PORT: 3000
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
       REDIS_URL: redis://localhost:6379
       ENABLE_MCP_SERVER: 'true'
       BASE_URL: http://localhost:3000
@@ -208,7 +209,7 @@ jobs:
         run: |
           failed=0
           k6 run --summary-export=k6-audit-list.json src/tests/load/k6/scenarios/audit-list.js || failed=1
-          k6 run --summary-export=k6-org-membership-list.json src/tests/load/k6/scenarios/org-membership-list.js || failed=1
+          k6 run --summary-export=k6-organization-membership-list.json src/tests/load/k6/scenarios/organization-membership-list.js || failed=1
           k6 run --summary-export=k6-notification-policy.json src/tests/load/k6/scenarios/notification-policy-crud.js || failed=1
           k6 run --summary-export=k6-billing-subscriptions-rls.json src/tests/load/k6/scenarios/billing-subscriptions-rls.js || failed=1
           k6 run --summary-export=k6-user-data-export.json src/tests/load/k6/scenarios/user-data-export.js || failed=1

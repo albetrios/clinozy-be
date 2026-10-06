@@ -55,7 +55,7 @@ export function createMemberRoleController(service: MemberRoleService) {
         action: 'tenancy.role.create',
         resource_type: 'role',
         organizationPublicId: organizationId,
-        metadata: { role_public_id: (data as { public_id?: string }).public_id },
+        metadata: { role_public_id: data.id },
       });
       return successResponse(data, getRequestIdentifier(request));
     },

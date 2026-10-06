@@ -247,7 +247,7 @@ export class MemberInvitationService {
     }
     const actingUser = await this.userService.requireUserRecordByPublicId(actingUserPublicId);
     if (!actingUser) throw new NotFoundError('User');
-    // sec-T4 follow-up: require a VERIFIED email to join an organization. magic-link / OAuth onboarding prove
+    // sec-T4 follow-up: require a VERIFIED email to join an organization. email-code / OAuth onboarding prove
     // email control (and set is_email_verified); an email/password signup-claim of a pre-provisioned
     // invited account stays unverified until the emailed code is entered. Without this, someone merely
     // FORWARDED the invite email could claim the invited address via password signup and accept —

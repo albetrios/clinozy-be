@@ -3,10 +3,7 @@ import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
-import {
-  injectAuthenticatedOrganizationMutation,
-  injectRoute,
-} from '@/tests/helpers/test-http-inject.helper.js';
+import { injectAuthenticated, injectRoute } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -62,7 +59,7 @@ describe('Security: Organization API key authentication', () => {
       organizationPublicId: organization.public_id,
     });
 
-    const createResponse = await injectAuthenticatedOrganizationMutation(app, {
+    const createResponse = await injectAuthenticated(app, {
       method: 'POST',
       url: testApiPath('/tenancy/organization/api-keys'),
       token,
@@ -251,7 +248,7 @@ describe('Security: Organization API key authentication', () => {
         userId: member.public_id,
         organizationPublicId: organization.public_id,
       });
-      const created = await injectAuthenticatedOrganizationMutation(app, {
+      const created = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/api-keys'),
         token: memberToken,
@@ -282,7 +279,7 @@ describe('Security: Organization API key authentication', () => {
       membershipPublicId: string;
       status: string;
     }) {
-      return injectAuthenticatedOrganizationMutation(app, {
+      return injectAuthenticated(app, {
         method: 'PATCH',
         url: testApiPath(`/tenancy/organization/memberships/${options.membershipPublicId}`),
         token: options.token,

@@ -8,6 +8,7 @@ describe('AuditSerializer', () => {
     // (`...row`) to a typed allowlist.
     const input = {
       id: 17,
+      public_id: 'aud_row00000000000000017',
       actor_user_id: 7,
       target_user_id: 9,
       actor_api_key_id: 23,
@@ -34,6 +35,8 @@ describe('AuditSerializer', () => {
 
     expect(result).toEqual([
       {
+        // The row's own identity is its public id; the bigserial never leaves.
+        id: 'aud_row00000000000000017',
         actor_user_id: 'usr_actor_pub',
         target_user_id: 'usr_target_pub',
         organization_id: 'org_owner_pub',
@@ -50,7 +53,7 @@ describe('AuditSerializer', () => {
 
     // Belt-and-braces: every leak-class field is gone.
     const out = result[0]!;
-    expect(out).not.toHaveProperty('id');
+    expect(out.id).not.toBe(17);
     expect(out).not.toHaveProperty('actor_api_key_id');
     expect(out).not.toHaveProperty('resource_id');
     expect(out).not.toHaveProperty('public_id');

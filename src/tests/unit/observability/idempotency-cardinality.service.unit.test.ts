@@ -11,6 +11,7 @@ const cardinalityTestEnv = vi.hoisted(() => ({
 
 vi.mock('@/infrastructure/cache/redis.client.js', () => ({
   redisConnection: {
+    options: { keyPrefix: 'product:development:' },
     scan: vi.fn(),
     set: vi.fn(),
   },
@@ -63,6 +64,19 @@ describe('sampleIdempotencyCardinality', () => {
     expect(result).toEqual({ observedCount: 3, scanTruncated: false });
     expect(mockSet).toHaveBeenCalledWith(expect.stringContaining('idempotency'), '3');
     expect(mockCaptureMessage).not.toHaveBeenCalled();
+  });
+
+  it('scans under the client key prefix (ioredis does not prefix a SCAN pattern)', async () => {
+    mockScan.mockResolvedValueOnce(['0', []]);
+
+    await sampleIdempotencyCardinality();
+    expect(mockScan).toHaveBeenCalledWith(
+      '0',
+      'MATCH',
+      'product:development:idempotency:*',
+      'COUNT',
+      expect.any(Number),
+    );
   });
 
   it('marks scanTruncated when capped while SCAN cursor has not returned to zero', async () => {

@@ -47,8 +47,9 @@ describe('worker-registration.registry', () => {
   it('keeps complete metadata for every registered worker', () => {
     const definitions = getWorkerQueueRegistrationDefinitions();
 
-    // REQ-4: +1 for the subscription-seat-sync worker (Stripe family, throughput, Postgres-backed).
-    expect(definitions).toHaveLength(32);
+    // REQ-4: +1 for the subscription-seat-sync worker (Stripe family, throughput, Postgres-backed);
+    // +1 for the webhook-delivery-reclaim sweep (webhook family, cron, Postgres-backed).
+    expect(definitions).toHaveLength(33);
     for (const definition of definitions) {
       expect(definition.queueName).toBeTruthy();
       expect(definition.logLabel).toBeTruthy();
@@ -70,21 +71,26 @@ describe('worker-registration.registry', () => {
   it('keeps expected family, criticality, scheduler, and external-io counts', () => {
     const definitions = getWorkerQueueRegistrationDefinitions();
 
-    // REQ-4: subscription-seat-sync adds one Postgres-backed, event-driven, throughput worker.
-    expect(definitions.filter((definition) => definition.usesPostgres)).toHaveLength(29);
-    expect(definitions.filter((definition) => definition.scheduled)).toHaveLength(26);
+    // REQ-4: subscription-seat-sync adds one Postgres-backed, event-driven, throughput worker; the
+    // webhook-delivery-reclaim sweep one Postgres-backed, scheduled, maintenance worker.
+    expect(definitions.filter((definition) => definition.usesPostgres)).toHaveLength(30);
+    expect(definitions.filter((definition) => definition.scheduled)).toHaveLength(27);
     expect(
       definitions.filter((definition) => definition.criticality === 'throughput'),
     ).toHaveLength(6);
     expect(
       definitions.filter((definition) => definition.criticality === 'maintenance'),
-    ).toHaveLength(24);
+    ).toHaveLength(25);
     expect(
       definitions.filter((definition) => definition.criticality === 'observability'),
     ).toHaveLength(2);
+    // No worker holds a database context across an outbound call: the audit export, the data
+    // export, the upload sweep and both retention purges open short contexts around their S3 calls.
     expect(
-      definitions.filter((definition) => definition.holdsConnectionDuringExternalIo === true),
-    ).toHaveLength(5);
+      definitions
+        .filter((definition) => definition.holdsConnectionDuringExternalIo === true)
+        .map((definition) => definition.queueName),
+    ).toEqual([]);
   });
 
   it('has no maintenance workers left unscheduled (every retention worker has a cron)', () => {

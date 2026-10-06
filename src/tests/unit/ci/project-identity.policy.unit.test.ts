@@ -20,10 +20,13 @@ import {
 } from '@tooling/setup/codegen/repository-identity-artifacts.js';
 import {
   applyTextRewrites,
+  infraSlugFor,
   localDatabaseRules,
   mcpTemplateRules,
   replaceIdentityToken,
   rewritePreviousDatabaseName,
+  rewritePreviousRedisKeyPrefix,
+  rewritePreviousWordmark,
   slugSpellings,
   TEXT_REWRITE_TARGETS,
 } from '@tooling/setup/codegen/text-identity-rewrites.js';
@@ -209,6 +212,14 @@ describe('project identity — previous identity gate', () => {
       '--health-cmd="pg_isready -U legacy -d legacy"',
       'DATABASE_URL: postgresql://user:pass@localhost:5432/legacy_dryrun',
       'CREATE DATABASE legacy;',
+      // Forms a rename once missed: libpq variables, the `postgres://` scheme, a URL without
+      // credentials (an env-schema test fixture), and a `_test` database behind `-d`.
+      'PGUSER=legacy',
+      'PGDATABASE: legacy_test',
+      "DATABASE_URL: 'postgres://localhost:5432/legacy'",
+      'postgres://legacy@localhost/legacy_test',
+      'psql -d legacy_test -c "select 1"',
+      '# legacy:legacy, as in docker-compose.yml',
     ]) {
       expect(flags(line), line).toBe(true);
     }
@@ -217,6 +228,83 @@ describe('project identity — previous identity gate', () => {
       'src/legacy/events/event-bus.ts',
       'the legacy layer',
       'POSTGRES_USER: postgres',
+      'PGUSER=postgres',
+      'postgres://localhost:5432/legacyish',
+    ]) {
+      expect(flags(line), line).toBe(false);
+    }
+  });
+
+  it('finds a previous slug written as a display wordmark', () => {
+    // The dashboards hub still titled itself with the old slug as a `<name>·<suffix>` wordmark (and
+    // split it with a <span>) long after the rename — no slug spelling covers that separator.
+    for (const line of [
+      '<title>legacy·be — control room</title>',
+      'LEGACY • BE',
+      'legacy&middot;be',
+      'legacy&#183;be',
+      'Legacy∙BE',
+      '<div>legacy<span class="text-brand">·</span>be</div>',
+    ]) {
+      expect(flags(line), line).toBe(true);
+    }
+    // The tail must end the word.
+    for (const line of ['legacy·bean', 'legacy&middot;beans']) {
+      expect(flags(line), line).toBe(false);
+    }
+  });
+
+  it('flags a previous slug joined by a plain dot or a single space, for a human to reword', () => {
+    // Detection only — the rename pass leaves this shape alone (see the next describe), because
+    // prose shares it: a hit is a line someone rewords, never an automatic rewrite.
+    for (const line of [
+      'legacy.be',
+      'https://legacy.be/docs',
+      'Legacy BE control room',
+      'LEGACY.FE',
+      'let the legacy be',
+    ]) {
+      expect(flags(line), line).toBe(true);
+    }
+    // Exactly one separator character, and the halves must stand as whole words.
+    for (const line of ['legacy..be', 'legacy  be', 'legacy.bean', 'xlegacy be', 'legacy.bed']) {
+      expect(flags(line), line).toBe(false);
+    }
+  });
+
+  it("finds the previous backend slug's sibling infrastructure repository", () => {
+    // CI comments and two policy tests kept naming the old `<stem>-infra` repository after the
+    // rename — no previous name covered it.
+    for (const line of [
+      'the deploy path calls legacy-infra',
+      'LEGACY-INFRA PROVISIONING',
+      'legacy_infra_bucket',
+    ]) {
+      expect(flags(line), line).toBe(true);
+    }
+    expect(flags('infra-only keys are dropped')).toBe(false);
+    expect(infraSlugFor('legacy-be')).toBe('legacy-infra');
+    expect(infraSlugFor('acme-api')).toBeNull();
+  });
+
+  it('finds the previous backend stem only where it is a Redis key prefix', () => {
+    // resolveRedisKeyPrefix() kept the old stem as its `<stem>:<NODE_ENV>:` default after the
+    // rename, so every Redis key and BullMQ queue carried the old name.
+    for (const line of [
+      `return \`legacy:\${environment.NODE_ENV}:\`;`,
+      'REDIS_KEY_PREFIX=legacy:dev:',
+      "process.env.REDIS_KEY_PREFIX = 'legacy:test:';",
+      "keyPrefix: 'legacy:'",
+      // The documented default in an env-schema comment.
+      'Redis key prefix (default `legacy:<NODE_ENV>:`).',
+    ]) {
+      expect(flags(line), line).toBe(true);
+    }
+    for (const line of [
+      'legacy: true',
+      'src/legacy/events/event-bus.ts',
+      '@scope/legacy:dev',
+      'legacy::value',
     ]) {
       expect(flags(line), line).toBe(false);
     }
@@ -264,6 +352,122 @@ describe('project identity — previous identity gate', () => {
       project: { ...buildConfig().project, previousNames: ['acme-api'] },
     } as SetupConfig);
     expect(previousIdentityPatterns(current)).toEqual([]);
+  });
+});
+
+describe('project identity — the rename pass rewrites what the previous-identity gate flags', () => {
+  const renamed = buildProjectIdentitySnapshot({
+    ...buildConfig(),
+    project: {
+      ...buildConfig().project,
+      previousNames: ['legacy-be', 'legacy-fe'],
+      previousOwners: [],
+    },
+  } as SetupConfig);
+  const flags = (line: string): boolean =>
+    previousIdentityPatterns(renamed).some(({ pattern }) => pattern.test(line));
+  const slugPairs = [
+    ['legacy-fe', 'globex-fe'],
+    ['legacy-be', 'globex-be'],
+  ] as const;
+
+  /** The `pnpm init:project` prose transforms for legacy-* → globex-*, in the order it runs them. */
+  const rename = (line: string): string => {
+    let updated = line;
+    for (const [previous, next] of [['legacy-infra', 'globex-infra'], ...slugPairs] as const) {
+      const nextSpellings = slugSpellings(next);
+      updated = slugSpellings(previous).reduce(
+        (text, from, index) => replaceIdentityToken(text, from, nextSpellings[index] ?? from),
+        updated,
+      );
+    }
+    updated = rewritePreviousDatabaseName(updated, {
+      previousDatabaseName: 'legacy',
+      nextDatabaseName: 'globex',
+    });
+    updated = rewritePreviousRedisKeyPrefix(updated, {
+      previousStem: 'legacy',
+      nextStem: 'globex',
+    });
+    for (const [previousSlug, nextSlug] of slugPairs) {
+      updated = rewritePreviousWordmark(updated, { previousSlug, nextSlug });
+    }
+    return updated;
+  };
+
+  it('renames a wordmark, keeping its separator, markup and casing', () => {
+    const renameWordmark = (value: string): string =>
+      rewritePreviousWordmark(value, { previousSlug: 'legacy-be', nextSlug: 'globex-be' });
+    expect(renameWordmark('<title>legacy·be — control room</title>')).toBe(
+      '<title>globex·be — control room</title>',
+    );
+    expect(renameWordmark('LEGACY • BE')).toBe('GLOBEX • BE');
+    expect(renameWordmark('Legacy·be')).toBe('Globex·be');
+    expect(renameWordmark('legacy&middot;be')).toBe('globex&middot;be');
+    expect(renameWordmark('<div>legacy<span class="text-brand">·</span>be</div>')).toBe(
+      '<div>globex<span class="text-brand">·</span>be</div>',
+    );
+    for (const untouched of ['let the legacy be', 'legacy.be', 'legacy·bean']) {
+      expect(renameWordmark(untouched)).toBe(untouched);
+    }
+  });
+
+  it('renames the stem only where it is a Redis key prefix', () => {
+    const renameStem = (value: string): string =>
+      rewritePreviousRedisKeyPrefix(value, { previousStem: 'legacy', nextStem: 'globex' });
+    expect(renameStem(`return \`legacy:\${environment.NODE_ENV}:\`;`)).toBe(
+      `return \`globex:\${environment.NODE_ENV}:\`;`,
+    );
+    expect(renameStem('REDIS_KEY_PREFIX=legacy:dev:')).toBe('REDIS_KEY_PREFIX=globex:dev:');
+    expect(renameStem("process.env.REDIS_KEY_PREFIX = 'legacy:test:';")).toBe(
+      "process.env.REDIS_KEY_PREFIX = 'globex:test:';",
+    );
+    expect(renameStem("keyPrefix: 'legacy:'")).toBe("keyPrefix: 'globex:'");
+    for (const untouched of [
+      'legacy: true',
+      'src/legacy/events/event-bus.ts',
+      '@scope/legacy:dev',
+      'legacy::value',
+    ]) {
+      expect(renameStem(untouched)).toBe(untouched);
+    }
+  });
+
+  it('leaves nothing behind that the gate flags', () => {
+    // One line for every form the gate detects — slug spellings, the database, the wordmark, the
+    // Redis key prefix. A form added to the gate without a rewrite in the rename pass fails here.
+    for (const line of [
+      'LEGACY-FE FULL JOURNEY',
+      'grantLegacyBeAppRoleForTests()',
+      'GRANT legacy_be_app TO x;',
+      'LEGACY_BE_RUNTIME=1',
+      'container legacy-be-postgres',
+      'POSTGRES_USER: legacy',
+      'POSTGRES_DB=legacy',
+      '--health-cmd="pg_isready -U legacy -d legacy"',
+      'DATABASE_URL: postgresql://user:pass@localhost:5432/legacy_dryrun',
+      'CREATE DATABASE legacy;',
+      '<title>legacy·be — control room</title>',
+      'LEGACY • BE',
+      'legacy&middot;be',
+      '<div>legacy<span class="text-brand">·</span>fe</div>',
+      `return \`legacy:\${environment.NODE_ENV}:\`;`,
+      'REDIS_KEY_PREFIX=legacy:dev:',
+      "process.env.REDIS_KEY_PREFIX = 'legacy:test:';",
+      "keyPrefix: 'legacy:'",
+      'Redis key prefix (default `legacy:<NODE_ENV>:`).',
+      'PGUSER=legacy',
+      'PGDATABASE: legacy_test',
+      "DATABASE_URL: 'postgres://localhost:5432/legacy'",
+      'postgres://legacy@localhost/legacy_test',
+      'psql -d legacy_test -c "select 1"',
+      'the deploy path calls legacy-infra',
+      'LEGACY-INFRA PROVISIONING',
+      '# legacy:legacy, as in docker-compose.yml',
+    ]) {
+      expect(flags(line), line).toBe(true);
+      expect(flags(rename(line)), `${line} → ${rename(line)}`).toBe(false);
+    }
   });
 });
 
@@ -369,6 +573,16 @@ describe('project identity — local database rename', () => {
     );
     expect(rename('pg_isready -U legacy -d legacy')).toBe('pg_isready -U globex -d globex');
     expect(rename('CREATE DATABASE legacy_dryrun;')).toBe('CREATE DATABASE globex_dryrun;');
+    // A `_test` database behind `-d`, libpq variables, and URLs without credentials or port.
+    expect(rename('psql -U legacy -d legacy_test')).toBe('psql -U globex -d globex_test');
+    expect(rename('PGUSER=legacy PGPASSWORD=legacy PGDATABASE=legacy_test')).toBe(
+      'PGUSER=globex PGPASSWORD=globex PGDATABASE=globex_test',
+    );
+    expect(rename('postgres://localhost:5432/legacy')).toBe('postgres://localhost:5432/globex');
+    expect(rename('postgres://legacy@localhost/legacy_test')).toBe(
+      'postgres://globex@localhost/globex_test',
+    );
+    expect(rename('postgres://user:pass@host/db')).toBe('postgres://user:pass@host/db');
     // The same word outside those anchors is not the database.
     expect(rename('POSTGRES_USER: postgres')).toBe('POSTGRES_USER: postgres');
     expect(rename('the legacy layer')).toBe('the legacy layer');

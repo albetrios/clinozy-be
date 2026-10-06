@@ -17,7 +17,7 @@ describe('createWorkerNotificationRepository worker-context allowlist', () => {
     }
   });
 
-  for (const kind of ['organization', 'global_admin', 'user'] as const) {
+  for (const kind of ['organization', 'user'] as const) {
     it(`accepts the ${kind} worker context`, async () => {
       process.env.CLINOZY_BE_RUNTIME = 'worker';
       await runWithWorkerDatabaseContext({ kind }, async () => {
@@ -25,6 +25,13 @@ describe('createWorkerNotificationRepository worker-context allowlist', () => {
       });
     });
   }
+
+  it('rejects the global_admin context — the recipient public id travels in the job, so no cross-user lookup needs it', async () => {
+    process.env.CLINOZY_BE_RUNTIME = 'worker';
+    await runWithWorkerDatabaseContext({ kind: 'global_admin' }, async () => {
+      expect(() => createWorkerNotificationRepository(handle)).toThrow(WorkerDatabaseContextError);
+    });
+  });
 
   it('rejects the removed global_retention_cleanup context (greenfield cleanup — retention uses a raw batch-delete, not this factory)', async () => {
     process.env.CLINOZY_BE_RUNTIME = 'worker';

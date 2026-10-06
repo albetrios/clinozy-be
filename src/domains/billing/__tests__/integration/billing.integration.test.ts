@@ -172,7 +172,6 @@ describe('Billing Domain — Response contract (integration)', () => {
         method: 'GET',
         url: testApiPath('/billing/invoices'),
         token: outsiderToken,
-        organizationPublicId: organization.public_id,
       });
       expect(response.statusCode).toBe(403);
     });
@@ -203,7 +202,6 @@ describe('Billing Domain — Response contract (integration)', () => {
         method: 'GET',
         url: testApiPath('/billing/payment-methods'),
         token: outsiderToken,
-        organizationPublicId: organization.public_id,
       });
       expect(response.statusCode).toBe(403);
     });

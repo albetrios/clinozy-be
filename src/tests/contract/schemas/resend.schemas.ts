@@ -21,12 +21,13 @@ export const ResendEmailsSuccessfulResponseContractSchema = z.object({
   id: z.string().min(1),
 });
 
-/** Zod contract for Resend's error envelope; ensures our error parser sees the documented shape. */
+/**
+ * Zod contract for the body Resend answers an error with. The SDK hands it back as-is as
+ * `error`, and `ResendApiError` reads `statusCode` and `name` from it to tell a per-email
+ * rejection from an outage.
+ */
 export const ResendEmailsErrorEnvelopeContractSchema = z.object({
-  data: z.null(),
-  error: z.object({
-    statusCode: z.number().optional(),
-    message: z.string().optional(),
-    name: z.string().optional(),
-  }),
+  statusCode: z.number(),
+  name: z.string(),
+  message: z.string(),
 });

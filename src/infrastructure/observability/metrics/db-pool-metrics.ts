@@ -90,7 +90,7 @@ let poolMonitoringInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Polls `pg_stat_activity` for connection-state counts, updates the
- * `db_pool_connections` / `pg_pool_*` / `postgres_pool_*` gauges, and feeds the
+ * `db_pool_connections` / `postgres_pool_*` gauges, and feeds the
  * sample into {@link evaluatePoolExhaustionAndAlert}. Sampling errors fall back
  * to all-zero counts so the alerter still runs (and may flip to `ok`).
  */

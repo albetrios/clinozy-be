@@ -69,6 +69,7 @@ Table audit.dead_letter_jobs {
   job_name text [not null]
   max_attempts int [not null]
   payload_summary jsonb [not null]
+  replay_depth int [not null]
   source_queue text [not null]
   indexes {
     (id) [pk]
@@ -88,6 +89,7 @@ Table audit.logs {
   ip_address varchar(45)
   metadata jsonb [not null]
   organization_id bigint
+  public_id varchar(28) [not null]
   resource_id bigint
   resource_type varchar(50) [not null]
   severity varchar(20) [not null]
@@ -96,7 +98,7 @@ Table audit.logs {
 }
 
 Note audit.logs {
-  'RLS: enabled\nPolicies: audit_logs_tenant_isolation, audit_logs_user_export_select, audit_logs_tenant_isolation_select, audit_logs_tenant_isolation_insert, audit_logs_tenant_isolation_delete\nFORCE ROW LEVEL SECURITY'
+  'RLS: enabled\nPolicies: audit_logs_user_export_select, audit_logs_tenant_isolation_select, audit_logs_tenant_isolation_delete, audit_logs_tenant_isolation_insert\nFORCE ROW LEVEL SECURITY'
 }
 
 Table audit.outbox {
@@ -135,7 +137,7 @@ Table auth.auth_methods {
   phone_number varchar(20)
   provider varchar(50)
   provider_user_id varchar(255)
-  public_id varchar(28)
+  public_id varchar(28) [not null]
   revoked_at timestamptz
   user_id bigint [not null]
   verified_at timestamptz
@@ -151,6 +153,7 @@ Table auth.mail_outbox {
   html text [not null]
   id bigint [pk, increment, not null]
   reply_to varchar(320)
+  resend_idempotency_token uuid [not null]
   resend_message_id varchar(255)
   sent_at timestamptz
   status varchar(20) [not null]
@@ -245,14 +248,13 @@ Table auth.user_notification_preferences {
   id bigint [pk, increment, not null]
   is_enabled boolean [not null]
   notification_type varchar(50) [not null]
-  organization_id bigint
   updated_at timestamptz [not null]
   updated_by_user_id bigint
   user_id bigint [not null]
 }
 
 Note auth.user_notification_preferences {
-  'RLS: enabled\nPolicies: user_notification_preferences_user_org_access, user_notification_preferences_user_access\nFORCE ROW LEVEL SECURITY'
+  'RLS: enabled\nPolicies: user_notification_preferences_user_access\nFORCE ROW LEVEL SECURITY'
 }
 
 Table auth.user_settings {
@@ -310,7 +312,7 @@ Table auth.verification_tokens {
 }
 
 Note auth.verification_tokens {
-  'RLS: enabled\nPolicies: verification_tokens_application_access, verification_tokens_deny_all, verification_tokens_app_access\nFORCE ROW LEVEL SECURITY'
+  'RLS: enabled\nPolicies: verification_tokens_deny_all, verification_tokens_app_access\nFORCE ROW LEVEL SECURITY'
 }
 
 Table auth.webauthn_credentials {
@@ -321,7 +323,7 @@ Table auth.webauthn_credentials {
   device_type varchar(32) [not null]
   id bigint [pk, increment, not null]
   last_used_at timestamptz
-  public_id varchar(28)
+  public_id varchar(28) [not null]
   public_key text [not null]
   revoked_at timestamptz
   transports jsonb [not null]
@@ -440,7 +442,7 @@ Table notify.webhook_delivery_attempts {
   id bigint [pk, increment, not null]
   next_retry_at timestamptz
   payload jsonb [not null]
-  public_id varchar(28)
+  public_id varchar(28) [not null]
   response_body text
   sent_at timestamptz
   status varchar(20) [not null]
@@ -670,7 +672,6 @@ Ref: auth.sessions.organization_id > tenancy.organizations.id [delete: set null]
 Ref: auth.sessions.user_id > auth.users.id [delete: cascade]
 Ref: auth.user_data_exports.user_id > auth.users.id [delete: cascade]
 Ref: auth.user_notification_preferences.created_by_user_id > auth.users.id [delete: no action]
-Ref: auth.user_notification_preferences.organization_id > tenancy.organizations.id [delete: set null]
 Ref: auth.user_notification_preferences.updated_by_user_id > auth.users.id [delete: no action]
 Ref: auth.user_notification_preferences.user_id > auth.users.id [delete: cascade]
 Ref: auth.user_settings.user_id > auth.users.id [delete: cascade]

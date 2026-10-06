@@ -13,10 +13,12 @@ Redis client management. Owns the singleton `ioredis` client used by domain-leve
 - **URL parser handles managed-provider quirks**: Railway and Upstash sometimes encode TLS / family options differently from canonical `redis://` URLs. The parser normalises before handing to ioredis.
 - **No application-level cache abstraction**: domains call ioredis directly through this module's exports. The cost of a generic cache abstraction is rarely paid back; specific call sites use the right TTL and key shape.
 - **One shared piece, and it is a protocol, not a cache**: [redis-tombstone-cache.util.ts](src/infrastructure/cache/redis-tombstone-cache.util.ts) holds the three-command read-through race protocol — read (a tombstone reads as a miss) · populate with `SET … EX … NX` · invalidate by writing a short-lived tombstone rather than `DEL`. It was extracted after that protocol had been hand-written once for revoked bearers in [session-token-cache.service.ts](src/domains/auth/sub-domains/auth-session/session-token-cache.service.ts); re-deriving it per cache is how the second one gets the `DEL` race wrong. Key shape, TTL, stored shape and invalidation points stay in the domain's own `<thing>.cache.ts`, so this does not become the abstraction the bullet above rules out. Contract: [PATTERNS.md → read-caching](src/PATTERNS.md); long form: [docs/reference/runtime/read-caching.md](docs/reference/runtime/read-caching.md).
+- **SCAN carries the key prefix itself**: ioredis prepends `keyPrefix` to every key argument but not to a SCAN or KEYS pattern, so a pattern written the way the code writes keys (`idempotency:*`) matches nothing, and one with a leading `*` reaches every environment on a shared Redis. [redis-scan.util.ts](src/infrastructure/cache/redis-scan.util.ts) builds the prefixed, glob-escaped pattern (`buildPrefixedScanPattern`) and pages logical keys (`scanLogicalKeys`) — use it for any pattern scan (the idempotency-cardinality sampler, the test harness's Redis cleanup, `pnpm load:reset`).
 
 ## Operational concerns
 
 - **TLS in production**: managed providers issue TLS-only URLs (`rediss://`); the parser detects and configures, and [buildRedisTlsOptions](src/infrastructure/cache/redis-url.parse.util.ts) passes an explicit `tls: { rejectUnauthorized: true }` to ioredis for `rediss://` URLs so the server certificate is verified, not merely encrypted.
+- **Eviction-policy boot assertion**: [assert-redis-eviction-policy.ts](src/infrastructure/cache/assert-redis-eviction-policy.ts) refuses to start a worker on a Redis whose `maxmemory-policy` is not `noeviction` while `maxmemory` is set — an evicting Redis drops BullMQ job data and lock keys when memory fills. An unreadable `INFO` only warns.
 - **TLS boot assertion**: [assert-redis-tls-safety.ts](src/infrastructure/cache/assert-redis-tls-safety.ts) refuses to boot a hosted deployment when `REDIS_URL` (or a `REDIS_BULLMQ_URL` override) is plaintext `redis://` to a public host. Plaintext is permitted only on trusted private networks (Railway `*.railway.internal`, Kubernetes `*.cluster.local`, RFC 1918, loopback) — the documented Railway private-networking topology stays valid. See [redis-topology runbook](docs/deployment/runbooks/redis-topology.md).
 - **Connection budget**: managed Redis tiers cap per-account connections; the worker / API processes should each open ≤ 2 connections (general + BullMQ).
 - **Latency budget**: cache reads are on the hot path of permission checks and idempotency; degraded Redis latency directly hits API p99.
@@ -27,7 +29,7 @@ Redis client management. Owns the singleton `ioredis` client used by domain-leve
 
 ## Tuning parameters
 
-- `REDIS_URL`, `REDIS_TLS` (when not in URL), `REDIS_FAMILY` (4 / 6).
+- `REDIS_URL`, `REDIS_BULLMQ_URL` (separate BullMQ endpoint), `REDIS_KEY_PREFIX` (override), `REDIS_TLS_ENFORCED`, `REDIS_READY_CHECK_ENABLED`, `REDIS_MEMORY_WARN_RATIO` / `REDIS_MEMORY_CRITICAL_RATIO`.
 
 ## Failure modes
 

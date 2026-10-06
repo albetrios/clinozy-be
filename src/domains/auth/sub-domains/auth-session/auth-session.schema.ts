@@ -10,7 +10,7 @@ import {
   check,
   pgPolicy,
 } from 'drizzle-orm/pg-core';
-import { authSchema } from '@/infrastructure/database/pg-schemas.js';
+import { authSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 
@@ -83,7 +83,7 @@ export const sessions = authSchema
           )
           OR ${table.public_id} = current_setting('app.current_session_public_id', true)
           OR ${table.token_hash} = current_setting('app.current_session_token_hash', true)
-          OR current_setting('app.session_retention_cleanup', true) = 'true'
+          OR ${maintenanceBypassArm('app.session_retention_cleanup')}
         )`,
         withCheck: sql`(
           ${table.user_id} = (
@@ -93,7 +93,7 @@ export const sessions = authSchema
           )
           OR ${table.public_id} = current_setting('app.current_session_public_id', true)
           OR ${table.token_hash} = current_setting('app.current_session_token_hash', true)
-          OR current_setting('app.session_retention_cleanup', true) = 'true'
+          OR ${maintenanceBypassArm('app.session_retention_cleanup')}
         )`,
       }),
     ],

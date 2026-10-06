@@ -6,7 +6,6 @@
       "be-route-schema-doc-guard",
       "be-route-catalog",
       "be-openapi-multilingual",
-      "be-openapi-route-sync",
       "be-idempotency-guard",
       "be-i18n-message-guard"
     ],

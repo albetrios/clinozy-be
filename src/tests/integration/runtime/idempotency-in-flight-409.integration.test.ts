@@ -6,6 +6,7 @@ import { createTestUser } from '@/tests/factories/user.factory.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
 import type { FastifyInstance } from 'fastify';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
+import { buildInFlightIdempotencyEntry } from '@/tests/helpers/idempotency-entry.helper.js';
 
 describe('Integration: idempotency in-flight returns 409', () => {
   let application: FastifyInstance;
@@ -26,7 +27,7 @@ describe('Integration: idempotency in-flight returns 409', () => {
     }
   });
 
-  it('returns 409 conflict_in_flight for legacy 202 placeholder in Redis', async () => {
+  it('returns 409 conflict_in_flight for an entry it cannot read (never replays or overwrites it)', async () => {
     const user = await createTestUser();
     const token = await generateTestToken({ userId: user.public_id });
     const idempotencyKey = `test-in-flight-${Date.now()}`;
@@ -65,7 +66,11 @@ describe('Integration: idempotency in-flight returns 409', () => {
     const cacheKey = buildIdempotencyCacheKey(idempotencyKey, { userId: user.public_id });
     await redisConnection.set(
       cacheKey,
-      JSON.stringify({ state: 'in_flight', claimedAt: Date.now() }),
+      buildInFlightIdempotencyEntry({
+        method: 'POST',
+        routePath: testApiPath('/tenancy/organizations'),
+        body: payload,
+      }),
       'EX',
       60,
     );

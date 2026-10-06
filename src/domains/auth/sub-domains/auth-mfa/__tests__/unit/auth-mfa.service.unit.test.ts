@@ -270,7 +270,7 @@ describe('MfaService', () => {
     expect(redis.eval).toHaveBeenCalledWith(
       expect.any(String),
       1,
-      'mfa:verify:fail:1',
+      'mfa:verify:fail:user_public',
       expect.any(String),
     );
   });
@@ -292,7 +292,7 @@ describe('MfaService', () => {
     expect(redis.eval).toHaveBeenCalledWith(
       expect.any(String),
       1,
-      'mfa:verify:fail:1',
+      'mfa:verify:fail:user_public',
       expect.any(String),
     );
     expect(redis.get).not.toHaveBeenCalled();
@@ -300,7 +300,7 @@ describe('MfaService', () => {
 
   it('verify clears the failure counter on success (audit-#12)', async () => {
     await service.verify('user_public', { code: '123456' });
-    expect(redis.del).toHaveBeenCalledWith('mfa:verify:fail:1');
+    expect(redis.del).toHaveBeenCalledWith('mfa:verify:fail:user_public');
   });
 
   it('verifyLoginMfa records a failure on an invalid TOTP code (audit-#12)', async () => {
@@ -315,7 +315,7 @@ describe('MfaService', () => {
     expect(redis.eval).toHaveBeenCalledWith(
       expect.any(String),
       1,
-      'mfa:verify:fail:1',
+      'mfa:verify:fail:user_public',
       expect.any(String),
     );
   });
@@ -530,7 +530,7 @@ describe('MfaService', () => {
   it('verifyLoginMfa marks the consumed TOTP code in Redis with NX', async () => {
     await service.verifyLoginMfa({ mfa_session_token: 'token', totp_code: '123456' }, '127.0.0.1');
     expect(redis.set).toHaveBeenCalledWith(
-      expect.stringContaining('mfa:totp:consumed:'),
+      expect.stringContaining('mfa:totp:consumed:user_public:'),
       '1',
       'EX',
       expect.any(Number),

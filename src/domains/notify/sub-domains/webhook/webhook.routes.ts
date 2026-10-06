@@ -5,7 +5,6 @@ import {
   STRICT_AUTHED_RATE_LIMIT,
 } from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
 import { requireOrganizationPermission } from '@/shared/utils/auth/authorization.util.js';
-import { rejectLegacyPagePagination } from '@/shared/utils/http/pagination.util.js';
 import { NOTIFY_PERMISSIONS } from '@/domains/notify/notify.permissions.js';
 import type { WebhookService } from './webhook.service.js';
 import type { WebhookEventService } from './webhook-event/webhook-event.service.js';
@@ -58,7 +57,6 @@ export function webhookRoutes(
           querystring: listWebhooksQueryDto,
         },
         onRequest: [app.authenticate],
-        preValidation: [rejectLegacyPagePagination],
         preHandler: [requireOrganizationPermission(NOTIFY_PERMISSIONS.WEBHOOK_READ)],
       },
       webhookController.listWebhooks,
@@ -119,7 +117,7 @@ export function webhookRoutes(
         schema: {
           summary: 'Delete webhook',
           description:
-            'Permanently deletes a webhook endpoint. Requires WEBHOOK_MANAGE permission.',
+            'Deletes a webhook endpoint: deliveries stop at once and the row is hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90); registering the same URL again restores it. Requires WEBHOOK_MANAGE permission.',
           tags: ['Webhook'],
           params: webhookIdParamsDto,
         },
@@ -138,7 +136,6 @@ export function webhookRoutes(
           querystring: listWebhookDeliveryAttemptsQueryDto,
         },
         onRequest: [app.authenticate],
-        preValidation: [rejectLegacyPagePagination],
         preHandler: [requireOrganizationPermission(NOTIFY_PERMISSIONS.WEBHOOK_READ)],
       },
       webhookController.listDeliveryAttempts,

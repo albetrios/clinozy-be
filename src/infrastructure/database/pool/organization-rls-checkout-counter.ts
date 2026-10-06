@@ -1,16 +1,14 @@
-/** In-process count of in-flight organization-scoped RLS transaction checkouts (HTTP request-pinned and service unit-of-work). */
+/** In-process count of in-flight RLS transaction checkouts (one per unit of work). */
 let activeOrganizationRlsCheckouts = 0;
 
 /**
- * Which code path opened the organization-scoped RLS checkout being measured:
- * - `scoped_context` — a `withAppDatabaseContext` / `withAppDatabaseContext` unit of work
- *   (the default `DATABASE_RLS_SCOPED_CONTEXTS=true` path; also used by workers and scripts).
- * - `request_transaction` — the legacy per-HTTP-request `organization-rls-transaction` middleware
- *   that pins one checkout for the full request (only when `DATABASE_RLS_SCOPED_CONTEXTS=false`).
+ * Which code path opened the RLS checkout being measured:
+ * - `scoped_context` — a `withAppDatabaseContext` unit of work (requests, workers, scripts).
+ * - `session_context` — a pre-auth session-artifact unit of work.
+ * - `maintenance_context` — a `withMaintenanceDatabaseContext` bypass transaction.
  */
 export type OrganizationRlsCheckoutPath =
   | 'scoped_context'
-  | 'request_transaction'
   // A5 all-scope coverage: session (pre-auth artifact) and maintenance (bypass)
   // pattern transactions also hold pooled checkouts — counted so the
   // pool-exhaustion alerter and hold histogram see the WHOLE checkout load

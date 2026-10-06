@@ -10,7 +10,7 @@
     "Health": "Comprobaciones de estado y preparación del servidor",
     "MCP": "Protocolo de contexto de modelo — herramientas y recursos para agentes (requiere JWT admin cuando ENABLE_MCP_SERVER=true)",
     "Auth": "Autenticación — inicio de sesión, cierre, gestión de contraseñas",
-    "Magic Link": "Autenticación sin contraseña por enlace por correo",
+    "Email Login": "Inicio de sesión sin contraseña con un código de verificación enviado por correo",
     "OAuth": "Flujos de inicio de sesión social OAuth 2.0",
     "Password": "Gestión de contraseñas (olvidar, restablecer, cambiar)",
     "Email Verification": "Verificación de dirección de correo",

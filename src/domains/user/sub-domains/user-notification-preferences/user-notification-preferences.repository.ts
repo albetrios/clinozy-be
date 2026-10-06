@@ -20,7 +20,6 @@ const USER_NOTIFICATION_PREFERENCES_REPLACE_LOCK_NAMESPACE = 0x55_4e_50_46; // '
 export type PreferenceRow = {
   notification_type: string;
   channel: string;
-  organization_id: number | null;
   is_enabled: boolean;
 };
 
@@ -79,7 +78,6 @@ export class UserNotificationPreferencesRepository {
       .values(
         deduplicatedPreferences.map((preference) => ({
           user_id,
-          organization_id: preference.organization_id ?? undefined,
           notification_type: preference.notification_type,
           channel: preference.channel,
           is_enabled: preference.is_enabled,

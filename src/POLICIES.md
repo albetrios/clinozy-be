@@ -70,7 +70,7 @@ The canonical exports live under [src/shared/constants/](src/shared/constants/) 
 
 - **Value**: 102 400 bytes (100 KiB)
 - **Source**: [src/shared/constants/limits.constants.ts](src/shared/constants/limits.constants.ts)
-- **Rationale**: Cap on the response body cached against an `X-Idempotency-Key`. Above this, the cached response is replaced with a `409` so we never blow up Redis with multi-MB payloads.
+- **Rationale**: Cap on the response body cached against an `X-Idempotency-Key`. Above this the response is not cached — the claim is released, so a retry with the same key runs the request again — and Redis never holds multi-MB payloads.
 - **Consequences of change**:
   - Decreasing → more endpoints fall over the cap and lose idempotency replay.
   - Increasing → larger Redis footprint per stored entry.
@@ -184,23 +184,25 @@ The canonical exports live under [src/shared/constants/](src/shared/constants/) 
   - Increasing → more support pressure on legitimate-user lockouts.
 - **Last reviewed**: 2026-05-28
 
-## STUCK_SENDING_LEASE_MINUTES
+## STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES
 
 - **Value**: 15 minutes
 - **Source**: [src/shared/constants/billing.constants.ts](src/shared/constants/billing.constants.ts)
-- **Rationale**: Mail outbox + Stripe webhook event reclaim lease. Rows stuck in `sending` / `processing` for longer than this are presumed orphaned (worker crashed or pod evicted) and may be reclaimed for retry. 15 minutes is the upper bound on a legitimate Stripe API call + Resend send.
+- **Rationale**: Stripe webhook event reclaim lease. Events stuck in `processing` for longer than this are presumed orphaned (worker crashed or pod evicted) and may be reclaimed for retry. 15 minutes is the upper bound on one legitimate processing run. The mail outbox reclaims `sending` rows on its own env-driven window (`MAIL_OUTBOX_RECLAIM_SENDING_MINUTES`); webhook deliveries need no lease — BullMQ runs one execution per job, so a new execution re-claims any attempt that is not yet `SENT`.
 - **Consequences of change**:
-  - Decreasing → reclaim races with slow legitimate sends; may produce duplicate emails or duplicate Stripe processing.
-  - Increasing → orphaned rows take longer to recover after a worker crash.
-- **Last reviewed**: 2026-05-28
+  - Decreasing → reclaim races with slow legitimate processing; may produce duplicate Stripe processing (absorbed by the event ledger's claim).
+  - Increasing → orphaned events take longer to recover after a worker crash.
+- **Last reviewed**: 2026-10-05
 
-## STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES
+## STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS
 
-- **Value**: 15 minutes (alias of `STUCK_SENDING_LEASE_MINUTES`)
+- **Value**: 25 attempts
 - **Source**: [src/shared/constants/billing.constants.ts](src/shared/constants/billing.constants.ts)
-- **Rationale**: Same trade-offs as `STUCK_SENDING_LEASE_MINUTES`; kept aliased so the two lease windows always move together.
-- **Consequences of change**: See `STUCK_SENDING_LEASE_MINUTES`.
-- **Last reviewed**: 2026-05-28
+- **Rationale**: A Stripe webhook event whose handler keeps failing was reclaimed every five minutes forever, and every reclaim cycle that ran out of BullMQ attempts raised another alert. After this many attempts — counted only when our handler ran, so a Stripe outage costs none — the ledger row turns `abandoned`, the reclaim stops, and one alert fires. Five BullMQ attempts per cycle make it about five cycles (~30 minutes) of a handler failing every time. A failure no retry fixes (conflicting organization metadata, `resource_missing`) is abandoned at once.
+- **Consequences of change**:
+  - Decreasing → transient bugs or brief data races abandon events sooner (an operator then retries them with `tool:stripe-webhook-replay -- --retry`).
+  - Increasing → a broken event retries longer before anyone is told.
+- **Last reviewed**: 2026-10-05
 
 ## PAGINATION
 
@@ -324,6 +326,16 @@ The canonical exports live under [src/shared/constants/](src/shared/constants/) 
 - **Consequences of change**: See `BULLMQ_DEFAULT_LOCK_DURATION_MS`.
 - **Last reviewed**: 2026-05-28
 
+## QUEUE_RETRY_JITTER_RATIO
+
+- **Value**: 0.2 (up to 20% added to every queue retry delay)
+- **Source**: [src/infrastructure/queue/queue.constants.ts](src/infrastructure/queue/queue.constants.ts) — BullMQ's `jitter` on the built-in exponential backoff; `addRetryJitter` ([retry-jitter.util.ts](src/infrastructure/queue/retry-jitter.util.ts)) on the custom ones (mail, Stripe webhook, webhook delivery)
+- **Rationale**: Jobs that fail together must not retry together. When a provider's circuit opens, every failing job waits exactly the circuit's remaining open time; without jitter the whole backlog hits the half-open probe in the same instant and opens the circuit again. A delay is never shortened, only lengthened.
+- **Consequences of change**:
+  - Increasing → retries spread wider, but the schedule stretches (the Stripe webhook curve's ~5-minute dead-letter window grows by up to the ratio).
+  - Decreasing → retries bunch up again; 0 restores lockstep retries.
+- **Last reviewed**: 2026-10-05
+
 ## DEFAULT_BATCH_DELETE_ROW_COUNT
 
 - **Value**: 5 000 rows per batch
@@ -346,7 +358,7 @@ The canonical exports live under [src/shared/constants/](src/shared/constants/) 
 
 - **Value**: A `PERSONAL` organization cannot exercise the six team-only actions — invite members, manage members, manage roles, transfer ownership, delete, manage billing; a `TEAM` organization can. The organization `type` is the **sole** determinant (no per-organization or plan-based variation today).
 - **Source**: [src/domains/tenancy/sub-domains/organization/organization-capability.ts](src/domains/tenancy/sub-domains/organization/organization-capability.ts) (`assertTeamOrganization(organization, capability)` enforces the rule; capability buckets `MEMBERS | ROLES | MUTATION | BILLING`).
-- **Rationale**: There is **one** route surface for both organization types — no personal-only / team-only paths. The team-only actions are structurally unavailable to a single-owner personal workspace. Rather than fork the URL space, the team-only routes are backstopped by a single centralized guard; clients derive availability from the organization `type` (`PERSONAL` vs `TEAM`) and gate the action on the caller's permissions. The API response carries **no** `capabilities` object — it was a redundant projection of `type`; reintroduce a purpose-built `features`/`entitlements` object only if availability ever stops being purely type-derived. The team-only routes: `DELETE /api/v1/tenancy/organization`, `POST /api/v1/tenancy/organization/invitations`, `POST /api/v1/tenancy/organization/memberships`, `POST /api/v1/tenancy/organization/transfer-ownership`, `POST /api/v1/tenancy/organization/roles`, and the four subscription mutations (`POST /api/v1/billing/subscriptions` + `/{subscription_id}/change-plan`, `/cancel`, `/resume`).
+- **Rationale**: There is **one** route surface for both organization types — no personal-only / team-only paths. The team-only actions are structurally unavailable to a single-owner personal workspace. Rather than fork the URL space, the team-only routes are backstopped by a single centralized guard; clients derive availability from the organization `type` (`PERSONAL` vs `TEAM`) and gate the action on the caller's permissions. The API response carries **no** `capabilities` object — it was a redundant projection of `type`; reintroduce a purpose-built `features`/`entitlements` object only if availability ever stops being purely type-derived. The team-only routes (the route catalog's `O` column marks them `team`): `DELETE /api/v1/tenancy/organization`, `POST /api/v1/tenancy/organization/memberships`, `POST /api/v1/tenancy/organization/transfer-ownership`, `POST /api/v1/tenancy/organization/roles`, `POST /api/v1/billing/payment-methods/setup`, and the four subscription mutations (`POST /api/v1/billing/subscriptions` + `/{subscription_id}/change-plan`, `/cancel`, `/resume`).
 - **422-on-personal-organization policy**: `assertTeamOrganization` rejects a personal organization with **HTTP 422** (`unprocessable_entity`), not 409. The organization `type` is **immutable**, so an identical retry can never succeed — 409 (transient state conflict) would mislead clients into retrying. See [docs/reference/api/response-codes.md](docs/reference/api/response-codes.md) (`409 vs 422`) and [docs/reference/api/route-consistency-and-organization-model.md](docs/reference/api/route-consistency-and-organization-model.md).
 - **Consequences of change**:
   - Adding a team-only action → call `assertTeamOrganization(organization, <bucket>)` in its service before the mutation, and add the route to the list above.

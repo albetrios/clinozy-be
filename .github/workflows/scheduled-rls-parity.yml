@@ -1,7 +1,7 @@
 # RLS parity canary — nightly DB suites under the PRODUCTION role posture.
 #
 # Why this exists: the PR lanes run the DB suites against the CI service
-# container's superuser (`core`), which Postgres exempts from RLS entirely —
+# container's superuser (the Compose `POSTGRES_USER`), which Postgres exempts from RLS entirely —
 # the exact masking that hid eight production bugs (silent audit-log loss,
 # broken account/org deletion, no-op retention) until local parity exposed
 # them in Aug 2026. This canary re-runs the DB-bound suites nightly with the

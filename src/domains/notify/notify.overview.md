@@ -17,7 +17,7 @@ What it does not own: outbound email — that belongs to the [src/infrastructure
 
 ## Key invariants
 
-- **At-least-once outbound webhook delivery**: each pending delivery is a `webhook_delivery_attempts` row (status `PENDING`, unique per `(webhook_id, event_key)`) written inside the originating transaction. The delivery worker claims it atomically, retries with exponential backoff (`attempt_count` capped at 5), and lands final failures in DLQ.
+- **At-least-once outbound webhook delivery**: each pending delivery is a `webhook_delivery_attempts` row (status `PENDING`, unique per `(webhook_id, event_key)`) written inside the originating transaction. The delivery worker claims it atomically (any status but `SENT`), retries on a schedule of eight attempts over about a day, and lands final failures in the dead-letter ledger; `410 Gone` turns the webhook off.
 - **Delivery record**: the `webhook_delivery_attempts` row tracks status (`PENDING → SENDING → SENT|FAILED`), HTTP status code, response body, and `attempt_count`; delivery history is queryable per webhook.
 - **Request-id forwarding**: outbound deliveries include the originating `X-Request-Id` so customers can correlate their server logs with our audit log.
 - **Tenant-scoped**: webhook configurations belong to organizations; deliveries fire only to URLs that organization owns.
@@ -58,12 +58,14 @@ stateDiagram-v2
   seen --> dismissed: user dismisses
   dismissed --> [*]
   [*] --> delivery_pending: webhook config matches event
-  delivery_pending --> delivery_in_flight: worker claims row
-  delivery_in_flight --> delivered: 2xx response
-  delivery_in_flight --> retry_scheduled: 5xx / timeout, retries left
-  retry_scheduled --> delivery_in_flight: backoff elapsed
-  delivery_in_flight --> dlq: retries exhausted
+  delivery_pending --> delivery_sending: worker claims row (any status but SENT)
+  delivery_sending --> delivered: 2xx response
+  delivery_sending --> retry_scheduled: non-2xx / timeout, retries left
+  retry_scheduled --> delivery_sending: schedule delay elapsed
+  delivery_sending --> endpoint_gone: 410 Gone — webhook turned off
+  delivery_sending --> dlq: retries exhausted
   delivered --> [*]
+  endpoint_gone --> [*]
   dlq --> [*]
 ```
 

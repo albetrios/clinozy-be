@@ -28,6 +28,7 @@ describe('assertDatabaseTlsVerification', () => {
     getEnvMock.mockReturnValue({
       DATABASE_TLS_ENFORCED: true,
       DATABASE_URL: 'postgresql://u:p@host/db?sslmode=verify-full',
+      DATABASE_MAINTENANCE_URL: 'postgresql://u:p@host/db?sslmode=verify-full',
     });
     const { logger } = await import('@/shared/utils/infrastructure/logger.util.js');
     const { assertDatabaseTlsVerification } = await import(
@@ -45,6 +46,7 @@ describe('assertDatabaseTlsVerification', () => {
     getEnvMock.mockReturnValue({
       DATABASE_TLS_ENFORCED: true,
       DATABASE_URL: 'postgresql://u:p@host/db?sslmode=require',
+      DATABASE_MAINTENANCE_URL: 'postgresql://u:p@host/db?sslmode=require',
       DATABASE_SSL_REJECT_UNAUTHORIZED: true,
     });
     const { assertDatabaseTlsVerification } = await import(
@@ -57,6 +59,7 @@ describe('assertDatabaseTlsVerification', () => {
     getEnvMock.mockReturnValue({
       DATABASE_TLS_ENFORCED: true,
       DATABASE_URL: 'postgresql://u:p@host/db?sslmode=require',
+      DATABASE_MAINTENANCE_URL: 'postgresql://u:p@host/db?sslmode=require',
     });
     const { assertDatabaseTlsVerification } = await import(
       '@/infrastructure/database/safety/assert-database-tls-safety.js'
@@ -64,10 +67,25 @@ describe('assertDatabaseTlsVerification', () => {
     expect(() => assertDatabaseTlsVerification()).toThrow(/database\.tls_safety\.unverified/);
   });
 
+  it('throws when only DATABASE_MAINTENANCE_URL skips verification — both pools share one TLS bar', async () => {
+    getEnvMock.mockReturnValue({
+      DATABASE_TLS_ENFORCED: true,
+      DATABASE_URL: 'postgresql://u:p@host/db?sslmode=verify-full',
+      DATABASE_MAINTENANCE_URL: 'postgresql://m:p@host/db?sslmode=require',
+    });
+    const { assertDatabaseTlsVerification } = await import(
+      '@/infrastructure/database/safety/assert-database-tls-safety.js'
+    );
+    expect(() => assertDatabaseTlsVerification()).toThrow(
+      /database\.tls_safety\.unverified: DATABASE_MAINTENANCE_URL/,
+    );
+  });
+
   it('warns (without throwing) when DATABASE_TLS_ENFORCED is false and verification is off', async () => {
     getEnvMock.mockReturnValue({
       DATABASE_TLS_ENFORCED: false,
-      DATABASE_URL: 'postgresql://u:p@localhost:5432/clinozy',
+      DATABASE_URL: 'postgresql://u:p@localhost:5432/fixture',
+      DATABASE_MAINTENANCE_URL: 'postgresql://u:p@localhost:5432/fixture',
     });
     const { logger } = await import('@/shared/utils/infrastructure/logger.util.js');
     const { assertDatabaseTlsVerification } = await import(

@@ -34,7 +34,7 @@ export const TURNSTILE_ALWAYS_PASS_TEST_SECRET = '1x0000000000000000000000000000
  * Maximum active (non-revoked) auth-method rows a single user may hold.
  *
  * @remarks
- * `POST /auth/me/auth-methods` only ever inserts credential-less `MAGIC_LINK` rows, so the risk is
+ * `POST /auth/me/auth-methods` only ever inserts credential-less `EMAIL_CODE` rows, so the risk is
  * benign self-bloat (a user accumulating rows that also truncate their own capped list view) rather
  * than a credential issue. This ceiling — enforced under the credential-mutation advisory lock so
  * concurrent creates cannot overshoot — bounds that growth well above any legitimate need.
@@ -79,10 +79,10 @@ export const MAX_ACTIVE_SESSIONS_PER_USER = 30;
  */
 export const MAX_MFA_VERIFICATION_ATTEMPTS = 10;
 
-/** Failed login attempts from a single IP before that IP is blocked for the window. */
+/** Failed login attempts from a single IP after which every login from it gets 429 for the rest of the window. */
 export const IP_FAILED_LOGIN_THRESHOLD = 50;
 
-/** Sliding window duration for the per-IP failed-login counter (seconds). */
+/** Window of the per-IP failed-login counter (seconds), fixed from the IP's first failure. */
 export const IP_FAILED_LOGIN_WINDOW_SECONDS = 15 * 60;
 
 /**

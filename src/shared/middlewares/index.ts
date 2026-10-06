@@ -16,8 +16,6 @@ import idempotencyMiddleware from './core/idempotency.middleware.js';
 import encryptionMiddleware from './security/encryption.middleware.js';
 import authMiddleware from './core/auth.middleware.js';
 import zodTypeProviderMiddleware from './core/zod-type-provider.middleware.js';
-import organizationRlsTransactionMiddleware from './tenant/organization-rls-transaction.middleware.js';
-import requestStatementTimeoutMiddleware from './core/request-statement-timeout.middleware.js';
 import healthMiddleware from './core/health.middleware.js';
 import httpMetricsPlugin from '@/infrastructure/observability/metrics/http-metrics.plugin.js';
 import metricsMiddleware from './core/metrics.middleware.js';
@@ -27,24 +25,13 @@ import shutdownMiddleware from './core/shutdown.middleware.js';
 /**
  * Ordered Fastify plugin list registered by {@link registerMiddleware}. Order
  * is significant: `requestLifecycleMiddleware` MUST be first to own the
- * `onResponse` orchestration of RLS-settle → idempotency-cache → outbox-flush
- * (Fastify `onResponse` hooks run FIFO).
- *
- * @remarks
- * sec-M4: the prior version of this block said `rateLimitMiddleware` had to
- * stay before `organizationRlsTransactionMiddleware` "so throttled requests
- * never open a DB transaction". That justification has been stale since
- * `organization-rls-transaction.middleware.ts` became a no-op stub that
- * returns `'no_transaction'` immediately — no HTTP-side transaction is opened
- * anywhere now; organization-scoped work runs inside `withAppDatabaseContext`.
- * The no-op is kept registered because `request-lifecycle.middleware.ts`
- * imports its settlement-outcome type as part of the lifecycle contract; a
- * future drop must update both files together. See the no-op's own TSDoc.
+ * `onResponse` orchestration of idempotency-cache → outbox-flush (Fastify
+ * `onResponse` hooks run FIFO). No HTTP-side database transaction exists:
+ * organization-scoped work runs inside `withAppDatabaseContext`, one unit of work at a time.
  */
 export const middlewarePlugins = [
   // MUST be first: registers the only `onResponse` hook that orchestrates
-  // RLS-settle → idempotency-cache → outbox-flush in the correct order
-  // (Fastify onResponse hooks run FIFO).
+  // idempotency-cache → outbox-flush in the correct order (Fastify onResponse hooks run FIFO).
   requestLifecycleMiddleware,
   compressMiddleware,
   cookieMiddleware,
@@ -66,14 +53,9 @@ export const middlewarePlugins = [
   encryptionMiddleware,
   zodTypeProviderMiddleware,
   authMiddleware,
-  // `rateLimitMiddleware` runs after auth + tenant so per-user / per-organization keys
-  // are available (the global limiter is keyed on `request.ip`, so it does
-  // not strictly require either, but per-route limits do). Order is otherwise
-  // irrelevant against `organizationRlsTransactionMiddleware`, which is a
-  // no-op stub (sec-M4).
+  // `rateLimitMiddleware` runs after auth so per-user / per-organization keys are available
+  // (the global limiter is keyed on `request.ip`, but per-route limits need the principal).
   rateLimitMiddleware,
-  organizationRlsTransactionMiddleware,
-  requestStatementTimeoutMiddleware,
   healthMiddleware,
   httpMetricsPlugin,
   metricsMiddleware,

@@ -3,6 +3,7 @@ import type { Redis } from 'ioredis';
 import {
   ForbiddenError,
   NotFoundError,
+  RateLimitedError,
   UnauthorizedError,
   ValidationError,
 } from '@/shared/errors/index.js';
@@ -67,6 +68,22 @@ export type LoginResult =
   | { mfa_required: true; mfa_session_token: string };
 
 /**
+ * Outcome of {@link AuthService.resetPassword}: the auto-login it completed, plus the user whose
+ * password was reset.
+ *
+ * @remarks
+ * The controller attributes the `auth.password.reset` audit event to `userPublicId` — the MFA
+ * branch issues no access token to read the actor from — and returns only `loginResult`. Before
+ * this field existed the event carried no actor, and the audit service dropped every one.
+ */
+export interface PasswordResetResult {
+  /** Public id of the user whose password was reset. Never part of the response. */
+  userPublicId: string;
+  /** The auto-login: an access token + session, or an `mfa_required` challenge. */
+  loginResult: LoginResult;
+}
+
+/**
  * Password-login orchestrator for the auth domain.
  *
  * @remarks
@@ -80,6 +97,9 @@ export type LoginResult =
  *   missing user, locked account, expired session, inactive user all throw
  *   `UnauthorizedError` with i18n keys (`errors:invalidEmailOrPassword`,
  *   `errors:accountLocked`, `errors:invalidOrExpiredSession`, `errors:accountNotActive`).
+ *   An IP over its failed-login budget ({@link IP_FAILED_LOGIN_THRESHOLD} per
+ *   {@link IP_FAILED_LOGIN_WINDOW_SECONDS}) gets `RateLimitedError` (429, `Retry-After` = the
+ *   window's remaining seconds) before any credential work.
  * - **Side effects:** increments / clears `users.failed_login_count` and sets
  *   `account_locked_until` after {@link MAX_FAILED_LOGIN_ATTEMPTS} failures; rehashes the
  *   stored password when argon2 parameters drift; creates and rotates rows in
@@ -101,16 +121,29 @@ export class AuthService {
     return `${IP_FAILED_LOGIN_KEY_PREFIX}${createHash('sha256').update(ipAddress).digest('hex')}`;
   }
 
+  /**
+   * Refuses the login with 429 + `Retry-After` (the counter's remaining TTL) once this IP has
+   * {@link IP_FAILED_LOGIN_THRESHOLD} failures in the window. Too fast, not unauthenticated: the
+   * caller can retry the same credentials after the wait. Fails open on Redis errors.
+   */
   private async checkIpLoginLimit(ipAddress: string): Promise<void> {
+    const key = this.buildIpKey(ipAddress);
+    let retryAfterSeconds: number | null = null;
     try {
-      const raw = await this.redis.get(this.buildIpKey(ipAddress));
+      const raw = await this.redis.get(key);
       if (raw !== null && Number(raw) >= IP_FAILED_LOGIN_THRESHOLD) {
-        throw new UnauthorizedError('errors:rateLimited');
+        // TTL is whole seconds: 0 in the last second, -2 if the window just ended, -1 never (the
+        // counter always gets its expiry with its first increment) — fall back to the full window.
+        const remainingSeconds = await this.redis.ttl(key);
+        retryAfterSeconds =
+          remainingSeconds === -1 ? IP_FAILED_LOGIN_WINDOW_SECONDS : Math.max(1, remainingSeconds);
       }
     } catch (error) {
-      if (error instanceof UnauthorizedError) throw error;
       // Redis unavailable — fail open; per-user lockout and rate-limit middleware still protect.
       logger.warn({ error }, 'auth.ip_limit.check.failed');
+    }
+    if (retryAfterSeconds !== null) {
+      throw new RateLimitedError().withRetryAfter(retryAfterSeconds);
     }
   }
 
@@ -155,7 +188,7 @@ export class AuthService {
     // equalized between unknown-email and wrong-password, but the wrong-password branch
     // additionally performs a Postgres write (registerFailedLoginAttempt) that the
     // unknown-email branch lacks — a residual timing oracle the other anti-enumeration
-    // endpoints (magic-link, forgot-password) already mask. Measure from before the
+    // endpoints (email code, forgot-password) already mask. Measure from before the
     // branch divergence (the user lookup) so both paths share the same floor.
     const startedAtMillis = Date.now();
 
@@ -264,14 +297,18 @@ export class AuthService {
    * - **Side effects:** the delegate's writes (password, token invalidation, session revoke) plus one
    *   new `auth_sessions` row (unless MFA is required). The caller sets the session cookie + audits.
    */
-  async resetPassword(body: unknown, ipAddress: string, userAgent?: string): Promise<LoginResult> {
+  async resetPassword(
+    body: unknown,
+    ipAddress: string,
+    userAgent?: string,
+  ): Promise<PasswordResetResult> {
     const user = await this.authMethodService.resetPassword(body);
     // The password was reset, but a suspended/locked/deleted account is never issued a session.
     assertUserAccountActive({
       status: user.status,
       deleted_at: user.deleted_at,
     });
-    return completeFirstFactorAuth({
+    const loginResult = await completeFirstFactorAuth({
       user: {
         id: user.id,
         public_id: user.public_id,
@@ -288,6 +325,7 @@ export class AuthService {
       // Non-pinned path: self-heal a missing personal organization into the token (item #5).
       ensurePersonalOrganizationOnMiss: true,
     });
+    return { userPublicId: user.public_id, loginResult };
   }
 
   async logout(token: string): Promise<void> {
@@ -359,6 +397,7 @@ export class AuthService {
 
     const rotated = await this.authSessionService.refreshSessionCredentials({
       sessionPublicId,
+      userPublicId: user.public_id,
       refreshSecret,
       nextAccessToken: jsonWebToken,
     });
@@ -425,7 +464,7 @@ export class AuthService {
     // Self-heal: provision the personal organization on demand when personal is enabled but missing,
     // so this can no longer 404 for a personal-enabled deployment. Returns undefined only when
     // personal organizations are disabled → 404 as before.
-    const personal = await ensurePersonalOrganization(user.id);
+    const personal = await ensurePersonalOrganization(user);
     if (!personal) throw new NotFoundError('Personal organization');
     return this.mintForActiveOrganization(user, sessionPublicId, personal);
   }

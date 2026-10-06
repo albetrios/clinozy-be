@@ -6,6 +6,9 @@ import {
 } from '@/domains/notify/sub-domains/notification/workers/notification-email-idempotency.js';
 import { NOTIFICATION_EMAIL_DISPATCH_IDEMPOTENCY_TTL_SECONDS } from '@/shared/constants/ttl.constants.js';
 
+const FIRST_NOTIFICATION_PUBLIC_ID = 'ntf_9z3rura5kqvcv8zggriym';
+const SECOND_NOTIFICATION_PUBLIC_ID = 'ntf_bchnclznbnkn5db2qocfh';
+
 /**
  * The guard that stops a retried notification job from emailing the same user twice (audit-#7).
  *
@@ -46,7 +49,7 @@ describe('notification email dispatch idempotency', () => {
   it('reports not-dispatched for a notification that was never marked', () => {
     return expect(
       isNotificationEmailDispatched({
-        notificationId: 1,
+        notificationPublicId: FIRST_NOTIFICATION_PUBLIC_ID,
         recipient: 'user@example.com',
         redis,
       }),
@@ -55,23 +58,37 @@ describe('notification email dispatch idempotency', () => {
 
   it('reports dispatched once the notification has been marked', async () => {
     await markNotificationEmailDispatched({
-      notificationId: 1,
+      notificationPublicId: FIRST_NOTIFICATION_PUBLIC_ID,
       recipient: 'user@example.com',
       redis,
     });
 
     await expect(
       isNotificationEmailDispatched({
-        notificationId: 1,
+        notificationPublicId: FIRST_NOTIFICATION_PUBLIC_ID,
         recipient: 'user@example.com',
         redis,
       }),
     ).resolves.toBe(true);
   });
 
-  it('scopes the marker to the notification id and recipient', async () => {
+  it('keys the marker by the notification public id, never the bigserial', async () => {
+    // The bigserial restarts at 1 after TRUNCATE ... RESTART IDENTITY or a restore while this
+    // marker lives for 24 hours — keyed by it, a NEW notification 1 would be skipped as sent.
     await markNotificationEmailDispatched({
-      notificationId: 1,
+      notificationPublicId: FIRST_NOTIFICATION_PUBLIC_ID,
+      recipient: 'user@example.com',
+      redis,
+    });
+
+    expect([...store.keys()]).toEqual([
+      `notification:email-dispatched:${FIRST_NOTIFICATION_PUBLIC_ID}:user@example.com`,
+    ]);
+  });
+
+  it('scopes the marker to the notification public id and recipient', async () => {
+    await markNotificationEmailDispatched({
+      notificationPublicId: FIRST_NOTIFICATION_PUBLIC_ID,
       recipient: 'user@example.com',
       redis,
     });
@@ -79,10 +96,18 @@ describe('notification email dispatch idempotency', () => {
     // A different notification to the same recipient, and the same notification to a different
     // recipient, must both still be undispatched — the key is the pair, not either half.
     await expect(
-      isNotificationEmailDispatched({ notificationId: 2, recipient: 'user@example.com', redis }),
+      isNotificationEmailDispatched({
+        notificationPublicId: SECOND_NOTIFICATION_PUBLIC_ID,
+        recipient: 'user@example.com',
+        redis,
+      }),
     ).resolves.toBe(false);
     await expect(
-      isNotificationEmailDispatched({ notificationId: 1, recipient: 'other@example.com', redis }),
+      isNotificationEmailDispatched({
+        notificationPublicId: FIRST_NOTIFICATION_PUBLIC_ID,
+        recipient: 'other@example.com',
+        redis,
+      }),
     ).resolves.toBe(false);
   });
 
@@ -90,37 +115,45 @@ describe('notification email dispatch idempotency', () => {
     // buildKey lowercases the recipient, so a re-queued job whose payload carries a differently
     // cased address must not be read as a fresh dispatch.
     await markNotificationEmailDispatched({
-      notificationId: 1,
+      notificationPublicId: FIRST_NOTIFICATION_PUBLIC_ID,
       recipient: 'User@Example.COM',
       redis,
     });
 
     await expect(
-      isNotificationEmailDispatched({ notificationId: 1, recipient: 'user@example.com', redis }),
+      isNotificationEmailDispatched({
+        notificationPublicId: FIRST_NOTIFICATION_PUBLIC_ID,
+        recipient: 'user@example.com',
+        redis,
+      }),
     ).resolves.toBe(true);
   });
 
   it('marking twice is idempotent and leaves a single marker', async () => {
     await markNotificationEmailDispatched({
-      notificationId: 1,
+      notificationPublicId: FIRST_NOTIFICATION_PUBLIC_ID,
       recipient: 'user@example.com',
       redis,
     });
     await markNotificationEmailDispatched({
-      notificationId: 1,
+      notificationPublicId: FIRST_NOTIFICATION_PUBLIC_ID,
       recipient: 'user@example.com',
       redis,
     });
 
     expect(store.size).toBe(1);
     await expect(
-      isNotificationEmailDispatched({ notificationId: 1, recipient: 'user@example.com', redis }),
+      isNotificationEmailDispatched({
+        notificationPublicId: FIRST_NOTIFICATION_PUBLIC_ID,
+        recipient: 'user@example.com',
+        redis,
+      }),
     ).resolves.toBe(true);
   });
 
   it('writes the marker with the declared TTL so the dedup window expires', async () => {
     await markNotificationEmailDispatched({
-      notificationId: 1,
+      notificationPublicId: FIRST_NOTIFICATION_PUBLIC_ID,
       recipient: 'user@example.com',
       redis,
     });
@@ -139,7 +172,7 @@ describe('notification email dispatch idempotency', () => {
 
     await expect(
       isNotificationEmailDispatched({
-        notificationId: 1,
+        notificationPublicId: FIRST_NOTIFICATION_PUBLIC_ID,
         recipient: 'user@example.com',
         redis: failingRedis,
       }),
@@ -153,7 +186,7 @@ describe('notification email dispatch idempotency', () => {
 
     await expect(
       markNotificationEmailDispatched({
-        notificationId: 1,
+        notificationPublicId: FIRST_NOTIFICATION_PUBLIC_ID,
         recipient: 'user@example.com',
         redis: failingRedis,
       }),

@@ -276,7 +276,7 @@ describe('planEnvironmentSyncPreview', () => {
       'FRONTEND_URL=http://a', // override, on remote different → update
       'WEBHOOK_MAX_PER_ORG=5', // override, absent → create
       'STRIPE_SECRET_KEY=sk_live_do_not_print', // secret, on remote → secret
-      'JWT_SECRET=xyz', // secret, absent → secret-create
+      'CAPTCHA_SECRET=xyz', // secret, absent → secret-create
       'OPTIONAL=', // blank
     ].join('\n'),
   );
@@ -302,7 +302,7 @@ describe('planEnvironmentSyncPreview', () => {
     expect(byName.get('FRONTEND_URL')?.decision).toBe('update');
     expect(byName.get('WEBHOOK_MAX_PER_ORG')?.decision).toBe('create');
     expect(byName.get('STRIPE_SECRET_KEY')?.decision).toBe('secret');
-    expect(byName.get('JWT_SECRET')?.decision).toBe('secret-create');
+    expect(byName.get('CAPTCHA_SECRET')?.decision).toBe('secret-create');
     expect(byName.get('OPTIONAL')?.decision).toBe('blank');
   });
 
@@ -333,5 +333,32 @@ describe('planEnvironmentSyncPreview', () => {
     expect(table).toContain(`total=${rows.length}`);
     expect(table).toContain('skip+prune=1');
     expect(table).not.toContain('sk_live'); // secret values never leak into the table
+  });
+});
+
+describe('planEnvironmentSyncPreview — the _SECRET suffix rule', () => {
+  const rows = planEnvironmentSyncPreview({
+    declared: parseEnvContents(
+      [
+        'OAUTH_GITHUB_CLIENT_SECRET=a',
+        'STRIPE_WEBHOOK_SECRET=b',
+        'NEW_PROVIDER_SECRET=c',
+        'WEBHOOK_SECRET_ROTATION_OVERLAP_HOURS=24',
+      ].join('\n'),
+    ),
+    remoteVariables: new Map(),
+    remoteSecretNames: new Set(),
+    schemaDefaults: {},
+  });
+  const byName = new Map(rows.map((row) => [row.name, row]));
+
+  it('treats every key ending in _SECRET as a secret, with no per-key list', () => {
+    expect(byName.get('OAUTH_GITHUB_CLIENT_SECRET')?.decision).toBe('secret-create');
+    expect(byName.get('STRIPE_WEBHOOK_SECRET')?.decision).toBe('secret-create');
+    expect(byName.get('NEW_PROVIDER_SECRET')?.decision).toBe('secret-create');
+  });
+
+  it('keeps a key with SECRET only mid-name a variable', () => {
+    expect(byName.get('WEBHOOK_SECRET_ROTATION_OVERLAP_HOURS')?.decision).toBe('create');
   });
 });

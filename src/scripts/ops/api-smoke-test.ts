@@ -10,6 +10,8 @@
  * Deploy CD sets BASE_URL from Railway API domain; optional GitHub secrets SMOKE_DEMO_EMAIL / SMOKE_DEMO_PASSWORD
  */
 import '@/shared/config/load-env-files.js';
+import { decodeJwt } from 'jose';
+import { GLOBAL_ROLES } from '@/shared/constants/roles.constants.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import {
   loadRouteRegistryFromCatalog,
@@ -95,6 +97,16 @@ function requireToken(): string {
     throw new Error('access token not set — login must run first');
   }
   return smokeContext.accessToken;
+}
+
+/**
+ * Whether the smoke user holds the global super-admin role, read from the access token's `role`
+ * claim — the claim `requireRole` checks on the audit-log route. A stack started by
+ * `pnpm dashboards:up` promotes the demo user (Bull Board signs in as it); a deployed smoke user is
+ * a regular user.
+ */
+function isSmokeUserSuperAdmin(): boolean {
+  return decodeJwt(requireToken()).role === GLOBAL_ROLES.SUPER_ADMIN;
 }
 
 function requireOrganizationId(): string {
@@ -408,12 +420,12 @@ function buildDomainProbes(): RouteProbe[] {
       expectedStatus: 200,
     },
 
-    // ── Audit (global role — demo user is "user", expect 403) ───────────
+    // ── Audit (global role — 200 for a super admin, 403 for anyone else) ─
     {
       name: 'GET /api/v1/audit/logs (global admin only)',
       path: `${API_PREFIX}/audit/logs`,
       authenticated: true,
-      expectedStatus: 403,
+      expectedStatus: isSmokeUserSuperAdmin() ? 200 : 403,
     },
 
     // ── Upload ────────────────────────────────────────────────────────
@@ -459,8 +471,10 @@ const healthProbes: RouteProbe[] = [
  * generic tolerance is wrong for a documented reason. Keep minimal.
  */
 const SWEEP_EXPECTED_OVERRIDES: Record<string, number[]> = {
-  // 403 for the demo (non-admin) user; 404 when ENABLE_MCP_SERVER=false in the target env.
-  'GET /api/v1/mcp': [403, 404],
+  // 403 for a non-admin smoke user; 404 when ENABLE_MCP_SERVER=false in the target env; 406 when
+  // the smoke user is a super_admin (GLOBAL_ADMIN_EMAILS): past the role check, the streamable-HTTP
+  // transport refuses a GET that does not accept `text/event-stream`, which this sweep never sends.
+  'GET /api/v1/mcp': [403, 404, 406],
 };
 
 import {

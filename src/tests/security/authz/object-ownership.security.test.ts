@@ -394,7 +394,6 @@ describe('Security: object-ownership BOLA matrix', () => {
         method: 'GET',
         url: testApiPath(`/billing/subscriptions/${fixture.subscriptionInB.public_id}`),
         token: tokenScopedToOrgA,
-        organizationPublicId: fixture.organizationA.public_id,
       });
       expect(res.statusCode).toBe(404);
     });
@@ -411,7 +410,6 @@ describe('Security: object-ownership BOLA matrix', () => {
           `/billing/subscriptions/${fixture.subscriptionInB.public_id}/payment-setup`,
         ),
         token: tokenScopedToOrgA,
-        organizationPublicId: fixture.organizationA.public_id,
       });
       expect(res.statusCode).toBe(404);
     });
@@ -426,7 +424,6 @@ describe('Security: object-ownership BOLA matrix', () => {
         method: 'GET',
         url: testApiPath(`/billing/subscriptions/${fixture.subscriptionInA.public_id}`),
         token: tokenScopedToOrgA,
-        organizationPublicId: fixture.organizationA.public_id,
       });
       expect(res.statusCode).toBe(200);
     });

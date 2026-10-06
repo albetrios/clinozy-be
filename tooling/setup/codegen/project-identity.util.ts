@@ -64,8 +64,8 @@ export interface ProjectDerivedNames {
   readonly dryRunDatabaseName: string;
   /** Restricted Postgres role the app connects as, under RLS. */
   readonly databaseAppRole: string;
-  /** Postgres role owning runtime objects. */
-  readonly databaseRuntimeRole: string;
+  /** Postgres role the maintenance (bypass) contexts connect as — the only role the bypass policy arms admit. */
+  readonly databaseMaintenanceRole: string;
   /** Default Redis key-prefix stem (`<stem>:<NODE_ENV>:`). */
   readonly redisKeyPrefix: string;
   /** Local Docker Compose container names, keyed by service. */
@@ -201,7 +201,7 @@ export function resolveDerivedNames(config: SetupConfig): ProjectDerivedNames {
     databaseName: stem,
     dryRunDatabaseName: `${stem}_dryrun`,
     databaseAppRole: `${sqlStem}_app`,
-    databaseRuntimeRole: `${sqlStem}_runtime`,
+    databaseMaintenanceRole: `${sqlStem}_maintenance`,
     redisKeyPrefix: stem,
     apiServerName: slug,
     webhookUserAgent: `${slug}-webhook`,

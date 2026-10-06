@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { InjectOptions } from 'light-my-request';
 import type { FastifyInstance } from 'fastify';
+import { waitForResponseSettlement } from '@/tests/helpers/response-settlement.helper.js';
 
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -119,6 +120,9 @@ export async function injectRoute(
   }
 
   const response = await application.inject(injectOptions);
+  // The idempotency entry and the post-commit dispatch flush run in `onResponse`, after
+  // `inject()` resolves — wait for them so a follow-up request or read sees their effects.
+  await waitForResponseSettlement(application);
 
   return toInjectResult({
     statusCode: response.statusCode,
@@ -129,7 +133,6 @@ export async function injectRoute(
 
 export type InjectAuthenticatedOptions = InjectRouteOptions & {
   token: string;
-  organizationPublicId?: string;
   extraHeaders?: Record<string, string>;
 };
 
@@ -142,12 +145,10 @@ export async function injectAuthenticated(
     ...options.headers,
     authorization: `Bearer ${options.token}`,
   };
-  // organizationPublicId is accepted-and-ignored: the X-Organization-Id header was
-  // removed — the active organization rides ONLY the token's signed `org` claim, so
-  // suites scope requests by minting the right token, never by header.
-  const { token, organizationPublicId, extraHeaders, ...routeOptions } = options;
+  // The active organization rides the token's signed `org` claim: a suite scopes a request by
+  // minting the right token.
+  const { token, extraHeaders, ...routeOptions } = options;
   void token;
-  void organizationPublicId;
   void extraHeaders;
   return injectRoute(application, { ...routeOptions, headers });
 }
@@ -168,27 +169,4 @@ export async function injectWithCookies(
   options: InjectWithCookiesOptions,
 ): Promise<InjectHttpResult> {
   return injectRoute(application, options);
-}
-
-/**
- * Organization-scoped routes pin Drizzle to a request transaction that commits in
- * `onResponse` after `inject()` resolves. Yield the event loop before follow-up reads.
- */
-export async function waitForOrganizationRlsTransactionCommit(): Promise<void> {
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  await new Promise<void>((resolve) => setTimeout(resolve, 50));
-}
-
-/** POST/PATCH/DELETE on organization-scoped routes commit in onResponse after inject() resolves. */
-export async function injectAuthenticatedOrganizationMutation(
-  application: FastifyInstance,
-  options: InjectAuthenticatedOptions,
-): Promise<InjectHttpResult> {
-  const response = await injectAuthenticated(application, options);
-  const method = options.method ?? 'GET';
-  if (method === 'POST' || method === 'PATCH' || method === 'DELETE') {
-    await waitForOrganizationRlsTransactionCommit();
-  }
-  return response;
 }

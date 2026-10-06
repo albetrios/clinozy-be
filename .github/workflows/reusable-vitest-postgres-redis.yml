@@ -116,6 +116,7 @@ jobs:
       HOST: 0.0.0.0
       PORT: 3000
       DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
       REDIS_URL: redis://localhost:6379
       RATE_LIMIT_MAX: 1000
       RATE_LIMIT_WINDOW_MS: 60000
@@ -228,6 +229,7 @@ jobs:
       HOST: 0.0.0.0
       PORT: 3000
       DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
       REDIS_URL: redis://localhost:6379
 
     steps:
@@ -297,6 +299,13 @@ jobs:
     needs: [run, unit-coverage]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # `pnpm docs:generate` loads the env schema (the encrypted list cursors derive their key from
+    # SECRETS_ENCRYPTION_KEY): the same throwaway values as the unit-coverage job. Nothing connects.
+    env:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      REDIS_URL: redis://localhost:6379
     outputs:
       coverage_summary: ${{ steps.summary.outputs.coverage_summary }}
     steps:
@@ -324,6 +333,9 @@ jobs:
           pattern: route-observed-*
           path: route-observed-shards
           merge-multiple: false
+
+      - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
+        uses: ./.github/actions/test-env
 
       - name: Generate OpenAPI artifact for the error-status documentation check
         run: pnpm docs:generate

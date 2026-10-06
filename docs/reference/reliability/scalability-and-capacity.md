@@ -99,7 +99,7 @@ and concurrent-create paths race their unique indexes (Postgres `23505`):
 | Index the remaining FKs (organization purge scanned `auth.sessions`; user purge scanned `webauthn_credentials`) | **Done** — `migrations/20260923152433_index_uncovered_foreign_keys.sql` |
 | Retire redundant prefix indexes (four on `audit.logs` alone, maintained on every audit write) | **Done** — `migrations/20260923130000_drop_redundant_prefix_indexes.sql` |
 | Keep both true | **Gated** — `src/tests/integration/database/index-hygiene.integration.test.ts` fails on an FK without a usable index, or a B-tree index that leads another |
-| Centralize the per-worker `stalled` listener into `attachDeadLetterAndAlerting` | Proposed — 32 workers each attach identical boilerplate; centralizing makes it structural but changes log-event tags (`*.stalled` → `queue.job.stalled`), so it wants owner review |
+| Centralize the per-worker `stalled` listener into `attachDeadLetterAndAlerting` | Proposed — 33 workers each attach identical boilerplate; centralizing makes it structural but changes log-event tags (`*.stalled` → `queue.job.stalled`), so it wants owner review |
 | Partition `audit.logs` + `webhook_delivery_attempts` by time | Proposed — high-volume append tables; range partitioning keeps retention deletes and recent-window reads cheap at scale (owner decision: ops project) |
 
 See also: [load-testing](../testing/load-testing.md) ·

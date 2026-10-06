@@ -3,10 +3,19 @@ import * as fc from 'fast-check';
 import { stripeWebhookBackoffStrategy } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook-backoff.util.js';
 import { buildStripeIdempotencyKey } from '@/domains/billing/sub-domains/subscription/subscription.service.js';
 import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
+import { QUEUE_RETRY_JITTER_RATIO } from '@/infrastructure/queue/queue.constants.js';
 import { TEN_SECONDS_MS } from '@/shared/constants/ttl.constants.js';
 import { propertyAssertOptions } from '@/tests/helpers/fast-check-property.util.js';
 
 const propertyOptions = propertyAssertOptions();
+
+/** The jitter added on top of a base delay: never shorter, at most 20% longer. */
+function expectJitteredDelay(delayMs: number, baseDelayMs: number): void {
+  expect(delayMs).toBeGreaterThanOrEqual(baseDelayMs);
+  expect(delayMs).toBeLessThanOrEqual(
+    baseDelayMs + Math.floor(baseDelayMs * QUEUE_RETRY_JITTER_RATIO),
+  );
+}
 
 /**
  * Layer 2 (property) for billing's two pure rule systems: the webhook retry curve (a wrong curve
@@ -23,10 +32,11 @@ describe('stripe webhook backoff curve (property)', () => {
         const delay = stripeWebhookBackoffStrategy(attempt, undefined, undefined);
         const next = stripeWebhookBackoffStrategy(attempt + 1, undefined, undefined);
         expect(delay).toBeGreaterThan(0);
-        // A flat or shrinking curve retries a failing provider at full speed.
+        // A flat or shrinking curve retries a failing provider at full speed — doubling outruns
+        // the 20% jitter, so the curve rises whatever the two draws were.
         expect(next).toBeGreaterThan(delay);
-        // The curve is exactly 10s · 2^(n-1) — the arithmetic the DLQ window is sized on.
-        expect(delay).toBe(TEN_SECONDS_MS * 2 ** (attempt - 1));
+        // The curve is 10s · 2^(n-1) plus jitter — the arithmetic the DLQ window is sized on.
+        expectJitteredDelay(delay, TEN_SECONDS_MS * 2 ** (attempt - 1));
       }),
       propertyOptions,
     );
@@ -37,7 +47,10 @@ describe('stripe webhook backoff curve (property)', () => {
       fc.property(fc.integer({ min: -10, max: 0 }), (attempt) => {
         // BullMQ should never hand these in, but a negative delay would be scheduled as
         // "immediately, forever" — the clamp is the guard.
-        expect(stripeWebhookBackoffStrategy(attempt, undefined, undefined)).toBe(TEN_SECONDS_MS);
+        expectJitteredDelay(
+          stripeWebhookBackoffStrategy(attempt, undefined, undefined),
+          TEN_SECONDS_MS,
+        );
       }),
       propertyOptions,
     );
@@ -51,8 +64,11 @@ describe('stripe webhook backoff curve (property)', () => {
         (attempt, retryAfterMs) => {
           const error = new CircuitBreakerOpenError('stripe', retryAfterMs, 'circuit open');
           // While the breaker is open, retrying on the exponential curve would slam a
-          // provider that already said "not yet" — the breaker's own clock wins.
-          expect(stripeWebhookBackoffStrategy(attempt, undefined, error)).toBe(retryAfterMs);
+          // provider that already said "not yet" — the breaker's own clock wins (plus jitter).
+          expectJitteredDelay(
+            stripeWebhookBackoffStrategy(attempt, undefined, error),
+            retryAfterMs,
+          );
         },
       ),
       propertyOptions,
@@ -63,10 +79,11 @@ describe('stripe webhook backoff curve (property)', () => {
     const total = [1, 2, 3, 4, 5]
       .map((attempt) => stripeWebhookBackoffStrategy(attempt, undefined, undefined))
       .reduce((sum, delay) => sum + delay, 0);
-    // 10+20+40+80+160s = 310s. The curve has no intrinsic clamp — THIS extrinsic bound
-    // (attempts: 5) is what keeps a failing event from waiting hours. If the sum moves,
-    // the DLQ runbook's "~5 minutes into an outage" claim moved with it.
-    expect(total).toBe(310_000);
+    // 10+20+40+80+160s = 310s, plus at most 20% jitter. The curve has no intrinsic clamp — THIS
+    // extrinsic bound (attempts: 5) is what keeps a failing event from waiting hours. If the sum
+    // moves, the DLQ runbook's "~5 minutes into an outage" claim moved with it.
+    expect(total).toBeGreaterThanOrEqual(310_000);
+    expect(total).toBeLessThanOrEqual(372_000);
   });
 });
 

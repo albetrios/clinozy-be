@@ -53,6 +53,10 @@ These are enforced by `pnpm db:migrate:lint` and cannot be overridden by the `--
    - **Overrides** — only in the first 20 lines of a file:
      `-- migration-safety: allow <rule_id> reason="short justification"`
      Known `rule_id` values live in `migrationSafetyRuleIds` in [`src/scripts/validators/migration/lint-migrations.ts`](../../../src/scripts/validators/migration/lint-migrations.ts).
+   - **Timeouts:** the runner caps every lock wait at 5 s (a transactional file is retried, 3 attempts) and
+     every transactional statement at 5 min. A migration that needs longer is a hidden data change or table
+     rewrite — split it or move the long part to the non-transactional lane (see migrations.md → Lock and
+     statement timeouts).
 6. **Verify locally** — always against the **local Docker** stack (Postgres 17), never a remote Neon dev branch. The compose Postgres is the only local environment with the `clinozy_be_app` role wired up so RLS security tests can `SET ROLE clinozy_be_app` and exercise policies exactly the way CI does:
 
    ```bash

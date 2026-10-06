@@ -499,6 +499,57 @@ describe('error-handler.middleware', () => {
     await validationApplication.close();
   });
 
+  it('names every unknown key of a strict schema in its own errors[] entry', async () => {
+    const validationApplication = Fastify({ logger: false });
+    await validationApplication.register(errorHandlerMiddleware);
+    validationApplication.get('/synthetic-unknown-keys', async () => {
+      const validationError = new Error('validation failed') as Error & {
+        statusCode: number;
+        code: string;
+        validation: Array<{
+          keyword?: string;
+          instancePath?: string;
+          params?: { keys?: string[] };
+          message?: string;
+        }>;
+        validationContext?: string;
+      };
+      validationError.statusCode = 400;
+      validationError.code = 'FST_ERR_VALIDATION';
+      // fastify-type-provider-zod reports a strict schema's unknown keys as ONE issue at the
+      // parent object (`keyword` = the Zod issue code, the keys under `params`).
+      validationError.validation = [
+        {
+          keyword: 'unrecognized_keys',
+          instancePath: '/',
+          params: { keys: ['page', 'per_page'] },
+          message: 'Unrecognized keys: "page", "per_page"',
+        },
+        {
+          keyword: 'unrecognized_keys',
+          instancePath: '/filter',
+          params: { keys: ['sort_by'] },
+          message: 'Unrecognized key: "sort_by"',
+        },
+      ];
+      validationError.validationContext = 'querystring';
+      throw validationError;
+    });
+    await validationApplication.ready();
+
+    const response = await validationApplication.inject({
+      method: 'GET',
+      url: '/synthetic-unknown-keys',
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.errors).toEqual([
+      { field: 'querystring.page', message: 'Unrecognized key: "page"' },
+      { field: 'querystring.per_page', message: 'Unrecognized key: "per_page"' },
+      { field: 'querystring.filter.sort_by', message: 'Unrecognized key: "sort_by"' },
+    ]);
+    await validationApplication.close();
+  });
+
   it('uses messageKey as validation item text when message is absent', async () => {
     const validationApplication = Fastify({ logger: false });
     await validationApplication.register(errorHandlerMiddleware);

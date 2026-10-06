@@ -82,13 +82,12 @@ describe('Billing account reads — unconfigured provider degradation', () => {
   }
 
   it('GET /billing/invoices returns an empty page (200), not 503', async () => {
-    const { organization, token } = await createBillingReadContext();
+    const { token } = await createBillingReadContext();
 
     const response = await injectAuthenticated(app, {
       method: 'GET',
       url: testApiPath('/billing/invoices'),
       token,
-      organizationPublicId: organization.public_id,
     });
 
     expect(response.statusCode).toBe(200);
@@ -104,13 +103,12 @@ describe('Billing account reads — unconfigured provider degradation', () => {
   });
 
   it('GET /billing/payment-methods returns an empty list (200), not 503', async () => {
-    const { organization, token } = await createBillingReadContext();
+    const { token } = await createBillingReadContext();
 
     const response = await injectAuthenticated(app, {
       method: 'GET',
       url: testApiPath('/billing/payment-methods'),
       token,
-      organizationPublicId: organization.public_id,
     });
 
     expect(response.statusCode).toBe(200);
@@ -144,7 +142,6 @@ describe('Billing account reads — unconfigured provider degradation', () => {
       method: 'GET',
       url: testApiPath(`/billing/subscriptions/${subscription.public_id}/payment-setup`),
       token,
-      organizationPublicId: organization.public_id,
     });
 
     expect(response.statusCode).toBe(200);

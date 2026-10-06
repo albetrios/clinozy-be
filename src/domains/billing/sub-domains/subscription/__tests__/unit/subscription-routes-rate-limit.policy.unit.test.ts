@@ -33,7 +33,6 @@ describe('subscription routes rate-limit policy (route-#2)', () => {
 
   const MUTATIONS: Array<[string, string]> = [
     ['post', '/subscriptions'],
-    ['patch', '/subscriptions/:subscription_id'],
     ['post', '/subscriptions/:subscription_id/change-plan'],
     ['post', '/subscriptions/:subscription_id/cancel'],
     ['post', '/subscriptions/:subscription_id/resume'],

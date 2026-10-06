@@ -20,7 +20,10 @@ export const IDEMPOTENCY_CLAIM_COUNTER_LOGICAL_KEY = 'idempotency-claim-counter'
  */
 export const IDEMPOTENCY_CLAIM_COUNTER_SHARD_COUNT = 16;
 
-/** Logical SCAN/WAIT pattern for cache keys (ioredis applies Redis key prefix). */
+/**
+ * Logical SCAN pattern for idempotency cache keys. ioredis does NOT prefix a SCAN pattern — build
+ * the real one with `buildPrefixedScanPattern` (`redis-scan.util.ts`).
+ */
 export const IDEMPOTENCY_CACHE_KEY_MATCH_PATTERN = 'idempotency:*';
 
 const IDEMPOTENCY_KEY_BODY_PATTERN = /^[A-Za-z0-9._:~+/=-]+$/;

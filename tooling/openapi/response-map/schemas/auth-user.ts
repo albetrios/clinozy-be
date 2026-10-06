@@ -71,11 +71,10 @@ export const notificationPreferenceSchema = {
     notification_type: { type: 'string' },
     channel: {
       type: 'string',
-      enum: ['EMAIL', 'SMS', 'PUSH', 'IN_APP'],
-      description: 'Possible values: EMAIL | SMS | PUSH | IN_APP',
+      enum: ['EMAIL', 'SMS', 'WEB_PUSH', 'IN_APP'],
+      description: 'Possible values: EMAIL | SMS | WEB_PUSH | IN_APP',
       example: 'EMAIL',
     },
-    organization_id: { type: 'string', nullable: true },
     is_enabled: { type: 'boolean' },
   },
 };
@@ -83,14 +82,12 @@ export const notificationPreferenceSchema = {
 export const notificationPreferenceExamples = [
   {
     notification_type: 'subscription.updated',
-    channel: 'email',
-    organization_id: null,
+    channel: 'EMAIL',
     is_enabled: true,
   },
   {
     notification_type: 'member.invited',
-    channel: 'push',
-    organization_id: 'org_k7x9m2pqr4w8n1v3a1b2c',
+    channel: 'WEB_PUSH',
     is_enabled: false,
   },
 ];
@@ -146,14 +143,12 @@ export const mfaEnrollSchema = {
   properties: {
     secret: { type: 'string' },
     provisioning_uri: { type: 'string' },
-    method_id: { type: 'integer' },
   },
 };
 
 export const mfaEnrollExample = {
   secret: 'JBSWY3DPEHPK3PXP',
   provisioning_uri: `otpauth://totp/${TOTP_ISSUER_EXAMPLE}:john.doe%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=${TOTP_ISSUER_EXAMPLE}`,
-  method_id: 1,
 };
 
 // ── MFA Verified ──
@@ -179,9 +174,9 @@ export const authMethodSchema = {
     id: { type: 'string', pattern: '^am_[a-z0-9]{21}$' },
     method_type: {
       type: 'string',
-      enum: ['PASSWORD', 'MAGIC_LINK', 'OAUTH', 'MFA_TOTP', 'MFA_SMS', 'MFA_EMAIL'],
+      enum: ['PASSWORD', 'EMAIL_CODE', 'OAUTH', 'MFA_TOTP', 'MFA_SMS', 'MFA_EMAIL'],
       description:
-        'Possible values: PASSWORD | MAGIC_LINK | OAUTH | MFA_TOTP | MFA_SMS | MFA_EMAIL',
+        'Possible values: PASSWORD | EMAIL_CODE | OAUTH | MFA_TOTP | MFA_SMS | MFA_EMAIL',
       example: 'PASSWORD',
     },
     provider: { type: 'string', nullable: true },

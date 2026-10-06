@@ -28,8 +28,8 @@ vi.mock('@/shared/utils/infrastructure/postgres-error.util.js', () => ({
  * Regressions for sec-U1 + sec-U8 (High): account-deletion safety.
  *
  * - **sec-U1:** soft-deleting a user must invalidate every outstanding verification token
- *   (magic-link, password-reset, email-verify, email-change). Without this, a 15-minute
- *   magic-link issued seconds before deletion can mint a session for the "deleted" user.
+ *   (email-code, password-reset, email-verify, email-change). Without this, a 15-minute
+ *   email code issued seconds before deletion can mint a session for the "deleted" user.
  *
  * - **sec-U8:** session/credential revocation must complete BEFORE the data-export and
  *   upload purge steps. The original ordering ran `deleteAllExportsForUser` before

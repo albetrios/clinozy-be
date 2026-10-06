@@ -2,6 +2,7 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Trend, Rate, Counter } from 'k6/metrics';
 import { API_PREFIX, PUBLIC_AUTH_FORM_HEADERS } from '../helpers/config.js';
+import { idempotencyKey } from '../helpers/idempotency.js';
 import { credentialPool } from '../helpers/pool.js';
 
 /**
@@ -202,11 +203,6 @@ export function setup() {
   return {};
 }
 
-/** Writes that the API rejects with 422 unless an idempotency key is present. */
-function idemKey() {
-  return `k6-${__VU}-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
-}
-
 /** `/auth/refresh` is CSRF-protected: the csrf_token cookie must be echoed as a header. */
 function csrfToken() {
   const c = http.cookieJar().cookiesForURL(`${API_PREFIX}/auth/refresh`).csrf_token;
@@ -342,7 +338,10 @@ export function feJourney() {
   const createOrg = http.post(
     `${API_PREFIX}/tenancy/organizations`,
     JSON.stringify({ name: `K6 Org ${unique}`, slug }),
-    { headers: { ...auth, 'X-Idempotency-Key': idemKey() }, tags: { name: '06-create-org' } },
+    {
+      headers: { ...auth, 'X-Idempotency-Key': idempotencyKey('fe-org') },
+      tags: { name: '06-create-org' },
+    },
   );
   const organizationOk = record('06-create-org', createOrg, [200, 201]);
   const organizationId = organizationOk ? JSON.parse(createOrg.body).data?.id : null;

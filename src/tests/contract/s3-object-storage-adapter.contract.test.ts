@@ -16,11 +16,10 @@ import { registerThirdPartyContractTestIsolationHooks } from './helpers/register
 registerThirdPartyContractTestIsolationHooks();
 
 /**
- * Contract test for the port-based S3ObjectStorageAdapter. The older s3.contract.test.ts
- * targets the function-style storage.service wrapper used by the audit export and the
- * tombstone retention worker. This test pins the adapter the upload domain depends on
- * (presigned POST, verifyUploadedObject, getObject) so signature drift in the AWS SDK
- * is caught at CI time.
+ * Contract test for S3ObjectStorageAdapter — the one S3 implementation: services inject it as
+ * `ObjectStoragePort`, workers use the default instance. Pins presigned PUT/POST,
+ * verifyUploadedObject, getObject and deleteObject so signature drift in the AWS SDK is caught
+ * at CI time.
  */
 describe('Amazon S3 contract (`S3ObjectStorageAdapter`)', () => {
   const bucketOutbound = env.S3_BUCKET ?? 'contract-test-bucket';
@@ -102,7 +101,7 @@ describe('Amazon S3 contract (`S3ObjectStorageAdapter`)', () => {
     );
   });
 
-  test('verifyUploadedObject returns HEAD-reported contentType + contentLength', async () => {
+  test('verifyUploadedObject verifies an object whose HEAD matches the declared type and length', async () => {
     nock(`https://${bucketHostnameOutbound}`)
       .intercept(objectRequestPathOutbound, 'HEAD')
       .matchHeader('authorization', /^AWS4-HMAC-SHA256 Credential=/)
@@ -112,13 +111,18 @@ describe('Amazon S3 contract (`S3ObjectStorageAdapter`)', () => {
       });
 
     const adapter = getDefaultS3ObjectStorageAdapter();
-    const metadata = await adapter.verifyUploadedObject(objectKeyOutbound, {
+    const verdict = await adapter.verifyUploadedObject(objectKeyOutbound, {
       contentType: headObjectOutboundMetadataFixture.contentType,
       contentLength: Number(headObjectOutboundMetadataFixture.contentLength),
     });
 
-    expect(metadata.contentType).toBe(headObjectOutboundMetadataFixture.contentType);
-    expect(metadata.contentLength).toBe(Number(headObjectOutboundMetadataFixture.contentLength));
+    expect(verdict).toEqual({
+      kind: 'verified',
+      metadata: {
+        contentType: headObjectOutboundMetadataFixture.contentType,
+        contentLength: Number(headObjectOutboundMetadataFixture.contentLength),
+      },
+    });
   });
 
   test('headObject returns null for missing objects (404 from S3)', async () => {
@@ -151,7 +155,7 @@ describe('Amazon S3 contract (`S3ObjectStorageAdapter`)', () => {
     expect(result.contentType).toBe('application/octet-stream');
   });
 
-  test('deleteObject returns true on a 204 No Content', async () => {
+  test('deleteObject reports deleted on a 204 No Content', async () => {
     // The AWS SDK appends an `?x-id=DeleteObject` query parameter; .query(true) accepts any.
     nock(`https://${bucketHostnameOutbound}`)
       .delete(objectRequestPathOutbound)
@@ -159,10 +163,10 @@ describe('Amazon S3 contract (`S3ObjectStorageAdapter`)', () => {
       .reply(204, '');
 
     const adapter = getDefaultS3ObjectStorageAdapter();
-    await expect(adapter.deleteObject(objectKeyOutbound)).resolves.toBe(true);
+    await expect(adapter.deleteObject(objectKeyOutbound)).resolves.toEqual({ kind: 'deleted' });
   });
 
-  test('deleteObject returns false (and does not throw) when S3 returns 5xx', async () => {
+  test('deleteObject reports failed (and does not throw) when S3 returns 5xx', async () => {
     nock(`https://${bucketHostnameOutbound}`)
       .delete(objectRequestPathOutbound)
       .query(true)
@@ -172,6 +176,9 @@ describe('Amazon S3 contract (`S3ObjectStorageAdapter`)', () => {
       });
 
     const adapter = getDefaultS3ObjectStorageAdapter();
-    await expect(adapter.deleteObject(objectKeyOutbound)).resolves.toBe(false);
+    await expect(adapter.deleteObject(objectKeyOutbound)).resolves.toEqual({
+      kind: 'failed',
+      circuitOpen: false,
+    });
   });
 });

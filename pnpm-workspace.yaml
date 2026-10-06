@@ -81,6 +81,16 @@ overrides:
   # handshake, <=2.0.9). Transitive via @modelcontextprotocol/sdk + @scalar/cli.
   # Fixed in 2.0.10.
   '@hono/node-server': '>=2.0.10'
+  # source-map-js >=1.0.0 <1.2.2 — GHSA-68fv-2mgg-jv7q (high): event-loop DoS through indexed
+  # source-map section offsets. Production tree, transitive via isomorphic-dompurify > jsdom >
+  # css-tree (4 paths). Fixed in 1.2.2; caret-bounded so the floor never silently major-bumps.
+  source-map-js: '^1.2.2'
+  # katex >=0.11.0 <0.18.2 — GHSA-238p-pmpm-9mq7 (low). Dev tree only, transitive via
+  # markdownlint-cli2 > markdownlint > micromark-extension-math. Fixed in 0.18.2.
+  katex: '>=0.18.2 <1'
+  # fast-copy >=4.0.0 <4.1.0 — GHSA-jggr-w7fw-pc2j (moderate). Dev tree only, transitive via
+  # pino-pretty. Fixed in 4.1.0.
+  fast-copy: '^4.1.0'
   # markdown-it 15.0.0 — GHSA-253c-mchw-3w2r (moderate, no patched 15.x named). Kept on the
   # 14.x line markdownlint-cli2 0.23.2 declares (14.3.0); an open floor resolved to 15.0.0.
   markdown-it: '>=14.1.1 <15'
@@ -161,3 +171,8 @@ minimumReleaseAgeExclude:
   - '@types/node@24.19.1'
   - '@aws-sdk/s3-presigned-post@3.1145.0'
   - '@aws-sdk/s3-request-presigner@3.1145.0'
+# Vitest 5 joins suite + test names with " > "; @stryker-mutator/vitest-runner 10.0.0 joins its test ids
+# with spaces, so no test matched and every mutant ran zero tests. Drop once the runner ships the fix
+# (the entry is version-keyed: bumping the runner without re-keying it fails the install).
+patchedDependencies:
+  '@stryker-mutator/vitest-runner@10.0.0': patches/@stryker-mutator__vitest-runner@10.0.0.patch

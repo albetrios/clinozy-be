@@ -182,7 +182,7 @@ describe('health.middleware', () => {
       worker_queues: [],
       worker_queue_manifest: [],
       circuit_breakers: [{ name: 'resend', state: 'OPEN' }],
-      queue_depths: [{ queue: 'mail', waiting: 3, delayed: 0 }],
+      queue_depths: [{ queue: 'mail', waiting: 3, delayed: 0, provider_pause_ms: 240_000 }],
       degraded: true,
     });
     application = Fastify();
@@ -194,7 +194,8 @@ describe('health.middleware', () => {
     expect(response.json()).toMatchObject({
       degraded: true,
       circuit_breakers: [{ name: 'resend', state: 'OPEN' }],
-      queue_depths: [{ queue: 'mail', waiting: 3, delayed: 0 }],
+      // A queue paused for its provider says so, with the time left.
+      queue_depths: [{ queue: 'mail', waiting: 3, delayed: 0, provider_pause_ms: 240_000 }],
     });
   });
 
@@ -230,7 +231,7 @@ describe('health.middleware', () => {
       worker_queues: [],
       worker_queue_manifest: [],
       circuit_breakers: [],
-      queue_depths: [{ queue: 'webhook-delivery', waiting: 250, delayed: 0 }],
+      queue_depths: [{ queue: 'webhook-delivery', waiting: 250, delayed: 0, provider_pause_ms: 0 }],
       degraded: false,
     });
     application = Fastify();

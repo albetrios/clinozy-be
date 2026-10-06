@@ -4,6 +4,7 @@
  * loader, same as the API and worker entrypoints.
  */
 import '../../shared/config/load-env-files.js';
+import '../helpers/harness-provider-env.js';
 
 // Force NODE_ENV=development (mirrors src/tests/setup.ts) so a developer's `.env.local` cannot leak a
 // different value through load-env-files. NODE_ENV is `local` | `development` | `production`; the chaos
@@ -11,16 +12,22 @@ import '../../shared/config/load-env-files.js';
 // cleanupDatabase/cleanupTestRedis guards) via the explicit flags below.
 process.env.NODE_ENV = 'development';
 // Isolate the chaos Redis keyspace from a running `pnpm dev` (both are NODE_ENV=development).
+// Forced with `=`, as src/tests/setup.ts does: with `??=` a developer's env file that sets
+// REDIS_KEY_PREFIX won, and the chaos jobs and cleanupTestRedis ran inside the dev namespace.
 // Literal, not an import: this module must resolve BEFORE Vitest wires `@/` aliases,
 // and the import-paths policy forbids `../` in a `from` clause. It is instead a
 // generator target (see text-identity-rewrites.ts), so a rebrand rewrites it in place.
-process.env.REDIS_KEY_PREFIX ??= 'clinozy:test:';
+process.env.REDIS_KEY_PREFIX = 'clinozy:test:';
 // Skip process-level shared-singleton teardown under the per-worker Vitest harness.
 process.env.SHUTDOWN_SKIP_SHARED_TEARDOWN = 'true';
 // Disable the ioredis ready-check (read raw from process.env by the Redis/BullMQ clients).
 process.env.REDIS_READY_CHECK_ENABLED = 'false';
 // Category-B security flags default hardened; set the relaxed test values (see src/tests/setup.ts).
 process.env.CAPTCHA_BYPASS_ALLOWED ??= 'true';
+// CAPTCHA is hard-disabled (`=`, not `??=`), as src/tests/setup.ts does for the main suite: CI leaves
+// CAPTCHA_PROVIDER unset (schema default `disabled`), while a developer's env file that enables
+// Turnstile would make every public auth form here answer 401 `errors:captchaRequired`.
+process.env.CAPTCHA_PROVIDER = 'disabled';
 process.env.SESSION_ORIGIN_CSRF_REQUIRED ??= 'false';
 process.env.WEBHOOK_ALLOWLIST_REQUIRED ??= 'false';
 process.env.METRICS_AUTH_REQUIRED ??= 'false';
@@ -55,7 +62,6 @@ process.env.RUN_DB_TESTS ||= '1';
 process.env.PORT ??= '3000';
 process.env.HTTP_BIND_HOST = '127.0.0.1';
 process.env.LOG_LEVEL ??= 'warn';
-/** Deprecated optional no-op; RS256 keys come from load-env-files / test setup. */
 process.env.ALLOWED_ORIGINS ??= 'http://localhost:3000';
 process.env.FRONTEND_URL ??= 'http://localhost:3000';
 
@@ -66,26 +72,20 @@ process.env.ENABLE_MCP_SERVER ??= 'true';
 process.env.BLOCK_DISPOSABLE_EMAIL ??= 'false';
 
 /**
- * Mirrors `src/tests/setup.ts` placeholders so outbound providers stay deterministic under Vitest chaos.
- */
-process.env.STRIPE_SECRET_KEY ??= 'sk_test_contract_fixture_key_for_nock_stubs';
-process.env.STRIPE_WEBHOOK_SECRET ??=
-  'whsec_test_contract_fixture_fallback_when_local_secret_below_32_xx';
-process.env.RESEND_API_KEY ??= 're_test_contract_fixture_for_chaos_testing_queue_only';
-process.env.EMAIL_FROM_ADDRESS ??= 'noreply@example.com';
-process.env.S3_BUCKET ??= 'contract-test-bucket';
-process.env.S3_REGION ??= 'us-east-1';
-process.env.S3_ACCESS_KEY_ID ??= 'AKIAIOSFODNN7EXAMPLE';
-process.env.S3_SECRET_ACCESS_KEY ??= 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
-
 /**
  * Always point at Toxiproxy listener ports for this Vitest profile. A developer `.env` often
  * sets direct `localhost:5432` / `6379` URLs; `||=` would skip the override and chaos traffic
  * would bypass proxies, so toxins and administrative proxy disables would not affect the app.
- * The credentials are Compose's (`core:core`); the CI chaos job's Postgres service creates the
- * same role, so this one URL serves both.
+ * The credentials are Compose's (the project's local database name as user and password); the CI
+ * chaos job's Postgres service creates the same role. Locally the database is the harness's own
+ * `<name>_test` (see src/tests/helpers/local-test-database.ts) — chaos suites run cleanupDatabase()
+ * too, which must never truncate the database `pnpm dev` serves; CI's service container only has
+ * the primary one.
  */
-process.env.DATABASE_URL = 'postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy';
+process.env.DATABASE_URL =
+  process.env.GITHUB_ACTIONS === 'true'
+    ? 'postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy'
+    : 'postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy_test';
 
 process.env.REDIS_URL = 'redis://127.0.0.1:26379';
 
@@ -101,14 +101,16 @@ process.env.DATABASE_OPERATOR_URL = process.env.DATABASE_URL;
 
 /**
  * Maintenance contexts (`withMaintenanceDatabaseContext` — retention, audit drain, global admin)
- * open their own pool on `DATABASE_MAINTENANCE_URL` when it is set, which a developer's env file
- * does. That pool would reach Postgres directly, so no toxin could touch a maintenance path. Keep
- * its role and credentials — the scope's grants are what these paths are tested under — and
- * reroute only the host and port through the Toxiproxy listener.
+ * open their own pool on `DATABASE_MAINTENANCE_URL`, which a developer's env file points straight
+ * at Postgres, so no toxin could touch a maintenance path. Keep its role and credentials — the
+ * scope's grants are what these paths are tested under — and reroute only the host and port
+ * through the Toxiproxy listener, onto the same database as `DATABASE_URL` above. Unset, it is
+ * `DATABASE_URL` itself.
  */
-if (process.env.DATABASE_MAINTENANCE_URL) {
-  const proxiedMaintenanceUrl = new URL(process.env.DATABASE_MAINTENANCE_URL);
-  proxiedMaintenanceUrl.hostname = '127.0.0.1';
-  proxiedMaintenanceUrl.port = '25432';
-  process.env.DATABASE_MAINTENANCE_URL = proxiedMaintenanceUrl.toString();
-}
+const proxiedMaintenanceUrl = new URL(
+  process.env.DATABASE_MAINTENANCE_URL ?? process.env.DATABASE_URL,
+);
+proxiedMaintenanceUrl.hostname = '127.0.0.1';
+proxiedMaintenanceUrl.port = '25432';
+proxiedMaintenanceUrl.pathname = new URL(process.env.DATABASE_URL).pathname;
+process.env.DATABASE_MAINTENANCE_URL = proxiedMaintenanceUrl.toString();

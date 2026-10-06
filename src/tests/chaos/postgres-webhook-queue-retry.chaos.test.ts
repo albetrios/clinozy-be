@@ -4,10 +4,8 @@ import { afterAll, describe, it, vi } from 'vitest';
 import { Queue, QueueEvents, type Worker } from 'bullmq';
 
 import { createWebhookDeliveryWorker } from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery.worker.js';
-import { database } from '@/infrastructure/database/connection.js';
 import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
 import { WEBHOOK_DELIVERY_QUEUE_NAME } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
-import { webhook_delivery_attempts } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
 import {
   getBullMQConnectionOptions,
   getBullMQKeyPrefix,
@@ -19,8 +17,10 @@ import {
 } from '@/tests/chaos/helpers/toxiproxy.client.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
-import { createTestWebhook } from '@/tests/factories/webhook.factory.js';
-import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import {
+  createTestWebhook,
+  createTestWebhookDeliveryAttempt,
+} from '@/tests/factories/webhook.factory.js';
 
 describe('Chaos resilience: BullMQ webhook delivery survives transient Postgres outages', () => {
   const chaosWebhookDeliveryProbeUrlAwaitingIsolation =
@@ -55,17 +55,11 @@ describe('Chaos resilience: BullMQ webhook delivery survives transient Postgres 
       url: chaosWebhookDeliveryProbeUrlAwaitingIsolation,
       events: ['chaos.webhooks.delivery.probe'],
     });
-    const [pendingWebhookDeliveryAttemptAwaitingIsolation] = await database
-      .insert(webhook_delivery_attempts)
-      .values({
-        public_id: generatePublicId('webhook'),
-        webhook_id: webhookAwaitingDeliveryJobIsolation.id,
-        event_type: 'chaos.webhooks.delivery.probe',
-        payload: { simulatedEvent: true },
-        status: 'PENDING',
-        attempt_count: 0,
-      })
-      .returning({ id: webhook_delivery_attempts.id });
+    const pendingWebhookDeliveryAttemptAwaitingIsolation = await createTestWebhookDeliveryAttempt({
+      webhookId: webhookAwaitingDeliveryJobIsolation.id,
+      eventType: 'chaos.webhooks.delivery.probe',
+      payload: { simulatedEvent: true },
+    });
 
     webhookDeliveryWorkerHandleAwaitingObservation = createWebhookDeliveryWorker();
 
@@ -147,7 +141,7 @@ describe('Chaos resilience: BullMQ webhook delivery survives transient Postgres 
       await enqueueQueueReferenceAwaitingIsolation.add(
         'deliver-webhook',
         {
-          deliveryAttemptId: pendingWebhookDeliveryAttemptAwaitingIsolation!.id,
+          deliveryAttemptPublicId: pendingWebhookDeliveryAttemptAwaitingIsolation.publicId,
           organizationPublicId: organizationAwaitingWebhookFixtureIsolation.public_id,
         },
         {

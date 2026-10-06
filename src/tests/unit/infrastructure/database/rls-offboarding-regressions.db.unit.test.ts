@@ -1,17 +1,22 @@
 import { sql as drizzleSql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { database } from '@/infrastructure/database/connection.js';
+import {
+  setLocalApplicationRole,
+  setLocalMaintenanceRole,
+} from '@/infrastructure/database/contexts/database-context-runtime.js';
 
 /**
  * Regressions for the superuser-masked RLS bugs fixed by migration
  * 20260827040000 (and the user.service global_admin soft-delete switch). Each
- * case runs as the RLS-subject `clinozy_be_app` role via `SET LOCAL ROLE`, which
- * is what production connects as — the local superuser pool would mask all of
- * these (they were found exactly that way).
+ * case runs as the RLS-subject roles production connects as, via `SET LOCAL ROLE`:
+ * `clinozy_be_app` for the request scopes, `clinozy_be_maintenance` for the bypass
+ * steps (the only role the bypass arms admit) — the local superuser pool would mask
+ * all of these (they were found exactly that way).
  */
 async function executeAsAppRole<T>(statements: (tx: typeof database) => Promise<T>): Promise<T> {
   return database.transaction(async (transaction) => {
-    await transaction.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+    await setLocalApplicationRole(transaction);
     const result = await statements(transaction as unknown as typeof database);
     // Roll back so fixtures never leak between cases.
     throw new RollbackSignal(result);
@@ -40,7 +45,7 @@ async function seedUser(tx: typeof database, publicId: string): Promise<void> {
   );
 }
 
-describe('RLS offboarding regressions (as clinozy_be_app)', () => {
+describe('RLS offboarding regressions (as the production roles)', () => {
   it('user soft-delete succeeds under global_admin and stays rejected under the plain user scope', async () => {
     const outcome = await runRolledBack(async (tx) => {
       // Seed BEFORE SET ROLE is not possible inside this tx (role already set) —
@@ -64,7 +69,9 @@ describe('RLS offboarding regressions (as clinozy_be_app)', () => {
         await tx.execute(drizzleSql`ROLLBACK TO SAVEPOINT self_attempt`);
       }
 
-      // global_admin (the context user.service now uses for the final softDelete step).
+      // global_admin (the context user.service now uses for the final softDelete step), on the
+      // maintenance pool's role.
+      await setLocalMaintenanceRole(tx);
       await tx.execute(drizzleSql`SELECT set_config('app.global_admin', 'true', true)`);
       const updated = await tx.execute<{ public_id: string }>(
         drizzleSql`UPDATE auth.users SET deleted_at = now()
@@ -109,7 +116,9 @@ describe('RLS offboarding regressions (as clinozy_be_app)', () => {
         await tx.execute(drizzleSql`ROLLBACK TO SAVEPOINT org_attempt`);
       }
 
-      // Retention context (what organization.service now uses for the tombstone step).
+      // Retention context (what organization.service now uses for the tombstone step), on the
+      // maintenance pool's role.
+      await setLocalMaintenanceRole(tx);
       await tx.execute(
         drizzleSql`SELECT set_config('app.current_organization_public_id', '', true)`,
       );
@@ -135,6 +144,7 @@ describe('RLS offboarding regressions (as clinozy_be_app)', () => {
       );
       await seedUser(tx, 'usr_rlsregression000003');
       await tx.execute(drizzleSql`SELECT set_config('app.current_user_public_id', '', true)`);
+      await setLocalMaintenanceRole(tx);
       await tx.execute(drizzleSql`SELECT set_config('app.global_retention_cleanup', 'true', true)`);
       const rows = await tx.execute(
         drizzleSql`SELECT public_id FROM auth.users WHERE public_id = 'usr_rlsregression000003'`,
@@ -159,7 +169,9 @@ describe('RLS offboarding regressions (as clinozy_be_app)', () => {
                    VALUES ('org_rlsregression00002', 'RLS Drain Org',
                            (SELECT id FROM auth.users WHERE public_id = 'usr_rlsregression000004'))`,
       );
-      // Drop every GUC — the drain resolves under app.global_admin only.
+      // Drop every GUC — the drain resolves under app.global_admin only, on the maintenance
+      // pool's role.
+      await setLocalMaintenanceRole(tx);
       await tx.execute(drizzleSql`SELECT set_config('app.current_user_public_id', '', true)`);
       await tx.execute(
         drizzleSql`SELECT set_config('app.current_organization_public_id', '', true)`,

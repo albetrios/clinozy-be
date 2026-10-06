@@ -33,14 +33,14 @@ async function handleMemberInvitationEmail(
     expiresInDays: payload.expires_in_days,
   });
 
-  const mailOutboxId = await recordOutboxEmail({
+  const mailOutboxToken = await recordOutboxEmail({
     to: payload.email,
     subject: `You've been invited to join ${payload.organization_name}`,
     html,
     tags: [{ name: 'category', value: 'invitation' }],
   });
   await scheduleCommitDispatch(
-    { type: 'mail_outbox', mailOutboxId },
+    { type: 'mail_outbox', mailOutboxToken },
     requestId !== undefined ? { requestId } : undefined,
   );
 }

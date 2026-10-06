@@ -115,14 +115,13 @@ describe('Performance: billing list routes stay O(1) in cross-domain work', () =
   });
 
   it('GET /billing/subscriptions does not scale its work with the number of subscriptions', async () => {
-    const { organization, token } = await createListContext(LARGE_LIST_ROW_COUNT);
+    const { token } = await createListContext(LARGE_LIST_ROW_COUNT);
 
     // Warm the app, connection pool, permission cache, and JIT before measuring.
     await injectAuthenticated(app, {
       method: 'GET',
       url: testApiPath('/billing/subscriptions'),
       token,
-      organizationPublicId: organization.public_id,
     });
 
     const started = performance.now();
@@ -130,7 +129,6 @@ describe('Performance: billing list routes stay O(1) in cross-domain work', () =
       method: 'GET',
       url: testApiPath('/billing/subscriptions'),
       token,
-      organizationPublicId: organization.public_id,
     });
     const elapsedMs = performance.now() - started;
 

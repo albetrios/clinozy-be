@@ -31,6 +31,7 @@ function mockRequest(
 function auditLogRow(overrides: Record<string, unknown> = {}) {
   return {
     id: 1,
+    public_id: 'aud_row00000000000000001',
     actor_user_id: 10,
     target_user_id: null,
     organization_id: 20,
@@ -88,8 +89,10 @@ describe('createAuditController', () => {
     expect(response).toMatchObject({
       data: [
         expect.objectContaining({
-          // sec-re-08: bigserial id is DROPPED; action + sanitized metadata
-          // pass through; user/organization bigints are replaced by resolved public ids.
+          // sec-re-08: the bigserial id is DROPPED — the row is identified by its public id;
+          // action + sanitized metadata pass through; user/organization bigints are replaced by
+          // resolved public ids.
+          id: 'aud_row00000000000000001',
           action: 'user.login',
           metadata: { source: 'test' },
           actor_user_id: 'usr_actor_pub',
@@ -97,7 +100,7 @@ describe('createAuditController', () => {
         }),
       ],
     });
-    expect((response as { data: Record<string, unknown>[] }).data[0]).not.toHaveProperty('id');
+    expect((response as { data: Record<string, unknown>[] }).data[0]?.id).not.toBe(1);
   });
 
   it('listLogs sets has_more and next when more pages exist', async () => {

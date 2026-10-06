@@ -3,10 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { and, count, eq, isNull } from 'drizzle-orm';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
-import {
-  injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
-} from '@/tests/helpers/test-http-inject.helper.js';
+import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -157,12 +154,11 @@ describe('Member Roles Sub-Domain — Integration', () => {
     // cannot fire and the refusal is the validator's own.
 
     it('POST /roles returns 400 when name is missing', async () => {
-      const { organization, token } = await createAuthorizedContext();
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const { token } = await createAuthorizedContext();
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/roles'),
         token,
-        organizationPublicId: organization.public_id,
         payload: {},
       });
       expect(response.statusCode, response.body).toBe(400);
@@ -221,11 +217,10 @@ describe('Member Roles Sub-Domain — Integration', () => {
       const { organization, token } = await createAuthorizedContext();
       const roleName = `Atomic Role ${randomUUID()}`;
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/roles'),
         token,
-        organizationPublicId: organization.public_id,
         payload: { name: roleName, permission_codes: [TENANCY_PERMISSIONS.ORGANIZATION_READ] },
       });
 
@@ -250,11 +245,10 @@ describe('Member Roles Sub-Domain — Integration', () => {
       await seedPermissions([TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE]);
       const roleName = `Escalation Role ${randomUUID()}`;
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/roles'),
         token,
-        organizationPublicId: organization.public_id,
         payload: { name: roleName, permission_codes: [TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE] },
       });
 
@@ -304,11 +298,10 @@ describe('Member Roles Sub-Domain — Integration', () => {
       const rolesBefore = await countRoles(provisioned.organization.id);
       expect(rolesBefore).toBe(1); // only the system Owner role
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/roles'),
         token,
-        organizationPublicId: provisioned.organization.public_id,
         payload: { name: `Personal Custom Role ${randomUUID()}` },
       });
 
@@ -344,11 +337,10 @@ describe('Member Roles Sub-Domain — Integration', () => {
 
       const rolesBefore = await countRoles(team.organization.id);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/roles'),
         token,
-        organizationPublicId: team.organization.public_id,
         payload: { name: `Team Custom Role ${randomUUID()}` },
       });
 

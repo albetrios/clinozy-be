@@ -63,13 +63,13 @@ Every security- or governance-relevant write stages a row in the `audit.outbox` 
 ### Implementation
 
 1. Handler performs its primary write (e.g. an organization or auth-method mutation).
-2. The handler calls `recordScopedAuditEvent(request, { actorUserPublicId | actorApiKeyPublicId, action, resource_type, resource_id, organization_public_id, severity, metadata })` — network context (IP, user-agent, request id) is filled in by the helper.
+2. The handler calls `recordScopedAuditEvent(request, { <actor>, action, resource_type, resource_id, organizationPublicId, severity, metadata })` — network context (IP, user-agent) is filled in by the helper. `<actor>` is exactly one of `actorUserPublicId`, `actorApiKeyPublicId` (spread `buildAuditActorFields(auth)` for a request principal, which may be either) or `anonymousActor: true` (pre-authentication events only, e.g. `auth.login_failure`). The `AuditActor` type makes it required — an actorless call does not compile.
 3. The row is staged in `audit.outbox` inside the caller's transaction (no synchronous id lookup). The audit drain worker later resolves internal ids and inserts into `audit.logs`.
 4. Errors are caught and logged at `warn`; the originating request still returns success.
 
 ### How to apply
 
-- Adding a security-relevant route: identify the action constant (or add one in [src/domains/audit/audit.types.ts](src/domains/audit/audit.types.ts)), call `recordScopedAuditEvent(request, {...})` after the primary write, populate `metadata` with the diff or operation parameters that future investigators will need.
+- Adding a security-relevant route: name the action `<domain>.<resource>.<verb>` and add it to the catalog in [docs/reference/security/audit-logs.md](docs/reference/security/audit-logs.md), call `recordScopedAuditEvent(request, {...})` after the primary write, populate `metadata` with the public ids and operation parameters that future investigators will need.
 - Severity defaults to `INFO`. Use `WARNING` for failed-but-recorded actions (e.g. permission denied) and `CRITICAL` for global-admin lifecycle events.
 
 ## idempotency
@@ -150,7 +150,7 @@ Postgres Row-Level Security is the **defense-in-depth** layer for tenant isolati
 
 ### Implementation
 
-- HTTP requests get RLS via `tenant.middleware` + `organization-rls-transaction.middleware` opening a request-scoped transaction with `SET LOCAL app.current_organization_public_id = $1`.
+- HTTP requests get RLS per unit of work: `withAppDatabaseContext` opens a short transaction with `SET LOCAL app.current_organization_public_id = $1`.
 - Workers get RLS via `runOrganizationScopedWorkerJob` which **requires** `organizationPublicId` in the job payload and opens its own `withAppDatabaseContext` transaction (job-minted organization scope). Workers are forbidden from importing `database-context-runtime.ts` (enforced by `worker-database-guard.unit.test.ts` and global tests).
 - Global-scope workers (cross-organization sweeps) use `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, …)`, which sets a different GUC that RLS policies recognize as "global retention" — strictly limited to retention/cleanup operations.
 
@@ -210,7 +210,7 @@ Outbound side effects (email send, webhook delivery) must not be lost when the o
 ### Where it lives
 
 - Mail: [src/infrastructure/mail/mail-outbox.schema.ts](src/infrastructure/mail/mail-outbox.schema.ts), [mail-outbox.repository.ts](src/infrastructure/mail/mail-outbox.repository.ts), [workers/mail-outbox-sweeper.processor.ts](src/infrastructure/mail/workers/mail-outbox-sweeper.processor.ts), [workers/mail.processor.ts](src/infrastructure/mail/workers/mail.processor.ts).
-- Webhook delivery: [src/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.ts](src/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.ts), [webhook-delivery-attempt.repository.ts](src/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery-attempt.repository.ts), [workers/webhook-delivery.worker.ts](src/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery.worker.ts).
+- Webhook delivery: [src/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.ts](src/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.ts), [webhook-delivery-attempt.repository.ts](src/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery-attempt.repository.ts), [workers/webhook-delivery.worker.ts](src/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery.worker.ts), [workers/webhook-delivery-reclaim.processor.ts](src/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery-reclaim.processor.ts).
 - Stripe webhook events: [src/domains/billing/sub-domains/stripe-webhook/stripe-webhook-event.repository.ts](src/domains/billing/sub-domains/stripe-webhook/stripe-webhook-event.repository.ts) — inbound webhooks use the same idempotent-claim pattern as the outbox.
 
 ### Implementation
@@ -235,8 +235,11 @@ sequenceDiagram
 ```
 
 - **Atomic claim**: the worker uses an `UPDATE ... WHERE status = 'pending' RETURNING id` to prevent two workers from claiming the same row.
-- **Stuck-row reclaim**: the sweeper processor reclaims rows stuck in `sending` for longer than `STUCK_SENDING_LEASE_MINUTES` (15 min) so a crashed worker doesn't strand outbox rows forever.
+- **Stuck-row reclaim**: the sweeper processor reclaims rows stuck in `sending` for longer than `MAIL_OUTBOX_RECLAIM_SENDING_MINUTES` (env, default 30 min; widened while the Resend circuit is open) so a crashed worker doesn't strand outbox rows forever.
 - **DLQ**: failed deliveries with exhausted retries land in the per-queue `<name>-dlq` registered by [src/infrastructure/queue/dlq/](src/infrastructure/queue/dlq/).
+- **Provider down ≠ job failed**: while Resend is down the mail queue pauses and parks the job without spending an attempt, and the row's claim is released — the row waits for the provider instead of being failed ([provider-outage-pause.util.ts](src/infrastructure/queue/worker-runtime/provider-outage-pause.util.ts)).
+- **One live job per row**: the enqueue deduplicates on the row's token, so a sweeper that re-enqueues a row the queue still holds adds no second job.
+- **Every outbox has a sweep for lost enqueues**: the enqueue runs after the commit and fails fast while Redis is unreachable or full, so a row can exist with no job. `mail-outbox-sweeper` (mail), `webhook-delivery-reclaim` (webhook delivery attempts) and `stripe-webhook-event-reclaim` (Stripe events) re-enqueue such rows. A failed enqueue leaves the row pending for its sweep — it never marks the row failed.
 
 ### How to apply
 
@@ -311,7 +314,7 @@ sequenceDiagram
   comment naming the fail-safe reason — `member-invitation-accepted.event-handlers.ts`
   documents its choice exactly that way, and is the model to copy.
 - **Invalidate after commit**, at *every* write choke point for that key, including worker paths. A writer that cannot name the scope (a retention sweep deleting by `created_at`) cannot invalidate — that is what the TTL bounds, and the direction of the resulting error belongs in the cache module's TSDoc.
-- **Register the key prefix** in `TEST_REDIS_PREFIXES` ([test-redis.ts](src/tests/helpers/test-redis.ts)). Test teardown recycles ids, so an un-cleared entry — or its tombstone, which blocks the next `SET NX` — leaks into the next case.
+- **Nothing to register for tests**: [`cleanupTestRedis`](src/tests/helpers/test-redis.ts) deletes every key under the harness's `<product>:test:` namespace except BullMQ's before each case, so a new cache's entries — and their `NX`-blocking tombstones — cannot leak into the next case through recycled ids.
 - **Tests, five of them**: a hit serving a value Postgres has since changed; invalidation on each write path; scope isolation with two warm callers; the route's own gate (401/403) refusing while the entry is warm; and Redis-down falling back. Worked example: [notification-unread-count-cache.integration.test.ts](src/domains/notify/sub-domains/notification/__tests__/integration/notification-unread-count-cache.integration.test.ts).
 - **Metric**: the cache module records `read_cache_requests_total{cache,result}` so its hit ratio is observable. A cache nobody measured is a cache nobody can defend.
 - No environment kill switch. A ≤ 60 s TTL self-heals and reverting the caller is the switch; a flag would be one more untested branch on a hot path.

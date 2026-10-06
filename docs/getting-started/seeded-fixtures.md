@@ -1,13 +1,20 @@
 # Seeded fixtures (`pnpm db:seed:full`)
 
-The **full** seed (`src/scripts/seed/full.ts`) extends the minimal seed with demo tenancy flows plus billing, notify, usage, and audit data for local exploration and API smoke tests.
+The **full** seed (`src/scripts/seed/full.ts`) runs the reference seed (permissions, plans) and adds a
+demo user, a demo organization and the common tenancy flows, for local exploration and the API smoke
+test. It creates no subscriptions, notifications, webhooks or audit rows — those come from using the
+API (or from `pnpm db:seed:bulk`).
 
 ## Credentials
 
 | Field | Value |
 | ----- | ----- |
 | Email | `demo@example.com` |
-| Password | `TEST_PASSWORD` from `.env`, or a generated value logged on first run |
+| Password | `DEMO_PASSWORD` (8+ characters). Unset → a random password that is never printed, so set it to log in |
+
+The API smoke test (`pnpm test:api-smoke`) and the k6 auth scenario read the same `DEMO_EMAIL` /
+`DEMO_PASSWORD` and default to `demo@example.com` / `DemoPassword123!` — seed with
+`DEMO_PASSWORD=DemoPassword123! pnpm db:seed:full` to match them.
 
 ## Demo organization
 
@@ -15,27 +22,20 @@ The **full** seed (`src/scripts/seed/full.ts`) extends the minimal seed with dem
 | ----- | ----- |
 | Name | Demo Organization |
 | Slug | `demo-org` |
-| Role | Admin (all system permissions) |
+| Role | Admin (every system permission) |
 
-## Billing fixtures
+Use its id (`org_…`, in the seed log) with `POST /auth/switch-to-organization`.
 
-After `pnpm db:seed:full`:
+## Tenancy flows
 
-- **Plans** — Free, Starter, Pro (from `plan.seed.ts`)
-- **Subscription** — Active monthly subscription on the demo organization (Starter plan)
-- **Usage records** — API requests and storage metrics for the subscription period
-- **Entitlements** — `api_calls` and `storage_gb` feature flags on the demo organization
+- **Second organization** — a generated organization owned by the demo user, with a `Member` role and
+  one generated member.
+- **Pending invitation** — an `INVITED` membership in the demo organization for a generated invitee,
+  with a member invitation that expires in 7 days.
 
-Use the organization id (`org_…`) from seed logs when switching the active organization (`POST /auth/switch-to-organization`) for billing routes.
+## Plans
 
-## Notify fixtures
-
-- **Notifications** — Welcome and billing-paid in-app messages for the demo user
-- **Webhook** — Disabled-by-default style endpoint URL (`https://example.com/webhooks/demo`) registered for billing events such as `billing.subscription.updated` (secret is encrypted at rest)
-
-## Audit fixtures
-
-- Sample **audit.logs** rows for organization create and membership invite actions (actor = demo user)
+- **Plans** — the reference catalog (`plan.reference.seed.ts`).
 
 ## Commands
 

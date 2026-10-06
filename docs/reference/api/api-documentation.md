@@ -28,7 +28,7 @@ List endpoints that use cursor pagination document these **query parameters**:
 
 Responses use `meta.pagination`: `per_page`, `next` (cursor or null), `has_more`, and optional `estimated_total`. The canonical route list is `tooling/openapi/pagination-openapi.ts` (`CURSOR_PAGINATED_LIST_ROUTE_KEYS`); query DTOs are mapped in `tooling/openapi/query-schema-map.ts`.
 
-> **Note**: The legacy `page` query parameter is no longer supported. Requests that include `page` return HTTP 400 with a validation error directing callers to use cursor pagination (`limit` + `after`). See [api-versioning.md](../api/api-versioning.md#runtime-behavior-clinozy-be) for the exact error payload.
+> **Note**: list queries are strict, so a parameter they do not declare — `page` included — is a 400 `validation_error`. Page with `limit` + `after`; see [api-versioning.md](../api/api-versioning.md#runtime-behavior-clinozy-be).
 
 ---
 

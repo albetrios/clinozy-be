@@ -29,6 +29,12 @@ const envMock = vi.hoisted(() => ({
 
 vi.mock('@/shared/config/env.config.js', () => envMock);
 
+// The failure mapping drags in the circuit breaker (and its Redis client); this suite is about the
+// customer email, so it maps nothing.
+vi.mock('@/infrastructure/outbound/outbound-error.js', () => ({
+  toClientFacingOutboundError: () => null,
+}));
+
 vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -98,9 +104,9 @@ describe('StripePaymentProvider.createSubscription — sec-B11 customer email', 
     envMock.env.EMAIL_FROM_ADDRESS = undefined as never;
     const provider = makeProvider();
 
-    // createSubscription wraps the throw in ServiceUnavailableError via its catch block —
-    // both behaviours satisfy the security property (no Stripe customer is created with a
-    // bogus domain). We assert the createStripeCustomer was NEVER called.
+    // createSubscription rethrows the ConfigurationError from its catch block (an AppError passes
+    // through unmapped) — the security property is that no Stripe customer is created with a
+    // bogus domain. We assert the createStripeCustomer was NEVER called.
     await expect(
       provider.createSubscription({
         organization: baseOrganization as never,

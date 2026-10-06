@@ -7,13 +7,19 @@ import {
   requirePrincipal,
 } from '@/shared/utils/http/request.util.js';
 import { validatePublicIdParam } from '@/shared/utils/identity/public-id-param.util.js';
+import {
+  buildAuditActorFields,
+  listBodyFieldNames,
+  recordScopedAuditEvent,
+} from '@/shared/utils/infrastructure/audit-request-context.util.js';
 import type { OrganizationNotificationPolicyService } from './organization-notification-policy.service.js';
 
 /**
  * Builds the Fastify handler map for `/organization/notification-policies`
  * routes — list, get, create, update, delete. The active organization is
  * resolved from the signed JWT `org` claim; the `policyId` path param is
- * validated via {@link validatePublicIdParam}.
+ * validated via {@link validatePublicIdParam}. Create, update and delete record a scoped audit
+ * event in the organization's log.
  *
  * @remarks
  * sec-T5: this handler used to coerce `policyId` to a positive integer
@@ -53,6 +59,13 @@ export function createOrganizationNotificationPolicyController(
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const data = await service.create(scope, request.body, getActingUserPublicId(auth));
+      await recordScopedAuditEvent(request, {
+        ...buildAuditActorFields(auth),
+        action: 'tenancy.notification_policy.create',
+        resource_type: 'notification_policy',
+        organizationPublicId: scope.organizationPublicId,
+        metadata: { notification_policy_public_id: data.id },
+      });
       return successResponse(data, getRequestIdentifier(request));
     },
     updatePolicy: async (request: FastifyRequest, _reply: FastifyReply) => {
@@ -62,22 +75,41 @@ export function createOrganizationNotificationPolicyController(
       }) ?? { notification_policy_id: '' };
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
+      const notificationPolicyId = validatePublicIdParam(policyId, 'notification_policy_id');
       const data = await service.update(
         scope,
-        validatePublicIdParam(policyId, 'notification_policy_id'),
+        notificationPolicyId,
         request.body,
         getActingUserPublicId(auth),
       );
+      await recordScopedAuditEvent(request, {
+        ...buildAuditActorFields(auth),
+        action: 'tenancy.notification_policy.update',
+        resource_type: 'notification_policy',
+        organizationPublicId: scope.organizationPublicId,
+        metadata: {
+          notification_policy_public_id: notificationPolicyId,
+          changed_fields: listBodyFieldNames(request.body),
+        },
+      });
       return successResponse(data, getRequestIdentifier(request));
     },
     deletePolicy: async (request: FastifyRequest, reply: FastifyReply) => {
-      requirePrincipal(request);
+      const auth = requirePrincipal(request);
       const { notification_policy_id: policyId } = (request.params as {
         notification_policy_id: string;
       }) ?? { notification_policy_id: '' };
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
-      await service.delete(scope, validatePublicIdParam(policyId, 'notification_policy_id'));
+      const notificationPolicyId = validatePublicIdParam(policyId, 'notification_policy_id');
+      await service.delete(scope, notificationPolicyId);
+      await recordScopedAuditEvent(request, {
+        ...buildAuditActorFields(auth),
+        action: 'tenancy.notification_policy.delete',
+        resource_type: 'notification_policy',
+        organizationPublicId: scope.organizationPublicId,
+        metadata: { notification_policy_public_id: notificationPolicyId },
+      });
       return reply.code(204).send();
     },
   };

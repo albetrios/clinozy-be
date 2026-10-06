@@ -150,7 +150,7 @@ describe('auth.http.util — token generation', () => {
   });
 
   it('generates a URL-safe refresh secret: a random part and its issuance MAC', () => {
-    const secret = generateRefreshSecret({ userId: 42 });
+    const secret = generateRefreshSecret({ userPublicId: 'user_issued_for' });
     const [randomPart, mac, ...rest] = secret.split('~');
     expect(rest).toHaveLength(0);
     expect(randomPart).toHaveLength(BASE64URL_32_BYTE_LENGTH);
@@ -162,7 +162,7 @@ describe('auth.http.util — token generation', () => {
   it('never repeats a CSRF token or a refresh secret across calls', () => {
     const csrfTokens = new Set(Array.from({ length: 50 }, () => generateCsrfToken()));
     const refreshSecrets = new Set(
-      Array.from({ length: 50 }, () => generateRefreshSecret({ userId: 42 })),
+      Array.from({ length: 50 }, () => generateRefreshSecret({ userPublicId: 'user_issued_for' })),
     );
     // A constant (or seeded) generator here would make every session's CSRF token guessable.
     expect(csrfTokens.size).toBe(50);
@@ -172,27 +172,43 @@ describe('auth.http.util — token generation', () => {
 
 describe('auth.http.util — refresh-secret issuance proof', () => {
   it('recognizes a secret issued for the same user', () => {
-    const secret = generateRefreshSecret({ userId: 42 });
-    expect(isIssuedRefreshSecret({ userId: 42, refreshSecret: secret })).toBe(true);
+    const secret = generateRefreshSecret({ userPublicId: 'user_issued_for' });
+    expect(isIssuedRefreshSecret({ userPublicId: 'user_issued_for', refreshSecret: secret })).toBe(
+      true,
+    );
   });
 
   it('rejects an issued secret presented for another user', () => {
-    const secret = generateRefreshSecret({ userId: 42 });
-    expect(isIssuedRefreshSecret({ userId: 43, refreshSecret: secret })).toBe(false);
+    const secret = generateRefreshSecret({ userPublicId: 'user_issued_for' });
+    expect(
+      isIssuedRefreshSecret({ userPublicId: 'user_someone_else', refreshSecret: secret }),
+    ).toBe(false);
   });
 
   it('rejects a secret whose random part was altered', () => {
-    const [randomPart, mac] = generateRefreshSecret({ userId: 42 }).split('~');
+    const [randomPart, mac] = generateRefreshSecret({ userPublicId: 'user_issued_for' }).split('~');
     const altered = `${randomPart?.slice(0, -1)}${randomPart?.endsWith('A') ? 'B' : 'A'}~${mac}`;
-    expect(isIssuedRefreshSecret({ userId: 42, refreshSecret: altered })).toBe(false);
+    expect(isIssuedRefreshSecret({ userPublicId: 'user_issued_for', refreshSecret: altered })).toBe(
+      false,
+    );
   });
 
-  it('rejects a fabricated secret and a pre-MAC secret', () => {
-    expect(isIssuedRefreshSecret({ userId: 42, refreshSecret: 'made-up~not-a-mac' })).toBe(false);
+  it('rejects a fabricated secret and a secret without a MAC', () => {
     expect(
-      isIssuedRefreshSecret({ userId: 42, refreshSecret: 'legacyrandomsecretwithoutmac' }),
+      isIssuedRefreshSecret({
+        userPublicId: 'user_issued_for',
+        refreshSecret: 'made-up~not-a-mac',
+      }),
     ).toBe(false);
-    expect(isIssuedRefreshSecret({ userId: 42, refreshSecret: '~' })).toBe(false);
+    expect(
+      isIssuedRefreshSecret({
+        userPublicId: 'user_issued_for',
+        refreshSecret: 'randomsecretwithoutmac',
+      }),
+    ).toBe(false);
+    expect(isIssuedRefreshSecret({ userPublicId: 'user_issued_for', refreshSecret: '~' })).toBe(
+      false,
+    );
   });
 });
 

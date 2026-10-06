@@ -41,6 +41,39 @@ describe('outboundCall', () => {
     await expect(promise).rejects.toBeInstanceOf(ExternalServiceError);
   });
 
+  it('gives every retry attempt its own timeout — a timed-out first attempt does not abort the retry', async () => {
+    vi.useRealTimers();
+    const attemptSignals: AbortSignal[] = [];
+
+    const result = await outboundCall({
+      name: 'resend',
+      timeoutMs: 40,
+      circuit: null,
+      retry: { maxAttempts: 2, baseDelayMs: 1, shouldRetry: () => true },
+      operation: async (signal) => {
+        attemptSignals.push(signal);
+        if (attemptSignals.length === 1) {
+          // The first attempt hangs until its own timeout aborts it.
+          await new Promise<void>((_resolve, reject) => {
+            signal.addEventListener('abort', () => {
+              const error = new Error('The operation was aborted due to timeout');
+              error.name = 'TimeoutError';
+              reject(error);
+            });
+          });
+        }
+        // A shared signal would already be aborted here, failing the retry before it started.
+        expect(signal.aborted).toBe(false);
+        return 'delivered';
+      },
+    });
+
+    expect(result).toBe('delivered');
+    expect(attemptSignals).toHaveLength(2);
+    expect(attemptSignals[0]).not.toBe(attemptSignals[1]);
+    vi.useFakeTimers();
+  });
+
   it('runs retry inside circuit execute', async () => {
     vi.useRealTimers();
     let attempts = 0;
@@ -69,6 +102,94 @@ describe('outboundCall', () => {
 
     expect(result).toBe('ok');
     expect(attempts).toBe(3);
+    vi.useFakeTimers();
+  });
+
+  it('tags an error its classifier calls a refusal, so the circuit counts the call as a success', async () => {
+    vi.useRealTimers();
+    const circuit = new CircuitBreaker({ name: 'refusal-classifier', failureThreshold: 1 });
+    const refusal = new Error('card declined');
+
+    await expect(
+      outboundCall({
+        name: 'stripe',
+        circuit,
+        rethrowIf: () => true,
+        countsAsCircuitFailure: (error) => error !== refusal,
+        operation: async () => {
+          throw refusal;
+        },
+      }),
+    ).rejects.toBe(refusal);
+
+    expect(refusal).toMatchObject({ countsAsCircuitFailure: false });
+    expect(await circuit.getState()).toBe('CLOSED');
+    vi.useFakeTimers();
+  });
+
+  it('counts an error its classifier does not call a refusal', async () => {
+    vi.useRealTimers();
+    const circuit = new CircuitBreaker({ name: 'failure-classifier', failureThreshold: 1 });
+    const outage = new Error('upstream down');
+
+    await expect(
+      outboundCall({
+        name: 'stripe',
+        circuit,
+        rethrowIf: () => true,
+        countsAsCircuitFailure: () => true,
+        operation: async () => {
+          throw outage;
+        },
+      }),
+    ).rejects.toBe(outage);
+
+    expect(outage).not.toHaveProperty('countsAsCircuitFailure');
+    expect(await circuit.getState()).toBe('OPEN');
+    vi.useFakeTimers();
+  });
+
+  it('applies the integration default classifier when the call site gives none (S3 404)', async () => {
+    vi.useRealTimers();
+    const circuit = new CircuitBreaker({ name: 's3-default-classifier', failureThreshold: 1 });
+    const notFound = Object.assign(new Error('NotFound'), {
+      name: 'NotFound',
+      $metadata: { httpStatusCode: 404 },
+    });
+
+    await expect(
+      outboundCall({
+        name: 's3',
+        circuit,
+        operation: async () => {
+          throw notFound;
+        },
+      }),
+    ).rejects.toBeInstanceOf(ExternalServiceError);
+
+    expect(notFound).toMatchObject({ countsAsCircuitFailure: false });
+    expect(await circuit.getState()).toBe('CLOSED');
+    vi.useFakeTimers();
+  });
+
+  it('still counts an S3 outage under the integration default classifier', async () => {
+    vi.useRealTimers();
+    const circuit = new CircuitBreaker({ name: 's3-default-outage', failureThreshold: 1 });
+
+    await expect(
+      outboundCall({
+        name: 's3',
+        circuit,
+        operation: async () => {
+          throw Object.assign(new Error('InternalError'), {
+            name: 'InternalError',
+            $metadata: { httpStatusCode: 500 },
+          });
+        },
+      }),
+    ).rejects.toBeInstanceOf(ExternalServiceError);
+
+    expect(await circuit.getState()).toBe('OPEN');
     vi.useFakeTimers();
   });
 

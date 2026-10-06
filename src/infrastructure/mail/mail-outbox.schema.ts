@@ -4,6 +4,7 @@ import {
   jsonb,
   text,
   timestamp,
+  uuid,
   varchar,
   index,
   uniqueIndex,
@@ -13,7 +14,7 @@ import { authSchema } from '@/infrastructure/database/pg-schemas.js';
 
 /**
  * Drizzle table for the transactional mail outbox (`auth.mail_outbox`). Inserts
- * commit with the request transaction; the mail worker claims `pending` rows,
+ * commit with the surrounding unit-of-work transaction; the mail worker claims `pending` rows,
  * sends via Resend, then marks them `sent`/`failed`. Status moves through
  * `pending → sending → sent|failed` and is enforced by `mail_outbox_status_check`.
  */
@@ -37,12 +38,20 @@ export const mail_outbox = authSchema.table(
     // concurrent producers (e.g. a stalled-then-redelivered notification job) cannot create
     // two outbox rows → two emails. NULL for the common case (no dedup needed).
     dedupe_key: varchar('dedupe_key', { length: 255 }),
+    // The row's handle outside Postgres: the mail job, the outbox sweeper and the post-commit
+    // dispatch name the row by it, and it is the Resend Idempotency-Key (`mail-outbox-<token>`).
+    // Not the bigserial `id`: that restarts at 1 after TRUNCATE ... RESTART IDENTITY or a restore
+    // while queued jobs live on in Redis (a job would load another row), and Resend rejects a key
+    // reused with a different body for 24 hours per account. A uuid because it must be unique
+    // across databases and Postgres generates it on insert (see buildMailOutboxIdempotencyKey).
+    resend_idempotency_token: uuid('resend_idempotency_token').notNull().defaultRandom(),
   },
   (table) => [
     index('idx_mail_outbox_status_created_at').on(table.status, table.created_at),
     uniqueIndex('idx_mail_outbox_dedupe_key')
       .on(table.dedupe_key)
       .where(sql`${table.dedupe_key} IS NOT NULL`),
+    uniqueIndex('idx_mail_outbox_resend_idempotency_token').on(table.resend_idempotency_token),
     check(
       'mail_outbox_status_check',
       sql`${table.status} IN ('pending', 'sending', 'sent', 'failed')`,

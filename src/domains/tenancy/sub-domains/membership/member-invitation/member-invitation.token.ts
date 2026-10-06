@@ -11,7 +11,7 @@ export function hashInvitationToken(token: string): string {
 
 /**
  * Produces a fresh 64-character hex invitation token (32 random bytes) used in
- * the magic-link-style accept URL emailed to the invitee.
+ * the single-use accept URL emailed to the invitee.
  */
 export function generateInvitationToken(): string {
   return randomBytes(32).toString('hex');

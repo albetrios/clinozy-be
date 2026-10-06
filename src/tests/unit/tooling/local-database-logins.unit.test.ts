@@ -5,7 +5,6 @@ import dotenv from 'dotenv';
 import {
   alterRoleStatement,
   applyLocalDatabaseLogins,
-  isLocalDatabaseUrl,
   localDatabaseLogins,
   passwordFromUrl,
   planLocalDatabaseLogins,
@@ -18,7 +17,11 @@ import {
 } from '@tooling/setup/codegen/project-identity.util.js';
 
 const SUPERUSER_URL = 'postgresql://owner:owner@localhost:5432/appdb';
-const LOGINS = localDatabaseLogins({ appRole: 'app_be_app', sqlStem: 'app_be' });
+const LOGINS = localDatabaseLogins({
+  appRole: 'app_be_app',
+  maintenanceRole: 'app_be_maintenance',
+  sqlStem: 'app_be',
+});
 
 function fixedPasswords() {
   let counter = 0;
@@ -105,13 +108,6 @@ describe('setup:local — the local database logins', () => {
     ).toThrow();
     expect(() => alterRoleStatement({ ...app!, role: 'App"Role' })).toThrow();
   });
-
-  it('recognises a local database URL', () => {
-    expect(isLocalDatabaseUrl('postgresql://u:p@localhost:5432/db')).toBe(true);
-    expect(isLocalDatabaseUrl('postgresql://u:p@127.0.0.1:5432/db')).toBe(true);
-    expect(isLocalDatabaseUrl('postgresql://u:p@db.example.test:5432/db')).toBe(false);
-    expect(isLocalDatabaseUrl(undefined)).toBe(false);
-  });
 });
 
 describe('local database logins stay in step with the migrations', () => {
@@ -120,7 +116,7 @@ describe('local database logins stay in step with the migrations', () => {
   it('covers exactly the roles the migrations create', () => {
     const config = loadConfig();
     const sqlStem = resolveSqlIdentifierStem(config);
-    const { databaseAppRole } = resolveDerivedNames(config);
+    const { databaseAppRole, databaseMaintenanceRole } = resolveDerivedNames(config);
     const migrationsDirectory = join(process.cwd(), 'migrations');
     const createdRoles = new Set<string>();
     for (const file of readdirSync(migrationsDirectory).filter((name) => name.endsWith('.sql'))) {
@@ -130,7 +126,11 @@ describe('local database logins stay in step with the migrations', () => {
       }
     }
     const declared = [
-      ...localDatabaseLogins({ appRole: databaseAppRole, sqlStem }).map((login) => login.role),
+      ...localDatabaseLogins({
+        appRole: databaseAppRole,
+        maintenanceRole: databaseMaintenanceRole,
+        sqlStem,
+      }).map((login) => login.role),
       ...rolesWithoutLocalLogin(sqlStem),
     ];
     expect(createdRoles.size).toBeGreaterThan(0);

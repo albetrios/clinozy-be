@@ -6,7 +6,6 @@ import {
 } from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
 import { GLOBAL_ROLES } from '@/shared/constants/index.js';
 import { requireRole } from '@/shared/utils/auth/authorization.util.js';
-import { rejectLegacyPagePagination } from '@/shared/utils/http/pagination.util.js';
 import { listOrganizationsQueryDto } from '@/domains/tenancy/sub-domains/organization/organization.dto.js';
 import { createUserController } from './user.controller.js';
 import { createUserDataExportController } from './sub-domains/user-data-export/user-data-export.controller.js';
@@ -45,7 +44,7 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN)],
       schema: {
         summary: 'List all users (admin)',
-        description: 'Returns a paginated list of all users. Requires SUPER_ADMIN or ADMIN role.',
+        description: 'Returns a paginated list of all users. Requires the SUPER_ADMIN role.',
         tags: ['User Management'],
       },
     },
@@ -58,7 +57,7 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN)],
       schema: {
         summary: 'Get user by ID (admin)',
-        description: "Returns a specific user's profile. Requires SUPER_ADMIN or ADMIN role.",
+        description: "Returns a specific user's profile. Requires the SUPER_ADMIN role.",
         tags: ['User Management'],
         params: userIdParamsDto,
       },
@@ -74,7 +73,7 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN)],
       schema: {
         summary: 'Update user (admin)',
-        description: "Updates a user's profile or status. Requires SUPER_ADMIN or ADMIN role.",
+        description: "Updates a user's profile or status. Requires the SUPER_ADMIN role.",
         tags: ['User Management'],
         params: userIdParamsDto,
         body: AdminUpdateUserDto,
@@ -91,7 +90,8 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN)],
       schema: {
         summary: 'Delete user (admin)',
-        description: 'Permanently deletes a user account. Requires SUPER_ADMIN or ADMIN role.',
+        description:
+          'Deletes a user account: sessions are revoked and the account disappears at once; the rows are hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires the SUPER_ADMIN role.',
         tags: ['User Management'],
         params: userIdParamsDto,
       },
@@ -106,8 +106,7 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN)],
       schema: {
         summary: 'Suspend user (admin)',
-        description:
-          'Suspends a user account, preventing login. Requires SUPER_ADMIN or ADMIN role.',
+        description: 'Suspends a user account, preventing login. Requires the SUPER_ADMIN role.',
         tags: ['User Management'],
         params: userIdParamsDto,
       },
@@ -122,7 +121,7 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       preHandler: [requireRole(GLOBAL_ROLES.SUPER_ADMIN)],
       schema: {
         summary: 'Unsuspend user (admin)',
-        description: 'Reactivates a suspended user account. Requires SUPER_ADMIN or ADMIN role.',
+        description: 'Reactivates a suspended user account. Requires the SUPER_ADMIN role.',
         tags: ['User Management'],
         params: userIdParamsDto,
       },
@@ -148,7 +147,6 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
     '/me/organizations',
     {
       onRequest: [app.authenticate],
-      preValidation: [rejectLegacyPagePagination],
       schema: {
         summary: 'List my organizations',
         description:
@@ -208,7 +206,7 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       schema: {
         summary: 'Delete my account',
         description:
-          "Permanently deletes the authenticated user's account and all associated data. This action is irreversible.",
+          "Deletes the authenticated user's account: sessions are revoked and the account disappears at once; the rows are hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90).",
         tags: ['User'],
       },
     },

@@ -68,6 +68,7 @@ jobs:
     env:
       NODE_ENV: development
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
       REDIS_URL: redis://localhost:6379
     steps:
       - name: Checkout

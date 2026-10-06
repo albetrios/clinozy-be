@@ -57,7 +57,7 @@ export class NotificationRepository {
     return resolveRepositoryDatabaseHandle(this.databaseHandle);
   }
 
-  async create(input: CreateNotificationInput): Promise<number> {
+  async create(input: CreateNotificationInput): Promise<{ publicId: string }> {
     const rows = await this.db()
       .insert(notifications)
       .values({
@@ -71,23 +71,17 @@ export class NotificationRepository {
         action_url: input.action_url,
         action_label: input.action_label,
       })
-      .returning({ id: notifications.id });
-    return rows[0]!.id;
+      .returning({ publicId: notifications.public_id });
+    return rows[0]!;
   }
 
-  /** Removes a notification row when post-commit BullMQ enqueue fails (rollback side effect). */
-  async deleteByInternalId(notification_id: number): Promise<void> {
-    await this.db().delete(notifications).where(eq(notifications.id, notification_id));
-  }
-
-  async findOrganizationPublicIdByNotificationId(notification_id: number): Promise<string | null> {
-    const rows = await this.db()
-      .select({ organizationPublicId: organizations.public_id })
-      .from(notifications)
-      .leftJoin(organizations, eq(notifications.organization_id, organizations.id))
-      .where(eq(notifications.id, notification_id))
-      .limit(1);
-    return rows[0]?.organizationPublicId ?? null;
+  /**
+   * Removes a notification row when its post-commit BullMQ enqueue fails (the rollback side
+   * effect). Runs under the notification's organization or recipient scope — RLS decides which
+   * row the public id can reach; a delete outside both matches nothing.
+   */
+  async deleteByPublicId(public_id: string): Promise<void> {
+    await this.db().delete(notifications).where(eq(notifications.public_id, public_id));
   }
 
   async findOrganizationPublicIdByOrganizationId(organization_id: number): Promise<string | null> {
@@ -100,24 +94,11 @@ export class NotificationRepository {
   }
 
   /**
-   * sec-D #10: resolve the recipient's user public id from a notification id via the
-   * `notify.resolve_user_public_id_for_notification` SECURITY DEFINER function. Used by
-   * the notification dispatch worker to pin `withAppDatabaseContext (user scope)` for NULL-organization
-   * notifications instead of the wider `app.global_retention_cleanup` retention scope.
-   * Returns null when the notification or recipient cannot be resolved (worker treats this
-   * as a hard error and throws).
+   * The dispatch projection of one notification, by its public id. `organization_public_id` must
+   * match the row's organization (`null` → a notification without one); `null` when no row
+   * matches in the caller's scope — deleted, erased, or in another organization.
    */
-  async findUserPublicIdForNotificationDispatch(notification_id: number): Promise<string | null> {
-    const result = await this.db().execute(
-      sql`SELECT notify.resolve_user_public_id_for_notification(${notification_id}) AS user_public_id`,
-    );
-    const rows = (
-      Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? [])
-    ) as { user_public_id: string | null }[];
-    return rows[0]?.user_public_id ?? null;
-  }
-
-  async findByIdForDispatch(notification_id: number, organization_public_id: string | null) {
+  async findByPublicIdForDispatch(public_id: string, organization_public_id: string | null) {
     const organizationScopeCondition =
       organization_public_id === null
         ? isNull(notifications.organization_id)
@@ -126,6 +107,7 @@ export class NotificationRepository {
     const rows = await this.db()
       .select({
         id: notifications.id,
+        publicId: notifications.public_id,
         type: notifications.type,
         title: notifications.title,
         message: notifications.message,
@@ -136,7 +118,7 @@ export class NotificationRepository {
       .from(notifications)
       .innerJoin(users, eq(notifications.user_id, users.id))
       .leftJoin(organizations, eq(notifications.organization_id, organizations.id))
-      .where(and(eq(notifications.id, notification_id), organizationScopeCondition))
+      .where(and(eq(notifications.public_id, public_id), organizationScopeCondition))
       .limit(1);
     return rows[0] ?? null;
   }
@@ -302,16 +284,15 @@ export class NotificationRepository {
 
 /**
  * Worker-only factory — requires an explicit handle pinned by one of the supported
- * worker database contexts: `organization` (tenant-scoped notifications),
- * `global_admin` (sec-D #10 SECURITY DEFINER user-id lookup for tenant-less
- * notifications), or `user` (sec-D #10 narrow per-user load for tenant-less
- * notifications). Retention cleanup uses a raw batch-delete under
+ * worker database contexts: `organization` (tenant-scoped notifications) or `user`
+ * (sec-D #10 narrow per-user load for tenant-less notifications, scoped by the recipient
+ * public id the job carries). Retention cleanup uses a raw batch-delete under
  * `withMaintenanceDatabaseContext` (not this factory), so
  * `global_retention_cleanup` is intentionally NOT an accepted context here.
  */
 export function createWorkerNotificationRepository(
   databaseHandle: WorkerDatabaseHandle,
 ): NotificationRepository {
-  assertWorkerDatabaseContext(['organization', 'global_admin', 'user']);
+  assertWorkerDatabaseContext(['organization', 'user']);
   return new NotificationRepository(databaseHandle);
 }

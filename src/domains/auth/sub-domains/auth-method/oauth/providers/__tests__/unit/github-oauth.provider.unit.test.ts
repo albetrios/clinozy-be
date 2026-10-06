@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { UnauthorizedError } from '@/shared/errors/index.js';
+import { ExternalServiceError } from '@/infrastructure/outbound/outbound-error.js';
+import { ServiceUnavailableError, UnauthorizedError } from '@/shared/errors/index.js';
 import {
   buildGitHubOAuthRedirectUrl,
   exchangeGitHubOAuthCode,
@@ -20,15 +21,25 @@ vi.mock('@/shared/config/env.config.js', async () => {
   };
 });
 
-const outboundFetch = vi.fn();
+const outboundFetchJson = vi.fn();
 
 vi.mock('@/infrastructure/outbound/index.js', () => ({
-  outboundFetch: (...args: unknown[]) => outboundFetch(...args),
+  outboundFetchJson: (...args: unknown[]) => outboundFetchJson(...args),
   buildOutboundFetchOptions: (options: unknown) => options,
 }));
 
-function jsonResponse(body: unknown) {
-  return { json: async () => body } as Response;
+/** What `outboundFetch*` throws for a provider answer outside the expected status. */
+function providerAnswered(status: number): ExternalServiceError {
+  return new ExternalServiceError({
+    integration: 'oauth-github',
+    category: status >= 500 ? 'http_5xx' : 'http_4xx',
+    status,
+  });
+}
+
+/** What `outboundFetch*` throws when the provider cannot be reached. */
+function providerUnreachable(): ExternalServiceError {
+  return new ExternalServiceError({ integration: 'oauth-github', category: 'network' });
 }
 
 describe('exchangeGitHubOAuthCode', () => {
@@ -44,17 +55,17 @@ describe('exchangeGitHubOAuthCode', () => {
   });
 
   it('returns a normalised profile using the primary verified email', async () => {
-    outboundFetch
-      .mockResolvedValueOnce(jsonResponse({ access_token: 'github-access-token' }))
-      .mockResolvedValueOnce(
-        jsonResponse({ id: 4242, name: 'Octo Cat', avatar_url: 'https://github.example/a.png' }),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse([
-          { email: 'secondary@example.com', primary: false, verified: true },
-          { email: 'octo@example.com', primary: true, verified: true },
-        ]),
-      );
+    outboundFetchJson
+      .mockResolvedValueOnce({ access_token: 'github-access-token' })
+      .mockResolvedValueOnce({
+        id: 4242,
+        name: 'Octo Cat',
+        avatar_url: 'https://github.example/a.png',
+      })
+      .mockResolvedValueOnce([
+        { email: 'secondary@example.com', primary: false, verified: true },
+        { email: 'octo@example.com', primary: true, verified: true },
+      ]);
 
     const profile = await exchangeGitHubOAuthCode({ code: 'auth-code', codeVerifier: 'verifier' });
 
@@ -65,17 +76,15 @@ describe('exchangeGitHubOAuthCode', () => {
       provider_user_id: '4242',
     });
 
-    const tokenRequest = outboundFetch.mock.calls[0]?.[0] as { init: { body: string } };
+    const tokenRequest = outboundFetchJson.mock.calls[0]?.[0] as { init: { body: string } };
     expect(JSON.parse(tokenRequest.init.body).code_verifier).toBe('verifier');
   });
 
   it('rejects when the primary email is not verified (no unverified fallback)', async () => {
-    outboundFetch
-      .mockResolvedValueOnce(jsonResponse({ access_token: 'github-access-token' }))
-      .mockResolvedValueOnce(jsonResponse({ id: 99, name: 'Attacker' }))
-      .mockResolvedValueOnce(
-        jsonResponse([{ email: 'victim@example.com', primary: true, verified: false }]),
-      );
+    outboundFetchJson
+      .mockResolvedValueOnce({ access_token: 'github-access-token' })
+      .mockResolvedValueOnce({ id: 99, name: 'Attacker' })
+      .mockResolvedValueOnce([{ email: 'victim@example.com', primary: true, verified: false }]);
 
     const error = await exchangeGitHubOAuthCode({
       code: 'auth-code',
@@ -87,17 +96,63 @@ describe('exchangeGitHubOAuthCode', () => {
   });
 
   it('does not fall back to an unverified non-primary email', async () => {
-    outboundFetch
-      .mockResolvedValueOnce(jsonResponse({ access_token: 'github-access-token' }))
-      .mockResolvedValueOnce(jsonResponse({ id: 7, name: 'Attacker' }))
-      .mockResolvedValueOnce(
-        jsonResponse([{ email: 'victim@example.com', primary: false, verified: false }]),
-      );
+    outboundFetchJson
+      .mockResolvedValueOnce({ access_token: 'github-access-token' })
+      .mockResolvedValueOnce({ id: 7, name: 'Attacker' })
+      .mockResolvedValueOnce([{ email: 'victim@example.com', primary: false, verified: false }]);
 
     await expect(
       exchangeGitHubOAuthCode({ code: 'auth-code', codeVerifier: 'verifier' }),
     ).rejects.toMatchObject({
       messageKey: 'errors:githubUserMissingVerifiedEmail',
     });
+  });
+
+  it('answers 401 when GitHub refuses the code (an `error` in a 200 body)', async () => {
+    outboundFetchJson.mockResolvedValueOnce({ error: 'bad_verification_code' });
+
+    await expect(
+      exchangeGitHubOAuthCode({ code: 'expired-code', codeVerifier: 'verifier' }),
+    ).rejects.toMatchObject({ statusCode: 401, messageKey: 'errors:githubTokenMissing' });
+  });
+
+  it.each([
+    ['unreachable', providerUnreachable()],
+    ['failing with a 5xx', providerAnswered(503)],
+  ])('answers 503 when GitHub is %s during the token exchange', async (_label, failure) => {
+    outboundFetchJson.mockRejectedValueOnce(failure);
+
+    const error = await exchangeGitHubOAuthCode({
+      code: 'auth-code',
+      codeVerifier: 'verifier',
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ServiceUnavailableError);
+    expect(error).toMatchObject({ messageKey: 'errors:oauthProviderUnavailable' });
+  });
+
+  it('answers 401 (no verified email) when GitHub refuses the email list', async () => {
+    outboundFetchJson
+      .mockResolvedValueOnce({ access_token: 'github-access-token' })
+      .mockResolvedValueOnce({ id: 4242, name: 'Octo Cat' })
+      .mockRejectedValueOnce(providerAnswered(403));
+
+    await expect(
+      exchangeGitHubOAuthCode({ code: 'auth-code', codeVerifier: 'verifier' }),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      messageKey: 'errors:githubUserMissingVerifiedEmail',
+    });
+  });
+
+  it('answers 503 when the email list fails — not a misleading "no verified email"', async () => {
+    outboundFetchJson
+      .mockResolvedValueOnce({ access_token: 'github-access-token' })
+      .mockResolvedValueOnce({ id: 4242, name: 'Octo Cat' })
+      .mockRejectedValueOnce(providerAnswered(502));
+
+    await expect(
+      exchangeGitHubOAuthCode({ code: 'auth-code', codeVerifier: 'verifier' }),
+    ).rejects.toMatchObject({ statusCode: 503, messageKey: 'errors:oauthProviderUnavailable' });
   });
 });

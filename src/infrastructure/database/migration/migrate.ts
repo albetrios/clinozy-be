@@ -4,6 +4,10 @@ import { resolve } from 'node:path';
 import { readdir, readFile } from 'node:fs/promises';
 import { describeMigrationConnectionError } from '@/infrastructure/database/migration/migration-error-hint.js';
 import { parseMigrationExecutionMode } from '@/infrastructure/database/migration/migration-execution-mode.js';
+import {
+  applyMigrationTimeouts,
+  retryOnMigrationLockTimeout,
+} from '@/infrastructure/database/migration/migration-lock-timeout.js';
 import { isNeonPoolerConnection } from '@/infrastructure/database/utils/connection-url.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
@@ -65,7 +69,6 @@ const sql = postgres(migrationUrl, { max: 1, connect_timeout: 15 });
  * is caught before it can produce a partially-applied schema.
  */
 const MINIMUM_POSTGRES_SERVER_VERSION_NUM = 170000;
-const INIT_MIGRATION_FILENAME = '00000000000000_init.sql';
 
 /**
  * Fixed 64-bit key for the session-level advisory lock that serializes the
@@ -123,71 +126,6 @@ async function assertPostgresMajorVersionAtLeast17(): Promise<void> {
       `Refusing to run migrations against Postgres ${row?.server_version ?? 'unknown'} (server_version_num=${row?.server_version_num ?? 'unknown'}). Postgres 17+ is required project-wide. See .cursor/skills/be-db-migration-maintainer/SKILL.md and docker-compose.yml.`,
     );
   }
-}
-
-interface BaselineExistingInitialMigrationInput {
-  appliedSet: Set<string>;
-  sqlFiles: string[];
-}
-
-async function baselineExistingInitialMigrationIfNeeded({
-  appliedSet,
-  sqlFiles,
-}: BaselineExistingInitialMigrationInput): Promise<void> {
-  if (appliedSet.size > 0 || !sqlFiles.includes(INIT_MIGRATION_FILENAME)) {
-    return;
-  }
-
-  const [row] = await sql<
-    {
-      audit_logs_exists: boolean;
-      auth_users_exists: boolean;
-      billing_plans_exists: boolean;
-      notify_notifications_exists: boolean;
-      tenancy_organizations_exists: boolean;
-      upload_uploads_exists: boolean;
-    }[]
-  >`
-    SELECT
-      to_regclass('audit.logs') IS NOT NULL AS audit_logs_exists,
-      to_regclass('auth.users') IS NOT NULL AS auth_users_exists,
-      to_regclass('billing.plans') IS NOT NULL AS billing_plans_exists,
-      to_regclass('notify.notifications') IS NOT NULL AS notify_notifications_exists,
-      to_regclass('tenancy.organizations') IS NOT NULL AS tenancy_organizations_exists,
-      to_regclass('upload.uploads') IS NOT NULL AS upload_uploads_exists
-  `;
-
-  const hasExistingInitialSchema =
-    row?.audit_logs_exists === true &&
-    row.auth_users_exists === true &&
-    row.billing_plans_exists === true &&
-    row.notify_notifications_exists === true &&
-    row.tenancy_organizations_exists === true &&
-    row.upload_uploads_exists === true;
-
-  if (!hasExistingInitialSchema) {
-    return;
-  }
-
-  if (isDryRun) {
-    logger.warn(
-      { filename: INIT_MIGRATION_FILENAME },
-      'Dry run: would baseline migration metadata for existing initialized database',
-    );
-    appliedSet.add(INIT_MIGRATION_FILENAME);
-    return;
-  }
-
-  await sql`
-    INSERT INTO public.schema_migrations (filename)
-    VALUES (${INIT_MIGRATION_FILENAME})
-    ON CONFLICT (filename) DO NOTHING
-  `;
-  appliedSet.add(INIT_MIGRATION_FILENAME);
-  logger.warn(
-    { filename: INIT_MIGRATION_FILENAME },
-    'Baseline migration metadata for existing initialized database',
-  );
 }
 
 /** Minimal shape shared by the top-level `sql` tag and a `sql.begin` transaction. */
@@ -288,8 +226,6 @@ async function main() {
       .filter((file) => file.endsWith('.sql'))
       .sort((a, b) => a.localeCompare(b));
 
-    await baselineExistingInitialMigrationIfNeeded({ appliedSet, sqlFiles });
-
     for (const filename of sqlFiles) {
       if (appliedSet.has(filename)) continue;
 
@@ -317,14 +253,21 @@ async function main() {
         .filter((statement) => statement.length > 0);
 
       if (transactional) {
-        await sql.begin(async (transaction) => {
-          await runMigrationStatements({ filename, statements, executor: transaction });
-          if (!isDryRun) {
-            await transaction.unsafe(
-              'insert into public.schema_migrations (filename) values ($1)',
-              [filename],
-            );
-          }
+        // Bounded lock waits (a blocked DDL must not queue the app's traffic behind it) and a
+        // statement cap; a file whose lock wait times out rolls back and is retried.
+        await retryOnMigrationLockTimeout({
+          filename,
+          run: () =>
+            sql.begin(async (transaction) => {
+              await applyMigrationTimeouts({ executor: transaction, scope: 'transaction' });
+              await runMigrationStatements({ filename, statements, executor: transaction });
+              if (!isDryRun) {
+                await transaction.unsafe(
+                  'insert into public.schema_migrations (filename) values ($1)',
+                  [filename],
+                );
+              }
+            }),
         });
         continue;
       }
@@ -337,10 +280,19 @@ async function main() {
        * an INVALID index behind, so we check for that before recording success —
        * an operator must `DROP INDEX CONCURRENTLY` the invalid index and re-run.
        */
-      await runMigrationStatements({ filename, statements, executor: sql });
-      await assertNoInvalidIndexes({ filename });
-      if (!isDryRun) {
-        await sql.unsafe('insert into public.schema_migrations (filename) values ($1)', [filename]);
+      // The lock wait is bounded here too; the statement cap is lifted for long index builds.
+      await applyMigrationTimeouts({ executor: sql, scope: 'session' });
+      try {
+        await runMigrationStatements({ filename, statements, executor: sql });
+        await assertNoInvalidIndexes({ filename });
+        if (!isDryRun) {
+          await sql.unsafe('insert into public.schema_migrations (filename) values ($1)', [
+            filename,
+          ]);
+        }
+      } finally {
+        await sql.unsafe('RESET lock_timeout');
+        await sql.unsafe('RESET statement_timeout');
       }
     }
 

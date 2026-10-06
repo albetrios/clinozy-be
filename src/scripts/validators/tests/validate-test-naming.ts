@@ -22,7 +22,7 @@ const TIER_SUFFIXES = [
 type TierSuffix = (typeof TIER_SUFFIXES)[number];
 
 /** Returns whether a test file is exempt from the `*.tier.test.ts` filename convention. */
-export function isExemptFromTierSuffix(relativePath: string, fileName: string): boolean {
+export function isExemptFromTierSuffix(relativePath: string): boolean {
   const normalized = relativePath.replaceAll('\\', '/');
 
   // Bundled domain e2e: domains/<d>/__tests__/<d>.test.ts
@@ -33,30 +33,6 @@ export function isExemptFromTierSuffix(relativePath: string, fileName: string): 
   if (
     normalized.match(/^domains\/.*\/__tests__\/[^/]+\.test\.ts$/) &&
     !normalized.includes('/events/__tests__/')
-  ) {
-    return true;
-  }
-
-  // Worker suite naming at sub-domain root __tests__
-  if (normalized.includes('/__tests__/') && fileName.endsWith('.worker.test.ts')) {
-    return true;
-  }
-
-  // Legacy validator tests co-located under __tests__/unit/
-  if (normalized.includes('/__tests__/unit/') && fileName.endsWith('.validator.test.ts')) {
-    return true;
-  }
-
-  // Policy scan tests under tests/unit/
-  if (normalized.startsWith('tests/unit/') && fileName.endsWith('.policy.test.ts')) {
-    return true;
-  }
-
-  // Legacy infra/context tests without tier in filename
-  if (
-    normalized.startsWith('infrastructure/') &&
-    normalized.includes('/__tests__/') &&
-    fileName.endsWith('.test.ts')
   ) {
     return true;
   }
@@ -73,24 +49,30 @@ export function detectTier(fileName: string): TierSuffix | undefined {
   return undefined;
 }
 
-/** Returns whether a test file path is allowed for the given Vitest tier suffix. */
+/**
+ * Returns whether a test file path is allowed for the given Vitest tier suffix.
+ *
+ * @remarks
+ * The allowed folders mirror the Vitest projects' `include` globs (`tooling/vitest/projects.ts`):
+ * a file outside them is collected by no project and never runs. Seven unit suites — the mail
+ * worker, DLQ auto-retry worker, Sentry and OpenTelemetry among them — sat in a `__tests__/`
+ * folder without `unit/` because `infrastructure/` and `scripts/` were allowed anywhere. A
+ * `*.db.unit` or `*.property.unit` file is collected anywhere under `src/` by its own project.
+ */
 export function isPathAllowedForTier(relativePath: string, tier: TierSuffix): boolean {
   const normalized = relativePath.replaceAll('\\', '/');
   switch (tier) {
     case 'unit':
       return (
+        normalized.endsWith('.db.unit.test.ts') ||
+        normalized.endsWith('.property.unit.test.ts') ||
         normalized.includes('/__tests__/unit/') ||
-        normalized.startsWith('tests/unit/') ||
-        normalized.startsWith('tests/helpers/') ||
-        normalized.includes('/unit/events/') ||
-        normalized.startsWith('infrastructure/') ||
-        normalized.startsWith('scripts/')
+        normalized.startsWith('tests/unit/')
       );
     case 'integration':
       return (
         normalized.includes('/__tests__/integration/') ||
-        normalized.startsWith('tests/integration/') ||
-        normalized.startsWith('scripts/')
+        normalized.startsWith('tests/integration/')
       );
     case 'e2e':
       return normalized.includes('/__tests__/e2e/') || normalized.startsWith('tests/e2e/');
@@ -136,7 +118,7 @@ function main(): void {
     const relativePath = relative(ROOT, filePath);
 
     if (!tier) {
-      if (isExemptFromTierSuffix(relativePath, fileName)) continue;
+      if (isExemptFromTierSuffix(relativePath)) continue;
       errors.push(`Missing tier suffix in filename: ${relativePath}`);
       continue;
     }

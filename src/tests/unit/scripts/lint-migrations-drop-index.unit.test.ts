@@ -54,20 +54,4 @@ DROP INDEX IF EXISTS auth.idx_some_dead_index;
     ).toBe(false);
     expect(usedAllowRules.has('drop_index_without_concurrently')).toBe(true);
   });
-
-  it('grandfathers the historical 20260606010000 migration (filename allowlist)', () => {
-    // The pre-rule migration that prompted sec-r4-D5 keeps its plain DROP INDEX
-    // form — we don't rewrite already-applied migration history. The
-    // forward-only fix is the separate 20260608060000_user_notif_prefs_drop_org_index_concurrently.sql
-    // that codifies the correct pattern.
-    const sql = `DROP INDEX IF EXISTS auth.idx_user_notif_prefs_org;
-`;
-    const { violations } = lintMigrationFileContent(
-      '20260606010000_user_notif_prefs_drop_org_branch.sql',
-      sql,
-    );
-    expect(
-      violations.some((violation) => violation.ruleId === 'drop_index_without_concurrently'),
-    ).toBe(false);
-  });
 });

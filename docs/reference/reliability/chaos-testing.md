@@ -12,12 +12,14 @@ replay) against **live Postgres + Redis**, with failures injected by
    - `pnpm chaos:up` (or `docker compose --profile chaos up -d toxiproxy`)
 2. Point the **API process** at proxied ports (**not** the defaults in `.env` unless you override):
    - `DATABASE_URL=postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy`
+   - `DATABASE_MAINTENANCE_URL` on the same `127.0.0.1:25432` listener (the suite reroutes it
+     itself, keeping its login)
    - `REDIS_URL=redis://127.0.0.1:26379`
    - `TOXIPROXY_URL=http://127.0.0.1:8474` (administration API for scripts)
 3. Register listeners (idempotent):
    - `pnpm chaos:provision`
-4. Migrate + run the focused suite:
-   - `pnpm db:migrate`
+4. Run the focused suite — it creates and migrates the harness's own `<local database>_test` over the
+   direct connection first, and takes the same database lock as `pnpm test`:
    - `pnpm test:chaos`
 
 On profile `chaos`, `docker-compose.yml` **builds** the Toxiproxy image locally from the official
@@ -32,9 +34,13 @@ via a GitHub Actions service container (see below), so this local build affects 
 > `pnpm test:chaos` is self-contained: its `bootstrap-env.ts` hard-forces `NODE_ENV=development` and points
 > `DATABASE_URL` / `REDIS_URL` at the proxied ports itself, so the manual overrides in step 2 are only
 > needed when you run the **API process** by hand against the proxies (not for the test suite). The chaos
-> bootstrap forces `NODE_ENV=development` and sets the test-affordance flags — captcha bypass via
-> `CAPTCHA_BYPASS_ALLOWED`, and `TEST_DATA_WIPE_ALLOWED=true` for `cleanupDatabase`/`cleanupTestRedis` —
-> so the suite behaves the same locally and in CI.
+> bootstrap forces `NODE_ENV=development`, hard-disables captcha (`CAPTCHA_PROVIDER=disabled`, as the main
+> suite's `src/tests/setup.ts` does), forces its own Redis key prefix (`<product>:test:`, so chaos jobs and
+> `cleanupTestRedis` never touch a running `pnpm dev`'s keys), imports the shared
+> `src/tests/helpers/harness-provider-env.ts` (fake provider keys, no telemetry, no network beyond
+> loopback — the main suite loads the same module) and sets the test-affordance flags —
+> `TEST_MODE=true`, the single gate for `cleanupDatabase`/`cleanupTestRedis` — so the suite behaves the same
+> locally and in CI.
 
 ## Continuous integration
 
@@ -42,7 +48,7 @@ The weekly [`scheduled-chaos.yml`](../../../.github/workflows/scheduled-chaos.ym
 
 - Executes `pnpm chaos:provision`, then `pnpm db:migrate` and `pnpm db:seed` (the reference rows, as a deploy does) against the proxied `DATABASE_URL`, then `pnpm test:chaos`. Without the seed, a fresh database has no permission catalog, and every test that creates an organization gets a 500 on the `role_permissions` foreign key.
 - The CI Postgres is plaintext while the schema default is TLS on, so the shared `test-env` action exports `DATABASE_SSL_ENABLED=false`. Without it every test dies in setup within milliseconds (`Client network socket disconnected before secure TLS connection was established`), which kept this suite red on every run from its first one.
-- The harness always connects as `core:core`, the Compose credentials (`src/tests/chaos/bootstrap-env.ts` overrides `DATABASE_URL`), so the job's Postgres service creates that role as well. With the image's usual `postgres:postgres` instead, every test failed in setup on `password authentication failed for user "core"`: the next failure after TLS, which showed up on the first run that got past TLS.
+- The harness always connects with the Compose credentials — user, password and database all the project's database name (`src/tests/chaos/bootstrap-env.ts` overrides `DATABASE_URL`) — so the job's Postgres service creates that role as well. With the image's usual `postgres:postgres` instead, every test failed in setup on `password authentication failed for user "<database name>"`: the next failure after TLS, which showed up on the first run that got past TLS.
 - A red run opens (or comments on) a `ci-failure` issue titled *Weekly chaos suite failing*; the next green run closes it.
 
 Upstream addresses inside the proxy container default to `postgres:5432` and `redis:6379`; override

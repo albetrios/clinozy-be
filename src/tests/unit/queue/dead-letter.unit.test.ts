@@ -4,6 +4,8 @@ import type { Job, Worker } from 'bullmq';
 
 const queueAddMock = vi.fn().mockResolvedValue(undefined);
 const queueCloseMock = vi.fn().mockResolvedValue(undefined);
+const queueGetWaitingCountMock = vi.fn().mockResolvedValue(0);
+const queueCleanMock = vi.fn().mockResolvedValue([]);
 const queueConstructorArgsMock: { name: string; options: unknown }[] = [];
 const sentryCaptureExceptionMock = vi.fn();
 const insertDeadLetterJobMock = vi.fn().mockResolvedValue(undefined);
@@ -14,13 +16,20 @@ vi.mock('bullmq', () => ({
   // bound, or making it absurdly large) silently turns the DLQ into an unbounded
   // Redis sink — exactly the failure mode the recon flagged.
   Queue: class MockQueue {
+    name: string;
+
     constructor(name: string, options: unknown) {
+      this.name = name;
       queueConstructorArgsMock.push({ name, options });
     }
 
     add = queueAddMock;
 
     close = queueCloseMock;
+
+    getWaitingCount = queueGetWaitingCountMock;
+
+    clean = (...arguments_: unknown[]) => queueCleanMock(this.name, ...arguments_);
   },
   UnrecoverableError: class UnrecoverableError extends Error {},
 }));
@@ -47,6 +56,10 @@ describe('dead-letter helpers', () => {
   afterEach(async () => {
     queueAddMock.mockClear();
     queueCloseMock.mockClear();
+    queueGetWaitingCountMock.mockReset();
+    queueGetWaitingCountMock.mockResolvedValue(0);
+    queueCleanMock.mockReset();
+    queueCleanMock.mockResolvedValue([]);
     queueConstructorArgsMock.length = 0;
     sentryCaptureExceptionMock.mockClear();
     insertDeadLetterJobMock.mockClear();
@@ -108,43 +121,101 @@ describe('dead-letter helpers', () => {
     });
   });
 
-  // P0-#6 regression: the DLQ queue itself must have bounded retention. Without
-  // queue-level `defaultJobOptions`, a DLQ job that never transitions out of
-  // `waiting` would sit in Redis forever — silently turning the dead-letter sink
-  // into an unbounded memory leak. The per-add removal options only fire on the
-  // complete/failed state transition, so they alone are not enough.
+  // P0-#6 regression: no worker consumes a `*-dlq` mirror, so its snapshots sit in `waiting` and
+  // BullMQ's removeOnComplete / removeOnFail never fire for them — the queue-level defaults that
+  // used to stand in for a bound bounded nothing. The real bounds: a size cap checked on every
+  // write, and an age trim run on every DLQ-depth tick.
   describe('DLQ retention bounds (P0-#6)', () => {
-    it('enqueueDeadLetter opens a *-dlq queue with bounded age + count defaults', async () => {
-      const { enqueueDeadLetter } = await import('@/infrastructure/queue/dlq/dead-letter.js');
+    const terminalJob = {
+      id: 'job-retention',
+      name: 'dispatch-test',
+      data: {},
+      attemptsMade: 3,
+      opts: { attempts: 3 },
+    } as Job;
+
+    it('keeps the mirror bounds within reason: 30 days and at most 10,000 snapshots per mirror', async () => {
+      const { DEAD_LETTER_MIRROR_MAX_JOBS, DEAD_LETTER_MIRROR_RETENTION_MS } = await import(
+        '@/infrastructure/queue/dlq/dead-letter.js'
+      );
       const { THIRTY_DAYS_SECONDS } = await import('@/shared/constants/ttl.constants.js');
+      expect(DEAD_LETTER_MIRROR_RETENTION_MS).toBe(THIRTY_DAYS_SECONDS * 1_000);
+      expect(DEAD_LETTER_MIRROR_MAX_JOBS).toBeGreaterThan(0);
+      expect(DEAD_LETTER_MIRROR_MAX_JOBS).toBeLessThanOrEqual(10_000);
+    });
 
-      const job = {
-        id: 'job-retention',
-        name: 'dispatch-test',
-        data: {},
-        attemptsMade: 3,
-        opts: { attempts: 3 },
-      } as Job;
+    it('mirrors a final failure while the mirror has room', async () => {
+      const { enqueueDeadLetter, DEAD_LETTER_MIRROR_MAX_JOBS } = await import(
+        '@/infrastructure/queue/dlq/dead-letter.js'
+      );
+      queueGetWaitingCountMock.mockResolvedValue(DEAD_LETTER_MIRROR_MAX_JOBS - 1);
 
-      await enqueueDeadLetter('mail', job, new Error('boom'));
+      await enqueueDeadLetter('mail', terminalJob, new Error('boom'));
 
-      const dlqConstructorCall = queueConstructorArgsMock.find((call) => call.name === 'mail-dlq');
-      expect(dlqConstructorCall).toBeDefined();
-      const options = dlqConstructorCall!.options as {
-        defaultJobOptions?: {
-          removeOnComplete?: { age?: number; count?: number };
-          removeOnFail?: { age?: number; count?: number };
-        };
-      };
+      expect(queueAddMock).toHaveBeenCalledOnce();
+    });
 
-      // Both arms (complete + fail) bounded by age AND count so a sustained burst
-      // cannot exhaust Redis even within the age window.
-      expect(options.defaultJobOptions?.removeOnComplete?.age).toBe(THIRTY_DAYS_SECONDS);
-      expect(options.defaultJobOptions?.removeOnComplete?.count).toBeGreaterThan(0);
-      expect(options.defaultJobOptions?.removeOnComplete?.count).toBeLessThanOrEqual(10_000);
-      expect(options.defaultJobOptions?.removeOnFail?.age).toBe(THIRTY_DAYS_SECONDS);
-      expect(options.defaultJobOptions?.removeOnFail?.count).toBeGreaterThan(0);
-      expect(options.defaultJobOptions?.removeOnFail?.count).toBeLessThanOrEqual(10_000);
+    it('stops mirroring once the mirror is full, so a failure storm cannot fill Redis', async () => {
+      const { enqueueDeadLetter, DEAD_LETTER_MIRROR_MAX_JOBS } = await import(
+        '@/infrastructure/queue/dlq/dead-letter.js'
+      );
+      const { logger } = await import('@/shared/utils/infrastructure/logger.util.js');
+      const warnSpy = vi.spyOn(logger, 'warn');
+      queueGetWaitingCountMock.mockResolvedValue(DEAD_LETTER_MIRROR_MAX_JOBS);
+
+      await enqueueDeadLetter('mail', terminalJob, new Error('boom'));
+
+      expect(queueAddMock).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          deadLetterQueue: 'mail-dlq',
+          mirroredCount: DEAD_LETTER_MIRROR_MAX_JOBS,
+        }),
+        'queue.dead_letter.mirror_full',
+      );
+    });
+
+    it('trims every mirror of the snapshots older than the retention, oldest first, capped per pass', async () => {
+      const {
+        trimDeadLetterQueueMirrors,
+        DEAD_LETTER_MIRROR_MAX_JOBS,
+        DEAD_LETTER_MIRROR_RETENTION_MS,
+      } = await import('@/infrastructure/queue/dlq/dead-letter.js');
+      queueCleanMock.mockImplementation(async (queueName: string) =>
+        queueName === 'mail-dlq' ? ['dlq-a', 'dlq-b'] : [],
+      );
+
+      const removed = await trimDeadLetterQueueMirrors({
+        sourceQueueNames: ['mail', 'notification'],
+      });
+
+      expect(removed).toBe(2);
+      expect(queueCleanMock).toHaveBeenCalledWith(
+        'mail-dlq',
+        DEAD_LETTER_MIRROR_RETENTION_MS,
+        DEAD_LETTER_MIRROR_MAX_JOBS,
+        'wait',
+      );
+      expect(queueCleanMock).toHaveBeenCalledWith(
+        'notification-dlq',
+        DEAD_LETTER_MIRROR_RETENTION_MS,
+        DEAD_LETTER_MIRROR_MAX_JOBS,
+        'wait',
+      );
+    });
+
+    it('keeps trimming the other mirrors when one fails', async () => {
+      const { trimDeadLetterQueueMirrors } = await import(
+        '@/infrastructure/queue/dlq/dead-letter.js'
+      );
+      queueCleanMock.mockImplementation(async (queueName: string) => {
+        if (queueName === 'mail-dlq') throw new Error('redis down');
+        return ['dlq-c'];
+      });
+
+      await expect(
+        trimDeadLetterQueueMirrors({ sourceQueueNames: ['mail', 'notification'] }),
+      ).resolves.toBe(1);
     });
 
     it('audit-#W2: redacts URL/query-embedded secrets in failed_reason/error_stack before the Redis mirror', async () => {
@@ -197,7 +268,7 @@ describe('dead-letter helpers', () => {
       const job = {
         id: 'job-1',
         name: 'dispatch-notification',
-        data: { notificationId: 1 },
+        data: { notificationPublicId: 'ntf_000000000000000000001' },
         attemptsMade: 1,
         opts: { attempts: 3 },
       } as Job;
@@ -223,7 +294,7 @@ describe('dead-letter helpers', () => {
       const job = {
         id: 'job-2',
         name: 'dispatch-notification',
-        data: { notificationId: 2 },
+        data: { notificationPublicId: 'ntf_000000000000000000002' },
         attemptsMade: 3,
         opts: { attempts: 3 },
       } as Job;
@@ -244,7 +315,7 @@ describe('dead-letter helpers', () => {
           failed_reason: 'permanent',
           attempts_made: 3,
           max_attempts: 3,
-          payload_summary: { notification_id: 2 },
+          payload_summary: { notification_public_id: 'ntf_000000000000000000002' },
         }),
       );
       expect(sentryCaptureExceptionMock).toHaveBeenCalledWith(finalError);
@@ -264,7 +335,7 @@ describe('dead-letter helpers', () => {
       const job = {
         id: 'job-3',
         name: 'dispatch-notification',
-        data: { notificationId: 3 },
+        data: { notificationPublicId: 'ntf_000000000000000000003' },
         attemptsMade: 3,
         opts: { attempts: 3 },
       } as Job;
@@ -278,6 +349,91 @@ describe('dead-letter helpers', () => {
       // One Sentry capture for the persist failure, one for the final-failure alert.
       expect(sentryCaptureExceptionMock).toHaveBeenCalledWith(persistError);
       expect(sentryCaptureExceptionMock).toHaveBeenCalledWith(finalError);
+    });
+  });
+
+  describe('attachDeadLetterAndAlerting — final failures that skip the retry budget', () => {
+    async function emitFailure(options: { error: Error; attemptsMade: number }) {
+      const { attachDeadLetterAndAlerting } = await import(
+        '@/infrastructure/queue/dlq/dead-letter.js'
+      );
+      const fakeWorker = new EventEmitter() as unknown as Worker;
+      attachDeadLetterAndAlerting(fakeWorker, 'webhook-delivery');
+      const job = {
+        id: 'wda_9z3rura5kqvcv8zggriym',
+        name: 'deliver-webhook',
+        data: { deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym', dlqReplayAttempt: 2 },
+        attemptsMade: options.attemptsMade,
+        opts: { attempts: 8 },
+      } as unknown as Job;
+      fakeWorker.emit('failed', job, options.error, 'active');
+      return job;
+    }
+
+    it('records and alerts an UnrecoverableError thrown on its first attempt', async () => {
+      // A job that can never succeed (a missing row, an unreadable secret) used to be logged and
+      // dropped: no ledger row, no alert, nothing for an operator to find.
+      const { UnrecoverableError } = await import('bullmq');
+      const error = new UnrecoverableError('webhook.delivery.signing_secret_unreadable');
+
+      await emitFailure({ error, attemptsMade: 1 });
+
+      await vi.waitFor(() => {
+        expect(insertDeadLetterJobMock).toHaveBeenCalledTimes(1);
+      });
+      expect(insertDeadLetterJobMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          failed_reason: 'webhook.delivery.signing_secret_unreadable',
+          // The failed job was the second replay of its lineage.
+          replay_depth: 2,
+        }),
+      );
+      expect(sentryCaptureExceptionMock).toHaveBeenCalledWith(error);
+    });
+
+    it('alerts a poison payload without recording it twice — the guard already did', async () => {
+      const { UnrecoverableError } = await import('bullmq');
+      const { markDeadLetterRecorded } = await import('@/infrastructure/queue/dlq/dead-letter.js');
+      const error = markDeadLetterRecorded(
+        new UnrecoverableError('bullmq.invalid_job_payload:webhook-delivery:{}'),
+      );
+
+      await emitFailure({ error, attemptsMade: 1 });
+
+      await vi.waitFor(() => {
+        expect(sentryCaptureExceptionMock).toHaveBeenCalledWith(error);
+      });
+      expect(insertDeadLetterJobMock).not.toHaveBeenCalled();
+      expect(queueAddMock).not.toHaveBeenCalled();
+    });
+
+    it('records an expected final failure without a Sentry page', async () => {
+      // A customer endpoint that never accepted the delivery: the job is dead and its owner sees
+      // it on the attempt row, but nobody on call can act on it.
+      const error = Object.assign(new Error('Webhook delivery failed with HTTP 500'), {
+        expectedFinalFailure: true,
+      });
+
+      await emitFailure({ error, attemptsMade: 8 });
+
+      await vi.waitFor(() => {
+        expect(insertDeadLetterJobMock).toHaveBeenCalledTimes(1);
+        expect(queueAddMock).toHaveBeenCalledTimes(1);
+      });
+      expect(sentryCaptureExceptionMock).not.toHaveBeenCalled();
+    });
+
+    it('retries an expected failure that still has attempts left', async () => {
+      const error = Object.assign(new Error('Webhook delivery failed with HTTP 500'), {
+        expectedFinalFailure: true,
+      });
+
+      await emitFailure({ error, attemptsMade: 3 });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(insertDeadLetterJobMock).not.toHaveBeenCalled();
+      expect(sentryCaptureExceptionMock).not.toHaveBeenCalled();
     });
   });
 

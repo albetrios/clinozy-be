@@ -1,4 +1,4 @@
-import { Queue } from 'bullmq';
+import type { Queue } from 'bullmq';
 import {
   MAINTENANCE_SCOPE,
   withMaintenanceDatabaseContext,
@@ -7,32 +7,56 @@ import { eq } from 'drizzle-orm';
 import { logs } from '@/domains/audit/audit.schema.js';
 import { users } from '@/domains/user/user.schema.js';
 import {
-  getBullMQConnectionOptions,
-  getBullMQKeyPrefix,
-} from '@/infrastructure/queue/connection.js';
-import {
   DLQ_QUEUE_SUFFIX,
   type DeadLetterJobData,
+  getDeadLetterQueueClient,
   listDeadLetterQueueNames,
 } from '@/infrastructure/queue/dlq/dead-letter.js';
-import { MAIL_QUEUE_NAME } from '@/infrastructure/mail/queues/mail.queue.js';
-import { WEBHOOK_DELIVERY_QUEUE_NAME } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
-import { NOTIFICATION_QUEUE_NAME } from '@/domains/notify/sub-domains/notification/queues/notification.queue.js';
-import { STRIPE_WEBHOOK_QUEUE_NAME } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
+import {
+  getWebhookDeliveryQueue,
+  WEBHOOK_DELIVERY_QUEUE_NAME,
+} from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
+import {
+  getNotificationQueue,
+  NOTIFICATION_QUEUE_NAME,
+} from '@/domains/notify/sub-domains/notification/queues/notification.queue.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 /**
  * Source queues whose DLQ payloads {@link buildReplayJobPayload} knows how to reconstruct.
  * Retention/observability DLQs are intentionally excluded — their jobs carry no business
- * payload worth replaying, so operators must clear them manually.
+ * payload worth replaying, so operators must clear them manually. So are mail and Stripe webhook
+ * jobs, whose rows carry their own retry: a mail job that failed for good left its row `failed`
+ * with the body scrubbed (it can never be re-sent — the user asks for a new email), or — circuit
+ * open on the last attempt — `pending`, which the outbox sweeper re-enqueues on its own; a Stripe
+ * event's ledger row is reclaimed by the `stripe-webhook-event-reclaim` sweep until it is
+ * processed or abandoned (`tool:stripe-webhook-replay -- --retry` restarts an abandoned one).
+ * Replaying them from the DLQ too would be a second retry path. Their DLQ entries are a record.
  */
 export const DLQ_REPLAY_SOURCE_QUEUE_NAMES = [
-  MAIL_QUEUE_NAME,
   WEBHOOK_DELIVERY_QUEUE_NAME,
   NOTIFICATION_QUEUE_NAME,
-  STRIPE_WEBHOOK_QUEUE_NAME,
 ] as const;
+
+/**
+ * Each replayable source queue's own producer. A replay goes through it so the queue's default
+ * job options — attempts, backoff, retention — apply to the replayed job: added through a bare
+ * `Queue`, a replay got one attempt and was kept in Redis forever.
+ */
+const REPLAY_SOURCE_QUEUE_PRODUCERS: Readonly<
+  Record<(typeof DLQ_REPLAY_SOURCE_QUEUE_NAMES)[number], () => Queue>
+> = {
+  [WEBHOOK_DELIVERY_QUEUE_NAME]: getWebhookDeliveryQueue,
+  [NOTIFICATION_QUEUE_NAME]: getNotificationQueue,
+};
+
+function getReplaySourceQueue(sourceQueueName: string): Queue | null {
+  const getProducer =
+    REPLAY_SOURCE_QUEUE_PRODUCERS[sourceQueueName as keyof typeof REPLAY_SOURCE_QUEUE_PRODUCERS];
+  return getProducer ? getProducer() : null;
+}
 
 /** DLQ queue names accepted by the `tool:dlq-replay` CLI (derived from {@link DLQ_REPLAY_SOURCE_QUEUE_NAMES}). */
 export const KNOWN_DEAD_LETTER_QUEUE_NAMES = listDeadLetterQueueNames(
@@ -62,7 +86,7 @@ export type DeadLetterLedgerReplayInput = {
   job_name: string;
   payload_summary: Record<string, unknown>;
   attempts_made: number;
-  auto_retry_count?: number;
+  replay_depth: number;
 };
 
 /**
@@ -73,7 +97,7 @@ export type DeadLetterLedgerReplayInput = {
  *   delegates to {@link buildReplayJobPayload}.
  * - **Failure modes:** returns `null` when required summary keys are missing (same as manual replay).
  * - **Side effects:** none.
- * - **Notes:** `auto_retry_count` becomes `dlqReplayAttempt` on the re-enqueued job.
+ * - **Notes:** the replayed job's `dlqReplayAttempt` is the row's `replay_depth` + 1.
  */
 export function buildReplayJobPayloadFromLedger(
   record: DeadLetterLedgerReplayInput,
@@ -87,59 +111,52 @@ export function buildReplayJobPayloadFromLedger(
     attempts_made: 0,
     max_attempts: 0,
     failed_at: new Date().toISOString(),
-    replay_attempt: record.auto_retry_count ?? 0,
+    replay_depth: record.replay_depth,
   });
   return buildReplayJobPayload(data);
 }
 
 /**
  * Reconstructs the minimal job payload needed to re-enqueue a dead-lettered job onto its
- * original BullMQ queue. Mail, webhook delivery, notification, and Stripe webhook jobs each
- * pull their required identifiers out of {@link DeadLetterJobData.original_data_summary}:
- * mail (`mail_outbox_id`), webhook (`delivery_attempt_id` + `organization_public_id`),
- * notification (`notification_id` + nullable `organization_public_id`), Stripe
- * (`stripe_event_id`). Queues without a known shape (retention/observability DLQs), or whose
- * summary is missing a required key, return `null` so the caller skips the replay. The
- * resulting payload is tagged with {@link DlqReplayJobFields} markers so the receiving worker
- * can detect a replay.
+ * original BullMQ queue. Webhook delivery and notification jobs pull their required identifiers
+ * out of {@link DeadLetterJobData.original_data_summary}: webhook (`delivery_attempt_public_id` +
+ * `organization_public_id`), notification (`notification_public_id` + nullable
+ * `organization_public_id` + `user_public_id`). Every other queue — mail and Stripe webhook
+ * included, see {@link DLQ_REPLAY_SOURCE_QUEUE_NAMES} — or a summary missing a required key returns `null` so
+ * the caller skips the replay. The payload is tagged with {@link DlqReplayJobFields} markers:
+ * `dlqReplayAttempt` is one deeper than the failure being replayed, so a replay that fails for
+ * good again is recorded one level down its lineage.
  */
 export function buildReplayJobPayload(data: DeadLetterJobData): Record<string, unknown> | null {
   const summary = data.original_data_summary;
   let basePayload: Record<string, unknown> | null = null;
 
   switch (data.original_queue) {
-    case MAIL_QUEUE_NAME: {
-      const mailOutboxId = summary.mail_outbox_id;
-      if (typeof mailOutboxId !== 'number') return null;
-      basePayload = { mailOutboxId };
-      break;
-    }
     case WEBHOOK_DELIVERY_QUEUE_NAME: {
-      const deliveryAttemptId = summary.delivery_attempt_id;
+      const deliveryAttemptPublicId = summary.delivery_attempt_public_id;
       const organizationPublicId = summary.organization_public_id;
-      if (typeof deliveryAttemptId !== 'number' || typeof organizationPublicId !== 'string') {
+      if (typeof deliveryAttemptPublicId !== 'string' || typeof organizationPublicId !== 'string') {
         return null;
       }
-      basePayload = { deliveryAttemptId, organizationPublicId };
+      basePayload = { deliveryAttemptPublicId, organizationPublicId };
       break;
     }
     case NOTIFICATION_QUEUE_NAME: {
-      const notificationId = summary.notification_id;
-      if (typeof notificationId !== 'number') return null;
-      // Notification jobs carry a nullable organization scope; preserve null (global notifications)
-      // and only forward a concrete public id when present.
+      const notificationPublicId = summary.notification_public_id;
+      const userPublicId = summary.user_public_id;
+      if (typeof notificationPublicId !== 'string' || typeof userPublicId !== 'string') {
+        return null;
+      }
+      // Notification jobs carry a nullable organization scope; preserve null (a notification
+      // without an organization, scoped by its recipient) and only forward a concrete public id
+      // when present.
       const organizationPublicId = summary.organization_public_id;
       basePayload = {
-        notificationId,
+        notificationPublicId,
         organizationPublicId:
           typeof organizationPublicId === 'string' ? organizationPublicId : null,
+        userPublicId,
       };
-      break;
-    }
-    case STRIPE_WEBHOOK_QUEUE_NAME: {
-      const stripeEventId = summary.stripe_event_id;
-      if (typeof stripeEventId !== 'string') return null;
-      basePayload = { stripeEventId };
       break;
     }
     default:
@@ -149,7 +166,7 @@ export function buildReplayJobPayload(data: DeadLetterJobData): Record<string, u
   return {
     ...basePayload,
     replayFromDlq: true,
-    dlqReplayAttempt: data.replay_attempt ?? 0,
+    dlqReplayAttempt: data.replay_depth + 1,
   };
 }
 
@@ -192,6 +209,7 @@ export async function recordDlqReplayAuditEntry(input: {
     MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
     async (databaseHandle) => {
       await databaseHandle.insert(logs).values({
+        public_id: generatePublicId('auditLog'),
         actor_user_id: actorRow.id,
         action: 'queue.dlq.replayed',
         resource_type: 'bullmq_dead_letter_job',
@@ -201,7 +219,7 @@ export async function recordDlqReplayAuditEntry(input: {
           dead_letter_job_id: input.deadLetterJobId,
           original_queue: input.data.original_queue,
           original_job_id: input.data.original_job_id,
-          replay_attempt: input.data.replay_attempt ?? 0,
+          replay_depth: input.data.replay_depth,
         },
       });
     },
@@ -215,10 +233,7 @@ export async function recordDlqReplayAuditEntry(input: {
  *
  * @remarks
  * A replay only re-enqueues the source job; whether it can actually re-deliver is decided by the
- * source processor. A terminally-`failed` mail row (body scrubbed) is re-enqueued here but the mail
- * processor immediately throws `UnrecoverableError` (audit-#W1), so the replayed job fails fast and
- * reappears in the DLQ with an explicit `mail.outbox.terminal_failed_not_replayable` reason rather
- * than silently no-opping as a success.
+ * source processor, which re-claims its row under its own idempotency rules.
  */
 export type ReplayDeadLetterJobResult =
   | { status: 'replayed'; originalQueue: string }
@@ -245,28 +260,27 @@ export async function recordDlqAutoRetryAuditEntry(input: {
   deadLetterJobId: number;
   sourceQueue: string;
   originalJobId: string | null;
-  autoRetryCount: number;
+  replayDepth: number;
 }): Promise<void> {
   // sec-r5-async-queue-1: tenantless system event — see the matching comment
-  // in `recordDlqReplayAuditEntry` above. Pre-fix, this INSERT was rejected
-  // by RLS; the throw was swallowed by the auto-retry processor's outer
-  // catch, the Redis counter never advanced, and the same 20 ledger rows
-  // were re-selected at the head forever (head-of-line starvation for the
-  // entire DLQ auto-retry subsystem). The system-audit-insert context fires
-  // the new policy arm gated on `organization_id IS NULL`.
+  // in `recordDlqReplayAuditEntry` above. The system-audit-insert context fires
+  // the policy arm gated on `organization_id IS NULL`.
   await withMaintenanceDatabaseContext(
     MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
     async (databaseHandle) => {
       await databaseHandle.insert(logs).values({
+        public_id: generatePublicId('auditLog'),
         actor_user_id: null,
         action: 'queue.dlq.auto_retried',
         resource_type: 'bullmq_dead_letter_job',
         severity: 'INFO',
         metadata: {
+          // No user or key triggered this — the sweeper did. Marked so an actorless row explains itself.
+          actor_kind: 'system',
           dead_letter_job_id: input.deadLetterJobId,
           original_queue: input.sourceQueue,
           original_job_id: input.originalJobId,
-          auto_retry_count: input.autoRetryCount,
+          replay_depth: input.replayDepth,
         },
       });
     },
@@ -274,86 +288,98 @@ export async function recordDlqAutoRetryAuditEntry(input: {
 }
 
 /**
+ * Re-enqueues a replay payload onto its source queue through that queue's own producer, with a
+ * fresh BullMQ id.
+ *
+ * @remarks
+ * The original `jobId` is never re-used: BullMQ treats a re-`add` with an id still in Redis (the
+ * original failed job, kept under `removeOnFail`) as a `duplicated` event and returns the existing
+ * id without enqueueing — a silent no-op. The source worker re-runs the job under its app-layer
+ * idempotency (Stripe `tryClaimEvent` ledger, webhook delivery `tryMarkSending`, notification
+ * dispatch markers), so a fresh id cannot produce duplicate work.
+ */
+async function enqueueReplay(options: {
+  sourceQueueName: string;
+  jobName: string;
+  payload: Record<string, unknown>;
+}): Promise<void> {
+  const sourceQueue = getReplaySourceQueue(options.sourceQueueName);
+  if (!sourceQueue) {
+    throw new Error(`dlq.replay.unknown_source_queue:${options.sourceQueueName}`);
+  }
+  await sourceQueue.add(options.jobName, options.payload);
+}
+
+/**
  * Re-enqueues one dead-letter ledger row onto its source queue and removes the Redis DLQ mirror.
  *
  * @remarks
- * - **Algorithm:** builds payload from Postgres summary, adds to source queue **without**
- *   re-using the original `jobId` (BullMQ treats a re-`add` with the same id as a `duplicated`
- *   event when the original failed job is still in Redis under `removeOnFail`, returning the
- *   existing id without enqueueing — silently turning replay into a no-op). The source-queue
- *   worker re-runs the job under app-layer idempotency (Stripe `tryClaimEvent` ledger,
- *   mail outbox `tryClaimPendingMailOutbox`, webhook delivery `tryMarkSending`, notification
- *   Redis `SET NX` dispatch marker), so a fresh BullMQ id cannot produce duplicate work.
- *   The Redis DLQ mirror is best-effort removed and an audit row is appended.
- * - **Failure modes:** `payload_not_reconstructable` when summary keys are missing; Redis/Postgres
- *   errors propagate after a successful source enqueue.
+ * - **Algorithm:** builds the payload from the Postgres summary (`dlqReplayAttempt` = the row's
+ *   `replay_depth` + 1), adds it through the source queue's own producer (its attempts, backoff
+ *   and retention apply) with a fresh BullMQ id, best-effort removes the matching Redis DLQ
+ *   snapshot, and appends an audit row.
+ * - **Failure modes:** `payload_not_reconstructable` when the queue is not replayable or summary
+ *   keys are missing; a failed enqueue propagates (the sweeper retries the row next tick). Once
+ *   the job is enqueued, the mirror removal and the audit row are best-effort — logged
+ *   (`dlq.auto_replay.follow_up_failed`) and swallowed: rethrown, they left the row unresolved and
+ *   the sweeper replayed the same failure again every tick.
  * - **Side effects:** BullMQ add + optional DLQ remove + audit insert.
- * - **Notes:** does not mutate ledger rows. App-layer idempotency keys are the canonical
- *   dedup boundary — never the BullMQ `jobId`.
+ * - **Notes:** does not touch the ledger row — the sweeper marks it handled.
  */
 export async function autoReplayDeadLetterFromLedger(input: {
   ledgerRow: DeadLetterLedgerReplayInput & { id: number; dead_letter_queue: string };
-  autoRetryCount: number;
 }): Promise<AutoReplayDeadLetterFromLedgerResult> {
-  const payload = buildReplayJobPayloadFromLedger({
-    ...input.ledgerRow,
-    auto_retry_count: input.autoRetryCount,
-  });
+  const payload = buildReplayJobPayloadFromLedger(input.ledgerRow);
   if (!payload) {
     return { status: 'payload_not_reconstructable' };
   }
 
-  const sourceQueue = new Queue(input.ledgerRow.source_queue, {
-    connection: getBullMQConnectionOptions(),
-    prefix: getBullMQKeyPrefix(),
+  await enqueueReplay({
+    sourceQueueName: input.ledgerRow.source_queue,
+    jobName: input.ledgerRow.job_name,
+    payload,
   });
-  try {
-    // Intentionally omit `jobId` — see TSDoc. App-layer idempotency dedups execution.
-    await sourceQueue.add(input.ledgerRow.job_name, payload);
 
-    const deadLetterQueue = new Queue(input.ledgerRow.dead_letter_queue, {
-      connection: getBullMQConnectionOptions(),
-      prefix: getBullMQKeyPrefix(),
-    });
-    try {
-      const safeOriginalJobIdentifier = input.ledgerRow.job_id ?? 'unknown';
-      // Identifier format mirrors `enqueueDeadLetter` (`dlq-<source>-<originalId>-attempt-<n>`)
-      // so we look up the snapshot for the specific terminal failure recorded in the ledger.
-      const deadLetterJobIdentifier = `dlq-${input.ledgerRow.source_queue}-${String(safeOriginalJobIdentifier)}-attempt-${String(input.ledgerRow.attempts_made)}`;
-      const deadLetterJob = await deadLetterQueue.getJob(deadLetterJobIdentifier);
-      if (deadLetterJob) {
-        await deadLetterJob.remove();
-      }
-    } finally {
-      await deadLetterQueue.close();
+  try {
+    // Identifier format mirrors `enqueueDeadLetter` (`dlq-<source>-<originalId>-attempt-<n>`) so
+    // we look up the snapshot for the specific terminal failure recorded in the ledger.
+    const safeOriginalJobIdentifier = input.ledgerRow.job_id ?? 'unknown';
+    const deadLetterJobIdentifier = `dlq-${input.ledgerRow.source_queue}-${String(safeOriginalJobIdentifier)}-attempt-${String(input.ledgerRow.attempts_made)}`;
+    const deadLetterJob = await getDeadLetterQueueClient(input.ledgerRow.dead_letter_queue).getJob(
+      deadLetterJobIdentifier,
+    );
+    if (deadLetterJob) {
+      await deadLetterJob.remove();
     }
 
     await recordDlqAutoRetryAuditEntry({
       deadLetterJobId: input.ledgerRow.id,
       sourceQueue: input.ledgerRow.source_queue,
       originalJobId: input.ledgerRow.job_id,
-      autoRetryCount: input.autoRetryCount,
+      replayDepth: input.ledgerRow.replay_depth + 1,
     });
-
-    return { status: 'replayed', originalQueue: input.ledgerRow.source_queue };
-  } finally {
-    await sourceQueue.close();
+  } catch (followUpError) {
+    // The replay is enqueued: report it as replayed so the sweeper resolves the row instead of
+    // replaying the same failure again next tick.
+    logger.error(
+      { error: followUpError, deadLetterJobId: input.ledgerRow.id },
+      'dlq.auto_replay.follow_up_failed',
+    );
   }
+
+  return { status: 'replayed', originalQueue: input.ledgerRow.source_queue };
 }
 
 /**
- * Replays a single dead-lettered job: looks it up, reconstructs its payload, adds it back
- * to the source queue with a fresh BullMQ id, removes the DLQ entry, and writes an audit row.
- * In `dryRun` mode no Redis or Postgres writes happen and `actorUserPublicId` is not required.
+ * Replays a single dead-lettered job: looks it up, reconstructs its payload, adds it back to the
+ * source queue through that queue's own producer with a fresh BullMQ id, removes the DLQ entry,
+ * and writes an audit row. In `dryRun` mode no Redis or Postgres writes happen and
+ * `actorUserPublicId` is not required.
  *
  * @remarks
- * `jobId` is intentionally NOT re-used from `data.original_job_id`. BullMQ's `addStandardJob`
- * Lua treats a re-`add` against an existing `jobIdKey` as a `duplicated` event and returns the
- * existing id without enqueueing a new job; because source queues retain failed jobs for 7 days
- * under `removeOnFail`, the original key is essentially always present, so re-using it turns
- * replay into a silent no-op. App-layer idempotency (Stripe ledger, mail outbox, webhook
- * delivery attempts, notification dispatch markers) is the canonical dedup boundary and is
- * unaffected by a fresh BullMQ id.
+ * `jobId` is intentionally NOT re-used from `data.original_job_id` — see {@link enqueueReplay}.
+ * The DLQ is read through the pooled, prefixed client: a bare `Queue` without the environment's
+ * key prefix reads an empty namespace and finds nothing.
  */
 export async function replayDeadLetterJob(input: {
   deadLetterQueueName: string;
@@ -361,87 +387,88 @@ export async function replayDeadLetterJob(input: {
   dryRun: boolean;
   actorUserPublicId?: string;
 }): Promise<ReplayDeadLetterJobResult> {
-  const queue = new Queue(input.deadLetterQueueName, {
-    connection: getBullMQConnectionOptions(),
-    prefix: getBullMQKeyPrefix(),
-  });
-  try {
-    const job = await queue.getJob(input.deadLetterJobId);
-    if (!job) {
-      return { status: 'not_found' };
-    }
-
-    const data = job.data as DeadLetterJobData;
-    const payload = buildReplayJobPayload(data);
-    if (!payload) {
-      return { status: 'payload_not_reconstructable' };
-    }
-
-    if (input.dryRun) {
-      logger.info({ originalQueue: data.original_queue, payload }, 'dlq.replay.dry_run');
-      return { status: 'replayed', originalQueue: data.original_queue };
-    }
-
-    if (!input.actorUserPublicId) {
-      throw new Error('--actor-user-public-id is required for DLQ replay (audit log)');
-    }
-
-    const sourceQueue = new Queue(data.original_queue, {
-      connection: getBullMQConnectionOptions(),
-      prefix: getBullMQKeyPrefix(),
-    });
-    try {
-      // Intentionally omit `jobId` — see TSDoc. App-layer idempotency dedups execution.
-      await sourceQueue.add(data.original_job_name, payload);
-      await job.remove();
-      await recordDlqReplayAuditEntry({
-        actorUserPublicId: input.actorUserPublicId,
-        deadLetterQueueName: input.deadLetterQueueName,
-        deadLetterJobId: input.deadLetterJobId,
-        data,
-      });
-      return { status: 'replayed', originalQueue: data.original_queue };
-    } finally {
-      await sourceQueue.close();
-    }
-  } finally {
-    await queue.close();
+  const job = await getDeadLetterQueueClient(input.deadLetterQueueName).getJob(
+    input.deadLetterJobId,
+  );
+  if (!job) {
+    return { status: 'not_found' };
   }
+
+  const data = job.data as DeadLetterJobData;
+  const payload = buildReplayJobPayload(data);
+  if (!payload) {
+    return { status: 'payload_not_reconstructable' };
+  }
+
+  if (input.dryRun) {
+    logger.info({ originalQueue: data.original_queue, payload }, 'dlq.replay.dry_run');
+    return { status: 'replayed', originalQueue: data.original_queue };
+  }
+
+  if (!input.actorUserPublicId) {
+    throw new Error('--actor-user-public-id is required for DLQ replay (audit log)');
+  }
+
+  await enqueueReplay({
+    sourceQueueName: data.original_queue,
+    jobName: data.original_job_name,
+    payload,
+  });
+  await job.remove();
+  await recordDlqReplayAuditEntry({
+    actorUserPublicId: input.actorUserPublicId,
+    deadLetterQueueName: input.deadLetterQueueName,
+    deadLetterJobId: input.deadLetterJobId,
+    data,
+  });
+  return { status: 'replayed', originalQueue: data.original_queue };
+}
+
+/**
+ * The jobs waiting in one DLQ, oldest first, at most `limit` — read through the pooled, prefixed
+ * client (the `tool:dlq-replay --replay-all` CLI walks this list).
+ */
+export async function listDeadLetterJobIds(options: {
+  deadLetterQueueName: string;
+  limit: number;
+}): Promise<string[]> {
+  const jobs = await getDeadLetterQueueClient(options.deadLetterQueueName).getJobs(
+    ['waiting', 'failed'],
+    0,
+    options.limit - 1,
+  );
+  return jobs.flatMap((job) => (job.id ? [job.id] : []));
 }
 
 /**
  * Prints the first 100 waiting/failed jobs from a DLQ to stdout in a tab-separated layout
- * (`jobId\toriginal_queue\toriginal_job_name\treplay_attempt=N\tfailed_reason`). Used only
+ * (`jobId\toriginal_queue\toriginal_job_name\treplay_depth=N\tfailed_reason`). Used only
  * by the `tool:dlq-replay` CLI; never call from API or worker code.
  */
 export async function listDeadLetterJobs(deadLetterQueueName: string): Promise<void> {
-  const queue = new Queue(deadLetterQueueName, {
-    connection: getBullMQConnectionOptions(),
-    prefix: getBullMQKeyPrefix(),
-  });
-  try {
-    const jobs = await queue.getJobs(['waiting', 'failed'], 0, 99);
-    if (jobs.length === 0) {
-      // biome-ignore lint/suspicious/noConsole: tabular CLI output for tool:dlq-replay (terminal user, not log aggregator).
-      console.log(`${deadLetterQueueName}: (empty)`);
-      return;
-    }
-    for (const job of jobs) {
-      const data = job.data as DeadLetterJobData;
-      // biome-ignore lint/suspicious/noConsole: tabular CLI output for tool:dlq-replay (terminal user, not log aggregator).
-      console.log(
-        [
-          job.id,
-          data.original_queue,
-          data.original_job_name,
-          `replay_attempt=${String(data.replay_attempt ?? 0)}`,
-          data.failed_reason?.slice(0, 60) ?? '',
-        ].join('\t'),
-      );
-    }
+  const jobs = await getDeadLetterQueueClient(deadLetterQueueName).getJobs(
+    ['waiting', 'failed'],
+    0,
+    99,
+  );
+  if (jobs.length === 0) {
     // biome-ignore lint/suspicious/noConsole: tabular CLI output for tool:dlq-replay (terminal user, not log aggregator).
-    console.log(`${deadLetterQueueName}: ${jobs.length} job(s)`);
-  } finally {
-    await queue.close();
+    console.log(`${deadLetterQueueName}: (empty)`);
+    return;
   }
+  for (const job of jobs) {
+    const data = job.data as DeadLetterJobData;
+    // biome-ignore lint/suspicious/noConsole: tabular CLI output for tool:dlq-replay (terminal user, not log aggregator).
+    console.log(
+      [
+        job.id,
+        data.original_queue,
+        data.original_job_name,
+        `replay_depth=${String(data.replay_depth ?? 0)}`,
+        data.failed_reason?.slice(0, 60) ?? '',
+      ].join('\t'),
+    );
+  }
+  // biome-ignore lint/suspicious/noConsole: tabular CLI output for tool:dlq-replay (terminal user, not log aggregator).
+  console.log(`${deadLetterQueueName}: ${jobs.length} job(s)`);
 }

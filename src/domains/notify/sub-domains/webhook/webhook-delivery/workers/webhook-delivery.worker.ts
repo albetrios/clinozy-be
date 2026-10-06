@@ -20,6 +20,7 @@ import {
   WEBHOOK_DELIVERY_JOB_ATTEMPTS,
   WEBHOOK_DELIVERY_QUEUE_NAME,
   type WebhookDeliveryJobData,
+  webhookDeliveryRetryBaseDelayMs,
 } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
 import { parseJobDataOrDeadLetter } from '@/infrastructure/queue/dlq/poison-job.util.js';
 import { runWithPropagatedTraceContext } from '@/infrastructure/observability/tracing/trace-context.util.js';
@@ -39,7 +40,7 @@ import {
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
-import { MILLISECONDS_PER_HOUR, TEN_SECONDS_MS } from '@/shared/constants/ttl.constants.js';
+import { MILLISECONDS_PER_HOUR } from '@/shared/constants/ttl.constants.js';
 import { env } from '@/shared/config/env.config.js';
 
 /** Maximum response-body length persisted to the delivery-attempt record (bounds storage growth). */
@@ -123,12 +124,6 @@ function formatStoredResponseBody(decoded: string, networkTruncated: boolean): s
   );
 }
 
-/** Derived from queue config: `attemptsMade` at or above this value means it is the final attempt. */
-const WEBHOOK_DELIVERY_MAX_RETRY_ATTEMPTS = WEBHOOK_DELIVERY_JOB_ATTEMPTS - 1;
-
-/** Base delay (ms) for the persisted `next_retry_at` hint, doubled per attempt. */
-const WEBHOOK_DELIVERY_RETRY_BASE_DELAY_MS = TEN_SECONDS_MS;
-
 /**
  * Sign a webhook payload with HMAC-SHA256 (Stripe-style signature).
  */
@@ -137,10 +132,14 @@ function signPayload(secret: string, payload: string, timestamp: number): string
   return createHmac('sha256', secret).update(signedPayload).digest('hex');
 }
 
-/** Compute the persisted `next_retry_at` hint, or `null` on the final attempt. */
-function computeNextRetryAt(attemptsMade: number): Date | null {
-  if (attemptsMade >= WEBHOOK_DELIVERY_MAX_RETRY_ATTEMPTS) return null;
-  return new Date(Date.now() + WEBHOOK_DELIVERY_RETRY_BASE_DELAY_MS * 2 ** attemptsMade);
+/**
+ * The `next_retry_at` recorded with a failed attempt: when BullMQ will try again (the schedule's
+ * base delay; the backoff adds jitter on top), or `null` after the last attempt.
+ */
+function computeNextRetryAt(attemptsMadeBefore: number): Date | null {
+  const failedAttempts = attemptsMadeBefore + 1;
+  if (failedAttempts >= WEBHOOK_DELIVERY_JOB_ATTEMPTS) return null;
+  return new Date(Date.now() + webhookDeliveryRetryBaseDelayMs(failedAttempts));
 }
 
 /**
@@ -165,25 +164,56 @@ interface WebhookDeliveryJobContext {
   requestId?: string;
 }
 
-/** Result of the claim phase — either a no-op (idempotent skip) or a claimed attempt to deliver. */
+/**
+ * What one delivery job did: delivered (2xx), skipped (already sent, or the webhook is disabled or
+ * deleted), or stopped because the endpoint answered `410 Gone` — after which the webhook is off.
+ *
+ * @remarks
+ * Every variant completes the BullMQ job: a skip or a `410` is final, not a failure to retry.
+ * Retryable receiver failures are thrown ({@link WebhookEndpointFailure}), never returned. The
+ * value is the job's return value, so it shows on the completed job in Bull Board.
+ */
+export type WebhookDeliveryJobResult =
+  | { outcome: 'delivered'; httpStatus: number }
+  | { outcome: 'skipped'; reason: 'already_sent' | 'webhook_disabled' }
+  | { outcome: 'endpoint_gone'; httpStatus: 410 };
+
+/**
+ * A delivery the receiver failed: a non-2xx answer (other than 410), a timeout, a refused
+ * connection, or the webhook's own circuit open.
+ *
+ * @remarks
+ * Retried on the delivery schedule. When the retries run out the job lands in the dead-letter
+ * ledger at warn level instead of paging anyone (`expectedFinalFailure`): the failure is the
+ * receiver's, and the webhook's owner sees it on the attempt row. Errors on our side — the
+ * database, an unreadable signing secret — are not this class and alert as usual.
+ */
+export class WebhookEndpointFailure extends Error {
+  /** Read by the dead-letter listener: record the final failure, but no Sentry page. */
+  readonly expectedFinalFailure = true;
+
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'WebhookEndpointFailure';
+  }
+}
+
+/** Result of the claim phase — a skip (already sent, webhook disabled) or a claimed attempt. */
 type WebhookDeliveryClaim =
-  | { status: 'no_op'; reason: 'already_sent' | 'in_flight' | 'webhook_disabled' }
+  | { status: 'skipped'; reason: 'already_sent' | 'webhook_disabled' }
   | { status: 'claimed'; deliveryContext: WebhookDeliveryAttemptWithWebhook };
 
 /**
- * Phase 1 (short DB transaction): load the attempt + webhook under the organization RLS scope
- * and atomically transition `PENDING → SENDING` (or reclaim a stale lease). Returns the loaded
- * context for the network phase, or a no-op when another worker already sent / holds the lease.
- * The transaction closes before the caller performs any network IO.
+ * Phase 1 (short DB transaction): load the attempt + webhook under the organization RLS scope and
+ * claim it (any status but `SENT` → `SENDING`). Returns the loaded context for the network
+ * phase, or a skip. The transaction closes before the caller performs any network IO.
  */
 async function claimWebhookDeliveryAttempt(options: {
-  deliveryAttemptId: number;
+  deliveryAttemptPublicId: string;
   organizationPublicId: string;
-  attemptNumber: number;
   deliveryAttemptRepository?: WebhookDeliveryAttemptRepository | undefined;
 }): Promise<WebhookDeliveryClaim> {
-  const { deliveryAttemptId, organizationPublicId, attemptNumber, deliveryAttemptRepository } =
-    options;
+  const { deliveryAttemptPublicId, organizationPublicId, deliveryAttemptRepository } = options;
   return withAppDatabaseContext(
     PRINCIPAL_SCOPE.JOB({ organizationPublicId: organizationPublicId }),
     async (databaseHandle) => {
@@ -191,29 +221,35 @@ async function claimWebhookDeliveryAttempt(options: {
         deliveryAttemptRepository ?? createWorkerWebhookDeliveryAttemptRepository(databaseHandle);
       const webhookDeliveryQueries = createWorkerWebhookDeliveryQueries(databaseHandle);
       const deliveryContext = await webhookDeliveryQueries.findWebhookDeliveryAttemptWithWebhook(
-        deliveryAttemptId,
+        deliveryAttemptPublicId,
         organizationPublicId,
       );
       if (!deliveryContext) {
-        throw new Error(`webhook.delivery.attempt_not_found:${String(deliveryAttemptId)}`);
+        // A job's attempt row is created before the job and never deleted while a delivery can
+        // still run — a missing row (or one in another organization) cannot be retried into
+        // existing, so fail terminally and let the dead-letter record show it.
+        throw new UnrecoverableError(
+          `webhook.delivery.attempt_not_found:${deliveryAttemptPublicId}`,
+        );
       }
       // sec-N1: the fan-out filter on is_enabled / deleted_at does NOT apply to
       // BullMQ retries — without this re-check, attempts continue firing the
       // signed payload to a URL operators have just disabled or soft-deleted.
-      // Record FAILED (terminal, no retry) and return no_op so BullMQ does not
-      // re-attempt. tryMarkSending is intentionally skipped — there's no point
-      // claiming a row we're about to terminate.
+      // Record FAILED (terminal, no retry) and skip. tryMarkSending is intentionally
+      // skipped — there's no point claiming a row we're about to terminate.
       if (!deliveryContext.webhookIsEnabled || deliveryContext.webhookDeletedAt !== null) {
-        await attemptRepository.recordOutcome(deliveryAttemptId, {
+        await attemptRepository.recordOutcome(deliveryContext.deliveryAttemptId, {
           status: 'FAILED',
           response_body: 'webhook_disabled',
           next_retry_at: null,
         });
-        return { status: 'no_op', reason: 'webhook_disabled' };
+        return { status: 'skipped', reason: 'webhook_disabled' };
       }
-      const sendingClaim = await attemptRepository.tryMarkSending(deliveryAttemptId, attemptNumber);
-      if (sendingClaim === 'already_sent' || sendingClaim === 'in_flight') {
-        return { status: 'no_op', reason: sendingClaim };
+      const sendingClaim = await attemptRepository.tryMarkSending(
+        deliveryContext.deliveryAttemptId,
+      );
+      if (sendingClaim === 'already_sent') {
+        return { status: 'skipped', reason: 'already_sent' };
       }
       return { status: 'claimed', deliveryContext };
     },
@@ -221,11 +257,12 @@ async function claimWebhookDeliveryAttempt(options: {
 }
 
 /**
- * Phase 3 (short DB transaction): persist a delivery outcome under the organization RLS scope.
- * Opened fresh (not held across the network call) so a slow endpoint never pins a pool checkout.
+ * Phase 3 (short DB transaction): persist a delivery outcome under the organization RLS scope —
+ * and, for a `410 Gone`, turn the webhook off in the same transaction. Opened fresh (not held
+ * across the network call) so a slow endpoint never pins a pool checkout.
  */
 async function recordWebhookDeliveryOutcome(options: {
-  deliveryAttemptId: number;
+  deliveryContext: WebhookDeliveryAttemptWithWebhook;
   organizationPublicId: string;
   outcome: {
     status: string;
@@ -233,15 +270,21 @@ async function recordWebhookDeliveryOutcome(options: {
     response_body?: string | null;
     next_retry_at?: Date | null;
   };
+  disableWebhook?: boolean;
   deliveryAttemptRepository?: WebhookDeliveryAttemptRepository | undefined;
 }): Promise<void> {
-  const { deliveryAttemptId, organizationPublicId, outcome, deliveryAttemptRepository } = options;
+  const { deliveryContext, organizationPublicId, outcome, deliveryAttemptRepository } = options;
   await withAppDatabaseContext(
     PRINCIPAL_SCOPE.JOB({ organizationPublicId: organizationPublicId }),
     async (databaseHandle) => {
       const attemptRepository =
         deliveryAttemptRepository ?? createWorkerWebhookDeliveryAttemptRepository(databaseHandle);
-      await attemptRepository.recordOutcome(deliveryAttemptId, outcome);
+      await attemptRepository.recordOutcome(deliveryContext.deliveryAttemptId, outcome);
+      if (options.disableWebhook) {
+        await createWorkerWebhookDeliveryQueries(databaseHandle).disableWebhookAfterEndpointGone(
+          deliveryContext.webhookId,
+        );
+      }
     },
   );
 }
@@ -260,9 +303,10 @@ function computeWebhookPreviousSignatureHeader(options: {
   secretRotatedAt: Date | null;
   payloadString: string;
   timestamp: number;
-  webhookId: number;
+  webhookPublicId: string;
 }): string | undefined {
-  const { encryptedSecretPrevious, secretRotatedAt, payloadString, timestamp, webhookId } = options;
+  const { encryptedSecretPrevious, secretRotatedAt, payloadString, timestamp, webhookPublicId } =
+    options;
   if (
     encryptedSecretPrevious === null ||
     encryptedSecretPrevious.length === 0 ||
@@ -282,7 +326,7 @@ function computeWebhookPreviousSignatureHeader(options: {
     return `t=${timestamp},v1=${previousSignature}`;
   } catch (decryptError) {
     logger.warn(
-      { webhookId, error: decryptError },
+      { webhookPublicId, error: decryptError },
       'webhook.delivery.previous_secret_decrypt_failed',
     );
     return undefined;
@@ -336,11 +380,10 @@ function buildWebhookRequestHeaders(options: {
 async function readWebhookResponseBodyOrPlaceholder(options: {
   response: Response;
   jobContext: WebhookDeliveryJobContext;
-  deliveryAttemptId: number;
-  webhookId: number;
+  deliveryContext: WebhookDeliveryAttemptWithWebhook;
   webhookUrlLogFields: ReturnType<typeof safeWebhookUrlForLogs>;
 }): Promise<string> {
-  const { response, jobContext, deliveryAttemptId, webhookId, webhookUrlLogFields } = options;
+  const { response, jobContext, deliveryContext, webhookUrlLogFields } = options;
   try {
     const capped = await readResponseBodyCapped(
       response,
@@ -352,8 +395,8 @@ async function readWebhookResponseBodyOrPlaceholder(options: {
       {
         jobId: jobContext.id,
         requestId: jobContext.requestId,
-        deliveryAttemptId,
-        webhookId,
+        deliveryAttemptPublicId: deliveryContext.deliveryAttemptPublicId,
+        webhookPublicId: deliveryContext.webhookPublicId,
         ...webhookUrlLogFields,
         parseError: parseError instanceof Error ? parseError.message : 'Unknown error',
       },
@@ -364,30 +407,84 @@ async function readWebhookResponseBodyOrPlaceholder(options: {
 }
 
 /**
+ * Records a delivery that can never succeed on our side (an unreadable or empty signing secret),
+ * pages on-call, and throws `UnrecoverableError` so BullMQ skips the remaining attempts and the
+ * dead-letter listener records it.
+ */
+async function failDeliveryTerminally(options: {
+  deliveryContext: WebhookDeliveryAttemptWithWebhook;
+  organizationPublicId: string;
+  reason: 'signing_secret_unreadable' | 'empty_signing_secret';
+  error?: unknown;
+  deliveryAttemptRepository?: WebhookDeliveryAttemptRepository | undefined;
+}): Promise<never> {
+  const { deliveryContext, reason } = options;
+  const logFields = {
+    webhookPublicId: deliveryContext.webhookPublicId,
+    deliveryAttemptPublicId: deliveryContext.deliveryAttemptPublicId,
+    eventType: deliveryContext.eventType,
+    ...(options.error === undefined ? {} : { error: options.error }),
+  };
+  captureMessage(`webhook.delivery.${reason}`, { level: 'error', extra: logFields });
+  logger.error(logFields, `webhook.delivery.${reason}`);
+  await recordWebhookDeliveryOutcome({
+    deliveryContext,
+    organizationPublicId: options.organizationPublicId,
+    deliveryAttemptRepository: options.deliveryAttemptRepository,
+    outcome: { status: 'FAILED', response_body: reason, next_retry_at: null },
+  });
+  throw new UnrecoverableError(`webhook.delivery.${reason}`);
+}
+
+/**
+ * Decrypts the webhook's signing secret, failing the delivery terminally when it cannot be read
+ * or is empty.
+ *
+ * @remarks
+ * Both are configuration faults no retry can fix. An unreadable secret (a rotated encryption key,
+ * a corrupt value) used to throw out of the worker after the row was claimed: the row stayed
+ * `SENDING`, the next attempt took it for a delivery in flight and completed the job, and the
+ * event was never sent. P0-#1: an empty secret must never ship an unsigned payload — the receiver
+ * could not tell it from a stripped signature.
+ */
+async function readSigningSecretOrFail(options: {
+  deliveryContext: WebhookDeliveryAttemptWithWebhook;
+  organizationPublicId: string;
+  deliveryAttemptRepository?: WebhookDeliveryAttemptRepository | undefined;
+}): Promise<string> {
+  let signingSecret: string;
+  try {
+    signingSecret = decryptFieldSecret(options.deliveryContext.encryptedSecret);
+  } catch (error) {
+    return failDeliveryTerminally({ ...options, reason: 'signing_secret_unreadable', error });
+  }
+  if (signingSecret.length === 0) {
+    return failDeliveryTerminally({ ...options, reason: 'empty_signing_secret' });
+  }
+  return signingSecret;
+}
+
+/** The status a receiver answers when an endpoint is permanently gone. */
+const HTTP_STATUS_GONE = 410;
+
+/**
  * Phase 2 (no DB context): HMAC-sign the payload and POST it through the per-webhook circuit
  * breaker / DNS-pinned fetch, then record the outcome via a fresh short transaction. Runs with
  * no open Postgres transaction so the up-to-~35s outbound call cannot starve the pool.
  */
 async function deliverClaimedWebhook(options: {
-  deliveryAttemptId: number;
   organizationPublicId: string;
   jobContext: WebhookDeliveryJobContext;
   fetchImplementation: WebhookDeliveryFetch;
   deliveryAttemptRepository?: WebhookDeliveryAttemptRepository | undefined;
   deliveryContext: WebhookDeliveryAttemptWithWebhook;
-}): Promise<{ httpStatus: number; success: true }> {
+}): Promise<WebhookDeliveryJobResult> {
+  const { organizationPublicId, jobContext, fetchImplementation, deliveryAttemptRepository } =
+    options;
+  const { deliveryContext } = options;
   const {
-    deliveryAttemptId,
-    organizationPublicId,
-    jobContext,
-    fetchImplementation,
-    deliveryAttemptRepository,
-    deliveryContext,
-  } = options;
-  const {
-    webhookId,
+    webhookPublicId,
     webhookUrl,
-    encryptedSecret,
     eventType,
     payload,
     encryptedSecretPrevious,
@@ -399,35 +496,11 @@ async function deliverClaimedWebhook(options: {
   } = deliveryContext;
   const payloadString = JSON.stringify(payload);
   const timestamp = Math.floor(Date.now() / 1000);
-  const signingSecret = decryptFieldSecret(encryptedSecret);
-  // P0-#1: fail-closed on empty signing secret. Previously we skipped the signature header
-  // and shipped the payload anyway, leaving the receiver unable to distinguish "secret
-  // rotated to empty" from "attacker stripped the header". An attacker who can flip a
-  // webhook into that state — or read an unsigned legitimate delivery — gets forge
-  // capability against any receiver still trusting the request. Treat it as a
-  // configuration regression: record FAILED terminally, page on-call via Sentry, and
-  // mark the BullMQ job UnrecoverableError so it skips retries and lands in the DLQ.
-  if (signingSecret.length === 0) {
-    captureMessage('webhook.delivery.empty_signing_secret', {
-      level: 'error',
-      extra: { webhookId, deliveryAttemptId, eventType },
-    });
-    logger.error(
-      { webhookId, deliveryAttemptId, eventType },
-      'webhook.delivery.empty_signing_secret',
-    );
-    await recordWebhookDeliveryOutcome({
-      deliveryAttemptId,
-      organizationPublicId,
-      deliveryAttemptRepository,
-      outcome: {
-        status: 'FAILED',
-        response_body: 'empty_signing_secret',
-        next_retry_at: null,
-      },
-    });
-    throw new UnrecoverableError('webhook.delivery.empty_signing_secret');
-  }
+  const signingSecret = await readSigningSecretOrFail({
+    deliveryContext,
+    organizationPublicId,
+    deliveryAttemptRepository,
+  });
   const signature = signPayload(signingSecret, payloadString, timestamp);
 
   // sec-N8: dual-sign while inside the rotation overlap window so a customer who has not yet
@@ -437,51 +510,58 @@ async function deliverClaimedWebhook(options: {
     secretRotatedAt,
     payloadString,
     timestamp,
-    webhookId,
+    webhookPublicId,
   });
 
   const webhookUrlLogFields = safeWebhookUrlForLogs(webhookUrl);
+  const logFields = {
+    jobId: jobContext.id,
+    requestId: jobContext.requestId,
+    deliveryAttemptPublicId,
+    webhookPublicId,
+    eventType,
+    ...webhookUrlLogFields,
+    attempt: jobContext.attemptsMade + 1,
+  };
+  logger.info(logFields, 'webhook.delivery.sending');
 
-  logger.info(
-    {
-      jobId: jobContext.id,
-      requestId: jobContext.requestId,
-      deliveryAttemptId,
-      webhookId,
-      eventType,
-      ...webhookUrlLogFields,
-      attempt: jobContext.attemptsMade + 1,
-    },
-    'webhook.delivery.sending',
-  );
+  const recordOutcome = (
+    outcome: Parameters<typeof recordWebhookDeliveryOutcome>[0]['outcome'],
+    disableWebhook = false,
+  ) =>
+    recordWebhookDeliveryOutcome({
+      deliveryContext,
+      organizationPublicId,
+      deliveryAttemptRepository,
+      outcome,
+      disableWebhook,
+    });
 
+  let response: Response;
   try {
     const pinnedFetch =
       fetchImplementation === defaultWebhookDeliveryFetch
         ? await createPinnedWebhookFetch(webhookUrl)
         : fetchImplementation;
-
-    const requestHeaders = buildWebhookRequestHeaders({
-      timestamp,
-      signature,
-      eventType,
-      deliveryAttemptPublicId,
-      previousSignatureHeader,
-      requestId: jobContext.requestId,
-    });
-
-    const response = await outboundCall(
+    response = await outboundCall(
       buildOutboundCallOptions({
         name: 'webhook',
         circuit: null,
         requestId: jobContext.requestId,
         operation: async (signal) =>
           fetchWebhookWithCircuitBreaker({
-            webhookId,
+            webhookPublicId,
             webhookUrl,
             init: {
               method: 'POST',
-              headers: requestHeaders,
+              headers: buildWebhookRequestHeaders({
+                timestamp,
+                signature,
+                eventType,
+                deliveryAttemptPublicId,
+                previousSignatureHeader,
+                requestId: jobContext.requestId,
+              }),
               body: payloadString,
               signal,
             },
@@ -489,61 +569,59 @@ async function deliverClaimedWebhook(options: {
           }),
       }),
     );
-
-    const responseBody = await readWebhookResponseBodyOrPlaceholder({
-      response,
-      jobContext,
-      deliveryAttemptId,
-      webhookId,
-      webhookUrlLogFields,
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'Unknown error';
+    await recordOutcome({
+      status: 'FAILED',
+      response_body: reason,
+      next_retry_at: computeNextRetryAt(jobContext.attemptsMade),
     });
-    const httpStatus = response.status;
-    const isSuccess = httpStatus >= 200 && httpStatus < 300;
+    throw new WebhookEndpointFailure(`webhook.delivery.request_failed: ${reason}`, {
+      cause: error,
+    });
+  }
 
-    if (isSuccess) {
-      await recordWebhookDeliveryOutcome({
-        deliveryAttemptId,
-        organizationPublicId,
-        deliveryAttemptRepository,
-        outcome: {
-          status: 'SENT',
-          http_status_code: httpStatus,
-          response_body: responseBody,
-        },
-      });
-      return { httpStatus, success: true };
-    }
+  const responseBody = await readWebhookResponseBodyOrPlaceholder({
+    response,
+    jobContext,
+    deliveryContext,
+    webhookUrlLogFields,
+  });
+  const httpStatus = response.status;
 
-    await recordWebhookDeliveryOutcome({
-      deliveryAttemptId,
-      organizationPublicId,
-      deliveryAttemptRepository,
-      outcome: {
+  if (httpStatus >= 200 && httpStatus < 300) {
+    await recordOutcome({
+      status: 'SENT',
+      http_status_code: httpStatus,
+      response_body: responseBody,
+    });
+    return { outcome: 'delivered', httpStatus };
+  }
+
+  if (httpStatus === HTTP_STATUS_GONE) {
+    // The receiver says this endpoint will never accept another delivery: no retries, and the
+    // webhook is turned off so later events stop going to it. Its owner re-enables it once fixed.
+    await recordOutcome(
+      {
         status: 'FAILED',
         http_status_code: httpStatus,
         response_body: responseBody,
-        next_retry_at: computeNextRetryAt(jobContext.attemptsMade),
+        next_retry_at: null,
       },
-    });
-    throw new Error(`Webhook delivery failed with HTTP ${String(httpStatus)}`);
-  } catch (error) {
-    const isRecordedHttpFailure =
-      error instanceof Error && error.message.startsWith('Webhook delivery failed with HTTP');
-    if (!isRecordedHttpFailure) {
-      await recordWebhookDeliveryOutcome({
-        deliveryAttemptId,
-        organizationPublicId,
-        deliveryAttemptRepository,
-        outcome: {
-          status: 'FAILED',
-          response_body: error instanceof Error ? error.message : 'Unknown error',
-          next_retry_at: computeNextRetryAt(jobContext.attemptsMade),
-        },
-      });
-    }
-
-    throw error;
+      true,
+    );
+    logger.warn({ ...logFields, httpStatus }, 'webhook.delivery.endpoint_gone');
+    return { outcome: 'endpoint_gone', httpStatus: HTTP_STATUS_GONE };
   }
+
+  await recordOutcome({
+    status: 'FAILED',
+    http_status_code: httpStatus,
+    response_body: responseBody,
+    next_retry_at: computeNextRetryAt(jobContext.attemptsMade),
+  });
+  logger.warn({ ...logFields, httpStatus }, 'webhook.delivery.endpoint_failed');
+  throw new WebhookEndpointFailure(`Webhook delivery failed with HTTP ${String(httpStatus)}`);
 }
 
 /**
@@ -552,67 +630,51 @@ async function deliverClaimedWebhook(options: {
  * @remarks
  * - **Algorithm:** three sequential phases, each owning its own short Postgres transaction so no
  *   pool checkout is held across the network call:
- *   1. **claim** (short txn) — load the attempt + webhook secret under `withAppDatabaseContext`
- *      and atomically transition `PENDING → SENDING` (or reclaim a stale lease; no-op on
- *      `already_sent` / `in_flight`);
+ *   1. **claim** (short txn) — load the attempt + webhook secret by the attempt's public id under
+ *      `withAppDatabaseContext` and claim it (any status but `SENT` → `SENDING`);
  *   2. **deliver** (no DB context) — HMAC-SHA256 sign `<timestamp>.<payload>` and POST through
  *      the per-webhook circuit breaker / DNS-pinned fetch;
  *   3. **record** (short txn) — write `SENT` (2xx) or `FAILED` with the truncated response body.
- * - **Failure modes:** rethrows any error after writing a `FAILED` outcome with `next_retry_at`
- *   for the next exponential backoff slot (10s × 2^attemptsMade for the first 4 retries; null on
- *   the final attempt so BullMQ promotes the job to the DLQ via `dead-letter.ts`).
- *   `attempt_not_found` (missing or cross-tenant attempt) short-circuits without a failure record.
- * - **Side effects:** outbound HTTPS POST; updates to `webhook_delivery_attempts`; structured
- *   logs at every transition.
+ * - **Failure modes:** a receiver failure (non-2xx, timeout, refused connection) records `FAILED`
+ *   with the next retry time and throws {@link WebhookEndpointFailure}: BullMQ retries on the
+ *   delivery schedule (a minute, rising to ten hours — about a day in all) and the last failure
+ *   reaches the dead-letter ledger without a page. `410 Gone` records `FAILED`, turns the webhook
+ *   off and completes. An unreadable or empty signing secret, or a missing attempt row, throws
+ *   `UnrecoverableError` (recorded and alerted). A disabled or deleted webhook records `FAILED`
+ *   and skips.
+ * - **Side effects:** outbound HTTPS POST; updates to `webhook_delivery_attempts` (and
+ *   `webhooks.is_enabled` on a 410); structured logs at every transition.
  * - **Notes:** the dependency-injection seam (`fetchImplementation`, `deliveryAttemptRepository`)
  *   is exclusively for unit tests; production paths must use the pinned fetch and the
  *   worker-scoped repository factories.
  */
-export async function processWebhookDeliveryAttempt(
-  deliveryAttemptId: number,
-  organizationPublicId: string,
-  jobContext: WebhookDeliveryJobContext,
-  fetchImplementation: WebhookDeliveryFetch = globalThis.fetch,
-  deliveryAttemptRepository?: WebhookDeliveryAttemptRepository,
-): Promise<{ httpStatus: number; success: true }> {
-  let claim: WebhookDeliveryClaim;
-  try {
-    claim = await claimWebhookDeliveryAttempt({
-      deliveryAttemptId,
-      organizationPublicId,
-      attemptNumber: jobContext.attemptsMade + 1,
-      deliveryAttemptRepository,
-    });
-  } catch (error) {
-    const isAttemptNotFound =
-      error instanceof Error && error.message.startsWith('webhook.delivery.attempt_not_found:');
-    if (deliveryAttemptRepository === undefined && !isAttemptNotFound) {
-      await recordWebhookDeliveryOutcome({
-        deliveryAttemptId,
-        organizationPublicId,
-        outcome: {
-          status: 'FAILED',
-          response_body: error instanceof Error ? error.message : 'Unknown error',
-          next_retry_at: computeNextRetryAt(jobContext.attemptsMade),
-        },
-      });
-    }
-    throw error;
-  }
+export async function processWebhookDeliveryAttempt(options: {
+  deliveryAttemptPublicId: string;
+  organizationPublicId: string;
+  jobContext: WebhookDeliveryJobContext;
+  fetchImplementation?: WebhookDeliveryFetch;
+  deliveryAttemptRepository?: WebhookDeliveryAttemptRepository;
+}): Promise<WebhookDeliveryJobResult> {
+  const { deliveryAttemptPublicId, organizationPublicId, jobContext, deliveryAttemptRepository } =
+    options;
+  const claim = await claimWebhookDeliveryAttempt({
+    deliveryAttemptPublicId,
+    organizationPublicId,
+    deliveryAttemptRepository,
+  });
 
-  if (claim.status === 'no_op') {
+  if (claim.status === 'skipped') {
     logger.info(
-      { deliveryAttemptId, requestId: jobContext.requestId },
+      { deliveryAttemptPublicId, requestId: jobContext.requestId },
       `webhook.delivery.${claim.reason}`,
     );
-    return { httpStatus: 200, success: true };
+    return { outcome: 'skipped', reason: claim.reason };
   }
 
   return deliverClaimedWebhook({
-    deliveryAttemptId,
     organizationPublicId,
     jobContext,
-    fetchImplementation,
+    fetchImplementation: options.fetchImplementation ?? globalThis.fetch,
     deliveryAttemptRepository,
     deliveryContext: claim.deliveryContext,
   });
@@ -626,15 +688,15 @@ export async function processWebhookDeliveryAttempt(
  *   the job payload through {@link webhookDeliveryJobDataSchema} and delegates to
  *   {@link processWebhookDeliveryAttempt}, which manages its own short organization-scoped
  *   transactions around (not across) the outbound HMAC-signed POST.
- * - **Failure modes:** delivery failures (timeout, non-2xx, network error) are persisted on
- *   the attempt row and rethrown so BullMQ retries up to 5 times using the custom backoff
- *   {@link webhookDeliveryBackoffWithJitter} (~10s × 2^attempt with up to 30% jitter); the
+ * - **Failure modes:** receiver failures are persisted on the attempt row and rethrown so BullMQ
+ *   retries up to {@link WEBHOOK_DELIVERY_JOB_ATTEMPTS} times using
+ *   {@link webhookDeliveryBackoffWithJitter} (the delivery schedule plus up to 20% jitter); the
  *   final failure routes the job to the per-queue DLQ via the bootstrap dead-letter wiring.
  * - **Side effects:** subscribes a `Worker` to Redis with webhook-tuned options; performs
  *   outbound HTTPS calls via a pinned fetch wrapped in a per-webhook circuit breaker; writes the
  *   audit trail to `notify.webhook_delivery_attempts`.
- * - **Notes:** the worker no longer holds a Postgres pool checkout while the outbound request is
- *   in flight (claim and record run in separate short transactions); concurrency comes from
+ * - **Notes:** the worker never holds a Postgres pool checkout while the outbound request is in
+ *   flight (claim and record run in separate short transactions); concurrency comes from
  *   `getWorkerConcurrencyWebhook()`; the returned handle is wired into bootstrap for graceful
  *   shutdown and lock release.
  */
@@ -642,22 +704,22 @@ export function createWebhookDeliveryWorker(): WorkerHandle {
   const worker = new Worker<WebhookDeliveryJobData>(
     WEBHOOK_DELIVERY_QUEUE_NAME,
     async (job) => {
-      const { deliveryAttemptId, organizationPublicId, requestId, traceparent, tracestate } =
+      const { deliveryAttemptPublicId, organizationPublicId, requestId, traceparent, tracestate } =
         await parseJobDataOrDeadLetter({
           schema: webhookDeliveryJobDataSchema,
           job,
           queueName: WEBHOOK_DELIVERY_QUEUE_NAME,
         });
       return runWithPropagatedTraceContext({ traceparent, tracestate }, job.name, () =>
-        processWebhookDeliveryAttempt(
-          deliveryAttemptId,
+        processWebhookDeliveryAttempt({
+          deliveryAttemptPublicId,
           organizationPublicId,
-          omitUndefined({
+          jobContext: omitUndefined({
             id: job.id,
             attemptsMade: job.attemptsMade,
             requestId,
           }),
-        ),
+        }),
       );
     },
     {

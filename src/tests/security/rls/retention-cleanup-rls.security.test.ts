@@ -3,7 +3,7 @@ import {
   MAINTENANCE_SCOPE,
   withMaintenanceDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
-import { sql as drizzleSql, and, eq, isNotNull, lt } from 'drizzle-orm';
+import { and, eq, isNotNull, lt } from 'drizzle-orm';
 import { sql } from '@/infrastructure/database/connection.js';
 import { database } from '@/infrastructure/database/connection.js';
 import type { RequestScopedPostgresDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
@@ -14,6 +14,10 @@ import { createTestWebhook } from '@/tests/factories/webhook.factory.js';
 import { deleteInBatchesByCondition } from '@/infrastructure/database/utils/batch-delete.util.js';
 import { webhooks } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
 import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
+import {
+  setLocalApplicationRole,
+  setLocalDatabaseConfig,
+} from '@/infrastructure/database/contexts/database-context-runtime.js';
 
 async function hasGlobalRetentionCleanupPolicyOnWebhooks(): Promise<boolean> {
   const rows = await sql<{ has_policy: boolean }[]>`
@@ -41,7 +45,7 @@ describe('Security: retention cleanup RLS', () => {
     await cleanupDatabase();
   });
 
-  it('hard-deletes tombstoned webhooks under clinozy_be_app when global_retention_cleanup is set', async () => {
+  it('hard-deletes tombstoned webhooks only as clinozy_be_maintenance with global_retention_cleanup set', async () => {
     if (!migrationApplied) {
       console.warn(
         'Skipping retention RLS test: apply migrations/00000000000000_init.sql (defines the global_retention_cleanup RLS policies)',
@@ -67,7 +71,7 @@ describe('Security: retention cleanup RLS', () => {
 
     const withoutRetentionGuc = await database.transaction(async (transaction) => {
       const databaseHandle = transaction as unknown as RequestScopedPostgresDatabase;
-      await databaseHandle.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+      await setLocalApplicationRole(databaseHandle);
       return deleteInBatchesByCondition({
         databaseHandle,
         table: webhooks,
@@ -80,6 +84,24 @@ describe('Security: retention cleanup RLS', () => {
 
     expect(withoutRetentionGuc.deletedCount).toBe(0);
 
+    // The runtime role arming the bypass GUC itself opens nothing: the arm is bound to the
+    // maintenance role, so a compromised clinozy_be_app connection cannot purge across tenants.
+    const applicationRoleWithRetentionGuc = await database.transaction(async (transaction) => {
+      const databaseHandle = transaction as unknown as RequestScopedPostgresDatabase;
+      await setLocalApplicationRole(databaseHandle);
+      await setLocalDatabaseConfig(databaseHandle, 'app.global_retention_cleanup', 'true');
+      return deleteInBatchesByCondition({
+        databaseHandle,
+        table: webhooks,
+        idColumn: webhooks.id,
+        whereCondition: and(isNotNull(webhooks.deleted_at), lt(webhooks.deleted_at, cutoffDate))!,
+        logContext: 'retention-cleanup-rls-test-application-role-with-guc',
+        tableLabel: 'notify.webhooks',
+      });
+    });
+
+    expect(applicationRoleWithRetentionGuc.deletedCount).toBe(0);
+
     const withRetentionGuc = await withMaintenanceDatabaseContext(
       MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
       async (databaseHandle) =>
@@ -91,7 +113,7 @@ describe('Security: retention cleanup RLS', () => {
           logContext: 'retention-cleanup-rls-test-with-guc',
           tableLabel: 'notify.webhooks',
         }),
-      { useApplicationDatabaseRole: true },
+      { useMaintenanceDatabaseRole: true },
     );
 
     expect(withRetentionGuc.deletedCount).toBe(1);

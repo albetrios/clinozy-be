@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
 import type { FastifyInstance } from 'fastify';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
-import { injectAuthenticatedOrganizationMutation } from '@/tests/helpers/test-http-inject.helper.js';
+import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -75,7 +75,7 @@ describe('Security: unique-violation conflict handling', () => {
     }
 
     function patchWebhookUrl(token: string, webhookPublicId: string, url: string) {
-      return injectAuthenticatedOrganizationMutation(app, {
+      return injectAuthenticated(app, {
         method: 'PATCH',
         url: testApiPath(`/notify/webhooks/${webhookPublicId}`),
         token,
@@ -163,7 +163,7 @@ describe('Security: unique-violation conflict handling', () => {
     // the (user_id, organization_id) unique index (the email resolves to the same user) — the service
     // maps that unique_violation to a clean 409 (errors:membershipAlreadyExists), not a raw 500.
     function addMember(token: string, email: string, rolePublicId: string) {
-      return injectAuthenticatedOrganizationMutation(app, {
+      return injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/memberships'),
         token,

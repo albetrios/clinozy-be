@@ -2,10 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
-import {
-  injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
-} from '@/tests/helpers/test-http-inject.helper.js';
+import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -90,7 +87,7 @@ describe('Tenancy team-only route guards — Integration', () => {
   describe('DELETE /api/v1/tenancy/organization', () => {
     it('refuses to delete a PERSONAL organization with 422', async () => {
       const { token } = await createOwnedOrganization('PERSONAL');
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'DELETE',
         url: testApiPath('/tenancy/organization'),
         token,
@@ -103,7 +100,7 @@ describe('Tenancy team-only route guards — Integration', () => {
 
     it('still deletes a TEAM organization with 204 (the guard discriminates on type, not on the route)', async () => {
       const { token } = await createOwnedOrganization('TEAM');
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'DELETE',
         url: testApiPath('/tenancy/organization'),
         token,
@@ -115,7 +112,7 @@ describe('Tenancy team-only route guards — Integration', () => {
       // A 422 that had already marked the row deleted would still read as a clean refusal at the
       // response layer — assert the organization survives.
       const { token } = await createOwnedOrganization('PERSONAL');
-      await injectAuthenticatedOrganizationMutation(app, {
+      await injectAuthenticated(app, {
         method: 'DELETE',
         url: testApiPath('/tenancy/organization'),
         token,
@@ -135,7 +132,7 @@ describe('Tenancy team-only route guards — Integration', () => {
       const personal = await createOwnedOrganization('PERSONAL');
       const recipient = await addSecondMember(personal.organization.id, personal.role.id);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/transfer-ownership'),
         token: personal.token,
@@ -152,7 +149,7 @@ describe('Tenancy team-only route guards — Integration', () => {
       const team = await createOwnedOrganization('TEAM');
       const recipient = await addSecondMember(team.organization.id, team.role.id);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/transfer-ownership'),
         token: team.token,
@@ -173,7 +170,7 @@ describe('Tenancy team-only route guards — Integration', () => {
         organizationPublicId: personal.organization.public_id,
       });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/transfer-ownership'),
         token: outsiderToken,

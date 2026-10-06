@@ -5,7 +5,10 @@ import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { provisionPersonalOrganization } from '@/domains/tenancy/sub-domains/organization/organization-provisioning.js';
 import { seedAllPermissions } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
-import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
+import {
+  executeAsGlobalAdmin,
+  grantClinozyBeAppRoleForTests,
+} from '@/tests/helpers/rls-matrix.helper.js';
 
 /**
  * Pins the policy fact behind PRs #1105 / #1106: **`app.global_admin` grants nothing on tenancy
@@ -20,22 +23,12 @@ import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper
  * `global_admin` arm to a tenancy policy, this fails and forces that to be a deliberate, reviewed
  * decision rather than a silent widening of the escape hatch.
  *
- * Runs as `clinozy_be_app` because the local/CI superuser (`POSTGRES_USER: clinozy`) bypasses RLS and
- * would make every assertion here vacuous.
+ * Runs as `clinozy_be_maintenance` — the role production's global-admin contexts connect as, and the
+ * only one the escape hatch admits. The local/CI superuser (`POSTGRES_USER: clinozy`) bypasses RLS,
+ * and `clinozy_be_app` opens no bypass arm at all; either would make every assertion here vacuous.
  */
 function rowCount(result: unknown): number {
   return (Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? [])).length;
-}
-
-/** Runs `callback` as `clinozy_be_app` with ONLY `app.global_admin` set — no organization, no user GUC. */
-async function executeAsGlobalAdminOnly<T>(
-  callback: (transaction: typeof database) => Promise<T>,
-): Promise<T> {
-  return database.transaction(async (transaction) => {
-    await transaction.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
-    await transaction.execute(drizzleSql`SELECT set_config('app.global_admin', 'true', true)`);
-    return callback(transaction as unknown as typeof database);
-  });
 }
 
 describe('Security: app.global_admin does not expose tenancy tables', () => {
@@ -65,7 +58,7 @@ describe('Security: app.global_admin does not expose tenancy tables', () => {
     expect(seededAsSuperuser.organizations).toBeGreaterThan(0);
     expect(seededAsSuperuser.memberships).toBeGreaterThan(0);
 
-    const visible = await executeAsGlobalAdminOnly(async (transaction) => ({
+    const visible = await executeAsGlobalAdmin(async (transaction) => ({
       organizations: rowCount(
         await transaction.execute(drizzleSql`SELECT id FROM tenancy.organizations`),
       ),
@@ -80,7 +73,7 @@ describe('Security: app.global_admin does not expose tenancy tables', () => {
   it('CAN read auth.users under global-admin (the arm that does exist)', async () => {
     await createTestUser();
 
-    const visible = await executeAsGlobalAdminOnly(async (transaction) =>
+    const visible = await executeAsGlobalAdmin(async (transaction) =>
       rowCount(await transaction.execute(drizzleSql`SELECT id FROM auth.users`)),
     );
 

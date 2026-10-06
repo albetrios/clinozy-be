@@ -22,6 +22,7 @@ src/
     │   │   │   │   └── worker/
     │   │   │   │   │   ├── audit-outbox-drain.worker.unit.test.ts
     │   │   │   │   │   └── audit-retention.worker.unit.test.ts
+    │   │   │   ├── audit-action-catalog.policy.unit.test.ts
     │   │   │   ├── audit-export.processor.unit.test.ts
     │   │   │   ├── audit-metadata-sanitizer.property.unit.test.ts
     │   │   │   ├── audit-outbox.repository.db.unit.test.ts
@@ -77,6 +78,7 @@ src/
     │   │   ├── factories/
     │   │   │   └── verification-code-token.factory.ts
     │   │   ├── integration/
+    │   │   │   ├── auth-audit-trail.integration.test.ts
     │   │   │   ├── auth-me-context.integration.test.ts
     │   │   │   ├── auth-recovery-atomicity.integration.test.ts
     │   │   │   ├── auth-route-smoke.integration.test.ts
@@ -159,7 +161,8 @@ src/
     │   │   │   │   │   │   │   ├── github-oauth.provider.unit.test.ts
     │   │   │   │   │   │   │   └── google-oauth.provider.unit.test.ts
     │   │   │   │   │   ├── github-oauth.provider.ts
-    │   │   │   │   │   └── google-oauth.provider.ts
+    │   │   │   │   │   ├── google-oauth.provider.ts
+    │   │   │   │   │   └── oauth-provider-failure.util.ts
     │   │   │   │   ├── oauth-pkce.ts
     │   │   │   │   ├── oauth-state.ts
     │   │   │   │   ├── oauth-user-session.ts
@@ -198,7 +201,7 @@ src/
     │   │   │   │   │   ├── auth-mfa-recovery-code.repository.db.unit.test.ts
     │   │   │   │   │   ├── auth-mfa-recovery-code.util.unit.test.ts
     │   │   │   │   │   ├── auth-mfa.repository.unit.test.ts
-    │   │   │   │   │   ├── auth-mfa.service.org-policy-on-delete.unit.test.ts
+    │   │   │   │   │   ├── auth-mfa.service.organization-policy-on-delete.unit.test.ts
     │   │   │   │   │   ├── auth-mfa.service.unit.test.ts
     │   │   │   │   │   └── auth-mfa.validator.unit.test.ts
     │   │   │   ├── seed/
@@ -299,6 +302,7 @@ src/
     │   │   │   └── subscription.factory.ts
     │   │   ├── integration/
     │   │   │   ├── billing-account-reads.integration.test.ts
+    │   │   │   ├── billing-audit-trail.integration.test.ts
     │   │   │   ├── billing-idempotency-replay.integration.test.ts
     │   │   │   ├── billing-route-smoke.integration.test.ts
     │   │   │   ├── billing-subscription-mutations.integration.test.ts
@@ -356,6 +360,7 @@ src/
     │   │   │   │   │   ├── stripe-webhook-construct-event.unit.test.ts
     │   │   │   │   │   ├── stripe-webhook-event-catchup.processor.unit.test.ts
     │   │   │   │   │   ├── stripe-webhook-event-retention.processor.db.unit.test.ts
+    │   │   │   │   │   ├── stripe-webhook-event.abandon.db.unit.test.ts
     │   │   │   │   │   ├── stripe-webhook-event.repository.db.unit.test.ts
     │   │   │   │   │   ├── stripe-webhook-event.repository.ledger-immutability.db.unit.test.ts
     │   │   │   │   │   ├── stripe-webhook-ingress.plugin.unit.test.ts
@@ -457,6 +462,7 @@ src/
     │   │   ├── e2e/
     │   │   │   └── webhook-delivery.e2e.test.ts
     │   │   ├── integration/
+    │   │   │   ├── notify-audit-trail.integration.test.ts
     │   │   │   └── notify-route-smoke.integration.test.ts
     │   │   ├── unit/
     │   │   │   ├── notify-routes-rate-limit.policy.unit.test.ts
@@ -540,7 +546,7 @@ src/
     │   │   │       │   ├── webhook.repository.unit.test.ts
     │   │   │       │   ├── webhook.serializer.no-secret.unit.test.ts
     │   │   │       │   ├── webhook.serializer.unit.test.ts
-    │   │   │       │   ├── webhook.service.max-per-org.unit.test.ts
+    │   │   │       │   ├── webhook.service.max-per-organization.unit.test.ts
     │   │   │       │   ├── webhook.service.ssrf-guard.unit.test.ts
     │   │   │       │   ├── webhook.service.unit.test.ts
     │   │   │       │   └── webhook.validator.unit.test.ts
@@ -553,6 +559,7 @@ src/
     │   │   │   ├── webhook-delivery/
     │   │   │       ├── __tests__/
     │   │   │       │   ├── integration/
+    │   │   │       │   │   ├── webhook-delivery-reclaim.integration.test.ts
     │   │   │       │   │   └── webhook-delivery.worker.integration.test.ts
     │   │   │       │   └── unit/
     │   │   │       │   │   ├── events/
@@ -564,6 +571,7 @@ src/
     │   │   │       │   │       └── webhook-delivery.event-handlers.unit.test.ts
     │   │   │       │   │   ├── webhook-delivery-attempt.repository.db.unit.test.ts
     │   │   │       │   │   ├── webhook-delivery-attempt.repository.try-mark-sending.db.unit.test.ts
+    │   │   │       │   │   ├── webhook-delivery-reclaim.processor.unit.test.ts
     │   │   │       │   │   ├── webhook-delivery.job.schema.unit.test.ts
     │   │   │       │   │   ├── webhook-delivery.queue.unit.test.ts
     │   │   │       │   │   ├── webhook-delivery.repository.db.unit.test.ts
@@ -576,6 +584,9 @@ src/
     │   │   │       │   ├── webhook-delivery.job.schema.ts
     │   │   │       │   └── webhook-delivery.queue.ts
     │   │   │       ├── workers/
+    │   │   │       │   ├── webhook-delivery-reclaim.constants.ts
+    │   │   │       │   ├── webhook-delivery-reclaim.processor.ts
+    │   │   │       │   ├── webhook-delivery-reclaim.worker.ts
     │   │   │       │   ├── webhook-delivery.worker.ts
     │   │   │       │   └── webhook-outbound-circuit.ts
     │   │   │       ├── webhook-delivery-attempt.repository.ts
@@ -629,13 +640,13 @@ src/
     │   │   ├── factories/
     │   │   │   └── permission.factory.ts
     │   │   ├── integration/
+    │   │   │   ├── tenancy-audit-trail.integration.test.ts
     │   │   │   ├── tenancy-detail-happy.integration.test.ts
     │   │   │   ├── tenancy-idempotency.integration.test.ts
     │   │   │   ├── tenancy-route-smoke.integration.test.ts
     │   │   │   ├── tenancy-team-only-routes.integration.test.ts
     │   │   │   └── tenancy.integration.test.ts
     │   │   ├── unit/
-    │   │   │   ├── legacy-public-organizations.policy.unit.test.ts
     │   │   │   └── tenancy-identifiers.property.unit.test.ts
     │   │   └── tenancy.test.ts
     │   ├── events/
@@ -892,7 +903,7 @@ src/
     │   │   │       │   ├── permission-cache-no-scan.policy.unit.test.ts
     │   │   │       │   ├── permission-cache.service.invalidation.unit.test.ts
     │   │   │       │   ├── permission.controller.unit.test.ts
-    │   │   │       │   ├── permission.repository.cross-org.db.unit.test.ts
+    │   │   │       │   ├── permission.repository.cross-organization.db.unit.test.ts
     │   │   │       │   ├── permission.repository.db.unit.test.ts
     │   │   │       │   ├── permission.serializer.unit.test.ts
     │   │   │       │   └── permission.service.unit.test.ts
@@ -937,7 +948,7 @@ src/
     │   │   │   ├── upload.repository.user-isolation.db.unit.test.ts
     │   │   │   ├── upload.serializer.unit.test.ts
     │   │   │   ├── upload.service.assert-key-confirmed.unit.test.ts
-    │   │   │   ├── upload.service.org-quota-concurrency.db.unit.test.ts
+    │   │   │   ├── upload.service.organization-quota-concurrency.db.unit.test.ts
     │   │   │   ├── upload.service.quota-concurrency.db.unit.test.ts
     │   │   │   ├── upload.service.unit.test.ts
     │   │   │   ├── upload.validator.mime-and-size.unit.test.ts
@@ -1117,15 +1128,19 @@ src/
     ├── cache/
     │   ├── __tests__/
     │   │   └── unit/
+    │   │   │   ├── assert-redis-eviction-policy.unit.test.ts
     │   │   │   ├── assert-redis-tls-safety.unit.test.ts
     │   │   │   ├── redis-lock.util.unit.test.ts
+    │   │   │   ├── redis-scan.util.unit.test.ts
     │   │   │   ├── redis-url.util.unit.test.ts
     │   │   │   └── resolve-bullmq-redis-url.util.unit.test.ts
+    │   ├── assert-redis-eviction-policy.ts
     │   ├── assert-redis-tls-safety.ts
     │   ├── bullmq-redis.client.ts
     │   ├── cache.overview.md
     │   ├── redis-lock.util.ts
     │   ├── redis-prefix.util.ts
+    │   ├── redis-scan.util.ts
     │   ├── redis-tombstone-cache.util.ts
     │   ├── redis-topology-warn.util.ts
     │   ├── redis-url.parse.util.ts
@@ -1138,10 +1153,10 @@ src/
     │   │   │   ├── assert-connection-budget.unit.test.ts
     │   │   │   ├── assert-database-rls-safety.unit.test.ts
     │   │   │   ├── assert-database-tls-safety.unit.test.ts
-    │   │   │   ├── database-context-runtime.test.ts
-    │   │   │   ├── maintenance-pool-selection.test.ts
-    │   │   │   ├── principal-checkout-accounting.test.ts
-    │   │   │   ├── principal-database-context.test.ts
+    │   │   │   ├── database-context-runtime.unit.test.ts
+    │   │   │   ├── maintenance-pool-selection.unit.test.ts
+    │   │   │   ├── principal-checkout-accounting.unit.test.ts
+    │   │   │   ├── principal-database-context.unit.test.ts
     │   │   │   └── worker-context-database-handle.unit.test.ts
     │   ├── contexts/
     │   │   ├── database-context-runtime.ts
@@ -1150,6 +1165,7 @@ src/
     │   │   ├── migrate.ts
     │   │   ├── migration-error-hint.ts
     │   │   ├── migration-execution-mode.ts
+    │   │   ├── migration-lock-timeout.ts
     │   │   └── migration-version.ts
     │   ├── pool/
     │   │   ├── organization-rls-checkout-counter.ts
@@ -1176,8 +1192,10 @@ src/
     │   │   └── unit/
     │   │   │   ├── mail-outbox-sweeper.processor.unit.test.ts
     │   │   │   ├── mail-outbox.dedupe.db.unit.test.ts
+    │   │   │   ├── mail-outbox.resend-idempotency-token.db.unit.test.ts
     │   │   │   ├── mail-outbox.scrub.db.unit.test.ts
-    │   │   │   └── mail.processor.unit.test.ts
+    │   │   │   ├── mail.processor.unit.test.ts
+    │   │   │   └── resend-api.error.unit.test.ts
     │   ├── queues/
     │   │   ├── __tests__/
     │   │   │   └── unit/
@@ -1198,7 +1216,8 @@ src/
     │   │   └── verification-code.template.ts
     │   ├── workers/
     │   │   ├── __tests__/
-    │   │   │   └── mail.worker.unit.test.ts
+    │   │   │   └── unit/
+    │   │   │   │   └── mail.worker.unit.test.ts
     │   │   ├── mail-outbox-sweeper.constants.ts
     │   │   ├── mail-outbox-sweeper.processor.ts
     │   │   ├── mail-outbox-sweeper.worker.ts
@@ -1220,17 +1239,14 @@ src/
     │   └── mcp.overview.md
     ├── observability/
     │   ├── __tests__/
-    │   │   ├── unit/
+    │   │   └── unit/
     │   │   │   ├── bullmq-trace-propagation.unit.test.ts
+    │   │   │   ├── opentelemetry.unit.test.ts
     │   │   │   ├── posthog.unit.test.ts
+    │   │   │   ├── sentry.unit.test.ts
     │   │   │   ├── trace-context.util.unit.test.ts
     │   │   │   └── unhandled-rejection.handler.unit.test.ts
-    │   │   ├── opentelemetry.unit.test.ts
-    │   │   └── sentry.unit.test.ts
     │   ├── dlq-depth/
-    │   │   ├── __tests__/
-    │   │   │   └── unit/
-    │   │   │   │   └── dlq-depth.coverage.unit.test.ts
     │   │   ├── db-pool-alert.service.ts
     │   │   ├── dlq-depth.constants.ts
     │   │   ├── dlq-depth.service.ts
@@ -1276,17 +1292,20 @@ src/
     │   └── outbound.overview.md
     ├── payment/
     │   ├── payment.overview.md
+    │   ├── stripe-error.util.ts
     │   └── stripe.client.ts
     ├── queue/
     │   ├── __tests__/
     │   │   └── unit/
+    │   │   │   ├── bootstrap.unit.test.ts
     │   │   │   ├── commit-dispatch-recovery.processor.unit.test.ts
     │   │   │   ├── commit-dispatch.executor.unit.test.ts
     │   │   │   ├── commit-dispatch.store.unit.test.ts
     │   │   │   ├── dlq-auto-retry-circuit.util.unit.test.ts
-    │   │   │   ├── dlq-auto-retry.store.unit.test.ts
     │   │   │   ├── dlq-replay.util.unit.test.ts
     │   │   │   ├── poison-job.util.unit.test.ts
+    │   │   │   ├── queue-catalog.coverage.unit.test.ts
+    │   │   │   ├── retry-jitter.util.unit.test.ts
     │   │   │   ├── worker-close.util.unit.test.ts
     │   │   │   ├── worker-health.server.unit.test.ts
     │   │   │   └── worker-queue-heartbeat.unit.test.ts
@@ -1299,17 +1318,16 @@ src/
     │   │   └── commit-dispatch.types.ts
     │   ├── dlq/
     │   │   ├── __tests__/
-    │   │   │   ├── unit/
+    │   │   │   └── unit/
     │   │   │   │   ├── dead-letter-auto-retry-scan.db.unit.test.ts
-    │   │   │   │   └── dlq-auto-retry.processor.unit.test.ts
-    │   │   │   └── dlq-auto-retry.worker.unit.test.ts
+    │   │   │   │   ├── dlq-auto-retry.processor.unit.test.ts
+    │   │   │   │   └── dlq-auto-retry.worker.unit.test.ts
     │   │   ├── dead-letter.repository.ts
     │   │   ├── dead-letter.schema.ts
     │   │   ├── dead-letter.ts
     │   │   ├── dlq-auto-retry-circuit.util.ts
     │   │   ├── dlq-auto-retry.constants.ts
     │   │   ├── dlq-auto-retry.processor.ts
-    │   │   ├── dlq-auto-retry.store.ts
     │   │   ├── dlq-auto-retry.worker.ts
     │   │   ├── dlq-replay-job-fields.schema.ts
     │   │   ├── dlq-replay.util.ts
@@ -1317,11 +1335,14 @@ src/
     │   ├── worker-runtime/
     │   │   ├── __tests__/
     │   │   │   └── unit/
+    │   │   │   │   ├── provider-outage-pause.util.unit.test.ts
     │   │   │   │   ├── registry-scheduler-consistency.unit.test.ts
     │   │   │   │   ├── scheduler-registry-audit.unit.test.ts
     │   │   │   │   ├── worker-connection-budget.unit.test.ts
     │   │   │   │   ├── worker-queue-family.util.unit.test.ts
     │   │   │   │   └── worker-registration.registry.unit.test.ts
+    │   │   ├── provider-outage-pause.util.ts
+    │   │   ├── provider-pause.util.ts
     │   │   ├── scheduler-registry-audit.ts
     │   │   ├── shutdown-timing.util.ts
     │   │   ├── worker-close.util.ts
@@ -1337,9 +1358,11 @@ src/
     │   ├── bootstrap.ts
     │   ├── connection.ts
     │   ├── health.ts
+    │   ├── queue-catalog.ts
     │   ├── queue-dashboard.ts
     │   ├── queue.constants.ts
     │   ├── queue.overview.md
+    │   ├── retry-jitter.util.ts
     │   └── scheduler.ts
     ├── resilience/
     │   ├── lua/
@@ -1350,36 +1373,31 @@ src/
     └── storage/
     │   ├── __tests__/
     │       └── unit/
-    │       │   ├── public-media-url.util.unit.test.ts
     │       │   ├── s3-adapter.unit.test.ts
     │       │   ├── s3-client-config.unit.test.ts
     │       │   ├── s3-error.util.unit.test.ts
-    │       │   ├── storage.service.presigned-put.unit.test.ts
-    │       │   ├── storage.service.put-object-buffer.unit.test.ts
-    │       │   └── storage.service.unconfigured.unit.test.ts
+    │       │   └── stored-object-purge.util.unit.test.ts
     │   ├── object-storage.port.ts
-    │   ├── public-media-url.util.ts
     │   ├── s3-adapter.ts
     │   ├── s3-client-config.util.ts
     │   ├── s3-error.util.ts
     │   ├── storage.overview.md
-    │   └── storage.service.ts
+    │   └── stored-object-purge.util.ts
 ├── scripts/
     ├── admin/
     │   ├── admin-token.ts
     │   ├── api-sign-in.util.ts
-    │   ├── audit-bcrypt-password-hashes.ts
-    │   ├── backfill-personal-organizations.ts
     │   ├── dlq-replay.ts
     │   ├── load-test-credential-pool.ts
     │   ├── load-test-credentials.ts
-    │   ├── rotate-field-secrets.ts
+    │   ├── load-test-reset.ts
     │   ├── stripe-webhook-replay.ts
     │   ├── worker-health.ts
     │   └── worker-readiness.ts
     ├── codegen/
     │   ├── __tests__/
-    │   │   └── hosted-docs-upload.unit.test.ts
+    │   │   └── unit/
+    │   │   │   └── hosted-docs-upload.unit.test.ts
     │   ├── check-api-docs-sync.ts
     │   ├── generate-dbdiagram.ts
     │   ├── generate-migration.ts
@@ -1395,6 +1413,7 @@ src/
     ├── ops/
     │   ├── api-smoke-test.ts
     │   ├── db-migrate-dry-run.ts
+    │   ├── db-sequences-advance.ts
     │   ├── memory-soak.ts
     │   ├── next-migration-prefix.ts
     │   ├── record-contract-fixtures.ts
@@ -1430,8 +1449,9 @@ src/
     │   └── run-pre-commit-guard.ts
     └── validators/
     │   ├── __tests__/
-    │       ├── constants-centralization.unit.test.ts
-    │       └── validate-test-api-prefix.unit.test.ts
+    │       └── unit/
+    │       │   ├── constants-centralization.unit.test.ts
+    │       │   └── validate-test-api-prefix.unit.test.ts
     │   ├── code/
     │       ├── constants-centralization.util.ts
     │       ├── validate-constants-centralization.ts
@@ -1528,7 +1548,6 @@ src/
     │   │   ├── recent-step-up.middleware.ts
     │   │   ├── request-context.middleware.ts
     │   │   ├── request-lifecycle.middleware.ts
-    │   │   ├── request-statement-timeout.middleware.ts
     │   │   ├── response-format.middleware.ts
     │   │   ├── server-timing.middleware.ts
     │   │   ├── shutdown.middleware.ts
@@ -1547,8 +1566,6 @@ src/
     │   ├── session/
     │   │   ├── cookie-session-origin.pre-handler.ts
     │   │   └── cookie.middleware.ts
-    │   ├── tenant/
-    │   │   └── organization-rls-transaction.middleware.ts
     │   └── index.ts
     ├── types/
     │   └── index.ts
@@ -1720,7 +1737,6 @@ src/
     │   ├── request-id-eventbus.contract.test.ts
     │   ├── resend.contract.test.ts
     │   ├── s3-object-storage-adapter.contract.test.ts
-    │   ├── s3.contract.test.ts
     │   ├── stripe-billing-account.contract.test.ts
     │   ├── stripe-webhook.contract.test.ts
     │   ├── stripe.contract.test.ts
@@ -1731,7 +1747,7 @@ src/
     │   ├── data-export-deletion.e2e.test.ts
     │   ├── e2e.overview.md
     │   ├── signup-flow.e2e.test.ts
-    │   └── tenancy-billing-org.e2e.test.ts
+    │   └── tenancy-billing-organization.e2e.test.ts
     ├── factories/
     │   ├── mfa-method.factory.ts
     │   ├── notification.factory.ts
@@ -1804,12 +1820,16 @@ src/
     │   ├── audit-log-partition.helper.ts
     │   ├── database-context-mock.helper.ts
     │   ├── fast-check-property.util.ts
+    │   ├── harness-provider-env.ts
+    │   ├── idempotency-entry.helper.ts
     │   ├── iteration-repository.helper.ts
+    │   ├── local-test-database.ts
     │   ├── object-storage-mock.helper.ts
     │   ├── operator-database.ts
     │   ├── principal-scope.helper.ts
     │   ├── redis-mock.helper.ts
     │   ├── registered-route.util.ts
+    │   ├── response-settlement.helper.ts
     │   ├── rls-matrix.helper.ts
     │   ├── route-authorization-model.ts
     │   ├── route-catalog-auth.ts
@@ -1839,6 +1859,7 @@ src/
     │   ├── billing/
     │   │   └── plans.integration.test.ts
     │   ├── database/
+    │   │   ├── constraint-validation.integration.test.ts
     │   │   ├── database-constraints.integration.test.ts
     │   │   ├── index-hygiene.integration.test.ts
     │   │   ├── migration-rollback.integration.test.ts
@@ -1855,6 +1876,14 @@ src/
     │   │   ├── audit-outbox-drain.integration.test.ts
     │   │   ├── bullmq-metrics.integration.test.ts
     │   │   ├── bullmq-noop-smoke.integration.test.ts
+    │   │   ├── commit-dispatch-cleanup.integration.test.ts
+    │   │   ├── dlq-auto-retry.integration.test.ts
+    │   │   ├── mail-delivery-lanes.integration.test.ts
+    │   │   ├── mail-enqueue-dedupe.integration.test.ts
+    │   │   ├── provider-outage-pause.integration.test.ts
+    │   │   ├── readiness-provider-pause.integration.test.ts
+    │   │   ├── stripe-webhook-enqueue-dedupe.integration.test.ts
+    │   │   ├── subscription-seat-sync-serialization.integration.test.ts
     │   │   ├── transactional-outbox.integration.test.ts
     │   │   └── worker-shutdown.integration.test.ts
     │   ├── runtime/
@@ -1912,8 +1941,8 @@ src/
     │   │   │   ├── member-role-permission-list.js
     │   │   │   ├── notification-policy-crud.js
     │   │   │   ├── notification-write.js
-    │   │   │   ├── org-membership-list.js
     │   │   │   ├── organization-api-key-lifecycle.js
+    │   │   │   ├── organization-membership-list.js
     │   │   │   ├── organization-settings-write.js
     │   │   │   ├── passwordless-signup.js
     │   │   │   ├── permission-cached.js
@@ -1943,6 +1972,7 @@ src/
     │   ├── notify-list.performance.test.ts
     │   ├── performance.overview.md
     │   ├── permission-cache.performance.test.ts
+    │   ├── queue-throughput.performance.test.ts
     │   └── worker-bulkheads.performance.test.ts
     ├── security/
     │   ├── auth/
@@ -1964,8 +1994,8 @@ src/
     │   │   ├── admin-only.security.test.ts
     │   │   ├── auth-token-flow.security.test.ts
     │   │   ├── billing-privilege.security.test.ts
-    │   │   ├── cross-org-mutation.security.test.ts
-    │   │   ├── cross-org-resource.security.test.ts
+    │   │   ├── cross-organization-mutation.security.test.ts
+    │   │   ├── cross-organization-resource.security.test.ts
     │   │   ├── invitation-email.security.test.ts
     │   │   ├── invitation-flow-abuse.security.test.ts
     │   │   ├── notify-isolation.security.test.ts
@@ -2019,8 +2049,8 @@ src/
     │   │   ├── audit-system-audit-insert-arm.security.test.ts
     │   │   ├── billing-subscriptions-with-check.security.test.ts
     │   │   ├── bola-cross-tenant.security.test.ts
+    │   │   ├── bypass-arm-role-binding.security.test.ts
     │   │   ├── clinozy-be-app-role-privileges.security.test.ts
-    │   │   ├── data-migration-as-owner.security.test.ts
     │   │   ├── force-rls-policies-restrict.security.test.ts
     │   │   ├── membership-name-sort-resolver.security.test.ts
     │   │   ├── membership-search-resolver.security.test.ts
@@ -2070,9 +2100,11 @@ src/
     │   ├── bench/
     │   │   └── bench-runner.unit.test.ts
     │   ├── ci/
+    │   │   ├── cleanup-ghcr.policy.unit.test.ts
     │   │   ├── codegraph-git-hooks.policy.unit.test.ts
     │   │   ├── dependabot-ci-triage.policy.unit.test.ts
     │   │   ├── deploy-node-env.policy.unit.test.ts
+    │   │   ├── dockerfile-patches.policy.unit.test.ts
     │   │   ├── git-hook-environment.policy.unit.test.ts
     │   │   ├── github-actions-node24.policy.unit.test.ts
     │   │   ├── github-actions-workflow-run-references.policy.unit.test.ts
@@ -2083,7 +2115,6 @@ src/
     │   │   ├── hosted-docs-publish.policy.unit.test.ts
     │   │   ├── k6-coverage.policy.unit.test.ts
     │   │   ├── openapi-drift-check.policy.unit.test.ts
-    │   │   ├── password-hashing-dependency.policy.unit.test.ts
     │   │   ├── post-merge-ci.policy.unit.test.ts
     │   │   ├── pr-quality-gate.policy.unit.test.ts
     │   │   ├── pr-rls-security-gate.policy.unit.test.ts
@@ -2143,6 +2174,8 @@ src/
     │   │   │   ├── maintenance-database-context.unit.test.ts
     │   │   │   ├── maintenance-role.db.unit.test.ts
     │   │   │   ├── migration-execution-mode.unit.test.ts
+    │   │   │   ├── migration-lock-timeout.db.unit.test.ts
+    │   │   │   ├── migration-lock-timeout.unit.test.ts
     │   │   │   ├── principal-scope-minting.policy.unit.test.ts
     │   │   │   ├── rls-offboarding-regressions.db.unit.test.ts
     │   │   │   ├── rls-table-scope-map.db.unit.test.ts
@@ -2160,7 +2193,10 @@ src/
     │   │   │   └── email-template.snapshot.unit.test.ts
     │   │   ├── outbound/
     │   │   │   └── outbound-redaction.unit.test.ts
+    │   │   ├── payment/
+    │   │   │   └── stripe-circuit-failure.unit.test.ts
     │   │   ├── queue/
+    │   │   │   ├── bullmq-connection-tls.unit.test.ts
     │   │   │   ├── bullmq-producer-connection.unit.test.ts
     │   │   │   └── scheduler.unit.test.ts
     │   │   ├── resilience/
@@ -2169,6 +2205,7 @@ src/
     │   │   │   └── retry-with-backoff.unit.test.ts
     │   │   ├── boot-tls-guards.unit.test.ts
     │   │   ├── database-suite-lock.unit.test.ts
+    │   │   ├── local-test-database.unit.test.ts
     │   │   └── migration-error-hint.unit.test.ts
     │   ├── middleware/
     │   │   ├── api-key-auth.middleware.unit.test.ts
@@ -2194,14 +2231,12 @@ src/
     │   │   ├── metrics.middleware.unit.test.ts
     │   │   ├── middleware-order.unit.test.ts
     │   │   ├── ops.middleware.unit.test.ts
-    │   │   ├── organization-rls-transaction.middleware.unit.test.ts
     │   │   ├── overload-guard.middleware.unit.test.ts
     │   │   ├── rate-limit-fallback-store.unit.test.ts
     │   │   ├── rate-limit-presets.constants.unit.test.ts
     │   │   ├── rate-limit-telemetry-throttle.unit.test.ts
     │   │   ├── rate-limit.middleware.unit.test.ts
     │   │   ├── request-lifecycle.middleware.unit.test.ts
-    │   │   ├── request-statement-timeout.middleware.unit.test.ts
     │   │   ├── response-format.middleware.hook.unit.test.ts
     │   │   ├── response-format.middleware.unit.test.ts
     │   │   ├── server-timing.middleware.unit.test.ts
@@ -2234,6 +2269,7 @@ src/
     │   │   │   ├── modules.unit.test.ts
     │   │   │   ├── production-guard.unit.test.ts
     │   │   │   └── seed-contract.unit.test.ts
+    │   │   ├── db-sequences-advance.db.unit.test.ts
     │   │   ├── generate-project-structure-tree.unit.test.ts
     │   │   ├── generate-route-catalog.unit.test.ts
     │   │   ├── lint-migrations-concurrent-index.unit.test.ts
@@ -2242,7 +2278,6 @@ src/
     │   │   ├── lint-migrations-rollback.unit.test.ts
     │   │   ├── lint-migrations-row-security-guc.unit.test.ts
     │   │   ├── lint-migrations-timestamp.unit.test.ts
-    │   │   ├── rotate-field-secrets.unit.test.ts
     │   │   ├── route-catalog-registry.unit.test.ts
     │   │   ├── route-http-coverage-validation.unit.test.ts
     │   │   ├── route-schema-docs-validation.unit.test.ts
@@ -2283,6 +2318,7 @@ src/
     │   │   ├── local-database-logins.unit.test.ts
     │   │   ├── project-identity.policy.unit.test.ts
     │   │   ├── railway-deploy-image.unit.test.ts
+    │   │   ├── rotate-live-image-tags.unit.test.ts
     │   │   ├── route-catalog-auth.unit.test.ts
     │   │   └── validate-environment-runtime.unit.test.ts
     │   ├── utils/
@@ -2350,7 +2386,7 @@ src/
     │   ├── workers/
     │   │   ├── tenant-scoped-job-data.policy.unit.test.ts
     │   │   └── webhook-worker-no-schema-import.policy.unit.test.ts
-    │   ├── per-org-row-caps.unit.test.ts
+    │   ├── per-organization-row-caps.unit.test.ts
     │   └── unit.overview.md
     ├── database-suite-lock.ts
     ├── global-setup.ts

@@ -57,17 +57,17 @@ describe('Global: no Stripe-shaped literals in source (sec-r5-secret-scanning)',
     // list of whsec_-prefixed secrets") with no body characters. Won't trip
     // the 16+-char body threshold anyway; listed for explicitness.
     'src/domains/billing/sub-domains/stripe-webhook/__tests__/unit/stripe-webhook-construct-event.unit.test.ts',
-    // The contract-setup placeholder ships a long, English-prose-shaped
+    // The harness's fake provider keys ship a long, English-prose-shaped
     // string after the prefix (e.g. whsec_test_contract_fixture_…). The
     // env-schema (`src/shared/config/env-schema.ts`) validates the
     // STRIPE_WEBHOOK_SECRET / STRIPE_SECRET_KEY values match the real Stripe
-    // prefixes — these test files set process.env BEFORE the schema parses,
-    // so the prefix MUST appear in source to satisfy the validator. The
-    // recognisable English text inside the body causes GitHub's entropy
+    // prefixes — this module sets process.env BEFORE the schema parses (every
+    // Vitest run loads it: the main suite, the chaos suite and the contract
+    // slice), so the prefix MUST appear in source to satisfy the validator.
+    // The recognisable English text inside the body causes GitHub's entropy
     // scanner to skip these (verified — no GH alert on these specific
     // strings). Listed explicitly so any future change is reviewed.
-    'src/tests/setup.ts',
-    'src/tests/chaos/bootstrap-env.ts',
+    'src/tests/helpers/harness-provider-env.ts',
   ]);
 
   const ROOTS = ['src', 'tooling'] as const;

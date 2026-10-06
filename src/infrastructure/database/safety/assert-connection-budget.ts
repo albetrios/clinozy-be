@@ -30,6 +30,15 @@ function resolvePoolMaxConnections(): number {
 }
 
 /**
+ * The second pool every process opens — the maintenance role's (`getMaintenanceDatabase`): mail
+ * outbox and ledger workers, retention, audit inserts. It counts against `max_connections` like
+ * the first; the budget used to leave it out, so a process could hold up to twice what it checked.
+ */
+function resolveMaintenancePoolMaxConnections(): number {
+  return env.DATABASE_MAINTENANCE_POOL_MAX;
+}
+
+/**
  * Returns the cluster `max_connections` setting — honours `POSTGRES_MAX_CONNECTIONS` when set,
  * otherwise queries `pg_settings` for the live value. Used to size the deployment connection budget.
  */
@@ -104,9 +113,9 @@ function resolveProcessCount(counts: ResolvedDeploymentCounts): number {
 
 function computeRequiredPoolConnections(
   counts: ResolvedDeploymentCounts,
-  poolMaxConnections: number,
+  perProcessConnections: number,
 ): number {
-  return resolveProcessCount(counts) * poolMaxConnections;
+  return resolveProcessCount(counts) * perProcessConnections;
 }
 
 /** Blank space between one column and the next — the only fixed measurement in the layout. */
@@ -130,6 +139,7 @@ function columnWidth(cells: readonly string[]): number {
  */
 function buildDeploymentBudgetErrorMessage(parameters: {
   poolMaxConnections: number;
+  maintenancePoolMaxConnections: number;
   postgresMaxConnections: number;
   reservedConnections: number;
   allowedApplicationConnections: number;
@@ -137,13 +147,13 @@ function buildDeploymentBudgetErrorMessage(parameters: {
   processCount: number;
   deploymentSummary: string;
 }): string {
-  const fittingPoolMax = Math.floor(
-    parameters.allowedApplicationConnections / parameters.processCount,
-  );
+  const fittingPoolMax =
+    Math.floor(parameters.allowedApplicationConnections / parameters.processCount) -
+    parameters.maintenancePoolMaxConnections;
   const neededMaxConnections = parameters.requiredConnections + parameters.reservedConnections;
 
-  const ruleCell = 'processes × DATABASE_POOL_MAX';
-  const wanted = `${parameters.processCount} × ${parameters.poolMaxConnections} = ${parameters.requiredConnections}`;
+  const ruleCell = 'processes × (DATABASE_POOL_MAX + DATABASE_MAINTENANCE_POOL_MAX)';
+  const wanted = `${parameters.processCount} × (${parameters.poolMaxConnections} + ${parameters.maintenancePoolMaxConnections}) = ${parameters.requiredConnections}`;
   const available = `${parameters.postgresMaxConnections} − ${parameters.reservedConnections} = ${parameters.allowedApplicationConnections}`;
 
   const poolOption = `DATABASE_POOL_MAX=${fittingPoolMax}`;
@@ -178,7 +188,8 @@ function buildDeploymentBudgetErrorMessage(parameters: {
     'is more than'.padEnd(compareColumn) +
     available +
     '\n\n' +
-    `${MESSAGE_INDENT}DATABASE_POOL_MAX ${parameters.poolMaxConnections} is PER PROCESS, not a total. ` +
+    `${MESSAGE_INDENT}DATABASE_POOL_MAX ${parameters.poolMaxConnections} and DATABASE_MAINTENANCE_POOL_MAX ` +
+    `${parameters.maintenancePoolMaxConnections} are PER PROCESS, not totals. ` +
     `You run ${parameters.deploymentSummary},\n` +
     `${MESSAGE_INDENT}so the app asks for ${parameters.requiredConnections} connections but only ` +
     `${parameters.allowedApplicationConnections} are free.\n` +
@@ -229,6 +240,7 @@ export async function assertPostgresConnectionBudget(
   options: AssertConnectionBudgetOptions = {},
 ): Promise<void> {
   const poolMaxConnections = resolvePoolMaxConnections();
+  const maintenancePoolMaxConnections = resolveMaintenancePoolMaxConnections();
   const reservedConnections = env.POSTGRES_RESERVED_CONNECTIONS;
   const postgresMaxConnections = await resolvePostgresMaxConnections();
   const allowedApplicationConnections = postgresMaxConnections - reservedConnections;
@@ -244,12 +256,13 @@ export async function assertPostgresConnectionBudget(
   if (deploymentCounts !== undefined) {
     const requiredConnections = computeRequiredPoolConnections(
       deploymentCounts,
-      poolMaxConnections,
+      poolMaxConnections + maintenancePoolMaxConnections,
     );
     if (requiredConnections > allowedApplicationConnections) {
       throw new Error(
         buildDeploymentBudgetErrorMessage({
           poolMaxConnections,
+          maintenancePoolMaxConnections,
           postgresMaxConnections,
           reservedConnections,
           allowedApplicationConnections,
@@ -273,6 +286,7 @@ export async function assertPostgresConnectionBudget(
       {
         ...logPayload,
         poolMaxConnections,
+        maintenancePoolMaxConnections,
         postgresMaxConnections,
         reservedConnections,
         requiredConnections,

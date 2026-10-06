@@ -12,11 +12,16 @@ What it owns:
 - The presigned-POST + presigned-GET URL issuance, with TTLs aligned to `PRESIGNED_URL_EXPIRY_SECONDS` (15 min by default).
 - The `POST /api/v1/uploads`, `GET /:publicId`, `POST /:publicId/confirm`, and `DELETE /:publicId` HTTP API.
 
-What it does not own: anti-virus / malware scanning (handled outside the platform), CDN caching policy (edge config), or content-type validation beyond the MIME-prefix allowlist on the presign call.
+What it does not own: CDN caching policy (edge config), or content-type validation beyond the MIME-prefix allowlist on the presign call.
+
+**Known gap — no malware scanning.** Nothing scans uploaded files, here or outside the platform. Deferred by
+decision on 2026-10-06; revisit before organization files are opened to clinical documents. Options weighed: a
+storage-agnostic scanner port with ClamAV on confirm (infected or unscanned files never served), or AWS GuardDuty
+Malware Protection for S3 (downloads gated on a clean tag). Details: `docs/deployment/runbooks/upload-storage.md`.
 
 ## Key invariants
 
-- **Two-phase commit**: a create-upload request first **reserves** a `pending` row (atomically, see quota invariant) and only then mints the presigned URL; the confirm call validates the upload landed in S3 (HEAD) and transitions the row to `uploaded`. A row stuck in `pending` past its presign TTL is GC-able by retention.
+- **Two-phase commit**: a create-upload request first **reserves** a `pending` row (atomically, see quota invariant) and only then mints the presigned URL; the confirm call validates the upload landed in S3 (HEAD) and transitions the row to `uploaded`. A row stuck in `pending` past its presign TTL is reconciled by the pending sweep (auto-confirmed, failed, or orphan-deleted).
 - **Magic-byte verification on confirm**: after HEAD, confirm reads the object's leading bytes and rejects mismatches against the declared `content_type` (closing the spoofed-content-type vector where S3 only echoes the client-declared type).
 - **Atomic per-user PENDING quota**: the pending-count check and the row insert run in one transaction guarded by a per-user `pg_advisory_xact_lock`, before any presigned URL is issued. This makes the quota race-free — concurrent requests cannot all pass the count check and then over-mint presigned slots. If presigning fails after the row is reserved, the row is left `pending` for the sweep worker to reclaim.
 - **Reservation RLS context matches the row** (sec-r7/M4): an organization-scoped upload reserves its `pending` row under `withAppDatabaseContext` with an organization scope (sets `app.current_organization_public_id`) so the `uploads_tenant_isolation` `WITH CHECK` is satisfied; a personal upload (`organization_id IS NULL`) reserves under `withAppDatabaseContext` with a user scope for `uploads_owner_access`. Reserving an organization row under user context is rejected by RLS as the production `clinozy_be_app` role (FORCE RLS) — verified in `src/tests/security/rls/upload-rls.security.test.ts`.
@@ -33,7 +38,7 @@ What it does not own: anti-virus / malware scanning (handled outside the platfor
 This domain implements the contracts documented in [src/PATTERNS.md](src/PATTERNS.md):
 
 - `idempotency` — the presign + confirm endpoints accept `X-Idempotency-Key` so retries don't issue duplicate presigns or re-confirm a row.
-- `soft-delete` — upload rows tombstone with `deleted_at`; a retention worker purges the S3 object and the row after the retention window.
+- `soft-delete` — upload rows tombstone with `deleted_at`; after the retention window a retention worker deletes the S3 object, and the row only once its object is gone.
 - `audit-emission` — confirm and delete record audit rows so file lifecycle is forensically traceable.
 
 ## Cross-domain flows
@@ -49,7 +54,9 @@ The upload domain is consumed by other domains rather than driving any flow itse
 
 ## Failure modes
 
-- **Confirm before upload landed** → S3 HEAD fails; row stays `pending`; client must retry the upload then the confirm.
+- **Confirm before upload landed** → S3 HEAD answers 404, a verdict on the object: the row is marked `failed` (422); the client creates a new upload.
+- **Confirm during an S3 outage** (timeout, throttling, open circuit) → error response; the row stays `pending`, so the client retries confirm — a storage failure is never a verdict on the upload.
+- **Pending object written again between verify and publish** (a second PUT through the still-valid presigned URL) → the ETag-pinned copy is refused: 409 `upload_changed_during_confirm`, the row stays `pending`, and confirming again verifies the new bytes. The pending sweep leaves such a row for its next pass.
 - **Confirm of a row that doesn't belong to the caller** → 404 (we deliberately don't reveal existence).
 - **Presign TTL exceeded** → S3 rejects the upload with a SignatureDoesNotMatch / ExpiredToken response; client must request a fresh presign.
-- **Delete after S3 outage** → DB row tombstones; retention worker retries the S3 object delete on its next pass.
+- **Delete after S3 outage** → DB row tombstones; the retention worker retries the S3 object delete on each pass and keeps the row until it succeeds.

@@ -1,14 +1,23 @@
 import { NotImplementedError, UnauthorizedError } from '@/shared/errors/index.js';
 import { env } from '@/shared/config/env.config.js';
 import { DEFAULT_FRONTEND_URL } from '@/shared/constants/index.js';
-import { buildOutboundFetchOptions, outboundFetch } from '@/infrastructure/outbound/index.js';
-import { ExternalServiceError } from '@/infrastructure/outbound/outbound-error.js';
+import { buildOutboundFetchOptions, outboundFetchJson } from '@/infrastructure/outbound/index.js';
+import { toOAuthProviderFailure } from '@/domains/auth/sub-domains/auth-method/oauth/providers/oauth-provider-failure.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import type { OAuthProfile } from '@/domains/auth/sub-domains/auth-method/oauth/oauth.types.js';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
+
+/** The OIDC userinfo fields the sign-in reads. */
+type GoogleUserInfo = {
+  sub?: string;
+  email?: string;
+  email_verified?: boolean;
+  name?: string;
+  picture?: string;
+};
 
 function getGoogleRedirectUri(): string {
   // The redirect URI is the SPA's provider-specific /callback/google page: the browser
@@ -60,7 +69,7 @@ export interface ExchangeGoogleOAuthCodeOptions {
   requestId?: string;
 }
 
-/** Trades the Google authorization code for an access token, fetches the OIDC userinfo response, and returns a normalised {@link OAuthProfile}. Rejects responses whose `email_verified` is not strictly `true` to prevent find-or-link account takeover. Translates outbound failures to `UnauthorizedError` with provider-specific i18n keys. */
+/** Trades the Google authorization code for an access token, fetches the OIDC userinfo response, and returns a normalised {@link OAuthProfile}. Rejects responses whose `email_verified` is not strictly `true` to prevent find-or-link account takeover. Google refusing the code or token is a 401 with a provider-specific i18n key; Google failing (network, timeout, 5xx, a body that is not JSON) is a 503 (`toOAuthProviderFailure`). */
 export async function exchangeGoogleOAuthCode(
   options: ExchangeGoogleOAuthCodeOptions,
 ): Promise<OAuthProfile> {
@@ -70,9 +79,9 @@ export async function exchangeGoogleOAuthCode(
     throw new NotImplementedError('errors:googleOAuthNotConfigured');
   }
 
-  let tokenResponse: Response;
+  let tokenData: { access_token?: string };
   try {
-    tokenResponse = await outboundFetch(
+    tokenData = await outboundFetchJson<{ access_token?: string }>(
       buildOutboundFetchOptions({
         name: 'oauth-google',
         url: GOOGLE_TOKEN_URL,
@@ -93,20 +102,16 @@ export async function exchangeGoogleOAuthCode(
       }),
     );
   } catch (error) {
-    if (error instanceof ExternalServiceError) {
-      throw new UnauthorizedError('errors:googleExchangeFailed');
-    }
-    throw error;
+    throw toOAuthProviderFailure({ error, rejectedMessageKey: 'errors:googleExchangeFailed' });
   }
 
-  const tokenData = (await tokenResponse.json()) as { access_token?: string };
   if (!tokenData.access_token) {
     throw new UnauthorizedError('errors:googleTokenMissingAccessToken');
   }
 
-  let userInfoResponse: Response;
+  let userInfo: GoogleUserInfo;
   try {
-    userInfoResponse = await outboundFetch(
+    userInfo = await outboundFetchJson<GoogleUserInfo>(
       buildOutboundFetchOptions({
         name: 'oauth-google',
         url: GOOGLE_USERINFO_URL,
@@ -118,19 +123,8 @@ export async function exchangeGoogleOAuthCode(
       }),
     );
   } catch (error) {
-    if (error instanceof ExternalServiceError) {
-      throw new UnauthorizedError('errors:googleFetchUserFailed');
-    }
-    throw error;
+    throw toOAuthProviderFailure({ error, rejectedMessageKey: 'errors:googleFetchUserFailed' });
   }
-
-  const userInfo = (await userInfoResponse.json()) as {
-    sub?: string;
-    email?: string;
-    email_verified?: boolean;
-    name?: string;
-    picture?: string;
-  };
 
   if (!(userInfo.email && userInfo.sub)) {
     throw new UnauthorizedError('errors:googleUserMissingEmailOrSub');

@@ -5,7 +5,7 @@ Before changing this repository:
 1. Follow **[.cursor/rules/be-engineering-principles.mdc](.cursor/rules/be-engineering-principles.mdc)** for general engineering behavior (always applied in Cursor). Product slug, image names, and branch/env mapping: **[.cursor/rules/be-project-identity.mdc](.cursor/rules/be-project-identity.mdc)** (`tooling/setup/setup.config.json` → `project-identity.constants.ts`).
 2. Agent-os items this repo owns start with `be-` (see **[CLAUDE.md → Agent-os naming](CLAUDE.md#agent-os-naming)**); upstream skills keep their names.
 3. Read **[CLAUDE.md](CLAUDE.md)** for architecture, domain layout, dependency rules, and commands. Import path policy: **[`.cursor/rules/be-import-paths.mdc`](.cursor/rules/be-import-paths.mdc)** (`@/` in `src/`, `@tooling/` in tooling; no `../`).
-4. For new domains, routes, workers, or schema work, follow **[docs/getting-started/requirement-intake.md](docs/getting-started/requirement-intake.md)** and consult **[be-skill-index](agent-os/skills/be-skill-index/SKILL.md)** first (47 project skills; Cursor built-ins: **be-cursor-global-skills**) — run only the skills that match your changes (no duplicate invocations).
+4. For new domains, routes, workers, or schema work, follow **[docs/getting-started/requirement-intake.md](docs/getting-started/requirement-intake.md)** and consult **[be-skill-index](agent-os/skills/be-skill-index/SKILL.md)** first (46 project skills; Cursor built-ins: **be-cursor-global-skills**) — run only the skills that match your changes (no duplicate invocations).
 5. For any change under `src/`, the **in-source documentation system** also applies — see **[docs/reference/architecture/documentation-system.md](docs/reference/architecture/documentation-system.md)**. TSDoc on every public export is canonical (gated by `pnpm tsdoc:check` against [`tooling/tsdoc-coverage/budget.json`](tooling/tsdoc-coverage/budget.json) — counts may decrease but may not increase); hand-written `<folder>.overview.md` files cover folder-level design decisions; `src/{OVERVIEW,PATTERNS,FLOWS,POLICIES}.md` carry the system narrative. There is no auto-generated `DOCS.md` aggregator.
 6. Human contributors — see **[CONTRIBUTING.md](CONTRIBUTING.md)** (setup summary, branching, **`SECURITY.md`**, **`CODE_OF_CONDUCT.md`**, **[`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)**).
 7. Before opening a pull request, ensure these pass (pre-commit runs the same sync checks locally):
@@ -55,8 +55,8 @@ can hang/fail at the compose step. To bring up the stack manually:
   `domain threaded`, so containers requesting the memory controller fail with `cannot enter cgroupv2
   ... threaded mode`. Bring up with an override that sets `network_mode: host`, `cgroup: host`,
   `mem_limit: 0` (postgres), and `ports: !reset []`, then `pnpm db:migrate && pnpm db:seed`.
-- **Worker:** `pnpm dev:worker` fails the connection-budget guard with default `DATABASE_POOL_MAX=20`
-  (monolithic worker demand is ~47). Start it as
+- **Worker:** `pnpm dev:worker` fails the connection-budget guard with default `DATABASE_POOL_MAX=30`
+  (monolithic worker demand is ~48). Start it as
   `DATABASE_POOL_MAX=60 POSTGRES_MAX_CONNECTIONS=500 pnpm dev:worker`. A cloud session runs with
   `NODE_ENV` unset (`local`): `.env.local` is the primary file, loaded without override, so the shell
   and the environment's Variables win (`load-env-files.ts`; see

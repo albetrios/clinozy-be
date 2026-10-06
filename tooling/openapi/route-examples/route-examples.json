@@ -1671,12 +1671,12 @@
         "error": {
           "type": "validation_error",
           "code": "invalid_field",
-          "detail": "Legacy `page` pagination is no longer supported on this route. Use cursor-based pagination via `limit` and `after` (opaque cursor from `meta.pagination.next`).",
+          "detail": "Invalid values for fields in request",
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "page",
-              "message": "Legacy `page` pagination is no longer supported on this route. Use cursor-based pagination via `limit` and `after` (opaque cursor from `meta.pagination.next`)."
+              "field": "querystring.page",
+              "message": "Unrecognized key: \"page\""
             }
           ]
         },
@@ -2568,12 +2568,12 @@
         "error": {
           "type": "validation_error",
           "code": "invalid_field",
-          "detail": "Legacy `page` pagination is no longer supported on this route. Use cursor-based pagination via `limit` and `after` (opaque cursor from `meta.pagination.next`).",
+          "detail": "Invalid values for fields in request",
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "page",
-              "message": "Legacy `page` pagination is no longer supported on this route. Use cursor-based pagination via `limit` and `after` (opaque cursor from `meta.pagination.next`)."
+              "field": "querystring.page",
+              "message": "Unrecognized key: \"page\""
             }
           ]
         },
@@ -2680,82 +2680,6 @@
           "database": 21,
           "redis": 1,
           "bullmq": 6
-        }
-      }
-    }
-  },
-  "PATCH /api/v1/billing/subscriptions/:subscription_id": {
-    "request_body": {},
-    "responses": {
-      "200": {
-        "data": {
-          "id": "sub_example00000000000000",
-          "status": "INCOMPLETE",
-          "billing_cycle": "MONTHLY",
-          "current_period_start": "2026-01-01T00:00:00.000Z",
-          "current_period_end": "2026-01-01T00:00:00.000Z",
-          "trial_end": null,
-          "cancel_at_period_end": false,
-          "canceled_at": null,
-          "provider": "stripe",
-          "plan_id": "pln_example00000000000000",
-          "seats_total": null,
-          "seats_used": 1,
-          "created_at": "2026-01-01T00:00:00.000Z",
-          "updated_at": "2026-01-01T00:00:00.000Z"
-        },
-        "meta": {
-          "request_id": "544afc62-ce31-41ee-9bbb-5ee2d78fb394"
-        }
-      },
-      "400": {
-        "error": {
-          "type": "validation_error",
-          "code": "invalid_field",
-          "detail": "Invalid values for fields in request",
-          "documentation_url": "https://example.com/resource",
-          "errors": [
-            {
-              "field": "body",
-              "message": "Unrecognized key: \"cancel_at_period_end\""
-            }
-          ]
-        },
-        "meta": {
-          "request_id": "e2f59228-3acb-4c83-991f-078b58d170aa"
-        }
-      },
-      "401": {
-        "error": {
-          "type": "request_error",
-          "code": "unauthorized",
-          "detail": "Missing Authorization header",
-          "documentation_url": "https://example.com/resource"
-        },
-        "meta": {
-          "request_id": "0f0f188c-b161-4aa3-90d7-c305acfaca63"
-        }
-      },
-      "403": {
-        "error": {
-          "type": "request_error",
-          "code": "forbidden",
-          "detail": "Insufficient organization permissions",
-          "documentation_url": "https://example.com/resource"
-        },
-        "meta": {
-          "request_id": "ec437715-892d-4248-9975-8b5f033e09ee"
-        }
-      },
-      "404": {
-        "error": {
-          "type": "request_error",
-          "code": "not_found",
-          "detail": "Subscription not found",
-          "documentation_url": "https://example.com/resource"
-        },
-        "meta": {
-          "request_id": "19564cd7-4fb4-47dc-95a8-5db460b2b375"
         }
       }
     }
@@ -2914,7 +2838,7 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "body",
+              "field": "body.__proto__",
               "message": "Unrecognized key: \"__proto__\""
             }
           ]
@@ -3170,7 +3094,7 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "body",
+              "field": "body.unexpected",
               "message": "Unrecognized key: \"unexpected\""
             }
           ]
@@ -3241,7 +3165,7 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "body",
+              "field": "body.unexpected_key",
               "message": "Unrecognized key: \"unexpected_key\""
             }
           ]
@@ -3316,7 +3240,7 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "body",
+              "field": "body.unknown_field",
               "message": "Unrecognized key: \"unknown_field\""
             }
           ]
@@ -3459,7 +3383,7 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "body",
+              "field": "body.unknown_field",
               "message": "Unrecognized key: \"unknown_field\""
             }
           ]
@@ -3506,7 +3430,7 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "body",
+              "field": "body.unknown_field",
               "message": "Unrecognized key: \"unknown_field\""
             }
           ]
@@ -3729,8 +3653,12 @@
               "message": "Invalid input: expected \"EMAIL_CODE\""
             },
             {
-              "field": "body",
-              "message": "Unrecognized keys: \"__fuzz\", \"unexpected\""
+              "field": "body.__fuzz",
+              "message": "Unrecognized key: \"__fuzz\""
+            },
+            {
+              "field": "body.unexpected",
+              "message": "Unrecognized key: \"unexpected\""
             }
           ]
         },
@@ -3777,8 +3705,12 @@
               "message": "Invalid input: expected \"MFA_TOTP\""
             },
             {
-              "field": "body",
-              "message": "Unrecognized keys: \"__fuzz\", \"unexpected\""
+              "field": "body.__fuzz",
+              "message": "Unrecognized key: \"__fuzz\""
+            },
+            {
+              "field": "body.unexpected",
+              "message": "Unrecognized key: \"unexpected\""
             }
           ]
         },
@@ -3836,8 +3768,12 @@
               "message": "Invalid input: expected string, received undefined"
             },
             {
-              "field": "body",
-              "message": "Unrecognized keys: \"__fuzz\", \"unexpected\""
+              "field": "body.__fuzz",
+              "message": "Unrecognized key: \"__fuzz\""
+            },
+            {
+              "field": "body.unexpected",
+              "message": "Unrecognized key: \"unexpected\""
             }
           ]
         },
@@ -3913,7 +3849,7 @@
           "options": {
             "challenge": "DoCdzM664nBLBCC4YXqy5zGzGa2ZYaDK_K-T0l0tjEc",
             "rp": {
-              "name": "Clinozy",
+              "name": "Example App",
               "id": "localhost"
             },
             "user": {
@@ -3958,8 +3894,12 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "body",
-              "message": "Unrecognized keys: \"__fuzz\", \"unexpected\""
+              "field": "body.__fuzz",
+              "message": "Unrecognized key: \"__fuzz\""
+            },
+            {
+              "field": "body.unexpected",
+              "message": "Unrecognized key: \"unexpected\""
             }
           ]
         },
@@ -5891,7 +5831,7 @@
           "documentation_url": "https://example.com/resource",
           "errors": [
             {
-              "field": "body",
+              "field": "body.public_id",
               "message": "Unrecognized key: \"public_id\""
             }
           ]
@@ -6512,7 +6452,7 @@
               "message": "Invalid input: expected array, received undefined"
             },
             {
-              "field": "body",
+              "field": "body.unknown_field",
               "message": "Unrecognized key: \"unknown_field\""
             }
           ]

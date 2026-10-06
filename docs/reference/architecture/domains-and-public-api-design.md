@@ -456,7 +456,7 @@ All 19 phases from the Consolidated Master Plan (Domain API Upgrade + CI/CD + en
 
 ### Phase 15 — Scalability + stability
 
-- [x] S3 error logging in `storage.service.ts`
+- [x] S3 error logging in `s3-adapter.ts`
 - [x] Worker RSS monitoring in `infrastructure/queue/bootstrap.ts`
 - [x] Transaction utility with timeout + isolation options (`infrastructure/database/transaction.ts`)
 

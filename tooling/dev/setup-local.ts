@@ -53,10 +53,10 @@ import { applyLocalCaptcha, TURNSTILE_ALWAYS_PASS_TEST_SITE_KEY } from './local-
 import {
   alterRoleStatement,
   applyLocalDatabaseLogins,
-  isLocalDatabaseUrl,
   localDatabaseLogins,
   planLocalDatabaseLogins,
 } from './local-database-logins.js';
+import { isLocalDatabaseUrl } from '@/infrastructure/database/utils/connection-url.util.js';
 import dotenv from 'dotenv';
 import postgres from 'postgres';
 import {
@@ -75,6 +75,7 @@ const {
   containers: LOCAL_CONTAINERS,
   databaseName: LOCAL_DATABASE_NAME,
   databaseAppRole: LOCAL_DATABASE_APP_ROLE,
+  databaseMaintenanceRole: LOCAL_DATABASE_MAINTENANCE_ROLE,
 } = resolveDerivedNames(SETUP_CONFIG);
 const POSTGRES_CONTAINER = LOCAL_CONTAINERS.postgres;
 const REDIS_CONTAINER = LOCAL_CONTAINERS.redis;
@@ -544,11 +545,14 @@ function injectGeneratedSecrets(content: string): string {
 // docker-compose.yml provisions from the same source — hardcoding them here made
 // `setup:local` write credentials the compose stack does not accept, so a freshly
 // adopted project could never migrate. Local Postgres/Redis are plaintext (no TLS).
+// The runtime and maintenance URLs start on the superuser too; once the migrations have
+// created the roles, the login step rewrites both onto their RLS-subject logins.
 const LOCAL_DATABASE_URL = `postgresql://${LOCAL_DATABASE_NAME}:${LOCAL_DATABASE_NAME}@localhost:5432/${LOCAL_DATABASE_NAME}`;
 function injectLocalhostOverrides(content: string): string {
   let updated = content;
   updated = upsertEnvAssignment(updated, 'DATABASE_URL', LOCAL_DATABASE_URL);
   updated = upsertEnvAssignment(updated, 'DATABASE_MIGRATION_URL', LOCAL_DATABASE_URL);
+  updated = upsertEnvAssignment(updated, 'DATABASE_MAINTENANCE_URL', LOCAL_DATABASE_URL);
   updated = upsertEnvAssignment(updated, 'REDIS_URL', 'redis://localhost:6379');
   updated = upsertEnvAssignment(updated, 'DATABASE_SSL_ENABLED', 'false');
   updated = upsertEnvAssignment(updated, 'DATABASE_SSL_REJECT_UNAUTHORIZED', 'false');
@@ -621,6 +625,7 @@ async function provisionLocalDatabaseLogins(
   }
   const logins = localDatabaseLogins({
     appRole: LOCAL_DATABASE_APP_ROLE,
+    maintenanceRole: LOCAL_DATABASE_MAINTENANCE_ROLE,
     sqlStem: resolveSqlIdentifierStem(SETUP_CONFIG),
   });
   const superuser = postgres(LOCAL_DATABASE_URL, {

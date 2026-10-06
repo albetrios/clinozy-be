@@ -7,6 +7,7 @@ import {
   grantClinozyBeAppRoleForTests,
   executeAsClinozyBeAppUser,
 } from '@/tests/helpers/rls-matrix.helper.js';
+import { DATABASE_APP_ROLE } from '@/shared/constants/project-identity.constants.js';
 
 /**
  * Regression guard for the non-superuser RLS lane itself.
@@ -41,7 +42,7 @@ describe('Security: clinozy_be_app application role is least-privilege (RLS-boun
   it('has NOSUPERUSER + NOBYPASSRLS (and no create/replication privileges) in pg_roles', async () => {
     const result = await database.execute(
       drizzleSql`SELECT rolsuper, rolbypassrls, rolcreatedb, rolcreaterole, rolreplication
-                 FROM pg_roles WHERE rolname = 'clinozy_be_app'`,
+                 FROM pg_roles WHERE rolname = ${DATABASE_APP_ROLE}`,
     );
     const role = (
       Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? [])

@@ -1,5 +1,8 @@
+import { createHash } from 'node:crypto';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { redisConnection } from '@/infrastructure/cache/redis.client.js';
+import { IP_FAILED_LOGIN_THRESHOLD } from '@/shared/constants/index.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { injectUnauthenticated, injectRoute } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -22,8 +25,8 @@ const AUTH_LOGIN_PATH = '/auth/login';
  * - **In `auth.test.ts`:** every route is reachable and every denial fires — the 400 / 401 / 403 /
  *   404 gate shapes and each route's plain success status.
  * - **Here:** the response contract *through* those gates — the session and CSRF cookie pair, the
- *   refresh Origin/Referer allowlist matrix, the MFA-challenge login envelope, and the translated
- *   i18n copy.
+ *   refresh Origin/Referer allowlist matrix, the per-IP login throttle's 429 envelope, the
+ *   MFA-challenge login envelope, and the translated i18n copy.
  *
  * Nothing is asserted in both files. When adding a case, pick the file by that question.
  */
@@ -41,6 +44,52 @@ describe('Auth Domain — Response contract (integration)', () => {
 
   beforeEach(async () => {
     await cleanupDatabase();
+  });
+
+  // ─── Per-IP failed-login throttle ─────────────────────────────
+
+  describe('POST /api/v1/auth/login — per-IP failed-login throttle', () => {
+    // A TEST-NET-3 address of its own, so a seeded counter never throttles the loopback address
+    // every other suite logs in from.
+    const throttledIp = '203.0.113.77';
+    const counterKey = `auth:failed_login:ip:${createHash('sha256').update(throttledIp).digest('hex')}`;
+
+    afterEach(async () => {
+      await redisConnection.del(counterKey);
+    });
+
+    async function loginFromThrottledIp(failuresSoFar: number) {
+      await redisConnection.set(counterKey, String(failuresSoFar), 'EX', 600);
+      const { user, password } = await createTestUserWithPassword();
+      return app.inject({
+        method: 'POST',
+        url: testApiPath(AUTH_LOGIN_PATH),
+        remoteAddress: throttledIp,
+        headers: { 'content-type': 'application/json', 'accept-language': 'en' },
+        payload: { email: user.email, password },
+      });
+    }
+
+    it('answers 429 rate_limited with Retry-After at the threshold, even for valid credentials', async () => {
+      const response = await loginFromThrottledIp(IP_FAILED_LOGIN_THRESHOLD);
+
+      expect(response.statusCode).toBe(429);
+      const retryAfter = Number(response.headers['retry-after']);
+      expect(retryAfter).toBeGreaterThan(0);
+      expect(retryAfter).toBeLessThanOrEqual(600);
+      expect(response.json().error).toMatchObject({
+        type: 'request_error',
+        code: 'rate_limited',
+        detail: 'Too many requests',
+      });
+    });
+
+    it('still signs in one failure below the threshold', async () => {
+      const response = await loginFromThrottledIp(IP_FAILED_LOGIN_THRESHOLD - 1);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.access_token).toEqual(expect.any(String));
+    });
   });
 
   // ─── Login envelope ───────────────────────────────────────────

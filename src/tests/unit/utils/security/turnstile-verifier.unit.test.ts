@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import nock from 'nock';
 import { resetEnvCacheForTests } from '@/shared/config/env.config.js';
+import { ExternalServiceError } from '@/infrastructure/outbound/outbound-error.js';
 import { verifyTurnstileToken } from '@/shared/utils/security/turnstile-verifier.util.js';
 import { TURNSTILE_ALWAYS_PASS_TEST_SECRET } from '@/shared/constants/security.constants.js';
 
@@ -59,5 +60,21 @@ describe('verifyTurnstileToken', () => {
 
     const result = await verifyTurnstileToken({ token: 'XXXX.DUMMY.TOKEN.XXXX' });
     expect(result.success).toBe(true);
+  });
+
+  it('throws an ExternalServiceError when Cloudflare answers other than 200 — an outage, not a verdict', async () => {
+    nock(TURNSTILE_HOST).post('/turnstile/v0/siteverify').reply(502, 'Bad Gateway');
+
+    const rejection = verifyTurnstileToken({ token: 'token' });
+    await expect(rejection).rejects.toBeInstanceOf(ExternalServiceError);
+    await expect(rejection).rejects.toMatchObject({ category: 'http_5xx', status: 502 });
+  });
+
+  it('throws an ExternalServiceError when Cloudflare answers a body that is not JSON', async () => {
+    nock(TURNSTILE_HOST).post('/turnstile/v0/siteverify').reply(200, '<html>maintenance</html>');
+
+    await expect(verifyTurnstileToken({ token: 'token' })).rejects.toBeInstanceOf(
+      ExternalServiceError,
+    );
   });
 });

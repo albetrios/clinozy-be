@@ -1,6 +1,7 @@
 import { resolveRedisKeyPrefix } from '@/infrastructure/cache/redis-prefix.util.js';
 import { REDIS_PROTOCOL_VERSION } from '@/infrastructure/cache/redis.constants.js';
 import { parseRedisUrl, resolveBullMqRedisUrl } from '@/infrastructure/cache/redis-url.util.js';
+import { buildRedisTlsOptions } from '@/infrastructure/cache/redis-url.parse.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import { TEN_SECONDS_MS } from '@/shared/constants/ttl.constants.js';
 
@@ -33,10 +34,17 @@ export function getBullMQConnectionOptions(): {
   maxRetriesPerRequest: null;
   enableReadyCheck: boolean;
   protocol: number;
+  tls?: { rejectUnauthorized: true };
 } {
   const bullMqRedisUrl = resolveBullMqRedisUrl();
   const parsed = parseRedisUrl(bullMqRedisUrl);
+  const tlsOptions = buildRedisTlsOptions(bullMqRedisUrl);
   return omitUndefined({
+    // TLS for a `rediss://` URL, with the server certificate verified — as the cache and health
+    // clients already did. Without it every queue and worker spoke plaintext to a TLS endpoint and
+    // never connected: any Redis reached over `rediss://` (required off a private network) left
+    // the whole queue system down.
+    tls: 'tls' in tlsOptions ? tlsOptions.tls : undefined,
     host: parsed.host,
     port: parsed.port,
     password: parsed.password,

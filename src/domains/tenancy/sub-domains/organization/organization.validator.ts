@@ -1,5 +1,4 @@
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { parseCursorPaginatedQuery } from '@/shared/utils/http/pagination.util.js';
 import {
   createOrganizationDto,
   updateOrganizationDto,
@@ -24,17 +23,12 @@ export function validateUpdateOrganization(data: unknown): UpdateOrganizationInp
 }
 
 /**
- * Validates the `GET /organizations` query string — first rejects legacy
- * `page` / `per_page` keys (`ensureCursorOnlyPagination`), then parses with
- * {@link listOrganizationsQueryDto}. Throws
+ * Validates the `GET /organizations` query string against the strict
+ * {@link listOrganizationsQueryDto} (cursor pagination only). Throws
  * `ValidationError('errors:validation.invalidPagination')` on failure.
  */
 export function validateListOrganizationsQuery(data: unknown): ListOrganizationsQueryInput {
-  return parseCursorPaginatedQuery(
-    listOrganizationsQueryDto,
-    data,
-    'errors:validation.invalidPagination',
-  );
+  return parseWithSchema(listOrganizationsQueryDto, data, 'errors:validation.invalidPagination');
 }
 
 /** Parses raw `PUT /organization/logo` body via {@link uploadLogoDto}; throws `ValidationError('errors:invalidInput')` on failure. */

@@ -9,6 +9,8 @@ import { isWorkerRuntime } from '@/infrastructure/database/contexts/database-con
 import { STRIPE_WEBHOOK_QUEUE_NAME } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
 import { MAIL_QUEUE_NAME } from '@/infrastructure/mail/queues/mail.queue.js';
 import { attachDeadLetterAndAlerting } from '@/infrastructure/queue/dlq/dead-letter.js';
+import { attachBullMQJobMetrics } from '@/infrastructure/observability/metrics/bullmq-metrics.js';
+import { attachWorkerQueueHeartbeat } from '@/infrastructure/queue/worker-runtime/worker-queue-heartbeat.js';
 import { registerScheduledJobs } from '@/infrastructure/queue/scheduler.js';
 import { auditSchedulerRegistryConsistency } from '@/infrastructure/queue/worker-runtime/scheduler-registry-audit.js';
 import {
@@ -45,7 +47,12 @@ export function stopRssMonitoring(): void {
   stopProcessMemoryMonitoring();
 }
 
-function pushWorkerWithDeadLetterHook(
+/**
+ * Starts one worker and attaches the hooks every worker carries: the dead-letter + Sentry `failed`
+ * listener, the job-duration histogram, and the queue heartbeat `/readyz` reads to tell a stalled
+ * worker from an idle one.
+ */
+function pushWorkerWithRuntimeHooks(
   workers: WorkerHandle[],
   createWorker: () => WorkerHandle,
 ): void {
@@ -53,6 +60,8 @@ function pushWorkerWithDeadLetterHook(
   workers.push(handle);
   if (handle.worker !== undefined && handle.queueName !== undefined) {
     attachDeadLetterAndAlerting(handle.worker, handle.queueName);
+    attachBullMQJobMetrics(handle.worker, handle.queueName);
+    attachWorkerQueueHeartbeat(handle.worker, handle.queueName);
   }
 }
 
@@ -61,8 +70,8 @@ function pushWorkerWithDeadLetterHook(
  * process: starts RSS monitoring, audits the registry against the scheduler cron
  * list, registers repeatable jobs for queues that have a worker locally, then
  * instantiates each worker (skipping `mail` / `stripe-webhook` when their secrets
- * are missing) and attaches the DLQ + Sentry `failed` listener via
- * {@link attachDeadLetterAndAlerting}. Returned handles are drained in reverse
+ * are missing) and attaches the DLQ + Sentry `failed` listener
+ * ({@link attachDeadLetterAndAlerting}), the job-duration histogram and the queue heartbeat. Returned handles are drained in reverse
  * order during shutdown.
  */
 export async function registerDomainWorkers(
@@ -130,7 +139,7 @@ export async function registerDomainWorkers(
       continue;
     }
 
-    pushWorkerWithDeadLetterHook(workers, () => registration.create(workerContainers));
+    pushWorkerWithRuntimeHooks(workers, () => registration.create(workerContainers));
     logger.info({ queueName: registration.queueName }, `Registered ${registration.logLabel}`);
   }
 

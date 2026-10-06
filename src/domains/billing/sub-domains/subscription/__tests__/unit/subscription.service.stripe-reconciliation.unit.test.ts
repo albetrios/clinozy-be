@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ValidationError } from '@/shared/errors/index.js';
 import {
   PRINCIPAL_SCOPE,
   type OrganizationPrincipalDatabaseScope,
@@ -144,22 +143,6 @@ describe('SubscriptionService — Stripe reconciliation (sec-B1+B2+B3+B4)', () =
       providerSubscriptionId: 'sub_xxx',
       providerCustomerId: 'cus_xxx',
     });
-  });
-
-  // ── sec-B1 ──────────────────────────────────────────────────────────────────────────
-  it('PATCH rejects cancel_at_period_end so clients must use /cancel and /resume (sec-B1)', async () => {
-    await expect(
-      service.update(scope, 'sub_public', { cancel_at_period_end: true }),
-    ).rejects.toBeInstanceOf(ValidationError);
-
-    expect(repository.update).not.toHaveBeenCalled();
-    // Stripe is not called for the rejected PATCH either — the request never reaches the
-    // provider, so the subscription cannot diverge silently.
-    expect(paymentProvider.cancelSubscriptionAtPeriodEnd).not.toHaveBeenCalled();
-  });
-
-  it('PATCH with empty body succeeds as a no-op (idempotent shape preserved)', async () => {
-    await expect(service.update(scope, 'sub_public', {})).resolves.toBeDefined();
   });
 
   // ── sec-B2 ──────────────────────────────────────────────────────────────────────────

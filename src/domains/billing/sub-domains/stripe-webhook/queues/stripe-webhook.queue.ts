@@ -22,7 +22,12 @@ export type StripeWebhookJobData = StripeWebhookJobDataValidated;
 
 let stripeWebhookQueue: Queue<StripeWebhookJobData> | null = null;
 
-function getStripeWebhookQueue(): Queue<StripeWebhookJobData> {
+/**
+ * The process-wide `stripe-webhook` producer (lazily created) — its default job options (five
+ * attempts, the custom backoff, bounded retention) apply to every job added through it, including
+ * dead-letter replays.
+ */
+export function getStripeWebhookQueue(): Queue<StripeWebhookJobData> {
   if (stripeWebhookQueue) return stripeWebhookQueue;
   stripeWebhookQueue = new Queue<StripeWebhookJobData>(STRIPE_WEBHOOK_QUEUE_NAME, {
     connection: getBullMQProducerConnectionOptions(),
@@ -48,6 +53,10 @@ export async function enqueueStripeWebhook(event: Stripe.Event, requestId?: stri
 /**
  * Enqueues a `stripe-webhook` job keyed by `stripe-event-${stripeEventId}` so
  * BullMQ deduplicates concurrent deliveries of the same Stripe event id.
+ *
+ * @remarks
+ * Also deduplicated on the event id ({@link stripeEventDeduplication}): while any job for the
+ * event — this one or a reclaim — is waiting, delayed or active, another add is a no-op.
  */
 export async function enqueueStripeWebhookByEventId(
   stripeEventId: string,
@@ -65,7 +74,22 @@ export async function enqueueStripeWebhookByEventId(
   );
   await queue.add('process-stripe-webhook', jobData, {
     jobId: `stripe-event-${stripeEventId}`,
+    deduplication: stripeEventDeduplication(stripeEventId),
   });
+}
+
+/**
+ * One live job per Stripe event, across the ingress and reclaim adds — BullMQ `deduplication`,
+ * released when that job completes or fails.
+ *
+ * @remarks
+ * During a Stripe outage the event's job sits parked for hours (the queue pauses) while its ledger
+ * row stays `processing`; the reclaim sweep re-enqueued the oldest of those rows every five
+ * minutes under a fresh job id — thousands of jobs, each an `events.retrieve` call once Stripe was
+ * back. With the deduplication the sweep's add is a no-op while the event's job is live.
+ */
+function stripeEventDeduplication(stripeEventId: string): { id: string } {
+  return { id: `stripe-event-${stripeEventId}` };
 }
 
 /**
@@ -84,9 +108,12 @@ export async function enqueueStripeWebhookByEventId(
  *   would still dedup, but downstream `tryClaimEvent` is atomic on the ledger
  *   row so duplicate dispatches are safe (the second hits
  *   `still_processing_within_lease` and exits).
+ * - **Deduplication:** a no-op while a job for the event is still live
+ *   ({@link stripeEventDeduplication}) — the sweep only re-enqueues an event
+ *   whose job is gone.
  * - **Failure modes:** propagates BullMQ enqueue errors so the caller can log
  *   and skip.
- * - **Side effects:** writes a new job to the `stripe-webhook` queue.
+ * - **Side effects:** writes a new job to the `stripe-webhook` queue, or none.
  */
 export async function enqueueStripeWebhookByEventIdForReclaim(
   stripeEventId: string,
@@ -104,6 +131,7 @@ export async function enqueueStripeWebhookByEventIdForReclaim(
   );
   await queue.add('process-stripe-webhook', jobData, {
     jobId: `stripe-event-${stripeEventId}-reclaim-${Date.now()}`,
+    deduplication: stripeEventDeduplication(stripeEventId),
   });
 }
 

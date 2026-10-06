@@ -12,7 +12,7 @@ import {
   check,
   pgPolicy,
 } from 'drizzle-orm/pg-core';
-import { notifySchema } from '@/infrastructure/database/pg-schemas.js';
+import { maintenanceBypassArm, notifySchema } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 
@@ -63,7 +63,7 @@ export const notifications = notifySchema
               WHERE public_id = current_setting('app.current_organization_public_id', true)
             )
           )
-          OR current_setting('app.global_retention_cleanup', true) = 'true'`,
+          OR ${maintenanceBypassArm('app.global_retention_cleanup')}`,
         withCheck: sql`(
             ${table.organization_id} IS NOT NULL
             AND ${table.organization_id} = (

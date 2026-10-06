@@ -3,7 +3,10 @@ import {
   getBullMQKeyPrefix,
   getBullMQProducerConnectionOptions,
 } from '@/infrastructure/queue/connection.js';
-import { DEFAULT_JOB_RETENTION_COUNT } from '@/infrastructure/queue/queue.constants.js';
+import {
+  DEFAULT_JOB_RETENTION_COUNT,
+  QUEUE_RETRY_JITTER_RATIO,
+} from '@/infrastructure/queue/queue.constants.js';
 import { captureTraceContextForPropagation } from '@/infrastructure/observability/tracing/trace-context.util.js';
 import { parseBullMQJobData } from '@/shared/utils/validation/bullmq-job-validation.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
@@ -16,12 +19,17 @@ import {
 /** BullMQ queue name for asynchronous notification dispatch (in-app + email fan-out). */
 export const NOTIFICATION_QUEUE_NAME = 'notification';
 
-/** Only ids are stored in Redis; content is loaded in the worker from Postgres with organization scoping. */
+/** Only public ids are stored in Redis; content is loaded in the worker from Postgres, scoped by them. */
 export type NotificationJobData = NotificationJobDataValidated;
 
 let notificationQueue: Queue<NotificationJobData> | null = null;
 
-function getNotificationQueue(): Queue<NotificationJobData> {
+/**
+ * The process-wide `notification` producer (lazily created) — its default job options (three
+ * attempts, exponential backoff, bounded retention) apply to every job added through it,
+ * including dead-letter replays.
+ */
+export function getNotificationQueue(): Queue<NotificationJobData> {
   if (notificationQueue) return notificationQueue;
   notificationQueue = new Queue<NotificationJobData>(NOTIFICATION_QUEUE_NAME, {
     connection: getBullMQProducerConnectionOptions(),
@@ -30,7 +38,7 @@ function getNotificationQueue(): Queue<NotificationJobData> {
       removeOnComplete: { count: DEFAULT_JOB_RETENTION_COUNT, age: SEVEN_DAYS_SECONDS },
       removeOnFail: { count: DEFAULT_JOB_RETENTION_COUNT, age: SEVEN_DAYS_SECONDS },
       attempts: 3,
-      backoff: { type: 'exponential', delay: FIVE_SECONDS_MS },
+      backoff: { type: 'exponential', delay: FIVE_SECONDS_MS, jitter: QUEUE_RETRY_JITTER_RATIO },
     },
   });
   return notificationQueue;
@@ -39,33 +47,34 @@ function getNotificationQueue(): Queue<NotificationJobData> {
 /**
  * Enqueue a notification for async delivery across configured channels.
  */
-export async function enqueueNotification(
-  notificationId: number,
-  organizationPublicId: string | null,
-  requestId?: string,
-): Promise<void> {
+export async function enqueueNotification(options: {
+  notificationPublicId: string;
+  organizationPublicId: string | null;
+  userPublicId: string;
+  requestId?: string;
+}): Promise<void> {
+  const { notificationPublicId, organizationPublicId, userPublicId, requestId } = options;
   const queue = getNotificationQueue();
   const jobData = parseBullMQJobData(
     notificationJobDataSchema,
     omitUndefined({
-      notificationId,
+      notificationPublicId,
       organizationPublicId,
+      userPublicId,
       requestId,
       ...captureTraceContextForPropagation(),
     }),
     NOTIFICATION_QUEUE_NAME,
   );
-  // audit #6: deduplicate on the notification id. A recovery/redelivery path
-  // (post-commit dispatch recovery, an event handler firing twice, or a
-  // producer-side retry) that re-enqueues the same persisted notification must
-  // not produce a second dispatch — and therefore a second outbound email — for
-  // one in-app notification row. BullMQ drops an add whose jobId still exists in
-  // any bucket (retained for SEVEN_DAYS_SECONDS), so a re-enqueue inside that
-  // window is a no-op. notification ids are unique bigserials, so the jobId is
-  // globally unique per notification.
-  await queue.add('dispatch-notification', jobData, {
-    jobId: `notification-${String(notificationId)}`,
-  });
+  // audit #6: deduplicate per notification. A recovery/redelivery path (post-commit dispatch
+  // recovery, an event handler firing twice, or a producer-side retry) that re-enqueues the same
+  // persisted notification must not produce a second dispatch — and therefore a second outbound
+  // email — for one in-app notification row. BullMQ drops an add whose jobId still exists in any
+  // bucket (retained for SEVEN_DAYS_SECONDS), so a re-enqueue inside that window is a no-op. The
+  // job id is the notification's public id as-is (the queue name is already in every key), never
+  // the bigserial: that restarts at 1 after TRUNCATE ... RESTART IDENTITY or a restore while Redis
+  // keeps finished jobs, and the add for a new notification reusing the id would be dropped.
+  await queue.add('dispatch-notification', jobData, { jobId: notificationPublicId });
 }
 
 /** Close the lazily-initialised notification queue (graceful-shutdown hook for tests/runtime). */

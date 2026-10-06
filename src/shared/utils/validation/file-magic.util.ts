@@ -1,10 +1,9 @@
 /**
  * Magic byte signatures for common file types.
  * Use when validating uploads to ensure content matches declared content-type
- * (prevents malicious files disguised with wrong extensions).
- *
- * Note: Presigned URL uploads go directly to S3; magic-byte verification
- * would need to run in S3 Object Lambda or a post-upload webhook.
+ * (prevents malicious files disguised with wrong extensions). Presigned uploads land in S3
+ * directly, so the upload confirm path and the pending-upload sweep read the leading
+ * {@link MAGIC_BYTE_PREFIX_LENGTH} bytes back with a ranged GET and verify them here.
  */
 
 const MAGIC_SIGNATURES: ReadonlyArray<{
@@ -33,6 +32,12 @@ const MAGIC_SIGNATURES: ReadonlyArray<{
 const WEBP_FORMAT_MARKER_OFFSET = 8;
 const WEBP_FORMAT_MARKER = Buffer.from([0x57, 0x45, 0x42, 0x50]); // 'WEBP'
 const WEBP_MINIMUM_LENGTH = WEBP_FORMAT_MARKER_OFFSET + WEBP_FORMAT_MARKER.length; // 12
+
+/**
+ * Leading bytes to read for {@link verifyFileMagicBytes} — comfortably more than the longest
+ * signature it checks (the 12-byte WebP header).
+ */
+export const MAGIC_BYTE_PREFIX_LENGTH = 32;
 
 /**
  * Returns true when {@link verifyFileMagicBytes} knows a magic-byte signature for

@@ -105,9 +105,9 @@ function toOutput(row: {
   price_yearly: string;
   currency: string;
   is_active: boolean;
-  // REQ-4: previously stripped; now surfaced. `features` is the typed jsonb map and
-  // `included_seats` drives the structured `limits.seats` (null = unlimited).
-  features: PlanFeatures | null;
+  // REQ-4: `features` is the typed jsonb map (NOT NULL, default `{}`) and `included_seats`
+  // drives the structured `limits.seats` (null = unlimited).
+  features: PlanFeatures;
   included_seats: number | null;
   created_at: Date;
   updated_at: Date;
@@ -120,8 +120,7 @@ function toOutput(row: {
     price_yearly: String(row.price_yearly),
     currency: row.currency,
     is_active: row.is_active,
-    // Defensive `?? {}` keeps the contract stable if a legacy row stored NULL.
-    features: row.features ?? {},
+    features: row.features,
     limits: { seats: row.included_seats ?? null },
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),

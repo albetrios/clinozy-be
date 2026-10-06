@@ -9,7 +9,6 @@ import {
   ChangePlanDto,
   CreateSubscriptionDto,
   subscriptionIdParamsDto,
-  UpdateSubscriptionDto,
 } from './subscription.dto.js';
 
 /**
@@ -71,23 +70,6 @@ export function subscriptionRoutes(service: SubscriptionService): FastifyPluginA
         preHandler: [requireOrganizationPermission(BILLING_PERMISSIONS.SUBSCRIPTION_MANAGE)],
       },
       controller.createSubscription,
-    );
-    zodApplication.patch<{ Params: { subscription_id: string } }>(
-      '/subscriptions/:subscription_id',
-      {
-        config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config },
-        schema: {
-          summary: 'Update subscription',
-          description:
-            'Updates subscription settings (e.g. cancel at period end). Requires SUBSCRIPTION_MANAGE permission.',
-          tags: ['Subscription'],
-          params: subscriptionIdParamsDto,
-          body: UpdateSubscriptionDto,
-        },
-        onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(BILLING_PERMISSIONS.SUBSCRIPTION_MANAGE)],
-      },
-      controller.updateSubscription,
     );
     zodApplication.post<{ Params: { subscription_id: string } }>(
       '/subscriptions/:subscription_id/change-plan',

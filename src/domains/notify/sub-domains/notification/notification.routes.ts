@@ -1,7 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { MODERATE_AUTHED_RATE_LIMIT } from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
-import { rejectLegacyPagePagination } from '@/shared/utils/http/pagination.util.js';
 import type { NotificationService } from './notification.service.js';
 import { createNotificationController } from './notification.controller.js';
 import {
@@ -29,7 +28,6 @@ export function notificationRoutes(service: NotificationService): FastifyPluginA
           querystring: listNotificationsQueryDto,
         },
         onRequest: [app.authenticate],
-        preValidation: [rejectLegacyPagePagination],
       },
       controller.listNotifications,
     );

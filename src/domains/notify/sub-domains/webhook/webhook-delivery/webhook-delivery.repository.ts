@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq, lt } from 'drizzle-orm';
 import {
   type RequestScopedPostgresDatabase,
   assertWorkerDatabaseContext,
@@ -31,6 +31,9 @@ export interface WebhookDeliveryAttemptWithWebhook {
   // use it as the X-Webhook-Delivery-Id header value without exposing the bigserial.
   deliveryAttemptPublicId: string;
   webhookId: number;
+  // Keys the per-webhook outbound circuit breaker — the bigserial would hand a webhook created
+  // after an id restart the open breaker of the one that held its id before.
+  webhookPublicId: string;
   webhookUrl: string;
   encryptedSecret: string;
   eventType: string;
@@ -74,8 +77,8 @@ export async function findOrganizationPublicIdByWebhookId(
  * webhooks → organizations. Used by the event handler to scope the BullMQ enqueue to the
  * correct tenant before the worker reads under RLS.
  */
-export async function findOrganizationPublicIdByDeliveryAttemptId(
-  delivery_attempt_id: number,
+export async function findOrganizationPublicIdByDeliveryAttemptPublicId(
+  delivery_attempt_public_id: string,
   databaseHandle?: RequestScopedPostgresDatabase,
 ): Promise<string | null> {
   const rows = await resolveDatabase(databaseHandle)
@@ -83,28 +86,61 @@ export async function findOrganizationPublicIdByDeliveryAttemptId(
     .from(webhook_delivery_attempts)
     .innerJoin(webhooks, eq(webhook_delivery_attempts.webhook_id, webhooks.id))
     .innerJoin(organizations, eq(webhooks.organization_id, organizations.id))
-    .where(eq(webhook_delivery_attempts.id, delivery_attempt_id))
+    .where(eq(webhook_delivery_attempts.public_id, delivery_attempt_public_id))
     .limit(1);
   return rows[0]?.organizationPublicId ?? null;
 }
 
 /**
- * Marks a delivery attempt as failed when the post-commit BullMQ enqueue fails, so the row
- * does not remain stuck in `PENDING` without a worker job.
+ * Delivery attempts still `PENDING` that were created before `createdBefore`, oldest first, each
+ * with its organization's public id — the reclaim sweep's candidates.
+ *
+ * @remarks
+ * - **Algorithm:** `PENDING` attempts joined to their webhook and organization, ordered by
+ *   `created_at`, capped at `limit`. A worker claims an attempt (`PENDING → SENDING`) as soon as
+ *   its job starts, so an older `PENDING` row lost its job or waits behind a backlog.
+ * - **Failure modes:** throws `WorkerDatabaseContextError` outside the global-retention context —
+ *   under an organization scope RLS would silently return one tenant's rows.
+ * - **Side effects:** none — a read.
+ * - **Notes:** crosses organizations: the attempts', webhooks' and organizations' RLS policies admit
+ *   the maintenance role under `app.global_retention_cleanup`. Attempts of a disabled or deleted
+ *   webhook are included — the delivery worker settles them (`webhook_disabled`).
  */
-export async function markDeliveryAttemptEnqueueFailed(
-  delivery_attempt_id: number,
+export async function findStalePendingDeliveryAttempts(
+  databaseHandle: WorkerDatabaseHandle,
+  options: { createdBefore: Date; limit: number },
+): Promise<Array<{ deliveryAttemptPublicId: string; organizationPublicId: string }>> {
+  assertWorkerDatabaseContext(['global_retention_cleanup']);
+  return databaseHandle
+    .select({
+      deliveryAttemptPublicId: webhook_delivery_attempts.public_id,
+      organizationPublicId: organizations.public_id,
+    })
+    .from(webhook_delivery_attempts)
+    .innerJoin(webhooks, eq(webhook_delivery_attempts.webhook_id, webhooks.id))
+    .innerJoin(organizations, eq(webhooks.organization_id, organizations.id))
+    .where(
+      and(
+        eq(webhook_delivery_attempts.status, 'PENDING'),
+        lt(webhook_delivery_attempts.created_at, options.createdBefore),
+      ),
+    )
+    .orderBy(asc(webhook_delivery_attempts.created_at))
+    .limit(options.limit);
+}
+
+/**
+ * Turns a webhook off after its endpoint answered `410 Gone` — the receiver's way of saying it
+ * will never accept another delivery. Worker-side, under the webhook's organization scope.
+ */
+export async function disableWebhookAfterEndpointGone(
+  webhook_id: number,
   databaseHandle?: RequestScopedPostgresDatabase,
 ): Promise<void> {
   await resolveDatabase(databaseHandle)
-    .update(webhook_delivery_attempts)
-    .set({
-      status: 'FAILED',
-      response_body: 'enqueue_failed',
-      http_status_code: null,
-      next_retry_at: null,
-    })
-    .where(eq(webhook_delivery_attempts.id, delivery_attempt_id));
+    .update(webhooks)
+    .set({ is_enabled: false, updated_at: new Date() })
+    .where(eq(webhooks.id, webhook_id));
 }
 
 /**
@@ -113,7 +149,7 @@ export async function markDeliveryAttemptEnqueueFailed(
  * to that organization.
  */
 export async function findWebhookDeliveryAttemptWithWebhook(
-  deliveryAttemptId: number,
+  delivery_attempt_public_id: string,
   organization_public_id: string,
   databaseHandle?: RequestScopedPostgresDatabase,
 ): Promise<WebhookDeliveryAttemptWithWebhook | null> {
@@ -122,6 +158,7 @@ export async function findWebhookDeliveryAttemptWithWebhook(
       deliveryAttemptId: webhook_delivery_attempts.id,
       deliveryAttemptPublicId: webhook_delivery_attempts.public_id,
       webhookId: webhooks.id,
+      webhookPublicId: webhooks.public_id,
       webhookUrl: webhooks.url,
       encryptedSecret: webhooks.encrypted_secret,
       eventType: webhook_delivery_attempts.event_type,
@@ -137,7 +174,7 @@ export async function findWebhookDeliveryAttemptWithWebhook(
     .innerJoin(organizations, eq(webhooks.organization_id, organizations.id))
     .where(
       and(
-        eq(webhook_delivery_attempts.id, deliveryAttemptId),
+        eq(webhook_delivery_attempts.public_id, delivery_attempt_public_id),
         eq(organizations.public_id, organization_public_id),
       ),
     )
@@ -150,6 +187,7 @@ export async function findWebhookDeliveryAttemptWithWebhook(
     deliveryAttemptId: row.deliveryAttemptId,
     deliveryAttemptPublicId: row.deliveryAttemptPublicId,
     webhookId: row.webhookId,
+    webhookPublicId: row.webhookPublicId,
     webhookUrl: row.webhookUrl,
     encryptedSecret: row.encryptedSecret,
     eventType: row.eventType,
@@ -164,7 +202,8 @@ export async function findWebhookDeliveryAttemptWithWebhook(
 
 /**
  * Insert the canonical `PENDING` delivery-attempt row that {@link emitWebhookDeliveryRequested}
- * publishes through the event bus. Returns the internal id used as the BullMQ payload.
+ * publishes through the event bus. Returns its public id — the BullMQ job id and job payload,
+ * unique across databases (see `enqueueWebhookDelivery`).
  *
  * @remarks
  * sec-N2: when `eventKey` is supplied, persist it and apply
@@ -172,16 +211,17 @@ export async function findWebhookDeliveryAttemptWithWebhook(
  * index `idx_webhook_delivery_attempts_pending_event_key` filters on
  * `status='PENDING' AND event_key IS NOT NULL`, so a re-run of the same logical
  * event (BullMQ retry, transient DB blip) is a no-op against the existing PENDING
- * row instead of fanning out a duplicate signed POST. Calls without `eventKey`
- * keep the plain-insert shape — backward compatible with paths that don't yet
- * have a stable id for the upstream event.
+ * row instead of fanning out a duplicate signed POST. Returns `null` when that row left
+ * `PENDING` between the conflict and the lookup — a worker already claimed it, so the event is
+ * being delivered and there is nothing to enqueue. Events without a stable upstream id
+ * (`eventKey` omitted) always insert a new row.
  */
 export async function createPendingWebhookDeliveryAttempt(input: {
   webhookId: number;
   eventType: string;
   payload: Record<string, unknown>;
   eventKey?: string;
-}): Promise<number> {
+}): Promise<{ publicId: string } | null> {
   const baseValues = {
     webhook_id: input.webhookId,
     event_type: input.eventType,
@@ -199,8 +239,8 @@ export async function createPendingWebhookDeliveryAttempt(input: {
       .onConflictDoNothing({
         target: [webhook_delivery_attempts.webhook_id, webhook_delivery_attempts.event_key],
       })
-      .returning({ id: webhook_delivery_attempts.id });
-    if (rows[0]) return rows[0].id;
+      .returning({ publicId: webhook_delivery_attempts.public_id });
+    if (rows[0]) return rows[0];
     // Conflict path: another inserter already wrote the PENDING row for this
     // (webhook_id, event_key). Look up its id so the caller can enqueue against
     // the existing row instead of dropping the delivery.
@@ -209,7 +249,7 @@ export async function createPendingWebhookDeliveryAttempt(input: {
     // transitions to SENDING/SENT/FAILED. Matching only PENDING here avoids
     // handing a completed-row id back to the caller.
     const existing = await getRequestDatabase()
-      .select({ id: webhook_delivery_attempts.id })
+      .select({ publicId: webhook_delivery_attempts.public_id })
       .from(webhook_delivery_attempts)
       .where(
         and(
@@ -219,12 +259,12 @@ export async function createPendingWebhookDeliveryAttempt(input: {
         ),
       )
       .limit(1);
-    return existing[0]!.id;
+    return existing[0] ?? null;
   }
   const rows = await insertBuilder
     .values(baseValues)
-    .returning({ id: webhook_delivery_attempts.id });
-  return rows[0]!.id;
+    .returning({ publicId: webhook_delivery_attempts.public_id });
+  return rows[0]!;
 }
 
 /** Worker-only — requires an explicit handle from `withAppDatabaseContext`. */
@@ -232,13 +272,15 @@ export function createWorkerWebhookDeliveryQueries(databaseHandle: WorkerDatabas
   assertWorkerDatabaseContext(['organization']);
   return {
     findWebhookDeliveryAttemptWithWebhook: (
-      deliveryAttemptId: number,
+      deliveryAttemptPublicId: string,
       organizationPublicId: string,
     ) =>
       findWebhookDeliveryAttemptWithWebhook(
-        deliveryAttemptId,
+        deliveryAttemptPublicId,
         organizationPublicId,
         databaseHandle,
       ),
+    disableWebhookAfterEndpointGone: (webhookId: number) =>
+      disableWebhookAfterEndpointGone(webhookId, databaseHandle),
   };
 }

@@ -5,6 +5,10 @@ import {
   createRouteStatusObserver,
   isRouteExampleCaptureEnabled,
 } from '@/tests/helpers/route-status-observer.js';
+import {
+  trackResponseSettlement,
+  waitForResponseSettlement,
+} from '@/tests/helpers/response-settlement.helper.js';
 import type { FastifyInstance } from 'fastify';
 import type { InjectOptions } from 'light-my-request';
 
@@ -102,6 +106,7 @@ class TestRequestBuilder implements PromiseLike<TestRequestResponse> {
     }
 
     const response = await this.app.inject(options);
+    await waitForResponseSettlement(this.app);
     let body: unknown;
     if (response.body) {
       try {
@@ -161,6 +166,7 @@ export async function createTestApp(options: CreateTestAppOptions = {}): Promise
   app.addHook('onClose', async () => {
     routeStatusObserver.flush();
   });
+  trackResponseSettlement(app);
   await app.ready();
   return { app, request: createTestRequestAgent(app), registeredRoutes };
 }

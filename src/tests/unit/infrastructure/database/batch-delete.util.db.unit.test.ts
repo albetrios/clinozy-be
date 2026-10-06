@@ -46,7 +46,7 @@ describe('deleteInBatchesByCondition (FK-blocked termination, route-audit A1)', 
       batchSize: 2,
     });
 
-    expect(result).toEqual({ deletedCount: 3, blockedCount: 2 });
+    expect(result).toEqual({ deletedCount: 3, blockedCount: 2, hasMore: false });
     const remaining = await sql<{ id: number }[]>`
       SELECT id FROM batch_delete_loop_parent ORDER BY id
     `;
@@ -64,10 +64,53 @@ describe('deleteInBatchesByCondition (FK-blocked termination, route-audit A1)', 
       batchSize: 2,
     });
 
-    expect(result).toEqual({ deletedCount: 5, blockedCount: 0 });
+    expect(result).toEqual({ deletedCount: 5, blockedCount: 0, hasMore: false });
     const remaining = await sql<{ count: number }[]>`
       SELECT count(*)::int AS count FROM batch_delete_loop_parent
     `;
     expect(remaining[0]?.count).toBe(0);
+  });
+
+  it('skips an FK-blocked row inside the caller transaction instead of aborting the run', async () => {
+    // How every retention worker calls it: inside one retention transaction. A failed statement
+    // there aborted the whole transaction — the per-row fallback then hit SQLSTATE 25P02 and the run
+    // failed, every night, for as long as one row stayed referenced.
+    await sql`INSERT INTO batch_delete_loop_parent (id) VALUES (21),(22),(23),(24)`;
+    await sql`INSERT INTO batch_delete_loop_child (id, parent_id) VALUES (201, 22)`;
+
+    const result = await database.transaction((transaction) =>
+      deleteInBatchesByCondition({
+        databaseHandle: transaction as never,
+        table: parentTable as never,
+        idColumn: parentTable.id as never,
+        whereCondition: drizzleSql`true`,
+        batchSize: 10,
+      }),
+    );
+
+    expect(result).toEqual({ deletedCount: 3, blockedCount: 1, hasMore: false });
+    const remaining = await sql<{ id: number }[]>`
+      SELECT id FROM batch_delete_loop_parent ORDER BY id
+    `;
+    expect(remaining.map((row) => Number(row.id))).toEqual([22]);
+  });
+
+  it('stops at its batch cap and reports that rows remain for the next run', async () => {
+    await sql`INSERT INTO batch_delete_loop_parent (id) VALUES (31),(32),(33),(34),(35)`;
+
+    const result = await deleteInBatchesByCondition({
+      databaseHandle: database as never,
+      table: parentTable as never,
+      idColumn: parentTable.id as never,
+      whereCondition: drizzleSql`true`,
+      batchSize: 2,
+      maxBatches: 2,
+    });
+
+    expect(result).toEqual({ deletedCount: 4, blockedCount: 0, hasMore: true });
+    const remaining = await sql<{ id: number }[]>`
+      SELECT id FROM batch_delete_loop_parent ORDER BY id
+    `;
+    expect(remaining.map((row) => Number(row.id))).toEqual([35]);
   });
 });

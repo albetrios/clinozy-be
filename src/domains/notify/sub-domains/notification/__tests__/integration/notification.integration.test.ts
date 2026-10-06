@@ -64,12 +64,11 @@ describe('Notification Sub-Domain — Integration', () => {
   });
 
   it('returns 200 for authorized notification list', async () => {
-    const { organization, token } = await createAuthorizedContext();
+    const { token } = await createAuthorizedContext();
     const response = await injectAuthenticated(app, {
       method: 'GET',
       url: testApiPath('/notify/notifications'),
       token,
-      organizationPublicId: organization.public_id,
     });
     expect(response.statusCode).toBe(200);
   });
@@ -96,7 +95,6 @@ describe('Notification Sub-Domain — Integration', () => {
         method: 'POST',
         url: testApiPath('/notify/notifications/mark-all-read'),
         token,
-        organizationPublicId: organization.public_id,
       });
 
       // 200 is the method→status policy for POST, enforced by the middleware rewrite — this is
@@ -107,13 +105,12 @@ describe('Notification Sub-Domain — Integration', () => {
     });
 
     it('returns 200 with updated_count 0 when nothing is unread', async () => {
-      const { organization, token } = await createAuthorizedContext();
+      const { token } = await createAuthorizedContext();
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/notify/notifications/mark-all-read'),
         token,
-        organizationPublicId: organization.public_id,
       });
 
       expect(response.statusCode, response.body).toBe(200);
@@ -134,7 +131,6 @@ describe('Notification Sub-Domain — Integration', () => {
         method: 'POST',
         url: testApiPath('/notify/notifications/mark-all-read'),
         token,
-        organizationPublicId: organization.public_id,
       });
 
       expect(response.statusCode, response.body).toBe(200);
@@ -150,13 +146,11 @@ describe('Notification Sub-Domain — Integration', () => {
         method: 'POST',
         url: testApiPath('/notify/notifications/mark-all-read'),
         token,
-        organizationPublicId: organization.public_id,
       });
       const second = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/notify/notifications/mark-all-read'),
         token,
-        organizationPublicId: organization.public_id,
       });
 
       expect((first.json() as { data?: { updated_count?: number } }).data?.updated_count).toBe(1);

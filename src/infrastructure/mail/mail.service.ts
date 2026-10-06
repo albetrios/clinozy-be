@@ -2,7 +2,7 @@ import { Resend } from 'resend';
 import { env } from '@/shared/config/env.config.js';
 import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
 import { buildOutboundCallOptions, outboundCall } from '@/infrastructure/outbound/index.js';
-import { ResendApiError } from '@/infrastructure/mail/resend-api.error.js';
+import { ResendApiError, readResendRetryAfterMs } from '@/infrastructure/mail/resend-api.error.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import { isTransientNetworkError } from '@/infrastructure/resilience/retry-with-backoff.util.js';
@@ -40,7 +40,8 @@ function getClient(): Resend {
  * - **Algorithm:** consumed by `sendEmailViaResend`, which fans `to` into an array
  *   and forwards `tags`/`replyTo` to the Resend SDK after stripping `undefined`.
  * - **Failure modes:** unset `to`/`subject`/`html` is a schema contract violation;
- *   Resend rejects invalid recipients with `ResendApiError` (not retried).
+ *   Resend rejects invalid recipients with a `ResendApiError` per-email rejection (not
+ *   retried, and not counted against the `resend` circuit).
  * - **Side effects:** none — pure data carrier; persistence happens in
  *   `insertMailOutbox`, transport happens in `sendEmail`.
  * - **Notes:** `requestId` is propagated into Resend retry-context and structured
@@ -93,18 +94,17 @@ async function sendEmailViaResend(
 
   if (sendResult.error) {
     logger.error({ error: sendResult.error, recipientCount }, 'mail.send.failed');
-    throw new ResendApiError(
-      typeof sendResult.error === 'object' &&
-        sendResult.error !== null &&
-        'message' in sendResult.error
-        ? String((sendResult.error as { message: string }).message)
-        : 'resend.api_error',
-    );
+    throw new ResendApiError({
+      message: sendResult.error.message || 'resend.api_error',
+      statusCode: sendResult.error.statusCode,
+      resendErrorName: sendResult.error.name,
+      retryAfterMs: readResendRetryAfterMs(sendResult.headers),
+    });
   }
 
   const messageId = sendResult.data?.id;
   if (!messageId) {
-    throw new ResendApiError('resend.missing_message_id');
+    throw new ResendApiError({ message: 'resend.missing_message_id' });
   }
 
   return messageId;
@@ -119,7 +119,9 @@ async function sendEmailViaResend(
  *   500ms base) and forwards an `AbortSignal` so circuit-open or shutdown can
  *   cancel the in-flight HTTP request.
  * - **Failure modes:** `ResendApiError` (4xx / missing `data.id`) is rethrown
- *   without retry; `CircuitBreakerOpenError` propagates so BullMQ retries with
+ *   without retry; a per-email rejection (`isPerEmailRejection` — bad recipient, field or
+ *   attachment) does not count against the circuit, every other Resend error does;
+ *   `CircuitBreakerOpenError` propagates so BullMQ retries with
  *   the custom backoff that defers past the circuit cooldown; transient network
  *   errors (`isTransientNetworkError`) trigger the inner retry loop.
  * - **Side effects:** outbound HTTP to Resend; emits `mail.send.success` /

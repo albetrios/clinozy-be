@@ -9,7 +9,7 @@ describe('Smoke: notify', () => {
     // (has webhook:read) or 403 (lacks it) both prove the route is reachable
     // without a 5xx.
     const { accessToken } = await smokeLogin();
-    await smokeFetch('/api/v1/tenancy/organizations', {
+    await smokeFetch('/api/v1/users/me/organizations', {
       headers: { authorization: `Bearer ${accessToken}` },
       expectStatus: 200,
     });

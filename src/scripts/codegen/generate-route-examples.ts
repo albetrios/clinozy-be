@@ -33,6 +33,8 @@ import {
 } from '@/tests/helpers/route-success-status.helper.js';
 import { ROUTE_COVERAGE_OBSERVED_DIRECTORY_NAME } from '@tooling/route-coverage/constants.js';
 import { ROUTE_EXAMPLES_PATH } from '@tooling/openapi/route-examples/constants.js';
+import { PROJECT_BRAND_NAME } from '@/shared/constants/project-identity.constants.js';
+import { PUBLIC_ID_PREFIXES } from '@/shared/utils/identity/public-id.util.js';
 
 type CapturedExample = { request_body?: unknown; response_body?: unknown };
 type RouteExamples = {
@@ -69,25 +71,21 @@ const SECRET_VALUE_PATTERNS: RegExp[] = [
   /^[A-Fa-f0-9]{32,}$/, // long hex blobs (hashes, raw tokens)
 ];
 
-const KNOWN_PUBLIC_ID_PREFIXES = [
-  'usr',
-  'org',
-  'mem',
-  'inv',
-  'rol',
-  'key',
-  'pol',
-  'ses',
-  'am',
-  'mfa',
-  'ntf',
-  'whk',
-  'pln',
-  'sub',
-  'upl',
-  'exp',
-  'wda',
-];
+/** Every registered public-id prefix (`usr`, `org`, `aud`, …) — the registry, not a copy of it. */
+const KNOWN_PUBLIC_ID_PREFIXES: readonly string[] = Object.values(PUBLIC_ID_PREFIXES);
+
+/**
+ * Fields holding an opaque list cursor. Cursors are encrypted, so each capture mints a different
+ * one; a placeholder keeps the committed examples stable.
+ */
+const CURSOR_FIELD_NAMES = new Set(['next', 'next_cursor', 'after']);
+const OPAQUE_CURSOR_PLACEHOLDER = '<opaque-cursor>';
+
+/**
+ * Stands in for the brand wherever a response echoes it (the passkey relying-party name), so the
+ * committed examples carry no project identity and survive a rebrand unchanged.
+ */
+const BRAND_PLACEHOLDER = 'Example App';
 const PREFIXED_PUBLIC_ID_PATTERN = new RegExp(
   `^(${KNOWN_PUBLIC_ID_PREFIXES.join('|')})_[a-z0-9]{21}$`,
 );
@@ -142,9 +140,7 @@ function resolveI18nKey(value: string): string {
 }
 
 function sanitizeString(value: string): string {
-  // Opaque base64-JSON pagination cursors ("eyJ…", no dots) embed timestamps
-  // and internal ids — normalize before the JWT check (JWTs have dots).
-  if (/^eyJ[A-Za-z0-9+/=_-]{8,}$/.test(value)) return '<opaque-cursor>';
+  if (value === PROJECT_BRAND_NAME) return BRAND_PLACEHOLDER;
   const translated = resolveI18nKey(value);
   if (translated !== value) return translated;
   // Prefixed public ids normalize to a stable per-entity placeholder BEFORE the
@@ -165,6 +161,9 @@ function sanitizeString(value: string): string {
 function sanitize(value: unknown, parentFieldName?: string): unknown {
   if (typeof value === 'string') {
     if (parentFieldName && isSecretFieldName(parentFieldName)) return REDACTED;
+    if (parentFieldName && CURSOR_FIELD_NAMES.has(parentFieldName)) {
+      return OPAQUE_CURSOR_PLACEHOLDER;
+    }
     return sanitizeString(value);
   }
   if (Array.isArray(value)) {

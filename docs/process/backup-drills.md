@@ -21,7 +21,7 @@ Elapsed restore time must be **strictly less than** `RTO_MINUTES × 60` seconds.
 ```mermaid
 flowchart LR
   A[GitHub Environment secrets] --> B["PITR branch from github.ref_name parent"]
-  B --> C[db:migrate + auth integration smoke]
+  B --> C[db:migrate + advance id sequences + auth integration smoke]
   C --> D[restore-drill-rto.json]
   D --> E{elapsed < RTO_MINUTES?}
   E -->|yes| F[Pass + delete branch]
@@ -32,7 +32,7 @@ flowchart LR
 | ---- | ---------------- |
 | **Parent branch** | Neon branch named **`github.ref_name`** (`main` on schedule; selected branch on manual run) |
 | **Branch create** | Child branch from that parent at **15-minute** PITR lookback |
-| **Recovery** | `pnpm db:migrate` + auth integration smoke against the new branch |
+| **Recovery** | `pnpm db:migrate`, then `pnpm db:sequences:advance` (the [DR runbook](dr-runbook.md#advance-the-id-sequences-after-a-restore) step), then auth integration smoke against the new branch — the weekly restore smoke runs the same three |
 | **RTO clock** | Starts at branch creation; ends after smoke passes |
 | **Cleanup** | Ephemeral branch deleted (also has `expires_at` TTL) |
 

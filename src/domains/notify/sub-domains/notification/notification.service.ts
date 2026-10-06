@@ -4,7 +4,6 @@ import {
   withAppDatabaseContext,
   type UserPrincipalDatabaseScope,
 } from '@/infrastructure/database/contexts/database-context.js';
-import { enqueueNotification } from '@/domains/notify/sub-domains/notification/queues/notification.queue.js';
 import { PAGINATION } from '@/shared/constants/pagination.constants.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import type { NotificationRepository } from './notification.repository.js';
@@ -31,19 +30,20 @@ export interface NotificationListServiceOptions {
 }
 
 /**
- * Persists in-app notifications and enqueues delivery for the owning user.
+ * The owning user's in-app notification inbox: list, read state, unread count and delete.
  *
  * @remarks
  * - **Algorithm:** controller-facing methods take the token-minted
  *   {@link UserPrincipalDatabaseScope}, resolve the user public id to an internal id via
  *   {@link UserService}, then run the repository call inside `withAppDatabaseContext` so
  *   Postgres RLS sees the correct identity GUCs; the data-export path
- *   (`listForUserDataExport`, a worker caller) stays on `withAppDatabaseContext (user scope)`. `dispatchNotification` looks up the
- *   organization public id and re-enqueues a notification job for the BullMQ worker.
+ *   (`listForUserDataExport`, a worker caller) stays on `withAppDatabaseContext (user scope)`.
+ *   Creating and dispatching a notification is `createAndDispatchNotification`
+ *   (`notification-dispatch.service.ts`).
  * - **Failure modes:** `UnauthorizedError` for unknown user public ids; repository errors
- *   propagate; `enqueueNotification` failures bubble to the caller.
+ *   propagate.
  * - **Side effects:** Postgres reads/writes against `notify.notifications` (mark-read,
- *   mark-all-read, delete) plus optional BullMQ enqueue from `dispatchNotification`.
+ *   mark-all-read, delete).
  * - **Notes:** `listForUser` takes a {@link NotificationListServiceOptions} object.
  */
 export class NotificationService {
@@ -167,14 +167,5 @@ export class NotificationService {
     // in hand at this point and that redundant invalidation costs one Postgres count at worst.
     if (result) await invalidateCachedUnreadNotificationCount(scope.userPublicId);
     return result;
-  }
-
-  /**
-   * Enqueue async dispatch for a persisted notification row (email / in-app channels).
-   */
-  async dispatchNotification(notificationId: number): Promise<void> {
-    const organizationPublicId =
-      await this.repository.findOrganizationPublicIdByNotificationId(notificationId);
-    await enqueueNotification(notificationId, organizationPublicId);
   }
 }

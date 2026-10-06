@@ -1,5 +1,4 @@
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { parseCursorPaginatedQuery } from '@/shared/utils/http/pagination.util.js';
 import {
   createMemberRoleDto,
   updateMemberRoleDto,
@@ -30,14 +29,9 @@ export function validateUpdateMemberRole(data: unknown): UpdateMemberRoleInput {
 }
 
 /**
- * Validates the `GET /organization/roles` query string, rejecting legacy
- * page-number pagination via {@link ensureCursorOnlyPagination} before parsing
- * against {@link listMemberRolesQueryDto}.
+ * Validates the `GET /organization/roles` query string against the strict
+ * {@link listMemberRolesQueryDto} (cursor pagination only).
  */
 export function validateListMemberRolesQuery(data: unknown): ListMemberRolesQueryInput {
-  return parseCursorPaginatedQuery(
-    listMemberRolesQueryDto,
-    data,
-    'errors:validation.invalidPagination',
-  );
+  return parseWithSchema(listMemberRolesQueryDto, data, 'errors:validation.invalidPagination');
 }

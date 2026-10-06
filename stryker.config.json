@@ -43,7 +43,6 @@
     "src/shared/middlewares/core/idempotency.middleware.ts",
     "src/shared/middlewares/security/api-key-auth.middleware.ts",
     "src/shared/middlewares/core/error-handler.middleware.ts",
-    "src/shared/middlewares/tenant/organization-rls-transaction.middleware.ts",
     "src/shared/middlewares/security/encryption.middleware.ts"
   ],
   "mutator": {

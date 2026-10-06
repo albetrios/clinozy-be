@@ -32,24 +32,24 @@ describe('Integration: transactional mail outbox', () => {
 
   it('defers BullMQ dispatch until flushOnCommit after recordOutboxEmail', async () => {
     enterOnCommitScope();
-    const mailOutboxId = await recordOutboxEmail({
+    const mailOutboxToken = await recordOutboxEmail({
       to: 'deferred@example.com',
       subject: 'Deferred dispatch test',
       html: '<p>Hello</p>',
     });
 
-    eventBus.onCommit(() => dispatchOutboxEmail(mailOutboxId));
+    eventBus.onCommit(() => dispatchOutboxEmail(mailOutboxToken));
     expect(dispatchOutboxEmailMock).not.toHaveBeenCalled();
 
     await eventBus.flushOnCommit();
     expect(dispatchOutboxEmailMock).toHaveBeenCalledOnce();
-    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith(mailOutboxId);
+    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith(mailOutboxToken);
 
     const pendingCount = await countPendingMailOutbox();
     expect(pendingCount).toBeGreaterThanOrEqual(1);
   });
 
-  it('does not persist outbox rows when the request transaction rolls back', async () => {
+  it('does not persist outbox rows when the enclosing transaction rolls back', async () => {
     const email = 'rollback@example.com';
 
     await expect(
@@ -78,16 +78,16 @@ describe('Integration: transactional mail outbox', () => {
     expect(dispatchOutboxEmailMock).not.toHaveBeenCalled();
   });
 
-  it('persists outbox row when the request transaction commits', async () => {
+  it('persists outbox row when the enclosing transaction commits', async () => {
     const email = 'committed@example.com';
-    let mailOutboxId = 0;
+    let mailOutboxToken = '';
 
     await database.transaction(async (transaction) => {
       const databaseHandle = transaction as unknown as RequestScopedPostgresDatabase;
       await organizationRequestDatabaseStorage.run(
         { databaseHandle, organizationPublicId: 'org_commit_test' },
         async () => {
-          mailOutboxId = await recordOutboxEmail({
+          mailOutboxToken = await recordOutboxEmail({
             to: email,
             subject: 'Committed outbox',
             html: '<p>OK</p>',
@@ -99,7 +99,7 @@ describe('Integration: transactional mail outbox', () => {
     const rows = await getOperatorDatabase()
       .select()
       .from(mail_outbox)
-      .where(eq(mail_outbox.id, mailOutboxId));
+      .where(eq(mail_outbox.resend_idempotency_token, mailOutboxToken));
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.status).toBe('pending');

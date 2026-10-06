@@ -66,7 +66,7 @@ describe('Auth Method Sub-Domain — Integration', () => {
   });
 
   describe('POST /api/v1/auth/email/send-code', () => {
-    it('should accept magic link send request', async () => {
+    it('should accept an email code send request', async () => {
       const response = await injectUnauthenticated(app, {
         method: 'POST',
         url: testApiPath('/auth/email/send-code'),

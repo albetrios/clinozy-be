@@ -46,6 +46,7 @@ describe('assertDatabaseTlsVerification', () => {
   it('throws when TLS is enforced and the connection does not verify the server certificate', () => {
     setEnv({
       DATABASE_URL: UNVERIFIED_DATABASE_URL,
+      DATABASE_MAINTENANCE_URL: UNVERIFIED_DATABASE_URL,
       DATABASE_SSL_REJECT_UNAUTHORIZED: false,
       DATABASE_TLS_ENFORCED: true,
     });
@@ -56,6 +57,7 @@ describe('assertDatabaseTlsVerification', () => {
   it('names the offending sslmode in the error so the fix is obvious at boot', () => {
     setEnv({
       DATABASE_URL: UNVERIFIED_DATABASE_URL,
+      DATABASE_MAINTENANCE_URL: UNVERIFIED_DATABASE_URL,
       DATABASE_SSL_REJECT_UNAUTHORIZED: false,
       DATABASE_TLS_ENFORCED: true,
     });
@@ -68,6 +70,7 @@ describe('assertDatabaseTlsVerification', () => {
   it('does not throw when sslmode=verify-full, even with TLS enforced', () => {
     setEnv({
       DATABASE_URL: VERIFIED_DATABASE_URL,
+      DATABASE_MAINTENANCE_URL: VERIFIED_DATABASE_URL,
       DATABASE_SSL_REJECT_UNAUTHORIZED: false,
       DATABASE_TLS_ENFORCED: true,
     });
@@ -78,6 +81,7 @@ describe('assertDatabaseTlsVerification', () => {
   it('accepts DATABASE_SSL_REJECT_UNAUTHORIZED=true as the alternative route to strict verification', () => {
     setEnv({
       DATABASE_URL: UNVERIFIED_DATABASE_URL,
+      DATABASE_MAINTENANCE_URL: UNVERIFIED_DATABASE_URL,
       DATABASE_SSL_REJECT_UNAUTHORIZED: true,
       DATABASE_TLS_ENFORCED: true,
     });
@@ -88,6 +92,7 @@ describe('assertDatabaseTlsVerification', () => {
   it('does not throw on an unverified connection when TLS is not enforced (local / CI)', () => {
     setEnv({
       DATABASE_URL: 'postgres://user:pass@127.0.0.1:5432/app',
+      DATABASE_MAINTENANCE_URL: 'postgres://user:pass@127.0.0.1:5432/app',
       DATABASE_SSL_REJECT_UNAUTHORIZED: false,
       DATABASE_TLS_ENFORCED: false,
     });
@@ -101,6 +106,7 @@ describe('assertDatabaseTlsVerification', () => {
     setEnv({
       NODE_ENV: 'production',
       DATABASE_URL: UNVERIFIED_DATABASE_URL,
+      DATABASE_MAINTENANCE_URL: UNVERIFIED_DATABASE_URL,
       DATABASE_SSL_REJECT_UNAUTHORIZED: false,
       DATABASE_TLS_ENFORCED: false,
     });

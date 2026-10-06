@@ -34,8 +34,9 @@ describe('Railway deploy tooling (policy)', () => {
   });
 
   it('is repo-owned — the deploy path depends on no external repository', () => {
-    expect(deployTool).not.toContain('core-infra');
-    expect(deployWorkflow).not.toContain('core-infra');
+    // No `<stem>-infra` (the sibling infrastructure repository) anywhere on the deploy path.
+    expect(deployTool).not.toMatch(/\b[a-z0-9]+-infra\b/);
+    expect(deployWorkflow).not.toMatch(/\b[a-z0-9]+-infra\b/);
     expect(deployWorkflow).not.toContain('pnpm --dir');
     expect(deployWorkflow).toContain('pnpm tool:railway-deploy-image');
   });

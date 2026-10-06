@@ -73,7 +73,7 @@ describe('Security: Input Validation', () => {
     });
   });
 
-  describe('Magic link validation', () => {
+  describe('Email code validation', () => {
     it('should reject missing email', async () => {
       const response = await injectUnauthenticated(app, {
         method: 'POST',

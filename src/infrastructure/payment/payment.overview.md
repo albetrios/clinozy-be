@@ -4,24 +4,37 @@
 
 ## Purpose
 
-Stripe SDK client wrapper. Owns the singleton Stripe instance, the convenience helpers for customer / subscription / portal session creation, the inbound webhook signature verification, and the `opossum` circuit breaker that protects this process from a degraded Stripe upstream.
+Stripe SDK client wrapper. Owns the singleton Stripe instance, the helpers for customer / subscription /
+portal session creation, and the inbound webhook signature verification. Every Stripe call runs through
+`outboundCall` behind the shared `stripe` circuit (see
+[resilience.overview.md](src/infrastructure/resilience/resilience.overview.md)).
 
-The billing **domain** ([src/domains/billing/](src/domains/billing/)) consumes this module and owns the business logic; this module owns the network primitive.
+The billing **domain** ([src/domains/billing/](src/domains/billing/)) consumes this module and owns the
+business logic; this module owns the network primitive.
 
 ## Design decisions
 
-- **Stripe SDK 17.x** — the latest stable major. Pinned major to avoid silent breaking changes from minor SDK updates.
-- **Circuit breaker via `opossum`**: a Stripe outage shouldn't take this process down. The breaker opens after a threshold of consecutive failures and short-circuits subsequent calls with a known error class, which the controller layer translates to 502.
-- **Network I/O outside RLS contexts**: callers must not invoke Stripe inside `withAppDatabaseContext`. Enforced by `pnpm test:global` (`rls-context-network-isolation.global.test.ts`) and called out as an invariant in [src/domains/billing/sub-domains/subscription/subscription.overview.md](src/domains/billing/sub-domains/subscription/subscription.overview.md).
-- **Webhook signature verification is byte-precise**: the route handler in [src/domains/billing/sub-domains/stripe-webhook/](src/domains/billing/sub-domains/stripe-webhook/) disables JSON parsing on the body so the SDK can verify against the raw bytes.
-- **Idempotency key forwarding**: when the API receives an `X-Idempotency-Key`, this module forwards the same key to Stripe as Stripe's native `Idempotency-Key` header. Stripe's idempotency window is 24 h, which informs the platform's `IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS = 86 400`.
-- **Sentry instrumentation**: every Stripe call is wrapped to record the operation, latency, and error class. PII redaction strips customer email and metadata before sending to Sentry.
+- **Stripe SDK `^23`**, with the API version pinned through the `apiVersion` option so an SDK upgrade
+  doesn't change response shapes.
+- **Errors keep their status meaning** (`stripe-error.util.ts`, `toClientFacingStripeError`): a declined
+  card → 422 `payment_declined`, a missing Stripe resource → 409, a Stripe rate limit, API or connection
+  error → 503 `paymentProviderUnavailable`; an open `stripe` circuit → 503 with `Retry-After`.
+- **Network I/O outside RLS contexts**: callers must not invoke Stripe inside `withAppDatabaseContext`.
+  Enforced by `pnpm test:global` (`rls-context-network-isolation.global.test.ts`) and called out as an
+  invariant in
+  [src/domains/billing/sub-domains/subscription/subscription.overview.md](src/domains/billing/sub-domains/subscription/subscription.overview.md).
+- **Webhook signature verification is byte-precise**: the route in
+  [src/domains/billing/sub-domains/stripe-webhook/](src/domains/billing/sub-domains/stripe-webhook/)
+  captures the raw body so the SDK verifies against the exact bytes.
+- **Idempotency key forwarding**: a mutating call forwards a key derived from the request's
+  `X-Idempotency-Key` as Stripe's native `Idempotency-Key`.
 
 ## Operational concerns
 
-- **Stripe API version pinning**: pin via the `apiVersion` SDK option so SDK upgrades don't change response shape.
-- **Webhook secret rotation**: dual-secret support (when `STRIPE_WEBHOOK_SECRET_NEXT` is configured) lets us rotate without downtime.
-- **Stripe rate limits**: 100 read or 100 write requests per second; exceeding them returns 429 which the breaker treats as a failure.
+- **Webhook secret rotation**: `STRIPE_WEBHOOK_SECRET` takes a comma-separated list; verification tries
+  each secret in turn, so the old and new secret overlap during a rotation.
+- **Stripe rate limits** (100 reads / 100 writes per second) answer 429, which counts as a circuit failure
+  and reaches the client as 503.
 
 ## External dependencies
 
@@ -29,12 +42,12 @@ The billing **domain** ([src/domains/billing/](src/domains/billing/)) consumes t
 
 ## Tuning parameters
 
-- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_WEBHOOK_SECRET_NEXT` (rotation), `STRIPE_API_TIMEOUT_MS`.
-- Circuit breaker thresholds: `STRIPE_CIRCUIT_BREAKER_*` env (when configured).
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (comma-separated for rotation),
+  `STRIPE_WEBHOOK_TOLERANCE_SECONDS`, `STRIPE_HTTP_TIMEOUT_MS`.
+- Circuit thresholds are constants in `circuit-breaker.ts` (no env knobs).
 
 ## Failure modes
 
-- **Stripe API outage** → circuit opens; controllers receive a 502-equivalent error class. Webhook still processes when Stripe recovers and re-delivers.
-- **Stripe rate-limit (429)** → counted as a failure for the breaker; client sees 502 with retry-after.
+- **Stripe API outage** → the circuit opens; user-facing calls answer 503 with `Retry-After`. Webhooks
+  are processed when Stripe re-delivers.
 - **Invalid webhook signature** → 400; Stripe retries.
-- **Webhook secret rotation midstream** → both `STRIPE_WEBHOOK_SECRET` and `STRIPE_WEBHOOK_SECRET_NEXT` are tried in sequence.

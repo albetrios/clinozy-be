@@ -3,17 +3,23 @@
  *
  * Usage:
  *   pnpm tool:dlq-replay -- --list
- *   pnpm tool:dlq-replay -- --list mail-dlq
- *   pnpm tool:dlq-replay -- --replay mail-dlq --job-id dlq-mail-123 --actor-user-public-id usr_xxx [--dry-run]
+ *   pnpm tool:dlq-replay -- --list notification-dlq
+ *   pnpm tool:dlq-replay -- --replay notification-dlq --job-id dlq-notification-ntf_x-attempt-3 --actor-user-public-id usr_xxx [--dry-run]
  *   pnpm tool:dlq-replay -- --replay-all webhook-delivery-dlq --actor-user-public-id usr_xxx [--limit 10] [--dry-run]
  */
+import '@/shared/config/load-env-files.js';
 import { closeDatabase } from '@/infrastructure/database/connection.js';
 import { connectRedis, closeRedis } from '@/infrastructure/cache/redis.client.js';
+import { closeDeadLetterQueues } from '@/infrastructure/queue/dlq/dead-letter.js';
 import {
+  listDeadLetterJobIds,
   listDeadLetterJobs,
   replayDeadLetterJob,
   resolveDeadLetterQueueNames,
 } from '@/infrastructure/queue/dlq/dlq-replay.util.js';
+import { closeNotificationQueue } from '@/domains/notify/sub-domains/notification/queues/notification.queue.js';
+import { closeStripeWebhookQueue } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
+import { closeWebhookDeliveryQueue } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 
 function parseArguments(): {
@@ -90,33 +96,25 @@ async function main(): Promise<void> {
 
   if (parsed.replayAll) {
     for (const name of queueNames) {
-      const queue = await import('bullmq').then((module) => module.Queue);
-      const { getBullMQConnectionOptions } = await import('@/infrastructure/queue/connection.js');
-      const bullQueue = new queue(name, { connection: getBullMQConnectionOptions() });
-      try {
-        const jobs = await bullQueue.getJobs(['waiting', 'failed'], 0, parsed.limit - 1);
-        for (const job of jobs) {
-          // eslint-disable-next-line max-depth -- CLI script with nested job iteration.
-          if (!job.id) continue;
-          const result = await replayDeadLetterJob(
-            omitUndefined({
-              deadLetterQueueName: name,
-              deadLetterJobId: job.id,
-              dryRun: parsed.dryRun,
-              actorUserPublicId: parsed.actorUserPublicId,
-            }),
+      // Read through the pooled, prefixed DLQ client: the bare Queue this used opened the default
+      // key namespace, found nothing, and replayed nothing.
+      const jobIds = await listDeadLetterJobIds({ deadLetterQueueName: name, limit: parsed.limit });
+      for (const jobId of jobIds) {
+        const result = await replayDeadLetterJob(
+          omitUndefined({
+            deadLetterQueueName: name,
+            deadLetterJobId: jobId,
+            dryRun: parsed.dryRun,
+            actorUserPublicId: parsed.actorUserPublicId,
+          }),
+        );
+        if (result.status === 'replayed') {
+          console.log(
+            parsed.dryRun
+              ? `[dry-run] Would replay ${jobId} → ${result.originalQueue}`
+              : `Replayed ${jobId} → ${result.originalQueue}`,
           );
-          // eslint-disable-next-line max-depth -- CLI script with nested job iteration.
-          if (result.status === 'replayed') {
-            console.log(
-              parsed.dryRun
-                ? `[dry-run] Would replay ${job.id} → ${result.originalQueue}`
-                : `Replayed ${job.id} → ${result.originalQueue}`,
-            );
-          }
         }
-      } finally {
-        await bullQueue.close();
       }
     }
     return;
@@ -159,6 +157,14 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
+    // Replays go through each source queue's own producer, and the DLQ through pooled clients —
+    // close them all or their Redis connections keep the process alive.
+    await Promise.allSettled([
+      closeDeadLetterQueues(),
+      closeWebhookDeliveryQueue(),
+      closeNotificationQueue(),
+      closeStripeWebhookQueue(),
+    ]);
     await closeRedis();
     await closeDatabase();
   });

@@ -1,8 +1,4 @@
 import { createHash } from 'node:crypto';
-import {
-  MAINTENANCE_SCOPE,
-  withMaintenanceDatabaseContext,
-} from '@/infrastructure/database/contexts/database-context.js';
 import { gunzipSync } from 'node:zlib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
@@ -12,19 +8,23 @@ import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import {
   AUDIT_EXPORT_MANIFEST_FILENAME,
+  AUDIT_EXPORT_SCHEMA_VERSION,
   type AuditExportManifest,
 } from '@/domains/audit/workers/audit-export.constants.js';
 import { buildManifestKey } from '@/domains/audit/workers/audit-export.processor.js';
 import type * as EnvConfigModule from '@/shared/config/env.config.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
-const { headObjectMock, putObjectBufferMock } = vi.hoisted(() => ({
+const { headObjectMock, putObjectMock } = vi.hoisted(() => ({
   headObjectMock: vi.fn(),
-  putObjectBufferMock: vi.fn(),
+  putObjectMock: vi.fn(),
 }));
 
-vi.mock('@/infrastructure/storage/storage.service.js', () => ({
-  headObject: headObjectMock,
-  putObjectBuffer: putObjectBufferMock,
+vi.mock('@/infrastructure/storage/s3-adapter.js', () => ({
+  getDefaultS3ObjectStorageAdapter: () => ({
+    headObject: headObjectMock,
+    putObject: putObjectMock,
+  }),
 }));
 
 vi.mock('@/shared/config/env.config.js', async (importOriginal) => {
@@ -73,7 +73,7 @@ describe('audit-export.worker — S3 NDJSON export', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     headObjectMock.mockResolvedValue(null);
-    putObjectBufferMock.mockResolvedValue(undefined);
+    putObjectMock.mockResolvedValue(undefined);
     await cleanupDatabase();
   });
 
@@ -84,7 +84,9 @@ describe('audit-export.worker — S3 NDJSON export', () => {
     const { start, dateLabel } = getPreviousUtcDayRange();
     const createdAt = new Date(start.getTime() + 3_600_000);
 
+    const auditPublicId = generatePublicId('auditLog');
     await getOperatorDatabase().insert(logs).values({
+      public_id: auditPublicId,
       organization_id: organization.id,
       actor_user_id: user.id,
       action: 'organization.updated',
@@ -93,26 +95,23 @@ describe('audit-export.worker — S3 NDJSON export', () => {
       created_at: createdAt,
     });
 
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      (databaseHandle) => runAuditExportJob(databaseHandle),
-    );
+    const result = await runAuditExportJob({ lookbackDays: 1 });
 
     expect(result.exportedOrganizations).toBe(1);
     expect(result.skipped).toBe(0);
-    expect(putObjectBufferMock).toHaveBeenCalledTimes(2);
+    expect(putObjectMock).toHaveBeenCalledTimes(2);
 
-    const gzipPut = putObjectBufferMock.mock.calls.find(
+    const gzipPut = putObjectMock.mock.calls.find(
       (call) => call[0]!.contentType === 'application/gzip',
     )![0]!;
     expect(gzipPut.key).toMatch(
       // eslint-disable-next-line security/detect-non-literal-regexp -- pattern built from server-side ids in test fixtures.
       new RegExp(
-        `^audit/export/organization_id=${organization.id}/dt=${dateLabel}/part-.+\\.jsonl\\.gz$`,
+        `^audit/export/organization_public_id=${organization.public_id}/dt=${dateLabel}/part-.+\\.jsonl\\.gz$`,
       ),
     );
     expect(gzipPut.metadata?.format).toBe('ndjson');
-    expect(gzipPut.metadata?.schema_version).toBe('1');
+    expect(gzipPut.metadata?.schema_version).toBe(AUDIT_EXPORT_SCHEMA_VERSION);
     expect(gzipPut.metadata?.export_date).toBe(dateLabel);
     expect(gzipPut.metadata?.row_count).toBe('1');
 
@@ -120,21 +119,30 @@ describe('audit-export.worker — S3 NDJSON export', () => {
     expect(gzipPut.metadata?.sha256).toBe(expectedSha256);
 
     const decompressed = gunzipSync(gzipPut.body).toString('utf8');
-    const parsed = JSON.parse(decompressed.trim().split('\n')[0]!) as {
-      action: string;
-      organization_id: number;
-    };
-    expect(parsed.action).toBe('organization.updated');
-    expect(parsed.organization_id).toBe(organization.id);
+    const parsed = JSON.parse(decompressed.trim().split('\n')[0]!) as Record<string, unknown>;
+    // Public ids only — the archive outlives the database, whose bigserials a restore reissues.
+    expect(parsed).toEqual({
+      id: auditPublicId,
+      organization_id: organization.public_id,
+      actor_user_id: user.public_id,
+      target_user_id: null,
+      action: 'organization.updated',
+      resource_type: 'organization',
+      severity: 'INFO',
+      metadata: {},
+      created_at: createdAt.toISOString(),
+    });
 
-    const manifestPut = putObjectBufferMock.mock.calls.find(
+    const manifestPut = putObjectMock.mock.calls.find(
       (call) => call[0]!.contentType === 'application/json',
     )![0]!;
-    expect(manifestPut.key).toBe(buildManifestKey(organization.id, dateLabel));
+    expect(manifestPut.key).toBe(
+      buildManifestKey({ organizationPublicId: organization.public_id, dateLabel }),
+    );
     const manifest = JSON.parse(manifestPut.body.toString('utf8')) as AuditExportManifest;
-    expect(manifest.schema_version).toBe('1');
+    expect(manifest.schema_version).toBe(AUDIT_EXPORT_SCHEMA_VERSION);
     expect(manifest.export_date).toBe(dateLabel);
-    expect(manifest.organization_id).toBe(organization.id);
+    expect(manifest.organization_public_id).toBe(organization.public_id);
     expect(manifest.objects).toHaveLength(1);
     expect(manifest.objects[0]).toMatchObject({
       key: gzipPut.key,
@@ -157,6 +165,7 @@ describe('audit-export.worker — S3 NDJSON export', () => {
       .insert(logs)
       .values([
         {
+          public_id: generatePublicId('auditLog'),
           organization_id: organizationA.id,
           actor_user_id: user.id,
           action: 'organization.updated',
@@ -164,6 +173,7 @@ describe('audit-export.worker — S3 NDJSON export', () => {
           created_at: createdAt,
         },
         {
+          public_id: generatePublicId('auditLog'),
           organization_id: organizationB.id,
           actor_user_id: user.id,
           action: 'membership.created',
@@ -172,16 +182,13 @@ describe('audit-export.worker — S3 NDJSON export', () => {
         },
       ]);
 
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      (databaseHandle) => runAuditExportJob(databaseHandle),
-    );
+    const result = await runAuditExportJob({ lookbackDays: 1 });
 
     expect(result.exportedOrganizations).toBe(2);
     expect(result.skipped).toBe(0);
-    expect(putObjectBufferMock).toHaveBeenCalledTimes(4);
+    expect(putObjectMock).toHaveBeenCalledTimes(4);
 
-    const gzipKeys = putObjectBufferMock.mock.calls
+    const gzipKeys = putObjectMock.mock.calls
       .filter((call) => call[0]!.contentType === 'application/gzip')
       .map((call) => call[0]!.key);
 
@@ -189,23 +196,27 @@ describe('audit-export.worker — S3 NDJSON export', () => {
       expect.arrayContaining([
         expect.stringMatching(
           // eslint-disable-next-line security/detect-non-literal-regexp -- pattern built from server-side ids in test fixtures.
-          new RegExp(`^audit/export/organization_id=${organizationA.id}/dt=${dateLabel}/part-`),
+          new RegExp(
+            `^audit/export/organization_public_id=${organizationA.public_id}/dt=${dateLabel}/part-`,
+          ),
         ),
         expect.stringMatching(
           // eslint-disable-next-line security/detect-non-literal-regexp -- pattern built from server-side ids in test fixtures.
-          new RegExp(`^audit/export/organization_id=${organizationB.id}/dt=${dateLabel}/part-`),
+          new RegExp(
+            `^audit/export/organization_public_id=${organizationB.public_id}/dt=${dateLabel}/part-`,
+          ),
         ),
       ]),
     );
 
-    const manifestKeys = putObjectBufferMock.mock.calls
+    const manifestKeys = putObjectMock.mock.calls
       .filter((call) => call[0]!.key.endsWith(`/${AUDIT_EXPORT_MANIFEST_FILENAME}`))
       .map((call) => call[0]!.key);
 
     expect(manifestKeys).toEqual(
       expect.arrayContaining([
-        buildManifestKey(organizationA.id, dateLabel),
-        buildManifestKey(organizationB.id, dateLabel),
+        buildManifestKey({ organizationPublicId: organizationA.public_id, dateLabel }),
+        buildManifestKey({ organizationPublicId: organizationB.public_id, dateLabel }),
       ]),
     );
   });
@@ -217,15 +228,21 @@ describe('audit-export.worker — S3 NDJSON export', () => {
     const { start, dateLabel } = getPreviousUtcDayRange();
     const createdAt = new Date(start.getTime() + 3_600_000);
 
-    await getOperatorDatabase().insert(logs).values({
-      organization_id: organization.id,
-      actor_user_id: user.id,
-      action: 'membership.created',
-      resource_type: 'membership',
-      created_at: createdAt,
-    });
+    await getOperatorDatabase()
+      .insert(logs)
+      .values({
+        public_id: generatePublicId('auditLog'),
+        organization_id: organization.id,
+        actor_user_id: user.id,
+        action: 'membership.created',
+        resource_type: 'membership',
+        created_at: createdAt,
+      });
 
-    const manifestKey = buildManifestKey(organization.id, dateLabel);
+    const manifestKey = buildManifestKey({
+      organizationPublicId: organization.public_id,
+      dateLabel,
+    });
     headObjectMock.mockImplementation(async (key: string) => {
       if (key === manifestKey) {
         return { contentType: 'application/json', contentLength: 256 };
@@ -233,14 +250,11 @@ describe('audit-export.worker — S3 NDJSON export', () => {
       return null;
     });
 
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      (databaseHandle) => runAuditExportJob(databaseHandle),
-    );
+    const result = await runAuditExportJob({ lookbackDays: 1 });
 
     expect(result.exportedOrganizations).toBe(0);
     expect(result.skipped).toBe(1);
-    expect(putObjectBufferMock).not.toHaveBeenCalled();
+    expect(putObjectMock).not.toHaveBeenCalled();
     expect(headObjectMock).toHaveBeenCalledWith(manifestKey);
   });
 
@@ -251,20 +265,20 @@ describe('audit-export.worker — S3 NDJSON export', () => {
     const { end } = getPreviousUtcDayRange();
     const todayLogTime = new Date(end.getTime() + 3_600_000);
 
-    await getOperatorDatabase().insert(logs).values({
-      organization_id: organization.id,
-      actor_user_id: user.id,
-      action: 'user.login',
-      resource_type: 'user',
-      created_at: todayLogTime,
-    });
+    await getOperatorDatabase()
+      .insert(logs)
+      .values({
+        public_id: generatePublicId('auditLog'),
+        organization_id: organization.id,
+        actor_user_id: user.id,
+        action: 'user.login',
+        resource_type: 'user',
+        created_at: todayLogTime,
+      });
 
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      (databaseHandle) => runAuditExportJob(databaseHandle),
-    );
+    const result = await runAuditExportJob({ lookbackDays: 1 });
 
     expect(result).toEqual({ exportedOrganizations: 0, skipped: 0 });
-    expect(putObjectBufferMock).not.toHaveBeenCalled();
+    expect(putObjectMock).not.toHaveBeenCalled();
   });
 });

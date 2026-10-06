@@ -1,5 +1,8 @@
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
-import { webhooks } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
+import {
+  webhook_delivery_attempts,
+  webhooks,
+} from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { encryptFieldSecret } from '@/shared/utils/security/field-secret-encryption.util.js';
 
@@ -31,4 +34,37 @@ export async function createTestWebhook(options: CreateWebhookOptions) {
     })
     .returning();
   return webhook!;
+}
+
+export interface CreateWebhookDeliveryAttemptOptions {
+  webhookId: number;
+  eventType?: string;
+  payload?: Record<string, unknown>;
+  status?: 'PENDING' | 'SENDING' | 'SENT' | 'FAILED';
+  attemptCount?: number;
+}
+
+/**
+ * Create a webhook delivery attempt row (PENDING, no attempts yet, by default) — the row a
+ * delivery job is enqueued for. Returns the internal id (for direct row reads) and the public id
+ * (the job's handle).
+ */
+export async function createTestWebhookDeliveryAttempt(
+  options: CreateWebhookDeliveryAttemptOptions,
+): Promise<{ id: number; publicId: string }> {
+  const [attempt] = await getOperatorDatabase()
+    .insert(webhook_delivery_attempts)
+    .values({
+      public_id: generatePublicId('webhookDeliveryAttempt'),
+      webhook_id: options.webhookId,
+      event_type: options.eventType ?? 'webhook.test',
+      payload: options.payload ?? { hello: 'world' },
+      status: options.status ?? 'PENDING',
+      attempt_count: options.attemptCount ?? 0,
+    })
+    .returning({
+      id: webhook_delivery_attempts.id,
+      publicId: webhook_delivery_attempts.public_id,
+    });
+  return attempt!;
 }

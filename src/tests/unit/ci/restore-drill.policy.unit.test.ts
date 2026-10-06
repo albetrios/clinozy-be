@@ -41,4 +41,23 @@ describe('restore drill automation policy', () => {
     expect(script).not.toContain('NEON_PARENT_BRANCH_ID');
     expect(script).not.toContain('DATABASE_URL_FOR_MONTHLY');
   });
+
+  it('advances the id sequences between migrating and the smoke, as the DR runbook does', () => {
+    const runbook = readFileSync(join(ROOT, 'docs/process/dr-runbook.md'), 'utf8');
+    expect(runbook).toContain('pnpm db:sequences:advance');
+
+    for (const workflowFileName of [
+      'scheduled-monthly-restore-rto.yml',
+      'scheduled-weekly-restore-smoke.yml',
+    ]) {
+      const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
+      const migrateIndex = workflow.indexOf('run: pnpm db:migrate');
+      const advanceIndex = workflow.indexOf('run: pnpm db:sequences:advance');
+      const smokeIndex = workflow.indexOf('run: pnpm test:integration');
+
+      expect(migrateIndex, workflowFileName).toBeGreaterThan(-1);
+      expect(advanceIndex, workflowFileName).toBeGreaterThan(migrateIndex);
+      expect(smokeIndex, workflowFileName).toBeGreaterThan(advanceIndex);
+    }
+  });
 });

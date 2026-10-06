@@ -6,6 +6,7 @@ export {
 } from '@/infrastructure/outbound/outbound-call.js';
 export {
   outboundFetch,
+  outboundFetchJson,
   buildOutboundFetchOptions,
   type OutboundFetchOptions,
   type OutboundFetchImplementation,

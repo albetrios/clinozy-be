@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
   injectAuthenticated,
-  injectAuthenticatedOrganizationMutation,
   injectUnauthenticated,
 } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -139,7 +138,7 @@ describe('Tenancy Organization Settings Sub-Domain — Integration', () => {
         organizationPublicId: updateContext.organization.public_id,
       });
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PATCH',
         url: ORGANIZATION_SETTINGS_PATH,
         token: readOnlyToken,
@@ -154,7 +153,7 @@ describe('Tenancy Organization Settings Sub-Domain — Integration', () => {
         TENANCY_PERMISSIONS.ORGANIZATION_UPDATE,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PATCH',
         url: ORGANIZATION_SETTINGS_PATH,
         token,
@@ -169,7 +168,7 @@ describe('Tenancy Organization Settings Sub-Domain — Integration', () => {
         TENANCY_PERMISSIONS.ORGANIZATION_UPDATE,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PATCH',
         url: ORGANIZATION_SETTINGS_PATH,
         token,
@@ -184,7 +183,7 @@ describe('Tenancy Organization Settings Sub-Domain — Integration', () => {
         TENANCY_PERMISSIONS.ORGANIZATION_UPDATE,
       ]);
 
-      const response = await injectAuthenticatedOrganizationMutation(app, {
+      const response = await injectAuthenticated(app, {
         method: 'PATCH',
         url: ORGANIZATION_SETTINGS_PATH,
         token,
@@ -214,7 +213,7 @@ describe('Tenancy Organization Settings Sub-Domain — Integration', () => {
         { authenticationMethods: [MFA_AUTHENTICATION_METHOD] },
       );
 
-      const first = await injectAuthenticatedOrganizationMutation(app, {
+      const first = await injectAuthenticated(app, {
         method: 'PATCH',
         url: ORGANIZATION_SETTINGS_PATH,
         token,
@@ -222,7 +221,7 @@ describe('Tenancy Organization Settings Sub-Domain — Integration', () => {
       });
       expect(first.statusCode).toBe(200);
 
-      const second = await injectAuthenticatedOrganizationMutation(app, {
+      const second = await injectAuthenticated(app, {
         method: 'PATCH',
         url: ORGANIZATION_SETTINGS_PATH,
         token,

@@ -1,4 +1,6 @@
-import { pgRole, pgSchema } from 'drizzle-orm/pg-core';
+import { type SQL, sql } from 'drizzle-orm';
+import { pgSchema } from 'drizzle-orm/pg-core';
+import { DATABASE_MAINTENANCE_ROLE } from '@/shared/constants/project-identity.constants.js';
 
 /**
  * Shared Postgres schema definitions.
@@ -6,7 +8,7 @@ import { pgRole, pgSchema } from 'drizzle-orm/pg-core';
  * when schemas reference tables across domains.
  */
 
-/** Drizzle handle for the Postgres `auth` schema — magic-link tokens, sessions, MFA, mail outbox. */
+/** Drizzle handle for the Postgres `auth` schema — verification tokens, sessions, MFA, mail outbox. */
 export const authSchema = pgSchema('auth');
 /** Drizzle handle for the Postgres `tenancy` schema — organizations, memberships, roles, API keys. */
 export const tenancySchema = pgSchema('tenancy');
@@ -19,9 +21,26 @@ export const auditSchema = pgSchema('audit');
 /** Drizzle handle for the Postgres `upload` schema — S3 upload metadata + tombstone retention. */
 export const uploadSchema = pgSchema('upload');
 
+/** The `app.*` GUC each GUC-backed maintenance kind arms — the selector of one RLS bypass arm. */
+export type MaintenanceBypassGuc =
+  | 'app.global_retention_cleanup'
+  | 'app.session_retention_cleanup'
+  | 'app.global_admin'
+  | 'app.system_audit_insert'
+  | 'app.audit_outbox_drain';
+
 /**
- * Drizzle reference to the unprivileged application role used by RLS policies.
- * Migrations and tests `SET LOCAL ROLE clinozy_be_app` to assert tenant isolation
- * against the same role the runtime uses.
+ * An RLS bypass arm for a `pgPolicy` predicate: open only while `guc` is `'true'` AND the
+ * connection acts as the maintenance role ({@link DATABASE_MAINTENANCE_ROLE}).
+ *
+ * @remarks
+ * The role condition makes bypass authority a property of the maintenance CONNECTION
+ * (`DATABASE_MAINTENANCE_URL`): any other role that sets the GUC opens nothing. Mirrors
+ * migration `20261005170000_bind_bypass_arms_to_maintenance_role.sql`, which the
+ * rls-table-scope-map suite pins against `pg_policies`.
  */
-export const clinozyBeAppRole = pgRole('clinozy_be_app');
+export function maintenanceBypassArm(guc: MaintenanceBypassGuc): SQL {
+  return sql.raw(
+    `(current_setting('${guc}', true) = 'true' AND current_user = '${DATABASE_MAINTENANCE_ROLE}')`,
+  );
+}

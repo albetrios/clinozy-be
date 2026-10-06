@@ -17,15 +17,14 @@ function isAbsoluteHttpUrl(value: string): boolean {
  *
  * @remarks
  * - **Algorithm:** `null`/empty → `null`; an absolute http(s) value (an external
- *   OAuth-provider avatar, or a legacy row that stored a public URL before this
- *   change) is returned as-is; otherwise the value is treated as a private object
+ *   OAuth-provider avatar) is returned as-is; otherwise the value is a private object
  *   key and a short-lived presigned GET URL is minted via
  *   {@link ObjectStoragePort.createPresignedDownloadUrl}.
  * - **Failure modes:** propagates storage presign errors to the caller.
  * - **Side effects:** none beyond the (network-free) presign signature.
- * - **Notes:** external/legacy absolute URLs are intentionally NOT re-signed so
- *   provider avatars keep working and legacy public logos remain readable until the
- *   asset is re-uploaded (which then stores a key).
+ * - **Notes:** an external absolute URL is intentionally NOT re-signed so OAuth-provider
+ *   avatars keep working; uploaded media (avatars and organization logos) always stores
+ *   the object key.
  */
 export async function resolveStoredMediaReadUrl(
   objectStorage: ObjectStoragePort,

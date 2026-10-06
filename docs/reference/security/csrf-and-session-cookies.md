@@ -53,7 +53,7 @@ Routes that set or clear the cookie include login, email verification-code verif
 
 The `session_id` cookie value is `<session public id>.<refresh secret>`. Every refresh rotates the secret; the previous one stays accepted for a short grace window so concurrent tabs do not trip reuse detection.
 
-Each secret is `<random>~<mac>`: 32 random bytes plus an HMAC that binds them to the session's user (key derived from `SECRETS_ENCRYPTION_KEY`; `generateRefreshSecret` / `isIssuedRefreshSecret` in `auth.http.util.ts`). The MAC is what makes reuse detection safe:
+Each secret is `<random>~<mac>`: 32 random bytes plus an HMAC that binds them to the session's user by public id (key derived from `SECRETS_ENCRYPTION_KEY`; `generateRefreshSecret` / `isIssuedRefreshSecret` in `auth.http.util.ts`). The stored hash of the previous secret is a second proof of issuance — it still holds after a key rotation invalidates the MACs. The MAC is what makes reuse detection safe:
 
 - A secret the server **issued** that no longer rotates — its MAC verifies, or it is the session's stored previous secret — is a replay of a retired, possibly stolen secret. The user's whole session family is revoked (RFC 9700 reuse detection).
 - A secret the server **did not issue** proves nothing: anyone who learns a session id (a stolen bearer can list them) could invent one. It gets a plain `401` — no session is revoked and no token cache is touched. Destructive session actions stay behind the strong step-up of the explicit session-revocation routes.

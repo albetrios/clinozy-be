@@ -14,6 +14,7 @@ import {
   createOpaqueCursorFromRow,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import type { AuditLogFilters, NewAuditLog } from './audit.types.js';
 
 /**
@@ -70,7 +71,9 @@ function buildAuditFilterConditions(filters: AuditLogFilters): SQL[] {
  */
 export class AuditRepository {
   async insert(entry: NewAuditLog): Promise<void> {
-    await getRequestDatabase().insert(logs).values(entry);
+    await getRequestDatabase()
+      .insert(logs)
+      .values({ ...entry, public_id: generatePublicId('auditLog') });
   }
 
   /**
@@ -100,16 +103,11 @@ export class AuditRepository {
      * sec-U12: bind the cursor to its minting filter set. An admin paginating
      * `?actor_user_id=A&after=<cursor>` cannot replay the cursor against
      * `?actor_user_id=B` — the SHA-256 fingerprint baked into the cursor at
-     * mint time must match the current request, or the cursor is refused.
-     * The first page (no cursor) and legacy unbound cursors (no fingerprint —
-     * none exist today, but the field is optional so the schema is
-     * forward-compatible for any other repo that hasn't opted in) both
-     * bypass the check.
+     * mint time must match the current request, or the cursor is refused. Every
+     * audit cursor carries one, so a cursor without it (minted by another list)
+     * is refused too.
      */
-    if (
-      parsedCursor?.filter_fingerprint !== undefined &&
-      parsedCursor.filter_fingerprint !== filterFingerprint
-    ) {
+    if (parsedCursor !== null && parsedCursor.filter_fingerprint !== filterFingerprint) {
       throw new ValidationError('errors:validation.invalidPagination');
     }
 

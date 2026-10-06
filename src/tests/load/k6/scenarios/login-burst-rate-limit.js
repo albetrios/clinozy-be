@@ -22,15 +22,14 @@ import { API_PREFIX, SCENARIOS, PUBLIC_AUTH_FORM_HEADERS } from '../helpers/conf
  * Deliberately NOT in the nightly SLO gate: its residue (per-IP window) could
  * bleed into gated login scenarios; run it on demand via `pnpm load:login-burst`.
  *
- * Env awareness: `RATE_LIMIT_RELAXED_CAPS=true` (local development / the test
- * harness) lifts the strict cap to 5000/window, so a local burst legitimately
- * sees zero 429s — set `EXPECT_RATE_LIMIT=false` there. Against a hardened
- * (production-shaped) target the default applies: the limiter MUST engage.
+ * Two limiters can answer the 429, so it engages on every target: the strict
+ * route cap (5/window, lifted to 5000 by `RATE_LIMIT_RELAXED_CAPS=true` locally)
+ * and the per-IP failed-login throttle (IP_FAILED_LOGIN_THRESHOLD failures per
+ * 15 minutes), which no env flag relaxes. The latter then refuses EVERY login from
+ * this IP — the demo user's included — until its window ends.
  */
 const rateLimitedResponses = new Counter('rate_limited_responses');
 const serverErrorResponses = new Counter('server_error_responses');
-
-const expectLimiterToEngage = (__ENV.EXPECT_RATE_LIMIT || 'true') === 'true';
 
 export const options = {
   scenarios: {
@@ -42,10 +41,8 @@ export const options = {
     },
   },
   thresholds: {
-    // Hardened target: the limiter must engage at least once during the burst.
-    // Relaxed-caps target (EXPECT_RATE_LIMIT=false): only prove it never 429s
-    // into 5xx territory — count stays informational.
-    rate_limited_responses: [expectLimiterToEngage ? 'count>0' : 'count>=0'],
+    // A limiter must engage at least once during the burst.
+    rate_limited_responses: ['count>0'],
     // The surface must never crumble into 5xx under brute force.
     server_error_responses: ['count==0'],
     checks: ['rate>0.99'],

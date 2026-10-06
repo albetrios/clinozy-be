@@ -21,10 +21,6 @@
   "GET /api/v1/billing/subscriptions/:subscription_id/payment-setup": {
     "model": "organization"
   },
-  "PATCH /api/v1/billing/subscriptions/:subscription_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
   "POST /api/v1/billing/subscriptions/:subscription_id/cancel": {
     "model": "organization",
     "verifyNoMutation": true

@@ -74,7 +74,7 @@ describe('OpenAPI X-Idempotency-Key header parameter', () => {
   });
 
   it('keeps the header optional on a mutating write that is not idempotency-required', () => {
-    const header = idempotencyHeaderFor('PATCH /api/v1/billing/subscriptions/{subscription_id}');
+    const header = idempotencyHeaderFor('PATCH /api/v1/notify/webhooks/{webhook_id}');
     expect(header).toBeDefined();
     expect(header?.required).toBe(false);
   });

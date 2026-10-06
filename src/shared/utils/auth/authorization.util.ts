@@ -3,7 +3,10 @@ import { resolveUserOrganizationPermissions } from '@/domains/tenancy/sub-domain
 import { organizationRequiresMfa } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-mfa-policy.js';
 import type { GlobalRole } from '@/shared/constants/roles.constants.js';
 import { ForbiddenError, UnauthorizedError } from '@/shared/errors/index.js';
-import { recordScopedAuditEvent } from '@/shared/utils/infrastructure/audit-request-context.util.js';
+import {
+  buildAuditActorFields,
+  recordScopedAuditEvent,
+} from '@/shared/utils/infrastructure/audit-request-context.util.js';
 
 /**
  * Best-effort emit `auth.permission.denied` audit row before throwing
@@ -11,20 +14,22 @@ import { recordScopedAuditEvent } from '@/shared/utils/infrastructure/audit-requ
  * authenticated rate-limit middleware, so no bespoke per-(user, route)
  * throttle is added here. The audit write is awaited (so it lands before
  * the 403 reaches the client) but failures are swallowed — the
- * `ForbiddenError` path is unchanged. The `auditDomain` decorator is
- * optional-chained so callers without it (early-boot / unit tests) still
- * deny correctly.
+ * `ForbiddenError` path is unchanged. A server without the audit domain
+ * (a unit test's fake request) is handled by {@link recordScopedAuditEvent},
+ * which logs and returns, so the deny path is the same either way.
  */
 async function emitPermissionDenyAudit(
   request: FastifyRequest,
   metadata: Record<string, unknown>,
 ): Promise<void> {
-  if (!request.server?.auditDomain?.auditService) return;
   const auth = request.auth;
-  const actorUserPublicId = auth?.kind === 'user' ? auth.userId : undefined;
+  // Every caller answers an unauthenticated request with 401 first, so `auth` is always set here.
+  if (!auth) return;
   try {
     await recordScopedAuditEvent(request, {
-      actorUserPublicId,
+      // A user is recorded as the user, an API key denied a scope as the key. Key denials used to
+      // carry no actor, and the audit service dropped every one of those rows.
+      ...buildAuditActorFields(auth),
       action: 'auth.permission.denied',
       resource_type: 'route',
       severity: 'WARNING',
@@ -113,48 +118,28 @@ export function requireRole(
  * Looks up: user -> membership -> role -> role_permissions
  *
  * @param permissionCode - The permission code to check (use domain constants, never bare strings)
- * @param paramName - Vestigial route-param fallback (default: 'organization_id'). After the route
- *   flatten no route carries an `{organization_id}` segment, so the organization is resolved from the token
- *   claim; the param lookup is retained only as a defensive fallback and is normally a no-op.
  *
  * Usage:
  *   { preHandler: [app.authenticate, requireOrganizationPermission(TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE)] }
  */
 export function requireOrganizationPermission(
   permissionCode: string,
-  paramName = 'organization_id',
 ): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
   return async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
     const auth = request.auth;
     if (!auth) throw new UnauthorizedError();
 
-    const params = request.params as Record<string, string>;
-    // Organization scope source: the signed `org` token claim (`auth.organizationPublicId`) — no
-    // route carries an `{organization_id}` path param post-flatten, so the param lookup below is a
-    // vestigial fallback that is normally undefined. The claim is scope, not authority: membership
-    // is still verified below (and RLS re-checked per request). Kept aligned with
-    // `resolveActiveOrganizationId` so authz and the data/RLS scope can never diverge.
-    // eslint-disable-next-line security/detect-object-injection -- paramName is a function argument with a typed default.
-    const organizationId = params[paramName] ?? auth.organizationPublicId;
+    // The organization is the signed `org` token claim — the same source `requireOrganizationScope`
+    // hands the controller, so authz and the data/RLS scope cannot diverge. The claim is scope, not
+    // authority: membership is verified below (and RLS re-checked per request).
+    const organizationId = auth.organizationPublicId;
     if (!organizationId) {
       throw new ForbiddenError('errors:organizationContextRequired');
     }
 
     if (auth.kind === 'apiKey') {
-      // Fail closed: an API-key principal is pinned to exactly one organization and it must equal
-      // the route's organization. The union guarantees a non-empty organizationPublicId + scopes,
-      // so a key scoped to another organization (or lacking the permission) is rejected here.
-      if (auth.organizationPublicId !== organizationId) {
-        await emitPermissionDenyAudit(
-          request,
-          buildDenyMetadata(request, {
-            deny_reason: 'api_key_organization_mismatch',
-            permission_code: permissionCode,
-            requested_organization_id: organizationId,
-          }),
-        );
-        throw new ForbiddenError('errors:insufficientOrganizationPermissions');
-      }
+      // An API key is pinned to the one organization it was minted in (its claim above); fail
+      // closed when its scopes lack the permission.
       if (!auth.apiKeyScopes.includes(permissionCode)) {
         await emitPermissionDenyAudit(
           request,

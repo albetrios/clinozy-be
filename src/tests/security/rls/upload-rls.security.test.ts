@@ -11,6 +11,7 @@ import {
   executeAsClinozyBeAppTenant,
   executeAsClinozyBeAppUser,
 } from '@/tests/helpers/rls-matrix.helper.js';
+import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
 /** Flattens an error and its `.cause` chain to one string so the postgres SQLSTATE is matchable. */
 function flattenErrorChain(error: unknown): string {
@@ -110,7 +111,7 @@ describe('Security: Upload RLS', () => {
     });
 
     const visibleForA = await database.transaction(async (transaction) => {
-      await transaction.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+      await setLocalApplicationRole(transaction);
       await transaction.execute(
         drizzleSql`SELECT set_config('app.current_organization_public_id', ${organizationA.public_id}, true)`,
       );
@@ -124,7 +125,7 @@ describe('Security: Upload RLS', () => {
     expect(visibleForA[0]?.public_id).toBe(uploadPublicIdA);
 
     const crossTenantAttempt = await database.transaction(async (transaction) => {
-      await transaction.execute(drizzleSql`SET LOCAL ROLE clinozy_be_app`);
+      await setLocalApplicationRole(transaction);
       await transaction.execute(
         drizzleSql`SELECT set_config('app.current_organization_public_id', ${organizationA.public_id}, true)`,
       );

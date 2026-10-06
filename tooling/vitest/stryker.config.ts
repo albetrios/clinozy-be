@@ -43,6 +43,9 @@ export default defineConfig({
     alias: {
       '@': resolve(projectRoot, 'src'),
       '@tooling': resolve(projectRoot, 'tooling'),
+      // Stryker forces the `threads` pool; the real package's native CPU-profiler addon crashes
+      // the run when the pool unloads it with its worker threads (see the stub's @remarks).
+      '@sentry/profiling-node': resolve(configurationDirectory, 'sentry-profiling-node.stub.ts'),
     },
   },
 });

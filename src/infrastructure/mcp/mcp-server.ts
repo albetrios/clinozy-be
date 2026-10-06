@@ -221,9 +221,8 @@ export function createMcpServer(options: CreateMcpServerOptions, sdk: McpSdk): M
         // Strip headers that could override authentication, session identity, or tenant context.
         // The MCP endpoint itself is admin-authenticated; the injected sub-request must not be
         // able to impersonate a different principal or pivot tenant context via caller-supplied
-        // header overrides. route-#8 hardening kept even though the API no longer reads x-organization-id, so a
-        // caller must not be able to set it on the proxied sub-request; the sub-request derives
-        // its organization the same way every other request does.
+        // header overrides; the sub-request derives its organization from the token claim like
+        // every other request (route-#8).
         const BLOCKED_HEADERS = new Set([
           'authorization',
           'cookie',
@@ -231,7 +230,6 @@ export function createMcpServer(options: CreateMcpServerOptions, sdk: McpSdk): M
           'x-csrf-token',
           'x-forwarded-for',
           'x-real-ip',
-          'x-organization-id',
         ]);
         const safeHeaders: Record<string, string> = {};
         for (const [key, value] of Object.entries(data.headers ?? {})) {

@@ -74,7 +74,9 @@ describe('session cookie value (property)', () => {
 describe('CSRF and refresh-secret generators (property)', () => {
   it('emits URL-safe base64url of the expected length, with no collisions across a batch', () => {
     const csrfTokens = Array.from({ length: 200 }, () => generateCsrfToken());
-    const refreshSecrets = Array.from({ length: 200 }, () => generateRefreshSecret({ userId: 7 }));
+    const refreshSecrets = Array.from({ length: 200 }, () =>
+      generateRefreshSecret({ userPublicId: 'user_property' }),
+    );
 
     for (const value of csrfTokens) {
       // 32 random bytes → 43 base64url chars, alphabet [A-Za-z0-9_-] — cookie- and URL-safe

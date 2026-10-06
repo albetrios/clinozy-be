@@ -72,15 +72,13 @@ describe('PlanService', () => {
     expect(plan.limits).toEqual({ seats: 25 });
   });
 
-  it('REQ-4: a null included_seats maps to limits.seats=null (unlimited) and missing features → {}', async () => {
+  it('REQ-4: a null included_seats maps to limits.seats=null (unlimited)', async () => {
     vi.mocked(repository.findByPublicId).mockResolvedValue({
       ...planRow,
       included_seats: null,
-      features: null,
     } as never);
     const plan = await service.getByPublicId('plan_public');
     expect(plan.limits).toEqual({ seats: null });
-    expect(plan.features).toEqual({});
   });
 
   it('getByPublicId maps null description values', async () => {

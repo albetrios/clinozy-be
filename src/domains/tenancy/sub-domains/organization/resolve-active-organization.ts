@@ -156,6 +156,15 @@ export async function resolvePersonalOrganization(
 }
 
 /**
+ * The user whose personal organization is resolved or provisioned: the internal id scopes the
+ * queries, the public id is what logs carry.
+ */
+export interface PersonalOrganizationOwner {
+  id: number;
+  public_id: string;
+}
+
+/**
  * Resolve the caller's PERSONAL organization, **self-healing** on a miss: when
  * `PERSONAL_ORGANIZATION_ENABLED` is true and the user has no personal organization,
  * provision it on demand and return it. This closes the gap left by best-effort
@@ -182,17 +191,17 @@ export async function resolvePersonalOrganization(
  *   disabled.
  */
 export async function ensurePersonalOrganization(
-  ownerUserInternalId: number,
+  owner: PersonalOrganizationOwner,
 ): Promise<{ id: number; public_id: string } | undefined> {
-  const existing = await resolvePersonalOrganization(ownerUserInternalId);
+  const existing = await resolvePersonalOrganization(owner.id);
   if (existing) return existing;
   if (!env.PERSONAL_ORGANIZATION_ENABLED) return undefined;
 
   try {
-    const provisioned = await provisionPersonalOrganization(ownerUserInternalId);
+    const provisioned = await provisionPersonalOrganization(owner.id);
     logger.info(
       {
-        userInternalId: ownerUserInternalId,
+        userPublicId: owner.public_id,
         organizationPublicId: provisioned.organization.public_id,
       },
       'personal_organization.self_heal.provisioned',
@@ -204,10 +213,10 @@ export async function ensurePersonalOrganization(
   } catch (error) {
     // A concurrent self-heal (or signup-time provision) may have won the race; the partial
     // unique index makes the second insert fail. Re-resolve and return the winner's row.
-    const afterRace = await resolvePersonalOrganization(ownerUserInternalId);
+    const afterRace = await resolvePersonalOrganization(owner.id);
     if (afterRace) return afterRace;
     logger.error(
-      { err: error, userInternalId: ownerUserInternalId },
+      { err: error, userPublicId: owner.public_id },
       'personal_organization.self_heal.failed',
     );
     throw error;
@@ -232,18 +241,18 @@ export async function ensurePersonalOrganization(
  *   error to the HTTP response.
  */
 export async function ensurePersonalOrganizationPublicId(
-  ownerUserInternalId: number,
+  owner: PersonalOrganizationOwner,
 ): Promise<string | undefined> {
   try {
-    return (await ensurePersonalOrganization(ownerUserInternalId))?.public_id;
+    return (await ensurePersonalOrganization(owner))?.public_id;
   } catch (error) {
     // Never let a self-heal failure break the read. Fall back to whatever already exists
     // (typically none → undefined → the caller reports null). ensurePersonalOrganization
     // already logged the failure at error level.
     logger.warn(
-      { err: error, userInternalId: ownerUserInternalId },
+      { err: error, userPublicId: owner.public_id },
       'personal_organization.self_heal.read_degraded',
     );
-    return (await resolvePersonalOrganization(ownerUserInternalId))?.public_id;
+    return (await resolvePersonalOrganization(owner.id))?.public_id;
   }
 }

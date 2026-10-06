@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { isLocalDatabaseUrl } from '@/infrastructure/database/utils/connection-url.util.js';
 import { PROJECT_SLUG } from '@/shared/constants/project-identity.constants.js';
 
 type LockHolder = { pid: number; startedAt: string; command: string };
@@ -10,16 +11,35 @@ type LockHolder = { pid: number; startedAt: string; command: string };
 let lockPathHeldByThisProcess: string | null = null;
 
 /**
- * Lock path, keyed on the database this run will use.
+ * The physical database a URL reaches: `local/<database>` for this machine's Postgres — whatever
+ * the login, loopback spelling or port (the chaos suite reaches it through the Toxiproxy port) —
+ * else `<host>:<port>/<database>`.
+ */
+function describeDatabaseTarget(databaseUrl: string | undefined): string {
+  if (!databaseUrl) return 'unset';
+  try {
+    const url = new URL(databaseUrl);
+    const database = url.pathname.replace(/^\//, '');
+    if (isLocalDatabaseUrl(databaseUrl)) return `local/${database}`;
+    return `${url.hostname.toLowerCase()}:${url.port || '5432'}/${database}`;
+  } catch {
+    return databaseUrl;
+  }
+}
+
+/**
+ * Lock path, keyed on the physical database this run will use.
  *
  * @remarks
  * Two runs against two DIFFERENT databases cannot corrupt each other, so they must not block
- * each other either — keying on the URL is what keeps this from being a nuisance. The hash keeps
- * credentials out of a world-readable filename in the shared temp directory.
+ * each other either. Keyed on the database a URL reaches rather than the URL itself: the main
+ * suite, the chaos suite (through the Toxiproxy port) and every worktree checkout reach this
+ * machine's one test database with different logins and ports, and a URL key gave each its own
+ * lock. The hash keeps names out of a world-readable filename in the shared temp directory.
  */
 function resolveLockPath(): string {
-  const databaseUrl = process.env.DATABASE_URL ?? 'unset';
-  const fingerprint = createHash('sha256').update(databaseUrl).digest('hex').slice(0, 12);
+  const target = describeDatabaseTarget(process.env.DATABASE_URL);
+  const fingerprint = createHash('sha256').update(target).digest('hex').slice(0, 12);
   return join(tmpdir(), `${PROJECT_SLUG}-test-database-${fingerprint}.lock`);
 }
 

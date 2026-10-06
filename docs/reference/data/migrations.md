@@ -65,6 +65,23 @@ The runner serializes the whole migration run behind a session-level `pg_advisor
 
 ---
 
+### Lock and statement timeouts
+
+A DDL statement waiting for a lock holds its place in that table's lock queue, so every later query
+on the table queues behind it — an outage for as long as the wait. The runner
+([`migration-lock-timeout.ts`](../../../src/infrastructure/database/migration/migration-lock-timeout.ts))
+therefore bounds every migration:
+
+| Lane | `lock_timeout` | `statement_timeout` | On a lock timeout (SQLSTATE 55P03) |
+| ---- | -------------- | ------------------- | ---------------------------------- |
+| Transactional (default) | 5 s (`SET LOCAL`) | 5 min (`SET LOCAL`) | the file rolls back and is retried, 3 attempts in all, 3 s apart |
+| Non-transactional (`CREATE INDEX CONCURRENTLY`) | 5 s (session) | none — long index builds block no writes | the run fails; drop the INVALID index and re-run |
+
+A migration that genuinely needs longer than 5 minutes inside its transaction is a data change in
+disguise (migrations carry no backfills) or a table rewrite the lint should have caught — split it, or
+move the long part to the non-transactional lane. Pinned by `migration-lock-timeout.unit.test.ts` and,
+against a real held lock, `migration-lock-timeout.db.unit.test.ts`.
+
 ## Non-transactional migrations (`CREATE INDEX CONCURRENTLY`)
 
 By default the runner wraps **each migration file in a single transaction** — DML and most DDL apply atomically and roll back automatically on a mid-file error. A few statements cannot run inside a transaction, most importantly `CREATE INDEX CONCURRENTLY`, which is the zero-downtime way to add an index: plain `CREATE INDEX` takes a `SHARE` lock that **blocks all writes** for the build duration (minutes on a large high-write table such as `audit.logs`).
@@ -93,6 +110,16 @@ Rules and guardrails (enforced by `pnpm db:migrate:lint`):
 ### Append-heavy tables (`audit.logs`, `notify.notifications`)
 
 These tables are **plain (non-partitioned)** tables. Growth is bounded by row-level retention workers (`audit-retention`, `notification-retention`) that batch-`DELETE` rows older than the configured window — there is no partition lifecycle to maintain. New indexes on these tables follow the same rules as any other high-write table: prefer `CREATE INDEX CONCURRENTLY` in a non-transactional migration. The composite keyset indexes added in [`20260520000006_keyset_pagination_indexes.sql`](../../../migrations/20260520000006_keyset_pagination_indexes.sql) were created with a plain `CREATE INDEX` only because the baseline seeds those tables empty (instant build, before any live traffic).
+
+### Before the first release
+
+Nothing is deployed yet, so no database holds data a migration must protect. A migration never
+carries a backfill, a data fix or a rename of old values: a new column is `NOT NULL` from the
+start, and an allowed value is stated in its final form where the table is created. The runner
+records each applied file by name, so editing an existing file changes fresh databases only — a
+rewrite is proven by migrating a fresh database before and after and diffing
+`pg_dump --schema-only`. Expand / contract and "never edit merged migrations" bind once a release
+ships.
 
 ### Expand / contract (keep deploys backward-compatible)
 
@@ -191,5 +218,6 @@ Dropped tables from earlier schema consolidations are omitted from the cumulativ
 | `pnpm db:migrate:new <slug>` | Create new migration file with real-time `YYYYMMDDHHMMSS` prefix |
 | `pnpm db:migrate:next-prefix` | Print next filename prefix after current max |
 | `pnpm db:migrate:dry-run` | Inspect pending SQL |
+| `pnpm db:sequences:advance` | After a point-in-time restore, jump every id sequence past the lost window ([dr-runbook.md](../../process/dr-runbook.md#advance-the-id-sequences-after-a-restore)) |
 | `pnpm tool:generate-dbdiagram` | Regenerate `docs/database/clinozy-be.dbml` for dbdiagram.io |
 | `pnpm verify:base` | migrate → seed → API smoke |

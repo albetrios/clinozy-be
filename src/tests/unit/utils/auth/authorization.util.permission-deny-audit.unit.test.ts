@@ -45,8 +45,13 @@ describe('authorization.util — permission-deny audit (sec-U13)', () => {
 
   function mockRequest(overrides: Partial<FastifyRequest> = {}): FastifyRequest {
     return attachPrincipalScope({
-      auth: { kind: 'user' as const, userId: 'user-1', role: GLOBAL_ROLES.USER },
-      params: { organization_id: 'org-public' },
+      auth: {
+        kind: 'user' as const,
+        userId: 'user-1',
+        role: GLOBAL_ROLES.USER,
+        organizationPublicId: 'org-public',
+      },
+      params: {},
       routeOptions: { url: '/api/v1/admin/test' },
       url: '/api/v1/admin/test',
       method: 'GET',
@@ -94,6 +99,33 @@ describe('authorization.util — permission-deny audit (sec-U13)', () => {
       severity: 'WARNING',
     });
     expect(call?.metadata?.permission_code).toBe('membership:manage');
+  });
+
+  it('attributes an API key denied a scope to the key, not to a user', async () => {
+    // The row used to carry no actor for a key (only `kind: 'user'` was read), and the audit
+    // service drops actorless rows — so a key probing for scopes it lacks left no trace.
+    const handler = requireOrganizationPermission('membership:manage');
+    const apiKeyRequest = mockRequest({
+      auth: {
+        kind: 'apiKey' as const,
+        apiKeyPublicId: 'key_deniedscopeprobe00001',
+        apiKeyScopes: ['membership:read'],
+        organizationPublicId: 'org-public',
+      },
+    });
+    await expect(handler(apiKeyRequest, mockReply)).rejects.toThrow(ForbiddenError);
+    expect(auditRecord).toHaveBeenCalledTimes(1);
+    const call = auditRecord.mock.calls[0]?.[0];
+    expect(call).toMatchObject({
+      actorApiKeyPublicId: 'key_deniedscopeprobe00001',
+      action: 'auth.permission.denied',
+      severity: 'WARNING',
+      metadata: expect.objectContaining({
+        deny_reason: 'api_key_scope_missing',
+        permission_code: 'membership:manage',
+      }),
+    });
+    expect(call).not.toHaveProperty('actorUserPublicId');
   });
 
   it('still throws ForbiddenError even when the audit write rejects (best-effort)', async () => {

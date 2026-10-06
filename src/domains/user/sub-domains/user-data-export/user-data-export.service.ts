@@ -171,7 +171,7 @@ export class UserDataExportService {
     const expiresAt = computeArtifactExpiresAt();
 
     // auth.user_data_exports is FORCE RLS keyed on app.current_user_public_id — insert inside the user
-    // context so the row passes the owner-access policy in default scoped-RLS mode.
+    // context so the row passes the owner-access policy.
     let row: Awaited<ReturnType<UserDataExportRepository['create']>>;
     try {
       row = await withAppDatabaseContext(scope, () =>
@@ -205,7 +205,6 @@ export class UserDataExportService {
         type: 'user_data_export',
         exportPublicId,
         userPublicId,
-        userInternalId,
       },
       options?.requestId !== undefined ? { requestId: options.requestId } : undefined,
     );
@@ -245,6 +244,15 @@ export class UserDataExportService {
     }
 
     return serializeUserDataExport(row, { download_url: downloadUrl });
+  }
+
+  /**
+   * The export owner's internal id for a worker job, or `null` when no such user exists. The job
+   * carries public ids only. MUST run inside the job's user-scoped database context — it joins
+   * that transaction (see {@link UserService.resolveInternalIdByPublicId}).
+   */
+  async resolveExportOwnerInternalId(userPublicId: string): Promise<number | null> {
+    return this.userService.resolveInternalIdByPublicId(userPublicId);
   }
 
   /**
@@ -387,8 +395,8 @@ export class UserDataExportService {
     s3Key: string,
     context: { exportPublicId: string; userInternalId: number },
   ): Promise<void> {
-    const objectDeleted = await this.objectStorage.deleteObject(s3Key);
-    if (!objectDeleted) {
+    const objectDelete = await this.objectStorage.deleteObject(s3Key);
+    if (objectDelete.kind !== 'deleted') {
       logger.warn({ ...context, s3Key }, 'user-data-export.complete.s3DeleteFailed');
     }
   }
@@ -440,7 +448,7 @@ export class UserDataExportService {
   async deleteAllExportsForUser(userInternalId: number, userPublicId: string): Promise<void> {
     // auth.user_data_exports is FORCE RLS keyed on app.current_user_public_id. Offboarding can be initiated
     // by an admin, so pin the context to the TARGET user (not the caller) so the owner-access policy
-    // matches and the rows are actually removed in default scoped-RLS mode.
+    // matches and the rows are actually removed.
     //
     // sec-r4-R2: stream the user's export S3 keys in bounded keyset batches and
     // delete the objects with bounded concurrency. The previous version loaded
@@ -464,7 +472,7 @@ export class UserDataExportService {
       }
       await this.deleteS3ObjectsWithBoundedConcurrency({
         s3Keys: rows.map((row) => row.s3_key).filter((s3Key): s3Key is string => s3Key !== null),
-        userInternalId,
+        userPublicId,
       });
       afterId = rows[rows.length - 1]!.id;
       if (rows.length < USER_DATA_EXPORT_OFFBOARDING_DELETE_BATCH_SIZE) {
@@ -476,7 +484,7 @@ export class UserDataExportService {
       () => this.exportRepository.deleteAllByUserId(userInternalId),
     );
     if (deletedCount > 0) {
-      logger.info({ userInternalId, deletedCount }, 'user-data-export.offboarding.deleted');
+      logger.info({ userPublicId, deletedCount }, 'user-data-export.offboarding.deleted');
     }
   }
 
@@ -488,9 +496,9 @@ export class UserDataExportService {
    */
   private async deleteS3ObjectsWithBoundedConcurrency(options: {
     s3Keys: readonly string[];
-    userInternalId: number;
+    userPublicId: string;
   }): Promise<void> {
-    const { s3Keys, userInternalId } = options;
+    const { s3Keys, userPublicId } = options;
     for (
       let index = 0;
       index < s3Keys.length;
@@ -499,9 +507,9 @@ export class UserDataExportService {
       const chunk = s3Keys.slice(index, index + USER_DATA_EXPORT_OFFBOARDING_DELETE_CONCURRENCY);
       await Promise.all(
         chunk.map(async (s3Key) => {
-          const objectDeleted = await this.objectStorage.deleteObject(s3Key);
-          if (!objectDeleted) {
-            logger.warn({ userInternalId, s3Key }, 'user-data-export.offboarding.s3DeleteFailed');
+          const objectDelete = await this.objectStorage.deleteObject(s3Key);
+          if (objectDelete.kind !== 'deleted') {
+            logger.warn({ userPublicId, s3Key }, 'user-data-export.offboarding.s3DeleteFailed');
           }
         }),
       );
@@ -600,6 +608,8 @@ export class UserDataExportService {
   /**
    * Loads each export category via the owning domain's service, fetching one row beyond
    * {@link GDPR_EXPORT_MAX_ROWS_PER_TABLE} so the caller can detect and disclose truncation.
+   * One category after another: each opens its own database context, and run in parallel they
+   * held four pool connections per export job while the worker budget counts one.
    */
   private async fetchExportCategoryRows(options: {
     userPublicId: string;
@@ -607,25 +617,24 @@ export class UserDataExportService {
     fetchLimit: number;
     crossDomain: UserDataExportCrossDomainServices;
   }) {
-    const [memberships_, sessions_, notifications_, auditLogs_] = await Promise.all([
-      options.crossDomain.membershipService.listOrganizationsForUserDataExport({
+    const memberships_ =
+      await options.crossDomain.membershipService.listOrganizationsForUserDataExport({
         userPublicId: options.userPublicId,
         userInternalId: options.userInternalId,
         limit: options.fetchLimit,
-      }),
-      options.crossDomain.authSessionService.listForUserDataExport({
-        userPublicId: options.userPublicId,
-        limit: options.fetchLimit,
-      }),
-      options.crossDomain.notificationService.listForUserDataExport({
-        userPublicId: options.userPublicId,
-        limit: options.fetchLimit,
-      }),
-      options.crossDomain.auditService.listActivityForUserDataExport({
-        userPublicId: options.userPublicId,
-        limit: options.fetchLimit,
-      }),
-    ]);
+      });
+    const sessions_ = await options.crossDomain.authSessionService.listForUserDataExport({
+      userPublicId: options.userPublicId,
+      limit: options.fetchLimit,
+    });
+    const notifications_ = await options.crossDomain.notificationService.listForUserDataExport({
+      userPublicId: options.userPublicId,
+      limit: options.fetchLimit,
+    });
+    const auditLogs_ = await options.crossDomain.auditService.listActivityForUserDataExport({
+      userPublicId: options.userPublicId,
+      limit: options.fetchLimit,
+    });
 
     return {
       memberships: memberships_,

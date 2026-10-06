@@ -26,15 +26,16 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
   };
 });
 
-const enqueueWebhookDeliveryByAttemptIdMock = vi.fn();
-const findOrganizationPublicIdByDeliveryAttemptIdMock = vi.fn();
+const DELIVERY_ATTEMPT_PUBLIC_ID = 'wda_9z3rura5kqvcv8zggriym';
+
+const enqueueWebhookDeliveryMock = vi.fn();
+const findOrganizationPublicIdByDeliveryAttemptPublicIdMock = vi.fn();
 
 vi.mock(
   '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js',
-  () => ({
-    WEBHOOK_DELIVERY_JOB_ATTEMPTS: 5,
-    enqueueWebhookDeliveryByAttemptId: (...arguments_: unknown[]) =>
-      enqueueWebhookDeliveryByAttemptIdMock(...arguments_),
+  async (importOriginal) => ({
+    ...(await importOriginal<Record<string, unknown>>()),
+    enqueueWebhookDelivery: (...arguments_: unknown[]) => enqueueWebhookDeliveryMock(...arguments_),
   }),
 );
 
@@ -44,32 +45,26 @@ vi.mock(
     // sec-N1: worker re-checks `webhookIsEnabled` / `webhookDeletedAt` at claim
     // time; the contract fixture must mark the webhook explicitly enabled so the
     // delivery proceeds through the claim → deliver → header-forward path.
-    findWebhookDeliveryAttemptWithWebhook: vi.fn().mockResolvedValue({
-      webhookId: 1,
-      webhookUrl: 'https://example.com/hook',
-      encryptedSecret: 'v1:secret',
-      eventType: 'webhook.test',
-      payload: { ok: true },
-      webhookIsEnabled: true,
-      webhookDeletedAt: null,
-      encryptedSecretPrevious: null,
-      secretRotatedAt: null,
-    }),
     createWorkerWebhookDeliveryQueries: () => ({
       findWebhookDeliveryAttemptWithWebhook: vi.fn().mockResolvedValue({
+        deliveryAttemptId: 7,
+        deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
         webhookId: 1,
+        webhookPublicId: 'wh_0y8vf3ktxqnhcm1ze21ab',
         webhookUrl: 'https://example.com/hook',
         encryptedSecret: 'v1:secret',
         eventType: 'webhook.test',
         payload: { ok: true },
+        attemptCount: 0,
         webhookIsEnabled: true,
         webhookDeletedAt: null,
         encryptedSecretPrevious: null,
         secretRotatedAt: null,
       }),
     }),
-    findOrganizationPublicIdByDeliveryAttemptId: (...arguments_: unknown[]) =>
-      findOrganizationPublicIdByDeliveryAttemptIdMock(...arguments_),
+    findOrganizationPublicIdByDeliveryAttemptPublicId: (...arguments_: unknown[]) =>
+      findOrganizationPublicIdByDeliveryAttemptPublicIdMock(...arguments_),
+    markDeliveryAttemptEnqueueFailed: vi.fn(),
   }),
 );
 
@@ -95,7 +90,7 @@ describe('Webhook request id forward contract', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    findOrganizationPublicIdByDeliveryAttemptIdMock.mockResolvedValue('org_public_contract');
+    findOrganizationPublicIdByDeliveryAttemptPublicIdMock.mockResolvedValue('org_public_contract');
     registerWebhookDeliveryEventHandlers();
   });
 
@@ -105,30 +100,31 @@ describe('Webhook request id forward contract', () => {
     await runWithOnCommitScope(async () => {
       await eventBus.emit({
         type: NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED,
-        payload: { delivery_attempt_id: 7 },
+        payload: { delivery_attempt_public_id: DELIVERY_ATTEMPT_PUBLIC_ID },
         timestamp: new Date(),
         requestId: correlationRequestId,
       });
       await eventBus.flushOnCommit();
     });
 
-    expect(enqueueWebhookDeliveryByAttemptIdMock).toHaveBeenCalledWith(
-      7,
-      'org_public_contract',
-      correlationRequestId,
-    );
+    expect(enqueueWebhookDeliveryMock).toHaveBeenCalledWith({
+      deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
+      organizationPublicId: 'org_public_contract',
+      requestId: correlationRequestId,
+    });
 
-    await processWebhookDeliveryAttempt(
-      7,
-      'org_public_contract',
-      { id: 'job-contract', attemptsMade: 0, requestId: correlationRequestId },
-      fetchMock,
-      deliveryAttemptRepository as never,
-    );
+    await processWebhookDeliveryAttempt({
+      deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
+      organizationPublicId: 'org_public_contract',
+      jobContext: { id: 'job-contract', attemptsMade: 0, requestId: correlationRequestId },
+      fetchImplementation: fetchMock,
+      deliveryAttemptRepository: deliveryAttemptRepository as never,
+    });
 
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(requestInit.headers).toMatchObject({
       'X-Request-Id': correlationRequestId,
+      'X-Webhook-Delivery-Id': DELIVERY_ATTEMPT_PUBLIC_ID,
     });
   });
 });

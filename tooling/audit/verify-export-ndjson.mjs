@@ -13,6 +13,17 @@ import { gunzipSync } from 'node:zlib';
 
 const REQUIRED_FIELDS = ['id', 'organization_id', 'action', 'created_at'];
 
+/**
+ * Every id on a line is a public id (the archive outlives the database, whose bigserials a
+ * restore reissues): the row's own `aud_…` id, the organization's `org_…`, users' `usr_…`.
+ */
+const PUBLIC_ID_FIELDS = {
+  id: /^aud_[a-z0-9]{21}$/,
+  organization_id: /^org_[a-z0-9]{21}$/,
+  actor_user_id: /^usr_[a-z0-9]{21}$/,
+  target_user_id: /^usr_[a-z0-9]{21}$/,
+};
+
 function readInputBuffer() {
   const filePath = process.argv[2];
   if (filePath) {
@@ -47,6 +58,12 @@ function validateNdjson(buffer) {
     for (const field of REQUIRED_FIELDS) {
       if (record[field] === undefined || record[field] === null) {
         throw new Error(`line ${lineNumber}: missing required field "${field}"`);
+      }
+    }
+    for (const [field, pattern] of Object.entries(PUBLIC_ID_FIELDS)) {
+      const value = record[field];
+      if (value !== undefined && value !== null && !pattern.test(String(value))) {
+        throw new Error(`line ${lineNumber}: "${field}" is not a public id (${String(value)})`);
       }
     }
   }

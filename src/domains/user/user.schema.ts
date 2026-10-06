@@ -11,7 +11,7 @@ import {
   check,
   pgPolicy,
 } from 'drizzle-orm/pg-core';
-import { authSchema } from '@/infrastructure/database/pg-schemas.js';
+import { authSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 
 /**
  * `auth.users` — canonical platform identity table. Soft-deleted via `deleted_at` so audit and
@@ -89,12 +89,12 @@ export const users = authSchema
             ${table.public_id} = current_setting('app.current_user_public_id', true)
             AND ${table.deleted_at} IS NULL
           )
-          OR current_setting('app.global_admin', true) = 'true'
-          OR current_setting('app.global_retention_cleanup', true) = 'true'
+          OR ${maintenanceBypassArm('app.global_admin')}
+          OR ${maintenanceBypassArm('app.global_retention_cleanup')}
         )`,
         withCheck: sql`(
           ${table.public_id} = current_setting('app.current_user_public_id', true)
-          OR current_setting('app.global_admin', true) = 'true'
+          OR ${maintenanceBypassArm('app.global_admin')}
         )`,
       }),
     ],
