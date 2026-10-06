@@ -123,6 +123,17 @@ block to make images load — a broken image means the client is holding an expi
 re-fetching the resource returns a fresh one. The one absolute URL a column can hold is an
 OAuth-provider avatar (Google / GitHub), which is returned as-is.
 
+## Malware scanning — not done (known gap)
+
+Nothing scans uploaded files for malware: confirm checks size, MIME type and (for SVG) sanitizes, but a
+malicious PDF or Office file is stored and served as uploaded. Deferred by decision on 2026-10-06; revisit
+before organization files are opened to clinical documents. The two options weighed:
+
+| Option | How | Trade-off |
+| ------ | --- | --------- |
+| Scanner port + ClamAV | Confirm streams the object to a `clamd` sidecar; infected or unscanned files are never served | Works with any S3-compatible store; one more container per environment |
+| AWS GuardDuty Malware Protection for S3 | AWS scans each object and tags it; downloads are refused until the tag says clean | Least code; AWS S3 only, billed per GB scanned |
+
 ## Configuration reference
 
 | Variable                             | Default      | Purpose                                                                                                                         |

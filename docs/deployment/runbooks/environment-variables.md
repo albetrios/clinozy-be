@@ -333,6 +333,9 @@ instead of running insecure — you cannot ship the dev value:
 | `SECRETS_ENCRYPTION_KEY`              | all-zero placeholder      | high-entropy 32-byte key (`openssl rand -hex 32`); low-entropy rejected           |
 | `ALLOWED_ORIGINS`                     | `http://localhost:3000`   | absolute `https://` only; no `*`, path, userinfo, query, or trailing slash        |
 | `FRONTEND_URL`                        | optional (dev fallback)   | **required**, `https://` (emailed links and the OAuth callback are built from it) |
+| `S3_BUCKET` + `S3_REGION`             | optional                  | **required** (uploads and personal-data exports); the access-key pair is set together or not at all |
+| `RESEND_API_KEY`                      | optional (mail skipped)   | **required** (email codes, password resets, invitations) — and with it `EMAIL_FROM_ADDRESS` |
+| `WEBAUTHN_RP_ID`                      | `localhost` / fallback    | optional; when set, a bare hostname the `FRONTEND_URL` host equals or sits under (passkeys are bound to it) |
 | `COOKIE_SECURE`                       | `false`                   | `true` (cookies sent over HTTPS only)                                              |
 | `UPLOAD_USE_PRESIGNED_POST`           | may be `false`            | `true` (presigned PUT has no min-size enforcement)                                 |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`         | `http://…` ok             | `https://` (telemetry must not transmit SQL/paths in plaintext)                   |

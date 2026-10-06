@@ -43,6 +43,12 @@ const productionRequiredBase = {
   FRONTEND_URL: 'https://app.example.com',
   CAPTCHA_PROVIDER: 'turnstile',
   CAPTCHA_SECRET: 'turnstile-secret',
+  // Production cannot start without object storage or Resend; the WebAuthn relying party is optional.
+  S3_BUCKET: 'clinic-uploads',
+  S3_REGION: 'us-east-1',
+  RESEND_API_KEY: 're_production_fixture_key',
+  EMAIL_FROM_ADDRESS: 'noreply@example.com',
+  WEBAUTHN_RP_ID: 'app.example.com',
   ...productionRedisTopology,
 };
 
@@ -712,6 +718,75 @@ describe('env-schema', () => {
     if (!parsed.success) {
       expect(parsed.error.flatten().fieldErrors.FRONTEND_URL).toBeDefined();
     }
+  });
+
+  describe('settings production cannot start without', () => {
+    /** The production fixture with `key` removed. */
+    function productionWithout(key: keyof typeof productionRequiredBase) {
+      const environment: Record<string, unknown> = { ...productionRequiredBase };
+      delete environment[key];
+      return environment;
+    }
+
+    function fieldErrors(environment: Record<string, unknown>) {
+      const parsed = envSchema.safeParse(environment);
+      return parsed.success ? {} : parsed.error.flatten().fieldErrors;
+    }
+
+    it.each(['S3_BUCKET', 'S3_REGION'] as const)(
+      'rejects production without %s (uploads and data exports would fail at use)',
+      (key) => {
+        expect(fieldErrors(productionWithout(key)).S3_BUCKET).toBeDefined();
+      },
+    );
+
+    it('rejects production without RESEND_API_KEY (no email codes, resets or invitations)', () => {
+      expect(fieldErrors(productionWithout('RESEND_API_KEY')).RESEND_API_KEY).toBeDefined();
+    });
+
+    it('accepts production without WEBAUTHN_RP_ID (optional — falls back to ALLOWED_ORIGINS)', () => {
+      expect(envSchema.safeParse(productionWithout('WEBAUTHN_RP_ID')).success).toBe(true);
+    });
+
+    it.each([
+      ['a URL instead of a hostname', 'https://app.example.com'],
+      ['a hostname with a port', 'app.example.com:443'],
+      ['a domain the frontend host is not under', 'other.example.org'],
+      ['a sibling subdomain', 'admin.example.com'],
+    ])('rejects production with WEBAUTHN_RP_ID set to %s', (_case, value) => {
+      expect(
+        fieldErrors({ ...productionRequiredBase, WEBAUTHN_RP_ID: value }).WEBAUTHN_RP_ID,
+      ).toBeDefined();
+    });
+
+    it('accepts a WEBAUTHN_RP_ID equal to the frontend host or a parent domain of it', () => {
+      expect(envSchema.safeParse(productionRequiredBase).success).toBe(true);
+      expect(
+        envSchema.safeParse({ ...productionRequiredBase, WEBAUTHN_RP_ID: 'example.com' }).success,
+      ).toBe(true);
+    });
+
+    it('rejects half a storage credential in any environment', () => {
+      for (const environment of [
+        { ...productionRequiredBase, S3_ACCESS_KEY_ID: 'key-id-only' },
+        { ...commonRequiredBase, NODE_ENV: 'development', S3_SECRET_ACCESS_KEY: 'secret-only' },
+      ]) {
+        expect(fieldErrors(environment).S3_ACCESS_KEY_ID).toBeDefined();
+      }
+      expect(
+        envSchema.safeParse({
+          ...productionRequiredBase,
+          S3_ACCESS_KEY_ID: 'key-id',
+          S3_SECRET_ACCESS_KEY: 'secret',
+        }).success,
+      ).toBe(true);
+    });
+
+    it('still lets development start without storage or Resend', () => {
+      expect(envSchema.safeParse({ ...commonRequiredBase, NODE_ENV: 'development' }).success).toBe(
+        true,
+      );
+    });
   });
 
   it('accepts production with an https FRONTEND_URL, and an unset one outside production', () => {

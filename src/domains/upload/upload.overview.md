@@ -12,7 +12,12 @@ What it owns:
 - The presigned-POST + presigned-GET URL issuance, with TTLs aligned to `PRESIGNED_URL_EXPIRY_SECONDS` (15 min by default).
 - The `POST /api/v1/uploads`, `GET /:publicId`, `POST /:publicId/confirm`, and `DELETE /:publicId` HTTP API.
 
-What it does not own: anti-virus / malware scanning (handled outside the platform), CDN caching policy (edge config), or content-type validation beyond the MIME-prefix allowlist on the presign call.
+What it does not own: CDN caching policy (edge config), or content-type validation beyond the MIME-prefix allowlist on the presign call.
+
+**Known gap — no malware scanning.** Nothing scans uploaded files, here or outside the platform. Deferred by
+decision on 2026-10-06; revisit before organization files are opened to clinical documents. Options weighed: a
+storage-agnostic scanner port with ClamAV on confirm (infected or unscanned files never served), or AWS GuardDuty
+Malware Protection for S3 (downloads gated on a clean tag). Details: `docs/deployment/runbooks/upload-storage.md`.
 
 ## Key invariants
 

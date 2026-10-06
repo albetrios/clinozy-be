@@ -467,7 +467,10 @@ const envSchemaBase = z.object({
   // CORS (comma-separated origins; required in every runtime)
   ALLOWED_ORIGINS: z.string().min(1),
 
-  /** WebAuthn RP ID (hostname). Defaults to first ALLOWED_ORIGINS hostname or localhost. */
+  /**
+   * WebAuthn RP ID (hostname). Optional: defaults to the first ALLOWED_ORIGINS hostname, then
+   * localhost. When production sets it, the WebAuthn refine below checks it against FRONTEND_URL.
+   */
   WEBAUTHN_RP_ID: z.string().min(1).optional(),
   /** WebAuthn relying party display name shown in passkey prompts. */
   WEBAUTHN_RP_NAME: z.string().min(1).optional(),
@@ -563,6 +566,7 @@ const envSchemaBase = z.object({
   WEBHOOK_SECRET_ROTATION_OVERLAP_HOURS: z.coerce.number().int().min(1).max(720).default(24),
 
   // Email (Resend)
+  // Required in production — see the Resend refine below.
   RESEND_API_KEY: z.string().min(1).optional(),
   /** Outbound Resend API request timeout (ms). Forwarded to fetch via AbortSignal. */
   RESEND_HTTP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(180_000).default(30_000),
@@ -689,6 +693,7 @@ const envSchemaBase = z.object({
     .min(1_000)
     .max(3_600_000)
     .default(300_000),
+  // Required in production — see the object-storage refine below.
   S3_BUCKET: z.string().min(1).optional(),
   S3_REGION: z.string().min(1).optional(),
   S3_ACCESS_KEY_ID: z.string().min(1).optional(),
@@ -1169,11 +1174,41 @@ const envSchemaBase = z.object({
   SONAR_ADMIN_PASSWORD: z.string().min(1).optional(),
 });
 
+/** A bare DNS hostname — no scheme, port, path or trailing dot. */
+const BARE_HOSTNAME = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/i;
+
+/**
+ * `WEBAUTHN_RP_ID` is optional (unset, it falls back to the first `ALLOWED_ORIGINS` hostname).
+ * When production sets it, it must be a bare hostname that the `FRONTEND_URL` host equals or sits
+ * under — the WebAuthn registrable-suffix rule; any other value fails every passkey ceremony. An
+ * unset or unparseable `FRONTEND_URL` is left to its own refine.
+ */
+function isValidProductionWebauthnRelyingPartyId(data: {
+  NODE_ENV: string;
+  WEBAUTHN_RP_ID?: string | undefined;
+  FRONTEND_URL?: string | undefined;
+}): boolean {
+  if (data.NODE_ENV !== 'production') return true;
+  const relyingPartyId = data.WEBAUTHN_RP_ID;
+  if (!relyingPartyId) return true;
+  if (!BARE_HOSTNAME.test(relyingPartyId)) return false;
+  if (!data.FRONTEND_URL) return true;
+  let frontendHost: string;
+  try {
+    frontendHost = new URL(data.FRONTEND_URL).hostname;
+  } catch {
+    return true;
+  }
+  const relyingParty = relyingPartyId.toLowerCase();
+  return frontendHost === relyingParty || frontendHost.endsWith(`.${relyingParty}`);
+}
+
 /**
  * Process environment Zod schema. Refines `envSchemaBase` with cross-field invariants
  * (idempotency threshold ordering, METRICS_ENABLED → token, CAPTCHA configuration,
- * production Turnstile requirement, Redis topology, and FRONTEND_URL protocol) so
- * the API/worker boot fails fast on misconfiguration instead of surfacing partial
+ * production Turnstile requirement, Redis topology, FRONTEND_URL protocol, the settings
+ * production cannot start without — object storage and Resend — and a valid WebAuthn
+ * relying-party id when one is set) so the API/worker boot fails fast on misconfiguration instead of surfacing partial
  * failures at runtime.
  */
 export const envSchema = envSchemaBase
@@ -1321,6 +1356,50 @@ export const envSchema = envSchemaBase
       path: ['FRONTEND_URL'],
     },
   )
+  .refine(
+    (data) =>
+      /**
+       * Uploads (avatars, logos, organization files) and personal-data exports store their files
+       * in object storage; without a bucket and region both fail at use instead of at boot.
+       */
+      data.NODE_ENV !== 'production' || (Boolean(data.S3_BUCKET) && Boolean(data.S3_REGION)),
+    {
+      message:
+        'S3_BUCKET and S3_REGION must be set in production (uploads and personal-data exports store files there).',
+      path: ['S3_BUCKET'],
+    },
+  )
+  .refine(
+    (data) =>
+      /**
+       * The two halves of a storage credential: set together, or neither (the AWS SDK then uses
+       * its default credential chain). One alone always signs requests that S3 rejects.
+       */
+      (data.S3_ACCESS_KEY_ID === undefined) === (data.S3_SECRET_ACCESS_KEY === undefined),
+    {
+      message:
+        'S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are set together or not at all (unset, the AWS SDK default credential chain applies).',
+      path: ['S3_ACCESS_KEY_ID'],
+    },
+  )
+  .refine(
+    (data) =>
+      /**
+       * Email codes, password resets and invitations are sent through Resend. Without a key the
+       * mail worker never starts and every one of those mails waits in the outbox forever.
+       */
+      data.NODE_ENV !== 'production' || Boolean(data.RESEND_API_KEY),
+    {
+      message:
+        'RESEND_API_KEY must be set in production (email codes, password resets and invitations are sent through it).',
+      path: ['RESEND_API_KEY'],
+    },
+  )
+  .refine((data) => isValidProductionWebauthnRelyingPartyId(data), {
+    message:
+      'WEBAUTHN_RP_ID, when set in production, must be a bare hostname that the FRONTEND_URL host equals or sits under (every passkey is bound to it).',
+    path: ['WEBAUTHN_RP_ID'],
+  })
   .refine(
     (data) => {
       const origins = data.ALLOWED_ORIGINS.split(',')
@@ -1949,8 +2028,11 @@ export const envSchemaConditionallyRequiredKeys: ReadonlyArray<{
   },
   {
     key: 'EMAIL_FROM_ADDRESS',
-    condition: 'RESEND_API_KEY is set (no hardcoded sender fallback)',
+    condition: 'RESEND_API_KEY is set, so always in production (no hardcoded sender fallback)',
   },
+  { key: 'RESEND_API_KEY', condition: 'NODE_ENV=production (email codes, resets, invitations)' },
+  { key: 'S3_BUCKET', condition: 'NODE_ENV=production (uploads and personal-data exports)' },
+  { key: 'S3_REGION', condition: 'NODE_ENV=production (uploads and personal-data exports)' },
   {
     key: 'FRONTEND_URL',
     condition: 'NODE_ENV=production, as an https URL (emailed links and the OAuth callback use it)',
