@@ -4,7 +4,8 @@
 # Runs every agent setup helper in order — Node, gh, Docker CLI/Compose, Docker
 # daemon, Docker images (registry mirror), CodeGraph, Headroom, gitleaks — scaffolds a
 # self-contained `.env.local` (`pnpm setup:local --only-env`), then brings up
-# the local Docker stack (Postgres + Redis), migrates, seeds, and verifies the
+# the local Docker stack (Postgres + Redis), migrates, enables the database logins
+# the migrations create (`pnpm setup:local --only-env` again), seeds, and verifies the
 # app is healthy (/livez + /readyz). A single command to make a cloud session
 # "same as local", with a progress log after each step so anyone watching the
 # session sees live status.
@@ -146,10 +147,15 @@ fi
 pnpm compose:wait >&2 || die "Postgres did not become ready"
 ok "[8/${TOTAL}] Postgres + Redis healthy"
 
-# 9) Migrations --------------------------------------------------------------
-step "[9/${TOTAL}] Database migrations"
+# 9) Migrations + database logins --------------------------------------------
+step "[9/${TOTAL}] Database migrations + logins"
 pnpm db:migrate >&2 || die "db:migrate failed"
-ok "[9/${TOTAL}] migrations applied"
+# Step 7 ran before Postgres was up, so it could not turn on the logins the
+# migrations just created NOLOGIN. Re-run it now (the same order `pnpm setup:local`
+# uses): otherwise a fresh database with a `.env.local` that already carries the
+# login URLs fails the seed, and a fresh `.env.local` leaves the app on the superuser.
+pnpm setup:local --only-env >&2 || die "database logins failed (pnpm setup:local --only-env)"
+ok "[9/${TOTAL}] migrations applied, database logins enabled"
 
 # 10) Seed -------------------------------------------------------------------
 step "[10/${TOTAL}] Seed (minimal reference data)"

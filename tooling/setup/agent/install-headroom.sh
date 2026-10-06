@@ -106,8 +106,16 @@ ensure_default_mcp_servers() {
       --slurpfile defaults .mcp.default.json \
       '.mcpServers = (($defaults[0].mcpServers // {}) + (.mcpServers // {}))' \
       > .mcp.json.tmp 2>/dev/null; then
-    mv .mcp.json.tmp .mcp.json
-    echo "install-headroom: ensured codegraph + headroom in .mcp.json." >&2
+    # Write only when the servers change, and through any symlink (`cat >`, not `mv`):
+    # the committed .mcp.json is a symlink to agent-os/mcp/mcp.json, and replacing it with
+    # a reformatted copy left every bootstrap with a dirty tree.
+    if [ "$(jq -S . .mcp.json.tmp)" = "$(printf '%s' "${current}" | jq -S . 2>/dev/null)" ]; then
+      echo "install-headroom: codegraph + headroom already in .mcp.json." >&2
+    else
+      cat .mcp.json.tmp > .mcp.json
+      echo "install-headroom: ensured codegraph + headroom in .mcp.json." >&2
+    fi
+    rm -f .mcp.json.tmp
   else
     rm -f .mcp.json.tmp
     echo "install-headroom: .mcp.json default-pair merge failed (non-fatal)." >&2
