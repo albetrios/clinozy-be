@@ -25,6 +25,11 @@ vi.mock('@/infrastructure/database/connection.js', () => ({
   database: { selectDistinct: vi.fn(), select: vi.fn() },
 }));
 
+// Every case passes its own `runInDatabaseContext`; the production default opens retention contexts.
+vi.mock('@/infrastructure/queue/worker-runtime/worker-processor.util.js', () => ({
+  runGlobalRetentionWorkerJob: vi.fn(),
+}));
+
 const headObjectMock = vi.hoisted(() => vi.fn());
 const putObjectMock = vi.hoisted(() => vi.fn());
 
@@ -141,6 +146,19 @@ function asWorkerHandle(handle: FakeDatabaseHandle) {
   return brandWorkerContextDatabaseHandle(handle as unknown as PostgresDatabaseHandle);
 }
 
+/**
+ * Options that run every database read on the fake handle — one context per read in production —
+ * and export yesterday only, as the cases below expect.
+ */
+function exportOptions(handle: FakeDatabaseHandle, lookbackDays = 1) {
+  return {
+    runInDatabaseContext: <TResult>(
+      work: (databaseHandle: ReturnType<typeof asWorkerHandle>) => Promise<TResult>,
+    ) => work(asWorkerHandle(handle)),
+    lookbackDays,
+  };
+}
+
 function putCalls(): PutObjectCall[] {
   return putObjectMock.mock.calls.map(([argument]) => argument as PutObjectCall);
 }
@@ -175,7 +193,7 @@ describe('audit-export.processor', () => {
     environmentMock.AUDIT_EXPORT_ENABLED = false;
     const databaseHandle = buildDatabaseHandle({ organizationIds: [], batches: [] });
 
-    const result = await runAuditExportJob(asWorkerHandle(databaseHandle));
+    const result = await runAuditExportJob(exportOptions(databaseHandle));
 
     expect(result).toEqual({ exportedOrganizations: 0, skipped: 0 });
     expect(databaseHandle.selectDistinct).not.toHaveBeenCalled();
@@ -193,7 +211,7 @@ describe('audit-export.processor', () => {
       batches: [[buildAuditRow(1, 42)]],
     });
 
-    await runAuditExportJob(asWorkerHandle(databaseHandle));
+    await runAuditExportJob(exportOptions(databaseHandle));
 
     const manifest = manifestCall();
     expect(manifest).toBeDefined();
@@ -218,7 +236,7 @@ describe('audit-export.processor', () => {
       batches: [[buildAuditRow(1, 42)]],
     });
 
-    await runAuditExportJob(asWorkerHandle(databaseHandle));
+    await runAuditExportJob(exportOptions(databaseHandle));
 
     const probedKey = headObjectMock.mock.calls[0]?.[0] as string;
     expect(probedKey.endsWith(`/${AUDIT_EXPORT_MANIFEST_FILENAME}`)).toBe(true);
@@ -236,7 +254,7 @@ describe('audit-export.processor', () => {
       batches: [[buildAuditRow(1, 42)]],
     });
 
-    await runAuditExportJob(asWorkerHandle(databaseHandle));
+    await runAuditExportJob(exportOptions(databaseHandle));
 
     const [part] = partCalls();
     expect(part).toBeDefined();
@@ -276,7 +294,7 @@ describe('audit-export.processor', () => {
   it('writes no manifest for a tenant with zero rows in the window and counts it as skipped', async () => {
     const databaseHandle = buildDatabaseHandle({ organizationIds: [42], batches: [[]] });
 
-    const result = await runAuditExportJob(asWorkerHandle(databaseHandle));
+    const result = await runAuditExportJob(exportOptions(databaseHandle));
 
     expect(result).toEqual({ exportedOrganizations: 0, skipped: 1 });
     expect(putObjectMock).not.toHaveBeenCalled();
@@ -294,9 +312,7 @@ describe('audit-export.processor', () => {
     });
     putObjectMock.mockRejectedValueOnce(new Error('s3-put-failed'));
 
-    await expect(runAuditExportJob(asWorkerHandle(databaseHandle))).rejects.toThrow(
-      's3-put-failed',
-    );
+    await expect(runAuditExportJob(exportOptions(databaseHandle))).rejects.toThrow('s3-put-failed');
 
     expect(manifestCall()).toBeUndefined();
   });
@@ -313,7 +329,7 @@ describe('audit-export.processor', () => {
       batches: [rows.slice(0, 2), rows.slice(2)],
     });
 
-    await runAuditExportJob(asWorkerHandle(databaseHandle));
+    await runAuditExportJob(exportOptions(databaseHandle));
 
     const parsed = JSON.parse(manifestCall()!.body.toString('utf8')) as AuditExportManifest;
     const parts = partCalls();
@@ -349,7 +365,7 @@ describe('audit-export.processor', () => {
     };
     const databaseHandle = buildDatabaseHandle({ organizationIds: [42], batches: [[row]] });
 
-    await runAuditExportJob(asWorkerHandle(databaseHandle));
+    await runAuditExportJob(exportOptions(databaseHandle));
 
     const [part] = partCalls();
     const line = JSON.parse(gunzipSync(part!.body).toString('utf8').split('\n')[0]!) as Record<
@@ -381,7 +397,7 @@ describe('audit-export.processor', () => {
       batches: [rows.slice(0, 2), rows.slice(2, 4), rows.slice(4)],
     });
 
-    await runAuditExportJob(asWorkerHandle(databaseHandle));
+    await runAuditExportJob(exportOptions(databaseHandle));
 
     expect(databaseHandle.requestedLimits()).toEqual([2, 2, 2]);
     // The third batch was short (1 < 2), so the loop stopped without a fourth probe.
@@ -401,10 +417,36 @@ describe('audit-export.processor', () => {
     });
     headObjectMock.mockResolvedValue({ ContentLength: 128 });
 
-    const result = await runAuditExportJob(asWorkerHandle(databaseHandle));
+    const result = await runAuditExportJob(exportOptions(databaseHandle));
 
     expect(result).toEqual({ exportedOrganizations: 0, skipped: 1 });
     expect(databaseHandle.batchQueryCount()).toBe(0);
     expect(putObjectMock).not.toHaveBeenCalled();
+  });
+
+  it('exports the earlier days of its lookback that have no manifest yet — a failed run is not lost', async () => {
+    const referenceDate = new Date('2024-05-10T06:00:00.000Z');
+    const exportedDay = '2024-05-09';
+    headObjectMock.mockImplementation(async (key: string) =>
+      key.includes(`dt=${exportedDay}/`) ? { contentType: 'application/json' } : null,
+    );
+    const databaseHandle = buildDatabaseHandle({
+      organizationIds: [7],
+      batches: [[buildAuditRow(1, 7)], [buildAuditRow(2, 7)]],
+    });
+
+    const result = await runAuditExportJob({
+      ...exportOptions(databaseHandle, 3),
+      referenceDate,
+    });
+
+    // Yesterday was already exported; the two days before it were not, and now are.
+    expect(result).toEqual({ exportedOrganizations: 2, skipped: 1 });
+    const manifestKeys = putCalls()
+      .map((call) => call.key)
+      .filter((key) => key.endsWith(AUDIT_EXPORT_MANIFEST_FILENAME));
+    expect(manifestKeys).toHaveLength(2);
+    expect(manifestKeys.some((key) => key.includes('dt=2024-05-08/'))).toBe(true);
+    expect(manifestKeys.some((key) => key.includes('dt=2024-05-07/'))).toBe(true);
   });
 });

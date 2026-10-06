@@ -156,7 +156,12 @@ describe('user-data-export.worker', () => {
     const createUserDataExportWorker = await importWorkerFactory();
 
     createUserDataExportWorker(service);
-    const job = { name: 'process-user-data-export', data: JOB_DATA };
+    const job = {
+      name: 'process-user-data-export',
+      data: JOB_DATA,
+      attemptsMade: 0,
+      opts: { attempts: 3 },
+    };
     await workerState.processor?.(job);
 
     expect(parseJobDataOrDeadLetterMock).toHaveBeenCalledWith(
@@ -167,7 +172,26 @@ describe('user-data-export.worker', () => {
       'process-user-data-export',
       expect.any(Function),
     );
-    expect(runUserDataExportJobMock).toHaveBeenCalledWith(JOB_DATA, service);
+    // Not the last of three attempts: a failure leaves the export processing for the retry.
+    expect(runUserDataExportJobMock).toHaveBeenCalledWith(JOB_DATA, service, {
+      isFinalAttempt: false,
+    });
+  });
+
+  it('tells the processor when this is the last attempt', async () => {
+    const createUserDataExportWorker = await importWorkerFactory();
+
+    createUserDataExportWorker(service);
+    await workerState.processor?.({
+      name: 'process-user-data-export',
+      data: JOB_DATA,
+      attemptsMade: 2,
+      opts: { attempts: 3 },
+    });
+
+    expect(runUserDataExportJobMock).toHaveBeenCalledWith(JOB_DATA, service, {
+      isFinalAttempt: true,
+    });
   });
 
   it('does not run the job when the payload fails validation (poison job is dead-lettered)', async () => {
@@ -202,7 +226,12 @@ describe('user-data-export.worker', () => {
     createUserDataExportWorker(service);
 
     await expect(
-      workerState.processor?.({ name: 'process-user-data-export', data: JOB_DATA }),
+      workerState.processor?.({
+        name: 'process-user-data-export',
+        data: JOB_DATA,
+        attemptsMade: 0,
+        opts: { attempts: 3 },
+      }),
     ).rejects.toThrow('export-bundling-failed');
   });
 });

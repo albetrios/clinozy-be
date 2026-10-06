@@ -42,7 +42,10 @@ export function createUserDataExportWorker(
       await runWithPropagatedTraceContext(
         { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
         job.name,
-        () => runUserDataExportJob(jobData, userDataExportService),
+        () =>
+          runUserDataExportJob(jobData, userDataExportService, {
+            isFinalAttempt: job.attemptsMade + 1 >= Math.max(1, job.opts.attempts ?? 1),
+          }),
       );
     },
     workerOptions: {

@@ -1,8 +1,4 @@
 import { createHash } from 'node:crypto';
-import {
-  MAINTENANCE_SCOPE,
-  withMaintenanceDatabaseContext,
-} from '@/infrastructure/database/contexts/database-context.js';
 import { gunzipSync } from 'node:zlib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
@@ -99,10 +95,7 @@ describe('audit-export.worker — S3 NDJSON export', () => {
       created_at: createdAt,
     });
 
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      (databaseHandle) => runAuditExportJob(databaseHandle),
-    );
+    const result = await runAuditExportJob({ lookbackDays: 1 });
 
     expect(result.exportedOrganizations).toBe(1);
     expect(result.skipped).toBe(0);
@@ -189,10 +182,7 @@ describe('audit-export.worker — S3 NDJSON export', () => {
         },
       ]);
 
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      (databaseHandle) => runAuditExportJob(databaseHandle),
-    );
+    const result = await runAuditExportJob({ lookbackDays: 1 });
 
     expect(result.exportedOrganizations).toBe(2);
     expect(result.skipped).toBe(0);
@@ -260,10 +250,7 @@ describe('audit-export.worker — S3 NDJSON export', () => {
       return null;
     });
 
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      (databaseHandle) => runAuditExportJob(databaseHandle),
-    );
+    const result = await runAuditExportJob({ lookbackDays: 1 });
 
     expect(result.exportedOrganizations).toBe(0);
     expect(result.skipped).toBe(1);
@@ -289,10 +276,7 @@ describe('audit-export.worker — S3 NDJSON export', () => {
         created_at: todayLogTime,
       });
 
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      (databaseHandle) => runAuditExportJob(databaseHandle),
-    );
+    const result = await runAuditExportJob({ lookbackDays: 1 });
 
     expect(result).toEqual({ exportedOrganizations: 0, skipped: 0 });
     expect(putObjectMock).not.toHaveBeenCalled();

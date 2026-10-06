@@ -82,13 +82,13 @@ describe('worker-registration.registry', () => {
     expect(
       definitions.filter((definition) => definition.criticality === 'observability'),
     ).toHaveLength(2);
-    // Only audit-export still runs its S3 writes inside its database context; the export worker,
-    // the upload sweep and both retention purges open short contexts around their S3 calls.
+    // No worker holds a database context across an outbound call: the audit export, the data
+    // export, the upload sweep and both retention purges open short contexts around their S3 calls.
     expect(
       definitions
         .filter((definition) => definition.holdsConnectionDuringExternalIo === true)
         .map((definition) => definition.queueName),
-    ).toEqual(['audit-export']);
+    ).toEqual([]);
   });
 
   it('has no maintenance workers left unscheduled (every retention worker has a cron)', () => {

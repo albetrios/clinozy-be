@@ -250,7 +250,6 @@ const WORKER_QUEUE_REGISTRATION_DEFINITIONS: WorkerQueueRegistrationDefinition[]
     queueName: AUDIT_EXPORT_QUEUE_NAME,
     family: 'retention',
     logLabel: 'audit export worker',
-    holdsConnectionDuringExternalIo: true,
     create: () => createAuditExportWorker(),
   }),
   retentionDefinition({

@@ -104,7 +104,7 @@ Registered in `src/infrastructure/queue/scheduler.ts` (default stagger 05:44–0
 4. Child tombstones (webhooks, policies, memberships, roles, API keys)
 5. `user-tombstone-retention` — last
 
-Batch deletes use `deleteInBatchesByCondition` with per-row FK fallback (`blockedCount` logged as `batch-delete.fkBlocked`).
+Batch deletes use `deleteInBatchesByCondition` with per-row FK fallback (`blockedCount` logged as `batch-delete.fkBlocked`). Every delete runs in a savepoint: the purges run inside one retention transaction, and before the savepoints a single blocked row (an invitation still referencing its inviter, say) aborted that transaction and failed the run every night. One run deletes at most `BATCH_DELETE_MAX_BATCHES_PER_RUN` batches (250 000 rows at the default batch size) — bounding the transaction's locks and WAL — and logs `batch-delete.run_capped` when rows remain for the next run.
 
 ---
 

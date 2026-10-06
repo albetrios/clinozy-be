@@ -7,10 +7,14 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
 import { users } from '@/domains/user/user.schema.js';
 import { getDefaultS3ObjectStorageAdapter } from '@/infrastructure/storage/s3-adapter.js';
 import { gzipBufferAsync } from '@/shared/utils/infrastructure/gzip.util.js';
-import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
+import {
+  runGlobalRetentionWorkerJob,
+  type WorkerDatabaseHandle,
+} from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { env } from '@/shared/config/env.config.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import {
+  AUDIT_EXPORT_LOOKBACK_DAYS,
   AUDIT_EXPORT_MANIFEST_FILENAME,
   AUDIT_EXPORT_SCHEMA_VERSION,
   type AuditExportManifest,
@@ -20,16 +24,18 @@ import {
 const actorUsers = alias(users, 'actor_users');
 const targetUsers = alias(users, 'target_users');
 
-function previousUtcDayRange(referenceDate = new Date()): {
+/** One UTC day, `daysAgo` days before `referenceDate`'s day: `[start, end)` and its `YYYY-MM-DD`. */
+function utcDayRange(options: { referenceDate: Date; daysAgo: number }): {
   start: Date;
   end: Date;
   dateLabel: string;
 } {
+  const { referenceDate, daysAgo } = options;
   const end = new Date(
     Date.UTC(
       referenceDate.getUTCFullYear(),
       referenceDate.getUTCMonth(),
-      referenceDate.getUTCDate(),
+      referenceDate.getUTCDate() - daysAgo + 1,
     ),
   );
   const start = new Date(end);
@@ -37,6 +43,11 @@ function previousUtcDayRange(referenceDate = new Date()): {
   const dateLabel = start.toISOString().slice(0, 10);
   return { start, end, dateLabel };
 }
+
+/** Runs one short database read; S3 calls stay outside it. */
+type AuditExportDatabaseRunner = <TResult>(
+  work: (databaseHandle: WorkerDatabaseHandle) => Promise<TResult>,
+) => Promise<TResult>;
 
 function exportPrefix(): string {
   return env.AUDIT_EXPORT_S3_PREFIX.replace(/\/$/, '');
@@ -81,15 +92,20 @@ export function buildManifestKey(options: {
 }
 
 /**
- * Exports the previous UTC day's audit log entries to S3 for every tenant that
- * produced events.
+ * Exports the last {@link AUDIT_EXPORT_LOOKBACK_DAYS} UTC days' audit log entries to S3 for every
+ * tenant that produced events and has no manifest for that day yet.
  *
  * @remarks
- * Pull-based daily job:
+ * Pull-based daily job. Every database read runs in its own short retention context
+ * (`runInDatabaseContext`, one per discovery and per batch) and every S3 call outside one: a
+ * single transaction across the whole export sat idle through each S3 request, and one slow
+ * upload past the 30-second `idle_in_transaction_session_timeout` ended the session — with the
+ * day's remaining tenants never exported, since the job has one attempt and used to export only
+ * yesterday.
  *
- * 1. Computes the previous UTC day (`[D-1, D)`) — bounded by UTC midnights so
- *    the same job can run from any time zone without missing or double-counting
- *    rows.
+ * 1. For each of the last {@link AUDIT_EXPORT_LOOKBACK_DAYS} UTC days (`[D-n, D-n+1)`, bounded by
+ *    UTC midnights so the job can run from any time zone without missing or double-counting rows)
+ *    — the lookback re-exports whatever a failed run left out.
  * 2. Discovers active tenants via `selectDistinct(organization_id)` over the
  *    window, with each organization's public id (the S3 partition). This avoids
  *    holding a giant cursor over the full `logs` table. The global-retention
@@ -108,7 +124,13 @@ export function buildManifestKey(options: {
  * circuits the whole job. Tenants with zero rows in the window are skipped
  * (no empty parts, no manifest).
  */
-export async function runAuditExportJob(databaseHandle: WorkerDatabaseHandle): Promise<{
+export async function runAuditExportJob(
+  options: {
+    runInDatabaseContext?: AuditExportDatabaseRunner;
+    lookbackDays?: number;
+    referenceDate?: Date;
+  } = {},
+): Promise<{
   exportedOrganizations: number;
   skipped: number;
 }> {
@@ -116,23 +138,49 @@ export async function runAuditExportJob(databaseHandle: WorkerDatabaseHandle): P
     logger.info('audit-export.skipped — disabled or S3_BUCKET unset');
     return { exportedOrganizations: 0, skipped: 0 };
   }
+  const runInDatabaseContext = options.runInDatabaseContext ?? runGlobalRetentionWorkerJob;
+  const referenceDate = options.referenceDate ?? new Date();
+  const lookbackDays = options.lookbackDays ?? AUDIT_EXPORT_LOOKBACK_DAYS;
 
-  const { start, end, dateLabel } = previousUtcDayRange();
+  let exportedOrganizations = 0;
+  let skipped = 0;
+  for (let daysAgo = 1; daysAgo <= lookbackDays; daysAgo += 1) {
+    const day = await exportAuditDay({
+      runInDatabaseContext,
+      ...utcDayRange({ referenceDate, daysAgo }),
+    });
+    exportedOrganizations += day.exportedOrganizations;
+    skipped += day.skipped;
+  }
+  logger.info({ exportedOrganizations, skipped, lookbackDays }, 'audit-export.completed');
+  return { exportedOrganizations, skipped };
+}
+
+/** Exports one UTC day for every tenant with events that day and no manifest for it yet. */
+async function exportAuditDay(options: {
+  runInDatabaseContext: AuditExportDatabaseRunner;
+  start: Date;
+  end: Date;
+  dateLabel: string;
+}): Promise<{ exportedOrganizations: number; skipped: number }> {
+  const { runInDatabaseContext, start, end, dateLabel } = options;
   logger.info(
     { start: start.toISOString(), end: end.toISOString(), dateLabel },
     'audit-export.starting',
   );
 
-  const organizationRows = await databaseHandle
-    .selectDistinct({
-      organization_id: logs.organization_id,
-      organization_public_id: organizations.public_id,
-    })
-    .from(logs)
-    .innerJoin(organizations, eq(logs.organization_id, organizations.id))
-    .where(
-      and(isNotNull(logs.organization_id), gte(logs.created_at, start), lt(logs.created_at, end)),
-    );
+  const organizationRows = await runInDatabaseContext((databaseHandle) =>
+    databaseHandle
+      .selectDistinct({
+        organization_id: logs.organization_id,
+        organization_public_id: organizations.public_id,
+      })
+      .from(logs)
+      .innerJoin(organizations, eq(logs.organization_id, organizations.id))
+      .where(
+        and(isNotNull(logs.organization_id), gte(logs.created_at, start), lt(logs.created_at, end)),
+      ),
+  );
 
   let exportedOrganizations = 0;
   let skipped = 0;
@@ -153,7 +201,7 @@ export async function runAuditExportJob(databaseHandle: WorkerDatabaseHandle): P
     }
 
     const manifestObjects = await collectOrganizationAuditBatches({
-      databaseHandle,
+      runInDatabaseContext,
       organizationId,
       organizationPublicId,
       dateLabel,
@@ -187,23 +235,25 @@ export async function runAuditExportJob(databaseHandle: WorkerDatabaseHandle): P
     );
   }
 
-  logger.info({ exportedOrganizations, skipped, dateLabel }, 'audit-export.completed');
+  logger.info({ exportedOrganizations, skipped, dateLabel }, 'audit-export.day_completed');
   return { exportedOrganizations, skipped };
 }
 
 /**
- * Streams one organization's audit logs for the day window in keyset batches, gzip-uploading
- * each batch to S3 and returning the manifest object descriptors (empty when there are no rows).
+ * Streams one organization's audit logs for the day window in keyset batches — each read in its
+ * own short database context — gzip-uploading each batch to S3 outside it, and returns the
+ * manifest object descriptors (empty when there are no rows).
  */
 async function collectOrganizationAuditBatches(options: {
-  databaseHandle: WorkerDatabaseHandle;
+  runInDatabaseContext: AuditExportDatabaseRunner;
   organizationId: number;
   organizationPublicId: string;
   dateLabel: string;
   start: Date;
   end: Date;
 }): Promise<AuditExportManifest['objects']> {
-  const { databaseHandle, organizationId, organizationPublicId, dateLabel, start, end } = options;
+  const { runInDatabaseContext, organizationId, organizationPublicId, dateLabel, start, end } =
+    options;
   const batchSize = env.AUDIT_EXPORT_BATCH_SIZE;
   let afterId = 0;
   const manifestObjects: AuditExportManifest['objects'] = [];
@@ -211,31 +261,33 @@ async function collectOrganizationAuditBatches(options: {
   while (true) {
     // The global-retention context reads auth.users (it has a retention arm), so actor and
     // target resolve to public ids here; a user hard-deleted since leaves the column null.
-    const rows = await databaseHandle
-      .select({
-        id: logs.id,
-        public_id: logs.public_id,
-        actor_user_public_id: actorUsers.public_id,
-        target_user_public_id: targetUsers.public_id,
-        action: logs.action,
-        resource_type: logs.resource_type,
-        severity: logs.severity,
-        metadata: logs.metadata,
-        created_at: logs.created_at,
-      })
-      .from(logs)
-      .leftJoin(actorUsers, eq(logs.actor_user_id, actorUsers.id))
-      .leftJoin(targetUsers, eq(logs.target_user_id, targetUsers.id))
-      .where(
-        and(
-          eq(logs.organization_id, organizationId),
-          gte(logs.created_at, start),
-          lt(logs.created_at, end),
-          gt(logs.id, afterId),
-        ),
-      )
-      .orderBy(asc(logs.id))
-      .limit(batchSize);
+    const rows = await runInDatabaseContext((databaseHandle) =>
+      databaseHandle
+        .select({
+          id: logs.id,
+          public_id: logs.public_id,
+          actor_user_public_id: actorUsers.public_id,
+          target_user_public_id: targetUsers.public_id,
+          action: logs.action,
+          resource_type: logs.resource_type,
+          severity: logs.severity,
+          metadata: logs.metadata,
+          created_at: logs.created_at,
+        })
+        .from(logs)
+        .leftJoin(actorUsers, eq(logs.actor_user_id, actorUsers.id))
+        .leftJoin(targetUsers, eq(logs.target_user_id, targetUsers.id))
+        .where(
+          and(
+            eq(logs.organization_id, organizationId),
+            gte(logs.created_at, start),
+            lt(logs.created_at, end),
+            gt(logs.id, afterId),
+          ),
+        )
+        .orderBy(asc(logs.id))
+        .limit(batchSize),
+    );
 
     if (rows.length === 0) break;
 

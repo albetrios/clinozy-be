@@ -608,6 +608,8 @@ export class UserDataExportService {
   /**
    * Loads each export category via the owning domain's service, fetching one row beyond
    * {@link GDPR_EXPORT_MAX_ROWS_PER_TABLE} so the caller can detect and disclose truncation.
+   * One category after another: each opens its own database context, and run in parallel they
+   * held four pool connections per export job while the worker budget counts one.
    */
   private async fetchExportCategoryRows(options: {
     userPublicId: string;
@@ -615,25 +617,24 @@ export class UserDataExportService {
     fetchLimit: number;
     crossDomain: UserDataExportCrossDomainServices;
   }) {
-    const [memberships_, sessions_, notifications_, auditLogs_] = await Promise.all([
-      options.crossDomain.membershipService.listOrganizationsForUserDataExport({
+    const memberships_ =
+      await options.crossDomain.membershipService.listOrganizationsForUserDataExport({
         userPublicId: options.userPublicId,
         userInternalId: options.userInternalId,
         limit: options.fetchLimit,
-      }),
-      options.crossDomain.authSessionService.listForUserDataExport({
-        userPublicId: options.userPublicId,
-        limit: options.fetchLimit,
-      }),
-      options.crossDomain.notificationService.listForUserDataExport({
-        userPublicId: options.userPublicId,
-        limit: options.fetchLimit,
-      }),
-      options.crossDomain.auditService.listActivityForUserDataExport({
-        userPublicId: options.userPublicId,
-        limit: options.fetchLimit,
-      }),
-    ]);
+      });
+    const sessions_ = await options.crossDomain.authSessionService.listForUserDataExport({
+      userPublicId: options.userPublicId,
+      limit: options.fetchLimit,
+    });
+    const notifications_ = await options.crossDomain.notificationService.listForUserDataExport({
+      userPublicId: options.userPublicId,
+      limit: options.fetchLimit,
+    });
+    const auditLogs_ = await options.crossDomain.auditService.listActivityForUserDataExport({
+      userPublicId: options.userPublicId,
+      limit: options.fetchLimit,
+    });
 
     return {
       memberships: memberships_,

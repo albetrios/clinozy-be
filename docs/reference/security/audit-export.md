@@ -50,7 +50,8 @@ Per organization and UTC date:
 ## Retention
 
 - Hot store: `audit-retention` worker deletes rows after `AUDIT_RETENTION_DAYS`
-- Export runs for the **previous UTC calendar day** before hot delete for that range
+- Each run exports the **last three UTC calendar days** (`AUDIT_EXPORT_LOOKBACK_DAYS`) for every organization that has no `manifest.json` for that day yet: an exported day costs one S3 HEAD, and a day a failed run left out is exported on the next one (the job has a single attempt per day). All of it lands long before the hot delete for that range.
+- Every database read (the day's organizations, each keyset batch) runs in its own short retention context and every S3 call outside one — a single transaction across the export used to sit idle through each S3 request, and one upload slower than the 30-second `idle_in_transaction_session_timeout` ended the session mid-export.
 - See [data-lifecycle-deletion.md](../data/data-lifecycle-deletion.md)
 
 ## SIEM ingest (Splunk, Datadog, and similar)

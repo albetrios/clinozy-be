@@ -1,6 +1,12 @@
 /** BullMQ queue for daily audit log export to S3 (NDJSON gzip per organization). */
 export const AUDIT_EXPORT_QUEUE_NAME = 'audit-export';
 
+/**
+ * Days back each run exports — yesterday and the two days before. A day already exported for a
+ * tenant (its manifest exists) costs one S3 HEAD; a day a failed run left out is exported now.
+ */
+export const AUDIT_EXPORT_LOOKBACK_DAYS = 3;
+
 /** Filename used for the per-export manifest sidecar uploaded next to the NDJSON parts. */
 export const AUDIT_EXPORT_MANIFEST_FILENAME = 'manifest.json';
 /** Manifest schema version literal — bump when the manifest shape changes incompatibly. */

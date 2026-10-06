@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runUserDataExportJob } from '@/domains/user/sub-domains/user-data-export/workers/user-data-export.processor.js';
 import { UserDataExportCancelledError } from '@/domains/user/sub-domains/user-data-export/user-data-export.types.js';
+import {
+  CircuitBreakerOpenError,
+  MANAGED_CIRCUIT_BREAKERS,
+} from '@/infrastructure/resilience/circuit-breaker.js';
 
 const fakeDatabaseHandle = { __fake: true } as const;
 
@@ -157,5 +161,37 @@ describe('user-data-export.processor', () => {
       'export_failed',
       fakeDatabaseHandle,
     );
+  });
+
+  it('leaves the export processing on an attempt that is not the last — BullMQ retries it', async () => {
+    vi.spyOn(MANAGED_CIRCUIT_BREAKERS.s3, 'getState').mockResolvedValue('CLOSED');
+    const service = createServiceMock();
+    service.isExportJobCancelled.mockResolvedValue(false);
+    service.markProcessing.mockResolvedValue(undefined);
+    const failure = new Error('boom');
+    service.buildExportPayload.mockRejectedValue(failure);
+
+    await expect(
+      runUserDataExportJob(jobData, service as never, { isFinalAttempt: false }),
+    ).rejects.toBe(failure);
+
+    expect(service.failExportJob).not.toHaveBeenCalled();
+  });
+
+  it('never marks the export failed for an S3 outage, even on the last attempt', async () => {
+    // Marked failed, the user could request a second export while S3 was down; when the parked
+    // job resumed, two exports were built.
+    const service = createServiceMock();
+    service.isExportJobCancelled.mockResolvedValue(false);
+    service.markProcessing.mockResolvedValue(undefined);
+    service.buildExportPayload.mockResolvedValue({});
+    const outage = new CircuitBreakerOpenError('s3', 15_000, 'Circuit breaker "s3" is OPEN');
+    service.completeExportJob.mockRejectedValue(outage);
+
+    await expect(
+      runUserDataExportJob(jobData, service as never, { isFinalAttempt: true }),
+    ).rejects.toBe(outage);
+
+    expect(service.failExportJob).not.toHaveBeenCalled();
   });
 });

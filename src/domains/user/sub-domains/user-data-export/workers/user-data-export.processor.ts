@@ -6,6 +6,7 @@ import {
   withAppDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
 import { gzipBufferAsync } from '@/shared/utils/infrastructure/gzip.util.js';
+import { toProviderOutageError } from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 /**
@@ -20,8 +21,11 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
  *   soft-deleted or the export row being purged by offboarding; an owner that no longer exists
  *   at all cancels the job too.
  * - **Failure modes:** {@link UserDataExportCancelledError} short-circuits to a no-op (no retry,
- *   no failure status). All other errors are logged, mark the row `failed` with `error_code`
- *   `export_failed`, and re-throw so BullMQ applies the queue's retry/backoff and DLQ policy.
+ *   no failure status). Every other error re-throws so BullMQ applies the queue's retry/backoff
+ *   and DLQ policy; only the final attempt marks the row `failed` (`error_code` `export_failed`),
+ *   and an S3 outage never does — the worker parks the job until S3 is back. Marking it failed on
+ *   every attempt let the user request a second export during an outage; when the first resumed,
+ *   two were built.
  * - **Side effects:** writes `auth.user_data_exports` status, uploads a gzip JSON object to the
  *   GDPR S3 prefix, and emits structured logs for observability.
  * - **Notes:** cross-domain reads delegate to each owning domain's service (see dependency rules).
@@ -29,6 +33,7 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 export async function runUserDataExportJob(
   jobData: UserDataExportJobData,
   userDataExportService: UserDataExportService,
+  options: { isFinalAttempt: boolean } = { isFinalAttempt: true },
 ): Promise<void> {
   const { exportPublicId, userPublicId } = jobData;
   const ownerScope = PRINCIPAL_SCOPE.JOB({ userPublicId: userPublicId });
@@ -88,6 +93,14 @@ export async function runUserDataExportJob(
     if (error instanceof UserDataExportCancelledError) {
       logger.info({ exportPublicId, userPublicId }, 'user-data-export.worker.cancelled');
       return;
+    }
+    const outage = await toProviderOutageError({ error, provider: 's3' });
+    if (outage !== null || !options.isFinalAttempt) {
+      logger.warn(
+        { error, exportPublicId, userPublicId, providerOutage: outage !== null },
+        'user-data-export.worker.retrying',
+      );
+      throw error;
     }
     logger.error({ error, exportPublicId, userPublicId }, 'user-data-export.worker.failed');
     await withAppDatabaseContext(ownerScope, async (databaseHandle) => {
