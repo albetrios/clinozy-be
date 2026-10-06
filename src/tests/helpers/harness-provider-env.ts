@@ -37,7 +37,6 @@ process.env.S3_SECRET_ACCESS_KEY = 'test-s3-secret-access-key';
 
 for (const key of [
   'S3_ENDPOINT',
-  'PUBLIC_MEDIA_BASE_URL',
   'REDIS_BULLMQ_URL',
   'SENTRY_DSN',
   'POSTHOG_KEY',
