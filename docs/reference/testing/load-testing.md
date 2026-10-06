@@ -244,6 +244,8 @@ two claims should not be reported as if they were the same one.
 
 ## Post-run settle check (drain + assert clean)
 
+The k6 journeys exercise the API; the worker runtime's volume behaviour is covered by `src/tests/performance/queue-throughput.performance.test.ts` (real Redis, two replicas): 10,000 jobs drained exactly once, and a 2,000-job backlog held through a provider outage and drained exactly once afterwards.
+
 After a load (or e2e) batch, `pnpm load:settle-check` proves the async fabric finished every job the run started — nothing stuck in a queue, the event-bus / outbox side effects flushed, and nothing dead-lettered. Run it against the **same** API + worker the load test hit (workers must be running so the backlog can drain):
 
 ```bash

@@ -1966,6 +1966,7 @@ src/
     │   ├── notify-list.performance.test.ts
     │   ├── performance.overview.md
     │   ├── permission-cache.performance.test.ts
+    │   ├── queue-throughput.performance.test.ts
     │   └── worker-bulkheads.performance.test.ts
     ├── security/
     │   ├── auth/
