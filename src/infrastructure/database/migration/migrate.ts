@@ -4,6 +4,10 @@ import { resolve } from 'node:path';
 import { readdir, readFile } from 'node:fs/promises';
 import { describeMigrationConnectionError } from '@/infrastructure/database/migration/migration-error-hint.js';
 import { parseMigrationExecutionMode } from '@/infrastructure/database/migration/migration-execution-mode.js';
+import {
+  applyMigrationTimeouts,
+  retryOnMigrationLockTimeout,
+} from '@/infrastructure/database/migration/migration-lock-timeout.js';
 import { isNeonPoolerConnection } from '@/infrastructure/database/utils/connection-url.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
@@ -249,14 +253,21 @@ async function main() {
         .filter((statement) => statement.length > 0);
 
       if (transactional) {
-        await sql.begin(async (transaction) => {
-          await runMigrationStatements({ filename, statements, executor: transaction });
-          if (!isDryRun) {
-            await transaction.unsafe(
-              'insert into public.schema_migrations (filename) values ($1)',
-              [filename],
-            );
-          }
+        // Bounded lock waits (a blocked DDL must not queue the app's traffic behind it) and a
+        // statement cap; a file whose lock wait times out rolls back and is retried.
+        await retryOnMigrationLockTimeout({
+          filename,
+          run: () =>
+            sql.begin(async (transaction) => {
+              await applyMigrationTimeouts({ executor: transaction, scope: 'transaction' });
+              await runMigrationStatements({ filename, statements, executor: transaction });
+              if (!isDryRun) {
+                await transaction.unsafe(
+                  'insert into public.schema_migrations (filename) values ($1)',
+                  [filename],
+                );
+              }
+            }),
         });
         continue;
       }
@@ -269,10 +280,19 @@ async function main() {
        * an INVALID index behind, so we check for that before recording success —
        * an operator must `DROP INDEX CONCURRENTLY` the invalid index and re-run.
        */
-      await runMigrationStatements({ filename, statements, executor: sql });
-      await assertNoInvalidIndexes({ filename });
-      if (!isDryRun) {
-        await sql.unsafe('insert into public.schema_migrations (filename) values ($1)', [filename]);
+      // The lock wait is bounded here too; the statement cap is lifted for long index builds.
+      await applyMigrationTimeouts({ executor: sql, scope: 'session' });
+      try {
+        await runMigrationStatements({ filename, statements, executor: sql });
+        await assertNoInvalidIndexes({ filename });
+        if (!isDryRun) {
+          await sql.unsafe('insert into public.schema_migrations (filename) values ($1)', [
+            filename,
+          ]);
+        }
+      } finally {
+        await sql.unsafe('RESET lock_timeout');
+        await sql.unsafe('RESET statement_timeout');
       }
     }
 

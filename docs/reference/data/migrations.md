@@ -65,6 +65,23 @@ The runner serializes the whole migration run behind a session-level `pg_advisor
 
 ---
 
+### Lock and statement timeouts
+
+A DDL statement waiting for a lock holds its place in that table's lock queue, so every later query
+on the table queues behind it — an outage for as long as the wait. The runner
+([`migration-lock-timeout.ts`](../../../src/infrastructure/database/migration/migration-lock-timeout.ts))
+therefore bounds every migration:
+
+| Lane | `lock_timeout` | `statement_timeout` | On a lock timeout (SQLSTATE 55P03) |
+| ---- | -------------- | ------------------- | ---------------------------------- |
+| Transactional (default) | 5 s (`SET LOCAL`) | 5 min (`SET LOCAL`) | the file rolls back and is retried, 3 attempts in all, 3 s apart |
+| Non-transactional (`CREATE INDEX CONCURRENTLY`) | 5 s (session) | none — long index builds block no writes | the run fails; drop the INVALID index and re-run |
+
+A migration that genuinely needs longer than 5 minutes inside its transaction is a data change in
+disguise (migrations carry no backfills) or a table rewrite the lint should have caught — split it, or
+move the long part to the non-transactional lane. Pinned by `migration-lock-timeout.unit.test.ts` and,
+against a real held lock, `migration-lock-timeout.db.unit.test.ts`.
+
 ## Non-transactional migrations (`CREATE INDEX CONCURRENTLY`)
 
 By default the runner wraps **each migration file in a single transaction** — DML and most DDL apply atomically and roll back automatically on a mid-file error. A few statements cannot run inside a transaction, most importantly `CREATE INDEX CONCURRENTLY`, which is the zero-downtime way to add an index: plain `CREATE INDEX` takes a `SHARE` lock that **blocks all writes** for the build duration (minutes on a large high-write table such as `audit.logs`).

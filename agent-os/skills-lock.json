@@ -65,7 +65,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-db-migration-maintainer/SKILL.md",
-      "computedHash": "16bf477551d91a23a2c27b9256d75f2803c360e095cef748c451d556db246cff"
+      "computedHash": "d901df32da58f17fe34ca67503f6cc89abf7a7e148497374713973585f3e23a0"
     },
     "be-delegate-search": {
       "source": "local",
