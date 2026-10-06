@@ -1,0 +1,22 @@
+---
+description: Mandatory rules for BullMQ queues, workers, crons and sweeps — registration, job data, enqueue after commit, job identity, lost-enqueue sweeps, provider pause, failures, database contexts, scheduler.
+globs: src/domains/**/queues/**/*.ts, src/domains/**/workers/**/*.ts, src/infrastructure/queue/**/*.ts, src/infrastructure/mail/queues/**/*.ts, src/infrastructure/mail/workers/**/*.ts
+alwaysApply: false
+---
+
+# Queue and worker conventions (clinozy-be)
+
+Owner: **[be-workers-events](../skills/be-workers-events/SKILL.md)**. Every rule below, with its reason and the test that enforces it: **[docs/reference/runtime/queue-and-worker-rules.md](../../docs/reference/runtime/queue-and-worker-rules.md)**.
+
+- **Register once**: an entry in `worker-registration.registry.ts` (never start a worker in `bootstrap.ts`), the queue name in `WORKER_QUEUE_NAMES` (`queue-catalog.ts`), and a cron also in `scheduler.ts` with `scheduled: true`.
+- **Job data**: public ids or row tokens only (never a bigserial), ids not documents; `organizationPublicId` / `userPublicId` for scoped jobs; a Zod job schema, `parseBullMQJobData` at enqueue and `parseJobDataOrDeadLetter` in the worker; trace context carried.
+- **Connections**: `prefix: getBullMQKeyPrefix()` on every `Queue` / `Worker` / `QueueEvents`; producers use `getBullMQProducerConnectionOptions()`.
+- **Enqueue after the commit** (`eventBus.onCommit`, `runEnqueueAfterCommit`, `scheduleCommitDispatch`); an enqueue error never fails the request.
+- **Every queue sets its own** `attempts`, jittered `backoff` and capped `removeOnComplete` / `removeOnFail`.
+- **Job identity on purpose**: one job per row → `jobId` = public id; one live job per key → `deduplication: { id }`; an aggregate's latest state → `deduplication: { id, keepLastIfActive: true }`. Never a stable `jobId` for repeatable work.
+- **Row-backed work**: an enqueue error leaves the row pending (never failed), and a sweep in the same family re-enqueues it.
+- **Provider-dependent queue** → `createProviderPausableWorker({ provider })`; a queue calling customer endpoints does not pause.
+- **Failures on purpose**: return a skip (nothing to do), `UnrecoverableError` (our fault), `expectedFinalFailure` (theirs), throw (transient). No Sentry capture in a worker's `failed` handler.
+- **Database**: context runners and `createWorker*Repository(databaseHandle)`, never `getRequestDatabase()`; no Stripe / S3 / Resend / HTTP call inside a database context.
+- **Crons and sweeps**: `retentionDefinition`, bounded batches, idempotent; `SCHEDULER_ENABLED=true` on every worker service.
+- **A new worker changes shared numbers**: the runbook counts (resource-limits, worker-scaling, redis-topology, bull-board, workers-and-events) and the pinned registry and scheduler tests.

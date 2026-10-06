@@ -280,6 +280,8 @@ src/shared/
 
 ## Queue Infrastructure — Domain-Owned Jobs and Processors
 
+Adding or changing a queue, worker, cron or sweep: follow **[`docs/reference/runtime/queue-and-worker-rules.md`](docs/reference/runtime/queue-and-worker-rules.md)** — every rule (registration, job data, enqueue after commit, job identity and deduplication, lost-enqueue sweeps, provider outage pause, failure choice, database contexts, scheduler, capacity, tests) with the test that enforces it (rule: `agent-os/rules/be-queue-worker-conventions.mdc`; procedure: **be-workers-events**).
+
 - **Infrastructure only**: Connection (Redis), **scheduler** (repeatable retention cron registry), **bootstrap** that registers schedulers and starts each worker.
 - **Jobs and processors**: Live in **respective domains only** — never in `common` or `shared`.
 - Layout:

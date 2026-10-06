@@ -215,7 +215,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-skill-index/SKILL.md",
-      "computedHash": "8de2ad3762eef0e6db605aa804d700e3b916289448b56358deae9c3042ab1c88"
+      "computedHash": "efee8edee74164b1c9cf5c6e8ddb7fbc49147efe35a6b86920076404e2dd211b"
     },
     "be-split-to-prs": {
       "source": "local",
@@ -263,7 +263,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-workers-events/SKILL.md",
-      "computedHash": "8b9903eeec4a03db78a82428c36a85b53c48a96786b946f65dbab7cdbc0ac8af"
+      "computedHash": "c320af80548415ebb249966c88abe166192312776818d5a31c5af84b78128cb0"
     },
     "ponytail": {
       "source": "DietrichGebert/ponytail",

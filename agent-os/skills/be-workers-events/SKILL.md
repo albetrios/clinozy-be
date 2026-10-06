@@ -6,6 +6,11 @@ indexNote: domain events + BullMQ queues/workers (Redis, retries, graceful shutd
 
 # Workers + events (EventBus + BullMQ)
 
+**Rules first:** every rule for a queue, worker, cron or sweep — job identity, enqueue after
+commit, provider pause, lost-enqueue sweeps, registration, capacity, tests — with the test that
+enforces it, is in [queue-and-worker-rules.md](../../../docs/reference/runtime/queue-and-worker-rules.md)
+(rule: `agent-os/rules/be-queue-worker-conventions.mdc`). This skill is the procedure.
+
 ## Core pattern
 
 - **Services emit domain events** (in-process) after successful DB writes.

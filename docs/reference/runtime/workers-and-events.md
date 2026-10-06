@@ -2,6 +2,8 @@
 
 Event bus (in-process) and BullMQ workers (durable) are **not the same thing**. Mixing them up is the most common architectural mistake on this codebase.
 
+Adding or changing a queue, worker, cron or sweep? Every rule — with the test that enforces it — is on one page: [queue-and-worker-rules.md](queue-and-worker-rules.md). This page explains the mechanisms behind them.
+
 ---
 
 ## Comparison
@@ -334,6 +336,8 @@ webhook-delivery.event-handlers.ts  →  enqueueWebhookDelivery()
 ---
 
 ## Implementation checklist
+
+The full rule set is [queue-and-worker-rules.md](queue-and-worker-rules.md); in order:
 
 1. **Emit** — After DB write in service: `eventBus.emit({ type, payload, timestamp })` with snake_case payload.
 2. **Handle** — Register once via `registerEventHandlers()`; validate payload, enqueue job, catch/log (do not throw to HTTP).
