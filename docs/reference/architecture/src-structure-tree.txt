@@ -2187,6 +2187,7 @@ src/
     │   │   ├── payment/
     │   │   │   └── stripe-circuit-failure.unit.test.ts
     │   │   ├── queue/
+    │   │   │   ├── bullmq-connection-tls.unit.test.ts
     │   │   │   ├── bullmq-producer-connection.unit.test.ts
     │   │   │   └── scheduler.unit.test.ts
     │   │   ├── resilience/
