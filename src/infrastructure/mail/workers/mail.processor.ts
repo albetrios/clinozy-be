@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { UnrecoverableError } from 'bullmq';
-import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
 import { sendEmail } from '@/infrastructure/mail/mail.service.js';
 import { ResendApiError } from '@/infrastructure/mail/resend-api.error.js';
 import { MAIL_QUEUE_MAX_ATTEMPTS } from '@/infrastructure/mail/queues/mail.queue.js';
@@ -16,6 +15,7 @@ import { MAIL_QUEUE_NAME, type MailJobData } from '@/infrastructure/mail/queues/
 import { mailJobDataSchema } from '@/infrastructure/mail/queues/mail.job.schema.js';
 import { parseBullMQJobData } from '@/shared/utils/validation/bullmq-job-validation.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
+import { toProviderOutageError } from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import {
   MAINTENANCE_SCOPE,
@@ -97,8 +97,10 @@ export type ProcessMailOutboxJobResult =
  *   complete as `skipped`; a terminal `failed` row (body scrubbed) throws `UnrecoverableError`;
  *   recipients that do not parse fail the row and throw `UnrecoverableError` — the row is broken
  *   and no retry fixes it (it used to stay `sending` and loop through the sweeper forever);
- *   `CircuitBreakerOpenError` is never terminal — the claim is released so BullMQ can retry past
- *   cooldown; a Resend per-email rejection fails the row and completes as `rejected`.
+ *   a Resend outage (`ProviderOutageError` — the circuit is open, or this failure left it open or
+ *   half-open) is never terminal, even on the last attempt: the claim is released and the worker
+ *   pauses the queue until Resend is back; a Resend per-email rejection fails the row and
+ *   completes as `rejected`.
  * - **Side effects:** updates `auth.mail_outbox.status` / `sent_at` /
  *   `resend_message_id`; sends one HTTP request to Resend per claimed attempt;
  *   emits `mail.worker.*` structured logs.
@@ -233,9 +235,10 @@ async function processMailOutboxJobInner(
 
 /**
  * Settles the outbox row after a failed send. A per-email rejection fails the row for good and
- * completes the job as `rejected` (the recipient's problem, not ours — no retry, no page); an
- * open circuit releases the claim; any other error releases it too — or fails the row on the last
- * attempt. Everything but a rejection is rethrown so BullMQ retries or dead-letters the job.
+ * completes the job as `rejected` (the recipient's problem, not ours — no retry, no page). A Resend
+ * outage releases the claim and throws `ProviderOutageError`, whatever the attempt: the row
+ * waits for Resend, it is never failed for it. Any other error releases the claim too — or fails
+ * the row on the last attempt — and is rethrown so BullMQ retries or dead-letters the job.
  */
 async function settleFailedSend(options: {
   error: unknown;
@@ -258,23 +261,16 @@ async function settleFailedSend(options: {
     return { outcome: 'rejected', statusCode: error.statusCode };
   }
 
-  const isCircuitOpen = error instanceof CircuitBreakerOpenError;
-  if (options.isFinalJobAttempt && !isCircuitOpen) {
+  const outage = await toProviderOutageError({ error, provider: 'resend' });
+  if (outage) {
+    await releaseMailOutboxClaim(mailOutboxToken);
+    logger.warn({ ...logFields, jobAttemptNumber, maxJobAttempts }, 'mail.worker.provider_outage');
+    throw outage;
+  }
+  if (options.isFinalJobAttempt) {
     await markMailOutboxFailed(mailOutboxToken);
   } else {
     await releaseMailOutboxClaim(mailOutboxToken);
-  }
-  if (isCircuitOpen) {
-    logger.warn(
-      {
-        ...logFields,
-        circuit: error.circuitName,
-        retryAfterMs: error.retryAfterMs,
-        jobAttemptNumber,
-        maxJobAttempts,
-      },
-      'mail.worker.circuit_open',
-    );
   }
   throw error instanceof Error ? error : new Error(`mail.send.failed:outbox:${mailOutboxToken}`);
 }

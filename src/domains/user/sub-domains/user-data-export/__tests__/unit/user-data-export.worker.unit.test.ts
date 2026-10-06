@@ -33,6 +33,28 @@ vi.mock('bullmq', () => ({
   }),
 }));
 
+// The real factory adds the pause behaviour (its own suites cover it); here it only has to build
+// the worker through the mocked BullMQ above and record which provider the queue pauses for.
+const pausableWorkerState = vi.hoisted(() => ({ provider: undefined as string | undefined }));
+vi.mock('@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js', async () => {
+  const { Worker } = await import('bullmq');
+  return {
+    createProviderPausableWorker: (options: {
+      queueName: string;
+      provider: string;
+      processor: unknown;
+      workerOptions: unknown;
+    }) => {
+      pausableWorkerState.provider = options.provider;
+      return new (Worker as unknown as new (...arguments_: unknown[]) => unknown)(
+        options.queueName,
+        options.processor,
+        options.workerOptions,
+      );
+    },
+  };
+});
+
 vi.mock('@/infrastructure/queue/connection.js', () => ({
   getBullMQKeyPrefix: () => 'test:bull',
   getBullMQConnectionOptions: () => ({ host: 'redis.test' }),
@@ -116,6 +138,8 @@ describe('user-data-export.worker', () => {
     expect(workerState.queueName).toBe('user-data-export');
     expect(handle.queueName).toBe('user-data-export');
     expect(handle.worker).toBeDefined();
+    // While S3 is down the queue pauses instead of spending attempts.
+    expect(pausableWorkerState.provider).toBe('s3');
   });
 
   it('takes concurrency from getWorkerConcurrencyNotify and merges the default worker options', async () => {

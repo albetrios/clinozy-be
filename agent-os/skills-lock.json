@@ -263,7 +263,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-workers-events/SKILL.md",
-      "computedHash": "22e1a0456362c74bdee75d5a6ef8c07560c9c2afcca95f612e59cd28875ef3c1"
+      "computedHash": "3130eff686e4cd8ce7f551a784a12b45e8e088d0069698bc7440ad3544dabc54"
     },
     "ponytail": {
       "source": "DietrichGebert/ponytail",

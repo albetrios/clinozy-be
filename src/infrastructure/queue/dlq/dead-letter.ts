@@ -12,7 +12,7 @@ import {
   getBullMQKeyPrefix,
 } from '@/infrastructure/queue/connection.js';
 import { insertDeadLetterJob } from '@/infrastructure/queue/dlq/dead-letter.repository.js';
-import { THIRTY_DAYS_SECONDS } from '@/shared/constants/ttl.constants.js';
+import { MILLISECONDS_PER_SECOND, THIRTY_DAYS_SECONDS } from '@/shared/constants/ttl.constants.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import { redactSensitive } from '@/shared/utils/security/sensitive-redaction.util.js';
@@ -23,11 +23,17 @@ export const DLQ_QUEUE_SUFFIX = '-dlq';
 const DEAD_LETTER_JOB_NAME = 'dead-letter';
 
 /**
- * Dead-letter jobs are retained for 30 days so operators have time to inspect and replay
- * them, after which BullMQ evicts the records from Redis to prevent unbounded growth and
- * OOM. Replay flows must finish (or re-enqueue) within this window.
+ * How long a snapshot stays in a `<source>-dlq` mirror: 30 days to inspect and replay it, then
+ * {@link trimDeadLetterQueueMirrors} removes it. The Postgres ledger keeps its own retention.
  */
-const DEAD_LETTER_RETENTION_SECONDS = THIRTY_DAYS_SECONDS;
+export const DEAD_LETTER_MIRROR_RETENTION_MS = THIRTY_DAYS_SECONDS * MILLISECONDS_PER_SECOND;
+
+/**
+ * Most snapshots one `<source>-dlq` mirror holds. Past it a final failure is still recorded in
+ * `audit.dead_letter_jobs` and alerted, but not mirrored: a failure storm cannot fill Redis — the
+ * same Redis every queue runs on.
+ */
+export const DEAD_LETTER_MIRROR_MAX_JOBS = 1_000;
 
 const deadLetterQueuesByName = new Map<string, Queue>();
 
@@ -35,7 +41,7 @@ const deadLetterQueuesByName = new Map<string, Queue>();
  * Snapshot persisted on the `<source>-dlq` queue when a job exhausts its retry budget.
  * Carries only a hand-picked metadata summary (see {@link buildReplayJobPayload}) — the
  * original payload is intentionally not stored so secrets, HTML bodies, and full webhook
- * payloads never sit in Redis past the 30-day retention window.
+ * payloads never sit in Redis, not even within the 30-day mirror retention.
  */
 export interface DeadLetterJobData {
   original_queue: string;
@@ -163,17 +169,12 @@ export function listDeadLetterQueueNames(sourceQueueNames: readonly string[]): s
 export function getDeadLetterQueueClient(deadLetterQueueName: string): Queue {
   const existing = deadLetterQueuesByName.get(deadLetterQueueName);
   if (existing) return existing;
+  // No worker consumes a mirror, so its snapshots stay `waiting` until a replay removes them:
+  // BullMQ's `removeOnComplete` / `removeOnFail` never fire for them. The bounds are
+  // DEAD_LETTER_MIRROR_MAX_JOBS (checked on write) and trimDeadLetterQueueMirrors (by age).
   const queue = new Queue(deadLetterQueueName, {
     connection: getBullMQConnectionOptions(),
     prefix: getBullMQKeyPrefix(),
-    // Queue-level default eviction so DLQ snapshots are bounded even when they sit
-    // in `waiting` state (BullMQ `removeOn{Complete,Fail}` per-add only fires on
-    // state transition; a DLQ job that never completes/fails would otherwise grow
-    // unbounded outside any retention policy).
-    defaultJobOptions: {
-      removeOnComplete: { age: DEAD_LETTER_RETENTION_SECONDS, count: 1_000 },
-      removeOnFail: { age: DEAD_LETTER_RETENTION_SECONDS, count: 1_000 },
-    },
   });
   deadLetterQueuesByName.set(deadLetterQueueName, queue);
   return queue;
@@ -213,13 +214,14 @@ export function isFinalJobFailure(job: Job | undefined): boolean {
  * @remarks
  * - **Algorithm:** lazily opens (or reuses) a BullMQ {@link Queue} for the DLQ, builds a
  *   safe {@link DeadLetterJobData} record via `summarizeJobDataForDeadLetter`, and adds a
- *   `dead-letter` job keyed by `dlq-<source>-<originalJobId>` for replay deduplication.
+ *   `dead-letter` job keyed by `dlq-<source>-<originalJobId>` for replay deduplication — unless
+ *   the mirror already holds {@link DEAD_LETTER_MIRROR_MAX_JOBS} snapshots, when it only logs
+ *   `queue.dead_letter.mirror_full` (the Postgres ledger has the record).
  * - **Failure modes:** any Redis error bubbles back to {@link attachDeadLetterAndAlerting},
  *   which logs `queue.dead_letter.enqueue_failed`; the original failed job remains in
  *   BullMQ's `failed` set so operators can still inspect it.
- * - **Side effects:** writes a row to the DLQ Redis stream with 30-day retention on
- *   `removeOnComplete` and `removeOnFail` (and queue-level defaults that also bound
- *   `waiting` jobs); no Postgres writes.
+ * - **Side effects:** one count and one add on the DLQ (a `waiting` job, removed by a replay or
+ *   by {@link trimDeadLetterQueueMirrors} after 30 days); no Postgres writes.
  * - **Notes:** the DLQ Redis `jobId` is `dlq-<source>-<originalJobId>-attempt-<attemptsMade>`
  *   so a replayed job that fails terminally again produces a FRESH snapshot rather than
  *   colliding with the prior failure's `failed_reason`/`error_stack`/`failed_at` (BullMQ's
@@ -234,6 +236,20 @@ export async function enqueueDeadLetter(
 ): Promise<void> {
   const deadLetterQueueName = getDeadLetterQueueName(sourceQueueName);
   const queue = getDeadLetterQueueClient(deadLetterQueueName);
+  const mirroredCount = await queue.getWaitingCount();
+  if (mirroredCount >= DEAD_LETTER_MIRROR_MAX_JOBS) {
+    logger.warn(
+      {
+        sourceQueue: sourceQueueName,
+        deadLetterQueue: deadLetterQueueName,
+        originalJobId: job.id,
+        mirroredCount,
+        maxMirroredJobs: DEAD_LETTER_MIRROR_MAX_JOBS,
+      },
+      'queue.dead_letter.mirror_full',
+    );
+    return;
+  }
   const errorObject = error instanceof Error ? error : new Error(String(error));
   const maxAttempts = resolveJobMaxAttempts(job);
 
@@ -256,11 +272,7 @@ export async function enqueueDeadLetter(
   const safeOriginalJobIdentifier = job.id ?? job.opts.jobId ?? 'unknown';
   const deadLetterJobIdentifier = `dlq-${sourceQueueName}-${String(safeOriginalJobIdentifier)}-attempt-${String(job.attemptsMade)}`;
 
-  await queue.add(DEAD_LETTER_JOB_NAME, data, {
-    jobId: deadLetterJobIdentifier,
-    removeOnComplete: { age: DEAD_LETTER_RETENTION_SECONDS },
-    removeOnFail: { age: DEAD_LETTER_RETENTION_SECONDS },
-  });
+  await queue.add(DEAD_LETTER_JOB_NAME, data, { jobId: deadLetterJobIdentifier });
 
   logger.info(
     {
@@ -483,6 +495,52 @@ export function attachDeadLetterAndAlerting(worker: Worker, queueName: string): 
       captureFinalFailureInSentry(queueName, job, error);
     }
   });
+}
+
+/**
+ * Removes the snapshots older than the mirror retention from each source queue's `<source>-dlq`.
+ *
+ * @remarks
+ * - **Algorithm:** `clean(retentionMs, DEAD_LETTER_MIRROR_MAX_JOBS, 'wait')` on every mirror,
+ *   concurrently through the pooled clients — at most one mirror's worth per queue per pass.
+ * - **Failure modes:** a Redis error on one mirror is logged (`queue.dead_letter.trim_failed`)
+ *   and leaves the others to finish; the next pass retries it.
+ * - **Side effects:** deletes Redis job hashes from the mirrors; never touches the Postgres
+ *   ledger, which `audit-retention` prunes on its own schedule.
+ * - **Notes:** run on every DLQ-depth tick. Returns the number of snapshots removed.
+ */
+export async function trimDeadLetterQueueMirrors(options: {
+  sourceQueueNames: readonly string[];
+  retentionMs?: number;
+}): Promise<number> {
+  const retentionMs = options.retentionMs ?? DEAD_LETTER_MIRROR_RETENTION_MS;
+  const removedCounts = await Promise.all(
+    options.sourceQueueNames.map(async (sourceQueueName) => {
+      const deadLetterQueueName = getDeadLetterQueueName(sourceQueueName);
+      try {
+        const removed = await getDeadLetterQueueClient(deadLetterQueueName).clean(
+          retentionMs,
+          DEAD_LETTER_MIRROR_MAX_JOBS,
+          'wait',
+        );
+        return removed.length;
+      } catch (error) {
+        logger.warn(
+          {
+            deadLetterQueue: deadLetterQueueName,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'queue.dead_letter.trim_failed',
+        );
+        return 0;
+      }
+    }),
+  );
+  const removedTotal = removedCounts.reduce((total, removed) => total + removed, 0);
+  if (removedTotal > 0) {
+    logger.info({ removedTotal, retentionMs }, 'queue.dead_letter.trimmed');
+  }
+  return removedTotal;
 }
 
 /**

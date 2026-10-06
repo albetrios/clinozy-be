@@ -40,7 +40,9 @@ This module is **infrastructure**, not a domain — it offers `recordOutboxEmail
 
 ## Failure modes
 
-- **Resend API timeout** → BullMQ retries with backoff; final failure → DLQ + Sentry. Mail outbox row stays for forensic value.
+- **Resend down** (the `resend` circuit opens, or a send failure leaves it open or half-open) → the `mail` queue pauses on every replica for five minutes and the job is parked without spending an attempt; the claim is released, so the row stays `pending` — never failed — however long the outage lasts. The next job after each pause is the probe; once Resend answers, the backlog drains. See [Provider outage pause](docs/reference/runtime/workers-and-events.md#provider-outage-pause).
+- **Resend API timeout while the circuit stays closed** → BullMQ retries with backoff; final failure → DLQ + Sentry. Mail outbox row stays for forensic value.
+- **Sweeper passes during a long outage** → each pass re-enqueues the `pending` rows, but `enqueueMailOutboxJob` deduplicates on the row's token: a row has one live job, so the passes add nothing.
 - **Worker crash mid-send** → row stuck in `sending`; sweeper reclaims after `MAIL_OUTBOX_RECLAIM_SENDING_MINUTES` and re-queues. The row's stored Resend idempotency key prevents a duplicate delivery if the crash happened after Resend accepted the message.
 - **Resend refuses the email itself** (422 `validation_error` — e.g. a bad recipient — `missing_required_field`, `invalid_attachment`, `invalid_parameter`) → a per-email rejection: the row is marked `failed` on the first attempt, the job completes as `rejected` (no retries, no DLQ, no page), and the `resend` circuit counts the call as a success — one bad address cannot hold back every other email.
 - **Resend 409 `invalid_idempotent_request`** → also a per-email rejection: the key was already used in the last 24 hours with a different body. Keys come from the per-row random token, so this points to a key built from something other than `resend_idempotency_token`.

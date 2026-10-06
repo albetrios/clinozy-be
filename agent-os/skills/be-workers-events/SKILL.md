@@ -37,8 +37,14 @@ options, caps `removeOnComplete` / `removeOnFail`, and adds retry jitter
 | `mail` | 8 | custom, doubling from 5 s (`mail-backoff.util.ts`) |
 | `webhook-delivery` | 8 | custom schedule, 1 min → 10 h (`WEBHOOK_DELIVERY_RETRY_DELAYS_MS`) |
 
-A mail or Stripe-webhook job failing on an open circuit waits the breaker's `retryAfterMs` instead of
-its next backoff step.
+Attempts are spent only on failures that are the job's own. A queue whose every job calls one
+third-party provider (`mail` → Resend, `stripe-webhook` and `subscription-seat-sync` → Stripe,
+`user-data-export` → S3) is created with `createProviderPausableWorker`
+(`src/infrastructure/queue/worker-runtime/provider-outage-pause.util.ts`): while the provider is down
+the whole queue pauses on every replica and probes every five minutes, and the failed job is parked
+without spending an attempt. It declares `PROVIDER_OUTAGE_PAUSABLE_LIMITER` because BullMQ enforces a
+queue-wide pause only for a worker with a limiter. Scheduled sweeps and `webhook-delivery` do not
+pause. Detail: [workers-and-events.md → Provider outage pause](../../../docs/reference/runtime/workers-and-events.md#provider-outage-pause).
 
 ## Files/locations
 

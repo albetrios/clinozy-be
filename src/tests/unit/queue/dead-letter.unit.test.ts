@@ -4,6 +4,8 @@ import type { Job, Worker } from 'bullmq';
 
 const queueAddMock = vi.fn().mockResolvedValue(undefined);
 const queueCloseMock = vi.fn().mockResolvedValue(undefined);
+const queueGetWaitingCountMock = vi.fn().mockResolvedValue(0);
+const queueCleanMock = vi.fn().mockResolvedValue([]);
 const queueConstructorArgsMock: { name: string; options: unknown }[] = [];
 const sentryCaptureExceptionMock = vi.fn();
 const insertDeadLetterJobMock = vi.fn().mockResolvedValue(undefined);
@@ -14,13 +16,20 @@ vi.mock('bullmq', () => ({
   // bound, or making it absurdly large) silently turns the DLQ into an unbounded
   // Redis sink — exactly the failure mode the recon flagged.
   Queue: class MockQueue {
+    name: string;
+
     constructor(name: string, options: unknown) {
+      this.name = name;
       queueConstructorArgsMock.push({ name, options });
     }
 
     add = queueAddMock;
 
     close = queueCloseMock;
+
+    getWaitingCount = queueGetWaitingCountMock;
+
+    clean = (...arguments_: unknown[]) => queueCleanMock(this.name, ...arguments_);
   },
   UnrecoverableError: class UnrecoverableError extends Error {},
 }));
@@ -47,6 +56,10 @@ describe('dead-letter helpers', () => {
   afterEach(async () => {
     queueAddMock.mockClear();
     queueCloseMock.mockClear();
+    queueGetWaitingCountMock.mockReset();
+    queueGetWaitingCountMock.mockResolvedValue(0);
+    queueCleanMock.mockReset();
+    queueCleanMock.mockResolvedValue([]);
     queueConstructorArgsMock.length = 0;
     sentryCaptureExceptionMock.mockClear();
     insertDeadLetterJobMock.mockClear();
@@ -108,43 +121,101 @@ describe('dead-letter helpers', () => {
     });
   });
 
-  // P0-#6 regression: the DLQ queue itself must have bounded retention. Without
-  // queue-level `defaultJobOptions`, a DLQ job that never transitions out of
-  // `waiting` would sit in Redis forever — silently turning the dead-letter sink
-  // into an unbounded memory leak. The per-add removal options only fire on the
-  // complete/failed state transition, so they alone are not enough.
+  // P0-#6 regression: no worker consumes a `*-dlq` mirror, so its snapshots sit in `waiting` and
+  // BullMQ's removeOnComplete / removeOnFail never fire for them — the queue-level defaults that
+  // used to stand in for a bound bounded nothing. The real bounds: a size cap checked on every
+  // write, and an age trim run on every DLQ-depth tick.
   describe('DLQ retention bounds (P0-#6)', () => {
-    it('enqueueDeadLetter opens a *-dlq queue with bounded age + count defaults', async () => {
-      const { enqueueDeadLetter } = await import('@/infrastructure/queue/dlq/dead-letter.js');
+    const terminalJob = {
+      id: 'job-retention',
+      name: 'dispatch-test',
+      data: {},
+      attemptsMade: 3,
+      opts: { attempts: 3 },
+    } as Job;
+
+    it('keeps the mirror bounds within reason: 30 days and at most 10,000 snapshots per mirror', async () => {
+      const { DEAD_LETTER_MIRROR_MAX_JOBS, DEAD_LETTER_MIRROR_RETENTION_MS } = await import(
+        '@/infrastructure/queue/dlq/dead-letter.js'
+      );
       const { THIRTY_DAYS_SECONDS } = await import('@/shared/constants/ttl.constants.js');
+      expect(DEAD_LETTER_MIRROR_RETENTION_MS).toBe(THIRTY_DAYS_SECONDS * 1_000);
+      expect(DEAD_LETTER_MIRROR_MAX_JOBS).toBeGreaterThan(0);
+      expect(DEAD_LETTER_MIRROR_MAX_JOBS).toBeLessThanOrEqual(10_000);
+    });
 
-      const job = {
-        id: 'job-retention',
-        name: 'dispatch-test',
-        data: {},
-        attemptsMade: 3,
-        opts: { attempts: 3 },
-      } as Job;
+    it('mirrors a final failure while the mirror has room', async () => {
+      const { enqueueDeadLetter, DEAD_LETTER_MIRROR_MAX_JOBS } = await import(
+        '@/infrastructure/queue/dlq/dead-letter.js'
+      );
+      queueGetWaitingCountMock.mockResolvedValue(DEAD_LETTER_MIRROR_MAX_JOBS - 1);
 
-      await enqueueDeadLetter('mail', job, new Error('boom'));
+      await enqueueDeadLetter('mail', terminalJob, new Error('boom'));
 
-      const dlqConstructorCall = queueConstructorArgsMock.find((call) => call.name === 'mail-dlq');
-      expect(dlqConstructorCall).toBeDefined();
-      const options = dlqConstructorCall!.options as {
-        defaultJobOptions?: {
-          removeOnComplete?: { age?: number; count?: number };
-          removeOnFail?: { age?: number; count?: number };
-        };
-      };
+      expect(queueAddMock).toHaveBeenCalledOnce();
+    });
 
-      // Both arms (complete + fail) bounded by age AND count so a sustained burst
-      // cannot exhaust Redis even within the age window.
-      expect(options.defaultJobOptions?.removeOnComplete?.age).toBe(THIRTY_DAYS_SECONDS);
-      expect(options.defaultJobOptions?.removeOnComplete?.count).toBeGreaterThan(0);
-      expect(options.defaultJobOptions?.removeOnComplete?.count).toBeLessThanOrEqual(10_000);
-      expect(options.defaultJobOptions?.removeOnFail?.age).toBe(THIRTY_DAYS_SECONDS);
-      expect(options.defaultJobOptions?.removeOnFail?.count).toBeGreaterThan(0);
-      expect(options.defaultJobOptions?.removeOnFail?.count).toBeLessThanOrEqual(10_000);
+    it('stops mirroring once the mirror is full, so a failure storm cannot fill Redis', async () => {
+      const { enqueueDeadLetter, DEAD_LETTER_MIRROR_MAX_JOBS } = await import(
+        '@/infrastructure/queue/dlq/dead-letter.js'
+      );
+      const { logger } = await import('@/shared/utils/infrastructure/logger.util.js');
+      const warnSpy = vi.spyOn(logger, 'warn');
+      queueGetWaitingCountMock.mockResolvedValue(DEAD_LETTER_MIRROR_MAX_JOBS);
+
+      await enqueueDeadLetter('mail', terminalJob, new Error('boom'));
+
+      expect(queueAddMock).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          deadLetterQueue: 'mail-dlq',
+          mirroredCount: DEAD_LETTER_MIRROR_MAX_JOBS,
+        }),
+        'queue.dead_letter.mirror_full',
+      );
+    });
+
+    it('trims every mirror of the snapshots older than the retention, oldest first, capped per pass', async () => {
+      const {
+        trimDeadLetterQueueMirrors,
+        DEAD_LETTER_MIRROR_MAX_JOBS,
+        DEAD_LETTER_MIRROR_RETENTION_MS,
+      } = await import('@/infrastructure/queue/dlq/dead-letter.js');
+      queueCleanMock.mockImplementation(async (queueName: string) =>
+        queueName === 'mail-dlq' ? ['dlq-a', 'dlq-b'] : [],
+      );
+
+      const removed = await trimDeadLetterQueueMirrors({
+        sourceQueueNames: ['mail', 'notification'],
+      });
+
+      expect(removed).toBe(2);
+      expect(queueCleanMock).toHaveBeenCalledWith(
+        'mail-dlq',
+        DEAD_LETTER_MIRROR_RETENTION_MS,
+        DEAD_LETTER_MIRROR_MAX_JOBS,
+        'wait',
+      );
+      expect(queueCleanMock).toHaveBeenCalledWith(
+        'notification-dlq',
+        DEAD_LETTER_MIRROR_RETENTION_MS,
+        DEAD_LETTER_MIRROR_MAX_JOBS,
+        'wait',
+      );
+    });
+
+    it('keeps trimming the other mirrors when one fails', async () => {
+      const { trimDeadLetterQueueMirrors } = await import(
+        '@/infrastructure/queue/dlq/dead-letter.js'
+      );
+      queueCleanMock.mockImplementation(async (queueName: string) => {
+        if (queueName === 'mail-dlq') throw new Error('redis down');
+        return ['dlq-c'];
+      });
+
+      await expect(
+        trimDeadLetterQueueMirrors({ sourceQueueNames: ['mail', 'notification'] }),
+      ).resolves.toBe(1);
     });
 
     it('audit-#W2: redacts URL/query-embedded secrets in failed_reason/error_stack before the Redis mirror', async () => {

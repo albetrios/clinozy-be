@@ -5,7 +5,11 @@ import {
 } from '@/infrastructure/queue/connection.js';
 import { getDefaultWorkerOptions } from '@/infrastructure/queue/worker-runtime/worker-options.js';
 import { buildWorkerHandle } from '@/infrastructure/queue/worker-runtime/worker-close.util.js';
-import { sampleDeadLetterQueueDepths } from '@/infrastructure/observability/dlq-depth/dlq-depth.service.js';
+import {
+  SOURCE_QUEUE_NAMES_FOR_DLQ_MONITORING,
+  sampleDeadLetterQueueDepths,
+} from '@/infrastructure/observability/dlq-depth/dlq-depth.service.js';
+import { trimDeadLetterQueueMirrors } from '@/infrastructure/queue/dlq/dead-letter.js';
 import {
   sampleBullMqSourceQueueWaitingDepth,
   sampleRedisMemorySaturation,
@@ -16,13 +20,14 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 /**
  * Creates the BullMQ worker that runs the observability tick on a schedule: per-source DLQ
- * depth, BullMQ source-queue waiting backlog, and cache Redis memory saturation. Each
- * reading is fanned into Sentry alerts plus structured logs.
+ * depth, BullMQ source-queue waiting backlog, and cache Redis memory saturation — each reading
+ * fanned into Sentry alerts plus structured logs — and trims the DLQ mirrors past their retention.
  *
  * @remarks
  * - **Algorithm:** per tick at concurrency 1, runs {@link sampleDeadLetterQueueDepths}, then
- *   {@link sampleBullMqSourceQueueWaitingDepth} and {@link sampleRedisMemorySaturation}. The
- *   latter two are independently guarded so one probe failure cannot suppress the others.
+ *   {@link trimDeadLetterQueueMirrors}, {@link sampleBullMqSourceQueueWaitingDepth} and
+ *   {@link sampleRedisMemorySaturation}. The last three are independently guarded so one probe
+ *   failure cannot suppress the others.
  * - **Failure modes:** a DLQ sampler error propagates to BullMQ retry; the waiting-depth and
  *   memory samplers swallow their own errors (logged at warn). Stalled jobs are logged at warn.
  * - **Side effects:** Sentry warnings + logs when any DLQ exceeds `DLQ_DEPTH_WARN_THRESHOLD`,
@@ -35,11 +40,15 @@ export function createDlqDepthWorker(): WorkerHandle {
     DLQ_DEPTH_QUEUE_NAME,
     async () => {
       const result = await sampleDeadLetterQueueDepths();
+      const trimmedDeadLetterCount = await trimDeadLetterQueueMirrors({
+        sourceQueueNames: SOURCE_QUEUE_NAMES_FOR_DLQ_MONITORING,
+      });
       const waitingDepth = await sampleBullMqSourceQueueWaitingDepth();
       const memory = await sampleRedisMemorySaturation();
       logger.info(
         {
           queueCount: result.depths.length,
+          trimmedDeadLetterCount,
           waitingQueueCount: waitingDepth.depths.length,
           redisMemoryRatio: memory.ratio,
         },

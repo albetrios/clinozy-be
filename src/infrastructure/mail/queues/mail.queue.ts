@@ -15,7 +15,10 @@ import { mailJobDataSchema, type MailJobDataValidated } from './mail.job.schema.
 /** BullMQ queue name for outbox-driven mail send jobs (`mail/send-email`). */
 export const MAIL_QUEUE_NAME = 'mail';
 
-/** BullMQ attempts — extra headroom for Resend circuit-open deferred retries. */
+/**
+ * BullMQ attempts per mail job — about ten minutes of exponential backoff (`mailBackoffStrategy`)
+ * for send errors that are not an outage. A Resend outage spends none: the worker pauses the queue.
+ */
 export const MAIL_QUEUE_MAX_ATTEMPTS = 8;
 
 /** Payload stored in Postgres mail_outbox; only the row's token is stored in Redis. */
@@ -61,6 +64,17 @@ function getMailQueue(): Queue<MailJobData> {
 /**
  * Enqueue a BullMQ send job for an existing mail_outbox row (no new Postgres insert), named by
  * the row's token.
+ *
+ * @remarks
+ * - **Algorithm:** one live job per row — the add is deduplicated on the row's token for as long
+ *   as a job for it is waiting, delayed or active (BullMQ `deduplication`, released when that job
+ *   completes or fails).
+ * - **Failure modes:** an add slower than fifteen seconds (Redis partition) rejects with
+ *   `mail.enqueue.deadline_exceeded`; any Redis error is logged and rethrown.
+ * - **Side effects:** one BullMQ add, or none when a job for the row is still live.
+ * - **Notes:** during a Resend outage the row's job sits paused for hours while the outbox sweeper
+ *   keeps re-enqueueing the row on every pass; without the deduplication each pass added another
+ *   job per row, all of them sent — or skipped — once Resend came back.
  */
 export async function enqueueMailOutboxJob(
   mailOutboxToken: string,
@@ -79,7 +93,9 @@ export async function enqueueMailOutboxJob(
       MAIL_QUEUE_NAME,
     );
     await new Promise<void>((resolve, reject) => {
-      const enqueueJobPromise = queue.add('send-email', jobData);
+      const enqueueJobPromise = queue.add('send-email', jobData, {
+        deduplication: { id: mailOutboxToken },
+      });
       deadlineTimer = setTimeout(() => {
         reject(new Error('mail.enqueue.deadline_exceeded'));
       }, FIFTEEN_SECONDS_MS);

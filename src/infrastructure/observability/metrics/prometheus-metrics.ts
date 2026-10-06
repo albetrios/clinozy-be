@@ -34,23 +34,10 @@ let eventBusHandlerFailuresTotal: Counter<'event_type'> | null = null;
 let commitDispatchDurabilityFallbacksTotal: Counter | null = null;
 let readCacheRequestsTotal: Counter<'cache' | 'result'> | null = null;
 let databaseUnscopedQueriesTotal: Counter | null = null;
+let bullmqProviderOutageParkedJobsTotal: Counter<'queue' | 'provider'> | null = null;
 
-function registerOn(registry: Registry): void {
-  httpRequestsTotal = new Counter({
-    name: 'http_requests_total',
-    help: 'Total HTTP requests',
-    labelNames: ['method', 'route', 'status_code'],
-    registers: [registry],
-  });
-
-  httpRequestDurationSeconds = new Histogram({
-    name: 'http_request_duration_seconds',
-    help: 'HTTP request duration in seconds',
-    labelNames: ['method', 'route', 'status_code'],
-    buckets: DEFAULT_LATENCY_BUCKETS_SECONDS,
-    registers: [registry],
-  });
-
+/** The BullMQ queue and job metrics — split out of {@link registerOn} to keep each short. */
+function registerQueueMetrics(registry: Registry): void {
   bullmqQueueWaiting = new Gauge({
     name: 'bullmq_queue_waiting',
     help: 'BullMQ jobs waiting in queue',
@@ -86,6 +73,32 @@ function registerOn(registry: Registry): void {
     buckets: JOB_DURATION_BUCKETS_SECONDS,
     registers: [registry],
   });
+
+  bullmqProviderOutageParkedJobsTotal = new Counter({
+    name: 'bullmq_provider_outage_parked_jobs_total',
+    help: "Jobs parked because their third-party provider was down, by queue and provider (resend | stripe | s3). Each one also re-arms its queue's five-minute pause, so a rate that keeps rising is an outage still in progress — the queue is waiting for the provider, not losing jobs",
+    labelNames: ['queue', 'provider'],
+    registers: [registry],
+  });
+}
+
+function registerOn(registry: Registry): void {
+  httpRequestsTotal = new Counter({
+    name: 'http_requests_total',
+    help: 'Total HTTP requests',
+    labelNames: ['method', 'route', 'status_code'],
+    registers: [registry],
+  });
+
+  httpRequestDurationSeconds = new Histogram({
+    name: 'http_request_duration_seconds',
+    help: 'HTTP request duration in seconds',
+    labelNames: ['method', 'route', 'status_code'],
+    buckets: DEFAULT_LATENCY_BUCKETS_SECONDS,
+    registers: [registry],
+  });
+
+  registerQueueMetrics(registry);
 
   postgresPoolMaxConnections = new Gauge({
     name: 'postgres_pool_max_connections',
@@ -214,6 +227,9 @@ function bindMetricHandlesFromRegistry(registry: Registry): void {
   commitDispatchDurabilityFallbacksTotal = registry.getSingleMetric(
     'commit_dispatch_durability_fallbacks_total',
   ) as Counter;
+  bullmqProviderOutageParkedJobsTotal = registry.getSingleMetric(
+    'bullmq_provider_outage_parked_jobs_total',
+  ) as Counter<'queue' | 'provider'>;
   readCacheRequestsTotal = registry.getSingleMetric('read_cache_requests_total') as Counter<
     'cache' | 'result'
   >;
@@ -462,6 +478,20 @@ export function recordReadCacheRequest(cache: string, result: 'hit' | 'miss'): v
   ensurePrometheusMetricsRegistered(getMetricsRegistry());
   if (!readCacheRequestsTotal) return;
   readCacheRequestsTotal.inc({ cache, result });
+}
+
+/**
+ * Increments `bullmq_provider_outage_parked_jobs_total` for one job parked by a provider outage.
+ *
+ * @remarks
+ * Called by the provider-pausable worker each time a job waits out its provider's outage. Both
+ * labels are bounded: a queue name and one of three providers.
+ */
+export function recordProviderOutageParkedJob(options: { queue: string; provider: string }): void {
+  if (!isMetricsEnabled()) return;
+  ensurePrometheusMetricsRegistered(getMetricsRegistry());
+  if (!bullmqProviderOutageParkedJobsTotal) return;
+  bullmqProviderOutageParkedJobsTotal.inc({ queue: options.queue, provider: options.provider });
 }
 
 /**

@@ -4,7 +4,9 @@ When a BullMQ job fails for good — it used its last attempt, or it threw `Unre
 
 **Automated replay:** the `dlq-auto-retry` sweeper (`DLQ_AUTO_RETRY_*`) replays each ledger row of a replayable queue **once**, after `DLQ_AUTO_RETRY_COOLDOWN_MINUTES` and only while that queue's outbound circuit is closed. The replay carries how deep it is in its lineage (`dlqReplayAttempt`); if it fails for good again, the new ledger row records that depth (`replay_depth`) and waits its own cooldown. A lineage stops at `DLQ_AUTO_RETRY_MAX_COUNT` replays — those rows are left to an operator. Every handled row gets `auto_retry_resolved_at`.
 
-**Retention:** Dead-letter jobs are kept in Redis for **30 days** (age-based eviction via BullMQ `removeOnComplete` / `removeOnFail`), then automatically removed to prevent unbounded growth and OOM. Inspect and replay within this window — older entries are no longer recoverable from Redis.
+**Retention:** a `<source>-dlq` mirror keeps each snapshot for **30 days** — the DLQ-depth tick (every 15 minutes) removes older ones (`queue.dead_letter.trimmed`) — and holds at most **1,000** snapshots: past that a final failure is still recorded in `audit.dead_letter_jobs` and alerted, only not mirrored (`queue.dead_letter.mirror_full`). Inspect and replay within the window; the ledger row stays the record (`audit-retention` prunes the ledger on its own schedule). BullMQ's `removeOnComplete` / `removeOnFail` never applied here: nothing consumes a mirror, so its snapshots never complete or fail.
+
+**Provider outage (not a dead letter):** while Resend, Stripe or S3 is down, the queues that depend on it (`mail`; `stripe-webhook`, `subscription-seat-sync`; `user-data-export`) pause and retry every five minutes — their jobs wait, they are not dead-lettered. Signs: `queue.provider_outage.paused` logs, `bullmq_provider_outage_parked_jobs_total` rising, the queue's `delayed` + `waiting` counts growing, the circuit OPEN in `/readyz`. Once the provider is back the next probe succeeds and the backlog drains by itself, at most five minutes later; nothing to replay.
 
 ## When to use
 

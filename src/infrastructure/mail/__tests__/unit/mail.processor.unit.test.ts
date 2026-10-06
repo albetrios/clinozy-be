@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { UnrecoverableError } from 'bullmq';
-import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
+import {
+  CircuitBreakerOpenError,
+  MANAGED_CIRCUIT_BREAKERS,
+} from '@/infrastructure/resilience/circuit-breaker.js';
+import { ProviderOutageError } from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
 import { MAIL_QUEUE_MAX_ATTEMPTS } from '@/infrastructure/mail/queues/mail.queue.js';
 import { ResendApiError } from '@/infrastructure/mail/resend-api.error.js';
 import {
@@ -59,6 +63,8 @@ describe('mail.processor', () => {
     markMailOutboxFailedMock.mockReset();
     releaseMailOutboxClaimMock.mockReset();
     sendEmailMock.mockReset();
+    // The Resend circuit is healthy unless a case says otherwise — no Redis read in a unit test.
+    vi.spyOn(MANAGED_CIRCUIT_BREAKERS.resend, 'getState').mockResolvedValue('CLOSED');
   });
 
   it('buildMailOutboxIdempotencyKey keys a row on its stored random token', () => {
@@ -245,11 +251,41 @@ describe('mail.processor', () => {
     expect(markMailOutboxFailedMock).not.toHaveBeenCalled();
   });
 
-  it('releases the claim on a final circuit-open failure without marking failed', async () => {
+  it('releases the claim on a final circuit-open failure and reports the outage, never failing the row', async () => {
     tryClaimPendingMailOutboxMock.mockResolvedValue('claimed');
     findMailOutboxByTokenMock.mockResolvedValue(outboxRow());
+    const circuitOpen = new CircuitBreakerOpenError(
+      'resend',
+      60_000,
+      'Circuit breaker "resend" is OPEN',
+    );
+    sendEmailMock.mockRejectedValue(circuitOpen);
+
+    const failure = await processMailOutboxJob(
+      { mailOutboxToken: MAIL_OUTBOX_TOKEN },
+      { jobAttemptNumber: MAIL_QUEUE_MAX_ATTEMPTS - 1, maxJobAttempts: MAIL_QUEUE_MAX_ATTEMPTS },
+    ).catch((error: unknown) => error);
+
+    // The worker reads this as "pause the queue, park the job" — no attempt spent.
+    expect(failure).toBeInstanceOf(ProviderOutageError);
+    expect((failure as ProviderOutageError).provider).toBe('resend');
+    expect((failure as ProviderOutageError).cause).toBe(circuitOpen);
+    expect(releaseMailOutboxClaimMock).toHaveBeenCalledWith(MAIL_OUTBOX_TOKEN);
+    expect(markMailOutboxFailedMock).not.toHaveBeenCalled();
+  });
+
+  it('never fails the row for a Resend error that left the circuit open, even on the last attempt', async () => {
+    // The probe after a pause failed (or this failure tripped the circuit): the email waits for
+    // Resend. Before, the last attempt failed the row — scrubbing its body — and the email was lost.
+    tryClaimPendingMailOutboxMock.mockResolvedValue('claimed');
+    findMailOutboxByTokenMock.mockResolvedValue(outboxRow());
+    vi.mocked(MANAGED_CIRCUIT_BREAKERS.resend.getState).mockResolvedValue('OPEN');
     sendEmailMock.mockRejectedValue(
-      new CircuitBreakerOpenError('resend', 60_000, 'Circuit breaker "resend" is OPEN'),
+      new ResendApiError({
+        message: 'Internal server error',
+        statusCode: 500,
+        resendErrorName: 'application_error',
+      }),
     );
 
     await expect(
@@ -257,7 +293,7 @@ describe('mail.processor', () => {
         { mailOutboxToken: MAIL_OUTBOX_TOKEN },
         { jobAttemptNumber: MAIL_QUEUE_MAX_ATTEMPTS - 1, maxJobAttempts: MAIL_QUEUE_MAX_ATTEMPTS },
       ),
-    ).rejects.toBeInstanceOf(CircuitBreakerOpenError);
+    ).rejects.toBeInstanceOf(ProviderOutageError);
 
     expect(releaseMailOutboxClaimMock).toHaveBeenCalledWith(MAIL_OUTBOX_TOKEN);
     expect(markMailOutboxFailedMock).not.toHaveBeenCalled();

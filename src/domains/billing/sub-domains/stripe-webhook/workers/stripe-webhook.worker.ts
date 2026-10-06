@@ -1,10 +1,7 @@
-import { Worker } from 'bullmq';
-import {
-  getBullMQConnectionOptions,
-  getBullMQKeyPrefix,
-} from '@/infrastructure/queue/connection.js';
+import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
 import { getDefaultWorkerOptions } from '@/infrastructure/queue/worker-runtime/worker-options.js';
 import { buildWorkerHandle } from '@/infrastructure/queue/worker-runtime/worker-close.util.js';
+import { createProviderPausableWorker } from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
 import {
   isStripeConfigured,
   isStripeWebhookIngressConfigured,
@@ -43,9 +40,10 @@ export type StripeWebhookWorkerBillingContainer = Pick<BillingContainer, 'stripe
  *   that delegates to {@link processStripeWebhookJob}; concurrency comes from
  *   {@link getWorkerConcurrencyStripe} and retries use
  *   {@link stripeWebhookBackoffStrategy}.
- * - **Failure modes:** Stalled jobs are logged via the `stalled` listener;
- *   processor exceptions trigger the configured backoff for up to the queue's
- *   default attempts.
+ * - **Failure modes:** Stalled jobs are logged via the `stalled` listener. While Stripe is down
+ *   the queue pauses on every replica and probes every five minutes, spending no attempt
+ *   (`createProviderPausableWorker`); other processor exceptions trigger the configured backoff
+ *   for up to the queue's default attempts.
  * - **Side effects:** Holds a Redis connection until the {@link WorkerHandle}
  *   returned to the caller is closed during shutdown.
  * - **Notes:** Requires billing services from the shared worker composition
@@ -55,9 +53,10 @@ export function createStripeWebhookWorker(
   billingContainer: StripeWebhookWorkerBillingContainer,
 ): WorkerHandle {
   const { stripeWebhookService } = billingContainer;
-  const worker = new Worker<StripeWebhookJobData>(
-    STRIPE_WEBHOOK_QUEUE_NAME,
-    async (job) => {
+  const worker = createProviderPausableWorker<StripeWebhookJobData>({
+    queueName: STRIPE_WEBHOOK_QUEUE_NAME,
+    provider: 'stripe',
+    processor: async (job) => {
       const jobData = await parseJobDataOrDeadLetter({
         schema: stripeWebhookJobDataSchema,
         job,
@@ -69,16 +68,15 @@ export function createStripeWebhookWorker(
         () => processStripeWebhookJob(jobData, stripeWebhookService, job.id),
       );
     },
-    {
+    workerOptions: {
       connection: getBullMQConnectionOptions(),
-      prefix: getBullMQKeyPrefix(),
       concurrency: getWorkerConcurrencyStripe(),
       ...getDefaultWorkerOptions(),
       settings: {
         backoffStrategy: stripeWebhookBackoffStrategy,
       },
     },
-  );
+  });
 
   worker.on('stalled', (jobId) => {
     logger.warn({ jobId, queueName: STRIPE_WEBHOOK_QUEUE_NAME }, 'stripe.webhook.worker.stalled');

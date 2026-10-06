@@ -33,8 +33,10 @@ which adds the per-attempt timeout and the error classification.
 
 - **Open circuit at the edge**: `CircuitBreakerOpenError` answers **503** with `Retry-After` (seconds
   until the half-open probe) — the request is retryable, never a 500.
-- **Open circuit in a worker**: a mail or Stripe-webhook job waits the breaker's `retryAfterMs` instead
-  of its next backoff step (their custom backoffs read it).
+- **Open circuit in a worker**: a queue whose every job calls one provider (`mail`, `stripe-webhook`,
+  `subscription-seat-sync`, `user-data-export`) pauses on every replica for five minutes and parks the
+  job without spending an attempt; the next job after the pause is the half-open probe
+  (`createProviderPausableWorker`, `src/infrastructure/queue/worker-runtime/provider-outage-pause.util.ts`).
 
 ## Failure modes
 

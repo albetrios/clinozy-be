@@ -25,6 +25,9 @@ vi.mock('bullmq', () => ({
     add = queueAddMock;
 
     close = queueCloseMock;
+
+    // The mirror is never full here — the size cap has its own suite (dead-letter.unit.test.ts).
+    getWaitingCount = async () => 0;
   },
   UnrecoverableError: class UnrecoverableError extends Error {},
 }));

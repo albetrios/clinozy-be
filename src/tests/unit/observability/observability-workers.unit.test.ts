@@ -9,6 +9,7 @@ const sampleIdempotencyCardinalityMock = vi.fn();
 const sampleDeadLetterQueueDepthsMock = vi.fn();
 const sampleBullMqSourceQueueWaitingDepthMock = vi.fn();
 const sampleRedisMemorySaturationMock = vi.fn();
+const trimDeadLetterQueueMirrorsMock = vi.fn();
 
 vi.mock('bullmq', () => ({
   Worker: vi.fn().mockImplementation(function WorkerMock(queueName, processor, options) {
@@ -44,8 +45,14 @@ vi.mock(
 );
 
 vi.mock('@/infrastructure/observability/dlq-depth/dlq-depth.service.js', () => ({
+  SOURCE_QUEUE_NAMES_FOR_DLQ_MONITORING: ['mail', 'notification'],
   sampleDeadLetterQueueDepths: (...parameters: unknown[]) =>
     sampleDeadLetterQueueDepthsMock(...parameters),
+}));
+
+vi.mock('@/infrastructure/queue/dlq/dead-letter.js', () => ({
+  trimDeadLetterQueueMirrors: (...parameters: unknown[]) =>
+    trimDeadLetterQueueMirrorsMock(...parameters),
 }));
 
 vi.mock('@/infrastructure/observability/redis-saturation/redis-saturation.service.js', () => ({
@@ -96,10 +103,11 @@ describe('observability workers', () => {
     expect(result).toEqual({ observedCount: 7, scanTruncated: false });
   });
 
-  it('dlq-depth worker samples dead-letter queue depths on its queue', async () => {
+  it('dlq-depth worker samples dead-letter queue depths on its queue and trims every mirror', async () => {
     sampleDeadLetterQueueDepthsMock.mockResolvedValue({
       depths: [{ queueName: 'mail-dlq', failedCount: 2 }],
     });
+    trimDeadLetterQueueMirrorsMock.mockResolvedValue(0);
 
     const { createDlqDepthWorker } = await import(
       '@/infrastructure/observability/dlq-depth/dlq-depth.worker.js'
@@ -113,6 +121,10 @@ describe('observability workers', () => {
       expect.objectContaining({ concurrency: 1 }),
     );
     expect(sampleDeadLetterQueueDepthsMock).toHaveBeenCalledOnce();
+    // The mirrors are trimmed past their 30-day retention on every tick.
+    expect(trimDeadLetterQueueMirrorsMock).toHaveBeenCalledWith({
+      sourceQueueNames: ['mail', 'notification'],
+    });
     expect(sampleBullMqSourceQueueWaitingDepthMock).toHaveBeenCalledOnce();
     expect(sampleRedisMemorySaturationMock).toHaveBeenCalledOnce();
     expect(result).toBeUndefined();

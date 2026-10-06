@@ -79,6 +79,7 @@ When **`METRICS_ENABLED=true`**, workers export BullMQ telemetry to the shared P
 | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `bullmq_queue_{waiting,active,delayed,failed}{queue}` | `refreshBullMQQueueGauges()` — called from `refreshMetricsBeforeScrape()` before `GET /metrics`                |
 | `bullmq_job_duration_seconds{queue,job_name}`         | `attachBullMQJobMetrics()` on worker `completed` — wired via `attachDeadLetterAndAlerting()` in `bootstrap.ts` |
+| `bullmq_provider_outage_parked_jobs_total{queue,provider}` | `createProviderPausableWorker` — each job parked by a provider outage ([Provider outage pause](#provider-outage-pause)) |
 
 Queue depth gauges scrape the monitored queue list in `src/infrastructure/observability/metrics/bullmq-metrics.ts` (`MONITORED_BULLMQ_QUEUE_NAMES`). See [observability runbook](../../deployment/runbooks/observability.md) for scrape setup and metric names.
 
@@ -108,8 +109,48 @@ options, caps `removeOnComplete` / `removeOnFail`, and adds retry jitter
 | `mail` | 8 | custom, doubling from 5 s (`mail-backoff.util.ts`) |
 | `webhook-delivery` | 8 | custom schedule, 1 min → 10 h (`WEBHOOK_DELIVERY_RETRY_DELAYS_MS`) |
 
-A mail or Stripe-webhook job failing on an open circuit waits the breaker's `retryAfterMs` instead of
-its next backoff step.
+Attempts are spent only on failures that are the job's own. A provider outage spends none — see
+[Provider outage pause](#provider-outage-pause).
+
+### Provider outage pause
+
+A queue whose every job calls one third-party provider is built with
+`createProviderPausableWorker` ([`provider-outage-pause.util.ts`](../../../src/infrastructure/queue/worker-runtime/provider-outage-pause.util.ts)).
+While that provider is down the whole queue pauses — on every replica — and retries every five
+minutes until the provider is back; then everything that waited is processed.
+
+| Queue | Provider (circuit) |
+| ----- | ------------------ |
+| `mail` | `resend` |
+| `stripe-webhook`, `subscription-seat-sync` | `stripe` |
+| `user-data-export` | `s3` |
+
+- **What counts as an outage** (`toProviderOutageError`): the provider's circuit is open (the call
+  never left), or a failure leaves the circuit not CLOSED — it tripped it, or it was a half-open probe
+  that failed. A failure while the circuit stays CLOSED, a refusal of this one request
+  (`countsAsCircuitFailure: false`) and `UnrecoverableError` are the job's own and take the queue's
+  attempts and backoff as before.
+- **What happens:** the queue-wide pause is set in Redis for `PROVIDER_OUTAGE_PAUSE_MS` (5 minutes)
+  and the job moves to `delayed` for the same time without spending an attempt (`job.moveToDelayed` +
+  `DelayedError`). It re-enters at the back of the line, so a job that keeps failing as the probe
+  cannot hold the queue — the job behind it probes next.
+- **Why a limiter:** BullMQ enforces a queue-wide pause in its Lua only for a worker that declares a
+  limiter. Every pausable worker declares `PROVIDER_OUTAGE_PAUSABLE_LIMITER` (a million jobs a
+  second — never reached). Without it the pause held only the replica that set it, and only for
+  BullMQ's 30-second `maximumRateLimitDelay`.
+- **The probe:** when the pause ends the next job runs. The circuit (its reset window is shorter than
+  five minutes) is half-open by then, so that job is the probe: it succeeds and the queue drains, or
+  it fails and the queue pauses again.
+- **Mail:** the processor releases the outbox claim on an outage — even on the last attempt — so the
+  row waits for Resend instead of being failed (and its body scrubbed). The row has one live job:
+  `enqueueMailOutboxJob` deduplicates on the row's token, so the outbox sweeper's re-enqueue on every
+  pass of a long outage adds nothing.
+- **Seen from outside:** a `queue.provider_outage.paused` warn log and
+  `bullmq_provider_outage_parked_jobs_total{queue,provider}` per parked job, the queue's `delayed` and
+  `waiting` counts growing, and the circuit-breaker transitions. `queue.getRateLimitTtl(1_000_000)`
+  (the limiter's `max`) answers how long a queue's pause has left.
+- **Not paused:** scheduled sweeps (a failed run retries on the next tick) and `webhook-delivery` —
+  one customer's endpoint being down is not an outage of every other customer's.
 
 ---
 
@@ -208,6 +249,7 @@ Operational sizing per family is documented in [resource-limits.md → Worker Po
 - The `dlq-auto-retry` sweeper replays each ledger row of a replayable queue (`webhook-delivery`, `notification`; mail and Stripe webhook rows carry their own retry) once, after the cooldown, through the source queue's own producer, one level deeper in its lineage (`dlqReplayAttempt`); a lineage stops at `DLQ_AUTO_RETRY_MAX_COUNT`. See [dlq-runbook.md](../../process/dlq-runbook.md).
 - Workers return `{ worker, queueName, close }` (`WorkerHandle` in `bootstrap.ts`).
 - Bull Board lists each `-dlq` next to its source queue when enabled.
+- **Mirror bounds:** no worker consumes a `-dlq` mirror, so its snapshots stay `waiting` and BullMQ's `removeOnComplete` / `removeOnFail` never fire for them. A mirror holds at most `DEAD_LETTER_MIRROR_MAX_JOBS` (1,000) snapshots — past that a final failure is still recorded in `audit.dead_letter_jobs` and alerted, only not mirrored (`queue.dead_letter.mirror_full`) — and `trimDeadLetterQueueMirrors` removes snapshots older than 30 days on every DLQ-depth tick (`queue.dead_letter.trimmed`). A failure storm cannot fill the Redis every queue runs on.
 - On shutdown: close workers, then `closeDeadLetterQueues()`, then Redis (`src/worker.ts`).
 - **Poison messages** (payload that fails `*.job.schema.ts` validation) never burn the retry budget: each worker entry point validates `job.data` via `parseJobDataOrDeadLetter` (`src/infrastructure/queue/dlq/poison-job.util.ts`), which records the dead-letter (Postgres + Redis mirror) and throws BullMQ `UnrecoverableError`, marked `markDeadLetterRecorded`, so remaining attempts are skipped. `attachDeadLetterAndAlerting` alerts on it without a second record. The producer-side `parseBullMQJobData` still throws a plain error — enqueue is not a retry path.
 
@@ -259,7 +301,7 @@ webhook-delivery.event-handlers.ts  →  enqueueWebhookDelivery()
 
 1. **Emit** — After DB write in service: `eventBus.emit({ type, payload, timestamp })` with snake_case payload.
 2. **Handle** — Register once via `registerEventHandlers()`; validate payload, enqueue job, catch/log (do not throw to HTTP).
-3. **Work** — Worker: switch on `job.name`, structured logs, idempotent when possible.
+3. **Work** — Worker: switch on `job.name`, structured logs, idempotent when possible. A queue whose every job calls one third-party provider is created with `createProviderPausableWorker` ([Provider outage pause](#provider-outage-pause)).
 4. **Bootstrap** — Retention schedules in `scheduler.ts`; domain workers in `bootstrap.ts` (from `src/worker.ts`).
 5. **Shutdown** — SIGTERM/SIGINT: close workers, `closeDeadLetterQueues()`, close Redis, exit 0.
 

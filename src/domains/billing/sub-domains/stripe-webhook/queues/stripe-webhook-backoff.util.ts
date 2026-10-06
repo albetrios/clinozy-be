@@ -6,6 +6,11 @@ import { TEN_SECONDS_MS } from '@/shared/constants/ttl.constants.js';
  * BullMQ custom backoff for stripe-webhook jobs: past the Stripe circuit's remaining open time when
  * it is open, otherwise exponential from ten seconds — both with jitter ({@link addRetryJitter}),
  * so a backlog that failed together does not hit the half-open probe together.
+ *
+ * @remarks
+ * A Stripe outage normally never reaches this curve: the worker pauses the queue and parks the job
+ * without spending an attempt (`createProviderPausableWorker`). The circuit branch covers the job
+ * whose pause could not be applied (Redis failed mid-pause) and retries it normally.
  */
 export function stripeWebhookBackoffStrategy(
   attemptsMade: number,

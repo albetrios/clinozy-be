@@ -23,6 +23,28 @@ vi.mock('bullmq', () => ({
   }),
 }));
 
+// The real factory adds the pause behaviour (its own suites cover it); here it only has to build
+// the worker through the mocked BullMQ above and record which provider the queue pauses for.
+const pausableWorkerState = vi.hoisted(() => ({ provider: undefined as string | undefined }));
+vi.mock('@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js', async () => {
+  const { Worker } = await import('bullmq');
+  return {
+    createProviderPausableWorker: (options: {
+      queueName: string;
+      provider: string;
+      processor: unknown;
+      workerOptions: unknown;
+    }) => {
+      pausableWorkerState.provider = options.provider;
+      return new (Worker as unknown as new (...arguments_: unknown[]) => unknown)(
+        options.queueName,
+        options.processor,
+        options.workerOptions,
+      );
+    },
+  };
+});
+
 vi.mock('@/infrastructure/queue/connection.js', () => ({
   getBullMQKeyPrefix: () => 'test:bull',
   getBullMQConnectionOptions: () => ({ host: 'redis.test' }),
@@ -129,6 +151,8 @@ describe('mail.worker', () => {
     const handle = createMailWorker();
 
     expect(handle.queueName).toBe('mail');
+    // While Resend is down the queue pauses instead of spending attempts.
+    expect(pausableWorkerState.provider).toBe('resend');
   });
 
   it('creates worker with mail concurrency from getWorkerConcurrencyMail', async () => {

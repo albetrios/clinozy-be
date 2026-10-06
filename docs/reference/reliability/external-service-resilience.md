@@ -53,15 +53,18 @@ When Redis is unavailable, breakers fall back to in-memory state per process.
 
 ## Mail worker and Resend
 
-- BullMQ mail jobs: **8 attempts** with **custom backoff** ([`mail.queue.ts`](../../../src/infrastructure/mail/queues/mail.queue.ts), [`mail-backoff.util.ts`](../../../src/infrastructure/mail/queues/mail-backoff.util.ts)): exponential from 5s for transport errors; **`CircuitBreakerOpenError.retryAfterMs`** (~remaining Resend circuit reset, up to 60s) when the cluster-wide Resend circuit is OPEN.
+- **Resend outage → the mail queue pauses.** While Resend is down (its circuit is open, or a send failure leaves it open or half-open) the whole `mail` queue pauses on every replica for five minutes, the failed job is parked without spending an attempt, and the next job after the pause is the probe — see [workers-and-events.md → Provider outage pause](../runtime/workers-and-events.md#provider-outage-pause). Emails wait for Resend however long the outage lasts, then all go out.
+- BullMQ mail jobs: **8 attempts** with **custom backoff** ([`mail.queue.ts`](../../../src/infrastructure/mail/queues/mail.queue.ts), [`mail-backoff.util.ts`](../../../src/infrastructure/mail/queues/mail-backoff.util.ts)), exponential from 5s, for send errors that are not an outage. The backoff's circuit branch (`CircuitBreakerOpenError.retryAfterMs`) only covers a job whose pause could not be applied.
 - `sendEmail` wraps the Resend HTTP call in `resendCircuit.execute()` plus bounded transient retries ([`retry-with-backoff.util.ts`](../../../src/infrastructure/resilience/retry-with-backoff.util.ts)); throws `CircuitBreakerOpenError` when the circuit is OPEN.
-- On send failure before the final attempt, the outbox row is released to `pending` ([`releaseMailOutboxClaim`](../../../src/infrastructure/mail/mail-outbox.repository.ts)). The final attempt marks `failed` only for **non** circuit-open errors; circuit-open on the last attempt still releases the claim (job may retry via BullMQ backoff without marking the outbox failed).
+- On send failure before the final attempt, the outbox row is released to `pending` ([`releaseMailOutboxClaim`](../../../src/infrastructure/mail/mail-outbox.repository.ts)). The final attempt marks `failed` only for an error that is not an outage; a Resend outage releases the claim on any attempt (`ProviderOutageError`), so the row is never failed — nor its body scrubbed — because Resend was down.
+- One live job per outbox row: `enqueueMailOutboxJob` deduplicates on the row's token (BullMQ `deduplication`), so the outbox sweeper re-enqueueing a row on every pass of a long outage adds no second job.
 - A Resend **per-email rejection** — a 422 about the email itself (`validation_error`, `missing_required_field`, `invalid_attachment`, `invalid_parameter`) or a 409 `invalid_idempotent_request` — does not count against the `resend` circuit and is not retried: the worker marks the outbox row `failed` on the first attempt and completes the job as `rejected` (`mail.worker.rejected`), so it never reaches the DLQ; the failed row is the record. Account and configuration errors (API key, unverified sender domain, quota) and Resend outages keep counting against the circuit and retrying.
 - After exhausted retries, jobs may land on the `mail-dlq` queue (see [dlq-runbook.md](../../process/dlq-runbook.md)).
 
 ## Stripe webhook worker
 
-- Queue uses custom backoff ([`stripe-webhook-backoff.util.ts`](../../../src/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook-backoff.util.ts)): exponential from 10s for API errors; `CircuitBreakerOpenError.retryAfterMs` when the Stripe circuit is OPEN (30s reset).
+- **Stripe outage → the queue pauses.** `stripe-webhook` and `subscription-seat-sync` pause on every replica while Stripe is down, probing every five minutes, without spending attempts ([Provider outage pause](../runtime/workers-and-events.md#provider-outage-pause)).
+- Queue uses custom backoff ([`stripe-webhook-backoff.util.ts`](../../../src/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook-backoff.util.ts)): exponential from 10s for API errors that are not an outage; its `CircuitBreakerOpenError.retryAfterMs` branch only covers a job whose pause could not be applied.
 
 ---
 

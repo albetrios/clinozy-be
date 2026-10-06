@@ -237,6 +237,8 @@ sequenceDiagram
 - **Atomic claim**: the worker uses an `UPDATE ... WHERE status = 'pending' RETURNING id` to prevent two workers from claiming the same row.
 - **Stuck-row reclaim**: the sweeper processor reclaims rows stuck in `sending` for longer than `MAIL_OUTBOX_RECLAIM_SENDING_MINUTES` (env, default 30 min; widened while the Resend circuit is open) so a crashed worker doesn't strand outbox rows forever.
 - **DLQ**: failed deliveries with exhausted retries land in the per-queue `<name>-dlq` registered by [src/infrastructure/queue/dlq/](src/infrastructure/queue/dlq/).
+- **Provider down ≠ job failed**: while Resend is down the mail queue pauses and parks the job without spending an attempt, and the row's claim is released — the row waits for the provider instead of being failed ([provider-outage-pause.util.ts](src/infrastructure/queue/worker-runtime/provider-outage-pause.util.ts)).
+- **One live job per row**: the enqueue deduplicates on the row's token, so a sweeper that re-enqueues a row the queue still holds adds no second job.
 
 ### How to apply
 
