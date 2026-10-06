@@ -41,7 +41,7 @@ What it does not own: user profile (lives in [user](src/domains/user/)), organiz
 
 This domain implements the contracts documented in [src/PATTERNS.md](src/PATTERNS.md):
 
-- `audit-emission` — every credential add/remove, every login (success or failure), every session revoke records a row.
+- `audit-emission` — every credential add/remove, every login (a success attributed to the user; a failure as an anonymous `auth.login_failure` that never names the account tried), every completed password reset, every MFA recovery-code use, and every session revoke records a row.
 - `idempotency` — email verification-code send, password reset, and OAuth callback accept `X-Idempotency-Key`.
 - `transactional-outbox` — auth emails (email verification-code, password reset) flow through `event-bus` → mail outbox → `mail.processor`.
 - `tenant-isolation` does **not** apply at the auth layer — auth is global. Organization scope is layered on later by `tenancy`.

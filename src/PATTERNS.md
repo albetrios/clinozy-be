@@ -63,13 +63,13 @@ Every security- or governance-relevant write stages a row in the `audit.outbox` 
 ### Implementation
 
 1. Handler performs its primary write (e.g. an organization or auth-method mutation).
-2. The handler calls `recordScopedAuditEvent(request, { actorUserPublicId | actorApiKeyPublicId, action, resource_type, resource_id, organization_public_id, severity, metadata })` — network context (IP, user-agent, request id) is filled in by the helper.
+2. The handler calls `recordScopedAuditEvent(request, { <actor>, action, resource_type, resource_id, organizationPublicId, severity, metadata })` — network context (IP, user-agent) is filled in by the helper. `<actor>` is exactly one of `actorUserPublicId`, `actorApiKeyPublicId` (spread `buildAuditActorFields(auth)` for a request principal, which may be either) or `anonymousActor: true` (pre-authentication events only, e.g. `auth.login_failure`). The `AuditActor` type makes it required — an actorless call does not compile.
 3. The row is staged in `audit.outbox` inside the caller's transaction (no synchronous id lookup). The audit drain worker later resolves internal ids and inserts into `audit.logs`.
 4. Errors are caught and logged at `warn`; the originating request still returns success.
 
 ### How to apply
 
-- Adding a security-relevant route: identify the action constant (or add one in [src/domains/audit/audit.types.ts](src/domains/audit/audit.types.ts)), call `recordScopedAuditEvent(request, {...})` after the primary write, populate `metadata` with the diff or operation parameters that future investigators will need.
+- Adding a security-relevant route: name the action `<domain>.<resource>.<verb>` and add it to the catalog in [docs/reference/security/audit-logs.md](docs/reference/security/audit-logs.md), call `recordScopedAuditEvent(request, {...})` after the primary write, populate `metadata` with the public ids and operation parameters that future investigators will need.
 - Severity defaults to `INFO`. Use `WARNING` for failed-but-recorded actions (e.g. permission denied) and `CRITICAL` for global-admin lifecycle events.
 
 ## idempotency

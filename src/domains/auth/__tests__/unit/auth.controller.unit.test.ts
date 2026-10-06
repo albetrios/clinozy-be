@@ -94,9 +94,12 @@ describe('createAuthController', () => {
       .fn()
       .mockResolvedValue({ access_token: 'new-token', refresh_secret: 'new-refresh-secret' }),
     resetPassword: vi.fn().mockResolvedValue({
-      access_token: 'token',
-      session_public_id: 'session',
-      session_refresh_secret: 'refresh-secret',
+      userPublicId: 'usr_resetresetresetreset1',
+      loginResult: {
+        access_token: 'token',
+        session_public_id: 'session',
+        session_refresh_secret: 'refresh-secret',
+      },
     }),
   };
 

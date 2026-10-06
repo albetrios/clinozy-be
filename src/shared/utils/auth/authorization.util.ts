@@ -3,7 +3,10 @@ import { resolveUserOrganizationPermissions } from '@/domains/tenancy/sub-domain
 import { organizationRequiresMfa } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-mfa-policy.js';
 import type { GlobalRole } from '@/shared/constants/roles.constants.js';
 import { ForbiddenError, UnauthorizedError } from '@/shared/errors/index.js';
-import { recordScopedAuditEvent } from '@/shared/utils/infrastructure/audit-request-context.util.js';
+import {
+  buildAuditActorFields,
+  recordScopedAuditEvent,
+} from '@/shared/utils/infrastructure/audit-request-context.util.js';
 
 /**
  * Best-effort emit `auth.permission.denied` audit row before throwing
@@ -21,10 +24,13 @@ async function emitPermissionDenyAudit(
 ): Promise<void> {
   if (!request.server?.auditDomain?.auditService) return;
   const auth = request.auth;
-  const actorUserPublicId = auth?.kind === 'user' ? auth.userId : undefined;
+  // Every caller answers an unauthenticated request with 401 first, so `auth` is always set here.
+  if (!auth) return;
   try {
     await recordScopedAuditEvent(request, {
-      actorUserPublicId,
+      // A user is recorded as the user, an API key denied a scope as the key. Key denials used to
+      // carry no actor, and the audit service dropped every one of those rows.
+      ...buildAuditActorFields(auth),
       action: 'auth.permission.denied',
       resource_type: 'route',
       severity: 'WARNING',

@@ -23,16 +23,50 @@ export interface AuditLogFilters {
 export type NewAuditLog = Omit<AuditLogInsert, 'public_id'>;
 
 /**
- * Server-internal audit input. After P0-#2 (audit outbox) this carries only
- * `*_public_id` fields — the drain worker resolves them to internal ids
- * out-of-band, so the request handler never pays a lookup-then-insert tax
+ * Who performed an audited action: exactly one of an acting user, an acting organization API key,
+ * or a declared anonymous (pre-authentication) caller.
+ *
+ * @remarks
+ * Part of every audit write ({@link AuditLogRecordInput}), so the compiler rejects a call that
+ * names no actor. The audit service used to drop such rows at runtime with only a log line — every
+ * `auth.login_failure`, `auth.password.reset`, `auth.mfa.recovery_code_used` and API-key
+ * `auth.permission.denied` row was lost that way. The `?: never` members forbid naming two kinds
+ * at once. `AuditService.record` keeps a runtime backstop for a value that bypasses the type.
+ */
+export type AuditActor =
+  | {
+      /** Public id of the acting user. */
+      actorUserPublicId: string;
+      actorApiKeyPublicId?: never;
+      anonymousActor?: never;
+    }
+  | {
+      /** Public id of the acting organization API key, when a key rather than a user performed the action. */
+      actorApiKeyPublicId: string;
+      actorUserPublicId?: never;
+      anonymousActor?: never;
+    }
+  | {
+      /**
+       * A pre-authentication event with no actor by design (e.g. `auth.login_failure`: the caller
+       * is not authenticated, and naming the targeted account would leak it). The row is staged
+       * with `metadata.actor_kind = 'anonymous'`.
+       */
+      anonymousActor: true;
+      actorUserPublicId?: never;
+      actorApiKeyPublicId?: never;
+    };
+
+/**
+ * Server-internal audit input: the {@link AuditActor} plus the {@link AuditLogRecordFields}.
+ * After P0-#2 (audit outbox) this carries only `*_public_id` fields — the drain worker resolves
+ * them to internal ids out-of-band, so the request handler never pays a lookup-then-insert tax
  * (or a per-row transaction for bulk operations).
  */
-export interface AuditLogRecordInput {
-  /** Public id of the acting user. Mutually exclusive with {@link actorApiKeyPublicId}. */
-  actorUserPublicId?: string | undefined;
-  /** Public id of the acting organization API key, when the action was performed by a key rather than a user. */
-  actorApiKeyPublicId?: string | undefined;
+export type AuditLogRecordInput = AuditActor & AuditLogRecordFields;
+
+/** The fields of an audit write other than its {@link AuditActor}. */
+export interface AuditLogRecordFields {
   action: string;
   resource_type: string;
   resource_id?: number | null;

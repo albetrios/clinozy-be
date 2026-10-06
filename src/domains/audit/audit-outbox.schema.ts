@@ -94,12 +94,15 @@ export const audit_outbox = auditSchema
       /**
        * Mirrors {@link logs} actor-required invariant: at least one of
        * actor_user_public_id / actor_api_key_public_id must be set so audit rows can
-       * always be attributed. The drain worker re-checks this at drain time to
-       * surface broken callers as FAILED rather than silently writing a bogus log.
+       * always be attributed — unless the row declares itself anonymous
+       * (`metadata.actor_kind = 'anonymous'`: pre-authentication events such as
+       * `auth.login_failure`, which have no actor by design). IS NOT DISTINCT FROM keeps
+       * a missing key from passing. The drain worker re-checks a declared actor at
+       * drain time to surface broken callers as FAILED rather than writing a bogus log.
        */
       check(
         'chk_audit_outbox_actor_present',
-        sql`${table.actor_user_public_id} IS NOT NULL OR ${table.actor_api_key_public_id} IS NOT NULL`,
+        sql`${table.actor_user_public_id} IS NOT NULL OR ${table.actor_api_key_public_id} IS NOT NULL OR (${table.metadata} ->> 'actor_kind') IS NOT DISTINCT FROM 'anonymous'`,
       ),
       check('chk_audit_outbox_attempt_count_nonneg', sql`${table.attempt_count} >= 0`),
       /**

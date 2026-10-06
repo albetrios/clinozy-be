@@ -8,6 +8,7 @@ import { Queue, QueueEvents } from 'bullmq';
 
 import { logs } from '@/domains/audit/audit.schema.js';
 import { dead_letter_jobs } from '@/infrastructure/queue/dlq/dead-letter.schema.js';
+import { verification_tokens } from '@/domains/auth/sub-domains/auth-method/verification-token/verification-token.schema.js';
 import { createAuditRetentionWorker } from '@/domains/audit/workers/audit-retention.worker.js';
 import { AUDIT_RETENTION_QUEUE_NAME } from '@/domains/audit/workers/audit-retention.constants.js';
 import {
@@ -198,6 +199,54 @@ describe('audit-retention.worker — purge', () => {
     );
     expect(remaining).toHaveLength(1);
     expect(remaining[0]?.failed_reason).toBe('recent-failure');
+  });
+
+  it('purges verification tokens long past expiry and keeps live or recently expired ones', async () => {
+    // The purge runs on the maintenance pool as clinozy_be_maintenance, a role the
+    // verification_tokens_app_access policy names explicitly (20261006022303) instead of
+    // admitting it only through its clinozy_be_app membership.
+    const user = await createTestUser();
+    const oneDay = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const longExpiredHash = 'a'.repeat(64);
+    const recentlyExpiredHash = 'b'.repeat(64);
+    const liveHash = 'c'.repeat(64);
+    await getOperatorDatabase()
+      .insert(verification_tokens)
+      .values([
+        {
+          token_type: 'PASSWORD_RESET',
+          token_hash: longExpiredHash,
+          user_id: user.id,
+          email: user.email,
+          expires_at: new Date(now - 30 * oneDay),
+        },
+        {
+          // Expired a day ago — still inside the grace period, so kept.
+          token_type: 'PASSWORD_RESET',
+          token_hash: recentlyExpiredHash,
+          user_id: user.id,
+          email: user.email,
+          expires_at: new Date(now - oneDay),
+        },
+        {
+          token_type: 'EMAIL_CODE',
+          token_hash: liveHash,
+          user_id: user.id,
+          email: user.email,
+          expires_at: new Date(now + oneDay),
+        },
+      ]);
+
+    const jobId = `audit-retention-${randomUUID()}`;
+    const completion = waitForJobCompletion(queueEvents!, jobId);
+    await queue!.add('cleanup-old-logs', {}, { jobId, attempts: 1 });
+    await completion;
+
+    const remaining = await getOperatorDatabase()
+      .select({ token_hash: verification_tokens.token_hash })
+      .from(verification_tokens);
+    expect(remaining.map((row) => row.token_hash).sort()).toEqual([recentlyExpiredHash, liveHash]);
   });
 });
 

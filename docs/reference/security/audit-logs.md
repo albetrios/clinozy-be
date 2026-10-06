@@ -13,7 +13,12 @@ Actions use dot-separated names: `<domain>.<resource>.<verb>`.
 
 | Action | Resource type | When |
 | ------ | ------------- | ---- |
-| `auth.login` | `session` | Successful password login |
+| `auth.login` | `session` | Successful login on any surface — password, email code, WebAuthn, OAuth, MFA second factor (`metadata.source`) |
+| `auth.login_failure` | `session` | Failed login on any surface — anonymous actor (see [Actors](#actors)) |
+| `auth.password.reset` | `user` | Completed password reset (`WARNING`) |
+| `auth.mfa.recovery_code_used` | `mfa_method` | Login completed with an MFA recovery code (`WARNING`) |
+| `auth.permission.denied` | `route` | A role, organization-permission, API-key-scope or organization-MFA check refused the request (`WARNING`) |
+| `auth.super_admin.token_issued` | `session` | A `super_admin` access token was minted (`WARNING`) |
 | `auth.logout` | `session` | Bearer logout |
 | `auth.password.change` | `user` | Authenticated password change |
 | `auth.auth_method.create` | `auth_method` | Link auth method |
@@ -53,9 +58,30 @@ Actions use dot-separated names: `<domain>.<resource>.<verb>`.
 ## Row shape
 
 - `public_id` — the row's own public id (`aud_…`), minted by every writer; the list API returns it as `id` and the S3 export writes it as each line's `id`. The bigserial `id` never leaves the database.
-- `actor_user_id` — resolved from JWT `userId` (public id).
+- `actor_user_id` / `actor_api_key_id` — the acting user or organization API key, resolved by the drain from the public id the request carried; both NULL only for an anonymous row (see [Actors](#actors)).
 - `organization_id` — set when the mutation is organization-scoped (resolved from the access token's `org` claim).
 - `metadata` — public ids and non-PII context (no passwords or tokens). The list API and the export run `sanitizeAuditMetadata` (`audit.serializer.ts`): the internal-id keys `auth_method_id` / `mfa_method_id` are dropped, and a value under a credential-like key (`password`, `secret`, `token`, `api_key`, …, but never a `*public_id` key) is replaced by `[REDACTED]`.
+
+## Actors
+
+Every row written through `AuditService.record` names exactly one actor:
+
+| Actor | Input field | Stored as |
+| ----- | ----------- | --------- |
+| User | `actorUserPublicId` | `actor_user_id` |
+| Organization API key | `actorApiKeyPublicId` | `actor_api_key_id` |
+| Anonymous — pre-authentication events only (`auth.login_failure`) | `anonymousActor: true` | both actor columns NULL, `metadata.actor_kind = 'anonymous'` |
+
+`buildAuditActorFields(auth)` picks the user or key field for a request principal. An anonymous row
+never names the account the caller tried (that would confirm the account exists); the IP address and
+user agent are what an investigator queries on.
+
+Three layers hold the rule. The `AuditActor` type ([`audit.types.ts`](../../../src/domains/audit/audit.types.ts))
+makes an actorless call fail to compile. The outbox CHECK `chk_audit_outbox_actor_present` admits an
+actorless row only when it is declared anonymous. `AuditService.record` logs `audit.record.missingActor`
+at `error` and drops a value that bypassed the type. Before the actor was a type, actorless calls
+compiled and were dropped at runtime — failed logins, password resets, recovery-code uses and API-key
+permission denials never reached `audit.logs`.
 
 ## Storage & partitioning
 
@@ -83,5 +109,7 @@ Daily NDJSON export to S3 is documented in [audit-export.md](./audit-export.md).
 
 ## Tests
 
-- `src/tests/security/infrastructure/mutation-audit.security.test.ts` — login, logout, organization settings.
+- `src/tests/security/infrastructure/mutation-audit.security.test.ts` — login, logout, user settings.
+- `src/domains/auth/__tests__/integration/auth-audit-trail.integration.test.ts` — failed login, password reset, recovery-code login and API-key permission denial, end to end into `audit.logs` (real routes, real drain).
+- `src/tests/integration/queue/audit-outbox-drain.integration.test.ts` — the drain: anonymous rows, the actor CHECK, unresolvable actors, concurrent drainers, per-row savepoints.
 - `src/tests/security/infrastructure/queue-dashboard-audit.security.test.ts` — Bull Board mutations.

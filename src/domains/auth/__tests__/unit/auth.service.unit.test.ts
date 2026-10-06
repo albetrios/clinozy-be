@@ -227,9 +227,15 @@ describe('AuthService', () => {
 
     it('logs the user straight in (access token + session) after a successful reset', async () => {
       vi.mocked(authMethodService.resetPassword).mockResolvedValue(user as never);
-      const result = await service.resetPassword(resetBody, '127.0.0.1', 'agent');
+      const { userPublicId, loginResult } = await service.resetPassword(
+        resetBody,
+        '127.0.0.1',
+        'agent',
+      );
       expect(authMethodService.resetPassword).toHaveBeenCalledWith(resetBody);
-      expect('access_token' in result && result.access_token).toBe('jwt-access-token');
+      expect('access_token' in loginResult && loginResult.access_token).toBe('jwt-access-token');
+      // The reset is audited against this user (the controller cannot read it from an MFA challenge).
+      expect(userPublicId).toBe(user.public_id);
       expect(authSessionService.createSessionForUser).toHaveBeenCalled();
     });
 
@@ -238,11 +244,12 @@ describe('AuthService', () => {
         ...user,
         is_mfa_enabled: true,
       } as never);
-      const result = await service.resetPassword(resetBody, '127.0.0.1');
-      expect(result).toEqual({
+      const { userPublicId, loginResult } = await service.resetPassword(resetBody, '127.0.0.1');
+      expect(loginResult).toEqual({
         mfa_required: true,
         mfa_session_token: 'mfa_session_token',
       });
+      expect(userPublicId).toBe(user.public_id);
       expect(authSessionService.createSessionForUser).not.toHaveBeenCalled();
     });
 

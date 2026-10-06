@@ -1,5 +1,5 @@
 import type { FastifyRequest } from 'fastify';
-import type { AuditLogRecordInput } from '@/domains/audit/audit.types.js';
+import type { AuditActor, AuditLogRecordFields } from '@/domains/audit/audit.types.js';
 import type { AuthContext } from '@/shared/types/index.js';
 import { isApiKeyPrincipal } from '@/shared/utils/http/request.util.js';
 import { recordAuditEvent } from '@/shared/utils/infrastructure/audit-record.util.js';
@@ -10,10 +10,7 @@ import { recordAuditEvent } from '@/shared/utils/infrastructure/audit-record.uti
  * the result into a {@link recordScopedAuditEvent} input so API-key-driven mutations are attributed
  * (the audit row carries a key actor) instead of being silently dropped for lack of a user.
  */
-export function buildAuditActorFields(auth: AuthContext): {
-  actorUserPublicId?: string;
-  actorApiKeyPublicId?: string;
-} {
+export function buildAuditActorFields(auth: AuthContext): AuditActor {
   return isApiKeyPrincipal(auth)
     ? { actorApiKeyPublicId: auth.apiKeyPublicId }
     : { actorUserPublicId: auth.userId };
@@ -31,16 +28,14 @@ export function getAuditRequestNetworkContext(request: FastifyRequest): {
   };
 }
 
-type ScopedAuditInput = Omit<
-  AuditLogRecordInput,
-  'ip_address' | 'user_agent' | 'organization_public_id'
-> & {
-  /**
-   * Organization public id, recorded verbatim on the outbox row. The drain worker resolves
-   * it to the internal id out-of-band, so the request never pays for that lookup (P0-#2).
-   */
-  organizationPublicId?: string;
-};
+type ScopedAuditInput = AuditActor &
+  Omit<AuditLogRecordFields, 'ip_address' | 'user_agent' | 'organization_public_id'> & {
+    /**
+     * Organization public id, recorded verbatim on the outbox row. The drain worker resolves
+     * it to the internal id out-of-band, so the request never pays for that lookup (P0-#2).
+     */
+    organizationPublicId?: string;
+  };
 
 /**
  * Records an audit row with request network context. Under the P0-#2 outbox model the

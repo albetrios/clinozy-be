@@ -77,6 +77,7 @@ src/
     │   │   ├── factories/
     │   │   │   └── verification-code-token.factory.ts
     │   │   ├── integration/
+    │   │   │   ├── auth-audit-trail.integration.test.ts
     │   │   │   ├── auth-me-context.integration.test.ts
     │   │   │   ├── auth-recovery-atomicity.integration.test.ts
     │   │   │   ├── auth-route-smoke.integration.test.ts

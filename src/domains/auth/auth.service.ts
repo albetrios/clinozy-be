@@ -68,6 +68,22 @@ export type LoginResult =
   | { mfa_required: true; mfa_session_token: string };
 
 /**
+ * Outcome of {@link AuthService.resetPassword}: the auto-login it completed, plus the user whose
+ * password was reset.
+ *
+ * @remarks
+ * The controller attributes the `auth.password.reset` audit event to `userPublicId` — the MFA
+ * branch issues no access token to read the actor from — and returns only `loginResult`. Before
+ * this field existed the event carried no actor, and the audit service dropped every one.
+ */
+export interface PasswordResetResult {
+  /** Public id of the user whose password was reset. Never part of the response. */
+  userPublicId: string;
+  /** The auto-login: an access token + session, or an `mfa_required` challenge. */
+  loginResult: LoginResult;
+}
+
+/**
  * Password-login orchestrator for the auth domain.
  *
  * @remarks
@@ -281,14 +297,18 @@ export class AuthService {
    * - **Side effects:** the delegate's writes (password, token invalidation, session revoke) plus one
    *   new `auth_sessions` row (unless MFA is required). The caller sets the session cookie + audits.
    */
-  async resetPassword(body: unknown, ipAddress: string, userAgent?: string): Promise<LoginResult> {
+  async resetPassword(
+    body: unknown,
+    ipAddress: string,
+    userAgent?: string,
+  ): Promise<PasswordResetResult> {
     const user = await this.authMethodService.resetPassword(body);
     // The password was reset, but a suspended/locked/deleted account is never issued a session.
     assertUserAccountActive({
       status: user.status,
       deleted_at: user.deleted_at,
     });
-    return completeFirstFactorAuth({
+    const loginResult = await completeFirstFactorAuth({
       user: {
         id: user.id,
         public_id: user.public_id,
@@ -305,6 +325,7 @@ export class AuthService {
       // Non-pinned path: self-heal a missing personal organization into the token (item #5).
       ensurePersonalOrganizationOnMiss: true,
     });
+    return { userPublicId: user.public_id, loginResult };
   }
 
   async logout(token: string): Promise<void> {

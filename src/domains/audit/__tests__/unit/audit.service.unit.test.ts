@@ -4,6 +4,7 @@ import type { AuditRepository } from '@/domains/audit/audit.repository.js';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { withAppDatabaseContext } from '@/infrastructure/database/contexts/database-context.js';
 
 vi.mock('@/infrastructure/database/contexts/database-context.js', async (importOriginal) => {
@@ -176,7 +177,12 @@ describe('AuditService', () => {
       expect(vi.mocked(withAppDatabaseContext)).not.toHaveBeenCalled();
     });
 
-    it('skips outbox INSERT when neither user nor API-key actor is supplied', async () => {
+    it('skips the outbox INSERT and logs an error when no actor is supplied or declared anonymous', async () => {
+      const loggerErrorSpy = vi.spyOn(logger, 'error');
+      // The AuditActor type already rejects this call at compile time (the directive fails the
+      // typecheck if that ever stops being true); the runtime check is the backstop for a value
+      // that bypasses the type.
+      // @ts-expect-error -- no actorUserPublicId, actorApiKeyPublicId or anonymousActor
       await service.record({
         action: 'tenancy.role.create',
         resource_type: 'role',
@@ -184,6 +190,38 @@ describe('AuditService', () => {
       });
 
       expect(insertAuditOutboxRowMock).not.toHaveBeenCalled();
+      // A caller bug, not a best-effort no-op: error, so it surfaces.
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        { action: 'tenancy.role.create' },
+        'audit.record.missingActor',
+      );
+      loggerErrorSpy.mockRestore();
+    });
+
+    it('stages a declared-anonymous pre-authentication row, marked actor_kind = anonymous', async () => {
+      await service.record({
+        anonymousActor: true,
+        action: 'auth.login_failure',
+        resource_type: 'session',
+        ip_address: '203.0.113.9',
+        metadata: { source: 'password', error_code: 'errors:invalidEmailOrPassword' },
+      });
+
+      expect(insertAuditOutboxRowMock).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          actorUserPublicId: undefined,
+          actorApiKeyPublicId: undefined,
+          action: 'auth.login_failure',
+          ipAddress: '203.0.113.9',
+          metadata: {
+            source: 'password',
+            error_code: 'errors:invalidEmailOrPassword',
+            actor_kind: 'anonymous',
+          },
+        }),
+      );
+      // Tenantless, so it reserves its outbox slot under the system-audit-insert context.
+      expect(systemAuditInsertContextMock).toHaveBeenCalledTimes(1);
     });
 
     it('does NOT swallow a DB INSERT failure — caller wrappers (recordAuditEvent) must handle it', async () => {

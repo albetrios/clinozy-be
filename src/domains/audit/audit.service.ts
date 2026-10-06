@@ -71,15 +71,16 @@ export class AuditService {
    *
    * @remarks
    * Algorithm:
-   * 1. Validate that the caller supplied at least one actor identifier
-   *    (`actorUserPublicId` or `actorApiKeyPublicId`) — otherwise we cannot
-   *    attribute the row and silently drop it (preserving the prior contract).
+   * 1. Require an actor identifier (`actorUserPublicId` or `actorApiKeyPublicId`), or an
+   *    explicit `anonymousActor` declaration for pre-authentication events (failed logins),
+   *    which are staged with `metadata.actor_kind = 'anonymous'`.
    * 2. Build the outbox payload from the supplied public ids and free-form
    *    metadata, then call {@link insertAuditOutboxRow} which enrolls in the
    *    caller's unit-of-work transaction when one is active.
    *
    * Failure modes:
-   * - Missing actor → logged at warn, no-op (best-effort by contract).
+   * - No actor and no `anonymousActor` → logged at error, not recorded. The `AuditActor` type
+   *   makes every typed call name one, so this only catches a value that bypasses the type.
    * - DB write failure → bubbles to caller; callers should go through
    *   `recordAuditEvent` so the failure is caught and logged.
    *
@@ -89,10 +90,13 @@ export class AuditService {
     const hasActor =
       (typeof input.actorUserPublicId === 'string' && input.actorUserPublicId.length > 0) ||
       (typeof input.actorApiKeyPublicId === 'string' && input.actorApiKeyPublicId.length > 0);
-    if (!hasActor) {
-      logger.warn({ action: input.action }, 'audit.record.missingActor');
+    if (!hasActor && input.anonymousActor !== true) {
+      logger.error({ action: input.action }, 'audit.record.missingActor');
       return;
     }
+    const metadata = hasActor
+      ? (input.metadata ?? {})
+      : { ...input.metadata, actor_kind: 'anonymous' };
 
     const insert = (): Promise<void> =>
       insertAuditOutboxRow({
@@ -106,7 +110,7 @@ export class AuditService {
         ipAddress: input.ip_address ?? null,
         userAgent: input.user_agent ?? null,
         severity: input.severity ?? 'INFO',
-        metadata: input.metadata ?? {},
+        metadata,
       });
 
     // sec-R10: the `audit.outbox` INSERT is gated by RLS (audit_outbox_tenant_isolation_insert:

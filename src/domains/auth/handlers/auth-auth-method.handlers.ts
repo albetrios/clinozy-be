@@ -74,13 +74,18 @@ export function createAuthAuthMethodHandlers({
     resetPassword: async (request: FastifyRequest, reply: FastifyReply) => {
       const ipAddress = getIpAddress(request);
       const userAgent = getUserAgent(request) ?? undefined;
-      const data = await authService.resetPassword(request.body, ipAddress, userAgent);
+      const { userPublicId, loginResult: data } = await authService.resetPassword(
+        request.body,
+        ipAddress,
+        userAgent,
+      );
 
       // A completed reset is a credential change — record it DISTINCTLY (and at WARNING) from the
       // subsequent login so a reset is queryable on its own (previously it surfaced only as
-      // auth.login). Recorded for both the MFA-required and auto-login branches; the adjacent login
-      // event and the captured IP/UA tie it to the actor.
+      // auth.login). Recorded for both the MFA-required and auto-login branches, attributed to the
+      // reset user (without an actor the audit service dropped every one of these rows).
       await recordScopedAuditEvent(request, {
+        actorUserPublicId: userPublicId,
         action: 'auth.password.reset',
         resource_type: 'user',
         severity: 'WARNING',

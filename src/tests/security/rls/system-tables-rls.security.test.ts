@@ -45,6 +45,26 @@ describe('Security: system tables RLS deny-all', () => {
     expect(names).toContain('stripe_subscription_tombstones_app_access');
   });
 
+  it('every role-scoped *_app_access policy names both runtime roles', async () => {
+    // The maintenance pool (clinozy_be_maintenance) runs the retention purges and system-table
+    // maintenance. A policy naming only clinozy_be_app admits it solely through its role
+    // membership (20260827020000) — revoke that grant and the purge silently matches no rows.
+    // auth.verification_tokens carried exactly that gap until 20261006022303.
+    const policies = await sql<{ table_name: string; policyname: string; roles: string[] }[]>`
+      SELECT schemaname || '.' || tablename AS table_name, policyname, roles::text[] AS roles
+      FROM pg_policies
+      WHERE right(policyname, 11) = '_app_access'
+      ORDER BY 1, 2
+    `;
+    // Seven system tables carry the pair today; fewer means a policy was dropped or renamed.
+    expect(policies.length).toBeGreaterThanOrEqual(7);
+    const runtimeRoles = ['clinozy_be_app', 'clinozy_be_maintenance'];
+    const missingARuntimeRole = policies
+      .filter((policy) => !runtimeRoles.every((role) => policy.roles.includes(role)))
+      .map((policy) => `${policy.table_name} → ${policy.policyname} {${policy.roles.join(',')}}`);
+    expect(missingARuntimeRole).toEqual([]);
+  });
+
   it('defines deny-all and clinozy_be_app policies on mail_outbox', async () => {
     const policies = await sql<{ policyname: string }[]>`
       SELECT policyname

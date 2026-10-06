@@ -100,6 +100,61 @@ describe('Integration: audit transactional outbox drain', () => {
     expect(outboxRows[0]?.last_error).toMatch(/actor public_id did not resolve/);
   });
 
+  it('drains a declared-anonymous row (no actor by design) into audit.logs with no actor', async () => {
+    // Pre-authentication events (a failed login) name no actor on purpose; the service stages them
+    // with metadata.actor_kind = 'anonymous'. The CHECK admits that shape and the drain writes it
+    // with both actor columns NULL instead of failing the row as an unresolved actor.
+    await getOperatorDatabase()
+      .insert(audit_outbox)
+      .values({
+        status: 'PENDING',
+        organization_public_id: null,
+        action: 'auth.login_failure',
+        resource_type: 'session',
+        severity: 'INFO',
+        metadata: { source: 'password', actor_kind: 'anonymous' },
+      });
+
+    const result = await withMaintenanceDatabaseContext(
+      MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+      (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
+    );
+
+    expect(result).toEqual({ drained: 1, transientFailed: 0, permanentlyFailed: 0 });
+    const auditRows = await getOperatorDatabase()
+      .select()
+      .from(logs)
+      .where(eq(logs.action, 'auth.login_failure'));
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0]).toMatchObject({
+      actor_user_id: null,
+      actor_api_key_id: null,
+      metadata: { source: 'password', actor_kind: 'anonymous' },
+    });
+  });
+
+  it('the outbox CHECK refuses an actorless row that is not declared anonymous', async () => {
+    const failure = await getOperatorDatabase()
+      .insert(audit_outbox)
+      .values({
+        status: 'PENDING',
+        organization_public_id: null,
+        action: 'tenancy.role.create',
+        resource_type: 'role',
+        metadata: { source: 'audit-outbox-drain.integration' },
+      })
+      .then(
+        () => null,
+        (error: unknown) => error,
+      );
+
+    // 23514 = check_violation, raised by Postgres itself — not by application code.
+    expect(failure).toMatchObject({
+      cause: { code: '23514', constraint_name: 'chk_audit_outbox_actor_present' },
+    });
+    expect(await pendingOutboxCount()).toBe(0);
+  });
+
   it('two concurrent drainers process each row exactly once (FOR UPDATE SKIP LOCKED)', async () => {
     // The scheduler can run on >1 replica. `claimPendingBatch` uses FOR UPDATE SKIP LOCKED so
     // two drainers racing the same backlog partition the rows instead of both copying a row into
