@@ -115,7 +115,7 @@ Production defaults (override with `SENTRY_TRACES_SAMPLE_RATE` / `SENTRY_PROFILE
 
 Health-check transactions are dropped. Fast successful requests use deterministic baseline sampling (~5% prod) so error and slow paths stay fully covered at lower volume.
 
-Unit tests: `src/infrastructure/observability/__tests__/sentry.unit.test.ts`.
+Unit tests: `src/infrastructure/observability/__tests__/unit/sentry.unit.test.ts`.
 
 ---
 
