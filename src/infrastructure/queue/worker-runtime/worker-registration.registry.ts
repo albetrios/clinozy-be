@@ -7,6 +7,8 @@ import { MAIL_QUEUE_NAME } from '@/infrastructure/mail/queues/mail.queue.js';
 import { isMailConfigured } from '@/infrastructure/mail/mail.service.js';
 import { createWebhookDeliveryWorker } from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery.worker.js';
 import { WEBHOOK_DELIVERY_QUEUE_NAME } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
+import { createWebhookDeliveryReclaimWorker } from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery-reclaim.worker.js';
+import { WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME } from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery-reclaim.constants.js';
 import { createNotificationWorker } from '@/domains/notify/sub-domains/notification/workers/notification.worker.js';
 import { NOTIFICATION_QUEUE_NAME } from '@/domains/notify/sub-domains/notification/queues/notification.queue.js';
 import { createAuditRetentionWorker } from '@/domains/audit/workers/audit-retention.worker.js';
@@ -191,6 +193,16 @@ const WORKER_QUEUE_REGISTRATION_DEFINITIONS: WorkerQueueRegistrationDefinition[]
     resolvePostgresConcurrency: () => getWorkerConcurrencyWebhook(),
     create: () => createWebhookDeliveryWorker(),
   },
+  // Same family as the delivery worker, so the safety net runs wherever deliveries run: it
+  // re-enqueues attempts whose job was lost (Redis refused the enqueue, or the process died
+  // between commit and enqueue). One short read, then the adds outside any database context.
+  retentionDefinition({
+    queueName: WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME,
+    family: 'webhook',
+    logLabel: 'webhook delivery reclaim worker',
+    holdsConnectionDuringExternalIo: false,
+    create: () => createWebhookDeliveryReclaimWorker(),
+  }),
   {
     queueName: NOTIFICATION_QUEUE_NAME,
     family: 'notify',

@@ -51,10 +51,10 @@ describe('infrastructure queue scheduler', () => {
     vi.resetModules();
   });
 
-  it('getScheduledJobs returns audit, session, stripe retention, audit export, tombstone retention, idempotency, dlq depth, mail sweeper, upload pending sweep, stripe reclaim, and audit-outbox drain jobs', async () => {
+  it('getScheduledJobs returns audit, session, stripe retention, audit export, tombstone retention, idempotency, dlq depth, mail sweeper, upload pending sweep, stripe reclaim, webhook delivery reclaim, and audit-outbox drain jobs', async () => {
     const { getScheduledJobs } = await import('@/infrastructure/queue/scheduler.js');
     const scheduledJobs = getScheduledJobs();
-    expect(scheduledJobs).toHaveLength(26);
+    expect(scheduledJobs).toHaveLength(27);
     expect(scheduledJobs.map((job) => job.queueName)).toEqual([
       'audit-retention',
       'audit-outbox-drain',
@@ -75,6 +75,7 @@ describe('infrastructure queue scheduler', () => {
       'upload-pending-sweep',
       'stripe-webhook-event-reclaim',
       'stripe-webhook-event-catchup',
+      'webhook-delivery-reclaim',
     ]);
   });
 
@@ -144,13 +145,13 @@ describe('infrastructure queue scheduler', () => {
   it('registerScheduledJobs registers one repeatable job per cleanup queue when enabled', async () => {
     const { registerScheduledJobs } = await import('@/infrastructure/queue/scheduler.js');
     const schedulerHandle = await registerScheduledJobs();
-    expect(upsertJobSchedulerMock).toHaveBeenCalledTimes(26);
-    // Each scheduled job opens one Queue for upsert (26) + the reconcile pass opens one Queue per
-    // unique queue name (26), each closed in its own loop iteration. The 26 upsert queues are
+    expect(upsertJobSchedulerMock).toHaveBeenCalledTimes(27);
+    // Each scheduled job opens one Queue for upsert (27) + the reconcile pass opens one Queue per
+    // unique queue name (27), each closed in its own loop iteration. The 27 upsert queues are
     // closed as soon as registration ends — not held open for the life of the process.
-    expect(queueCloseMock).toHaveBeenCalledTimes(52);
+    expect(queueCloseMock).toHaveBeenCalledTimes(54);
     await schedulerHandle.close();
-    expect(queueCloseMock).toHaveBeenCalledTimes(52);
+    expect(queueCloseMock).toHaveBeenCalledTimes(54);
   });
 
   it('registerScheduledJobs does not instantiate queues when SCHEDULER_ENABLED is false', async () => {
@@ -160,6 +161,37 @@ describe('infrastructure queue scheduler', () => {
     expect(upsertJobSchedulerMock).not.toHaveBeenCalled();
     expect(queueCloseMock).not.toHaveBeenCalled();
     await schedulerHandle.close();
+  });
+
+  // A split worker service running with the scheduler off registers none of its queues' crons, and
+  // no other process registers them for it: the mail outbox sweeper and the Stripe and webhook
+  // reclaims then never run — silently, until lost work piles up.
+  it('warns with the crons it leaves unregistered when the scheduler is off in a process that runs them', async () => {
+    vi.stubEnv('SCHEDULER_ENABLED', 'false');
+    loggerMock.warn.mockClear();
+    const { registerScheduledJobs } = await import('@/infrastructure/queue/scheduler.js');
+
+    await registerScheduledJobs({
+      activeQueueNames: new Set(['mail', 'mail-outbox-sweeper', 'webhook-delivery-reclaim']),
+    });
+
+    expect(upsertJobSchedulerMock).not.toHaveBeenCalled();
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      { queueNames: ['mail-outbox-sweeper', 'webhook-delivery-reclaim'] },
+      'scheduler.disabled.crons_not_registered',
+    );
+  });
+
+  it('stays quiet with the scheduler off in a process that runs no cron queue', async () => {
+    vi.stubEnv('SCHEDULER_ENABLED', 'false');
+    loggerMock.warn.mockClear();
+    loggerMock.info.mockClear();
+    const { registerScheduledJobs } = await import('@/infrastructure/queue/scheduler.js');
+
+    await registerScheduledJobs({ activeQueueNames: new Set(['mail', 'webhook-delivery']) });
+
+    expect(loggerMock.warn).not.toHaveBeenCalled();
+    expect(loggerMock.info).toHaveBeenCalledWith('scheduler.disabled');
   });
 
   it('registerScheduledJobs removes orphan schedulers whose id is not in the canonical set (sec-Q)', async () => {

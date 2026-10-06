@@ -42,6 +42,16 @@ describe('enqueueSubscriptionSeatSync', () => {
     expect(firstJobId).not.toBe(secondJobId);
   });
 
+  // Two replicas used to be able to sync one organization at once: the job that read the older
+  // member count could finish last and leave Stripe billing the wrong quantity. The key keeps one
+  // job per organization in flight and re-runs once after a change that lands mid-sync.
+  it('keys every enqueue to its organization, keeping the latest add while a sync runs', async () => {
+    await enqueueSubscriptionSeatSync({ organizationPublicId: 'org_abc' });
+
+    const options = addMock.mock.calls[0]![2] as { deduplication: unknown };
+    expect(options.deduplication).toEqual({ id: 'seat-sync-org_abc', keepLastIfActive: true });
+  });
+
   it('carries the organization id and idempotency token in the job data', async () => {
     await enqueueSubscriptionSeatSync({
       organizationPublicId: 'org_xyz',

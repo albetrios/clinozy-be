@@ -4,6 +4,7 @@ import { COMMIT_DISPATCH_RECOVERY_QUEUE_NAME } from '@/infrastructure/queue/comm
 import { NOTIFICATION_QUEUE_NAME } from '@/domains/notify/sub-domains/notification/queues/notification.queue.js';
 import { USER_DATA_EXPORT_QUEUE_NAME } from '@/domains/user/sub-domains/user-data-export/queues/user-data-export.queue.js';
 import { WEBHOOK_DELIVERY_QUEUE_NAME } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
+import { WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME } from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery-reclaim.constants.js';
 import { STRIPE_WEBHOOK_QUEUE_NAME } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
 import { SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME } from '@/domains/billing/sub-domains/subscription/queues/subscription-seat-sync.queue.js';
 import { STRIPE_WEBHOOK_EVENT_RETENTION_QUEUE_NAME } from '@/domains/billing/sub-domains/stripe-webhook/workers/stripe-webhook-event-retention.constants.js';
@@ -51,6 +52,7 @@ export const WORKER_QUEUE_NAMES = [
   NOTIFICATION_QUEUE_NAME,
   USER_DATA_EXPORT_QUEUE_NAME,
   WEBHOOK_DELIVERY_QUEUE_NAME,
+  WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME,
   STRIPE_WEBHOOK_QUEUE_NAME,
   SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME,
   STRIPE_WEBHOOK_EVENT_RETENTION_QUEUE_NAME,

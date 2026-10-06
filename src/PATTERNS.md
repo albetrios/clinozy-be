@@ -210,7 +210,7 @@ Outbound side effects (email send, webhook delivery) must not be lost when the o
 ### Where it lives
 
 - Mail: [src/infrastructure/mail/mail-outbox.schema.ts](src/infrastructure/mail/mail-outbox.schema.ts), [mail-outbox.repository.ts](src/infrastructure/mail/mail-outbox.repository.ts), [workers/mail-outbox-sweeper.processor.ts](src/infrastructure/mail/workers/mail-outbox-sweeper.processor.ts), [workers/mail.processor.ts](src/infrastructure/mail/workers/mail.processor.ts).
-- Webhook delivery: [src/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.ts](src/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.ts), [webhook-delivery-attempt.repository.ts](src/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery-attempt.repository.ts), [workers/webhook-delivery.worker.ts](src/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery.worker.ts).
+- Webhook delivery: [src/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.ts](src/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.ts), [webhook-delivery-attempt.repository.ts](src/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery-attempt.repository.ts), [workers/webhook-delivery.worker.ts](src/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery.worker.ts), [workers/webhook-delivery-reclaim.processor.ts](src/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery-reclaim.processor.ts).
 - Stripe webhook events: [src/domains/billing/sub-domains/stripe-webhook/stripe-webhook-event.repository.ts](src/domains/billing/sub-domains/stripe-webhook/stripe-webhook-event.repository.ts) — inbound webhooks use the same idempotent-claim pattern as the outbox.
 
 ### Implementation
@@ -239,6 +239,7 @@ sequenceDiagram
 - **DLQ**: failed deliveries with exhausted retries land in the per-queue `<name>-dlq` registered by [src/infrastructure/queue/dlq/](src/infrastructure/queue/dlq/).
 - **Provider down ≠ job failed**: while Resend is down the mail queue pauses and parks the job without spending an attempt, and the row's claim is released — the row waits for the provider instead of being failed ([provider-outage-pause.util.ts](src/infrastructure/queue/worker-runtime/provider-outage-pause.util.ts)).
 - **One live job per row**: the enqueue deduplicates on the row's token, so a sweeper that re-enqueues a row the queue still holds adds no second job.
+- **Every outbox has a sweep for lost enqueues**: the enqueue runs after the commit and fails fast while Redis is unreachable or full, so a row can exist with no job. `mail-outbox-sweeper` (mail), `webhook-delivery-reclaim` (webhook delivery attempts) and `stripe-webhook-event-reclaim` (Stripe events) re-enqueue such rows. A failed enqueue leaves the row pending for its sweep — it never marks the row failed.
 
 ### How to apply
 

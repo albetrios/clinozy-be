@@ -12,7 +12,7 @@ Outbound webhook HTTP delivery: durable attempt records, BullMQ queue/worker, ci
 
 - `webhook-delivery.repository.ts` / `webhook-delivery-attempt.repository.ts` — persistence
 - `queues/` — BullMQ job schema, enqueue helper and the retry schedule (`WEBHOOK_DELIVERY_RETRY_DELAYS_MS`)
-- `workers/` — delivery processor + outbound circuit breaker
+- `workers/` — delivery processor + outbound circuit breaker, and the `webhook-delivery-reclaim` sweep that re-enqueues attempts whose job was lost
 - `events/` — in-process emit + handlers (types remain in parent `webhook/events/notify.events.ts`)
 
 ## Lifecycle
@@ -20,6 +20,7 @@ Outbound webhook HTTP delivery: durable attempt records, BullMQ queue/worker, ci
 ```mermaid
 stateDiagram-v2
   [*] --> PENDING: attempt row written with the event (job id = attempt public id)
+  PENDING --> PENDING: enqueue lost (Redis refused it) → reclaim sweep re-enqueues after 5 min
   PENDING --> SENDING: claim (attempt_count + 1)
   SENDING --> SENDING: a new execution re-claims after a crash
   SENDING --> SENT: 2xx
@@ -36,6 +37,7 @@ stateDiagram-v2
 ## Key invariants
 
 - The job carries the attempt's **public id** (`deliveryAttemptPublicId`, also the BullMQ job id) and `organizationPublicId` — never a bigserial. The worker loads the row by public id under the organization's RLS scope.
+- **A lost enqueue is re-sent, never failed.** The job is enqueued after the transaction commits, and producers fail fast while Redis is unreachable or full; the attempt then stays `PENDING` with no job. The `webhook-delivery-reclaim` sweep (every 5 min, `webhook` family) re-enqueues attempts still `PENDING` after 5 minutes, across organizations under the global-retention scope, then adds the jobs outside any database context. An attempt whose job still exists (queued behind a backlog, retained after a dead-letter) is left alone — BullMQ drops the add for an existing job id.
 - **Claim unless `SENT`.** BullMQ runs one execution of a job at a time, so an execution that finds its row `SENDING` is looking at one that crashed or lost its lock; it claims the row again. No lease, no "in flight" skip — that used to complete the job and drop the event. `attempt_count` counts every claim and has no upper bound.
 - Delivery is **at-least-once**: every POST of an attempt carries the same `X-Webhook-Delivery-Id` (the attempt's public id); receivers dedupe on it. Nothing POSTs an attempt once it is `SENT`, and `recordOutcome` never overwrites `SENT`.
 - **Retry schedule**: eight attempts — after 1 min, 5 min, 30 min, 2 h, 5 h, 10 h, 10 h (about 28 h in all), plus up to 20% jitter. The row's `next_retry_at` uses the same base delay.

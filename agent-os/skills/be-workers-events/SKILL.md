@@ -48,6 +48,25 @@ queue-wide pause only for a worker with a limiter. A provider throttle (Resend 4
 limiter (`RESEND_MAX_REQUESTS_PER_SECOND`) and sends `transactional` mail ahead of the `bulk` lane.
 Scheduled sweeps and `webhook-delivery` do not pause. Detail: [workers-and-events.md → Provider outage pause](../../../docs/reference/runtime/workers-and-events.md#provider-outage-pause).
 
+## Durability and per-aggregate ordering
+
+- **A row-backed job gets a sweep for lost enqueues.** The enqueue runs after the commit and fails
+  fast while Redis is unreachable or full, so the row can exist with no job. When a row holds the
+  work (mail outbox, webhook delivery attempts, the Stripe event ledger), an enqueue error leaves
+  the row pending — never marks it failed — and a scheduled sweep in the **same family** as the
+  worker re-enqueues rows still pending after a cutoff (`mail-outbox-sweeper`,
+  `webhook-delivery-reclaim`, `stripe-webhook-event-reclaim`). Key the job on the row's public id or
+  token so the sweep's add is a no-op while the job exists. Table: [workers-and-events.md → When
+  Redis refuses the enqueue](../../../docs/reference/runtime/workers-and-events.md#when-redis-refuses-the-enqueue).
+- **A job that pushes an aggregate's latest state runs one at a time per aggregate.** Deduplicate
+  on the aggregate with `keepLastIfActive` (see `subscriptionSeatSyncDeduplication`): a waiting job
+  absorbs further adds, a change that lands mid-run runs once after it, and two replicas never run
+  the same aggregate at once — otherwise the run that read the older state can finish last. Never a
+  stable `jobId` for this: a retained completed or failed job silently drops every later add.
+- **Every worker service keeps `SCHEDULER_ENABLED=true`.** Each process registers only the crons of
+  the queues it runs; a service with the scheduler off leaves its families' sweeps unregistered
+  (`scheduler.disabled.crons_not_registered`).
+
 ## Files/locations
 
 - Event bus: `src/core/events/event-bus.ts`

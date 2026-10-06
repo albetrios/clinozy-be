@@ -38,6 +38,7 @@ import {
   DEFAULT_DLQ_AUTO_RETRY_CRON,
 } from '@/infrastructure/queue/dlq/dlq-auto-retry.constants.js';
 import { STRIPE_WEBHOOK_EVENT_RECLAIM_QUEUE_NAME } from '@/domains/billing/sub-domains/stripe-webhook/workers/stripe-webhook-event-reclaim.constants.js';
+import { WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME } from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery-reclaim.constants.js';
 import { STRIPE_WEBHOOK_EVENT_CATCHUP_QUEUE_NAME } from '@/domains/billing/sub-domains/stripe-webhook/workers/stripe-webhook-event-catchup.constants.js';
 import { STRIPE_WEBHOOK_EVENT_RETENTION_QUEUE_NAME } from '@/domains/billing/sub-domains/stripe-webhook/workers/stripe-webhook-event-retention.constants.js';
 import { AUDIT_EXPORT_QUEUE_NAME } from '@/domains/audit/workers/audit-export.constants.js';
@@ -97,6 +98,9 @@ const DEFAULT_COMMIT_DISPATCH_RECOVERY_CRON = '*/5 * * * *';
 const DEFAULT_UPLOAD_PENDING_SWEEP_CRON = '15 * * * *';
 const DEFAULT_STRIPE_WEBHOOK_EVENT_RECLAIM_CRON = '*/5 * * * *';
 const DEFAULT_STRIPE_WEBHOOK_EVENT_CATCHUP_CRON = '*/15 * * * *';
+// Every five minutes: with the 5-minute stale cutoff, a delivery whose enqueue was lost goes out
+// within about ten minutes of Redis taking writes again.
+const DEFAULT_WEBHOOK_DELIVERY_RECLAIM_CRON = '*/5 * * * *';
 const DEFAULT_STRIPE_WEBHOOK_EVENT_RETENTION_CRON = '0 3 * * *';
 const DEFAULT_AUDIT_EXPORT_CRON = '15 2 * * *';
 
@@ -293,6 +297,12 @@ export function getScheduledJobs(): ScheduledJob[] {
       cronPattern:
         env.STRIPE_WEBHOOK_EVENT_CATCHUP_CRON ?? DEFAULT_STRIPE_WEBHOOK_EVENT_CATCHUP_CRON,
     }),
+    withSchedulerTimezone(timezone, {
+      queueName: WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME,
+      schedulerId: 'webhook-delivery-reclaim',
+      jobName: 're-enqueue-stale-pending-webhook-deliveries',
+      cronPattern: DEFAULT_WEBHOOK_DELIVERY_RECLAIM_CRON,
+    }),
   ];
 }
 
@@ -362,24 +372,37 @@ async function reconcileOrphanSchedulers(options: {
 }
 
 /**
- * Registers repeatable jobs with BullMQ. No-op when SCHEDULER_ENABLED is false.
+ * Registers repeatable jobs with BullMQ. With SCHEDULER_ENABLED false it registers nothing and
+ * warns (`scheduler.disabled.crons_not_registered`) when this process runs queues that have crons.
  */
 export async function registerScheduledJobs(
   options: RegisterScheduledJobsOptions = {},
 ): Promise<SchedulerHandle> {
+  const allJobs = getScheduledJobs();
+  const jobs =
+    options.activeQueueNames === undefined
+      ? allJobs
+      : allJobs.filter((job) => options.activeQueueNames?.has(job.queueName));
+
   if (!env.SCHEDULER_ENABLED) {
-    logger.info('scheduler.disabled');
+    // Each process registers only the crons of its own queues, so a worker that runs these queues
+    // with the scheduler off leaves their crons unregistered unless another scheduler-enabled
+    // process runs the same families — the sweeps that recover lost work (mail outbox, Stripe
+    // reclaim, webhook reclaim) then never run.
+    if (jobs.length > 0) {
+      logger.warn(
+        { queueNames: jobs.map((job) => job.queueName) },
+        'scheduler.disabled.crons_not_registered',
+      );
+    } else {
+      logger.info('scheduler.disabled');
+    }
     return {
       close: async () => {},
     };
   }
 
   const connection = getBullMQConnectionOptions();
-  const allJobs = getScheduledJobs();
-  const jobs =
-    options.activeQueueNames === undefined
-      ? allJobs
-      : allJobs.filter((job) => options.activeQueueNames?.has(job.queueName));
   const queues: Queue[] = [];
 
   // Group canonical scheduler ids by queue name so the reconciliation step can drop any

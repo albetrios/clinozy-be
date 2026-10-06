@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq, lt } from 'drizzle-orm';
 import {
   type RequestScopedPostgresDatabase,
   assertWorkerDatabaseContext,
@@ -92,22 +92,41 @@ export async function findOrganizationPublicIdByDeliveryAttemptPublicId(
 }
 
 /**
- * Marks a delivery attempt as failed when the post-commit BullMQ enqueue fails, so the row
- * does not remain stuck in `PENDING` without a worker job.
+ * Delivery attempts still `PENDING` that were created before `createdBefore`, oldest first, each
+ * with its organization's public id — the reclaim sweep's candidates.
+ *
+ * @remarks
+ * - **Algorithm:** `PENDING` attempts joined to their webhook and organization, ordered by
+ *   `created_at`, capped at `limit`. A worker claims an attempt (`PENDING → SENDING`) as soon as
+ *   its job starts, so an older `PENDING` row lost its job or waits behind a backlog.
+ * - **Failure modes:** throws `WorkerDatabaseContextError` outside the global-retention context —
+ *   under an organization scope RLS would silently return one tenant's rows.
+ * - **Side effects:** none — a read.
+ * - **Notes:** crosses organizations: the attempts', webhooks' and organizations' RLS policies admit
+ *   the maintenance role under `app.global_retention_cleanup`. Attempts of a disabled or deleted
+ *   webhook are included — the delivery worker settles them (`webhook_disabled`).
  */
-export async function markDeliveryAttemptEnqueueFailed(
-  delivery_attempt_public_id: string,
-  databaseHandle?: RequestScopedPostgresDatabase,
-): Promise<void> {
-  await resolveDatabase(databaseHandle)
-    .update(webhook_delivery_attempts)
-    .set({
-      status: 'FAILED',
-      response_body: 'enqueue_failed',
-      http_status_code: null,
-      next_retry_at: null,
+export async function findStalePendingDeliveryAttempts(
+  databaseHandle: WorkerDatabaseHandle,
+  options: { createdBefore: Date; limit: number },
+): Promise<Array<{ deliveryAttemptPublicId: string; organizationPublicId: string }>> {
+  assertWorkerDatabaseContext(['global_retention_cleanup']);
+  return databaseHandle
+    .select({
+      deliveryAttemptPublicId: webhook_delivery_attempts.public_id,
+      organizationPublicId: organizations.public_id,
     })
-    .where(eq(webhook_delivery_attempts.public_id, delivery_attempt_public_id));
+    .from(webhook_delivery_attempts)
+    .innerJoin(webhooks, eq(webhook_delivery_attempts.webhook_id, webhooks.id))
+    .innerJoin(organizations, eq(webhooks.organization_id, organizations.id))
+    .where(
+      and(
+        eq(webhook_delivery_attempts.status, 'PENDING'),
+        lt(webhook_delivery_attempts.created_at, options.createdBefore),
+      ),
+    )
+    .orderBy(asc(webhook_delivery_attempts.created_at))
+    .limit(options.limit);
 }
 
 /**

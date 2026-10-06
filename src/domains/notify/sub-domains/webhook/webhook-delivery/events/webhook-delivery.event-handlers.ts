@@ -1,9 +1,6 @@
 import { eventBus, runEnqueueAfterCommit, type DomainEvent } from '@/core/events/event-bus.js';
 import { enqueueWebhookDelivery } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
-import {
-  findOrganizationPublicIdByDeliveryAttemptPublicId,
-  markDeliveryAttemptEnqueueFailed,
-} from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.js';
+import { findOrganizationPublicIdByDeliveryAttemptPublicId } from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import {
@@ -30,8 +27,9 @@ async function onWebhookDeliveryRequestedEvent(event: DomainEvent): Promise<void
           }),
         );
       } catch (error) {
+        // The attempt stays PENDING: the webhook-delivery-reclaim sweep re-enqueues it once
+        // Redis takes writes again (producers fail fast while it is unreachable or full).
         logger.error({ error, deliveryAttemptPublicId }, 'notify.webhook_delivery.enqueue.failed');
-        await markDeliveryAttemptEnqueueFailed(deliveryAttemptPublicId);
       }
     });
   } catch (error) {

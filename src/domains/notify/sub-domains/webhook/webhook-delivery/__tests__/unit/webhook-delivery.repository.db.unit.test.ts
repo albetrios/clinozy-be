@@ -1,26 +1,77 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
-import { database } from '@/infrastructure/database/connection.js';
 import { webhook_delivery_attempts } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
 import { WebhookRepository } from '@/domains/notify/sub-domains/webhook/webhook.repository.js';
+import {
+  runWithWorkerDatabaseContext,
+  WorkerDatabaseContextError,
+} from '@/infrastructure/database/contexts/database-context-runtime.js';
+import {
+  runGlobalRetentionWorkerJob,
+  type WorkerDatabaseHandle,
+} from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import {
   createPendingWebhookDeliveryAttempt,
   disableWebhookAfterEndpointGone,
   findOrganizationPublicIdByDeliveryAttemptPublicId,
   findOrganizationPublicIdByWebhookId,
+  findStalePendingDeliveryAttempts,
   findWebhookDeliveryAttemptWithWebhook,
-  markDeliveryAttemptEnqueueFailed,
 } from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.js';
 
 describe('webhook-delivery.repository (database)', () => {
   const webhookRepository = new WebhookRepository();
+  const originalRuntime = process.env.CLINOZY_BE_RUNTIME;
 
   beforeEach(async () => {
     await cleanupDatabase();
   });
+
+  afterEach(() => {
+    if (originalRuntime === undefined) {
+      delete process.env.CLINOZY_BE_RUNTIME;
+    } else {
+      process.env.CLINOZY_BE_RUNTIME = originalRuntime;
+    }
+  });
+
+  async function createWebhookForNewOrganization(urlSuffix: string) {
+    const owner = await createTestUser();
+    const organization = await createTestOrganization({ ownerUserId: owner.id });
+    const webhook = await webhookRepository.create({
+      organization_id: organization.id,
+      url: `https://example.com/${urlSuffix}`,
+      events: ['subscription.updated'],
+      encrypted_secret: `sample-webhook-secret-${urlSuffix}`,
+      created_by_user_id: owner.id,
+    });
+    return { organization, webhook };
+  }
+
+  /** A delivery attempt created `createdMinutesAgo` minutes ago, in `status` (PENDING by default). */
+  async function createAttemptAged(options: {
+    webhookId: number;
+    createdMinutesAgo: number;
+    status?: 'SENDING' | 'SENT';
+  }): Promise<string> {
+    const attempt = await createPendingWebhookDeliveryAttempt({
+      webhookId: options.webhookId,
+      eventType: 'subscription.updated',
+      payload: {},
+    });
+    await getOperatorDatabase()
+      .update(webhook_delivery_attempts)
+      .set({
+        created_at: new Date(Date.now() - options.createdMinutesAgo * 60_000),
+        ...(options.status ? { status: options.status } : {}),
+      })
+      .where(eq(webhook_delivery_attempts.public_id, attempt!.publicId));
+    return attempt!.publicId;
+  }
 
   it('resolves organization by webhook and delivery attempt ids', async () => {
     const owner = await createTestUser();
@@ -97,35 +148,60 @@ describe('webhook-delivery.repository (database)', () => {
     expect(result).toBeNull();
   });
 
-  // The only backstop against a delivery row stuck in PENDING forever when the post-commit BullMQ
-  // enqueue fails (a Redis blip). Referenced only in source until now — no test proved the SQL.
-  it('markDeliveryAttemptEnqueueFailed moves a stuck PENDING row to FAILED / enqueue_failed with no retry', async () => {
-    const owner = await createTestUser();
-    const organization = await createTestOrganization({ ownerUserId: owner.id });
-    const webhook = await webhookRepository.create({
-      organization_id: organization.id,
-      url: 'https://example.com/enqueue-fail',
-      events: ['subscription.updated'],
-      encrypted_secret: 'sample-webhook-secret-enqueuefail',
-      created_by_user_id: owner.id,
+  // The reclaim sweep's read. A delivery whose enqueue failed (Redis refused the write) or whose
+  // process died between the commit and the enqueue sits PENDING with no job; before the sweep it
+  // was marked FAILED and never sent.
+  it('findStalePendingDeliveryAttempts finds attempts still PENDING past the cutoff in every organization, oldest first', async () => {
+    const first = await createWebhookForNewOrganization('reclaim-first');
+    const second = await createWebhookForNewOrganization('reclaim-second');
+    const staleInFirst = await createAttemptAged({
+      webhookId: first.webhook.id,
+      createdMinutesAgo: 10,
     });
-    const deliveryAttempt = await createPendingWebhookDeliveryAttempt({
-      webhookId: webhook.id,
-      eventType: 'subscription.updated',
-      payload: { subscription_id: 'sub_enqueue_fail' },
+    // Fresh (its job is just starting), delivered, and claimed: none of them is the sweep's.
+    await createAttemptAged({ webhookId: first.webhook.id, createdMinutesAgo: 1 });
+    await createAttemptAged({ webhookId: first.webhook.id, createdMinutesAgo: 20, status: 'SENT' });
+    await createAttemptAged({
+      webhookId: first.webhook.id,
+      createdMinutesAgo: 20,
+      status: 'SENDING',
     });
+    const staleInSecond = await createAttemptAged({
+      webhookId: second.webhook.id,
+      createdMinutesAgo: 30,
+    });
+    const createdBefore = new Date(Date.now() - 5 * 60_000);
 
-    await markDeliveryAttemptEnqueueFailed(deliveryAttempt!.publicId);
+    const found = await runGlobalRetentionWorkerJob((databaseHandle) =>
+      findStalePendingDeliveryAttempts(databaseHandle, { createdBefore, limit: 10 }),
+    );
+    expect(found).toEqual([
+      {
+        deliveryAttemptPublicId: staleInSecond,
+        organizationPublicId: second.organization.public_id,
+      },
+      {
+        deliveryAttemptPublicId: staleInFirst,
+        organizationPublicId: first.organization.public_id,
+      },
+    ]);
 
-    const [row] = await database
-      .select()
-      .from(webhook_delivery_attempts)
-      .where(eq(webhook_delivery_attempts.public_id, deliveryAttempt!.publicId));
-    expect(row?.status).toBe('FAILED');
-    expect(row?.response_body).toBe('enqueue_failed');
-    expect(row?.http_status_code).toBeNull();
-    // next_retry_at null so the retention/retry paths never re-pick a terminally-enqueue-failed row.
-    expect(row?.next_retry_at).toBeNull();
+    const oldestOnly = await runGlobalRetentionWorkerJob((databaseHandle) =>
+      findStalePendingDeliveryAttempts(databaseHandle, { createdBefore, limit: 1 }),
+    );
+    expect(oldestOnly.map((row) => row.deliveryAttemptPublicId)).toEqual([staleInSecond]);
+  });
+
+  it('findStalePendingDeliveryAttempts refuses an organization-scoped worker context, where RLS would hide every other tenant', async () => {
+    process.env.CLINOZY_BE_RUNTIME = 'worker';
+    await runWithWorkerDatabaseContext({ kind: 'organization' }, async () => {
+      await expect(
+        findStalePendingDeliveryAttempts({} as WorkerDatabaseHandle, {
+          createdBefore: new Date(),
+          limit: 1,
+        }),
+      ).rejects.toThrow(WorkerDatabaseContextError);
+    });
   });
 
   it('disableWebhookAfterEndpointGone turns the webhook off (410 Gone from its endpoint)', async () => {

@@ -2,7 +2,6 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const enqueueWebhookDeliveryMock = vi.fn();
 const findOrganizationPublicIdByDeliveryAttemptPublicIdMock = vi.fn();
-const markDeliveryAttemptEnqueueFailedMock = vi.fn();
 
 vi.mock(
   '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js',
@@ -16,8 +15,6 @@ vi.mock(
   () => ({
     findOrganizationPublicIdByDeliveryAttemptPublicId: (...arguments_: unknown[]) =>
       findOrganizationPublicIdByDeliveryAttemptPublicIdMock(...arguments_),
-    markDeliveryAttemptEnqueueFailed: (...arguments_: unknown[]) =>
-      markDeliveryAttemptEnqueueFailedMock(...arguments_),
   }),
 );
 
@@ -44,7 +41,6 @@ describe('webhook delivery event handlers', () => {
 
   beforeEach(() => {
     enqueueWebhookDeliveryMock.mockReset();
-    markDeliveryAttemptEnqueueFailedMock.mockReset();
     findOrganizationPublicIdByDeliveryAttemptPublicIdMock.mockReset();
     findOrganizationPublicIdByDeliveryAttemptPublicIdMock.mockResolvedValue('org_public_test_99');
   });
@@ -97,8 +93,10 @@ describe('webhook delivery event handlers', () => {
     });
   });
 
-  it('marks the attempt enqueue_failed when the enqueue itself fails (a Redis blip)', async () => {
-    // Without this backstop the row would sit PENDING forever: nothing else ever enqueues it.
+  it('leaves the attempt PENDING for the reclaim sweep when the enqueue itself fails (Redis refused the write)', async () => {
+    // It used to be marked FAILED (`enqueue_failed`) and was never sent. Now nothing touches the
+    // row: the webhook-delivery-reclaim sweep re-enqueues it once Redis takes writes again, and
+    // the failure never escapes the event bus into the originating request.
     enqueueWebhookDeliveryMock.mockRejectedValueOnce(new Error('redis down'));
 
     await eventBus.emit({
@@ -107,7 +105,7 @@ describe('webhook delivery event handlers', () => {
       timestamp: new Date(),
     });
 
-    expect(markDeliveryAttemptEnqueueFailedMock).toHaveBeenCalledExactlyOnceWith('wda_attempt44');
+    expect(enqueueWebhookDeliveryMock).toHaveBeenCalledOnce();
   });
 
   it('does not enqueue an unscoped delivery when the attempt has no resolvable organization', async () => {

@@ -559,6 +559,7 @@ src/
     │   │   │   ├── webhook-delivery/
     │   │   │       ├── __tests__/
     │   │   │       │   ├── integration/
+    │   │   │       │   │   ├── webhook-delivery-reclaim.integration.test.ts
     │   │   │       │   │   └── webhook-delivery.worker.integration.test.ts
     │   │   │       │   └── unit/
     │   │   │       │   │   ├── events/
@@ -570,6 +571,7 @@ src/
     │   │   │       │   │       └── webhook-delivery.event-handlers.unit.test.ts
     │   │   │       │   │   ├── webhook-delivery-attempt.repository.db.unit.test.ts
     │   │   │       │   │   ├── webhook-delivery-attempt.repository.try-mark-sending.db.unit.test.ts
+    │   │   │       │   │   ├── webhook-delivery-reclaim.processor.unit.test.ts
     │   │   │       │   │   ├── webhook-delivery.job.schema.unit.test.ts
     │   │   │       │   │   ├── webhook-delivery.queue.unit.test.ts
     │   │   │       │   │   ├── webhook-delivery.repository.db.unit.test.ts
@@ -582,6 +584,9 @@ src/
     │   │   │       │   ├── webhook-delivery.job.schema.ts
     │   │   │       │   └── webhook-delivery.queue.ts
     │   │   │       ├── workers/
+    │   │   │       │   ├── webhook-delivery-reclaim.constants.ts
+    │   │   │       │   ├── webhook-delivery-reclaim.processor.ts
+    │   │   │       │   ├── webhook-delivery-reclaim.worker.ts
     │   │   │       │   ├── webhook-delivery.worker.ts
     │   │   │       │   └── webhook-outbound-circuit.ts
     │   │   │       ├── webhook-delivery-attempt.repository.ts
@@ -1878,6 +1883,7 @@ src/
     │   │   ├── provider-outage-pause.integration.test.ts
     │   │   ├── readiness-provider-pause.integration.test.ts
     │   │   ├── stripe-webhook-enqueue-dedupe.integration.test.ts
+    │   │   ├── subscription-seat-sync-serialization.integration.test.ts
     │   │   ├── transactional-outbox.integration.test.ts
     │   │   └── worker-shutdown.integration.test.ts
     │   ├── runtime/
