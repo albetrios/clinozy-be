@@ -10,6 +10,11 @@ import {
 import type { OrganizationService } from './organization.service.js';
 import type { AuditService } from '@/domains/audit/audit.service.js';
 import { AuditSerializer } from '@/domains/audit/audit.serializer.js';
+import {
+  buildAuditActorFields,
+  listBodyFieldNames,
+  recordScopedAuditEvent,
+} from '@/shared/utils/infrastructure/audit-request-context.util.js';
 
 /**
  * Builds the Fastify handler map for the organization routes — account-level
@@ -17,7 +22,8 @@ import { AuditSerializer } from '@/domains/audit/audit.serializer.js';
  * `/organization` resource (get/update/delete, logo upload/delete, audit-log
  * listing). Wraps service calls with `requireAuth`, public-id validation, and
  * `successResponse` / `paginatedResponse` shaping. The optional
- * {@link AuditService} is required only by `listOrganizationAuditLogs`.
+ * {@link AuditService} is required only by `listOrganizationAuditLogs`. Create, update and
+ * delete record a scoped audit event in the organization's own log.
  */
 export function createOrganizationController(
   service: OrganizationService,
@@ -39,18 +45,42 @@ export function createOrganizationController(
     createOrganization: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
       const data = await service.create(request.body, auth.userId);
+      // Recorded in the new organization's own log, so its admins can see who created it.
+      await recordScopedAuditEvent(request, {
+        actorUserPublicId: auth.userId,
+        action: 'tenancy.organization.create',
+        resource_type: 'organization',
+        organizationPublicId: data.id,
+      });
       return successResponse(data, getRequestIdentifier(request));
     },
     updateOrganization: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
       const id = requireOrganizationScope(request);
       const data = await service.update(id, request.body, getActingUserPublicId(auth));
+      const changedFields = listBodyFieldNames(request.body);
+      await recordScopedAuditEvent(request, {
+        ...buildAuditActorFields(auth),
+        action: 'tenancy.organization.update',
+        resource_type: 'organization',
+        organizationPublicId: id.organizationPublicId,
+        // A status change (suspend / archive) decides whether the organization can be used at all.
+        severity: changedFields.includes('status') ? 'WARNING' : 'INFO',
+        metadata: { changed_fields: changedFields },
+      });
       return successResponse(data, getRequestIdentifier(request));
     },
     deleteOrganization: async (request: FastifyRequest, reply: FastifyReply) => {
-      requirePrincipal(request);
+      const auth = requirePrincipal(request);
       const id = requireOrganizationScope(request);
       await service.delete(id);
+      await recordScopedAuditEvent(request, {
+        ...buildAuditActorFields(auth),
+        action: 'tenancy.organization.delete',
+        resource_type: 'organization',
+        organizationPublicId: id.organizationPublicId,
+        severity: 'WARNING',
+      });
       return reply.code(204).send();
     },
     uploadLogo: async (request: FastifyRequest, _reply: FastifyReply) => {

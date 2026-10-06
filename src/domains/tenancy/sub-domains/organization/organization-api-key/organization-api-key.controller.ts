@@ -57,6 +57,7 @@ export function createOrganizationApiKeyController(service: OrganizationApiKeySe
         actorUserPublicId: auth.userId,
         action: 'organization.api_key.create',
         resource_type: 'organization_api_key',
+        organizationPublicId: scope.organizationPublicId,
         severity: 'WARNING',
         metadata: { api_key_id: result.api_key.id },
       });
@@ -81,6 +82,7 @@ export function createOrganizationApiKeyController(service: OrganizationApiKeySe
         ...buildAuditActorFields(auth),
         action: 'organization.api_key.update',
         resource_type: 'organization_api_key',
+        organizationPublicId: scope.organizationPublicId,
         metadata: { api_key_id: apiKeyId },
       });
       return successResponse(data, getRequestIdentifier(request));
@@ -102,6 +104,7 @@ export function createOrganizationApiKeyController(service: OrganizationApiKeySe
         ...buildAuditActorFields(auth),
         action: 'organization.api_key.revoke',
         resource_type: 'organization_api_key',
+        organizationPublicId: scope.organizationPublicId,
         severity: 'WARNING',
         metadata: { api_key_id: apiKeyId },
       });
@@ -124,6 +127,7 @@ export function createOrganizationApiKeyController(service: OrganizationApiKeySe
         actorUserPublicId: auth.userId,
         action: 'organization.api_key.rotate',
         resource_type: 'organization_api_key',
+        organizationPublicId: scope.organizationPublicId,
         severity: 'WARNING',
         metadata: { api_key_id: apiKeyId },
       });

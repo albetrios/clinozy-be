@@ -22,6 +22,7 @@ src/
     │   │   │   │   └── worker/
     │   │   │   │   │   ├── audit-outbox-drain.worker.unit.test.ts
     │   │   │   │   │   └── audit-retention.worker.unit.test.ts
+    │   │   │   ├── audit-action-catalog.policy.unit.test.ts
     │   │   │   ├── audit-export.processor.unit.test.ts
     │   │   │   ├── audit-metadata-sanitizer.property.unit.test.ts
     │   │   │   ├── audit-outbox.repository.db.unit.test.ts
@@ -301,6 +302,7 @@ src/
     │   │   │   └── subscription.factory.ts
     │   │   ├── integration/
     │   │   │   ├── billing-account-reads.integration.test.ts
+    │   │   │   ├── billing-audit-trail.integration.test.ts
     │   │   │   ├── billing-idempotency-replay.integration.test.ts
     │   │   │   ├── billing-route-smoke.integration.test.ts
     │   │   │   ├── billing-subscription-mutations.integration.test.ts
@@ -460,6 +462,7 @@ src/
     │   │   ├── e2e/
     │   │   │   └── webhook-delivery.e2e.test.ts
     │   │   ├── integration/
+    │   │   │   ├── notify-audit-trail.integration.test.ts
     │   │   │   └── notify-route-smoke.integration.test.ts
     │   │   ├── unit/
     │   │   │   ├── notify-routes-rate-limit.policy.unit.test.ts
@@ -632,6 +635,7 @@ src/
     │   │   ├── factories/
     │   │   │   └── permission.factory.ts
     │   │   ├── integration/
+    │   │   │   ├── tenancy-audit-trail.integration.test.ts
     │   │   │   ├── tenancy-detail-happy.integration.test.ts
     │   │   │   ├── tenancy-idempotency.integration.test.ts
     │   │   │   ├── tenancy-route-smoke.integration.test.ts
@@ -1154,6 +1158,7 @@ src/
     │   │   ├── migrate.ts
     │   │   ├── migration-error-hint.ts
     │   │   ├── migration-execution-mode.ts
+    │   │   ├── migration-lock-timeout.ts
     │   │   └── migration-version.ts
     │   ├── pool/
     │   │   ├── organization-rls-checkout-counter.ts
@@ -1323,11 +1328,13 @@ src/
     │   ├── worker-runtime/
     │   │   ├── __tests__/
     │   │   │   └── unit/
+    │   │   │   │   ├── provider-outage-pause.util.unit.test.ts
     │   │   │   │   ├── registry-scheduler-consistency.unit.test.ts
     │   │   │   │   ├── scheduler-registry-audit.unit.test.ts
     │   │   │   │   ├── worker-connection-budget.unit.test.ts
     │   │   │   │   ├── worker-queue-family.util.unit.test.ts
     │   │   │   │   └── worker-registration.registry.unit.test.ts
+    │   │   ├── provider-outage-pause.util.ts
     │   │   ├── scheduler-registry-audit.ts
     │   │   ├── shutdown-timing.util.ts
     │   │   ├── worker-close.util.ts
@@ -1860,6 +1867,8 @@ src/
     │   │   ├── bullmq-noop-smoke.integration.test.ts
     │   │   ├── commit-dispatch-cleanup.integration.test.ts
     │   │   ├── dlq-auto-retry.integration.test.ts
+    │   │   ├── mail-enqueue-dedupe.integration.test.ts
+    │   │   ├── provider-outage-pause.integration.test.ts
     │   │   ├── transactional-outbox.integration.test.ts
     │   │   └── worker-shutdown.integration.test.ts
     │   ├── runtime/
@@ -2149,6 +2158,8 @@ src/
     │   │   │   ├── maintenance-database-context.unit.test.ts
     │   │   │   ├── maintenance-role.db.unit.test.ts
     │   │   │   ├── migration-execution-mode.unit.test.ts
+    │   │   │   ├── migration-lock-timeout.db.unit.test.ts
+    │   │   │   ├── migration-lock-timeout.unit.test.ts
     │   │   │   ├── principal-scope-minting.policy.unit.test.ts
     │   │   │   ├── rls-offboarding-regressions.db.unit.test.ts
     │   │   │   ├── rls-table-scope-map.db.unit.test.ts

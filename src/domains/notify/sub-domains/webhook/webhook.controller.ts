@@ -8,6 +8,11 @@ import {
 } from '@/shared/utils/http/request.util.js';
 import { validatePublicIdParam } from '@/shared/utils/identity/public-id-param.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
+import {
+  buildAuditActorFields,
+  listBodyFieldNames,
+  recordScopedAuditEvent,
+} from '@/shared/utils/infrastructure/audit-request-context.util.js';
 import type { WebhookService } from './webhook.service.js';
 import { WebhookDeliveryAttemptSerializer } from './webhook.serializer.js';
 import {
@@ -29,6 +34,15 @@ function buildCursorPaginationMetadata(result: CursorPaginationResult) {
     has_more: result.has_more,
     ...(result.total !== null ? { estimated_total: result.total } : {}),
   };
+}
+
+/** A webhook URL's origin for the audit log — its path and query can carry the receiver's secret. */
+function webhookUrlOrigin(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
 }
 
 function createListWebhooksHandler(service: WebhookService) {
@@ -100,11 +114,17 @@ export function createWebhookController(service: WebhookService) {
     },
     createWebhook: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
-      const data = await service.create(
-        requireOrganizationScope(request),
-        request.body,
-        getActingUserPublicId(auth),
-      );
+      const scope = requireOrganizationScope(request);
+      const data = await service.create(scope, request.body, getActingUserPublicId(auth));
+      // A new outbound destination for the organization's events — recorded at WARNING.
+      await recordScopedAuditEvent(request, {
+        ...buildAuditActorFields(auth),
+        action: 'notify.webhook.create',
+        resource_type: 'webhook',
+        organizationPublicId: scope.organizationPublicId,
+        severity: 'WARNING',
+        metadata: { webhook_public_id: data.id, url_origin: webhookUrlOrigin(data.url) },
+      });
       return successResponse(data, getRequestIdentifier(request));
     },
     updateWebhook: async (
@@ -112,24 +132,48 @@ export function createWebhookController(service: WebhookService) {
       _reply: FastifyReply,
     ) => {
       const auth = requirePrincipal(request);
+      const scope = requireOrganizationScope(request);
       // sec-new-N1: reject malformed webhookId before reaching the service layer.
+      const webhookId = validatePublicIdParam(request.params.webhook_id, 'webhook_id');
       const data = await service.update(
-        requireOrganizationScope(request),
-        validatePublicIdParam(request.params.webhook_id, 'webhook_id'),
+        scope,
+        webhookId,
         request.body,
         getActingUserPublicId(auth),
       );
+      const changedFields = listBodyFieldNames(request.body);
+      // A URL change is a new outbound destination — recorded at WARNING with its origin.
+      const destinationChanged = changedFields.includes('url');
+      await recordScopedAuditEvent(request, {
+        ...buildAuditActorFields(auth),
+        action: 'notify.webhook.update',
+        resource_type: 'webhook',
+        organizationPublicId: scope.organizationPublicId,
+        severity: destinationChanged ? 'WARNING' : 'INFO',
+        metadata: {
+          webhook_public_id: webhookId,
+          changed_fields: changedFields,
+          ...(destinationChanged ? { url_origin: webhookUrlOrigin(data.url) } : {}),
+        },
+      });
       return successResponse(data, getRequestIdentifier(request));
     },
     deleteWebhook: async (
       request: FastifyRequest<{ Params: { webhook_id: string } }>,
       reply: FastifyReply,
     ) => {
+      const auth = requirePrincipal(request);
+      const scope = requireOrganizationScope(request);
       // sec-new-N1: reject malformed webhookId before reaching the service layer.
-      await service.delete(
-        requireOrganizationScope(request),
-        validatePublicIdParam(request.params.webhook_id, 'webhook_id'),
-      );
+      const webhookId = validatePublicIdParam(request.params.webhook_id, 'webhook_id');
+      await service.delete(scope, webhookId);
+      await recordScopedAuditEvent(request, {
+        ...buildAuditActorFields(auth),
+        action: 'notify.webhook.delete',
+        resource_type: 'webhook',
+        organizationPublicId: scope.organizationPublicId,
+        metadata: { webhook_public_id: webhookId },
+      });
       return reply.code(204).send();
     },
     listDeliveryAttempts: createListDeliveryAttemptsHandler(service),

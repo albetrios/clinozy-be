@@ -14,15 +14,14 @@ import {
  * authenticated rate-limit middleware, so no bespoke per-(user, route)
  * throttle is added here. The audit write is awaited (so it lands before
  * the 403 reaches the client) but failures are swallowed — the
- * `ForbiddenError` path is unchanged. The `auditDomain` decorator is
- * optional-chained so callers without it (early-boot / unit tests) still
- * deny correctly.
+ * `ForbiddenError` path is unchanged. A server without the audit domain
+ * (a unit test's fake request) is handled by {@link recordScopedAuditEvent},
+ * which logs and returns, so the deny path is the same either way.
  */
 async function emitPermissionDenyAudit(
   request: FastifyRequest,
   metadata: Record<string, unknown>,
 ): Promise<void> {
-  if (!request.server?.auditDomain?.auditService) return;
   const auth = request.auth;
   // Every caller answers an unauthenticated request with 401 first, so `auth` is always set here.
   if (!auth) return;

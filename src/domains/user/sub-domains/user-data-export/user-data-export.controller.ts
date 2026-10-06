@@ -22,9 +22,16 @@ export function createUserDataExportController(userDataExportService: UserDataEx
      */
     async requestExport(request: FastifyRequest, reply: FastifyReply) {
       const requestId = getRequestIdentifier(request);
-      const _auth = requireAuth(request);
+      const auth = requireAuth(request);
       const data = await userDataExportService.requestExport(requireUserScope(request), {
         requestId,
+      });
+      // A full copy of the account's data is about to exist — record who asked, like each URL mint.
+      await recordScopedAuditEvent(request, {
+        actorUserPublicId: auth.userId,
+        action: 'user.data_export.request',
+        resource_type: 'user_data_export',
+        metadata: { export_public_id: data.id },
       });
       return reply.status(202).send(successResponse(data, requestId));
     },

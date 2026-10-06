@@ -1,4 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { AuthContext } from '@/shared/types/index.js';
 import { paginatedResponse, successResponse } from '@/shared/utils/http/response.util.js';
 import {
   getActingUserPublicId,
@@ -7,6 +8,10 @@ import {
   requirePrincipal,
 } from '@/shared/utils/http/request.util.js';
 import { validatePublicIdParam } from '@/shared/utils/identity/public-id-param.util.js';
+import {
+  buildAuditActorFields,
+  recordScopedAuditEvent,
+} from '@/shared/utils/infrastructure/audit-request-context.util.js';
 import type { SubscriptionService } from './subscription.service.js';
 import { SubscriptionSerializer } from './subscription.serializer.js';
 
@@ -16,13 +21,34 @@ function readIdempotencyKey(request: FastifyRequest): string | undefined {
     : undefined;
 }
 
+/** Records a subscription change in the organization's audit log, naming the subscription and its plan. */
+async function recordSubscriptionAuditEvent(options: {
+  request: FastifyRequest;
+  auth: AuthContext;
+  organizationPublicId: string;
+  action: string;
+  subscription: { id: string; plan_id: string | null };
+}): Promise<void> {
+  await recordScopedAuditEvent(options.request, {
+    ...buildAuditActorFields(options.auth),
+    action: options.action,
+    resource_type: 'subscription',
+    organizationPublicId: options.organizationPublicId,
+    metadata: {
+      subscription_public_id: options.subscription.id,
+      plan_public_id: options.subscription.plan_id,
+    },
+  });
+}
+
 /**
  * Builds organization-scoped subscription handlers (list / get / create /
  * update / change-plan / cancel / resume). The active organization is resolved
  * from the signed `org` token claim via `requireOrganizationScope(request)`; handlers
  * that take a `subscription_id` path param validate it (sec-B10); externally
  * mutating routes also require the `X-Idempotency-Key` header before delegating
- * to {@link SubscriptionService}.
+ * to {@link SubscriptionService}. Create, change-plan, cancel and resume record a scoped audit
+ * event in the organization's log.
  *
  * @remarks
  * sec-B10: every handler resolves the organization from the token claim and
@@ -53,51 +79,86 @@ export function createSubscriptionController(service: SubscriptionService) {
     },
     createSubscription: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
+      const scope = requireOrganizationScope(request);
       const idempotencyKey = readIdempotencyKey(request);
-      const data = await service.create(
-        requireOrganizationScope(request),
-        request.body,
-        getActingUserPublicId(auth),
-        idempotencyKey,
+      const subscription = SubscriptionSerializer.one(
+        await service.create(scope, request.body, getActingUserPublicId(auth), idempotencyKey),
       );
-      return successResponse(SubscriptionSerializer.one(data), getRequestIdentifier(request));
+      await recordSubscriptionAuditEvent({
+        request,
+        auth,
+        organizationPublicId: scope.organizationPublicId,
+        action: 'billing.subscription.create',
+        subscription,
+      });
+      return successResponse(subscription, getRequestIdentifier(request));
     },
     changePlan: async (
       request: FastifyRequest<{ Params: { subscription_id: string } }>,
       _reply: FastifyReply,
     ) => {
-      requirePrincipal(request);
-      const data = await service.changePlan(
-        requireOrganizationScope(request),
-        validatePublicIdParam(request.params.subscription_id, 'subscription_id'),
-        request.body,
-        readIdempotencyKey(request),
+      const auth = requirePrincipal(request);
+      const scope = requireOrganizationScope(request);
+      const subscription = SubscriptionSerializer.one(
+        await service.changePlan(
+          scope,
+          validatePublicIdParam(request.params.subscription_id, 'subscription_id'),
+          request.body,
+          readIdempotencyKey(request),
+        ),
       );
-      return successResponse(SubscriptionSerializer.one(data), getRequestIdentifier(request));
+      await recordSubscriptionAuditEvent({
+        request,
+        auth,
+        organizationPublicId: scope.organizationPublicId,
+        action: 'billing.subscription.change_plan',
+        subscription,
+      });
+      return successResponse(subscription, getRequestIdentifier(request));
     },
     cancelSubscription: async (
       request: FastifyRequest<{ Params: { subscription_id: string } }>,
       _reply: FastifyReply,
     ) => {
-      requirePrincipal(request);
-      const data = await service.cancel(
-        requireOrganizationScope(request),
-        validatePublicIdParam(request.params.subscription_id, 'subscription_id'),
-        readIdempotencyKey(request),
+      const auth = requirePrincipal(request);
+      const scope = requireOrganizationScope(request);
+      const subscription = SubscriptionSerializer.one(
+        await service.cancel(
+          scope,
+          validatePublicIdParam(request.params.subscription_id, 'subscription_id'),
+          readIdempotencyKey(request),
+        ),
       );
-      return successResponse(SubscriptionSerializer.one(data), getRequestIdentifier(request));
+      await recordSubscriptionAuditEvent({
+        request,
+        auth,
+        organizationPublicId: scope.organizationPublicId,
+        action: 'billing.subscription.cancel',
+        subscription,
+      });
+      return successResponse(subscription, getRequestIdentifier(request));
     },
     resumeSubscription: async (
       request: FastifyRequest<{ Params: { subscription_id: string } }>,
       _reply: FastifyReply,
     ) => {
-      requirePrincipal(request);
-      const data = await service.resume(
-        requireOrganizationScope(request),
-        validatePublicIdParam(request.params.subscription_id, 'subscription_id'),
-        readIdempotencyKey(request),
+      const auth = requirePrincipal(request);
+      const scope = requireOrganizationScope(request);
+      const subscription = SubscriptionSerializer.one(
+        await service.resume(
+          scope,
+          validatePublicIdParam(request.params.subscription_id, 'subscription_id'),
+          readIdempotencyKey(request),
+        ),
       );
-      return successResponse(SubscriptionSerializer.one(data), getRequestIdentifier(request));
+      await recordSubscriptionAuditEvent({
+        request,
+        auth,
+        organizationPublicId: scope.organizationPublicId,
+        action: 'billing.subscription.resume',
+        subscription,
+      });
+      return successResponse(subscription, getRequestIdentifier(request));
     },
     getPaymentSetup: async (
       request: FastifyRequest<{ Params: { subscription_id: string } }>,

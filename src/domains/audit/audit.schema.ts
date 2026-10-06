@@ -127,9 +127,16 @@ export const logs = auditSchema
         // flips this GUC cannot write to any tenant's audit log — only
         // tenantless rows. Used by `withMaintenanceDatabaseContext` for DLQ
         // replay and other system-level emitters that have no tenant.
+        //
+        // The organization arm resolves through the SECURITY DEFINER resolver, not a
+        // `tenancy.organizations` subquery: that table's RLS hides deleted organizations, so a
+        // deleted organization's pending outbox rows (its own delete event first) could never
+        // be written (20261006063350).
         withCheck: sql`${table.organization_id} = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
+            SELECT resolved.id
+            FROM audit.resolve_organization_ids_for_public_ids(
+              ARRAY[current_setting('app.current_organization_public_id', true)]
+            ) AS resolved
           )
           OR (
             ${table.organization_id} IS NULL

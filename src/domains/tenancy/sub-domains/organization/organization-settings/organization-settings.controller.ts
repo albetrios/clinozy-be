@@ -6,12 +6,18 @@ import {
   requireOrganizationScope,
   requirePrincipal,
 } from '@/shared/utils/http/request.util.js';
+import {
+  buildAuditActorFields,
+  listBodyFieldNames,
+  recordScopedAuditEvent,
+} from '@/shared/utils/infrastructure/audit-request-context.util.js';
 import type { OrganizationSettingsService } from './organization-settings.service.js';
 
 /**
  * Builds the Fastify handler map for `/organization/settings` —
  * exposes a `getSettings` reader and a `updateSettings` writer that
- * upserts the row through {@link OrganizationSettingsService}.
+ * upserts the row through {@link OrganizationSettingsService} and records the change in the
+ * organization's audit log.
  */
 export function createOrganizationSettingsController(service: OrganizationSettingsService) {
   return {
@@ -24,6 +30,16 @@ export function createOrganizationSettingsController(service: OrganizationSettin
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       const data = await service.update(scope, request.body, getActingUserPublicId(auth));
+      const changedFields = listBodyFieldNames(request.body);
+      await recordScopedAuditEvent(request, {
+        ...buildAuditActorFields(auth),
+        action: 'tenancy.organization_settings.update',
+        resource_type: 'organization_settings',
+        organizationPublicId: scope.organizationPublicId,
+        // The security policy decides who may use the organization (its MFA requirement among others).
+        severity: changedFields.includes('security_policy') ? 'WARNING' : 'INFO',
+        metadata: { changed_fields: changedFields },
+      });
       return successResponse(data, getRequestIdentifier(request));
     },
   };

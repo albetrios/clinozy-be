@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { audit_outbox } from '@/domains/audit/audit-outbox.schema.js';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
@@ -112,6 +115,36 @@ describe('User Data Export Sub-Domain — Integration', () => {
      * (`user-data-export.concurrent_pending_returned`). Neither branch had a test, so a
      * regression would surface to a double-clicking user as a 500.
      */
+    it('records user.data_export.request, attributed to the requesting user', async () => {
+      // A full copy of the account's data is about to exist; the request used to leave no trace
+      // (only each later download-link mint was recorded).
+      const user = await createTestUser();
+      const token = await generateTestToken({ userId: user.public_id });
+      await getAuthenticatedUserReady(app, token);
+
+      const response = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/users/me/data-export'),
+        token,
+        payload: {},
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const exportId = (response.json() as { data: { id: string } }).data.id;
+
+      const staged = await getOperatorDatabase()
+        .select()
+        .from(audit_outbox)
+        .where(eq(audit_outbox.action, 'user.data_export.request'));
+      expect(staged).toEqual([
+        expect.objectContaining({
+          actor_user_public_id: user.public_id,
+          organization_public_id: null,
+          resource_type: 'user_data_export',
+          metadata: { export_public_id: exportId },
+        }),
+      ]);
+    });
+
     it('returns the in-flight export instead of creating a second one', async () => {
       const user = await createTestUser();
       const token = await generateTestToken({ userId: user.public_id });

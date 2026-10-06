@@ -275,6 +275,8 @@ export async function recordDlqAutoRetryAuditEntry(input: {
         resource_type: 'bullmq_dead_letter_job',
         severity: 'INFO',
         metadata: {
+          // No user or key triggered this — the sweeper did. Marked so an actorless row explains itself.
+          actor_kind: 'system',
           dead_letter_job_id: input.deadLetterJobId,
           original_queue: input.sourceQueue,
           original_job_id: input.originalJobId,
