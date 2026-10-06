@@ -319,7 +319,10 @@ async function enqueueReplay(options: {
  *   and retention apply) with a fresh BullMQ id, best-effort removes the matching Redis DLQ
  *   snapshot, and appends an audit row.
  * - **Failure modes:** `payload_not_reconstructable` when the queue is not replayable or summary
- *   keys are missing; Redis/Postgres errors propagate after a successful source enqueue.
+ *   keys are missing; a failed enqueue propagates (the sweeper retries the row next tick). Once
+ *   the job is enqueued, the mirror removal and the audit row are best-effort — logged
+ *   (`dlq.auto_replay.follow_up_failed`) and swallowed: rethrown, they left the row unresolved and
+ *   the sweeper replayed the same failure again every tick.
  * - **Side effects:** BullMQ add + optional DLQ remove + audit insert.
  * - **Notes:** does not touch the ledger row — the sweeper marks it handled.
  */
@@ -337,23 +340,32 @@ export async function autoReplayDeadLetterFromLedger(input: {
     payload,
   });
 
-  // Identifier format mirrors `enqueueDeadLetter` (`dlq-<source>-<originalId>-attempt-<n>`) so we
-  // look up the snapshot for the specific terminal failure recorded in the ledger.
-  const safeOriginalJobIdentifier = input.ledgerRow.job_id ?? 'unknown';
-  const deadLetterJobIdentifier = `dlq-${input.ledgerRow.source_queue}-${String(safeOriginalJobIdentifier)}-attempt-${String(input.ledgerRow.attempts_made)}`;
-  const deadLetterJob = await getDeadLetterQueueClient(input.ledgerRow.dead_letter_queue).getJob(
-    deadLetterJobIdentifier,
-  );
-  if (deadLetterJob) {
-    await deadLetterJob.remove();
-  }
+  try {
+    // Identifier format mirrors `enqueueDeadLetter` (`dlq-<source>-<originalId>-attempt-<n>`) so
+    // we look up the snapshot for the specific terminal failure recorded in the ledger.
+    const safeOriginalJobIdentifier = input.ledgerRow.job_id ?? 'unknown';
+    const deadLetterJobIdentifier = `dlq-${input.ledgerRow.source_queue}-${String(safeOriginalJobIdentifier)}-attempt-${String(input.ledgerRow.attempts_made)}`;
+    const deadLetterJob = await getDeadLetterQueueClient(input.ledgerRow.dead_letter_queue).getJob(
+      deadLetterJobIdentifier,
+    );
+    if (deadLetterJob) {
+      await deadLetterJob.remove();
+    }
 
-  await recordDlqAutoRetryAuditEntry({
-    deadLetterJobId: input.ledgerRow.id,
-    sourceQueue: input.ledgerRow.source_queue,
-    originalJobId: input.ledgerRow.job_id,
-    replayDepth: input.ledgerRow.replay_depth + 1,
-  });
+    await recordDlqAutoRetryAuditEntry({
+      deadLetterJobId: input.ledgerRow.id,
+      sourceQueue: input.ledgerRow.source_queue,
+      originalJobId: input.ledgerRow.job_id,
+      replayDepth: input.ledgerRow.replay_depth + 1,
+    });
+  } catch (followUpError) {
+    // The replay is enqueued: report it as replayed so the sweeper resolves the row instead of
+    // replaying the same failure again next tick.
+    logger.error(
+      { error: followUpError, deadLetterJobId: input.ledgerRow.id },
+      'dlq.auto_replay.follow_up_failed',
+    );
+  }
 
   return { status: 'replayed', originalQueue: input.ledgerRow.source_queue };
 }

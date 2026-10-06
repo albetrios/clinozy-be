@@ -131,6 +131,25 @@ describe('autoReplayDeadLetterFromLedger', () => {
     expect(dlqRemoveMock).toHaveBeenCalledOnce();
   });
 
+  it('still reports the replay once it is enqueued when the mirror removal fails', async () => {
+    // Rethrown, a follow-up failure left the ledger row unresolved and the sweeper replayed the
+    // same failure again on every tick.
+    dlqGetJobMock.mockRejectedValueOnce(new Error('redis blip'));
+
+    const result = await autoReplayDeadLetterFromLedger({ ledgerRow: notificationLedgerRow });
+
+    expect(sourceQueueAddMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ status: 'replayed', originalQueue: 'notification' });
+  });
+
+  it('propagates a failed enqueue, so the sweeper retries the row', async () => {
+    sourceQueueAddMock.mockRejectedValueOnce(new Error('redis down'));
+
+    await expect(
+      autoReplayDeadLetterFromLedger({ ledgerRow: notificationLedgerRow }),
+    ).rejects.toThrow('redis down');
+  });
+
   it('reports a mail row as not reconstructable and enqueues nothing', async () => {
     const result = await autoReplayDeadLetterFromLedger({
       ledgerRow: {

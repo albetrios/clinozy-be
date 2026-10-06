@@ -161,6 +161,9 @@ minutes until the provider is back; then everything that waited is processed.
   parked job, the queue's `delayed` and `waiting` counts growing, and the circuit-breaker transitions.
   `getProviderPauseLeftMs(queue)` (BullMQ `getRateLimitTtl(Number.MAX_SAFE_INTEGER)`, which never
   reports the limiter's ordinary per-second count) answers how long a queue's pause has left.
+- **Stripe:** the `stripe-webhook` ingress and reclaim adds deduplicate on the event id, so the
+  reclaim sweep — which re-enqueues ledger rows left `processing` — adds nothing while the event's
+  job is parked for an outage (it used to add one job per event every five minutes).
 - **Readiness:** a paused queue's waiting jobs do not count toward a "stalled" worker
   (`getQueuesWaitingJobCount` skips it) — its work waits by design, and a worker restarted for it
   would only pause again. `/readyz` reports `provider_pause_ms` per throughput queue.

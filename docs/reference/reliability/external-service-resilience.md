@@ -65,7 +65,7 @@ When Redis is unavailable, breakers fall back to in-memory state per process.
 
 ## Stripe webhook worker
 
-- **Stripe outage → the queue pauses.** `stripe-webhook` and `subscription-seat-sync` pause on every replica while Stripe is down, probing every five minutes, without spending attempts ([Provider outage pause](../runtime/workers-and-events.md#provider-outage-pause)).
+- **Stripe outage → the queue pauses.** `stripe-webhook` and `subscription-seat-sync` pause on every replica while Stripe is down, probing every five minutes, without spending attempts ([Provider outage pause](../runtime/workers-and-events.md#provider-outage-pause)). One live job per event: the ingress and reclaim adds deduplicate on the event id, so reclaim sweeps during the outage add nothing.
 - Queue uses custom backoff ([`stripe-webhook-backoff.util.ts`](../../../src/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook-backoff.util.ts)): exponential from 10s for API errors that are not an outage; its `CircuitBreakerOpenError.retryAfterMs` branch only covers a job whose pause could not be applied.
 
 ---
