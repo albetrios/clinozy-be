@@ -1123,11 +1123,13 @@ src/
     ├── cache/
     │   ├── __tests__/
     │   │   └── unit/
+    │   │   │   ├── assert-redis-eviction-policy.unit.test.ts
     │   │   │   ├── assert-redis-tls-safety.unit.test.ts
     │   │   │   ├── redis-lock.util.unit.test.ts
     │   │   │   ├── redis-scan.util.unit.test.ts
     │   │   │   ├── redis-url.util.unit.test.ts
     │   │   │   └── resolve-bullmq-redis-url.util.unit.test.ts
+    │   ├── assert-redis-eviction-policy.ts
     │   ├── assert-redis-tls-safety.ts
     │   ├── bullmq-redis.client.ts
     │   ├── cache.overview.md

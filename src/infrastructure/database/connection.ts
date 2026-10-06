@@ -100,14 +100,16 @@ let maintenanceDatabaseHandle: ReturnType<typeof drizzle> | undefined;
  * - **Notes:** bypass authority is a CONNECTION-level property: every bypass policy arm requires
  *   `current_user = 'clinozy_be_maintenance'` as well as its `app.*` GUC, so the arms only open
  *   on this pool. Provisioning steps: `docs/deployment/runbooks/maintenance-database-role.md`.
- *   The lazy pool uses the same tuned {@link buildPostgresOptions} as the primary pool.
+ *   The lazy pool uses the same tuned {@link buildPostgresOptions} as the primary pool, sized by
+ *   `DATABASE_MAINTENANCE_POOL_MAX`.
  */
 export function getMaintenanceDatabase(): ReturnType<typeof drizzle> {
   if (maintenanceDatabaseHandle === undefined) {
-    maintenanceSql = postgres(
-      env.DATABASE_MAINTENANCE_URL,
-      buildPostgresOptions(env.DATABASE_MAINTENANCE_URL),
-    );
+    maintenanceSql = postgres(env.DATABASE_MAINTENANCE_URL, {
+      ...buildPostgresOptions(env.DATABASE_MAINTENANCE_URL),
+      // Its own, smaller size: short checkouts only, and it counts against max_connections too.
+      max: env.DATABASE_MAINTENANCE_POOL_MAX,
+    });
     maintenanceDatabaseHandle = drizzle(maintenanceSql);
   }
   return maintenanceDatabaseHandle;

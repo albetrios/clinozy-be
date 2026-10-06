@@ -82,7 +82,9 @@ describe('env template worker pool budget', () => {
       Number(template.DEPLOYMENT_API_REPLICA_COUNT) +
       Number(template.DEPLOYMENT_WORKER_REPLICA_COUNT);
     expect(processes).toBeGreaterThan(0);
-    expect(processes * templatePool).toBeLessThanOrEqual(
+    // Each process opens two pools: the primary one and the maintenance role's (default 10).
+    const maintenancePool = Number(template.DATABASE_MAINTENANCE_POOL_MAX ?? 10);
+    expect(processes * (templatePool + maintenancePool)).toBeLessThanOrEqual(
       maxConnections - Number(template.POSTGRES_RESERVED_CONNECTIONS),
     );
   });

@@ -145,10 +145,11 @@ describe('infrastructure queue scheduler', () => {
     const { registerScheduledJobs } = await import('@/infrastructure/queue/scheduler.js');
     const schedulerHandle = await registerScheduledJobs();
     expect(upsertJobSchedulerMock).toHaveBeenCalledTimes(26);
+    // Each scheduled job opens one Queue for upsert (26) + the reconcile pass opens one Queue per
+    // unique queue name (26), each closed in its own loop iteration. The 26 upsert queues are
+    // closed as soon as registration ends — not held open for the life of the process.
+    expect(queueCloseMock).toHaveBeenCalledTimes(52);
     await schedulerHandle.close();
-    // Each scheduled job opens one Queue for upsert (26) + the reconcile pass opens one
-    // Queue per unique queue name (26) which is closed inside its own loop iteration.
-    // handle.close() then closes the 26 upsert queues, so the mock observes 52 close calls.
     expect(queueCloseMock).toHaveBeenCalledTimes(52);
   });
 

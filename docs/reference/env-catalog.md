@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**13 / 237** variables migrated to an explicit `{ allowed, description }` entry.
+**13 / 238** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -40,6 +40,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `DATABASE_HTTP_STATEMENT_TIMEOUT_MS` | — | `5000` |  | — |
 | `DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS` | — | — *(optional)* |  | — |
 | `DATABASE_LOCK_TIMEOUT_MS` | — | `3000` |  | — |
+| `DATABASE_MAINTENANCE_POOL_MAX` | — | `10` |  | — |
 | `DATABASE_MAINTENANCE_URL` | — | — *(required)* |  | — |
 | `DATABASE_MIGRATION_URL` | — | — *(optional)* |  | — |
 | `DATABASE_OPERATOR_URL` | — | — *(optional)* |  | — |

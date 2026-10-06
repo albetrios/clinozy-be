@@ -196,7 +196,7 @@ src/infrastructure/
   cache/
     redis.client.ts           # Redis connection (managed service)
     bullmq-redis.client.ts    # Separate BullMQ Redis client (logical DB) + redis-url / redis-prefix utils
-                              # + redis.constants.ts, assert-redis-tls-safety.ts (boot guard), redis-topology-warn.util.ts,
+                              # + redis.constants.ts, assert-redis-tls-safety.ts + assert-redis-eviction-policy.ts (boot guards), redis-topology-warn.util.ts,
                               #   redis-lock.util.ts (withRedisLock compare-and-del lock), redis-url.parse.util.ts,
                               #   redis-scan.util.ts (SCAN under the client's key prefix — ioredis leaves it off patterns)
   queue/

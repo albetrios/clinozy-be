@@ -432,14 +432,14 @@ export async function registerScheduledJobs(
     // it forever (doubling cron rate after rename, firing into a worker-less queue after
     // removal). Inside the try so a failure still closes the registration queues below.
     await reconcileOrphanSchedulers({ connection, canonicalSchedulerIdsByQueueName });
-  } catch (error) {
+  } finally {
+    // The schedulers live in Redis and the workers run them; nothing needs these queues once
+    // they are registered. Kept open, they held one Redis connection per cron queue — 26 — for
+    // the life of the process.
     await Promise.allSettled(queues.map((queue) => queue.close()));
-    throw error;
   }
 
   return {
-    close: async () => {
-      await Promise.allSettled(queues.map((queue) => queue.close()));
-    },
+    close: async () => {},
   };
 }

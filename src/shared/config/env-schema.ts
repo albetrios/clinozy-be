@@ -761,6 +761,12 @@ const envSchemaBase = z.object({
    * instances; see docs/deployment/runbooks/resource-limits.md.
    */
   DATABASE_POOL_MAX: z.coerce.number().int().min(1).default(30),
+  /**
+   * Pool size per process for the maintenance role's pool (`DATABASE_MAINTENANCE_URL`) — mail
+   * outbox and ledger workers, retention purges, system audit inserts. Its checkouts are short, so
+   * it is much smaller than `DATABASE_POOL_MAX`; both count against Postgres `max_connections`.
+   */
+  DATABASE_MAINTENANCE_POOL_MAX: z.coerce.number().int().min(1).max(500).default(10),
   /** Connections reserved for admin, migrations, and monitoring (subtracted from Postgres max_connections). */
   POSTGRES_RESERVED_CONNECTIONS: z.coerce.number().int().min(1).default(10),
   /** Override when SHOW max_connections is unavailable or wrong (e.g. behind pooler). */
