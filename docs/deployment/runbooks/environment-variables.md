@@ -182,7 +182,7 @@ Step by step:
      `PORT`, `LOG_LEVEL`, `WORKER_CONCURRENCY`, feature flags (`ENABLE_*`),
      URLs (`FRONTEND_URL`, `ALLOWED_ORIGINS`), public OAuth IDs
      (`OAUTH_*_CLIENT_ID`), public RP info (`WEBAUTHN_RP_ID`),
-     `JWT_PUBLIC_KEY`, `CAPTCHA_SITE_KEY`.
+     `JWT_PUBLIC_KEY`.
    - **Edge cases — `*_KEY`:** `_PRIVATE_KEY` / `_SECRET_KEY` / `_API_KEY` /
      `_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` → **Secret**. `_PUBLIC_KEY` /
      `_SITE_KEY` → **Variable**. AES raw-hex keys → **Secret**.

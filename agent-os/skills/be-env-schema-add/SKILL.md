@@ -123,8 +123,7 @@ Apply in order; the first rule that matches wins.
    Examples: `PORT`, `LOG_LEVEL`, `WORKER_CONCURRENCY`, feature flags
    (`ENABLE_*`), URLs (`FRONTEND_URL`, `ALLOWED_ORIGINS`), public OAuth client
    IDs (`OAUTH_*_CLIENT_ID`), public WebAuthn RP info (`WEBAUTHN_RP_ID`),
-   public CAPTCHA site key (`CAPTCHA_SITE_KEY`), public JWT verify key
-   (`JWT_PUBLIC_KEY`).
+   public JWT verify key (`JWT_PUBLIC_KEY`).
 4. **Edge case — `*_KEY` suffix.** The name alone is not enough:
    - `_PRIVATE_KEY`, `_SECRET_KEY`, `_API_KEY`, `_ACCESS_KEY_ID`,
      `_SECRET_ACCESS_KEY` → **Secret**.
