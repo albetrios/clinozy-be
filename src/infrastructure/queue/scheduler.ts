@@ -89,7 +89,9 @@ const DEFAULT_ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_CRON = '52 5 * * *';
 const DEFAULT_USER_TOMBSTONE_RETENTION_CRON = '53 5 * * *';
 const DEFAULT_IDEMPOTENCY_CARDINALITY_CRON = '*/15 * * * *';
 const DEFAULT_DLQ_DEPTH_CRON = '*/15 * * * *';
-const DEFAULT_MAIL_OUTBOX_SWEEPER_CRON = '*/10 * * * *';
+// Every two minutes: with the 3-minute pending cutoff, an email whose enqueue was lost goes out
+// within about five minutes — well inside a sign-in code's 15-minute life.
+const DEFAULT_MAIL_OUTBOX_SWEEPER_CRON = '*/2 * * * *';
 const DEFAULT_COMMIT_DISPATCH_RECOVERY_CRON = '*/5 * * * *';
 /** PENDING upload reconciliation runs hourly (independent of tombstone retention). */
 const DEFAULT_UPLOAD_PENDING_SWEEP_CRON = '15 * * * *';

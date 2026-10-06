@@ -143,4 +143,38 @@ describe('Resend outbound email contract (`mail.service.sendEmail`)', () => {
 
     expect(await resendCircuit.getState()).toBe('CLOSED');
   });
+
+  test('a burst of rate-limit 429s is a throttle with its Retry-After — it never opens the circuit', async () => {
+    // Resend allows 10 requests a second per team. Counted as failures, a burst over it opened the
+    // circuit and — with the outage pause — held all mail for five minutes at a time.
+    const throttleCount = 6;
+    nock(resendApiHostnameOutbound)
+      .post('/emails', () => true)
+      .times(throttleCount)
+      .reply(
+        429,
+        { statusCode: 429, name: 'rate_limit_exceeded', message: 'Too many requests.' },
+        { 'retry-after': '2', 'ratelimit-reset': '2' },
+      );
+
+    outboundLoggerFixtureErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    for (let attempt = 0; attempt < throttleCount; attempt += 1) {
+      const throttle = await sendEmail({
+        to: outboundResendEmailsRequestExpectedEnvelope.to[0] ?? '',
+        subject: outboundResendEmailsRequestExpectedEnvelope.subject,
+        html: outboundResendEmailsRequestExpectedEnvelope.html,
+      }).catch((error: unknown) => error);
+
+      expect(throttle).toBeInstanceOf(ResendApiError);
+      expect(throttle).toMatchObject({
+        statusCode: 429,
+        resendErrorName: 'rate_limit_exceeded',
+        isRateLimited: true,
+        retryAfterMs: 2_000,
+      });
+    }
+
+    expect(await resendCircuit.getState()).toBe('CLOSED');
+  });
 });

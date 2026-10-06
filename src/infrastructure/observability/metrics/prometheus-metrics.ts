@@ -34,7 +34,7 @@ let eventBusHandlerFailuresTotal: Counter<'event_type'> | null = null;
 let commitDispatchDurabilityFallbacksTotal: Counter | null = null;
 let readCacheRequestsTotal: Counter<'cache' | 'result'> | null = null;
 let databaseUnscopedQueriesTotal: Counter | null = null;
-let bullmqProviderOutageParkedJobsTotal: Counter<'queue' | 'provider'> | null = null;
+let bullmqProviderOutageParkedJobsTotal: Counter<'queue' | 'provider' | 'reason'> | null = null;
 
 /** The BullMQ queue and job metrics — split out of {@link registerOn} to keep each short. */
 function registerQueueMetrics(registry: Registry): void {
@@ -76,8 +76,8 @@ function registerQueueMetrics(registry: Registry): void {
 
   bullmqProviderOutageParkedJobsTotal = new Counter({
     name: 'bullmq_provider_outage_parked_jobs_total',
-    help: "Jobs parked because their third-party provider was down, by queue and provider (resend | stripe | s3). Each one also re-arms its queue's five-minute pause, so a rate that keeps rising is an outage still in progress — the queue is waiting for the provider, not losing jobs",
-    labelNames: ['queue', 'provider'],
+    help: "Jobs parked because their third-party provider was down (reason=outage — each one re-arms the queue's five-minute pause) or throttling us (reason=throttle — paused for the provider's Retry-After), by queue and provider (resend | stripe | s3). An outage rate that keeps rising is an outage still in progress: the queue is waiting for the provider, not losing jobs",
+    labelNames: ['queue', 'provider', 'reason'],
     registers: [registry],
   });
 }
@@ -229,7 +229,7 @@ function bindMetricHandlesFromRegistry(registry: Registry): void {
   ) as Counter;
   bullmqProviderOutageParkedJobsTotal = registry.getSingleMetric(
     'bullmq_provider_outage_parked_jobs_total',
-  ) as Counter<'queue' | 'provider'>;
+  ) as Counter<'queue' | 'provider' | 'reason'>;
   readCacheRequestsTotal = registry.getSingleMetric('read_cache_requests_total') as Counter<
     'cache' | 'result'
   >;
@@ -481,17 +481,26 @@ export function recordReadCacheRequest(cache: string, result: 'hit' | 'miss'): v
 }
 
 /**
- * Increments `bullmq_provider_outage_parked_jobs_total` for one job parked by a provider outage.
+ * Increments `bullmq_provider_outage_parked_jobs_total` for one job parked by a provider outage or
+ * throttle.
  *
  * @remarks
- * Called by the provider-pausable worker each time a job waits out its provider's outage. Both
- * labels are bounded: a queue name and one of three providers.
+ * Called by the provider-pausable worker each time a job waits out its provider. Every label is
+ * bounded: a queue name, one of three providers, `outage` or `throttle`.
  */
-export function recordProviderOutageParkedJob(options: { queue: string; provider: string }): void {
+export function recordProviderOutageParkedJob(options: {
+  queue: string;
+  provider: string;
+  reason: 'outage' | 'throttle';
+}): void {
   if (!isMetricsEnabled()) return;
   ensurePrometheusMetricsRegistered(getMetricsRegistry());
   if (!bullmqProviderOutageParkedJobsTotal) return;
-  bullmqProviderOutageParkedJobsTotal.inc({ queue: options.queue, provider: options.provider });
+  bullmqProviderOutageParkedJobsTotal.inc({
+    queue: options.queue,
+    provider: options.provider,
+    reason: options.reason,
+  });
 }
 
 /**

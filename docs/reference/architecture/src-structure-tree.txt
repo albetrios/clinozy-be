@@ -1867,6 +1867,7 @@ src/
     │   │   ├── bullmq-noop-smoke.integration.test.ts
     │   │   ├── commit-dispatch-cleanup.integration.test.ts
     │   │   ├── dlq-auto-retry.integration.test.ts
+    │   │   ├── mail-delivery-lanes.integration.test.ts
     │   │   ├── mail-enqueue-dedupe.integration.test.ts
     │   │   ├── provider-outage-pause.integration.test.ts
     │   │   ├── transactional-outbox.integration.test.ts

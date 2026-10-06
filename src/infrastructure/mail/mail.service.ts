@@ -2,7 +2,7 @@ import { Resend } from 'resend';
 import { env } from '@/shared/config/env.config.js';
 import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
 import { buildOutboundCallOptions, outboundCall } from '@/infrastructure/outbound/index.js';
-import { ResendApiError } from '@/infrastructure/mail/resend-api.error.js';
+import { ResendApiError, readResendRetryAfterMs } from '@/infrastructure/mail/resend-api.error.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import { isTransientNetworkError } from '@/infrastructure/resilience/retry-with-backoff.util.js';
@@ -98,6 +98,7 @@ async function sendEmailViaResend(
       message: sendResult.error.message || 'resend.api_error',
       statusCode: sendResult.error.statusCode,
       resendErrorName: sendResult.error.name,
+      retryAfterMs: readResendRetryAfterMs(sendResult.headers),
     });
   }
 

@@ -43,8 +43,10 @@ third-party provider (`mail` → Resend, `stripe-webhook` and `subscription-seat
 (`src/infrastructure/queue/worker-runtime/provider-outage-pause.util.ts`): while the provider is down
 the whole queue pauses on every replica and probes every five minutes, and the failed job is parked
 without spending an attempt. It declares `PROVIDER_OUTAGE_PAUSABLE_LIMITER` because BullMQ enforces a
-queue-wide pause only for a worker with a limiter. Scheduled sweeps and `webhook-delivery` do not
-pause. Detail: [workers-and-events.md → Provider outage pause](../../../docs/reference/runtime/workers-and-events.md#provider-outage-pause).
+queue-wide pause only for a worker with a limiter. A provider throttle (Resend 429
+`rate_limit_exceeded`) pauses only for its `Retry-After`, and `mail` paces itself with a real
+limiter (`RESEND_MAX_REQUESTS_PER_SECOND`) and sends `transactional` mail ahead of the `bulk` lane.
+Scheduled sweeps and `webhook-delivery` do not pause. Detail: [workers-and-events.md → Provider outage pause](../../../docs/reference/runtime/workers-and-events.md#provider-outage-pause).
 
 ## Files/locations
 

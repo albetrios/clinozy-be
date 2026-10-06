@@ -570,6 +570,12 @@ const envSchemaBase = z.object({
   RESEND_API_KEY: z.string().min(1).optional(),
   /** Outbound Resend API request timeout (ms). Forwarded to fetch via AbortSignal. */
   RESEND_HTTP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(180_000).default(30_000),
+  /**
+   * Most Resend requests per second the mail worker makes, across every replica (BullMQ's queue
+   * limiter). Resend allows 10 per second per team by default; set it to the team's limit, lower
+   * when other environments send through the same team.
+   */
+  RESEND_MAX_REQUESTS_PER_SECOND: z.coerce.number().int().min(1).max(1000).default(10),
   EMAIL_FROM_ADDRESS: z.email().optional(),
   EMAIL_FROM_NAME: z.string().min(1).optional(),
   // Category-B (security). Block disposable/temporary email domains. Defaults to the HARDENED value
@@ -904,7 +910,13 @@ const envSchemaBase = z.object({
   AUDIT_EXPORT_S3_PREFIX: z.string().min(1).default('audit/export'),
   AUDIT_EXPORT_BATCH_SIZE: z.coerce.number().int().min(100).max(50_000).default(5_000),
   AUDIT_EXPORT_CRON: z.string().min(1).optional(),
-  MAIL_OUTBOX_SWEEP_PENDING_MINUTES: z.coerce.number().int().min(1).default(15),
+  /**
+   * Minimum age (minutes) before the outbox sweeper re-enqueues a `pending` row — the recovery for
+   * an email whose post-commit enqueue was lost. Short on purpose: a sign-in code lives 15 minutes,
+   * and re-enqueueing a row whose job is still live is a no-op (the enqueue deduplicates on its
+   * token).
+   */
+  MAIL_OUTBOX_SWEEP_PENDING_MINUTES: z.coerce.number().int().min(1).default(3),
   /**
    * Minimum age (minutes) before a row stuck in `sending` is reclaimed to
    * `pending`. Must sit comfortably above worst-case Resend delivery time

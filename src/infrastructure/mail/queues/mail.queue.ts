@@ -21,6 +21,19 @@ export const MAIL_QUEUE_NAME = 'mail';
  */
 export const MAIL_QUEUE_MAX_ATTEMPTS = 8;
 
+/**
+ * Which mail goes out first. `transactional` — sign-in codes, password resets, invitations — runs
+ * ahead of every `bulk` email (notification fan-out): a broadcast to an organization cannot hold a
+ * sign-in code behind it.
+ */
+export type MailDeliveryLane = 'transactional' | 'bulk';
+
+/**
+ * BullMQ priority of a `bulk` email. BullMQ takes a job without a priority before any prioritized
+ * one, so `transactional` mail (no priority) always goes first, and bulk mail keeps its order.
+ */
+export const MAIL_BULK_LANE_PRIORITY = 10;
+
 /** Payload stored in Postgres mail_outbox; only the row's token is stored in Redis. */
 export type MailJobData = MailJobDataValidated;
 
@@ -68,17 +81,19 @@ function getMailQueue(): Queue<MailJobData> {
  * @remarks
  * - **Algorithm:** one live job per row — the add is deduplicated on the row's token for as long
  *   as a job for it is waiting, delayed or active (BullMQ `deduplication`, released when that job
- *   completes or fails).
+ *   completes or fails). A `bulk` email gets {@link MAIL_BULK_LANE_PRIORITY}, so `transactional`
+ *   mail (the default) is taken first.
  * - **Failure modes:** an add slower than fifteen seconds (Redis partition) rejects with
  *   `mail.enqueue.deadline_exceeded`; any Redis error is logged and rethrown.
  * - **Side effects:** one BullMQ add, or none when a job for the row is still live.
  * - **Notes:** during a Resend outage the row's job sits paused for hours while the outbox sweeper
  *   keeps re-enqueueing the row on every pass; without the deduplication each pass added another
- *   job per row, all of them sent — or skipped — once Resend came back.
+ *   job per row, all of them sent — or skipped — once Resend came back. A re-enqueue that does not
+ *   know the lane (the sweeper, a replay) uses `transactional`.
  */
 export async function enqueueMailOutboxJob(
   mailOutboxToken: string,
-  options?: { requestId?: string },
+  options?: { requestId?: string; lane?: MailDeliveryLane },
 ): Promise<void> {
   let deadlineTimer: NodeJS.Timeout | undefined;
   try {
@@ -95,6 +110,7 @@ export async function enqueueMailOutboxJob(
     await new Promise<void>((resolve, reject) => {
       const enqueueJobPromise = queue.add('send-email', jobData, {
         deduplication: { id: mailOutboxToken },
+        ...(options?.lane === 'bulk' ? { priority: MAIL_BULK_LANE_PRIORITY } : {}),
       });
       deadlineTimer = setTimeout(() => {
         reject(new Error('mail.enqueue.deadline_exceeded'));
@@ -133,7 +149,7 @@ export async function recordOutboxEmail(data: MailEnqueueInput): Promise<string>
  */
 export async function dispatchOutboxEmail(
   mailOutboxToken: string,
-  options?: { requestId?: string },
+  options?: { requestId?: string; lane?: MailDeliveryLane },
 ): Promise<void> {
   await enqueueMailOutboxJob(mailOutboxToken, options);
 }

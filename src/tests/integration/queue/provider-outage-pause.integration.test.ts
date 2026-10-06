@@ -1,14 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Queue, type Job, type Worker } from 'bullmq';
+import { Queue, type Job, type RateLimiterOptions, type Worker } from 'bullmq';
 import {
   getBullMQConnectionOptions,
   getBullMQKeyPrefix,
 } from '@/infrastructure/queue/connection.js';
 import { getDefaultWorkerOptions } from '@/infrastructure/queue/worker-runtime/worker-options.js';
 import {
-  PROVIDER_OUTAGE_PAUSABLE_LIMITER,
+  ProviderOutageError,
   createProviderPausableWorker,
+  getProviderPauseLeftMs,
 } from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
 import {
   CircuitBreakerOpenError,
@@ -26,12 +27,9 @@ import {
  */
 const PAUSE_MS = 2_000;
 
-/**
- * Time left on the queue's outage pause. Passing the limiter's `max` makes BullMQ ignore the
- * limiter's ordinary per-second job counter and report only the pause.
- */
+/** Time left on the queue's provider pause — never the limiter's ordinary per-second count. */
 function outagePauseLeftMs(queue: Queue): Promise<number> {
-  return queue.getRateLimitTtl(PROVIDER_OUTAGE_PAUSABLE_LIMITER.max);
+  return getProviderPauseLeftMs(queue);
 }
 
 async function waitFor(condition: () => Promise<boolean>, timeoutMs: number): Promise<void> {
@@ -64,14 +62,23 @@ describe('Integration: provider outage pauses the queue', () => {
     vi.restoreAllMocks();
   });
 
-  function startReplicas(processor: (job: Job<{ label: string }>) => Promise<void>, count = 2) {
+  function startReplicas(
+    processor: (job: Job<{ label: string }>) => Promise<void>,
+    count = 2,
+    options: { concurrency?: number; limiter?: RateLimiterOptions } = {},
+  ) {
     for (let replica = 0; replica < count; replica += 1) {
       workers.push(
         createProviderPausableWorker<{ label: string }>({
           queueName: queue.name,
           provider: 'resend',
           processor,
-          workerOptions: { connection, concurrency: 1, ...getDefaultWorkerOptions() },
+          workerOptions: {
+            connection,
+            concurrency: options.concurrency ?? 1,
+            ...getDefaultWorkerOptions(),
+          },
+          ...(options.limiter ? { limiter: options.limiter } : {}),
           pauseMs: PAUSE_MS,
         }),
       );
@@ -138,6 +145,87 @@ describe('Integration: provider outage pauses the queue', () => {
 
     await waitFor(async () => processed.length === 2, PAUSE_MS * 4);
     expect(processed).toEqual(['behind', 'probe']);
+  }, 20_000);
+
+  it('waits out a throttle for its Retry-After only — and never cuts a longer outage pause short', async () => {
+    const throttleMs = 300;
+    let throttled = false;
+    const processed: string[] = [];
+    await startReplicas(
+      async (job) => {
+        if (job.data.label === 'outage') {
+          throw new CircuitBreakerOpenError('resend', 30_000, 'Circuit breaker "resend" is OPEN');
+        }
+        if (job.data.label === 'throttled' && !throttled) {
+          // Throttled only once the outage pause is in place: the shorter pause must not replace it.
+          await waitFor(async () => (await outagePauseLeftMs(queue)) > PAUSE_MS / 2, 5_000);
+          throttled = true;
+          throw new ProviderOutageError({
+            provider: 'resend',
+            cause: new Error('429 rate_limit_exceeded'),
+            retryAfterMs: throttleMs,
+          });
+        }
+        processed.push(job.data.label);
+      },
+      1,
+      { concurrency: 2 },
+    );
+
+    await queue.add('send', { label: 'outage' }, { attempts: 3 });
+    const throttledJob = await queue.add('send', { label: 'throttled' }, { attempts: 3 });
+    await waitFor(async () => throttled && (await throttledJob.getState()) === 'delayed', 5_000);
+
+    // The five-minute-style outage pause still holds after the 300 ms throttle.
+    expect(await outagePauseLeftMs(queue)).toBeGreaterThan(throttleMs);
+    expect((await queue.getJob(throttledJob.id as string))?.attemptsMade).toBe(0);
+  }, 20_000);
+
+  it('a throttle alone pauses only for its Retry-After', async () => {
+    const throttleMs = 400;
+    let throttledOnce = false;
+    const processedAt: number[] = [];
+    await startReplicas(async () => {
+      if (!throttledOnce) {
+        throttledOnce = true;
+        throw new ProviderOutageError({
+          provider: 'resend',
+          cause: new Error('429 rate_limit_exceeded'),
+          retryAfterMs: throttleMs,
+        });
+      }
+      processedAt.push(Date.now());
+    }, 1);
+
+    const startedAt = Date.now();
+    const job = await queue.add('send', { label: 'throttled' }, { attempts: 3 });
+    await waitFor(async () => (await job.getState()) === 'completed', PAUSE_MS * 2);
+
+    const waitedMs = (processedAt[0] ?? Date.now()) - startedAt;
+    expect(waitedMs).toBeGreaterThanOrEqual(throttleMs - 50);
+    // Nowhere near the outage pause: a throttle is seconds, not minutes.
+    expect(waitedMs).toBeLessThan(PAUSE_MS);
+    expect((await queue.getJob(job.id as string))?.attemptsMade).toBe(1);
+  }, 20_000);
+
+  it('paces the queue to its limiter across every replica', async () => {
+    // Two replicas, two jobs a second between them: six jobs take three windows, not one burst.
+    const startedAt = Date.now();
+    const processedAt: number[] = [];
+    await startReplicas(
+      async () => {
+        processedAt.push(Date.now());
+      },
+      2,
+      { concurrency: 4, limiter: { max: 2, duration: 1_000 } },
+    );
+
+    await queue.addBulk(
+      Array.from({ length: 6 }, (_, index) => ({ name: 'send', data: { label: `job-${index}` } })),
+    );
+    await waitFor(async () => processedAt.length === 6, 10_000);
+
+    expect(Math.max(...processedAt) - startedAt).toBeGreaterThanOrEqual(1_900);
   }, 20_000);
 
   it('keeps spending attempts on a failure that is the job’s own', async () => {

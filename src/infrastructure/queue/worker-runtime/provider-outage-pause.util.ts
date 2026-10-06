@@ -6,6 +6,8 @@ import {
   WaitingError,
   Worker,
   type Job,
+  type Queue,
+  type RateLimiterOptions,
   type WorkerOptions,
 } from 'bullmq';
 import {
@@ -45,26 +47,57 @@ export const PROVIDER_OUTAGE_PAUSABLE_LIMITER = {
 } as const;
 
 /**
- * A job failed because its provider is down, not because of anything about the job.
+ * A job failed because its provider is down — or throttling us — not because of anything about
+ * the job.
  *
  * @remarks
- * - **Algorithm:** carries the provider and the original error (`cause`). Built by
+ * - **Algorithm:** carries the provider, the original error (`cause`) and, for a throttle, how long
+ *   the provider asked us to wait (`retryAfterMs`, a 429's `Retry-After`). Built by
  *   {@link toProviderOutageError}; a processor that must settle its own state first (the mail
  *   processor releases its outbox claim instead of failing the row) throws it itself.
  * - **Failure modes:** none — a value object.
  * - **Side effects:** none.
  * - **Notes:** only a worker made by {@link createProviderPausableWorker} handles it: the queue
- *   pauses and the job waits the outage out without spending an attempt.
+ *   pauses — `retryAfterMs` for a throttle, five minutes for an outage — and the job waits without
+ *   spending an attempt.
  */
 export class ProviderOutageError extends Error {
-  /** The provider that is down. */
+  /** The provider that is down, or throttling. */
   readonly provider: QueueProvider;
+  /** How long the provider asked us to wait — set for a throttle, `null` for an outage. */
+  readonly retryAfterMs: number | null;
 
-  constructor(options: { provider: QueueProvider; cause: unknown }) {
+  constructor(options: { provider: QueueProvider; cause: unknown; retryAfterMs?: number | null }) {
     super(`provider_outage:${options.provider}`, { cause: options.cause });
     this.name = 'ProviderOutageError';
     this.provider = options.provider;
+    this.retryAfterMs = options.retryAfterMs ?? null;
   }
+}
+
+/**
+ * A `max` no counter reaches: BullMQ's manual pause stores `Number.MAX_SAFE_INTEGER` in the limiter
+ * key, so asking for the rate-limit TTL at this `max` reports the pause and never the limiter's
+ * ordinary per-second count.
+ */
+const PAUSE_SENTINEL_MAX_JOBS = Number.MAX_SAFE_INTEGER;
+
+/**
+ * Milliseconds left on a queue's provider pause, or 0 when it is not paused.
+ *
+ * @remarks
+ * - **Algorithm:** BullMQ `getRateLimitTtl(Number.MAX_SAFE_INTEGER)` — the pause sets the limiter
+ *   key to that value; the limiter's own per-second counter never gets near it.
+ * - **Failure modes:** a Redis error propagates.
+ * - **Side effects:** one Redis script call.
+ * - **Notes:** read by worker readiness, so a paused queue with work waiting is not "stalled", and
+ *   reported per queue on the `/readyz` body.
+ */
+export async function getProviderPauseLeftMs(
+  queue: Pick<Queue, 'getRateLimitTtl'>,
+): Promise<number> {
+  const pauseLeftMs = await queue.getRateLimitTtl(PAUSE_SENTINEL_MAX_JOBS);
+  return pauseLeftMs > 0 ? pauseLeftMs : 0;
 }
 
 /** BullMQ's own control-flow errors and `UnrecoverableError` — never an outage, always passed on. */
@@ -134,30 +167,51 @@ function describeOutageCause(cause: unknown): Record<string, unknown> {
 export type ProviderPausableWorkerOptions = Omit<WorkerOptions, 'limiter' | 'prefix'>;
 
 /**
+ * Sets the queue-wide pause to `pauseMs` unless a longer one is already in place — a 1-second
+ * throttle must not cut short a five-minute outage pause another job just set.
+ */
+async function extendQueuePause(options: {
+  backend: {
+    getRateLimitTtl(maxJobs?: number): Promise<number>;
+    setRateLimit(expireTimeMs: number): Promise<void>;
+  };
+  pauseMs: number;
+}): Promise<void> {
+  const currentPauseMs = await options.backend.getRateLimitTtl(PAUSE_SENTINEL_MAX_JOBS);
+  if (currentPauseMs >= options.pauseMs) return;
+  await options.backend.setRateLimit(options.pauseMs);
+}
+
+/**
  * Creates the BullMQ worker for a queue whose jobs call one third-party provider. While that
  * provider is down the whole queue pauses — every replica — and retries every five minutes until
  * the provider is back; then everything that waited is processed.
  *
  * @remarks
  * - **Algorithm:** runs `processor`; when it fails with a provider outage
- *   ({@link toProviderOutageError}), sets the queue-wide pause (`setRateLimit`, enforced by
- *   {@link PROVIDER_OUTAGE_PAUSABLE_LIMITER}) and moves the job to `delayed` for the same time,
- *   without spending an attempt (`DelayedError`). The job lands at the back of the line, so a job
+ *   ({@link toProviderOutageError}), sets the queue-wide pause (`setRateLimit`, enforced by the
+ *   worker's limiter) and moves the job to `delayed` for the same time, without spending an attempt
+ *   (`DelayedError`). The pause is five minutes for an outage and the provider's `Retry-After` for a
+ *   throttle; it only ever extends a pause in place. The job lands at the back of the line, so a job
  *   that keeps failing as the probe cannot hold the queue: the job behind it probes next.
  * - **Failure modes:** a failure that is not an outage reaches BullMQ unchanged — its attempts,
  *   backoff and dead-letter queue apply as before. If the pause or the move fails (Redis), that
  *   error reaches BullMQ, which retries the job normally.
- * - **Side effects:** on an outage: one Redis `SET` with a TTL, one job move, a warn log
- *   (`queue.provider_outage.paused`) and `bullmq_provider_outage_parked_jobs_total`.
+ * - **Side effects:** on an outage: a pause read and `SET` in Redis, one job move, a warn log
+ *   (`queue.provider_outage.paused`; `queue.provider_throttle.paused` at info for a throttle) and
+ *   `bullmq_provider_outage_parked_jobs_total{reason}`.
  * - **Notes:** for event-driven queues only. A scheduled sweep simply retries on its next tick.
  *   Webhook delivery does not use this: one customer's endpoint being down is not an outage of
- *   every other customer's. `pauseMs` exists so a test can shorten the pause.
+ *   every other customer's. `limiter` defaults to {@link PROVIDER_OUTAGE_PAUSABLE_LIMITER}; a queue
+ *   that must also pace itself to a provider's rate limit passes its own (mail: Resend's
+ *   requests per second). `pauseMs` exists so a test can shorten the pause.
  */
 export function createProviderPausableWorker<TData, TResult = unknown>(options: {
   queueName: string;
   provider: QueueProvider;
   processor: (job: Job<TData>) => Promise<TResult>;
   workerOptions: ProviderPausableWorkerOptions;
+  limiter?: RateLimiterOptions;
   pauseMs?: number;
 }): Worker<TData, TResult> {
   const { queueName, provider } = options;
@@ -170,25 +224,26 @@ export function createProviderPausableWorker<TData, TResult = unknown>(options: 
       } catch (error) {
         const outage = await toProviderOutageError({ error, provider });
         if (outage === null || token === undefined) throw error;
-        await worker.getBackend().setRateLimit(pauseMs);
-        await job.moveToDelayed(Date.now() + pauseMs, token);
-        recordProviderOutageParkedJob({ queue: queueName, provider });
-        logger.warn(
-          {
-            queue: queueName,
-            provider,
-            jobId: job.id,
-            pauseMs,
-            ...describeOutageCause(outage.cause),
-          },
-          'queue.provider_outage.paused',
-        );
+        const parkMs = outage.retryAfterMs ?? pauseMs;
+        await extendQueuePause({ backend: worker.getBackend(), pauseMs: parkMs });
+        await job.moveToDelayed(Date.now() + parkMs, token);
+        const reason = outage.retryAfterMs === null ? 'outage' : 'throttle';
+        recordProviderOutageParkedJob({ queue: queueName, provider, reason });
+        const logFields = {
+          queue: queueName,
+          provider,
+          jobId: job.id,
+          pauseMs: parkMs,
+          ...describeOutageCause(outage.cause),
+        };
+        if (reason === 'outage') logger.warn(logFields, 'queue.provider_outage.paused');
+        else logger.info(logFields, 'queue.provider_throttle.paused');
         throw new DelayedError();
       }
     },
     {
       ...options.workerOptions,
-      limiter: PROVIDER_OUTAGE_PAUSABLE_LIMITER,
+      limiter: options.limiter ?? PROVIDER_OUTAGE_PAUSABLE_LIMITER,
       // The environment's BullMQ key namespace is not the caller's choice — see getBullMQKeyPrefix.
       prefix: getBullMQKeyPrefix(),
     },

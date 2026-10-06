@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**13 / 236** variables migrated to an explicit `{ allowed, description }` entry.
+**13 / 237** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -106,7 +106,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `LOG_PRETTY` | — | `false` |  | — |
 | `MAIL_OUTBOX_RECLAIM_SENDING_MINUTES` | — | `30` |  | — |
 | `MAIL_OUTBOX_SWEEP_BATCH_SIZE` | — | `100` |  | — |
-| `MAIL_OUTBOX_SWEEP_PENDING_MINUTES` | — | `15` |  | — |
+| `MAIL_OUTBOX_SWEEP_PENDING_MINUTES` | — | `3` |  | — |
 | `MAIL_OUTBOX_SWEEPER_CRON` | — | — *(optional)* |  | — |
 | `MAX_TEAM_ORGANIZATIONS_PER_OWNER` | — | `20` |  | — |
 | `MCP_CALL_API_ALLOW_MUTATIONS` | — | `false` |  | — |
@@ -168,6 +168,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `RELEASE_PLEASE_TOKEN` | — | — *(optional)* |  | — |
 | `RESEND_API_KEY` | — | — *(optional)* |  | — |
 | `RESEND_HTTP_TIMEOUT_MS` | — | `30000` |  | — |
+| `RESEND_MAX_REQUESTS_PER_SECOND` | — | `10` |  | — |
 | `RESPONSE_ENCRYPTION_CURRENT_VERSION` | — | `v1` |  | — |
 | `RESPONSE_ENCRYPTION_KEY` | — | — *(optional)* |  | — |
 | `RESPONSE_ENCRYPTION_KEYS` | — | — *(optional)* |  | — |

@@ -15,7 +15,10 @@ import { MAIL_QUEUE_NAME, type MailJobData } from '@/infrastructure/mail/queues/
 import { mailJobDataSchema } from '@/infrastructure/mail/queues/mail.job.schema.js';
 import { parseBullMQJobData } from '@/shared/utils/validation/bullmq-job-validation.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
-import { toProviderOutageError } from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
+import {
+  ProviderOutageError,
+  toProviderOutageError,
+} from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import {
   MAINTENANCE_SCOPE,
@@ -99,7 +102,8 @@ export type ProcessMailOutboxJobResult =
  *   and no retry fixes it (it used to stay `sending` and loop through the sweeper forever);
  *   a Resend outage (`ProviderOutageError` — the circuit is open, or this failure left it open or
  *   half-open) is never terminal, even on the last attempt: the claim is released and the worker
- *   pauses the queue until Resend is back; a Resend per-email rejection fails the row and
+ *   pauses the queue until Resend is back; so is a Resend throttle (429 `rate_limit_exceeded`),
+ *   which pauses it for Resend's `Retry-After`; a Resend per-email rejection fails the row and
  *   completes as `rejected`.
  * - **Side effects:** updates `auth.mail_outbox.status` / `sent_at` /
  *   `resend_message_id`; sends one HTTP request to Resend per claimed attempt;
@@ -236,9 +240,10 @@ async function processMailOutboxJobInner(
 /**
  * Settles the outbox row after a failed send. A per-email rejection fails the row for good and
  * completes the job as `rejected` (the recipient's problem, not ours — no retry, no page). A Resend
- * outage releases the claim and throws `ProviderOutageError`, whatever the attempt: the row
- * waits for Resend, it is never failed for it. Any other error releases the claim too — or fails
- * the row on the last attempt — and is rethrown so BullMQ retries or dead-letters the job.
+ * throttle or outage releases the claim and throws {@link ProviderOutageError}, whatever the
+ * attempt: the row waits for Resend, it is never failed for it. Any other error releases the claim
+ * too — or fails the row on the last attempt — and is rethrown so BullMQ retries or dead-letters
+ * the job.
  */
 async function settleFailedSend(options: {
   error: unknown;
@@ -261,10 +266,25 @@ async function settleFailedSend(options: {
     return { outcome: 'rejected', statusCode: error.statusCode };
   }
 
-  const outage = await toProviderOutageError({ error, provider: 'resend' });
+  const outage =
+    error instanceof ResendApiError && error.isRateLimited
+      ? new ProviderOutageError({
+          provider: 'resend',
+          cause: error,
+          retryAfterMs: error.retryAfterMs,
+        })
+      : await toProviderOutageError({ error, provider: 'resend' });
   if (outage) {
     await releaseMailOutboxClaim(mailOutboxToken);
-    logger.warn({ ...logFields, jobAttemptNumber, maxJobAttempts }, 'mail.worker.provider_outage');
+    const outageLogFields = { ...logFields, jobAttemptNumber, maxJobAttempts };
+    if (outage.retryAfterMs === null) {
+      logger.warn(outageLogFields, 'mail.worker.provider_outage');
+    } else {
+      logger.info(
+        { ...outageLogFields, retryAfterMs: outage.retryAfterMs },
+        'mail.worker.throttled',
+      );
+    }
     throw outage;
   }
   if (options.isFinalJobAttempt) {

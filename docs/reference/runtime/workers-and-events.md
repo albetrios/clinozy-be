@@ -79,7 +79,7 @@ When **`METRICS_ENABLED=true`**, workers export BullMQ telemetry to the shared P
 | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `bullmq_queue_{waiting,active,delayed,failed}{queue}` | `refreshBullMQQueueGauges()` — called from `refreshMetricsBeforeScrape()` before `GET /metrics`                |
 | `bullmq_job_duration_seconds{queue,job_name}`         | `attachBullMQJobMetrics()` on worker `completed` — wired via `attachDeadLetterAndAlerting()` in `bootstrap.ts` |
-| `bullmq_provider_outage_parked_jobs_total{queue,provider}` | `createProviderPausableWorker` — each job parked by a provider outage ([Provider outage pause](#provider-outage-pause)) |
+| `bullmq_provider_outage_parked_jobs_total{queue,provider,reason}` | `createProviderPausableWorker` — each job parked by a provider outage or throttle ([Provider outage pause](#provider-outage-pause)) |
 
 Queue depth gauges scrape the monitored queue list in `src/infrastructure/observability/metrics/bullmq-metrics.ts` (`MONITORED_BULLMQ_QUEUE_NAMES`). See [observability runbook](../../deployment/runbooks/observability.md) for scrape setup and metric names.
 
@@ -138,17 +138,29 @@ minutes until the provider is back; then everything that waited is processed.
   limiter. Every pausable worker declares `PROVIDER_OUTAGE_PAUSABLE_LIMITER` (a million jobs a
   second — never reached). Without it the pause held only the replica that set it, and only for
   BullMQ's 30-second `maximumRateLimitDelay`.
+- **Throttle ≠ outage:** a provider saying "slow down" (Resend 429 `rate_limit_exceeded`) is not
+  an outage. It does not count against the circuit; the processor reports it with the provider's
+  `Retry-After` (`ProviderOutageError.retryAfterMs`) and the queue pauses only that long. A pause
+  only ever extends — a one-second throttle never cuts a five-minute outage pause short. Resend's
+  daily and monthly quota 429s are outages: they last until the quota resets.
+- **Pacing:** the `mail` worker's limiter is `RESEND_MAX_REQUESTS_PER_SECOND` (default 10 — Resend's
+  per-team limit), enforced across every replica, so a burst is spread out instead of throttled.
+  The other pausable workers keep `PROVIDER_OUTAGE_PAUSABLE_LIMITER`.
 - **The probe:** when the pause ends the next job runs. The circuit (its reset window is shorter than
   five minutes) is half-open by then, so that job is the probe: it succeeds and the queue drains, or
   it fails and the queue pauses again.
-- **Mail:** the processor releases the outbox claim on an outage — even on the last attempt — so the
-  row waits for Resend instead of being failed (and its body scrubbed). The row has one live job:
-  `enqueueMailOutboxJob` deduplicates on the row's token, so the outbox sweeper's re-enqueue on every
-  pass of a long outage adds nothing.
-- **Seen from outside:** a `queue.provider_outage.paused` warn log and
-  `bullmq_provider_outage_parked_jobs_total{queue,provider}` per parked job, the queue's `delayed` and
-  `waiting` counts growing, and the circuit-breaker transitions. `queue.getRateLimitTtl(1_000_000)`
-  (the limiter's `max`) answers how long a queue's pause has left.
+- **Mail:** the processor releases the outbox claim on an outage or throttle — even on the last
+  attempt — so the row waits for Resend instead of being failed (and its body scrubbed). The row has
+  one live job: `enqueueMailOutboxJob` deduplicates on the row's token, so the outbox sweeper's
+  re-enqueue on every pass of a long outage adds nothing. Mail has two lanes: notification fan-out
+  goes out `bulk` (BullMQ priority `MAIL_BULK_LANE_PRIORITY`), everything else `transactional`
+  (no priority) — and BullMQ takes a job without a priority first, so a sign-in code never waits
+  behind a broadcast.
+- **Seen from outside:** a `queue.provider_outage.paused` warn log (`queue.provider_throttle.paused`
+  at info for a throttle) and `bullmq_provider_outage_parked_jobs_total{queue,provider,reason}` per
+  parked job, the queue's `delayed` and `waiting` counts growing, and the circuit-breaker transitions.
+  `getProviderPauseLeftMs(queue)` (BullMQ `getRateLimitTtl(Number.MAX_SAFE_INTEGER)`, which never
+  reports the limiter's ordinary per-second count) answers how long a queue's pause has left.
 - **Not paused:** scheduled sweeps (a failed run retries on the next tick) and `webhook-delivery` —
   one customer's endpoint being down is not an outage of every other customer's.
 

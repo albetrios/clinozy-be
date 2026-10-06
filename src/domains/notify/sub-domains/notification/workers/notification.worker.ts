@@ -115,7 +115,11 @@ async function dispatchNotificationEmail(options: {
   // Do NOT throw on dispatch failure — the mail-outbox sweeper re-enqueues the row.
   let dispatchSucceeded = false;
   try {
-    await dispatchOutboxEmail(mailOutboxToken, requestId ? { requestId } : undefined);
+    // Notification email is fan-out: the bulk lane keeps sign-in codes and resets ahead of it.
+    await dispatchOutboxEmail(mailOutboxToken, {
+      lane: 'bulk',
+      ...(requestId ? { requestId } : {}),
+    });
     dispatchSucceeded = true;
   } catch (dispatchError) {
     logger.warn(

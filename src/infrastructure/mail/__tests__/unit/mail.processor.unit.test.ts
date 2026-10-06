@@ -274,6 +274,31 @@ describe('mail.processor', () => {
     expect(markMailOutboxFailedMock).not.toHaveBeenCalled();
   });
 
+  it('waits out a Resend throttle for its Retry-After, without failing the row or reading the circuit', async () => {
+    tryClaimPendingMailOutboxMock.mockResolvedValue('claimed');
+    findMailOutboxByTokenMock.mockResolvedValue(outboxRow());
+    sendEmailMock.mockRejectedValue(
+      new ResendApiError({
+        message: 'Too many requests.',
+        statusCode: 429,
+        resendErrorName: 'rate_limit_exceeded',
+        retryAfterMs: 2_000,
+      }),
+    );
+
+    const failure = await processMailOutboxJob(
+      { mailOutboxToken: MAIL_OUTBOX_TOKEN },
+      { jobAttemptNumber: MAIL_QUEUE_MAX_ATTEMPTS - 1, maxJobAttempts: MAIL_QUEUE_MAX_ATTEMPTS },
+    ).catch((error: unknown) => error);
+
+    // A throttle is not an outage: the worker pauses the queue for 2 s, not five minutes.
+    expect(failure).toBeInstanceOf(ProviderOutageError);
+    expect((failure as ProviderOutageError).retryAfterMs).toBe(2_000);
+    expect(releaseMailOutboxClaimMock).toHaveBeenCalledWith(MAIL_OUTBOX_TOKEN);
+    expect(markMailOutboxFailedMock).not.toHaveBeenCalled();
+    expect(MANAGED_CIRCUIT_BREAKERS.resend.getState).not.toHaveBeenCalled();
+  });
+
   it('never fails the row for a Resend error that left the circuit open, even on the last attempt', async () => {
     // The probe after a pause failed (or this failure tripped the circuit): the email waits for
     // Resend. Before, the last attempt failed the row — scrubbing its body — and the email was lost.
