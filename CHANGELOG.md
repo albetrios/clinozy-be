@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [8.0.0](https://github.com/albetrios/clinozy-be/compare/v7.2.1...v8.0.0) (2026-10-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* PATCH /api/v1/billing/subscriptions/:subscription_id no longer exists (it never changed anything).
+
+### Fixed
+
+* production-readiness hardening across identity, queues, audit and config ([#40](https://github.com/albetrios/clinozy-be/issues/40)) ([34cdd4a](https://github.com/albetrios/clinozy-be/commit/34cdd4a10362668c69ef7745c8e6c027f5d18390))
+
 ## [7.2.1](https://github.com/albetrios/clinozy-be/compare/v7.2.0...v7.2.1) (2026-10-03)
 
 
