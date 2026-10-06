@@ -15,7 +15,8 @@ What this suite does **not** cover: HTTP routes (see `e2e/`, `integration/`), wo
 - **Pure-function tests** — utilities, validators, serializers, parsers.
 - **Class-under-mocks tests** — services with all dependencies stubbed.
 - **Composition-root smoke tests** (`composition-root/`) — verify the DI container assembles correctly without invoking any real I/O.
-- **CI helper tests** (`ci/`) — exercises the codegen / lint helpers used by CI.
+- **CI helper and policy tests** (`ci/`) — the codegen / lint helpers used by CI, plus policies that pin workflows, Dockerfiles and tooling config (for example, every image build stage copies `patches/` before `pnpm install`).
+- **Tooling tests** (`tooling/`) — scripts under `tooling/`; some run for real against fakes (the deploy's live-image tag rotation runs against a fake `docker`).
 
 ## How to run
 

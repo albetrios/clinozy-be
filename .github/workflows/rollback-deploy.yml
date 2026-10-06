@@ -9,11 +9,13 @@
 #     are NOT reverted — the previous image must tolerate the current schema
 #     (this repo's migration lint enforces additive/compatible migrations, which
 #     is what makes image rollback safe in the common case).
-#   - `:previous` exists only after at least one successful deploy retagged it.
+#   - `:previous` names the prior release only from the second successful deploy under the
+#     rotation on (the first one creates `:current`).
 #   - The environment approval gate still applies — the required reviewer
 #     approves the rollback exactly like a deploy.
-#   - After rolling back, land a real fix or revert on the normal path; the next
-#     successful deploy overwrites `:previous` with the rolled-back-from image.
+#   - A rollback is itself a successful deploy, so it rotates the tags: afterwards
+#     `:previous` names the release rolled back FROM — running this again redeploys it.
+#     Land a real fix or revert on the normal path instead.
 
 name: Rollback deploy (previous image)
 

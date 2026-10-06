@@ -2075,9 +2075,11 @@ src/
     │   ├── bench/
     │   │   └── bench-runner.unit.test.ts
     │   ├── ci/
+    │   │   ├── cleanup-ghcr.policy.unit.test.ts
     │   │   ├── codegraph-git-hooks.policy.unit.test.ts
     │   │   ├── dependabot-ci-triage.policy.unit.test.ts
     │   │   ├── deploy-node-env.policy.unit.test.ts
+    │   │   ├── dockerfile-patches.policy.unit.test.ts
     │   │   ├── git-hook-environment.policy.unit.test.ts
     │   │   ├── github-actions-node24.policy.unit.test.ts
     │   │   ├── github-actions-workflow-run-references.policy.unit.test.ts
@@ -2288,6 +2290,7 @@ src/
     │   │   ├── local-database-logins.unit.test.ts
     │   │   ├── project-identity.policy.unit.test.ts
     │   │   ├── railway-deploy-image.unit.test.ts
+    │   │   ├── rotate-live-image-tags.unit.test.ts
     │   │   ├── route-catalog-auth.unit.test.ts
     │   │   └── validate-environment-runtime.unit.test.ts
     │   ├── utils/

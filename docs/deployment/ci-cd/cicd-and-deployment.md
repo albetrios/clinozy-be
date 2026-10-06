@@ -272,7 +272,7 @@ Use **workflow_dispatch** when you need to run part of the pipeline without a fu
 
 **Rollback:** Dispatch **Reusable — Railway deploy** with `image_override=ghcr.io/<owner>/<repo>/clinozy-be-api:previous` (and the worker ref derived automatically when the override contains `clinozy-be-api`).
 
-**Cleanup:** [cleanup-cache.yml](../../../.github/workflows/cleanup-cache.yml) prunes Actions caches (outcome-aware LRU; daily safety net on `main`). [cleanup-ghcr.yml](../../../.github/workflows/cleanup-ghcr.yml) prunes stale GHCR manifests weekly while preserving `:latest`, `:previous`, `:vX.Y.Z` release tags, and recent SHA tags.
+**Cleanup:** [cleanup-cache.yml](../../../.github/workflows/cleanup-cache.yml) prunes Actions caches (outcome-aware LRU; daily safety net on `main`). [cleanup-ghcr.yml](../../../.github/workflows/cleanup-ghcr.yml) prunes stale GHCR manifests weekly while preserving `:latest`, `:current`, `:previous`, `:vX.Y.Z` release tags, and recent SHA tags.
 
 ---
 

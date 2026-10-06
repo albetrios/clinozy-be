@@ -121,7 +121,7 @@ Batch deletes use `deleteInBatchesByCondition` with per-row FK fallback (`blocke
 | `sessions`                           | auth    | Ephemeral               | `expires_at`, `is_revoked`                | Cleanup worker hard-deletes                                                     |
 | `auth_methods`                       | auth    | Revocation              | `revoked_at`                              | Not `deleted_at` by design                                                      |
 | `mfa_methods`                        | auth    | Revocation              | `revoked_at`                              | Same                                                                            |
-| `verification_tokens`                | auth    | Ephemeral               | TTL implicit                              | Hard delete acceptable                                                          |
+| `verification_tokens`                | auth    | Ephemeral               | `expires_at`, `used_at`                   | Audit-retention worker hard-deletes rows 7 days past `expires_at`               |
 | `organizations`                      | tenancy | Tombstone               | `deleted_at`, `status`                    | Logo S3 + organization upload tombstone; no child cascade on soft-delete                 |
 | `memberships`                        | tenancy | Tombstone               | `deleted_at`                              |                                                                                 |
 | `member_invitations`                 | tenancy | Revocation + TTL        | `revoked_at`, `expires_at`, `accepted_at` |                                                                                 |

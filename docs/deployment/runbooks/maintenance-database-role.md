@@ -26,8 +26,11 @@ connection-level property: every bypass policy arm requires BOTH its `app.*` GUC
   data-plane grants mirroring `clinozy_be_app`; `20260827020000_maintenance_role_policy_access.sql`
   extends the six role-scoped `*_app_access` system-table policies to both application roles
   (without it a maintenance connection hits `deny_all` on the mail outbox / Stripe ledger / DLQ
-  ledger) and grants it `clinozy_be_app` membership.
-- Locks: `rls-table-scope-map.db.unit.test.ts` fails on any bypass arm not bound to the role;
+  ledger) and grants it `clinozy_be_app` membership. `20261006022303_verification_tokens_maintenance_role_access.sql`
+  does the same for the seventh, `verification_tokens_app_access` (the retention purge had reached it
+  only through that membership).
+- Locks: `system-tables-rls.security.test.ts` fails on any `*_app_access` policy that does not name
+  both runtime roles; `rls-table-scope-map.db.unit.test.ts` fails on any bypass arm not bound to the role;
   `bypass-arm-role-binding.security.test.ts` proves each bypass GUC opens nothing for
   `clinozy_be_app` and opens for `clinozy_be_maintenance`.
 

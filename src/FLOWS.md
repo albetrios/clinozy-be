@@ -115,6 +115,7 @@ sequenceDiagram
 ### Failure modes
 
 - **Wrong password** → 401, generic message; failed-attempt counter incremented.
+- **Too many failed logins from one IP** (50 within 15 minutes of its first failure) → 429 `rate_limited` with `Retry-After` for the rest of that window, for every login from the IP; fails open when Redis errors.
 - **Account locked + wrong password** → `errors:accountLocked` until the lockout window passes; a correct password during the window authenticates and lifts the lock.
 - **MFA challenge expired** → 401 `errors:mfaSessionExpired`; client must re-login.
 - **Disabled or unverified user** → 401 with the appropriate message key; behavior identical to wrong-password from the client's perspective for non-existent emails (anti-enumeration).

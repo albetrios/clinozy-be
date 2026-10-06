@@ -1,7 +1,8 @@
 name: Cleanup GHCR images
 
 # Weekly prune of stale GHCR manifests. Preserves floating convenience tags
-# (:latest, :previous), the immutable release tags (:vX.Y.Z — the release traceability
+# (:latest, plus :current / :previous — the live image and the rollback target, which
+# tooling/ci/rotate-live-image-tags.sh reads), the immutable release tags (:vX.Y.Z — the release traceability
 # alias for released production images), and the most recent SHA-tagged images.
 
 on:
@@ -49,7 +50,7 @@ jobs:
         run: |
           set -euo pipefail
           package_type="$(gh api "/users/${{ github.repository_owner }}/packages/container/${PACKAGE}" --jq '.package_type' 2>/dev/null || echo container)"
-          echo "Cleaning ${PACKAGE} (${package_type}) — retaining ${RETAIN} SHA tags plus :latest/:previous/:vX.Y.Z/:deploy-failed-*"
+          echo "Cleaning ${PACKAGE} (${package_type}) — retaining ${RETAIN} SHA tags plus :latest/:current/:previous/:vX.Y.Z/:deploy-failed-*"
 
           versions="$(
             gh api "/users/${{ github.repository_owner }}/packages/container/${PACKAGE}/versions?per_page=100" \
@@ -64,8 +65,10 @@ jobs:
           fi
 
           # Never prune release tags (:vX.Y.Z — the immutable release traceability alias) or the
-          # :latest/:previous/:deploy-failed-* convenience tags.
-          protected_regex='(^|,)(latest|previous|v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?|deploy-failed-[^,]+)(,|$)'
+          # :latest/:current/:previous/:deploy-failed-* tags. :current is the live image even when it
+          # is not the newest build (after a rollback, or an image_override deploy) — pruning it would
+          # leave the next tag rotation without a :current and :previous stale.
+          protected_regex='(^|,)(latest|current|previous|v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?|deploy-failed-[^,]+)(,|$)'
           deleted=0
           kept_sha=0
 

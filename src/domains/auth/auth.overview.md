@@ -79,6 +79,7 @@ stateDiagram-v2
 ## Failure modes
 
 - **Lockout exceeded** → 423; clears after `ACCOUNT_LOCKOUT_MINUTES`.
+- **Per-IP failed-login throttle** (50 failures within 15 minutes of the IP's first) → 429 `rate_limited` + `Retry-After`; fails open on Redis errors.
 - **Disposable email blocked** → 400 on send; user gets actionable message.
 - **MFA challenge expired** (5 min) → 401, client must restart login.
 - **OAuth state mismatch** → 400; CSRF defence engaged.

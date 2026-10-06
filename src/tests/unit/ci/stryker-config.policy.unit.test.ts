@@ -37,6 +37,30 @@ describe('Stryker mutation testing policy (#68)', () => {
     expect(workflow).toContain("cron: '30 3 * * 0'");
   });
 
+  it('stubs the Sentry CPU profiler, whose native addon segfaults the threads pool', async () => {
+    const vitestConfig = readFileSync(vitestStrykerPath, 'utf8');
+    expect(vitestConfig).toMatch(
+      /'@sentry\/profiling-node':\s*resolve\([^)]*'sentry-profiling-node\.stub\.ts'\)/,
+    );
+    // The stub keeps the one export sentry.ts imports, as a no-op integration.
+    const { nodeProfilingIntegration } = await import(
+      '@tooling/vitest/sentry-profiling-node.stub.js'
+    );
+    expect(nodeProfilingIntegration()).toEqual({ name: 'ProfilingIntegration' });
+  });
+
+  it('patches the vitest runner so each mutant selects its covering tests', () => {
+    // Vitest 5 matches testNamePattern against names joined with " > "; the runner's test ids join
+    // them with spaces, so unpatched, every mutant ran zero tests and "survived".
+    const workspace = readFileSync(join(process.cwd(), 'pnpm-workspace.yaml'), 'utf8');
+    const registration = workspace.match(
+      /'@stryker-mutator\/vitest-runner@[\d.]+': (patches\/\S+\.patch)/,
+    );
+    expect(registration, 'the runner patch is registered in pnpm-workspace.yaml').not.toBeNull();
+    const patch = readFileSync(join(process.cwd(), registration![1]!), 'utf8');
+    expect(patch).toContain(".replaceAll(' ', '(?: | > )')");
+  });
+
   it('limits vitest to service and middleware unit tests for mutation dry run', () => {
     const vitestConfig = readFileSync(vitestStrykerPath, 'utf8');
     expect(vitestConfig).toContain('*service*.unit.test.ts');

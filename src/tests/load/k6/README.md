@@ -4,7 +4,7 @@ Load tests for the clinozy-be API. Keep this doc in sync with [docs/reference/te
 
 ## Prerequisites
 
-- **Server**: `RATE_LIMIT_MAX=10000 pnpm dev` — raises the per-IP limit for load testing; plain `pnpm dev` 429s at high VU counts.
+- **Server**: `RATE_LIMIT_MAX=10000 pnpm dev` — raises the per-IP limit for load testing; plain `pnpm dev` 429s at high VU counts. The journeys that create webhooks (user-journey, fe-full-surface) also need `WEBHOOK_URL_ALLOWLIST=example.com`.
 - **Postgres + Redis**: Required for auth and organization-dependent scenarios (`docker compose up -d` or your own).
 - **Database**: `pnpm db:migrate` then choose a seed tier:
   - Single-user scenarios (`api-stress`, `daily-ops`, etc.): `pnpm db:seed:full` (demo user `demo@example.com` / `DemoPassword123!`)
@@ -46,7 +46,7 @@ Org-scoped routes are flat — they carry **no** `/organizations/{organization_i
 | Webhooks        | `scenarios/webhooks.js`        | `TEST_TOKEN`, `TEST_ORG_ID`                              | `pnpm load:webhooks`                              |
 | RLS concurrency | `scenarios/rls-concurrency-beyond-pool.js` | `TEST_TOKEN`, `TEST_ORG_ID` (optional `DATABASE_POOL_MAX`, `BEYOND_POOL_FACTOR`, `BEYOND_POOL_VUS`) | `pnpm load:rls-concurrency`          |
 | Admin           | `scenarios/admin.js`           | `ADMIN_TOKEN`                                            | `pnpm load:admin` (after `pnpm tool:admin-token`) |
-| **User journey** | `scenarios/user-journey.js`  | credential pool (see below)                              | `pnpm load:user-journey`                          |
+| **User journey** | `scenarios/user-journey.js`  | credential pool (see below) + API started with `WEBHOOK_URL_ALLOWLIST=example.com` | `pnpm load:user-journey`                          |
 | **clinozy-fe journey** | `scenarios/fe-login-to-organization.js` | credential pool + API on `TEST_MODE=true` with `AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED` | `VUS=50 POOL=50 k6 run src/tests/load/k6/scenarios/fe-login-to-organization.js` — the full front-end journey, one pass per VU (VUs are users). Knobs: `VUS`, `POOL`, `AUTH` (`code`\|`password`\|`otp`), `STATIC_CODE`, `STAGGER`, `RESULT_TAG` |
 | **Session journey** | `scenarios/session-refresh-journey.js` | `DEMO_EMAIL`, `DEMO_PASSWORD` (or use defaults) | `pnpm load:session-journey` — login → Bearer read → cookie+CSRF refresh → rotated-token read → logout → refresh 401 |
 | **Comprehensive journey** | `scenarios/comprehensive-journey.js` | none — `setup-loadtest.sh` seeds the pool and starts a cluster on `:3001` with its settings in the gitignored `data/loadtest-overrides.env` (your env files are never edited) | `pnpm load:journey` (setup + run), `pnpm load:journey:down`, `pnpm load:reset` (leaked journey rows + this namespace's rate-limit counters, local database only). See [COMPREHENSIVE-JOURNEY.md](COMPREHENSIVE-JOURNEY.md) |

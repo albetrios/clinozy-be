@@ -65,10 +65,11 @@ With `CAPTCHA_PROVIDER=disabled` (the default outside production) the middleware
 | Guard                     | When it runs                                                  |
 | ------------------------- | ------------------------------------------------------------- |
 | Zod `FRONTEND_URL` refine | Boot — when set, `FRONTEND_URL` must be a valid `http(s)` URL |
+| Zod `FRONTEND_URL` production refine | Boot in production — `FRONTEND_URL` must be set, to an `https` URL |
 
 **Test code path:** tests subscribe to `AUTH_EVENT.EMAIL_VERIFICATION_CODE_REQUESTED` via the `captureNextVerificationCode(email)` helper in `src/tests/helpers/verification-code.helper.ts` to obtain the raw code for assertions.
 
-**Deployed environments (Railway development, production):** any valid public `FRONTEND_URL` is accepted. The previous environment-based inline-token leak and its localhost-only `FRONTEND_URL` restriction have been removed.
+**Deployed environments:** development accepts any valid public `FRONTEND_URL`; production requires one, over `https` — unset, every emailed link (verification code, password reset, invitation) would point at the local-dev fallback `http://localhost:5173`. The previous environment-based inline-token leak and its localhost-only `FRONTEND_URL` restriction have been removed.
 
 ## WebAuthn (passkeys)
 

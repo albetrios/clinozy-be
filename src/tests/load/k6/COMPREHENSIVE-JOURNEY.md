@@ -108,7 +108,8 @@ Boot: `setup-loadtest.sh` (or the commands in §4).
 - **`MAX_TEAM_ORGANIZATIONS_PER_OWNER`** (20): why `create-org` is excluded from the journey (it
   accumulates organizations with no cleanup — organization-delete is destructive).
 - **Idempotency** (`X-Idempotency-Key` on `POST /organizations|/memberships|/roles|/api-keys|/notification-policies|/webhooks|/uploads`): reused key
-  - different body → 422. Keys are run-unique (`idem-<RUN>-<vu>-<iter>-<n>`).
+  - different body → 422. Every write gets a fresh key from `idempotencyKey()` (`helpers/idempotency.js`):
+  `k6-<label>-<vu>-<iter>-<ms>-<random>` — 16–255 characters, unique across runs without `RUN`.
 
 ## 3. Test data
 
@@ -161,7 +162,7 @@ RUN=$(date +%s) VUS=100 DURATION=60s k6 run src/tests/load/k6/scenarios/comprehe
 
 ### Knobs (env)
 
-`VUS`, `DURATION`, `RUN` (unique per invocation — keeps names + idempotency keys unique),
+`VUS`, `DURATION`, `RUN` (names the resources a run creates; a fresh value by default),
 `THINK` (think-time s/phase, default 0.4), `WRITE_EVERY` (write phases every Nth iteration; >1 =
 read-dominant), `RARE` (`true` to include the cross-organization member-invite flow — OFF by default because
 it churns other users' permission caches under load), `DIAG` (`true` logs each failure's status/body),
@@ -174,7 +175,8 @@ it churns other users' permission caches under load), `DIAG` (`true` logs each f
   login limit. It also issues one **cache-warming** read per user.
 - **No re-auth by default** (`REAUTH=false`): re-login on 401 from one IP self-amplifies into a login
   storm under load. (Tokens last 900 s; runs are shorter.)
-- **Run-unique names + idempotency keys** (`RUN`) — no cross-run slug/key collisions.
+- **Run-unique names** (`RUN`) and a **fresh idempotency key per write** — no cross-run slug/key
+  collisions; a rerun never replays an earlier run's response.
 - **Self-cleaning writes** — created roles/keys/policies/webhooks/uploads/memberships are deleted
   in-iteration so data + per-organization caps don't grow.
 - **Per-op metrics**: total / `Server-Timing` server-compute / TTFB(waiting) / queue+network, plus
@@ -188,6 +190,8 @@ it churns other users' permission caches under load), `DIAG` (`true` logs each f
 - **1 VU**: latency is all server-compute (q+net ~1 ms). **At sustained load, requests stay warm**
   (~5 ms reads); the ~22 ms "idle penalty" only hits the first request after a quiet gap (V8 JIT/
   connection warm-up), and vanishes under traffic.
+- **`unexpected_failures` (threshold `rate<0.01`)** counts every non-2xx except 429 and 503, so a
+  broken write step fails the run instead of passing quietly.
 - Failures by type: **429** = a cap not lifted; **503** = overload guard shedding (event-loop > 250 ms);
   **403 `insufficientOrganizationPermissions`** = permission-cache recompute contention (cold/churned
   cache + a slow/loaded DB); **404** = read-after-delete race; **422** = idempotency key reuse.

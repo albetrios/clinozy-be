@@ -1951,6 +1951,10 @@ export const envSchemaConditionallyRequiredKeys: ReadonlyArray<{
     key: 'EMAIL_FROM_ADDRESS',
     condition: 'RESEND_API_KEY is set (no hardcoded sender fallback)',
   },
+  {
+    key: 'FRONTEND_URL',
+    condition: 'NODE_ENV=production, as an https URL (emailed links and the OAuth callback use it)',
+  },
 ];
 
 /* ---------------------------------------------------------------------------

@@ -22,11 +22,8 @@ Configuration: [`stryker.config.json`](../../../stryker.config.json), [`tooling/
 - Auth, billing, and tenancy **services** that have co-located `*service*.unit.test.ts` coverage
 - Security-critical **middleware**: auth, tenant, idempotency, API key auth, error handler, organization RLS transaction, encryption
 
-**Excluded until dedicated service unit tests exist** (not in `mutate`):
-
-- `webauthn.service.ts`, `session-token-cache.service.ts`, `verification-token.service.ts`
-- `permission-cache.service.ts`
-- Other middleware (compress, helmet, CORS, health, etc.) — covered by integration tests; narrow scope keeps nightly runtime under ~3 minutes
+**Not mutated** (not in `mutate`): other middleware (compress, helmet, CORS, health, etc.) — covered by
+integration tests. The weekly full run takes about 18 minutes.
 
 **Thresholds:** `break: 70`, `high: 80` (global mutation score).
 
@@ -48,12 +45,26 @@ Workflow: [.github/workflows/scheduled-stryker-mutation.yml](../../../.github/wo
 
 ## TypeScript 7 compatibility
 
-Two settings in `stryker.config.json` exist solely to keep Stryker working on the native **TypeScript 7** compiler (`typescript@7.x`), whose programmatic API drops the legacy compiler functions Stryker 9.x relies on:
+Two settings in `stryker.config.json` exist solely to keep Stryker working on the native **TypeScript 7** compiler (`typescript@7.x`), whose programmatic API drops the legacy compiler functions Stryker relies on:
 
 - **`tsconfigFile: "tsconfig.stryker-noop.json"`** (a path that intentionally does not exist). Stryker's `TsConfigPreprocessor` rewrites the tsconfig for its sandbox using `ts.parseConfigFileTextToJson`, which is `undefined` in TypeScript 7 → the run crashes before any mutant is tested. Pointing `tsconfigFile` at a non-existent file skips that preprocessor. It is safe because the Vitest runner resolves `@/` and `@tooling/` via the aliases in `tooling/vitest/stryker.config.ts`, not via tsconfig path rewriting — so mutation results are unaffected.
 - **`ignorePatterns`** excludes paths that must not be copied into Stryker's sandbox and are irrelevant to mutation: the agent-tooling dirs `.claude` / `.cursor` / `.codex` / `.mcp.json` (committed **symlinks** into `agent-os/` → `ENOTSUP … copyfile`), the local `.codegraph` MCP database (a live SQLite dir whose WAL file rotates mid-copy → flaky `ENOENT`), and the `reports` / `coverage` output dirs. These are local-only concerns (absent in CI) but keep local runs deterministic.
 
-Revisit both once a Stryker release supports TypeScript 7's compiler API (latest is 9.6.1 as of this change), or if the repo moves back to a JS-based TypeScript.
+Revisit both on each Stryker upgrade (the repo pins `^10.0.0`): drop them once a release supports TypeScript 7's compiler API, or if the repo moves back to a JS-based TypeScript.
+
+Two more workarounds keep the run itself sound:
+
+- **`@sentry/profiling-node` is aliased to `tooling/vitest/sentry-profiling-node.stub.ts`** in
+  `tooling/vitest/stryker.config.ts`. Stryker's vitest runner forces the `threads` pool; tearing the
+  threads down unloads Sentry's native CPU-profiler addon while a callback into it is still queued,
+  and the run dies with SIGSEGV. No test exercises profiling, so a no-op integration is enough.
+- **`patches/@stryker-mutator__vitest-runner@10.0.0.patch`** (registered under `patchedDependencies`
+  in `pnpm-workspace.yaml`). Vitest 5 joins suite and test names with ` > `; the runner's test ids
+  join them with spaces, so without the patch no test matched and every mutant "survived" having
+  run none. Drop the patch once `@stryker-mutator/vitest-runner` ships the fix — the patch is keyed
+  to 10.0.0, so pnpm refuses to install a newer runner until the entry is removed or re-keyed.
+
+`stryker-config.policy.unit.test.ts` pins both.
 
 ---
 

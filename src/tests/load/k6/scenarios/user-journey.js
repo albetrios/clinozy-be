@@ -7,7 +7,9 @@
  * Prerequisites:
  *   pnpm db:seed:loadtest          — seeds 12 organizations × 10 users with full domain data
  *                                    and writes src/tests/load/k6/data/credential-pool.json
- *   RATE_LIMIT_MAX=10000 pnpm dev  — raise the rate limit for load testing
+ *   RATE_LIMIT_MAX=10000 WEBHOOK_URL_ALLOWLIST=example.com pnpm dev
+ *                                  — raise the rate limit; allow the example.com webhooks the
+ *                                    journey creates (the template allowlist rejects them)
  *
  * Run:
  *   pnpm load:user-journey

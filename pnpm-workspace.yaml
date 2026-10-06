@@ -161,5 +161,8 @@ minimumReleaseAgeExclude:
   - '@types/node@24.19.1'
   - '@aws-sdk/s3-presigned-post@3.1145.0'
   - '@aws-sdk/s3-request-presigner@3.1145.0'
+# Vitest 5 joins suite + test names with " > "; @stryker-mutator/vitest-runner 10.0.0 joins its test ids
+# with spaces, so no test matched and every mutant ran zero tests. Drop once the runner ships the fix
+# (the entry is version-keyed: bumping the runner without re-keying it fails the install).
 patchedDependencies:
   '@stryker-mutator/vitest-runner@10.0.0': patches/@stryker-mutator__vitest-runner@10.0.0.patch

@@ -38,6 +38,13 @@ When you add a **new table in a tenant-owned schema** (`tenancy`, `billing`, `no
 - [ ] Keep the `app.global_retention_cleanup` escape clause **in `USING` only**, so the retention/tombstone worker can still SELECT/DELETE cross-tenant but can never write cross-tenant.
 - [ ] Add the table to `EXPECTED_FORCE_RLS_TABLES` (`force-rls-tables.constants.ts`, alphabetical) — `diffForceRlsTables` asserts the live DB FORCE-RLS set matches exactly.
 
+When you add a **system (non-tenant) table** — a ledger, outbox or catalog no organization owns — gate it by role instead:
+
+- [ ] ENABLE + FORCE RLS, a `<table>_deny_all` policy (`TO PUBLIC USING (false)`), and a `<table>_app_access` policy
+      `TO clinozy_be_app, clinozy_be_maintenance` — **both** runtime roles. A policy naming only `clinozy_be_app` leaves
+      maintenance-pool purges reaching the table through role membership alone; `system-tables-rls.security.test.ts`
+      fails on it. Declare these role policies in the migration only, not in the Drizzle schema.
+
 For **worker / processor** code touching tenant data:
 
 - [ ] **NEW-row visibility:** an UPDATE's NEW row must still pass the SELECT arms of the

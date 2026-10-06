@@ -24,8 +24,9 @@ the image just deployed. Redeploying the live image leaves `:previous` alone.
 2. Approve the `production` environment gate when prompted (same required
    reviewer as a deploy).
 3. The run reuses the full deploy pipeline (`reusable-railway-deploy.yml` with
-   `image_override`): env validation → migrations (no-op) → Railway API +
-   worker → `/readyz` + API-surface probes.
+   `image_override`): env validation → migrations and seed from `main`'s tip
+   (already applied, so normally a no-op — but a migration merged after the bad
+   release runs here) → Railway API + worker → `/readyz` + API-surface probes.
 
 ## What it does and does not roll back
 
