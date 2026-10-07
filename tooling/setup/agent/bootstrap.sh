@@ -32,18 +32,25 @@ ok()   { echo "✓ $*"; }
 skip() { echo "• $*"; }
 die()  { echo "✗ $*" >&2; exit 1; }
 
-# Stop any transiently-started dev server (pnpm -> tsx watch -> node), skipping
-# this shell. Reliable across the orphaned-node case where pnpm/tsx exit first.
-stop_app() {
-  local self=$$ pid cmd
-  for p in /proc/[0-9]*; do
-    pid=${p#/proc/}
-    [ "$pid" = "$self" ] && continue
-    cmd=$(tr '\0' ' ' <"$p/cmdline" 2>/dev/null) || continue
-    case "$cmd" in
-      *tsx*watch*|*node*src/index*) kill -TERM "$pid" 2>/dev/null ;;
-    esac
+# Every descendant of a process (pnpm -> sh -> tsx watch -> node), read from `ps`,
+# which Linux and macOS both have — `/proc` is Linux-only.
+descendant_pids() {
+  local parent=$1 pid ppid
+  ps -A -o pid= -o ppid= | while read -r pid ppid; do
+    [ "$ppid" = "$parent" ] || continue
+    echo "$pid"
+    descendant_pids "$pid"
   done
+}
+
+# Stop the dev server this script started and everything it spawned. The whole tree
+# is collected before anything is signalled, so no child is orphaned and missed, and
+# nothing outside it (another checkout's `tsx watch`) is touched.
+stop_app() {
+  local pids
+  pids="$(descendant_pids "$1") $1"
+  # shellcheck disable=SC2086 # one PID per word
+  kill -TERM ${pids} 2>/dev/null || true
 }
 
 echo "cloud bring-up — $(date -u '+%Y-%m-%d %H:%M:%SZ')"
@@ -94,7 +101,7 @@ step "[3/${TOTAL}] Docker CLI/Compose + images (mirror + pull)"
 bash "${AGENT_DIR}/install-docker.sh" || true
 bash "${AGENT_DIR}/install-docker-images.sh" || true
 if docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -qE '^postgres:|^redis:'; then
-  ok "[3/${TOTAL}] compose images present: $(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^postgres:|^redis:' | paste -sd' ')"
+  ok "[3/${TOTAL}] compose images present: $(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^postgres:|^redis:' | paste -sd' ' -)"
 else
   skip "[3/${TOTAL}] images not pre-pulled (compose will pull via mirror)"
 fi
@@ -168,6 +175,7 @@ ok "[10/${TOTAL}] seed complete"
 step "[11/${TOTAL}] App health (/livez + /readyz)"
 app_log="$(mktemp)"
 pnpm dev >"${app_log}" 2>&1 &
+app_pid=$!
 if bash "${AGENT_DIR}/healthcheck.sh"; then
   ok "[11/${TOTAL}] app live & ready"
   app_ok=1
@@ -180,7 +188,7 @@ fi
 if [ "${KEEP_APP:-0}" = "1" ] && [ "${app_ok}" = "1" ]; then
   echo "  KEEP_APP=1 — leaving \`pnpm dev\` running on :${PORT:-3000}." >&2
 else
-  stop_app
+  stop_app "${app_pid}"
   echo "  stopped transient app (Postgres + Redis stay up)." >&2
 fi
 rm -f "${app_log}"

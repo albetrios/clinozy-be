@@ -28,4 +28,14 @@ describe('agent Docker daemon setup scripts', () => {
     expect(bootstrapScript).toContain('DOCKERD_AGENT_MODE_FILE');
     expect(bootstrapScript).toContain('restricted*');
   });
+
+  it('stops only the dev-server tree it started, without Linux-only /proc', () => {
+    // A /proc walk never ran on macOS (the app was left up) and, on Linux, matched every
+    // `tsx watch` on the machine. `ps` exists on both; the tree hangs off `pnpm dev`'s PID.
+    expect(bootstrapScript).toContain('app_pid=$!');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal ${app_pid} shell variable in bootstrap.sh
+    expect(bootstrapScript).toContain('stop_app "${app_pid}"');
+    expect(bootstrapScript).toContain('ps -A -o pid= -o ppid=');
+    expect(bootstrapScript).not.toContain('/proc/');
+  });
 });

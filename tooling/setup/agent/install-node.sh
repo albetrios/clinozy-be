@@ -43,6 +43,13 @@ readonly version
 major="${version%%.*}"
 readonly target_dir="${INSTALL_PREFIX}/node${major}"
 
+# Cloud images are Linux and this installs a linux tarball; on a developer machine (macOS) the
+# Node comes from nvm, so there is nothing to install.
+if [ "$(uname -s)" != "Linux" ]; then
+  echo "install-node: $(uname -s) is not a cloud image — using the session Node (nvm)."
+  exit 0
+fi
+
 # Idempotent: skip the download when the target already has this exact version.
 if [ -x "${target_dir}/bin/node" ] && [ "$("${target_dir}/bin/node" -v 2>/dev/null)" = "v${version}" ]; then
   echo "install-node: Node v${version} already present at ${target_dir} — nothing to do."
