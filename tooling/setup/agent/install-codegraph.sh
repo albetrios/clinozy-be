@@ -81,6 +81,17 @@ if ! command -v codegraph >/dev/null 2>&1; then
   fi
 fi
 
+# Put the CLI on Claude Code's own PATH. The global install lands in the pinned Node's
+# bin (/opt/node24/bin), which only the Bash tool's PATH gains (via CLAUDE_ENV_FILE); the
+# Claude Code process that launches MCP servers keeps the image PATH, so `codegraph serve
+# --mcp` failed with ENOENT. ~/.local/bin is on that PATH (headroom lives there).
+codegraph_path="$(command -v codegraph)"
+if [ "${codegraph_path}" != "${user_bin}/codegraph" ]; then
+  mkdir -p "${user_bin}" 2>/dev/null || true
+  ln -sf "${codegraph_path}" "${user_bin}/codegraph" \
+    && echo "install-codegraph: linked ${user_bin}/codegraph → ${codegraph_path}." >&2
+fi
+
 # Index only — never `codegraph install`: it builds no index without `--init`, and it
 # replaces the tracked .mcp.json and .claude/settings.json symlinks with plain files,
 # leaving every bootstrap with a dirty tree. install-headroom.sh declares the codegraph

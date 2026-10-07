@@ -3,7 +3,7 @@
 #
 # Installs — Node (into /opt, as root or via passwordless sudo), dependencies, gh, Docker
 # CLI/Compose, Docker images (registry mirror), CodeGraph, Headroom + the default MCP pair,
-# gitleaks — and scaffolds a self-contained `.env.local` (`pnpm setup:local --only-env`,
+# gitleaks, semgrep, k6 — and scaffolds a self-contained `.env.local` (`pnpm setup:local --only-env`,
 # which first stops on a DATABASE_*_URL in the environment that is remote or the wrong
 # login, or a remote REDIS_URL). Then brings up the local Docker stack (Postgres + Redis),
 # migrates, enables the database logins the migrations create (`pnpm setup:local
@@ -154,10 +154,14 @@ bash "${AGENT_DIR}/install-headroom.sh" || true
 pnpm mcp:setup:default >&2 || skip "mcp:setup:default failed (non-fatal)"
 if command -v headroom >/dev/null 2>&1; then ok "[6/${TOTAL}] headroom $(headroom --version 2>/dev/null)"; else skip "[6/${TOTAL}] headroom unavailable (non-fatal)"; fi
 
-# 7) gitleaks (pre-commit secret scan) --------------------------------------
-step "[7/${TOTAL}] gitleaks (secret scan)"
+# 7) gitleaks (pre-commit secret scan) + semgrep (security:sast) + k6 (load:*) --
+step "[7/${TOTAL}] gitleaks + semgrep + k6 (secret scan, SAST, load tests)"
 bash "${AGENT_DIR}/install-gitleaks.sh" || true
+bash "${AGENT_DIR}/install-semgrep.sh" || true
+bash "${AGENT_DIR}/install-k6.sh" || true
 if command -v gitleaks >/dev/null 2>&1; then ok "[7/${TOTAL}] gitleaks $(gitleaks version 2>/dev/null)"; else skip "[7/${TOTAL}] gitleaks unavailable — pre-commit secret scan will fail (non-fatal)"; fi
+if command -v semgrep >/dev/null 2>&1; then ok "[7/${TOTAL}] semgrep $(semgrep --version 2>/dev/null)"; else skip "[7/${TOTAL}] semgrep unavailable — pnpm security:sast will fail (non-fatal)"; fi
+if command -v k6 >/dev/null 2>&1; then ok "[7/${TOTAL}] $(k6 version 2>/dev/null | head -1)"; else skip "[7/${TOTAL}] k6 unavailable — pnpm load:* will fail (non-fatal)"; fi
 
 # 8) Environment files (.env.local) -----------------------------------------
 step "[8/${TOTAL}] Environment (.env.local)"

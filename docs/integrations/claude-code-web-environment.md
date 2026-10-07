@@ -53,7 +53,8 @@ The default **Trusted** allowlist already covers what `pnpm install` and image p
 Add the rest via **Custom** (tick "Also include default list of common package managers"):
 
 - `nodejs.org` — **always**, for the Node 24 download in the setup script. Without it the install is blocked.
-- Tier 3 only (live calls; contract tests mock these, so usually unnecessary): `api.stripe.com`, `api.resend.com`, `sentry.io` / `*.ingest.sentry.io`.
+- Tier 3 only (live calls; contract tests mock these, so usually unnecessary): `api.stripe.com`, `api.resend.com`, `sentry.io` / `*.ingest.sentry.io`, `us.i.posthog.com` (PostHog events — blocked by default, so they are silently dropped).
+- Agent tooling: `semgrep.dev` (`pnpm security:sast` downloads its `--config auto` rules), `context7.com` (the Context7 docs MCP), `openaipublic.blob.core.windows.net` (Headroom's tiktoken token counter downloads its vocabulary here).
 
 > **Do not use `None`** — it blocks `pnpm install` entirely.
 
@@ -69,7 +70,7 @@ bash tooling/setup/agent/bootstrap.sh --install-only
 ```
 
 `--install-only` runs steps 1–8 — Node 24 into `/opt/node24`, `pnpm install`, gh, the Docker
-CLI + mirror + compose images, CodeGraph, Headroom + the default MCP pair, gitleaks, and the
+CLI + mirror + compose images, CodeGraph, Headroom + the default MCP pair, gitleaks, semgrep, k6, and the
 `.env.local` scaffold — and stops before Docker, so the result is cached. In the session, the same
 command without the flag repeats those steps (fast — each is idempotent) and brings the stack up.
 
@@ -78,6 +79,10 @@ On the first session the cached Node 24 is already on disk, [`session-start.sh`]
 **GitHub CLI (optional).** [`install-gh.sh`](../../tooling/setup/agent/install-gh.sh) adds `gh` as an in-session fallback for reading Actions logs, checking CI, and merging (the GitHub MCP tools already cover this). It belongs in the cached **setup script**, not `session-start.sh` — a per-session `apt install` would not cache and would slow every startup. Set `GH_TOKEN` in the environment's **Variables** (least-privilege: `contents` + `pull_requests` + `actions:read`; env vars are not a secrets store). The script first installs the **github.com release binary** (reachable on the default Trusted allowlist, so no extra allowlist entry is normally needed); its `cli.github.com` apt-repo path is only a last resort.
 
 **gitleaks (recommended if you commit).** The pre-commit guard's "Staged secrets scan" step shells out to `gitleaks protect --staged …` and hard-errors when the binary is missing, so a cloud session cannot commit until gitleaks is installed. The cloud image does not ship it. [`install-gitleaks.sh`](../../tooling/setup/agent/install-gitleaks.sh) installs the **github.com release binary** (reachable on the default Trusted allowlist), pinned to the same version as the CI `security-secrets` job. If that download fails it falls back to `go install` — which must use gitleaks's **legacy self-declared module path** `github.com/zricethezav/gitleaks/v8` (the current `github.com/gitleaks` repo path fails Go's module-path check).
+
+**semgrep + k6 (optional).** [`install-semgrep.sh`](../../tooling/setup/agent/install-semgrep.sh) (via `uv`, unpinned like the CI SAST job) makes `pnpm security:sast` runnable — the scan itself also needs `semgrep.dev` on the allowlist. [`install-k6.sh`](../../tooling/setup/agent/install-k6.sh) installs the pinned **github.com release binary** for the `pnpm load:*` scenarios (the "latest release" lookups are blocked on Trusted, hence the pin).
+
+**CodeGraph MCP on PATH.** The Claude Code process that launches MCP servers keeps the image `PATH`, which lacks `/opt/node24/bin`, so [`install-codegraph.sh`](../../tooling/setup/agent/install-codegraph.sh) links `codegraph` into `~/.local/bin` (on that `PATH`) — otherwise `codegraph serve --mcp` fails with `ENOENT` at session start.
 
 ---
 
@@ -142,7 +147,7 @@ pnpm db:seed         # or pnpm db:seed:full
 
 ### One-command bring-up + verify
 
-To run the whole in-session flow at once — tool installs (gh, Docker CLI/Compose when missing, Docker daemon start, Docker mirror, CodeGraph, Headroom, gitleaks), `compose:up`, `db:migrate`, the database logins (`setup:local --only-env`), `db:seed`, then an app healthcheck — use the orchestrator, which logs a ✓/✗ status after each step:
+To run the whole in-session flow at once — tool installs (gh, Docker CLI/Compose when missing, Docker daemon start, Docker mirror, CodeGraph, Headroom, gitleaks, semgrep, k6), `compose:up`, `db:migrate`, the database logins (`setup:local --only-env`), `db:seed`, then an app healthcheck — use the orchestrator, which logs a ✓/✗ status after each step:
 
 ```bash
 bash tooling/setup/agent/bootstrap.sh        # KEEP_APP=1 to leave `pnpm dev` running afterwards
