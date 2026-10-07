@@ -72,7 +72,6 @@ export const UpdateTreatmentDto = z
     parameters: z.record(z.string(), trimmedString().max(80)).optional(),
     remark: trimmedString().max(2000).nullable().optional(),
     aftercare_call: z.enum(TREATMENT_AFTERCARE_CALL_VALUES).optional(),
-    patient_package_id: recordIdSchema.nullable().optional(),
     expected_updated_at: expectedUpdatedAtSchema,
   })
   .strict()

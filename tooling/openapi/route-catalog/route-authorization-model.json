@@ -990,5 +990,8 @@
   "POST /api/v1/app/appointments/:appointment_id/copy": {
     "model": "organization",
     "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/timeline": {
+    "model": "organization"
   }
 }

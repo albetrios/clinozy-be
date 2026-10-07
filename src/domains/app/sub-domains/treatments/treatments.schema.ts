@@ -83,6 +83,7 @@ export const treatments = appSchema
       parameters: jsonb('parameters').notNull().default({}),
       remark: text('remark'),
       aftercare_call: varchar('aftercare_call', { length: 11 }).notNull().default('next_day'),
+      // The package this session uses — one of its sessions is taken; a reverse gives it back
       patient_package_id: bigint('patient_package_id', { mode: 'number' }).references(
         (): AnyPgColumn => patient_packages.id,
         { onDelete: 'set null' },

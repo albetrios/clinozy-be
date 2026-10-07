@@ -104,6 +104,7 @@ export function appRolePresets(adminCodes: readonly string[]): readonly AppRoleP
         ...readCodes(['medicine', 'manufacturer']),
         APP_PERMISSIONS.OFFER_PRICE_BILL_BELOW,
         APP_PERMISSIONS.CLINICAL_RECORD_READ,
+        APP_PERMISSIONS.PRIVATE_ALBUM_READ,
         APP_PERMISSIONS.LIST_EXPORT,
       ]),
     },

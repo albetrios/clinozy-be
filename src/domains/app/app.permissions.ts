@@ -127,4 +127,5 @@ export const APP_PERMISSIONS = {
   CLINICAL_RECORD_READ: 'clinical_record:read',
   LIST_EXPORT: 'list:export',
   TASK_RULE_UPDATE: 'task_rule:update',
+  PRIVATE_ALBUM_READ: 'private_album:read',
 } as const;

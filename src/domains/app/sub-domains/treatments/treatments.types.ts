@@ -15,6 +15,7 @@ export interface TreatmentOutput {
   parameters: unknown;
   remark: string | null;
   aftercare_call: string;
+  /** The package this session uses — one of its sessions is taken; a reverse gives it back */
   patient_package_id: string | null;
   status: string;
   reversed_reason: string | null;

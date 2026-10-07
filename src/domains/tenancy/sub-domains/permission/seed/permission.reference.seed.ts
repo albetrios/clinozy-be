@@ -169,6 +169,7 @@ export const SYSTEM_PERMISSIONS = [
   { code: 'clinical_record:read', name: 'Read Clinical Notes', category: 'special' },
   { code: 'list:export', name: 'Export Lists', category: 'special' },
   { code: 'task_rule:update', name: 'Change Task Rules', category: 'special' },
+  { code: 'private_album:read', name: 'See The Private Photo Album', category: 'special' },
 ] as const;
 
 /**

@@ -232,6 +232,11 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.patientsRecordSchema, schemas.patientsRecordExample),
     example: null,
   },
+  'GET /api/v1/app/patients/{patient_id}/timeline': {
+    statusCode: 200,
+    schema: wrapSuccess({ type: 'object', additionalProperties: true }, {}),
+    example: null,
+  },
   'DELETE /api/v1/app/patients/{patient_id}': { statusCode: 204, schema: null, example: null },
   'POST /api/v1/app/patients/{patient_id}/restore': {
     statusCode: 200,

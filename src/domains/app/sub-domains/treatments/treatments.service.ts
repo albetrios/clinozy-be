@@ -8,6 +8,7 @@ import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js'
 import type { TreatmentsRepository } from './treatments.repository.js';
 import { serializeTreatment } from './treatments.serializer.js';
 import type { TreatmentOutput } from './treatments.types.js';
+import { treatmentsRules } from './treatments.rules.js';
 import {
   validateCreateTreatment,
   validateListTreatmentsQuery,
@@ -51,6 +52,7 @@ export class TreatmentsService extends BaseRecordService<TreatmentOutput> {
           parse: validateReverseTreatment,
         },
       },
+      ...treatmentsRules,
     });
   }
 }

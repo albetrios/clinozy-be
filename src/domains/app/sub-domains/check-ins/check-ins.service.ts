@@ -6,6 +6,7 @@ import { treatments } from '@/domains/app/sub-domains/treatments/treatments.sche
 import { CHECK_IN_NEXT_OFFERINGS_LINK, type CheckInsRepository } from './check-ins.repository.js';
 import { serializeCheckIn } from './check-ins.serializer.js';
 import type { CheckInOutput } from './check-ins.types.js';
+import { checkInsRules } from './check-ins.rules.js';
 import {
   validateCreateCheckIn,
   validateListCheckInsQuery,
@@ -40,6 +41,7 @@ export class CheckInsService extends BaseRecordService<CheckInOutput> {
         { field: 'next_offering_ids', link: CHECK_IN_NEXT_OFFERINGS_LINK, label: 'offering' },
       ],
       parent: { field: 'patient_id', table: patients, label: 'Patient' },
+      ...checkInsRules,
     });
   }
 }

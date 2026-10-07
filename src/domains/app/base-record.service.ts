@@ -125,6 +125,18 @@ export class BaseRecordService<Output> {
         if (id === undefined) return emptyPage(input.limit);
         equals[field] = id;
       }
+      const readScope = await this.readScopeOf(options.visibility);
+      for (const [field, allowed] of Object.entries(readScope ?? {})) {
+        const requested = equals[field];
+        const kept =
+          requested === undefined
+            ? [...allowed]
+            : (Array.isArray(requested) ? requested : [requested]).filter((value) =>
+                allowed.includes(value),
+              );
+        if (kept.length === 0) return emptyPage(input.limit);
+        equals[field] = kept;
+      }
       const branchScope = await this.branchScope({
         organizationId,
         actingUserPublicId: options.actingUserPublicId,
@@ -585,7 +597,18 @@ export class BaseRecordService<Output> {
     if (!branchAllowed(row[this.descriptor.branchColumn ?? ''], visible)) {
       throw new NotFoundError(this.descriptor.label);
     }
+    if (!readScopeAllows(row, await this.readScopeOf(visibility))) {
+      throw new NotFoundError(this.descriptor.label);
+    }
     return row;
+  }
+
+  /** The table's read scope for this caller (see {@link BaseRecordRules.readScope}). */
+  private async readScopeOf(
+    visibility: BaseRecordVisibility | undefined,
+  ): Promise<Readonly<Record<string, readonly unknown[]>> | undefined> {
+    if (!(this.descriptor.readScope && visibility?.can)) return undefined;
+    return this.descriptor.readScope(visibility.can);
   }
 
   /** Whether a (deleted) row is in the caller's branches — the restore check. */
@@ -600,7 +623,10 @@ export class BaseRecordService<Output> {
       userId: await this.userId(options.actingUserPublicId),
       visibility: options.visibility,
     });
-    return branchAllowed(options.row[this.descriptor.branchColumn ?? ''], visible);
+    return (
+      branchAllowed(options.row[this.descriptor.branchColumn ?? ''], visible) &&
+      readScopeAllows(options.row, await this.readScopeOf(options.visibility))
+    );
   }
 
   /**
@@ -806,6 +832,14 @@ const EXPORT_PAGE_SIZE = 100;
 function branchAllowed(branchId: unknown, visible: readonly number[] | null): boolean {
   if (visible === null || branchId === null || branchId === undefined) return true;
   return typeof branchId === 'number' && visible.includes(branchId);
+}
+
+/** Whether a row's values fall inside a read scope (none = every row). */
+function readScopeAllows(
+  row: BaseRecordRow,
+  scope: Readonly<Record<string, readonly unknown[]>> | undefined,
+): boolean {
+  return Object.entries(scope ?? {}).every(([field, allowed]) => allowed.includes(row[field]));
 }
 
 /** An empty page (a filter named a record that is not here). */

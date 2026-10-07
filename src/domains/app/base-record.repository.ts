@@ -656,6 +656,46 @@ export class BaseRecordRepository extends BaseRepository {
     return rows[0] ?? null;
   }
 
+  /**
+   * Moves a live row's counter by `delta` in one guarded statement (a package's sessions used, a
+   * batch's quantity) — never below zero, never above `ceilingColumn` when named.
+   *
+   * @remarks
+   * - **Algorithm:** `UPDATE … SET column = column + delta WHERE … AND column + delta >= 0 [AND
+   *   column + delta <= ceilingColumn] RETURNING *` — the guard and the write are one statement,
+   *   so concurrent moves can never overshoot.
+   * - **Failure modes:** none; a move the guard refuses (or a gone row) answers null.
+   */
+  async adjust(options: {
+    id: number;
+    column: string;
+    delta: number;
+    ceilingColumn?: string;
+    userId: number | null;
+  }): Promise<BaseRecordRow | null> {
+    const column = this.column(options.column);
+    const moved = sql`${column} + ${options.delta}`;
+    const rows = (await getRequestDatabase()
+      .update(this.config.table)
+      .set({
+        [options.column]: moved,
+        updated_at: sql`greatest(${this.column('created_at')}, now())`,
+        updated_by_user_id: options.userId,
+      } as never)
+      .where(
+        and(
+          eq(this.column('id'), options.id),
+          isNull(this.column('deleted_at')),
+          sql`${moved} >= 0`,
+          options.ceilingColumn
+            ? sql`${moved} <= ${this.column(options.ceilingColumn)}`
+            : undefined,
+        ),
+      )
+      .returning()) as BaseRecordRow[];
+    return rows[0] ?? null;
+  }
+
   /** Soft-deletes a live row with its reason; returns it, or null when it is gone. */
   async softDelete(
     id: number,

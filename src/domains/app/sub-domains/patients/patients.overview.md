@@ -27,6 +27,7 @@ A registered patient (launch ROUTE #13). Table `app.patients`.
 | `POST /app/patients` | `patient:create` |
 | `GET /app/patients/{patient_id}` | `patient:read` |
 | `PATCH /app/patients/{patient_id}` | `patient:update` |
+| `GET /app/patients/{patient_id}/timeline` | `patient:read` |
 | `DELETE /app/patients/{patient_id}` | `patient:delete` |
 | `POST /app/patients/{patient_id}/restore` | `patient:delete` |
 

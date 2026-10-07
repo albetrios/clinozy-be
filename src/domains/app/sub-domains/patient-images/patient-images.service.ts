@@ -5,6 +5,7 @@ import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js'
 import type { PatientImagesRepository } from './patient-images.repository.js';
 import { serializePatientImage } from './patient-images.serializer.js';
 import type { PatientImageOutput } from './patient-images.types.js';
+import { patientImagesRules } from './patient-images.rules.js';
 import {
   validateCreatePatientImage,
   validateListPatientImagesQuery,
@@ -35,6 +36,7 @@ export class PatientImagesService extends BaseRecordService<PatientImageOutput> 
         { field: 'appointment_id', table: appointments, label: 'appointment' },
       ],
       parent: { field: 'patient_id', table: patients, label: 'Patient' },
+      ...patientImagesRules,
     });
   }
 }

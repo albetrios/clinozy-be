@@ -129,6 +129,15 @@ export const listPatientsQueryDto = listSearchSortSchema([
   })
   .strict();
 
+/** Query of `GET /app/patients/{patient_id}/timeline`. */
+export const timelinePatientQueryDto = z
+  .object({
+    group: z.enum(['all', 'clinical', 'money', 'messages']).optional(),
+    before: instantSchema.optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+  })
+  .strict();
+
 /** Parsed {@link CreatePatientDto}. */
 export type CreatePatientInput = z.infer<typeof CreatePatientDto>;
 /** Parsed {@link UpdatePatientDto}. */

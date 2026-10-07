@@ -39,6 +39,7 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
     'object-ownership: subscription payment-setup (cross-organization)',
   'GET /api/v1/notify/webhooks/:webhook_id': 'cross-organization-resource: webhook',
   'GET /api/v1/app/branches/:branch_id': 'cross-organization-resource: branch',
+  'GET /api/v1/app/patients/:patient_id/timeline': 'cross-organization-resource: patient',
   'POST /api/v1/app/appointments/:appointment_id/copy': 'cross-organization-resource: appointment',
   'POST /api/v1/app/leads/:lead_id/convert': 'cross-organization-resource: lead',
   'GET /api/v1/app/messages/:message_id': 'cross-organization-resource: message',

@@ -198,5 +198,9 @@
   "slotTaken": "The {{resource}} is already booked at {{start_time}}",
   "appointmentNotMovable": "A {{status}} appointment cannot be moved",
   "appointmentNotDue": "This appointment is not due yet, so it cannot be marked {{status}}",
-  "visitStarted": "The visit has started — the check-in cannot be undone"
+  "visitStarted": "The visit has started — the check-in cannot be undone",
+  "prescriptionApproved": "An approved prescription cannot be changed",
+  "packageExpired": "This package has expired",
+  "packageUsedUp": "Every session of this package is used",
+  "treatmentReversed": "A reversed session cannot be changed"
 }

@@ -6,6 +6,7 @@ import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js'
 import type { PrescriptionsRepository } from './prescriptions.repository.js';
 import { serializePrescription } from './prescriptions.serializer.js';
 import type { PrescriptionOutput } from './prescriptions.types.js';
+import { prescriptionsRules } from './prescriptions.rules.js';
 import {
   validateCreatePrescription,
   validateListPrescriptionsQuery,
@@ -40,6 +41,7 @@ export class PrescriptionsService extends BaseRecordService<PrescriptionOutput> 
       transitions: {
         approve: { from: ['draft'], set: { status: 'approved' }, stamp: ['approved_at'] },
       },
+      ...prescriptionsRules,
     });
   }
 }

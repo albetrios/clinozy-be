@@ -11,6 +11,7 @@ import {
   UpdatePatientDto,
   listPatientsQueryDto,
   patientsIdParamsDto,
+  timelinePatientQueryDto,
 } from './patients.dto.js';
 
 /** Registers the `patients` routes (prefix `/api/v1/app`). */
@@ -97,6 +98,23 @@ export function patientsRoutes(service: PatientsService): FastifyPluginAsync {
         },
       },
       controller.update,
+    );
+    zodApplication.get<{ Params: { patient_id: string } }>(
+      '/patients/:patient_id/timeline',
+      {
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_READ)],
+        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        schema: {
+          summary: 'Patient timeline',
+          description:
+            "The patient's history, newest first, merged from visits, treatments, prescriptions, check-ins, packages, reports, photos and notes (`clinical`), invoices and payments (`money`) and messages (`messages`) \u2014 each kind only for a caller who may read it; clinical notes need clinical_record:read and Private photos private_album:read. Pages with `before` (the last entry's `at`). Answers `{ items: [{ kind, group, id, at, fields }], next_before }`. Requires patient:read.",
+          tags: ['Patient'],
+          params: patientsIdParamsDto,
+          querystring: timelinePatientQueryDto,
+        },
+      },
+      controller.view('timeline'),
     );
     zodApplication.delete<{ Params: { patient_id: string } }>(
       '/patients/:patient_id',

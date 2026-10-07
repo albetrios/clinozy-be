@@ -134,6 +134,14 @@ export interface BaseRecordChange {
  *   (references already resolved to ids). Throw a typed error to refuse the write.
  */
 export interface BaseRecordRules {
+  /**
+   * The rows a caller may read at all, as `column → allowed values` (the Private album only for
+   * its holders) — applied to every list, read, write and restore by id; an internal call (no
+   * `can`) reads everything.
+   */
+  readScope?: (
+    can: (code: string) => Promise<boolean>,
+  ) => Promise<Readonly<Record<string, readonly unknown[]>> | undefined>;
   /** Fills or checks a create's values before the insert (defaults by rule, cross-table checks). */
   prepareCreate?: (
     values: Record<string, unknown>,
