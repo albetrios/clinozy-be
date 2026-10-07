@@ -16,24 +16,49 @@ src/
     │   ├── seed/
     │   │   └── index.ts
     │   ├── sub-domains/
-    │   │   └── branches/
+    │   │   ├── appointments/
+    │   │   │   ├── appointments.constants.ts
+    │   │   │   ├── appointments.controller.ts
+    │   │   │   ├── appointments.dto.ts
+    │   │   │   ├── appointments.overview.md
+    │   │   │   ├── appointments.repository.ts
+    │   │   │   ├── appointments.routes.ts
+    │   │   │   ├── appointments.rules.ts
+    │   │   │   ├── appointments.schema.ts
+    │   │   │   ├── appointments.serializer.ts
+    │   │   │   ├── appointments.service.ts
+    │   │   │   ├── appointments.types.ts
+    │   │   │   └── appointments.validator.ts
+    │   │   ├── branch-holidays/
+    │   │   │   ├── branch-holidays.constants.ts
+    │   │   │   ├── branch-holidays.controller.ts
+    │   │   │   ├── branch-holidays.dto.ts
+    │   │   │   ├── branch-holidays.overview.md
+    │   │   │   ├── branch-holidays.repository.ts
+    │   │   │   ├── branch-holidays.routes.ts
+    │   │   │   ├── branch-holidays.schema.ts
+    │   │   │   ├── branch-holidays.serializer.ts
+    │   │   │   ├── branch-holidays.service.ts
+    │   │   │   ├── branch-holidays.types.ts
+    │   │   │   └── branch-holidays.validator.ts
+    │   │   ├── branches/
     │   │   │   ├── __tests__/
-    │   │   │       └── integration/
-    │   │   │       │   ├── branches-schema.integration.test.ts
-    │   │   │       │   └── branches.integration.test.ts
+    │   │   │   │   └── integration/
+    │   │   │   │   │   ├── branches-schema.integration.test.ts
+    │   │   │   │   │   └── branches.integration.test.ts
     │   │   │   ├── branch-user-accesses/
-    │   │   │       ├── branch-user-accesses.controller.ts
-    │   │   │       ├── branch-user-accesses.dto.ts
-    │   │   │       ├── branch-user-accesses.repository.ts
-    │   │   │       ├── branch-user-accesses.routes.ts
-    │   │   │       ├── branch-user-accesses.schema.ts
-    │   │   │       ├── branch-user-accesses.serializer.ts
-    │   │   │       ├── branch-user-accesses.service.ts
-    │   │   │       └── branch-user-accesses.validator.ts
+    │   │   │   │   ├── branch-user-accesses.controller.ts
+    │   │   │   │   ├── branch-user-accesses.dto.ts
+    │   │   │   │   ├── branch-user-accesses.repository.ts
+    │   │   │   │   ├── branch-user-accesses.routes.ts
+    │   │   │   │   ├── branch-user-accesses.schema.ts
+    │   │   │   │   ├── branch-user-accesses.serializer.ts
+    │   │   │   │   ├── branch-user-accesses.service.ts
+    │   │   │   │   └── branch-user-accesses.validator.ts
     │   │   │   ├── seed/
-    │   │   │       ├── branches.bulk.seed.ts
-    │   │   │       ├── branches.seed.ts
-    │   │   │       └── index.ts
+    │   │   │   │   ├── branches.bulk.seed.ts
+    │   │   │   │   ├── branches.seed.ts
+    │   │   │   │   └── index.ts
     │   │   │   ├── branches.constants.ts
     │   │   │   ├── branches.controller.ts
     │   │   │   ├── branches.dto.ts
@@ -45,10 +70,628 @@ src/
     │   │   │   ├── branches.service.ts
     │   │   │   ├── branches.types.ts
     │   │   │   └── branches.validator.ts
+    │   │   ├── check-ins/
+    │   │   │   ├── check-ins.constants.ts
+    │   │   │   ├── check-ins.controller.ts
+    │   │   │   ├── check-ins.dto.ts
+    │   │   │   ├── check-ins.overview.md
+    │   │   │   ├── check-ins.repository.ts
+    │   │   │   ├── check-ins.routes.ts
+    │   │   │   ├── check-ins.schema.ts
+    │   │   │   ├── check-ins.serializer.ts
+    │   │   │   ├── check-ins.service.ts
+    │   │   │   ├── check-ins.types.ts
+    │   │   │   └── check-ins.validator.ts
+    │   │   ├── contacts/
+    │   │   │   ├── contacts.controller.ts
+    │   │   │   ├── contacts.dto.ts
+    │   │   │   ├── contacts.overview.md
+    │   │   │   ├── contacts.routes.ts
+    │   │   │   ├── contacts.serializer.ts
+    │   │   │   ├── contacts.service.ts
+    │   │   │   ├── contacts.types.ts
+    │   │   │   └── contacts.validator.ts
+    │   │   ├── credit-notes/
+    │   │   │   ├── credit-notes.constants.ts
+    │   │   │   ├── credit-notes.controller.ts
+    │   │   │   ├── credit-notes.dto.ts
+    │   │   │   ├── credit-notes.overview.md
+    │   │   │   ├── credit-notes.repository.ts
+    │   │   │   ├── credit-notes.routes.ts
+    │   │   │   ├── credit-notes.schema.ts
+    │   │   │   ├── credit-notes.serializer.ts
+    │   │   │   ├── credit-notes.service.ts
+    │   │   │   ├── credit-notes.types.ts
+    │   │   │   └── credit-notes.validator.ts
+    │   │   ├── day-close-events/
+    │   │   │   ├── day-close-events.constants.ts
+    │   │   │   ├── day-close-events.repository.ts
+    │   │   │   └── day-close-events.schema.ts
+    │   │   ├── day-closes/
+    │   │   │   ├── day-closes.constants.ts
+    │   │   │   ├── day-closes.controller.ts
+    │   │   │   ├── day-closes.dto.ts
+    │   │   │   ├── day-closes.overview.md
+    │   │   │   ├── day-closes.repository.ts
+    │   │   │   ├── day-closes.routes.ts
+    │   │   │   ├── day-closes.schema.ts
+    │   │   │   ├── day-closes.serializer.ts
+    │   │   │   ├── day-closes.service.ts
+    │   │   │   ├── day-closes.types.ts
+    │   │   │   └── day-closes.validator.ts
+    │   │   ├── diagnoses/
+    │   │   │   ├── diagnoses.constants.ts
+    │   │   │   ├── diagnoses.controller.ts
+    │   │   │   ├── diagnoses.dto.ts
+    │   │   │   ├── diagnoses.overview.md
+    │   │   │   ├── diagnoses.repository.ts
+    │   │   │   ├── diagnoses.routes.ts
+    │   │   │   ├── diagnoses.schema.ts
+    │   │   │   ├── diagnoses.serializer.ts
+    │   │   │   ├── diagnoses.service.ts
+    │   │   │   ├── diagnoses.types.ts
+    │   │   │   └── diagnoses.validator.ts
+    │   │   ├── feedback-actions/
+    │   │   │   ├── feedback-actions.constants.ts
+    │   │   │   ├── feedback-actions.controller.ts
+    │   │   │   ├── feedback-actions.dto.ts
+    │   │   │   ├── feedback-actions.overview.md
+    │   │   │   ├── feedback-actions.repository.ts
+    │   │   │   ├── feedback-actions.routes.ts
+    │   │   │   ├── feedback-actions.schema.ts
+    │   │   │   ├── feedback-actions.serializer.ts
+    │   │   │   ├── feedback-actions.service.ts
+    │   │   │   ├── feedback-actions.types.ts
+    │   │   │   └── feedback-actions.validator.ts
+    │   │   ├── invoices/
+    │   │   │   ├── invoices.constants.ts
+    │   │   │   ├── invoices.controller.ts
+    │   │   │   ├── invoices.dto.ts
+    │   │   │   ├── invoices.overview.md
+    │   │   │   ├── invoices.repository.ts
+    │   │   │   ├── invoices.routes.ts
+    │   │   │   ├── invoices.schema.ts
+    │   │   │   ├── invoices.serializer.ts
+    │   │   │   ├── invoices.service.ts
+    │   │   │   ├── invoices.types.ts
+    │   │   │   └── invoices.validator.ts
+    │   │   ├── lead-reads/
+    │   │   │   ├── lead-reads.constants.ts
+    │   │   │   ├── lead-reads.repository.ts
+    │   │   │   └── lead-reads.schema.ts
+    │   │   ├── leads/
+    │   │   │   ├── leads.constants.ts
+    │   │   │   ├── leads.controller.ts
+    │   │   │   ├── leads.dto.ts
+    │   │   │   ├── leads.overview.md
+    │   │   │   ├── leads.repository.ts
+    │   │   │   ├── leads.routes.ts
+    │   │   │   ├── leads.rules.ts
+    │   │   │   ├── leads.schema.ts
+    │   │   │   ├── leads.serializer.ts
+    │   │   │   ├── leads.service.ts
+    │   │   │   ├── leads.types.ts
+    │   │   │   └── leads.validator.ts
+    │   │   ├── machines/
+    │   │   │   ├── machines.constants.ts
+    │   │   │   ├── machines.controller.ts
+    │   │   │   ├── machines.dto.ts
+    │   │   │   ├── machines.overview.md
+    │   │   │   ├── machines.repository.ts
+    │   │   │   ├── machines.routes.ts
+    │   │   │   ├── machines.schema.ts
+    │   │   │   ├── machines.serializer.ts
+    │   │   │   ├── machines.service.ts
+    │   │   │   ├── machines.types.ts
+    │   │   │   └── machines.validator.ts
+    │   │   ├── manufacturers/
+    │   │   │   ├── manufacturers.constants.ts
+    │   │   │   ├── manufacturers.controller.ts
+    │   │   │   ├── manufacturers.dto.ts
+    │   │   │   ├── manufacturers.overview.md
+    │   │   │   ├── manufacturers.repository.ts
+    │   │   │   ├── manufacturers.routes.ts
+    │   │   │   ├── manufacturers.schema.ts
+    │   │   │   ├── manufacturers.serializer.ts
+    │   │   │   ├── manufacturers.service.ts
+    │   │   │   ├── manufacturers.types.ts
+    │   │   │   └── manufacturers.validator.ts
+    │   │   ├── medical-contacts/
+    │   │   │   ├── medical-contacts.constants.ts
+    │   │   │   ├── medical-contacts.controller.ts
+    │   │   │   ├── medical-contacts.dto.ts
+    │   │   │   ├── medical-contacts.overview.md
+    │   │   │   ├── medical-contacts.repository.ts
+    │   │   │   ├── medical-contacts.routes.ts
+    │   │   │   ├── medical-contacts.schema.ts
+    │   │   │   ├── medical-contacts.serializer.ts
+    │   │   │   ├── medical-contacts.service.ts
+    │   │   │   ├── medical-contacts.types.ts
+    │   │   │   └── medical-contacts.validator.ts
+    │   │   ├── medical-purchase-orders/
+    │   │   │   ├── medical-purchase-orders.constants.ts
+    │   │   │   ├── medical-purchase-orders.controller.ts
+    │   │   │   ├── medical-purchase-orders.dto.ts
+    │   │   │   ├── medical-purchase-orders.overview.md
+    │   │   │   ├── medical-purchase-orders.repository.ts
+    │   │   │   ├── medical-purchase-orders.routes.ts
+    │   │   │   ├── medical-purchase-orders.schema.ts
+    │   │   │   ├── medical-purchase-orders.serializer.ts
+    │   │   │   ├── medical-purchase-orders.service.ts
+    │   │   │   ├── medical-purchase-orders.types.ts
+    │   │   │   └── medical-purchase-orders.validator.ts
+    │   │   ├── medical-rep-visits/
+    │   │   │   ├── medical-rep-visits.constants.ts
+    │   │   │   ├── medical-rep-visits.controller.ts
+    │   │   │   ├── medical-rep-visits.dto.ts
+    │   │   │   ├── medical-rep-visits.overview.md
+    │   │   │   ├── medical-rep-visits.repository.ts
+    │   │   │   ├── medical-rep-visits.routes.ts
+    │   │   │   ├── medical-rep-visits.schema.ts
+    │   │   │   ├── medical-rep-visits.serializer.ts
+    │   │   │   ├── medical-rep-visits.service.ts
+    │   │   │   ├── medical-rep-visits.types.ts
+    │   │   │   └── medical-rep-visits.validator.ts
+    │   │   ├── medical-reps/
+    │   │   │   ├── medical-reps.constants.ts
+    │   │   │   ├── medical-reps.controller.ts
+    │   │   │   ├── medical-reps.dto.ts
+    │   │   │   ├── medical-reps.overview.md
+    │   │   │   ├── medical-reps.repository.ts
+    │   │   │   ├── medical-reps.routes.ts
+    │   │   │   ├── medical-reps.schema.ts
+    │   │   │   ├── medical-reps.serializer.ts
+    │   │   │   ├── medical-reps.service.ts
+    │   │   │   ├── medical-reps.types.ts
+    │   │   │   └── medical-reps.validator.ts
+    │   │   ├── medical-sales/
+    │   │   │   ├── medical-sales.constants.ts
+    │   │   │   ├── medical-sales.controller.ts
+    │   │   │   ├── medical-sales.dto.ts
+    │   │   │   ├── medical-sales.overview.md
+    │   │   │   ├── medical-sales.repository.ts
+    │   │   │   ├── medical-sales.routes.ts
+    │   │   │   ├── medical-sales.schema.ts
+    │   │   │   ├── medical-sales.serializer.ts
+    │   │   │   ├── medical-sales.service.ts
+    │   │   │   ├── medical-sales.types.ts
+    │   │   │   └── medical-sales.validator.ts
+    │   │   ├── medicines/
+    │   │   │   ├── medicines.constants.ts
+    │   │   │   ├── medicines.controller.ts
+    │   │   │   ├── medicines.dto.ts
+    │   │   │   ├── medicines.overview.md
+    │   │   │   ├── medicines.repository.ts
+    │   │   │   ├── medicines.routes.ts
+    │   │   │   ├── medicines.schema.ts
+    │   │   │   ├── medicines.serializer.ts
+    │   │   │   ├── medicines.service.ts
+    │   │   │   ├── medicines.types.ts
+    │   │   │   └── medicines.validator.ts
+    │   │   ├── message-templates/
+    │   │   │   ├── message-templates.constants.ts
+    │   │   │   ├── message-templates.controller.ts
+    │   │   │   ├── message-templates.dto.ts
+    │   │   │   ├── message-templates.overview.md
+    │   │   │   ├── message-templates.repository.ts
+    │   │   │   ├── message-templates.routes.ts
+    │   │   │   ├── message-templates.schema.ts
+    │   │   │   ├── message-templates.serializer.ts
+    │   │   │   ├── message-templates.service.ts
+    │   │   │   ├── message-templates.types.ts
+    │   │   │   └── message-templates.validator.ts
+    │   │   ├── messages/
+    │   │   │   ├── messages.constants.ts
+    │   │   │   ├── messages.controller.ts
+    │   │   │   ├── messages.dto.ts
+    │   │   │   ├── messages.overview.md
+    │   │   │   ├── messages.repository.ts
+    │   │   │   ├── messages.routes.ts
+    │   │   │   ├── messages.rules.ts
+    │   │   │   ├── messages.schema.ts
+    │   │   │   ├── messages.serializer.ts
+    │   │   │   ├── messages.service.ts
+    │   │   │   ├── messages.types.ts
+    │   │   │   └── messages.validator.ts
+    │   │   ├── offering-groups/
+    │   │   │   ├── offering-groups.constants.ts
+    │   │   │   ├── offering-groups.controller.ts
+    │   │   │   ├── offering-groups.dto.ts
+    │   │   │   ├── offering-groups.overview.md
+    │   │   │   ├── offering-groups.repository.ts
+    │   │   │   ├── offering-groups.routes.ts
+    │   │   │   ├── offering-groups.schema.ts
+    │   │   │   ├── offering-groups.serializer.ts
+    │   │   │   ├── offering-groups.service.ts
+    │   │   │   ├── offering-groups.types.ts
+    │   │   │   └── offering-groups.validator.ts
+    │   │   ├── offering-suggestions/
+    │   │   │   ├── offering-suggestions.constants.ts
+    │   │   │   ├── offering-suggestions.controller.ts
+    │   │   │   ├── offering-suggestions.dto.ts
+    │   │   │   ├── offering-suggestions.overview.md
+    │   │   │   ├── offering-suggestions.repository.ts
+    │   │   │   ├── offering-suggestions.routes.ts
+    │   │   │   ├── offering-suggestions.schema.ts
+    │   │   │   ├── offering-suggestions.serializer.ts
+    │   │   │   ├── offering-suggestions.service.ts
+    │   │   │   ├── offering-suggestions.types.ts
+    │   │   │   └── offering-suggestions.validator.ts
+    │   │   ├── offerings/
+    │   │   │   ├── offerings.constants.ts
+    │   │   │   ├── offerings.controller.ts
+    │   │   │   ├── offerings.dto.ts
+    │   │   │   ├── offerings.overview.md
+    │   │   │   ├── offerings.repository.ts
+    │   │   │   ├── offerings.routes.ts
+    │   │   │   ├── offerings.rules.ts
+    │   │   │   ├── offerings.schema.ts
+    │   │   │   ├── offerings.serializer.ts
+    │   │   │   ├── offerings.service.ts
+    │   │   │   ├── offerings.types.ts
+    │   │   │   └── offerings.validator.ts
+    │   │   ├── offers/
+    │   │   │   ├── offers.constants.ts
+    │   │   │   ├── offers.controller.ts
+    │   │   │   ├── offers.dto.ts
+    │   │   │   ├── offers.overview.md
+    │   │   │   ├── offers.repository.ts
+    │   │   │   ├── offers.routes.ts
+    │   │   │   ├── offers.schema.ts
+    │   │   │   ├── offers.serializer.ts
+    │   │   │   ├── offers.service.ts
+    │   │   │   ├── offers.types.ts
+    │   │   │   └── offers.validator.ts
+    │   │   ├── patient-clinical-notes/
+    │   │   │   ├── patient-clinical-notes.constants.ts
+    │   │   │   ├── patient-clinical-notes.controller.ts
+    │   │   │   ├── patient-clinical-notes.dto.ts
+    │   │   │   ├── patient-clinical-notes.overview.md
+    │   │   │   ├── patient-clinical-notes.repository.ts
+    │   │   │   ├── patient-clinical-notes.routes.ts
+    │   │   │   ├── patient-clinical-notes.schema.ts
+    │   │   │   ├── patient-clinical-notes.serializer.ts
+    │   │   │   ├── patient-clinical-notes.service.ts
+    │   │   │   ├── patient-clinical-notes.types.ts
+    │   │   │   └── patient-clinical-notes.validator.ts
+    │   │   ├── patient-ideas/
+    │   │   │   ├── patient-ideas.constants.ts
+    │   │   │   ├── patient-ideas.repository.ts
+    │   │   │   └── patient-ideas.schema.ts
+    │   │   ├── patient-images/
+    │   │   │   ├── patient-images.constants.ts
+    │   │   │   ├── patient-images.controller.ts
+    │   │   │   ├── patient-images.dto.ts
+    │   │   │   ├── patient-images.overview.md
+    │   │   │   ├── patient-images.repository.ts
+    │   │   │   ├── patient-images.routes.ts
+    │   │   │   ├── patient-images.schema.ts
+    │   │   │   ├── patient-images.serializer.ts
+    │   │   │   ├── patient-images.service.ts
+    │   │   │   ├── patient-images.types.ts
+    │   │   │   └── patient-images.validator.ts
+    │   │   ├── patient-notes/
+    │   │   │   ├── patient-notes.constants.ts
+    │   │   │   ├── patient-notes.controller.ts
+    │   │   │   ├── patient-notes.dto.ts
+    │   │   │   ├── patient-notes.overview.md
+    │   │   │   ├── patient-notes.repository.ts
+    │   │   │   ├── patient-notes.routes.ts
+    │   │   │   ├── patient-notes.schema.ts
+    │   │   │   ├── patient-notes.serializer.ts
+    │   │   │   ├── patient-notes.service.ts
+    │   │   │   ├── patient-notes.types.ts
+    │   │   │   └── patient-notes.validator.ts
+    │   │   ├── patient-packages/
+    │   │   │   ├── patient-packages.constants.ts
+    │   │   │   ├── patient-packages.controller.ts
+    │   │   │   ├── patient-packages.dto.ts
+    │   │   │   ├── patient-packages.overview.md
+    │   │   │   ├── patient-packages.repository.ts
+    │   │   │   ├── patient-packages.routes.ts
+    │   │   │   ├── patient-packages.schema.ts
+    │   │   │   ├── patient-packages.serializer.ts
+    │   │   │   ├── patient-packages.service.ts
+    │   │   │   ├── patient-packages.types.ts
+    │   │   │   └── patient-packages.validator.ts
+    │   │   ├── patient-reports/
+    │   │   │   ├── patient-reports.constants.ts
+    │   │   │   ├── patient-reports.controller.ts
+    │   │   │   ├── patient-reports.dto.ts
+    │   │   │   ├── patient-reports.overview.md
+    │   │   │   ├── patient-reports.repository.ts
+    │   │   │   ├── patient-reports.routes.ts
+    │   │   │   ├── patient-reports.schema.ts
+    │   │   │   ├── patient-reports.serializer.ts
+    │   │   │   ├── patient-reports.service.ts
+    │   │   │   ├── patient-reports.types.ts
+    │   │   │   └── patient-reports.validator.ts
+    │   │   ├── patients/
+    │   │   │   ├── patients.constants.ts
+    │   │   │   ├── patients.controller.ts
+    │   │   │   ├── patients.dto.ts
+    │   │   │   ├── patients.overview.md
+    │   │   │   ├── patients.repository.ts
+    │   │   │   ├── patients.routes.ts
+    │   │   │   ├── patients.rules.ts
+    │   │   │   ├── patients.schema.ts
+    │   │   │   ├── patients.serializer.ts
+    │   │   │   ├── patients.service.ts
+    │   │   │   ├── patients.types.ts
+    │   │   │   └── patients.validator.ts
+    │   │   ├── payment-edits/
+    │   │   │   ├── payment-edits.constants.ts
+    │   │   │   ├── payment-edits.repository.ts
+    │   │   │   └── payment-edits.schema.ts
+    │   │   ├── payments/
+    │   │   │   ├── payments.constants.ts
+    │   │   │   ├── payments.controller.ts
+    │   │   │   ├── payments.dto.ts
+    │   │   │   ├── payments.overview.md
+    │   │   │   ├── payments.repository.ts
+    │   │   │   ├── payments.routes.ts
+    │   │   │   ├── payments.schema.ts
+    │   │   │   ├── payments.serializer.ts
+    │   │   │   ├── payments.service.ts
+    │   │   │   ├── payments.types.ts
+    │   │   │   └── payments.validator.ts
+    │   │   ├── pending-credits/
+    │   │   │   ├── pending-credits.constants.ts
+    │   │   │   ├── pending-credits.controller.ts
+    │   │   │   ├── pending-credits.dto.ts
+    │   │   │   ├── pending-credits.overview.md
+    │   │   │   ├── pending-credits.repository.ts
+    │   │   │   ├── pending-credits.routes.ts
+    │   │   │   ├── pending-credits.schema.ts
+    │   │   │   ├── pending-credits.serializer.ts
+    │   │   │   ├── pending-credits.service.ts
+    │   │   │   ├── pending-credits.types.ts
+    │   │   │   └── pending-credits.validator.ts
+    │   │   ├── prescription-kits/
+    │   │   │   ├── prescription-kits.constants.ts
+    │   │   │   ├── prescription-kits.controller.ts
+    │   │   │   ├── prescription-kits.dto.ts
+    │   │   │   ├── prescription-kits.overview.md
+    │   │   │   ├── prescription-kits.repository.ts
+    │   │   │   ├── prescription-kits.routes.ts
+    │   │   │   ├── prescription-kits.schema.ts
+    │   │   │   ├── prescription-kits.serializer.ts
+    │   │   │   ├── prescription-kits.service.ts
+    │   │   │   ├── prescription-kits.types.ts
+    │   │   │   └── prescription-kits.validator.ts
+    │   │   ├── prescriptions/
+    │   │   │   ├── prescriptions.constants.ts
+    │   │   │   ├── prescriptions.controller.ts
+    │   │   │   ├── prescriptions.dto.ts
+    │   │   │   ├── prescriptions.overview.md
+    │   │   │   ├── prescriptions.repository.ts
+    │   │   │   ├── prescriptions.routes.ts
+    │   │   │   ├── prescriptions.schema.ts
+    │   │   │   ├── prescriptions.serializer.ts
+    │   │   │   ├── prescriptions.service.ts
+    │   │   │   ├── prescriptions.types.ts
+    │   │   │   └── prescriptions.validator.ts
+    │   │   ├── record-counters/
+    │   │   │   ├── record-counters.overview.md
+    │   │   │   └── record-counters.schema.ts
+    │   │   ├── reviews/
+    │   │   │   ├── reviews.constants.ts
+    │   │   │   ├── reviews.controller.ts
+    │   │   │   ├── reviews.dto.ts
+    │   │   │   ├── reviews.overview.md
+    │   │   │   ├── reviews.repository.ts
+    │   │   │   ├── reviews.routes.ts
+    │   │   │   ├── reviews.schema.ts
+    │   │   │   ├── reviews.serializer.ts
+    │   │   │   ├── reviews.service.ts
+    │   │   │   ├── reviews.types.ts
+    │   │   │   └── reviews.validator.ts
+    │   │   ├── rooms/
+    │   │   │   ├── rooms.constants.ts
+    │   │   │   ├── rooms.controller.ts
+    │   │   │   ├── rooms.dto.ts
+    │   │   │   ├── rooms.overview.md
+    │   │   │   ├── rooms.repository.ts
+    │   │   │   ├── rooms.routes.ts
+    │   │   │   ├── rooms.schema.ts
+    │   │   │   ├── rooms.serializer.ts
+    │   │   │   ├── rooms.service.ts
+    │   │   │   ├── rooms.types.ts
+    │   │   │   └── rooms.validator.ts
+    │   │   ├── saved-views/
+    │   │   │   ├── saved-views.constants.ts
+    │   │   │   ├── saved-views.controller.ts
+    │   │   │   ├── saved-views.dto.ts
+    │   │   │   ├── saved-views.overview.md
+    │   │   │   ├── saved-views.repository.ts
+    │   │   │   ├── saved-views.routes.ts
+    │   │   │   ├── saved-views.schema.ts
+    │   │   │   ├── saved-views.serializer.ts
+    │   │   │   ├── saved-views.service.ts
+    │   │   │   ├── saved-views.types.ts
+    │   │   │   └── saved-views.validator.ts
+    │   │   ├── searches/
+    │   │   │   ├── searches.controller.ts
+    │   │   │   ├── searches.dto.ts
+    │   │   │   ├── searches.overview.md
+    │   │   │   ├── searches.routes.ts
+    │   │   │   ├── searches.service.ts
+    │   │   │   ├── searches.types.ts
+    │   │   │   └── searches.validator.ts
+    │   │   ├── stock-counts/
+    │   │   │   ├── stock-counts.constants.ts
+    │   │   │   ├── stock-counts.controller.ts
+    │   │   │   ├── stock-counts.dto.ts
+    │   │   │   ├── stock-counts.overview.md
+    │   │   │   ├── stock-counts.repository.ts
+    │   │   │   ├── stock-counts.routes.ts
+    │   │   │   ├── stock-counts.schema.ts
+    │   │   │   ├── stock-counts.serializer.ts
+    │   │   │   ├── stock-counts.service.ts
+    │   │   │   ├── stock-counts.types.ts
+    │   │   │   └── stock-counts.validator.ts
+    │   │   ├── stock-items/
+    │   │   │   ├── stock-items.constants.ts
+    │   │   │   ├── stock-items.controller.ts
+    │   │   │   ├── stock-items.dto.ts
+    │   │   │   ├── stock-items.overview.md
+    │   │   │   ├── stock-items.repository.ts
+    │   │   │   ├── stock-items.routes.ts
+    │   │   │   ├── stock-items.schema.ts
+    │   │   │   ├── stock-items.serializer.ts
+    │   │   │   ├── stock-items.service.ts
+    │   │   │   ├── stock-items.types.ts
+    │   │   │   └── stock-items.validator.ts
+    │   │   ├── stock-movements/
+    │   │   │   ├── stock-movements.constants.ts
+    │   │   │   ├── stock-movements.controller.ts
+    │   │   │   ├── stock-movements.dto.ts
+    │   │   │   ├── stock-movements.overview.md
+    │   │   │   ├── stock-movements.repository.ts
+    │   │   │   ├── stock-movements.routes.ts
+    │   │   │   ├── stock-movements.schema.ts
+    │   │   │   ├── stock-movements.serializer.ts
+    │   │   │   ├── stock-movements.service.ts
+    │   │   │   ├── stock-movements.types.ts
+    │   │   │   └── stock-movements.validator.ts
+    │   │   ├── stock-purchases/
+    │   │   │   ├── stock-purchases.constants.ts
+    │   │   │   ├── stock-purchases.controller.ts
+    │   │   │   ├── stock-purchases.dto.ts
+    │   │   │   ├── stock-purchases.overview.md
+    │   │   │   ├── stock-purchases.repository.ts
+    │   │   │   ├── stock-purchases.routes.ts
+    │   │   │   ├── stock-purchases.schema.ts
+    │   │   │   ├── stock-purchases.serializer.ts
+    │   │   │   ├── stock-purchases.service.ts
+    │   │   │   ├── stock-purchases.types.ts
+    │   │   │   └── stock-purchases.validator.ts
+    │   │   ├── stock-vendors/
+    │   │   │   ├── stock-vendors.constants.ts
+    │   │   │   ├── stock-vendors.controller.ts
+    │   │   │   ├── stock-vendors.dto.ts
+    │   │   │   ├── stock-vendors.overview.md
+    │   │   │   ├── stock-vendors.repository.ts
+    │   │   │   ├── stock-vendors.routes.ts
+    │   │   │   ├── stock-vendors.schema.ts
+    │   │   │   ├── stock-vendors.serializer.ts
+    │   │   │   ├── stock-vendors.service.ts
+    │   │   │   ├── stock-vendors.types.ts
+    │   │   │   └── stock-vendors.validator.ts
+    │   │   ├── supplier-credits/
+    │   │   │   ├── supplier-credits.constants.ts
+    │   │   │   ├── supplier-credits.controller.ts
+    │   │   │   ├── supplier-credits.dto.ts
+    │   │   │   ├── supplier-credits.overview.md
+    │   │   │   ├── supplier-credits.repository.ts
+    │   │   │   ├── supplier-credits.routes.ts
+    │   │   │   ├── supplier-credits.schema.ts
+    │   │   │   ├── supplier-credits.serializer.ts
+    │   │   │   ├── supplier-credits.service.ts
+    │   │   │   ├── supplier-credits.types.ts
+    │   │   │   └── supplier-credits.validator.ts
+    │   │   ├── suppliers/
+    │   │   │   ├── suppliers.constants.ts
+    │   │   │   ├── suppliers.controller.ts
+    │   │   │   ├── suppliers.dto.ts
+    │   │   │   ├── suppliers.overview.md
+    │   │   │   ├── suppliers.repository.ts
+    │   │   │   ├── suppliers.routes.ts
+    │   │   │   ├── suppliers.schema.ts
+    │   │   │   ├── suppliers.serializer.ts
+    │   │   │   ├── suppliers.service.ts
+    │   │   │   ├── suppliers.types.ts
+    │   │   │   └── suppliers.validator.ts
+    │   │   ├── task-owner-changes/
+    │   │   │   ├── task-owner-changes.constants.ts
+    │   │   │   ├── task-owner-changes.repository.ts
+    │   │   │   └── task-owner-changes.schema.ts
+    │   │   ├── task-rule-settings/
+    │   │   │   ├── task-rule-settings.constants.ts
+    │   │   │   ├── task-rule-settings.controller.ts
+    │   │   │   ├── task-rule-settings.dto.ts
+    │   │   │   ├── task-rule-settings.overview.md
+    │   │   │   ├── task-rule-settings.repository.ts
+    │   │   │   ├── task-rule-settings.routes.ts
+    │   │   │   ├── task-rule-settings.schema.ts
+    │   │   │   ├── task-rule-settings.serializer.ts
+    │   │   │   ├── task-rule-settings.service.ts
+    │   │   │   ├── task-rule-settings.types.ts
+    │   │   │   └── task-rule-settings.validator.ts
+    │   │   ├── tasks/
+    │   │   │   ├── tasks.constants.ts
+    │   │   │   ├── tasks.controller.ts
+    │   │   │   ├── tasks.dto.ts
+    │   │   │   ├── tasks.overview.md
+    │   │   │   ├── tasks.repository.ts
+    │   │   │   ├── tasks.routes.ts
+    │   │   │   ├── tasks.schema.ts
+    │   │   │   ├── tasks.serializer.ts
+    │   │   │   ├── tasks.service.ts
+    │   │   │   ├── tasks.types.ts
+    │   │   │   └── tasks.validator.ts
+    │   │   ├── treatments/
+    │   │   │   ├── treatments.constants.ts
+    │   │   │   ├── treatments.controller.ts
+    │   │   │   ├── treatments.dto.ts
+    │   │   │   ├── treatments.overview.md
+    │   │   │   ├── treatments.repository.ts
+    │   │   │   ├── treatments.routes.ts
+    │   │   │   ├── treatments.schema.ts
+    │   │   │   ├── treatments.serializer.ts
+    │   │   │   ├── treatments.service.ts
+    │   │   │   ├── treatments.types.ts
+    │   │   │   └── treatments.validator.ts
+    │   │   ├── user-preferences/
+    │   │   │   ├── user-preferences.constants.ts
+    │   │   │   ├── user-preferences.controller.ts
+    │   │   │   ├── user-preferences.dto.ts
+    │   │   │   ├── user-preferences.overview.md
+    │   │   │   ├── user-preferences.repository.ts
+    │   │   │   ├── user-preferences.routes.ts
+    │   │   │   ├── user-preferences.schema.ts
+    │   │   │   ├── user-preferences.serializer.ts
+    │   │   │   ├── user-preferences.service.ts
+    │   │   │   ├── user-preferences.types.ts
+    │   │   │   └── user-preferences.validator.ts
+    │   │   ├── users/
+    │   │   │   ├── users.controller.ts
+    │   │   │   ├── users.dto.ts
+    │   │   │   ├── users.overview.md
+    │   │   │   ├── users.routes.ts
+    │   │   │   ├── users.serializer.ts
+    │   │   │   ├── users.service.ts
+    │   │   │   ├── users.types.ts
+    │   │   │   └── users.validator.ts
+    │   │   └── visits/
+    │   │   │   ├── visits.constants.ts
+    │   │   │   ├── visits.controller.ts
+    │   │   │   ├── visits.dto.ts
+    │   │   │   ├── visits.overview.md
+    │   │   │   ├── visits.repository.ts
+    │   │   │   ├── visits.routes.ts
+    │   │   │   ├── visits.schema.ts
+    │   │   │   ├── visits.serializer.ts
+    │   │   │   ├── visits.service.ts
+    │   │   │   ├── visits.types.ts
+    │   │   │   └── visits.validator.ts
+    │   ├── workers/
+    │   │   ├── app-record-purge.constants.ts
+    │   │   ├── app-record-purge.processor.ts
+    │   │   └── app-record-purge.worker.ts
+    │   ├── app-access-sections.ts
+    │   ├── app-record-tables.ts
+    │   ├── app-records.container.ts
+    │   ├── app-records.plugin.ts
+    │   ├── app-role-presets.ts
     │   ├── app.container.ts
     │   ├── app.overview.md
     │   ├── app.permissions.ts
-    │   └── app.routes.ts
+    │   ├── app.routes.ts
+    │   ├── base-record.controller.ts
+    │   ├── base-record.repository.ts
+    │   ├── base-record.service.ts
+    │   └── base-record.types.ts
     ├── audit/
     │   ├── __tests__/
     │   │   ├── integration/
@@ -740,6 +1383,7 @@ src/
     │   │   │   │   ├── member-role-tombstone-retention.constants.ts
     │   │   │   │   ├── member-role-tombstone-retention.processor.ts
     │   │   │   │   └── member-role-tombstone-retention.worker.ts
+    │   │   │   ├── member-role.constants.ts
     │   │   │   ├── member-role.controller.ts
     │   │   │   ├── member-role.dto.ts
     │   │   │   ├── member-role.repository.ts
@@ -1693,6 +2337,7 @@ src/
     │   │   ├── webhook-signature.util.ts
     │   │   └── webhook-url.util.ts
     │   ├── text/
+    │   │   ├── csv.util.ts
     │   │   ├── email.util.ts
     │   │   └── html-escape.util.ts
     │   └── validation/
