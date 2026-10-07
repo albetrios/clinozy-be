@@ -131,6 +131,7 @@ Use the repo's compose scripts — the **same ones you run locally** — so the 
 pnpm compose:up      # start Postgres + Redis (same as local)
 pnpm compose:wait    # block until Postgres accepts connections
 pnpm db:migrate
+pnpm setup:local --only-env   # turn on the database logins the migrations created
 pnpm db:seed         # or pnpm db:seed:full
 ```
 
@@ -144,7 +145,7 @@ pnpm db:seed         # or pnpm db:seed:full
 
 ### One-command bring-up + verify
 
-To run the whole in-session flow at once — tool installs (gh, Docker CLI/Compose when missing, Docker daemon start, Docker mirror, CodeGraph, Headroom, gitleaks), `compose:up`, `db:migrate`, `db:seed`, then an app healthcheck — use the orchestrator, which logs a ✓/✗ status after each step:
+To run the whole in-session flow at once — tool installs (gh, Docker CLI/Compose when missing, Docker daemon start, Docker mirror, CodeGraph, Headroom, gitleaks), `compose:up`, `db:migrate`, the database logins (`setup:local --only-env`), `db:seed`, then an app healthcheck — use the orchestrator, which logs a ✓/✗ status after each step:
 
 ```bash
 bash tooling/setup/agent/bootstrap.sh        # KEEP_APP=1 to leave `pnpm dev` running afterwards
