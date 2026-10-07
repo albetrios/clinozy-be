@@ -84,8 +84,9 @@ pnpm setup:local --only-env     # self-contained .env.local: DB/Redis URLs, JWT 
 pnpm compose:up
 pnpm compose:wait               # exits non-zero if Postgres never becomes healthy
 
-# 3. Apply migrations
+# 3. Apply migrations, then turn on the database logins they create
 pnpm db:migrate
+pnpm setup:local --only-env     # DATABASE_URL → clinozy_be_app, maintenance, operator logins
 
 # 4. (Optional) seed data
 pnpm db:seed                    # minimal
@@ -251,7 +252,7 @@ Covers: what runs in CI, branch-to-environment mapping (`dev` → development, `
 
 | Goal                  | Command                                                                                      |
 | --------------------- | -------------------------------------------------------------------------------------------- |
-| Local run (manual)    | `pnpm compose:up` → `pnpm compose:wait` → `pnpm db:migrate` → `pnpm dev` + `pnpm dev:worker` |
+| Local run (manual)    | `pnpm compose:up` → `pnpm compose:wait` → `pnpm db:migrate` → `pnpm setup:local --only-env` → `pnpm dev` + `pnpm dev:worker` |
 | Fast feedback         | `pnpm test:unit`                                                                             |
 | Before PR             | `pnpm validate && pnpm test` (full gate: `pnpm ci:local`)                                    |
 | Stop local stack      | `pnpm compose:down`                                                                          |

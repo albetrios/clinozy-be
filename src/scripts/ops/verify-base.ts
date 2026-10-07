@@ -1,5 +1,6 @@
 /**
- * End-to-end verify gate: migrate → minimal seed → full seed → API smoke → validate.
+ * End-to-end verify gate: migrate → database logins → minimal seed → full seed → API smoke →
+ * validate.
  *
  * Prerequisites:
  * - `docker compose up -d` (Postgres + Redis for migrate, seed, and server)
@@ -12,6 +13,10 @@
  */
 import '@/shared/config/load-env-files.js';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import dotenv from 'dotenv';
+import { DATABASE_URL_KEYS } from '@/infrastructure/database/utils/connection-url.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 const BASE_URL_FOR_HEALTH = (process.env.BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
@@ -22,6 +27,27 @@ const READY_WAIT_TIMEOUT_MILLISECONDS = 60_000;
 const TEARDOWN_GRACE_MILLISECONDS = 5000;
 
 const spawnedChildProcesses: ChildProcess[] = [];
+
+const envLocalPath = resolve(process.cwd(), '.env.local');
+/** The database URLs this process loaded from `.env.local`, before the logins step rewrites them. */
+const databaseUrlsFromEnvLocal = existsSync(envLocalPath)
+  ? dotenv.parse(readFileSync(envLocalPath, 'utf8'))
+  : {};
+
+/**
+ * This process's environment minus the database URLs it took from `.env.local`, so every step
+ * reads the current file itself — the logins step switches them onto the role logins mid-run. A
+ * value set outside the file (a shell export) is kept.
+ */
+function childEnvironment(): NodeJS.ProcessEnv {
+  const environment = { ...process.env };
+  for (const key of DATABASE_URL_KEYS) {
+    if (environment[key] !== undefined && environment[key] === databaseUrlsFromEnvLocal[key]) {
+      delete environment[key];
+    }
+  }
+  return environment;
+}
 
 let didRegisterSignalHandlers = false;
 
@@ -69,7 +95,7 @@ function runPnpmStep(stepName: string, pnpmArguments: string[]): Promise<void> {
       cwd: process.cwd(),
       stdio: 'inherit',
       shell: process.platform === 'win32',
-      env: process.env,
+      env: childEnvironment(),
     });
     child.once('error', (error) => {
       reject(error);
@@ -152,13 +178,13 @@ async function ensureServerRunning(): Promise<void> {
     cwd: process.cwd(),
     stdio: stdioMode,
     shell: process.platform === 'win32',
-    env: process.env,
+    env: childEnvironment(),
   });
   const workerProcess = spawn('pnpm', ['dev:worker'], {
     cwd: process.cwd(),
     stdio: stdioMode,
     shell: process.platform === 'win32',
-    env: process.env,
+    env: childEnvironment(),
   });
 
   spawnedChildProcesses.push(developmentServer, workerProcess);
@@ -180,6 +206,8 @@ async function main(): Promise<void> {
 
   try {
     await runPnpmStep('db:migrate', ['db:migrate']);
+    // The migrations create the role logins NOLOGIN; turn them on before anything connects.
+    await runPnpmStep('database logins', ['setup:local', '--only-env']);
     await runPnpmStep('db:seed', ['db:seed']);
     await runPnpmStep('db:seed:full', ['db:seed:full']);
     await ensureServerRunning();

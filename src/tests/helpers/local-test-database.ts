@@ -1,5 +1,8 @@
 import postgres from 'postgres';
-import { isLocalDatabaseUrl } from '@/infrastructure/database/utils/connection-url.util.js';
+import {
+  DATABASE_URL_KEYS,
+  isLocalDatabaseUrl,
+} from '@/infrastructure/database/utils/connection-url.util.js';
 import { LOCAL_DATABASE_NAME } from '@/shared/constants/project-identity.constants.js';
 
 /**
@@ -16,13 +19,6 @@ export const LOCAL_TEST_DATABASE_NAME = `${LOCAL_DATABASE_NAME}_test`;
 
 /** Compose-superuser URL of {@link LOCAL_TEST_DATABASE_NAME} — the harness fallback and migration login. */
 export const LOCAL_TEST_DATABASE_URL = `postgresql://${LOCAL_DATABASE_NAME}:${LOCAL_DATABASE_NAME}@localhost:5432/${LOCAL_TEST_DATABASE_NAME}`;
-
-const DATABASE_URL_KEYS = [
-  'DATABASE_URL',
-  'DATABASE_MIGRATION_URL',
-  'DATABASE_MAINTENANCE_URL',
-  'DATABASE_OPERATOR_URL',
-] as const;
 
 /** The `DATABASE_*URL`s the harness cannot run without; the operator URL is an optional pool. */
 const REQUIRED_DATABASE_URL_KEYS = new Set<string>([

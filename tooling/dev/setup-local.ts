@@ -53,6 +53,7 @@ import { applyLocalCaptcha, TURNSTILE_ALWAYS_PASS_TEST_SITE_KEY } from './local-
 import {
   alterRoleStatement,
   applyLocalDatabaseLogins,
+  environmentDatabaseUrlProblems,
   localDatabaseLogins,
   planLocalDatabaseLogins,
 } from './local-database-logins.js';
@@ -77,6 +78,11 @@ const {
   databaseAppRole: LOCAL_DATABASE_APP_ROLE,
   databaseMaintenanceRole: LOCAL_DATABASE_MAINTENANCE_ROLE,
 } = resolveDerivedNames(SETUP_CONFIG);
+const LOCAL_DATABASE_LOGINS = localDatabaseLogins({
+  appRole: LOCAL_DATABASE_APP_ROLE,
+  maintenanceRole: LOCAL_DATABASE_MAINTENANCE_ROLE,
+  sqlStem: resolveSqlIdentifierStem(SETUP_CONFIG),
+});
 const POSTGRES_CONTAINER = LOCAL_CONTAINERS.postgres;
 const REDIS_CONTAINER = LOCAL_CONTAINERS.redis;
 const DEFAULT_DEV_PORT = 3000;
@@ -396,6 +402,7 @@ function runInstallDependencies(reports: StepReport[], options: BootstrapOptions
 function runEnvScaffolding(reports: StepReport[], options: BootstrapOptions): void {
   logHeading('3/9 Environment (.env.local)');
   scaffoldEnvLocal(reports, options);
+  checkEnvironmentDatabaseUrls(reports, options);
   syncExternalCredentials(reports, options);
   configureLocalCaptcha(reports, options);
 }
@@ -600,6 +607,48 @@ function scaffoldEnvLocal(reports: StepReport[], options: BootstrapOptions): voi
 }
 
 /**
+ * Stops when the process environment sets a database URL the local stack must own — a remote
+ * host, or a login other than the variable's role (`environmentDatabaseUrlProblems`). The
+ * environment beats `.env.local`, so a cloud environment's Variables copied from development
+ * would otherwise migrate, seed or run maintenance contexts against the hosted database. Runs in
+ * the env phase, before Docker and migrations; skipped when `.env.local` itself is remote.
+ */
+function checkEnvironmentDatabaseUrls(reports: StepReport[], options: BootstrapOptions): void {
+  const startedAt = performance.now();
+  const phase = 'database URLs in the environment';
+  if (!existsSync(ENV_LOCAL_PATH)) {
+    reportStep(reports, phase, 'skipped', startedAt, 'no .env.local yet');
+    return;
+  }
+  const envLocal = readFileSync(ENV_LOCAL_PATH, 'utf8');
+  const currentDatabaseUrl = dotenv.parse(envLocal).DATABASE_URL;
+  if (currentDatabaseUrl && !isLocalDatabaseUrl(currentDatabaseUrl)) {
+    reportStep(reports, phase, 'skipped', startedAt, 'DATABASE_URL points at a remote database');
+    return;
+  }
+  const problems = environmentDatabaseUrlProblems({
+    envLocal,
+    environment: process.env,
+    logins: LOCAL_DATABASE_LOGINS,
+  });
+  if (problems.length === 0) {
+    reportStep(reports, phase, 'skipped', startedAt, 'none override .env.local');
+    return;
+  }
+  reportStep(
+    reports,
+    phase,
+    options.check ? 'warning' : 'failed',
+    startedAt,
+    problems.map(({ envKey, problem }) => `${envKey} ${problem}`).join('; '),
+  );
+  logInfo(
+    '      The environment beats .env.local. Remove these from the environment (the Variables of a cloud environment, or your shell) and re-run.',
+  );
+  if (!options.check) process.exit(1);
+}
+
+/**
  * Turns on the three database logins `.env.local` connects as — runtime (`clinozy_be_app`),
  * maintenance and operator — and writes their URLs (docs/deployment/runbooks/
  * maintenance-database-role.md). The migrations create those roles `NOLOGIN`; this grants LOGIN
@@ -623,11 +672,7 @@ async function provisionLocalDatabaseLogins(
     reportStep(reports, phase, 'skipped', startedAt, 'DATABASE_URL points at a remote database');
     return;
   }
-  const logins = localDatabaseLogins({
-    appRole: LOCAL_DATABASE_APP_ROLE,
-    maintenanceRole: LOCAL_DATABASE_MAINTENANCE_ROLE,
-    sqlStem: resolveSqlIdentifierStem(SETUP_CONFIG),
-  });
+  const logins = LOCAL_DATABASE_LOGINS;
   const superuser = postgres(LOCAL_DATABASE_URL, {
     max: 1,
     connect_timeout: 5,

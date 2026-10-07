@@ -74,6 +74,21 @@ export function isStrictDatabaseTlsVerification({
   );
 }
 
+/**
+ * Every env variable that carries a Postgres connection URL: the runtime pool, migrations,
+ * maintenance contexts, and the local/CI-only operator login.
+ *
+ * @remarks
+ * - **Notes:** the one list the test harness's local-database switch, `pnpm setup:local`'s
+ *   environment check and `pnpm verify:base` share.
+ */
+export const DATABASE_URL_KEYS = [
+  'DATABASE_URL',
+  'DATABASE_MIGRATION_URL',
+  'DATABASE_MAINTENANCE_URL',
+  'DATABASE_OPERATOR_URL',
+] as const;
+
 /** Hostnames that are this machine, with IPv6 brackets stripped. */
 const LOCAL_DATABASE_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
 

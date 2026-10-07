@@ -115,6 +115,9 @@ cmd_up() {
   pnpm compose:wait >/dev/null 2>&1 && ok "postgres ready"  || warn "postgres wait timed out"
   log "→ migrations…"
   pnpm db:migrate   >/dev/null 2>&1 && ok "migrations applied" || warn "migrate failed (run: pnpm db:migrate)"
+  # The migrations create the role logins NOLOGIN; turn them on before the seed and the API connect.
+  pnpm setup:local --only-env >/dev/null 2>&1 && ok "database logins enabled" \
+    || warn "database logins failed (run: pnpm setup:local --only-env)"
   log "→ demo super_admin (the user the proxy logs in as for Bull Board)…"
   pnpm db:seed:demo-admin >/dev/null 2>&1 \
     && ok "demo super_admin ready" \
@@ -127,7 +130,10 @@ cmd_up() {
   start_proc api    "src/server.ts" pnpm dev
   start_proc worker "src/worker.ts" pnpm dev:worker
   if pgrep -f "drizzle-kit.*studio" >/dev/null 2>&1; then ok "studio already running"; else
-    DATABASE_URL="$(env_val DATABASE_URL)" nohup pnpm db:studio > "$RUN_DIR/studio.log" 2>&1 &
+    # Browse as the operator login like the seeds do: DATABASE_URL is the RLS-subject app role,
+    # under which every tenant table reads empty.
+    studio_url="$(env_val DATABASE_OPERATOR_URL)"; [ -n "$studio_url" ] || studio_url="$(env_val DATABASE_URL)"
+    DATABASE_URL="$studio_url" nohup pnpm db:studio > "$RUN_DIR/studio.log" 2>&1 &
     local spid=$!; disown "$spid" 2>/dev/null || disown 2>/dev/null || true
     echo "$spid" > "$RUN_DIR/studio.pid"; ok "studio started (pid $spid)  ${c_dim}→ .dashboards/studio.log${c_reset}"
   fi

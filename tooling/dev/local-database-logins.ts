@@ -1,6 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import dotenv from 'dotenv';
 import { upsertEnvAssignment } from './env-file.util.js';
+import {
+  DATABASE_URL_KEYS,
+  isLocalDatabaseUrl,
+} from '@/infrastructure/database/utils/connection-url.util.js';
 
 /**
  * One database login `.env.local` connects as — a role the migrations create `NOLOGIN` and local
@@ -145,6 +149,43 @@ export function applyLocalDatabaseLogins(options: {
     content = upsertEnvAssignment(content, 'DATABASE_MIGRATION_URL', options.superuserUrl);
   }
   return content;
+}
+
+/** A database URL in the process environment that would take a local session off its logins. */
+export type EnvironmentDatabaseUrlProblem = { envKey: string; problem: string };
+
+/**
+ * The database URLs the process environment sets that a local session must not use. With
+ * `NODE_ENV` unset the loader keeps the environment's value over `.env.local`'s, so a cloud
+ * environment given development's Variables would migrate, seed or run maintenance contexts
+ * against the hosted database. Allowed: the value `.env.local` itself holds (inherited from a
+ * process that loaded it), and a local URL that logs in as the variable's role (its password is
+ * adopted — see `planLocalDatabaseLogins`); `DATABASE_MIGRATION_URL` only has to be local.
+ * Problems name the user and host, never the password.
+ */
+export function environmentDatabaseUrlProblems(options: {
+  envLocal: string;
+  environment: Readonly<Record<string, string | undefined>>;
+  logins: readonly LocalDatabaseLogin[];
+}): EnvironmentDatabaseUrlProblem[] {
+  const envLocalValues = dotenv.parse(options.envLocal);
+  const problems: EnvironmentDatabaseUrlProblem[] = [];
+  for (const envKey of DATABASE_URL_KEYS) {
+    const value = options.environment[envKey];
+    if (!value || value === envLocalValues[envKey]) continue;
+    const role = options.logins.find((login) => login.envKey === envKey)?.role;
+    const url = parseUrl(value);
+    const user = url ? decodeURIComponent(url.username) : '';
+    if (!isLocalDatabaseUrl(value)) {
+      problems.push({
+        envKey,
+        problem: `points at ${url?.hostname || 'an unparseable URL'}, not the local Postgres`,
+      });
+    } else if (role && user !== role) {
+      problems.push({ envKey, problem: `logs in as ${user || 'no user'}, not ${role}` });
+    }
+  }
+  return problems;
 }
 
 function parseUrl(value: string | undefined): URL | undefined {

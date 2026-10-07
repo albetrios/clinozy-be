@@ -18,6 +18,7 @@ pnpm install
 pnpm compose:up
 pnpm compose:wait
 pnpm db:migrate
+pnpm setup:local --only-env   # turn on the database logins the migrations created
 pnpm db:seed
 pnpm dev
 ```

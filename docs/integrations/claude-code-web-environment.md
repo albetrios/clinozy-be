@@ -100,8 +100,12 @@ On the first session the cached Node 24 is already on disk, [`session-start.sh`]
   `.env.development`, which a fresh clone lacks, then lays `.env.local` over the Variables with
   `override: true`: the session still runs as `local`, but loses the Variables.)
 - **Set the development values as the environment's Variables** — every key from your
-  `.env.development` except `NODE_ENV`, `DATABASE_URL`, `DATABASE_MIGRATION_URL`, `REDIS_URL` and
-  `DATABASE_SSL_ENABLED` (those follow the session's own Postgres + Redis). Third-party keys
+  `.env.development` except `NODE_ENV`, every `DATABASE_*_URL` (`DATABASE_URL`,
+  `DATABASE_MIGRATION_URL`, `DATABASE_MAINTENANCE_URL`, `DATABASE_OPERATOR_URL`), `REDIS_URL` and
+  `DATABASE_SSL_ENABLED` (those follow the session's own Postgres + Redis). `pnpm setup:local`
+  (and so `install.sh` and `bootstrap.sh`) stops when a Variable sets a `DATABASE_*_URL` that is
+  remote or logs in as another role — the Variable would beat `.env.local` and point the session
+  at the hosted database. Third-party keys
   (Resend, Stripe test mode, OAuth, S3, Sentry DSN, …) then match development. A blank `KEY=`
   placeholder in `.env.local` no longer deletes a Variable
   ([`load-env-files.ts`](../../src/shared/config/load-env-files.ts), pinned by

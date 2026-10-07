@@ -69,7 +69,9 @@ Local mirrors live: migration `20260827050000` creates `clinozy_be_owner` /
 `--only-env` run once the roles exist), as the compose superuser — the admin connection whose
 credentials come from the same manifest Docker Compose uses. Each password is the one
 `.env.local` already has for that role, else the one the process environment carries for that
-variable (shell exports, CI or cloud variables), else a new generated one. The migrations own the
+variable (shell exports, CI or cloud variables), else a new generated one. Because the process
+environment beats `.env.local`, every run first refuses a `DATABASE_*_URL` there that is remote or
+logs in as another role than its variable's. The migrations own the
 roles; the logins are mapped in
 [`tooling/dev/local-database-logins.ts`](../../../tooling/dev/local-database-logins.ts), whose
 unit test fails when a migration creates or renames a role that is neither a local login nor

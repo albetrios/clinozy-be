@@ -6,7 +6,7 @@ Load tests for the clinozy-be API. Keep this doc in sync with [docs/reference/te
 
 - **Server**: `RATE_LIMIT_MAX=10000 pnpm dev` — raises the per-IP limit for load testing; plain `pnpm dev` 429s at high VU counts. The journeys that create webhooks (user-journey, fe-full-surface) also need `WEBHOOK_URL_ALLOWLIST=example.com`.
 - **Postgres + Redis**: Required for auth and organization-dependent scenarios (`docker compose up -d` or your own).
-- **Database**: `pnpm db:migrate` then choose a seed tier:
+- **Database**: `pnpm db:migrate`, `pnpm setup:local --only-env` (turns on the database logins the migrations create), then choose a seed tier:
   - Single-user scenarios (`api-stress`, `daily-ops`, etc.): `pnpm db:seed:full` (demo user `demo@example.com` / `DemoPassword123!`)
   - Per-VU multi-user scenario (`user-journey`): `pnpm db:seed:loadtest` — seeds 12 organizations × 10 users with full domain data and writes `src/tests/load/k6/data/credential-pool.json` (gitignored; contains passwords)
 - **k6**: [Install k6](https://k6.io/docs/get-started/installation/).

@@ -7,6 +7,7 @@ Manual and scripted checks against a running API (`pnpm dev` + `pnpm dev:worker`
 ```bash
 docker compose up -d
 pnpm db:migrate
+pnpm setup:local --only-env   # turn on the database logins the migrations created
 DEMO_PASSWORD=DemoPassword123! pnpm db:seed:full   # fixed demo password
 pnpm db:seed:sync-demo   # sync admin permissions (after permission changes)
 pnpm dev              # terminal 1 — http://localhost:3000

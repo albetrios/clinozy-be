@@ -832,7 +832,7 @@ async function main(): Promise<void> {
   log.info('Remaining manual steps:');
   log.instruction([
     'Create provider accounts and secrets (Stripe, Resend, S3, Sentry, Neon/Postgres, Redis).',
-    'Run `pnpm setup:local` to scaffold .env.local, then `pnpm db:migrate`.',
+    'Run `pnpm setup:local` (.env.local, Docker, migrations, then the database logins).',
     'Run `pnpm github:sync` to push rulesets, environments and secrets to the new repository.',
     'Replace the placeholder contacts in SECURITY.md and CONTRIBUTING.md.',
     `Enable the GitHub Template flag on the BASE repo if you maintain it: gh api -X PATCH repos/${previousOwner}/${previousSlug} -f is_template=true`,
