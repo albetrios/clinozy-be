@@ -8,7 +8,7 @@
 | Opened | 2026-09-30 |
 | Branch | docs/legacy-prd-import |
 | Baseline | none |
-| Status | approved |
+| Status | implementing |
 | Summary | Full clinic app: 12 screens, 93 routes, 40 entities |
 | Drop placed | 2026-10-03 |
 | Drop source | ~/projects/clinozy/clinozy-fe/iterations/launch-2026-09-30-jxmr/intake-files |
@@ -21,3 +21,4 @@
 
 - 2026-10-03 · planning → ready-for-approval · — · Nikunj Mavani
 - 2026-10-03 · ready-for-approval → approved · — · Nikunj Mavani
+- 2026-10-07 · approved → implementing · — · Claude

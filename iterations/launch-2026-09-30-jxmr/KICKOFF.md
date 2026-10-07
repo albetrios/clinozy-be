@@ -112,7 +112,7 @@ CHANGE table, feature, background work, flow → `/be-build-requirement`. Each r
 
 | # | Work item | Kind | Depends on | Skill/driver | Acceptance | Assignee | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `organization` — CHANGE table (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#organization--changed) approved and built (`data.stage-foundation`) | — | open |
+| 1 | `organization` — CHANGE table (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#organization--changed) approved and built (`data.stage-foundation`) | — | in progress |
 | 2 | `branch` — NEW table (Stage 1) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#branch--new) approved and built (`data.stage-foundation`) | — | open |
 | 3 | `user` — CHANGE table (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#user--changed) approved and built (`data.stage-foundation`) | — | open |
 | 4 | `membership` — CHANGE table (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#membership--changed) approved and built (`data.stage-foundation`) | — | open |
