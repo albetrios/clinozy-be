@@ -86,7 +86,7 @@ else
 fi
 
 # Ensure the default MCP pair (codegraph + headroom) is declared in .mcp.json so the
-# session matches `pnpm setup:local`. install-codegraph.sh writes codegraph; this merges
+# session matches `pnpm setup:local`. install-codegraph.sh only builds the index; this merges
 # in the committed `.mcp.default.json` (codegraph + headroom), preserving any other
 # entries — never clobbering real keys. Best-effort: needs jq + the template. (On Claude
 # Code web the platform loads MCP from the environment settings, not this file; this keeps

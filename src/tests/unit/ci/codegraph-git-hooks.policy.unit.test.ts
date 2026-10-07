@@ -33,3 +33,28 @@ describe('codegraph auto-sync git hooks policy', () => {
     expect(hook).toContain('&');
   });
 });
+
+/**
+ * Locks in index-only setup: `codegraph install` builds no index without `--init`
+ * and replaces the tracked `.mcp.json` / `.cursor/mcp.json` / `.claude/settings.json`
+ * symlinks with plain files, leaving every bootstrap with a dirty tree. Both setup
+ * paths build the index with `codegraph init`; the MCP server is declared through
+ * the symlink by the default-pair merge.
+ */
+describe('codegraph setup policy', () => {
+  it('the cloud bootstrap builds the index with codegraph init, never codegraph install', () => {
+    const script = readFileSync(join(ROOT, 'tooling/setup/agent/install-codegraph.sh'), 'utf8');
+    const commands = script
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('#'))
+      .join('\n');
+    expect(commands).toContain('codegraph init');
+    expect(commands).not.toContain('codegraph install');
+  });
+
+  it('setup:local builds the index with codegraph init, never codegraph install', () => {
+    const source = readFileSync(join(ROOT, 'tooling/dev/setup-local.ts'), 'utf8');
+    expect(source).toContain("captureCommand('codegraph', ['init'])");
+    expect(source).not.toMatch(/captureCommand\(\s*'codegraph',\s*\[\s*'install'/);
+  });
+});

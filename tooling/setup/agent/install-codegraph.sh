@@ -17,9 +17,9 @@
 # IMPORTANT (MCP): installing the CLI + index does NOT auto-connect the codegraph
 # MCP tools in a running session. In Claude Code on the web the live MCP server set
 # is loaded by the platform at session start from your account/environment MCP
-# settings — NOT the repo .mcp.json this writes. Configure the `codegraph` server
-# in the web UI MCP settings (command `codegraph serve --mcp`) for the tools to
-# appear, then start a fresh session. The CLI (`codegraph query/context/status`)
+# settings — NOT the repo .mcp.json (declared by install-headroom.sh). Configure the
+# `codegraph` server in the web UI MCP settings (command `codegraph serve --mcp`) for
+# the tools to appear, then start a fresh session. The CLI (`codegraph query/context/status`)
 # works immediately regardless.
 #
 # Idempotent and best-effort: never hard-fails the setup chain. Diagnostics → stderr.
@@ -81,12 +81,16 @@ if ! command -v codegraph >/dev/null 2>&1; then
   fi
 fi
 
-if [ -f .codegraph/codegraph.db ] && [ -f .mcp.json ]; then
+# Index only — never `codegraph install`: it builds no index without `--init`, and it
+# replaces the tracked .mcp.json and .claude/settings.json symlinks with plain files,
+# leaving every bootstrap with a dirty tree. install-headroom.sh declares the codegraph
+# MCP server through the symlink; agent-os/platforms/claude/settings.json allows its tools.
+if [ -f .codegraph/codegraph.db ]; then
   echo "install-codegraph: index present — refreshing (codegraph sync)…" >&2
   codegraph sync >&2 2>&1 || echo "install-codegraph: sync failed (non-fatal)." >&2
 else
-  echo "install-codegraph: building index + writing Claude MCP config…" >&2
-  codegraph install --target=claude --location=local --yes >&2 2>&1 \
+  echo "install-codegraph: building index (codegraph init)…" >&2
+  codegraph init >&2 2>&1 \
     || echo "install-codegraph: index build failed (non-fatal)." >&2
 fi
 

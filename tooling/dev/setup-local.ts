@@ -934,7 +934,7 @@ function runCodeGraphSetup(reports: StepReport[], options: BootstrapOptions): vo
       'codegraph',
       'skipped',
       startedAt,
-      '--check mode (would install CLI + configure agents + index)',
+      '--check mode (would install CLI + build the index)',
     );
     return;
   }
@@ -955,10 +955,8 @@ function runCodeGraphSetup(reports: StepReport[], options: BootstrapOptions): vo
   }
 
   const databasePath = resolve(PROJECT_ROOT, '.codegraph/codegraph.db');
-  const claudeMcpPath = resolve(PROJECT_ROOT, '.mcp.json');
-  const alreadyConfigured = existsSync(databasePath) && existsSync(claudeMcpPath);
 
-  if (alreadyConfigured) {
+  if (existsSync(databasePath)) {
     const sync = captureCommand('codegraph', ['sync']);
     const status: StepStatus = sync.code === 0 ? 'done' : 'warning';
     reportStep(
@@ -971,12 +969,10 @@ function runCodeGraphSetup(reports: StepReport[], options: BootstrapOptions): vo
     return;
   }
 
-  const result = captureCommand('codegraph', [
-    'install',
-    '--target=cursor,claude',
-    '--location=local',
-    '--yes',
-  ]);
+  // Index only — never `codegraph install`: it builds no index without `--init`, and it
+  // replaces the tracked .mcp.json, .cursor/mcp.json and .claude/settings.json symlinks
+  // with plain files. ensureDefaultMcpConfig declares the codegraph MCP server through them.
+  const result = captureCommand('codegraph', ['init']);
   const status: StepStatus = result.code === 0 ? 'done' : 'warning';
   reportStep(
     reports,
@@ -984,14 +980,14 @@ function runCodeGraphSetup(reports: StepReport[], options: BootstrapOptions): vo
     status,
     startedAt,
     status === 'done'
-      ? 'cursor + claude MCP configured + project indexed (restart agents to load)'
-      : 'codegraph install failed (non-fatal)',
+      ? 'project indexed (codegraph init — restart agents to load the MCP server)'
+      : 'codegraph init failed (non-fatal)',
   );
 }
 
 // Declare the default auto-start MCP pair (codegraph + headroom) in .mcp.json so a local
-// session matches the cloud bootstrap. Non-destructive: codegraph install above writes
-// codegraph; this adds headroom (and codegraph when skipped) without clobbering real keys.
+// session matches the cloud bootstrap. Non-destructive: writes through the .mcp.json
+// symlink and adds codegraph + headroom without clobbering real keys.
 function ensureDefaultMcpConfig(reports: StepReport[], options: BootstrapOptions): void {
   const startedAt = performance.now();
   if (options.check) {
