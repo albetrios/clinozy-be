@@ -44,9 +44,12 @@ byte-level precision; use `headroom_stats` to confirm savings.
 Install once on the agent host, then the MCP entry above is live:
 
 ```bash
-pip install "headroom-ai[mcp]"
-headroom mcp install   # auto-registers the MCP server with the client
+bash tooling/setup/agent/install-headroom.sh   # the pinned HEADROOM_VERSION; also runs `headroom mcp install`
+pnpm tool:agent-tools --smoke                  # starts the server and lists its tools
 ```
+
+The version is pinned in `tooling/setup/agent/tool-versions.sh` — never `pip install` it unpinned
+(bumps: **be-dependency-security**). The cloud bootstrap and `pnpm setup:local` run the same script.
 
 `headroom mcp install` is the authoritative way to wire the server; the
 `.mcp.example.json` entry (`headroom mcp serve`) is the declarative equivalent.

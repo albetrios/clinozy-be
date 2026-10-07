@@ -22,7 +22,7 @@ When you edit a file matching a pattern below, invoke the listed skill(s). Gener
 | `iterations/*/AS-BUILT.md` | be-kickoff-iteration | Iteration implementation — one ROUTE row at a time; every row's technical decisions go into AS-BUILT.md |
 | `iterations/*/plans/**` | be-iteration-planning | Iteration plans — requirements and decisions only, never technical design; KICKOFF.md is written at Step 5 |
 | `migrations/*.sql` | be-db-migration-maintainer | Migration files (schema changes go via the schema-change chain) |
-| `package.json`, `pnpm-lock.yaml` | be-dependency-security | Zero-vuln dependency updates |
+| `package.json`, `pnpm-lock.yaml`, `tooling/setup/agent/tool-versions.sh` | be-dependency-security | Zero-vuln dependency updates + agent tool pin bumps |
 | `src/**/*.overview.md` | be-overview-doc-maintainer | Per-folder overview docs |
 | `src/**/*.ts` | be-change-completeness-guard | Finishing any code change — own tests + cross-cutting suites + docs + rules + skills move with it |
 | `src/**/*.ts` | be-tsdoc-export-guard | Public export added/renamed — TSDoc summary (+ @remarks on service/worker/policy) |

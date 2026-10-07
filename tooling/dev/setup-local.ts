@@ -1038,20 +1038,24 @@ function installHeadroomCli(reports: StepReport[], options: BootstrapOptions): v
     reportStep(reports, 'headroom CLI', 'skipped', startedAt, '--check mode (would install)');
     return;
   }
-  if (captureCommand('headroom', ['--version']).code === 0) {
-    reportStep(reports, 'headroom CLI', 'skipped', startedAt, 'already installed');
+  // The version pinned in tooling/setup/agent/tool-versions.sh — the same one the cloud
+  // bootstrap installs. A different installed version is replaced, not kept.
+  const headroomTool = AGENT_TOOLS.find((tool) => tool.name === 'headroom');
+  const pinnedVersion = headroomTool ? readToolVersions()[headroomTool.versionKey] : undefined;
+  if (headroomTool && readInstalledVersion(headroomTool) === pinnedVersion) {
+    reportStep(reports, 'headroom CLI', 'skipped', startedAt, `${pinnedVersion} (at the pin)`);
     return;
   }
   captureCommand('bash', ['tooling/setup/agent/install-headroom.sh']);
-  const installed = captureCommand('headroom', ['--version']).code === 0;
+  const installed = headroomTool ? readInstalledVersion(headroomTool) : undefined;
   reportStep(
     reports,
     'headroom CLI',
-    installed ? 'done' : 'warning',
+    installed === pinnedVersion ? 'done' : 'warning',
     startedAt,
-    installed
-      ? 'context-compression MCP ready'
-      : 'install skipped — run `pip install "headroom-ai[mcp]"` manually (non-fatal)',
+    installed === pinnedVersion
+      ? `context-compression MCP ready (${installed}, at the pin)`
+      : 'install failed — run `bash tooling/setup/agent/install-headroom.sh` manually (non-fatal)',
   );
 }
 

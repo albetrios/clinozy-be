@@ -41,7 +41,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-code-quality-guard/SKILL.md",
-      "computedHash": "608c923a0e704c2afc70a2ef137d201e61711c8603186fcac38ebae59e29d3ef"
+      "computedHash": "58175bf2b330d885990b3c25423bbc61079a6166e929960b9f6056f86000c3d8"
     },
     "be-code-smells-and-best-practices": {
       "source": "local",
@@ -77,7 +77,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-dependency-security/SKILL.md",
-      "computedHash": "424153943d3934b94d318d45c4d284394cd009a7d3b2588853b52dbe01ee3f88"
+      "computedHash": "94184555db2f26b0d1d8d349d442b38426e918a361f18cf25edb13066b1557f3"
     },
     "be-docs-audit": {
       "source": "local",
@@ -215,7 +215,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-skill-index/SKILL.md",
-      "computedHash": "efee8edee74164b1c9cf5c6e8ddb7fbc49147efe35a6b86920076404e2dd211b"
+      "computedHash": "277400052ccf8cf128a5a1d09c29a3dc114eb138ac1bbf11a4d0ee8a9c5c1444"
     },
     "be-split-to-prs": {
       "source": "local",

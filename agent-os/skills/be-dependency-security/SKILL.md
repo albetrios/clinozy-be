@@ -1,8 +1,8 @@
 ---
 name: be-dependency-security
-description: Keeps pnpm dependencies non-vulnerable and avoids breaking changes when updating. Use when adding/updating dependencies, when CI audit fails, or when reviewing package.json / pnpm-lock.yaml.
-trigger: package.json, pnpm-lock.yaml
-triggerNote: Zero-vuln dependency updates
+description: Keeps pnpm dependencies non-vulnerable and avoids breaking changes when updating — and owns the pinned agent-tool versions (codegraph, headroom, semgrep, gitleaks, k6) in tooling/setup/agent/tool-versions.sh. Use when adding/updating dependencies, when CI audit fails, when reviewing package.json / pnpm-lock.yaml, or when bumping an agent tool pin.
+trigger: package.json, pnpm-lock.yaml, tooling/setup/agent/tool-versions.sh
+triggerNote: Zero-vuln dependency updates + agent tool pin bumps
 indexNote: keep pnpm deps non-vulnerable; safe patch/minor updates
 ---
 
@@ -70,6 +70,37 @@ Keep **zero known vulnerabilities** in dependencies and avoid **breaking changes
 
 4. **Never leave known vulnerabilities**
    - Do not commit with `pnpm audit` failing. CI will fail. Resolve via overrides or upgrades until `pnpm audit` reports "No known vulnerabilities found."
+
+## Agent tool pins (`tooling/setup/agent/tool-versions.sh`)
+
+The CLIs the cloud bootstrap, `setup:local` and CI install — `codegraph`, `headroom`, `semgrep`,
+`gitleaks`, `k6` — are pinned in **one file** of plain `KEY=value` lines: a version per tool and,
+for each github.com release binary, a SHA-256 per architecture. Every installer moves the
+machine to the pin (reinstalls a different version) and refuses a download whose checksum does
+not match; CI appends the same file to `$GITHUB_ENV`. Policy and upgrade flow:
+[`docs/integrations/claude-code-web-environment.md` → Tool versions](../../../docs/integrations/claude-code-web-environment.md#tool-versions-pinned-checked-at-install).
+
+**Bump workflow**
+
+1. `pnpm tool:agent-tools --outdated` — lists each pin vs the newest release and prints the exact
+   lines to paste (version **and** checksums; never hand-type a hash). The cloud bootstrap runs
+   the same report at every install.
+2. Read the tool's release notes for breaking changes (a CLI that rewrites repo files, a changed
+   MCP tool set, a dropped flag) — the reason these are pinned at all.
+3. Paste the lines into `tool-versions.sh`; nothing else holds a version.
+4. Verify locally: `bash tooling/setup/agent/install-<tool>.sh` (moves to the new pin),
+   `pnpm tool:agent-tools --smoke`, and the tool's own gate (`pnpm security:sast`,
+   `pnpm load:health`, a commit for gitleaks).
+5. One PR per bump — CI installs and runs the new version before it lands. **Rollback** = revert
+   the line; every session moves back on its next bootstrap.
+
+**Trial without a commit:** set the key (and its `*_SHA256_*` keys) as variables on a separate
+cloud environment — an environment variable overrides the pin. A version override without its
+checksum is refused.
+
+**Never:** install an agent tool unpinned (`@latest`, a bare `pip install semgrep`, `pipx upgrade`),
+copy a version into a workflow, doc or script, or commit a pin without its checksums —
+`src/tests/unit/tooling/agent-tool-versions.policy.unit.test.ts` fails on each.
 
 ## Scripts (package.json)
 
