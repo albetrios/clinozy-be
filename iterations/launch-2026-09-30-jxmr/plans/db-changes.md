@@ -249,24 +249,28 @@ erDiagram
 ### organization · CHANGED
 
 - **Holds:** The clinic business (tenant). Read by every screen (header, print letterhead); written by Users › Branches (settings).
-- **Table (proposal):** `tenancy.organizations`
+- **Table (built, ROUTE #1):** `tenancy.organizations` (the clinic profile) + `tenancy.organization_settings` (the clinic settings, with the organization's other settings — RC-201 writes them)
 - **Sources:** schema-routes.md:138–149 · PRD.md:9 · D7
 - **Added** (a frontend request, D3, unless a decision is named): `specialties` (D7), `timezone` (D7), `currency` (D7), `default_day_float` (payments.md:76, 327), `lead_hold_days` (leads.md:180, 402), `reminder_hour` (D34), `retarget_after_days` (D35), `deleted_record_purge_days` (D38)
 - **Open:** none
 
 ```mermaid
 erDiagram
-  organization["organization · CHANGED"] {
+  organization["tenancy.organizations · CHANGED"] {
     id id PK
     json specialties "ADDED"
     text timezone "ADDED"
     text currency "ADDED"
+  }
+  organization_settings["tenancy.organization_settings · CHANGED"] {
+    id organization_id PK
     money default_day_float "ADDED"
     number lead_hold_days "ADDED"
-    text reminder_hour "ADDED"
+    number reminder_hour "ADDED"
     number retarget_after_days "ADDED"
     number deleted_record_purge_days "ADDED"
   }
+  organization ||--o| organization_settings : "settings"
 ```
 
 ### branch · NEW
