@@ -1064,6 +1064,9 @@ export const appointmentsRecordSchema = {
     move_count: {
       type: 'integer',
     },
+    is_walk_in: {
+      type: 'boolean',
+    },
     patient_package_id: {
       type: 'string',
       nullable: true,
@@ -1109,6 +1112,7 @@ export const appointmentsRecordExample = {
   reminder_status: 'not_sent',
   is_confirmed_by_reply: true,
   move_count: 1,
+  is_walk_in: true,
   patient_package_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
   created_at: '2026-10-07T10:30:00.000Z',
   updated_at: '2026-10-07T10:30:00.000Z',

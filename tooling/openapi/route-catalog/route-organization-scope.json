@@ -437,5 +437,8 @@
   "GET /api/v1/app/messages/:message_id": "both",
   "POST /api/v1/app/messages/:message_id/resend": "both",
   "POST /api/v1/app/messages/batches": "both",
-  "POST /api/v1/app/leads/:lead_id/convert": "both"
+  "POST /api/v1/app/leads/:lead_id/convert": "both",
+  "POST /api/v1/app/appointments/:appointment_id/copy": "both",
+  "GET /api/v1/app/appointments/slots": "both",
+  "GET /api/v1/app/appointments/daily-counts": "both"
 }

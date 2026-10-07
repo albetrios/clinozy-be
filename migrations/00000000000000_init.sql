@@ -1530,6 +1530,7 @@ CREATE TABLE IF NOT EXISTS "app"."appointments" (
 	"reminder_status" varchar(17) DEFAULT 'not_sent' NOT NULL,
 	"is_confirmed_by_reply" boolean DEFAULT false NOT NULL,
 	"move_count" integer DEFAULT 0 NOT NULL,
+	"is_walk_in" boolean DEFAULT false NOT NULL,
 	"patient_package_id" bigint,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,

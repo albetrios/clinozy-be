@@ -30,6 +30,8 @@ export interface AppointmentOutput {
   reminder_status: string;
   is_confirmed_by_reply: boolean;
   move_count: number;
+  /** A walk-in: booked at the current slot and checked in at once (appointments.6) */
+  is_walk_in: boolean;
   patient_package_id: string | null;
   created_at: string;
   updated_at: string;

@@ -30,7 +30,10 @@ A booked slot for a patient or a lead with a doctor, in a branch — a room and 
 | `POST /app/appointments/{appointment_id}/status` | `appointment:update` |
 | `POST /app/appointments/{appointment_id}/cancel` | `appointment:update` |
 | `POST /app/appointments/{appointment_id}/reinstate` | `appointment:update` |
+| `POST /app/appointments/{appointment_id}/copy` | `appointment:create` |
 | `POST /app/appointments/{appointment_id}/undo-check-in` | `appointment:update` |
+| `GET /app/appointments/slots` | `appointment:read` |
+| `GET /app/appointments/daily-counts` | `appointment:read` |
 | `DELETE /app/appointments/{appointment_id}` | `appointment:delete` |
 | `POST /app/appointments/{appointment_id}/restore` | `appointment:delete` |
 

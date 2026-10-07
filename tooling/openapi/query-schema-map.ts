@@ -25,7 +25,11 @@ import { listOffersQueryDto as appOffersListQueryDto } from '@/domains/app/sub-d
 import { listPatientsQueryDto as appPatientsListQueryDto } from '@/domains/app/sub-domains/patients/patients.dto.js';
 import { listLeadsQueryDto as appLeadsListQueryDto } from '@/domains/app/sub-domains/leads/leads.dto.js';
 import { listMessageTemplatesQueryDto as appMessageTemplatesListQueryDto } from '@/domains/app/sub-domains/message-templates/message-templates.dto.js';
-import { listAppointmentsQueryDto as appAppointmentsListQueryDto } from '@/domains/app/sub-domains/appointments/appointments.dto.js';
+import {
+  dailyCountsAppointmentsQueryDto as appDailyCountsAppointmentsQueryDto,
+  listAppointmentsQueryDto as appAppointmentsListQueryDto,
+  slotsAppointmentsQueryDto as appSlotsAppointmentsQueryDto,
+} from '@/domains/app/sub-domains/appointments/appointments.dto.js';
 import { listVisitsQueryDto as appVisitsListQueryDto } from '@/domains/app/sub-domains/visits/visits.dto.js';
 import { listDiagnosesQueryDto as appDiagnosesListQueryDto } from '@/domains/app/sub-domains/diagnoses/diagnoses.dto.js';
 import { listPatientClinicalNotesQueryDto as appPatientClinicalNotesListQueryDto } from '@/domains/app/sub-domains/patient-clinical-notes/patient-clinical-notes.dto.js';
@@ -140,6 +144,8 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/app/stock-purchases/exports': appStockPurchasesListQueryDto,
   'GET /api/v1/app/tasks/exports': appTasksListQueryDto,
   'GET /api/v1/app/messages': appMessagesListQueryDto,
+  'GET /api/v1/app/appointments/slots': appSlotsAppointmentsQueryDto,
+  'GET /api/v1/app/appointments/daily-counts': appDailyCountsAppointmentsQueryDto,
 };
 
 /** Routes that must document `after` and `limit` query parameters in OpenAPI. */

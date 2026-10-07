@@ -11,7 +11,10 @@ import {
   UpdateAppointmentDto,
   appointmentsIdParamsDto,
   cancelAppointmentDto,
+  copyAppointmentDto,
+  dailyCountsAppointmentsQueryDto,
   listAppointmentsQueryDto,
+  slotsAppointmentsQueryDto,
   statusAppointmentDto,
 } from './appointments.dto.js';
 
@@ -153,6 +156,23 @@ export function appointmentsRoutes(service: AppointmentsService): FastifyPluginA
       controller.transition('reinstate'),
     );
     zodApplication.post<{ Params: { appointment_id: string } }>(
+      '/appointments/:appointment_id/copy',
+      {
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.APPOINTMENT_CREATE)],
+        config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
+        schema: {
+          summary: 'Copy appointment',
+          description:
+            'Books the same visit again (patient or lead, service, doctor, room, machine, length) on another date and time \u2014 the new appointment names the one it copies; the slot rules apply (appointments.4). Answers the new appointment. A appointment whose status does not allow it is a 409. Requires appointment:create.',
+          tags: ['Appointment'],
+          params: appointmentsIdParamsDto,
+          body: copyAppointmentDto,
+        },
+      },
+      controller.transition('copy'),
+    );
+    zodApplication.post<{ Params: { appointment_id: string } }>(
       '/appointments/:appointment_id/undo-check-in',
       {
         onRequest: [app.authenticate],
@@ -167,6 +187,38 @@ export function appointmentsRoutes(service: AppointmentsService): FastifyPluginA
         },
       },
       controller.transition('undo-check-in'),
+    );
+    zodApplication.get(
+      '/appointments/slots',
+      {
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.APPOINTMENT_READ)],
+        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        schema: {
+          summary: 'List free slots',
+          description:
+            "The start times a booking of `duration_minutes` fits on a date: inside the branch hours and working days, outside its holidays, and clear of the doctor's, room's and machine's other appointments (cancelled and no-show ones free their slot); today starts from now. Every `step_minutes` (15). A closed day answers `is_open: false` with `closed_reason` `past`, `branch_inactive`, `not_working_day`, `holiday` (with its `closed_label`) or `doctor_off`. Answers `{ appointment_date, is_open, closed_reason, closed_label, slots: [{ start_time, end_time }] }`. Requires appointment:read.",
+          tags: ['Appointment'],
+          querystring: slotsAppointmentsQueryDto,
+        },
+      },
+      controller.collectionView('slots'),
+    );
+    zodApplication.get(
+      '/appointments/daily-counts',
+      {
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.APPOINTMENT_READ)],
+        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        schema: {
+          summary: 'Count appointments per day',
+          description:
+            "For the calendar's month and week views: per date in [date_from, date_to] (at most 62 days), the total and the count per status \u2014 in the caller's branches unless they hold branch:read. Answers `[{ appointment_date, total, by_status }]`. Requires appointment:read.",
+          tags: ['Appointment'],
+          querystring: dailyCountsAppointmentsQueryDto,
+        },
+      },
+      controller.collectionView('daily-counts'),
     );
     zodApplication.delete<{ Params: { appointment_id: string } }>(
       '/appointments/:appointment_id',

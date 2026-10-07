@@ -111,6 +111,8 @@ export const appointments = appSchema
       reminder_status: varchar('reminder_status', { length: 17 }).notNull().default('not_sent'),
       is_confirmed_by_reply: boolean('is_confirmed_by_reply').notNull().default(false),
       move_count: integer('move_count').notNull().default(0),
+      // A walk-in: booked at the current slot and checked in at once (appointments.6)
+      is_walk_in: boolean('is_walk_in').notNull().default(false),
       patient_package_id: bigint('patient_package_id', { mode: 'number' }).references(
         (): AnyPgColumn => patient_packages.id,
         { onDelete: 'set null' },

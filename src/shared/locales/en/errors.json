@@ -191,5 +191,12 @@
   "fieldNeedsPermission": "You need the {{permission}} permission to change {{field}}",
   "leadHeld": "This lead is held by another team member until {{held_until}}",
   "leadNotYours": "Only the lead’s owner can release it",
-  "leadConverted": "This lead is already a patient"
+  "leadConverted": "This lead is already a patient",
+  "slotInPast": "This time has already passed — pick a later slot",
+  "slotClosed": "No bookings on this day ({{reason}})",
+  "slotOutsideHours": "Pick a time between {{opens_at}} and {{closes_at}}",
+  "slotTaken": "The {{resource}} is already booked at {{start_time}}",
+  "appointmentNotMovable": "A {{status}} appointment cannot be moved",
+  "appointmentNotDue": "This appointment is not due yet, so it cannot be marked {{status}}",
+  "visitStarted": "The visit has started — the check-in cannot be undone"
 }

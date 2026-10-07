@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 439
+  Total routes: 442
 ================================================================================
 
 Legend:
@@ -13,7 +13,7 @@ Legend:
 
 ================================================================================
   DOMAIN: APP (/api/v1/app)
-  Routes: 306
+  Routes: 309
 ================================================================================
 
   — Sub Domains —
@@ -23,11 +23,14 @@ Legend:
   PATCH  /api/v1/app/appointments/:appointment_id                 200  -    both  PERM: appointment:update
   DELETE /api/v1/app/appointments/:appointment_id                 204  -    both  PERM: appointment:delete
   POST   /api/v1/app/appointments/:appointment_id/cancel          200  req  both  PERM: appointment:update
+  POST   /api/v1/app/appointments/:appointment_id/copy            200  req  both  PERM: appointment:create
   POST   /api/v1/app/appointments/:appointment_id/reinstate       200  req  both  PERM: appointment:update
   POST   /api/v1/app/appointments/:appointment_id/restore         200  req  both  PERM: appointment:delete
   POST   /api/v1/app/appointments/:appointment_id/status          200  req  both  PERM: appointment:update
   POST   /api/v1/app/appointments/:appointment_id/undo-check-in   200  req  both  PERM: appointment:update
+  GET    /api/v1/app/appointments/daily-counts                    200  -    both  PERM: appointment:read
   GET    /api/v1/app/appointments/exports                         200  -    both  PERM: list:export
+  GET    /api/v1/app/appointments/slots                           200  -    both  PERM: appointment:read
   GET    /api/v1/app/branch-holidays/:branch_holiday_id           200  -    both  PERM: organization:read
   PATCH  /api/v1/app/branch-holidays/:branch_holiday_id           200  -    both  PERM: branch_holiday:update
   DELETE /api/v1/app/branch-holidays/:branch_holiday_id           204  -    both  PERM: branch_holiday:delete
@@ -530,16 +533,16 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 439
+  Total routes    : 442
   Public          : 16
   Authenticated   : 51
   Role-guarded    : 9
-  Perm-guarded    : 358
+  Perm-guarded    : 361
   Token-guarded   : 5
   Team-only (O)   : 10
 
 ================================================================================
-  IDEMPOTENCY-REQUIRED WRITES (121) — X-Idempotency-Key required
+  IDEMPOTENCY-REQUIRED WRITES (122) — X-Idempotency-Key required
 ================================================================================
 
   Routes flagged I = req reject a missing or reused key (422); every other write
@@ -547,6 +550,7 @@ Legend:
 
     POST /api/v1/app/appointments
     POST /api/v1/app/appointments/:appointment_id/cancel
+    POST /api/v1/app/appointments/:appointment_id/copy
     POST /api/v1/app/appointments/:appointment_id/reinstate
     POST /api/v1/app/appointments/:appointment_id/restore
     POST /api/v1/app/appointments/:appointment_id/status

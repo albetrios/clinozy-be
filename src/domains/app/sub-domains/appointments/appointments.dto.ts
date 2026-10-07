@@ -41,6 +41,7 @@ export const CreateAppointmentDto = z
     reason: trimmedStringMinMax(1, 160).nullable().optional(),
     notes: trimmedString().max(2000).nullable().optional(),
     follow_up_at: instantSchema.nullable().optional(),
+    is_walk_in: z.boolean().optional(),
     patient_package_id: recordIdSchema.nullable().optional(),
   })
   .strict();
@@ -106,6 +107,37 @@ export const cancelAppointmentDto = z
   .object({
     cancel_reason: z.enum(APPOINTMENT_CANCEL_REASON_VALUES),
     cancel_note: trimmedString().max(280).optional(),
+  })
+  .strict();
+
+/** Body of `POST /app/appointments/{appointment_id}/copy`. */
+export const copyAppointmentDto = z
+  .object({
+    appointment_date: calendarDateSchema,
+    start_time: hourMinuteSchema,
+  })
+  .strict();
+
+/** Query of `GET /app/appointments/slots`. */
+export const slotsAppointmentsQueryDto = z
+  .object({
+    branch_id: recordIdSchema,
+    appointment_date: calendarDateSchema,
+    duration_minutes: z.coerce.number().int().min(5).max(240),
+    doctor_membership_id: recordIdSchema.optional(),
+    room_id: recordIdSchema.optional(),
+    machine_id: recordIdSchema.optional(),
+    step_minutes: z.coerce.number().int().min(5).max(60).optional(),
+  })
+  .strict();
+
+/** Query of `GET /app/appointments/daily-counts`. */
+export const dailyCountsAppointmentsQueryDto = z
+  .object({
+    date_from: calendarDateSchema,
+    date_to: calendarDateSchema,
+    branch_ids: recordIdListSchema.optional(),
+    doctor_membership_id: recordIdSchema.optional(),
   })
   .strict();
 

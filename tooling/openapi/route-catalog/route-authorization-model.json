@@ -986,5 +986,9 @@
   "POST /api/v1/app/leads/:lead_id/convert": {
     "model": "organization",
     "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/copy": {
+    "model": "organization",
+    "verifyNoMutation": true
   }
 }

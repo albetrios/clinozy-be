@@ -437,5 +437,8 @@
   "GET /api/v1/app/messages/:message_id": 200,
   "POST /api/v1/app/messages/:message_id/resend": 200,
   "POST /api/v1/app/messages/batches": 200,
-  "POST /api/v1/app/leads/:lead_id/convert": 200
+  "POST /api/v1/app/leads/:lead_id/convert": 200,
+  "POST /api/v1/app/appointments/:appointment_id/copy": 200,
+  "GET /api/v1/app/appointments/slots": 200,
+  "GET /api/v1/app/appointments/daily-counts": 200
 }

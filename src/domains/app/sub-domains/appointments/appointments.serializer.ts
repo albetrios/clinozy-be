@@ -37,6 +37,7 @@ export function serializeAppointment(
     reminder_status: row.reminder_status as string,
     is_confirmed_by_reply: row.is_confirmed_by_reply as boolean,
     move_count: row.move_count as number,
+    is_walk_in: row.is_walk_in as boolean,
     patient_package_id: references.publicIdOf('patient_package_id', row),
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),

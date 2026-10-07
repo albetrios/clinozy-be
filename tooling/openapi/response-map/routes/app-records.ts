@@ -373,9 +373,24 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.appointmentsRecordSchema, schemas.appointmentsRecordExample),
     example: null,
   },
+  'POST /api/v1/app/appointments/{appointment_id}/copy': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.appointmentsRecordSchema, schemas.appointmentsRecordExample),
+    example: null,
+  },
   'POST /api/v1/app/appointments/{appointment_id}/undo-check-in': {
     statusCode: 200,
     schema: wrapSuccess(schemas.appointmentsRecordSchema, schemas.appointmentsRecordExample),
+    example: null,
+  },
+  'GET /api/v1/app/appointments/slots': {
+    statusCode: 200,
+    schema: wrapSuccess({ type: 'object', additionalProperties: true }, {}),
+    example: null,
+  },
+  'GET /api/v1/app/appointments/daily-counts': {
+    statusCode: 200,
+    schema: wrapSuccess({ type: 'object', additionalProperties: true }, {}),
     example: null,
   },
   'DELETE /api/v1/app/appointments/{appointment_id}': {

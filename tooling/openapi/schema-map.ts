@@ -51,6 +51,7 @@ import {
 } from '@/domains/app/sub-domains/message-templates/message-templates.dto.js';
 import {
   cancelAppointmentDto as appCancelAppointmentDto,
+  copyAppointmentDto as appCopyAppointmentDto,
   CreateAppointmentDto as appCreateAppointmentDto,
   statusAppointmentDto as appStatusAppointmentDto,
   UpdateAppointmentDto as appUpdateAppointmentDto,
@@ -347,6 +348,7 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
 
   // ── App: Branches ──
   'POST /api/v1/app/branches': CreateBranchDto,
+  'POST /api/v1/app/appointments/{appointment_id}/copy': appCopyAppointmentDto,
   'POST /api/v1/app/leads/{lead_id}/convert': appConvertLeadDto,
   'POST /api/v1/app/messages/batches': appBatchesMessagesBodyDto,
   'POST /api/v1/app/messages': appCreateMessageDto,

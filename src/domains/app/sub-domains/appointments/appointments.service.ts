@@ -13,6 +13,7 @@ import { rooms } from '@/domains/app/sub-domains/rooms/rooms.schema.js';
 import type { AppointmentsRepository } from './appointments.repository.js';
 import { serializeAppointment } from './appointments.serializer.js';
 import type { AppointmentOutput } from './appointments.types.js';
+import { appointmentsRules } from './appointments.rules.js';
 import {
   validateCancelAppointment,
   validateCreateAppointment,
@@ -86,6 +87,7 @@ export class AppointmentsService extends BaseRecordService<AppointmentOutput> {
           set: { status: 'confirmed', checked_in_at: null },
         },
       },
+      ...appointmentsRules,
     });
   }
 }
