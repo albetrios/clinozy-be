@@ -7,8 +7,10 @@
 # install mechanism) and dispatches each manifest entry to the matching handler.
 #
 # Installs-or-UPGRADES every external tool the project needs that `pnpm install`
-# cannot provide, from AUTHENTICATED sources only (Homebrew official formulae, the
-# npm registry, PyPI) and with NO prompts/pauses, so setup runs fully hands-off.
+# cannot provide, from AUTHENTICATED sources only (Homebrew official formulae) and
+# with NO prompts/pauses, so setup runs fully hands-off. The agent tools (codegraph,
+# headroom) are not here: `pnpm setup:local` installs them at the versions pinned in
+# tooling/setup/agent/tool-versions.sh.
 # Already-present tools are upgraded (or left as-is for Node/Docker); missing ones
 # are installed. macOS only for now — a no-op on other platforms.
 #
@@ -126,40 +128,6 @@ docker_ensure() {
   if [ "$runtime" = "colima" ]; then run colima start || true; fi
 }
 
-# npm global — install-or-upgrade. $1 = package@version (e.g. @scope/name@latest).
-npm_ensure() {
-  pkg="$1"
-  base="$(printf '%s' "$pkg" | sed -E 's/@[^@]*$//')" # strip trailing @version
-  if ! command -v npm >/dev/null 2>&1; then
-    log "npm: not on PATH — skipping ${base} (run pnpm setup:local so Node is present)."
-    return 0
-  fi
-  if npm ls -g --depth=0 "$base" >/dev/null 2>&1; then
-    log "${base}: already installed — upgrading to latest (npm)."
-  else
-    log "${base}: not present — installing (npm)."
-  fi
-  run npm install -g "$pkg"
-}
-
-# pipx — install-or-upgrade. $1 = package[extras] (e.g. headroom-ai[mcp]).
-pipx_ensure() {
-  pkg="$1"
-  base="${pkg%%[*}" # strip [extras]
-  if ! command -v pipx >/dev/null 2>&1; then
-    log "pipx: not on PATH — skipping ${base} (retry after a fresh shell)."
-    return 0
-  fi
-  run pipx ensurepath >/dev/null 2>&1 || true
-  if pipx list 2>/dev/null | grep -q "$base"; then
-    log "${base}: already installed — upgrading (pipx)."
-    run pipx upgrade "$base" || true
-  else
-    log "${base}: not present — installing (pipx)."
-    run pipx install "$pkg"
-  fi
-}
-
 # ---------------------------------------------------------------------------
 # Drive every tool from the manifest (blank lines and `#` comments ignored).
 # ---------------------------------------------------------------------------
@@ -170,8 +138,6 @@ while IFS='|' read -r method spec _note || [ -n "$method" ]; do
     node) node_ensure ;;
     brew) brew_ensure "$spec" ;;
     docker) docker_ensure "$spec" ;;
-    npm) npm_ensure "$spec" ;;
-    pipx) pipx_ensure "$spec" ;;
     *) log "unknown method '${method}' in manifest — skipping." ;;
   esac
 done <"$MANIFEST"

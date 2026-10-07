@@ -9,7 +9,7 @@
 # This starts nothing itself — run it AFTER the stack and app are up in-session:
 #
 #     pnpm compose:up && pnpm compose:wait
-#     pnpm db:migrate && pnpm db:seed
+#     pnpm db:migrate && pnpm setup:local --only-env && pnpm db:seed
 #     pnpm dev &                                    # (or pnpm dev:worker, with WORKER_HEALTH_PORT)
 #     bash tooling/setup/agent/healthcheck.sh
 #

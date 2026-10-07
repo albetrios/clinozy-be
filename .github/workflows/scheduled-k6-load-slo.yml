@@ -116,8 +116,14 @@ jobs:
           rate-limit-max: '100000'
           rate-limit-window-ms: '1000'
 
-      - name: Setup k6
-        uses: grafana/setup-k6-action@43b9fc21641a76002687994433dd586f56e791b1 # v1
+      # The cloud installer, so CI and cloud sessions run the same k6: the version pinned in
+      # tooling/setup/agent/tool-versions.sh, SHA-256-verified. It never fails on its own
+      # (best-effort), so `k6 version` is the gate.
+      - name: Install k6
+        run: |
+          set -euo pipefail
+          sudo bash tooling/setup/agent/install-k6.sh
+          k6 version
 
       - name: Run migrations
         run: pnpm db:migrate

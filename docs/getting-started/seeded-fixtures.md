@@ -42,6 +42,7 @@ Use its id (`org_…`, in the seed log) with `POST /auth/switch-to-organization`
 ```bash
 pnpm compose:up && pnpm compose:wait
 pnpm db:migrate
+pnpm setup:local --only-env   # turn on the database logins the migrations created
 pnpm db:seed:full
 pnpm dev
 ```

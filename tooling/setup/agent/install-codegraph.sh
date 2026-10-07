@@ -17,9 +17,9 @@
 # IMPORTANT (MCP): installing the CLI + index does NOT auto-connect the codegraph
 # MCP tools in a running session. In Claude Code on the web the live MCP server set
 # is loaded by the platform at session start from your account/environment MCP
-# settings — NOT the repo .mcp.json this writes. Configure the `codegraph` server
-# in the web UI MCP settings (command `codegraph serve --mcp`) for the tools to
-# appear, then start a fresh session. The CLI (`codegraph query/context/status`)
+# settings — NOT the repo .mcp.json (declared by install-headroom.sh). Configure the
+# `codegraph` server in the web UI MCP settings (command `codegraph serve --mcp`) for
+# the tools to appear, then start a fresh session. The CLI (`codegraph query/context/status`)
 # works immediately regardless.
 #
 # Idempotent and best-effort: never hard-fails the setup chain. Diagnostics → stderr.
@@ -69,24 +69,47 @@ case ":${PATH}:" in
     ;;
 esac
 
-if ! command -v codegraph >/dev/null 2>&1; then
-  echo "install-codegraph: installing ${CODEGRAPH_PACKAGE}…" >&2
-  if ! npm install -g "${CODEGRAPH_PACKAGE}" >&2 2>&1; then
+# shellcheck source=tool-install.lib.sh
+source "${repository_root}/tooling/setup/agent/tool-install.lib.sh"
+codegraph_version="$(pinned_version CODEGRAPH_VERSION)"
+current_version="$(installed_version codegraph --version)"
+
+if [ "${current_version}" = "${codegraph_version}" ]; then
+  echo "install-codegraph: codegraph ${current_version} is at the pin — nothing to install." >&2
+else
+  package="${CODEGRAPH_PACKAGE}@${codegraph_version}"
+  echo "install-codegraph: installing ${package} (found: ${current_version:-none})…" >&2
+  if ! npm install -g "${package}" >&2 2>&1; then
     echo "install-codegraph: global install failed — trying user prefix (${user_bin})…" >&2
     mkdir -p "${user_bin}" 2>/dev/null || true
-    if ! npm install -g "${CODEGRAPH_PACKAGE}" --prefix "${HOME}/.local" >&2 2>&1; then
-      echo "install-codegraph: user-prefix install failed — run \`npm i -g ${CODEGRAPH_PACKAGE}\` manually (non-fatal)." >&2
+    if ! npm install -g "${package}" --prefix "${HOME}/.local" >&2 2>&1; then
+      echo "install-codegraph: user-prefix install failed — run \`npm i -g ${package}\` manually (non-fatal)." >&2
       exit 0
     fi
   fi
 fi
 
-if [ -f .codegraph/codegraph.db ] && [ -f .mcp.json ]; then
+# Put the CLI on Claude Code's own PATH. The global install lands in the pinned Node's
+# bin (/opt/node24/bin), which only the Bash tool's PATH gains (via CLAUDE_ENV_FILE); the
+# Claude Code process that launches MCP servers keeps the image PATH, so `codegraph serve
+# --mcp` failed with ENOENT. ~/.local/bin is on that PATH (headroom lives there).
+codegraph_path="$(command -v codegraph)"
+if [ "${codegraph_path}" != "${user_bin}/codegraph" ]; then
+  mkdir -p "${user_bin}" 2>/dev/null || true
+  ln -sf "${codegraph_path}" "${user_bin}/codegraph" \
+    && echo "install-codegraph: linked ${user_bin}/codegraph → ${codegraph_path}." >&2
+fi
+
+# Index only — never `codegraph install`: it builds no index without `--init`, and it
+# replaces the tracked .mcp.json and .claude/settings.json symlinks with plain files,
+# leaving every bootstrap with a dirty tree. install-headroom.sh declares the codegraph
+# MCP server through the symlink; agent-os/platforms/claude/settings.json allows its tools.
+if [ -f .codegraph/codegraph.db ]; then
   echo "install-codegraph: index present — refreshing (codegraph sync)…" >&2
   codegraph sync >&2 2>&1 || echo "install-codegraph: sync failed (non-fatal)." >&2
 else
-  echo "install-codegraph: building index + writing Claude MCP config…" >&2
-  codegraph install --target=claude --location=local --yes >&2 2>&1 \
+  echo "install-codegraph: building index (codegraph init)…" >&2
+  codegraph init >&2 2>&1 \
     || echo "install-codegraph: index build failed (non-fatal)." >&2
 fi
 

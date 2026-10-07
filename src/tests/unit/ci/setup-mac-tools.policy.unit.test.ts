@@ -33,36 +33,31 @@ describe('setup:local macOS prerequisites installer policy', () => {
   it('is driven by the single manifest, which lists every tool', () => {
     // The script reads the manifest and dispatches by method — no hard-coded list.
     expect(SCRIPT).toContain('setup-prerequisites-mac-tools.manifest');
-    for (const handler of [
-      'node_ensure',
-      'brew_ensure',
-      'docker_ensure',
-      'npm_ensure',
-      'pipx_ensure',
-    ]) {
+    for (const handler of ['node_ensure', 'brew_ensure', 'docker_ensure']) {
       expect(SCRIPT).toContain(handler);
     }
     // The manifest is the source of truth for which tools are installed.
-    for (const tool of [
-      'gitleaks',
-      'gh',
-      'jq',
-      'uv',
-      'pipx',
-      'colima',
-      '@colbymchenry/codegraph@latest',
-      'headroom-ai[mcp]',
-    ]) {
+    for (const tool of ['gitleaks', 'gh', 'jq', 'uv', 'pipx', 'colima']) {
       expect(MANIFEST).toContain(tool);
     }
     expect(MANIFEST).toMatch(/^node\|/m);
   });
 
-  it('install-or-upgrades from authenticated sources (Homebrew / npm / PyPI)', () => {
+  it('leaves the pinned agent tools to setup:local — never an upgrade-to-latest here', () => {
+    // codegraph + headroom are pinned in tooling/setup/agent/tool-versions.sh; an
+    // install-or-upgrade line here would move them off that pin on every run.
+    const entries = MANIFEST.split('\n').filter((line) => line.trim() && !line.startsWith('#'));
+    for (const entry of entries) {
+      expect(entry).not.toContain('@latest');
+      expect(entry).not.toMatch(/codegraph|headroom-ai/);
+    }
+    expect(SETUP_LOCAL).toContain("AGENT_TOOLS.find((tool) => tool.name === 'codegraph')");
+    expect(SETUP_LOCAL).toContain("AGENT_TOOLS.find((tool) => tool.name === 'headroom')");
+  });
+
+  it('install-or-upgrades from authenticated sources (Homebrew)', () => {
     expect(SCRIPT).toContain('brew upgrade');
     expect(SCRIPT).toContain('brew install');
-    expect(SCRIPT).toContain('npm install -g');
-    expect(SCRIPT).toContain('pipx upgrade');
     // Node matches the pinned .nvmrc major.
     expect(SCRIPT).toContain('.nvmrc');
   });

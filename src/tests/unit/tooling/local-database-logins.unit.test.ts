@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import {
   alterRoleStatement,
   applyLocalDatabaseLogins,
+  environmentConnectionUrlProblems,
   localDatabaseLogins,
   passwordFromUrl,
   planLocalDatabaseLogins,
@@ -107,6 +108,76 @@ describe('setup:local — the local database logins', () => {
       alterRoleStatement({ ...app!, password: "x'; DROP ROLE app_be_app; --" }),
     ).toThrow();
     expect(() => alterRoleStatement({ ...app!, role: 'App"Role' })).toThrow();
+  });
+});
+
+describe('setup:local — database and Redis URLs in the process environment', () => {
+  const problems = (environment: Record<string, string | undefined>, envLocal = '') =>
+    environmentConnectionUrlProblems({ envLocal, environment, logins: LOGINS });
+
+  it('accepts nothing set, and local URLs that log in as the role of each variable', () => {
+    expect(problems({})).toEqual([]);
+    expect(
+      problems({
+        DATABASE_URL: 'postgresql://app_be_app:secret@localhost:5432/appdb',
+        DATABASE_MAINTENANCE_URL: 'postgresql://app_be_maintenance:secret@127.0.0.1:5432/appdb',
+        DATABASE_OPERATOR_URL: 'postgresql://app_be_operator:secret@localhost:5432/appdb',
+        // The migration URL only has to be local: locally it is the compose superuser.
+        DATABASE_MIGRATION_URL: SUPERUSER_URL,
+      }),
+    ).toEqual([]);
+  });
+
+  it('rejects a hosted URL, naming the host but never the password', () => {
+    const found = problems({
+      DATABASE_MAINTENANCE_URL:
+        'postgresql://app_be_maintenance:hosted-secret@ep-dev.neon.tech/appdb?sslmode=verify-full',
+      DATABASE_MIGRATION_URL: 'postgresql://app_be_migrator:hosted-secret@ep-dev.neon.tech/appdb',
+    });
+    expect(found).toEqual([
+      {
+        envKey: 'DATABASE_MIGRATION_URL',
+        problem: 'points at ep-dev.neon.tech, not the local Postgres',
+      },
+      {
+        envKey: 'DATABASE_MAINTENANCE_URL',
+        problem: 'points at ep-dev.neon.tech, not the local Postgres',
+      },
+    ]);
+    expect(JSON.stringify(found)).not.toContain('hosted-secret');
+  });
+
+  it('rejects a local URL that logs in as another role, such as the superuser', () => {
+    expect(problems({ DATABASE_URL: SUPERUSER_URL })).toEqual([
+      { envKey: 'DATABASE_URL', problem: 'logs in as owner, not app_be_app' },
+    ]);
+    expect(problems({ DATABASE_OPERATOR_URL: 'not a url' })).toEqual([
+      {
+        envKey: 'DATABASE_OPERATOR_URL',
+        problem: 'points at an unparseable URL, not the local Postgres',
+      },
+    ]);
+  });
+
+  it('accepts the value .env.local itself holds, inherited from a process that loaded it', () => {
+    // verify:base and `set -a; source .env.local` hand the file's own values to children; before
+    // the logins exist that is the superuser, which is not an override.
+    expect(problems({ DATABASE_URL: SUPERUSER_URL }, `DATABASE_URL=${SUPERUSER_URL}\n`)).toEqual(
+      [],
+    );
+  });
+
+  it('holds REDIS_URL to the local Redis: hosted is rejected, local or the file value passes', () => {
+    expect(problems({ REDIS_URL: 'redis://localhost:6379' })).toEqual([]);
+    expect(problems({ REDIS_URL: 'redis://127.0.0.1:6379/1' })).toEqual([]);
+    const hosted = 'rediss://default:hosted-secret@redis-dev.example.cloud:6380';
+    const found = problems({ REDIS_URL: hosted });
+    expect(found).toEqual([
+      { envKey: 'REDIS_URL', problem: 'points at redis-dev.example.cloud, not the local Redis' },
+    ]);
+    expect(JSON.stringify(found)).not.toContain('hosted-secret');
+    // A developer who points .env.local itself at a hosted Redis is not overridden by it.
+    expect(problems({ REDIS_URL: hosted }, `REDIS_URL=${hosted}\n`)).toEqual([]);
   });
 });
 

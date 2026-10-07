@@ -123,8 +123,11 @@ it later.
 3. Run migrations and seed reference data:
 
    ```bash
-   pnpm db:migrate && pnpm db:seed
+   pnpm db:migrate && pnpm setup:local --only-env && pnpm db:seed
    ```
+
+   `setup:local --only-env` turns on the database logins the migrations create (`NOLOGIN`)
+   before the seed connects.
 
 4. Push repository configuration — rulesets, GitHub Environments, and secrets — to the new
    repository:

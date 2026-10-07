@@ -23,7 +23,9 @@
 # Idempotent and best-effort: never hard-fails the setup chain. Diagnostics → stderr.
 set -uo pipefail
 
-# Lightweight MCP-only extra; use headroom-ai[all] for the full embedder runtime.
+# Lightweight MCP-only extra; use headroom-ai[all] for the full embedder runtime (the `code`
+# extra adds nothing to the MCP compress path — measured 0% either way on code, logs, JSON).
+# The version is pinned in tool-versions.sh (HEADROOM_VERSION).
 readonly HEADROOM_PACKAGE="headroom-ai[mcp]"
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -42,30 +44,35 @@ case ":${PATH}:" in
     ;;
 esac
 
-if command -v headroom >/dev/null 2>&1; then
-  echo "install-headroom: headroom already installed ($(headroom --version 2>/dev/null || echo present)) — skipping install." >&2
+# shellcheck source=tool-install.lib.sh
+source "${repository_root}/tooling/setup/agent/tool-install.lib.sh"
+headroom_version="$(pinned_version HEADROOM_VERSION)"
+current_version="$(installed_version headroom --version)"
+package="${HEADROOM_PACKAGE}==${headroom_version}"
+
+if [ "${current_version}" = "${headroom_version}" ]; then
+  echo "install-headroom: headroom ${current_version} is at the pin — nothing to install." >&2
 else
   # Prefer uv (already the repo's Python tool runner for MCP servers); fall back to
   # pipx, then pip --user. The PEP 668 "externally-managed" marker on system Python
   # blocks a bare system pip install, so isolated installers (uv / pipx) come first.
+  # `--force` replaces a different installed version with the pin.
+  echo "install-headroom: installing '${package}' (found: ${current_version:-none})…" >&2
   installed=0
   if command -v uv >/dev/null 2>&1; then
-    echo "install-headroom: installing '${HEADROOM_PACKAGE}' via \`uv tool install\`…" >&2
-    uv tool install "${HEADROOM_PACKAGE}" >&2 2>&1 && installed=1
+    uv tool install --force "${package}" >&2 2>&1 && installed=1
   fi
   if [ "${installed}" -eq 0 ] && command -v pipx >/dev/null 2>&1; then
-    echo "install-headroom: installing '${HEADROOM_PACKAGE}' via \`pipx install\`…" >&2
-    pipx install "${HEADROOM_PACKAGE}" >&2 2>&1 && installed=1
+    pipx install --force "${package}" >&2 2>&1 && installed=1
   fi
   if [ "${installed}" -eq 0 ] && command -v python3 >/dev/null 2>&1; then
-    echo "install-headroom: installing '${HEADROOM_PACKAGE}' via \`pip install --user\`…" >&2
-    if python3 -m pip install --user "${HEADROOM_PACKAGE}" >&2 2>&1 \
-      || python3 -m pip install --user --break-system-packages "${HEADROOM_PACKAGE}" >&2 2>&1; then
+    if python3 -m pip install --user "${package}" >&2 2>&1 \
+      || python3 -m pip install --user --break-system-packages "${package}" >&2 2>&1; then
       installed=1
     fi
   fi
   if [ "${installed}" -eq 0 ]; then
-    echo "install-headroom: install failed — install \`uv\` (or pipx) and run \`uv tool install '${HEADROOM_PACKAGE}'\` manually (non-fatal)." >&2
+    echo "install-headroom: install failed — install \`uv\` (or pipx) and run \`uv tool install '${package}'\` manually (non-fatal)." >&2
     exit 0
   fi
 fi
@@ -86,7 +93,7 @@ else
 fi
 
 # Ensure the default MCP pair (codegraph + headroom) is declared in .mcp.json so the
-# session matches `pnpm setup:local`. install-codegraph.sh writes codegraph; this merges
+# session matches `pnpm setup:local`. install-codegraph.sh only builds the index; this merges
 # in the committed `.mcp.default.json` (codegraph + headroom), preserving any other
 # entries — never clobbering real keys. Best-effort: needs jq + the template. (On Claude
 # Code web the platform loads MCP from the environment settings, not this file; this keeps

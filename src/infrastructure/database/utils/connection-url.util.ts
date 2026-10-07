@@ -74,6 +74,21 @@ export function isStrictDatabaseTlsVerification({
   );
 }
 
+/**
+ * Every env variable that carries a Postgres connection URL: the runtime pool, migrations,
+ * maintenance contexts, and the local/CI-only operator login.
+ *
+ * @remarks
+ * - **Notes:** the one list the test harness's local-database switch, `pnpm setup:local`'s
+ *   environment check and `pnpm verify:base` share.
+ */
+export const DATABASE_URL_KEYS = [
+  'DATABASE_URL',
+  'DATABASE_MIGRATION_URL',
+  'DATABASE_MAINTENANCE_URL',
+  'DATABASE_OPERATOR_URL',
+] as const;
+
 /** Hostnames that are this machine, with IPv6 brackets stripped. */
 const LOCAL_DATABASE_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
 
@@ -86,7 +101,8 @@ const LOCAL_DATABASE_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
  * - **Failure modes:** an unset or unparseable value is not local.
  * - **Side effects:** none — pure string parsing.
  * - **Notes:** the one check the test harness's local-database switch, the bulk-seed guard and
- *   `pnpm setup:local` share.
+ *   `pnpm setup:local` share. It only reads the hostname, so `setup:local`'s environment guard
+ *   applies it to `REDIS_URL` as well.
  */
 export function isLocalDatabaseUrl(value: string | undefined): boolean {
   if (!value) return false;

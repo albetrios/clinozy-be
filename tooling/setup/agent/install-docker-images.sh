@@ -53,49 +53,56 @@ start_docker() {
   wait_for_docker
 }
 
-# 1) Configure the registry mirror (merge-safe; preserve any existing config).
-mkdir -p /etc/docker
-if [ -f "${DAEMON_JSON}" ] && grep -q 'mirror.gcr.io' "${DAEMON_JSON}" 2>/dev/null; then
-  echo "install-docker-images: registry mirror already present in ${DAEMON_JSON}." >&2
-elif command -v jq >/dev/null 2>&1 && [ -f "${DAEMON_JSON}" ]; then
-  tmp="$(mktemp)"
-  if jq --arg m "${MIRROR_URL}" \
-       '."registry-mirrors" = ((."registry-mirrors" // []) + [$m] | unique)' \
-       "${DAEMON_JSON}" > "${tmp}" 2>/dev/null; then
-    mv "${tmp}" "${DAEMON_JSON}"
-    echo "install-docker-images: merged registry mirror into existing ${DAEMON_JSON}." >&2
+# Steps 1–2 are for the Linux cloud image, whose Docker Hub blob CDN is blocked. Docker Desktop
+# and OrbStack on a developer machine pull straight from Docker Hub and own their daemon (there
+# is no /etc/docker or dockerd to restart), so only the pre-pull in step 3 applies there.
+if [ "$(uname -s)" = "Linux" ]; then
+  # 1) Configure the registry mirror (merge-safe; preserve any existing config).
+  mkdir -p /etc/docker 2>/dev/null || true
+  if [ -f "${DAEMON_JSON}" ] && grep -q 'mirror.gcr.io' "${DAEMON_JSON}" 2>/dev/null; then
+    echo "install-docker-images: registry mirror already present in ${DAEMON_JSON}." >&2
+  elif command -v jq >/dev/null 2>&1 && [ -f "${DAEMON_JSON}" ]; then
+    tmp="$(mktemp)"
+    if jq --arg m "${MIRROR_URL}" \
+         '."registry-mirrors" = ((."registry-mirrors" // []) + [$m] | unique)' \
+         "${DAEMON_JSON}" > "${tmp}" 2>/dev/null && mv "${tmp}" "${DAEMON_JSON}" 2>/dev/null; then
+      echo "install-docker-images: merged registry mirror into existing ${DAEMON_JSON}." >&2
+    else
+      rm -f "${tmp}"
+      echo "install-docker-images: could not merge ${DAEMON_JSON} — leaving it untouched." >&2
+    fi
+  elif printf '{\n  "registry-mirrors": ["%s"]\n}\n' "${MIRROR_URL}" > "${DAEMON_JSON}" 2>/dev/null; then
+    echo "install-docker-images: wrote ${DAEMON_JSON} with registry mirror ${MIRROR_URL}." >&2
   else
-    rm -f "${tmp}"
-    echo "install-docker-images: could not merge ${DAEMON_JSON} — leaving it untouched." >&2
+    echo "install-docker-images: cannot write ${DAEMON_JSON} (needs root — run in the Setup script) — pulls go straight to Docker Hub." >&2
+  fi
+
+  # 2) Ensure dockerd is running and has actually picked up the mirror.
+  if ! docker info >/dev/null 2>&1; then
+    echo "install-docker-images: starting dockerd…" >&2
+    bash "${agent_dir}/ensure-docker-daemon.sh" || start_docker || true
+  fi
+
+  if ! docker info >/dev/null 2>&1; then
+    echo "install-docker-images: dockerd not reachable during setup — the mirror is written and will apply when dockerd next starts in-session." >&2
+    exit 0
+  fi
+
+  if grep -q 'mirror.gcr.io' "${DAEMON_JSON}" 2>/dev/null && ! docker info 2>/dev/null | grep -q 'mirror.gcr.io'; then
+    echo "install-docker-images: restarting dockerd to apply the mirror…" >&2
+    if ! service docker restart >/dev/null 2>&1; then
+      pkill -TERM dockerd 2>/dev/null || true
+      for _ in $(seq 1 20); do docker info >/dev/null 2>&1 || break; sleep 1; done
+      start_docker || true
+    fi
   fi
 else
-  printf '{\n  "registry-mirrors": ["%s"]\n}\n' "${MIRROR_URL}" > "${DAEMON_JSON}"
-  echo "install-docker-images: wrote ${DAEMON_JSON} with registry mirror ${MIRROR_URL}." >&2
-fi
-
-# 2) Ensure dockerd is running and has actually picked up the mirror.
-if ! docker info >/dev/null 2>&1; then
-  echo "install-docker-images: starting dockerd…" >&2
-  bash "${agent_dir}/ensure-docker-daemon.sh" || start_docker || true
-fi
-
-if ! docker info >/dev/null 2>&1; then
-  echo "install-docker-images: dockerd not reachable during setup — the mirror is written and will apply when dockerd next starts in-session." >&2
-  exit 0
-fi
-
-if ! docker info 2>/dev/null | grep -q 'mirror.gcr.io'; then
-  echo "install-docker-images: restarting dockerd to apply the mirror…" >&2
-  if ! service docker restart >/dev/null 2>&1; then
-    pkill -TERM dockerd 2>/dev/null || true
-    for _ in $(seq 1 20); do docker info >/dev/null 2>&1 || break; sleep 1; done
-    start_docker || true
-  fi
+  echo "install-docker-images: $(uname -s) Docker pulls from Docker Hub directly — no mirror needed." >&2
 fi
 
 # 3) Pre-pull the exact images docker-compose.yml pins (stays in sync automatically).
 if [ -f "${repository_root}/docker-compose.yml" ] && docker info >/dev/null 2>&1; then
-  echo "install-docker-images: pre-pulling compose images via mirror…" >&2
+  echo "install-docker-images: pre-pulling compose images…" >&2
   ( cd "${repository_root}" && docker compose pull postgres redis ) >&2 2>&1 \
     || echo "install-docker-images: pre-pull failed (non-fatal) — compose will pull on demand via the mirror." >&2
 fi

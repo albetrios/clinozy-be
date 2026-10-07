@@ -53,7 +53,8 @@ The default **Trusted** allowlist already covers what `pnpm install` and image p
 Add the rest via **Custom** (tick "Also include default list of common package managers"):
 
 - `nodejs.org` — **always**, for the Node 24 download in the setup script. Without it the install is blocked.
-- Tier 3 only (live calls; contract tests mock these, so usually unnecessary): `api.stripe.com`, `api.resend.com`, `sentry.io` / `*.ingest.sentry.io`.
+- Tier 3 only (live calls; contract tests mock these, so usually unnecessary): `api.stripe.com`, `api.resend.com`, `sentry.io` / `*.ingest.sentry.io`, `us.i.posthog.com` (PostHog events — blocked by default, so they are silently dropped).
+- Agent tooling: `semgrep.dev` (`pnpm security:sast` downloads its `--config auto` rules), `context7.com` (the Context7 docs MCP), `openaipublic.blob.core.windows.net` (Headroom's tiktoken token counter downloads its vocabulary here).
 
 > **Do not use `None`** — it blocks `pnpm install` entirely.
 
@@ -61,30 +62,54 @@ Add the rest via **Custom** (tick "Also include default list of common package m
 
 ## Setup script
 
-**Canonical (shared with Cursor):** paste the contents of
-[`agent-os/cloud-environment/install.sh`](../../agent-os/cloud-environment/install.sh),
-or run:
+**One script for everything (shared with Cursor)** —
+[`bootstrap.sh`](../../tooling/setup/agent/bootstrap.sh). In the Setup script field:
 
 ```bash
-bash agent-os/cloud-environment/install.sh
+bash tooling/setup/agent/bootstrap.sh --install-only
 ```
 
-That script wraps the same helpers below. For a hand-maintained list:
-
-```bash
-bash tooling/setup/agent/install-node.sh
-bash tooling/setup/agent/install-gh.sh              # optional: GitHub CLI (in-session GitHub fallback)
-bash tooling/setup/agent/install-docker-images.sh   # optional: Docker Hub mirror + pre-pull compose images
-bash tooling/setup/agent/install-codegraph.sh       # default MCP pair: CodeGraph CLI + semantic index
-bash tooling/setup/agent/install-headroom.sh        # default MCP pair: Headroom CLI — context-compression MCP (headroom_compress)
-bash tooling/setup/agent/install-gitleaks.sh        # optional: gitleaks (pre-commit secret scan)
-```
+`--install-only` runs steps 1–8 — Node 24 into `/opt/node24`, `pnpm install`, gh, the Docker
+CLI + mirror + compose images, CodeGraph, Headroom + the default MCP pair, gitleaks, semgrep, k6, and the
+`.env.local` scaffold — and stops before Docker, so the result is cached. In every web session the session-start hook
+then runs the same script **without** the flag in the background — those steps again (fast: each
+is idempotent and already at its pin), then the stack, fully live. See
+[Session startup — the live playground](#session-startup--the-live-playground).
 
 On the first session the cached Node 24 is already on disk, [`session-start.sh`](../../agent-os/hooks/session-start.sh) switches `PATH` to `/opt/node24`, and runs `pnpm install`. Do **not** start Postgres / Redis here — setup-script processes do not persist; start them per session (below).
 
 **GitHub CLI (optional).** [`install-gh.sh`](../../tooling/setup/agent/install-gh.sh) adds `gh` as an in-session fallback for reading Actions logs, checking CI, and merging (the GitHub MCP tools already cover this). It belongs in the cached **setup script**, not `session-start.sh` — a per-session `apt install` would not cache and would slow every startup. Set `GH_TOKEN` in the environment's **Variables** (least-privilege: `contents` + `pull_requests` + `actions:read`; env vars are not a secrets store). The script first installs the **github.com release binary** (reachable on the default Trusted allowlist, so no extra allowlist entry is normally needed); its `cli.github.com` apt-repo path is only a last resort.
 
 **gitleaks (recommended if you commit).** The pre-commit guard's "Staged secrets scan" step shells out to `gitleaks protect --staged …` and hard-errors when the binary is missing, so a cloud session cannot commit until gitleaks is installed. The cloud image does not ship it. [`install-gitleaks.sh`](../../tooling/setup/agent/install-gitleaks.sh) installs the **github.com release binary** (reachable on the default Trusted allowlist), pinned to the same version as the CI `security-secrets` job. If that download fails it falls back to `go install` — which must use gitleaks's **legacy self-declared module path** `github.com/zricethezav/gitleaks/v8` (the current `github.com/gitleaks` repo path fails Go's module-path check).
+
+**semgrep + k6 (optional).** [`install-semgrep.sh`](../../tooling/setup/agent/install-semgrep.sh) (via `uv`) makes `pnpm security:sast` runnable — the scan itself also needs `semgrep.dev` on the allowlist. [`install-k6.sh`](../../tooling/setup/agent/install-k6.sh) installs the **github.com release binary** for the `pnpm load:*` scenarios. Both install the version pinned in [`tool-versions.sh`](../../tooling/setup/agent/tool-versions.sh) — see [Tool versions](#tool-versions-pinned-checked-at-install).
+
+**CodeGraph MCP on PATH.** The Claude Code process that launches MCP servers keeps the image `PATH`, which lacks `/opt/node24/bin`, so [`install-codegraph.sh`](../../tooling/setup/agent/install-codegraph.sh) links `codegraph` into `~/.local/bin` (on that `PATH`) — otherwise `codegraph serve --mcp` fails with `ENOENT` at session start.
+
+### Tool versions (pinned, checked at install)
+
+Every agent tool the bootstrap installs — `codegraph`, `headroom`, `semgrep`, `gitleaks`, `k6` — is pinned in **one file**, [`tooling/setup/agent/tool-versions.sh`](../../tooling/setup/agent/tool-versions.sh): plain `KEY=value` lines (a version, plus a SHA-256 per architecture for each downloaded binary). Node stays in `.nvmrc`, pnpm in `package.json` `packageManager`, Docker images in the compose files (Dependabot).
+
+| Piece | What it does |
+| ----- | ------------ |
+| `install-*.sh` (via [`tool-install.lib.sh`](../../tooling/setup/agent/tool-install.lib.sh)) | **Moves the machine to the pin**: installs when missing, **reinstalls when the installed version differs** (a cached environment never freezes on an old version), and refuses a release download whose SHA-256 does not match. |
+| CI ([`pr-ci.yml`](../../.github/workflows/pr-ci.yml), [`scheduled-k6-load-slo.yml`](../../.github/workflows/scheduled-k6-load-slo.yml)) | Appends the same file to `$GITHUB_ENV` and runs the same installers — CI and cloud sessions run identical versions, with no second copy to drift. |
+| `pnpm tool:agent-tools --smoke --outdated` | Run by `bootstrap.sh` at **every install**: each tool vs its pin, the `.mcp.default.json` servers started for real (`initialize` + `tools/list`), and **which pins have a newer release** — with the paste-ready lines (version + checksums) to bump. Report only; it never upgrades. |
+| Session-start banner | `tools 5/5 at pin`, or names the drifted tool (`k6 2.2.0≠2.3.0 — run bash tooling/setup/agent/bootstrap.sh`). Local `--version` calls only. |
+| [`agent-tool-versions.policy.unit.test.ts`](../../src/tests/unit/tooling/agent-tool-versions.policy.unit.test.ts) | Fails on an unpinned install, a hardcoded version, a missing checksum, or a tool added to one place but not the others. |
+
+**Upgrade flow — what if something breaks?**
+
+```text
+bootstrap reports "⬆ k6 2.3.0 → 2.4.0 available" + the lines to paste
+  → one-line PR to tool-versions.sh → CI installs and runs 2.4.0 → merge
+  → every session moves to 2.4.0 on its next bootstrap
+  → broken? revert the line → sessions move back on their next bootstrap
+```
+
+- **Nothing changes under you:** a tool moves only when its pin moves, and only through a reviewed PR that CI has exercised.
+- **Trial before you bump:** set the key (and, for a binary, its `*_SHA256_*` keys) as **variables on a separate cloud environment** — an environment variable overrides the pin, so a canary session runs the new version with no commit. A version override without its checksum is refused.
+- **Not pinned by this:** semgrep's `--config auto` / `p/default` rules come from the registry at scan time, so results can change on the same semgrep version.
 
 ---
 
@@ -100,8 +125,12 @@ On the first session the cached Node 24 is already on disk, [`session-start.sh`]
   `.env.development`, which a fresh clone lacks, then lays `.env.local` over the Variables with
   `override: true`: the session still runs as `local`, but loses the Variables.)
 - **Set the development values as the environment's Variables** — every key from your
-  `.env.development` except `NODE_ENV`, `DATABASE_URL`, `DATABASE_MIGRATION_URL`, `REDIS_URL` and
-  `DATABASE_SSL_ENABLED` (those follow the session's own Postgres + Redis). Third-party keys
+  `.env.development` except `NODE_ENV`, every `DATABASE_*_URL` (`DATABASE_URL`,
+  `DATABASE_MIGRATION_URL`, `DATABASE_MAINTENANCE_URL`, `DATABASE_OPERATOR_URL`), `REDIS_URL` and
+  `DATABASE_SSL_ENABLED` (those follow the session's own Postgres + Redis). `pnpm setup:local`
+  (and so `bootstrap.sh`, with or without `--install-only`) stops when a Variable sets a `DATABASE_*_URL` that is
+  remote or logs in as another role, or a remote `REDIS_URL` — the Variable would beat
+  `.env.local` and point the session at the hosted database or Redis. Third-party keys
   (Resend, Stripe test mode, OAuth, S3, Sentry DSN, …) then match development. A blank `KEY=`
   placeholder in `.env.local` no longer deletes a Variable
   ([`load-env-files.ts`](../../src/shared/config/load-env-files.ts), pinned by
@@ -145,13 +174,13 @@ pnpm db:seed         # or pnpm db:seed:full
 
 ### One-command bring-up + verify
 
-To run the whole in-session flow at once — tool installs (gh, Docker CLI/Compose when missing, Docker daemon start, Docker mirror, CodeGraph, Headroom, gitleaks), `compose:up`, `db:migrate`, the database logins (`setup:local --only-env`), `db:seed`, then an app healthcheck — use the orchestrator, which logs a ✓/✗ status after each step:
+The session-start hook runs this for you in every web session (below). To run it yourself — after `pnpm dev:stack:stop`, or with `AGENT_AUTO_STACK=0` — use the orchestrator; it logs a ✓/✗ after each step and records the running step for `pnpm dev:stack:status`:
 
 ```bash
-bash tooling/setup/agent/bootstrap.sh        # KEEP_APP=1 to leave `pnpm dev` running afterwards
+bash tooling/setup/agent/bootstrap.sh        # setup → Postgres + Redis → migrate → demo seed → API + worker, left running
 ```
 
-It leaves Postgres + Redis up and starts the app only transiently for the check. To verify health on its own (after the app is up), run [`healthcheck.sh`](../../tooling/setup/agent/healthcheck.sh): it polls `GET /livez` then `GET /readyz` and exits non-zero unless Postgres + Redis + BullMQ are all reachable. Neither belongs in the Setup-script *field* (that runs before any app is listening).
+A re-run is safe: a lock stops a second bring-up from racing the first, and an API or worker that already answers is kept. To verify health on its own, run [`healthcheck.sh`](../../tooling/setup/agent/healthcheck.sh): it polls `GET /livez` then `GET /readyz` (set `HEALTHCHECK_URL=http://127.0.0.1:9090` for the worker) and exits non-zero unless Postgres + Redis + BullMQ are all reachable. Only `--install-only` belongs in the Setup-script *field* (that runs before any service can be running).
 
 ## Tiers — what to enable for which goal
 
@@ -164,11 +193,32 @@ It leaves Postgres + Redis up and starts the app only transiently for the check.
 
 ---
 
-## Session startup vs on-demand
+## Session startup — the live playground
 
-Startup stays **light** so a session is ready fast: the setup script (Node 24, cached) plus `session-start.sh`, which runs `pnpm install` and a single `pnpm agent-os:check` readiness gate. Nothing else is bootstrapped.
+A web session is a playground: it brings itself **fully live** before the work starts, without
+delaying the session. [`session-start.sh`](../../agent-os/hooks/session-start.sh) runs `pnpm install`
+and the `pnpm agent-os:check` gate, then launches `bootstrap.sh` **detached** and returns at once:
 
-Everything else runs **on demand, driven by your prompt** — `pnpm compose:up` for the database, `pnpm db:migrate` / `pnpm db:seed`, the test suite, or `pnpm dev` — started only when a task needs it.
+```text
+session starts → session-start hook (returns at once) → bootstrap.sh, detached
+  [1–8] tools at their pins, deps, `.env.local`        (seconds — the Setup script cached them)
+  [9] Postgres + Redis  [10] migrate + database logins  [11] full demo seed
+  [12] API on :3000 — kept running   [13] worker, health on :9090 — kept running
+  → "live" + the playground card (API, /reference, /admin/queues, worker, logs)
+```
+
+| You want | Do |
+| -------- | -- |
+| Follow it step by step | `tail -f /tmp/agent-stack/bootstrap.log`, or ask the agent to watch the stack |
+| Know where it is | `pnpm dev:stack:status` — the running step (or `live`), API + worker `/livez` · `/readyz`, containers, logs |
+| Stop the API + worker | `pnpm dev:stack:stop` (Postgres + Redis stay; `pnpm compose:down` stops them) |
+| Bring it back | `bash tooling/setup/agent/bootstrap.sh` |
+| A known demo password | set `DEMO_PASSWORD` in the environment's variables (`demo@example.com`) |
+| No auto-start for an environment | set `AGENT_AUTO_STACK=0` in its variables |
+
+The banner shows `Stack: starting…` / `live` and tells the agent to wait for `live` before any
+database or API work. A resumed session whose API already answers, or a bring-up already
+running, is left alone. Local sessions are unchanged (`Stack: on demand`).
 
 ## How to tell a session is provisioned
 
@@ -225,7 +275,7 @@ The repo splits the MCP set into two tiers:
 
 Because the platform — not `.mcp.json` — drives a cloud session's MCP, set these in the environment's MCP settings:
 
-1. **Add the default pair so they auto-connect every session:** `codegraph` (command `codegraph serve --mcp`) and `headroom` (command `headroom mcp serve`). Their CLIs are installed by the Setup script above.
+1. **Add the default pair so they auto-connect every session:** `codegraph` (command `codegraph serve --mcp`) and `headroom` (command `headroom mcp serve`). Their CLIs are installed by the Setup script above, both in `~/.local/bin` (on the platform's `PATH`). Check them in-session with `pnpm tool:agent-tools --smoke` — it starts each server the way a client does and lists its tools.
 2. **Add any on-demand server a task needs** from `.mcp.example.json`, supplying its token via the environment **Variables**.
 3. **Do not add `Composio`, `Descript`, or `Slack`.** They are intentionally not part of this project's tooling — use `gh` / the GitHub MCP for GitHub, and keep any personal-account servers at the user level, separate from the repo. (See [agentic-third-party-tooling.md](agentic-third-party-tooling.md).)
 

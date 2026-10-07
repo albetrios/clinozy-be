@@ -139,7 +139,12 @@ export default {
 | Step | Tool                          | What it catches                                         |
 | ---- | ----------------------------- | ------------------------------------------------------- |
 | 1    | `gitleaks` CLI (binary, v8)   | Full-repo secret scan (AWS keys, tokens, passwords)     |
-| 2    | `semgrep scan --config auto`  | SAST: SQL injection, XSS, insecure crypto, OWASP Top 10 |
+| 2    | `semgrep scan --config p/default` | SAST: SQL injection, XSS, insecure crypto, OWASP Top 10 |
+
+Both versions come from `tooling/setup/agent/tool-versions.sh` (the job appends it to
+`$GITHUB_ENV`): gitleaks via `install-gitleaks.sh` (SHA-256-verified), semgrep as
+`pip install "semgrep==${SEMGREP_VERSION}"` — the same pins cloud sessions install. A bump is a
+one-line PR there (owner: **be-dependency-security**); never a version in the workflow.
 
 ### `unit` job (runs after static checks pass)
 

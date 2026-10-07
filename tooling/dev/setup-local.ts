@@ -42,6 +42,7 @@ import { createServer } from 'node:net';
 import { resolve } from 'node:path';
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
+import { AGENT_TOOLS, readInstalledVersion, readToolVersions } from './agent-tools.js';
 import { ensureDefaultMcpServers } from './mcp-config.js';
 import {
   EXTERNAL_CREDENTIALS,
@@ -53,6 +54,7 @@ import { applyLocalCaptcha, TURNSTILE_ALWAYS_PASS_TEST_SITE_KEY } from './local-
 import {
   alterRoleStatement,
   applyLocalDatabaseLogins,
+  environmentConnectionUrlProblems,
   localDatabaseLogins,
   planLocalDatabaseLogins,
 } from './local-database-logins.js';
@@ -77,6 +79,11 @@ const {
   databaseAppRole: LOCAL_DATABASE_APP_ROLE,
   databaseMaintenanceRole: LOCAL_DATABASE_MAINTENANCE_ROLE,
 } = resolveDerivedNames(SETUP_CONFIG);
+const LOCAL_DATABASE_LOGINS = localDatabaseLogins({
+  appRole: LOCAL_DATABASE_APP_ROLE,
+  maintenanceRole: LOCAL_DATABASE_MAINTENANCE_ROLE,
+  sqlStem: resolveSqlIdentifierStem(SETUP_CONFIG),
+});
 const POSTGRES_CONTAINER = LOCAL_CONTAINERS.postgres;
 const REDIS_CONTAINER = LOCAL_CONTAINERS.redis;
 const DEFAULT_DEV_PORT = 3000;
@@ -396,6 +403,7 @@ function runInstallDependencies(reports: StepReport[], options: BootstrapOptions
 function runEnvScaffolding(reports: StepReport[], options: BootstrapOptions): void {
   logHeading('3/9 Environment (.env.local)');
   scaffoldEnvLocal(reports, options);
+  checkEnvironmentConnectionUrls(reports, options);
   syncExternalCredentials(reports, options);
   configureLocalCaptcha(reports, options);
 }
@@ -600,6 +608,49 @@ function scaffoldEnvLocal(reports: StepReport[], options: BootstrapOptions): voi
 }
 
 /**
+ * Stops when the process environment sets a database or Redis URL the local stack must own — a
+ * remote host, or a login other than the variable's role (`environmentConnectionUrlProblems`). The
+ * environment beats `.env.local`, so a cloud environment's Variables copied from development
+ * would otherwise migrate, seed, queue or run maintenance contexts against the hosted database and
+ * Redis. Runs in the env phase, before Docker and migrations; skipped when `.env.local`'s
+ * `DATABASE_URL` is itself remote.
+ */
+function checkEnvironmentConnectionUrls(reports: StepReport[], options: BootstrapOptions): void {
+  const startedAt = performance.now();
+  const phase = 'database and Redis URLs in the environment';
+  if (!existsSync(ENV_LOCAL_PATH)) {
+    reportStep(reports, phase, 'skipped', startedAt, 'no .env.local yet');
+    return;
+  }
+  const envLocal = readFileSync(ENV_LOCAL_PATH, 'utf8');
+  const currentDatabaseUrl = dotenv.parse(envLocal).DATABASE_URL;
+  if (currentDatabaseUrl && !isLocalDatabaseUrl(currentDatabaseUrl)) {
+    reportStep(reports, phase, 'skipped', startedAt, 'DATABASE_URL points at a remote database');
+    return;
+  }
+  const problems = environmentConnectionUrlProblems({
+    envLocal,
+    environment: process.env,
+    logins: LOCAL_DATABASE_LOGINS,
+  });
+  if (problems.length === 0) {
+    reportStep(reports, phase, 'skipped', startedAt, 'none override .env.local');
+    return;
+  }
+  reportStep(
+    reports,
+    phase,
+    options.check ? 'warning' : 'failed',
+    startedAt,
+    problems.map(({ envKey, problem }) => `${envKey} ${problem}`).join('; '),
+  );
+  logInfo(
+    '      The environment beats .env.local. Remove these from the environment (the Variables of a cloud environment, or your shell) and re-run.',
+  );
+  if (!options.check) process.exit(1);
+}
+
+/**
  * Turns on the three database logins `.env.local` connects as — runtime (`clinozy_be_app`),
  * maintenance and operator — and writes their URLs (docs/deployment/runbooks/
  * maintenance-database-role.md). The migrations create those roles `NOLOGIN`; this grants LOGIN
@@ -623,11 +674,7 @@ async function provisionLocalDatabaseLogins(
     reportStep(reports, phase, 'skipped', startedAt, 'DATABASE_URL points at a remote database');
     return;
   }
-  const logins = localDatabaseLogins({
-    appRole: LOCAL_DATABASE_APP_ROLE,
-    maintenanceRole: LOCAL_DATABASE_MAINTENANCE_ROLE,
-    sqlStem: resolveSqlIdentifierStem(SETUP_CONFIG),
-  });
+  const logins = LOCAL_DATABASE_LOGINS;
   const superuser = postgres(LOCAL_DATABASE_URL, {
     max: 1,
     connect_timeout: 5,
@@ -888,31 +935,36 @@ function runCodeGraphSetup(reports: StepReport[], options: BootstrapOptions): vo
       'codegraph',
       'skipped',
       startedAt,
-      '--check mode (would install CLI + configure agents + index)',
+      '--check mode (would install CLI + build the index)',
     );
     return;
   }
 
-  const cliAvailable = captureCommand('codegraph', ['--version']).code === 0;
-  if (!cliAvailable) {
-    const install = captureCommand('npm', ['install', '-g', CODEGRAPH_PACKAGE]);
+  // The version pinned in tooling/setup/agent/tool-versions.sh — the same one the cloud
+  // bootstrap installs. A different installed version is replaced, not kept.
+  const codegraphTool = AGENT_TOOLS.find((tool) => tool.name === 'codegraph');
+  const pinnedVersion = codegraphTool ? readToolVersions()[codegraphTool.versionKey] : undefined;
+  const installedVersion = codegraphTool ? readInstalledVersion(codegraphTool) : undefined;
+  if (!installedVersion || installedVersion !== pinnedVersion) {
+    const codegraphPackage = pinnedVersion
+      ? `${CODEGRAPH_PACKAGE}@${pinnedVersion}`
+      : CODEGRAPH_PACKAGE;
+    const install = captureCommand('npm', ['install', '-g', codegraphPackage]);
     if (install.code !== 0) {
       reportStep(
         reports,
         'codegraph',
         'warning',
         startedAt,
-        `global install failed — run \`npm i -g ${CODEGRAPH_PACKAGE}\` manually (non-fatal)`,
+        `global install failed — run \`npm i -g ${codegraphPackage}\` manually (non-fatal)`,
       );
       return;
     }
   }
 
   const databasePath = resolve(PROJECT_ROOT, '.codegraph/codegraph.db');
-  const claudeMcpPath = resolve(PROJECT_ROOT, '.mcp.json');
-  const alreadyConfigured = existsSync(databasePath) && existsSync(claudeMcpPath);
 
-  if (alreadyConfigured) {
+  if (existsSync(databasePath)) {
     const sync = captureCommand('codegraph', ['sync']);
     const status: StepStatus = sync.code === 0 ? 'done' : 'warning';
     reportStep(
@@ -925,12 +977,10 @@ function runCodeGraphSetup(reports: StepReport[], options: BootstrapOptions): vo
     return;
   }
 
-  const result = captureCommand('codegraph', [
-    'install',
-    '--target=cursor,claude',
-    '--location=local',
-    '--yes',
-  ]);
+  // Index only — never `codegraph install`: it builds no index without `--init`, and it
+  // replaces the tracked .mcp.json, .cursor/mcp.json and .claude/settings.json symlinks
+  // with plain files. ensureDefaultMcpConfig declares the codegraph MCP server through them.
+  const result = captureCommand('codegraph', ['init']);
   const status: StepStatus = result.code === 0 ? 'done' : 'warning';
   reportStep(
     reports,
@@ -938,14 +988,14 @@ function runCodeGraphSetup(reports: StepReport[], options: BootstrapOptions): vo
     status,
     startedAt,
     status === 'done'
-      ? 'cursor + claude MCP configured + project indexed (restart agents to load)'
-      : 'codegraph install failed (non-fatal)',
+      ? 'project indexed (codegraph init — restart agents to load the MCP server)'
+      : 'codegraph init failed (non-fatal)',
   );
 }
 
 // Declare the default auto-start MCP pair (codegraph + headroom) in .mcp.json so a local
-// session matches the cloud bootstrap. Non-destructive: codegraph install above writes
-// codegraph; this adds headroom (and codegraph when skipped) without clobbering real keys.
+// session matches the cloud bootstrap. Non-destructive: writes through the .mcp.json
+// symlink and adds codegraph + headroom without clobbering real keys.
 function ensureDefaultMcpConfig(reports: StepReport[], options: BootstrapOptions): void {
   const startedAt = performance.now();
   if (options.check) {
@@ -988,20 +1038,24 @@ function installHeadroomCli(reports: StepReport[], options: BootstrapOptions): v
     reportStep(reports, 'headroom CLI', 'skipped', startedAt, '--check mode (would install)');
     return;
   }
-  if (captureCommand('headroom', ['--version']).code === 0) {
-    reportStep(reports, 'headroom CLI', 'skipped', startedAt, 'already installed');
+  // The version pinned in tooling/setup/agent/tool-versions.sh — the same one the cloud
+  // bootstrap installs. A different installed version is replaced, not kept.
+  const headroomTool = AGENT_TOOLS.find((tool) => tool.name === 'headroom');
+  const pinnedVersion = headroomTool ? readToolVersions()[headroomTool.versionKey] : undefined;
+  if (headroomTool && readInstalledVersion(headroomTool) === pinnedVersion) {
+    reportStep(reports, 'headroom CLI', 'skipped', startedAt, `${pinnedVersion} (at the pin)`);
     return;
   }
   captureCommand('bash', ['tooling/setup/agent/install-headroom.sh']);
-  const installed = captureCommand('headroom', ['--version']).code === 0;
+  const installed = headroomTool ? readInstalledVersion(headroomTool) : undefined;
   reportStep(
     reports,
     'headroom CLI',
-    installed ? 'done' : 'warning',
+    installed === pinnedVersion ? 'done' : 'warning',
     startedAt,
-    installed
-      ? 'context-compression MCP ready'
-      : 'install skipped — run `pip install "headroom-ai[mcp]"` manually (non-fatal)',
+    installed === pinnedVersion
+      ? `context-compression MCP ready (${installed}, at the pin)`
+      : 'install failed — run `bash tooling/setup/agent/install-headroom.sh` manually (non-fatal)',
   );
 }
 
