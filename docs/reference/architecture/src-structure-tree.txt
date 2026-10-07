@@ -774,6 +774,7 @@ src/
     │   │   │   ├── __tests__/
     │   │   │   │   ├── integration/
     │   │   │   │   │   ├── organization-audit-logs.integration.test.ts
+    │   │   │   │   │   ├── organization-clinic-profile.integration.test.ts
     │   │   │   │   │   └── organization.integration.test.ts
     │   │   │   │   └── unit/
     │   │   │   │   │   ├── organization-capability.unit.test.ts
@@ -863,6 +864,7 @@ src/
     │   │   │   │   │   └── organization-settings.faker.ts
     │   │   │   │   ├── i18n-locale.cache.ts
     │   │   │   │   ├── organization-mfa-policy.ts
+    │   │   │   │   ├── organization-settings.constants.ts
     │   │   │   │   ├── organization-settings.controller.ts
     │   │   │   │   ├── organization-settings.dto.ts
     │   │   │   │   ├── organization-settings.overview.md
@@ -881,6 +883,7 @@ src/
     │   │   │   │   └── organization-tombstone-retention.worker.ts
     │   │   │   ├── organization-capability.ts
     │   │   │   ├── organization-provisioning.ts
+    │   │   │   ├── organization.constants.ts
     │   │   │   ├── organization.controller.ts
     │   │   │   ├── organization.dto.ts
     │   │   │   ├── organization.overview.md

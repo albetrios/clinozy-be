@@ -1,0 +1,19 @@
+import { SEVEN_DAYS } from '@/shared/constants/ttl.constants.js';
+
+/**
+ * Opening cash a clinic day starts with when there is no previous close to carry from, in rupees
+ * (`numeric(12,2)` string, as Drizzle reads and writes `numeric`).
+ */
+export const ORGANIZATION_SETTINGS_DEFAULT_DAY_FLOAT = '2000.00';
+
+/** Idle days after which a held lead opens to the whole team. */
+export const ORGANIZATION_SETTINGS_DEFAULT_LEAD_HOLD_DAYS = 3;
+
+/** Hour of the day (0–23, the organization's timezone) the day-before appointment reminder goes out. */
+export const ORGANIZATION_SETTINGS_DEFAULT_REMINDER_HOUR = 16;
+
+/** Days without a visit after which a consenting patient gets a re-target lead. */
+export const ORGANIZATION_SETTINGS_DEFAULT_RETARGET_AFTER_DAYS = 90;
+
+/** Days a soft-deleted clinic record stays restorable before the purge erases it. */
+export const ORGANIZATION_SETTINGS_DEFAULT_DELETED_RECORD_PURGE_DAYS = SEVEN_DAYS;

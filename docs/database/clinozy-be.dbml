@@ -557,9 +557,14 @@ Note tenancy.organization_notification_policies {
 Table tenancy.organization_settings {
   created_at timestamptz [not null]
   created_by_user_id bigint
+  default_day_float numeric(12, 2) [not null]
   default_locale varchar(5) [not null]
+  deleted_record_purge_days int [not null]
   is_email_notifications_enabled boolean [not null]
+  lead_hold_days int [not null]
   organization_id bigint [pk, not null]
+  reminder_hour smallint [not null]
+  retarget_after_days int [not null]
   security_policy jsonb [not null]
   updated_at timestamptz [not null]
   updated_by_user_id bigint
@@ -572,6 +577,7 @@ Note tenancy.organization_settings {
 Table tenancy.organizations {
   created_at timestamptz [not null]
   created_by_user_id bigint
+  currency varchar(3) [not null]
   deleted_at timestamptz
   deletion_started_at timestamptz
   id bigint [pk, increment, not null]
@@ -580,8 +586,10 @@ Table tenancy.organizations {
   owner_user_id bigint [not null]
   public_id varchar(28) [not null]
   slug varchar(100)
+  specialties text [not null]
   status varchar(20) [not null]
   stripe_customer_id varchar(255)
+  timezone varchar(64) [not null]
   type varchar(20) [not null]
   updated_at timestamptz [not null]
   updated_by_user_id bigint
