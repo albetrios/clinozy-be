@@ -25,12 +25,12 @@ operators copy into each platform's environment config.
 | **Cursor** | [`.cursor/environment.json`](../../.cursor/environment.json) → symlink here | `install` runs `bootstrap.sh --install-only`; optional `start` / `terminals` from `environment.json` |
 | **Cursor dashboard** | Cloud Agents → Environment → Install script | `bash tooling/setup/agent/bootstrap.sh --install-only` |
 | **Claude Code on the web** | Environment → Setup script field | `bash tooling/setup/agent/bootstrap.sh --install-only` (see [claude-code-web-environment.md](../../docs/integrations/claude-code-web-environment.md)) |
-| **All agents** | [`AGENTS.md`](../../AGENTS.md) → [`agents-cloud.md`](agents-cloud.md) | `bootstrap.sh` (no flag) in the session when DB/API/workers are needed |
+| **All agents** | [`AGENTS.md`](../../AGENTS.md) → [`agents-cloud.md`](agents-cloud.md) | `bootstrap.sh` (no flag) brings the stack fully live — launched automatically by the session-start hook in Claude Code web sessions (`AGENT_AUTO_STACK=0` opts out) |
 
 > In the cached `install` / Setup step, always pass **`--install-only`**: it stops before
 > Docker, because a Docker failure there marks the whole environment as failed and no
-> running container survives the cache anyway. Run the full `bootstrap.sh` **in the session**
-> (see `agents-cloud.md`); it auto-retries with restricted VFS + the cloud-agent compose
+> running container survives the cache anyway. The full `bootstrap.sh` runs **in the session** —
+> launched by the session-start hook on Claude Code web (see `agents-cloud.md`); it auto-retries with restricted VFS + the cloud-agent compose
 > override when standard compose fails.
 
 ## Network allowlist (cloud)

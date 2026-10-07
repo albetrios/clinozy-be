@@ -458,6 +458,7 @@ Local SonarQube quality gate (pre-commit): `pnpm sonar:up` / `sonar:scan` / `son
 - `pnpm build` — compile to `dist/` (`tsc` + `tsc-alias`); `pnpm build:check` fails if `@/` aliases remain
 - `pnpm dev` — run Fastify server (tsx watch)
 - `pnpm dev:worker` — run BullMQ worker process (tsx watch)
+- `pnpm dev:stack:status` / `pnpm dev:stack:stop` — the live playground stack `tooling/setup/agent/bootstrap.sh` brings up (the session-start hook launches it in every Claude Code web session; `AGENT_AUTO_STACK=0` opts out): the running step or `live`, API + worker health, logs / stop the API + worker
 - `pnpm lint` — run Biome (lint + format check on `src/` and `tooling/`)
 - `pnpm format` — run Biome formatter (`biome format --write`)
 - `pnpm typecheck` — TypeScript type check

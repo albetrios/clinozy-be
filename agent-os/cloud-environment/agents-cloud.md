@@ -11,29 +11,38 @@ install step).
 (`codegraph`, `headroom`) is installed and written to `.mcp.json` by `bootstrap.sh`; on-demand
 MCPs and the full skill catalog are listed there.
 
-## When to run bring-up
+## What needs the live stack
 
-| Task needs | Run bring-up? |
-| ---------- | ------------- |
+In Claude Code web sessions the stack comes up on its own (below) — wait for `live`. Elsewhere,
+run the bring-up when a task needs it:
+
+| Task needs | Needs the live stack? |
+| ---------- | --------------------- |
 | Lint, typecheck, unit tests, `pnpm agent-os:check` | No |
 | E2E, integration, `pnpm test`, migrations | Yes |
 | `pnpm dev`, `pnpm dev:worker`, `/readyz`, API smoke | Yes |
 
-## One-command bring-up
+## The live stack (automatic in web sessions)
+
+Every Claude Code web session brings itself fully live: the session-start hook launches
+`bootstrap.sh` in the background — setup, Postgres + Redis, migrations + database logins, the
+full demo seed, then the API (:3000) and the worker (health on :9090) **left running**. Wait for
+`live` before database/API work:
+
+```bash
+pnpm dev:stack:status                 # the running step (or "live"), API + worker health, logs
+tail -f /tmp/agent-stack/bootstrap.log
+pnpm dev:stack:stop                   # stop the API + worker (Postgres + Redis stay)
+```
+
+Run it yourself (another platform, after a stop, or with `AGENT_AUTO_STACK=0`):
 
 ```bash
 export PATH="/opt/node24/bin:$HOME/.local/bin:$PATH"
 bash tooling/setup/agent/bootstrap.sh
 ```
 
-Leaves Postgres + Redis up; starts the app only for the healthcheck, then stops it.
-To keep the API running:
-
-```bash
-KEEP_APP=1 bash tooling/setup/agent/bootstrap.sh
-```
-
-Or start manually after bootstrap:
+Or start pieces by hand:
 
 ```bash
 pnpm dev          # API (tmux / background)

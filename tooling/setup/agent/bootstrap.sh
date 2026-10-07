@@ -1,26 +1,30 @@
 #!/usr/bin/env bash
-# The one cloud-agent setup script: install everything, then bring the stack up.
+# The one cloud-agent setup script: install everything, then bring the stack up — live.
 #
 # Installs — Node (into /opt, as root or via passwordless sudo), dependencies, gh, Docker
 # CLI/Compose, Docker images (registry mirror), CodeGraph, Headroom + the default MCP pair,
-# gitleaks, semgrep, k6 — and scaffolds a self-contained `.env.local` (`pnpm setup:local --only-env`,
-# which first stops on a DATABASE_*_URL in the environment that is remote or the wrong
-# login, or a remote REDIS_URL). Then brings up the local Docker stack (Postgres + Redis),
-# migrates, enables the database logins the migrations create (`pnpm setup:local
-# --only-env` again), seeds, and verifies the app is healthy (/livez + /readyz). A progress
-# log after each step shows anyone watching the session live status.
+# gitleaks, semgrep, k6 — each at the version pinned in tool-versions.sh — and scaffolds a
+# self-contained `.env.local` (`pnpm setup:local --only-env`, which first stops on a
+# DATABASE_*_URL in the environment that is remote or the wrong login, or a remote
+# REDIS_URL). Then brings the playground fully live: Postgres + Redis, migrations, the
+# database logins the migrations create (`pnpm setup:local --only-env` again), the full demo
+# seed, and the API (12) and the worker (13) started in their own sessions and LEFT RUNNING.
 #
-#   bash tooling/setup/agent/bootstrap.sh                 # in the session: everything
-#   bash tooling/setup/agent/bootstrap.sh --install-only  # environment Setup / install
-#                                                         # script: steps 1-8, cached
+#   bash tooling/setup/agent/bootstrap.sh                 # the session: setup → live stack
+#   bash tooling/setup/agent/bootstrap.sh --install-only  # environment Setup script:
+#                                                         # steps 1-8 only, cached
+#
+# The session-start hook launches the default mode (detached) in every web session unless
+# AGENT_AUTO_STACK=0, so the stack is live before the work starts. Each step is written to
+# $AGENT_STACK_DIR/status (default /tmp/agent-stack) as it runs, with the full log beside it;
+# a lock keeps two bring-ups from racing; a re-run is safe (live services are kept).
+# `pnpm dev:stack:status` / `pnpm dev:stack:stop` (tooling/setup/agent/stack.sh).
 #
 # `--install-only` stops before Docker: the setup phase is cached as files only (no
 # running containers survive it), and a Docker failure there would mark the whole
 # environment as failed. Tool installs are best-effort and log ✓/skip without aborting;
-# dependencies, the env scaffold, DB bring-up, migrate, seed and healthcheck are HARD
-# gates (non-zero exit on failure). Leaves Postgres + Redis running. The app is started
-# only transiently for the healthcheck and then stopped — set KEEP_APP=1 to leave
-# `pnpm dev` up.
+# dependencies, the env scaffold, DB bring-up, migrate, seed and the API/worker health
+# checks are HARD gates (non-zero exit on failure).
 set -uo pipefail
 
 install_only=0
@@ -30,38 +34,57 @@ for argument in "$@"; do
     *) echo "✗ unknown option: ${argument} (only --install-only)" >&2; exit 2 ;;
   esac
 done
+# Every run but the cached Setup script brings the stack live.
+live=1
+[ "${install_only}" = 1 ] && live=0
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../../.." || exit 1
 readonly AGENT_DIR="tooling/setup/agent"
-readonly TOTAL=12
+readonly TOTAL=13
 readonly DOCKERD_AGENT_MODE_FILE="${DOCKERD_AGENT_MODE_FILE:-/tmp/dockerd-agent-mode}"
+readonly STACK_DIR="${AGENT_STACK_DIR:-/tmp/agent-stack}"
 start_ts=$(date +%s)
 
-step() { echo ""; echo "▶ $*"; }
+# The step that is running (or failed, or "live") — read by `pnpm dev:stack:status`.
+record_status() {
+  [ "${live}" = 1 ] || return 0
+  printf '%s  %s\n' "$(date -u '+%H:%M:%SZ')" "$*" > "${STACK_DIR}/status"
+}
+
+step() { echo ""; echo "▶ $*"; record_status "running ${*}"; }
 ok()   { echo "✓ $*"; }
 skip() { echo "• $*"; }
-die()  { echo "✗ $*" >&2; exit 1; }
+die()  { echo "✗ $*" >&2; record_status "failed — ${*}"; exit 1; }
 
-# Every descendant of a process (pnpm -> sh -> tsx watch -> node), read from `ps`,
-# which Linux and macOS both have — `/proc` is Linux-only.
-descendant_pids() {
-  local parent=$1 pid ppid
-  ps -A -o pid= -o ppid= | while read -r pid ppid; do
-    [ "$ppid" = "$parent" ] || continue
-    echo "$pid"
-    descendant_pids "$pid"
-  done
+# start_detached NAME COMMAND… — COMMAND in its own session, so it outlives this script
+# (and the hook that launched it); output in $STACK_DIR/NAME.log, pid in $STACK_DIR/NAME.pid.
+start_detached() {
+  local name=$1
+  shift
+  if command -v setsid >/dev/null 2>&1; then
+    setsid nohup "$@" >"${STACK_DIR}/${name}.log" 2>&1 </dev/null &
+  else
+    nohup "$@" >"${STACK_DIR}/${name}.log" 2>&1 </dev/null &
+  fi
+  echo $! > "${STACK_DIR}/${name}.pid"
 }
 
-# Stop the dev server this script started and everything it spawned. The whole tree
-# is collected before anything is signalled, so no child is orphaned and missed, and
-# nothing outside it (another checkout's `tsx watch`) is touched.
-stop_app() {
-  local pids
-  pids="$(descendant_pids "$1") $1"
-  # shellcheck disable=SC2086 # one PID per word
-  kill -TERM ${pids} 2>/dev/null || true
-}
+# One bring-up at a time (a session resume, or a manual run while the hook's runs).
+if [ "${live}" = 1 ]; then
+  mkdir -p "${STACK_DIR}"
+  if ! mkdir "${STACK_DIR}/lock" 2>/dev/null; then
+    lock_holder="$(cat "${STACK_DIR}/lock/pid" 2>/dev/null || true)"
+    if [ -n "${lock_holder}" ] && kill -0 "${lock_holder}" 2>/dev/null; then
+      echo "bootstrap: a live bring-up is already running (pid ${lock_holder}) — follow ${STACK_DIR}/bootstrap.log" >&2
+      exit 0
+    fi
+    rm -f "${STACK_DIR}/lock/pid"
+    rmdir "${STACK_DIR}/lock" 2>/dev/null
+    mkdir "${STACK_DIR}/lock" || die "cannot take the bring-up lock ${STACK_DIR}/lock"
+  fi
+  echo $$ > "${STACK_DIR}/lock/pid"
+  trap 'rm -f "${STACK_DIR}/lock/pid"; rmdir "${STACK_DIR}/lock" 2>/dev/null' EXIT
+fi
 
 echo "cloud bring-up — $(date -u '+%Y-%m-%d %H:%M:%SZ')$([ "${install_only}" = 1 ] && echo ' (install only)')"
 
@@ -222,32 +245,50 @@ pnpm setup:local --only-env >&2 || die "database logins failed (pnpm setup:local
 ok "[10/${TOTAL}] migrations applied, database logins enabled"
 
 # 11) Seed -------------------------------------------------------------------
-step "[11/${TOTAL}] Seed (minimal reference data)"
-pnpm db:seed >&2 || die "db:seed failed"
+# The full demo set — it includes the minimal reference data and upserts, so a re-run is safe.
+step "[11/${TOTAL}] Seed (full demo data)"
+pnpm db:seed:full >&2 || die "db:seed:full failed"
 ok "[11/${TOTAL}] seed complete"
 
-# 12) App health (/livez + /readyz) -----------------------------------------
-step "[12/${TOTAL}] App health (/livez + /readyz)"
-app_log="$(mktemp)"
-pnpm dev >"${app_log}" 2>&1 &
-app_pid=$!
-if bash "${AGENT_DIR}/healthcheck.sh"; then
-  ok "[12/${TOTAL}] app live & ready"
-  app_ok=1
+# 12) API — started in its own session and left running --------------------
+step "[12/${TOTAL}] API live (/livez + /readyz)"
+if HEALTHCHECK_RETRIES=1 bash "${AGENT_DIR}/healthcheck.sh" >/dev/null 2>&1; then
+  ok "[12/${TOTAL}] API already live on :${PORT:-3000}"
 else
-  echo "---- pnpm dev log (tail) ----" >&2
-  tail -20 "${app_log}" >&2
-  app_ok=0
+  start_detached api pnpm dev
+  if ! bash "${AGENT_DIR}/healthcheck.sh"; then
+    echo "---- pnpm dev log (tail) ----" >&2
+    tail -20 "${STACK_DIR}/api.log" >&2
+    die "API healthcheck failed (log: ${STACK_DIR}/api.log)"
+  fi
+  ok "[12/${TOTAL}] API live on :${PORT:-3000} (kept running)"
 fi
 
-if [ "${KEEP_APP:-0}" = "1" ] && [ "${app_ok}" = "1" ]; then
-  echo "  KEEP_APP=1 — leaving \`pnpm dev\` running on :${PORT:-3000}." >&2
+# 13) Worker (BullMQ) — its own /livez + /readyz on WORKER_HEALTH_PORT ---------
+worker_url="http://127.0.0.1:${WORKER_HEALTH_PORT:-9090}"
+step "[13/${TOTAL}] Worker live (${worker_url}/readyz)"
+if HEALTHCHECK_URL="${worker_url}" HEALTHCHECK_RETRIES=1 bash "${AGENT_DIR}/healthcheck.sh" >/dev/null 2>&1; then
+  ok "[13/${TOTAL}] worker already live"
 else
-  stop_app "${app_pid}"
-  echo "  stopped transient app (Postgres + Redis stay up)." >&2
+  start_detached worker pnpm dev:worker
+  if ! HEALTHCHECK_URL="${worker_url}" bash "${AGENT_DIR}/healthcheck.sh"; then
+    echo "---- pnpm dev:worker log (tail) ----" >&2
+    tail -20 "${STACK_DIR}/worker.log" >&2
+    die "worker healthcheck failed (log: ${STACK_DIR}/worker.log)"
+  fi
+  ok "[13/${TOTAL}] worker live (kept running)"
 fi
-rm -f "${app_log}"
-[ "${app_ok}" = "1" ] || die "healthcheck failed"
 
+api_url="http://127.0.0.1:${PORT:-3000}"
+# curl prints 000 itself when nothing answers.
+route_state() { curl -s -o /dev/null -m 3 -w '%{http_code}' "$1" 2>/dev/null || true; }
+record_status "live — API ${api_url} · worker ${worker_url}"
 echo ""
-echo "✓ bring-up complete in $(( $(date +%s) - start_ts ))s — session matches local. Postgres + Redis are up; run \`pnpm dev\` when you need the app."
+echo "✓ playground live in $(( $(date +%s) - start_ts ))s"
+echo "  API          ${api_url}   (/livez · /readyz)"
+echo "  API docs     ${api_url}/reference      [HTTP $(route_state "${api_url}/reference")]"
+echo "  Queues       ${api_url}/admin/queues   [HTTP $(route_state "${api_url}/admin/queues")]"
+echo "  Worker       ${worker_url}/readyz"
+echo "  Demo login   demo@example.com — set DEMO_PASSWORD on the environment for a known password"
+echo "  Logs         ${STACK_DIR}/{bootstrap,api,worker}.log"
+echo "  Status/stop  pnpm dev:stack:status · pnpm dev:stack:stop"

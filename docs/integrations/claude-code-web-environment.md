@@ -71,8 +71,10 @@ bash tooling/setup/agent/bootstrap.sh --install-only
 
 `--install-only` runs steps 1–8 — Node 24 into `/opt/node24`, `pnpm install`, gh, the Docker
 CLI + mirror + compose images, CodeGraph, Headroom + the default MCP pair, gitleaks, semgrep, k6, and the
-`.env.local` scaffold — and stops before Docker, so the result is cached. In the session, the same
-command without the flag repeats those steps (fast — each is idempotent) and brings the stack up.
+`.env.local` scaffold — and stops before Docker, so the result is cached. In every web session the session-start hook
+then runs the same script **without** the flag in the background — those steps again (fast: each
+is idempotent and already at its pin), then the stack, fully live. See
+[Session startup — the live playground](#session-startup--the-live-playground).
 
 On the first session the cached Node 24 is already on disk, [`session-start.sh`](../../agent-os/hooks/session-start.sh) switches `PATH` to `/opt/node24`, and runs `pnpm install`. Do **not** start Postgres / Redis here — setup-script processes do not persist; start them per session (below).
 
@@ -172,13 +174,13 @@ pnpm db:seed         # or pnpm db:seed:full
 
 ### One-command bring-up + verify
 
-To run the whole in-session flow at once — tool installs (gh, Docker CLI/Compose when missing, Docker daemon start, Docker mirror, CodeGraph, Headroom, gitleaks, semgrep, k6), `compose:up`, `db:migrate`, the database logins (`setup:local --only-env`), `db:seed`, then an app healthcheck — use the orchestrator, which logs a ✓/✗ status after each step:
+The session-start hook runs this for you in every web session (below). To run it yourself — after `pnpm dev:stack:stop`, or with `AGENT_AUTO_STACK=0` — use the orchestrator; it logs a ✓/✗ after each step and records the running step for `pnpm dev:stack:status`:
 
 ```bash
-bash tooling/setup/agent/bootstrap.sh        # KEEP_APP=1 to leave `pnpm dev` running afterwards
+bash tooling/setup/agent/bootstrap.sh        # setup → Postgres + Redis → migrate → demo seed → API + worker, left running
 ```
 
-It leaves Postgres + Redis up and starts the app only transiently for the check. To verify health on its own (after the app is up), run [`healthcheck.sh`](../../tooling/setup/agent/healthcheck.sh): it polls `GET /livez` then `GET /readyz` and exits non-zero unless Postgres + Redis + BullMQ are all reachable. Neither belongs in the Setup-script *field* (that runs before any app is listening).
+A re-run is safe: a lock stops a second bring-up from racing the first, and an API or worker that already answers is kept. To verify health on its own, run [`healthcheck.sh`](../../tooling/setup/agent/healthcheck.sh): it polls `GET /livez` then `GET /readyz` (set `HEALTHCHECK_URL=http://127.0.0.1:9090` for the worker) and exits non-zero unless Postgres + Redis + BullMQ are all reachable. Only `--install-only` belongs in the Setup-script *field* (that runs before any service can be running).
 
 ## Tiers — what to enable for which goal
 
@@ -191,11 +193,32 @@ It leaves Postgres + Redis up and starts the app only transiently for the check.
 
 ---
 
-## Session startup vs on-demand
+## Session startup — the live playground
 
-Startup stays **light** so a session is ready fast: the setup script (Node 24, cached) plus `session-start.sh`, which runs `pnpm install` and a single `pnpm agent-os:check` readiness gate. Nothing else is bootstrapped.
+A web session is a playground: it brings itself **fully live** before the work starts, without
+delaying the session. [`session-start.sh`](../../agent-os/hooks/session-start.sh) runs `pnpm install`
+and the `pnpm agent-os:check` gate, then launches `bootstrap.sh` **detached** and returns at once:
 
-Everything else runs **on demand, driven by your prompt** — `pnpm compose:up` for the database, `pnpm db:migrate` / `pnpm db:seed`, the test suite, or `pnpm dev` — started only when a task needs it.
+```text
+session starts → session-start hook (returns at once) → bootstrap.sh, detached
+  [1–8] tools at their pins, deps, `.env.local`        (seconds — the Setup script cached them)
+  [9] Postgres + Redis  [10] migrate + database logins  [11] full demo seed
+  [12] API on :3000 — kept running   [13] worker, health on :9090 — kept running
+  → "live" + the playground card (API, /reference, /admin/queues, worker, logs)
+```
+
+| You want | Do |
+| -------- | -- |
+| Follow it step by step | `tail -f /tmp/agent-stack/bootstrap.log`, or ask the agent to watch the stack |
+| Know where it is | `pnpm dev:stack:status` — the running step (or `live`), API + worker `/livez` · `/readyz`, containers, logs |
+| Stop the API + worker | `pnpm dev:stack:stop` (Postgres + Redis stay; `pnpm compose:down` stops them) |
+| Bring it back | `bash tooling/setup/agent/bootstrap.sh` |
+| A known demo password | set `DEMO_PASSWORD` in the environment's variables (`demo@example.com`) |
+| No auto-start for an environment | set `AGENT_AUTO_STACK=0` in its variables |
+
+The banner shows `Stack: starting…` / `live` and tells the agent to wait for `live` before any
+database or API work. A resumed session whose API already answers, or a bring-up already
+running, is left alone. Local sessions are unchanged (`Stack: on demand`).
 
 ## How to tell a session is provisioned
 
