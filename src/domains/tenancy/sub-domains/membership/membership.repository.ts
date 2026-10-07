@@ -1,10 +1,11 @@
-import { and, asc, desc, eq, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql, type SQL } from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import {
   getContextFreeDatabase,
   getRequestDatabase,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { membershipHoldsRole } from '@/domains/tenancy/sub-domains/membership/membership-additional-roles/membership-additional-roles.schema.js';
 import { member_invitations } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
@@ -12,7 +13,11 @@ import { role_permissions } from '@/domains/tenancy/sub-domains/member-roles/mem
 import { BaseRepository } from '@/infrastructure/database/base-repository.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
-import { type MembershipRow, SEAT_CONSUMING_MEMBERSHIP_STATUSES } from './membership.types.js';
+import {
+  type MembershipProfileData,
+  type MembershipRow,
+  SEAT_CONSUMING_MEMBERSHIP_STATUSES,
+} from './membership.types.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import { parseListCursor } from '@/shared/utils/http/pagination.util.js';
 import {
@@ -363,7 +368,8 @@ export class MembershipRepository extends BaseRepository {
     const rows = await getRequestDatabase()
       .selectDistinct({ user_id: memberships.user_id })
       .from(memberships)
-      .innerJoin(roles, and(eq(roles.id, memberships.role_id), isNull(roles.deleted_at)))
+      // Main or additional role (D5).
+      .innerJoin(roles, and(membershipHoldsRole(roles.id), isNull(roles.deleted_at)))
       .innerJoin(
         role_permissions,
         and(
@@ -442,7 +448,7 @@ export class MembershipRepository extends BaseRepository {
       .from(memberships)
       .where(
         and(
-          eq(memberships.role_id, role_id),
+          membershipHoldsRole(role_id),
           eq(memberships.organization_id, organization_id),
           isNull(memberships.deleted_at),
         ),
@@ -583,10 +589,12 @@ export class MembershipRepository extends BaseRepository {
     status?: string;
     invited_by_user_id?: number | null;
     created_by_user_id?: number | null;
+    profile?: MembershipProfileData;
   }) {
     return runInsertWithPublicIdentifierRetry(async () => {
       const public_id = generatePublicId('membership');
       const row = {
+        ...(data.profile ?? {}),
         public_id,
         organization_id: data.organization_id,
         user_id: data.user_id,
@@ -604,16 +612,17 @@ export class MembershipRepository extends BaseRepository {
   async update(
     public_id: string,
     organization_id: number,
-    data: { status?: string; role_id?: number },
+    data: { status?: string; role_id?: number; profile?: MembershipProfileData },
     updated_by_user_id: number | null,
   ): Promise<MembershipRow | null> {
-    const payload: {
+    const payload: MembershipProfileData & {
       status?: string;
       role_id?: number;
       joined_at?: Date;
       updated_at: Date | SQL;
       updated_by_user_id?: number;
     } = omitUndefined({
+      ...data.profile,
       updated_at: databaseNowTimestamp,
       updated_by_user_id: updated_by_user_id ?? undefined,
     });
@@ -667,10 +676,18 @@ export class MembershipRepository extends BaseRepository {
     return (rows[0] ?? null) as MembershipRow | null;
   }
 
-  async softDelete(public_id: string, organization_id: number): Promise<MembershipRow | null> {
+  async softDelete(
+    public_id: string,
+    organization_id: number,
+    removal?: { delete_reason: string; delete_note: string | null },
+  ): Promise<MembershipRow | null> {
     const rows = await getRequestDatabase()
       .update(memberships)
-      .set({ deleted_at: databaseNowTimestamp, updated_at: databaseNowTimestamp })
+      .set({
+        deleted_at: databaseNowTimestamp,
+        updated_at: databaseNowTimestamp,
+        ...(removal ?? {}),
+      })
       .where(
         and(
           eq(memberships.public_id, public_id),
@@ -685,6 +702,55 @@ export class MembershipRepository extends BaseRepository {
             WHERE ${organizations.id} = ${memberships.organization_id}
               AND ${organizations.owner_user_id} = ${memberships.user_id}
           )`,
+        ),
+      )
+      .returning();
+    return (rows[0] ?? null) as MembershipRow | null;
+  }
+
+  /** A soft-deleted membership of the organization by public id (the restore path), or null. */
+  async findDeletedByPublicId(
+    public_id: string,
+    organization_id: number,
+  ): Promise<MembershipRow | null> {
+    const rows = await getRequestDatabase()
+      .select()
+      .from(memberships)
+      .where(
+        and(
+          eq(memberships.public_id, public_id),
+          eq(memberships.organization_id, organization_id),
+          isNotNull(memberships.deleted_at),
+        ),
+      )
+      .limit(1);
+    return (rows[0] ?? null) as MembershipRow | null;
+  }
+
+  /**
+   * Undoes a soft delete: clears `deleted_at` and the removal reason and note. Throws a Postgres
+   * unique violation when the person already holds a live membership again
+   * (`idx_memberships_user_org_unique`) — the caller maps it to a 409.
+   */
+  async restore(
+    public_id: string,
+    organization_id: number,
+    updated_by_user_id: number | null,
+  ): Promise<MembershipRow | null> {
+    const rows = await getRequestDatabase()
+      .update(memberships)
+      .set({
+        deleted_at: null,
+        delete_reason: null,
+        delete_note: null,
+        updated_at: databaseNowTimestamp,
+        ...(updated_by_user_id === null ? {} : { updated_by_user_id }),
+      })
+      .where(
+        and(
+          eq(memberships.public_id, public_id),
+          eq(memberships.organization_id, organization_id),
+          isNotNull(memberships.deleted_at),
         ),
       )
       .returning();

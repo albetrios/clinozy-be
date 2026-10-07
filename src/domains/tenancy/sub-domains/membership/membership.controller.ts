@@ -112,15 +112,31 @@ function createMembershipWriteHandlers(service: MembershipService) {
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const membershipId = readMembershipIdParam(request);
-      await service.delete(scope, membershipId);
+      await service.delete(scope, membershipId, request.query);
+      const removal = request.query as { reason?: string };
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
         action: 'tenancy.membership.delete',
         resource_type: 'membership',
         organizationPublicId: scope.organizationPublicId,
-        metadata: { membership_public_id: membershipId },
+        metadata: { membership_public_id: membershipId, delete_reason: removal.reason },
       });
       return reply.code(204).send();
+    },
+    restoreMembership: async (request: FastifyRequest, _reply: FastifyReply) => {
+      const auth = requirePrincipal(request);
+      const scope = requireOrganizationScope(request);
+      const membershipId = readMembershipIdParam(request);
+      const data = await service.restore(scope, membershipId, getActingUserPublicId(auth));
+      await recordScopedAuditEvent(request, {
+        ...buildAuditActorFields(auth),
+        action: 'tenancy.membership.restore',
+        resource_type: 'membership',
+        organizationPublicId: scope.organizationPublicId,
+        target_user_public_id: data.user_id,
+        metadata: { membership_public_id: membershipId },
+      });
+      return successResponse(data, getRequestIdentifier(request));
     },
     leaveOrganization: async (request: FastifyRequest, reply: FastifyReply) => {
       const auth = requireAuth(request);

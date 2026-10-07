@@ -23,7 +23,7 @@ Generate co-located Drizzle schema files for new domains or sub-domains, followi
 
 ## Steps
 
-1. **Determine the Postgres schema** from `pg-schemas.ts` (auth, tenancy, billing, notify, audit, upload, app — the clinic tables).
+1. **Determine the Postgres schema** from `pg-schemas.ts` (auth, tenancy, billing, notify, audit, upload, app — the app's own record tables).
 2. **Create `<sub-domain>.schema.ts`** in the domain/sub-domain folder (e.g. `src/domains/tenancy/sub-domains/organization/organization.schema.ts`).
 3. **Follow column conventions**:
    - Use `snake_case` for all column property names

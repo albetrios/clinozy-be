@@ -59,7 +59,14 @@
     "uploadNotConfirmed": "Upload must be confirmed before it can be attached",
     "unrecognizedKey": "Unrecognized key: \"{{key}}\"",
     "branchMembershipNotFound": "{{membership_id}} is not a member of this organization",
-    "branchClosesBeforeOpens": "Closing time must be after opening time"
+    "branchClosesBeforeOpens": "Closing time must be after opening time",
+    "membershipRoleNotFound": "{{role_id}} is not a role of this organization",
+    "membershipBranchNotFound": "{{branch_id}} is not a branch of this organization",
+    "workEndsBeforeStarts": "Working hours must end after they start",
+    "roleToCopyNotFound": "{{role_id}} is not a role of this organization",
+    "recordFieldRule": "The {{field}} field breaks a record rule",
+    "recordReferenceNotFound": "{{id}} is not a {{label}} of this organization",
+    "branchNotYours": "{{field}} is not one of your branches"
   },
   "missingSessionCookie": "Missing session cookie",
   "disposableEmail": "This email domain is not allowed.",
@@ -81,6 +88,8 @@
   "apiKeyRotationConflict": "This API key was already rotated or revoked by a concurrent request; reload and try again",
   "ownershipTransferTargetNotActive": "Ownership cannot be transferred: the selected member is no longer an active member of the organization",
   "membershipAlreadyExists": "This user is already a member of the organization",
+  "membershipNotDeleted": "This member has not been removed",
+  "roleLocked": "This role's access is fixed and cannot be changed",
   "webhookUrlExists": "A webhook for \"{{url}}\" already exists in this organization",
   "webhookMaxReached": "Maximum number of webhooks ({{max}}) reached for this organization. Delete an existing webhook before adding another.",
   "webhookSecretRotationTooSoon": "The signing secret was rotated recently and the previous secret is still within its dual-sign overlap window. Rotating again now would invalidate it for receivers that haven't migrated yet. Retry after {{retryAfter}}.",
@@ -173,5 +182,14 @@
   "invalidMetricsToken": "Invalid or missing metrics token",
   "resourceBusy": "The resource is busy right now. Please retry in a moment.",
   "branchNameExists": "A branch named \"{{name}}\" already exists in this organization",
-  "branchMainExists": "Only one branch can be the main branch"
+  "branchMainExists": "Only one branch can be the main branch",
+  "recordAlreadyExists": "A record with these details already exists",
+  "recordNotDeleted": "This record is not deleted",
+  "recordRestoreConflict": "This record cannot be restored — an active record with the same details exists",
+  "recordTransitionNotAllowed": "Cannot {{action}} a record that is {{status}}",
+  "recordChangedSinceOpened": "This record was changed by {{updated_by}} at {{updated_at}} — reload and try again",
+  "fieldNeedsPermission": "You need the {{permission}} permission to change {{field}}",
+  "leadHeld": "This lead is held by another team member until {{held_until}}",
+  "leadNotYours": "Only the lead’s owner can release it",
+  "leadConverted": "This lead is already a patient"
 }

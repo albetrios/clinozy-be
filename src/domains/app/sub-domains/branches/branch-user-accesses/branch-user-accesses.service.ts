@@ -1,5 +1,8 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
-import type { MembershipService } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
+import type {
+  MembershipBranchAccessPort,
+  MembershipService,
+} from '@/domains/tenancy/sub-domains/membership/membership.service.js';
 import {
   type OrganizationPrincipalDatabaseScope,
   withAppDatabaseContext,
@@ -22,7 +25,7 @@ import { validateReplaceBranchUserAccesses } from './branch-user-accesses.valida
  *   no live member of this organization.
  * - **Side effects:** a replace deletes and inserts `app.branch_user_accesses` rows.
  */
-export class BranchUserAccessesService {
+export class BranchUserAccessesService implements MembershipBranchAccessPort {
   constructor(
     private readonly organizationService: OrganizationService,
     private readonly membershipService: MembershipService,
@@ -72,6 +75,53 @@ export class BranchUserAccessesService {
       return BranchUserAccessesSerializer.many(
         await this.branchUserAccessesRepository.listForBranch(ids.branch),
       );
+    });
+  }
+
+  /**
+   * The branches each membership works in, for the membership routes (launch ROUTE #4). Runs in
+   * the caller's context.
+   */
+  async listBranchPublicIdsByMembershipIds(options: {
+    membershipIds: readonly number[];
+  }): Promise<Map<number, string[]>> {
+    return this.branchUserAccessesRepository.listBranchPublicIdsByMembershipIds(
+      options.membershipIds,
+    );
+  }
+
+  /**
+   * Sets the exact branches a membership works in (the member invite and edit, launch ROUTE #4).
+   *
+   * @remarks
+   * - **Algorithm:** in the caller's context, resolve every `brn_` id to a live branch of the
+   *   organization, then make that set the membership's access list.
+   * - **Failure modes:** `ValidationError` on `branch_ids` for an id that is no live branch here.
+   * - **Side effects:** deletes and inserts `app.branch_user_accesses` rows.
+   */
+  async replaceBranchesForMembership(options: {
+    organizationId: number;
+    membershipId: number;
+    branchPublicIds: readonly string[];
+    createdByUserId: number | null;
+  }): Promise<void> {
+    const resolved = await this.branchesRepository.findIdsByPublicIds(
+      options.organizationId,
+      options.branchPublicIds,
+    );
+    const unknown = options.branchPublicIds.filter((publicId) => !resolved.has(publicId));
+    if (unknown.length > 0) {
+      throw new ValidationError(
+        'errors:validation.membershipBranchNotFound',
+        { branch_id: unknown.join(', ') },
+        { branch_ids: unknown.map((publicId) => `${publicId} is not a branch here`) },
+      );
+    }
+    await this.branchUserAccessesRepository.replaceForMembership({
+      membership_id: options.membershipId,
+      organization_id: options.organizationId,
+      branch_ids: [...resolved.values()],
+      created_by_user_id: options.createdByUserId,
     });
   }
 

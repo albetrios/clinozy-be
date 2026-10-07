@@ -434,7 +434,14 @@ export class OrganizationRepository extends BaseRepository {
 
   async update(
     public_id: string,
-    data: { name?: string; slug?: string; status?: string; logo_url?: string | null },
+    data: {
+      name?: string;
+      slug?: string;
+      status?: string;
+      logo_url?: string | null;
+      specialties?: string[];
+      timezone?: string;
+    },
     updated_by_user_id: number | null,
   ): Promise<Organization | null> {
     const rows = await getRequestDatabase()

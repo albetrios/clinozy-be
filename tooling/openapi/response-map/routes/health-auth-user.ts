@@ -226,6 +226,7 @@ export const healthAuthUserRouteResponses: Record<string, ResponseDefinition> = 
           user: schemas.userSchema,
           active_organization: { ...schemas.organizationSchema, nullable: true },
           my_permissions: { type: 'array', items: { type: 'string' } },
+          my_role_ids: { type: 'array', items: { type: 'string' } },
           global_role: { type: 'string', nullable: true },
           // The organization LIST is not here: it lives at
           // `GET /users/me/organizations`, which pages. Embedded it was a flat
@@ -237,6 +238,7 @@ export const healthAuthUserRouteResponses: Record<string, ResponseDefinition> = 
         user: schemas.userExample,
         active_organization: schemas.organizationExample,
         my_permissions: ['organization:read', 'membership:read'],
+        my_role_ids: ['rol_m3n7p2q8w5k1r4t6a1b2c'],
         global_role: null,
         organizations: [{ ...schemas.organizationExample, is_active: true }],
       },
@@ -353,6 +355,11 @@ export const healthAuthUserRouteResponses: Record<string, ResponseDefinition> = 
     example: null,
   },
   'PATCH /api/v1/users/me': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.userSchema, schemas.userExample),
+    example: null,
+  },
+  'PUT /api/v1/users/me/presence': {
     statusCode: 200,
     schema: wrapSuccess(schemas.userSchema, schemas.userExample),
     example: null,

@@ -86,6 +86,12 @@ export function createUserController({
       return successResponse(data, getRequestIdentifier(request));
     },
 
+    // requireUserScope is the auth check here: it throws the same 401 requireAuth would.
+    putMyPresence: async (request: FastifyRequest, _reply: FastifyReply) => {
+      const data = await userService.updateMyPresence(requireUserScope(request), request.body);
+      return successResponse(data, getRequestIdentifier(request));
+    },
+
     completeOnboardingMe: async (request: FastifyRequest, _reply: FastifyReply) => {
       const _auth = requireAuth(request);
       const data = await userService.completeOnboarding(requireUserScope(request));

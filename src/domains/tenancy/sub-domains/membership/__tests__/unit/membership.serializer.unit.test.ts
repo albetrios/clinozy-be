@@ -11,6 +11,16 @@ const user = {
   avatar_url: 'https://signed.example.com/avatar.png',
 };
 const role = { id: 'role-public', name: 'Admin' };
+const profileColumns = {
+  staff_number: 12,
+  phone: null,
+  tone: 'sky',
+  working_days: ['mon', 'tue'],
+  work_starts_at: '10:00:00',
+  work_ends_at: '19:00:00',
+  commission_percent: '10.00',
+};
+const access = { role_ids: ['role-public'], branch_ids: [] };
 
 describe('membership serializer', () => {
   it('serializeMembership maps null joined_at and a null invitation (active row)', () => {
@@ -22,11 +32,13 @@ describe('membership serializer', () => {
           joined_at: null,
           created_at: createdAt,
           updated_at: updatedAt,
+          ...profileColumns,
         },
         'org-public',
         user,
         role,
         null,
+        access,
       ),
     ).toMatchObject({ status: 'ACTIVE', joined_at: null, invitation: null });
   });
@@ -40,11 +52,13 @@ describe('membership serializer', () => {
         joined_at: joinedAt,
         created_at: createdAt,
         updated_at: updatedAt,
+        ...profileColumns,
       },
       'org-public',
       user,
       role,
       null,
+      access,
     );
 
     expect(serialized).toEqual({
@@ -74,11 +88,13 @@ describe('membership serializer', () => {
         joined_at: null,
         created_at: createdAt,
         updated_at: updatedAt,
+        ...profileColumns,
       },
       'org-public',
       user,
       role,
       { public_id: 'inv-public', expires_at: expiresAt },
+      access,
     );
     expect(serialized.invitation).toEqual({
       id: 'inv-public',

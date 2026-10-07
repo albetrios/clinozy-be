@@ -12,6 +12,9 @@ export function serializeOrganization(row: {
   type: string;
   status: string;
   logo_url: string | null;
+  specialties: string[];
+  timezone: string;
+  currency: string;
   created_at: Date;
   updated_at: Date;
 }): OrganizationOutput {
@@ -22,6 +25,9 @@ export function serializeOrganization(row: {
     type: row.type,
     status: row.status,
     logo_url: row.logo_url,
+    specialties: row.specialties,
+    timezone: row.timezone,
+    currency: row.currency,
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),
   };

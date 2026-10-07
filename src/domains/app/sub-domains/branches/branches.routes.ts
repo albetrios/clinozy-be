@@ -71,7 +71,7 @@ export function branchesRoutes(service: BranchesService): FastifyPluginAsync {
       {
         onRequest: [app.authenticate],
         preHandler: [requireOrganizationPermission(APP_PERMISSIONS.BRANCH_CREATE)],
-        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Create branch',
           description:

@@ -1,4 +1,6 @@
+import { toHourMinute } from '@/shared/utils/validation/record-fields.util.js';
 import type {
+  MembershipAccessRefs,
   MembershipOutput,
   MembershipRoleSummary,
   MembershipUserSummary,
@@ -20,11 +22,19 @@ export function serializeMembership(
     joined_at: Date | null;
     created_at: Date;
     updated_at: Date;
+    staff_number: number;
+    phone: string | null;
+    tone: string;
+    working_days: string[];
+    work_starts_at: string;
+    work_ends_at: string;
+    commission_percent: string;
   },
   organization_public_id: string,
   user: MembershipUserSummary,
   role: MembershipRoleSummary,
   invitation: { public_id: string; expires_at: Date } | null,
+  access: MembershipAccessRefs,
 ): MembershipOutput {
   return {
     id: row.public_id,
@@ -41,5 +51,14 @@ export function serializeMembership(
       invitation === null
         ? null
         : { id: invitation.public_id, expires_at: invitation.expires_at.toISOString() },
+    staff_number: row.staff_number,
+    phone: row.phone,
+    tone: row.tone,
+    role_ids: access.role_ids,
+    branch_ids: access.branch_ids,
+    working_days: row.working_days,
+    work_starts_at: toHourMinute(row.work_starts_at),
+    work_ends_at: toHourMinute(row.work_ends_at),
+    commission_percent: Number(row.commission_percent),
   };
 }

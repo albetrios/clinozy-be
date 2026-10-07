@@ -24,6 +24,7 @@ import { USER_OFFBOARDING_RECONCILE_QUEUE_NAME } from '@/domains/user/workers/us
 import { ORGANIZATION_OFFBOARDING_RECONCILE_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/workers/organization-offboarding-reconcile.constants.js';
 import { ORGANIZATION_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/workers/organization-tombstone-retention.constants.js';
 import { MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/membership/workers/membership-tombstone-retention.constants.js';
+import { APP_RECORD_PURGE_QUEUE_NAME } from '@/domains/app/workers/app-record-purge.constants.js';
 import { MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.constants.js';
 import { ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/organization-api-key/workers/organization-api-key-tombstone-retention.constants.js';
 import { UPLOAD_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/upload/workers/upload-tombstone-retention.constants.js';
@@ -85,6 +86,8 @@ const DEFAULT_WEBHOOK_TOMBSTONE_RETENTION_CRON = '47 5 * * *';
 const DEFAULT_WEBHOOK_DELIVERY_ATTEMPT_RETENTION_CRON = '40 3 * * *';
 const DEFAULT_ORGANIZATION_NOTIFICATION_POLICY_TOMBSTONE_RETENTION_CRON = '48 5 * * *';
 const DEFAULT_MEMBERSHIP_TOMBSTONE_RETENTION_CRON = '50 5 * * *';
+/** Daily erase of deleted app records past each organization's restore window (WC-46, D38). */
+const DEFAULT_APP_RECORD_PURGE_CRON = '56 5 * * *';
 const DEFAULT_MEMBER_ROLE_TOMBSTONE_RETENTION_CRON = '51 5 * * *';
 const DEFAULT_ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_CRON = '52 5 * * *';
 const DEFAULT_USER_TOMBSTONE_RETENTION_CRON = '53 5 * * *';
@@ -153,6 +156,12 @@ function getTombstoneRetentionScheduledJobs(timezone: string | undefined): Sched
       jobName: 'purge-old-deleted-memberships',
       cronPattern:
         env.MEMBERSHIP_TOMBSTONE_RETENTION_CRON ?? DEFAULT_MEMBERSHIP_TOMBSTONE_RETENTION_CRON,
+    }),
+    withSchedulerTimezone(timezone, {
+      queueName: APP_RECORD_PURGE_QUEUE_NAME,
+      schedulerId: 'daily-app-record-purge',
+      jobName: 'purge-deleted-app-records',
+      cronPattern: env.APP_RECORD_PURGE_CRON ?? DEFAULT_APP_RECORD_PURGE_CRON,
     }),
     withSchedulerTimezone(timezone, {
       queueName: MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME,

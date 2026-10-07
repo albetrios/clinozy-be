@@ -11,6 +11,12 @@ export interface Organization {
   status: string;
   logo_url: string | null;
   stripe_customer_id: string | null;
+  /** What the organization practises (launch D7). */
+  specialties: string[];
+  /** IANA time zone its timed work runs in (D41). */
+  timezone: string;
+  /** Always `INR` at launch (server-set). */
+  currency: string;
   deleted_at: Date | null;
   deletion_started_at: Date | null;
   created_at: Date;
@@ -26,6 +32,12 @@ export interface OrganizationOutput {
   type: string;
   status: string;
   logo_url: string | null;
+  /** What the organization practises — 1 to 6 of `skin`, `hair`, … (launch D7). */
+  specialties: string[];
+  /** IANA time zone its timed work runs in (D41). */
+  timezone: string;
+  /** Always `INR` at launch. */
+  currency: string;
   created_at: string;
   updated_at: string;
 }

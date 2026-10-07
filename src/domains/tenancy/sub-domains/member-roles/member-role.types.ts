@@ -10,6 +10,8 @@ export interface MemberRoleRow {
   name: string;
   description: string | null;
   is_system: boolean;
+  tone: string;
+  is_locked: boolean;
   deleted_at: Date | null;
   created_at: Date;
   updated_at: Date;
@@ -26,6 +28,10 @@ export interface MemberRoleOutput {
   name: string;
   description: string | null;
   is_system: boolean;
+  /** The role's chip colour. */
+  tone: string;
+  /** True when the role's access cannot be edited (only Admin, D40). */
+  is_locked: boolean;
   member_count: number;
   created_at: string;
   updated_at: string;

@@ -43,6 +43,37 @@ export interface MembershipRow {
   deleted_at: Date | null;
   created_at: Date;
   updated_at: Date;
+  staff_number: number;
+  phone: string | null;
+  tone: string;
+  working_days: string[];
+  work_starts_at: string;
+  work_ends_at: string;
+  commission_percent: string;
+  delete_reason: string | null;
+  delete_note: string | null;
+}
+
+/**
+ * The staff profile columns a create or update writes (launch ROUTE #4); `undefined` leaves a
+ * column at its default (create) or unchanged (update), `phone: null` clears it.
+ */
+export interface MembershipProfileData {
+  phone?: string | null;
+  tone?: string;
+  working_days?: string[];
+  work_starts_at?: string;
+  work_ends_at?: string;
+  commission_percent?: string;
+}
+
+/**
+ * A membership's role and branch lists as public ids (launch ROUTE #4): every role it holds, the
+ * main role first (D5), and the branches it works in.
+ */
+export interface MembershipAccessRefs {
+  role_ids: string[];
+  branch_ids: string[];
 }
 
 /**
@@ -93,4 +124,18 @@ export interface MembershipOutput {
   user: MembershipUserSummary;
   role: MembershipRoleSummary;
   invitation: MembershipInvitationRef | null;
+  /** The "#12" of the team table — per organization, never reused. */
+  staff_number: number;
+  phone: string | null;
+  tone: string;
+  /** Every role held, the main role first (`role_id` repeats the first). */
+  role_ids: string[];
+  /** The branches this member works in (`brn_…`). */
+  branch_ids: string[];
+  working_days: string[];
+  /** `HH:mm`. */
+  work_starts_at: string;
+  /** `HH:mm`, after `work_starts_at`. */
+  work_ends_at: string;
+  commission_percent: number;
 }

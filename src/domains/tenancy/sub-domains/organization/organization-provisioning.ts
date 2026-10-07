@@ -3,6 +3,7 @@ import { AUDIT_PERMISSIONS } from '@/domains/audit/audit.permissions.js';
 import { BILLING_PERMISSIONS } from '@/domains/billing/billing.permissions.js';
 import { NOTIFY_PERMISSIONS } from '@/domains/notify/notify.permissions.js';
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
+import { type AppRolePreset, appRolePresets } from '@/domains/app/app-role-presets.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { UPLOAD_PERMISSIONS } from '@/domains/upload/upload.permissions.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
@@ -35,10 +36,10 @@ const ALL_TENANCY_PERMISSION_CODES: readonly string[] = Object.values(TENANCY_PE
 const ALL_NOTIFY_PERMISSION_CODES: readonly string[] = Object.values(NOTIFY_PERMISSIONS);
 
 /**
- * App (clinic record) permission codes — granted to TEAM owners and the Admin role.
+ * App record permission codes — granted to TEAM owners and the Admin role.
  *
  * @remarks
- * A clinic is a TEAM organization; a personal workspace holds no branches (D44), so these codes
+ * A business runs as a TEAM organization; a personal workspace holds no branches (D44), so these codes
  * join the TEAM half of {@link ownerPermissionCodesForOrganizationType} only.
  */
 const ALL_APP_PERMISSION_CODES: readonly string[] = Object.values(APP_PERMISSIONS);
@@ -103,79 +104,56 @@ export function ownerPermissionCodesForOrganizationType(
   return everyOwnerCodes;
 }
 
-/** A default, immutable non-owner role auto-provisioned into every TEAM organization. */
-export interface DefaultTeamRole {
-  /** Human-readable role name; unique within the organization. */
-  name: string;
-  /** Short description surfaced in the roles UI. */
-  description: string;
-  /** Permission codes granted to the role; every code must exist in `tenancy.permissions`. */
-  permissionCodes: readonly string[];
-}
+/** A default non-owner role auto-provisioned into every TEAM organization (the clinic roles). */
+export type DefaultTeamRole = AppRolePreset;
 
 /**
- * Non-owner system roles seeded into every TEAM organization at provisioning time, so a freshly
- * created team can assign a role and invite members immediately — without an operator first
- * hand-crafting one.
+ * Admin's codes: every team code but `organization:delete` (D8), billing, webhooks, audit logs,
+ * uploads and every app code — the special permissions included.
  *
  * @remarks
- * - Every entry is `is_system: true` (immutable — cannot be edited or deleted via the role API),
- *   matching the Owner role.
- * - **Admin** holds every permission except `organization:delete`, so the name matches the
- *   capability: it can manage members, roles, invitations, API keys, webhooks, notification
- *   policies, billing and audit logs. Escalation to Owner stays closed on three independent
- *   paths — `assertCallerCanGrantPermissionCodes` limits any grant to codes the caller already
- *   holds (so an Admin can never hand out `organization:delete`), the same guard runs on
- *   membership create and update (so an Admin cannot assign the Owner role to anyone), and
- *   `is_system` blocks editing the Owner role itself.
- * - **Member** and **Viewer** always include `organization:read` so any assigned member can load
- *   the organization dashboard (the frontend's landing surface gates on `organization:read`).
+ * Escalation to Owner stays closed on three independent paths —
+ * `assertCallerCanGrantPermissionCodes` limits any grant to codes the caller already holds (so an
+ * Admin can never hand out `organization:delete`), the same guard runs on membership create and
+ * update (so an Admin cannot assign the Owner role to anyone), and `is_system` blocks editing the
+ * Owner role itself.
+ */
+const ADMIN_PERMISSION_CODES: readonly string[] = [
+  TENANCY_PERMISSIONS.ORGANIZATION_READ,
+  TENANCY_PERMISSIONS.ORGANIZATION_UPDATE,
+  TENANCY_PERMISSIONS.MEMBERSHIP_READ,
+  TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+  TENANCY_PERMISSIONS.INVITATION_MANAGE,
+  TENANCY_PERMISSIONS.ROLE_READ,
+  TENANCY_PERMISSIONS.ROLE_MANAGE,
+  TENANCY_PERMISSIONS.API_KEY_READ,
+  TENANCY_PERMISSIONS.API_KEY_MANAGE,
+  TENANCY_PERMISSIONS.NOTIFICATION_POLICY_READ,
+  TENANCY_PERMISSIONS.NOTIFICATION_POLICY_MANAGE,
+  BILLING_PERMISSIONS.SUBSCRIPTION_READ,
+  BILLING_PERMISSIONS.SUBSCRIPTION_MANAGE,
+  NOTIFY_PERMISSIONS.WEBHOOK_READ,
+  NOTIFY_PERMISSIONS.WEBHOOK_MANAGE,
+  AUDIT_PERMISSIONS.AUDIT_LOG_READ,
+  UPLOAD_PERMISSIONS.UPLOAD_MANAGE,
+  ...ALL_APP_PERMISSION_CODES,
+];
+
+/**
+ * Non-owner system roles seeded into every TEAM organization at provisioning time — the clinic
+ * roles (Admin, Doctor, Therapist, Front desk, Counsellor, Pharmacist, Accountant, Marketing;
+ * launch ROUTE #6/#7, D12) — so a new clinic can invite its team straight away.
+ *
+ * @remarks
+ * - Every entry is `is_system: true`: its name is fixed and it cannot be deleted. Its access is
+ *   each organization's to edit (D5), except Admin's — the one `is_locked` role (D40).
  * - PERSONAL organizations are single-member and reject custom roles, so they receive only Owner;
  *   these defaults apply to TEAM organizations exclusively.
  * - Every permission code must exist in the seeded `tenancy.permissions` reference table (the grant
- *   insert carries an FK to it).
+ *   insert carries an FK to it). The presets live in `app-role-presets.ts`.
  */
-export const DEFAULT_TEAM_ROLES: readonly DefaultTeamRole[] = [
-  {
-    name: 'Admin',
-    description:
-      'Run the organization: members, roles, invitations, API keys, webhooks, billing, audit logs and branches. Cannot delete the organization.',
-    permissionCodes: [
-      TENANCY_PERMISSIONS.ORGANIZATION_READ,
-      TENANCY_PERMISSIONS.ORGANIZATION_UPDATE,
-      TENANCY_PERMISSIONS.MEMBERSHIP_READ,
-      TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
-      TENANCY_PERMISSIONS.INVITATION_MANAGE,
-      TENANCY_PERMISSIONS.ROLE_READ,
-      TENANCY_PERMISSIONS.ROLE_MANAGE,
-      TENANCY_PERMISSIONS.API_KEY_READ,
-      TENANCY_PERMISSIONS.API_KEY_MANAGE,
-      TENANCY_PERMISSIONS.NOTIFICATION_POLICY_READ,
-      TENANCY_PERMISSIONS.NOTIFICATION_POLICY_MANAGE,
-      BILLING_PERMISSIONS.SUBSCRIPTION_READ,
-      BILLING_PERMISSIONS.SUBSCRIPTION_MANAGE,
-      NOTIFY_PERMISSIONS.WEBHOOK_READ,
-      NOTIFY_PERMISSIONS.WEBHOOK_MANAGE,
-      AUDIT_PERMISSIONS.AUDIT_LOG_READ,
-      UPLOAD_PERMISSIONS.UPLOAD_MANAGE,
-      ...ALL_APP_PERMISSION_CODES,
-    ],
-  },
-  {
-    name: 'Member',
-    description: 'Read organization data and view members and roles.',
-    permissionCodes: [
-      TENANCY_PERMISSIONS.ORGANIZATION_READ,
-      TENANCY_PERMISSIONS.MEMBERSHIP_READ,
-      TENANCY_PERMISSIONS.ROLE_READ,
-    ],
-  },
-  {
-    name: 'Viewer',
-    description: 'Read-only access to the organization and its members.',
-    permissionCodes: [TENANCY_PERMISSIONS.ORGANIZATION_READ, TENANCY_PERMISSIONS.MEMBERSHIP_READ],
-  },
-];
+export const DEFAULT_TEAM_ROLES: readonly DefaultTeamRole[] =
+  appRolePresets(ADMIN_PERMISSION_CODES);
 
 /** Input for {@link provisionOrganizationWithOwner}. */
 export interface ProvisionOrganizationInput {
@@ -211,14 +189,14 @@ export interface ProvisionOrganizationResult {
  *   its WITH CHECK with 42501 in deployed environments). One transaction keeps the owner-bootstrap
  *   atomic — a partial failure can never leave an organization whose owner has no access. TEAM
  *   organizations additionally insert the default {@link DEFAULT_TEAM_ROLES}
- *   (Admin/Member/Viewer) and their grants so a new team can assign a role and invite members
+ *   (the clinic roles) and their grants so a new team can assign a role and invite members
  *   immediately; PERSONAL organizations get Owner only. This is a server-side bootstrap only;
  *   the inputs are not user-controlled beyond name/slug/type.
  * - **Failure modes:** the whole transaction rolls back on any insert failure (unique slug,
  *   one-personal-per-owner index, missing permission reference rows). Callers map
  *   `unique_violation` to a 409.
  * - **Side effects:** table inserts (organizations, roles, role_permissions, memberships); TEAM
- *   organizations additionally insert the default Admin/Member/Viewer roles and their grants.
+ *   organizations additionally insert the default clinic roles (Admin locked) and their grants.
  * - **Notes:** the owner and default roles are `is_system: true` so they cannot be deleted via the
  *   role API. Permission reference rows (the `permissions` table) are assumed seeded — they are
  *   reference data present in every environment.
@@ -308,8 +286,8 @@ async function provisionOrganization(
         })
         .returning();
 
-      // TEAM organizations also receive the default non-owner system roles (Admin/Member/Viewer)
-      // so the team can assign a role and invite members immediately. PERSONAL organizations are
+      // TEAM organizations also receive the default clinic roles (Admin, Doctor, Therapist, Front
+      // desk, Counsellor, Pharmacist, Accountant, Marketing) so the team can invite straight away. PERSONAL organizations are
       // single-member and reject custom roles, so they get Owner only.
       if (input.type === 'TEAM') {
         for (const defaultRole of DEFAULT_TEAM_ROLES) {
@@ -320,7 +298,9 @@ async function provisionOrganization(
               organization_id: organization!.id,
               name: defaultRole.name,
               description: defaultRole.description,
+              tone: defaultRole.tone,
               is_system: true,
+              is_locked: defaultRole.isLocked,
               created_by_user_id: input.ownerUserId,
             })
             .returning();

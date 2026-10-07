@@ -3,6 +3,10 @@ import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-tim
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import {
+  membership_additional_roles,
+  membershipHoldsRole,
+} from '@/domains/tenancy/sub-domains/membership/membership-additional-roles/membership-additional-roles.schema.js';
 import { BaseRepository } from '@/infrastructure/database/base-repository.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
@@ -126,7 +130,28 @@ export class MemberRoleRepository extends BaseRepository {
         ),
       )
       .groupBy(memberships.role_id);
-    return new Map(rows.map((row) => [row.role_id, row.member_count]));
+    const counts = new Map(rows.map((row) => [row.role_id, row.member_count]));
+    // Plus the people holding the role as an additional one (D5). A person holds a role once —
+    // main or additional — so the two counts add up without double counting.
+    const additionalRows = await getRequestDatabase()
+      .select({
+        role_id: membership_additional_roles.role_id,
+        member_count: sql<number>`count(*)::int`,
+      })
+      .from(membership_additional_roles)
+      .innerJoin(memberships, eq(memberships.id, membership_additional_roles.membership_id))
+      .where(
+        and(
+          eq(memberships.organization_id, organization_id),
+          inArray(memberships.status, [...MEMBER_COUNT_STATUSES]),
+          isNull(memberships.deleted_at),
+        ),
+      )
+      .groupBy(membership_additional_roles.role_id);
+    for (const row of additionalRows) {
+      counts.set(row.role_id, (counts.get(row.role_id) ?? 0) + row.member_count);
+    }
+    return counts;
   }
 
   /**
@@ -146,7 +171,7 @@ export class MemberRoleRepository extends BaseRepository {
       .from(memberships)
       .where(
         and(
-          eq(memberships.role_id, role_id),
+          membershipHoldsRole(role_id),
           eq(memberships.organization_id, organization_id),
           inArray(memberships.status, [...MEMBER_COUNT_STATUSES]),
           isNull(memberships.deleted_at),
@@ -193,6 +218,7 @@ export class MemberRoleRepository extends BaseRepository {
     name: string;
     description?: string | null;
     is_system?: boolean;
+    tone?: string;
     created_by_user_id?: number | null;
   }) {
     return runInsertWithPublicIdentifierRetry(async () => {
@@ -203,6 +229,7 @@ export class MemberRoleRepository extends BaseRepository {
         name: data.name,
         description: data.description ?? null,
         is_system: data.is_system ?? false,
+        ...(data.tone === undefined ? {} : { tone: data.tone }),
         created_by_user_id: data.created_by_user_id ?? undefined,
         updated_by_user_id: data.created_by_user_id ?? undefined,
       };
@@ -214,7 +241,7 @@ export class MemberRoleRepository extends BaseRepository {
   async update(
     public_id: string,
     organization_id: number,
-    data: { name?: string; description?: string | null },
+    data: { name?: string; description?: string | null; tone?: string },
     updated_by_user_id: number | null,
   ): Promise<MemberRoleRow | null> {
     const rows = await getRequestDatabase()
@@ -276,7 +303,7 @@ export class MemberRoleRepository extends BaseRepository {
           sql`NOT EXISTS (
             SELECT 1
             FROM ${memberships}
-            WHERE ${memberships.role_id} = ${roles.id}
+            WHERE ${membershipHoldsRole(roles.id)}
               AND ${memberships.organization_id} = ${organization_id}
               AND ${memberships.deleted_at} IS NULL
           )`,

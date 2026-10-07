@@ -80,6 +80,11 @@ export class OrganizationSettingsService {
           is_email_notifications_enabled: parsed.is_email_notifications_enabled,
           default_locale: parsed.default_locale,
           security_policy: parsed.security_policy as object | undefined,
+          default_day_float: parsed.default_day_float,
+          lead_hold_days: parsed.lead_hold_days,
+          reminder_hour: parsed.reminder_hour,
+          retarget_after_days: parsed.retarget_after_days,
+          deleted_record_purge_days: parsed.deleted_record_purge_days,
         }),
       );
       return serializeOrganizationSettings(organization.public_id, updated);

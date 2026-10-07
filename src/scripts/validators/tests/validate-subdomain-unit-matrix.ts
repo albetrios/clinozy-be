@@ -38,6 +38,7 @@ const WORKER_TEST_ALLOWLIST = new Set([
   'upload-pending-sweep.worker.ts',
   'webhook-tombstone-retention.worker.ts',
   'membership-tombstone-retention.worker.ts',
+  'app-record-purge.worker.ts',
   'member-role-tombstone-retention.worker.ts',
   'organization-tombstone-retention.worker.ts',
   'organization-api-key-tombstone-retention.worker.ts',

@@ -6,6 +6,8 @@ import { DEFAULT_TRANSIENT_RETRY_ATTEMPTS } from '@/shared/constants/limits.cons
 const POSTGRES_UNIQUE_VIOLATION = '23505';
 const POSTGRES_LOCK_NOT_AVAILABLE = '55P03';
 const POSTGRES_FOREIGN_KEY_VIOLATION = '23503';
+const POSTGRES_CHECK_VIOLATION = '23514';
+const POSTGRES_NOT_NULL_VIOLATION = '23502';
 const MAX_CAUSE_DEPTH = 5;
 
 /**
@@ -72,6 +74,19 @@ export function isPostgresLockTimeout(error: unknown): boolean {
 /** Returns true when `error` is a Postgres `foreign_key_violation` (SQLSTATE 23503). */
 export function isPostgresForeignKeyViolation(error: unknown): boolean {
   return hasPostgresErrorCode(error, POSTGRES_FOREIGN_KEY_VIOLATION);
+}
+
+/**
+ * Whether a delete was refused because of the rows that point at it — a foreign key with no
+ * action (23503), or a cascaded `SET NULL` that a CHECK (23514) or NOT NULL (23502) refuses.
+ * Retention jobs count such a row as blocked and keep going (schema review H1).
+ */
+export function isPostgresDeleteBlockedByReferences(error: unknown): boolean {
+  return (
+    hasPostgresErrorCode(error, POSTGRES_FOREIGN_KEY_VIOLATION) ||
+    hasPostgresErrorCode(error, POSTGRES_CHECK_VIOLATION) ||
+    hasPostgresErrorCode(error, POSTGRES_NOT_NULL_VIOLATION)
+  );
 }
 
 /**

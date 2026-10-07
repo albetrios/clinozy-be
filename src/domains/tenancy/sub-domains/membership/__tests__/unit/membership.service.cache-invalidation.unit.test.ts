@@ -179,7 +179,7 @@ describe('MembershipService — permission cache invalidation', () => {
       user_id: 5,
     });
 
-    await service.delete(asScope('org_public_abc'), 'membership_public');
+    await service.delete(asScope('org_public_abc'), 'membership_public', { reason: 'mistake' });
 
     expect(organizationService.resolveUserPublicIdByInternalId).toHaveBeenCalledWith(5);
     expect(invalidatePermissions).toHaveBeenCalledWith('user_public_affected', 'org_public_abc');

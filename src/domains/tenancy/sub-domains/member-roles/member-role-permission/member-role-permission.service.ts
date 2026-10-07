@@ -73,6 +73,10 @@ export class MemberRolePermissionService {
       if (!organization) throw new NotFoundError('Organization');
       const role = await this.memberRoleRepository.findByPublicId(role_public_id, organization.id);
       if (!role) throw new NotFoundError('Role');
+      // Launch RC-6 (D40): a locked role's access is fixed — only Admin is locked.
+      if (role.is_locked) {
+        throw new ForbiddenError('errors:roleLocked').withReason('role_locked');
+      }
       /**
        * Owner-role protection (sec-T2): a `ROLE_MANAGE` holder must not be able to alter
        * the permission set on the role currently assigned to the organization owner — that

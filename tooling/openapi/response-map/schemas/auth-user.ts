@@ -16,6 +16,7 @@ export const userSchema = {
     first_name: { type: 'string', nullable: true },
     last_name: { type: 'string', nullable: true },
     avatar_url: { type: 'string', nullable: true },
+    presence: { type: 'string', enum: ['online', 'busy', 'away'] },
     status: {
       type: 'string',
       enum: ['ACTIVE', 'LOCKED', 'SUSPENDED'],
@@ -35,6 +36,7 @@ export const userExample = {
   first_name: 'John',
   last_name: 'Doe',
   avatar_url: 'https://cdn.example.com/avatars/john-doe.jpg',
+  presence: 'online',
   status: 'ACTIVE',
   created_at: '2026-01-15T10:30:00.000Z',
   updated_at: '2026-02-10T14:20:00.000Z',

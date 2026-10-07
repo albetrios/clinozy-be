@@ -22,6 +22,13 @@ export const organizationSchema = {
       example: 'ACTIVE',
     },
     logo_url: { type: 'string', nullable: true },
+    specialties: {
+      type: 'array',
+      items: { type: 'string', enum: ['skin', 'hair', 'dental', 'gynac', 'physio', 'general'] },
+      example: ['skin'],
+    },
+    timezone: { type: 'string', example: 'Asia/Kolkata' },
+    currency: { type: 'string', example: 'INR' },
     created_at: { type: 'string', format: 'date-time' },
     updated_at: { type: 'string', format: 'date-time' },
   },
@@ -34,6 +41,9 @@ export const organizationExample = {
   type: 'TEAM',
   status: 'ACTIVE',
   logo_url: 'https://cdn.example.com/logos/acme-corp.png',
+  specialties: ['skin'],
+  timezone: 'Asia/Kolkata',
+  currency: 'INR',
   created_at: '2026-01-01T00:00:00.000Z',
   updated_at: '2026-02-10T12:00:00.000Z',
 };
@@ -45,6 +55,11 @@ export const organizationSettingsSchema = {
     organization_id: { type: 'string' },
     is_email_notifications_enabled: { type: 'boolean' },
     security_policy: { type: 'object' },
+    default_day_float: { type: 'number', example: 2000, description: 'Rupees' },
+    lead_hold_days: { type: 'integer', example: 3 },
+    reminder_hour: { type: 'integer', example: 16, description: '0–23, organization time zone' },
+    retarget_after_days: { type: 'integer', example: 90 },
+    deleted_record_purge_days: { type: 'integer', example: 7 },
     created_at: { type: 'string', format: 'date-time' },
     updated_at: { type: 'string', format: 'date-time' },
   },
@@ -54,6 +69,11 @@ export const organizationSettingsExample = {
   organization_id: 'org_k7x9m2pqr4w8n1v3a1b2c',
   is_email_notifications_enabled: true,
   security_policy: { mfa_required: true, session_timeout_minutes: 30 },
+  default_day_float: 2000,
+  lead_hold_days: 3,
+  reminder_hour: 16,
+  retarget_after_days: 90,
+  deleted_record_purge_days: 7,
   created_at: '2026-01-01T00:00:00.000Z',
   updated_at: '2026-02-10T12:00:00.000Z',
 };
@@ -184,6 +204,26 @@ export const membershipSchema = {
         expires_at: { type: 'string', format: 'date-time' },
       },
     },
+    // Staff profile (launch ROUTE #4).
+    staff_number: {
+      type: 'integer',
+      description: 'The "#12" of the team table — per organization, never reused.',
+    },
+    phone: { type: 'string', nullable: true, example: '+919825044120' },
+    tone: { type: 'string', example: 'sky' },
+    role_ids: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Every role held, the main role first (role_id repeats it).',
+    },
+    branch_ids: { type: 'array', items: { type: 'string' } },
+    working_days: {
+      type: 'array',
+      items: { type: 'string', enum: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] },
+    },
+    work_starts_at: { type: 'string', example: '10:00' },
+    work_ends_at: { type: 'string', example: '19:00' },
+    commission_percent: { type: 'number', example: 10 },
   },
 };
 
@@ -208,6 +248,15 @@ export const membershipExample = {
     name: 'Admin',
   },
   invitation: null,
+  staff_number: 12,
+  phone: '+919825044120',
+  tone: 'sky',
+  role_ids: ['rol_m3n7p2q8w5k1r4t6a1b2c'],
+  branch_ids: ['brn_k7x9m2pqr4w8n1v3a1b2c'],
+  working_days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'],
+  work_starts_at: '10:00',
+  work_ends_at: '19:00',
+  commission_percent: 10,
 };
 
 // ── Member Invitation ──
@@ -242,6 +291,11 @@ export const memberRoleSchema = {
     name: { type: 'string' },
     description: { type: 'string', nullable: true },
     is_system: { type: 'boolean' },
+    tone: { type: 'string', example: 'sky' },
+    is_locked: {
+      type: 'boolean',
+      description: 'True when the role access cannot be edited (Admin).',
+    },
     member_count: {
       type: 'integer',
       minimum: 0,
@@ -258,6 +312,8 @@ export const memberRoleExample = {
   name: 'Admin',
   description: 'Full access to all organization resources',
   is_system: true,
+  tone: 'lav',
+  is_locked: true,
   member_count: 3,
   created_at: '2026-01-01T00:00:00.000Z',
   updated_at: '2026-01-01T00:00:00.000Z',

@@ -1,7 +1,7 @@
 import { SEVEN_DAYS } from '@/shared/constants/ttl.constants.js';
 
 /**
- * Opening cash a clinic day starts with when there is no previous close to carry from, in rupees
+ * Opening cash a business day starts with when there is no previous close to carry from, in rupees
  * (`numeric(12,2)` string, as Drizzle reads and writes `numeric`).
  */
 export const ORGANIZATION_SETTINGS_DEFAULT_DAY_FLOAT = '2000.00';
@@ -15,5 +15,5 @@ export const ORGANIZATION_SETTINGS_DEFAULT_REMINDER_HOUR = 16;
 /** Days without a visit after which a consenting patient gets a re-target lead. */
 export const ORGANIZATION_SETTINGS_DEFAULT_RETARGET_AFTER_DAYS = 90;
 
-/** Days a soft-deleted clinic record stays restorable before the purge erases it. */
+/** Days a soft-deleted app record stays restorable before the purge erases it. */
 export const ORGANIZATION_SETTINGS_DEFAULT_DELETED_RECORD_PURGE_DAYS = SEVEN_DAYS;

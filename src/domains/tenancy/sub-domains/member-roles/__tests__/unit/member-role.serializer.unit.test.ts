@@ -9,6 +9,8 @@ const roleRow = {
   name: 'Admin',
   description: 'Full access',
   is_system: true,
+  tone: 'sky',
+  is_locked: false,
   created_at: createdAt,
   updated_at: updatedAt,
 };
@@ -20,6 +22,8 @@ describe('member-role serializer', () => {
       name: 'Admin',
       description: 'Full access',
       is_system: true,
+      tone: 'sky',
+      is_locked: false,
       member_count: 3,
       created_at: createdAt.toISOString(),
       updated_at: updatedAt.toISOString(),

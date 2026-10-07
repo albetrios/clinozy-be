@@ -166,6 +166,11 @@ export const tenancyRouteResponses: Record<string, ResponseDefinition> = {
     schema: null,
     example: null,
   },
+  'POST /api/v1/tenancy/organization/memberships/{membership_id}/restore': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.membershipSchema, schemas.membershipExample),
+    example: null,
+  },
   'POST /api/v1/tenancy/organization/leave': {
     statusCode: 200,
     schema: null,

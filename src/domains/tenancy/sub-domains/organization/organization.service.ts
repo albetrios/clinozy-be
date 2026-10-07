@@ -221,6 +221,20 @@ export class OrganizationService {
     };
   }
 
+  /**
+   * The IANA time zone the organization's timed work runs in (launch D7, D41) — its "today".
+   *
+   * @remarks
+   * - **Algorithm:** one `findByPublicId` under the caller's RLS-scoped context.
+   * - **Failure modes:** `NotFoundError('Organization')` if no row resolves.
+   * - **Side effects:** none (read-only).
+   */
+  async requireOrganizationTimeZone(public_id: string): Promise<string> {
+    const organization = await this.repository.findByPublicId(public_id);
+    if (!organization) throw new NotFoundError('Organization');
+    return organization.timezone;
+  }
+
   async transferOrganizationOwnership(
     organization_public_id: string,
     new_owner_user_id: number,

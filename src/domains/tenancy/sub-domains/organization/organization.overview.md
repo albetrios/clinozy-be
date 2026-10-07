@@ -13,7 +13,7 @@ The top-level tenancy aggregate. Owns the `organizations` table (id, public id, 
 - **Slug is unique among LIVE teams only**: `idx_organizations_slug` is a **partial** unique index (`WHERE deleted_at IS NULL`), so a soft-deleted team releases its slug immediately for reuse instead of burning it until tombstone-retention. Matches `SLUG_REGEX`, lowercased, no leading/trailing/consecutive hyphens. Personal organizations carry a NULL slug and are not constrained here.
 - **Public id is the API contract**: 21-char URL-safe; the internal numeric id never appears in URLs or JSON.
 - **Slug change is rare and audited**: changing the slug rewrites organization-scoped URLs for clients; recorded with `WARNING` severity in audit.
-- **Clinic profile (launch D7)**: `specialties` (1–6 of `ORGANIZATION_SPECIALTIES`, default `{skin}`), `timezone` (IANA, default `Asia/Kolkata`; IANA validity is the validator's job), `currency` (fixed `INR`, server-set). CHECKs: `chk_organizations_specialties_allowed`, `chk_organizations_specialties_count`, `chk_organizations_currency`.
+- **Organization profile (launch D7)**: `specialties` (1–6 of `ORGANIZATION_SPECIALTIES`, default `{skin}`), `timezone` (IANA, default `Asia/Kolkata`; IANA validity is the validator's job), `currency` (fixed `INR`, server-set). CHECKs: `chk_organizations_specialties_allowed`, `chk_organizations_specialties_count`, `chk_organizations_currency`.
 - **Organization soft-delete cascades to child resources**: settings, API keys, and notification policy tombstone with the organization. Memberships are handled separately.
 
 ## Lifecycle

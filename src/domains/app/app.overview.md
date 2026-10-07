@@ -1,11 +1,11 @@
 `src/domains/app/`
 
-# App (the clinic records)
+# App (the app's own records)
 
 ## Purpose
 
-The clinic's own records for the launch iteration (`iterations/launch-2026-09-30-jxmr/`), served
-under `/api/v1/app` and stored in the Postgres `app` schema. It starts with the branches a clinic
+The organization's own records for the launch iteration (`iterations/launch-2026-09-30-jxmr/`), served
+under `/api/v1/app` and stored in the Postgres `app` schema. It starts with the branches an organization
 works from and who works in each; patients, appointments, billing and the rest join it row by row
 as the launch's ROUTE builds them.
 

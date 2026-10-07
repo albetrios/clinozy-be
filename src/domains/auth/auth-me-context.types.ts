@@ -7,6 +7,8 @@ export interface AuthMeContextData {
   user: UserOutput;
   activeOrganization: OrganizationOutput | null;
   myPermissions: string[];
+  /** The caller's roles in the active organization, the main role first (D5); `[]` without one. */
+  myRoleIds: string[];
   globalRole: GlobalRole | null;
 }
 
@@ -18,6 +20,8 @@ export interface AuthMeContextOutput {
   active_organization: OrganizationOutput | null;
   /** Permission codes the caller holds in the active organization (e.g. `["organization:read", …]`). */
   my_permissions: string[];
+  /** The caller's roles in the active organization (`role_…`), the main role first (D5); `[]` without one. */
+  my_role_ids: string[];
   /**
    * The caller's platform-wide role, or `null` for a standard user.
    *

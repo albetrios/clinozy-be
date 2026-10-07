@@ -1,5 +1,10 @@
 import { env } from '@/shared/config/env.config.js';
-import { ConflictError, ForbiddenError, NotFoundError } from '@/shared/errors/index.js';
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '@/shared/errors/index.js';
 import { isPostgresUniqueViolation } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import {
   withAppDatabaseContext,
@@ -193,7 +198,11 @@ export class MemberRoleService {
       // unknown code throws here, and the whole `withAppDatabaseContext` transaction
       // rolls back — no half-made role. A brand-new role has no current permissions and is never
       // the owner role, so the owner-protection / removed-codes checks the PUT path runs do not apply.
-      const permissionCodes = parsed.permission_codes ?? [];
+      // RC-142: "copy access from" another role — its codes join any listed ones.
+      const copiedCodes = parsed.copy_from_role_id
+        ? await this.listCodesOfRoleToCopy(organization.id, parsed.copy_from_role_id)
+        : [];
+      const permissionCodes = [...new Set([...(parsed.permission_codes ?? []), ...copiedCodes])];
       if (permissionCodes.length > 0) {
         await assertCallerCanGrantPermissionCodes({
           authorizationService: this.authorizationService,
@@ -214,6 +223,7 @@ export class MemberRoleService {
             organization_id: organization.id,
             name: parsed.name,
             description: parsed.description,
+            tone: parsed.tone,
             created_by_user_id: userId ?? null,
           }),
         );
@@ -238,6 +248,29 @@ export class MemberRoleService {
     });
   }
 
+  /**
+   * The permission codes of the role a new role copies its access from (RC-142).
+   *
+   * @remarks
+   * - **Failure modes:** an id that is no live role of the organization is a `ValidationError` on
+   *   `copy_from_role_id` (400) — it is a body field, not the path.
+   */
+  private async listCodesOfRoleToCopy(
+    organizationId: number,
+    rolePublicId: string,
+  ): Promise<string[]> {
+    const source = await this.memberRoleRepository.findByPublicId(rolePublicId, organizationId);
+    if (!source) {
+      throw new ValidationError(
+        'errors:validation.roleToCopyNotFound',
+        { role_id: rolePublicId },
+        { copy_from_role_id: [`${rolePublicId} is not a role of this organization`] },
+      );
+    }
+    const rows = await this.memberRolePermissionRepository.findByRoleId(source.id);
+    return rows.map((row) => row.permission_code);
+  }
+
   async update(
     scope: OrganizationPrincipalDatabaseScope,
     role_public_id: string,
@@ -251,8 +284,9 @@ export class MemberRoleService {
         await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
       const role = await this.memberRoleRepository.findByPublicId(role_public_id, organization.id);
       if (!role) throw new NotFoundError('Role');
-      // sec-T3: system roles (Admin/Member) are immutable from the API — same guard as delete.
-      if (role.is_system) {
+      // sec-T3: a system role's name is immutable from the API — same guard as delete. Its tone and
+      // description (the role's purpose, launch RC-141) stay editable.
+      if (role.is_system && parsed.name !== undefined && parsed.name !== role.name) {
         throw new ForbiddenError('errors:cannotModifySystemRole');
       }
       const userId =

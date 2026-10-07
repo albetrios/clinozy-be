@@ -1,5 +1,5 @@
 /**
- * Canonical clinic specialty values for `tenancy.organizations.specialties` — the single source of
+ * Canonical specialty values for `tenancy.organizations.specialties` — the single source of
  * truth shared by the Drizzle schema CHECK (`chk_organizations_specialties_allowed`) and the
  * validators that write it.
  *

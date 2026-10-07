@@ -29,7 +29,7 @@ const VALID_BRANCH = {
   city: 'Surat',
   postal_code: '395009',
   phone: '+919825012345',
-  email: 'adajan@clinic.example.com',
+  email: 'adajan@example.com',
 };
 
 type BranchBody = { data: Record<string, unknown> };

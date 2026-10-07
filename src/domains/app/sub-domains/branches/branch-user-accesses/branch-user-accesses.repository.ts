@@ -1,7 +1,8 @@
-import { and, asc, eq, isNull, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { branch_user_accesses } from '@/domains/app/sub-domains/branches/branch-user-accesses/branch-user-accesses.schema.js';
+import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 
 /**
  * Persistence for `app.branch_user_accesses` — who works in which branch. Runs on the request's
@@ -50,6 +51,67 @@ export class BranchUserAccessesRepository {
         options.membership_ids.map((membership_id) => ({
           branch_id: options.branch_id,
           membership_id,
+          organization_id: options.organization_id,
+          created_by_user_id: options.created_by_user_id,
+        })),
+      )
+      .onConflictDoNothing();
+  }
+
+  /** The live branches each membership works in (`brn_…`, by branch name); absent when none. */
+  async listBranchPublicIdsByMembershipIds(
+    membership_ids: readonly number[],
+  ): Promise<Map<number, string[]>> {
+    const byMembership = new Map<number, string[]>();
+    if (membership_ids.length === 0) return byMembership;
+    const rows = await getRequestDatabase()
+      .select({
+        membership_id: branch_user_accesses.membership_id,
+        branch_public_id: branches.public_id,
+      })
+      .from(branch_user_accesses)
+      .innerJoin(branches, eq(branches.id, branch_user_accesses.branch_id))
+      .where(
+        and(
+          inArray(branch_user_accesses.membership_id, [...membership_ids]),
+          isNull(branches.deleted_at),
+        ),
+      )
+      .orderBy(asc(branches.name));
+    for (const row of rows) {
+      const list = byMembership.get(row.membership_id) ?? [];
+      list.push(row.branch_public_id);
+      byMembership.set(row.membership_id, list);
+    }
+    return byMembership;
+  }
+
+  /**
+   * Makes `branch_ids` the membership's exact branch list: removes the others, adds the missing
+   * (existing grants keep their `created_at`).
+   */
+  async replaceForMembership(options: {
+    membership_id: number;
+    organization_id: number;
+    branch_ids: readonly number[];
+    created_by_user_id: number | null;
+  }): Promise<void> {
+    const database = getRequestDatabase();
+    const ofMembership = eq(branch_user_accesses.membership_id, options.membership_id);
+    await database
+      .delete(branch_user_accesses)
+      .where(
+        options.branch_ids.length === 0
+          ? ofMembership
+          : and(ofMembership, notInArray(branch_user_accesses.branch_id, [...options.branch_ids])),
+      );
+    if (options.branch_ids.length === 0) return;
+    await database
+      .insert(branch_user_accesses)
+      .values(
+        options.branch_ids.map((branch_id) => ({
+          branch_id,
+          membership_id: options.membership_id,
           organization_id: options.organization_id,
           created_by_user_id: options.created_by_user_id,
         })),

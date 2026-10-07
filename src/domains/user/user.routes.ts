@@ -15,6 +15,7 @@ import {
   AdminUpdateUserDto,
   dataExportIdParamsDto,
   UpdateMeDto,
+  UpdateMyPresenceDto,
   UploadAvatarDto,
   userIdParamsDto,
 } from './user.dto.js';
@@ -177,6 +178,22 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       },
     },
     controller.patchMe,
+  );
+  zodApplication.put(
+    '/me/presence',
+    {
+      onRequest: [app.authenticate],
+      // A self-service write like PATCH /me — the moderate-authed tier.
+      ...MODERATE_AUTHED_RATE_LIMIT,
+      schema: {
+        summary: 'Set my presence',
+        description:
+          "Sets the authenticated user's presence — online, busy or away — the status dot the rest of the team sees. Returns the refreshed self profile.",
+        tags: ['User'],
+        body: UpdateMyPresenceDto,
+      },
+    },
+    controller.putMyPresence,
   );
   zodApplication.post(
     '/me/onboarding/complete',

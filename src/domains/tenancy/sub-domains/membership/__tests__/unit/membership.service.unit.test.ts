@@ -501,7 +501,7 @@ describe('MembershipService', () => {
   });
 
   it('delete soft-deletes membership', async () => {
-    await service.delete(asScope('org_public'), 'mem_public');
+    await service.delete(asScope('org_public'), 'mem_public', { reason: 'mistake' });
     expect(membershipRepository.softDelete).toHaveBeenCalled();
   });
 
@@ -605,9 +605,9 @@ describe('MembershipService', () => {
 
   it('delete throws when soft delete returns null', async () => {
     vi.mocked(membershipRepository.softDelete).mockResolvedValue(null);
-    await expect(service.delete(asScope('org_public'), 'mem_public')).rejects.toBeInstanceOf(
-      NotFoundError,
-    );
+    await expect(
+      service.delete(asScope('org_public'), 'mem_public', { reason: 'mistake' }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('leaveOrganization throws when membership is missing', async () => {
@@ -646,9 +646,9 @@ describe('MembershipService', () => {
 
   it('delete throws when soft delete returns null', async () => {
     vi.mocked(membershipRepository.softDelete).mockResolvedValue(null);
-    await expect(service.delete(asScope('org_public'), 'mem_public')).rejects.toBeInstanceOf(
-      NotFoundError,
-    );
+    await expect(
+      service.delete(asScope('org_public'), 'mem_public', { reason: 'mistake' }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('transferOwnership throws when current user cannot be resolved', async () => {

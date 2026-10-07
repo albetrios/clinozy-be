@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { listSearchSortSchema } from '@/shared/utils/http/list-query.util.js';
 import { trimmedString, trimmedStringMinMax } from '@/shared/utils/validation/validation.util.js';
+import { chipToneSchema } from '@/shared/utils/validation/record-fields.util.js';
 
 /** Zod schema for the `:role_id` path param (get/update/delete role + list/replace role permissions). */
 export const roleIdParamsDto = z
@@ -29,6 +30,9 @@ export const createMemberRoleDto = z
     name: trimmedStringMinMax(1, 100),
     description: trimmedString().max(500).nullable().optional(),
     permission_codes: z.array(trimmedStringMinMax(1, 100)).max(200).optional(),
+    tone: chipToneSchema.optional(),
+    // Launch RC-142: start from another role's access ("copy access from").
+    copy_from_role_id: trimmedStringMinMax(1, 28).optional(),
   })
   .strict();
 
@@ -41,6 +45,7 @@ export const updateMemberRoleDto = z
   .object({
     name: trimmedStringMinMax(1, 100).optional(),
     description: trimmedString().max(500).nullable().optional(),
+    tone: chipToneSchema.optional(),
   })
   .strict();
 

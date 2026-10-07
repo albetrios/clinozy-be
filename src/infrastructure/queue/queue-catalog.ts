@@ -23,6 +23,7 @@ import { ORGANIZATION_NOTIFICATION_POLICY_TOMBSTONE_RETENTION_QUEUE_NAME } from 
 import { USER_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/user/workers/user-tombstone-retention.constants.js';
 import { ORGANIZATION_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/workers/organization-tombstone-retention.constants.js';
 import { MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/membership/workers/membership-tombstone-retention.constants.js';
+import { APP_RECORD_PURGE_QUEUE_NAME } from '@/domains/app/workers/app-record-purge.constants.js';
 import { MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.constants.js';
 import { ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/organization-api-key/workers/organization-api-key-tombstone-retention.constants.js';
 import { UPLOAD_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/upload/workers/upload-tombstone-retention.constants.js';
@@ -71,6 +72,7 @@ export const WORKER_QUEUE_NAMES = [
   USER_TOMBSTONE_RETENTION_QUEUE_NAME,
   ORGANIZATION_TOMBSTONE_RETENTION_QUEUE_NAME,
   MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME,
+  APP_RECORD_PURGE_QUEUE_NAME,
   MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME,
   ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_QUEUE_NAME,
   UPLOAD_TOMBSTONE_RETENTION_QUEUE_NAME,

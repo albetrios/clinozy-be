@@ -5,6 +5,7 @@ import {
   trimmedStringMinMax,
   isTraversalFreeStorageKey,
 } from '@/shared/utils/validation/validation.util.js';
+import { USER_PRESENCE_VALUES, type UserPresence } from './user.constants.js';
 
 /** Zod schema for the admin `:user_id` path param (get/update/delete/suspend/unsuspend). */
 export const userIdParamsDto = z
@@ -46,6 +47,18 @@ export const UpdateMeDto = z
   .strict();
 /** Inferred body type from {@link UpdateMeDto}. */
 export type UpdateMeInput = z.infer<typeof UpdateMeDto>;
+
+/**
+ * Zod schema for the `PUT /api/v1/users/me/presence` request body — the caller's own status dot
+ * (online, busy or away), shown to the rest of the team.
+ */
+export const UpdateMyPresenceDto = z
+  .object({
+    presence: z.enum(USER_PRESENCE_VALUES as [UserPresence, ...UserPresence[]]),
+  })
+  .strict();
+/** Inferred body type from {@link UpdateMyPresenceDto}. */
+export type UpdateMyPresenceInput = z.infer<typeof UpdateMyPresenceDto>;
 
 /**
  * Zod schema for the `PUT /api/v1/users/me/avatar` request body. Requires an `avatars/`-prefixed

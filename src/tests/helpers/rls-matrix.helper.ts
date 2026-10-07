@@ -20,6 +20,7 @@ import { organization_notification_policies } from '@/domains/tenancy/sub-domain
 import { api_keys } from '@/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.schema.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import { branch_user_accesses } from '@/domains/app/sub-domains/branches/branch-user-accesses/branch-user-accesses.schema.js';
+import { membership_additional_roles } from '@/domains/tenancy/sub-domains/membership/membership-additional-roles/membership-additional-roles.schema.js';
 import { user_settings } from '@/domains/user/sub-domains/user-settings/user-settings.schema.js';
 import { user_data_exports } from '@/domains/user/sub-domains/user-data-export/user-data-export.schema.js';
 import { webauthn_credentials } from '@/domains/auth/sub-domains/auth-webauthn/webauthn-credential.schema.js';
@@ -82,6 +83,8 @@ export const RLS_MATRIX_SKIP_CRUD_TABLES = new Set([
   // Composite key (branch_id, membership_id), no `id` — cross-organization isolation is asserted
   // through the user-accesses routes in the authz security suites.
   tableKey('app', 'branch_user_accesses'),
+  // Composite key (membership_id, role_id), no `id` — same reason as branch_user_accesses.
+  tableKey('tenancy', 'membership_additional_roles'),
   tableKey('notify', 'webhook_delivery_attempts'),
   tableKey('auth', 'verification_tokens'),
   // sec-U3: audit.logs is append-only — REVOKE UPDATE causes UPDATE to throw
@@ -393,6 +396,20 @@ export async function seedRlsMatrixFixtures(): Promise<RlsTenantFixture> {
   await database.insert(branch_user_accesses).values([
     { branch_id: branchA!.id, membership_id: membershipA.id, organization_id: organizationA.id },
     { branch_id: branchB!.id, membership_id: membershipB.id, organization_id: organizationB.id },
+  ]);
+  await database.insert(membership_additional_roles).values([
+    {
+      membership_id: membershipA.id,
+      role_id: roleA.id,
+      organization_id: organizationA.id,
+      position: 1,
+    },
+    {
+      membership_id: membershipB.id,
+      role_id: roleB.id,
+      organization_id: organizationB.id,
+      position: 1,
+    },
   ]);
 
   const webhookA = await createTestWebhook({ organizationId: organizationA.id });

@@ -23,7 +23,7 @@ import {
 /**
  * Drizzle table for `tenancy.organizations` — the per-tenant root entity.
  * Holds slug-based identity, ownership, lifecycle status, optional Stripe
- * customer linkage, the clinic profile (specialties, timezone, the fixed
+ * customer linkage, the organization profile (specialties, timezone, the fixed
  * INR currency), and soft-delete via `deleted_at`. The `pgPolicy`
  * `organizations_tenant_isolation` enforces RLS by matching `public_id` to
  * `app.current_organization_public_id`, with a global retention-cleanup escape
@@ -48,7 +48,7 @@ export const organizations = tenancySchema
       status: varchar('status', { length: 20 }).notNull().default('ACTIVE'),
       logo_url: varchar('logo_url', { length: 512 }),
       stripe_customer_id: varchar('stripe_customer_id', { length: 255 }),
-      // The clinic profile (launch D7): what the clinic practises, the timezone its timed work runs
+      // The organization profile (launch D7): what the organization practises, the timezone its timed work runs
       // in, and its one currency (server-set). Defaults cover personal organizations, which never
       // show them.
       specialties: text('specialties')

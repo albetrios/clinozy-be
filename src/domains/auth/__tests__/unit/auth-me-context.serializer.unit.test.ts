@@ -10,6 +10,9 @@ const organization = (id: string, type: 'PERSONAL' | 'TEAM'): OrganizationOutput
   type,
   status: 'ACTIVE',
   logo_url: null,
+  specialties: ['skin'],
+  timezone: 'Asia/Kolkata',
+  currency: 'INR',
   created_at: '2026-01-01T00:00:00.000Z',
   updated_at: '2026-01-01T00:00:00.000Z',
 });
@@ -24,6 +27,7 @@ const baseData = (overrides: Partial<AuthMeContextData> = {}): AuthMeContextData
     last_name: 'B',
     job_title: null,
     avatar_url: null,
+    presence: 'online',
     status: 'ACTIVE',
     onboarding_completed: true,
     created_at: '2026-01-01T00:00:00.000Z',
@@ -31,6 +35,7 @@ const baseData = (overrides: Partial<AuthMeContextData> = {}): AuthMeContextData
   },
   activeOrganization: organization('org_active', 'TEAM'),
   myPermissions: ['organization:read', 'membership:manage'],
+  myRoleIds: ['role_admin'],
   globalRole: null,
   ...overrides,
 });

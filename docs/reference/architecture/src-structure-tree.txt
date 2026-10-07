@@ -796,10 +796,15 @@ src/
     │   │   │   │   ├── member-invitation.token.ts
     │   │   │   │   ├── member-invitation.types.ts
     │   │   │   │   └── member-invitation.validator.ts
+    │   │   │   ├── membership-additional-roles/
+    │   │   │   │   ├── membership-additional-roles.overview.md
+    │   │   │   │   ├── membership-additional-roles.repository.ts
+    │   │   │   │   └── membership-additional-roles.schema.ts
     │   │   │   ├── workers/
     │   │   │   │   ├── membership-tombstone-retention.constants.ts
     │   │   │   │   ├── membership-tombstone-retention.processor.ts
     │   │   │   │   └── membership-tombstone-retention.worker.ts
+    │   │   │   ├── membership.constants.ts
     │   │   │   ├── membership.controller.ts
     │   │   │   ├── membership.dto.ts
     │   │   │   ├── membership.overview.md
@@ -814,7 +819,7 @@ src/
     │   │   │   ├── __tests__/
     │   │   │   │   ├── integration/
     │   │   │   │   │   ├── organization-audit-logs.integration.test.ts
-    │   │   │   │   │   ├── organization-clinic-profile.integration.test.ts
+    │   │   │   │   │   ├── organization-profile-fields.integration.test.ts
     │   │   │   │   │   └── organization.integration.test.ts
     │   │   │   │   └── unit/
     │   │   │   │   │   ├── organization-capability.unit.test.ts
@@ -1152,6 +1157,7 @@ src/
     │   │   ├── user-tombstone-retention.constants.ts
     │   │   ├── user-tombstone-retention.processor.ts
     │   │   └── user-tombstone-retention.worker.ts
+    │   ├── user.constants.ts
     │   ├── user.container.ts
     │   ├── user.controller.ts
     │   ├── user.dto.ts
@@ -1544,13 +1550,13 @@ src/
     │   └── worker-concurrency.util.ts
     ├── constants/
     │   ├── billing.constants.ts
-    │   ├── clinic-record.constants.ts
     │   ├── index.ts
     │   ├── limits.constants.ts
     │   ├── notification.constants.ts
     │   ├── pagination.constants.ts
     │   ├── project-identity.constants.ts
     │   ├── query-limits.constants.ts
+    │   ├── record-fields.constants.ts
     │   ├── roles.constants.ts
     │   ├── security.constants.ts
     │   └── ttl.constants.ts
@@ -1694,6 +1700,7 @@ src/
     │   │   ├── file-magic.util.ts
     │   │   ├── omit-undefined.util.ts
     │   │   ├── parse-with-schema.util.ts
+    │   │   ├── record-fields.util.ts
     │   │   └── validation.util.ts
     └── shared.overview.md
 ├── tests/

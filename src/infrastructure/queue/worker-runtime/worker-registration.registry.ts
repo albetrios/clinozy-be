@@ -35,6 +35,8 @@ import { createOrganizationTombstoneRetentionWorker } from '@/domains/tenancy/su
 import { ORGANIZATION_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/workers/organization-tombstone-retention.constants.js';
 import { createMembershipTombstoneRetentionWorker } from '@/domains/tenancy/sub-domains/membership/workers/membership-tombstone-retention.worker.js';
 import { MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/membership/workers/membership-tombstone-retention.constants.js';
+import { createAppRecordPurgeWorker } from '@/domains/app/workers/app-record-purge.worker.js';
+import { APP_RECORD_PURGE_QUEUE_NAME } from '@/domains/app/workers/app-record-purge.constants.js';
 import { createMemberRoleTombstoneRetentionWorker } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.worker.js';
 import { MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.constants.js';
 import { createOrganizationApiKeyTombstoneRetentionWorker } from '@/domains/tenancy/sub-domains/organization/organization-api-key/workers/organization-api-key-tombstone-retention.worker.js';
@@ -364,6 +366,12 @@ const WORKER_QUEUE_REGISTRATION_DEFINITIONS: WorkerQueueRegistrationDefinition[]
     family: 'retention',
     logLabel: 'membership tombstone retention worker',
     create: () => createMembershipTombstoneRetentionWorker(),
+  }),
+  retentionDefinition({
+    queueName: APP_RECORD_PURGE_QUEUE_NAME,
+    family: 'retention',
+    logLabel: 'app record purge worker',
+    create: () => createAppRecordPurgeWorker(),
   }),
   retentionDefinition({
     queueName: MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME,

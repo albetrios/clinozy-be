@@ -20,7 +20,7 @@ export const notifySchema = pgSchema('notify');
 export const auditSchema = pgSchema('audit');
 /** Drizzle handle for the Postgres `upload` schema — S3 upload metadata + tombstone retention. */
 export const uploadSchema = pgSchema('upload');
-/** Drizzle handle for the Postgres `app` schema — the clinic tables (branches, and the launch's clinic records). */
+/** Drizzle handle for the Postgres `app` schema — the app's own record tables (branches, and the launch's records). */
 export const appSchema = pgSchema('app');
 
 /** The `app.*` GUC each GUC-backed maintenance kind arms — the selector of one RLS bypass arm. */

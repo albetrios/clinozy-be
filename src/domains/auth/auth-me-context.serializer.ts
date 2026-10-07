@@ -16,6 +16,7 @@ export function serializeAuthMeContext(data: AuthMeContextData): AuthMeContextOu
     user: data.user,
     active_organization: data.activeOrganization,
     my_permissions: data.myPermissions,
+    my_role_ids: data.myRoleIds,
     global_role: data.globalRole,
   };
 }

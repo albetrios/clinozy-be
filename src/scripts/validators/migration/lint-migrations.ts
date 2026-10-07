@@ -590,6 +590,11 @@ function stripSqlLineComments(fileContent: string): string {
     .join('\n');
 }
 
+/** SQL with dollar-quoted bodies (`$$ … $$`, `$tag$ … $tag$`) blanked out. */
+function stripDollarQuotedBodies(sqlText: string): string {
+  return sqlText.replace(/\$([A-Za-z_]*)\$[\s\S]*?\$\1\$/g, '$$$$');
+}
+
 /**
  * Flags a data migration that touches a FORCE RLS table without lifting FORCE around it.
  *
@@ -607,7 +612,9 @@ function stripSqlLineComments(fileContent: string): string {
  *   matrix asserts against, so a newly forced table is covered here without a second list.
  */
 function findForceRlsDataMigrationViolations(filename: string, fileContent: string): Violation[] {
-  const sqlOnly = stripSqlLineComments(fileContent);
+  // A function body (`$$ … $$`) runs when the function is called, not when the file migrates —
+  // a trigger that upserts a counter is not a data migration.
+  const sqlOnly = stripDollarQuotedBodies(stripSqlLineComments(fileContent));
   if (!dataWriteStatementPattern.test(sqlOnly)) return [];
 
   const violations: Violation[] = [];

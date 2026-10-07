@@ -6,11 +6,22 @@ Parent: [tenancy](../../tenancy.overview.md)
 
 ## Purpose
 
-The link between users and organizations: who is in which organization with which role. Includes the nested [member-invitation](src/domains/tenancy/sub-domains/membership/member-invitation/) resource for inviting users (signed-up or not) to an organization.
+The link between users and organizations: who is in which organization with which role. Includes the nested [member-invitation](src/domains/tenancy/sub-domains/membership/member-invitation/) resource for inviting users (signed-up or not) to an organization, and the nested [membership-additional-roles](membership-additional-roles/membership-additional-roles.overview.md) persistence module (the roles a person holds besides the main one).
+
+## Staff profile (launch ROUTE #4)
+
+A membership is also the person's staff profile in the organization: `staff_number` (the "#12" of the team table — per organization, assigned at insert by the `trg_memberships_staff_number` trigger under a per-organization advisory lock, never reused), `phone`, `tone`, `working_days`, `work_starts_at` / `work_ends_at` and `commission_percent`. A person holds **several roles** (D5): the main one stays `role_id`, the rest live in `tenancy.membership_additional_roles`, and the API speaks `role_ids` (main first). Access is the union of every role held — the permission resolution, the permission holder lookup, the role member counts and the role delete guard all read both (`membershipHoldsRole`). The branches a member works in are `app.branch_user_accesses`, read and written as `branch_ids` through the app domain's late-wired `MembershipBranchAccessPort`.
+
+| Route | Gate | Note |
+| --- | --- | --- |
+| `POST /tenancy/organization/memberships` | `membership:manage` | invite + `role_ids` + profile + `branch_ids` |
+| `PATCH /tenancy/organization/memberships/{membership_id}` | `membership:manage` | `role_ids` / `branch_ids` replace the list; the owner's status and roles are locked, their profile is not |
+| `DELETE /tenancy/organization/memberships/{membership_id}?reason=&note=` | `membership:manage` | soft delete with `delete_reason` (+ `delete_note` for `other`) |
+| `POST /tenancy/organization/memberships/{membership_id}/restore` | `membership:manage` | undo a removal; 409 when live, rejoined or no seat; API keys stay revoked |
 
 ## Response shape
 
-`GET /organization/memberships` (and `/:membership_id`) embed each member's `user` summary (`id`, `email`, `first_name`, `last_name`, presigned `avatar_url`) and `role` summary (`id`, `name`) alongside the flat `user_id`/`role_id` public ids, so a members table renders without an N+1 per-row fetch. User summaries are resolved via the `auth.resolve_user_summaries_by_ids` SECURITY DEFINER function (auth.users is FORCE RLS, unreachable by a plain join under organization-only context). `INVITED` rows also carry `invitation: { id, expires_at }` (the live pending invite) so the frontend can Resend/Revoke straight from the row; `ACTIVE`/`SUSPENDED` rows have `invitation: null`.
+`GET /organization/memberships` (and `/:membership_id`) carry the staff profile (`staff_number`, `phone`, `tone`, `role_ids`, `branch_ids`, `working_days`, `work_starts_at`, `work_ends_at`, `commission_percent`) and embed each member's `user` summary (`id`, `email`, `first_name`, `last_name`, presigned `avatar_url`) and `role` summary (`id`, `name`) alongside the flat `user_id`/`role_id` public ids, so a members table renders without an N+1 per-row fetch. User summaries are resolved via the `auth.resolve_user_summaries_by_ids` SECURITY DEFINER function (auth.users is FORCE RLS, unreachable by a plain join under organization-only context). `INVITED` rows also carry `invitation: { id, expires_at }` (the live pending invite) so the frontend can Resend/Revoke straight from the row; `ACTIVE`/`SUSPENDED` rows have `invitation: null`.
 
 ## Key invariants
 
@@ -30,7 +41,8 @@ stateDiagram-v2
   invited --> cancelled: admin cancels
   invited --> expired: TTL passes
   active --> active: role change (permission cache invalidated)
-  active --> tombstoned: soft delete (member removed)
+  active --> tombstoned: soft delete (member removed, with a reason)
+  tombstoned --> active: restore (undo)
   tombstoned --> [*]: retention worker purges after window
 ```
 

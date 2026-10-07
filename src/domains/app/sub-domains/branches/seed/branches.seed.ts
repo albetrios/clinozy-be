@@ -44,7 +44,7 @@ export async function seedBranch(payload: SeedBranchPayload): Promise<number> {
       city: 'Surat',
       postal_code: '395009',
       phone: '+919800000000',
-      email: `${payload.area.toLowerCase()}@clinic.example.com`,
+      email: `${payload.area.toLowerCase()}@example.com`,
       created_by_user_id: payload.created_by_user_id,
       updated_by_user_id: payload.created_by_user_id,
     })

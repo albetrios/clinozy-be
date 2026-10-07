@@ -16,6 +16,7 @@ import {
 } from './member-invitation/member-invitation.dto.js';
 import {
   createMembershipDto,
+  deleteMembershipQueryDto,
   membershipIdParamsDto,
   transferOwnershipDto,
   updateMembershipDto,
@@ -102,7 +103,7 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
         schema: {
           summary: 'Add member by email',
           description:
-            'Adds a member by email: provisions or resolves the user, creates an INVITED membership with the given role, and emails an invitation token. The invitee becomes ACTIVE on accept. Requires MEMBERSHIP_MANAGE permission.',
+            'Adds a member by email: provisions or resolves the user, creates an INVITED membership with the given roles (role_ids, main first) and staff profile (phone, tone, branch_ids, working days and hours, commission), and emails an invitation token. The invitee becomes ACTIVE on accept. Requires MEMBERSHIP_MANAGE permission.',
           tags: ['Membership'],
           body: createMembershipDto,
         },
@@ -119,7 +120,7 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
         schema: {
           summary: 'Update membership',
           description:
-            "Updates a membership's status and/or role (suspend, reactivate, or change role). Requires MEMBERSHIP_MANAGE permission.",
+            "Updates a membership's status, its roles (role_ids, main first — replaces the list) and its staff profile: phone, tone, branch_ids (replaces the list), working days and hours, commission. The owner's status and roles cannot change. Requires MEMBERSHIP_MANAGE permission.",
           tags: ['Membership'],
           params: membershipIdParamsDto,
           body: updateMembershipDto,
@@ -137,12 +138,30 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
         schema: {
           summary: 'Remove membership',
           description:
-            'Removes a member from the organization. Requires MEMBERSHIP_MANAGE permission.',
+            'Removes a member from the organization, with why: reason (mistake, duplicate, not_needed, other) and a note, required for other. Undo with POST …/restore. Requires MEMBERSHIP_MANAGE permission.',
+          tags: ['Membership'],
+          params: membershipIdParamsDto,
+          querystring: deleteMembershipQueryDto,
+        },
+      },
+      membershipController.deleteMembership,
+    );
+    zodApplication.post<{ Params: { membership_id: string } }>(
+      '/organization/memberships/:membership_id/restore',
+      {
+        // R4: organization-scoped admin mutation — cap per (organization, actor).
+        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE)],
+        schema: {
+          summary: 'Restore membership',
+          description:
+            "Undoes a member's removal — the membership is live again with its roles, branches and profile; its API keys stay revoked. A live membership is a 409, as is a person who rejoined since, or no free seat. Requires MEMBERSHIP_MANAGE permission.",
           tags: ['Membership'],
           params: membershipIdParamsDto,
         },
       },
-      membershipController.deleteMembership,
+      membershipController.restoreMembership,
     );
     zodApplication.post(
       '/organization/leave',

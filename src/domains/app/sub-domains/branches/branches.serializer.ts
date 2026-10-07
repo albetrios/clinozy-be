@@ -1,3 +1,4 @@
+import { toHourMinute } from '@/shared/utils/validation/record-fields.util.js';
 type SerializableTimestamp = Date | string;
 
 /** A branch row as the repository reads it, with its default staff as membership public ids. */
@@ -42,11 +43,6 @@ interface BranchSummaryRecord {
 
 function toIsoString(value: SerializableTimestamp): string {
   return value instanceof Date ? value.toISOString() : value;
-}
-
-/** Postgres `time` reads as `HH:mm:ss`; the API speaks `HH:mm`. */
-function toHourMinute(value: string): string {
-  return value.slice(0, 5);
 }
 
 function serializeOne(row: BranchRecord) {

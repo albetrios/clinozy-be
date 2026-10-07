@@ -24,6 +24,7 @@ import { UserSerializer } from './user.serializer.js';
 import { resolveStoredMediaReadUrl } from '@/shared/utils/infrastructure/media-url.util.js';
 import {
   validateUpdateMe,
+  validateUpdateMyPresence,
   validateListUsers,
   validateAdminUpdateUser,
   validateUploadAvatar,
@@ -525,6 +526,22 @@ export class UserService {
       ...(await this.toUserOutput(user)),
       personal_organization_id: personalOrganizationId,
     };
+  }
+
+  /**
+   * Sets the caller's own presence (online, busy or away) — the status dot the team sees.
+   *
+   * @remarks
+   * - **Algorithm:** validate the body, then one user-scoped update of `presence`.
+   * - **Notes:** a deleted user is a 404, like the other self-service writes.
+   */
+  async updateMyPresence(scope: UserPrincipalDatabaseScope, body: unknown): Promise<UserOutput> {
+    const { presence } = validateUpdateMyPresence(body);
+    const user = await withAppDatabaseContext(scope, () =>
+      this.repository.update(scope.userPublicId, { presence }),
+    );
+    if (!user) throw new NotFoundError('User');
+    return this.toUserOutput(user);
   }
 
   async updateMe(scope: UserPrincipalDatabaseScope, body: unknown): Promise<UserOutput> {

@@ -2,12 +2,14 @@ import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.uti
 import {
   createMembershipDto,
   updateMembershipDto,
+  deleteMembershipQueryDto,
   listMembershipsQueryDto,
   transferOwnershipDto,
 } from './membership.dto.js';
 import type {
   CreateMembershipInput,
   UpdateMembershipInput,
+  DeleteMembershipQueryInput,
   ListMembershipsQueryInput,
   TransferOwnershipInput,
 } from './membership.dto.js';
@@ -28,6 +30,14 @@ export function validateCreateMembership(data: unknown): CreateMembershipInput {
  */
 export function validateUpdateMembership(data: unknown): UpdateMembershipInput {
   return parseWithSchema(updateMembershipDto, data);
+}
+
+/**
+ * Validates a `DELETE /organization/memberships/:membership_id` query string against
+ * {@link deleteMembershipQueryDto}; throws `ValidationError('errors:invalidInput')` on failure.
+ */
+export function validateDeleteMembershipQuery(data: unknown): DeleteMembershipQueryInput {
+  return parseWithSchema(deleteMembershipQueryDto, data);
 }
 
 /**

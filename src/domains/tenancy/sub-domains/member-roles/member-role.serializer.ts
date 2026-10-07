@@ -14,6 +14,8 @@ export function serializeMemberRole(
     name: string;
     description: string | null;
     is_system: boolean;
+    tone: string;
+    is_locked: boolean;
     created_at: Date;
     updated_at: Date;
   },
@@ -24,6 +26,8 @@ export function serializeMemberRole(
     name: row.name,
     description: row.description,
     is_system: row.is_system,
+    tone: row.tone,
+    is_locked: row.is_locked,
     member_count,
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),

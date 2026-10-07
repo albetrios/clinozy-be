@@ -6,7 +6,7 @@ Parent: [app](../../app.overview.md)
 
 ## Purpose
 
-A clinic location of an organization (launch ROUTE #2): address, contact, GSTIN, opening hours and
+A location of an organization (launch ROUTE #2): address, contact, GSTIN, opening hours and
 working days, the default staff per role, the maps and review links — and, in the nested
 `branch-user-accesses/`, who works in each branch (D9). Tables `app.branches` and
 `app.branch_user_accesses`.
@@ -47,7 +47,7 @@ working days, the default staff per role, the maps and review links — and, in 
   `delete_note`.
 - **Default staff and access are memberships** (D5): a `mem_` id that is no live member here is a 400;
   removing the membership clears a default (`SET NULL`) and drops the access (`CASCADE`).
-- **Value lists** (tone, weekday, delete reason) come from `@/shared/constants/clinic-record.constants.ts`.
+- **Value lists** (tone, weekday, delete reason) come from `@/shared/constants/record-fields.constants.ts`.
 
 ## Lifecycle
 

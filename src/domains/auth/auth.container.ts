@@ -2,6 +2,7 @@ import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import type { FastifyInstance } from 'fastify';
 import type { UserService } from '@/domains/user/user.service.js';
 import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.js';
+import type { MembershipService } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import type { AuthorizationService } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import { AuthMethodRepository } from './sub-domains/auth-method/auth-method.repository.js';
@@ -35,6 +36,8 @@ export function createAuthContainer(
   organizationSettingsService: OrganizationSettingsService,
   organizationService: OrganizationService,
   authorizationService: AuthorizationService,
+  // Launch ROUTE #4: the caller's roles for /auth/me/context; the worker process omits it.
+  membershipService?: MembershipService,
 ): AuthContainer {
   const authMethodRepository = new AuthMethodRepository();
   const verificationTokenRepository = new VerificationTokenRepository();
@@ -94,6 +97,7 @@ export function createAuthContainer(
     userService,
     organizationService,
     authorizationService,
+    membershipService,
   );
 
   return {
@@ -117,6 +121,7 @@ export function registerAuthContainer(application: FastifyInstance): void {
       application.tenancyDomain.organizationSettingsService,
       application.tenancyDomain.organizationService,
       application.tenancyDomain.authorizationService,
+      application.tenancyDomain.membershipService,
     ),
   );
 }

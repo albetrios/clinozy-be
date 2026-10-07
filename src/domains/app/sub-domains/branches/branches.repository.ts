@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, getTableColumns, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { DEFAULT_REPOSITORY_LIST_LIMIT } from '@/shared/constants/limits.constants.js';
@@ -108,6 +108,21 @@ export class BranchesRepository {
       .where(and(liveInOrganization(organization_id), eq(branches.public_id, public_id)))
       .limit(1);
     return rows[0] ?? null;
+  }
+
+  /** The live branches of the organization among `public_ids`, as `public_id → id`. */
+  async findIdsByPublicIds(
+    organization_id: number,
+    public_ids: readonly string[],
+  ): Promise<Map<string, number>> {
+    if (public_ids.length === 0) return new Map();
+    const rows = await getRequestDatabase()
+      .select({ id: branches.id, public_id: branches.public_id })
+      .from(branches)
+      .where(
+        and(liveInOrganization(organization_id), inArray(branches.public_id, [...public_ids])),
+      );
+    return new Map(rows.map((row) => [row.public_id, row.id]));
   }
 
   /** Inserts a branch; returns its internal and public ids. */

@@ -335,13 +335,14 @@ erDiagram
 - **Sources:** schema-routes.md:184–207 · PRD.md:150 · users.md:26–40, 99–124 · D4
 - **Added** (a frontend request, D3, unless a decision is named): `presence` (C8; shell.md:27), `last_active_at` (schema-routes.md:207)
 - **Open:** none — presence per schema-routes (C8); staff fields live on the membership (D3)
+- **Built (ROUTE #3):** `presence` varchar(10) NOT NULL DEFAULT `online`, CHECK `chk_users_presence` (`online`, `busy`, `away`); `last_active_at` already on `auth.users` — reused, not added
 
 ```mermaid
 erDiagram
   user["user · CHANGED"] {
     id id PK
     choice presence "ADDED"
-    datetime last_active_at "ADDED"
+    datetime last_active_at "EXISTING"
   }
 ```
 
@@ -352,6 +353,7 @@ erDiagram
 - **Sources:** D4, D5 · users.md:26–40, 99–124
 - **Added** (a frontend request, D3, unless a decision is named): `roles` (D5; users.md:110), `seq` (users.md:32), `phone` (users.md:106), `tone` (users.md:109), `working_days` (users.md:113), `starts_at` (users.md:114), `ends_at` (users.md:115), `commission_pct` (users.md:116), `branch_ids` (users.md:112)
 - **Open:** none — the first role listed is the main one (D40)
+- **Built (ROUTE #4):** `staff_number` integer (trigger `trg_memberships_staff_number`, unique per organization, never reused), `phone` varchar(16), `tone` varchar(10) (`sky`), `working_days` text[] (Mon–Sat), `work_starts_at` / `work_ends_at` time (10:00 / 19:00, ends after starts), `commission_percent` numeric(5,2) 0–100, `delete_reason` / `delete_note`; `roles` → main stays `role_id` + new `tenancy.membership_additional_roles` (membership_id, role_id, organization_id, position 1–9); `branch_ids` → `app.branch_user_accesses` (ROUTE #2); `seq` → `staff_number`, `starts_at`/`ends_at` → `work_starts_at`/`work_ends_at`, `commission_pct` → `commission_percent`
 
 ```mermaid
 erDiagram
@@ -378,6 +380,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `tone` (users.md:11, 49–50), `purpose` (users.md:50), `is_locked` (users.md:61; D40 — only Admin)
 - **Open:** none — default matrix D12; special-permission presets D18, D25; only Admin is locked (D40)
 
+- **Built:** `tone` varchar(10) (`sky`), `is_locked` boolean (false); `purpose` → existing `description` · ROUTE #5
 ```mermaid
 erDiagram
   role["role · CHANGED"] {
@@ -423,6 +426,7 @@ erDiagram
 - **Sources:** schema-routes.md:227–238 · shell.md:9, 26–27, 43
 - **Open:** none — per user on the server (schema-routes + D3; P29); the branch filter per organization (C7, D40); theme on the device (frontend only)
 
+- **Built:** `app.user_preferences` · ROUTE #8 (2026-10-07)
 ```mermaid
 erDiagram
   user_preference["user_preference · NEW"] {
@@ -442,6 +446,7 @@ erDiagram
 - **Sources:** patients.md:129, 274 · payments.md:39 · H:968, 1545
 - **Open:** none
 
+- **Built:** `app.saved_views` · ROUTE #9 (2026-10-07)
 ```mermaid
 erDiagram
   saved_view["saved_view · NEW"] {
@@ -463,6 +468,7 @@ erDiagram
 - **Sources:** PRD.md:169–173 · D29
 - **Open:** none
 
+- **Built:** `app.offering_groups` · ROUTE #10 (2026-10-07)
 ```mermaid
 erDiagram
   offering_group["offering_group · NEW"] {
@@ -480,6 +486,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `group_id` (D29), `offer_price` (offerings.md:70), `branch_ids` (offerings.md:68), `gst_inclusive` (offerings.md:73), `search_terms` (offerings.md:80), `description` (offerings.md:81)
 - **Open:** none — a fixed kind (consultation, treatment, package, product; lhr is a treatment) + clinic groups (D29); GST as a number (P71, D3); seeded rates (D27); discounts stop at minPrice (D26)
 
+- **Built:** `app.offerings` · ROUTE #11 (2026-10-07)
 ```mermaid
 erDiagram
   offering["offering · NEW"] {
@@ -514,6 +521,7 @@ erDiagram
 - **Sources:** schema-routes.md:581–598 · offerings.md:41–55, 91–112
 - **Open:** none
 
+- **Built:** `app.offers` · ROUTE #12 (2026-10-07)
 ```mermaid
 erDiagram
   offer["offer · NEW"] {
@@ -543,6 +551,7 @@ erDiagram
 - **Replaced (schema-routes field → now):** `complaints` → patient_clinical_note, `diagnosis` → patient_clinical_note, `treatment_suggestions` → patient_clinical_note, `future_suggestions` → patient_clinical_note, `consent_given` → consent_data / consent_photos / consent_marketing, `phone2` → phones
 - **Open:** none — access per D12, D15, D16
 
+- **Built:** `app.patients` · ROUTE #13 (2026-10-07)
 ```mermaid
 erDiagram
   patient["patient · NEW"] {
@@ -588,6 +597,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `last_touch_at` (leads.md:402; H:5738), `phones` (leads.md:96–101), `instagram_handles` (leads.md:96–101), `default_channel` (leads.md:96–101, 415), `preferences` (leads.md:96–101), `household` (leads.md:440–442)
 - **Open:** none — Contacted on a first reply or a logged call (P21, D40); re-target leads daily, staff send the first message (D35); contact fields on Lead and Patient (P16, D3)
 
+- **Built:** `app.leads` · ROUTE #14 (2026-10-07)
 ```mermaid
 erDiagram
   lead["lead · NEW"] {
@@ -625,6 +635,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `record_type` (leads.md:54; tasks.md:83), `record_id` (leads.md:54; tasks.md:83)
 - **Open:** none — real WhatsApp and Instagram (D32, D3); no SMS or email (D33); the provider is chosen at kickoff
 
+- **Built:** `app.lead_messages` · ROUTE #15 (2026-10-07)
 ```mermaid
 erDiagram
   lead_message["lead_message · NEW"] {
@@ -650,6 +661,7 @@ erDiagram
 - **Sources:** leads.md:32, 36
 - **Open:** none
 
+- **Built:** `app.lead_reads` · ROUTE #16 (2026-10-07)
 ```mermaid
 erDiagram
   lead_read["lead_read · NEW"] {
@@ -667,6 +679,7 @@ erDiagram
 - **Sources:** leads.md:427–432 · _patterns.md:178–183 · H:5743
 - **Open:** none — Owner and Admin edit them (D40)
 
+- **Built:** `app.message_templates` · ROUTE #17 (2026-10-07)
 ```mermaid
 erDiagram
   message_template["message_template · NEW"] {
@@ -686,6 +699,7 @@ erDiagram
 - **Sources:** D41 · H:2349
 - **Open:** none
 
+- **Built:** `app.branch_holidays` · ROUTE #18 (2026-10-07)
 ```mermaid
 erDiagram
   branch_holiday["branch_holiday · NEW"] {
@@ -703,6 +717,7 @@ erDiagram
 - **Sources:** PRD.md:56–57 · D28
 - **Open:** none
 
+- **Built:** `app.rooms` · ROUTE #19 (2026-10-07)
 ```mermaid
 erDiagram
   room["room · NEW"] {
@@ -720,6 +735,7 @@ erDiagram
 - **Sources:** PRD.md:56–57 · D28
 - **Open:** none
 
+- **Built:** `app.machines` · ROUTE #20 (2026-10-07)
 ```mermaid
 erDiagram
   machine["machine · NEW"] {
@@ -739,6 +755,7 @@ erDiagram
 - **Replaced (schema-routes field → now):** `room` → room_id → room (D28)
 - **Open:** none — a room and a machine per branch (D28); no-show by staff after the start (D30); a confirm request + one reminder (D34); cancel reasons + rescheduling_later, booked_by_mistake (P9, D40); the package named on the appointment (B3, D40)
 
+- **Built:** `app.appointments` · ROUTE #21 (2026-10-07)
 ```mermaid
 erDiagram
   appointment["appointment · NEW"] {
@@ -781,6 +798,7 @@ erDiagram
 - **Sources:** today.md:38–46, 78–121, 157–163 · patient-file.md:92–101, 392–404 · frontend D18, D20
 - **Open:** none — the server moves a card only on an explicit stage call (P2, D40); lanes (P1, D3)
 
+- **Built:** `app.visits` · ROUTE #22 (2026-10-07)
 ```mermaid
 erDiagram
   visit["visit · NEW"] {
@@ -812,6 +830,7 @@ erDiagram
 - **Sources:** today.md:84
 - **Open:** none — prescribers add entries (D14, D40)
 
+- **Built:** `app.diagnoses` · ROUTE #23 (2026-10-07)
 ```mermaid
 erDiagram
   diagnosis["diagnosis · NEW"] {
@@ -827,6 +846,7 @@ erDiagram
 - **Sources:** patient-file.md:53, 225 · H:780
 - **Open:** none — replaces Patient.complaints / diagnosis / treatment_suggestions / future_suggestions (D3)
 
+- **Built:** `app.patient_clinical_notes` · ROUTE #24 (2026-10-07)
 ```mermaid
 erDiagram
   patient_clinical_note["patient_clinical_note · NEW"] {
@@ -847,6 +867,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `status` (D31; today.md:59, 90–92), `approved_at` (D31), `approved_by_id` (D31), `print_language` (today.md:87; D40)
 - **Open:** none — draft, then approved by a prescriber (D31); print language stored per prescription (D40); the prescribe code on Doctor and Admin (D13, D14)
 
+- **Built:** `app.prescriptions` · ROUTE #25 (2026-10-07)
 ```mermaid
 erDiagram
   prescription["prescription · NEW"] {
@@ -875,6 +896,7 @@ erDiagram
 - **Sources:** patient-file.md:278 · today.md:86 · H:763, 4810
 - **Open:** none
 
+- **Built:** `app.prescription_kits` · ROUTE #26 (2026-10-07)
 ```mermaid
 erDiagram
   prescription_kit["prescription_kit · NEW"] {
@@ -893,6 +915,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `display_name` (P45, D40)
 - **Open:** none — an editable display name (P45, D40); Private album per schema-routes (P46)
 
+- **Built:** `app.patient_images` · ROUTE #27 (2026-10-07)
 ```mermaid
 erDiagram
   patient_image["patient_image · NEW"] {
@@ -916,6 +939,7 @@ erDiagram
 - **Sources:** schema-routes.md:436–448 · patient-file.md:143–157
 - **Open:** none
 
+- **Built:** `app.patient_reports` · ROUTE #28 (2026-10-07)
 ```mermaid
 erDiagram
   patient_report["patient_report · NEW"] {
@@ -936,6 +960,7 @@ erDiagram
 - **Sources:** schema-routes.md:468–476 · patient-file.md:81–90
 - **Open:** none
 
+- **Built:** `app.patient_notes` · ROUTE #29 (2026-10-07)
 ```mermaid
 erDiagram
   patient_note["patient_note · NEW"] {
@@ -955,6 +980,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `invoice_number` (D23), `financial_year` (D23)
 - **Open:** none — numbered per branch GSTIN and financial year, own series without a GSTIN (D23, D40); overall discount before tax, GST-inclusive lines where marked (D20, D21) — to confirm with the accountant
 
+- **Built:** `app.invoices` · ROUTE #30 (2026-10-07)
 ```mermaid
 erDiagram
   invoice["invoice · NEW"] {
@@ -983,6 +1009,7 @@ erDiagram
 - **Sources:** schema-routes.md:452–464 · patient-file.md:70–79, 159–169
 - **Open:** none — package before its invoice settled (P33, D3)
 
+- **Built:** `app.patient_packages` · ROUTE #31 (2026-10-07)
 ```mermaid
 erDiagram
   patient_package["patient_package · NEW"] {
@@ -1003,6 +1030,7 @@ erDiagram
 - **Sources:** schema-routes.md:480–496 · PRD.md:123–124, 140 · patient-file.md:53, 56, 515–519
 - **Open:** none — A28 settled (derived); ideas come from patient_idea (D39)
 
+- **Built:** `app.offering_suggestions` · ROUTE #32 (2026-10-07)
 ```mermaid
 erDiagram
   offering_suggestion["offering_suggestion · NEW"] {
@@ -1027,6 +1055,7 @@ erDiagram
 - **Sources:** D39 · schema-routes.md:1635 · H:4355–4367
 - **Open:** none — the AI provider is chosen at kickoff (D39); only patients with Data consent; never name, phone, photos or note text
 
+- **Built:** `app.patient_ideas` · ROUTE #33 (2026-10-07)
 ```mermaid
 erDiagram
   patient_idea["patient_idea · NEW"] {
@@ -1046,6 +1075,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `bill_allocations` (P58, D40), `reference` (payments.md:103), `attachments` (payments.md:124), `checked_at_close` (payments.md:61, 67)
 - **Open:** none — reversal per schema-routes (P77); an amount above the due is refused (P78); one payment may cover several supplier bills (P58, D40)
 
+- **Built:** `app.payments` · ROUTE #34 (2026-10-07)
 ```mermaid
 erDiagram
   payment["payment · NEW"] {
@@ -1080,6 +1110,7 @@ erDiagram
 - **Sources:** payments.md:29, 109, 129
 - **Open:** none
 
+- **Built:** `app.payment_edits` · ROUTE #35 (2026-10-07)
 ```mermaid
 erDiagram
   payment_edit["payment_edit · NEW"] {
@@ -1099,6 +1130,7 @@ erDiagram
 - **Sources:** schema-routes.md:666–676 · PRD.md:88 · payments.md:179
 - **Open:** none — only against an invoice (D22)
 
+- **Built:** `app.credit_notes` · ROUTE #36 (2026-10-07)
 ```mermaid
 erDiagram
   credit_note["credit_note · NEW"] {
@@ -1118,6 +1150,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `invoice_id` (payments.md:160), `settle_by` (payments.md:161), `settled_amount` (payments.md:45, 179), `party_kind` (payments.md:45, 157), `note` (payments.md:162)
 - **Open:** none — reasons from the one stored set + additions (P35); a give-back with no invoice is a refund payment, not a credit note (D22)
 
+- **Built:** `app.pending_credits` · ROUTE #37 (2026-10-07)
 ```mermaid
 erDiagram
   pending_credit["pending_credit · NEW"] {
@@ -1147,6 +1180,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `difference_reason` (D24), `reopened_at` (payments.md:191), `reopened_by_id` (payments.md:191), `auto_closed` (payments.md:277, 327, 331), `opening_accepted_by_id` (payments.md:76, 327)
 - **Open:** none — a reason when the count differs (D24); a day nobody closed is closed at midnight after it (D40); the close-the-day code on Accountant, Owner, Admin (D13, D18)
 
+- **Built:** `app.day_closes` · ROUTE #38 (2026-10-07)
 ```mermaid
 erDiagram
   day_close["day_close · NEW"] {
@@ -1174,6 +1208,7 @@ erDiagram
 - **Sources:** payments.md:327, 423
 - **Open:** none
 
+- **Built:** `app.day_close_events` · ROUTE #39 (2026-10-07)
 ```mermaid
 erDiagram
   day_close_event["day_close_event · NEW"] {
@@ -1195,6 +1230,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `status` (today.md:105, 107; P89, D40), `reversed_reason` (today.md:107; D40), `reversed_at` (today.md:107; D40)
 - **Open:** none — reversed with a reason, never deleted (P89, D40); the treatments code on Doctor and Therapist (D12, D13)
 
+- **Built:** `app.treatments` · ROUTE #40 (2026-10-07)
 ```mermaid
 erDiagram
   treatment["treatment · NEW"] {
@@ -1226,6 +1262,7 @@ erDiagram
 - **Sources:** schema-routes.md:500–519 · PRD.md:125, 148 · patient-file.md:171–187
 - **Open:** none — details up to 300 (P37, D40); score nullable (P32, D3)
 
+- **Built:** `app.check_ins` · ROUTE #41 (2026-10-07)
 ```mermaid
 erDiagram
   check_in["check_in · NEW"] {
@@ -1253,6 +1290,7 @@ erDiagram
 - **Sources:** schema-routes.md:523–538 · PRD.md:148 · patient-file.md:189–203
 - **Open:** none — Marketing logs reviews through the reviews code (D16)
 
+- **Built:** `app.reviews` · ROUTE #42 (2026-10-07)
 ```mermaid
 erDiagram
   review["review · NEW"] {
@@ -1276,6 +1314,7 @@ erDiagram
 - **Sources:** schema-routes.md:542–553 · patient-file.md:521
 - **Open:** none — additions settled (P34, D3)
 
+- **Built:** `app.feedback_actions` · ROUTE #43 (2026-10-07)
 ```mermaid
 erDiagram
   feedback_action["feedback_action · NEW"] {
@@ -1297,6 +1336,7 @@ erDiagram
 - **Sources:** schema-routes.md:741–750 · medical.md:89–103, 208–222
 - **Open:** none
 
+- **Built:** `app.manufacturers` · ROUTE #44 (2026-10-07)
 ```mermaid
 erDiagram
   manufacturer["manufacturer · NEW"] {
@@ -1314,6 +1354,7 @@ erDiagram
 - **Sources:** schema-routes.md:754–765 · medical.md:73–87, 190–206
 - **Open:** none — one payment may cover several bills (P58, D40)
 
+- **Built:** `app.suppliers` · ROUTE #45 (2026-10-07)
 ```mermaid
 erDiagram
   supplier["supplier · NEW"] {
@@ -1333,6 +1374,7 @@ erDiagram
 - **Sources:** schema-routes.md:769–779 · medical.md:105–119, 224–237
 - **Open:** none
 
+- **Built:** `app.medical_reps` · ROUTE #46 (2026-10-07)
 ```mermaid
 erDiagram
   medical_rep["medical_rep · NEW"] {
@@ -1351,6 +1393,7 @@ erDiagram
 - **Sources:** schema-routes.md:783–791 · medical.md:239–252
 - **Open:** none
 
+- **Built:** `app.medical_rep_visits` · ROUTE #47 (2026-10-07)
 ```mermaid
 erDiagram
   medical_rep_visit["medical_rep_visit · NEW"] {
@@ -1370,6 +1413,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `rx_only` (medical.md:177), `near_expiry_discount_pct` (medical.md:17, 45, 50)
 - **Open:** none — expiry is a month, MM/YY (B2, D40); MRP includes GST (D21)
 
+- **Built:** `app.medicines` · ROUTE #48 (2026-10-07)
 ```mermaid
 erDiagram
   medicine["medicine · NEW"] {
@@ -1397,6 +1441,7 @@ erDiagram
 - **Sources:** schema-routes.md:816–828 · PRD.md:145 · medical.md:57–71, 254–281
 - **Open:** none
 
+- **Built:** `app.medical_purchase_orders` · ROUTE #49 (2026-10-07)
 ```mermaid
 erDiagram
   medical_purchase_order["medical_purchase_order · NEW"] {
@@ -1419,6 +1464,7 @@ erDiagram
 - **Sources:** schema-routes.md:832–840 · medical.md:155
 - **Open:** none
 
+- **Built:** `app.medical_contacts` · ROUTE #50 (2026-10-07)
 ```mermaid
 erDiagram
   medical_contact["medical_contact · NEW"] {
@@ -1436,6 +1482,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `lead_id` (medical.md:155; payments.md:138)
 - **Open:** none — void and return effects settled (P54, P55, D3)
 
+- **Built:** `app.medical_sales` · ROUTE #51 (2026-10-07)
 ```mermaid
 erDiagram
   medical_sale["medical_sale · NEW"] {
@@ -1459,6 +1506,7 @@ erDiagram
 - **Sources:** medical.md:200, 297–309
 - **Open:** none
 
+- **Built:** `app.supplier_credits` · ROUTE #52 (2026-10-07)
 ```mermaid
 erDiagram
   supplier_credit["supplier_credit · NEW"] {
@@ -1481,6 +1529,7 @@ erDiagram
 - **Sources:** schema-routes.md:860–869 · clinic-stock.md:174–185
 - **Open:** none
 
+- **Built:** `app.stock_vendors` · ROUTE #53 (2026-10-07)
 ```mermaid
 erDiagram
   stock_vendor["stock_vendor · NEW"] {
@@ -1499,6 +1548,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `last_rate` (Appendix F — no intake line found)
 - **Open:** none — the last rate is an Appendix F request (D3)
 
+- **Built:** `app.stock_items` · ROUTE #54 (2026-10-07)
 ```mermaid
 erDiagram
   stock_item["stock_item · NEW"] {
@@ -1525,6 +1575,7 @@ erDiagram
 - **Sources:** schema-routes.md:894–905 · clinic-stock.md:41–55, 142–157
 - **Open:** none — typing paid records the payment (P59, D40)
 
+- **Built:** `app.stock_purchases` · ROUTE #55 (2026-10-07)
 ```mermaid
 erDiagram
   stock_purchase["stock_purchase · NEW"] {
@@ -1547,6 +1598,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `note` (clinic-stock.md:134)
 - **Open:** none — Undo written as a reversing row (P60)
 
+- **Built:** `app.stock_movements` · ROUTE #56 (2026-10-07)
 ```mermaid
 erDiagram
   stock_movement["stock_movement · NEW"] {
@@ -1572,6 +1624,7 @@ erDiagram
 - **Sources:** schema-routes.md:929–935 · clinic-stock.md:73–85, 159–172
 - **Open:** none
 
+- **Built:** `app.stock_counts` · ROUTE #57 (2026-10-07)
 ```mermaid
 erDiagram
   stock_count["stock_count · NEW"] {
@@ -1591,6 +1644,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `rule_key` (tasks.md:42–56), `resolved_by_id` (tasks.md:58, 78), `resolved_by_clinozy` (tasks.md:58), `result_text` (tasks.md:78, 185–227), `note` (tasks.md:78), `snooze_label` (tasks.md:178), `priority` (H:1877), `remind_before` (H:1878)
 - **Open:** none — Mine = mine + my roles' unowned queue (P5, A23, D40); rules (P26, D3); rule settings by Owner and Admin (D19)
 
+- **Built:** `app.tasks` · ROUTE #58 (2026-10-07)
 ```mermaid
 erDiagram
   task["task · NEW"] {
@@ -1627,6 +1681,7 @@ erDiagram
 - **Sources:** tasks.md:38, 113
 - **Open:** none
 
+- **Built:** `app.task_owner_changes` · ROUTE #59 (2026-10-07)
 ```mermaid
 erDiagram
   task_owner_change["task_owner_change · NEW"] {
@@ -1645,6 +1700,7 @@ erDiagram
 - **Sources:** tasks.md:148–162
 - **Open:** none — Owner and Admin change them (D19)
 
+- **Built:** `app.task_rule_settings` · ROUTE #60 (2026-10-07)
 ```mermaid
 erDiagram
   task_rule_setting["task_rule_setting · NEW"] {

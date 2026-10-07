@@ -115,6 +115,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `MEMBER_ROLE_MAX_PER_ORG` | — | `50` |  | — |
 | `MEMBER_ROLE_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
 | `MEMBERSHIP_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
+| `APP_RECORD_PURGE_CRON` | — | — *(optional)* |  | — |
 | `METRICS_AUTH_REQUIRED` | — | `true` |  | — |
 | `METRICS_ENABLED` | — | `true` |  | — |
 | `METRICS_SCRAPE_TOKEN` | — | — *(optional)* |  | — |

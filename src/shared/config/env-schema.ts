@@ -935,6 +935,7 @@ const envSchemaBase = z.object({
   USER_TOMBSTONE_RETENTION_CRON: z.string().min(1).optional(),
   ORGANIZATION_TOMBSTONE_RETENTION_CRON: z.string().min(1).optional(),
   MEMBERSHIP_TOMBSTONE_RETENTION_CRON: z.string().min(1).optional(),
+  APP_RECORD_PURGE_CRON: z.string().min(1).optional(),
   MEMBER_ROLE_TOMBSTONE_RETENTION_CRON: z.string().min(1).optional(),
   ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_CRON: z.string().min(1).optional(),
   UPLOAD_TOMBSTONE_RETENTION_CRON: z.string().min(1).optional(),

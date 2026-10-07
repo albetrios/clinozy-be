@@ -4,6 +4,7 @@ import {
 } from '@/infrastructure/database/contexts/database-context.js';
 import type { GlobalRole } from '@/shared/constants/roles.constants.js';
 import type { UserService } from '@/domains/user/user.service.js';
+import type { MembershipService } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import type { AuthorizationService } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import type { OrganizationOutput } from '@/domains/tenancy/sub-domains/organization/organization.types.js';
@@ -33,6 +34,8 @@ export class AuthMeContextService {
     private readonly userService: UserService,
     private readonly organizationService: OrganizationService,
     private readonly authorizationService: AuthorizationService,
+    // Launch ROUTE #4: the caller's roles (D5); absent in the worker process and minimal harnesses.
+    private readonly membershipService?: Pick<MembershipService, 'listRolePublicIdsForCaller'>,
   ) {}
 
   /** Assembles the caller's effective context for `GET /auth/me/context`. */
@@ -56,7 +59,7 @@ export class AuthMeContextService {
     // `resolveUserOrganizationPermissions` stays outside: it drives a DIFFERENT guc
     // (`app.current_organization_public_id`), so it must keep its own transaction and
     // can still overlap with the block below.
-    const [userScoped, myPermissions] = await Promise.all([
+    const [userScoped, myPermissions, myRoleIds] = await Promise.all([
       withAppDatabaseContext(scope, async () => ({
         user: await this.userService.getMe(scope),
         activeOrganization: activeOrganizationPublicId
@@ -69,6 +72,9 @@ export class AuthMeContextService {
             activeOrganizationPublicId,
           )
         : Promise.resolve<string[]>([]),
+      this.membershipService
+        ? this.membershipService.listRolePublicIdsForCaller(scope)
+        : Promise.resolve<string[]>([]),
     ]);
     const { user, activeOrganization } = userScoped;
 
@@ -76,6 +82,7 @@ export class AuthMeContextService {
       user,
       activeOrganization,
       myPermissions,
+      myRoleIds,
       globalRole: globalRole ?? null,
     };
   }

@@ -3,7 +3,7 @@ import { composeContributions, type DomainSeedModule } from '@/scripts/seed/seed
 
 const bulkContribution = composeContributions(branchesSeedContribution);
 
-/** The app domain's seed module (the clinic records): branches after tenancy and user. */
+/** The app domain's seed module (the app's own records): branches after tenancy and user. */
 export const appSeedModule: DomainSeedModule = {
   name: 'app',
   dependsOn: ['tenancy', 'user'],

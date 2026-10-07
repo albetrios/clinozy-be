@@ -28,7 +28,7 @@ import {
  * `tenancy.organizations` (PK = `organization_id`). Stores per-tenant
  * delivery toggles, default UI locale (constrained to `en`/`es`), and a
  * free-form `security_policy` JSONB used for MFA enforcement and similar
- * platform rules, and the clinic settings the launch's rooms and background
+ * platform rules, and the operating settings the launch's rooms and background
  * work read (opening cash float, lead hold days, reminder hour, re-target
  * days, deleted-record purge days). RLS is enforced by the
  * `organization_settings_tenant_isolation` policy.
@@ -45,7 +45,7 @@ export const organization_settings = tenancySchema
         .default(true),
       default_locale: varchar('default_locale', { length: 5 }).notNull().default('en'),
       security_policy: jsonb('security_policy').notNull().default({}),
-      // The clinic settings (launch D34, D35, D38 and the frontend's requests). A row is written
+      // The operating settings (launch D34, D35, D38 and the frontend's requests). A row is written
       // lazily (upsert), so a reader without one uses these same defaults from the constants.
       default_day_float: numeric('default_day_float', { precision: 12, scale: 2 })
         .notNull()

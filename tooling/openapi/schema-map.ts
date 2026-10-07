@@ -6,6 +6,180 @@
  *
  * When adding a new route with a body, add its mapping here.
  */
+import { UpdateUserPreferenceDto } from '@/domains/app/sub-domains/user-preferences/user-preferences.dto.js';
+import { ReplaceTaskRulesDto } from '@/domains/app/sub-domains/task-rule-settings/task-rule-settings.dto.js';
+import {
+  CreateSavedViewDto as appCreateSavedViewDto,
+  UpdateSavedViewDto as appUpdateSavedViewDto,
+} from '@/domains/app/sub-domains/saved-views/saved-views.dto.js';
+import {
+  CreateOfferingGroupDto as appCreateOfferingGroupDto,
+  UpdateOfferingGroupDto as appUpdateOfferingGroupDto,
+} from '@/domains/app/sub-domains/offering-groups/offering-groups.dto.js';
+import {
+  CreateRoomDto as appCreateRoomDto,
+  UpdateRoomDto as appUpdateRoomDto,
+} from '@/domains/app/sub-domains/rooms/rooms.dto.js';
+import {
+  CreateMachineDto as appCreateMachineDto,
+  UpdateMachineDto as appUpdateMachineDto,
+} from '@/domains/app/sub-domains/machines/machines.dto.js';
+import {
+  CreateBranchHolidayDto as appCreateBranchHolidayDto,
+  UpdateBranchHolidayDto as appUpdateBranchHolidayDto,
+} from '@/domains/app/sub-domains/branch-holidays/branch-holidays.dto.js';
+import {
+  CreateOfferingDto as appCreateOfferingDto,
+  UpdateOfferingDto as appUpdateOfferingDto,
+} from '@/domains/app/sub-domains/offerings/offerings.dto.js';
+import {
+  CreateOfferDto as appCreateOfferDto,
+  UpdateOfferDto as appUpdateOfferDto,
+} from '@/domains/app/sub-domains/offers/offers.dto.js';
+import {
+  CreatePatientDto as appCreatePatientDto,
+  UpdatePatientDto as appUpdatePatientDto,
+} from '@/domains/app/sub-domains/patients/patients.dto.js';
+import {
+  convertLeadDto as appConvertLeadDto,
+  CreateLeadDto as appCreateLeadDto,
+  UpdateLeadDto as appUpdateLeadDto,
+} from '@/domains/app/sub-domains/leads/leads.dto.js';
+import {
+  CreateMessageTemplateDto as appCreateMessageTemplateDto,
+  UpdateMessageTemplateDto as appUpdateMessageTemplateDto,
+} from '@/domains/app/sub-domains/message-templates/message-templates.dto.js';
+import {
+  cancelAppointmentDto as appCancelAppointmentDto,
+  CreateAppointmentDto as appCreateAppointmentDto,
+  statusAppointmentDto as appStatusAppointmentDto,
+  UpdateAppointmentDto as appUpdateAppointmentDto,
+} from '@/domains/app/sub-domains/appointments/appointments.dto.js';
+import {
+  stageVisitDto as appStageVisitDto,
+  UpdateVisitDto as appUpdateVisitDto,
+} from '@/domains/app/sub-domains/visits/visits.dto.js';
+import {
+  CreateDiagnosisDto as appCreateDiagnosisDto,
+  UpdateDiagnosisDto as appUpdateDiagnosisDto,
+} from '@/domains/app/sub-domains/diagnoses/diagnoses.dto.js';
+import { CreatePatientClinicalNoteDto as appCreatePatientClinicalNoteDto } from '@/domains/app/sub-domains/patient-clinical-notes/patient-clinical-notes.dto.js';
+import {
+  CreatePrescriptionDto as appCreatePrescriptionDto,
+  UpdatePrescriptionDto as appUpdatePrescriptionDto,
+} from '@/domains/app/sub-domains/prescriptions/prescriptions.dto.js';
+import {
+  CreatePrescriptionKitDto as appCreatePrescriptionKitDto,
+  UpdatePrescriptionKitDto as appUpdatePrescriptionKitDto,
+} from '@/domains/app/sub-domains/prescription-kits/prescription-kits.dto.js';
+import {
+  CreatePatientImageDto as appCreatePatientImageDto,
+  UpdatePatientImageDto as appUpdatePatientImageDto,
+} from '@/domains/app/sub-domains/patient-images/patient-images.dto.js';
+import {
+  CreatePatientReportDto as appCreatePatientReportDto,
+  UpdatePatientReportDto as appUpdatePatientReportDto,
+} from '@/domains/app/sub-domains/patient-reports/patient-reports.dto.js';
+import {
+  CreatePatientNoteDto as appCreatePatientNoteDto,
+  UpdatePatientNoteDto as appUpdatePatientNoteDto,
+} from '@/domains/app/sub-domains/patient-notes/patient-notes.dto.js';
+import {
+  CreateInvoiceDto as appCreateInvoiceDto,
+  UpdateInvoiceDto as appUpdateInvoiceDto,
+} from '@/domains/app/sub-domains/invoices/invoices.dto.js';
+import {
+  CreatePatientPackageDto as appCreatePatientPackageDto,
+  UpdatePatientPackageDto as appUpdatePatientPackageDto,
+} from '@/domains/app/sub-domains/patient-packages/patient-packages.dto.js';
+import {
+  CreateOfferingSuggestionDto as appCreateOfferingSuggestionDto,
+  UpdateOfferingSuggestionDto as appUpdateOfferingSuggestionDto,
+} from '@/domains/app/sub-domains/offering-suggestions/offering-suggestions.dto.js';
+import {
+  CreatePaymentDto as appCreatePaymentDto,
+  UpdatePaymentDto as appUpdatePaymentDto,
+} from '@/domains/app/sub-domains/payments/payments.dto.js';
+import {
+  CreatePendingCreditDto as appCreatePendingCreditDto,
+  UpdatePendingCreditDto as appUpdatePendingCreditDto,
+} from '@/domains/app/sub-domains/pending-credits/pending-credits.dto.js';
+import {
+  closeDayCloseDto as appCloseDayCloseDto,
+  CreateDayCloseDto as appCreateDayCloseDto,
+} from '@/domains/app/sub-domains/day-closes/day-closes.dto.js';
+import {
+  CreateTreatmentDto as appCreateTreatmentDto,
+  reverseTreatmentDto as appReverseTreatmentDto,
+  UpdateTreatmentDto as appUpdateTreatmentDto,
+} from '@/domains/app/sub-domains/treatments/treatments.dto.js';
+import {
+  CreateCheckInDto as appCreateCheckInDto,
+  UpdateCheckInDto as appUpdateCheckInDto,
+} from '@/domains/app/sub-domains/check-ins/check-ins.dto.js';
+import {
+  CreateReviewDto as appCreateReviewDto,
+  UpdateReviewDto as appUpdateReviewDto,
+} from '@/domains/app/sub-domains/reviews/reviews.dto.js';
+import {
+  CreateFeedbackActionDto as appCreateFeedbackActionDto,
+  UpdateFeedbackActionDto as appUpdateFeedbackActionDto,
+} from '@/domains/app/sub-domains/feedback-actions/feedback-actions.dto.js';
+import {
+  CreateManufacturerDto as appCreateManufacturerDto,
+  UpdateManufacturerDto as appUpdateManufacturerDto,
+} from '@/domains/app/sub-domains/manufacturers/manufacturers.dto.js';
+import {
+  CreateSupplierDto as appCreateSupplierDto,
+  UpdateSupplierDto as appUpdateSupplierDto,
+} from '@/domains/app/sub-domains/suppliers/suppliers.dto.js';
+import {
+  CreateMedicalRepDto as appCreateMedicalRepDto,
+  UpdateMedicalRepDto as appUpdateMedicalRepDto,
+} from '@/domains/app/sub-domains/medical-reps/medical-reps.dto.js';
+import {
+  CreateMedicalRepVisitDto as appCreateMedicalRepVisitDto,
+  UpdateMedicalRepVisitDto as appUpdateMedicalRepVisitDto,
+} from '@/domains/app/sub-domains/medical-rep-visits/medical-rep-visits.dto.js';
+import {
+  CreateMedicineDto as appCreateMedicineDto,
+  UpdateMedicineDto as appUpdateMedicineDto,
+} from '@/domains/app/sub-domains/medicines/medicines.dto.js';
+import {
+  cancelMedicalPurchaseOrderDto as appCancelMedicalPurchaseOrderDto,
+  CreateMedicalPurchaseOrderDto as appCreateMedicalPurchaseOrderDto,
+  UpdateMedicalPurchaseOrderDto as appUpdateMedicalPurchaseOrderDto,
+} from '@/domains/app/sub-domains/medical-purchase-orders/medical-purchase-orders.dto.js';
+import {
+  CreateMedicalContactDto as appCreateMedicalContactDto,
+  UpdateMedicalContactDto as appUpdateMedicalContactDto,
+} from '@/domains/app/sub-domains/medical-contacts/medical-contacts.dto.js';
+import { CreateMedicalSaleDto as appCreateMedicalSaleDto } from '@/domains/app/sub-domains/medical-sales/medical-sales.dto.js';
+import { CreateSupplierCreditDto as appCreateSupplierCreditDto } from '@/domains/app/sub-domains/supplier-credits/supplier-credits.dto.js';
+import {
+  CreateStockVendorDto as appCreateStockVendorDto,
+  UpdateStockVendorDto as appUpdateStockVendorDto,
+} from '@/domains/app/sub-domains/stock-vendors/stock-vendors.dto.js';
+import {
+  CreateStockItemDto as appCreateStockItemDto,
+  UpdateStockItemDto as appUpdateStockItemDto,
+} from '@/domains/app/sub-domains/stock-items/stock-items.dto.js';
+import {
+  CreateStockPurchaseDto as appCreateStockPurchaseDto,
+  UpdateStockPurchaseDto as appUpdateStockPurchaseDto,
+} from '@/domains/app/sub-domains/stock-purchases/stock-purchases.dto.js';
+import { CreateStockCountDto as appCreateStockCountDto } from '@/domains/app/sub-domains/stock-counts/stock-counts.dto.js';
+import { CreateStockMovementDto as appCreateStockMovementDto } from '@/domains/app/sub-domains/stock-movements/stock-movements.dto.js';
+import {
+  CreateTaskDto as appCreateTaskDto,
+  resolveTaskDto as appResolveTaskDto,
+  snoozeTaskDto as appSnoozeTaskDto,
+  UpdateTaskDto as appUpdateTaskDto,
+} from '@/domains/app/sub-domains/tasks/tasks.dto.js';
+import {
+  batchesMessagesBodyDto as appBatchesMessagesBodyDto,
+  CreateMessageDto as appCreateMessageDto,
+} from '@/domains/app/sub-domains/messages/messages.dto.js';
 import type { ZodTypeAny } from 'zod';
 
 // ─── Auth ──────────────────────────────────────────────────────────────
@@ -23,7 +197,12 @@ import {
 } from '@/domains/auth/auth.dto.js';
 
 // ─── User ──────────────────────────────────────────────────────────────
-import { UpdateMeDto, AdminUpdateUserDto, UploadAvatarDto } from '@/domains/user/user.dto.js';
+import {
+  UpdateMeDto,
+  UpdateMyPresenceDto,
+  AdminUpdateUserDto,
+  UploadAvatarDto,
+} from '@/domains/user/user.dto.js';
 import { UpdateUserSettingsDto } from '@/domains/user/sub-domains/user-settings/user-settings.dto.js';
 import { PutNotificationPreferencesDto } from '@/domains/user/sub-domains/user-notification-preferences/user-notification-preferences.dto.js';
 import { exportUserDataBodyDto } from '@/domains/user/sub-domains/user-data-export/user-data-export.dto.js';
@@ -118,6 +297,7 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
 
   // ── User: Me (profile) ──
   'PATCH /api/v1/users/me': UpdateMeDto,
+  'PUT /api/v1/users/me/presence': UpdateMyPresenceDto,
   'PATCH /api/v1/users/me/settings': UpdateUserSettingsDto,
   'PUT /api/v1/users/me/notification-preferences': PutNotificationPreferencesDto,
 
@@ -167,6 +347,102 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
 
   // ── App: Branches ──
   'POST /api/v1/app/branches': CreateBranchDto,
+  'POST /api/v1/app/leads/{lead_id}/convert': appConvertLeadDto,
+  'POST /api/v1/app/messages/batches': appBatchesMessagesBodyDto,
+  'POST /api/v1/app/messages': appCreateMessageDto,
+  'PATCH /api/v1/app/patient-packages/{patient_package_id}': appUpdatePatientPackageDto,
+  'PATCH /api/v1/app/patient-reports/{patient_report_id}': appUpdatePatientReportDto,
+  'PATCH /api/v1/app/patient-images/{patient_image_id}': appUpdatePatientImageDto,
+  'POST /api/v1/app/tasks/{task_id}/snooze': appSnoozeTaskDto,
+  'POST /api/v1/app/tasks/{task_id}/resolve': appResolveTaskDto,
+  'PATCH /api/v1/app/tasks/{task_id}': appUpdateTaskDto,
+  'POST /api/v1/app/tasks': appCreateTaskDto,
+  'POST /api/v1/app/stock-movements': appCreateStockMovementDto,
+  'POST /api/v1/app/stock-counts': appCreateStockCountDto,
+  'PATCH /api/v1/app/stock-purchases/{stock_purchase_id}': appUpdateStockPurchaseDto,
+  'POST /api/v1/app/stock-purchases': appCreateStockPurchaseDto,
+  'PATCH /api/v1/app/stock-items/{stock_item_id}': appUpdateStockItemDto,
+  'POST /api/v1/app/stock-items': appCreateStockItemDto,
+  'PATCH /api/v1/app/stock-vendors/{stock_vendor_id}': appUpdateStockVendorDto,
+  'POST /api/v1/app/stock-vendors': appCreateStockVendorDto,
+  'POST /api/v1/app/supplier-credits': appCreateSupplierCreditDto,
+  'POST /api/v1/app/medical-sales': appCreateMedicalSaleDto,
+  'PATCH /api/v1/app/medical-contacts/{medical_contact_id}': appUpdateMedicalContactDto,
+  'POST /api/v1/app/medical-contacts': appCreateMedicalContactDto,
+  'POST /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}/cancel':
+    appCancelMedicalPurchaseOrderDto,
+  'PATCH /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}':
+    appUpdateMedicalPurchaseOrderDto,
+  'POST /api/v1/app/medical-purchase-orders': appCreateMedicalPurchaseOrderDto,
+  'PATCH /api/v1/app/medicines/{medicine_id}': appUpdateMedicineDto,
+  'POST /api/v1/app/medicines': appCreateMedicineDto,
+  'PATCH /api/v1/app/medical-rep-visits/{medical_rep_visit_id}': appUpdateMedicalRepVisitDto,
+  'POST /api/v1/app/medical-reps/{medical_rep_id}/visits': appCreateMedicalRepVisitDto,
+  'PATCH /api/v1/app/medical-reps/{medical_rep_id}': appUpdateMedicalRepDto,
+  'POST /api/v1/app/medical-reps': appCreateMedicalRepDto,
+  'PATCH /api/v1/app/suppliers/{supplier_id}': appUpdateSupplierDto,
+  'POST /api/v1/app/suppliers': appCreateSupplierDto,
+  'PATCH /api/v1/app/manufacturers/{manufacturer_id}': appUpdateManufacturerDto,
+  'POST /api/v1/app/manufacturers': appCreateManufacturerDto,
+  'PATCH /api/v1/app/feedback-actions/{feedback_action_id}': appUpdateFeedbackActionDto,
+  'POST /api/v1/app/feedback-actions': appCreateFeedbackActionDto,
+  'PATCH /api/v1/app/reviews/{review_id}': appUpdateReviewDto,
+  'POST /api/v1/app/patients/{patient_id}/reviews': appCreateReviewDto,
+  'PATCH /api/v1/app/check-ins/{check_in_id}': appUpdateCheckInDto,
+  'POST /api/v1/app/patients/{patient_id}/check-ins': appCreateCheckInDto,
+  'POST /api/v1/app/treatments/{treatment_id}/reverse': appReverseTreatmentDto,
+  'PATCH /api/v1/app/treatments/{treatment_id}': appUpdateTreatmentDto,
+  'POST /api/v1/app/patients/{patient_id}/treatments': appCreateTreatmentDto,
+  'POST /api/v1/app/day-closes/{day_close_id}/close': appCloseDayCloseDto,
+  'POST /api/v1/app/day-closes': appCreateDayCloseDto,
+  'PATCH /api/v1/app/pending-credits/{pending_credit_id}': appUpdatePendingCreditDto,
+  'POST /api/v1/app/pending-credits': appCreatePendingCreditDto,
+  'PATCH /api/v1/app/payments/{payment_id}': appUpdatePaymentDto,
+  'POST /api/v1/app/payments': appCreatePaymentDto,
+  'PATCH /api/v1/app/offering-suggestions/{offering_suggestion_id}': appUpdateOfferingSuggestionDto,
+  'POST /api/v1/app/patients/{patient_id}/offering-suggestions': appCreateOfferingSuggestionDto,
+  'POST /api/v1/app/patients/{patient_id}/packages': appCreatePatientPackageDto,
+  'PATCH /api/v1/app/invoices/{invoice_id}': appUpdateInvoiceDto,
+  'POST /api/v1/app/invoices': appCreateInvoiceDto,
+  'PATCH /api/v1/app/patient-notes/{patient_note_id}': appUpdatePatientNoteDto,
+  'POST /api/v1/app/patients/{patient_id}/notes': appCreatePatientNoteDto,
+  'POST /api/v1/app/patients/{patient_id}/reports': appCreatePatientReportDto,
+  'POST /api/v1/app/patients/{patient_id}/images': appCreatePatientImageDto,
+  'PATCH /api/v1/app/prescription-kits/{prescription_kit_id}': appUpdatePrescriptionKitDto,
+  'POST /api/v1/app/prescription-kits': appCreatePrescriptionKitDto,
+  'PATCH /api/v1/app/prescriptions/{prescription_id}': appUpdatePrescriptionDto,
+  'POST /api/v1/app/patients/{patient_id}/prescriptions': appCreatePrescriptionDto,
+  'POST /api/v1/app/patients/{patient_id}/clinical-notes': appCreatePatientClinicalNoteDto,
+  'PATCH /api/v1/app/diagnoses/{diagnosis_id}': appUpdateDiagnosisDto,
+  'POST /api/v1/app/diagnoses': appCreateDiagnosisDto,
+  'POST /api/v1/app/visits/{visit_id}/stage': appStageVisitDto,
+  'PATCH /api/v1/app/visits/{visit_id}': appUpdateVisitDto,
+  'POST /api/v1/app/appointments/{appointment_id}/cancel': appCancelAppointmentDto,
+  'POST /api/v1/app/appointments/{appointment_id}/status': appStatusAppointmentDto,
+  'PATCH /api/v1/app/appointments/{appointment_id}': appUpdateAppointmentDto,
+  'POST /api/v1/app/appointments': appCreateAppointmentDto,
+  'PATCH /api/v1/app/message-templates/{message_template_id}': appUpdateMessageTemplateDto,
+  'POST /api/v1/app/message-templates': appCreateMessageTemplateDto,
+  'PATCH /api/v1/app/leads/{lead_id}': appUpdateLeadDto,
+  'POST /api/v1/app/leads': appCreateLeadDto,
+  'PATCH /api/v1/app/patients/{patient_id}': appUpdatePatientDto,
+  'POST /api/v1/app/patients': appCreatePatientDto,
+  'PATCH /api/v1/app/offers/{offer_id}': appUpdateOfferDto,
+  'POST /api/v1/app/offers': appCreateOfferDto,
+  'PATCH /api/v1/app/offerings/{offering_id}': appUpdateOfferingDto,
+  'POST /api/v1/app/offerings': appCreateOfferingDto,
+  'PATCH /api/v1/app/branch-holidays/{branch_holiday_id}': appUpdateBranchHolidayDto,
+  'POST /api/v1/app/branches/{branch_id}/holidays': appCreateBranchHolidayDto,
+  'PATCH /api/v1/app/machines/{machine_id}': appUpdateMachineDto,
+  'POST /api/v1/app/branches/{branch_id}/machines': appCreateMachineDto,
+  'PATCH /api/v1/app/rooms/{room_id}': appUpdateRoomDto,
+  'POST /api/v1/app/branches/{branch_id}/rooms': appCreateRoomDto,
+  'PATCH /api/v1/app/offering-groups/{offering_group_id}': appUpdateOfferingGroupDto,
+  'POST /api/v1/app/offering-groups': appCreateOfferingGroupDto,
+  'PATCH /api/v1/app/saved-views/{saved_view_id}': appUpdateSavedViewDto,
+  'POST /api/v1/app/saved-views': appCreateSavedViewDto,
+  'PATCH /api/v1/app/user-preferences': UpdateUserPreferenceDto,
+  'PUT /api/v1/app/task-rule-settings': ReplaceTaskRulesDto,
   'PATCH /api/v1/app/branches/{branch_id}': UpdateBranchDto,
   'PUT /api/v1/app/branches/{branch_id}/user-accesses': ReplaceBranchUserAccessesDto,
 

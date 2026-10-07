@@ -18,11 +18,12 @@ import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import {
-  CLINIC_TONE_VALUES,
+  PHONE_NUMBER_PATTERN,
+  CHIP_TONE_VALUES,
   RECORD_DELETE_REASON,
   RECORD_DELETE_REASON_VALUES,
   WEEKDAY_VALUES,
-} from '@/shared/constants/clinic-record.constants.js';
+} from '@/shared/constants/record-fields.constants.js';
 import {
   BRANCH_DEFAULT_CLOSES_AT,
   BRANCH_DEFAULT_OPENS_AT,
@@ -30,7 +31,6 @@ import {
   BRANCH_DEFAULT_TONE,
   BRANCH_DEFAULT_WORKING_DAYS,
   BRANCH_GST_NUMBER_PATTERN,
-  BRANCH_PHONE_PATTERN,
   BRANCH_POSTAL_CODE_PATTERN,
 } from './branches.constants.js';
 
@@ -48,7 +48,7 @@ function pattern(value: string): SQL {
 }
 
 /**
- * Drizzle table for `app.branches` — a clinic location of an organization (launch ROUTE #2, domain `app`).
+ * Drizzle table for `app.branches` — a location of an organization (launch ROUTE #2, domain `app`).
  * Holds the address, contact, GSTIN, opening hours and working days, the default staff per role
  * (memberships), the maps and review links, and a soft delete with its reason. One live main branch
  * per organization and live names unique per organization (case-insensitive). RLS is the
@@ -145,12 +145,12 @@ export const branches = appSchema
       index('idx_branches_updated_by_user_id')
         .on(table.updated_by_user_id)
         .where(sql`${table.updated_by_user_id} IS NOT NULL`),
-      check('chk_branches_tone', inList(table.tone, CLINIC_TONE_VALUES)),
+      check('chk_branches_tone', inList(table.tone, CHIP_TONE_VALUES)),
       check(
         'chk_branches_postal_code',
         sql`${table.postal_code} ~ ${pattern(BRANCH_POSTAL_CODE_PATTERN)}`,
       ),
-      check('chk_branches_phone', sql`${table.phone} ~ ${pattern(BRANCH_PHONE_PATTERN)}`),
+      check('chk_branches_phone', sql`${table.phone} ~ ${pattern(PHONE_NUMBER_PATTERN)}`),
       check(
         'chk_branches_gst_number',
         sql`${table.gst_number} ~ ${pattern(BRANCH_GST_NUMBER_PATTERN)}`,
