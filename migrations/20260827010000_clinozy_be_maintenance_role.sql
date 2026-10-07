@@ -25,11 +25,11 @@ BEGIN
   EXECUTE format('GRANT CONNECT ON DATABASE %I TO clinozy_be_maintenance', database_name);
 END $$;
 --> statement-breakpoint
-GRANT USAGE ON SCHEMA auth, tenancy, billing, notify, audit, upload TO clinozy_be_maintenance;
+GRANT USAGE ON SCHEMA auth, tenancy, billing, notify, audit, upload, app TO clinozy_be_maintenance;
 --> statement-breakpoint
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA auth, tenancy, billing, notify, audit, upload TO clinozy_be_maintenance;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA auth, tenancy, billing, notify, audit, upload, app TO clinozy_be_maintenance;
 --> statement-breakpoint
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA auth, tenancy, billing, notify, audit, upload TO clinozy_be_maintenance;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA auth, tenancy, billing, notify, audit, upload, app TO clinozy_be_maintenance;
 --> statement-breakpoint
 ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO clinozy_be_maintenance;
 --> statement-breakpoint
@@ -43,6 +43,8 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA audit GRANT SELECT, INSERT, UPDATE, DELETE ON
 --> statement-breakpoint
 ALTER DEFAULT PRIVILEGES IN SCHEMA upload GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO clinozy_be_maintenance;
 --> statement-breakpoint
+ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO clinozy_be_maintenance;
+--> statement-breakpoint
 ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT USAGE, SELECT ON SEQUENCES TO clinozy_be_maintenance;
 --> statement-breakpoint
 ALTER DEFAULT PRIVILEGES IN SCHEMA tenancy GRANT USAGE, SELECT ON SEQUENCES TO clinozy_be_maintenance;
@@ -54,3 +56,5 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA notify GRANT USAGE, SELECT ON SEQUENCES TO cl
 ALTER DEFAULT PRIVILEGES IN SCHEMA audit GRANT USAGE, SELECT ON SEQUENCES TO clinozy_be_maintenance;
 --> statement-breakpoint
 ALTER DEFAULT PRIVILEGES IN SCHEMA upload GRANT USAGE, SELECT ON SEQUENCES TO clinozy_be_maintenance;
+--> statement-breakpoint
+ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT USAGE, SELECT ON SEQUENCES TO clinozy_be_maintenance;

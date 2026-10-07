@@ -17,6 +17,8 @@ import {
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { NOTIFY_PERMISSIONS } from '@/domains/notify/notify.permissions.js';
+import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
+import { createTestBranch } from '@/tests/factories/branches.factory.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
 import { seedTwoOrganizationsWithSubscriptions } from '@/tests/helpers/test-organization.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
@@ -58,6 +60,7 @@ describe('Security: cross-organization mutation isolation (model: organization â
   const ALL_PERMISSION_CODES = [
     ...Object.values(TENANCY_PERMISSIONS),
     ...Object.values(NOTIFY_PERMISSIONS),
+    ...Object.values(APP_PERMISSIONS),
   ];
 
   async function organizationWithResources() {
@@ -89,6 +92,7 @@ describe('Security: cross-organization mutation isolation (model: organization â
     });
     // A pending invitation (tied to an INVITED membership) so the invitation
     // DELETE / resend routes have a real organization-scoped target to attack.
+    const branch = await createTestBranch({ organizationId: organization.id });
     const invitee = await createTestUser();
     const inviteeMembership = await createMembership({
       userId: invitee.id,
@@ -121,6 +125,7 @@ describe('Security: cross-organization mutation isolation (model: organization â
       apiKey,
       policy,
       webhook,
+      branch,
       invitation: invitation!,
     };
   }
@@ -129,7 +134,7 @@ describe('Security: cross-organization mutation isolation (model: organization â
 
   const mutationCases: ReadonlyArray<{
     label: string;
-    method: 'PATCH' | 'DELETE' | 'POST';
+    method: 'PATCH' | 'PUT' | 'DELETE' | 'POST';
     target: (organization: OrgFixture) => string;
     body?: Record<string, unknown>;
   }> = [
@@ -138,6 +143,18 @@ describe('Security: cross-organization mutation isolation (model: organization â
       method: 'PATCH',
       target: (organization) => `/notify/webhooks/${organization.webhook.public_id}`,
       body: {},
+    },
+    {
+      label: 'branch PATCH',
+      method: 'PATCH',
+      target: (organization) => `/app/branches/${organization.branch.public_id}`,
+      body: { name: 'Renamed across organizations' },
+    },
+    {
+      label: 'branch user-accesses PUT',
+      method: 'PUT',
+      target: (organization) => `/app/branches/${organization.branch.public_id}/user-accesses`,
+      body: { membership_ids: [] },
     },
     {
       label: 'webhook DELETE',

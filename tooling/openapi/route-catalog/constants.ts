@@ -28,6 +28,7 @@ export const DOMAIN_LABELS: Record<string, string> = {
   '/api/v1/billing': 'BILLING',
   '/api/v1/notify': 'NOTIFY',
   '/api/v1/uploads': 'UPLOAD',
+  '/api/v1/app': 'APP',
   '/api/v1/mcp': 'MCP',
   '/livez': 'HEALTH',
   '/metrics': 'METRICS',

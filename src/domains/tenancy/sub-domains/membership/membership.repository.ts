@@ -555,6 +555,27 @@ export class MembershipRepository extends BaseRepository {
     return (rows[0] ?? null) as MembershipRow | null;
   }
 
+  /**
+   * Live memberships of one organization among `public_ids`, as `{ id, public_id }` pairs —
+   * the lookup other domains use to turn `mem_` ids from a request into foreign keys.
+   */
+  async findIdsByPublicIds(
+    organization_id: number,
+    public_ids: readonly string[],
+  ): Promise<{ id: number; public_id: string }[]> {
+    if (public_ids.length === 0) return [];
+    return getRequestDatabase()
+      .select({ id: memberships.id, public_id: memberships.public_id })
+      .from(memberships)
+      .where(
+        and(
+          eq(memberships.organization_id, organization_id),
+          inArray(memberships.public_id, [...public_ids]),
+          isNull(memberships.deleted_at),
+        ),
+      );
+  }
+
   async create(data: {
     organization_id: number;
     user_id: number;

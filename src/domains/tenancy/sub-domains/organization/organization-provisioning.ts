@@ -2,6 +2,7 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { AUDIT_PERMISSIONS } from '@/domains/audit/audit.permissions.js';
 import { BILLING_PERMISSIONS } from '@/domains/billing/billing.permissions.js';
 import { NOTIFY_PERMISSIONS } from '@/domains/notify/notify.permissions.js';
+import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { UPLOAD_PERMISSIONS } from '@/domains/upload/upload.permissions.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
@@ -32,6 +33,15 @@ const ALL_TENANCY_PERMISSION_CODES: readonly string[] = Object.values(TENANCY_PE
  * permission nothing can hold is not a security boundary, it is a dead route.
  */
 const ALL_NOTIFY_PERMISSION_CODES: readonly string[] = Object.values(NOTIFY_PERMISSIONS);
+
+/**
+ * App (clinic record) permission codes — granted to TEAM owners and the Admin role.
+ *
+ * @remarks
+ * A clinic is a TEAM organization; a personal workspace holds no branches (D44), so these codes
+ * join the TEAM half of {@link ownerPermissionCodesForOrganizationType} only.
+ */
+const ALL_APP_PERMISSION_CODES: readonly string[] = Object.values(APP_PERMISSIONS);
 
 /**
  * Audit and upload permission codes — granted to every owner, TEAM and PERSONAL alike.
@@ -87,6 +97,7 @@ export function ownerPermissionCodesForOrganizationType(
       ...everyOwnerCodes,
       BILLING_PERMISSIONS.SUBSCRIPTION_MANAGE,
       ...ALL_NOTIFY_PERMISSION_CODES,
+      ...ALL_APP_PERMISSION_CODES,
     ];
   }
   return everyOwnerCodes;
@@ -128,7 +139,7 @@ export const DEFAULT_TEAM_ROLES: readonly DefaultTeamRole[] = [
   {
     name: 'Admin',
     description:
-      'Run the organization: members, roles, invitations, API keys, webhooks, billing and audit logs. Cannot delete the organization.',
+      'Run the organization: members, roles, invitations, API keys, webhooks, billing, audit logs and branches. Cannot delete the organization.',
     permissionCodes: [
       TENANCY_PERMISSIONS.ORGANIZATION_READ,
       TENANCY_PERMISSIONS.ORGANIZATION_UPDATE,
@@ -147,6 +158,7 @@ export const DEFAULT_TEAM_ROLES: readonly DefaultTeamRole[] = [
       NOTIFY_PERMISSIONS.WEBHOOK_MANAGE,
       AUDIT_PERMISSIONS.AUDIT_LOG_READ,
       UPLOAD_PERMISSIONS.UPLOAD_MANAGE,
+      ...ALL_APP_PERMISSION_CODES,
     ],
   },
   {

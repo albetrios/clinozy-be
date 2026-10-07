@@ -18,6 +18,8 @@ import { logs } from '@/domains/audit/audit.schema.js';
 import { organization_settings } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.schema.js';
 import { organization_notification_policies } from '@/domains/tenancy/sub-domains/organization/organization-notification-policy/organization-notification-policy.schema.js';
 import { api_keys } from '@/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.schema.js';
+import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
+import { branch_user_accesses } from '@/domains/app/sub-domains/branches/branch-user-accesses/branch-user-accesses.schema.js';
 import { user_settings } from '@/domains/user/sub-domains/user-settings/user-settings.schema.js';
 import { user_data_exports } from '@/domains/user/sub-domains/user-data-export/user-data-export.schema.js';
 import { webauthn_credentials } from '@/domains/auth/sub-domains/auth-webauthn/webauthn-credential.schema.js';
@@ -77,6 +79,9 @@ export const RLS_MATRIX_SKIP_CRUD_TABLES = new Set([
   tableKey('tenancy', 'member_invitations'),
   tableKey('tenancy', 'role_permissions'),
   tableKey('tenancy', 'organization_settings'),
+  // Composite key (branch_id, membership_id), no `id` — cross-organization isolation is asserted
+  // through the user-accesses routes in the authz security suites.
+  tableKey('app', 'branch_user_accesses'),
   tableKey('notify', 'webhook_delivery_attempts'),
   tableKey('auth', 'verification_tokens'),
   // sec-U3: audit.logs is append-only — REVOKE UPDATE causes UPDATE to throw
@@ -354,6 +359,41 @@ export async function seedRlsMatrixFixtures(): Promise<RlsTenantFixture> {
     organizationA: apiKeyA!.id,
     organizationB: apiKeyB!.id,
   });
+
+  const branchValues = {
+    address_line_one: '1 Main Road',
+    area: 'Adajan',
+    city: 'Surat',
+    postal_code: '395009',
+    phone: '+919800000000',
+    email: 'branch@example.com',
+  };
+  const [branchA] = await database
+    .insert(branches)
+    .values({
+      ...branchValues,
+      public_id: generatePublicId('branch'),
+      organization_id: organizationA.id,
+      name: 'branch-a',
+    })
+    .returning();
+  const [branchB] = await database
+    .insert(branches)
+    .values({
+      ...branchValues,
+      public_id: generatePublicId('branch'),
+      organization_id: organizationB.id,
+      name: 'branch-b',
+    })
+    .returning();
+  rowIdsByTable.set(tableKey('app', 'branches'), {
+    organizationA: branchA!.id,
+    organizationB: branchB!.id,
+  });
+  await database.insert(branch_user_accesses).values([
+    { branch_id: branchA!.id, membership_id: membershipA.id, organization_id: organizationA.id },
+    { branch_id: branchB!.id, membership_id: membershipB.id, organization_id: organizationB.id },
+  ]);
 
   const webhookA = await createTestWebhook({ organizationId: organizationA.id });
   const webhookB = await createTestWebhook({ organizationId: organizationB.id });

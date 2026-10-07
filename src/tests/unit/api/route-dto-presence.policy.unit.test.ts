@@ -13,6 +13,7 @@ const ROUTE_REGISTRAR_ONLY = new Set([
   'src/domains/billing/billing.routes.ts',
   'src/domains/tenancy/tenancy.routes.ts',
   'src/domains/notify/notify.routes.ts',
+  'src/domains/app/app.routes.ts',
 ]);
 
 function collectRouteFiles(directory: string, collected: string[] = []): string[] {

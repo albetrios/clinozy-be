@@ -7,6 +7,11 @@ Project clinozy_be {
   database_type: 'PostgreSQL'
 }
 
+TableGroup app {
+  app.branch_user_accesses
+  app.branches
+}
+
 TableGroup audit {
   audit.dead_letter_jobs
   audit.logs
@@ -54,6 +59,60 @@ TableGroup tenancy {
 
 TableGroup upload {
   upload.uploads
+}
+
+Table app.branch_user_accesses {
+  branch_id bigint [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  membership_id bigint [not null]
+  organization_id bigint [not null]
+  indexes {
+    (branch_id, membership_id) [pk]
+  }
+}
+
+Note app.branch_user_accesses {
+  'RLS: enabled\nPolicies: branch_user_accesses_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.branches {
+  address_line_one varchar(120) [not null]
+  address_line_two varchar(120)
+  area varchar(60) [not null]
+  city varchar(60) [not null]
+  closes_at time [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  default_doctor_membership_id bigint
+  default_front_desk_membership_id bigint
+  default_pharmacist_membership_id bigint
+  default_therapist_membership_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  email varchar(120) [not null]
+  gst_number varchar(15)
+  id bigint [pk, increment, not null]
+  is_active boolean [not null]
+  is_main boolean [not null]
+  maps_link varchar(512)
+  name varchar(60) [not null]
+  opens_at time [not null]
+  organization_id bigint [not null]
+  phone varchar(16) [not null]
+  postal_code varchar(6) [not null]
+  public_id varchar(28) [not null]
+  review_link varchar(512)
+  state varchar(60) [not null]
+  tone varchar(10) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+  working_days text [not null]
+}
+
+Note app.branches {
+  'RLS: enabled\nPolicies: branches_tenant_isolation\nFORCE ROW LEVEL SECURITY'
 }
 
 Table audit.dead_letter_jobs {
@@ -667,6 +726,17 @@ Note upload.uploads {
   'RLS: enabled\nPolicies: uploads_tenant_isolation, uploads_owner_access\nFORCE ROW LEVEL SECURITY'
 }
 
+Ref: app.branch_user_accesses.branch_id > app.branches.id [delete: cascade]
+Ref: app.branch_user_accesses.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.branch_user_accesses.membership_id > tenancy.memberships.id [delete: cascade]
+Ref: app.branch_user_accesses.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.branches.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.branches.default_doctor_membership_id > tenancy.memberships.id [delete: set null]
+Ref: app.branches.default_front_desk_membership_id > tenancy.memberships.id [delete: set null]
+Ref: app.branches.default_pharmacist_membership_id > tenancy.memberships.id [delete: set null]
+Ref: app.branches.default_therapist_membership_id > tenancy.memberships.id [delete: set null]
+Ref: app.branches.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.branches.updated_by_user_id > auth.users.id [delete: no action]
 Ref: audit.logs.actor_api_key_id > tenancy.api_keys.id [delete: set null]
 Ref: audit.logs.actor_user_id > auth.users.id [delete: set null]
 Ref: audit.logs.organization_id > tenancy.organizations.id [delete: set null]

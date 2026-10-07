@@ -24,7 +24,16 @@ import { sql } from '@/infrastructure/database/connection.js';
  *    attribution FK indexes of `20260623000000` were in exactly that state).
  */
 
-const APPLICATION_SCHEMAS = ['auth', 'tenancy', 'billing', 'notify', 'audit', 'upload', 'public'];
+const APPLICATION_SCHEMAS = [
+  'auth',
+  'tenancy',
+  'billing',
+  'notify',
+  'audit',
+  'upload',
+  'app',
+  'public',
+];
 
 describe('Integration: index hygiene', () => {
   it('backs every foreign key with an index its ON DELETE / ON UPDATE action can use', async () => {

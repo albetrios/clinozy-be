@@ -58,7 +58,7 @@ export async function cleanupDatabase(): Promise<void> {
           SELECT string_agg(quote_ident(schemaname) || '.' || quote_ident(tablename), ', ')
           INTO tables
           FROM pg_tables
-          WHERE schemaname IN ('public', 'auth', 'tenancy', 'billing', 'notify', 'audit', 'upload')
+          WHERE schemaname IN ('public', 'auth', 'tenancy', 'billing', 'notify', 'audit', 'upload', 'app')
           AND tablename != 'permissions'
           AND NOT (schemaname = 'public' AND tablename = 'schema_migrations');
           IF tables IS NOT NULL AND tables != '' THEN

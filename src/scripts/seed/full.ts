@@ -8,6 +8,10 @@ import '@/shared/config/load-env-files.js';
 import '@/scripts/seed/seed-runtime-url.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import {
+  seedBranch,
+  seedBranchUserAccess,
+} from '@/domains/app/sub-domains/branches/seed/branches.seed.js';
 import { closeDatabase } from './helpers.js';
 import {
   seedPermissions,
@@ -96,6 +100,23 @@ export async function runFullSeed(): Promise<void> {
     created_by_user_id: demoUser.id,
   });
   logger.info('seed.full: demo membership created');
+
+  for (const branch of [
+    { name: 'Adajan', area: 'Adajan', is_main: true },
+    { name: 'Vesu', area: 'Vesu', is_main: false },
+  ]) {
+    const branchId = await seedBranch({
+      ...branch,
+      organization_id: demoOrganization.id,
+      created_by_user_id: demoUser.id,
+    });
+    await seedBranchUserAccess({
+      branch_id: branchId,
+      organization_id: demoOrganization.id,
+      user_id: demoUser.id,
+    });
+  }
+  logger.info('seed.full: demo branches created');
 
   const extraUserPayload = generateUserPayload();
   const extraUser = await seedUser(extraUserPayload);

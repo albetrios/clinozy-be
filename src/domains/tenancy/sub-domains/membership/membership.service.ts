@@ -288,6 +288,28 @@ export class MembershipService {
   }
 
   /**
+   * Resolves membership public ids (`mem_…`) of one organization to their internal ids, inside the
+   * CALLER's database context — for another domain storing a membership foreign key.
+   *
+   * @remarks
+   * - **Algorithm:** one `IN` lookup over the live memberships of `organizationId`; duplicates in
+   *   the input collapse.
+   * - **Failure modes:** none raised — an unknown, deleted or foreign id is simply absent from the
+   *   map, so the caller decides the error (it knows the field the id came from).
+   * - **Side effects:** none; runs on the ambient `withAppDatabaseContext` handle, so call it only
+   *   from inside the caller's context.
+   */
+  async resolveMembershipIdsByPublicIds(options: {
+    organizationId: number;
+    membershipPublicIds: readonly string[];
+  }): Promise<Map<string, number>> {
+    const rows = await this.membershipRepository.findIdsByPublicIds(options.organizationId, [
+      ...new Set(options.membershipPublicIds),
+    ]);
+    return new Map(rows.map((row) => [row.public_id, row.id]));
+  }
+
+  /**
    * Resolves user + role summaries (and the live invitation for `INVITED` rows) for a page of
    * memberships and serializes them. The internal `user_id`/`role_id` are never emitted; user
    * summaries go through the SECURITY DEFINER resolver (auth.users is FORCE RLS and unreachable by a

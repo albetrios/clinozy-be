@@ -147,6 +147,7 @@ Flat domains (`audit`, `upload`) keep layers at domain root (no `sub-domains/`).
 | **billing**     | plan, subscription, stripe-webhook                                                                                                                                                                                                                                                          |
 | **notify**      | notification, webhook (webhook-event, webhook-delivery)                                                                                                                                                                                                                                     |
 | **upload**      | (single domain, no sub-domains)                                                                                                                                                                                                                                                             |
+| **app**         | branches (branch-user-accesses) — the clinic records, Postgres schema `app`                                                                                                                                                                                                                 |
 
 **Permission resolution** (tenancy domain, not under `shared/`):
 
@@ -187,7 +188,7 @@ src/infrastructure/
     base-repository.ts        # Abstract BaseRepository with paginate()
     transaction.ts            # withTransaction() helper
     resource-quota-lock.util.ts # Advisory-lock guard for resource caps (per-scope count+insert serialization)
-    pg-schemas.ts             # Shared pgSchema definitions (auth, tenancy, billing, notify, audit, upload)
+    pg-schemas.ts             # Shared pgSchema definitions (auth, tenancy, billing, notify, audit, upload, app)
     migration/migrate.ts      # Migration runner (+ migration-version.ts, migration-execution-mode.ts)
     contexts/                 # DB context wrappers (request / organization / tenant / user / retention / worker / system-audit-insert / global-admin / audit-outbox-drain) that set the RLS GUC
     pool/                     # Pool instrumentation (organization-rls-checkout-counter.ts)

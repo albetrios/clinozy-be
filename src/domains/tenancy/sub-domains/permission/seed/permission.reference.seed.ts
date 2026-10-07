@@ -46,6 +46,11 @@ export const SYSTEM_PERMISSIONS = [
   { code: 'audit-log:read', name: 'View Audit Logs', category: 'audit' },
   // Upload
   { code: 'upload:manage', name: 'Manage Uploads', category: 'upload' },
+  // App (the clinic records)
+  { code: 'branch:read', name: 'View Branches', category: 'app' },
+  { code: 'branch:create', name: 'Create Branches', category: 'app' },
+  { code: 'branch:update', name: 'Update Branches', category: 'app' },
+  { code: 'branch:delete', name: 'Delete Branches', category: 'app' },
 ] as const;
 
 /**

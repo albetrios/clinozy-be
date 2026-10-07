@@ -57,7 +57,9 @@
     "avatarKeyNotOwned": "La clave de avatar no pertenece a este usuario",
     "logoKeyNotOwned": "La clave de logo no pertenece a esta organización",
     "uploadNotConfirmed": "La carga debe confirmarse antes de poder adjuntarse",
-    "unrecognizedKey": "Clave no reconocida: \"{{key}}\""
+    "unrecognizedKey": "Clave no reconocida: \"{{key}}\"",
+    "branchMembershipNotFound": "{{membership_id}} no es miembro de esta organización",
+    "branchClosesBeforeOpens": "La hora de cierre debe ser posterior a la de apertura"
   },
   "missingSessionCookie": "Falta la cookie de sesión",
   "disposableEmail": "Este dominio de correo no está permitido.",
@@ -169,5 +171,7 @@
   "queueDashboardReadOnly": "Las mutaciones del panel de colas están deshabilitadas en este entorno",
   "idempotencyKeyRequired": "El encabezado X-Idempotency-Key es obligatorio para esta operación",
   "invalidMetricsToken": "Token de métricas inválido o ausente",
-  "resourceBusy": "El recurso está ocupado en este momento. Vuelve a intentarlo en un momento."
+  "resourceBusy": "El recurso está ocupado en este momento. Vuelve a intentarlo en un momento.",
+  "branchNameExists": "Ya existe una sucursal llamada \"{{name}}\" en esta organización",
+  "branchMainExists": "Solo una sucursal puede ser la principal"
 }

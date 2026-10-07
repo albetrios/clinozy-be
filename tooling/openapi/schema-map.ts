@@ -81,6 +81,13 @@ import {
 // ─── Upload ────────────────────────────────────────────────────────────
 import { createUploadDto } from '@/domains/upload/upload.dto.js';
 
+// ─── App ───────────────────────────────────────────────────────────────
+import {
+  CreateBranchDto,
+  UpdateBranchDto,
+} from '@/domains/app/sub-domains/branches/branches.dto.js';
+import { ReplaceBranchUserAccessesDto } from '@/domains/app/sub-domains/branches/branch-user-accesses/branch-user-accesses.dto.js';
+
 // ─── Notify ────────────────────────────────────────────────────────────
 import {
   CreateWebhookDto,
@@ -157,6 +164,11 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
 
   // ── Upload ──
   'POST /api/v1/uploads': createUploadDto,
+
+  // ── App: Branches ──
+  'POST /api/v1/app/branches': CreateBranchDto,
+  'PATCH /api/v1/app/branches/{branch_id}': UpdateBranchDto,
+  'PUT /api/v1/app/branches/{branch_id}/user-accesses': ReplaceBranchUserAccessesDto,
 
   // ── User: Avatar & export ──
   'PUT /api/v1/users/me/avatar': UploadAvatarDto,

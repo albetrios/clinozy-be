@@ -4,6 +4,7 @@
 export type { ResponseDefinition } from './building-blocks.js';
 export { wrapPaginated, wrapSuccess } from './building-blocks.js';
 
+import { appRouteResponses } from './routes/app.js';
 import { auditUploadRouteResponses } from './routes/audit-upload.js';
 import { billingRouteResponses } from './routes/billing.js';
 import { healthAuthUserRouteResponses } from './routes/health-auth-user.js';
@@ -18,4 +19,5 @@ export const routeResponseMap: Record<string, import('./building-blocks.js').Res
   ...billingRouteResponses,
   ...notifyRouteResponses,
   ...auditUploadRouteResponses,
+  ...appRouteResponses,
 };

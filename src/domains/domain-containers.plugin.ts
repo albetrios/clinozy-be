@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import fp from 'fastify-plugin';
+import { registerAppContainer } from '@/domains/app/app.container.js';
 import { registerAuditContainer } from '@/domains/audit/audit.container.js';
 import { registerAuthContainer } from '@/domains/auth/auth.container.js';
 import { registerBillingContainer } from '@/domains/billing/billing.container.js';
@@ -11,6 +12,7 @@ import { registerUserContainer } from '@/domains/user/user.container.js';
 async function registerDomainContainers(application: FastifyInstance): Promise<void> {
   registerUserContainer(application);
   registerTenancyContainer(application);
+  registerAppContainer(application);
   registerAuditContainer(application);
   registerAuthContainer(application);
   registerBillingContainer(application);

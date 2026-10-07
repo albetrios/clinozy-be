@@ -38,6 +38,9 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
   'GET /api/v1/billing/subscriptions/:subscription_id/payment-setup':
     'object-ownership: subscription payment-setup (cross-organization)',
   'GET /api/v1/notify/webhooks/:webhook_id': 'cross-organization-resource: webhook',
+  'GET /api/v1/app/branches/:branch_id': 'cross-organization-resource: branch',
+  'GET /api/v1/app/branches/:branch_id/user-accesses':
+    'cross-organization-resource: branch user-accesses',
   'GET /api/v1/notify/webhooks/:webhook_id/delivery-attempts':
     'cross-organization-resource: webhook delivery-attempts',
   'GET /api/v1/tenancy/organization/api-keys/:api_key_id': 'cross-organization-resource: API key',
@@ -61,6 +64,9 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
   'POST /api/v1/billing/subscriptions/:subscription_id/resume':
     'cross-organization-mutation: subscription resume',
   'PATCH /api/v1/notify/webhooks/:webhook_id': 'cross-organization-mutation: webhook PATCH',
+  'PATCH /api/v1/app/branches/:branch_id': 'cross-organization-mutation: branch PATCH',
+  'PUT /api/v1/app/branches/:branch_id/user-accesses':
+    'cross-organization-mutation: branch user-accesses PUT',
   'POST /api/v1/notify/webhooks/:webhook_id/test': 'cross-organization-mutation: webhook test',
   'PATCH /api/v1/tenancy/organization/api-keys/:api_key_id':
     'cross-organization-mutation: API key PATCH',

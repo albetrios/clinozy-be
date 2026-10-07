@@ -69,22 +69,22 @@ messaging webhook D32, branch holidays D41).
 
 ## Branches
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| RC-12 | NEW | GET | `/api/v1/app/branches` | any role (active only); users · view (incl. inactive) | listBranches, listBranches (settings) | `schema-routes.md:1564, 1748` |
-| RC-13 | NEW | POST | `/api/v1/app/branches` | users · create | create Branch | `schema-routes.md:1754` |
-| RC-14 | NEW | PATCH | `/api/v1/app/branches/{branch_id}` | users · edit | update Branch | `schema-routes.md:1754` |
-| RC-15 | NEW | GET | `/api/v1/app/branches/{branch_id}` | users · view | Branch drawer | `schema-routes.md:110` |
-| RC-149 | NEW | PUT | `/api/v1/app/branches/{branch_id}/team` | users · edit | set a branch's team in one write | `users.md:146` |
-| RC-192 | NEW | GET | `/api/v1/app/branches/{branch_id}/rooms` | any role (pickers) | a branch's rooms | D28; `PRD.md:56–57` |
-| RC-193 | NEW | POST | `/api/v1/app/branches/{branch_id}/rooms` | users · edit | add a room | D28 |
-| RC-194 | NEW | PATCH | `/api/v1/app/rooms/{room_id}` | users · edit | rename or deactivate a room | D28 |
-| RC-195 | NEW | GET | `/api/v1/app/branches/{branch_id}/machines` | any role (pickers) | a branch's machines | D28; `PRD.md:56–57` |
-| RC-196 | NEW | POST | `/api/v1/app/branches/{branch_id}/machines` | users · edit | add a machine | D28 |
-| RC-197 | NEW | PATCH | `/api/v1/app/machines/{machine_id}` | users · edit | rename or deactivate a machine | D28 |
-| RC-204 | NEW | GET | `/api/v1/app/branches/{branch_id}/holidays` | any role (booking) | a branch's holidays | D41; `H:2349` |
-| RC-205 | NEW | POST | `/api/v1/app/branches/{branch_id}/holidays` | users · edit | add a holiday | D41 |
-| RC-206 | NEW | PATCH | `/api/v1/app/branch-holidays/{branch_holiday_id}` | users · edit | change a holiday's date or label | D41 |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| RC-12 | NEW | GET | `/api/v1/app/branches` | any role (active only); users · view (incl. inactive) | listBranches, listBranches (settings) | `schema-routes.md:1564, 1748` | `GET /api/v1/app/branches` (`branch:read`) + `GET /api/v1/app/branches/my` (every member) · ROUTE #2 |
+| RC-13 | NEW | POST | `/api/v1/app/branches` | users · create | create Branch | `schema-routes.md:1754` | `POST /api/v1/app/branches` (`branch:create`) · ROUTE #2 |
+| RC-14 | NEW | PATCH | `/api/v1/app/branches/{branch_id}` | users · edit | update Branch | `schema-routes.md:1754` | `PATCH /api/v1/app/branches/{branch_id}` (`branch:update`) · ROUTE #2 |
+| RC-15 | NEW | GET | `/api/v1/app/branches/{branch_id}` | users · view | Branch drawer | `schema-routes.md:110` | `GET /api/v1/app/branches/{branch_id}` (`branch:read`) · ROUTE #2 |
+| RC-149 | NEW | PUT | `/api/v1/app/branches/{branch_id}/team` | users · edit | set a branch's team in one write | `users.md:146` | `GET`/`PUT /api/v1/app/branches/{branch_id}/user-accesses` (`branch:update`) · ROUTE #2 |
+| RC-192 | NEW | GET | `/api/v1/app/branches/{branch_id}/rooms` | any role (pickers) | a branch's rooms | D28; `PRD.md:56–57` | — |
+| RC-193 | NEW | POST | `/api/v1/app/branches/{branch_id}/rooms` | users · edit | add a room | D28 | — |
+| RC-194 | NEW | PATCH | `/api/v1/app/rooms/{room_id}` | users · edit | rename or deactivate a room | D28 | — |
+| RC-195 | NEW | GET | `/api/v1/app/branches/{branch_id}/machines` | any role (pickers) | a branch's machines | D28; `PRD.md:56–57` | — |
+| RC-196 | NEW | POST | `/api/v1/app/branches/{branch_id}/machines` | users · edit | add a machine | D28 | — |
+| RC-197 | NEW | PATCH | `/api/v1/app/machines/{machine_id}` | users · edit | rename or deactivate a machine | D28 | — |
+| RC-204 | NEW | GET | `/api/v1/app/branches/{branch_id}/holidays` | any role (booking) | a branch's holidays | D41; `H:2349` | — |
+| RC-205 | NEW | POST | `/api/v1/app/branches/{branch_id}/holidays` | users · edit | add a holiday | D41 | — |
+| RC-206 | NEW | PATCH | `/api/v1/app/branch-holidays/{branch_holiday_id}` | users · edit | change a holiday's date or label | D41 | — |
 
 ## Leads and messages
 

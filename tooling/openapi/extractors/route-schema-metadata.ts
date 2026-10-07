@@ -34,6 +34,7 @@ const DOMAIN_PREFIX_BY_FOLDER: Record<string, string> = {
   billing: '/api/v1/billing',
   notify: '/api/v1/notify',
   upload: '/api/v1/uploads',
+  app: '/api/v1/app',
 };
 
 const SUPPLEMENTAL_ROUTE_FILES: Array<{ absolutePath: string; prefix: string }> = [

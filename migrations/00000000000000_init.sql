@@ -15,6 +15,8 @@ CREATE SCHEMA "tenancy";
 --> statement-breakpoint
 CREATE SCHEMA "upload";
 --> statement-breakpoint
+CREATE SCHEMA "app";
+--> statement-breakpoint
 DO $$
 BEGIN
 	CREATE ROLE clinozy_be_app NOLOGIN;
@@ -370,12 +372,22 @@ CREATE TABLE "tenancy"."organization_settings" (
 	"is_email_notifications_enabled" boolean DEFAULT true NOT NULL,
 	"default_locale" varchar(5) DEFAULT 'en' NOT NULL,
 	"security_policy" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"default_day_float" numeric(12, 2) DEFAULT '2000.00' NOT NULL,
+	"lead_hold_days" integer DEFAULT 3 NOT NULL,
+	"reminder_hour" smallint DEFAULT 16 NOT NULL,
+	"retarget_after_days" integer DEFAULT 90 NOT NULL,
+	"deleted_record_purge_days" integer DEFAULT 7 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
 	"updated_by_user_id" bigint,
 	CONSTRAINT "chk_org_settings_updated" CHECK ("tenancy"."organization_settings"."updated_at" >= "tenancy"."organization_settings"."created_at"),
-	CONSTRAINT "chk_organization_settings_default_locale" CHECK ("tenancy"."organization_settings"."default_locale" IN ('en', 'es'))
+	CONSTRAINT "chk_organization_settings_default_locale" CHECK ("tenancy"."organization_settings"."default_locale" IN ('en', 'es')),
+	CONSTRAINT "chk_organization_settings_default_day_float" CHECK ("tenancy"."organization_settings"."default_day_float" >= 0),
+	CONSTRAINT "chk_organization_settings_lead_hold_days" CHECK ("tenancy"."organization_settings"."lead_hold_days" >= 1),
+	CONSTRAINT "chk_organization_settings_reminder_hour" CHECK ("tenancy"."organization_settings"."reminder_hour" BETWEEN 0 AND 23),
+	CONSTRAINT "chk_organization_settings_retarget_after_days" CHECK ("tenancy"."organization_settings"."retarget_after_days" >= 1),
+	CONSTRAINT "chk_organization_settings_deleted_record_purge_days" CHECK ("tenancy"."organization_settings"."deleted_record_purge_days" >= 1)
 );
 --> statement-breakpoint
 ALTER TABLE "tenancy"."organization_settings" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
@@ -389,6 +401,9 @@ CREATE TABLE "tenancy"."organizations" (
 	"status" varchar(20) DEFAULT 'ACTIVE' NOT NULL,
 	"logo_url" varchar(512),
 	"stripe_customer_id" varchar(255),
+	"specialties" text[] DEFAULT ARRAY['skin']::text[] NOT NULL,
+	"timezone" varchar(64) DEFAULT 'Asia/Kolkata' NOT NULL,
+	"currency" varchar(3) DEFAULT 'INR' NOT NULL,
 	"deleted_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -397,7 +412,10 @@ CREATE TABLE "tenancy"."organizations" (
 	CONSTRAINT "chk_organizations_status" CHECK ("tenancy"."organizations"."status" IN ('ACTIVE', 'SUSPENDED', 'ARCHIVED')),
 	CONSTRAINT "chk_organizations_type" CHECK ("tenancy"."organizations"."type" IN ('PERSONAL', 'TEAM')),
 	CONSTRAINT "chk_organizations_slug" CHECK ("tenancy"."organizations"."slug" ~ '^[a-z0-9-]+$'),
-	CONSTRAINT "chk_organizations_updated" CHECK ("tenancy"."organizations"."updated_at" >= "tenancy"."organizations"."created_at")
+	CONSTRAINT "chk_organizations_updated" CHECK ("tenancy"."organizations"."updated_at" >= "tenancy"."organizations"."created_at"),
+	CONSTRAINT "chk_organizations_specialties_allowed" CHECK ("tenancy"."organizations"."specialties" <@ ARRAY['skin', 'hair', 'dental', 'gynac', 'physio', 'general']::text[]),
+	CONSTRAINT "chk_organizations_specialties_count" CHECK (cardinality("tenancy"."organizations"."specialties") BETWEEN 1 AND 6),
+	CONSTRAINT "chk_organizations_currency" CHECK ("tenancy"."organizations"."currency" = 'INR')
 );
 --> statement-breakpoint
 ALTER TABLE "tenancy"."organizations" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
@@ -802,11 +820,112 @@ BEGIN
   EXECUTE format('GRANT CONNECT ON DATABASE %I TO clinozy_be_app', database_name);
 END $$;
 --> statement-breakpoint
-GRANT USAGE ON SCHEMA auth, tenancy, billing, notify, audit, upload TO clinozy_be_app;
+-- app.branches — a clinic location of an organization (launch ROUTE #2).
+CREATE TABLE IF NOT EXISTS "app"."branches" (
+	"id" bigserial PRIMARY KEY NOT NULL,
+	"public_id" varchar(28) NOT NULL,
+	"organization_id" bigint NOT NULL,
+	"name" varchar(60) NOT NULL,
+	"tone" varchar(10) DEFAULT 'sage' NOT NULL,
+	"is_main" boolean DEFAULT false NOT NULL,
+	"address_line_one" varchar(120) NOT NULL,
+	"address_line_two" varchar(120),
+	"area" varchar(60) NOT NULL,
+	"city" varchar(60) NOT NULL,
+	"state" varchar(60) DEFAULT 'Gujarat' NOT NULL,
+	"postal_code" varchar(6) NOT NULL,
+	"phone" varchar(16) NOT NULL,
+	"email" varchar(120) NOT NULL,
+	"gst_number" varchar(15),
+	"opens_at" time DEFAULT '10:00' NOT NULL,
+	"closes_at" time DEFAULT '20:00' NOT NULL,
+	"working_days" text[] DEFAULT ARRAY['mon', 'tue', 'wed', 'thu', 'fri', 'sat']::text[] NOT NULL,
+	"default_doctor_membership_id" bigint,
+	"default_front_desk_membership_id" bigint,
+	"default_therapist_membership_id" bigint,
+	"default_pharmacist_membership_id" bigint,
+	"is_active" boolean DEFAULT true NOT NULL,
+	"maps_link" varchar(512),
+	"review_link" varchar(512),
+	"deleted_at" timestamp with time zone,
+	"delete_reason" varchar(20),
+	"delete_note" varchar(280),
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_by_user_id" bigint,
+	"updated_by_user_id" bigint,
+	CONSTRAINT "chk_branches_tone" CHECK ("app"."branches"."tone" IN ('butter', 'lav', 'sky', 'sage', 'blush', 'mint', 'peach', 'plum', 'lime', 'slate', 'stone')),
+	CONSTRAINT "chk_branches_postal_code" CHECK ("app"."branches"."postal_code" ~ '^\d{6}$'),
+	CONSTRAINT "chk_branches_phone" CHECK ("app"."branches"."phone" ~ '^\+91\d{10}$'),
+	CONSTRAINT "chk_branches_gst_number" CHECK ("app"."branches"."gst_number" ~ '^\d{2}[A-Z]{5}\d{4}[A-Z]\d[Z][A-Z\d]$'),
+	CONSTRAINT "chk_branches_hours" CHECK ("app"."branches"."closes_at" > "app"."branches"."opens_at"),
+	CONSTRAINT "chk_branches_working_days_allowed" CHECK ("app"."branches"."working_days" <@ ARRAY['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']::text[]),
+	CONSTRAINT "chk_branches_working_days_count" CHECK (cardinality("app"."branches"."working_days") BETWEEN 1 AND 7),
+	CONSTRAINT "chk_branches_maps_link" CHECK ("app"."branches"."maps_link" ~ '^https://'),
+	CONSTRAINT "chk_branches_review_link" CHECK ("app"."branches"."review_link" ~ '^https://'),
+	CONSTRAINT "chk_branches_delete_reason" CHECK ("app"."branches"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
+	CONSTRAINT "chk_branches_delete_reason_when_deleted" CHECK (("app"."branches"."deleted_at" IS NULL) = ("app"."branches"."delete_reason" IS NULL)),
+	CONSTRAINT "chk_branches_delete_note_when_other" CHECK ("app"."branches"."delete_reason" IS DISTINCT FROM 'other' OR "app"."branches"."delete_note" IS NOT NULL),
+	CONSTRAINT "chk_branches_updated" CHECK ("app"."branches"."updated_at" >= "app"."branches"."created_at")
+);
 --> statement-breakpoint
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA auth, tenancy, billing, notify, audit, upload TO clinozy_be_app;
+ALTER TABLE "app"."branches" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_default_doctor_membership_id_memberships_id_fk" FOREIGN KEY ("default_doctor_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_default_front_desk_membership_id_memberships_id_fk" FOREIGN KEY ("default_front_desk_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_default_therapist_membership_id_memberships_id_fk" FOREIGN KEY ("default_therapist_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_default_pharmacist_membership_id_memberships_id_fk" FOREIGN KEY ("default_pharmacist_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_branches_public_id" ON "app"."branches" USING btree ("public_id");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_branches_organization_name_unique" ON "app"."branches" USING btree ("organization_id", lower("name")) WHERE "app"."branches"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_branches_one_main_per_organization" ON "app"."branches" USING btree ("organization_id") WHERE "app"."branches"."is_main" AND "app"."branches"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branches_organization_id_name" ON "app"."branches" USING btree ("organization_id", "name");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branches_deleted_at" ON "app"."branches" USING btree ("deleted_at") WHERE "app"."branches"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branches_default_doctor_membership_id" ON "app"."branches" USING btree ("default_doctor_membership_id") WHERE "app"."branches"."default_doctor_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branches_default_front_desk_membership_id" ON "app"."branches" USING btree ("default_front_desk_membership_id") WHERE "app"."branches"."default_front_desk_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branches_default_therapist_membership_id" ON "app"."branches" USING btree ("default_therapist_membership_id") WHERE "app"."branches"."default_therapist_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branches_default_pharmacist_membership_id" ON "app"."branches" USING btree ("default_pharmacist_membership_id") WHERE "app"."branches"."default_pharmacist_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branches_created_by_user_id" ON "app"."branches" USING btree ("created_by_user_id") WHERE "app"."branches"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branches_updated_by_user_id" ON "app"."branches" USING btree ("updated_by_user_id") WHERE "app"."branches"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "branches_tenant_isolation" ON "app"."branches" AS PERMISSIVE FOR ALL TO public USING ("app"."branches"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )
+          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."branches"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+-- app.branch_user_accesses — which branches each person of an organization works in (launch ROUTE #2).
+CREATE TABLE IF NOT EXISTS "app"."branch_user_accesses" (
+	"branch_id" bigint NOT NULL,
+	"membership_id" bigint NOT NULL,
+	"organization_id" bigint NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_by_user_id" bigint,
+	CONSTRAINT "branch_user_accesses_pkey" PRIMARY KEY ("branch_id", "membership_id")
+);
 --> statement-breakpoint
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA auth, tenancy, billing, notify, audit, upload TO clinozy_be_app;
+ALTER TABLE "app"."branch_user_accesses" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "app"."branch_user_accesses" ADD CONSTRAINT "branch_user_accesses_branch_id_branches_id_fk" FOREIGN KEY ("branch_id") REFERENCES "app"."branches"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branch_user_accesses" ADD CONSTRAINT "branch_user_accesses_membership_id_memberships_id_fk" FOREIGN KEY ("membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branch_user_accesses" ADD CONSTRAINT "branch_user_accesses_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branch_user_accesses" ADD CONSTRAINT "branch_user_accesses_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_user_accesses_membership_id" ON "app"."branch_user_accesses" USING btree ("membership_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_user_accesses_organization_id" ON "app"."branch_user_accesses" USING btree ("organization_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_user_accesses_created_by_user_id" ON "app"."branch_user_accesses" USING btree ("created_by_user_id") WHERE "app"."branch_user_accesses"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "branch_user_accesses_tenant_isolation" ON "app"."branch_user_accesses" AS PERMISSIVE FOR ALL TO public USING ("app"."branch_user_accesses"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )) WITH CHECK ("app"."branch_user_accesses"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+GRANT USAGE ON SCHEMA auth, tenancy, billing, notify, audit, upload, app TO clinozy_be_app;
+--> statement-breakpoint
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA auth, tenancy, billing, notify, audit, upload, app TO clinozy_be_app;
+--> statement-breakpoint
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA auth, tenancy, billing, notify, audit, upload, app TO clinozy_be_app;
 --> statement-breakpoint
 ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO clinozy_be_app;
 --> statement-breakpoint
@@ -819,6 +938,8 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA notify GRANT SELECT, INSERT, UPDATE, DELETE O
 ALTER DEFAULT PRIVILEGES IN SCHEMA audit GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO clinozy_be_app;
 --> statement-breakpoint
 ALTER DEFAULT PRIVILEGES IN SCHEMA upload GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO clinozy_be_app;
+--> statement-breakpoint
+ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO clinozy_be_app;
 --> statement-breakpoint
 GRANT EXECUTE ON FUNCTION billing.resolve_organization_public_id_for_stripe_subscription (TEXT) TO clinozy_be_app;
 --> statement-breakpoint
@@ -837,6 +958,10 @@ ALTER TABLE tenancy.organization_settings FORCE ROW LEVEL SECURITY;
 ALTER TABLE tenancy.organization_notification_policies FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE tenancy.api_keys FORCE ROW LEVEL SECURITY;
+--> statement-breakpoint
+ALTER TABLE app.branches FORCE ROW LEVEL SECURITY;
+--> statement-breakpoint
+ALTER TABLE app.branch_user_accesses FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE billing.subscriptions FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint

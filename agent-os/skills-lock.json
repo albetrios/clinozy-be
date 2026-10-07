@@ -203,7 +203,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-schema-generator/SKILL.md",
-      "computedHash": "ed480d796ed2c1cace97ed009a9bdf59056d8f768b65afe90011dab2381b8cc2"
+      "computedHash": "83cfeabb144a8c7dd3f208ed652302d50217e70bbff712d7596b5d5474409ecc"
     },
     "be-seed-maintainer": {
       "source": "local",

@@ -9,6 +9,46 @@ src/
     │   └── register-event-handlers.ts
     └── core.overview.md
 ├── domains/
+    ├── app/
+    │   ├── __tests__/
+    │   │   └── integration/
+    │   │   │   └── app-route-smoke.integration.test.ts
+    │   ├── seed/
+    │   │   └── index.ts
+    │   ├── sub-domains/
+    │   │   └── branches/
+    │   │   │   ├── __tests__/
+    │   │   │       └── integration/
+    │   │   │       │   ├── branches-schema.integration.test.ts
+    │   │   │       │   └── branches.integration.test.ts
+    │   │   │   ├── branch-user-accesses/
+    │   │   │       ├── branch-user-accesses.controller.ts
+    │   │   │       ├── branch-user-accesses.dto.ts
+    │   │   │       ├── branch-user-accesses.repository.ts
+    │   │   │       ├── branch-user-accesses.routes.ts
+    │   │   │       ├── branch-user-accesses.schema.ts
+    │   │   │       ├── branch-user-accesses.serializer.ts
+    │   │   │       ├── branch-user-accesses.service.ts
+    │   │   │       └── branch-user-accesses.validator.ts
+    │   │   │   ├── seed/
+    │   │   │       ├── branches.bulk.seed.ts
+    │   │   │       ├── branches.seed.ts
+    │   │   │       └── index.ts
+    │   │   │   ├── branches.constants.ts
+    │   │   │   ├── branches.controller.ts
+    │   │   │   ├── branches.dto.ts
+    │   │   │   ├── branches.overview.md
+    │   │   │   ├── branches.repository.ts
+    │   │   │   ├── branches.routes.ts
+    │   │   │   ├── branches.schema.ts
+    │   │   │   ├── branches.serializer.ts
+    │   │   │   ├── branches.service.ts
+    │   │   │   ├── branches.types.ts
+    │   │   │   └── branches.validator.ts
+    │   ├── app.container.ts
+    │   ├── app.overview.md
+    │   ├── app.permissions.ts
+    │   └── app.routes.ts
     ├── audit/
     │   ├── __tests__/
     │   │   ├── integration/
@@ -1504,6 +1544,7 @@ src/
     │   └── worker-concurrency.util.ts
     ├── constants/
     │   ├── billing.constants.ts
+    │   ├── clinic-record.constants.ts
     │   ├── index.ts
     │   ├── limits.constants.ts
     │   ├── notification.constants.ts
@@ -1752,6 +1793,7 @@ src/
     │   ├── signup-flow.e2e.test.ts
     │   └── tenancy-billing-organization.e2e.test.ts
     ├── factories/
+    │   ├── branches.factory.ts
     │   ├── mfa-method.factory.ts
     │   ├── notification.factory.ts
     │   ├── organization-api-key.factory.ts

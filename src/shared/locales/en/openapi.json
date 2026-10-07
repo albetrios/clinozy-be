@@ -37,7 +37,8 @@
     "Stripe Webhook": "Stripe billing webhook receiver (raw body, signature verified)",
     "Notification": "User notification feed",
     "Webhook": "Webhook endpoint management and delivery history",
-    "Upload": "Pre-signed URL generation for file uploads"
+    "Upload": "Pre-signed URL generation for file uploads",
+    "Branch": "Clinic branches — locations, hours and who works where"
   },
   "components": {
     "bearerAuthDescription": "JWT access token obtained from the login or token refresh endpoint."

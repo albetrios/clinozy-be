@@ -85,6 +85,34 @@ function resolveOrganizationPermissionsForRequest(
 }
 
 /**
+ * Whether the authenticated caller holds `permissionCode` in its active organization — the
+ * non-throwing twin of {@link requireOrganizationPermission}, for a route whose result WIDENS
+ * with a permission rather than being gated by it (`GET /app/branches/my`: every branch for a
+ * branch reader, the assigned ones otherwise).
+ *
+ * @remarks
+ * - **Algorithm:** no auth or no organization claim → false; an API key → its scopes; a user →
+ *   the same per-request memoized permission set the preHandler resolves.
+ * - **Notes:** never use it to gate a write — a gate must throw (and audit the deny) through
+ *   {@link requireOrganizationPermission}.
+ */
+export async function hasOrganizationPermission(
+  request: FastifyRequest,
+  permissionCode: string,
+): Promise<boolean> {
+  const auth = request.auth;
+  const organizationPublicId = auth?.organizationPublicId;
+  if (!(auth && organizationPublicId)) return false;
+  if (auth.kind === 'apiKey') return auth.apiKeyScopes.includes(permissionCode);
+  const permissionCodes = await resolveOrganizationPermissionsForRequest(
+    request,
+    auth.userId,
+    organizationPublicId,
+  );
+  return permissionCodes.includes(permissionCode);
+}
+
+/**
  * Returns a Fastify preHandler that checks the authenticated user's global role.
  * Throws ForbiddenError if the user's role is not in the allowed list.
  *

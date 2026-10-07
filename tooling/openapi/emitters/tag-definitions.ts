@@ -35,6 +35,7 @@ export function buildTagDefinitions(
     Notification: 'User notification feed',
     Webhook: 'Webhook endpoint management and delivery history',
     Upload: 'Pre-signed URL generation for file uploads',
+    Branch: 'Clinic branches — locations, hours and who works where',
   };
   const tagDescriptions = tagStrings ?? builtInTagDescriptions;
 
@@ -71,6 +72,7 @@ export function buildTagDefinitions(
     'Notification',
     'Webhook',
     'Upload',
+    'Branch',
   ];
 
   const sortedTags = [...tagSet].sort((left, right) => {

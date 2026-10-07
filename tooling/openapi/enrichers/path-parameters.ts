@@ -11,6 +11,7 @@ const ENTITY_LABELS: Record<PublicIdEntity, string> = {
   memberInvitation: 'invitation',
   memberRole: 'role',
   organizationApiKey: 'API key',
+  branch: 'branch',
   organizationNotificationPolicy: 'notification policy',
   authSession: 'session',
   authMethod: 'auth method',

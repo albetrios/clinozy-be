@@ -55,7 +55,7 @@ reason — `schema-routes.md:126–134`, plus `updated_by` — `patients.md:28`)
 
 | Stage | Tables |
 | --- | --- |
-| Stage 1 — Foundation: the organization, branches and the team | `organization`, `branch`, `user`, `membership`, `role`, `permission`, `role_permission`, `user_preference`, `saved_view` |
+| Stage 1 — Foundation: the organization, branches and the team | `organization`, `branch`, `branch_user_accesses`, `user`, `membership`, `role`, `permission`, `role_permission`, `user_preference`, `saved_view` |
 | Stage 2 — Catalogue: what the clinic sells | `offering_group`, `offering`, `offer` |
 | Stage 3 — People and conversations | `patient`, `lead`, `lead_message`, `lead_read`, `message_template` |
 | Stage 4 — Scheduling and the visit | `branch_holiday`, `room`, `machine`, `appointment`, `visit` |
@@ -276,37 +276,55 @@ erDiagram
 ### branch · NEW
 
 - **Holds:** A clinic location. Read by header branch picker, every drawer's Branch field, print sheets; written by Users › Branches.
-- **Table (proposal):** `app.branches` — domain not chosen yet (Step 4)
+- **Table (built, ROUTE #2):** `app.branches` — code `app/sub-domains/branches/`
 - **Sources:** schema-routes.md:154–180 · PRD.md:151 · users.md:79–95, 126–156
-- **Added** (a frontend request, D3, unless a decision is named): `maps_link` (leads.md:427–432), `review_link` (leads.md:427–432)
-- **Open:** none — own branches, Owner and Admin all (D9); maps and review links for templates (D3)
+- **Added** (a frontend request, D3, unless a decision is named): `maps_link` (leads.md:427–432), `review_link` (leads.md:427–432); soft delete `delete_reason`, `delete_note` (schema-routes.md:126–134)
+- **Renamed at build** (repository rules): `address_line1/2` → `address_line_one/two`, `pin` → `postal_code`, `active` → `is_active`, `default_*_id` → `default_*_membership_id` (a membership is the staff member, D5)
+- **Open:** none — own branches, Owner and Admin all (D9 → `app.branch_user_accesses`); maps and review links for templates (D3)
 
 ```mermaid
 erDiagram
-  branch["branch · NEW"] {
+  branch["app.branches · NEW"] {
     id id PK
     text name
     choice tone
     boolean is_main
-    text address_line1
-    text address_line2
+    text address_line_one
+    text address_line_two
     text area
     text city
     text state
-    text pin
+    text postal_code
     text phone
     text email
     text gst_number
-    text opens_at
-    text closes_at
+    time opens_at
+    time closes_at
     json working_days
-    id default_doctor_id FK "→ user"
-    id default_desk_id FK "→ user"
-    id default_therapist_id FK "→ user"
-    id default_pharmacist_id FK "→ user"
-    boolean active
+    id default_doctor_membership_id FK "→ membership"
+    id default_front_desk_membership_id FK "→ membership"
+    id default_therapist_membership_id FK "→ membership"
+    id default_pharmacist_membership_id FK "→ membership"
+    boolean is_active
     text maps_link
     text review_link
+    choice delete_reason
+    text delete_note
+  }
+```
+
+### branch_user_accesses · NEW (built, not planned)
+
+- **Holds:** Who works in which branch — one row per (branch, membership). Read by `GET /app/branches/my` (every member's branch picker); written by `PUT /app/branches/{branch_id}/user-accesses` and, at row #4, the staff invite and edit.
+- **Table (built, ROUTE #2):** `app.branch_user_accesses` — code `app/sub-domains/branches/branch-user-accesses/`
+- **Sources:** D9 · users.md:126–156 (the plan held "branches" on the membership, row #4; built as a link table so each access is a real foreign key, user 2026-10-07)
+- **Open:** none
+
+```mermaid
+erDiagram
+  branch_user_accesses["app.branch_user_accesses · NEW"] {
+    id branch_id FK "→ branch"
+    id membership_id FK "→ membership"
   }
 ```
 

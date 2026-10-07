@@ -65,6 +65,23 @@ function payloadForPermissionRoute(
   if (route.path.includes('/notification-policies/:notification_policy_id')) {
     return { default_enabled: false };
   }
+  if (route.path.endsWith('/app/branches')) {
+    return {
+      name: 'Matrix branch',
+      address_line_one: '1 Main Road',
+      area: 'Adajan',
+      city: 'Surat',
+      postal_code: '395009',
+      phone: '+919800000000',
+      email: 'matrix@example.com',
+    };
+  }
+  if (route.path.endsWith('/branches/:branch_id/user-accesses')) {
+    return { membership_ids: [] };
+  }
+  if (route.path.includes('/branches/:branch_id')) {
+    return { name: 'Matrix branch' };
+  }
   if (route.path.endsWith('/webhooks')) {
     return { url: 'https://example.com/webhook', events: ['notification.created'] };
   }

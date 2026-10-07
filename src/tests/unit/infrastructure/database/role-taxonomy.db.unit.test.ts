@@ -39,10 +39,10 @@ describe('role taxonomy (owner / operator / migrator / app / maintenance)', () =
     }
   });
 
-  it('clinozy_be_owner owns every table in the six app schemas (drift lock)', async () => {
+  it('clinozy_be_owner owns every table in the seven application schemas (drift lock)', async () => {
     const rows = await queryRows<{ schemaname: string; tablename: string; tableowner: string }>(
       drizzleSql`SELECT schemaname, tablename, tableowner FROM pg_tables
-                 WHERE schemaname IN ('auth','tenancy','billing','notify','audit','upload')
+                 WHERE schemaname IN ('auth','tenancy','billing','notify','audit','upload','app')
                    AND tableowner <> 'clinozy_be_owner'`,
     );
     expect(
@@ -67,7 +67,7 @@ describe('role taxonomy (owner / operator / migrator / app / maintenance)', () =
     const rows = await queryRows<{ proname: string; owner: string }>(
       drizzleSql`SELECT p.proname, pg_get_userbyid(p.proowner) AS owner
                  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-                 WHERE p.prosecdef AND n.nspname IN ('auth','tenancy','billing','notify','audit','upload')`,
+                 WHERE p.prosecdef AND n.nspname IN ('auth','tenancy','billing','notify','audit','upload','app')`,
     );
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {

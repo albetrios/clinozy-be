@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 131
+  Total routes: 138
 ================================================================================
 
 Legend:
@@ -10,6 +10,20 @@ Legend:
   PERM    = Organization-scoped permission required
   TOKEN   = Credential enforced in-handler (non-JWT bearer token or session cookie)
   Columns after the path: S = success status · I = idempotency (req | -) · O = organization scope (both | team-only, 422 on personal)
+
+================================================================================
+  DOMAIN: APP (/api/v1/app)
+  Routes: 7
+================================================================================
+
+  — Sub Domains —
+  GET    /api/v1/app/branches                                     200  -    both  PERM: branch:read
+  POST   /api/v1/app/branches                                     200  -    both  PERM: branch:create
+  GET    /api/v1/app/branches/:branch_id                          200  -    both  PERM: branch:read
+  PATCH  /api/v1/app/branches/:branch_id                          200  -    both  PERM: branch:update
+  GET    /api/v1/app/branches/:branch_id/user-accesses            200  -    both  PERM: branch:update
+  PUT    /api/v1/app/branches/:branch_id/user-accesses            200  -    both  PERM: branch:update
+  GET    /api/v1/app/branches/my                                  200  -    both  PERM: organization:read
 
 ================================================================================
   DOMAIN: AUDIT (/api/v1/audit)
@@ -215,11 +229,11 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 131
+  Total routes    : 138
   Public          : 16
   Authenticated   : 50
   Role-guarded    : 9
-  Perm-guarded    : 51
+  Perm-guarded    : 58
   Token-guarded   : 5
   Team-only (O)   : 9
 
@@ -267,6 +281,10 @@ Legend:
 
   Upload:
     upload:manage
+
+  App:
+    branch:create                 branch:delete                 branch:read
+    branch:update
 
   Global Roles:
     super_admin                   user

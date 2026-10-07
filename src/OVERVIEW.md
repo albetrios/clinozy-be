@@ -70,6 +70,7 @@ Bounded contexts live under [src/domains/](src/domains/). Each domain owns its r
 
 | Domain | Routes | Purpose |
 | --- | --- | --- |
+| [app](src/domains/app/) | `/api/v1/app` | The clinic records (launch iteration): branches and who works in each — more tables join row by row. Postgres schema `app`. |
 | [audit](src/domains/audit/) | `/api/v1/audit` | Append-only audit log of security- and governance-relevant actions (`audit-emission` pattern). Read API is global-admin only. |
 | [auth](src/domains/auth/) | `/api/v1/auth` | Authentication: passwords (argon2id), email verification-code login, OAuth, MFA (TOTP), WebAuthn, sessions. Issues short-lived JWTs and Origin-checked session cookies. |
 | [billing](src/domains/billing/) | `/api/v1/billing` | Plans, subscriptions, and the Stripe integration. Stripe is authoritative; webhooks reconcile state via the `subscription-change-flow` and `dunning-flow`. |

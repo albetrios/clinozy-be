@@ -6,6 +6,7 @@ import {
   PUBLIC_API_VERSION_SEGMENT_V1,
 } from '@/shared/utils/http/api-versioning.util.js';
 import { domainContainersPlugin } from '@/domains/domain-containers.plugin.js';
+import { appRoutesPlugin } from '@/domains/app/app.routes.js';
 import { auditRoutesPlugin } from '@/domains/audit/audit.routes.js';
 import { authRoutesPlugin } from '@/domains/auth/auth.routes.js';
 import { userRoutesPlugin } from '@/domains/user/user.routes.js';
@@ -30,6 +31,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   await app.register(billingRoutesPlugin, { prefix: `${apiV1}/billing` });
   await app.register(notifyRoutesPlugin, { prefix: `${apiV1}/notify` });
   await app.register(uploadRoutesPlugin, { prefix: `${apiV1}/uploads` });
+  await app.register(appRoutesPlugin, { prefix: `${apiV1}/app` });
 
   if (getEnv().ENABLE_QUEUE_DASHBOARD) {
     await registerQueueDashboard(app, { auditService: app.auditDomain.auditService });

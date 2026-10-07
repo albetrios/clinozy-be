@@ -17,6 +17,8 @@ import {
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { NOTIFY_PERMISSIONS } from '@/domains/notify/notify.permissions.js';
+import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
+import { createTestBranch } from '@/tests/factories/branches.factory.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
 
 /**
@@ -53,6 +55,8 @@ describe('Security: cross-organization resource isolation (model: organization)'
     TENANCY_PERMISSIONS.ROLE_READ,
     TENANCY_PERMISSIONS.MEMBERSHIP_READ,
     NOTIFY_PERMISSIONS.WEBHOOK_READ,
+    APP_PERMISSIONS.BRANCH_READ,
+    APP_PERMISSIONS.BRANCH_UPDATE,
   ];
 
   // An organization with a non-owner member who can read every resource type, plus one of
@@ -84,11 +88,12 @@ describe('Security: cross-organization resource isolation (model: organization)'
       organizationId: organization.id,
       createdByUserId: owner.id,
     });
+    const branch = await createTestBranch({ organizationId: organization.id });
     const memberToken = await generateTestToken({
       userId: member.public_id,
       organizationPublicId: organization.public_id,
     });
-    return { organization, member, memberToken, role, membership, apiKey, policy, webhook };
+    return { organization, member, memberToken, role, membership, apiKey, policy, webhook, branch };
   }
 
   type OrgFixture = Awaited<ReturnType<typeof organizationWithResources>>;
@@ -123,6 +128,14 @@ describe('Security: cross-organization resource isolation (model: organization)'
       label: 'webhook delivery-attempts',
       path: (organization) =>
         `/notify/webhooks/${organization.webhook.public_id}/delivery-attempts`,
+    },
+    {
+      label: 'branch',
+      path: (organization) => `/app/branches/${organization.branch.public_id}`,
+    },
+    {
+      label: 'branch user-accesses',
+      path: (organization) => `/app/branches/${organization.branch.public_id}/user-accesses`,
     },
     {
       label: 'membership permissions',
