@@ -22,6 +22,13 @@ from [`.mcp.default.json`](../../.mcp.default.json).
 | **headroom** | `install-headroom.sh` | `headroom mcp serve` | Context compression — `headroom_compress` / `headroom_retrieve` / `headroom_stats` for large tool output |
 
 **PATH:** CLIs land in `~/.local/bin`; install sets `PATH="/opt/node24/bin:$HOME/.local/bin:$PATH"`.
+`codegraph` installs under `/opt/node24/bin`, which the process that launches MCP servers does
+not have on its `PATH`, so `install-codegraph.sh` links it into `~/.local/bin` (without the link
+the server fails with `ENOENT`).
+
+**Versions:** both CLIs are pinned in [`tool-versions.sh`](../../tooling/setup/agent/tool-versions.sh)
+(`CODEGRAPH_VERSION`, `HEADROOM_VERSION`). `pnpm tool:agent-tools --smoke` starts each server
+and lists its tools; `--outdated` reports newer releases.
 
 **Platform note:** Claude Code on the web loads MCP from the **environment MCP settings** in
 the web UI as well as repo `.mcp.json`. Cursor Cloud Agents read `.mcp.json` when present.

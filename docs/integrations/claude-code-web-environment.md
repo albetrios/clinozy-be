@@ -80,9 +80,34 @@ On the first session the cached Node 24 is already on disk, [`session-start.sh`]
 
 **gitleaks (recommended if you commit).** The pre-commit guard's "Staged secrets scan" step shells out to `gitleaks protect --staged …` and hard-errors when the binary is missing, so a cloud session cannot commit until gitleaks is installed. The cloud image does not ship it. [`install-gitleaks.sh`](../../tooling/setup/agent/install-gitleaks.sh) installs the **github.com release binary** (reachable on the default Trusted allowlist), pinned to the same version as the CI `security-secrets` job. If that download fails it falls back to `go install` — which must use gitleaks's **legacy self-declared module path** `github.com/zricethezav/gitleaks/v8` (the current `github.com/gitleaks` repo path fails Go's module-path check).
 
-**semgrep + k6 (optional).** [`install-semgrep.sh`](../../tooling/setup/agent/install-semgrep.sh) (via `uv`, unpinned like the CI SAST job) makes `pnpm security:sast` runnable — the scan itself also needs `semgrep.dev` on the allowlist. [`install-k6.sh`](../../tooling/setup/agent/install-k6.sh) installs the pinned **github.com release binary** for the `pnpm load:*` scenarios (the "latest release" lookups are blocked on Trusted, hence the pin).
+**semgrep + k6 (optional).** [`install-semgrep.sh`](../../tooling/setup/agent/install-semgrep.sh) (via `uv`) makes `pnpm security:sast` runnable — the scan itself also needs `semgrep.dev` on the allowlist. [`install-k6.sh`](../../tooling/setup/agent/install-k6.sh) installs the **github.com release binary** for the `pnpm load:*` scenarios. Both install the version pinned in [`tool-versions.sh`](../../tooling/setup/agent/tool-versions.sh) — see [Tool versions](#tool-versions-pinned-checked-at-install).
 
 **CodeGraph MCP on PATH.** The Claude Code process that launches MCP servers keeps the image `PATH`, which lacks `/opt/node24/bin`, so [`install-codegraph.sh`](../../tooling/setup/agent/install-codegraph.sh) links `codegraph` into `~/.local/bin` (on that `PATH`) — otherwise `codegraph serve --mcp` fails with `ENOENT` at session start.
+
+### Tool versions (pinned, checked at install)
+
+Every agent tool the bootstrap installs — `codegraph`, `headroom`, `semgrep`, `gitleaks`, `k6` — is pinned in **one file**, [`tooling/setup/agent/tool-versions.sh`](../../tooling/setup/agent/tool-versions.sh): plain `KEY=value` lines (a version, plus a SHA-256 per architecture for each downloaded binary). Node stays in `.nvmrc`, pnpm in `package.json` `packageManager`, Docker images in the compose files (Dependabot).
+
+| Piece | What it does |
+| ----- | ------------ |
+| `install-*.sh` (via [`tool-install.lib.sh`](../../tooling/setup/agent/tool-install.lib.sh)) | **Moves the machine to the pin**: installs when missing, **reinstalls when the installed version differs** (a cached environment never freezes on an old version), and refuses a release download whose SHA-256 does not match. |
+| CI ([`pr-ci.yml`](../../.github/workflows/pr-ci.yml), [`scheduled-k6-load-slo.yml`](../../.github/workflows/scheduled-k6-load-slo.yml)) | Appends the same file to `$GITHUB_ENV` and runs the same installers — CI and cloud sessions run identical versions, with no second copy to drift. |
+| `pnpm tool:agent-tools --smoke --outdated` | Run by `bootstrap.sh` at **every install**: each tool vs its pin, the `.mcp.default.json` servers started for real (`initialize` + `tools/list`), and **which pins have a newer release** — with the paste-ready lines (version + checksums) to bump. Report only; it never upgrades. |
+| Session-start banner | `tools 5/5 at pin`, or names the drifted tool (`k6 2.2.0≠2.3.0 — run bash tooling/setup/agent/bootstrap.sh`). Local `--version` calls only. |
+| [`agent-tool-versions.policy.unit.test.ts`](../../src/tests/unit/tooling/agent-tool-versions.policy.unit.test.ts) | Fails on an unpinned install, a hardcoded version, a missing checksum, or a tool added to one place but not the others. |
+
+**Upgrade flow — what if something breaks?**
+
+```text
+bootstrap reports "⬆ k6 2.3.0 → 2.4.0 available" + the lines to paste
+  → one-line PR to tool-versions.sh → CI installs and runs 2.4.0 → merge
+  → every session moves to 2.4.0 on its next bootstrap
+  → broken? revert the line → sessions move back on their next bootstrap
+```
+
+- **Nothing changes under you:** a tool moves only when its pin moves, and only through a reviewed PR that CI has exercised.
+- **Trial before you bump:** set the key (and, for a binary, its `*_SHA256_*` keys) as **variables on a separate cloud environment** — an environment variable overrides the pin, so a canary session runs the new version with no commit. A version override without its checksum is refused.
+- **Not pinned by this:** semgrep's `--config auto` / `p/default` rules come from the registry at scan time, so results can change on the same semgrep version.
 
 ---
 
@@ -227,7 +252,7 @@ The repo splits the MCP set into two tiers:
 
 Because the platform — not `.mcp.json` — drives a cloud session's MCP, set these in the environment's MCP settings:
 
-1. **Add the default pair so they auto-connect every session:** `codegraph` (command `codegraph serve --mcp`) and `headroom` (command `headroom mcp serve`). Their CLIs are installed by the Setup script above.
+1. **Add the default pair so they auto-connect every session:** `codegraph` (command `codegraph serve --mcp`) and `headroom` (command `headroom mcp serve`). Their CLIs are installed by the Setup script above, both in `~/.local/bin` (on the platform's `PATH`). Check them in-session with `pnpm tool:agent-tools --smoke` — it starts each server the way a client does and lists its tools.
 2. **Add any on-demand server a task needs** from `.mcp.example.json`, supplying its token via the environment **Variables**.
 3. **Do not add `Composio`, `Descript`, or `Slack`.** They are intentionally not part of this project's tooling — use `gh` / the GitHub MCP for GitHub, and keep any personal-account servers at the user level, separate from the repo. (See [agentic-third-party-tooling.md](agentic-third-party-tooling.md).)
 

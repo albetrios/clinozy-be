@@ -69,13 +69,21 @@ case ":${PATH}:" in
     ;;
 esac
 
-if ! command -v codegraph >/dev/null 2>&1; then
-  echo "install-codegraph: installing ${CODEGRAPH_PACKAGE}…" >&2
-  if ! npm install -g "${CODEGRAPH_PACKAGE}" >&2 2>&1; then
+# shellcheck source=tool-install.lib.sh
+source "${repository_root}/tooling/setup/agent/tool-install.lib.sh"
+codegraph_version="$(pinned_version CODEGRAPH_VERSION)"
+current_version="$(installed_version codegraph --version)"
+
+if [ "${current_version}" = "${codegraph_version}" ]; then
+  echo "install-codegraph: codegraph ${current_version} is at the pin — nothing to install." >&2
+else
+  package="${CODEGRAPH_PACKAGE}@${codegraph_version}"
+  echo "install-codegraph: installing ${package} (found: ${current_version:-none})…" >&2
+  if ! npm install -g "${package}" >&2 2>&1; then
     echo "install-codegraph: global install failed — trying user prefix (${user_bin})…" >&2
     mkdir -p "${user_bin}" 2>/dev/null || true
-    if ! npm install -g "${CODEGRAPH_PACKAGE}" --prefix "${HOME}/.local" >&2 2>&1; then
-      echo "install-codegraph: user-prefix install failed — run \`npm i -g ${CODEGRAPH_PACKAGE}\` manually (non-fatal)." >&2
+    if ! npm install -g "${package}" --prefix "${HOME}/.local" >&2 2>&1; then
+      echo "install-codegraph: user-prefix install failed — run \`npm i -g ${package}\` manually (non-fatal)." >&2
       exit 0
     fi
   fi

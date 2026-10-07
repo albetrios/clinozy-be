@@ -148,8 +148,8 @@ a service to operate, so it sits *in front of* this list, not inside it.
 **Headroom** is a different category from the service MCPs above: it is an *agent-only context
 compression layer*, not a peer to any third-party service (no SDK, no CI/CD CLI). It compresses
 large tool output, logs, files, and RAG chunks before they reach the model (`headroom_compress`
-/ `headroom_retrieve` / `headroom_stats`). Local install: `pip install "headroom-ai[mcp]"` then
-`headroom mcp install` (the declarative entry is `{ "command": "headroom", "args": ["mcp",
+/ `headroom_retrieve` / `headroom_stats`). Local install: `bash tooling/setup/agent/install-headroom.sh` (the version pinned as
+`HEADROOM_VERSION` in `tooling/setup/agent/tool-versions.sh`; it also runs `headroom mcp install`) (the declarative entry is `{ "command": "headroom", "args": ["mcp",
 "serve"] }`). All agents should use it — see
 [`agent-os/rules/be-headroom-context-compression.mdc`](../../agent-os/rules/be-headroom-context-compression.mdc).
 

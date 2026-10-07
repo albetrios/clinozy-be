@@ -162,6 +162,13 @@ bash "${AGENT_DIR}/install-k6.sh" || true
 if command -v gitleaks >/dev/null 2>&1; then ok "[7/${TOTAL}] gitleaks $(gitleaks version 2>/dev/null)"; else skip "[7/${TOTAL}] gitleaks unavailable — pre-commit secret scan will fail (non-fatal)"; fi
 if command -v semgrep >/dev/null 2>&1; then ok "[7/${TOTAL}] semgrep $(semgrep --version 2>/dev/null)"; else skip "[7/${TOTAL}] semgrep unavailable — pnpm security:sast will fail (non-fatal)"; fi
 if command -v k6 >/dev/null 2>&1; then ok "[7/${TOTAL}] $(k6 version 2>/dev/null | head -1)"; else skip "[7/${TOTAL}] k6 unavailable — pnpm load:* will fail (non-fatal)"; fi
+# Every tool against its pin in tool-versions.sh, the default MCP servers started for real
+# (initialize + tools/list), and the newer releases waiting — report only: a bump is a PR.
+if pnpm tool:agent-tools --smoke --outdated >&2; then
+  ok "[7/${TOTAL}] agent tools at their pins; MCP servers answer"
+else
+  skip "[7/${TOTAL}] agent tools: one is off its pin or failed its MCP smoke test — see the report above (non-fatal)"
+fi
 
 # 8) Environment files (.env.local) -----------------------------------------
 step "[8/${TOTAL}] Environment (.env.local)"

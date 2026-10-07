@@ -31,8 +31,9 @@ for cloud sessions: **[agent-os/cloud-environment/skills-and-mcps.md](agent-os/c
 ## Cursor Cloud specific instructions
 
 The startup update script runs `bash tooling/setup/agent/bootstrap.sh --install-only` (Node 24
-via `/opt/node24/bin`, `pnpm install`, Docker CLI, `.env.local` scaffold); the same script
-without the flag brings up the stack. Always prefix shells
+via `/opt/node24/bin`, `pnpm install`, Docker CLI, the agent tools at the versions pinned in
+`tooling/setup/agent/tool-versions.sh` — codegraph, headroom, gitleaks, semgrep, k6 — and the
+`.env.local` scaffold); the same script without the flag brings up the stack. Always prefix shells
 with `export PATH="/opt/node24/bin:$HOME/.local/bin:$PATH"` — the base image default is Node 22,
 which trips the engines gate. Lint/typecheck/unit tests need no services; e2e/`pnpm dev` need
 Postgres + Redis (see [agents-cloud.md](agent-os/cloud-environment/agents-cloud.md)).

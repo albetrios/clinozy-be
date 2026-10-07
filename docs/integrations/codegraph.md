@@ -36,27 +36,32 @@ The local bootstrap runs CodeGraph as **phase `7/9`**. It is idempotent and non-
 
 ```mermaid
 flowchart TD
-  A[setup:local phase 7/9] --> B{codegraph CLI on PATH?}
-  B -- no --> C[npm i -g @colbymchenry/codegraph]
+  A[setup:local phase 7/9] --> B{codegraph CLI at the pinned version?}
+  B -- "no (missing or another version)" --> C["npm i -g @colbymchenry/codegraph@CODEGRAPH_VERSION"]
   B -- yes --> D{codegraph.db exists?}
   C --> D
   D -- no, fresh clone --> E["codegraph init<br/>(full index)"]
   D -- yes --> F["codegraph sync<br/>(fast incremental refresh)"]
 ```
 
-- **First run / fresh clone** — `codegraph.db` is absent, so it runs `codegraph init` (after installing the CLI globally if missing), which builds the index from the current working tree.
+- **Version** — pinned as `CODEGRAPH_VERSION` in [`tooling/setup/agent/tool-versions.sh`](../../tooling/setup/agent/tool-versions.sh), the same pin the cloud bootstrap installs; a missing CLI or another installed version is replaced with the pin. Bump policy: [Tool versions](claude-code-web-environment.md#tool-versions-pinned-checked-at-install).
+- **First run / fresh clone** — `codegraph.db` is absent, so it runs `codegraph init` (after installing the pinned CLI if needed), which builds the index from the current working tree.
 - **Subsequent runs** — the DB exists, so it runs the fast incremental `codegraph sync`.
 - **MCP config** — the next step declares the `codegraph` server (with `headroom`) in `.mcp.json`, writing through the symlink, so Claude Code and Cursor both pick it up.
 - **Skip it** — `pnpm setup:local --skip-codegraph`.
 
 > After the first run, **restart your agent** (Cursor / Claude Code) so it loads the new `codegraph` MCP server. This is the one manual step CodeGraph requires.
 
+### Cloud sessions
+
+The cloud bootstrap runs [`install-codegraph.sh`](../../tooling/setup/agent/install-codegraph.sh): the pinned CLI, then `codegraph init` / `sync` — the same flow as above. The global install lands in the pinned Node's bin (`/opt/node24/bin`), which the process that launches MCP servers does not have on its `PATH`, so the script also links `codegraph` into `~/.local/bin`. `pnpm tool:agent-tools --smoke` starts the server exactly as an MCP client does and lists its tools.
+
 ---
 
 ## Manual setup (without `setup:local`)
 
 ```bash
-npm i -g @colbymchenry/codegraph
+npm i -g "@colbymchenry/codegraph@$(sed -n 's/^CODEGRAPH_VERSION=//p' tooling/setup/agent/tool-versions.sh)"   # the pinned version
 codegraph init           # build the index
 pnpm mcp:setup:default   # declare codegraph + headroom in .mcp.json (Claude Code + Cursor share it)
 # `pnpm mcp:setup` for the full set; then replace ${CONTEXT7_API_KEY} etc. — the codegraph entry needs no edits
@@ -99,7 +104,8 @@ pnpm mcp:setup:default   # declare codegraph + headroom in .mcp.json (Claude Cod
 | Agent does not show `codegraph_*` tools | Restart the agent (Cursor / Claude Code) so it loads the MCP server from `.cursor/mcp.json` / `.mcp.json`. |
 | `CodeGraph not initialized` | Run `codegraph init` (or `pnpm setup:local`) from the repo root. |
 | `git status` shows `T .mcp.json` / `T .claude/settings.json` | A local `codegraph install` replaced the symlinks — `git checkout -- .mcp.json .cursor/mcp.json .claude/settings.json`, then `pnpm mcp:setup:default`. |
-| `codegraph: command not found` | `npm i -g @colbymchenry/codegraph`. |
+| `codegraph: command not found` | `pnpm setup:local` (local) or `bash tooling/setup/agent/install-codegraph.sh` (cloud) — both install the pinned version. |
+| MCP server fails at session start: `Executable not found in $PATH: codegraph` (ENOENT) | The CLI is only under `/opt/node24/bin`; re-run `bash tooling/setup/agent/install-codegraph.sh` to link it into `~/.local/bin`, then start a fresh session. |
 | Index out of date | `codegraph sync` (incremental) or `codegraph index --force` (full rebuild). |
 | Stale tools after a large refactor | `codegraph index --force`. |
 

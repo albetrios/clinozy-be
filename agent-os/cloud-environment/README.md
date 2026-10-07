@@ -14,6 +14,7 @@ operators copy into each platform's environment config.
 | ---- | ------- |
 | [`environment.json`](environment.json) | Cursor Cloud Agents — `install`, `start`, optional `terminals` |
 | [`bootstrap.sh`](../../tooling/setup/agent/bootstrap.sh) | The one setup script: `--install-only` = idempotent cached install (tools + deps + MCP default pair + `.env.local`); no flag = that plus the full stack bring-up |
+| [`tool-versions.sh`](../../tooling/setup/agent/tool-versions.sh) | The pinned version (+ SHA-256 per binary) of every agent tool — codegraph, headroom, semgrep, gitleaks, k6. Installers move the machine to it; CI installs the same pins; `pnpm tool:agent-tools --smoke --outdated` (run by `bootstrap.sh`) reports drift, MCP smoke and newer releases. Policy: [Tool versions](../../docs/integrations/claude-code-web-environment.md#tool-versions-pinned-checked-at-install) |
 | [`agents-cloud.md`](agents-cloud.md) | On-demand stack instructions every agent reads via `AGENTS.md` |
 | [`skills-and-mcps.md`](skills-and-mcps.md) | Which MCPs, skills, and subagents cloud sessions use |
 
@@ -37,6 +38,13 @@ operators copy into each platform's environment config.
 Minimum Custom allowlist entry beyond defaults:
 
 - `nodejs.org` — Node 24 install (`install-node.sh`)
+
+Recommended for agent tooling (blocked on the default Trusted list):
+
+- `semgrep.dev` — `pnpm security:sast` downloads its rules here
+- `context7.com` — the Context7 docs MCP
+- `openaipublic.blob.core.windows.net` — Headroom's tiktoken token counter
+- `us.i.posthog.com` — PostHog events (otherwise silently dropped)
 
 For Docker image pulls without the GCR mirror script, also add
 `production.cloudfront.docker.com`. Prefer

@@ -42,6 +42,7 @@ import { createServer } from 'node:net';
 import { resolve } from 'node:path';
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
+import { AGENT_TOOLS, readInstalledVersion, readToolVersions } from './agent-tools.js';
 import { ensureDefaultMcpServers } from './mcp-config.js';
 import {
   EXTERNAL_CREDENTIALS,
@@ -939,16 +940,23 @@ function runCodeGraphSetup(reports: StepReport[], options: BootstrapOptions): vo
     return;
   }
 
-  const cliAvailable = captureCommand('codegraph', ['--version']).code === 0;
-  if (!cliAvailable) {
-    const install = captureCommand('npm', ['install', '-g', CODEGRAPH_PACKAGE]);
+  // The version pinned in tooling/setup/agent/tool-versions.sh — the same one the cloud
+  // bootstrap installs. A different installed version is replaced, not kept.
+  const codegraphTool = AGENT_TOOLS.find((tool) => tool.name === 'codegraph');
+  const pinnedVersion = codegraphTool ? readToolVersions()[codegraphTool.versionKey] : undefined;
+  const installedVersion = codegraphTool ? readInstalledVersion(codegraphTool) : undefined;
+  if (!installedVersion || installedVersion !== pinnedVersion) {
+    const codegraphPackage = pinnedVersion
+      ? `${CODEGRAPH_PACKAGE}@${pinnedVersion}`
+      : CODEGRAPH_PACKAGE;
+    const install = captureCommand('npm', ['install', '-g', codegraphPackage]);
     if (install.code !== 0) {
       reportStep(
         reports,
         'codegraph',
         'warning',
         startedAt,
-        `global install failed — run \`npm i -g ${CODEGRAPH_PACKAGE}\` manually (non-fatal)`,
+        `global install failed — run \`npm i -g ${codegraphPackage}\` manually (non-fatal)`,
       );
       return;
     }

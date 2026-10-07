@@ -72,8 +72,19 @@ docker compose -f docker-compose.yml -f tooling/setup/agent/docker-compose.cloud
 
 ## MCP default pair
 
-`bootstrap.sh` installs `codegraph` and `headroom` to `~/.local/bin` and runs
+`bootstrap.sh` installs `codegraph` and `headroom` to `~/.local/bin` (`codegraph` is linked
+there from the pinned Node's bin, so the platform's `PATH` finds it) and runs
 `pnpm mcp:setup:default` (same as local `pnpm setup:local`). If MCP tools are missing in a
-session, confirm platform MCP settings match [`.mcp.default.json`](../../.mcp.default.json)
-and start a fresh session. For **be-stack-monitor**, add `dashboards` via
+session, run `pnpm tool:agent-tools --smoke` (starts each server and lists its tools), confirm
+platform MCP settings match [`.mcp.default.json`](../../.mcp.default.json), and start a fresh
+session.
+
+## Agent tool versions
+
+`codegraph`, `headroom`, `semgrep`, `gitleaks` and `k6` are pinned in
+[`tool-versions.sh`](../../tooling/setup/agent/tool-versions.sh). The session-start banner says
+`tools 5/5 at pin` or names the drifted tool — then run `bash tooling/setup/agent/bootstrap.sh`
+(each installer moves the machine to its pin). `pnpm tool:agent-tools --outdated` lists newer
+releases with the lines to paste for a bump PR. Policy and upgrade flow:
+[Tool versions](../../docs/integrations/claude-code-web-environment.md#tool-versions-pinned-checked-at-install). For **be-stack-monitor**, add `dashboards` via
 `pnpm mcp:setup dashboards` after `pnpm dashboards:up` — see [`skills-and-mcps.md`](skills-and-mcps.md).
