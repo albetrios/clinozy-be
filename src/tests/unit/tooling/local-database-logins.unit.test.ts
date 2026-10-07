@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 import {
   alterRoleStatement,
   applyLocalDatabaseLogins,
-  environmentDatabaseUrlProblems,
+  environmentConnectionUrlProblems,
   localDatabaseLogins,
   passwordFromUrl,
   planLocalDatabaseLogins,
@@ -111,9 +111,9 @@ describe('setup:local — the local database logins', () => {
   });
 });
 
-describe('setup:local — database URLs in the process environment', () => {
+describe('setup:local — database and Redis URLs in the process environment', () => {
   const problems = (environment: Record<string, string | undefined>, envLocal = '') =>
-    environmentDatabaseUrlProblems({ envLocal, environment, logins: LOGINS });
+    environmentConnectionUrlProblems({ envLocal, environment, logins: LOGINS });
 
   it('accepts nothing set, and local URLs that log in as the role of each variable', () => {
     expect(problems({})).toEqual([]);
@@ -165,6 +165,19 @@ describe('setup:local — database URLs in the process environment', () => {
     expect(problems({ DATABASE_URL: SUPERUSER_URL }, `DATABASE_URL=${SUPERUSER_URL}\n`)).toEqual(
       [],
     );
+  });
+
+  it('holds REDIS_URL to the local Redis: hosted is rejected, local or the file value passes', () => {
+    expect(problems({ REDIS_URL: 'redis://localhost:6379' })).toEqual([]);
+    expect(problems({ REDIS_URL: 'redis://127.0.0.1:6379/1' })).toEqual([]);
+    const hosted = 'rediss://default:hosted-secret@redis-dev.example.cloud:6380';
+    const found = problems({ REDIS_URL: hosted });
+    expect(found).toEqual([
+      { envKey: 'REDIS_URL', problem: 'points at redis-dev.example.cloud, not the local Redis' },
+    ]);
+    expect(JSON.stringify(found)).not.toContain('hosted-secret');
+    // A developer who points .env.local itself at a hosted Redis is not overridden by it.
+    expect(problems({ REDIS_URL: hosted }, `REDIS_URL=${hosted}\n`)).toEqual([]);
   });
 });
 

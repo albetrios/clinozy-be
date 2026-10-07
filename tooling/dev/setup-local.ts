@@ -53,7 +53,7 @@ import { applyLocalCaptcha, TURNSTILE_ALWAYS_PASS_TEST_SITE_KEY } from './local-
 import {
   alterRoleStatement,
   applyLocalDatabaseLogins,
-  environmentDatabaseUrlProblems,
+  environmentConnectionUrlProblems,
   localDatabaseLogins,
   planLocalDatabaseLogins,
 } from './local-database-logins.js';
@@ -402,7 +402,7 @@ function runInstallDependencies(reports: StepReport[], options: BootstrapOptions
 function runEnvScaffolding(reports: StepReport[], options: BootstrapOptions): void {
   logHeading('3/9 Environment (.env.local)');
   scaffoldEnvLocal(reports, options);
-  checkEnvironmentDatabaseUrls(reports, options);
+  checkEnvironmentConnectionUrls(reports, options);
   syncExternalCredentials(reports, options);
   configureLocalCaptcha(reports, options);
 }
@@ -607,15 +607,16 @@ function scaffoldEnvLocal(reports: StepReport[], options: BootstrapOptions): voi
 }
 
 /**
- * Stops when the process environment sets a database URL the local stack must own — a remote
- * host, or a login other than the variable's role (`environmentDatabaseUrlProblems`). The
+ * Stops when the process environment sets a database or Redis URL the local stack must own — a
+ * remote host, or a login other than the variable's role (`environmentConnectionUrlProblems`). The
  * environment beats `.env.local`, so a cloud environment's Variables copied from development
- * would otherwise migrate, seed or run maintenance contexts against the hosted database. Runs in
- * the env phase, before Docker and migrations; skipped when `.env.local` itself is remote.
+ * would otherwise migrate, seed, queue or run maintenance contexts against the hosted database and
+ * Redis. Runs in the env phase, before Docker and migrations; skipped when `.env.local`'s
+ * `DATABASE_URL` is itself remote.
  */
-function checkEnvironmentDatabaseUrls(reports: StepReport[], options: BootstrapOptions): void {
+function checkEnvironmentConnectionUrls(reports: StepReport[], options: BootstrapOptions): void {
   const startedAt = performance.now();
-  const phase = 'database URLs in the environment';
+  const phase = 'database and Redis URLs in the environment';
   if (!existsSync(ENV_LOCAL_PATH)) {
     reportStep(reports, phase, 'skipped', startedAt, 'no .env.local yet');
     return;
@@ -626,7 +627,7 @@ function checkEnvironmentDatabaseUrls(reports: StepReport[], options: BootstrapO
     reportStep(reports, phase, 'skipped', startedAt, 'DATABASE_URL points at a remote database');
     return;
   }
-  const problems = environmentDatabaseUrlProblems({
+  const problems = environmentConnectionUrlProblems({
     envLocal,
     environment: process.env,
     logins: LOCAL_DATABASE_LOGINS,

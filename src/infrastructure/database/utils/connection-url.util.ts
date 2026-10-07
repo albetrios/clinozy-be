@@ -101,7 +101,8 @@ const LOCAL_DATABASE_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
  * - **Failure modes:** an unset or unparseable value is not local.
  * - **Side effects:** none — pure string parsing.
  * - **Notes:** the one check the test harness's local-database switch, the bulk-seed guard and
- *   `pnpm setup:local` share.
+ *   `pnpm setup:local` share. It only reads the hostname, so `setup:local`'s environment guard
+ *   applies it to `REDIS_URL` as well.
  */
 export function isLocalDatabaseUrl(value: string | undefined): boolean {
   if (!value) return false;

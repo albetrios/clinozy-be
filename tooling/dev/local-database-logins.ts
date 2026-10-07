@@ -151,26 +151,33 @@ export function applyLocalDatabaseLogins(options: {
   return content;
 }
 
-/** A database URL in the process environment that would take a local session off its logins. */
-export type EnvironmentDatabaseUrlProblem = { envKey: string; problem: string };
+/** A connection URL in the process environment that would take a local session off its stack. */
+export type EnvironmentConnectionUrlProblem = { envKey: string; problem: string };
+
+/** The connection URLs a local session owns, with the service each must reach on this machine. */
+const LOCAL_CONNECTION_URL_KEYS: readonly [envKey: string, service: string][] = [
+  ...DATABASE_URL_KEYS.map((envKey): [string, string] => [envKey, 'Postgres']),
+  ['REDIS_URL', 'Redis'],
+];
 
 /**
- * The database URLs the process environment sets that a local session must not use. With
- * `NODE_ENV` unset the loader keeps the environment's value over `.env.local`'s, so a cloud
- * environment given development's Variables would migrate, seed or run maintenance contexts
- * against the hosted database. Allowed: the value `.env.local` itself holds (inherited from a
- * process that loaded it), and a local URL that logs in as the variable's role (its password is
- * adopted — see `planLocalDatabaseLogins`); `DATABASE_MIGRATION_URL` only has to be local.
- * Problems name the user and host, never the password.
+ * The database and Redis URLs the process environment sets that a local session must not use.
+ * With `NODE_ENV` unset the loader keeps the environment's value over `.env.local`'s, so a cloud
+ * environment given development's Variables would migrate, seed, queue or run maintenance contexts
+ * against the hosted database and Redis. Allowed: the value `.env.local` itself holds (inherited
+ * from a process that loaded it), and a local URL that, for a database login, logs in as the
+ * variable's role (its password is adopted — see `planLocalDatabaseLogins`);
+ * `DATABASE_MIGRATION_URL` and `REDIS_URL` only have to be local. Problems name the user and
+ * host, never the password.
  */
-export function environmentDatabaseUrlProblems(options: {
+export function environmentConnectionUrlProblems(options: {
   envLocal: string;
   environment: Readonly<Record<string, string | undefined>>;
   logins: readonly LocalDatabaseLogin[];
-}): EnvironmentDatabaseUrlProblem[] {
+}): EnvironmentConnectionUrlProblem[] {
   const envLocalValues = dotenv.parse(options.envLocal);
-  const problems: EnvironmentDatabaseUrlProblem[] = [];
-  for (const envKey of DATABASE_URL_KEYS) {
+  const problems: EnvironmentConnectionUrlProblem[] = [];
+  for (const [envKey, service] of LOCAL_CONNECTION_URL_KEYS) {
     const value = options.environment[envKey];
     if (!value || value === envLocalValues[envKey]) continue;
     const role = options.logins.find((login) => login.envKey === envKey)?.role;
@@ -179,7 +186,7 @@ export function environmentDatabaseUrlProblems(options: {
     if (!isLocalDatabaseUrl(value)) {
       problems.push({
         envKey,
-        problem: `points at ${url?.hostname || 'an unparseable URL'}, not the local Postgres`,
+        problem: `points at ${url?.hostname || 'an unparseable URL'}, not the local ${service}`,
       });
     } else if (role && user !== role) {
       problems.push({ envKey, problem: `logs in as ${user || 'no user'}, not ${role}` });

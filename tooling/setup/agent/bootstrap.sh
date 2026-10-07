@@ -4,7 +4,8 @@
 # Runs every agent setup helper in order — Node, gh, Docker CLI/Compose, Docker
 # daemon, Docker images (registry mirror), CodeGraph, Headroom, gitleaks — scaffolds a
 # self-contained `.env.local` (`pnpm setup:local --only-env`, which first stops on a
-# DATABASE_*_URL in the environment that is remote or the wrong login), then brings up
+# DATABASE_*_URL in the environment that is remote or the wrong login, or a remote
+# REDIS_URL), then brings up
 # the local Docker stack (Postgres + Redis), migrates, enables the database logins
 # the migrations create (`pnpm setup:local --only-env` again), seeds, and verifies the
 # app is healthy (/livez + /readyz). A single command to make a cloud session

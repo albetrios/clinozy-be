@@ -104,8 +104,8 @@ On the first session the cached Node 24 is already on disk, [`session-start.sh`]
   `DATABASE_MIGRATION_URL`, `DATABASE_MAINTENANCE_URL`, `DATABASE_OPERATOR_URL`), `REDIS_URL` and
   `DATABASE_SSL_ENABLED` (those follow the session's own Postgres + Redis). `pnpm setup:local`
   (and so `install.sh` and `bootstrap.sh`) stops when a Variable sets a `DATABASE_*_URL` that is
-  remote or logs in as another role — the Variable would beat `.env.local` and point the session
-  at the hosted database. Third-party keys
+  remote or logs in as another role, or a remote `REDIS_URL` — the Variable would beat
+  `.env.local` and point the session at the hosted database or Redis. Third-party keys
   (Resend, Stripe test mode, OAuth, S3, Sentry DSN, …) then match development. A blank `KEY=`
   placeholder in `.env.local` no longer deletes a Variable
   ([`load-env-files.ts`](../../src/shared/config/load-env-files.ts), pinned by
