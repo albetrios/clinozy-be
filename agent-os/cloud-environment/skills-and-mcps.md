@@ -1,17 +1,18 @@
 # Cloud environment — skills, MCPs, and subagents
 
 What coding agents get in a **Cursor Cloud Agent** or **Claude Code on the web** session
-after the cached install (`install.sh`) and optional on-demand bring-up (`bootstrap.sh`).
+after the cached install (`bootstrap.sh --install-only`) and the in-session bring-up
+(`bootstrap.sh`).
 
-Canonical install: [`install.sh`](install.sh) · Stack bring-up: [`agents-cloud.md`](agents-cloud.md)
+One setup script: [`bootstrap.sh`](../../tooling/setup/agent/bootstrap.sh) · Stack bring-up: [`agents-cloud.md`](agents-cloud.md)
 
 ---
 
 ## MCP servers
 
-### Installed and auto-declared by `install.sh`
+### Installed and auto-declared by `bootstrap.sh`
 
-These are the **default auto-start pair** (zero token, local stdio). `install.sh` installs
+These are the **default auto-start pair** (zero token, local stdio). `bootstrap.sh` installs
 the CLIs and runs `pnpm mcp:setup:default` to write the gitignored [`.mcp.json`](../../.mcp.json)
 from [`.mcp.default.json`](../../.mcp.default.json).
 
@@ -27,7 +28,7 @@ the web UI as well as repo `.mcp.json`. Cursor Cloud Agents read `.mcp.json` whe
 Configure the same `codegraph` + `headroom` commands in the platform MCP panel if tools do
 not appear after a fresh session.
 
-### Often available from the platform (not in `install.sh`)
+### Often available from the platform (not in `bootstrap.sh`)
 
 | Server | Source | Purpose |
 | ------ | ------ | ------- |
@@ -126,9 +127,9 @@ Invocation: [`agent-os/docs/platform-access.md`](../../agent-os/docs/platform-ac
 
 ```bash
 # Cached install (every VM) — tools, deps, .mcp.json default pair, .env.local scaffold
-bash agent-os/cloud-environment/install.sh
+bash tooling/setup/agent/bootstrap.sh --install-only
 
-# On-demand stack (Postgres, Redis, migrate, seed, healthcheck)
+# In the session: the same steps plus the stack (Postgres, Redis, migrate, logins, seed, healthcheck)
 bash tooling/setup/agent/bootstrap.sh
 
 # Optional MCP: stack dashboards (be-stack-monitor)

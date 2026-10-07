@@ -13,7 +13,7 @@ operators copy into each platform's environment config.
 | File | Purpose |
 | ---- | ------- |
 | [`environment.json`](environment.json) | Cursor Cloud Agents — `install`, `start`, optional `terminals` |
-| [`install.sh`](install.sh) | Idempotent cached install (tools + deps + MCP default pair; **no** full stack bring-up) |
+| [`bootstrap.sh`](../../tooling/setup/agent/bootstrap.sh) | The one setup script: `--install-only` = idempotent cached install (tools + deps + MCP default pair + `.env.local`); no flag = that plus the full stack bring-up |
 | [`agents-cloud.md`](agents-cloud.md) | On-demand stack instructions every agent reads via `AGENTS.md` |
 | [`skills-and-mcps.md`](skills-and-mcps.md) | Which MCPs, skills, and subagents cloud sessions use |
 
@@ -21,15 +21,16 @@ operators copy into each platform's environment config.
 
 | Platform | Config location | What to wire |
 | -------- | --------------- | ------------ |
-| **Cursor** | [`.cursor/environment.json`](../../.cursor/environment.json) → symlink here | `install` runs `install.sh`; optional `start` / `terminals` from `environment.json` |
-| **Cursor dashboard** | Cloud Agents → Environment → Install script | Paste contents of `install.sh`, or `bash agent-os/cloud-environment/install.sh` |
-| **Claude Code on the web** | Environment → Setup script field | Same `install.sh` lines (see [claude-code-web-environment.md](../../docs/integrations/claude-code-web-environment.md)) |
-| **All agents** | [`AGENTS.md`](../../AGENTS.md) → [`agents-cloud.md`](agents-cloud.md) | On-demand `bootstrap.sh` when DB/API/workers are needed |
+| **Cursor** | [`.cursor/environment.json`](../../.cursor/environment.json) → symlink here | `install` runs `bootstrap.sh --install-only`; optional `start` / `terminals` from `environment.json` |
+| **Cursor dashboard** | Cloud Agents → Environment → Install script | `bash tooling/setup/agent/bootstrap.sh --install-only` |
+| **Claude Code on the web** | Environment → Setup script field | `bash tooling/setup/agent/bootstrap.sh --install-only` (see [claude-code-web-environment.md](../../docs/integrations/claude-code-web-environment.md)) |
+| **All agents** | [`AGENTS.md`](../../AGENTS.md) → [`agents-cloud.md`](agents-cloud.md) | `bootstrap.sh` (no flag) in the session when DB/API/workers are needed |
 
-> **Do not** put full [`bootstrap.sh`](../../tooling/setup/agent/bootstrap.sh) in the
-> cached `install` step — a Docker failure there marks the whole environment as failed.
-> Run bootstrap **on demand** (see `agents-cloud.md`). `bootstrap.sh` now auto-retries
-> with restricted VFS + the cloud-agent compose override when standard compose fails.
+> In the cached `install` / Setup step, always pass **`--install-only`**: it stops before
+> Docker, because a Docker failure there marks the whole environment as failed and no
+> running container survives the cache anyway. Run the full `bootstrap.sh` **in the session**
+> (see `agents-cloud.md`); it auto-retries with restricted VFS + the cloud-agent compose
+> override when standard compose fails.
 
 ## Network allowlist (cloud)
 
@@ -39,14 +40,14 @@ Minimum Custom allowlist entry beyond defaults:
 
 For Docker image pulls without the GCR mirror script, also add
 `production.cloudfront.docker.com`. Prefer
-[`install-docker-images.sh`](../../tooling/setup/agent/install-docker-images.sh) in
-`install.sh` (already included).
+[`install-docker-images.sh`](../../tooling/setup/agent/install-docker-images.sh), which
+`bootstrap.sh` already runs.
 
 ## MCP, skills, and subagents
 
 **Full reference:** [`skills-and-mcps.md`](skills-and-mcps.md)
 
-`install.sh` installs the **default MCP pair** and scaffolds [`.mcp.json`](../../.mcp.json):
+`bootstrap.sh` installs the **default MCP pair** and scaffolds [`.mcp.json`](../../.mcp.json):
 
 | Server | Command | Installed by |
 | ------ | ------- | ------------ |

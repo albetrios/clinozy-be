@@ -61,24 +61,17 @@ Add the rest via **Custom** (tick "Also include default list of common package m
 
 ## Setup script
 
-**Canonical (shared with Cursor):** paste the contents of
-[`agent-os/cloud-environment/install.sh`](../../agent-os/cloud-environment/install.sh),
-or run:
+**One script for everything (shared with Cursor)** —
+[`bootstrap.sh`](../../tooling/setup/agent/bootstrap.sh). In the Setup script field:
 
 ```bash
-bash agent-os/cloud-environment/install.sh
+bash tooling/setup/agent/bootstrap.sh --install-only
 ```
 
-That script wraps the same helpers below. For a hand-maintained list:
-
-```bash
-bash tooling/setup/agent/install-node.sh
-bash tooling/setup/agent/install-gh.sh              # optional: GitHub CLI (in-session GitHub fallback)
-bash tooling/setup/agent/install-docker-images.sh   # optional: Docker Hub mirror + pre-pull compose images
-bash tooling/setup/agent/install-codegraph.sh       # default MCP pair: CodeGraph CLI + semantic index
-bash tooling/setup/agent/install-headroom.sh        # default MCP pair: Headroom CLI — context-compression MCP (headroom_compress)
-bash tooling/setup/agent/install-gitleaks.sh        # optional: gitleaks (pre-commit secret scan)
-```
+`--install-only` runs steps 1–8 — Node 24 into `/opt/node24`, `pnpm install`, gh, the Docker
+CLI + mirror + compose images, CodeGraph, Headroom + the default MCP pair, gitleaks, and the
+`.env.local` scaffold — and stops before Docker, so the result is cached. In the session, the same
+command without the flag repeats those steps (fast — each is idempotent) and brings the stack up.
 
 On the first session the cached Node 24 is already on disk, [`session-start.sh`](../../agent-os/hooks/session-start.sh) switches `PATH` to `/opt/node24`, and runs `pnpm install`. Do **not** start Postgres / Redis here — setup-script processes do not persist; start them per session (below).
 
@@ -103,7 +96,7 @@ On the first session the cached Node 24 is already on disk, [`session-start.sh`]
   `.env.development` except `NODE_ENV`, every `DATABASE_*_URL` (`DATABASE_URL`,
   `DATABASE_MIGRATION_URL`, `DATABASE_MAINTENANCE_URL`, `DATABASE_OPERATOR_URL`), `REDIS_URL` and
   `DATABASE_SSL_ENABLED` (those follow the session's own Postgres + Redis). `pnpm setup:local`
-  (and so `install.sh` and `bootstrap.sh`) stops when a Variable sets a `DATABASE_*_URL` that is
+  (and so `bootstrap.sh`, with or without `--install-only`) stops when a Variable sets a `DATABASE_*_URL` that is
   remote or logs in as another role, or a remote `REDIS_URL` — the Variable would beat
   `.env.local` and point the session at the hosted database or Redis. Third-party keys
   (Resend, Stripe test mode, OAuth, S3, Sentry DSN, …) then match development. A blank `KEY=`

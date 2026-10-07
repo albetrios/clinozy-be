@@ -3,10 +3,12 @@
 Read this on **remote / cloud** sessions (Cursor Cloud Agents, Claude Code on the web)
 before tasks that need Postgres, Redis, migrations, seeds, or a live API.
 
-Canonical config: [`agent-os/cloud-environment/`](./) (`install.sh`, `environment.json`).
+Canonical config: [`agent-os/cloud-environment/`](./) (`environment.json`) and the one setup
+script, [`bootstrap.sh`](../../tooling/setup/agent/bootstrap.sh) (`--install-only` in the cached
+install step).
 
 **Skills, MCPs, subagents:** [`skills-and-mcps.md`](skills-and-mcps.md) — default pair
-(`codegraph`, `headroom`) is installed and written to `.mcp.json` by `install.sh`; on-demand
+(`codegraph`, `headroom`) is installed and written to `.mcp.json` by `bootstrap.sh`; on-demand
 MCPs and the full skill catalog are listed there.
 
 ## When to run bring-up
@@ -70,7 +72,7 @@ docker compose -f docker-compose.yml -f tooling/setup/agent/docker-compose.cloud
 
 ## MCP default pair
 
-`install.sh` installs `codegraph` and `headroom` to `~/.local/bin` and runs
+`bootstrap.sh` installs `codegraph` and `headroom` to `~/.local/bin` and runs
 `pnpm mcp:setup:default` (same as local `pnpm setup:local`). If MCP tools are missing in a
 session, confirm platform MCP settings match [`.mcp.default.json`](../../.mcp.default.json)
 and start a fresh session. For **be-stack-monitor**, add `dashboards` via
