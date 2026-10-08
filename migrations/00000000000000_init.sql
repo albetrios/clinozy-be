@@ -2080,7 +2080,7 @@ CREATE TABLE IF NOT EXISTS "app"."patient_offering_suggestions" (
 	CONSTRAINT "chk_patient_offering_suggestions_delete_note_when_other" CHECK ("app"."patient_offering_suggestions"."delete_reason" IS DISTINCT FROM 'other' OR "app"."patient_offering_suggestions"."delete_note" IS NOT NULL)
 );--> statement-breakpoint
 ALTER TABLE "app"."patient_offering_suggestions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.payments
+-- app.payments — one entry in or out of a branch's money (launch ROUTE #136, 8.C)
 CREATE TABLE IF NOT EXISTS "app"."payments" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
@@ -2100,6 +2100,7 @@ CREATE TABLE IF NOT EXISTS "app"."payments" (
 	"invoice_credit_note_id" bigint,
 	"pending_credit_id" bigint,
 	"reverses_payment_id" bigint,
+	"stock_purchase_id" bigint,
 	"payee_name" varchar(120),
 	"expense_category" varchar(11),
 	"reference" varchar(60),
@@ -2121,6 +2122,7 @@ CREATE TABLE IF NOT EXISTS "app"."payments" (
 	CONSTRAINT "chk_payments_credit_with_pending_credit" CHECK ("app"."payments"."credit_amount" = 0 OR "app"."payments"."pending_credit_id" IS NOT NULL),
 	CONSTRAINT "chk_payments_receipt_contact" CHECK ("app"."payments"."kind" <> 'receipt' OR "app"."payments"."contact_id" IS NOT NULL),
 	CONSTRAINT "chk_payments_reversal" CHECK (("app"."payments"."kind" = 'reversal') = ("app"."payments"."reverses_payment_id" IS NOT NULL)),
+	CONSTRAINT "chk_payments_stock_purchase" CHECK ("app"."payments"."stock_purchase_id" IS NULL OR "app"."payments"."kind" IN ('supplier_bill', 'reversal')),
 	CONSTRAINT "chk_payments_payee" CHECK ("app"."payments"."kind" NOT IN ('expense', 'supplier_bill') OR "app"."payments"."payee_name" IS NOT NULL),
 	CONSTRAINT "chk_payments_expense_category" CHECK (("app"."payments"."kind" = 'expense') = ("app"."payments"."expense_category" IS NOT NULL) AND ("app"."payments"."expense_category" IS NULL OR "app"."payments"."expense_category" IN ('medicines', 'consumables', 'salary', 'rent', 'marketing', 'utilities', 'maintenance', 'misc'))),
 	CONSTRAINT "chk_payments_attachment_keys" CHECK (cardinality("app"."payments"."attachment_keys") <= 5),
@@ -2644,13 +2646,13 @@ CREATE TABLE IF NOT EXISTS "app"."supplier_credits" (
 );
 --> statement-breakpoint
 ALTER TABLE "app"."supplier_credits" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.stock_vendors — A vendor the organization buys consumables from (launch ROUTE #53).
+-- app.stock_vendors — who the clinic buys consumables from (launch ROUTE #137, 9.E)
 CREATE TABLE IF NOT EXISTS "app"."stock_vendors" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
 	"organization_id" bigint NOT NULL,
 	"name" varchar(120) NOT NULL,
-	"phone" varchar(16),
+	"phone" varchar(13),
 	"is_quick" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -2659,29 +2661,29 @@ CREATE TABLE IF NOT EXISTS "app"."stock_vendors" (
 	"deleted_at" timestamp with time zone,
 	"delete_reason" varchar(20),
 	"delete_note" varchar(280),
+	CONSTRAINT "chk_stock_vendors_name" CHECK (char_length("app"."stock_vendors"."name") > 0),
 	CONSTRAINT "chk_stock_vendors_phone" CHECK ("app"."stock_vendors"."phone" ~ '^\+91\d{10}$'),
 	CONSTRAINT "chk_stock_vendors_updated" CHECK ("app"."stock_vendors"."updated_at" >= "app"."stock_vendors"."created_at"),
 	CONSTRAINT "chk_stock_vendors_delete_reason" CHECK ("app"."stock_vendors"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
 	CONSTRAINT "chk_stock_vendors_delete_reason_when_deleted" CHECK (("app"."stock_vendors"."deleted_at" IS NULL) = ("app"."stock_vendors"."delete_reason" IS NULL)),
 	CONSTRAINT "chk_stock_vendors_delete_note_when_other" CHECK ("app"."stock_vendors"."delete_reason" IS DISTINCT FROM 'other' OR "app"."stock_vendors"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
+);--> statement-breakpoint
 ALTER TABLE "app"."stock_vendors" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.stock_items — A consumable kept in stock — its levels in milli-units (×1000) (launch ROUTE #54).
+-- app.stock_items — a consumable or piece of equipment and its balance (launch ROUTE #137, 9.A)
 CREATE TABLE IF NOT EXISTS "app"."stock_items" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
 	"organization_id" bigint NOT NULL,
 	"stock_item_number" integer DEFAULT 0 NOT NULL,
 	"name" varchar(120) NOT NULL,
-	"category" varchar(13) DEFAULT 'creams_serums' NOT NULL,
+	"category" varchar(13) DEFAULT 'consumables' NOT NULL,
 	"unit" varchar(7) DEFAULT 'piece' NOT NULL,
-	"size_per_unit_milli" integer,
+	"size_per_unit" numeric(12, 3),
 	"measure_unit" varchar(5),
-	"quantity_milli" integer DEFAULT 0 NOT NULL,
-	"min_quantity" integer DEFAULT 1 NOT NULL,
-	"max_quantity" integer DEFAULT 10 NOT NULL,
-	"usage_per_week_milli" integer DEFAULT 0 NOT NULL,
+	"quantity" numeric(12, 3) DEFAULT '0' NOT NULL,
+	"min_quantity" numeric(12, 3) DEFAULT '1' NOT NULL,
+	"max_quantity" numeric(12, 3) DEFAULT '10' NOT NULL,
+	"usage_per_week" numeric(12, 3) DEFAULT '0' NOT NULL,
 	"stock_vendor_id" bigint,
 	"last_rate" numeric(12, 2),
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -2691,26 +2693,25 @@ CREATE TABLE IF NOT EXISTS "app"."stock_items" (
 	"deleted_at" timestamp with time zone,
 	"delete_reason" varchar(20),
 	"delete_note" varchar(280),
-	CONSTRAINT "chk_stock_items_stock_item_number" CHECK ("app"."stock_items"."stock_item_number" > 0),
+	CONSTRAINT "chk_stock_items_number" CHECK ("app"."stock_items"."stock_item_number" > 0),
+	CONSTRAINT "chk_stock_items_name" CHECK (char_length("app"."stock_items"."name") > 0),
 	CONSTRAINT "chk_stock_items_category" CHECK ("app"."stock_items"."category" IN ('creams_serums', 'peels', 'masks', 'consumables', 'equipment', 'other')),
 	CONSTRAINT "chk_stock_items_unit" CHECK ("app"."stock_items"."unit" IN ('piece', 'tube', 'bottle', 'kit', 'pack', 'box', 'vial', 'ampoule', 'sachet', 'jar', 'roll', 'pair', 'ml', 'g', 'litre')),
 	CONSTRAINT "chk_stock_items_measure_unit" CHECK ("app"."stock_items"."measure_unit" IN ('ml', 'g', 'pcs', 'units')),
-	CONSTRAINT "chk_stock_items_quantity_milli" CHECK ("app"."stock_items"."quantity_milli" >= 0),
-	CONSTRAINT "chk_stock_items_min_quantity" CHECK ("app"."stock_items"."min_quantity" BETWEEN 0 AND 99999),
-	CONSTRAINT "chk_stock_items_max_quantity" CHECK ("app"."stock_items"."max_quantity" BETWEEN 0 AND 99999),
-	CONSTRAINT "chk_stock_items_usage_per_week_milli" CHECK ("app"."stock_items"."usage_per_week_milli" >= 0),
+	CONSTRAINT "chk_stock_items_size_per_unit" CHECK ("app"."stock_items"."size_per_unit" > 0),
+	CONSTRAINT "chk_stock_items_size_with_measure" CHECK (("app"."stock_items"."size_per_unit" IS NULL) = ("app"."stock_items"."measure_unit" IS NULL)),
+	CONSTRAINT "chk_stock_items_quantity" CHECK ("app"."stock_items"."quantity" >= 0),
+	CONSTRAINT "chk_stock_items_min_quantity" CHECK ("app"."stock_items"."min_quantity" >= 0),
+	CONSTRAINT "chk_stock_items_max_quantity" CHECK ("app"."stock_items"."max_quantity" >= "app"."stock_items"."min_quantity"),
+	CONSTRAINT "chk_stock_items_usage_per_week" CHECK ("app"."stock_items"."usage_per_week" >= 0),
 	CONSTRAINT "chk_stock_items_last_rate" CHECK ("app"."stock_items"."last_rate" >= 0),
-	CONSTRAINT "chk_stock_items_quantity_levels" CHECK ("app"."stock_items"."min_quantity" <= "app"."stock_items"."max_quantity"),
-	CONSTRAINT "chk_stock_items_measure_unit_with_size" CHECK ("app"."stock_items"."size_per_unit_milli" IS NULL OR "app"."stock_items"."measure_unit" IS NOT NULL),
-	CONSTRAINT "chk_stock_items_size_positive" CHECK ("app"."stock_items"."size_per_unit_milli" IS NULL OR "app"."stock_items"."size_per_unit_milli" > 0),
 	CONSTRAINT "chk_stock_items_updated" CHECK ("app"."stock_items"."updated_at" >= "app"."stock_items"."created_at"),
 	CONSTRAINT "chk_stock_items_delete_reason" CHECK ("app"."stock_items"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
 	CONSTRAINT "chk_stock_items_delete_reason_when_deleted" CHECK (("app"."stock_items"."deleted_at" IS NULL) = ("app"."stock_items"."delete_reason" IS NULL)),
 	CONSTRAINT "chk_stock_items_delete_note_when_other" CHECK ("app"."stock_items"."delete_reason" IS DISTINCT FROM 'other' OR "app"."stock_items"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
+);--> statement-breakpoint
 ALTER TABLE "app"."stock_items" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.stock_purchases — A purchase of consumables from a vendor (launch ROUTE #55).
+-- app.stock_purchases — a vendor bill and its lines (launch ROUTE #137, 9.D)
 CREATE TABLE IF NOT EXISTS "app"."stock_purchases" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
@@ -2719,9 +2720,10 @@ CREATE TABLE IF NOT EXISTS "app"."stock_purchases" (
 	"stock_vendor_id" bigint NOT NULL,
 	"bill_number" varchar(30),
 	"purchase_date" date NOT NULL,
-	"lines" jsonb DEFAULT '[]'::jsonb NOT NULL,
-	"bill_amount" numeric(12, 2) DEFAULT '0.00' NOT NULL,
+	"bill_amount" numeric(12, 2) NOT NULL,
 	"paid_amount" numeric(12, 2) DEFAULT '0.00' NOT NULL,
+	"due_amount" numeric(12, 2) GENERATED ALWAYS AS (bill_amount - paid_amount) STORED,
+	"payment_status" varchar(7) GENERATED ALWAYS AS (CASE WHEN bill_amount - paid_amount <= 0 THEN 'paid' WHEN paid_amount > 0 THEN 'partial' ELSE 'unpaid' END) STORED,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
@@ -2729,71 +2731,60 @@ CREATE TABLE IF NOT EXISTS "app"."stock_purchases" (
 	"deleted_at" timestamp with time zone,
 	"delete_reason" varchar(20),
 	"delete_note" varchar(280),
-	CONSTRAINT "chk_stock_purchases_stock_purchase_number" CHECK ("app"."stock_purchases"."stock_purchase_number" > 0),
+	CONSTRAINT "chk_stock_purchases_number" CHECK ("app"."stock_purchases"."stock_purchase_number" > 0),
 	CONSTRAINT "chk_stock_purchases_bill_amount" CHECK ("app"."stock_purchases"."bill_amount" >= 0),
-	CONSTRAINT "chk_stock_purchases_paid_amount" CHECK ("app"."stock_purchases"."paid_amount" >= 0),
-	CONSTRAINT "chk_stock_purchases_paid_within_bill" CHECK ("app"."stock_purchases"."paid_amount" <= "app"."stock_purchases"."bill_amount"),
+	CONSTRAINT "chk_stock_purchases_paid_amount" CHECK ("app"."stock_purchases"."paid_amount" >= 0 AND "app"."stock_purchases"."paid_amount" <= "app"."stock_purchases"."bill_amount"),
 	CONSTRAINT "chk_stock_purchases_updated" CHECK ("app"."stock_purchases"."updated_at" >= "app"."stock_purchases"."created_at"),
 	CONSTRAINT "chk_stock_purchases_delete_reason" CHECK ("app"."stock_purchases"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
 	CONSTRAINT "chk_stock_purchases_delete_reason_when_deleted" CHECK (("app"."stock_purchases"."deleted_at" IS NULL) = ("app"."stock_purchases"."delete_reason" IS NULL)),
 	CONSTRAINT "chk_stock_purchases_delete_note_when_other" CHECK ("app"."stock_purchases"."delete_reason" IS DISTINCT FROM 'other' OR "app"."stock_purchases"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
+);--> statement-breakpoint
 ALTER TABLE "app"."stock_purchases" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.stock_counts — A stock count — only the changed lines write adjust movements (launch ROUTE #57).
+-- app.stock_counts — a stock check and what it counted (launch ROUTE #137, 9.C)
 CREATE TABLE IF NOT EXISTS "app"."stock_counts" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
 	"organization_id" bigint NOT NULL,
-	"lines" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"counted_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"author_membership_id" bigint,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"created_by_user_id" bigint,
-	"updated_by_user_id" bigint,
-	"deleted_at" timestamp with time zone,
-	"delete_reason" varchar(20),
-	"delete_note" varchar(280),
-	CONSTRAINT "chk_stock_counts_updated" CHECK ("app"."stock_counts"."updated_at" >= "app"."stock_counts"."created_at"),
-	CONSTRAINT "chk_stock_counts_delete_reason" CHECK ("app"."stock_counts"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
-	CONSTRAINT "chk_stock_counts_delete_reason_when_deleted" CHECK (("app"."stock_counts"."deleted_at" IS NULL) = ("app"."stock_counts"."delete_reason" IS NULL)),
-	CONSTRAINT "chk_stock_counts_delete_note_when_other" CHECK ("app"."stock_counts"."delete_reason" IS DISTINCT FROM 'other' OR "app"."stock_counts"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
+	"created_by_user_id" bigint
+);--> statement-breakpoint
 ALTER TABLE "app"."stock_counts" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.stock_movements — One change to an item's stock — used, received, adjusted, damaged, returned or reverted (a ledger) (launch ROUTE #56).
-CREATE TABLE IF NOT EXISTS "app"."stock_movements" (
+-- app.stock_item_movements — every change to an item's quantity (launch ROUTE #137, 9.B)
+CREATE TABLE IF NOT EXISTS "app"."stock_item_movements" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
 	"organization_id" bigint NOT NULL,
 	"stock_item_id" bigint NOT NULL,
-	"type" varchar(8) DEFAULT 'used' NOT NULL,
-	"delta_milli" integer NOT NULL,
+	"type" varchar(8) NOT NULL,
+	"quantity_change" numeric(12, 3) NOT NULL,
+	"quantity_after" numeric(12, 3) NOT NULL,
 	"used_for" varchar(80),
-	"patient_id" bigint,
+	"note" varchar(280),
+	"patient_treatment_id" bigint,
 	"stock_purchase_id" bigint,
 	"stock_count_id" bigint,
-	"reverts_stock_movement_id" bigint,
-	"reverted_by_stock_movement_id" bigint,
+	"reverts_stock_item_movement_id" bigint,
 	"revert_reason" varchar(14),
-	"note" varchar(280),
+	"author_membership_id" bigint,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
-	"updated_by_user_id" bigint,
-	"deleted_at" timestamp with time zone,
-	"delete_reason" varchar(20),
-	"delete_note" varchar(280),
-	CONSTRAINT "chk_stock_movements_type" CHECK ("app"."stock_movements"."type" IN ('used', 'received', 'adjust', 'damaged', 'returned', 'reverted')),
-	CONSTRAINT "chk_stock_movements_revert_reason" CHECK ("app"."stock_movements"."revert_reason" IN ('mistake', 'wrong_item', 'wrong_quantity', 'other')),
-	CONSTRAINT "chk_stock_movements_delta_nonzero" CHECK ("app"."stock_movements"."delta_milli" <> 0),
-	CONSTRAINT "chk_stock_movements_updated" CHECK ("app"."stock_movements"."updated_at" >= "app"."stock_movements"."created_at"),
-	CONSTRAINT "chk_stock_movements_delete_reason" CHECK ("app"."stock_movements"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
-	CONSTRAINT "chk_stock_movements_delete_reason_when_deleted" CHECK (("app"."stock_movements"."deleted_at" IS NULL) = ("app"."stock_movements"."delete_reason" IS NULL)),
-	CONSTRAINT "chk_stock_movements_delete_note_when_other" CHECK ("app"."stock_movements"."delete_reason" IS DISTINCT FROM 'other' OR "app"."stock_movements"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
-ALTER TABLE "app"."stock_movements" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+	CONSTRAINT "chk_stock_item_movements_type" CHECK ("app"."stock_item_movements"."type" IN ('opening', 'received', 'used', 'damaged', 'returned', 'adjust', 'reverted')),
+	CONSTRAINT "chk_stock_item_movements_sign" CHECK ("app"."stock_item_movements"."quantity_change" <> 0
+          AND ("app"."stock_item_movements"."type" NOT IN ('opening', 'received') OR "app"."stock_item_movements"."quantity_change" > 0)
+          AND ("app"."stock_item_movements"."type" NOT IN ('used', 'damaged', 'returned') OR "app"."stock_item_movements"."quantity_change" < 0)),
+	CONSTRAINT "chk_stock_item_movements_quantity_after" CHECK ("app"."stock_item_movements"."quantity_after" >= 0),
+	CONSTRAINT "chk_stock_item_movements_used_for" CHECK ("app"."stock_item_movements"."used_for" IS NULL OR "app"."stock_item_movements"."type" = 'used'),
+	CONSTRAINT "chk_stock_item_movements_patient_treatment" CHECK ("app"."stock_item_movements"."patient_treatment_id" IS NULL OR "app"."stock_item_movements"."type" = 'used'),
+	CONSTRAINT "chk_stock_item_movements_stock_purchase" CHECK ("app"."stock_item_movements"."stock_purchase_id" IS NULL OR "app"."stock_item_movements"."type" IN ('received', 'reverted')),
+	CONSTRAINT "chk_stock_item_movements_stock_count" CHECK ("app"."stock_item_movements"."stock_count_id" IS NULL OR "app"."stock_item_movements"."type" = 'adjust'),
+	CONSTRAINT "chk_stock_item_movements_reverts" CHECK (("app"."stock_item_movements"."type" = 'reverted') = ("app"."stock_item_movements"."reverts_stock_item_movement_id" IS NOT NULL)
+          AND ("app"."stock_item_movements"."type" = 'reverted') = ("app"."stock_item_movements"."revert_reason" IS NOT NULL)),
+	CONSTRAINT "chk_stock_item_movements_revert_reason" CHECK ("app"."stock_item_movements"."revert_reason" IN ('mistake', 'wrong_item', 'wrong_quantity', 'other')),
+	CONSTRAINT "chk_stock_item_movements_note_when_other" CHECK ("app"."stock_item_movements"."revert_reason" IS DISTINCT FROM 'other' OR "app"."stock_item_movements"."note" IS NOT NULL)
+);--> statement-breakpoint
+ALTER TABLE "app"."stock_item_movements" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 -- app.tasks — A to-do in the work queue — by hand or from a rule (launch ROUTE #58).
 CREATE TABLE IF NOT EXISTS "app"."tasks" (
 	"id" bigserial PRIMARY KEY NOT NULL,
@@ -2966,29 +2957,6 @@ ALTER TABLE "app"."supplier_credits" ADD CONSTRAINT "supplier_credits_created_by
 ALTER TABLE "app"."supplier_credits" ADD CONSTRAINT "supplier_credits_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."supplier_credits" ADD CONSTRAINT "supplier_credits_supplier_id_suppliers_id_fk" FOREIGN KEY ("supplier_id") REFERENCES "app"."suppliers"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."supplier_credits" ADD CONSTRAINT "supplier_credits_medicine_id_medicines_id_fk" FOREIGN KEY ("medicine_id") REFERENCES "app"."medicines"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_vendors" ADD CONSTRAINT "stock_vendors_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_vendors" ADD CONSTRAINT "stock_vendors_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_vendors" ADD CONSTRAINT "stock_vendors_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_items" ADD CONSTRAINT "stock_items_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_items" ADD CONSTRAINT "stock_items_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_items" ADD CONSTRAINT "stock_items_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_items" ADD CONSTRAINT "stock_items_stock_vendor_id_stock_vendors_id_fk" FOREIGN KEY ("stock_vendor_id") REFERENCES "app"."stock_vendors"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_purchases" ADD CONSTRAINT "stock_purchases_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_purchases" ADD CONSTRAINT "stock_purchases_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_purchases" ADD CONSTRAINT "stock_purchases_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_purchases" ADD CONSTRAINT "stock_purchases_stock_vendor_id_stock_vendors_id_fk" FOREIGN KEY ("stock_vendor_id") REFERENCES "app"."stock_vendors"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_counts" ADD CONSTRAINT "stock_counts_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_counts" ADD CONSTRAINT "stock_counts_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_counts" ADD CONSTRAINT "stock_counts_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_movements" ADD CONSTRAINT "stock_movements_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_movements" ADD CONSTRAINT "stock_movements_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_movements" ADD CONSTRAINT "stock_movements_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_movements" ADD CONSTRAINT "stock_movements_stock_item_id_stock_items_id_fk" FOREIGN KEY ("stock_item_id") REFERENCES "app"."stock_items"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_movements" ADD CONSTRAINT "stock_movements_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_movements" ADD CONSTRAINT "stock_movements_stock_purchase_id_stock_purchases_id_fk" FOREIGN KEY ("stock_purchase_id") REFERENCES "app"."stock_purchases"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_movements" ADD CONSTRAINT "stock_movements_stock_count_id_stock_counts_id_fk" FOREIGN KEY ("stock_count_id") REFERENCES "app"."stock_counts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_movements" ADD CONSTRAINT "stock_movements_reverts_stock_movement_id_stock_movements_id_fk" FOREIGN KEY ("reverts_stock_movement_id") REFERENCES "app"."stock_movements"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."stock_movements" ADD CONSTRAINT "stock_movements_reverted_by_stock_movement_id_stock_movements_id_fk" FOREIGN KEY ("reverted_by_stock_movement_id") REFERENCES "app"."stock_movements"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -3316,92 +3284,6 @@ CREATE POLICY "supplier_credits_tenant_isolation" ON "app"."supplier_credits" AS
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
 ALTER TABLE "app"."supplier_credits" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_vendors_public_id" ON "app"."stock_vendors" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_vendors_organization_created" ON "app"."stock_vendors" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_vendors_deleted_at" ON "app"."stock_vendors" USING btree ("deleted_at") WHERE "app"."stock_vendors"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_vendors_created_by_user_id" ON "app"."stock_vendors" USING btree ("created_by_user_id") WHERE "app"."stock_vendors"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_vendors_updated_by_user_id" ON "app"."stock_vendors" USING btree ("updated_by_user_id") WHERE "app"."stock_vendors"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_vendors_organization_name" ON "app"."stock_vendors" USING btree ("organization_id","name","id") WHERE "app"."stock_vendors"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE POLICY "stock_vendors_tenant_isolation" ON "app"."stock_vendors" AS PERMISSIVE FOR ALL TO public USING ("app"."stock_vendors"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."stock_vendors"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."stock_vendors" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_items_public_id" ON "app"."stock_items" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_items_organization_created" ON "app"."stock_items" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_items_deleted_at" ON "app"."stock_items" USING btree ("deleted_at") WHERE "app"."stock_items"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_items_created_by_user_id" ON "app"."stock_items" USING btree ("created_by_user_id") WHERE "app"."stock_items"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_items_updated_by_user_id" ON "app"."stock_items" USING btree ("updated_by_user_id") WHERE "app"."stock_items"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_items_organization_name" ON "app"."stock_items" USING btree ("organization_id","name","id") WHERE "app"."stock_items"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_items_stock_vendor_id" ON "app"."stock_items" USING btree ("stock_vendor_id") WHERE "app"."stock_items"."stock_vendor_id" IS NOT NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_items_organization_stock_item_number" ON "app"."stock_items" USING btree ("organization_id","stock_item_number");--> statement-breakpoint
-CREATE POLICY "stock_items_tenant_isolation" ON "app"."stock_items" AS PERMISSIVE FOR ALL TO public USING ("app"."stock_items"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."stock_items"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."stock_items" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE TRIGGER trg_stock_items_stock_item_number BEFORE INSERT ON "app"."stock_items" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('stock_item_number');--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_purchases_public_id" ON "app"."stock_purchases" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_purchases_organization_created" ON "app"."stock_purchases" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_purchases_deleted_at" ON "app"."stock_purchases" USING btree ("deleted_at") WHERE "app"."stock_purchases"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_purchases_created_by_user_id" ON "app"."stock_purchases" USING btree ("created_by_user_id") WHERE "app"."stock_purchases"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_purchases_updated_by_user_id" ON "app"."stock_purchases" USING btree ("updated_by_user_id") WHERE "app"."stock_purchases"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_purchases_stock_vendor_id" ON "app"."stock_purchases" USING btree ("stock_vendor_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_purchases_organization_purchase_date" ON "app"."stock_purchases" USING btree ("organization_id","purchase_date","id") WHERE "app"."stock_purchases"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_purchases_organization_stock_purchase_number" ON "app"."stock_purchases" USING btree ("organization_id","stock_purchase_number");--> statement-breakpoint
-CREATE POLICY "stock_purchases_tenant_isolation" ON "app"."stock_purchases" AS PERMISSIVE FOR ALL TO public USING ("app"."stock_purchases"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."stock_purchases"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."stock_purchases" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE TRIGGER trg_stock_purchases_stock_purchase_number BEFORE INSERT ON "app"."stock_purchases" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('stock_purchase_number');--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_counts_public_id" ON "app"."stock_counts" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_counts_organization_created" ON "app"."stock_counts" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_counts_deleted_at" ON "app"."stock_counts" USING btree ("deleted_at") WHERE "app"."stock_counts"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_counts_created_by_user_id" ON "app"."stock_counts" USING btree ("created_by_user_id") WHERE "app"."stock_counts"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_counts_updated_by_user_id" ON "app"."stock_counts" USING btree ("updated_by_user_id") WHERE "app"."stock_counts"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_counts_organization_counted_at" ON "app"."stock_counts" USING btree ("organization_id","counted_at","id") WHERE "app"."stock_counts"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE POLICY "stock_counts_tenant_isolation" ON "app"."stock_counts" AS PERMISSIVE FOR ALL TO public USING ("app"."stock_counts"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."stock_counts"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."stock_counts" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_movements_public_id" ON "app"."stock_movements" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_movements_organization_created" ON "app"."stock_movements" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_movements_deleted_at" ON "app"."stock_movements" USING btree ("deleted_at") WHERE "app"."stock_movements"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_movements_created_by_user_id" ON "app"."stock_movements" USING btree ("created_by_user_id") WHERE "app"."stock_movements"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_movements_updated_by_user_id" ON "app"."stock_movements" USING btree ("updated_by_user_id") WHERE "app"."stock_movements"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_movements_stock_item_id" ON "app"."stock_movements" USING btree ("stock_item_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_movements_patient_id" ON "app"."stock_movements" USING btree ("patient_id") WHERE "app"."stock_movements"."patient_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_movements_stock_purchase_id" ON "app"."stock_movements" USING btree ("stock_purchase_id") WHERE "app"."stock_movements"."stock_purchase_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_movements_stock_count_id" ON "app"."stock_movements" USING btree ("stock_count_id") WHERE "app"."stock_movements"."stock_count_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_movements_reverts_stock_movement_id" ON "app"."stock_movements" USING btree ("reverts_stock_movement_id") WHERE "app"."stock_movements"."reverts_stock_movement_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_movements_reverted_by_stock_movement_id" ON "app"."stock_movements" USING btree ("reverted_by_stock_movement_id") WHERE "app"."stock_movements"."reverted_by_stock_movement_id" IS NOT NULL;--> statement-breakpoint
-CREATE POLICY "stock_movements_tenant_isolation" ON "app"."stock_movements" AS PERMISSIVE FOR ALL TO public USING ("app"."stock_movements"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."stock_movements"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."stock_movements" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_tasks_public_id" ON "app"."tasks" USING btree ("public_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_tasks_organization_created" ON "app"."tasks" USING btree ("organization_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_tasks_deleted_at" ON "app"."tasks" USING btree ("deleted_at") WHERE "app"."tasks"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -4099,31 +3981,10 @@ ALTER TABLE "app"."payment_edits" ADD CONSTRAINT "payment_edits_organization_id_
 ALTER TABLE "app"."payment_edits" ADD CONSTRAINT "payment_edits_payment_id_payments_id_fk" FOREIGN KEY ("payment_id") REFERENCES "app"."payments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."payment_edits" ADD CONSTRAINT "payment_edits_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."payment_edits" ADD CONSTRAINT "payment_edits_author_membership_fk" FOREIGN KEY ("organization_id","author_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_branch_id_branches_id_fk" FOREIGN KEY ("branch_id") REFERENCES "app"."branches"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "app"."contacts"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_invoice_id_invoices_id_fk" FOREIGN KEY ("invoice_id") REFERENCES "app"."invoices"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_invoice_credit_note_id_invoice_credit_notes_id_fk" FOREIGN KEY ("invoice_credit_note_id") REFERENCES "app"."invoice_credit_notes"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_pending_credit_id_pending_credits_id_fk" FOREIGN KEY ("pending_credit_id") REFERENCES "app"."pending_credits"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_reverses_payment_id_payments_id_fk" FOREIGN KEY ("reverses_payment_id") REFERENCES "app"."payments"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_payment_edits_public_id" ON "app"."payment_edits" USING btree ("public_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payment_edits_payment_created" ON "app"."payment_edits" USING btree ("payment_id","created_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payment_edits_author_membership_id" ON "app"."payment_edits" USING btree ("organization_id","author_membership_id") WHERE "app"."payment_edits"."author_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payment_edits_created_by_user_id" ON "app"."payment_edits" USING btree ("created_by_user_id") WHERE "app"."payment_edits"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_payments_public_id" ON "app"."payments" USING btree ("public_id");--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_payments_organization_payment_number" ON "app"."payments" USING btree ("organization_id","payment_number");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_payments_organization_paid_at" ON "app"."payments" USING btree ("organization_id","paid_at" DESC NULLS LAST,"id") WHERE "app"."payments"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_payments_branch_paid_at" ON "app"."payments" USING btree ("branch_id","paid_at") WHERE "app"."payments"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_payments_contact_paid_at" ON "app"."payments" USING btree ("contact_id","paid_at" DESC NULLS LAST) WHERE "app"."payments"."deleted_at" IS NULL AND "app"."payments"."contact_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_payments_invoice_id" ON "app"."payments" USING btree ("invoice_id") WHERE "app"."payments"."invoice_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_payments_pending_credit_id" ON "app"."payments" USING btree ("pending_credit_id") WHERE "app"."payments"."pending_credit_id" IS NOT NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_payments_reverses_payment_id" ON "app"."payments" USING btree ("reverses_payment_id") WHERE "app"."payments"."reverses_payment_id" IS NOT NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_payments_invoice_credit_note_id" ON "app"."payments" USING btree ("invoice_credit_note_id") WHERE "app"."payments"."invoice_credit_note_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_payments_deleted_at" ON "app"."payments" USING btree ("deleted_at") WHERE "app"."payments"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_payments_created_by_user_id" ON "app"."payments" USING btree ("created_by_user_id") WHERE "app"."payments"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_payments_updated_by_user_id" ON "app"."payments" USING btree ("updated_by_user_id") WHERE "app"."payments"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE POLICY "payment_edits_tenant_isolation" ON "app"."payment_edits" AS PERMISSIVE FOR ALL TO public USING ("app"."payment_edits"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
@@ -4131,17 +3992,7 @@ CREATE POLICY "payment_edits_tenant_isolation" ON "app"."payment_edits" AS PERMI
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
-CREATE POLICY "payments_tenant_isolation" ON "app"."payments" AS PERMISSIVE FOR ALL TO public USING ("app"."payments"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."payments"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."payments" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "app"."payment_edits" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE TRIGGER trg_payments_payment_number BEFORE INSERT ON "app"."payments" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('payment_number');--> statement-breakpoint
 -- app.pending_credits (folded from the Drizzle schema): keys, indexes, RLS, counters.
 ALTER TABLE "app"."pending_credits" ADD CONSTRAINT "pending_credits_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."pending_credits" ADD CONSTRAINT "pending_credits_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "app"."contacts"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
@@ -4234,6 +4085,204 @@ CREATE POLICY "patient_offerings_tenant_isolation" ON "app"."patient_offerings" 
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
 ALTER TABLE "app"."patient_offerings" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.stock_vendors (folded from the Drizzle schema): keys, indexes, RLS.
+ALTER TABLE "app"."stock_vendors" ADD CONSTRAINT "stock_vendors_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_vendors" ADD CONSTRAINT "stock_vendors_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_vendors" ADD CONSTRAINT "stock_vendors_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_vendors_public_id" ON "app"."stock_vendors" USING btree ("public_id");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_vendors_organization_name_unique" ON "app"."stock_vendors" USING btree ("organization_id",lower("name")) WHERE "app"."stock_vendors"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_vendors_organization_name" ON "app"."stock_vendors" USING btree ("organization_id","name","id") WHERE "app"."stock_vendors"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_vendors_organization_created" ON "app"."stock_vendors" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."stock_vendors"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_vendors_deleted_at" ON "app"."stock_vendors" USING btree ("deleted_at") WHERE "app"."stock_vendors"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_vendors_created_by_user_id" ON "app"."stock_vendors" USING btree ("created_by_user_id") WHERE "app"."stock_vendors"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_vendors_updated_by_user_id" ON "app"."stock_vendors" USING btree ("updated_by_user_id") WHERE "app"."stock_vendors"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "stock_vendors_tenant_isolation" ON "app"."stock_vendors" AS PERMISSIVE FOR ALL TO public USING ("app"."stock_vendors"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )
+          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."stock_vendors"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."stock_vendors" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.stock_items (folded from the Drizzle schema): keys, indexes, RLS, counters.
+ALTER TABLE "app"."stock_items" ADD CONSTRAINT "stock_items_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_items" ADD CONSTRAINT "stock_items_stock_vendor_id_stock_vendors_id_fk" FOREIGN KEY ("stock_vendor_id") REFERENCES "app"."stock_vendors"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_items" ADD CONSTRAINT "stock_items_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_items" ADD CONSTRAINT "stock_items_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_items_public_id" ON "app"."stock_items" USING btree ("public_id");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_items_organization_number" ON "app"."stock_items" USING btree ("organization_id","stock_item_number");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_items_organization_name_unique" ON "app"."stock_items" USING btree ("organization_id",lower("name")) WHERE "app"."stock_items"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_items_organization_name" ON "app"."stock_items" USING btree ("organization_id","name","id") WHERE "app"."stock_items"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_items_organization_category" ON "app"."stock_items" USING btree ("organization_id","category","name") WHERE "app"."stock_items"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_items_organization_low" ON "app"."stock_items" USING btree ("organization_id") WHERE "app"."stock_items"."deleted_at" IS NULL AND "app"."stock_items"."quantity" <= "app"."stock_items"."min_quantity";--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_items_organization_created" ON "app"."stock_items" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."stock_items"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_items_stock_vendor_id" ON "app"."stock_items" USING btree ("stock_vendor_id") WHERE "app"."stock_items"."stock_vendor_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_items_deleted_at" ON "app"."stock_items" USING btree ("deleted_at") WHERE "app"."stock_items"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_items_created_by_user_id" ON "app"."stock_items" USING btree ("created_by_user_id") WHERE "app"."stock_items"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_items_updated_by_user_id" ON "app"."stock_items" USING btree ("updated_by_user_id") WHERE "app"."stock_items"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "stock_items_tenant_isolation" ON "app"."stock_items" AS PERMISSIVE FOR ALL TO public USING ("app"."stock_items"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )
+          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."stock_items"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."stock_items" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TRIGGER trg_stock_items_stock_item_number BEFORE INSERT ON "app"."stock_items" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('stock_item_number');--> statement-breakpoint
+-- app.stock_purchase_items — a vendor bill and its lines (launch ROUTE #137, 9.D)
+CREATE TABLE IF NOT EXISTS "app"."stock_purchase_items" (
+	"stock_purchase_id" bigint NOT NULL,
+	"line_number" smallint NOT NULL,
+	"stock_item_id" bigint NOT NULL,
+	"organization_id" bigint NOT NULL,
+	"quantity" numeric(12, 3) NOT NULL,
+	"rate" numeric(12, 2) NOT NULL,
+	"amount" numeric(12, 2) NOT NULL,
+	CONSTRAINT "stock_purchase_items_pkey" PRIMARY KEY("stock_purchase_id","line_number"),
+	CONSTRAINT "chk_stock_purchase_items_line_number" CHECK ("app"."stock_purchase_items"."line_number" BETWEEN 1 AND 50),
+	CONSTRAINT "chk_stock_purchase_items_quantity" CHECK ("app"."stock_purchase_items"."quantity" > 0),
+	CONSTRAINT "chk_stock_purchase_items_rate" CHECK ("app"."stock_purchase_items"."rate" >= 0),
+	CONSTRAINT "chk_stock_purchase_items_amount" CHECK ("app"."stock_purchase_items"."amount" >= 0)
+);--> statement-breakpoint
+ALTER TABLE "app"."stock_purchase_items" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.stock_purchases, app.stock_purchase_items (folded from the Drizzle schema): keys, indexes, RLS, counters.
+ALTER TABLE "app"."stock_purchase_items" ADD CONSTRAINT "stock_purchase_items_stock_purchase_id_stock_purchases_id_fk" FOREIGN KEY ("stock_purchase_id") REFERENCES "app"."stock_purchases"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_purchase_items" ADD CONSTRAINT "stock_purchase_items_stock_item_id_stock_items_id_fk" FOREIGN KEY ("stock_item_id") REFERENCES "app"."stock_items"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_purchase_items" ADD CONSTRAINT "stock_purchase_items_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_purchases" ADD CONSTRAINT "stock_purchases_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_purchases" ADD CONSTRAINT "stock_purchases_stock_vendor_id_stock_vendors_id_fk" FOREIGN KEY ("stock_vendor_id") REFERENCES "app"."stock_vendors"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_purchases" ADD CONSTRAINT "stock_purchases_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_purchases" ADD CONSTRAINT "stock_purchases_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_purchase_items_stock_item_id" ON "app"."stock_purchase_items" USING btree ("stock_item_id");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_purchases_public_id" ON "app"."stock_purchases" USING btree ("public_id");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_purchases_organization_number" ON "app"."stock_purchases" USING btree ("organization_id","stock_purchase_number");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_purchases_organization_purchase_date" ON "app"."stock_purchases" USING btree ("organization_id","purchase_date" DESC NULLS LAST,"id") WHERE "app"."stock_purchases"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_purchases_stock_vendor_purchase_date" ON "app"."stock_purchases" USING btree ("stock_vendor_id","purchase_date") WHERE "app"."stock_purchases"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_purchases_organization_due" ON "app"."stock_purchases" USING btree ("organization_id","purchase_date") WHERE "app"."stock_purchases"."deleted_at" IS NULL AND "app"."stock_purchases"."due_amount" > 0;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_purchases_organization_created" ON "app"."stock_purchases" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."stock_purchases"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_purchases_deleted_at" ON "app"."stock_purchases" USING btree ("deleted_at") WHERE "app"."stock_purchases"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_purchases_created_by_user_id" ON "app"."stock_purchases" USING btree ("created_by_user_id") WHERE "app"."stock_purchases"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_purchases_updated_by_user_id" ON "app"."stock_purchases" USING btree ("updated_by_user_id") WHERE "app"."stock_purchases"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "stock_purchase_items_tenant_isolation" ON "app"."stock_purchase_items" AS PERMISSIVE FOR ALL TO public USING ("app"."stock_purchase_items"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )) WITH CHECK ("app"."stock_purchase_items"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+CREATE POLICY "stock_purchases_tenant_isolation" ON "app"."stock_purchases" AS PERMISSIVE FOR ALL TO public USING ("app"."stock_purchases"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )
+          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."stock_purchases"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."stock_purchases" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "app"."stock_purchase_items" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TRIGGER trg_stock_purchases_stock_purchase_number BEFORE INSERT ON "app"."stock_purchases" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('stock_purchase_number');--> statement-breakpoint
+-- app.stock_count_lines — a stock check and what it counted (launch ROUTE #137, 9.C)
+CREATE TABLE IF NOT EXISTS "app"."stock_count_lines" (
+	"stock_count_id" bigint NOT NULL,
+	"stock_item_id" bigint NOT NULL,
+	"organization_id" bigint NOT NULL,
+	"system_quantity" numeric(12, 3) NOT NULL,
+	"counted_quantity" numeric(12, 3) NOT NULL,
+	CONSTRAINT "stock_count_lines_pkey" PRIMARY KEY("stock_count_id","stock_item_id"),
+	CONSTRAINT "chk_stock_count_lines_system_quantity" CHECK ("app"."stock_count_lines"."system_quantity" >= 0),
+	CONSTRAINT "chk_stock_count_lines_counted_quantity" CHECK ("app"."stock_count_lines"."counted_quantity" >= 0)
+);--> statement-breakpoint
+ALTER TABLE "app"."stock_count_lines" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.stock_counts, app.stock_count_lines (folded from the Drizzle schema): keys, indexes, RLS.
+ALTER TABLE "app"."stock_count_lines" ADD CONSTRAINT "stock_count_lines_stock_count_id_stock_counts_id_fk" FOREIGN KEY ("stock_count_id") REFERENCES "app"."stock_counts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_count_lines" ADD CONSTRAINT "stock_count_lines_stock_item_id_stock_items_id_fk" FOREIGN KEY ("stock_item_id") REFERENCES "app"."stock_items"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_count_lines" ADD CONSTRAINT "stock_count_lines_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_counts" ADD CONSTRAINT "stock_counts_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_counts" ADD CONSTRAINT "stock_counts_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_counts" ADD CONSTRAINT "stock_counts_author_membership_fk" FOREIGN KEY ("organization_id","author_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_count_lines_stock_item_id" ON "app"."stock_count_lines" USING btree ("stock_item_id");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_counts_public_id" ON "app"."stock_counts" USING btree ("public_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_counts_organization_counted_at" ON "app"."stock_counts" USING btree ("organization_id","counted_at" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_counts_author_membership_id" ON "app"."stock_counts" USING btree ("organization_id","author_membership_id") WHERE "app"."stock_counts"."author_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_counts_created_by_user_id" ON "app"."stock_counts" USING btree ("created_by_user_id") WHERE "app"."stock_counts"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "stock_count_lines_tenant_isolation" ON "app"."stock_count_lines" AS PERMISSIVE FOR ALL TO public USING ("app"."stock_count_lines"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )) WITH CHECK ("app"."stock_count_lines"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+CREATE POLICY "stock_counts_tenant_isolation" ON "app"."stock_counts" AS PERMISSIVE FOR ALL TO public USING ("app"."stock_counts"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )) WITH CHECK ("app"."stock_counts"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."stock_counts" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "app"."stock_count_lines" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.stock_item_movements (folded from the Drizzle schema): keys, indexes, RLS.
+ALTER TABLE "app"."stock_item_movements" ADD CONSTRAINT "stock_item_movements_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_item_movements" ADD CONSTRAINT "stock_item_movements_stock_item_id_stock_items_id_fk" FOREIGN KEY ("stock_item_id") REFERENCES "app"."stock_items"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_item_movements" ADD CONSTRAINT "stock_item_movements_patient_treatment_id_patient_treatments_id_fk" FOREIGN KEY ("patient_treatment_id") REFERENCES "app"."patient_treatments"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_item_movements" ADD CONSTRAINT "stock_item_movements_stock_purchase_id_stock_purchases_id_fk" FOREIGN KEY ("stock_purchase_id") REFERENCES "app"."stock_purchases"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_item_movements" ADD CONSTRAINT "stock_item_movements_stock_count_id_stock_counts_id_fk" FOREIGN KEY ("stock_count_id") REFERENCES "app"."stock_counts"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_item_movements" ADD CONSTRAINT "stock_item_movements_reverts_stock_item_movement_id_stock_item_movements_id_fk" FOREIGN KEY ("reverts_stock_item_movement_id") REFERENCES "app"."stock_item_movements"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_item_movements" ADD CONSTRAINT "stock_item_movements_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."stock_item_movements" ADD CONSTRAINT "stock_item_movements_author_membership_fk" FOREIGN KEY ("organization_id","author_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_item_movements_public_id" ON "app"."stock_item_movements" USING btree ("public_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_item_movements_stock_item_created" ON "app"."stock_item_movements" USING btree ("stock_item_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_item_movements_organization_created" ON "app"."stock_item_movements" USING btree ("organization_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_item_movements_stock_purchase_id" ON "app"."stock_item_movements" USING btree ("stock_purchase_id") WHERE "app"."stock_item_movements"."stock_purchase_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_item_movements_stock_count_id" ON "app"."stock_item_movements" USING btree ("stock_count_id") WHERE "app"."stock_item_movements"."stock_count_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_item_movements_patient_treatment_id" ON "app"."stock_item_movements" USING btree ("patient_treatment_id") WHERE "app"."stock_item_movements"."patient_treatment_id" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_item_movements_reverts" ON "app"."stock_item_movements" USING btree ("reverts_stock_item_movement_id") WHERE "app"."stock_item_movements"."reverts_stock_item_movement_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_item_movements_author_membership_id" ON "app"."stock_item_movements" USING btree ("organization_id","author_membership_id") WHERE "app"."stock_item_movements"."author_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_item_movements_created_by_user_id" ON "app"."stock_item_movements" USING btree ("created_by_user_id") WHERE "app"."stock_item_movements"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "stock_item_movements_tenant_isolation" ON "app"."stock_item_movements" AS PERMISSIVE FOR ALL TO public USING ("app"."stock_item_movements"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )) WITH CHECK ("app"."stock_item_movements"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."stock_item_movements" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.payments (folded from the Drizzle schema): keys, indexes, RLS, counters.
+ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_branch_id_branches_id_fk" FOREIGN KEY ("branch_id") REFERENCES "app"."branches"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "app"."contacts"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_invoice_id_invoices_id_fk" FOREIGN KEY ("invoice_id") REFERENCES "app"."invoices"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_invoice_credit_note_id_invoice_credit_notes_id_fk" FOREIGN KEY ("invoice_credit_note_id") REFERENCES "app"."invoice_credit_notes"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_pending_credit_id_pending_credits_id_fk" FOREIGN KEY ("pending_credit_id") REFERENCES "app"."pending_credits"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_reverses_payment_id_payments_id_fk" FOREIGN KEY ("reverses_payment_id") REFERENCES "app"."payments"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_stock_purchase_id_stock_purchases_id_fk" FOREIGN KEY ("stock_purchase_id") REFERENCES "app"."stock_purchases"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_payments_public_id" ON "app"."payments" USING btree ("public_id");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_payments_organization_payment_number" ON "app"."payments" USING btree ("organization_id","payment_number");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_payments_organization_paid_at" ON "app"."payments" USING btree ("organization_id","paid_at" DESC NULLS LAST,"id") WHERE "app"."payments"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_payments_branch_paid_at" ON "app"."payments" USING btree ("branch_id","paid_at") WHERE "app"."payments"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_payments_contact_paid_at" ON "app"."payments" USING btree ("contact_id","paid_at" DESC NULLS LAST) WHERE "app"."payments"."deleted_at" IS NULL AND "app"."payments"."contact_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_payments_invoice_id" ON "app"."payments" USING btree ("invoice_id") WHERE "app"."payments"."invoice_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_payments_pending_credit_id" ON "app"."payments" USING btree ("pending_credit_id") WHERE "app"."payments"."pending_credit_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_payments_stock_purchase_id" ON "app"."payments" USING btree ("stock_purchase_id") WHERE "app"."payments"."stock_purchase_id" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_payments_reverses_payment_id" ON "app"."payments" USING btree ("reverses_payment_id") WHERE "app"."payments"."reverses_payment_id" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_payments_invoice_credit_note_id" ON "app"."payments" USING btree ("invoice_credit_note_id") WHERE "app"."payments"."invoice_credit_note_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_payments_deleted_at" ON "app"."payments" USING btree ("deleted_at") WHERE "app"."payments"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_payments_created_by_user_id" ON "app"."payments" USING btree ("created_by_user_id") WHERE "app"."payments"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_payments_updated_by_user_id" ON "app"."payments" USING btree ("updated_by_user_id") WHERE "app"."payments"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "payments_tenant_isolation" ON "app"."payments" AS PERMISSIVE FOR ALL TO public USING ("app"."payments"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )
+          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."payments"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."payments" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TRIGGER trg_payments_payment_number BEFORE INSERT ON "app"."payments" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('payment_number');--> statement-breakpoint
 -- ── end of app records ──
 GRANT USAGE ON SCHEMA auth, tenancy, billing, notify, audit, upload, app TO clinozy_be_app;
 --> statement-breakpoint

@@ -265,71 +265,71 @@ that drops them is built. The medical store's routes wait for its own review ([D
 
 | # | Change | Method | Path | Access | Operation | Source | Built |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 8.1 | KEPT | GET | `/invoices` | `payment:read` | List invoices | routes-final §8.A.7 | `GET /api/v1/app/invoices` · #136 |
-| 8.2 | KEPT | GET | `/invoices/exports` | `payment:export` | The invoices CSV | routes-final §8.A.7 | `GET /api/v1/app/invoices/exports` · #136 |
-| 8.3 | KEPT | POST | `/invoices` | `payment:create` | Bill — optionally with "Paid now" | routes-final §8.A.7 | `POST /api/v1/app/invoices` · #136 |
-| 8.4 | KEPT | GET | `/invoices/{invoice_id}` | `payment:read` | Get an invoice (the print preview) | routes-final §8.A.7 | `GET /api/v1/app/invoices/{invoice_id}` · #136 |
-| 8.5 | KEPT | PATCH | `/invoices/{invoice_id}` | `payment:update` | Change it, until settled | routes-final §8.A.7 | `PATCH /api/v1/app/invoices/{invoice_id}` · #136 |
-| 8.6 | KEPT | DELETE | `/invoices/{invoice_id}` | `payment:delete` | Delete an unpaid invoice | routes-final §8.A.7 | `DELETE /api/v1/app/invoices/{invoice_id}` · #136 |
-| 8.7 | KEPT | POST | `/invoices/{invoice_id}/restore` | `payment:delete` | Undo | routes-final §8.A.7 | `POST /api/v1/app/invoices/{invoice_id}/restore` · #136 |
-| 8.8 | CHANGED | GET | `/invoice-credit-notes` | `payment:read` | Every credit note | routes-final §8.B.7 | `GET /api/v1/app/invoice-credit-notes` · #136 |
-| 8.9 | KEPT | GET | `/invoices/{invoice_id}/credit-notes` | `payment:read` | An invoice's credit notes | routes-final §8.B.7 | `GET /api/v1/app/invoices/{invoice_id}/credit-notes` · #136 |
-| 8.10 | NEW | POST | `/invoices/{invoice_id}/credit-notes` | `payment:create` | Refund: credit note + refund payment | routes-final §8.B.7 | `POST /api/v1/app/invoices/{invoice_id}/credit-notes` · #136 |
-| 8.11 | CHANGED | GET | `/invoices/{invoice_id}/credit-notes/{invoice_credit_note_id}` | `payment:read` | Get one | routes-final §8.B.7 | `GET /api/v1/app/invoices/{invoice_id}/credit-notes/{invoice_credit_note_id}` · #136 |
-| 8.12 | KEPT | GET | `/payments` | `payment:read` | The ledger | routes-final §8.C.7 | `GET /api/v1/app/payments` · #136 |
-| 8.13 | KEPT | GET | `/payments/exports` | `payment:export` | The payments CSV | routes-final §8.C.7 | `GET /api/v1/app/payments/exports` · #136 |
-| 8.14 | KEPT | POST | `/payments` | `payment:create` | Receive, pay an expense or a supplier bill, record money back | routes-final §8.C.7 | `POST /api/v1/app/payments` · #136 |
-| 8.15 | KEPT | GET | `/payments/{payment_id}` | `payment:read` | Get a payment | routes-final §8.C.7 | `GET /api/v1/app/payments/{payment_id}` · #136 |
-| 8.16 | KEPT | PATCH | `/payments/{payment_id}` | `payment:update` | Change it on an open day — recorded | routes-final §8.C.7 | `PATCH /api/v1/app/payments/{payment_id}` · #136 |
-| 8.17 | NEW | GET | `/payments/{payment_id}/edits` | `payment:read` | What changed | routes-final §8.C.7 | `GET /api/v1/app/payments/{payment_id}/edits` · #136 |
-| 8.18 | NEW | POST | `/payments/{payment_id}/reverse` | `payment:delete` | Undo a settled payment | routes-final §8.C.7 | `POST /api/v1/app/payments/{payment_id}/reverse` · #136 |
-| 8.19 | KEPT | DELETE | `/payments/{payment_id}` | `payment:delete` | Delete on an open day | routes-final §8.C.7 | `DELETE /api/v1/app/payments/{payment_id}` · #136 |
-| 8.20 | KEPT | POST | `/payments/{payment_id}/restore` | `payment:delete` | Undo | routes-final §8.C.7 | `POST /api/v1/app/payments/{payment_id}/restore` · #136 |
-| 8.21 | KEPT | GET | `/pending-credits` | `payment:read` | List pending credits | routes-final §8.D.7 | `GET /api/v1/app/pending-credits` · #136 |
-| 8.22 | KEPT | POST | `/pending-credits` | `payment:create` | Add one — give or take | routes-final §8.D.7 | `POST /api/v1/app/pending-credits` · #136 |
-| 8.23 | KEPT | GET | `/pending-credits/{pending_credit_id}` | `payment:read` | Get one | routes-final §8.D.7 | `GET /api/v1/app/pending-credits/{pending_credit_id}` · #136 |
-| 8.24 | KEPT | PATCH | `/pending-credits/{pending_credit_id}` | `payment:update` | Change it, while nothing is settled | routes-final §8.D.7 | `PATCH /api/v1/app/pending-credits/{pending_credit_id}` · #136 |
-| 8.25 | KEPT | DELETE | `/pending-credits/{pending_credit_id}` | `payment:delete` | Delete it, while nothing is settled | routes-final §8.D.7 | `DELETE /api/v1/app/pending-credits/{pending_credit_id}` · #136 |
-| 8.26 | KEPT | POST | `/pending-credits/{pending_credit_id}/restore` | `payment:delete` | Undo | routes-final §8.D.7 | `POST /api/v1/app/pending-credits/{pending_credit_id}/restore` · #136 |
-| 8.27 | NEW | POST | `/pending-credits/{pending_credit_id}/settle` | `payment:create` | Give back, get back, or use on a bill | routes-final §8.D.7 | `POST /api/v1/app/pending-credits/{pending_credit_id}/settle` · #136 |
-| 8.28 | KEPT | GET | `/day-closes` | `payment:read` | Past and open days | routes-final §8.E.7 | `GET /api/v1/app/day-closes` · #136 |
-| 8.29 | KEPT | POST | `/day-closes` | `payment:update` | Open the day — accept or recount the opening cash | routes-final §8.E.7 | `POST /api/v1/app/day-closes` · #136 |
-| 8.30 | KEPT | GET | `/day-closes/{day_close_id}` | `payment:read` | A day, with its live figures and events | routes-final §8.E.7 | `GET /api/v1/app/day-closes/{day_close_id}` · #136 |
-| 8.31 | KEPT | POST | `/day-closes/{day_close_id}/close` | `payment:update` | Count and close — locks the day | routes-final §8.E.7 | `POST /api/v1/app/day-closes/{day_close_id}/close` · #136 |
-| 8.32 | KEPT | POST | `/day-closes/{day_close_id}/reopen` | `payment:delete` | Reopen a closed day | routes-final §8.E.7 | `POST /api/v1/app/day-closes/{day_close_id}/reopen` · #136 |
+| 8.1 | KEPT | GET | `/invoices` | `payment:read` | List invoices | routes-final §8.A.7 | `GET /api/v1/app/invoices` · #136 · af50257 |
+| 8.2 | KEPT | GET | `/invoices/exports` | `payment:export` | The invoices CSV | routes-final §8.A.7 | `GET /api/v1/app/invoices/exports` · #136 · af50257 |
+| 8.3 | KEPT | POST | `/invoices` | `payment:create` | Bill — optionally with "Paid now" | routes-final §8.A.7 | `POST /api/v1/app/invoices` · #136 · af50257 |
+| 8.4 | KEPT | GET | `/invoices/{invoice_id}` | `payment:read` | Get an invoice (the print preview) | routes-final §8.A.7 | `GET /api/v1/app/invoices/{invoice_id}` · #136 · af50257 |
+| 8.5 | KEPT | PATCH | `/invoices/{invoice_id}` | `payment:update` | Change it, until settled | routes-final §8.A.7 | `PATCH /api/v1/app/invoices/{invoice_id}` · #136 · af50257 |
+| 8.6 | KEPT | DELETE | `/invoices/{invoice_id}` | `payment:delete` | Delete an unpaid invoice | routes-final §8.A.7 | `DELETE /api/v1/app/invoices/{invoice_id}` · #136 · af50257 |
+| 8.7 | KEPT | POST | `/invoices/{invoice_id}/restore` | `payment:delete` | Undo | routes-final §8.A.7 | `POST /api/v1/app/invoices/{invoice_id}/restore` · #136 · af50257 |
+| 8.8 | CHANGED | GET | `/invoice-credit-notes` | `payment:read` | Every credit note | routes-final §8.B.7 | `GET /api/v1/app/invoice-credit-notes` · #136 · af50257 |
+| 8.9 | KEPT | GET | `/invoices/{invoice_id}/credit-notes` | `payment:read` | An invoice's credit notes | routes-final §8.B.7 | `GET /api/v1/app/invoices/{invoice_id}/credit-notes` · #136 · af50257 |
+| 8.10 | NEW | POST | `/invoices/{invoice_id}/credit-notes` | `payment:create` | Refund: credit note + refund payment | routes-final §8.B.7 | `POST /api/v1/app/invoices/{invoice_id}/credit-notes` · #136 · af50257 |
+| 8.11 | CHANGED | GET | `/invoices/{invoice_id}/credit-notes/{invoice_credit_note_id}` | `payment:read` | Get one | routes-final §8.B.7 | `GET /api/v1/app/invoices/{invoice_id}/credit-notes/{invoice_credit_note_id}` · #136 · af50257 |
+| 8.12 | KEPT | GET | `/payments` | `payment:read` | The ledger | routes-final §8.C.7 | `GET /api/v1/app/payments` · #136 · af50257 |
+| 8.13 | KEPT | GET | `/payments/exports` | `payment:export` | The payments CSV | routes-final §8.C.7 | `GET /api/v1/app/payments/exports` · #136 · af50257 |
+| 8.14 | KEPT | POST | `/payments` | `payment:create` | Receive, pay an expense or a supplier bill, record money back | routes-final §8.C.7 | `POST /api/v1/app/payments` · #136 · af50257 |
+| 8.15 | KEPT | GET | `/payments/{payment_id}` | `payment:read` | Get a payment | routes-final §8.C.7 | `GET /api/v1/app/payments/{payment_id}` · #136 · af50257 |
+| 8.16 | KEPT | PATCH | `/payments/{payment_id}` | `payment:update` | Change it on an open day — recorded | routes-final §8.C.7 | `PATCH /api/v1/app/payments/{payment_id}` · #136 · af50257 |
+| 8.17 | NEW | GET | `/payments/{payment_id}/edits` | `payment:read` | What changed | routes-final §8.C.7 | `GET /api/v1/app/payments/{payment_id}/edits` · #136 · af50257 |
+| 8.18 | NEW | POST | `/payments/{payment_id}/reverse` | `payment:delete` | Undo a settled payment | routes-final §8.C.7 | `POST /api/v1/app/payments/{payment_id}/reverse` · #136 · af50257 |
+| 8.19 | KEPT | DELETE | `/payments/{payment_id}` | `payment:delete` | Delete on an open day | routes-final §8.C.7 | `DELETE /api/v1/app/payments/{payment_id}` · #136 · af50257 |
+| 8.20 | KEPT | POST | `/payments/{payment_id}/restore` | `payment:delete` | Undo | routes-final §8.C.7 | `POST /api/v1/app/payments/{payment_id}/restore` · #136 · af50257 |
+| 8.21 | KEPT | GET | `/pending-credits` | `payment:read` | List pending credits | routes-final §8.D.7 | `GET /api/v1/app/pending-credits` · #136 · af50257 |
+| 8.22 | KEPT | POST | `/pending-credits` | `payment:create` | Add one — give or take | routes-final §8.D.7 | `POST /api/v1/app/pending-credits` · #136 · af50257 |
+| 8.23 | KEPT | GET | `/pending-credits/{pending_credit_id}` | `payment:read` | Get one | routes-final §8.D.7 | `GET /api/v1/app/pending-credits/{pending_credit_id}` · #136 · af50257 |
+| 8.24 | KEPT | PATCH | `/pending-credits/{pending_credit_id}` | `payment:update` | Change it, while nothing is settled | routes-final §8.D.7 | `PATCH /api/v1/app/pending-credits/{pending_credit_id}` · #136 · af50257 |
+| 8.25 | KEPT | DELETE | `/pending-credits/{pending_credit_id}` | `payment:delete` | Delete it, while nothing is settled | routes-final §8.D.7 | `DELETE /api/v1/app/pending-credits/{pending_credit_id}` · #136 · af50257 |
+| 8.26 | KEPT | POST | `/pending-credits/{pending_credit_id}/restore` | `payment:delete` | Undo | routes-final §8.D.7 | `POST /api/v1/app/pending-credits/{pending_credit_id}/restore` · #136 · af50257 |
+| 8.27 | NEW | POST | `/pending-credits/{pending_credit_id}/settle` | `payment:create` | Give back, get back, or use on a bill | routes-final §8.D.7 | `POST /api/v1/app/pending-credits/{pending_credit_id}/settle` · #136 · af50257 |
+| 8.28 | KEPT | GET | `/day-closes` | `payment:read` | Past and open days | routes-final §8.E.7 | `GET /api/v1/app/day-closes` · #136 · af50257 |
+| 8.29 | KEPT | POST | `/day-closes` | `payment:update` | Open the day — accept or recount the opening cash | routes-final §8.E.7 | `POST /api/v1/app/day-closes` · #136 · af50257 |
+| 8.30 | KEPT | GET | `/day-closes/{day_close_id}` | `payment:read` | A day, with its live figures and events | routes-final §8.E.7 | `GET /api/v1/app/day-closes/{day_close_id}` · #136 · af50257 |
+| 8.31 | KEPT | POST | `/day-closes/{day_close_id}/close` | `payment:update` | Count and close — locks the day | routes-final §8.E.7 | `POST /api/v1/app/day-closes/{day_close_id}/close` · #136 · af50257 |
+| 8.32 | KEPT | POST | `/day-closes/{day_close_id}/reopen` | `payment:delete` | Reopen a closed day | routes-final §8.E.7 | `POST /api/v1/app/day-closes/{day_close_id}/reopen` · #136 · af50257 |
 
 ## 9. Stock
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| 9.1 | KEPT | GET | `/stock-items` | `stock_item:read` | The Items tab | routes-final §9.A.7 |
-| 9.2 | KEPT | GET | `/stock-items/exports` | `stock_item:export` | The items CSV | routes-final §9.A.7 |
-| 9.3 | KEPT | POST | `/stock-items` | `stock_item:create` | Add an item, with its opening quantity | routes-final §9.A.7 |
-| 9.4 | KEPT | GET | `/stock-items/{stock_item_id}` | `stock_item:read` | Get an item | routes-final §9.A.7 |
-| 9.5 | KEPT | PATCH | `/stock-items/{stock_item_id}` | `stock_item:update` | Change an item (not its quantity) | routes-final §9.A.7 |
-| 9.6 | KEPT | DELETE | `/stock-items/{stock_item_id}` | `stock_item:delete` | Delete an item at zero | routes-final §9.A.7 |
-| 9.7 | KEPT | POST | `/stock-items/{stock_item_id}/restore` | `stock_item:delete` | Undo | routes-final §9.A.7 |
-| 9.8 | CHANGED | GET | `/stock-item-movements` | `stock_item:read` | Every movement — the Movements tab | routes-final §9.B.7 |
-| 9.9 | KEPT | GET | `/stock-items/{stock_item_id}/movements` | `stock_item:read` | An item's history | routes-final §9.B.7 |
-| 9.10 | CHANGED | POST | `/stock-items/{stock_item_id}/movements` | `stock_item:update` | Use, receive, damage, return or adjust | routes-final §9.B.7 |
-| 9.11 | CHANGED | GET | `/stock-items/{stock_item_id}/movements/{stock_item_movement_id}` | `stock_item:read` | Get one | routes-final §9.B.7 |
-| 9.12 | NEW | POST | `/stock-items/{stock_item_id}/movements/{stock_item_movement_id}/revert` | `stock_item:update` | Revert it with a reason | routes-final §9.B.7 |
-| 9.13 | KEPT | GET | `/stock-counts` | `stock_item:read` | Past stock checks | routes-final §9.C.7 |
-| 9.14 | KEPT | POST | `/stock-counts` | `stock_item:update` | Save a stock check — adjusts what differs | routes-final §9.C.7 |
-| 9.15 | KEPT | GET | `/stock-counts/{stock_count_id}` | `stock_item:read` | Get one | routes-final §9.C.7 |
-| 9.16 | KEPT | GET | `/stock-purchases` | `stock_item:read` | The Purchases tab | routes-final §9.D.7 |
-| 9.17 | KEPT | GET | `/stock-purchases/exports` | `stock_item:export` | The purchases CSV | routes-final §9.D.7 |
-| 9.18 | KEPT | POST | `/stock-purchases` | `stock_item:create` | Record a purchase — receives its lines, optionally pays | routes-final §9.D.7 |
-| 9.19 | KEPT | GET | `/stock-purchases/{stock_purchase_id}` | `stock_item:read` | Get one | routes-final §9.D.7 |
-| 9.20 | KEPT | PATCH | `/stock-purchases/{stock_purchase_id}` | `stock_item:update` | Change the bill details | routes-final §9.D.7 |
-| 9.21 | KEPT | DELETE | `/stock-purchases/{stock_purchase_id}` | `stock_item:delete` | Delete an unpaid purchase | routes-final §9.D.7 |
-| 9.22 | KEPT | POST | `/stock-purchases/{stock_purchase_id}/restore` | `stock_item:delete` | Undo | routes-final §9.D.7 |
-| 9.23 | KEPT | GET | `/stock-vendors` | `stock_item:read` | The vendor picker | routes-final §9.E.7 |
-| 9.24 | KEPT | POST | `/stock-vendors` | `stock_item:create` | Add a vendor | routes-final §9.E.7 |
-| 9.25 | KEPT | GET | `/stock-vendors/{stock_vendor_id}` | `stock_item:read` | Get one | routes-final §9.E.7 |
-| 9.26 | KEPT | PATCH | `/stock-vendors/{stock_vendor_id}` | `stock_item:update` | Change one | routes-final §9.E.7 |
-| 9.27 | KEPT | DELETE | `/stock-vendors/{stock_vendor_id}` | `stock_item:delete` | Delete one with nothing owed | routes-final §9.E.7 |
-| 9.28 | KEPT | POST | `/stock-vendors/{stock_vendor_id}/restore` | `stock_item:delete` | Undo | routes-final §9.E.7 |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 9.1 | KEPT | GET | `/stock-items` | `stock_item:read` | The Items tab | routes-final §9.A.7 | `GET /api/v1/app/stock-items` · #137 |
+| 9.2 | KEPT | GET | `/stock-items/exports` | `stock_item:export` | The items CSV | routes-final §9.A.7 | `GET /api/v1/app/stock-items/exports` · #137 |
+| 9.3 | KEPT | POST | `/stock-items` | `stock_item:create` | Add an item, with its opening quantity | routes-final §9.A.7 | `POST /api/v1/app/stock-items` · #137 |
+| 9.4 | KEPT | GET | `/stock-items/{stock_item_id}` | `stock_item:read` | Get an item | routes-final §9.A.7 | `GET /api/v1/app/stock-items/{stock_item_id}` · #137 |
+| 9.5 | KEPT | PATCH | `/stock-items/{stock_item_id}` | `stock_item:update` | Change an item (not its quantity) | routes-final §9.A.7 | `PATCH /api/v1/app/stock-items/{stock_item_id}` · #137 |
+| 9.6 | KEPT | DELETE | `/stock-items/{stock_item_id}` | `stock_item:delete` | Delete an item at zero | routes-final §9.A.7 | `DELETE /api/v1/app/stock-items/{stock_item_id}` · #137 |
+| 9.7 | KEPT | POST | `/stock-items/{stock_item_id}/restore` | `stock_item:delete` | Undo | routes-final §9.A.7 | `POST /api/v1/app/stock-items/{stock_item_id}/restore` · #137 |
+| 9.8 | CHANGED | GET | `/stock-item-movements` | `stock_item:read` | Every movement — the Movements tab | routes-final §9.B.7 | `GET /api/v1/app/stock-item-movements` · #137 |
+| 9.9 | KEPT | GET | `/stock-items/{stock_item_id}/movements` | `stock_item:read` | An item's history | routes-final §9.B.7 | `GET /api/v1/app/stock-items/{stock_item_id}/movements` · #137 |
+| 9.10 | CHANGED | POST | `/stock-items/{stock_item_id}/movements` | `stock_item:update` | Use, receive, damage, return or adjust | routes-final §9.B.7 | `POST /api/v1/app/stock-items/{stock_item_id}/movements` · #137 |
+| 9.11 | CHANGED | GET | `/stock-items/{stock_item_id}/movements/{stock_item_movement_id}` | `stock_item:read` | Get one | routes-final §9.B.7 | `GET /api/v1/app/stock-items/{stock_item_id}/movements/{stock_item_movement_id}` · #137 |
+| 9.12 | NEW | POST | `/stock-items/{stock_item_id}/movements/{stock_item_movement_id}/revert` | `stock_item:update` | Revert it with a reason | routes-final §9.B.7 | `POST /api/v1/app/stock-items/{stock_item_id}/movements/{stock_item_movement_id}/revert` · #137 |
+| 9.13 | KEPT | GET | `/stock-counts` | `stock_item:read` | Past stock checks | routes-final §9.C.7 | `GET /api/v1/app/stock-counts` · #137 |
+| 9.14 | KEPT | POST | `/stock-counts` | `stock_item:update` | Save a stock check — adjusts what differs | routes-final §9.C.7 | `POST /api/v1/app/stock-counts` · #137 |
+| 9.15 | KEPT | GET | `/stock-counts/{stock_count_id}` | `stock_item:read` | Get one | routes-final §9.C.7 | `GET /api/v1/app/stock-counts/{stock_count_id}` · #137 |
+| 9.16 | KEPT | GET | `/stock-purchases` | `stock_item:read` | The Purchases tab | routes-final §9.D.7 | `GET /api/v1/app/stock-purchases` · #137 |
+| 9.17 | KEPT | GET | `/stock-purchases/exports` | `stock_item:export` | The purchases CSV | routes-final §9.D.7 | `GET /api/v1/app/stock-purchases/exports` · #137 |
+| 9.18 | KEPT | POST | `/stock-purchases` | `stock_item:create` | Record a purchase — receives its lines, optionally pays | routes-final §9.D.7 | `POST /api/v1/app/stock-purchases` · #137 |
+| 9.19 | KEPT | GET | `/stock-purchases/{stock_purchase_id}` | `stock_item:read` | Get one | routes-final §9.D.7 | `GET /api/v1/app/stock-purchases/{stock_purchase_id}` · #137 |
+| 9.20 | KEPT | PATCH | `/stock-purchases/{stock_purchase_id}` | `stock_item:update` | Change the bill details | routes-final §9.D.7 | `PATCH /api/v1/app/stock-purchases/{stock_purchase_id}` · #137 |
+| 9.21 | KEPT | DELETE | `/stock-purchases/{stock_purchase_id}` | `stock_item:delete` | Delete an unpaid purchase | routes-final §9.D.7 | `DELETE /api/v1/app/stock-purchases/{stock_purchase_id}` · #137 |
+| 9.22 | KEPT | POST | `/stock-purchases/{stock_purchase_id}/restore` | `stock_item:delete` | Undo | routes-final §9.D.7 | `POST /api/v1/app/stock-purchases/{stock_purchase_id}/restore` · #137 |
+| 9.23 | KEPT | GET | `/stock-vendors` | `stock_item:read` | The vendor picker | routes-final §9.E.7 | `GET /api/v1/app/stock-vendors` · #137 |
+| 9.24 | KEPT | POST | `/stock-vendors` | `stock_item:create` | Add a vendor | routes-final §9.E.7 | `POST /api/v1/app/stock-vendors` · #137 |
+| 9.25 | KEPT | GET | `/stock-vendors/{stock_vendor_id}` | `stock_item:read` | Get one | routes-final §9.E.7 | `GET /api/v1/app/stock-vendors/{stock_vendor_id}` · #137 |
+| 9.26 | KEPT | PATCH | `/stock-vendors/{stock_vendor_id}` | `stock_item:update` | Change one | routes-final §9.E.7 | `PATCH /api/v1/app/stock-vendors/{stock_vendor_id}` · #137 |
+| 9.27 | KEPT | DELETE | `/stock-vendors/{stock_vendor_id}` | `stock_item:delete` | Delete one with nothing owed | routes-final §9.E.7 | `DELETE /api/v1/app/stock-vendors/{stock_vendor_id}` · #137 |
+| 9.28 | KEPT | POST | `/stock-vendors/{stock_vendor_id}/restore` | `stock_item:delete` | Undo | routes-final §9.E.7 | `POST /api/v1/app/stock-vendors/{stock_vendor_id}/restore` · #137 |
 
 ## 10. Tasks & rules
 

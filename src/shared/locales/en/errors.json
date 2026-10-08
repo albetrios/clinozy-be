@@ -140,7 +140,17 @@
     "pendingCreditAmountMoreThanLeft": "That is more than is left of this pending credit",
     "pendingCreditInvoiceOtherContact": "That invoice is another contact's",
     "pendingCreditPartyRequired": "Pick a contact or type a name",
-    "pendingCreditUseOnBillGiveOnly": "Only money the clinic owes can be used on a bill"
+    "pendingCreditUseOnBillGiveOnly": "Only money the clinic owes can be used on a bill",
+    "stockItemSizeWithMeasure": "Give the size per unit and its measure together, or neither",
+    "stockItemMaxBelowMin": "The maximum can't be under the minimum",
+    "stockMovementTreatmentReversed": "That treatment session was reversed — pick a done one",
+    "stockMovementAdjustUnchanged": "The counted quantity is what is in stock — nothing to adjust",
+    "stockCountUnknownItem": "No stock item {{id}} here",
+    "stockCountNothingDiffers": "Every counted quantity matches the stock — nothing to save",
+    "stockPurchaseUnknownItem": "No stock item {{id}} here",
+    "stockPurchaseDateInFuture": "The purchase date can't be in the future",
+    "stockPurchaseBillBelowPaid": "The bill can't be under what is already paid",
+    "paymentStockPurchaseOnlySupplierBill": "Only a supplier bill pays a stock purchase"
   },
   "missingSessionCookie": "Missing session cookie",
   "disposableEmail": "This email domain is not allowed.",
@@ -304,9 +314,15 @@
   "paymentAlreadyReversed": "This payment was reversed before, or is itself a reversal",
   "paymentDayClosed": "The day of {{date}} is closed at this branch — its money can't change",
   "paymentDayOpen": "This payment's day is still open — delete it instead of reversing it",
-  "paymentMoreThanDue": "That is more than the invoice's due",
-  "paymentMoreThanPaid": "That is more than the invoice has paid",
+  "paymentMoreThanDue": "That is more than the bill's due",
+  "paymentMoreThanPaid": "That is more than the bill has paid",
   "pendingCreditClosed": "This pending credit is settled in full",
   "pendingCreditNothingDue": "Nothing due for this party to adjust against on that invoice",
-  "pendingCreditSettled": "Part of this pending credit is settled — it can't change or be deleted"
+  "pendingCreditSettled": "Part of this pending credit is settled — it can't change or be deleted",
+  "stockNotEnough": "Only {{quantity}} {{unit}} in stock — that would take it below zero",
+  "stockVendorHasDues": "A purchase from this vendor is not fully paid — pay or settle it first",
+  "stockItemHasStock": "This item still has stock — write it off before deleting it",
+  "stockMovementAlreadyReverted": "This movement was reverted before, or is itself a revert",
+  "stockPurchaseReceived": "A purchase's lines are fixed once saved — record another purchase or revert a movement",
+  "stockPurchasePaid": "Something is paid on this purchase — it can't be deleted"
 }

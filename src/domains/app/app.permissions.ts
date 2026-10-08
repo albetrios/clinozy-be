@@ -84,18 +84,14 @@ export const APP_PERMISSIONS = {
   MEDICAL_SALE_CREATE: 'medical_sale:create',
   MEDICAL_SALE_UPDATE: 'medical_sale:update',
   MEDICAL_SALE_DELETE: 'medical_sale:delete',
-  STOCK_VENDOR_READ: 'stock_vendor:read',
-  STOCK_VENDOR_CREATE: 'stock_vendor:create',
-  STOCK_VENDOR_UPDATE: 'stock_vendor:update',
-  STOCK_VENDOR_DELETE: 'stock_vendor:delete',
+  // Clinic stock (launch #137, S2): one code set for items, movements, counts, purchases and
+  // vendors; using, receiving, adjusting, reverting and counting are `stock_item:update`.
   STOCK_ITEM_READ: 'stock_item:read',
   STOCK_ITEM_CREATE: 'stock_item:create',
   STOCK_ITEM_UPDATE: 'stock_item:update',
   STOCK_ITEM_DELETE: 'stock_item:delete',
-  STOCK_PURCHASE_READ: 'stock_purchase:read',
-  STOCK_PURCHASE_CREATE: 'stock_purchase:create',
-  STOCK_PURCHASE_UPDATE: 'stock_purchase:update',
-  STOCK_PURCHASE_DELETE: 'stock_purchase:delete',
+  /** Download the stock items and purchases CSVs (launch #137, S2). */
+  STOCK_ITEM_EXPORT: 'stock_item:export',
   TASK_READ: 'task:read',
   TASK_CREATE: 'task:create',
   TASK_UPDATE: 'task:update',

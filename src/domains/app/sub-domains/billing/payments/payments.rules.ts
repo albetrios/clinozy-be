@@ -13,6 +13,7 @@ import type {
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import { attachBilledContacts } from '@/domains/app/sub-domains/billing/invoices/invoices.rules.js';
 import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
+import { stock_purchases } from '@/domains/app/sub-domains/stock/stock-purchases/stock-purchases.schema.js';
 import { InvoicesRepository } from '@/domains/app/sub-domains/billing/invoices/invoices.repository.js';
 import { InvoiceCreditNotesRepository } from '@/domains/app/sub-domains/billing/invoice-credit-notes/invoice-credit-notes.repository.js';
 import { DAY_CLOSE_STATUS } from '@/domains/app/sub-domains/billing/day-closes/day-closes.constants.js';
@@ -30,6 +31,7 @@ import { ReversePaymentDto } from './payments.dto.js';
 import {
   applyInvoicePaid,
   applyPaymentEffects,
+  applyStockPurchasePaid,
   assertPaymentDayOpen,
   columnsToSplits,
   invoiceEffect,
@@ -37,6 +39,7 @@ import {
   type PaymentSplit,
   recordPayment,
   splitsToColumns,
+  stockPurchaseEffect,
   writePaymentActivity,
 } from './payments.ledger.js';
 import { payments } from './payments.schema.js';
@@ -52,6 +55,7 @@ const RECORDED_FIELDS = [
   'paid_at',
   'contact_id',
   'invoice_id',
+  'stock_purchase_id',
   'payee_name',
   'expense_category',
   'reference',
@@ -108,6 +112,12 @@ async function assertKindFields(values: Readonly<Record<string, unknown>>): Prom
       });
     }
   }
+  if (typeof values.stock_purchase_id === 'number' && kind !== PAYMENT_KIND.SUPPLIER_BILL) {
+    throw fieldValidationError({
+      field: 'stock_purchase_id',
+      messageKey: 'errors:validation.paymentStockPurchaseOnlySupplierBill',
+    });
+  }
   if (
     (PAYMENT_PAYEE_KIND_VALUES as readonly string[]).includes(kind) &&
     typeof values.payee_name !== 'string'
@@ -155,10 +165,10 @@ function applySplits(values: Record<string, unknown>, existing: BaseRecordRow): 
   Object.assign(values, columns);
 }
 
-/** A refund's, reversal's or settlement's contact and invoice stay as their write set them. */
+/** A refund's, reversal's or settlement's contact, invoice and purchase stay as their write set them. */
 function assertLinksKept(values: Readonly<Record<string, unknown>>, existing: BaseRecordRow): void {
   if (!isFixedMoney(existing)) return;
-  for (const field of ['contact_id', 'invoice_id'] as const) {
+  for (const field of ['contact_id', 'invoice_id', 'stock_purchase_id'] as const) {
     if (field in values && values[field] !== existing[field]) {
       throw fieldValidationError({
         field,
@@ -177,22 +187,28 @@ async function reversedOf(
   return (await repository.findById(row.reverses_payment_id)) ?? undefined;
 }
 
+/** The referenced fields a change records as public ids, with the table each names. */
+const RECORDED_REFERENCES = {
+  contact_id: contacts,
+  invoice_id: invoices,
+  stock_purchase_id: stock_purchases,
+} as const;
+
+/** A referenced field a change records. */
+type RecordedReference = keyof typeof RECORDED_REFERENCES;
+
 /** The recorded value of one field — splits as `[{ mode, amount }]`, references as public ids. */
 function recordedValue(
   row: BaseRecordRow,
   field: (typeof RECORDED_FIELDS)[number],
-  publicIds: { contacts: Map<number, string>; invoices: Map<number, string> },
+  publicIds: ReadonlyMap<RecordedReference, Map<number, string>>,
 ): unknown {
   if (field === 'splits') return columnsToSplits(row);
   if (field === 'paid_at') return toInstant(row.paid_at);
-  if (field === 'contact_id') {
-    return typeof row.contact_id === 'number'
-      ? (publicIds.contacts.get(row.contact_id) ?? null)
-      : null;
-  }
-  if (field === 'invoice_id') {
-    return typeof row.invoice_id === 'number'
-      ? (publicIds.invoices.get(row.invoice_id) ?? null)
+  if (field in RECORDED_REFERENCES) {
+    const id = row[field];
+    return typeof id === 'number'
+      ? (publicIds.get(field as RecordedReference)?.get(id) ?? null)
       : null;
   }
   return row[field] ?? null;
@@ -206,12 +222,13 @@ async function recordEdit(options: {
   context: BaseRecordWriteContext;
 }): Promise<void> {
   const { before, after, context } = options;
-  const ids = (field: 'contact_id' | 'invoice_id') =>
-    [before[field], after[field]].filter((value): value is number => typeof value === 'number');
-  const publicIds = {
-    contacts: await resolveRecordPublicIds({ table: contacts, ids: ids('contact_id') }),
-    invoices: await resolveRecordPublicIds({ table: invoices, ids: ids('invoice_id') }),
-  };
+  const publicIds = new Map<RecordedReference, Map<number, string>>();
+  for (const [field, table] of Object.entries(RECORDED_REFERENCES)) {
+    const ids = [before[field], after[field]].filter(
+      (value): value is number => typeof value === 'number',
+    );
+    publicIds.set(field as RecordedReference, await resolveRecordPublicIds({ table, ids }));
+  }
   const changes: Record<string, { from: unknown; to: unknown }> = {};
   for (const field of RECORDED_FIELDS) {
     const from = recordedValue(before, field, publicIds);
@@ -232,24 +249,39 @@ async function recordEdit(options: {
 }
 
 /**
- * B20, B21: a change moves the invoice's paid amount by the difference — one delta on the same
- * invoice, or out of the old one and into the new one.
+ * B20, B21, S11: a change moves the invoice's and the stock purchase's paid amount by the
+ * difference — one delta on the same record, or out of the old one and into the new one.
  */
-async function moveInvoicePaid(options: {
+async function moveLinkedPaid(options: {
   before: BaseRecordRow;
   after: BaseRecordRow;
   reversed: BaseRecordRow | undefined;
   context: BaseRecordWriteContext;
 }): Promise<void> {
   const { before, after, reversed, context } = options;
-  const was = invoiceEffect(before, reversed);
-  const now = invoiceEffect(after, reversed);
-  if (before.invoice_id === after.invoice_id) {
-    await applyInvoicePaid({ context, invoiceId: after.invoice_id, delta: now - was });
-    return;
+  const links = [
+    {
+      field: 'invoice_id',
+      effect: invoiceEffect,
+      apply: (id: unknown, delta: number) => applyInvoicePaid({ context, invoiceId: id, delta }),
+    },
+    {
+      field: 'stock_purchase_id',
+      effect: stockPurchaseEffect,
+      apply: (id: unknown, delta: number) =>
+        applyStockPurchasePaid({ context, stockPurchaseId: id, delta }),
+    },
+  ] as const;
+  for (const link of links) {
+    const was = link.effect(before, reversed);
+    const now = link.effect(after, reversed);
+    if (before[link.field] === after[link.field]) {
+      await link.apply(after[link.field], now - was);
+      continue;
+    }
+    await link.apply(before[link.field], -was);
+    await link.apply(after[link.field], now);
   }
-  await applyInvoicePaid({ context, invoiceId: before.invoice_id, delta: -was });
-  await applyInvoicePaid({ context, invoiceId: after.invoice_id, delta: now });
 }
 
 /**
@@ -288,6 +320,7 @@ async function reversePayment(input: BaseRecordActionInput): Promise<BaseRecordR
       contact_id: existing.contact_id,
       invoice_id: existing.invoice_id,
       pending_credit_id: existing.pending_credit_id,
+      stock_purchase_id: existing.stock_purchase_id,
       reverses_payment_id: existing.id,
       note: body.reason,
     },
@@ -304,9 +337,10 @@ async function reversePayment(input: BaseRecordActionInput): Promise<BaseRecordR
  * - **Algorithm:** a create fixes the direction from the kind (B17), stores the splits as columns
  *   (B18), checks the kind's fields (B19) and its day (B6); once written, its money moves the
  *   invoice's paid amount and the pending credit's settled amount, and a `system` entry joins the
- *   contact's activity (B7). A change (open day — its old and new `paid_at`) keeps a refund's,
- *   reversal's or settlement's money and links, moves the invoice's paid amount by the difference
- *   and records the changed fields (B20). A delete or restore (open day) takes the money out or
+ *   contact's activity (B7); a supplier bill may pay a stock purchase (S11). A change (open day —
+ *   its old and new `paid_at`) keeps a refund's, reversal's or settlement's money and links, moves
+ *   the invoice's and the purchase's paid amount by the difference and records the changed fields
+ *   (B20). A delete or restore (open day) takes the money out or
  *   puts it back — a refund's credit note goes and comes back with it (B16). The reverse action
  *   undoes a settled payment (B21).
  * - **Failure modes:** `ValidationError` on `splits`, `contact_id`, `invoice_id`, `payee_name`,
@@ -379,7 +413,7 @@ export function createPaymentsRules(repository: PaymentsRepository): BaseRecordR
         return;
       }
       if (change.kind === 'update' && change.before) {
-        await moveInvoicePaid({ before: change.before, after: row, reversed, context });
+        await moveLinkedPaid({ before: change.before, after: row, reversed, context });
         await recordEdit({ repository, before: change.before, after: row, context });
         return;
       }

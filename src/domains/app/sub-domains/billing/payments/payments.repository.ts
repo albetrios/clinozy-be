@@ -8,6 +8,7 @@ import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js'
 import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
 import { day_closes } from '@/domains/app/sub-domains/billing/day-closes/day-closes.schema.js';
 import { DAY_CLOSE_STATUS } from '@/domains/app/sub-domains/billing/day-closes/day-closes.constants.js';
+import { stock_purchases } from '@/domains/app/sub-domains/stock/stock-purchases/stock-purchases.schema.js';
 import { PAYMENT_MODE } from './payments.constants.js';
 import { payment_edits, payments } from './payments.schema.js';
 
@@ -131,6 +132,35 @@ export class PaymentsRepository extends BaseRecordRepository {
           eq(invoices.id, options.invoiceId),
           sql`${moved} >= 0`,
           sql`${moved} <= ${invoices.total}`,
+        ),
+      )
+      .returning()) as BaseRecordRow[];
+    return rows[0] ?? null;
+  }
+
+  /**
+   * S11: moves a live stock purchase's paid amount by `delta` in one guarded statement — never
+   * below 0 nor above its bill; null when the guard refuses (or the purchase is gone).
+   */
+  async adjustStockPurchasePaid(options: {
+    stockPurchaseId: number;
+    delta: number;
+    userId: number | null;
+  }): Promise<BaseRecordRow | null> {
+    const moved = sql`${stock_purchases.paid_amount} + ${options.delta}`;
+    const rows = (await getRequestDatabase()
+      .update(stock_purchases)
+      .set({
+        paid_amount: moved,
+        updated_at: sql`greatest(${stock_purchases.created_at}, now())`,
+        updated_by_user_id: options.userId,
+      } as never)
+      .where(
+        and(
+          eq(stock_purchases.id, options.stockPurchaseId),
+          isNull(stock_purchases.deleted_at),
+          sql`${moved} >= 0`,
+          sql`${moved} <= ${stock_purchases.bill_amount}`,
         ),
       )
       .returning()) as BaseRecordRow[];

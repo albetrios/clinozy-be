@@ -1281,36 +1281,6 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.supplierCreditsRecordSchema, schemas.supplierCreditsRecordExample),
     example: null,
   },
-  'GET /api/v1/app/stock-vendors': {
-    statusCode: 200,
-    schema: wrapPaginated(schemas.stockVendorsRecordSchema, [schemas.stockVendorsRecordExample]),
-    example: null,
-  },
-  'POST /api/v1/app/stock-vendors': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.stockVendorsRecordSchema, schemas.stockVendorsRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/stock-vendors/{stock_vendor_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.stockVendorsRecordSchema, schemas.stockVendorsRecordExample),
-    example: null,
-  },
-  'PATCH /api/v1/app/stock-vendors/{stock_vendor_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.stockVendorsRecordSchema, schemas.stockVendorsRecordExample),
-    example: null,
-  },
-  'DELETE /api/v1/app/stock-vendors/{stock_vendor_id}': {
-    statusCode: 204,
-    schema: null,
-    example: null,
-  },
-  'POST /api/v1/app/stock-vendors/{stock_vendor_id}/restore': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.stockVendorsRecordSchema, schemas.stockVendorsRecordExample),
-    example: null,
-  },
   'GET /api/v1/app/stock-items': {
     statusCode: 200,
     schema: wrapPaginated(schemas.stockItemsRecordSchema, [schemas.stockItemsRecordExample]),
@@ -1346,11 +1316,71 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.stockItemsRecordSchema, schemas.stockItemsRecordExample),
     example: null,
   },
+  'GET /api/v1/app/stock-item-movements': {
+    statusCode: 200,
+    schema: wrapPaginated(schemas.stockItemMovementsRecordSchema, [
+      schemas.stockItemMovementsRecordExample,
+    ]),
+    example: null,
+  },
+  'GET /api/v1/app/stock-items/{stock_item_id}/movements': {
+    statusCode: 200,
+    schema: wrapPaginated(schemas.stockItemMovementsRecordSchema, [
+      schemas.stockItemMovementsRecordExample,
+    ]),
+    example: null,
+  },
+  'POST /api/v1/app/stock-items/{stock_item_id}/movements': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      schemas.stockItemMovementsRecordSchema,
+      schemas.stockItemMovementsRecordExample,
+    ),
+    example: null,
+  },
+  'GET /api/v1/app/stock-items/{stock_item_id}/movements/{stock_item_movement_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      schemas.stockItemMovementsRecordSchema,
+      schemas.stockItemMovementsRecordExample,
+    ),
+    example: null,
+  },
+  'POST /api/v1/app/stock-items/{stock_item_id}/movements/{stock_item_movement_id}/revert': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      schemas.stockItemMovementsRecordSchema,
+      schemas.stockItemMovementsRecordExample,
+    ),
+    example: null,
+  },
+  'GET /api/v1/app/stock-counts': {
+    statusCode: 200,
+    schema: wrapPaginated(schemas.stockCountsRecordSchema, [schemas.stockCountsRecordExample]),
+    example: null,
+  },
+  'POST /api/v1/app/stock-counts': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.stockCountsRecordSchema, schemas.stockCountsRecordExample),
+    example: null,
+  },
+  'GET /api/v1/app/stock-counts/{stock_count_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.stockCountsRecordSchema, schemas.stockCountsRecordExample),
+    example: null,
+  },
   'GET /api/v1/app/stock-purchases': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.stockPurchasesRecordSchema, [
-      schemas.stockPurchasesRecordExample,
-    ]),
+    schema: wrapPaginated(
+      schemas.stockPurchasesRecordSchema,
+      [schemas.stockPurchasesRecordExample],
+      {
+        due_total: {
+          type: 'number',
+          description: 'The open dues of every purchase the filters match',
+        },
+      },
+    ),
     example: null,
   },
   'GET /api/v1/app/stock-purchases/exports': {
@@ -1383,46 +1413,34 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.stockPurchasesRecordSchema, schemas.stockPurchasesRecordExample),
     example: null,
   },
-  'GET /api/v1/app/stock-counts': {
+  'GET /api/v1/app/stock-vendors': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.stockCountsRecordSchema, [schemas.stockCountsRecordExample]),
+    schema: wrapPaginated(schemas.stockVendorsRecordSchema, [schemas.stockVendorsRecordExample]),
     example: null,
   },
-  'POST /api/v1/app/stock-counts': {
+  'POST /api/v1/app/stock-vendors': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.stockCountsRecordSchema, schemas.stockCountsRecordExample),
+    schema: wrapSuccess(schemas.stockVendorsRecordSchema, schemas.stockVendorsRecordExample),
     example: null,
   },
-  'GET /api/v1/app/stock-counts/{stock_count_id}': {
+  'GET /api/v1/app/stock-vendors/{stock_vendor_id}': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.stockCountsRecordSchema, schemas.stockCountsRecordExample),
+    schema: wrapSuccess(schemas.stockVendorsRecordSchema, schemas.stockVendorsRecordExample),
     example: null,
   },
-  'DELETE /api/v1/app/stock-counts/{stock_count_id}': {
+  'PATCH /api/v1/app/stock-vendors/{stock_vendor_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.stockVendorsRecordSchema, schemas.stockVendorsRecordExample),
+    example: null,
+  },
+  'DELETE /api/v1/app/stock-vendors/{stock_vendor_id}': {
     statusCode: 204,
     schema: null,
     example: null,
   },
-  'POST /api/v1/app/stock-counts/{stock_count_id}/restore': {
+  'POST /api/v1/app/stock-vendors/{stock_vendor_id}/restore': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.stockCountsRecordSchema, schemas.stockCountsRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/stock-movements': {
-    statusCode: 200,
-    schema: wrapPaginated(schemas.stockMovementsRecordSchema, [
-      schemas.stockMovementsRecordExample,
-    ]),
-    example: null,
-  },
-  'POST /api/v1/app/stock-movements': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.stockMovementsRecordSchema, schemas.stockMovementsRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/stock-movements/{stock_movement_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.stockMovementsRecordSchema, schemas.stockMovementsRecordExample),
+    schema: wrapSuccess(schemas.stockVendorsRecordSchema, schemas.stockVendorsRecordExample),
     example: null,
   },
   'GET /api/v1/app/tasks': {

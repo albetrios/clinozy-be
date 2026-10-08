@@ -275,31 +275,31 @@ Legend:
   GET    /api/v1/app/stock-counts                                 200  -    both  PERM: stock_item:read
   POST   /api/v1/app/stock-counts                                 200  req  both  PERM: stock_item:update
   GET    /api/v1/app/stock-counts/:stock_count_id                 200  -    both  PERM: stock_item:read
-  DELETE /api/v1/app/stock-counts/:stock_count_id                 204  -    both  PERM: stock_item:update
-  POST   /api/v1/app/stock-counts/:stock_count_id/restore         200  req  both  PERM: stock_item:update
+  GET    /api/v1/app/stock-item-movements                         200  -    both  PERM: stock_item:read
   GET    /api/v1/app/stock-items                                  200  -    both  PERM: stock_item:read
   POST   /api/v1/app/stock-items                                  200  req  both  PERM: stock_item:create
   GET    /api/v1/app/stock-items/:stock_item_id                   200  -    both  PERM: stock_item:read
   PATCH  /api/v1/app/stock-items/:stock_item_id                   200  -    both  PERM: stock_item:update
   DELETE /api/v1/app/stock-items/:stock_item_id                   204  -    both  PERM: stock_item:delete
+  GET    /api/v1/app/stock-items/:stock_item_id/movements         200  -    both  PERM: stock_item:read
+  POST   /api/v1/app/stock-items/:stock_item_id/movements         200  req  both  PERM: stock_item:update
+  GET    /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id  200  -    both  PERM: stock_item:read
+  POST   /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id/revert  200  req  both  PERM: stock_item:update
   POST   /api/v1/app/stock-items/:stock_item_id/restore           200  req  both  PERM: stock_item:delete
-  GET    /api/v1/app/stock-items/exports                          200  -    both  PERM: list:export
-  GET    /api/v1/app/stock-movements                              200  -    both  PERM: stock_item:read
-  POST   /api/v1/app/stock-movements                              200  req  both  PERM: stock_item:update
-  GET    /api/v1/app/stock-movements/:stock_movement_id           200  -    both  PERM: stock_item:read
-  GET    /api/v1/app/stock-purchases                              200  -    both  PERM: stock_purchase:read
-  POST   /api/v1/app/stock-purchases                              200  req  both  PERM: stock_purchase:create
-  GET    /api/v1/app/stock-purchases/:stock_purchase_id           200  -    both  PERM: stock_purchase:read
-  PATCH  /api/v1/app/stock-purchases/:stock_purchase_id           200  -    both  PERM: stock_purchase:update
-  DELETE /api/v1/app/stock-purchases/:stock_purchase_id           204  -    both  PERM: stock_purchase:delete
-  POST   /api/v1/app/stock-purchases/:stock_purchase_id/restore   200  req  both  PERM: stock_purchase:delete
-  GET    /api/v1/app/stock-purchases/exports                      200  -    both  PERM: list:export
-  GET    /api/v1/app/stock-vendors                                200  -    both  PERM: stock_vendor:read
-  POST   /api/v1/app/stock-vendors                                200  req  both  PERM: stock_vendor:create
-  GET    /api/v1/app/stock-vendors/:stock_vendor_id               200  -    both  PERM: stock_vendor:read
-  PATCH  /api/v1/app/stock-vendors/:stock_vendor_id               200  -    both  PERM: stock_vendor:update
-  DELETE /api/v1/app/stock-vendors/:stock_vendor_id               204  -    both  PERM: stock_vendor:delete
-  POST   /api/v1/app/stock-vendors/:stock_vendor_id/restore       200  req  both  PERM: stock_vendor:delete
+  GET    /api/v1/app/stock-items/exports                          200  -    both  PERM: stock_item:export
+  GET    /api/v1/app/stock-purchases                              200  -    both  PERM: stock_item:read
+  POST   /api/v1/app/stock-purchases                              200  req  both  PERM: stock_item:create
+  GET    /api/v1/app/stock-purchases/:stock_purchase_id           200  -    both  PERM: stock_item:read
+  PATCH  /api/v1/app/stock-purchases/:stock_purchase_id           200  -    both  PERM: stock_item:update
+  DELETE /api/v1/app/stock-purchases/:stock_purchase_id           204  -    both  PERM: stock_item:delete
+  POST   /api/v1/app/stock-purchases/:stock_purchase_id/restore   200  req  both  PERM: stock_item:delete
+  GET    /api/v1/app/stock-purchases/exports                      200  -    both  PERM: stock_item:export
+  GET    /api/v1/app/stock-vendors                                200  -    both  PERM: stock_item:read
+  POST   /api/v1/app/stock-vendors                                200  req  both  PERM: stock_item:create
+  GET    /api/v1/app/stock-vendors/:stock_vendor_id               200  -    both  PERM: stock_item:read
+  PATCH  /api/v1/app/stock-vendors/:stock_vendor_id               200  -    both  PERM: stock_item:update
+  DELETE /api/v1/app/stock-vendors/:stock_vendor_id               204  -    both  PERM: stock_item:delete
+  POST   /api/v1/app/stock-vendors/:stock_vendor_id/restore       200  req  both  PERM: stock_item:delete
   GET    /api/v1/app/supplier-credits                             200  -    both  PERM: supplier:read
   POST   /api/v1/app/supplier-credits                             200  req  both  PERM: supplier:update
   GET    /api/v1/app/supplier-credits/:supplier_credit_id         200  -    both  PERM: supplier:read
@@ -635,10 +635,10 @@ Legend:
     POST /api/v1/app/prescription-kits
     POST /api/v1/app/prescription-kits/:prescription_kit_id/restore
     POST /api/v1/app/stock-counts
-    POST /api/v1/app/stock-counts/:stock_count_id/restore
     POST /api/v1/app/stock-items
+    POST /api/v1/app/stock-items/:stock_item_id/movements
+    POST /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id/revert
     POST /api/v1/app/stock-items/:stock_item_id/restore
-    POST /api/v1/app/stock-movements
     POST /api/v1/app/stock-purchases
     POST /api/v1/app/stock-purchases/:stock_purchase_id/restore
     POST /api/v1/app/stock-vendors
@@ -718,13 +718,11 @@ Legend:
     patient_treatment:read        patient_treatment:update      payment:create
     payment:delete                payment:export                payment:read
     payment:update                sale:void                     stock_item:create
-    stock_item:delete             stock_item:read               stock_item:update
-    stock_purchase:create         stock_purchase:delete         stock_purchase:read
-    stock_purchase:update         stock_vendor:create           stock_vendor:delete
-    stock_vendor:read             stock_vendor:update           supplier:create
-    supplier:delete               supplier:read                 supplier:update
-    task:create                   task:delete                   task:read
-    task:update                   task_rule:update
+    stock_item:delete             stock_item:export             stock_item:read
+    stock_item:update             supplier:create               supplier:delete
+    supplier:read                 supplier:update               task:create
+    task:delete                   task:read                     task:update
+    task_rule:update
 
   Global Roles:
     super_admin                   user

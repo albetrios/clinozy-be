@@ -32,11 +32,9 @@ import { medical_purchase_orders } from '@/domains/app/sub-domains/medical-purch
 import { medical_contacts } from '@/domains/app/sub-domains/medical-contacts/medical-contacts.schema.js';
 import { medical_sales } from '@/domains/app/sub-domains/medical-sales/medical-sales.schema.js';
 import { supplier_credits } from '@/domains/app/sub-domains/supplier-credits/supplier-credits.schema.js';
-import { stock_vendors } from '@/domains/app/sub-domains/stock-vendors/stock-vendors.schema.js';
-import { stock_items } from '@/domains/app/sub-domains/stock-items/stock-items.schema.js';
-import { stock_purchases } from '@/domains/app/sub-domains/stock-purchases/stock-purchases.schema.js';
-import { stock_counts } from '@/domains/app/sub-domains/stock-counts/stock-counts.schema.js';
-import { stock_movements } from '@/domains/app/sub-domains/stock-movements/stock-movements.schema.js';
+import { stock_vendors } from '@/domains/app/sub-domains/stock/stock-vendors/stock-vendors.schema.js';
+import { stock_items } from '@/domains/app/sub-domains/stock/stock-items/stock-items.schema.js';
+import { stock_purchases } from '@/domains/app/sub-domains/stock/stock-purchases/stock-purchases.schema.js';
 import { tasks } from '@/domains/app/sub-domains/tasks/tasks.schema.js';
 import { task_owner_changes } from '@/domains/app/sub-domains/task-owner-changes/task-owner-changes.schema.js';
 import { task_rule_settings } from '@/domains/app/sub-domains/task-rule-settings/task-rule-settings.schema.js';
@@ -49,16 +47,17 @@ import { task_rule_settings } from '@/domains/app/sub-domains/task-rule-settings
  * - **Notes:** generated with the app tables. `app.branches` is not here — a branch is never
  *   deleted (D3, D16) — nor `app.patients` (never purged, P7), nor the tables that never soft-delete
  *   (`app.patient_treatments` — reversed, TR6; the append-only `app.patient_feedback_actions`,
- *   `app.payment_edits`, `app.day_close_events`; `app.day_closes` — opened and closed, B25; an
- *   invoice's lines and members, which go with it).
+ *   `app.payment_edits`, `app.day_close_events`, `app.stock_item_movements`, `app.stock_counts`;
+ *   `app.day_closes` — opened and closed, B25; an invoice's lines and members, a purchase's lines
+ *   and a count's lines, which go with it).
  */
 export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   { table: task_rule_settings, label: 'app.task_rule_settings' },
   { table: task_owner_changes, label: 'app.task_owner_changes' },
   { table: tasks, label: 'app.tasks' },
-  { table: stock_movements, label: 'app.stock_movements' },
-  { table: stock_counts, label: 'app.stock_counts' },
+  // A purchase's lines go with it; one whose movements still name it stays blocked (`RESTRICT`)
   { table: stock_purchases, label: 'app.stock_purchases' },
+  // An item with movement history stays blocked (`RESTRICT` — the ledger keeps it, S5)
   { table: stock_items, label: 'app.stock_items' },
   { table: stock_vendors, label: 'app.stock_vendors' },
   { table: supplier_credits, label: 'app.supplier_credits' },

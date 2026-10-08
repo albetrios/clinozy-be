@@ -42,6 +42,7 @@ export function validateListPaymentsQuery(data: unknown): BaseRecordListInput {
       contact_id: query.contact_id,
       invoice_id: query.invoice_id,
       pending_credit_id: query.pending_credit_id,
+      stock_purchase_id: query.stock_purchase_id,
     },
     branchPublicIds: query.branch_id === undefined ? undefined : splitRecordIds(query.branch_id),
     derived: {

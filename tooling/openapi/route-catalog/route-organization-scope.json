@@ -327,11 +327,6 @@
   "GET /api/v1/app/stock-counts": "both",
   "POST /api/v1/app/stock-counts": "both",
   "GET /api/v1/app/stock-counts/:stock_count_id": "both",
-  "DELETE /api/v1/app/stock-counts/:stock_count_id": "both",
-  "POST /api/v1/app/stock-counts/:stock_count_id/restore": "both",
-  "GET /api/v1/app/stock-movements": "both",
-  "POST /api/v1/app/stock-movements": "both",
-  "GET /api/v1/app/stock-movements/:stock_movement_id": "both",
   "GET /api/v1/app/tasks": "both",
   "POST /api/v1/app/tasks": "both",
   "GET /api/v1/app/tasks/:task_id": "both",
@@ -437,5 +432,10 @@
   "GET /api/v1/app/invoices/:invoice_id/credit-notes/:invoice_credit_note_id": "both",
   "GET /api/v1/app/payments/:payment_id/edits": "both",
   "POST /api/v1/app/payments/:payment_id/reverse": "both",
-  "POST /api/v1/app/pending-credits/:pending_credit_id/settle": "both"
+  "POST /api/v1/app/pending-credits/:pending_credit_id/settle": "both",
+  "GET /api/v1/app/stock-item-movements": "both",
+  "GET /api/v1/app/stock-items/:stock_item_id/movements": "both",
+  "POST /api/v1/app/stock-items/:stock_item_id/movements": "both",
+  "GET /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id": "both",
+  "POST /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id/revert": "both"
 }

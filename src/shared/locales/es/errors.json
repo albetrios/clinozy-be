@@ -140,7 +140,17 @@
     "pendingCreditAmountMoreThanLeft": "Eso es más de lo que queda de este crédito pendiente",
     "pendingCreditInvoiceOtherContact": "Esa factura es de otro contacto",
     "pendingCreditPartyRequired": "Elige un contacto o escribe un nombre",
-    "pendingCreditUseOnBillGiveOnly": "Solo el dinero que la clínica debe puede usarse en una factura"
+    "pendingCreditUseOnBillGiveOnly": "Solo el dinero que la clínica debe puede usarse en una factura",
+    "stockItemSizeWithMeasure": "Indica el tamaño por unidad y su medida juntos, o ninguno",
+    "stockItemMaxBelowMin": "El máximo no puede ser menor que el mínimo",
+    "stockMovementTreatmentReversed": "Esa sesión de tratamiento se revirtió: elige una realizada",
+    "stockMovementAdjustUnchanged": "La cantidad contada es la que hay en stock: no hay nada que ajustar",
+    "stockCountUnknownItem": "No hay ningún artículo de stock {{id}} aquí",
+    "stockCountNothingDiffers": "Todas las cantidades contadas coinciden con el stock: no hay nada que guardar",
+    "stockPurchaseUnknownItem": "No hay ningún artículo de stock {{id}} aquí",
+    "stockPurchaseDateInFuture": "La fecha de compra no puede ser futura",
+    "stockPurchaseBillBelowPaid": "La factura no puede ser menor que lo ya pagado",
+    "paymentStockPurchaseOnlySupplierBill": "Solo una factura de proveedor paga una compra de stock"
   },
   "missingSessionCookie": "Falta la cookie de sesión",
   "disposableEmail": "Este dominio de correo no está permitido.",
@@ -308,5 +318,11 @@
   "paymentMoreThanPaid": "Eso es más de lo pagado en la factura",
   "pendingCreditClosed": "Este crédito pendiente está saldado por completo",
   "pendingCreditNothingDue": "No hay nada pendiente de esta persona en esa factura para ajustar",
-  "pendingCreditSettled": "Parte de este crédito pendiente está saldada: no puede cambiar ni eliminarse"
+  "pendingCreditSettled": "Parte de este crédito pendiente está saldada: no puede cambiar ni eliminarse",
+  "stockNotEnough": "Solo quedan {{quantity}} {{unit}} en stock: quedaría por debajo de cero",
+  "stockVendorHasDues": "Una compra a este proveedor no está pagada del todo: págala o liquídala primero",
+  "stockItemHasStock": "Este artículo aún tiene stock: dalo de baja antes de eliminarlo",
+  "stockMovementAlreadyReverted": "Este movimiento ya se revirtió, o es en sí una reversión",
+  "stockPurchaseReceived": "Las líneas de una compra quedan fijas al guardarla: registra otra compra o revierte un movimiento",
+  "stockPurchasePaid": "Esta compra tiene algo pagado: no se puede eliminar"
 }

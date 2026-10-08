@@ -1313,6 +1313,11 @@ export const paymentsRecordSchema = {
     invoice_id: { type: 'string', nullable: true },
     invoice_credit_note_id: { type: 'string', nullable: true },
     pending_credit_id: { type: 'string', nullable: true },
+    stock_purchase_id: {
+      type: 'string',
+      nullable: true,
+      description: 'The stock purchase a supplier bill pays (S11)',
+    },
     reverses_payment_id: { type: 'string', nullable: true },
     reversed_by_payment_id: { type: 'string', nullable: true },
     payee_name: { type: 'string', nullable: true },
@@ -1343,6 +1348,7 @@ export const paymentsRecordExample = {
   invoice_id: 'invc_k7x9m2pqr4w8n1v3a1b2c',
   invoice_credit_note_id: null,
   pending_credit_id: null,
+  stock_purchase_id: null,
   reverses_payment_id: null,
   reversed_by_payment_id: null,
   payee_name: null,
@@ -2287,60 +2293,38 @@ export const supplierCreditsRecordExample = {
   updated_at: '2026-10-07T10:30:00.000Z',
 };
 
-/** `StockVendorOutput`. */
+/** `StockVendorOutput` — who the clinic buys consumables from (launch #137, routes-final 9.E.6). */
 export const stockVendorsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'svnd_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    name: {
-      type: 'string',
-    },
-    phone: {
-      type: 'string',
-      example: '+919825044120',
-      nullable: true,
-    },
-    is_quick: {
-      type: 'boolean',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    id: { type: 'string', example: 'svnd_k7x9m2pqr4w8n1v3a1b2c' },
+    name: { type: 'string' },
+    phone: { type: 'string', example: '+919825044120', nullable: true },
+    is_quick: { type: 'boolean', description: 'Added inline from a picker' },
+    payable: { type: 'number', description: 'The open dues of its live purchases (S13)' },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
 /** Example `StockVendorOutput`. */
 export const stockVendorsRecordExample = {
   id: 'svnd_k7x9m2pqr4w8n1v3a1b2c',
-  name: 'Sample name',
+  name: 'Skin Supplies',
   phone: '+919800000001',
-  is_quick: true,
+  is_quick: false,
+  payable: 350,
   created_at: '2026-10-07T10:30:00.000Z',
   updated_at: '2026-10-07T10:30:00.000Z',
 };
 
-/** `StockItemOutput`. */
+/** `StockItemOutput` — a consumable or piece of equipment (launch #137, routes-final 9.A.6). */
 export const stockItemsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'sitm_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    stock_item_number: {
-      type: 'integer',
-    },
-    name: {
-      type: 'string',
-    },
+    id: { type: 'string', example: 'sitm_k7x9m2pqr4w8n1v3a1b2c' },
+    stock_item_number: { type: 'integer', description: '#167' },
+    name: { type: 'string' },
     category: {
       type: 'string',
       enum: ['creams_serums', 'peels', 'masks', 'consumables', 'equipment', 'other'],
@@ -2365,230 +2349,186 @@ export const stockItemsRecordSchema = {
         'litre',
       ],
     },
-    size_per_unit_milli: {
-      type: 'integer',
-      nullable: true,
-    },
-    measure_unit: {
-      type: 'string',
-      enum: ['ml', 'g', 'pcs', 'units'],
-      nullable: true,
-    },
-    quantity_milli: {
-      type: 'integer',
-    },
-    min_quantity: {
-      type: 'integer',
-    },
-    max_quantity: {
-      type: 'integer',
-    },
-    usage_per_week_milli: {
-      type: 'integer',
-    },
-    stock_vendor_id: {
-      type: 'string',
-      nullable: true,
-    },
-    last_rate: {
-      type: 'number',
-      nullable: true,
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    size_per_unit: { type: 'number', nullable: true, description: '1 tube = 30 g' },
+    measure_unit: { type: 'string', enum: ['ml', 'g', 'pcs', 'units'], nullable: true },
+    quantity: { type: 'number', description: 'The balance — moved only by movements (S5)' },
+    min_quantity: { type: 'number' },
+    max_quantity: { type: 'number' },
+    usage_per_week: { type: 'number' },
+    stock_vendor_id: { type: 'string', nullable: true },
+    last_rate: { type: 'number', nullable: true, description: "The latest purchase line's rate" },
+    stock_level: { type: 'string', enum: ['ok', 'low', 'out'] },
+    lasts_days: { type: 'integer', nullable: true, description: 'Null without a weekly usage' },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
 /** Example `StockItemOutput`. */
 export const stockItemsRecordExample = {
   id: 'sitm_k7x9m2pqr4w8n1v3a1b2c',
-  stock_item_number: 12,
-  name: 'Sample name',
-  category: 'creams_serums',
-  unit: 'piece',
-  size_per_unit_milli: 1,
+  stock_item_number: 167,
+  name: 'Glycolic peel 30%',
+  category: 'peels',
+  unit: 'bottle',
+  size_per_unit: 30,
   measure_unit: 'ml',
-  quantity_milli: 1,
-  min_quantity: 1,
-  max_quantity: 1,
-  usage_per_week_milli: 1,
-  stock_vendor_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  last_rate: 100,
+  quantity: 3.5,
+  min_quantity: 2,
+  max_quantity: 6,
+  usage_per_week: 1.5,
+  stock_vendor_id: 'svnd_k7x9m2pqr4w8n1v3a1b2c',
+  last_rate: 450,
+  stock_level: 'ok',
+  lasts_days: 16,
   created_at: '2026-10-07T10:30:00.000Z',
   updated_at: '2026-10-07T10:30:00.000Z',
 };
 
-/** `StockPurchaseOutput`. */
-export const stockPurchasesRecordSchema = {
+/** `StockItemMovementOutput` — one change to an item's quantity (launch #137, routes-final 9.B.6). */
+export const stockItemMovementsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
+    id: { type: 'string', example: 'smov_k7x9m2pqr4w8n1v3a1b2c' },
+    stock_item_id: { type: 'string' },
+    type: {
       type: 'string',
-      example: 'spur_k7x9m2pqr4w8n1v3a1b2c',
+      enum: ['opening', 'received', 'used', 'damaged', 'returned', 'adjust', 'reverted'],
     },
-    stock_purchase_number: {
-      type: 'integer',
-    },
-    stock_vendor_id: {
+    quantity_change: { type: 'number', description: 'Signed by the type (S7)' },
+    quantity_after: { type: 'number', description: 'The balance this row left' },
+    used_for: { type: 'string', nullable: true },
+    note: { type: 'string', nullable: true },
+    patient_treatment_id: { type: 'string', nullable: true },
+    stock_purchase_id: { type: 'string', nullable: true },
+    stock_count_id: { type: 'string', nullable: true },
+    reverts_stock_item_movement_id: { type: 'string', nullable: true },
+    reverted_by_stock_item_movement_id: { type: 'string', nullable: true },
+    revert_reason: {
       type: 'string',
-    },
-    bill_number: {
-      type: 'string',
+      enum: ['mistake', 'wrong_item', 'wrong_quantity', 'other'],
       nullable: true,
     },
-    purchase_date: {
-      type: 'string',
-      format: 'date',
-    },
-    lines: {},
-    bill_amount: {
-      type: 'number',
-    },
-    paid_amount: {
-      type: 'number',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    author_membership_id: { type: 'string', nullable: true },
+    created_at: { type: 'string', format: 'date-time' },
   },
 };
 
-/** Example `StockPurchaseOutput`. */
-export const stockPurchasesRecordExample = {
-  id: 'spur_k7x9m2pqr4w8n1v3a1b2c',
-  stock_purchase_number: 12,
-  stock_vendor_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  bill_number: 'Sample bill number',
-  purchase_date: '2026-10-08',
-  lines: [],
-  bill_amount: 100,
-  paid_amount: 100,
+/** Example `StockItemMovementOutput`. */
+export const stockItemMovementsRecordExample = {
+  id: 'smov_k7x9m2pqr4w8n1v3a1b2c',
+  stock_item_id: 'sitm_k7x9m2pqr4w8n1v3a1b2c',
+  type: 'used',
+  quantity_change: -1.5,
+  quantity_after: 3.5,
+  used_for: 'Peel session',
+  note: null,
+  patient_treatment_id: 'ptrt_k7x9m2pqr4w8n1v3a1b2c',
+  stock_purchase_id: null,
+  stock_count_id: null,
+  reverts_stock_item_movement_id: null,
+  reverted_by_stock_item_movement_id: null,
+  revert_reason: null,
+  author_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
   created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
 };
 
-/** `StockCountOutput`. */
+/** `StockCountOutput` — one stock check (launch #137, routes-final 9.C.6). */
 export const stockCountsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'scnt_k7x9m2pqr4w8n1v3a1b2c',
+    id: { type: 'string', example: 'scnt_k7x9m2pqr4w8n1v3a1b2c' },
+    counted_at: { type: 'string', format: 'date-time' },
+    author_membership_id: { type: 'string', nullable: true },
+    lines: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          stock_item_id: { type: 'string' },
+          system_quantity: { type: 'number', description: 'The balance when saved' },
+          counted_quantity: { type: 'number' },
+          difference: { type: 'number' },
+        },
+      },
     },
-    lines: {},
-    counted_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    changed_item_count: { type: 'integer' },
+    created_at: { type: 'string', format: 'date-time' },
   },
 };
 
 /** Example `StockCountOutput`. */
 export const stockCountsRecordExample = {
   id: 'scnt_k7x9m2pqr4w8n1v3a1b2c',
-  lines: [],
-  counted_at: '2026-10-08T10:00:00+05:30',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  counted_at: '2026-10-08T10:00:00.000Z',
+  author_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
+  lines: [
+    {
+      stock_item_id: 'sitm_k7x9m2pqr4w8n1v3a1b2c',
+      system_quantity: 3.5,
+      counted_quantity: 3,
+      difference: -0.5,
+    },
+  ],
+  changed_item_count: 1,
+  created_at: '2026-10-08T10:00:00.000Z',
 };
 
-/** `StockMovementOutput`. */
-export const stockMovementsRecordSchema = {
+/** `StockPurchaseOutput` — a vendor bill (launch #137, routes-final 9.D.6). */
+export const stockPurchasesRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'smov_k7x9m2pqr4w8n1v3a1b2c',
+    id: { type: 'string', example: 'spur_k7x9m2pqr4w8n1v3a1b2c' },
+    stock_purchase_number: { type: 'integer', description: '#16' },
+    stock_vendor_id: { type: 'string' },
+    bill_number: { type: 'string', nullable: true },
+    purchase_date: { type: 'string', format: 'date' },
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          line_number: { type: 'integer' },
+          stock_item_id: { type: 'string' },
+          quantity: { type: 'number' },
+          rate: { type: 'number' },
+          amount: { type: 'number' },
+        },
+      },
     },
-    stock_item_id: {
-      type: 'string',
-    },
-    type: {
-      type: 'string',
-      enum: ['used', 'received', 'adjust', 'damaged', 'returned', 'reverted'],
-    },
-    delta_milli: {
-      type: 'integer',
-    },
-    used_for: {
-      type: 'string',
-      nullable: true,
-    },
-    patient_id: {
-      type: 'string',
-      nullable: true,
-    },
-    stock_purchase_id: {
-      type: 'string',
-      nullable: true,
-    },
-    stock_count_id: {
-      type: 'string',
-      nullable: true,
-    },
-    reverts_stock_movement_id: {
-      type: 'string',
-      nullable: true,
-    },
-    reverted_by_stock_movement_id: {
-      type: 'string',
-      nullable: true,
-    },
-    revert_reason: {
-      type: 'string',
-      enum: ['mistake', 'wrong_item', 'wrong_quantity', 'other'],
-      nullable: true,
-    },
-    note: {
-      type: 'string',
-      nullable: true,
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    bill_amount: { type: 'number' },
+    paid_amount: { type: 'number', description: 'Kept by its supplier-bill payments (S11)' },
+    due_amount: { type: 'number' },
+    payment_status: { type: 'string', enum: ['paid', 'partial', 'unpaid'] },
+    payment_ids: { type: 'array', items: { type: 'string' } },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
-/** Example `StockMovementOutput`. */
-export const stockMovementsRecordExample = {
-  id: 'smov_k7x9m2pqr4w8n1v3a1b2c',
-  stock_item_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  type: 'used',
-  delta_milli: 1,
-  used_for: 'Sample used for',
-  patient_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  stock_purchase_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  stock_count_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  reverts_stock_movement_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  reverted_by_stock_movement_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  revert_reason: 'mistake',
-  note: 'Sample note',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+/** Example `StockPurchaseOutput`. */
+export const stockPurchasesRecordExample = {
+  id: 'spur_k7x9m2pqr4w8n1v3a1b2c',
+  stock_purchase_number: 16,
+  stock_vendor_id: 'svnd_k7x9m2pqr4w8n1v3a1b2c',
+  bill_number: 'SS-2041',
+  purchase_date: '2026-10-08',
+  items: [
+    {
+      line_number: 1,
+      stock_item_id: 'sitm_k7x9m2pqr4w8n1v3a1b2c',
+      quantity: 4,
+      rate: 450,
+      amount: 1800,
+    },
+  ],
+  bill_amount: 1800,
+  paid_amount: 1000,
+  due_amount: 800,
+  payment_status: 'partial',
+  payment_ids: ['pay_k7x9m2pqr4w8n1v3a1b2c'],
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
 };
 
 /** `TaskOutput`. */

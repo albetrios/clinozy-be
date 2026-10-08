@@ -63,11 +63,14 @@ import { listMedicalPurchaseOrdersQueryDto as appMedicalPurchaseOrdersListQueryD
 import { listMedicalContactsQueryDto as appMedicalContactsListQueryDto } from '@/domains/app/sub-domains/medical-contacts/medical-contacts.dto.js';
 import { listMedicalSalesQueryDto as appMedicalSalesListQueryDto } from '@/domains/app/sub-domains/medical-sales/medical-sales.dto.js';
 import { listSupplierCreditsQueryDto as appSupplierCreditsListQueryDto } from '@/domains/app/sub-domains/supplier-credits/supplier-credits.dto.js';
-import { listStockVendorsQueryDto as appStockVendorsListQueryDto } from '@/domains/app/sub-domains/stock-vendors/stock-vendors.dto.js';
-import { listStockItemsQueryDto as appStockItemsListQueryDto } from '@/domains/app/sub-domains/stock-items/stock-items.dto.js';
-import { listStockPurchasesQueryDto as appStockPurchasesListQueryDto } from '@/domains/app/sub-domains/stock-purchases/stock-purchases.dto.js';
-import { listStockCountsQueryDto as appStockCountsListQueryDto } from '@/domains/app/sub-domains/stock-counts/stock-counts.dto.js';
-import { listStockMovementsQueryDto as appStockMovementsListQueryDto } from '@/domains/app/sub-domains/stock-movements/stock-movements.dto.js';
+import { listStockVendorsQueryDto as appStockVendorsListQueryDto } from '@/domains/app/sub-domains/stock/stock-vendors/stock-vendors.dto.js';
+import { listStockItemsQueryDto as appStockItemsListQueryDto } from '@/domains/app/sub-domains/stock/stock-items/stock-items.dto.js';
+import { listStockPurchasesQueryDto as appStockPurchasesListQueryDto } from '@/domains/app/sub-domains/stock/stock-purchases/stock-purchases.dto.js';
+import { listStockCountsQueryDto as appStockCountsListQueryDto } from '@/domains/app/sub-domains/stock/stock-counts/stock-counts.dto.js';
+import {
+  listItemStockItemMovementsQueryDto as appStockItemMovementsNestedListQueryDto,
+  listStockItemMovementsQueryDto as appStockItemMovementsListQueryDto,
+} from '@/domains/app/sub-domains/stock/stock-item-movements/stock-item-movements.dto.js';
 import { listTasksQueryDto as appTasksListQueryDto } from '@/domains/app/sub-domains/tasks/tasks.dto.js';
 import { listContactsQueryDto } from '@/domains/app/sub-domains/contacts/contacts.dto.js';
 import { listLimitQuerySchema } from '@/shared/utils/http/pagination.util.js';
@@ -132,7 +135,8 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/app/stock-items': appStockItemsListQueryDto,
   'GET /api/v1/app/stock-purchases': appStockPurchasesListQueryDto,
   'GET /api/v1/app/stock-counts': appStockCountsListQueryDto,
-  'GET /api/v1/app/stock-movements': appStockMovementsListQueryDto,
+  'GET /api/v1/app/stock-item-movements': appStockItemMovementsListQueryDto,
+  'GET /api/v1/app/stock-items/{stock_item_id}/movements': appStockItemMovementsNestedListQueryDto,
   'GET /api/v1/app/tasks': appTasksListQueryDto,
   'GET /api/v1/app/contacts': listContactsQueryDto,
   'GET /api/v1/app/offerings/exports': appOfferingsListQueryDto,

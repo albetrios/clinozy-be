@@ -327,11 +327,6 @@
   "GET /api/v1/app/stock-counts": 200,
   "POST /api/v1/app/stock-counts": 200,
   "GET /api/v1/app/stock-counts/:stock_count_id": 200,
-  "DELETE /api/v1/app/stock-counts/:stock_count_id": 204,
-  "POST /api/v1/app/stock-counts/:stock_count_id/restore": 200,
-  "GET /api/v1/app/stock-movements": 200,
-  "POST /api/v1/app/stock-movements": 200,
-  "GET /api/v1/app/stock-movements/:stock_movement_id": 200,
   "GET /api/v1/app/tasks": 200,
   "POST /api/v1/app/tasks": 200,
   "GET /api/v1/app/tasks/:task_id": 200,
@@ -437,5 +432,10 @@
   "GET /api/v1/app/invoices/:invoice_id/credit-notes/:invoice_credit_note_id": 200,
   "GET /api/v1/app/payments/:payment_id/edits": 200,
   "POST /api/v1/app/payments/:payment_id/reverse": 200,
-  "POST /api/v1/app/pending-credits/:pending_credit_id/settle": 200
+  "POST /api/v1/app/pending-credits/:pending_credit_id/settle": 200,
+  "GET /api/v1/app/stock-item-movements": 200,
+  "GET /api/v1/app/stock-items/:stock_item_id/movements": 200,
+  "POST /api/v1/app/stock-items/:stock_item_id/movements": 200,
+  "GET /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id": 200,
+  "POST /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id/revert": 200
 }

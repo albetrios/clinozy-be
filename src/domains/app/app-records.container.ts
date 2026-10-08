@@ -39,6 +39,7 @@ import {
   type BillingServices,
   createBillingServices,
 } from './sub-domains/billing/billing.container.js';
+import { createStockServices, type StockServices } from './sub-domains/stock/stock.container.js';
 import { PatientOfferingsRepository } from './sub-domains/patients/patient-offerings/patient-offerings.repository.js';
 import { PatientOfferingsService } from './sub-domains/patients/patient-offerings/patient-offerings.service.js';
 import { PatientOfferingSuggestionsRepository } from './sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.repository.js';
@@ -67,60 +68,46 @@ import { MedicalSalesRepository } from './sub-domains/medical-sales/medical-sale
 import { MedicalSalesService } from './sub-domains/medical-sales/medical-sales.service.js';
 import { SupplierCreditsRepository } from './sub-domains/supplier-credits/supplier-credits.repository.js';
 import { SupplierCreditsService } from './sub-domains/supplier-credits/supplier-credits.service.js';
-import { StockVendorsRepository } from './sub-domains/stock-vendors/stock-vendors.repository.js';
-import { StockVendorsService } from './sub-domains/stock-vendors/stock-vendors.service.js';
-import { StockItemsRepository } from './sub-domains/stock-items/stock-items.repository.js';
-import { StockItemsService } from './sub-domains/stock-items/stock-items.service.js';
-import { StockPurchasesRepository } from './sub-domains/stock-purchases/stock-purchases.repository.js';
-import { StockPurchasesService } from './sub-domains/stock-purchases/stock-purchases.service.js';
-import { StockCountsRepository } from './sub-domains/stock-counts/stock-counts.repository.js';
-import { StockCountsService } from './sub-domains/stock-counts/stock-counts.service.js';
-import { StockMovementsRepository } from './sub-domains/stock-movements/stock-movements.repository.js';
-import { StockMovementsService } from './sub-domains/stock-movements/stock-movements.service.js';
 import { TasksRepository } from './sub-domains/tasks/tasks.repository.js';
 import { TasksService } from './sub-domains/tasks/tasks.service.js';
 
 /** The services of the app record tables (launch iteration), one per table. */
-export type AppRecordServices = BillingServices & {
-  offeringGroupsService: OfferingGroupsService;
-  branchRoomsService: BranchRoomsService;
-  branchMachinesService: BranchMachinesService;
-  branchHolidaysService: BranchHolidaysService;
-  offeringsService: OfferingsService;
-  offersService: OffersService;
-  contactsService: ContactsService;
-  contactActivitiesService: ContactActivitiesService;
-  contactMessageTemplatesService: ContactMessageTemplatesService;
-  patientsService: PatientsService;
-  leadsService: LeadsService;
-  appointmentsService: AppointmentsService;
-  patientDiagnosesService: PatientDiagnosesService;
-  patientClinicalNotesService: PatientClinicalNotesService;
-  patientPrescriptionsService: PatientPrescriptionsService;
-  prescriptionKitsService: PrescriptionKitsService;
-  patientImagesService: PatientImagesService;
-  patientReportsService: PatientReportsService;
-  patientOfferingsService: PatientOfferingsService;
-  patientOfferingSuggestionsService: PatientOfferingSuggestionsService;
-  patientTreatmentsService: PatientTreatmentsService;
-  patientCheckInsService: PatientCheckInsService;
-  patientReviewsService: PatientReviewsService;
-  manufacturersService: ManufacturersService;
-  suppliersService: SuppliersService;
-  medicalRepsService: MedicalRepsService;
-  medicalRepVisitsService: MedicalRepVisitsService;
-  medicinesService: MedicinesService;
-  medicalPurchaseOrdersService: MedicalPurchaseOrdersService;
-  medicalContactsService: MedicalContactsService;
-  medicalSalesService: MedicalSalesService;
-  supplierCreditsService: SupplierCreditsService;
-  stockVendorsService: StockVendorsService;
-  stockItemsService: StockItemsService;
-  stockPurchasesService: StockPurchasesService;
-  stockCountsService: StockCountsService;
-  stockMovementsService: StockMovementsService;
-  tasksService: TasksService;
-};
+export type AppRecordServices = BillingServices &
+  StockServices & {
+    offeringGroupsService: OfferingGroupsService;
+    branchRoomsService: BranchRoomsService;
+    branchMachinesService: BranchMachinesService;
+    branchHolidaysService: BranchHolidaysService;
+    offeringsService: OfferingsService;
+    offersService: OffersService;
+    contactsService: ContactsService;
+    contactActivitiesService: ContactActivitiesService;
+    contactMessageTemplatesService: ContactMessageTemplatesService;
+    patientsService: PatientsService;
+    leadsService: LeadsService;
+    appointmentsService: AppointmentsService;
+    patientDiagnosesService: PatientDiagnosesService;
+    patientClinicalNotesService: PatientClinicalNotesService;
+    patientPrescriptionsService: PatientPrescriptionsService;
+    prescriptionKitsService: PrescriptionKitsService;
+    patientImagesService: PatientImagesService;
+    patientReportsService: PatientReportsService;
+    patientOfferingsService: PatientOfferingsService;
+    patientOfferingSuggestionsService: PatientOfferingSuggestionsService;
+    patientTreatmentsService: PatientTreatmentsService;
+    patientCheckInsService: PatientCheckInsService;
+    patientReviewsService: PatientReviewsService;
+    manufacturersService: ManufacturersService;
+    suppliersService: SuppliersService;
+    medicalRepsService: MedicalRepsService;
+    medicalRepVisitsService: MedicalRepVisitsService;
+    medicinesService: MedicinesService;
+    medicalPurchaseOrdersService: MedicalPurchaseOrdersService;
+    medicalContactsService: MedicalContactsService;
+    medicalSalesService: MedicalSalesService;
+    supplierCreditsService: SupplierCreditsService;
+    tasksService: TasksService;
+  };
 
 /**
  * The services of the places, offerings and people every booking and bill picks from — a branch's
@@ -254,17 +241,7 @@ export function createAppRecordServices(
       organizationService,
       new SupplierCreditsRepository(),
     ),
-    stockVendorsService: new StockVendorsService(organizationService, new StockVendorsRepository()),
-    stockItemsService: new StockItemsService(organizationService, new StockItemsRepository()),
-    stockPurchasesService: new StockPurchasesService(
-      organizationService,
-      new StockPurchasesRepository(),
-    ),
-    stockCountsService: new StockCountsService(organizationService, new StockCountsRepository()),
-    stockMovementsService: new StockMovementsService(
-      organizationService,
-      new StockMovementsRepository(),
-    ),
+    ...createStockServices(organizationService),
     tasksService: new TasksService(organizationService, new TasksRepository()),
   };
 }

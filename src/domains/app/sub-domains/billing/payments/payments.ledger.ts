@@ -124,6 +124,41 @@ export async function applyInvoicePaid(options: {
     : new ConflictError('errors:paymentMoreThanPaid').withReason('more_than_paid');
 }
 
+/**
+ * What a payment does to its stock purchase's paid amount (S11): a supplier bill adds, its
+ * reversal takes it away; nothing else touches it.
+ */
+export function stockPurchaseEffect(
+  row: Readonly<Record<string, unknown>>,
+  reversed?: BaseRecordRow,
+): number {
+  if (typeof row.stock_purchase_id !== 'number') return 0;
+  if (row.kind === PAYMENT_KIND.SUPPLIER_BILL) return toAmount(row.amount) ?? 0;
+  if (row.kind === PAYMENT_KIND.REVERSAL && reversed) return -stockPurchaseEffect(reversed);
+  return 0;
+}
+
+/**
+ * S11: moves a stock purchase's paid amount by `delta` in one guarded statement — over its bill
+ * is a 409 `more_than_due`, under nothing a 409 `more_than_paid`.
+ */
+export async function applyStockPurchasePaid(options: {
+  context: BaseRecordWriteContext;
+  stockPurchaseId: unknown;
+  delta: number;
+}): Promise<void> {
+  if (typeof options.stockPurchaseId !== 'number' || options.delta === 0) return;
+  const moved = await paymentsRepository.adjustStockPurchasePaid({
+    stockPurchaseId: options.stockPurchaseId,
+    delta: options.delta,
+    userId: options.context.userId,
+  });
+  if (moved) return;
+  throw options.delta > 0
+    ? new ConflictError('errors:paymentMoreThanDue').withReason('more_than_due')
+    : new ConflictError('errors:paymentMoreThanPaid').withReason('more_than_paid');
+}
+
 /** B7: a billing event in the contact's activity — a `system` entry linked to the invoice or payment. */
 export async function writeBillingActivity(options: {
   context: BaseRecordWriteContext;
@@ -191,8 +226,9 @@ async function applyPendingCreditSettled(options: {
 }
 
 /**
- * Applies a payment's money to what it points at — the invoice's paid amount (B5, B21) and the
- * pending credit's settled amount (B24) — `sign` 1 when it is written or restored, −1 when deleted.
+ * Applies a payment's money to what it points at — the invoice's paid amount (B5, B21), the
+ * pending credit's settled amount (B24) and the stock purchase's paid amount (S11) — `sign` 1 when
+ * it is written or restored, −1 when deleted.
  *
  * @remarks
  * - **Failure modes:** `ConflictError` `more_than_due`, `more_than_paid`, `credit_closed`.
@@ -210,6 +246,11 @@ export async function applyPaymentEffects(options: {
     delta: sign * invoiceEffect(row, options.reversed),
   });
   await applyPendingCreditSettled({ context, row, delta: sign * pendingCreditEffect(row) });
+  await applyStockPurchasePaid({
+    context,
+    stockPurchaseId: row.stock_purchase_id,
+    delta: sign * stockPurchaseEffect(row, options.reversed),
+  });
 }
 
 /** B7: the contact's `system` entry for a payment that moves their money. */
@@ -228,9 +269,9 @@ export async function writePaymentActivity(options: {
 }
 
 /**
- * Writes a payment another billing write makes in its transaction — the invoice's "Paid now"
- * receipt (B13), a credit note's refund (B16), a pending credit's settlement (B24), a reversal
- * (B21): the day lock, the row, what it points at, the activity entry.
+ * Writes a payment another write makes in its transaction — the invoice's "Paid now" receipt
+ * (B13), a credit note's refund (B16), a pending credit's settlement (B24), a reversal (B21), a
+ * stock purchase's "Paid" (S11): the day lock, the row, what it points at, the activity entry.
  *
  * @remarks
  * - **Failure modes:** `ConflictError` `day_closed`, `more_than_due`, `more_than_paid`,

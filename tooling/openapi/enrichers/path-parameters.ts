@@ -28,7 +28,7 @@ const ENTITY_LABELS: Record<PublicIdEntity, string> = {
   taskRuleSetting: 'task rule setting',
   taskOwnerChange: 'task owner change',
   task: 'task',
-  stockMovement: 'stock movement',
+  stockItemMovement: 'stock item movement',
   stockCount: 'stock count',
   stockPurchase: 'stock purchase',
   stockItem: 'stock item',

@@ -569,66 +569,75 @@ src/
     │   │   ├── record-counters/
     │   │   │   ├── record-counters.overview.md
     │   │   │   └── record-counters.schema.ts
-    │   │   ├── stock-counts/
-    │   │   │   ├── stock-counts.constants.ts
-    │   │   │   ├── stock-counts.controller.ts
-    │   │   │   ├── stock-counts.dto.ts
-    │   │   │   ├── stock-counts.overview.md
-    │   │   │   ├── stock-counts.repository.ts
-    │   │   │   ├── stock-counts.routes.ts
-    │   │   │   ├── stock-counts.schema.ts
-    │   │   │   ├── stock-counts.serializer.ts
-    │   │   │   ├── stock-counts.service.ts
-    │   │   │   ├── stock-counts.types.ts
-    │   │   │   └── stock-counts.validator.ts
-    │   │   ├── stock-items/
-    │   │   │   ├── stock-items.constants.ts
-    │   │   │   ├── stock-items.controller.ts
-    │   │   │   ├── stock-items.dto.ts
-    │   │   │   ├── stock-items.overview.md
-    │   │   │   ├── stock-items.repository.ts
-    │   │   │   ├── stock-items.routes.ts
-    │   │   │   ├── stock-items.schema.ts
-    │   │   │   ├── stock-items.serializer.ts
-    │   │   │   ├── stock-items.service.ts
-    │   │   │   ├── stock-items.types.ts
-    │   │   │   └── stock-items.validator.ts
-    │   │   ├── stock-movements/
-    │   │   │   ├── stock-movements.constants.ts
-    │   │   │   ├── stock-movements.controller.ts
-    │   │   │   ├── stock-movements.dto.ts
-    │   │   │   ├── stock-movements.overview.md
-    │   │   │   ├── stock-movements.repository.ts
-    │   │   │   ├── stock-movements.routes.ts
-    │   │   │   ├── stock-movements.schema.ts
-    │   │   │   ├── stock-movements.serializer.ts
-    │   │   │   ├── stock-movements.service.ts
-    │   │   │   ├── stock-movements.types.ts
-    │   │   │   └── stock-movements.validator.ts
-    │   │   ├── stock-purchases/
-    │   │   │   ├── stock-purchases.constants.ts
-    │   │   │   ├── stock-purchases.controller.ts
-    │   │   │   ├── stock-purchases.dto.ts
-    │   │   │   ├── stock-purchases.overview.md
-    │   │   │   ├── stock-purchases.repository.ts
-    │   │   │   ├── stock-purchases.routes.ts
-    │   │   │   ├── stock-purchases.schema.ts
-    │   │   │   ├── stock-purchases.serializer.ts
-    │   │   │   ├── stock-purchases.service.ts
-    │   │   │   ├── stock-purchases.types.ts
-    │   │   │   └── stock-purchases.validator.ts
-    │   │   ├── stock-vendors/
-    │   │   │   ├── stock-vendors.constants.ts
-    │   │   │   ├── stock-vendors.controller.ts
-    │   │   │   ├── stock-vendors.dto.ts
-    │   │   │   ├── stock-vendors.overview.md
-    │   │   │   ├── stock-vendors.repository.ts
-    │   │   │   ├── stock-vendors.routes.ts
-    │   │   │   ├── stock-vendors.schema.ts
-    │   │   │   ├── stock-vendors.serializer.ts
-    │   │   │   ├── stock-vendors.service.ts
-    │   │   │   ├── stock-vendors.types.ts
-    │   │   │   └── stock-vendors.validator.ts
+    │   │   ├── stock/
+    │   │   │   ├── stock-counts/
+    │   │   │   │   ├── stock-counts.constants.ts
+    │   │   │   │   ├── stock-counts.controller.ts
+    │   │   │   │   ├── stock-counts.dto.ts
+    │   │   │   │   ├── stock-counts.overview.md
+    │   │   │   │   ├── stock-counts.repository.ts
+    │   │   │   │   ├── stock-counts.routes.ts
+    │   │   │   │   ├── stock-counts.rules.ts
+    │   │   │   │   ├── stock-counts.schema.ts
+    │   │   │   │   ├── stock-counts.serializer.ts
+    │   │   │   │   ├── stock-counts.service.ts
+    │   │   │   │   ├── stock-counts.types.ts
+    │   │   │   │   └── stock-counts.validator.ts
+    │   │   │   ├── stock-item-movements/
+    │   │   │   │   ├── stock-item-movements.constants.ts
+    │   │   │   │   ├── stock-item-movements.controller.ts
+    │   │   │   │   ├── stock-item-movements.dto.ts
+    │   │   │   │   ├── stock-item-movements.ledger.ts
+    │   │   │   │   ├── stock-item-movements.overview.md
+    │   │   │   │   ├── stock-item-movements.repository.ts
+    │   │   │   │   ├── stock-item-movements.routes.ts
+    │   │   │   │   ├── stock-item-movements.rules.ts
+    │   │   │   │   ├── stock-item-movements.schema.ts
+    │   │   │   │   ├── stock-item-movements.serializer.ts
+    │   │   │   │   ├── stock-item-movements.service.ts
+    │   │   │   │   ├── stock-item-movements.types.ts
+    │   │   │   │   └── stock-item-movements.validator.ts
+    │   │   │   ├── stock-items/
+    │   │   │   │   ├── stock-items.constants.ts
+    │   │   │   │   ├── stock-items.controller.ts
+    │   │   │   │   ├── stock-items.dto.ts
+    │   │   │   │   ├── stock-items.overview.md
+    │   │   │   │   ├── stock-items.repository.ts
+    │   │   │   │   ├── stock-items.routes.ts
+    │   │   │   │   ├── stock-items.rules.ts
+    │   │   │   │   ├── stock-items.schema.ts
+    │   │   │   │   ├── stock-items.serializer.ts
+    │   │   │   │   ├── stock-items.service.ts
+    │   │   │   │   ├── stock-items.types.ts
+    │   │   │   │   └── stock-items.validator.ts
+    │   │   │   ├── stock-purchases/
+    │   │   │   │   ├── stock-purchases.constants.ts
+    │   │   │   │   ├── stock-purchases.controller.ts
+    │   │   │   │   ├── stock-purchases.dto.ts
+    │   │   │   │   ├── stock-purchases.overview.md
+    │   │   │   │   ├── stock-purchases.repository.ts
+    │   │   │   │   ├── stock-purchases.routes.ts
+    │   │   │   │   ├── stock-purchases.rules.ts
+    │   │   │   │   ├── stock-purchases.schema.ts
+    │   │   │   │   ├── stock-purchases.serializer.ts
+    │   │   │   │   ├── stock-purchases.service.ts
+    │   │   │   │   ├── stock-purchases.types.ts
+    │   │   │   │   └── stock-purchases.validator.ts
+    │   │   │   ├── stock-vendors/
+    │   │   │   │   ├── stock-vendors.controller.ts
+    │   │   │   │   ├── stock-vendors.dto.ts
+    │   │   │   │   ├── stock-vendors.overview.md
+    │   │   │   │   ├── stock-vendors.repository.ts
+    │   │   │   │   ├── stock-vendors.routes.ts
+    │   │   │   │   ├── stock-vendors.rules.ts
+    │   │   │   │   ├── stock-vendors.schema.ts
+    │   │   │   │   ├── stock-vendors.serializer.ts
+    │   │   │   │   ├── stock-vendors.service.ts
+    │   │   │   │   ├── stock-vendors.types.ts
+    │   │   │   │   └── stock-vendors.validator.ts
+    │   │   │   ├── stock.container.ts
+    │   │   │   ├── stock.overview.md
+    │   │   │   └── stock.routes.ts
     │   │   ├── supplier-credits/
     │   │   │   ├── supplier-credits.constants.ts
     │   │   │   ├── supplier-credits.controller.ts

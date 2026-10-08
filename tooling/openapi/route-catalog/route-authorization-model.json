@@ -691,17 +691,6 @@
   "GET /api/v1/app/stock-counts/:stock_count_id": {
     "model": "organization"
   },
-  "DELETE /api/v1/app/stock-counts/:stock_count_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "POST /api/v1/app/stock-counts/:stock_count_id/restore": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "GET /api/v1/app/stock-movements/:stock_movement_id": {
-    "model": "organization"
-  },
   "GET /api/v1/app/tasks/:task_id": {
     "model": "organization"
   },
@@ -998,6 +987,20 @@
     "verifyNoMutation": true
   },
   "POST /api/v1/app/pending-credits/:pending_credit_id/settle": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/stock-items/:stock_item_id/movements": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/stock-items/:stock_item_id/movements": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id/revert": {
     "model": "organization",
     "verifyNoMutation": true
   }

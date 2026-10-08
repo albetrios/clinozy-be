@@ -161,6 +161,8 @@ const PHARMACIST_PRESET: AppRolePreset = {
     ...PERSON_FACING_ROLE_CODES,
     ...sectionCodes('medical', VIEW_CREATE_EDIT),
     ...readCodes(['patient', 'patient_prescription']),
+    // Uses clinic stock in procedures (launch #137, S2)
+    ...sectionCodes('stock', VIEW_CREATE_EDIT),
     APP_PERMISSIONS.LIST_EXPORT,
     APP_PERMISSIONS.PATIENT_EXPORT,
     APP_PERMISSIONS.OFFERING_EXPORT,
@@ -180,6 +182,7 @@ const ACCOUNTANT_PRESET: AppRolePreset = {
     ...sectionCodes('payments', VIEW_CREATE_EDIT),
     ...sectionCodes('medical', VIEW_CREATE_EDIT),
     ...sectionCodes('stock', ['read']),
+    APP_PERMISSIONS.STOCK_ITEM_EXPORT,
     APP_PERMISSIONS.PATIENT_EXPORT,
     APP_PERMISSIONS.PAYMENT_EXPORT,
     APP_PERMISSIONS.LIST_EXPORT,

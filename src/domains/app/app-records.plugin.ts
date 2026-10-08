@@ -33,11 +33,7 @@ import { medicalPurchaseOrdersRoutes } from './sub-domains/medical-purchase-orde
 import { medicalContactsRoutes } from './sub-domains/medical-contacts/medical-contacts.routes.js';
 import { medicalSalesRoutes } from './sub-domains/medical-sales/medical-sales.routes.js';
 import { supplierCreditsRoutes } from './sub-domains/supplier-credits/supplier-credits.routes.js';
-import { stockVendorsRoutes } from './sub-domains/stock-vendors/stock-vendors.routes.js';
-import { stockItemsRoutes } from './sub-domains/stock-items/stock-items.routes.js';
-import { stockPurchasesRoutes } from './sub-domains/stock-purchases/stock-purchases.routes.js';
-import { stockCountsRoutes } from './sub-domains/stock-counts/stock-counts.routes.js';
-import { stockMovementsRoutes } from './sub-domains/stock-movements/stock-movements.routes.js';
+import { stockRoutes } from './sub-domains/stock/stock.routes.js';
 import { tasksRoutes } from './sub-domains/tasks/tasks.routes.js';
 
 /** Registers every app record table's routes on the `/api/v1/app` plugin. */
@@ -78,10 +74,6 @@ export async function registerAppRecordRoutes(
   await app.register(medicalContactsRoutes(services.medicalContactsService));
   await app.register(medicalSalesRoutes(services.medicalSalesService));
   await app.register(supplierCreditsRoutes(services.supplierCreditsService));
-  await app.register(stockVendorsRoutes(services.stockVendorsService));
-  await app.register(stockItemsRoutes(services.stockItemsService));
-  await app.register(stockPurchasesRoutes(services.stockPurchasesService));
-  await app.register(stockCountsRoutes(services.stockCountsService));
-  await app.register(stockMovementsRoutes(services.stockMovementsService));
+  await app.register(stockRoutes(services));
   await app.register(tasksRoutes(services.tasksService));
 }

@@ -309,6 +309,14 @@ export interface BaseRecordDescriptor<Output> extends BaseRecordRules {
   conflicts?: Readonly<Record<string, string | { key: string; reason: string }>>;
   /** Cross-field rules on the values a write would leave (create values, or row + update). */
   checkValues?: (values: Record<string, unknown>) => void;
+  /**
+   * What a list adds to its `meta` beside the paging, from the query as resolved (a purchase list's
+   * `due_total` over every page).
+   */
+  listMeta?: (options: {
+    organizationId: number;
+    query: BaseRecordListQuery;
+  }) => Promise<Readonly<Record<string, unknown>>>;
   transitions?: Readonly<Record<string, BaseRecordTransition>>;
   /**
    * The column naming the member a record belongs to (a doctor's prescription kits, P17): a create

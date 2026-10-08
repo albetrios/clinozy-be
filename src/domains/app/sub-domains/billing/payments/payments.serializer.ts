@@ -38,6 +38,7 @@ export function serializePayment(
     invoice_id: references.publicIdOf('invoice_id', row),
     invoice_credit_note_id: references.publicIdOf('invoice_credit_note_id', row),
     pending_credit_id: references.publicIdOf('pending_credit_id', row),
+    stock_purchase_id: references.publicIdOf('stock_purchase_id', row),
     reverses_payment_id: references.publicIdOf('reverses_payment_id', row),
     reversed_by_payment_id: null,
     payee_name: (row.payee_name as string | null) ?? null,

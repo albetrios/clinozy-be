@@ -94,11 +94,13 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
   'POST /api/v1/app/stock-purchases/:stock_purchase_id/restore':
     'cross-organization-resource: stock purchase',
   'GET /api/v1/app/stock-counts/:stock_count_id': 'cross-organization-resource: stock count',
-  'DELETE /api/v1/app/stock-counts/:stock_count_id': 'cross-organization-resource: stock count',
-  'POST /api/v1/app/stock-counts/:stock_count_id/restore':
-    'cross-organization-resource: stock count',
-  'GET /api/v1/app/stock-movements/:stock_movement_id':
-    'cross-organization-resource: stock movement',
+  'GET /api/v1/app/stock-items/:stock_item_id/movements': 'cross-organization-resource: stock item',
+  'POST /api/v1/app/stock-items/:stock_item_id/movements':
+    'cross-organization-resource: stock item',
+  'GET /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id':
+    'cross-organization-resource: stock item movement',
+  'POST /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id/revert':
+    'cross-organization-resource: stock item movement',
   'GET /api/v1/app/tasks/:task_id': 'cross-organization-resource: task',
   'PATCH /api/v1/app/tasks/:task_id': 'cross-organization-resource: task',
   'POST /api/v1/app/tasks/:task_id/resolve': 'cross-organization-resource: task',

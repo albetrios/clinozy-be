@@ -1275,6 +1275,7 @@ erDiagram
 
 - **Built:** `app.payments` · ROUTE #34 (2026-10-07)
 - **Built (ROUTE #136, routes-final 8.C, code `billing/payments/`):** `app.payments` — `kind` (six) fixes `direction` (`chk_payments_kind_direction`, B17); `cash_amount`, `upi_amount`, `card_amount`, `credit_amount` with the sum CHECK (B18; the jsonb `splits` goes), `credit_amount > 0` only with `pending_credit_id`; `contact_id` (required for a receipt), `invoice_id`, `invoice_credit_note_id` (unique), `pending_credit_id`, `reverses_payment_id` (unique, `(kind = 'reversal') = (… IS NOT NULL)`); `payee_name` for expenses and supplier bills, `expense_category` only on an expense; `attachment_keys` ≤ 5; `bill_ref`, `bill_allocations`, `day_close_id`, `is_checked_at_close`, `patient_id` go (B6, B22).
+- **Built (ROUTE #137, S11):** `stock_purchase_id` → `app.stock_purchases` `ON DELETE RESTRICT` (`idx_payments_stock_purchase_id`), set only on a `supplier_bill` or its `reversal` (`chk_payments_stock_purchase`) — the typed link sub-domain 8 left for supplier bills; the payment's money keeps the purchase's `paid_amount`.
 ```mermaid
 erDiagram
   payment["payment · NEW"] {
@@ -1738,6 +1739,7 @@ erDiagram
 - **Open:** none
 
 - **Built:** `app.stock_vendors` · ROUTE #53 (2026-10-07)
+- **Built (ROUTE #137, sub-domain 9.E):** `name` unique among live vendors in any case (`idx_stock_vendors_organization_name_unique`), `phone` varchar(13) `~ '^\+91\d{10}$'`, `is_quick`; indexes `(organization_id, name, id)` and `(organization_id, created_at DESC, id)` among live rows; derived `payable` (the open dues of its live purchases, S13); delete refused while one is owed. RLS ENABLE + FORCE with the retention arm. Code `app/sub-domains/stock/stock-vendors/`.
 ```mermaid
 erDiagram
   stock_vendor["stock_vendor · NEW"] {
@@ -1757,6 +1759,7 @@ erDiagram
 - **Open:** none — the last rate is an Appendix F request (D3)
 
 - **Built:** `app.stock_items` · ROUTE #54 (2026-10-07)
+- **Built (ROUTE #137, sub-domain 9.A):** `numeric(12,3)` `size_per_unit`, `quantity` (`≥ 0`, the balance — moved only by the movement ledger, S5), `min_quantity` (1), `max_quantity` (10, `≥ min`), `usage_per_week`; `category` default `consumables`; `(size_per_unit IS NULL) = (measure_unit IS NULL)`; `last_rate` from the latest purchase line; unique `lower(name)` among live items; the low index `(organization_id) WHERE quantity <= min_quantity`; `*_milli` columns gone (S4). Delete only at zero; one with movements is never purged (`RESTRICT`). Code `app/sub-domains/stock/stock-items/`.
 ```mermaid
 erDiagram
   stock_item["stock_item · NEW"] {
@@ -1784,6 +1787,7 @@ erDiagram
 - **Open:** none — typing paid records the payment (P59, D40)
 
 - **Built:** `app.stock_purchases` · ROUTE #55 (2026-10-07)
+- **Built (ROUTE #137, sub-domain 9.D):** `lines` jsonb → NEW `app.stock_purchase_items` (`stock_purchase_id` CASCADE, `line_number` 1–50 — key with the purchase, `stock_item_id` RESTRICT, `quantity numeric(12,3) > 0`, `rate`, `amount`, `organization_id`; RLS ENABLE + FORCE); `bill_amount` (no default — the lines' total unless sent), `paid_amount` `0 ≤ paid ≤ bill` kept by supplier-bill payments (`app.payments.stock_purchase_id`, RESTRICT, S11), generated `due_amount` / `payment_status`; the vendor `RESTRICT`; indexes by date, by vendor and date, and `WHERE due_amount > 0`. Code `app/sub-domains/stock/stock-purchases/`.
 ```mermaid
 erDiagram
   stock_purchase["stock_purchase · NEW"] {
@@ -1807,6 +1811,7 @@ erDiagram
 - **Open:** none — Undo written as a reversing row (P60)
 
 - **Built:** `app.stock_movements` · ROUTE #56 (2026-10-07)
+- **Built (ROUTE #137, sub-domain 9.B):** renamed **`app.stock_item_movements`** (S1); append-only — no `updated_*` or soft delete; `type` adds `opening`; `delta_milli` → `quantity_change numeric(12,3)` (`≠ 0`, the sign by type) and `quantity_after` (`≥ 0`); `patient_id` → `patient_treatment_id` (RESTRICT, `used` only, S14); `stock_purchase_id` (`received` / `reverted`), `stock_count_id` (`adjust`), `reverts_stock_item_movement_id` unique with `revert_reason` exactly on `reverted` (S8), `reverted_by_*` dropped; the K8 author `author_membership_id`; every link RESTRICT; out of the purge list. Code `app/sub-domains/stock/stock-item-movements/` (the ledger `stock-item-movements.ledger.ts`).
 ```mermaid
 erDiagram
   stock_movement["stock_movement · NEW"] {
@@ -1833,6 +1838,7 @@ erDiagram
 - **Open:** none
 
 - **Built:** `app.stock_counts` · ROUTE #57 (2026-10-07)
+- **Built (ROUTE #137, sub-domain 9.C):** `lines` jsonb → NEW `app.stock_count_lines` (key `(stock_count_id, stock_item_id)`, `system_quantity` / `counted_quantity numeric(12,3) ≥ 0`, `organization_id`; RLS ENABLE + FORCE); the count keeps `counted_at` and the K8 author, loses `updated_*` and the soft-delete columns (never changed or deleted, S9) and the retention arm; out of the purge list. Code `app/sub-domains/stock/stock-counts/`.
 ```mermaid
 erDiagram
   stock_count["stock_count · NEW"] {

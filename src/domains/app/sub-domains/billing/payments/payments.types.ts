@@ -33,6 +33,8 @@ export interface PaymentOutput {
   invoice_id: string | null;
   invoice_credit_note_id: string | null;
   pending_credit_id: string | null;
+  /** The stock purchase a supplier bill pays (launch #137, S11) */
+  stock_purchase_id: string | null;
   reverses_payment_id: string | null;
   reversed_by_payment_id: string | null;
   payee_name: string | null;

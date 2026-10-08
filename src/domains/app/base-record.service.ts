@@ -149,13 +149,9 @@ export class BaseRecordService<Output> {
         visibility: options.visibility,
         requested: input.branchPublicIds,
       });
-      const page: BaseRecordPage = await this.descriptor.repository.list(organizationId, {
-        ...input,
-        equals,
-        branchScope,
-        linked,
-        withTotal: options.withTotal,
-      });
+      const listQuery = { ...input, equals, branchScope, linked, withTotal: options.withTotal };
+      const page: BaseRecordPage = await this.descriptor.repository.list(organizationId, listQuery);
+      const meta = await this.descriptor.listMeta?.({ organizationId, query: listQuery });
       const items = await this.serializeRows(page.items);
       await this.decorate(
         items,
@@ -166,7 +162,7 @@ export class BaseRecordService<Output> {
           options.visibility,
         ),
       );
-      return { ...page, items };
+      return { ...page, items, ...(meta ? { meta } : {}) };
     });
   }
 

@@ -154,17 +154,20 @@ import { CreateSupplierCreditDto as appCreateSupplierCreditDto } from '@/domains
 import {
   CreateStockVendorDto as appCreateStockVendorDto,
   UpdateStockVendorDto as appUpdateStockVendorDto,
-} from '@/domains/app/sub-domains/stock-vendors/stock-vendors.dto.js';
+} from '@/domains/app/sub-domains/stock/stock-vendors/stock-vendors.dto.js';
 import {
   CreateStockItemDto as appCreateStockItemDto,
   UpdateStockItemDto as appUpdateStockItemDto,
-} from '@/domains/app/sub-domains/stock-items/stock-items.dto.js';
+} from '@/domains/app/sub-domains/stock/stock-items/stock-items.dto.js';
 import {
   CreateStockPurchaseDto as appCreateStockPurchaseDto,
   UpdateStockPurchaseDto as appUpdateStockPurchaseDto,
-} from '@/domains/app/sub-domains/stock-purchases/stock-purchases.dto.js';
-import { CreateStockCountDto as appCreateStockCountDto } from '@/domains/app/sub-domains/stock-counts/stock-counts.dto.js';
-import { CreateStockMovementDto as appCreateStockMovementDto } from '@/domains/app/sub-domains/stock-movements/stock-movements.dto.js';
+} from '@/domains/app/sub-domains/stock/stock-purchases/stock-purchases.dto.js';
+import { CreateStockCountDto as appCreateStockCountDto } from '@/domains/app/sub-domains/stock/stock-counts/stock-counts.dto.js';
+import {
+  CreateStockItemMovementDto as appCreateStockItemMovementDto,
+  RevertStockItemMovementDto as appRevertStockItemMovementDto,
+} from '@/domains/app/sub-domains/stock/stock-item-movements/stock-item-movements.dto.js';
 import {
   CreateTaskDto as appCreateTaskDto,
   resolveTaskDto as appResolveTaskDto,
@@ -359,7 +362,9 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'POST /api/v1/app/tasks/{task_id}/resolve': appResolveTaskDto,
   'PATCH /api/v1/app/tasks/{task_id}': appUpdateTaskDto,
   'POST /api/v1/app/tasks': appCreateTaskDto,
-  'POST /api/v1/app/stock-movements': appCreateStockMovementDto,
+  'POST /api/v1/app/stock-items/{stock_item_id}/movements/{stock_item_movement_id}/revert':
+    appRevertStockItemMovementDto,
+  'POST /api/v1/app/stock-items/{stock_item_id}/movements': appCreateStockItemMovementDto,
   'POST /api/v1/app/stock-counts': appCreateStockCountDto,
   'PATCH /api/v1/app/stock-purchases/{stock_purchase_id}': appUpdateStockPurchaseDto,
   'POST /api/v1/app/stock-purchases': appCreateStockPurchaseDto,

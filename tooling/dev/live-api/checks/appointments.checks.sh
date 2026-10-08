@@ -248,7 +248,7 @@ expect 200 "undo the walk-in's check-in (still waiting)" POST "/app/appointments
 expect_value "undone: confirmed, off the floor" '[.data.status, (.data.checked_in_at | tostring), (.data.visit_stage | tostring)] | join(",")' confirmed,null,null
 expect 200 "Bela keeps the file the walk-in opened" GET "/app/contacts/${BELA}"
 expect_value "Bela's file stays" '.data.patient_id != null' true
-appointment_sql "UPDATE app.appointments SET appointment_date = '${TODAY}', start_time = '00:30' WHERE public_id = '${CHIRAG_APPOINTMENT}';"
+appointment_sql "UPDATE app.appointments SET appointment_date = '${TODAY}', start_time = '00:00' WHERE public_id = '${CHIRAG_APPOINTMENT}';"
 expect 200 "no-show after the start" POST "/app/appointments/${CHIRAG_APPOINTMENT}/no-show"
 expect_value "no_show" '.data.status' no_show
 

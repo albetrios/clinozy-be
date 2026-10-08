@@ -782,12 +782,7 @@ export class BaseRecordRepository extends BaseRepository {
       cursor && cursor.filter_fingerprint === fingerprint && cursor.sort_value !== undefined
         ? readCursorSortValues(cursor.sort_value, sort.keys.length)
         : null;
-    const where = and(
-      this.liveInOrganization(organization_id),
-      this.searchCondition(query.q),
-      ...this.filterConditions(query, organization_id),
-      ...sort.notNull,
-    );
+    const where = and(this.listWhere(query, organization_id), ...sort.notNull);
     const keyset =
       resumeValues && cursor?.id !== undefined
         ? keysetCondition({ keys: sort.keys, idColumn, values: resumeValues, id: cursor.id })
@@ -839,6 +834,31 @@ export class BaseRecordRepository extends BaseRepository {
         ? await countWithCap({ database, table: this.config.table, where })
         : null;
     return { items, total, limit: query.limit, has_more, next_cursor };
+  }
+
+  /** A list query's conditions — the organization's live rows, the search and the filters. */
+  private listWhere(query: BaseRecordListQuery, organizationId: number): SQL | undefined {
+    return and(
+      this.liveInOrganization(organizationId),
+      this.searchCondition(query.q),
+      ...this.filterConditions(query, organizationId),
+    );
+  }
+
+  /**
+   * The sum of a column over every row a list query matches, on every page — a list's footer
+   * total (a purchase list's `meta.due_total`).
+   */
+  async sumOver(options: {
+    organizationId: number;
+    query: BaseRecordListQuery;
+    column: string;
+  }): Promise<number> {
+    const rows = await getRequestDatabase()
+      .select({ total: sql<string>`coalesce(sum(${this.column(options.column)}), 0)` })
+      .from(this.config.table)
+      .where(this.listWhere(options.query, options.organizationId));
+    return Number(rows[0]?.total ?? 0);
   }
 
   /**
