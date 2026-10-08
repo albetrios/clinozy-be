@@ -176,3 +176,7 @@ minimumReleaseAgeExclude:
 # (the entry is version-keyed: bumping the runner without re-keying it fails the install).
 patchedDependencies:
   '@stryker-mutator/vitest-runner@10.0.0': patches/@stryker-mutator__vitest-runner@10.0.0.patch
+  # Drizzle's postgres.js unsafe() calls disable preparation even on direct connections.
+  # Honor the pool's prepare option; postgres.js still gates this off for prepare:false poolers.
+  # Remove when an upstream driver release enables statement preparation on these paths.
+  drizzle-orm@0.45.3: patches/drizzle-orm@0.45.3.patch

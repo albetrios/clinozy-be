@@ -28,6 +28,12 @@ export const options = {
   },
   thresholds: {
     http_req_failed: ['rate<0.01'],
+    checks: ['rate>0.99'],
+    'http_reqs{name:users-me}': ['count>0'],
+    'http_reqs{name:my-organizations}': ['count>0'],
+    'http_reqs{name:notify-notifications}': ['count>0'],
+    'http_reqs{name:notify-unread-count}': ['count>0'],
+    'http_reqs{name:tenancy-memberships}': ['count>0'],
     http_reqs: ['rate>5'],
     http_req_duration: ['p(95)<500', 'p(99)<1000'],
     'http_req_duration{name:users-me}': ['p(95)<500'],
@@ -37,6 +43,12 @@ export const options = {
     'http_req_duration{name:tenancy-memberships}': ['p(95)<500'],
   },
 };
+
+export function setup() {
+  if (!(__ENV.TEST_TOKEN && __ENV.TEST_ORG_ID)) {
+    throw new Error('API stress requires TEST_TOKEN scoped to TEST_ORG_ID');
+  }
+}
 
 export function apiStress() {
   const token = __ENV.TEST_TOKEN;
@@ -77,7 +89,7 @@ export function apiStress() {
       opts('tenancy-memberships'),
     );
     check(membersRes, {
-      'tenancy/memberships 2xx or 403': (r) => r.status === 200 || r.status === 403,
+      'tenancy/memberships 200': (r) => r.status === 200,
     });
   }
 

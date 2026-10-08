@@ -345,6 +345,11 @@ describe('UploadService', () => {
     expect(objectStorage.deleteObject).toHaveBeenCalledWith(
       'organization-files/organization/bbb.pdf',
     );
+    expect(repository.softDeleteAllByOrganizationId).toHaveBeenCalledWith(10);
+    const lastObjectDelete = vi.mocked(objectStorage.deleteObject).mock.invocationCallOrder.at(-1)!;
+    const tombstoneCall = vi.mocked(repository.softDeleteAllByOrganizationId).mock
+      .invocationCallOrder[0]!;
+    expect(lastObjectDelete).toBeLessThan(tombstoneCall);
   });
 
   const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);

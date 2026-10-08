@@ -16,6 +16,19 @@ export interface WebauthnChallengePayload {
   challenge: string;
 }
 
+/** Validates cached ceremony fields while preserving opaque decoy owners and extra metadata. */
+function isWebauthnChallengePayload(payload: unknown): payload is WebauthnChallengePayload {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false;
+  const candidate = payload as Record<string, unknown>;
+  return (
+    (candidate.kind === 'registration' || candidate.kind === 'authentication') &&
+    typeof candidate.user_public_id === 'string' &&
+    candidate.user_public_id.trim().length > 0 &&
+    typeof candidate.challenge === 'string' &&
+    candidate.challenge.trim().length > 0
+  );
+}
+
 /** Mints a 32-byte hex challenge handle, stores `{kind, user_public_id, challenge}` in Redis with {@link WEBAUTHN_CHALLENGE_TTL_SECONDS} TTL, and returns the handle for the client to echo back during verify. */
 export async function createWebauthnChallenge(
   redis: Redis,
@@ -53,14 +66,14 @@ export async function consumeWebauthnChallenge(
     throw new UnauthorizedError('errors:webauthnInvalidChallenge');
   }
 
-  let storedPayload: WebauthnChallengePayload;
+  let storedPayload: unknown;
   try {
-    storedPayload = JSON.parse(storedPayloadRaw) as WebauthnChallengePayload;
+    storedPayload = JSON.parse(storedPayloadRaw);
   } catch {
     throw new UnauthorizedError('errors:webauthnInvalidChallenge');
   }
 
-  if (storedPayload.kind !== expectedKind) {
+  if (!isWebauthnChallengePayload(storedPayload) || storedPayload.kind !== expectedKind) {
     throw new UnauthorizedError('errors:webauthnInvalidChallenge');
   }
 

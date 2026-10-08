@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { getOperatorSql } from '@/tests/helpers/operator-database.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
@@ -12,6 +13,7 @@ import {
   createMembership,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import {
+  getCachedPermissions,
   invalidatePermissions,
   invalidateOrganizationPermissions,
 } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
@@ -209,7 +211,16 @@ describe('Permission System Validation', () => {
     );
     expect(first).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
 
-    // Invalidate the cache
+    // Revoke the real grant independently of cache invalidation. A no-op
+    // invalidator must leave the stale value visible and fail the final check.
+    expect(await getCachedPermissions(user.public_id, organization.public_id)).toEqual([
+      TENANCY_PERMISSIONS.ORGANIZATION_READ,
+    ]);
+    await getOperatorSql()`DELETE FROM tenancy.role_permissions WHERE role_id = ${limitedRole.id}`;
+    expect(await getCachedPermissions(user.public_id, organization.public_id)).toEqual([
+      TENANCY_PERMISSIONS.ORGANIZATION_READ,
+    ]);
+
     await invalidatePermissions(user.public_id, organization.public_id);
 
     // Second resolution after invalidation — should hit DB again
@@ -217,7 +228,7 @@ describe('Permission System Validation', () => {
       user.public_id,
       organization.public_id,
     );
-    expect(second).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
+    expect(second).toEqual([]);
   });
 
   // ─── Case 6: Permission resolution — correct 5-table join ─────────────
@@ -341,7 +352,32 @@ describe('Permission System Validation', () => {
     expect(ownerPermissions).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
     expect(memberPermissions).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
 
-    // Invalidate all permissions for the organization
+    // A different tenant is a positive control: its live cache must survive.
+    const otherOrganization = await createTestOrganization({ ownerUserId: owner.id });
+    const otherRole = await createRoleWithPermissions({
+      organizationId: otherOrganization.id,
+      permissionCodes: [TENANCY_PERMISSIONS.ORGANIZATION_READ],
+    });
+    await createMembership({
+      userId: owner.id,
+      organizationId: otherOrganization.id,
+      roleId: otherRole.id,
+    });
+    expect(
+      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions(
+        owner.public_id,
+        otherOrganization.public_id,
+      ),
+    ).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
+
+    await getOperatorSql()`DELETE FROM tenancy.role_permissions WHERE role_id = ${role.id}`;
+    expect(await getCachedPermissions(owner.public_id, organization.public_id)).toEqual([
+      TENANCY_PERMISSIONS.ORGANIZATION_READ,
+    ]);
+    expect(await getCachedPermissions(member.public_id, organization.public_id)).toEqual([
+      TENANCY_PERMISSIONS.ORGANIZATION_READ,
+    ]);
+
     await invalidateOrganizationPermissions(organization.public_id);
 
     // Re-resolve — should hit DB again (cache cleared)
@@ -356,7 +392,10 @@ describe('Permission System Validation', () => {
         organization.public_id,
       );
 
-    expect(ownerPermissionsAfterInvalidation).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
-    expect(memberPermissionsAfterInvalidation).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
+    expect(ownerPermissionsAfterInvalidation).toEqual([]);
+    expect(memberPermissionsAfterInvalidation).toEqual([]);
+    expect(await getCachedPermissions(owner.public_id, otherOrganization.public_id)).toEqual([
+      TENANCY_PERMISSIONS.ORGANIZATION_READ,
+    ]);
   });
 });

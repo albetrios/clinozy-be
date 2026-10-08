@@ -1,0 +1,88 @@
+diff --git a/postgres-js/session.cjs b/postgres-js/session.cjs
+index dac222ae57e908c3ad8242b9495fd0d0e0d02617..a9ab51f20b2fe86401a70d3701cd17ccd1ccbdff 100644
+--- a/postgres-js/session.cjs
++++ b/postgres-js/session.cjs
+@@ -55,7 +55,7 @@ class PostgresJsPreparedQuery extends import_session.PgPreparedQuery {
+       if (!fields && !customResultMapper) {
+         return import_tracing.tracer.startActiveSpan("drizzle.driver.execute", () => {
+           return this.queryWithCache(query, params, async () => {
+-            return await client.unsafe(query, params);
++            return await client.unsafe(query, params, { prepare: true });
+           });
+         });
+       }
+@@ -65,7 +65,7 @@ class PostgresJsPreparedQuery extends import_session.PgPreparedQuery {
+           "drizzle.query.params": JSON.stringify(params)
+         });
+         return this.queryWithCache(query, params, async () => {
+-          return await client.unsafe(query, params).values();
++          return await client.unsafe(query, params, { prepare: true }).values();
+         });
+       });
+       return import_tracing.tracer.startActiveSpan("drizzle.mapResponse", () => {
+@@ -87,7 +87,7 @@ class PostgresJsPreparedQuery extends import_session.PgPreparedQuery {
+           "drizzle.query.params": JSON.stringify(params)
+         });
+         return this.queryWithCache(this.queryString, params, async () => {
+-          return this.client.unsafe(this.queryString, params);
++          return this.client.unsafe(this.queryString, params, { prepare: true });
+         });
+       });
+     });
+@@ -125,10 +125,10 @@ class PostgresJsSession extends import_session.PgSession {
+   }
+   query(query, params) {
+     this.logger.logQuery(query, params);
+-    return this.client.unsafe(query, params).values();
++    return this.client.unsafe(query, params, { prepare: true }).values();
+   }
+   queryObjects(query, params) {
+-    return this.client.unsafe(query, params);
++    return this.client.unsafe(query, params, { prepare: true });
+   }
+   transaction(transaction, config) {
+     return this.client.begin(async (client) => {
+diff --git a/postgres-js/session.js b/postgres-js/session.js
+index f7322c0cf4a29b93e72f03b6ba988dcae1cb02e3..2b5fd4d607f9c97495e22fdcb2cb51c14da441a9 100644
+--- a/postgres-js/session.js
++++ b/postgres-js/session.js
+@@ -30,7 +30,7 @@ class PostgresJsPreparedQuery extends PgPreparedQuery {
+       if (!fields && !customResultMapper) {
+         return tracer.startActiveSpan("drizzle.driver.execute", () => {
+           return this.queryWithCache(query, params, async () => {
+-            return await client.unsafe(query, params);
++            return await client.unsafe(query, params, { prepare: true });
+           });
+         });
+       }
+@@ -40,7 +40,7 @@ class PostgresJsPreparedQuery extends PgPreparedQuery {
+           "drizzle.query.params": JSON.stringify(params)
+         });
+         return this.queryWithCache(query, params, async () => {
+-          return await client.unsafe(query, params).values();
++          return await client.unsafe(query, params, { prepare: true }).values();
+         });
+       });
+       return tracer.startActiveSpan("drizzle.mapResponse", () => {
+@@ -62,7 +62,7 @@ class PostgresJsPreparedQuery extends PgPreparedQuery {
+           "drizzle.query.params": JSON.stringify(params)
+         });
+         return this.queryWithCache(this.queryString, params, async () => {
+-          return this.client.unsafe(this.queryString, params);
++          return this.client.unsafe(this.queryString, params, { prepare: true });
+         });
+       });
+     });
+@@ -100,10 +100,10 @@ class PostgresJsSession extends PgSession {
+   }
+   query(query, params) {
+     this.logger.logQuery(query, params);
+-    return this.client.unsafe(query, params).values();
++    return this.client.unsafe(query, params, { prepare: true }).values();
+   }
+   queryObjects(query, params) {
+-    return this.client.unsafe(query, params);
++    return this.client.unsafe(query, params, { prepare: true });
+   }
+   transaction(transaction, config) {
+     return this.client.begin(async (client) => {

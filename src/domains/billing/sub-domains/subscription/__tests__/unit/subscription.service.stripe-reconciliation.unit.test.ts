@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   PRINCIPAL_SCOPE,
   type OrganizationPrincipalDatabaseScope,
@@ -133,7 +133,11 @@ describe('SubscriptionService — Stripe reconciliation (sec-B1+B2+B3+B4)', () =
     paymentProvider,
   );
 
+  const fixedNow = new Date('2026-10-08T12:00:00.123Z');
+
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(fixedNow);
     vi.clearAllMocks();
     vi.mocked(repository.findActiveByOrganization).mockResolvedValue(null);
     vi.mocked(repository.findByPublicId).mockResolvedValue(subscription as never);
@@ -145,13 +149,17 @@ describe('SubscriptionService — Stripe reconciliation (sec-B1+B2+B3+B4)', () =
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   // ── sec-B2 ──────────────────────────────────────────────────────────────────────────
-  it('create() stamps last_stripe_event_created_at so late Stripe events cannot clobber (sec-B2)', async () => {
+  it('create() stamps last_stripe_event_created_at at the current clock time (sec-B2)', async () => {
     await service.create(scope, { plan_id: 'plan_pro', billing_cycle: 'monthly' }, 'created_by');
 
     expect(repository.create).toHaveBeenCalledTimes(1);
     const createPayload = vi.mocked(repository.create).mock.calls[0]![0];
-    expect(createPayload.last_stripe_event_created_at).toBeInstanceOf(Date);
+    expect(createPayload.last_stripe_event_created_at).toEqual(fixedNow);
   });
 
   it('create() does NOT stamp the watermark when Stripe is not configured (local-only flow)', async () => {
@@ -165,19 +173,19 @@ describe('SubscriptionService — Stripe reconciliation (sec-B1+B2+B3+B4)', () =
   it('cancel() bumps last_stripe_event_created_at on the local update (sec-B3)', async () => {
     await service.cancel(scope, 'sub_public');
     const updatePayload = vi.mocked(repository.update).mock.calls[0]![2];
-    expect(updatePayload.last_stripe_event_created_at).toBeInstanceOf(Date);
+    expect(updatePayload.last_stripe_event_created_at).toEqual(fixedNow);
   });
 
   it('resume() bumps last_stripe_event_created_at on the local update (sec-B3)', async () => {
     await service.resume(scope, 'sub_public');
     const updatePayload = vi.mocked(repository.update).mock.calls[0]![2];
-    expect(updatePayload.last_stripe_event_created_at).toBeInstanceOf(Date);
+    expect(updatePayload.last_stripe_event_created_at).toEqual(fixedNow);
   });
 
   it('changePlan() bumps last_stripe_event_created_at on the local update (sec-B3)', async () => {
     await service.changePlan(scope, 'sub_public', { plan_id: 'plan_pro' });
     const updatePayload = vi.mocked(repository.update).mock.calls[0]![2];
-    expect(updatePayload.last_stripe_event_created_at).toBeInstanceOf(Date);
+    expect(updatePayload.last_stripe_event_created_at).toEqual(fixedNow);
   });
 
   // ── sec-B4 ──────────────────────────────────────────────────────────────────────────

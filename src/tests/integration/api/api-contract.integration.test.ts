@@ -1,4 +1,4 @@
-import { describe, expect, it, afterAll } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
@@ -13,14 +13,16 @@ import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 describe('API contract (integration)', () => {
   let app: FastifyInstance;
 
+  beforeAll(async () => {
+    const testApp = await createTestApp();
+    app = testApp.app;
+  });
+
   afterAll(async () => {
     if (app) await app.close();
   });
 
   it('GET /readyz returns database, redis, and bullmq status', async () => {
-    const testApp = await createTestApp();
-    app = testApp.app;
-
     const response = await injectUnauthenticated(app, {
       method: 'GET',
       url: '/readyz',
@@ -45,9 +47,6 @@ describe('API contract (integration)', () => {
   });
 
   it('POST /api/v1/auth/login rejects empty body with validation error', async () => {
-    const testApp = await createTestApp();
-    app = testApp.app;
-
     const response = await injectUnauthenticated(app, {
       method: 'POST',
       url: testApiPath('/auth/login'),
@@ -58,8 +57,6 @@ describe('API contract (integration)', () => {
 
   it('GET /api/v1/users/me returns profile for valid token', async () => {
     await cleanupDatabase();
-    const testApp = await createTestApp();
-    app = testApp.app;
 
     const user = await createTestUser();
     const token = await generateTestToken({ userId: user.public_id });
@@ -76,9 +73,6 @@ describe('API contract (integration)', () => {
   });
 
   it('GET /api/v1/billing/plans returns 200 without authentication', async () => {
-    const testApp = await createTestApp();
-    app = testApp.app;
-
     const response = await injectUnauthenticated(app, {
       method: 'GET',
       url: testApiPath('/billing/plans'),
@@ -88,8 +82,6 @@ describe('API contract (integration)', () => {
 
   it('GET /api/v1/billing/plans returns a list for authenticated callers', async () => {
     await cleanupDatabase();
-    const testApp = await createTestApp();
-    app = testApp.app;
 
     const user = await createTestUser();
     const token = await generateTestToken({ userId: user.public_id });

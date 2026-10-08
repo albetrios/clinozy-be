@@ -204,7 +204,10 @@ function handleAppErrorResponse(
       }),
     );
   } else if (error.statusCode === SERVICE_UNAVAILABLE_STATUS) {
-    logger.warn({ requestId, messageKey: error.messageKey }, 'request.service_unavailable');
+    logger.warn(
+      omitUndefined({ requestId, messageKey: error.messageKey, reason: error.reason }),
+      'request.service_unavailable',
+    );
   }
   const code = ERROR_CODE_TO_SNAKE[error.code];
   const isValidation = error instanceof ValidationError;

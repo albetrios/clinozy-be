@@ -252,6 +252,60 @@ describe('Billing Subscription Mutations — Integration', () => {
       expect(await statusOf(owner.id)).toBe('ACTIVE');
     });
 
+    it('keeps the oldest non-owner seat and suspends the newest on a two-seat downgrade', async () => {
+      const {
+        user: owner,
+        organization,
+        subscription,
+        token,
+      } = await createBillingMutationContext();
+      const memberRole = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: ALL_BILLING_PERMISSIONS,
+      });
+      const olderUser = await createTestUser();
+      const newerUser = await createTestUser();
+      const olderMembership = await createMembership({
+        userId: olderUser.id,
+        organizationId: organization.id,
+        roleId: memberRole.id,
+      });
+      const newerMembership = await createMembership({
+        userId: newerUser.id,
+        organizationId: organization.id,
+        roleId: memberRole.id,
+      });
+      await getOperatorDatabase()
+        .update(memberships)
+        .set({ joined_at: new Date('2026-01-01T00:00:00Z') })
+        .where(eq(memberships.id, olderMembership.id));
+      await getOperatorDatabase()
+        .update(memberships)
+        .set({ joined_at: new Date('2026-02-01T00:00:00Z') })
+        .where(eq(memberships.id, newerMembership.id));
+      const twoSeatPlan = await createTestPlan({ includedSeats: 2 });
+
+      const response = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
+        token,
+        payload: { plan_id: twoSeatPlan.public_id },
+        headers: { 'x-idempotency-key': generatePublicId('subscription') },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const rows = await getOperatorDatabase()
+        .select({
+          userId: memberships.user_id,
+          status: memberships.status,
+        })
+        .from(memberships)
+        .where(eq(memberships.organization_id, organization.id));
+      const statuses = new Map(rows.map((row) => [row.userId, row.status]));
+      expect(statuses.get(owner.id)).toBe('ACTIVE');
+      expect(statuses.get(olderUser.id)).toBe('ACTIVE');
+      expect(statuses.get(newerUser.id)).toBe('SUSPENDED');
+    });
+
     it('downgrade of an owner-only organization to a 0-seat plan succeeds without suspending the owner (F2)', async () => {
       // Only the owner holds a seat; the owner is never suspended, so an over-cap downgrade still
       // succeeds (the organization simply remains at its owner-only floor).

@@ -318,11 +318,13 @@ describe('AuthMethodService', () => {
     const { enforceMinimumDuration } = await import(
       '@/shared/utils/security/anti-enumeration.util.js'
     );
+    vi.mocked(enforceMinimumDuration).mockClear();
     await service.forgotPassword({ email: user.email });
+    expect(enforceMinimumDuration).toHaveBeenCalledTimes(1);
+    vi.mocked(enforceMinimumDuration).mockClear();
     vi.mocked(userService.findByEmail).mockResolvedValue(null);
     await service.forgotPassword({ email: 'missing@example.com' });
-    // The known- and unknown-account paths both run the floor so latency cannot be an oracle.
-    expect(vi.mocked(enforceMinimumDuration)).toHaveBeenCalledTimes(2);
+    expect(enforceMinimumDuration).toHaveBeenCalledTimes(1);
   });
 
   it('resetPassword updates password for valid token', async () => {

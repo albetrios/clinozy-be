@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WebauthnService } from '@/domains/auth/sub-domains/auth-webauthn/webauthn.service.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import type { WebauthnCredentialRepository } from '@/domains/auth/sub-domains/auth-webauthn/webauthn-credential.repository.js';
+import { ValidationError } from '@/shared/errors/index.js';
 
 vi.mock('@/domains/auth/sub-domains/auth-webauthn/webauthn-challenge.js', () => ({
   createWebauthnChallenge: vi.fn().mockResolvedValue('challenge-token'),
@@ -59,16 +60,10 @@ describe('WebauthnService.generateAuthenticationOptions', () => {
     vi.clearAllMocks();
   });
 
-  it('rejects when no email is supplied (DTO requires it after sec-A #24)', async () => {
-    // The DTO now requires `email`, so the validator throws a ValidationError before the
-    // service is reached in production. This test still uses the service directly to keep
-    // the defense-in-depth runtime check covered — it routes via the same anti-enumeration
-    // UnauthorizedError shape rather than leaking the validation failure.
-    await expect(service.generateAuthenticationOptions({})).rejects.toBeInstanceOf(
-      // Either ValidationError (preferred — DTO rejects) or UnauthorizedError (service
-      // defense in depth) is acceptable; both refuse the request without leaking state.
-      Error,
-    );
+  it('rejects a missing email with ValidationError before querying any account', async () => {
+    await expect(service.generateAuthenticationOptions({})).rejects.toBeInstanceOf(ValidationError);
+    expect(userService.findByEmail).not.toHaveBeenCalled();
+    expect(credentialRepository.listActiveByUserId).not.toHaveBeenCalled();
   });
 
   const KNOWN_USER = {

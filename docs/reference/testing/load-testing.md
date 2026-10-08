@@ -20,7 +20,7 @@ flowchart TB
     Bench[pnpm test:bench]
   end
 
-  subgraph full [Full confidence]
+  subgraph full [Scoped stress checks]
     Stress[pnpm load:stress]
     StressAPI[pnpm load:stress:api]
   end
@@ -30,9 +30,19 @@ flowchart TB
   full --> Scenarios[Scenarios: health, auth, daily-ops, billing, webhooks, admin]
 ```
 
-Prerequisites → Quick (health, bench) vs Full confidence (stress, stress:api) → Scenarios.
+Prerequisites → Quick (health, bench) vs Scoped stress checks (stress, stress:api) → Scenarios.
 
 ---
+
+## Route coverage and test intent
+
+Count distinct **method + route template** pairs actually requested, and compare API pairs with the current [route catalogue](../../routes.txt). Scenario files and optional branches are potential coverage; they are not executed coverage. `api-stress.js` exercises five reads, `rls-concurrency-beyond-pool.js` exercises one of those membership reads, and `session-refresh-journey.js` adds login, refresh, and logout. Increasing VUs does not increase route coverage or the number of identities.
+
+`pnpm load:read-surface` adds 23 nondestructive GET routes across auth, user, tenancy, billing, and notify. Supply `TEST_TOKEN` scoped to `TEST_ORG_ID`; setup verifies a TEAM tenant and the required permissions. Defaults are 10 concurrent clients and 20 complete journeys (`VUS` / `ITERATIONS`). Every route must execute, return HTTP 200, and pass its basic response-shape checks. This is functional read load, not full business-invariant or production capacity certification. It excludes destructive writes, admin routes, resource details, and live Stripe/S3 calls.
+
+Load scenarios must fail on missing prerequisites and gate semantic checks as well as HTTP/latency metrics. API/RLS stress now require credentials and request counts; membership denial cannot pass as an authorized success. The session journey preserves the current rotated cookies before logout, replays them with valid CSRF, and requires 401 for both refresh and bearer access. Clearing the client cookie or receiving 403/429 does not prove server revocation.
+
+Report separately: executed route coverage, concurrency profile, fixture/identity/tenant counts, status distribution, semantic check results, latency percentiles, and exclusions. An all-green run means no failures in those checks; it does not imply an error-free backend.
 
 ## Nightly CI gate (GitHub Actions)
 
@@ -62,7 +72,7 @@ Artifacts (`k6-*.json` summaries and `server.log`) are uploaded for 14 days. Opt
 
 ---
 
-## Full confidence (recommended)
+## Scoped load coverage
 
 To gain confidence in the **whole system** (not just health endpoints), run both infrastructure stress and API stress:
 
@@ -84,7 +94,7 @@ To gain confidence in the **whole system** (not just health endpoints), run both
 3. **Optional — auth flow**: `pnpm load:auth`
    - Stresses login + profile + list organizations (ramping load profile; see thresholds in `src/tests/load/k6/scenarios/auth-onboarding.js`).
 
-If **load:stress** and **load:stress:api** both pass, the system is under load-tested for both infra and main API paths.
+Passing these scenarios establishes their named health and API checks, not capacity or correctness across every API route.
 
 ### Failure rate and how to handle it
 
@@ -283,7 +293,7 @@ The same signals are observable live via `GET /readyz` (verbose), `GET /metrics`
 - **Env**: Optional `BASE_URL` (default `http://localhost:3000`)
 - **Run**: `pnpm load:health` or `k6 run src/tests/load/k6/scenarios/health.js`
 
-### 2. API stress (full confidence)
+### 2. API stress (five-route coverage)
 
 - **File**: `src/tests/load/k6/scenarios/api-stress.js`
 - **Auth**: Bearer token (TEST_TOKEN) + TEST_ORG_ID for memberships

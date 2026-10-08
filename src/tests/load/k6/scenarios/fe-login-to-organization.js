@@ -177,7 +177,7 @@ export const options = {
       exec: 'feJourney',
     },
   },
-  thresholds: { journey_complete: ['rate>=0'] },
+  thresholds: { journey_complete: ['rate==1'], checks: ['rate==1'] },
 };
 
 /** Announce the run shape to the load-testing monitor (404s harmlessly without it). */

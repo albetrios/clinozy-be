@@ -10,6 +10,7 @@ import { eq } from 'drizzle-orm';
 import { createTestUserWithPassword } from '@/tests/factories/user.factory.js';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { users } from '@/domains/user/user.schema.js';
+import esSuccess from '@/shared/locales/es/success.json' with { type: 'json' };
 import type { FastifyInstance } from 'fastify';
 
 const AUTH_LOGIN_PATH = '/auth/login';
@@ -325,10 +326,9 @@ describe('Auth Domain — Response contract (integration)', () => {
       });
       expect(response.statusCode).toBe(200);
       expect((response.json() as { data: Record<string, unknown> }).data.message).toBeDefined();
-      expect([
-        'If an account exists with this email, you will receive a sign-in code shortly.',
-        'Si existe una cuenta con este correo, recibirás un código de inicio de sesión en breve.',
-      ]).toContain((response.json() as { data: Record<string, unknown> }).data.message);
+      expect((response.json() as { data: Record<string, unknown> }).data.message).toBe(
+        esSuccess.verificationCodeSent,
+      );
     });
 
     it('returns 404 error detail in English with Accept-Language: en', async () => {

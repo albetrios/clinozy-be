@@ -20,6 +20,8 @@ import {
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 
+import { NOTIFICATION_UNREAD_COUNT_CACHE_TTL_SECONDS } from '@/shared/constants/ttl.constants.js';
+
 const PERMISSIONS = ['notify:read'];
 const UNREAD_COUNT_PATH = testApiPath('/notify/notifications/unread-count');
 
@@ -198,8 +200,21 @@ describe('Notification unread count — read cache', () => {
     await createTestNotification({ userId: user.id, organizationId: organization.id });
     expect(await readUnreadCount(token)).toBe(1);
 
-    await getOperatorDatabase().delete(notifications);
+    const cacheKey = `notify:unread-count:${user.public_id}`;
+    const cacheTtlMs = await redisConnection.pttl(cacheKey);
+    expect(cacheTtlMs).toBeGreaterThan(0);
+    expect(cacheTtlMs).toBeLessThanOrEqual(NOTIFICATION_UNREAD_COUNT_CACHE_TTL_SECONDS * 1000);
 
+    await getOperatorDatabase().delete(notifications);
     expect(await readUnreadCount(token)).toBe(1);
+
+    // Keep production TTL configuration intact; accelerate this entry's real Redis expiry.
+    // Unlike DEL, PEXPIRE exercises the cache's expiration and subsequent DB fallback.
+    expect(await redisConnection.pexpire(cacheKey, 1)).toBe(1);
+    await expect
+      .poll(() => redisConnection.exists(cacheKey), { interval: 10, timeout: 2000 })
+      .toBe(0);
+    expect(await readUnreadCount(token)).toBe(0);
+    expect(await redisConnection.get(cacheKey)).toBe('0');
   });
 });

@@ -15,7 +15,7 @@ describe('outboundCall', () => {
     vi.useRealTimers();
   });
 
-  it('throws ExternalServiceError with timeout category when operation exceeds timeout', async () => {
+  it('throws ExternalServiceError with timeout or aborted category when operation exceeds timeout', async () => {
     const promise = outboundCall({
       name: 'oauth-google',
       timeoutMs: 50,
@@ -81,6 +81,7 @@ describe('outboundCall', () => {
       name: 'retry-inside-circuit',
       failureThreshold: 10,
     });
+    const executeSpy = vi.spyOn(circuit, 'execute');
 
     const result = await outboundCall({
       name: 'resend',
@@ -102,6 +103,8 @@ describe('outboundCall', () => {
 
     expect(result).toBe('ok');
     expect(attempts).toBe(3);
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    executeSpy.mockRestore();
     vi.useFakeTimers();
   });
 
@@ -193,7 +196,7 @@ describe('outboundCall', () => {
     vi.useFakeTimers();
   });
 
-  it('maps CircuitBreakerOpenError to ExternalServiceError circuit_open', async () => {
+  it('preserves CircuitBreakerOpenError when the circuit rejects before execution', async () => {
     const circuit = new CircuitBreaker({
       name: 'open-fast',
       failureThreshold: 1,

@@ -4,7 +4,6 @@ import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { sql as drizzleSql } from 'drizzle-orm';
 import {
   EXPECTED_FORCE_RLS_TABLES,
-  RLS_MATRIX_SKIP_CRUD_TABLES,
   USER_SCOPED_FORCE_RLS_TABLES,
   countRowsAsGlobalAdmin,
   countRowsAsTenant,
@@ -40,6 +39,53 @@ function countFromExecuteResult(result: unknown): number {
     ? result
     : ((result as { rows?: { count: number }[] }).rows ?? []);
   return Number(rows[0]?.count ?? 0);
+}
+
+// This generic matrix needs seeded pairs and tenant SELECT/UPDATE/DELETE policy semantics.
+// Other forced tables have user, maintenance, global-catalog or append-only policy shapes.
+// Their explicit exclusion is not a claim their CRUD security is covered here.
+const TENANT_CRUD_EXCLUDED_POLICY_SHAPES = new Set([
+  'audit.dead_letter_jobs',
+  'audit.logs',
+  'audit.outbox',
+  'auth.auth_methods',
+  'auth.mail_outbox',
+  'auth.mfa_methods',
+  'auth.mfa_recovery_codes',
+  'auth.sessions',
+  'auth.user_data_exports',
+  'auth.user_notification_preferences',
+  'auth.user_settings',
+  'auth.users',
+  'auth.verification_tokens',
+  'auth.webauthn_credentials',
+  'billing.plans',
+  'billing.stripe_subscription_tombstones',
+  'billing.stripe_webhook_events',
+  'notify.webhook_delivery_attempts',
+  'tenancy.member_invitations',
+  'tenancy.organization_settings',
+  'tenancy.organizations',
+  'tenancy.permissions',
+  'tenancy.role_permissions',
+]);
+
+async function tenantRowSnapshot(
+  schemaName: string,
+  tableName: string,
+  rowId: number,
+  organizationPublicId: string,
+): Promise<unknown> {
+  return executeAsClinozyBeAppTenant(organizationPublicId, async (transaction) => {
+    const result = await transaction.execute(
+      drizzleSql.raw(
+        `SELECT to_jsonb(target) AS snapshot FROM "${schemaName}"."${tableName}" AS target WHERE id = ${rowId}`,
+      ),
+    );
+    const rows = Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? []);
+    expect(rows, `${schemaName}.${tableName} owner sees seeded target`).toHaveLength(1);
+    return (rows[0] as { snapshot: unknown }).snapshot;
+  });
 }
 
 describe('Security: RLS matrix (all FORCE RLS tables)', () => {
@@ -100,7 +146,7 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
   });
 
   const crudMatrixTables = EXPECTED_FORCE_RLS_TABLES.filter(
-    (table) => !RLS_MATRIX_SKIP_CRUD_TABLES.has(tableKey(table.schemaName, table.tableName)),
+    (table) => !TENANT_CRUD_EXCLUDED_POLICY_SHAPES.has(tableKey(table.schemaName, table.tableName)),
   );
 
   describe.each(crudMatrixTables)(
@@ -111,21 +157,14 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
       it('should not read other tenant rows (SELECT count)', async () => {
         const fixture = await seedRlsMatrixFixtures();
         const rowIds = fixture.rowIdsByTable.get(key);
-        if (!rowIds) {
-          const countForA = await countRowsAsTenant(
-            schemaName,
-            tableName,
-            fixture.organizationAPublicId,
-          );
-          const countForB = await countRowsAsTenant(
-            schemaName,
-            tableName,
-            fixture.organizationBPublicId,
-          );
-          expect(countForA).toBeGreaterThanOrEqual(0);
-          expect(countForB).toBeGreaterThanOrEqual(0);
-          return;
-        }
+        expect(rowIds, `${key} must have a seeded A/B pair`).toBeDefined();
+        if (!rowIds) throw new Error(`Missing required tenant fixture: ${key}`);
+        await tenantRowSnapshot(
+          schemaName,
+          tableName,
+          rowIds.organizationB,
+          fixture.organizationBPublicId,
+        );
 
         const visibleForA = await countRowsAsTenant(
           schemaName,
@@ -151,7 +190,14 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
       it('should not UPDATE other tenant rows', async () => {
         const fixture = await seedRlsMatrixFixtures();
         const rowIds = fixture.rowIdsByTable.get(key);
-        if (!rowIds) return;
+        expect(rowIds, `${key} must have a seeded A/B pair`).toBeDefined();
+        if (!rowIds) throw new Error(`Missing required tenant fixture: ${key}`);
+        const before = await tenantRowSnapshot(
+          schemaName,
+          tableName,
+          rowIds.organizationB,
+          fixture.organizationBPublicId,
+        );
 
         const updated = await updateRowAsTenant(
           schemaName,
@@ -160,12 +206,26 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
           fixture.organizationAPublicId,
         );
         expect(updated).toBe(0);
+        const after = await tenantRowSnapshot(
+          schemaName,
+          tableName,
+          rowIds.organizationB,
+          fixture.organizationBPublicId,
+        );
+        expect(after, `${key} target unchanged by cross-tenant UPDATE`).toEqual(before);
       });
 
       it('should not DELETE other tenant rows', async () => {
         const fixture = await seedRlsMatrixFixtures();
         const rowIds = fixture.rowIdsByTable.get(key);
-        if (!rowIds) return;
+        expect(rowIds, `${key} must have a seeded A/B pair`).toBeDefined();
+        if (!rowIds) throw new Error(`Missing required tenant fixture: ${key}`);
+        const before = await tenantRowSnapshot(
+          schemaName,
+          tableName,
+          rowIds.organizationB,
+          fixture.organizationBPublicId,
+        );
 
         const deleted = await deleteRowAsTenant(
           schemaName,
@@ -174,6 +234,13 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
           fixture.organizationAPublicId,
         );
         expect(deleted).toBe(0);
+        const after = await tenantRowSnapshot(
+          schemaName,
+          tableName,
+          rowIds.organizationB,
+          fixture.organizationBPublicId,
+        );
+        expect(after, `${key} target survives cross-tenant DELETE`).toEqual(before);
       });
     },
   );

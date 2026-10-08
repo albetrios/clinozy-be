@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Redis } from 'ioredis';
 import { UnauthorizedError } from '@/shared/errors/index.js';
+import { MFA_SESSION_TTL_SECONDS } from '@/shared/constants/index.js';
 import {
   createMfaSession,
   verifyMfaSession,
@@ -20,12 +21,12 @@ describe('auth-mfa-session', () => {
 
   it('createMfaSession stores user_public_id JSON payload with TTL', async () => {
     const token = await createMfaSession(redis, 'user_public_abc');
-    expect(token.length).toBeGreaterThan(10);
+    expect(token).toMatch(/^[a-f0-9]{64}$/);
     expect(redis.set).toHaveBeenCalledWith(
       expect.stringContaining(MFA_SESSION_KEY_PREFIX),
       JSON.stringify({ user_public_id: 'user_public_abc' }),
       'EX',
-      expect.any(Number),
+      MFA_SESSION_TTL_SECONDS,
     );
   });
 
@@ -49,6 +50,45 @@ describe('auth-mfa-session', () => {
   it('verifyMfaSession rejects malformed JSON payload', async () => {
     vi.mocked(redis.getdel).mockResolvedValue('{not-json');
     await expect(verifyMfaSession(redis, 'token-abc')).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+
+  it.each([
+    ['null', null],
+    ['a number', 42],
+    ['a boolean', true],
+    ['a string', 'user_public_abc'],
+    ['an array', [{ user_public_id: 'user_public_abc' }]],
+    ['a null user id', { user_public_id: null }],
+    ['a numeric user id', { user_public_id: 123 }],
+    ['a boolean user id', { user_public_id: true }],
+    ['an object user id', { user_public_id: {} }],
+    ['an array user id', { user_public_id: ['user_public_abc'] }],
+    ['a whitespace-only user id', { user_public_id: '   ' }],
+  ])(
+    'rejects valid JSON containing %s with a typed denial and consumes the entry',
+    async (_label, payload) => {
+      vi.mocked(redis.getdel)
+        .mockResolvedValueOnce(JSON.stringify(payload))
+        .mockResolvedValueOnce(null);
+      const consumption = verifyMfaSession(redis, 'invalid-payload-token');
+      await expect(consumption).rejects.toBeInstanceOf(UnauthorizedError);
+      await expect(consumption).rejects.toMatchObject({
+        messageKey: 'errors:mfaInvalidOrExpiredSession',
+      });
+      expect(redis.getdel).toHaveBeenCalledOnce();
+      expect(redis.getdel).toHaveBeenCalledWith(`${MFA_SESSION_KEY_PREFIX}invalid-payload-token`);
+      await expect(verifyMfaSession(redis, 'invalid-payload-token')).rejects.toBeInstanceOf(
+        UnauthorizedError,
+      );
+      expect(redis.getdel).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it('preserves additional metadata on a valid MFA payload', async () => {
+    const payload = { user_public_id: 'user_public_abc', metadata: { request_id: 'request-1' } };
+    vi.mocked(redis.getdel).mockResolvedValueOnce(JSON.stringify(payload));
+    await expect(verifyMfaSession(redis, 'metadata-token')).resolves.toEqual(payload);
+    expect(redis.getdel).toHaveBeenCalledOnce();
   });
 
   it('verifyMfaSession rejects payload missing user_public_id', async () => {

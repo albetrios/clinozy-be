@@ -17,4 +17,10 @@ describe('oauth-pkce', () => {
     const expected = createHash('sha256').update(verifier).digest('base64url');
     expect(derivePkceCodeChallengeS256(verifier)).toBe(expected);
   });
+
+  it('matches the independent RFC 7636 Appendix B S256 test vector', () => {
+    expect(derivePkceCodeChallengeS256('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk')).toBe(
+      'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+    );
+  });
 });

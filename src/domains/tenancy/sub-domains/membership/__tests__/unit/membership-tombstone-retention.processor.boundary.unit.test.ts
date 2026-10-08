@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 import { runMembershipTombstoneRetentionJob } from '@/domains/tenancy/sub-domains/membership/workers/membership-tombstone-retention.processor.js';
 
 const deleteInBatchesByConditionMock = vi.fn();
@@ -19,11 +21,17 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
 
 describe('membership-tombstone-retention.processor boundary cases', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-08T12:00:00.000Z'));
     deleteInBatchesByConditionMock.mockReset();
     loggerInfoMock.mockReset();
   });
 
-  it('purges only tombstones older than the cutoff', async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('builds a strict older-than cutoff predicate for tombstones', async () => {
     deleteInBatchesByConditionMock.mockResolvedValue({ deletedCount: 4, blockedCount: 0 });
 
     const result = await runMembershipTombstoneRetentionJob({} as never);
@@ -35,10 +43,18 @@ describe('membership-tombstone-retention.processor boundary cases', () => {
         tableLabel: 'tenancy.memberships',
       }),
     );
+    const options = deleteInBatchesByConditionMock.mock.calls[0]![0] as { whereCondition: SQL };
+    const query = new PgDialect().sqlToQuery(options.whereCondition);
+    expect(query.sql).toMatch(/"deleted_at" is not null/i);
+    expect(query.sql).toMatch(/"deleted_at" < \$1/);
+    expect(query.sql).toMatch(/ and /i);
+    expect(query.params).toHaveLength(1);
+    const cutoff = query.params[0];
+    expect(cutoff instanceof Date ? cutoff.toISOString() : cutoff).toBe('2026-09-08T12:00:00.000Z');
     expect(result).toEqual({ deletedCount: 4, blockedCount: 0 });
   });
 
-  it('keeps rows at or younger than the cutoff (no rows matched)', async () => {
+  it('returns zero counts when the batch deleter reports no matching rows', async () => {
     deleteInBatchesByConditionMock.mockResolvedValue({ deletedCount: 0, blockedCount: 0 });
 
     const result = await runMembershipTombstoneRetentionJob({} as never);

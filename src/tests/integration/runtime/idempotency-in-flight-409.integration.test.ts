@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
+import { cleanupTestRedis } from '@/tests/helpers/test-redis.js';
 import { buildIdempotencyCacheKey } from '@/shared/utils/idempotency/idempotency-key.util.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
@@ -21,10 +22,7 @@ describe('Integration: idempotency in-flight returns 409', () => {
   });
 
   beforeEach(async () => {
-    const keys = await redisConnection.keys('*idempotency*');
-    if (keys.length > 0) {
-      await redisConnection.del(...keys);
-    }
+    await cleanupTestRedis();
   });
 
   it('returns 409 conflict_in_flight for an entry it cannot read (never replays or overwrites it)', async () => {
@@ -41,6 +39,9 @@ describe('Integration: idempotency in-flight returns 409', () => {
       60,
     );
 
+    const originalEntry = await redisConnection.get(cacheKey);
+    expect(originalEntry).not.toBeNull();
+
     const response = await application.inject({
       method: 'POST',
       url: requestUrl,
@@ -53,6 +54,7 @@ describe('Integration: idempotency in-flight returns 409', () => {
     });
 
     expect(response.statusCode).toBe(409);
+    expect(await redisConnection.get(cacheKey)).toBe(originalEntry);
     const body = response.json() as { error?: { code?: string } };
     expect(body.error?.code).toBe('conflict_in_flight');
   });
@@ -75,6 +77,9 @@ describe('Integration: idempotency in-flight returns 409', () => {
       60,
     );
 
+    const originalEntry = await redisConnection.get(cacheKey);
+    expect(originalEntry).not.toBeNull();
+
     const response = await application.inject({
       method: 'POST',
       url: requestUrl,
@@ -87,5 +92,6 @@ describe('Integration: idempotency in-flight returns 409', () => {
     });
 
     expect(response.statusCode).toBe(409);
+    expect(await redisConnection.get(cacheKey)).toBe(originalEntry);
   });
 });

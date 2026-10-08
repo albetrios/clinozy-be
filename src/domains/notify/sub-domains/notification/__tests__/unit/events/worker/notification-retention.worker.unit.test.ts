@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { lt } from 'drizzle-orm';
+import { notifications } from '@/domains/notify/sub-domains/notification/notification.schema.js';
 import { runNotificationRetentionJob } from '@/domains/notify/sub-domains/notification/workers/notification-retention.processor.js';
 
 const deleteInBatchesByConditionMock = vi.fn();
@@ -18,16 +20,25 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
 
 describe('notification-retention.worker', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-08T12:00:00.000Z'));
     deleteInBatchesByConditionMock.mockReset();
     deleteInBatchesByConditionMock.mockResolvedValue({ deletedCount: 2, blockedCount: 0 });
   });
 
-  it('runNotificationRetentionJob deletes notifications older than retention window', async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('runNotificationRetentionJob passes a strict age predicate to batch deletion', async () => {
     const result = await runNotificationRetentionJob({} as never);
 
     expect(deleteInBatchesByConditionMock).toHaveBeenCalledOnce();
     expect(deleteInBatchesByConditionMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        table: notifications,
+        idColumn: notifications.id,
+        whereCondition: lt(notifications.created_at, new Date('2025-10-08T12:00:00.000Z')),
         logContext: 'notification-retention',
         tableLabel: 'notify.notifications',
       }),

@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import { and, eq } from 'drizzle-orm';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
+import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { injectUnauthenticated } from '@/tests/helpers/test-http-inject.helper.js';
@@ -111,7 +114,38 @@ describe('refresh preserves the switched active organization (audit-#3)', () => 
     expect(loginResponse.statusCode).toBe(200);
     const cookie = sessionCookie(loginResponse.headers);
 
-    // No switch performed → session has no persisted organization → refresh resolves the default.
+    const organizationB = await provisionOrganizationWithOwner({
+      name: 'Stale Refresh Team',
+      slug: `stale-refresh-team-${generatePublicId('organization').slice(4, 14)}`,
+      type: 'TEAM',
+      ownerUserId: user.id,
+    });
+    const loginToken = (loginResponse.json() as { data: { access_token: string } }).data
+      .access_token;
+    const switched = await app.inject({
+      method: 'POST',
+      url: testApiPath('/auth/switch-to-organization'),
+      headers: { authorization: `Bearer ${loginToken}` },
+      payload: { organization_id: organizationB.organization.public_id },
+    });
+    expect(switched.statusCode, switched.body).toBe(200);
+    expect(
+      decodeOrgClaim((switched.json() as { data: { access_token: string } }).data.access_token),
+    ).toBe(organizationB.organization.public_id);
+
+    // Persisted session organization now points at a membership that no longer authorizes the user.
+    const suspended = await getOperatorDatabase()
+      .update(memberships)
+      .set({ status: 'SUSPENDED' })
+      .where(
+        and(
+          eq(memberships.user_id, user.id),
+          eq(memberships.organization_id, organizationB.organization.id),
+        ),
+      )
+      .returning({ status: memberships.status });
+    expect(suspended).toEqual([{ status: 'SUSPENDED' }]);
+
     const refreshResponse = await app.inject({
       method: 'POST',
       url: testApiPath('/auth/refresh'),

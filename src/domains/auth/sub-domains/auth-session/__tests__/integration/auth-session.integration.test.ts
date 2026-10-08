@@ -54,6 +54,10 @@ describe('Auth Session Sub-Domain — Integration', () => {
       const { token, sessionPublicId } = await generateTestTokenAndSession({
         userId: user.public_id,
       });
+      const { sessionPublicId: otherSessionPublicId } = await generateTestTokenAndSession({
+        userId: user.public_id,
+      });
+      expect(otherSessionPublicId).not.toBe(sessionPublicId);
       const response = await injectAuthenticated(app, {
         method: 'GET',
         url: testApiPath('/auth/me/sessions'),
@@ -67,12 +71,10 @@ describe('Auth Session Sub-Domain — Integration', () => {
       // The derived display fields are always part of the contract (value may be null).
       expect(current).toHaveProperty('device');
       expect(current).toHaveProperty('browser');
-      // Only the calling session is flagged current.
-      for (const session of body.data) {
-        if (session.id !== sessionPublicId) {
-          expect(session.is_current).toBe(false);
-        }
-      }
+      const other = body.data.find((session) => session.id === otherSessionPublicId);
+      expect(other).toBeDefined();
+      expect(other?.is_current).toBe(false);
+      expect(body.data.filter((session) => session.is_current === true)).toHaveLength(1);
     });
   });
 

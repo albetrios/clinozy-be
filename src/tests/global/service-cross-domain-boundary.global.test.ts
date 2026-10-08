@@ -36,7 +36,7 @@ function findCrossDomainLayerImports(
   layer: 'repository' | 'schema',
 ): string[] {
   const importPattern = new RegExp(
-    String.raw`from\s+['"]@/domains/([^/'"]+)(?:/[^'"]*)?/${layer}(?:\.js)?['"]`,
+    String.raw`from\s+['"]@/domains/([^/'"]+)/(?:[^'"]*/)?(?:[^/'"]+\.)?${layer}(?:\.js)?['"]`,
     'g',
   );
   const offenders: string[] = [];
@@ -51,6 +51,19 @@ function findCrossDomainLayerImports(
 
 describe('Policy: service cross-domain boundary', () => {
   const serviceFiles = collectServiceFiles(DOMAINS_ROOT);
+
+  it('detects named repository/schema imports across domains and permits the owning domain', () => {
+    for (const layer of ['repository', 'schema'] as const) {
+      for (const path of [
+        `@/domains/user/user.${layer}.js`,
+        `@/domains/user/sub-domains/user-settings/user-settings.${layer}.js`,
+      ]) {
+        const source = `import { dependency } from '${path}';`;
+        expect(findCrossDomainLayerImports(source, 'tenancy', layer)).toHaveLength(1);
+        expect(findCrossDomainLayerImports(source, 'user', layer)).toEqual([]);
+      }
+    }
+  });
 
   it('every domain *.service.ts uses only same-domain repositories (never other domains)', () => {
     const violations: string[] = [];

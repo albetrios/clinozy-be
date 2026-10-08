@@ -35,7 +35,7 @@ describe('Performance: auth session list', () => {
     await cleanupDatabase();
   });
 
-  it('GET /auth/me/sessions does not scale its work with the number of active sessions', async () => {
+  it('GET /auth/me/sessions returns at least 15 fixture sessions within the local timing budget', async () => {
     const user = await createTestUser();
 
     // A real multi-device user: every session is a genuine row created through the

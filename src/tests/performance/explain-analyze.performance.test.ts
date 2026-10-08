@@ -7,7 +7,7 @@ import { AuditRepository } from '@/domains/audit/audit.repository.js';
 
 const runExplainTests = process.env.RUN_EXPLAIN_TESTS !== '0';
 
-describe.runIf(runExplainTests)('Performance: EXPLAIN ANALYZE', () => {
+describe.runIf(runExplainTests)('Performance: EXPLAIN index eligibility', () => {
   const auditRepository = new AuditRepository();
 
   beforeAll(async () => {
@@ -63,7 +63,7 @@ describe.runIf(runExplainTests)('Performance: EXPLAIN ANALYZE', () => {
     expect(planText.toLowerCase()).toMatch(/index|bitmap/);
   });
 
-  it('should use pg_trgm GIN index for admin user email ILIKE search', async () => {
+  it('email ILIKE query can use the pg_trgm index with sequential scans discouraged', async () => {
     const searchTerm = 'admin-search';
     for (let index = 0; index < 40; index++) {
       await createTestUser({ email: `${searchTerm}-${index}@example.com` });

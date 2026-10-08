@@ -26,11 +26,12 @@ describe('Global: no direct DB-query primitives outside repositories (sec-r5-arc
     {
       name: '`database` singleton from connection.js',
       pattern:
-        /from\s+['"]@\/infrastructure\/database\/connection\.js['"][\s\S]*?\{[^}]*\bdatabase\b/g,
+        /import\s*\{[^}]*\bdatabase\b[^}]*\}\s*from\s+['"]@\/infrastructure\/database\/connection\.js['"]/g,
     },
     {
       name: 'raw `sql` tagged-template from connection.js',
-      pattern: /from\s+['"]@\/infrastructure\/database\/connection\.js['"][\s\S]*?\{[^}]*\bsql\b/g,
+      pattern:
+        /import\s*\{[^}]*\bsql\b[^}]*\}\s*from\s+['"]@\/infrastructure\/database\/connection\.js['"]/g,
     },
     {
       name: 'getRequestDatabase() from request-database.context.js',
@@ -84,6 +85,31 @@ describe('Global: no direct DB-query primitives outside repositories (sec-r5-arc
       yield entryPath;
     }
   }
+
+  it('recognizes ordinary and multiline runtime connection imports while allowing type-only imports', () => {
+    for (const primitive of ['database', 'sql']) {
+      const scanner = FORBIDDEN_IMPORT_PATTERNS.find(({ name }) =>
+        name.includes('`' + primitive + '`'),
+      )?.pattern;
+      expect(scanner).toBeDefined();
+      for (const source of [
+        `import { ${primitive} } from '@/infrastructure/database/connection.js';`,
+        `import {
+  ${primitive} as connectionPrimitive,
+} from '@/infrastructure/database/connection.js';`,
+      ]) {
+        scanner!.lastIndex = 0;
+        expect(scanner!.test(source), source).toBe(true);
+      }
+      scanner!.lastIndex = 0;
+      expect(
+        scanner!.test(
+          `import type { ${primitive} } from '@/infrastructure/database/connection.js';`,
+        ),
+      ).toBe(false);
+      scanner!.lastIndex = 0;
+    }
+  });
 
   it('forbids `database` / `sql` / `getRequestDatabase` outside repositories', async () => {
     const repositoryRoot = process.cwd();

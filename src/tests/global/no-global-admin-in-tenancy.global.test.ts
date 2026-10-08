@@ -35,7 +35,7 @@ describe('Global: tenancy code never uses the global-admin RLS escape hatch', ()
    * `MAINTENANCE_SCOPE.GLOBAL_ADMIN` singleton is the only way to enter the hatch
    * since the family unification, so referencing it outside a comment IS the use.
    */
-  const GLOBAL_ADMIN_USE = /^(?!\s*(?:\/\/|\*|\/\*)).*MAINTENANCE_SCOPE\.global_admin/gm;
+  const GLOBAL_ADMIN_USE = /^(?!\s*(?:\/\/|\*|\/\*)).*MAINTENANCE_SCOPE\.GLOBAL_ADMIN\b/gm;
 
   async function* walkTypeScriptFiles(root: string): AsyncGenerator<string> {
     const entries = await fs.readdir(root, { withFileTypes: true });
@@ -52,6 +52,18 @@ describe('Global: tenancy code never uses the global-admin RLS escape hatch', ()
       yield entryPath;
     }
   }
+
+  it('detects the canonical global-admin scope reference and ignores comment-only mentions', () => {
+    GLOBAL_ADMIN_USE.lastIndex = 0;
+    expect(
+      GLOBAL_ADMIN_USE.test(
+        'withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_ADMIN, callback)',
+      ),
+    ).toBe(true);
+    GLOBAL_ADMIN_USE.lastIndex = 0;
+    expect(GLOBAL_ADMIN_USE.test('// MAINTENANCE_SCOPE.GLOBAL_ADMIN is forbidden')).toBe(false);
+    GLOBAL_ADMIN_USE.lastIndex = 0;
+  });
 
   it('no file under src/domains/tenancy uses MAINTENANCE_SCOPE.GLOBAL_ADMIN', async () => {
     const repositoryRoot = process.cwd();

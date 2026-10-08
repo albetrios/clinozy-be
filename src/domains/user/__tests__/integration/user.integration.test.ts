@@ -7,6 +7,9 @@ import {
 } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
+import { eq } from 'drizzle-orm';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
+import { users } from '@/domains/user/user.schema.js';
 import { generateTestToken, generateSuperAdminToken } from '@/tests/helpers/test-auth.js';
 import type { FastifyInstance } from 'fastify';
 import type { InjectHttpResult } from '@/tests/helpers/test-http-inject.helper.js';
@@ -172,7 +175,17 @@ describe('User Domain — Integration', () => {
         token: token,
         payload: { first_name: 'Updated' },
       });
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode, response.body).toBe(200);
+      expect((response.json() as { data: Record<string, unknown> }).data).toMatchObject({
+        id: user.public_id,
+        first_name: 'Updated',
+      });
+      const read = await getMeWithRetry(app, token);
+      expect(read.statusCode, read.body).toBe(200);
+      expect((read.json() as { data: Record<string, unknown> }).data).toMatchObject({
+        id: user.public_id,
+        first_name: 'Updated',
+      });
     });
 
     it('should return 400 or 422 for invalid body', async () => {
@@ -236,6 +249,12 @@ describe('User Domain — Integration', () => {
         token,
       });
       expect(first.statusCode, first.body).toBe(200);
+      const database = getOperatorDatabase();
+      const [firstState] = await database
+        .select({ completedAt: users.onboarding_completed_at })
+        .from(users)
+        .where(eq(users.id, user.id));
+      expect(firstState?.completedAt).toBeInstanceOf(Date);
 
       const second = await injectAuthenticated(app, {
         method: 'POST',
@@ -246,6 +265,11 @@ describe('User Domain — Integration', () => {
       expect(
         (second.json() as { data: { onboarding_completed: boolean } }).data.onboarding_completed,
       ).toBe(true);
+      const [secondState] = await database
+        .select({ completedAt: users.onboarding_completed_at })
+        .from(users)
+        .where(eq(users.id, user.id));
+      expect(secondState?.completedAt).toEqual(firstState?.completedAt);
     });
   });
 

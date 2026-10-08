@@ -220,6 +220,9 @@ describe('UserService — avatar lifecycle', () => {
 
     expect(objectStorage.deleteObject).toHaveBeenCalledWith(OLD_AVATAR_KEY);
     expect(repository.update).toHaveBeenCalledWith(USER_PUBLIC_ID, { avatar_url: null });
+    expect(vi.mocked(objectStorage.deleteObject).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(repository.update).mock.invocationCallOrder[0]!,
+    );
   });
 
   it('deleteAvatar is a no-op for storage when no avatar is set', async () => {

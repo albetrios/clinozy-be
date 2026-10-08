@@ -79,6 +79,7 @@ src/
     │   │   │   └── verification-code-token.factory.ts
     │   │   ├── integration/
     │   │   │   ├── auth-audit-trail.integration.test.ts
+    │   │   │   ├── auth-cached-payload.integration.test.ts
     │   │   │   ├── auth-me-context.integration.test.ts
     │   │   │   ├── auth-recovery-atomicity.integration.test.ts
     │   │   │   ├── auth-route-smoke.integration.test.ts
@@ -348,6 +349,7 @@ src/
     │   │   │   │   │   ├── stripe-webhook-payload-shrink.integration.test.ts
     │   │   │   │   │   ├── stripe-webhook-reclaim.integration.test.ts
     │   │   │   │   │   ├── stripe-webhook-replay.integration.test.ts
+    │   │   │   │   │   ├── stripe-webhook-worker-claim-race.integration.test.ts
     │   │   │   │   │   └── stripe-webhook.integration.test.ts
     │   │   │   │   └── unit/
     │   │   │   │   │   ├── events/
@@ -1865,6 +1867,7 @@ src/
     │   │   ├── migration-rollback.integration.test.ts
     │   │   ├── migrations-backward.integration.test.ts
     │   │   ├── migrations-forward.integration.test.ts
+    │   │   ├── prepared-statements.integration.test.ts
     │   │   ├── request-transaction-budget.integration.test.ts
     │   │   ├── resource-quota-lock.integration.test.ts
     │   │   └── transaction-rollback.integration.test.ts
@@ -1947,6 +1950,7 @@ src/
     │   │   │   ├── passwordless-signup.js
     │   │   │   ├── permission-cached.js
     │   │   │   ├── permission-write.js
+    │   │   │   ├── read-surface.js
     │   │   │   ├── rls-concurrency-beyond-pool.js
     │   │   │   ├── session-refresh-journey.js
     │   │   │   ├── stripe-webhook-ingest.js

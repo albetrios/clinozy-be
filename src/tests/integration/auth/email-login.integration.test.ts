@@ -38,5 +38,6 @@ describe('Auth - Email verification-code login', () => {
 
     // 401 for an unknown email / wrong code; 400 on a malformed body.
     expect(response.statusCode).toBeGreaterThanOrEqual(400);
+    expect(response.statusCode).toBeLessThan(500);
   });
 });

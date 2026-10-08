@@ -125,7 +125,15 @@ describe('webhook-outbound-circuit', () => {
     }
     expect(getWebhookOutboundCircuitCacheSize()).toBe(WEBHOOK_CIRCUIT_CACHE_MAX_ENTRIES);
 
-    // One more distinct webhook id must evict the oldest entry, keeping the cache at the cap.
+    // Touch the first-inserted entry so FIFO eviction would now choose the wrong one.
+    await fetchWebhookWithCircuitBreaker({
+      webhookPublicId: 'whk_0',
+      webhookUrl: 'https://example.com/hook/0',
+      init: { method: 'POST' },
+      fetchImplementation: okFetch,
+    });
+
+    // Overflow must evict whk_1, the least recently accessed entry, while retaining whk_0.
     await fetchWebhookWithCircuitBreaker({
       webhookPublicId: `whk_${String(WEBHOOK_CIRCUIT_CACHE_MAX_ENTRIES)}`,
       webhookUrl: 'https://example.com/hook/overflow',
@@ -134,6 +142,10 @@ describe('webhook-outbound-circuit', () => {
     });
 
     expect(getWebhookOutboundCircuitCacheSize()).toBe(WEBHOOK_CIRCUIT_CACHE_MAX_ENTRIES);
+    invalidateWebhookOutboundCircuit('whk_1');
+    expect(getWebhookOutboundCircuitCacheSize()).toBe(WEBHOOK_CIRCUIT_CACHE_MAX_ENTRIES);
+    invalidateWebhookOutboundCircuit('whk_0');
+    expect(getWebhookOutboundCircuitCacheSize()).toBe(WEBHOOK_CIRCUIT_CACHE_MAX_ENTRIES - 1);
   });
 
   it('evicts an idle breaker once the idle TTL has elapsed (time-based, distinct from the LRU cap)', async () => {

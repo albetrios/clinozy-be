@@ -71,6 +71,16 @@ describe('upload-tombstone-retention.processor', () => {
       { id: 2, public_id: 'upl_2', file_key: 'uploads/old-2.png' },
     ]);
     const objectStorage = createObjectStoragePortMock();
+    const deletedObjects: string[] = [];
+    objectStorage.deleteObject.mockImplementation(async (key) => {
+      await Promise.resolve();
+      deletedObjects.push(key);
+      return { kind: 'deleted' };
+    });
+    hardDeleteUploadsByInternalIdsMock.mockImplementation(async () => {
+      expect(deletedObjects).toEqual(['uploads/old-1.png', 'uploads/old-2.png']);
+      return 2;
+    });
 
     const result = await runUploadTombstoneRetentionJob(objectStorage);
 

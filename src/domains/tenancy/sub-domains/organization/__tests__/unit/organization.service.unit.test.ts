@@ -352,6 +352,13 @@ describe('OrganizationService', () => {
     // A single per-owner transaction-scoped quota lock serializes the count + insert; the
     // previously-redundant resource-cap-lock has been removed (audit R12).
     expect(repository.acquireOwnedOrganizationQuotaLock).toHaveBeenCalledWith(expect.any(Number));
+    expect(repository.countActiveOwnedByUser).toHaveBeenCalledOnce();
+    expect(
+      vi.mocked(repository.acquireOwnedOrganizationQuotaLock).mock.invocationCallOrder[0],
+    ).toBeLessThan(vi.mocked(repository.countActiveOwnedByUser).mock.invocationCallOrder[0]!);
+    expect(vi.mocked(repository.countActiveOwnedByUser).mock.invocationCallOrder[0]).toBeLessThan(
+      provisionOrganizationWithOwnerMock.mock.invocationCallOrder[0]!,
+    );
   });
 
   it('create rejects when the owner is at the team-organization cap', async () => {
@@ -656,6 +663,10 @@ describe('OrganizationService', () => {
     } as never);
     const result = await service.deleteLogo(asScope(organizationRow.public_id), 'owner_public');
     expect(objectStorage.deleteObject).toHaveBeenCalledWith(logoPath);
+    expect(repository.update).toHaveBeenCalledOnce();
+    expect(vi.mocked(objectStorage.deleteObject).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(repository.update).mock.invocationCallOrder[0]!,
+    );
     expect(result.logo_url).toBeNull();
   });
 

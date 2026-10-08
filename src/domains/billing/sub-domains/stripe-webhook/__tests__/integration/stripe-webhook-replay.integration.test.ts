@@ -108,7 +108,10 @@ describe('Stripe webhook — replay defence', () => {
   }
 
   it('refuses a delivery signed outside the tolerance window', async () => {
-    if (!env.STRIPE_WEBHOOK_SECRET) return;
+    expect(
+      env.STRIPE_WEBHOOK_SECRET,
+      'signed replay tests require STRIPE_WEBHOOK_SECRET',
+    ).toBeTruthy();
     // The HMAC still verifies — the secret has not changed — so only the timestamp check can
     // reject this. That makes it a direct test of the replay window, not of signing.
     const { rawPayload, signature } = await buildSignedWebhookFixture({
@@ -121,7 +124,10 @@ describe('Stripe webhook — replay defence', () => {
   });
 
   it('writes no ledger row for a refused stale delivery', async () => {
-    if (!env.STRIPE_WEBHOOK_SECRET) return;
+    expect(
+      env.STRIPE_WEBHOOK_SECRET,
+      'signed replay tests require STRIPE_WEBHOOK_SECRET',
+    ).toBeTruthy();
     // Rejection must happen before ingestion: a ledger row for a refused delivery would both
     // pollute the reclaim sweep and let an attacker seed arbitrary event ids.
     const { stripeEventId, rawPayload, signature } = await buildSignedWebhookFixture({
@@ -138,7 +144,10 @@ describe('Stripe webhook — replay defence', () => {
   });
 
   it('accepts a fresh delivery and deduplicates its replay to a single ledger row', async () => {
-    if (!env.STRIPE_WEBHOOK_SECRET) return;
+    expect(
+      env.STRIPE_WEBHOOK_SECRET,
+      'signed replay tests require STRIPE_WEBHOOK_SECRET',
+    ).toBeTruthy();
     // The contrast that makes the two refusals meaningful: inside the window the identical
     // construction is accepted, and the ledger's unique event id absorbs the replay — a
     // replayed delivery inside the window is idempotent rather than reprocessed.

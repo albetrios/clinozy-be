@@ -136,8 +136,15 @@ describe('WebhookService', () => {
   it('lists, gets, creates, updates, and deletes webhooks', async () => {
     const listed = await service.list({ scope });
     expect(listed.items).toHaveLength(1);
-    await service.get(scope, 'webhook_public');
-    await service.create(
+    expect(listed.items[0]).toMatchObject({ id: webhook.public_id, url: webhook.url });
+    const found = await service.get(scope, 'webhook_public');
+    expect(found).toMatchObject({ id: webhook.public_id, url: webhook.url });
+    expect(found).not.toHaveProperty('encrypted_secret');
+    expect(webhookRepository.findByPublicId).toHaveBeenCalledWith(
+      webhook.public_id,
+      organization.id,
+    );
+    const created = await service.create(
       scope,
       {
         url: 'https://example.com/hook',
@@ -146,9 +153,32 @@ describe('WebhookService', () => {
       },
       'user_public',
     );
-    await service.update(scope, 'webhook_public', { is_enabled: false }, 'user_public');
+    expect(created).toMatchObject({ id: webhook.public_id, url: webhook.url });
+    expect(webhookRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organization_id: organization.id,
+        url: webhook.url,
+        events: ['subscription.updated'],
+        encrypted_secret: expect.any(String),
+        created_by_user_id: 10,
+      }),
+    );
+    const updated = await service.update(
+      scope,
+      'webhook_public',
+      { is_enabled: false },
+      'user_public',
+    );
+    expect(updated.id).toBe(webhook.public_id);
+    expect(webhookRepository.update).toHaveBeenCalledWith(
+      webhook.public_id,
+      organization.id,
+      { is_enabled: false },
+      10,
+      {},
+    );
     await service.delete(scope, 'webhook_public');
-    expect(webhookRepository.softDelete).toHaveBeenCalled();
+    expect(webhookRepository.softDelete).toHaveBeenCalledWith(webhook.public_id, organization.id);
   });
 
   it('listDeliveryAttempts resolves webhook id', async () => {
@@ -263,6 +293,17 @@ describe('WebhookService', () => {
       webhook_public_id: 'webhook_public',
     });
     expect(result.success).toBe(false);
+    expect(deliveryAttemptRepository.create).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        webhook_id: webhook.id,
+        event_type: 'webhook.test',
+        status: 'FAILED',
+        http_status_code: null,
+        response_body: 'network error',
+        attempt_count: 1,
+        sent_at: expect.any(Date),
+      }),
+    );
   });
 
   it('get throws NotFound when webhook is missing', async () => {
