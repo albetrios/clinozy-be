@@ -241,4 +241,26 @@ describe('permission-cache service invalidation', () => {
       );
     expect(commitCall).toBeUndefined();
   });
+
+  it('coalesces concurrent recomputes in one process when the Redis lock cannot be acquired', async () => {
+    mockedRedisSet(redisConnection.set).mockRejectedValue(new Error('redis down'));
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const recompute = vi.fn(async () => {
+      await gate;
+      return ['tenancy:read'];
+    });
+
+    const first = withPermissionCacheRecomputeLock('user_public_id', 'org_public_id', recompute);
+    const second = withPermissionCacheRecomputeLock('user_public_id', 'org_public_id', recompute);
+    release();
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      ['tenancy:read'],
+      ['tenancy:read'],
+    ]);
+    expect(recompute).toHaveBeenCalledTimes(1);
+  });
 });

@@ -5,10 +5,14 @@ import {
   PERMISSION_CACHE_DEFAULT_TTL_SECONDS,
   PERMISSION_CACHE_RECOMPUTE_LOCK_TTL_SECONDS,
 } from '@/shared/constants/ttl.constants.js';
+import { createSingleflight } from '@/shared/utils/infrastructure/singleflight.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { captureException } from '@/infrastructure/observability/sentry/sentry.js';
 
 const PERMISSION_CACHE_PREFIX = 'perm';
+
+/** In-process coalesce so concurrent misses for one user in one organization share one database read. */
+const permissionRecomputeSingleflight = createSingleflight<string[]>();
 const PERMISSION_CACHE_ORGANIZATION_VERSION_PREFIX = 'perm:org';
 
 /** Upper bound (exclusive) for the 0..60s jitter smeared over permission-cache expirations. */
@@ -228,13 +232,14 @@ async function commitCachedPermissionsIfLockHeld(
  * so only one request per (user, organization) hits the database during a stampede.
  *
  * @remarks
- * - **Algorithm:** `SET key <nonce> EX <ttl> NX` to claim the lock with a unique
- *   per-call nonce; on success runs `recompute()`, then commits the result via
- *   {@link commitCachedPermissionsIfLockHeld} (a compare-and-set guarded on the
- *   nonce) and returns. Waiters poll up to `STAMPEDE_POLL_ATTEMPTS` ×
- *   `PERMISSION_CACHE_STAMPEDE_POLL_MS` (≈2s) for the cache to populate; if still empty, they fall
+ * - **Algorithm:** in-process callers for the same user and organization share one flight
+ *   ({@link createSingleflight}) before any Redis lock. Inside that flight, `SET key <nonce> EX <ttl> NX`
+ *   claims the lock with a unique per-call nonce; on success runs `recompute()`, then commits the
+ *   result via {@link commitCachedPermissionsIfLockHeld} (a compare-and-set guarded on the nonce)
+ *   and returns. Waiters on other processes poll up to `STAMPEDE_POLL_ATTEMPTS` ×
+ *   `PERMISSION_CACHE_STAMPEDE_POLL_MS` for the cache to populate; if still empty, they fall
  *   through to a fresh recompute as a safety net (without caching, since they do
- *   not own the lock).
+ *   not own the lock). Same-process waiters never reach that fall-through: they await the flight.
  * - **Failure modes:** Redis `SET` failure is logged
  *   (`permission-cache.lock.acquire.failed`) and the caller falls back to a
  *   direct `recompute()` without locking — the database carries the load.
@@ -255,6 +260,18 @@ export async function withPermissionCacheRecomputeLock(
   organizationId: string,
   recompute: () => Promise<string[]>,
 ): Promise<string[]> {
+  return permissionRecomputeSingleflight.run({
+    key: `${userId}:${organizationId}`,
+    load: () => recomputePermissionsUnderLock({ userId, organizationId, recompute }),
+  });
+}
+
+async function recomputePermissionsUnderLock(options: {
+  userId: string;
+  organizationId: string;
+  recompute: () => Promise<string[]>;
+}): Promise<string[]> {
+  const { userId, organizationId, recompute } = options;
   const lockKey = buildRecomputeLockKey(userId, organizationId);
   const lockNonce = randomUUID();
   let acquiredLock = false;

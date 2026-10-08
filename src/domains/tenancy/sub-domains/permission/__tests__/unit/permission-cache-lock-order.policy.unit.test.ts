@@ -9,9 +9,11 @@ const permissionCacheServicePath = join(
 );
 
 function extractWithPermissionCacheRecomputeLockBody(source: string): string {
-  const start = source.indexOf('export async function withPermissionCacheRecomputeLock');
+  const start = source.indexOf('async function recomputePermissionsUnderLock');
   expect(start).toBeGreaterThanOrEqual(0);
-  const openBrace = source.indexOf('{', start);
+  // The parameter type is `options: { ... }`, so the first brace is not the function body.
+  const returnType = source.indexOf('Promise<string[]>', start);
+  const openBrace = source.indexOf('{', returnType);
   let depth = 0;
   for (let index = openBrace; index < source.length; index++) {
     if (source[index] === '{') depth += 1;

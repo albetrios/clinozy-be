@@ -12,6 +12,7 @@ import {
 import type { AuthSessionRepository } from './auth-session.repository.js';
 import type { AuthSessionCreateData } from './auth-session.types.js';
 import {
+  coalesceSessionTokenMiss,
   getCachedSessionTokenValid,
   invalidateCachedSessionToken,
   setCachedSessionTokenValid,
@@ -225,6 +226,24 @@ export class AuthSessionService {
       return { sessionPublicId: cachedSessionPublicId };
     }
 
+    return coalesceSessionTokenMiss({
+      sessionTokenHash,
+      load: () => this.loadVerifiedSessionOnCacheMiss(sessionTokenHash, userPublicId),
+    });
+  }
+
+  /**
+   * Database path for {@link verifyActiveAccessToken} after a cache miss.
+   *
+   * @remarks
+   * Concurrent misses for the same token hash share one call via
+   * {@link coalesceSessionTokenMiss}. The two reads stay outside a service transaction
+   * (autocommit) and retry only connection-level errors.
+   */
+  private async loadVerifiedSessionOnCacheMiss(
+    sessionTokenHash: string,
+    userPublicId: string,
+  ): Promise<{ sessionPublicId: string }> {
     // These two reads run in the auth pre-handler, outside any service transaction (autocommit), so
     // a transient managed-Postgres connection drop is safe to retry rather than spuriously 401 an
     // otherwise-authenticated request. Only connection-level errors are retried (see

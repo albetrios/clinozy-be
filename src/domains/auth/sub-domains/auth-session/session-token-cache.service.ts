@@ -1,8 +1,11 @@
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { SESSION_TOKEN_CACHE_TTL_SECONDS } from '@/shared/constants/index.js';
+import { createSingleflight } from '@/shared/utils/infrastructure/singleflight.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 const SESSION_TOKEN_CACHE_PREFIX = 'session:tok';
+
+const sessionTokenMissLoads = createSingleflight<{ sessionPublicId: string }>();
 
 /**
  * Revocation tombstone value. `invalidateCachedSessionToken` writes this (not a DEL) so a concurrent
@@ -111,6 +114,36 @@ export async function setCachedSessionTokenValid({
   } catch (error) {
     logger.warn({ error }, 'session-token-cache.set.failed');
   }
+}
+
+/**
+ * Runs one database load for a session-token cache miss and shares it with concurrent misses
+ * of the same token hash.
+ *
+ * @remarks
+ * - **Algorithm:** re-reads the cache, then runs `load` only on a miss. Concurrent callers for the
+ *   same hash await that one promise ({@link createSingleflight}). The cache key and TTL are unchanged.
+ * - **Failure modes:** a rejection (invalid session, database error) is shared with every waiter and
+ *   then forgotten, so the next request loads again. Redis read failures inside the cache lookup
+ *   still count as a miss and fall through to `load`.
+ * - **Side effects:** none of its own — `load` performs the database read and the cache populate.
+ * - **Notes:** process-local. Two API replicas can still both miss. Callers keep the fast cache-hit
+ *   path outside this helper so a warm token does not join an in-flight load.
+ */
+export function coalesceSessionTokenMiss(options: {
+  sessionTokenHash: string;
+  load: () => Promise<{ sessionPublicId: string }>;
+}): Promise<{ sessionPublicId: string }> {
+  return sessionTokenMissLoads.run({
+    key: options.sessionTokenHash,
+    load: async () => {
+      const cachedSessionPublicId = await getCachedSessionTokenValid(options.sessionTokenHash);
+      if (cachedSessionPublicId !== null) {
+        return { sessionPublicId: cachedSessionPublicId };
+      }
+      return options.load();
+    },
+  });
 }
 
 /**

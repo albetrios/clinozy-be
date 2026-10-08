@@ -130,3 +130,31 @@ describe("revocation tombstone (route-audit session-#1: revoke can't be repopula
     expect(await getCachedSessionTokenValid('hash-live')).toBe('sess_live');
   });
 });
+
+describe('coalesceSessionTokenMiss', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    redisGet.mockResolvedValue(null);
+  });
+
+  it('runs one load for concurrent misses of the same token hash', async () => {
+    const { coalesceSessionTokenMiss } = await import(
+      '@/domains/auth/sub-domains/auth-session/session-token-cache.service.js'
+    );
+    let release: (value: { sessionPublicId: string }) => void = () => undefined;
+    const gate = new Promise<{ sessionPublicId: string }>((resolve) => {
+      release = resolve;
+    });
+    const load = vi.fn(() => gate);
+
+    const first = coalesceSessionTokenMiss({ sessionTokenHash: 'hash-shared', load });
+    const second = coalesceSessionTokenMiss({ sessionTokenHash: 'hash-shared', load });
+    release({ sessionPublicId: 'sess_shared' });
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { sessionPublicId: 'sess_shared' },
+      { sessionPublicId: 'sess_shared' },
+    ]);
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+});

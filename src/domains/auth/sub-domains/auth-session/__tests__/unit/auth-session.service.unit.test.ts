@@ -13,6 +13,9 @@ vi.mock('@/domains/auth/sub-domains/auth-session/session-token-cache.service.js'
   getCachedSessionTokenValid: vi.fn().mockResolvedValue(null),
   setCachedSessionTokenValid: vi.fn().mockResolvedValue(undefined),
   invalidateCachedSessionToken: vi.fn().mockResolvedValue(undefined),
+  coalesceSessionTokenMiss: vi.fn(
+    async (options: { load: () => Promise<{ sessionPublicId: string }> }) => options.load(),
+  ),
 }));
 
 vi.mock('@/infrastructure/database/contexts/database-context.js', async (importOriginal) => {
