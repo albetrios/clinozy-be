@@ -19,7 +19,10 @@ export const offeringsIdParamsDto = z
   })
   .strict();
 
-/** Body of the create route — a new offering. */
+/**
+ * Body of `POST /app/offerings` — a new offering (routes-final 3.B.8 #9): `min_price` ≤ `offer_price`
+ * ≤ `price` is checked by the service (O4); `branch_ids` empty or absent = every branch (O5).
+ */
 export const CreateOfferingDto = z
   .object({
     name: trimmedStringMinMax(1, 120),
@@ -31,13 +34,11 @@ export const CreateOfferingDto = z
     duration_minutes: z.number().int().min(5).max(480).optional(),
     sessions: z.number().int().min(1).max(99).optional(),
     validity_days: z.number().int().min(0).max(1095).optional(),
-    default_doctor_membership_id: recordIdSchema.nullable().optional(),
-    default_room_id: recordIdSchema.nullable().optional(),
     gst_percent: z
       .union([z.literal(0), z.literal(5), z.literal(12), z.literal(18), z.literal(28)])
       .optional(),
     is_active: z.boolean().optional(),
-    group_id: recordIdSchema.nullable().optional(),
+    offering_group_id: recordIdSchema.nullable().optional(),
     offer_price: moneySchema.nullable().optional(),
     branch_ids: z
       .array(recordIdSchema)
@@ -50,7 +51,10 @@ export const CreateOfferingDto = z
   })
   .strict();
 
-/** Body of `PATCH /app/offerings/{offering_id}` — any field (null clears an optional one); `expected_updated_at` refuses a stale save (D43). */
+/**
+ * Body of `PATCH /app/offerings/{offering_id}` — any field (null clears an optional one; `branch_ids`
+ * replaces the set, `[]` = every branch); `expected_updated_at` refuses a stale save (D43).
+ */
 export const UpdateOfferingDto = z
   .object({
     name: trimmedStringMinMax(1, 120).optional(),
@@ -62,13 +66,11 @@ export const UpdateOfferingDto = z
     duration_minutes: z.number().int().min(5).max(480).optional(),
     sessions: z.number().int().min(1).max(99).optional(),
     validity_days: z.number().int().min(0).max(1095).optional(),
-    default_doctor_membership_id: recordIdSchema.nullable().optional(),
-    default_room_id: recordIdSchema.nullable().optional(),
     gst_percent: z
       .union([z.literal(0), z.literal(5), z.literal(12), z.literal(18), z.literal(28)])
       .optional(),
     is_active: z.boolean().optional(),
-    group_id: recordIdSchema.nullable().optional(),
+    offering_group_id: recordIdSchema.nullable().optional(),
     offer_price: moneySchema.nullable().optional(),
     branch_ids: z
       .array(recordIdSchema)
@@ -85,13 +87,19 @@ export const UpdateOfferingDto = z
     message: 'Send at least one field',
   });
 
-/** Query of the `offerings` list — keyset paging, `q` search, sort and filters. */
+/**
+ * Query of the `offerings` list and export — keyset paging, `q` (name, number such as `274` /
+ * `#274`, search terms — O9), sort `created_at` (default, newest first) | `name`, and filters;
+ * `branch_id` keeps the offerings offered there, every-branch ones included (O5). The saved-view
+ * registry checks a view's `filters` against it (`membership-saved-views.lists.ts`).
+ */
 export const listOfferingsQueryDto = listSearchSortSchema(['created_at', 'name'] as const)
   .extend({
     category: z.enum(OFFERING_CATEGORY_VALUES).optional(),
     specialty: z.enum(OFFERING_SPECIALTY_VALUES).optional(),
     is_active: z.enum(['true', 'false']).optional(),
-    group_id: recordIdSchema.optional(),
+    offering_group_id: recordIdSchema.optional(),
+    branch_id: recordIdSchema.optional(),
     created_from: z.iso.datetime({ offset: true }).optional(),
     created_to: z.iso.datetime({ offset: true }).optional(),
   })

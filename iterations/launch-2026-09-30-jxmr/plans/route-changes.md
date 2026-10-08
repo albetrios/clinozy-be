@@ -85,37 +85,37 @@ that drops them is built. The medical store's routes wait for its own review ([D
 | 2.18 | KEPT | GET | `/tenancy/organization/roles/{role_id}/permissions` | `role:read` | A role's codes | routes-final §2.D.7 | `GET /api/v1/tenancy/organization/roles/:role_id/permissions` · #126 · 4339fc3 |
 | 2.19 | KEPT | PUT | `/tenancy/organization/roles/{role_id}/permissions` | `role:update` | Replace a role's codes (the matrix) | routes-final §2.D.7 | `PUT /api/v1/tenancy/organization/roles/:role_id/permissions` · #126 · 4339fc3 |
 | 2.20 | KEPT | GET | `/tenancy/permissions` | signed in | The permission catalog | routes-final §2.E.7 | `GET /api/v1/tenancy/permissions` · #126 · 4339fc3 |
-| 2.21 | CHANGED | GET | `/app/memberships/me/preferences` | `organization:read` | My preferences (the defaults before the first save) | routes-final §2.F.7 | `GET /api/v1/app/memberships/me/preferences` · #127 (uncommitted) |
-| 2.22 | CHANGED | PATCH | `/app/memberships/me/preferences` | `organization:read` | Save them | routes-final §2.F.7 | `PATCH /api/v1/app/memberships/me/preferences` · #127 (uncommitted) |
-| 2.23 | CHANGED | GET | `/app/memberships/me/saved-views` | `organization:read` | My saved views | routes-final §2.G.7 | `GET /api/v1/app/memberships/me/saved-views` · #127 (uncommitted) |
-| 2.24 | CHANGED | POST | `/app/memberships/me/saved-views` | `organization:read` | Save a view | routes-final §2.G.7 | `POST /api/v1/app/memberships/me/saved-views` · #127 (uncommitted) |
-| 2.25 | CHANGED | GET | `/app/memberships/me/saved-views/{membership_saved_view_id}` | `organization:read` | Get one | routes-final §2.G.7 | `GET /api/v1/app/memberships/me/saved-views/:membership_saved_view_id` · #127 (uncommitted) |
-| 2.26 | CHANGED | PATCH | `/app/memberships/me/saved-views/{membership_saved_view_id}` | `organization:read` | Rename it or change its filters | routes-final §2.G.7 | `PATCH /api/v1/app/memberships/me/saved-views/:membership_saved_view_id` · #127 (uncommitted) |
-| 2.27 | CHANGED | DELETE | `/app/memberships/me/saved-views/{membership_saved_view_id}` | `organization:read` | Remove it — for good (U6) | routes-final §2.G.7 | `DELETE /api/v1/app/memberships/me/saved-views/:membership_saved_view_id` · #127 (uncommitted) |
+| 2.21 | CHANGED | GET | `/app/memberships/me/preferences` | `organization:read` | My preferences (the defaults before the first save) | routes-final §2.F.7 | `GET /api/v1/app/memberships/me/preferences` · #127 · 30f8ddf |
+| 2.22 | CHANGED | PATCH | `/app/memberships/me/preferences` | `organization:read` | Save them | routes-final §2.F.7 | `PATCH /api/v1/app/memberships/me/preferences` · #127 · 30f8ddf |
+| 2.23 | CHANGED | GET | `/app/memberships/me/saved-views` | `organization:read` | My saved views | routes-final §2.G.7 | `GET /api/v1/app/memberships/me/saved-views` · #127 · 30f8ddf |
+| 2.24 | CHANGED | POST | `/app/memberships/me/saved-views` | `organization:read` | Save a view | routes-final §2.G.7 | `POST /api/v1/app/memberships/me/saved-views` · #127 · 30f8ddf |
+| 2.25 | CHANGED | GET | `/app/memberships/me/saved-views/{membership_saved_view_id}` | `organization:read` | Get one | routes-final §2.G.7 | `GET /api/v1/app/memberships/me/saved-views/:membership_saved_view_id` · #127 · 30f8ddf |
+| 2.26 | CHANGED | PATCH | `/app/memberships/me/saved-views/{membership_saved_view_id}` | `organization:read` | Rename it or change its filters | routes-final §2.G.7 | `PATCH /api/v1/app/memberships/me/saved-views/:membership_saved_view_id` · #127 · 30f8ddf |
+| 2.27 | CHANGED | DELETE | `/app/memberships/me/saved-views/{membership_saved_view_id}` | `organization:read` | Remove it — for good (U6) | routes-final §2.G.7 | `DELETE /api/v1/app/memberships/me/saved-views/:membership_saved_view_id` · #127 · 30f8ddf |
 
 ## 3. Offerings
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| 3.1 | KEPT | GET | `/offering-groups` | any member | List groups (menu order) | routes-final §3.A.7 |
-| 3.2 | KEPT | POST | `/offering-groups` | `offering:create` | Add a group | routes-final §3.A.7 |
-| 3.3 | KEPT | GET | `/offering-groups/{offering_group_id}` | any member | Get a group | routes-final §3.A.7 |
-| 3.4 | KEPT | PATCH | `/offering-groups/{offering_group_id}` | `offering:update` | Rename / reorder a group | routes-final §3.A.7 |
-| 3.5 | KEPT | DELETE | `/offering-groups/{offering_group_id}` | `offering:delete` | Delete an empty group (O7) | routes-final §3.A.7 |
-| 3.6 | KEPT | POST | `/offering-groups/{offering_group_id}/restore` | `offering:delete` | Undo a delete | routes-final §3.A.7 |
-| 3.7 | KEPT | GET | `/offerings` | any member | List offerings | routes-final §3.B.7 |
-| 3.8 | KEPT | GET | `/offerings/exports` | `offering:export` | Download the list as CSV | routes-final §3.B.7 |
-| 3.9 | KEPT | POST | `/offerings` | `offering:create` | Add an offering | routes-final §3.B.7 |
-| 3.10 | KEPT | GET | `/offerings/{offering_id}` | any member | Get an offering | routes-final §3.B.7 |
-| 3.11 | KEPT | PATCH | `/offerings/{offering_id}` | `offering:update` | Change an offering (prices included) | routes-final §3.B.7 |
-| 3.12 | KEPT | DELETE | `/offerings/{offering_id}` | `offering:delete` | Delete an offering | routes-final §3.B.7 |
-| 3.13 | KEPT | POST | `/offerings/{offering_id}/restore` | `offering:delete` | Undo a delete | routes-final §3.B.7 |
-| 3.14 | KEPT | GET | `/offers` | any member | List offers (Live → Scheduled → Paused → Ended) | routes-final §3.C.7 |
-| 3.15 | KEPT | POST | `/offers` | `offering:create` | Add an offer | routes-final §3.C.7 |
-| 3.16 | KEPT | GET | `/offers/{offer_id}` | any member | Get an offer | routes-final §3.C.7 |
-| 3.17 | KEPT | PATCH | `/offers/{offer_id}` | `offering:update` | Change, pause or resume an offer | routes-final §3.C.7 |
-| 3.18 | KEPT | DELETE | `/offers/{offer_id}` | `offering:delete` | Delete an offer | routes-final §3.C.7 |
-| 3.19 | KEPT | POST | `/offers/{offer_id}/restore` | `offering:delete` | Undo a delete | routes-final §3.C.7 |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 3.1 | KEPT | GET | `/offering-groups` | any member | List groups (menu order) | routes-final §3.A.7 | `GET /api/v1/app/offering-groups` · #128 (uncommitted) |
+| 3.2 | KEPT | POST | `/offering-groups` | `offering:create` | Add a group | routes-final §3.A.7 | `POST /api/v1/app/offering-groups` · #128 (uncommitted) |
+| 3.3 | KEPT | GET | `/offering-groups/{offering_group_id}` | any member | Get a group | routes-final §3.A.7 | `GET /api/v1/app/offering-groups/:offering_group_id` · #128 (uncommitted) |
+| 3.4 | KEPT | PATCH | `/offering-groups/{offering_group_id}` | `offering:update` | Rename / reorder a group | routes-final §3.A.7 | `PATCH /api/v1/app/offering-groups/:offering_group_id` · #128 (uncommitted) |
+| 3.5 | KEPT | DELETE | `/offering-groups/{offering_group_id}` | `offering:delete` | Delete an empty group (O7) | routes-final §3.A.7 | `DELETE /api/v1/app/offering-groups/:offering_group_id` · #128 (uncommitted) |
+| 3.6 | KEPT | POST | `/offering-groups/{offering_group_id}/restore` | `offering:delete` | Undo a delete | routes-final §3.A.7 | `POST /api/v1/app/offering-groups/:offering_group_id/restore` · #128 (uncommitted) |
+| 3.7 | KEPT | GET | `/offerings` | any member | List offerings | routes-final §3.B.7 | `GET /api/v1/app/offerings` · #128 (uncommitted) |
+| 3.8 | KEPT | GET | `/offerings/exports` | `offering:export` | Download the list as CSV | routes-final §3.B.7 | `GET /api/v1/app/offerings/exports` · #128 (uncommitted) |
+| 3.9 | KEPT | POST | `/offerings` | `offering:create` | Add an offering | routes-final §3.B.7 | `POST /api/v1/app/offerings` · #128 (uncommitted) |
+| 3.10 | KEPT | GET | `/offerings/{offering_id}` | any member | Get an offering | routes-final §3.B.7 | `GET /api/v1/app/offerings/:offering_id` · #128 (uncommitted) |
+| 3.11 | KEPT | PATCH | `/offerings/{offering_id}` | `offering:update` | Change an offering (prices included) | routes-final §3.B.7 | `PATCH /api/v1/app/offerings/:offering_id` · #128 (uncommitted) |
+| 3.12 | KEPT | DELETE | `/offerings/{offering_id}` | `offering:delete` | Delete an offering | routes-final §3.B.7 | `DELETE /api/v1/app/offerings/:offering_id` · #128 (uncommitted) |
+| 3.13 | KEPT | POST | `/offerings/{offering_id}/restore` | `offering:delete` | Undo a delete | routes-final §3.B.7 | `POST /api/v1/app/offerings/:offering_id/restore` · #128 (uncommitted) |
+| 3.14 | KEPT | GET | `/offers` | any member | List offers (Live → Scheduled → Paused → Ended) | routes-final §3.C.7 | `GET /api/v1/app/offers` · #128 (uncommitted) |
+| 3.15 | KEPT | POST | `/offers` | `offering:create` | Add an offer | routes-final §3.C.7 | `POST /api/v1/app/offers` · #128 (uncommitted) |
+| 3.16 | KEPT | GET | `/offers/{offer_id}` | any member | Get an offer | routes-final §3.C.7 | `GET /api/v1/app/offers/:offer_id` · #128 (uncommitted) |
+| 3.17 | KEPT | PATCH | `/offers/{offer_id}` | `offering:update` | Change, pause or resume an offer | routes-final §3.C.7 | `PATCH /api/v1/app/offers/:offer_id` · #128 (uncommitted) |
+| 3.18 | KEPT | DELETE | `/offers/{offer_id}` | `offering:delete` | Delete an offer | routes-final §3.C.7 | `DELETE /api/v1/app/offers/:offer_id` · #128 (uncommitted) |
+| 3.19 | KEPT | POST | `/offers/{offer_id}/restore` | `offering:delete` | Undo a delete | routes-final §3.C.7 | `POST /api/v1/app/offers/:offer_id/restore` · #128 (uncommitted) |
 
 ## 4. Contacts
 

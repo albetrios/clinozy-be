@@ -3,7 +3,9 @@
  * `<resource>:read|create|update|delete` codes it holds — the permission catalog's `category`.
  * A branch's rooms, machines and holidays carry no codes of their own — the branch's (`users` section)
  * gate them (D12). A member's own preferences and saved views carry none either: every member reaches
- * their own with `organization:read` (launch U2).
+ * their own with `organization:read` (launch U2). Offerings have no View code — every member reads
+ * them (launch O2); their row adds Lowest price (`offering:lower_price:read`) and Export
+ * (`offering:export`).
  *
  * @remarks
  * - **Notes:** generated with the app tables; the catalog seed carries the same categories.
@@ -23,7 +25,9 @@ export const APP_ACCESS_SECTION_RESOURCES = {
   stock: ['stock_vendor', 'stock_item', 'stock_purchase'],
   payments: ['invoice', 'payment', 'day_close'],
   tasks: ['task'],
-  offerings: ['offering', 'offering_group', 'offer'],
+  // One code set for groups, offerings and offers (launch #128, O2); no `offering:read` — every
+  // member reads them.
+  offerings: ['offering'],
   // The team's codes are tenancy's (membership, role — launch T8); they sit in the Users row.
   users: ['branch', 'membership', 'role'],
 } as const;

@@ -500,10 +500,11 @@ erDiagram
 - **Sources:** PRD.md:169–173 · D29
 - **Open:** none
 
-- **Built:** `app.offering_groups` · ROUTE #10 (2026-10-07)
+- **Built:** `app.offering_groups` · ROUTE #10 (2026-10-07) — code `app/sub-domains/offerings/offering-groups/` since ROUTE #128 (OC17)
+- **Built (ROUTE #128, sub-domain 3):** columns unchanged (`name` 1–60 unique per organization in any case among live groups, `sort_order` 0–9999); the menu-order index is now `idx_offering_groups_organization_sort_order_name` `(organization_id, sort_order, name, id)` for the default list order (O8); a group live offerings use cannot be deleted (O7 — a 409 from the service, no schema change).
 ```mermaid
 erDiagram
-  offering_group["offering_group · NEW"] {
+  offering_groups["app.offering_groups · NEW"] {
     id id PK
     text name
     number sort_order
@@ -519,31 +520,34 @@ erDiagram
 - **Open:** none — a fixed kind (consultation, treatment, package, product; lhr is a treatment) + clinic groups (D29); GST as a number (P71, D3); seeded rates (D27); discounts stop at minPrice (D26)
 
 - **Built:** `app.offerings` · ROUTE #11 (2026-10-07)
+- **Built (ROUTE #128, sub-domain 3):** `group_id` → `offering_group_id` (O1 — key `offerings_offering_group_id_offering_groups_id_fk` `ON DELETE SET NULL`, index `idx_offerings_offering_group_id`); `default_doctor_membership_id` and `default_room_id` dropped with their keys and indexes (O6); new CHECK `chk_offerings_min_price_within_offer_price` — with the two existing ones, `min_price` ≤ `offer_price` ≤ `price` (O4); `branch_ids` on `app.offering_branches` (none = every branch, O5). Code `app/sub-domains/offerings/` (the folder root, D54).
 ```mermaid
 erDiagram
-  offering["offering · NEW"] {
+  offerings["app.offerings · NEW"] {
     id id PK
-    number seq
+    number offering_number
     text name
     choice category
     choice specialty
     choice tone
     money price
     money min_price
-    number duration_min
+    number duration_minutes
     number sessions
     number validity_days
-    id default_doctor_id FK "→ user"
-    choice room
-    number gst_pct
-    boolean active
-    id group_id FK "→ offering_group"
+    number gst_percent
+    boolean is_active
+    id offering_group_id FK "→ offering_group"
     money offer_price
-    json branch_ids "→ branch list"
-    boolean gst_inclusive
+    boolean is_gst_inclusive
     json search_terms
     text description
   }
+  offering_branches["app.offering_branches · NEW"] {
+    id offering_id FK "→ offering"
+    id branch_id FK "→ branch"
+  }
+  offerings ||--o{ offering_branches : "is offered at (none = every branch)"
 ```
 
 ### offer · NEW
@@ -553,23 +557,32 @@ erDiagram
 - **Sources:** schema-routes.md:581–598 · offerings.md:41–55, 91–112
 - **Open:** none
 
-- **Built:** `app.offers` · ROUTE #12 (2026-10-07)
+- **Built:** `app.offers` · ROUTE #12 (2026-10-07) — code `app/sub-domains/offerings/offers/` since ROUTE #128 (OC17)
+- **Built (ROUTE #128, sub-domain 3):** `is_paused` → `is_active` (default true, O10; the response derives `status` — never stored); `chk_offers_value` → `chk_offers_value_for_kind` (`percent` whole 1–100, `amount` / `fixed` > 0, `extra` whole 1–99 — O11); `chk_offers_code` `^[A-Z0-9]+$` (no empty code) and unique index `idx_offers_organization_code_unique` `(organization_id, code)` on live offers with a code (O11); `idx_offers_organization_starts_on` now `(organization_id, coalesce(starts_on, '-infinity'), id)` on live offers — the `starts_on` sort keeps offers without a start. Links `app.offer_offerings` (1–50 live, active offerings — O12) and `app.offer_branches` (none = every branch — O5) unchanged.
 ```mermaid
 erDiagram
-  offer["offer · NEW"] {
+  offers["app.offers · NEW"] {
     id id PK
     text name
-    text code
+    text code "unique among live offers"
     choice kind
     money value
-    json offering_ids "→ offering list"
-    json branch_ids "→ branch list"
     date starts_on
     date ends_on
-    boolean paused
+    boolean is_active
     choice tone
     text note
   }
+  offer_offerings["app.offer_offerings · NEW"] {
+    id offer_id FK "→ offer"
+    id offering_id FK "→ offering"
+  }
+  offer_branches["app.offer_branches · NEW"] {
+    id offer_id FK "→ offer"
+    id branch_id FK "→ branch"
+  }
+  offers ||--|{ offer_offerings : "applies to (1–50)"
+  offers ||--o{ offer_branches : "runs at (none = every branch)"
 ```
 
 ## Stage 3 — People and conversations

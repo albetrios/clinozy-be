@@ -1,10 +1,10 @@
 import type { PgTable } from 'drizzle-orm/pg-core';
-import { offering_groups } from '@/domains/app/sub-domains/offering-groups/offering-groups.schema.js';
+import { offering_groups } from '@/domains/app/sub-domains/offerings/offering-groups/offering-groups.schema.js';
 import { branch_rooms } from '@/domains/app/sub-domains/branches/branch-rooms/branch-rooms.schema.js';
 import { branch_machines } from '@/domains/app/sub-domains/branches/branch-machines/branch-machines.schema.js';
 import { branch_holidays } from '@/domains/app/sub-domains/branches/branch-holidays/branch-holidays.schema.js';
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
-import { offers } from '@/domains/app/sub-domains/offers/offers.schema.js';
+import { offers } from '@/domains/app/sub-domains/offerings/offers/offers.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
 import { lead_reads } from '@/domains/app/sub-domains/lead-reads/lead-reads.schema.js';

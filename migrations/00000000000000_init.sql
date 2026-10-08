@@ -1357,11 +1357,9 @@ CREATE TABLE IF NOT EXISTS "app"."offerings" (
 	"duration_minutes" integer DEFAULT 30 NOT NULL,
 	"sessions" integer DEFAULT 1 NOT NULL,
 	"validity_days" integer DEFAULT 0 NOT NULL,
-	"default_doctor_membership_id" bigint,
-	"default_room_id" bigint,
 	"gst_percent" integer DEFAULT 0 NOT NULL,
 	"is_active" boolean DEFAULT true NOT NULL,
-	"group_id" bigint,
+	"offering_group_id" bigint,
 	"offer_price" numeric(12, 2),
 	"is_gst_inclusive" boolean DEFAULT false NOT NULL,
 	"search_terms" text[] DEFAULT '{}' NOT NULL,
@@ -1386,6 +1384,7 @@ CREATE TABLE IF NOT EXISTS "app"."offerings" (
 	CONSTRAINT "chk_offerings_offer_price" CHECK ("app"."offerings"."offer_price" >= 0),
 	CONSTRAINT "chk_offerings_min_price_within_price" CHECK ("app"."offerings"."min_price" <= "app"."offerings"."price"),
 	CONSTRAINT "chk_offerings_offer_price_within_price" CHECK ("app"."offerings"."offer_price" IS NULL OR "app"."offerings"."offer_price" <= "app"."offerings"."price"),
+	CONSTRAINT "chk_offerings_min_price_within_offer_price" CHECK ("app"."offerings"."offer_price" IS NULL OR "app"."offerings"."min_price" <= "app"."offerings"."offer_price"),
 	CONSTRAINT "chk_offerings_updated" CHECK ("app"."offerings"."updated_at" >= "app"."offerings"."created_at"),
 	CONSTRAINT "chk_offerings_delete_reason" CHECK ("app"."offerings"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
 	CONSTRAINT "chk_offerings_delete_reason_when_deleted" CHECK (("app"."offerings"."deleted_at" IS NULL) = ("app"."offerings"."delete_reason" IS NULL)),
@@ -1415,7 +1414,7 @@ CREATE TABLE IF NOT EXISTS "app"."offers" (
 	"value" numeric(12, 2) NOT NULL,
 	"starts_on" date,
 	"ends_on" date,
-	"is_paused" boolean DEFAULT false NOT NULL,
+	"is_active" boolean DEFAULT true NOT NULL,
 	"tone" varchar(10) DEFAULT 'blush' NOT NULL,
 	"note" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -1426,10 +1425,12 @@ CREATE TABLE IF NOT EXISTS "app"."offers" (
 	"delete_reason" varchar(20),
 	"delete_note" varchar(280),
 	CONSTRAINT "chk_offers_kind" CHECK ("app"."offers"."kind" IN ('percent', 'amount', 'fixed', 'extra')),
-	CONSTRAINT "chk_offers_value" CHECK ("app"."offers"."value" >= 0),
+	CONSTRAINT "chk_offers_value_for_kind" CHECK (("app"."offers"."kind" = 'percent' AND "app"."offers"."value" BETWEEN 1 AND 100 AND "app"."offers"."value" = trunc("app"."offers"."value"))
+          OR ("app"."offers"."kind" IN ('amount', 'fixed') AND "app"."offers"."value" > 0)
+          OR ("app"."offers"."kind" = 'extra' AND "app"."offers"."value" BETWEEN 1 AND 99 AND "app"."offers"."value" = trunc("app"."offers"."value"))),
 	CONSTRAINT "chk_offers_tone" CHECK ("app"."offers"."tone" IN ('butter', 'lav', 'sky', 'sage', 'blush', 'mint', 'peach', 'plum', 'lime', 'slate', 'stone')),
 	CONSTRAINT "chk_offers_ends_after_starts" CHECK ("app"."offers"."ends_on" IS NULL OR "app"."offers"."starts_on" IS NULL OR "app"."offers"."ends_on" >= "app"."offers"."starts_on"),
-	CONSTRAINT "chk_offers_code" CHECK ("app"."offers"."code" ~ '^[A-Z0-9]*$'),
+	CONSTRAINT "chk_offers_code" CHECK ("app"."offers"."code" ~ '^[A-Z0-9]+$'),
 	CONSTRAINT "chk_offers_updated" CHECK ("app"."offers"."updated_at" >= "app"."offers"."created_at"),
 	CONSTRAINT "chk_offers_delete_reason" CHECK ("app"."offers"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
 	CONSTRAINT "chk_offers_delete_reason_when_deleted" CHECK (("app"."offers"."deleted_at" IS NULL) = ("app"."offers"."delete_reason" IS NULL)),
@@ -2938,9 +2939,7 @@ ALTER TABLE "app"."branch_holidays" ADD CONSTRAINT "branch_holidays_branch_id_br
 ALTER TABLE "app"."offerings" ADD CONSTRAINT "offerings_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offerings" ADD CONSTRAINT "offerings_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offerings" ADD CONSTRAINT "offerings_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."offerings" ADD CONSTRAINT "offerings_default_doctor_membership_id_memberships_id_fk" FOREIGN KEY ("default_doctor_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."offerings" ADD CONSTRAINT "offerings_default_room_id_branch_rooms_id_fk" FOREIGN KEY ("default_room_id") REFERENCES "app"."branch_rooms"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."offerings" ADD CONSTRAINT "offerings_group_id_offering_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "app"."offering_groups"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."offerings" ADD CONSTRAINT "offerings_offering_group_id_offering_groups_id_fk" FOREIGN KEY ("offering_group_id") REFERENCES "app"."offering_groups"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offering_branches" ADD CONSTRAINT "offering_branches_offering_id_offerings_id_fk" FOREIGN KEY ("offering_id") REFERENCES "app"."offerings"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offering_branches" ADD CONSTRAINT "offering_branches_branch_id_branches_id_fk" FOREIGN KEY ("branch_id") REFERENCES "app"."branches"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offering_branches" ADD CONSTRAINT "offering_branches_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -3215,7 +3214,7 @@ CREATE INDEX IF NOT EXISTS "idx_offering_groups_deleted_at" ON "app"."offering_g
 CREATE INDEX IF NOT EXISTS "idx_offering_groups_created_by_user_id" ON "app"."offering_groups" USING btree ("created_by_user_id") WHERE "app"."offering_groups"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_offering_groups_updated_by_user_id" ON "app"."offering_groups" USING btree ("updated_by_user_id") WHERE "app"."offering_groups"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_offering_groups_organization_name" ON "app"."offering_groups" USING btree ("organization_id","name","id") WHERE "app"."offering_groups"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_offering_groups_organization_sort_order" ON "app"."offering_groups" USING btree ("organization_id","sort_order","id") WHERE "app"."offering_groups"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_offering_groups_organization_sort_order_name" ON "app"."offering_groups" USING btree ("organization_id","sort_order","name","id") WHERE "app"."offering_groups"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_offering_groups_organization_name_unique" ON "app"."offering_groups" USING btree ("organization_id",lower("name")) WHERE "app"."offering_groups"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE POLICY "offering_groups_tenant_isolation" ON "app"."offering_groups" AS PERMISSIVE FOR ALL TO public USING ("app"."offering_groups"."organization_id" = (
             SELECT id FROM tenancy.organizations
@@ -3283,9 +3282,7 @@ CREATE INDEX IF NOT EXISTS "idx_offerings_deleted_at" ON "app"."offerings" USING
 CREATE INDEX IF NOT EXISTS "idx_offerings_created_by_user_id" ON "app"."offerings" USING btree ("created_by_user_id") WHERE "app"."offerings"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_offerings_updated_by_user_id" ON "app"."offerings" USING btree ("updated_by_user_id") WHERE "app"."offerings"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_offerings_organization_name" ON "app"."offerings" USING btree ("organization_id","name","id") WHERE "app"."offerings"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_offerings_default_doctor_membership_id" ON "app"."offerings" USING btree ("default_doctor_membership_id") WHERE "app"."offerings"."default_doctor_membership_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_offerings_default_room_id" ON "app"."offerings" USING btree ("default_room_id") WHERE "app"."offerings"."default_room_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_offerings_group_id" ON "app"."offerings" USING btree ("group_id") WHERE "app"."offerings"."group_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_offerings_offering_group_id" ON "app"."offerings" USING btree ("offering_group_id") WHERE "app"."offerings"."offering_group_id" IS NOT NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_offerings_organization_offering_number" ON "app"."offerings" USING btree ("organization_id","offering_number");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_offering_branches_branch_id" ON "app"."offering_branches" USING btree ("branch_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_offering_branches_organization_id" ON "app"."offering_branches" USING btree ("organization_id");--> statement-breakpoint
@@ -3315,7 +3312,8 @@ CREATE INDEX IF NOT EXISTS "idx_offers_deleted_at" ON "app"."offers" USING btree
 CREATE INDEX IF NOT EXISTS "idx_offers_created_by_user_id" ON "app"."offers" USING btree ("created_by_user_id") WHERE "app"."offers"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_offers_updated_by_user_id" ON "app"."offers" USING btree ("updated_by_user_id") WHERE "app"."offers"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_offers_organization_name" ON "app"."offers" USING btree ("organization_id","name","id") WHERE "app"."offers"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_offers_organization_starts_on" ON "app"."offers" USING btree ("organization_id","starts_on","id") WHERE "app"."offers"."deleted_at" IS NULL AND "app"."offers"."starts_on" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_offers_organization_starts_on" ON "app"."offers" USING btree ("organization_id",coalesce("starts_on", '-infinity'::date),"id") WHERE "app"."offers"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_offers_organization_code_unique" ON "app"."offers" USING btree ("organization_id","code") WHERE "app"."offers"."deleted_at" IS NULL AND "app"."offers"."code" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_offer_offerings_offering_id" ON "app"."offer_offerings" USING btree ("offering_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_offer_offerings_organization_id" ON "app"."offer_offerings" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_offer_offerings_created_by_user_id" ON "app"."offer_offerings" USING btree ("created_by_user_id") WHERE "app"."offer_offerings"."created_by_user_id" IS NOT NULL;--> statement-breakpoint

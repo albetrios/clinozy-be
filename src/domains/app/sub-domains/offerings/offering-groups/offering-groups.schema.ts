@@ -27,7 +27,8 @@ function joinValues(values: readonly string[]): SQL {
 }
 
 /**
- * Drizzle table for `app.offering_groups` — A group for browsing offerings — Facial, Hair, Peel, Laser (D29) (launch ROUTE #10, domain `app`).
+ * Drizzle table for `app.offering_groups` — A group for browsing offerings — Facial, Hair, Peel, Laser (D29)
+ * (launch ROUTE #10, rebuilt at #128 — routes-final §3.A; domain `app`, nested in sub-domain `offerings`).
  * Standard app record columns (public id, organization, attribution, soft delete with its reason);
  * RLS is the `offering_groups_tenant_isolation` policy on the organization GUC, with the retention-cleanup arm
  * for the deleted-record purge.
@@ -74,8 +75,9 @@ export const offering_groups = appSchema
       index('idx_offering_groups_organization_name')
         .on(table.organization_id, table.name, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
-      index('idx_offering_groups_organization_sort_order')
-        .on(table.organization_id, table.sort_order, table.id)
+      // The menu order (O8): sort_order, then name
+      index('idx_offering_groups_organization_sort_order_name')
+        .on(table.organization_id, table.sort_order, table.name, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       uniqueIndex('idx_offering_groups_organization_name_unique')
         .on(table.organization_id, sql`lower(${table.name})`)

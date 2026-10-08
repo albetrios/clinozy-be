@@ -3,7 +3,7 @@ import type { BaseRecordReferenceLookup } from '@/domains/app/base-record.types.
 import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import type { OfferingOutput } from './offerings.types.js';
 
-/** Shapes a `app.offerings` row as the API returns it (public ids, numbers, ISO times). */
+/** Shapes an `app.offerings` row as the API returns it (public ids, rupees as numbers, ISO times). */
 export function serializeOffering(
   row: BaseRecordRow,
   references: BaseRecordReferenceLookup,
@@ -20,11 +20,9 @@ export function serializeOffering(
     duration_minutes: row.duration_minutes as number,
     sessions: row.sessions as number,
     validity_days: row.validity_days as number,
-    default_doctor_membership_id: references.publicIdOf('default_doctor_membership_id', row),
-    default_room_id: references.publicIdOf('default_room_id', row),
     gst_percent: row.gst_percent as number,
     is_active: row.is_active as boolean,
-    group_id: references.publicIdOf('group_id', row),
+    offering_group_id: references.publicIdOf('offering_group_id', row),
     offer_price: toAmount(row.offer_price),
     branch_ids: references.listOf('branch_ids', row),
     is_gst_inclusive: row.is_gst_inclusive as boolean,

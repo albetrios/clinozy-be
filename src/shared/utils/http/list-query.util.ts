@@ -63,11 +63,12 @@ export function buildContainsLikePattern(term: string): string {
 }
 
 /**
- * Case-insensitive `ILIKE '%term%'` across `columns` (OR-combined). Returns `undefined` when `q` is
- * empty so callers can spread it into `and(...)` unconditionally.
+ * Case-insensitive `ILIKE '%term%'` across `columns` (OR-combined) — columns, or SQL text
+ * expressions such as a text array joined into one string. Returns `undefined` when `q` is empty so
+ * callers can spread it into `and(...)` unconditionally.
  */
 export function buildSearchCondition(
-  columns: readonly AnyColumn[],
+  columns: readonly (AnyColumn | SQL)[],
   q: string | undefined,
 ): SQL | undefined {
   if (!q || columns.length === 0) {

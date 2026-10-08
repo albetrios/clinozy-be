@@ -5,6 +5,7 @@ import {
   desc,
   eq,
   getTableColumns,
+  gt,
   gte,
   inArray,
   isNotNull,
@@ -57,8 +58,21 @@ export interface BaseRecordListQuery {
   ranges?: Record<string, { from?: unknown; to?: unknown }>;
   /** Rows of these branches or of no branch (the branch picker and D9 visibility). */
   branchScope?: { column: string; ids: readonly number[] } | undefined;
+  /** Rows linked to a record through a link table (`branch_id` over an offering's `branch_ids`). */
+  linked?: readonly BaseRecordLinkFilter[] | undefined;
+  /** Filters the table works out itself, by name → value (an offer's derived `status`). */
+  derived?: Record<string, unknown> | undefined;
   /** `false` skips the COUNT (internal readers that never show a total). */
   withTotal?: boolean | undefined;
+}
+
+/** A list filter through a link table: the rows linked to one record. */
+export interface BaseRecordLinkFilter {
+  link: BaseRecordLinkTable;
+  /** The linked record's internal id. */
+  targetId: number;
+  /** Also keep the rows with no links at all — where none means every one (no branches = every branch, O5). */
+  orUnlinked: boolean;
 }
 
 /** One page of a list, with the total (capped) count every list returns (P38). */
@@ -71,18 +85,113 @@ export interface BaseRecordPage {
   next_cursor: string | null;
 }
 
+/** One key of a {@link BaseRecordSortSpec}. */
+export interface BaseRecordSortKey {
+  /** A column of the table, or an SQL expression of the row built for the organization (a derived status). */
+  value: string | ((organizationId: number) => SQL);
+  /** The SQL type the cursor's text value casts back to — required for an expression; a column's own otherwise. */
+  sqlType?: string;
+  /** `true` = this key runs against the list's order (status first, then newest first inside each). */
+  reversed?: boolean;
+}
+
+/** A sort of several keys, or of an expression, then `id` — with its own order when the query names none. */
+export interface BaseRecordSortSpec {
+  /** Most significant first; an expression key must never be null. */
+  keys: readonly BaseRecordSortKey[];
+  defaultOrder: 'asc' | 'desc';
+}
+
 /** What an app record table is: the Drizzle table, its public-id entity and how it lists. */
 export interface BaseRecordTableConfig {
   table: PgTable;
   entity: PublicIdEntity;
-  /** Columns `q` searches (`ILIKE '%q%'`, OR-combined). */
+  /** Columns `q` searches (`ILIKE '%q%'`, OR-combined); a text array is searched as one string of its entries. */
   searchColumns: readonly string[];
   /** The running-number column a numeric `q` (`2841`, `#2841`, `PT-0412`) also matches. */
   numberColumn?: string;
   /** Sortable fields → `text` or `created_at` keyset (a `created_at` entry is always present). */
   sortColumns: Readonly<Record<string, 'text' | 'created_at'>>;
+  /**
+   * Sorts made of several keys or an expression, by sort name — checked before `sortColumns` (a
+   * menu's `sort_order` then name; an offer's derived status then newest first).
+   */
+  sortKeys?: Readonly<Record<string, BaseRecordSortSpec>>;
+  /** Filters the table works out itself (`BaseRecordListQuery.derived`), by name → the condition for a value. */
+  derivedFilters?: Readonly<Record<string, (value: unknown, organizationId: number) => SQL>>;
   defaultSort: string;
   defaultOrder: 'asc' | 'desc';
+}
+
+/** A list's sort resolved for one query: its name, order and keys (then `id`). */
+interface ResolvedSort {
+  name: string;
+  order: 'asc' | 'desc';
+  keys: readonly ResolvedSortKey[];
+  /** `IS NOT NULL` on each nullable sort column — a nullable column lists the rows that have a value. */
+  notNull: readonly SQL[];
+}
+
+/** One key of a {@link ResolvedSort}. */
+interface ResolvedSortKey {
+  expression: SQL | AnyPgColumn;
+  /** The SQL type the cursor's text value casts back to. */
+  castType: string;
+  /** A timestamp's cursor text keeps microseconds, in UTC. */
+  isTimestamp: boolean;
+  direction: 'asc' | 'desc';
+}
+
+/**
+ * The keyset condition after a cursor: rows past `values` (then `id`) in each key's direction — one
+ * row comparison when every key runs the same way, else the expanded OR of comparisons.
+ */
+function keysetCondition(options: {
+  keys: readonly ResolvedSortKey[];
+  idColumn: AnyPgColumn;
+  values: readonly string[];
+  id: number;
+}): SQL {
+  const { keys, idColumn, id } = options;
+  const idDirection = keys.at(-1)?.direction ?? 'asc';
+  const typedValues = keys.map(
+    (key, index) => sql`${options.values[index]}::${sql.raw(key.castType)}`,
+  );
+  if (keys.every((key) => key.direction === idDirection)) {
+    const left = sql.join([...keys.map((key) => key.expression), idColumn], sql`, `);
+    const right = sql.join([...typedValues, sql`${id}`], sql`, `);
+    return idDirection === 'desc' ? sql`(${left}) < (${right})` : sql`(${left}) > (${right})`;
+  }
+  const branches: SQL[] = [];
+  const equalSoFar: SQL[] = [];
+  keys.forEach((key, index) => {
+    const value = typedValues[index]!;
+    const past =
+      key.direction === 'desc'
+        ? sql`${key.expression} < ${value}`
+        : sql`${key.expression} > ${value}`;
+    branches.push(and(...equalSoFar, past) as SQL);
+    equalSoFar.push(sql`${key.expression} = ${value}`);
+  });
+  branches.push(
+    and(...equalSoFar, idDirection === 'desc' ? lt(idColumn, id) : gt(idColumn, id)) as SQL,
+  );
+  return or(...branches) as SQL;
+}
+
+/** A cursor's sort values: the plain text of a one-key sort, a JSON list for several keys; null when unreadable. */
+function readCursorSortValues(sortValue: string, keyCount: number): string[] | null {
+  if (keyCount === 1) return [sortValue];
+  try {
+    const values: unknown = JSON.parse(sortValue);
+    return Array.isArray(values) &&
+      values.length === keyCount &&
+      values.every((value) => typeof value === 'string')
+      ? (values as string[])
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 /** A link table that holds a record's list of references to another table (e.g. `branch_ids`). */
@@ -125,6 +234,8 @@ export async function resolveRecordIds(options: {
   table: PgTable;
   organizationId: number;
   publicIds: readonly string[];
+  /** Column values each row must also have (`{ is_active: true }`). */
+  equals?: Readonly<Record<string, unknown>> | undefined;
 }): Promise<Map<string, number>> {
   const unique = [...new Set(options.publicIds)];
   if (unique.length === 0) return new Map();
@@ -138,6 +249,9 @@ export async function resolveRecordIds(options: {
         inArray(publicIdColumn, unique),
         eq(columnOf(options.table, 'organization_id'), options.organizationId),
         liveRowFilter(options.table),
+        ...Object.entries(options.equals ?? {}).map(([name, value]) =>
+          eq(columnOf(options.table, name), value),
+        ),
       ),
     )) as { id: number; public_id: string }[];
   return new Map(rows.map((row) => [row.public_id, row.id]));
@@ -381,7 +495,11 @@ export class BaseRecordRepository extends BaseRepository {
   /** `q` over the search columns, or the running number when `q` reads as one. */
   private searchCondition(q: string | undefined): SQL | undefined {
     const text = buildSearchCondition(
-      this.config.searchColumns.map((name) => this.column(name)),
+      this.config.searchColumns.map((name) => {
+        const column = this.column(name);
+        // A text array (an offering's search terms, O9) is searched as one string of its entries.
+        return column.columnType === 'PgArray' ? sql`array_to_string(${column}, ' ')` : column;
+      }),
       q,
     );
     const digits = q?.match(/^\s*(?:#|[a-z]{1,4}-)?0*(\d{1,9})\s*$/i)?.[1];
@@ -390,8 +508,8 @@ export class BaseRecordRepository extends BaseRepository {
     return text ? (or(text, number) as SQL) : number;
   }
 
-  /** The filter conditions of a list query (equality and ranges). */
-  private filterConditions(query: BaseRecordListQuery): SQL[] {
+  /** The filter conditions of a list query (equality, ranges, branches, links and derived filters). */
+  private filterConditions(query: BaseRecordListQuery, organizationId: number): SQL[] {
     const conditions: SQL[] = [];
     for (const [name, value] of Object.entries(query.equals ?? {})) {
       if (value === undefined) continue;
@@ -407,94 +525,173 @@ export class BaseRecordRepository extends BaseRepository {
       if (range.from !== undefined) conditions.push(gte(this.column(name), range.from));
       if (range.to !== undefined) conditions.push(lt(this.column(name), range.to));
     }
-    if (query.branchScope) {
-      const column = this.column(query.branchScope.column);
-      const ids = [...query.branchScope.ids];
-      if (column.notNull) {
-        // A NOT NULL branch column: a plain IN, so each branch is one index range (H4).
-        conditions.push(ids.length === 0 ? sql`false` : inArray(column, ids));
-      } else {
-        conditions.push(
-          ids.length === 0 ? isNull(column) : (or(inArray(column, ids), isNull(column)) as SQL),
-        );
-      }
+    if (query.branchScope) conditions.push(this.branchCondition(query.branchScope));
+    for (const filter of query.linked ?? []) conditions.push(this.linkedCondition(filter));
+    conditions.push(...this.derivedConditions(query.derived, organizationId));
+    return conditions;
+  }
+
+  /** Rows of the scope's branches — or of no branch, on a nullable branch column (D9). */
+  private branchCondition(branchScope: { column: string; ids: readonly number[] }): SQL {
+    const column = this.column(branchScope.column);
+    const ids = [...branchScope.ids];
+    // A NOT NULL branch column: a plain IN, so each branch is one index range (H4).
+    if (column.notNull) return ids.length === 0 ? sql`false` : inArray(column, ids);
+    return ids.length === 0 ? isNull(column) : (or(inArray(column, ids), isNull(column)) as SQL);
+  }
+
+  /** The conditions of the table's own derived filters ({@link BaseRecordTableConfig.derivedFilters}). */
+  private derivedConditions(
+    derived: Record<string, unknown> | undefined,
+    organizationId: number,
+  ): SQL[] {
+    const conditions: SQL[] = [];
+    for (const [name, value] of Object.entries(derived ?? {})) {
+      if (value === undefined) continue;
+      const build = this.config.derivedFilters?.[name];
+      if (!build) throw new Error(`No derived filter named ${name}`);
+      conditions.push(build(value, organizationId));
     }
     return conditions;
+  }
+
+  /** The rows linked to the filter's record — or, where none means every one, with no links at all. */
+  private linkedCondition(filter: BaseRecordLinkFilter): SQL {
+    const { link } = filter;
+    const owner = columnOf(link.table, link.ownerColumn);
+    const ownerIsRow = sql`${owner} = ${this.column('id')}`;
+    const linked = sql`exists (select 1 from ${link.table} where ${ownerIsRow} and ${columnOf(link.table, link.targetColumn)} = ${filter.targetId})`;
+    if (!filter.orUnlinked) return linked;
+    return or(linked, sql`not exists (select 1 from ${link.table} where ${ownerIsRow})`) as SQL;
+  }
+
+  /** The query's sort: a named multi-key sort, a sortable column, or the default — with its order and keys. */
+  private resolveSort(query: BaseRecordListQuery, organizationId: number): ResolvedSort {
+    const { sortKeys = {}, sortColumns } = this.config;
+    const name =
+      query.sort !== undefined && (query.sort in sortKeys || query.sort in sortColumns)
+        ? query.sort
+        : this.config.defaultSort;
+    const spec = sortKeys[name];
+    const order = query.order ?? spec?.defaultOrder ?? this.config.defaultOrder;
+    const against = order === 'asc' ? 'desc' : 'asc';
+    const keys: ResolvedSortKey[] = [];
+    const notNull: SQL[] = [];
+    for (const key of spec?.keys ?? [{ value: name }]) {
+      const direction = key.reversed ? against : order;
+      if (typeof key.value === 'string') {
+        const column = this.column(key.value);
+        if (!column.notNull) notNull.push(isNotNull(column));
+        keys.push({
+          expression: column,
+          castType: key.sqlType ?? column.getSQLType(),
+          isTimestamp: column.columnType === 'PgTimestamp',
+          direction,
+        });
+      } else {
+        if (!key.sqlType) throw new Error(`Sort ${name}: an expression key names its SQL type`);
+        keys.push({
+          expression: key.value(organizationId),
+          castType: key.sqlType,
+          isTimestamp: false,
+          direction,
+        });
+      }
+    }
+    return { name, order, keys, notNull };
   }
 
   /**
    * One keyset page of the organization's live rows, with the capped total on the first page.
    *
-   * The cursor carries the sort column's exact value (as text, cast back with the column's own
-   * SQL type) and the id, and pages with a row-value comparison whose id tie-break follows the
-   * sort — so any column sorts correctly, timestamps included. Sorting by a nullable column lists
-   * the rows that have a value. A cursor minted under other filters starts over at page one.
+   * The cursor carries each sort key's exact value (as text, cast back with the key's own SQL type
+   * — a several-key sort carries them as a JSON list) and the id, and pages with a keyset comparison
+   * whose id tie-break follows the last key — so any column or expression sorts correctly,
+   * timestamps included. Sorting by a nullable column lists the rows that have a value. A cursor
+   * minted under other filters starts over at page one.
    */
   async list(organization_id: number, query: BaseRecordListQuery): Promise<BaseRecordPage> {
-    const sortField =
-      query.sort !== undefined && query.sort in this.config.sortColumns
-        ? query.sort
-        : this.config.defaultSort;
-    const order = query.order ?? this.config.defaultOrder;
-    const sortColumn = this.column(sortField);
+    const sort = this.resolveSort(query, organization_id);
     const idColumn = this.column('id');
     const fingerprint = createHash('sha256')
       .update(
         JSON.stringify({
           q: query.q ?? '',
-          sort: sortField,
-          order,
+          sort: sort.name,
+          order: sort.order,
           equals: query.equals ?? {},
           ranges: query.ranges ?? {},
           branch: query.branchScope?.ids ?? null,
+          ...(query.linked?.length
+            ? {
+                linked: query.linked.map((filter) => [
+                  filter.link.ownerColumn,
+                  filter.link.targetColumn,
+                  filter.targetId,
+                  filter.orUnlinked,
+                ]),
+              }
+            : {}),
+          ...(query.derived ? { derived: query.derived } : {}),
         }),
       )
       .digest('hex');
     const cursor = parseListCursor(query.after);
-    const resume =
+    const resumeValues =
       cursor && cursor.filter_fingerprint === fingerprint && cursor.sort_value !== undefined
-        ? cursor
+        ? readCursorSortValues(cursor.sort_value, sort.keys.length)
         : null;
     const where = and(
       this.liveInOrganization(organization_id),
       this.searchCondition(query.q),
-      ...this.filterConditions(query),
-      sortColumn.notNull ? undefined : isNotNull(sortColumn),
+      ...this.filterConditions(query, organization_id),
+      ...sort.notNull,
     );
-    const sqlType = sql.raw(sortColumn.getSQLType());
-    const keyset = resume
-      ? order === 'desc'
-        ? sql`(${sortColumn}, ${idColumn}) < (${resume.sort_value}::${sqlType}, ${resume.id})`
-        : sql`(${sortColumn}, ${idColumn}) > (${resume.sort_value}::${sqlType}, ${resume.id})`
-      : undefined;
-    const sortText =
-      sortColumn.columnType === 'PgTimestamp'
-        ? sql<string>`to_char(${sortColumn} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
-        : sql<string>`${sortColumn}::text`;
+    const keyset =
+      resumeValues && cursor?.id !== undefined
+        ? keysetCondition({ keys: sort.keys, idColumn, values: resumeValues, id: cursor.id })
+        : undefined;
+    const sortTexts = Object.fromEntries(
+      sort.keys.map((key, index) => [
+        `page_sort_${index}`,
+        key.isTimestamp
+          ? sql<string>`to_char(${key.expression} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
+          : sql<string>`${key.expression}::text`,
+      ]),
+    );
+    const idDirection = sort.keys.at(-1)?.direction ?? sort.order;
     const database = getRequestDatabase();
     const fetched = (await database
-      .select({ ...getTableColumns(this.config.table), page_sort_value: sortText })
+      .select({ ...getTableColumns(this.config.table), ...sortTexts })
       .from(this.config.table)
       .where(and(where, keyset))
       .orderBy(
-        ...(order === 'desc'
-          ? [desc(sortColumn), desc(idColumn)]
-          : [asc(sortColumn), asc(idColumn)]),
+        ...sort.keys.map((key) =>
+          key.direction === 'desc' ? desc(key.expression) : asc(key.expression),
+        ),
+        idDirection === 'desc' ? desc(idColumn) : asc(idColumn),
       )
-      .limit(query.limit + 1)) as (BaseRecordRow & { page_sort_value: string })[];
+      .limit(query.limit + 1)) as (BaseRecordRow & Record<string, unknown>)[];
     const has_more = fetched.length > query.limit;
     const page = has_more ? fetched.slice(0, query.limit) : fetched;
     const last = page.at(-1);
+    const sortValues = last
+      ? sort.keys.map((_key, index) => String(last[`page_sort_${index}`]))
+      : [];
     const next_cursor =
       has_more && last
         ? createOpaqueCursorFromRow({
             created_at: last.created_at,
             id: last.id,
-            sort_value: last.page_sort_value,
+            sort_value: sortValues.length === 1 ? sortValues[0]! : JSON.stringify(sortValues),
             filter_fingerprint: fingerprint,
           })
         : null;
-    const items = page.map(({ page_sort_value: _sortValue, ...row }) => row as BaseRecordRow);
+    const items = page.map((row) => {
+      const item = { ...row };
+      for (const name of Object.keys(sortTexts)) delete item[name];
+      return item as BaseRecordRow;
+    });
     // The total is the first page's: later pages and internal readers skip the count (M1).
     const total =
       query.after === undefined && query.withTotal !== false
@@ -519,7 +716,7 @@ export class BaseRecordRepository extends BaseRepository {
       .where(
         and(
           this.liveInOrganization(options.organizationId),
-          ...this.filterConditions({ limit: 0, equals: options.equals }),
+          ...this.filterConditions({ limit: 0, equals: options.equals }, options.organizationId),
         ),
       )
       .returning({ id: this.column('id') });
@@ -555,11 +752,10 @@ export class BaseRecordRepository extends BaseRepository {
         and(
           this.liveInOrganization(options.organizationId),
           inArray(group, [...options.groupIds]),
-          ...this.filterConditions({
-            limit: 0,
-            equals: options.equals ?? {},
-            ranges: options.ranges ?? {},
-          }),
+          ...this.filterConditions(
+            { limit: 0, equals: options.equals ?? {}, ranges: options.ranges ?? {} },
+            options.organizationId,
+          ),
         ),
       )
       .groupBy(group)) as { group_id: number; figure: unknown }[];
@@ -586,12 +782,15 @@ export class BaseRecordRepository extends BaseRepository {
       .where(
         and(
           this.liveInOrganization(options.organizationId),
-          ...this.filterConditions({
-            limit: 0,
-            equals: options.equals ?? {},
-            ranges: options.ranges ?? {},
-            branchScope: options.branchScope,
-          }),
+          ...this.filterConditions(
+            {
+              limit: 0,
+              equals: options.equals ?? {},
+              ranges: options.ranges ?? {},
+              branchScope: options.branchScope,
+            },
+            options.organizationId,
+          ),
         ),
       )
       .groupBy(...options.columns.map((name) => this.column(name)))) as Record<string, unknown>[];

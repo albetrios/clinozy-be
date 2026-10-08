@@ -34,13 +34,10 @@ export interface BaseRecordControllerOptions {
   parentParam?: string;
   /**
    * Output fields only holders of a permission see — everyone else gets `null`
-   * (`{ min_price: 'lowest_price:read' }`, D18 "See the lowest price").
+   * (`{ min_price: 'offering:lower_price:read' }`, launch O15 "Lowest price").
    */
   hiddenFields?: Readonly<Record<string, string>>;
-  /**
-   * Body fields only holders of a permission may send — 403 otherwise
-   * (`{ price: 'price:manage' }`, D18 "Change prices & offers").
-   */
+  /** Body fields only holders of a permission may send — 403 otherwise (`{ field: 'resource:code' }`). */
   guardedFields?: Readonly<Record<string, string>>;
   /** The table's read permission — an export (gated by `list:export`) needs it too. */
   readPermission?: string;

@@ -1,6 +1,6 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
-import { OfferingGroupsRepository } from './sub-domains/offering-groups/offering-groups.repository.js';
-import { OfferingGroupsService } from './sub-domains/offering-groups/offering-groups.service.js';
+import { OfferingGroupsRepository } from './sub-domains/offerings/offering-groups/offering-groups.repository.js';
+import { OfferingGroupsService } from './sub-domains/offerings/offering-groups/offering-groups.service.js';
 import { BranchRoomsRepository } from './sub-domains/branches/branch-rooms/branch-rooms.repository.js';
 import { BranchRoomsService } from './sub-domains/branches/branch-rooms/branch-rooms.service.js';
 import { BranchMachinesRepository } from './sub-domains/branches/branch-machines/branch-machines.repository.js';
@@ -9,8 +9,8 @@ import { BranchHolidaysRepository } from './sub-domains/branches/branch-holidays
 import { BranchHolidaysService } from './sub-domains/branches/branch-holidays/branch-holidays.service.js';
 import { OfferingsRepository } from './sub-domains/offerings/offerings.repository.js';
 import { OfferingsService } from './sub-domains/offerings/offerings.service.js';
-import { OffersRepository } from './sub-domains/offers/offers.repository.js';
-import { OffersService } from './sub-domains/offers/offers.service.js';
+import { OffersRepository } from './sub-domains/offerings/offers/offers.repository.js';
+import { OffersService } from './sub-domains/offerings/offers/offers.service.js';
 import { PatientsRepository } from './sub-domains/patients/patients.repository.js';
 import { PatientsService } from './sub-domains/patients/patients.service.js';
 import { LeadsRepository } from './sub-domains/leads/leads.repository.js';

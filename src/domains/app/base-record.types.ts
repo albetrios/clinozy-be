@@ -21,6 +21,15 @@ export interface BaseRecordReferenceList {
   field: string;
   link: BaseRecordLinkTable;
   label: string;
+  /** Column values every named record must also have (`{ is_active: true }`) — else the same 400. */
+  require?: Readonly<Record<string, unknown>>;
+  /**
+   * The 400's message key for a named record that is not live here (or misses `require`), with
+   * `id` as its param — the generic `recordReferenceNotFound` when omitted.
+   */
+  notFoundKey?: string;
+  /** An empty list means every record (no branches = every branch, O5): a list filter keeps the unlinked rows too. */
+  emptyMeansEvery?: boolean;
 }
 
 /** The record a nested route lives under (`/patients/{patient_id}/notes`). */
@@ -50,6 +59,11 @@ export interface BaseRecordTransition {
 export type BaseRecordListInput = BaseRecordListQuery & {
   /** Reference filters by public id (`?patient_id=pat_…`); an unknown id gives an empty page. */
   referenceEquals?: Record<string, string | undefined>;
+  /**
+   * Filters through a reference list, by its field → one public id (`{ branch_ids: 'brn_…' }` for
+   * `?branch_id=`); an unknown id gives an empty page.
+   */
+  linkEquals?: Record<string, string | undefined>;
   /** The header branch picker (`?branch_ids=brn_…,brn_…`); absent or empty = every branch. */
   branchPublicIds?: readonly string[] | undefined;
 };
@@ -145,6 +159,11 @@ export interface BaseRecordRules {
   /** Fills or checks a create's values before the insert (defaults by rule, cross-table checks). */
   prepareCreate?: (
     values: Record<string, unknown>,
+    context: BaseRecordWriteContext,
+  ) => Promise<void> | void;
+  /** Checks a delete before it is written (a group that still holds live offerings — O7). */
+  prepareRemove?: (
+    existing: BaseRecordRow,
     context: BaseRecordWriteContext,
   ) => Promise<void> | void;
   /** Fills or checks an update's values before the write; `existing` is the row as it was. */

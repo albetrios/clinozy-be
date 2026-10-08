@@ -15,6 +15,7 @@ import {
 } from '@/shared/utils/validation/record-fields.util.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 import {
+  type BaseRecordLinkFilter,
   type BaseRecordPage,
   type BaseRecordRow,
   listLinkedPublicIds,
@@ -25,6 +26,7 @@ import {
 } from './base-record.repository.js';
 import type {
   BaseRecordDescriptor,
+  BaseRecordListInput,
   BaseRecordListResult,
   BaseRecordReferenceList,
   BaseRecordReferenceLookup,
@@ -104,14 +106,8 @@ export class BaseRecordService<Output> {
     return withAppDatabaseContext(scope, async () => {
       const organizationId = await this.organizationId(scope);
       const equals: Record<string, unknown> = { ...(input.equals ?? {}) };
-      for (const [field, publicIds] of Object.entries(options.referenceIn ?? {})) {
-        const ids = await resolveRecordIds({
-          table: this.referenceTable(field),
-          organizationId,
-          publicIds: [...publicIds],
-        });
-        if (ids.size === 0) return emptyPage(input.limit);
-        equals[field] = [...ids.values()];
+      if (!(await this.resolveReferenceIn(organizationId, options.referenceIn, equals))) {
+        return emptyPage(input.limit);
       }
       if (this.descriptor.ownedByActor) {
         equals.created_by_user_id = await this.userId(options.actingUserPublicId);
@@ -125,14 +121,8 @@ export class BaseRecordService<Output> {
           visibility: options.visibility,
         });
       }
-      for (const [field, publicId] of Object.entries(input.referenceEquals ?? {})) {
-        if (publicId === undefined) continue;
-        const table = this.referenceTable(field);
-        const ids = await resolveRecordIds({ table, organizationId, publicIds: [publicId] });
-        const id = ids.get(publicId);
-        if (id === undefined) return emptyPage(input.limit);
-        equals[field] = id;
-      }
+      const linked = await this.resolveReferenceFilters(organizationId, input, equals);
+      if (!linked) return emptyPage(input.limit);
       const readScope = await this.readScopeOf(options.visibility);
       for (const [field, allowed] of Object.entries(readScope ?? {})) {
         const requested = equals[field];
@@ -155,6 +145,7 @@ export class BaseRecordService<Output> {
         ...input,
         equals,
         branchScope,
+        linked,
         withTotal: options.withTotal,
       });
       const items = await this.serializeRows(page.items);
@@ -169,6 +160,60 @@ export class BaseRecordService<Output> {
       );
       return { ...page, items };
     });
+  }
+
+  /**
+   * Internal reference filters by many public ids, into `equals` (one `IN` per field); false when a
+   * field names no record here (the page is empty).
+   */
+  private async resolveReferenceIn(
+    organizationId: number,
+    referenceIn: Readonly<Record<string, readonly string[]>> | undefined,
+    equals: Record<string, unknown>,
+  ): Promise<boolean> {
+    for (const [field, publicIds] of Object.entries(referenceIn ?? {})) {
+      const ids = await resolveRecordIds({
+        table: this.referenceTable(field),
+        organizationId,
+        publicIds: [...publicIds],
+      });
+      if (ids.size === 0) return false;
+      equals[field] = [...ids.values()];
+    }
+    return true;
+  }
+
+  /**
+   * A list query's reference filters (into `equals`) and link filters (returned) by public id; null
+   * when one names no record here (the page is empty).
+   */
+  private async resolveReferenceFilters(
+    organizationId: number,
+    input: BaseRecordListInput,
+    equals: Record<string, unknown>,
+  ): Promise<BaseRecordLinkFilter[] | null> {
+    for (const [field, publicId] of Object.entries(input.referenceEquals ?? {})) {
+      if (publicId === undefined) continue;
+      const table = this.referenceTable(field);
+      const ids = await resolveRecordIds({ table, organizationId, publicIds: [publicId] });
+      const id = ids.get(publicId);
+      if (id === undefined) return null;
+      equals[field] = id;
+    }
+    const linked: BaseRecordLinkFilter[] = [];
+    for (const [field, publicId] of Object.entries(input.linkEquals ?? {})) {
+      if (publicId === undefined) continue;
+      const list = this.referenceList(field);
+      const ids = await resolveRecordIds({
+        table: list.link.targetTable,
+        organizationId,
+        publicIds: [publicId],
+      });
+      const targetId = ids.get(publicId);
+      if (targetId === undefined) return null;
+      linked.push({ link: list.link, targetId, orUnlinked: list.emptyMeansEvery === true });
+    }
+    return linked;
   }
 
   /** One live record. */
@@ -344,6 +389,10 @@ export class BaseRecordService<Output> {
         userId,
         visibility,
       });
+      await this.descriptor.prepareRemove?.(
+        existing,
+        this.writeContext(scope, organizationId, userId, visibility),
+      );
       const deleted = await this.descriptor.repository.softDelete(
         existing.id,
         { delete_reason: removal.reason, delete_note: removal.note ?? null },
@@ -795,6 +844,13 @@ export class BaseRecordService<Output> {
     return reference.table;
   }
 
+  /** The reference list a list field names. */
+  private referenceList(field: string): BaseRecordReferenceList {
+    const list = (this.descriptor.referenceLists ?? []).find((entry) => entry.field === field);
+    if (!list) throw new Error(`No reference list named ${field}`);
+    return list;
+  }
+
   /** Turns referenced public ids in `values` into ids, in place; 400 on an unknown one. */
   private async resolveReferences(
     organizationId: number,
@@ -829,6 +885,7 @@ export class BaseRecordService<Output> {
         table: list.link.targetTable,
         organizationId,
         publicIds,
+        equals: list.require,
       });
       const unknown = publicIds.filter((publicId) => !ids.has(publicId));
       if (unknown.length > 0) throw referenceNotFound(list, unknown);
@@ -884,9 +941,22 @@ export class BaseRecordService<Output> {
 
 /** The 400 for a referenced id that is no live record of the organization. */
 function referenceNotFound(
-  reference: { field: string; label: string },
+  reference: { field: string; label: string; notFoundKey?: string },
   publicIds: readonly string[],
 ): ValidationError {
+  const { notFoundKey } = reference;
+  if (notFoundKey) {
+    return new ValidationError(
+      notFoundKey,
+      { id: publicIds.join(', ') },
+      undefined,
+      publicIds.map((id) => ({
+        field: reference.field,
+        messageKey: notFoundKey,
+        messageParams: { id },
+      })),
+    );
+  }
   return new ValidationError(
     'errors:validation.recordReferenceNotFound',
     { id: publicIds.join(', '), label: reference.label },

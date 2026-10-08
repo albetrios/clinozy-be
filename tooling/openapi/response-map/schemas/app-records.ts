@@ -227,6 +227,8 @@ export const offeringsRecordSchema = {
     },
     min_price: {
       type: 'number',
+      nullable: true,
+      description: 'The lowest the desk may bill; null without offering:lower_price:read (O15).',
     },
     duration_minutes: {
       type: 'integer',
@@ -237,27 +239,22 @@ export const offeringsRecordSchema = {
     validity_days: {
       type: 'integer',
     },
-    default_doctor_membership_id: {
-      type: 'string',
-      nullable: true,
-    },
-    default_room_id: {
-      type: 'string',
-      nullable: true,
-    },
     gst_percent: {
       type: 'integer',
+      enum: [0, 5, 12, 18, 28],
     },
     is_active: {
       type: 'boolean',
     },
-    group_id: {
+    offering_group_id: {
       type: 'string',
       nullable: true,
+      example: 'ogr_k7x9m2pqr4w8n1v3a1b2c',
     },
     offer_price: {
       type: 'number',
       nullable: true,
+      description: 'What is billed; null = the list price (O4).',
     },
     branch_ids: {
       type: 'array',
@@ -298,17 +295,15 @@ export const offeringsRecordExample = {
   specialty: 'skin',
   tone: 'sky',
   price: 100,
-  min_price: 100,
-  duration_minutes: 5,
+  min_price: 80,
+  duration_minutes: 30,
   sessions: 1,
-  validity_days: 1,
-  default_doctor_membership_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  default_room_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  gst_percent: 1,
+  validity_days: 0,
+  gst_percent: 18,
   is_active: true,
-  group_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  offer_price: 100,
-  branch_ids: ['ref_k7x9m2pqr4w8n1v3a1b2c'],
+  offering_group_id: 'ogr_k7x9m2pqr4w8n1v3a1b2c',
+  offer_price: 90,
+  branch_ids: ['brn_k7x9m2pqr4w8n1v3a1b2c'],
   is_gst_inclusive: true,
   search_terms: ['sample'],
   description: 'Sample description',
@@ -360,8 +355,14 @@ export const offersRecordSchema = {
       format: 'date',
       nullable: true,
     },
-    is_paused: {
+    is_active: {
       type: 'boolean',
+      description: 'false = paused (O10).',
+    },
+    status: {
+      type: 'string',
+      enum: ['live', 'scheduled', 'paused', 'ended'],
+      description: "Derived on the organization's today (O10).",
     },
     tone: {
       type: 'string',
@@ -398,14 +399,15 @@ export const offersRecordSchema = {
 export const offersRecordExample = {
   id: 'ofr_k7x9m2pqr4w8n1v3a1b2c',
   name: 'Sample name',
-  code: 'Sample code',
+  code: 'GLOW20',
   kind: 'percent',
-  value: 100,
-  offering_ids: ['ref_k7x9m2pqr4w8n1v3a1b2c'],
-  branch_ids: ['ref_k7x9m2pqr4w8n1v3a1b2c'],
+  value: 20,
+  offering_ids: ['off_k7x9m2pqr4w8n1v3a1b2c'],
+  branch_ids: ['brn_k7x9m2pqr4w8n1v3a1b2c'],
   starts_on: '2026-10-08',
-  ends_on: '2026-10-08',
-  is_paused: true,
+  ends_on: '2026-10-31',
+  is_active: true,
+  status: 'live',
   tone: 'sky',
   note: 'Sample note',
   created_at: '2026-10-07T10:30:00.000Z',

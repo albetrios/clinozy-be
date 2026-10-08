@@ -166,11 +166,11 @@ Legend:
   POST   /api/v1/app/messages/:message_id/resend                  200  req  both  PERM: lead:update
   POST   /api/v1/app/messages/batches                             200  req  both  PERM: lead:update
   GET    /api/v1/app/offering-groups                              200  -    both  PERM: organization:read
-  POST   /api/v1/app/offering-groups                              200  req  both  PERM: offering_group:create
+  POST   /api/v1/app/offering-groups                              200  req  both  PERM: offering:create
   GET    /api/v1/app/offering-groups/:offering_group_id           200  -    both  PERM: organization:read
-  PATCH  /api/v1/app/offering-groups/:offering_group_id           200  -    both  PERM: offering_group:update
-  DELETE /api/v1/app/offering-groups/:offering_group_id           204  -    both  PERM: offering_group:delete
-  POST   /api/v1/app/offering-groups/:offering_group_id/restore   200  req  both  PERM: offering_group:delete
+  PATCH  /api/v1/app/offering-groups/:offering_group_id           200  -    both  PERM: offering:update
+  DELETE /api/v1/app/offering-groups/:offering_group_id           204  -    both  PERM: offering:delete
+  POST   /api/v1/app/offering-groups/:offering_group_id/restore   200  req  both  PERM: offering:delete
   GET    /api/v1/app/offering-suggestions/:offering_suggestion_id  200  -    both  PERM: patient:read
   PATCH  /api/v1/app/offering-suggestions/:offering_suggestion_id  200  -    both  PERM: patient:update
   DELETE /api/v1/app/offering-suggestions/:offering_suggestion_id  204  -    both  PERM: patient:update
@@ -181,13 +181,13 @@ Legend:
   PATCH  /api/v1/app/offerings/:offering_id                       200  -    both  PERM: offering:update
   DELETE /api/v1/app/offerings/:offering_id                       204  -    both  PERM: offering:delete
   POST   /api/v1/app/offerings/:offering_id/restore               200  req  both  PERM: offering:delete
-  GET    /api/v1/app/offerings/exports                            200  -    both  PERM: list:export
-  GET    /api/v1/app/offers                                       200  -    both  PERM: offer:read
-  POST   /api/v1/app/offers                                       200  req  both  PERM: price:manage
-  GET    /api/v1/app/offers/:offer_id                             200  -    both  PERM: offer:read
-  PATCH  /api/v1/app/offers/:offer_id                             200  -    both  PERM: price:manage
-  DELETE /api/v1/app/offers/:offer_id                             204  -    both  PERM: price:manage
-  POST   /api/v1/app/offers/:offer_id/restore                     200  req  both  PERM: price:manage
+  GET    /api/v1/app/offerings/exports                            200  -    both  PERM: offering:export
+  GET    /api/v1/app/offers                                       200  -    both  PERM: organization:read
+  POST   /api/v1/app/offers                                       200  req  both  PERM: offering:create
+  GET    /api/v1/app/offers/:offer_id                             200  -    both  PERM: organization:read
+  PATCH  /api/v1/app/offers/:offer_id                             200  -    both  PERM: offering:update
+  DELETE /api/v1/app/offers/:offer_id                             204  -    both  PERM: offering:delete
+  POST   /api/v1/app/offers/:offer_id/restore                     200  req  both  PERM: offering:delete
   GET    /api/v1/app/patient-clinical-notes/:patient_clinical_note_id  200  -    both  PERM: clinical_record:read
   DELETE /api/v1/app/patient-clinical-notes/:patient_clinical_note_id  204  -    both  PERM: patient:update
   POST   /api/v1/app/patient-clinical-notes/:patient_clinical_note_id/restore  200  req  both  PERM: patient:update
@@ -708,35 +708,32 @@ Legend:
     day_close:read                day_close:update              invoice:create
     invoice:delete                invoice:read                  invoice:update
     lead:create                   lead:delete                   lead:read
-    lead:update                   list:export                   lowest_price:read
-    manufacturer:create           manufacturer:delete           manufacturer:read
-    manufacturer:update           medical_purchase_order:create medical_purchase_order:delete
-    medical_purchase_order:read   medical_purchase_order:update medical_rep:create
-    medical_rep:delete            medical_rep:read              medical_rep:update
-    medical_sale:create           medical_sale:delete           medical_sale:read
-    medical_sale:update           medicine:create               medicine:delete
-    medicine:read                 medicine:update               message_template:create
-    message_template:delete       message_template:read         message_template:update
-    offer:create                  offer:delete                  offer:read
-    offer:update                  offer_price:bill_below        offering:create
-    offering:delete               offering:read                 offering:update
-    offering_group:create         offering_group:delete         offering_group:read
-    offering_group:update         patient:create                patient:delete
+    lead:update                   list:export                   manufacturer:create
+    manufacturer:delete           manufacturer:read             manufacturer:update
+    medical_purchase_order:create medical_purchase_order:delete medical_purchase_order:read
+    medical_purchase_order:update medical_rep:create            medical_rep:delete
+    medical_rep:read              medical_rep:update            medical_sale:create
+    medical_sale:delete           medical_sale:read             medical_sale:update
+    medicine:create               medicine:delete               medicine:read
+    medicine:update               message_template:create       message_template:delete
+    message_template:read         message_template:update       offering:create
+    offering:delete               offering:export               offering:lower_price:read
+    offering:update               patient:create                patient:delete
     patient:read                  patient:update                payment:create
     payment:delete                payment:read                  payment:reverse_settled
     payment:update                prescription:create           prescription:delete
-    prescription:read             prescription:update           price:manage
-    private_album:read            refund:create                 review:create
-    review:delete                 review:read                   review:update
-    sale:void                     stock_item:create             stock_item:delete
-    stock_item:read               stock_item:update             stock_purchase:create
-    stock_purchase:delete         stock_purchase:read           stock_purchase:update
-    stock_vendor:create           stock_vendor:delete           stock_vendor:read
-    stock_vendor:update           supplier:create               supplier:delete
-    supplier:read                 supplier:update               task:create
-    task:delete                   task:read                     task:update
-    task_rule:update              treatment:create              treatment:delete
-    treatment:read                treatment:update
+    prescription:read             prescription:update           private_album:read
+    refund:create                 review:create                 review:delete
+    review:read                   review:update                 sale:void
+    stock_item:create             stock_item:delete             stock_item:read
+    stock_item:update             stock_purchase:create         stock_purchase:delete
+    stock_purchase:read           stock_purchase:update         stock_vendor:create
+    stock_vendor:delete           stock_vendor:read             stock_vendor:update
+    supplier:create               supplier:delete               supplier:read
+    supplier:update               task:create                   task:delete
+    task:read                     task:update                   task_rule:update
+    treatment:create              treatment:delete              treatment:read
+    treatment:update
 
   Global Roles:
     super_admin                   user

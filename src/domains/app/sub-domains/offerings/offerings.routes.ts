@@ -29,7 +29,7 @@ export function offeringsRoutes(service: OfferingsService): FastifyPluginAsync {
         schema: {
           summary: 'List offerings',
           description:
-            "Returns one page of the active organization's offerings (newest first by default), with the total count; `q` searches, filters narrow. Requires organization:read (every member).",
+            "Returns one page of the active organization's offerings (newest first by default), with the total count on the first page. `q` matches the name, the number (`274`, `#274`) or a search term; filters `category`, `specialty`, `is_active`, `offering_group_id`, and `branch_id` (offered there — every-branch offerings included, O5). `min_price` is null without offering:lower_price:read. Requires organization:read (every member).",
           tags: ['Offering'],
           querystring: listOfferingsQueryDto,
         },
@@ -40,12 +40,12 @@ export function offeringsRoutes(service: OfferingsService): FastifyPluginAsync {
       '/offerings/exports',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.LIST_EXPORT)],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.OFFERING_EXPORT)],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Export offerings',
           description:
-            'Returns the offerings the same filters and sort as the list would (every page, up to 5,000 rows) as a CSV file inside the JSON envelope (`file_name`, `content_type`, `row_count`, `is_truncated`, `content`). Requires `list:export` ("Export lists") and organization:read (every member).',
+            'Returns the offerings the same filters and sort as the list would (every page, up to 5,000 rows; `limit` and `after` ignored) as a CSV file inside the JSON envelope (`file_name` `offerings-YYYY-MM-DD.csv`, `content_type`, `row_count`, `is_truncated`, `content` — the offering fields as columns, lists joined with `|`). Requires offering:export (O14).',
           tags: ['Offering'],
           querystring: listOfferingsQueryDto,
         },
@@ -60,7 +60,8 @@ export function offeringsRoutes(service: OfferingsService): FastifyPluginAsync {
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Create offering',
-          description: 'Adds a offering to the active organization. Requires offering:create.',
+          description:
+            'Adds an offering to the active organization with its prices: `min_price` ≤ `offer_price` ≤ `price` (a 400 naming the field otherwise, O4); GST defaults to 0 for a consultation, else 18; `branch_ids` empty = every branch. A name another offering has is a 409. Requires offering:create.',
           tags: ['Offering'],
           body: CreateOfferingDto,
         },
@@ -76,7 +77,7 @@ export function offeringsRoutes(service: OfferingsService): FastifyPluginAsync {
         schema: {
           summary: 'Get offering',
           description:
-            'Returns one offering of the active organization. Requires organization:read (every member).',
+            'Returns one live offering of the active organization; a deleted one is a 404. `min_price` is null without offering:lower_price:read. Requires organization:read (every member).',
           tags: ['Offering'],
           params: offeringsIdParamsDto,
         },
@@ -92,7 +93,7 @@ export function offeringsRoutes(service: OfferingsService): FastifyPluginAsync {
         schema: {
           summary: 'Update offering',
           description:
-            "Changes any of a offering's fields; null clears an optional one. Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 naming who changed it (D43). Requires offering:update.",
+            "Changes any of an offering's fields, prices included; null clears an optional one, `branch_ids` replaces the set (`[]` = every branch). The prices the save would leave must keep `min_price` ≤ `offer_price` ≤ `price` (O4). Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 `record_changed` naming who changed it (D43). Requires offering:update.",
           tags: ['Offering'],
           params: offeringsIdParamsDto,
           body: UpdateOfferingDto,
@@ -109,7 +110,7 @@ export function offeringsRoutes(service: OfferingsService): FastifyPluginAsync {
         schema: {
           summary: 'Delete offering',
           description:
-            "Soft-deletes a offering with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Restorable until the organization's purge window ends (D38). Requires offering:delete.",
+            "Soft-deletes an offering with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. It leaves new bookings and bills; past records keep it. Restorable until the organization's purge window ends (D38). Requires offering:delete.",
           tags: ['Offering'],
           params: offeringsIdParamsDto,
           querystring: recordDeleteQuerySchema,
@@ -126,7 +127,7 @@ export function offeringsRoutes(service: OfferingsService): FastifyPluginAsync {
         schema: {
           summary: 'Restore offering',
           description:
-            "Undoes a offering's delete. A live offering is a 409. Requires offering:delete.",
+            "Undoes an offering's delete. A live offering is a 409 `record_not_deleted`; a name taken meanwhile is a 409 `record_restore_conflict`. Requires offering:delete.",
           tags: ['Offering'],
           params: offeringsIdParamsDto,
         },

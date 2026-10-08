@@ -4,18 +4,17 @@ import { BaseRecordController } from '@/domains/app/base-record.controller.js';
 import type { OfferingsService } from './offerings.service.js';
 import type { OfferingOutput } from './offerings.types.js';
 
-/** HTTP handlers for the `offerings` routes — {@link BaseRecordController} on {@link OfferingsService}. */
+/**
+ * HTTP handlers for the `offerings` routes — {@link BaseRecordController} on {@link OfferingsService}:
+ * `min_price` reads `null` without `offering:lower_price:read` (O15), the export answers the list as
+ * CSV (O14).
+ */
 export class OfferingsController extends BaseRecordController<OfferingOutput> {
   constructor(service: OfferingsService) {
     super(service, {
       resource: 'offering',
       idParam: 'offering_id',
-      hiddenFields: { min_price: APP_PERMISSIONS.LOWEST_PRICE_READ },
-      guardedFields: {
-        price: APP_PERMISSIONS.PRICE_MANAGE,
-        min_price: APP_PERMISSIONS.PRICE_MANAGE,
-        offer_price: APP_PERMISSIONS.PRICE_MANAGE,
-      },
+      hiddenFields: { min_price: APP_PERMISSIONS.OFFERING_LOWER_PRICE_READ },
       readPermission: TENANCY_PERMISSIONS.ORGANIZATION_READ,
       exportName: 'offerings',
     });

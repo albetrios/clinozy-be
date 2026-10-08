@@ -30,21 +30,14 @@ function readCodes(resources: readonly string[]): string[] {
 }
 
 /**
- * What every role holds: the organization (the team picker `GET /app/memberships`, and the member's
- * own preferences and saved views — launch U2) and tasks (D12). The team management list
+ * What every role holds: the organization (the team picker `GET /app/memberships`, the member's
+ * own preferences and saved views — launch U2 — and the offering groups, offerings and offers every
+ * booking and bill picks from — launch O2) and tasks (D12). The team management list
  * (`membership:read`) is Owner and Admin (T7).
  */
 const EVERY_ROLE_CODES: readonly string[] = [
   TENANCY_PERMISSIONS.ORGANIZATION_READ,
   ...sectionCodes('tasks', VIEW_CREATE_EDIT),
-];
-
-/**
- * The pickers a role that books or bills needs: offerings and offers. A branch's rooms, machines
- * and holidays are readable by every member (`organization:read`, D5/D12).
- */
-const BOOKING_LOOKUP_CODES: readonly string[] = [
-  ...readCodes(APP_ACCESS_SECTION_RESOURCES.offerings),
 ];
 
 /**
@@ -101,15 +94,14 @@ export function appRolePresets(adminCodes: readonly string[]): readonly AppRoleP
       isLocked: false,
       permissionCodes: unique([
         ...EVERY_ROLE_CODES,
-        ...BOOKING_LOOKUP_CODES,
         ...sectionCodes('leads', VIEW_CREATE_EDIT),
         ...sectionCodes('appointments', VIEW_CREATE_EDIT),
         ...sectionCodes('patients', VIEW_CREATE_EDIT),
         ...readCodes(['medicine', 'manufacturer']),
-        APP_PERMISSIONS.OFFER_PRICE_BILL_BELOW,
         APP_PERMISSIONS.CLINICAL_RECORD_READ,
         APP_PERMISSIONS.PRIVATE_ALBUM_READ,
         APP_PERMISSIONS.LIST_EXPORT,
+        APP_PERMISSIONS.OFFERING_EXPORT,
       ]),
     },
     {
@@ -119,7 +111,6 @@ export function appRolePresets(adminCodes: readonly string[]): readonly AppRoleP
       isLocked: false,
       permissionCodes: unique([
         ...EVERY_ROLE_CODES,
-        ...BOOKING_LOOKUP_CODES,
         ...sectionCodes('appointments', VIEW_CREATE_EDIT),
         ...resourceCodes('patient', VIEW_CREATE_EDIT),
         ...resourceCodes('treatment', VIEW_CREATE_EDIT),
@@ -135,7 +126,6 @@ export function appRolePresets(adminCodes: readonly string[]): readonly AppRoleP
       isLocked: false,
       permissionCodes: unique([
         ...EVERY_ROLE_CODES,
-        ...BOOKING_LOOKUP_CODES,
         ...sectionCodes('leads', VIEW_CREATE_EDIT),
         ...sectionCodes('appointments', VIEW_CREATE_EDIT),
         ...resourceCodes('patient', VIEW_CREATE_EDIT),
@@ -152,15 +142,14 @@ export function appRolePresets(adminCodes: readonly string[]): readonly AppRoleP
       isLocked: false,
       permissionCodes: unique([
         ...EVERY_ROLE_CODES,
-        ...BOOKING_LOOKUP_CODES,
         ...sectionCodes('leads', VIEW_CREATE_EDIT),
         ...sectionCodes('appointments', VIEW_CREATE_EDIT),
         ...resourceCodes('patient', VIEW_CREATE_EDIT),
         ...resourceCodes('review', VIEW_CREATE_EDIT),
         ...readCodes(['prescription', 'treatment']),
         ...sectionCodes('payments', ['read', 'create']),
-        ...sectionCodes('offerings', VIEW_CREATE_EDIT),
-        APP_PERMISSIONS.OFFER_PRICE_BILL_BELOW,
+        // Groups, offerings — prices included — and offers (O2, O3)
+        ...sectionCodes('offerings', ['create', 'update']),
         APP_PERMISSIONS.CLINICAL_RECORD_READ,
       ]),
     },
@@ -174,6 +163,7 @@ export function appRolePresets(adminCodes: readonly string[]): readonly AppRoleP
         ...sectionCodes('medical', VIEW_CREATE_EDIT),
         ...readCodes(['patient', 'prescription']),
         APP_PERMISSIONS.LIST_EXPORT,
+        APP_PERMISSIONS.OFFERING_EXPORT,
         APP_PERMISSIONS.SALE_VOID,
       ]),
     },
@@ -185,14 +175,14 @@ export function appRolePresets(adminCodes: readonly string[]): readonly AppRoleP
       permissionCodes: unique([
         ...EVERY_ROLE_CODES,
         ...readCodes(['patient']),
-        ...readCodes(APP_ACCESS_SECTION_RESOURCES.offerings),
         ...sectionCodes('payments', VIEW_CREATE_EDIT),
         ...sectionCodes('medical', VIEW_CREATE_EDIT),
         ...sectionCodes('stock', ['read']),
         APP_PERMISSIONS.DAY_CLOSE_CLOSE,
         APP_PERMISSIONS.PAYMENT_REVERSE_SETTLED,
         APP_PERMISSIONS.LIST_EXPORT,
-        APP_PERMISSIONS.LOWEST_PRICE_READ,
+        APP_PERMISSIONS.OFFERING_EXPORT,
+        APP_PERMISSIONS.OFFERING_LOWER_PRICE_READ,
         APP_PERMISSIONS.REFUND_CREATE,
       ]),
     },
@@ -204,7 +194,7 @@ export function appRolePresets(adminCodes: readonly string[]): readonly AppRoleP
       permissionCodes: unique([
         ...EVERY_ROLE_CODES,
         ...sectionCodes('leads', VIEW_CREATE_EDIT),
-        ...readCodes(['patient', ...APP_ACCESS_SECTION_RESOURCES.offerings]),
+        ...readCodes(['patient']),
         ...resourceCodes('review', VIEW_CREATE_EDIT),
       ]),
     },

@@ -16,13 +16,13 @@ import { listOrganizationApiKeysQueryDto } from '@/domains/tenancy/sub-domains/o
 import { listOrganizationsQueryDto } from '@/domains/tenancy/sub-domains/organization/organization.dto.js';
 import { ListUsersDto } from '@/domains/user/user.dto.js';
 import { listMembershipSavedViewsQueryDto } from '@/domains/app/sub-domains/memberships/membership-saved-views/membership-saved-views.dto.js';
-import { listOfferingGroupsQueryDto as appOfferingGroupsListQueryDto } from '@/domains/app/sub-domains/offering-groups/offering-groups.dto.js';
+import { listOfferingGroupsQueryDto as appOfferingGroupsListQueryDto } from '@/domains/app/sub-domains/offerings/offering-groups/offering-groups.dto.js';
 import { listBranchRoomsQueryDto as appRoomsListQueryDto } from '@/domains/app/sub-domains/branches/branch-rooms/branch-rooms.dto.js';
 import { listBranchMachinesQueryDto as appMachinesListQueryDto } from '@/domains/app/sub-domains/branches/branch-machines/branch-machines.dto.js';
 import { listBranchHolidaysQueryDto as appBranchHolidaysListQueryDto } from '@/domains/app/sub-domains/branches/branch-holidays/branch-holidays.dto.js';
 import { listBranchesQueryDto as appBranchesListQueryDto } from '@/domains/app/sub-domains/branches/branches.dto.js';
 import { listOfferingsQueryDto as appOfferingsListQueryDto } from '@/domains/app/sub-domains/offerings/offerings.dto.js';
-import { listOffersQueryDto as appOffersListQueryDto } from '@/domains/app/sub-domains/offers/offers.dto.js';
+import { listOffersQueryDto as appOffersListQueryDto } from '@/domains/app/sub-domains/offerings/offers/offers.dto.js';
 import {
   listPatientsQueryDto as appPatientsListQueryDto,
   timelinePatientQueryDto as appTimelinePatientQueryDto,

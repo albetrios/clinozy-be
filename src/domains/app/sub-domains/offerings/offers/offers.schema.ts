@@ -24,7 +24,12 @@ import {
   RECORD_DELETE_REASON,
   RECORD_DELETE_REASON_VALUES,
 } from '@/shared/constants/record-fields.constants.js';
-import { OFFER_KIND_VALUES } from '@/domains/app/sub-domains/offers/offers.constants.js';
+import {
+  OFFER_EXTRA_SESSIONS_MAX,
+  OFFER_KIND,
+  OFFER_KIND_VALUES,
+  OFFER_PERCENT_MAX,
+} from '@/domains/app/sub-domains/offerings/offers/offers.constants.js';
 
 /** `'a', 'b', …` from a value list, for an `IN (…)` or `ARRAY[…]` CHECK. */
 function joinValues(values: readonly string[]): SQL {
@@ -35,7 +40,9 @@ function joinValues(values: readonly string[]): SQL {
 }
 
 /**
- * Drizzle table for `app.offers` — A limited-time price on offerings (launch ROUTE #12, domain `app`).
+ * Drizzle table for `app.offers` — A limited-time price on offerings (launch ROUTE #12, rebuilt at
+ * #128 — routes-final §3.C; domain `app`, nested in sub-domain `offerings`). The code is unique among
+ * live offers and the value's range follows its kind (O11).
  * Standard app record columns (public id, organization, attribution, soft delete with its reason);
  * RLS is the `offers_tenant_isolation` policy on the organization GUC, with the retention-cleanup arm
  * for the deleted-record purge.
@@ -52,13 +59,14 @@ export const offers = appSchema
       name: varchar('name', { length: 80 }).notNull(),
       code: varchar('code', { length: 16 }),
       kind: varchar('kind', { length: 7 }).notNull().default('percent'),
-      // percent: 1–100; amount and fixed: rupees; extra: sessions
+      // percent: whole 1–100; amount and fixed: rupees above 0; extra: whole sessions 1–99 (O11)
       value: numeric('value', { precision: 12, scale: 2 }).notNull(),
       // Empty = from now on
       starts_on: date('starts_on', { mode: 'string' }),
       // Empty = no end
       ends_on: date('ends_on', { mode: 'string' }),
-      is_paused: boolean('is_paused').notNull().default(false),
+      // false = paused (O10); the response derives `status` from this and the dates
+      is_active: boolean('is_active').notNull().default(true),
       tone: varchar('tone', { length: 10 }).notNull().default('blush'),
       note: text('note'),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -92,17 +100,26 @@ export const offers = appSchema
       index('idx_offers_organization_name')
         .on(table.organization_id, table.name, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
+      // The starts_on sort keeps offers without a start (O10): an empty start sorts as the earliest
       index('idx_offers_organization_starts_on')
-        .on(table.organization_id, table.starts_on, table.id)
-        .where(sql`${table.deleted_at} IS NULL AND ${table.starts_on} IS NOT NULL`),
+        .on(table.organization_id, sql`coalesce(${table.starts_on}, '-infinity'::date)`, table.id)
+        .where(sql`${table.deleted_at} IS NULL`),
+      uniqueIndex('idx_offers_organization_code_unique')
+        .on(table.organization_id, table.code)
+        .where(sql`${table.deleted_at} IS NULL AND ${table.code} IS NOT NULL`),
       check('chk_offers_kind', sql`${table.kind} IN (${joinValues(OFFER_KIND_VALUES)})`),
-      check('chk_offers_value', sql`${table.value} >= 0`),
+      check(
+        'chk_offers_value_for_kind',
+        sql`(${table.kind} = ${OFFER_KIND.PERCENT} AND ${table.value} BETWEEN 1 AND ${sql.raw(String(OFFER_PERCENT_MAX))} AND ${table.value} = trunc(${table.value}))
+          OR (${table.kind} IN (${OFFER_KIND.AMOUNT}, ${OFFER_KIND.FIXED}) AND ${table.value} > 0)
+          OR (${table.kind} = ${OFFER_KIND.EXTRA} AND ${table.value} BETWEEN 1 AND ${sql.raw(String(OFFER_EXTRA_SESSIONS_MAX))} AND ${table.value} = trunc(${table.value}))`,
+      ),
       check('chk_offers_tone', sql`${table.tone} IN (${joinValues(CHIP_TONE_VALUES)})`),
       check(
         'chk_offers_ends_after_starts',
         sql`${table.ends_on} IS NULL OR ${table.starts_on} IS NULL OR ${table.ends_on} >= ${table.starts_on}`,
       ),
-      check('chk_offers_code', sql`${table.code} ~ '^[A-Z0-9]*$'`),
+      check('chk_offers_code', sql`${table.code} ~ '^[A-Z0-9]+$'`),
       check('chk_offers_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_offers_delete_reason',

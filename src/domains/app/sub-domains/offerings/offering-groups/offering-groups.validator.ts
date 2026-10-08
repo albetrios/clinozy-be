@@ -8,12 +8,12 @@ import {
   type UpdateOfferingGroupInput,
 } from './offering-groups.dto.js';
 
-/** Parses a offering group create body; throws `ValidationError` naming each bad field. */
+/** Parses an offering group create body; throws `ValidationError` naming each bad field. */
 export function validateCreateOfferingGroup(data: unknown): CreateOfferingGroupInput {
   return parseWithSchema(CreateOfferingGroupDto, data);
 }
 
-/** Parses a offering group update body; throws `ValidationError` naming each bad field. */
+/** Parses an offering group update body; throws `ValidationError` naming each bad field. */
 export function validateUpdateOfferingGroup(data: unknown): UpdateOfferingGroupInput {
   return parseWithSchema(UpdateOfferingGroupDto, data);
 }

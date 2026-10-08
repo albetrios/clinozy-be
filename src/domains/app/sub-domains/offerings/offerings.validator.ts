@@ -8,17 +8,17 @@ import {
   type UpdateOfferingInput,
 } from './offerings.dto.js';
 
-/** Parses a offering create body; throws `ValidationError` naming each bad field. */
+/** Parses an offering create body; throws `ValidationError` naming each bad field. */
 export function validateCreateOffering(data: unknown): CreateOfferingInput {
   return parseWithSchema(CreateOfferingDto, data);
 }
 
-/** Parses a offering update body; throws `ValidationError` naming each bad field. */
+/** Parses an offering update body; throws `ValidationError` naming each bad field. */
 export function validateUpdateOffering(data: unknown): UpdateOfferingInput {
   return parseWithSchema(UpdateOfferingDto, data);
 }
 
-/** Parses the `GET /app/offerings` query into a list input (filters by column). */
+/** Parses the `GET /app/offerings` (and export) query into a list input — filters by column, group and branch. */
 export function validateListOfferingsQuery(data: unknown): BaseRecordListInput {
   const query = parseWithSchema(listOfferingsQueryDto, data);
   return {
@@ -33,7 +33,10 @@ export function validateListOfferingsQuery(data: unknown): BaseRecordListInput {
       is_active: query.is_active === undefined ? undefined : query.is_active === 'true',
     },
     referenceEquals: {
-      group_id: query.group_id,
+      offering_group_id: query.offering_group_id,
+    },
+    linkEquals: {
+      branch_ids: query.branch_id,
     },
     ranges: {
       created_at: {

@@ -19,9 +19,7 @@ import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-sc
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
-import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
-import { offering_groups } from '@/domains/app/sub-domains/offering-groups/offering-groups.schema.js';
-import { branch_rooms } from '@/domains/app/sub-domains/branches/branch-rooms/branch-rooms.schema.js';
+import { offering_groups } from '@/domains/app/sub-domains/offerings/offering-groups/offering-groups.schema.js';
 import {
   CHIP_TONE_VALUES,
   RECORD_DELETE_REASON,
@@ -41,8 +39,10 @@ function joinValues(values: readonly string[]): SQL {
 }
 
 /**
- * Drizzle table for `app.offerings` — A sellable service, package or product (launch ROUTE #11, domain `app`).
- * Standard app record columns (public id, organization, attribution, soft delete with its reason);
+ * Drizzle table for `app.offerings` — A sellable service, package or product (launch ROUTE #11,
+ * rebuilt at #128 — routes-final §3.B; domain `app`, sub-domain `offerings`).
+ * Prices hold `min_price` ≤ `offer_price` ≤ `price` (O4); it links only to its group, its branches
+ * and its offers (O6). Standard app record columns (public id, organization, attribution, soft delete with its reason);
  * RLS is the `offerings_tenant_isolation` policy on the organization GUC, with the retention-cleanup arm
  * for the deleted-record purge.
  */
@@ -67,16 +67,10 @@ export const offerings = appSchema
       sessions: integer('sessions').notNull().default(1),
       // Packages: days a package stays usable; 0 = no expiry
       validity_days: integer('validity_days').notNull().default(0),
-      default_doctor_membership_id: bigint('default_doctor_membership_id', {
-        mode: 'number',
-      }).references(() => memberships.id, { onDelete: 'set null' }),
-      default_room_id: bigint('default_room_id', { mode: 'number' }).references(
-        (): AnyPgColumn => branch_rooms.id,
-        { onDelete: 'set null' },
-      ),
       gst_percent: integer('gst_percent').notNull().default(0),
       is_active: boolean('is_active').notNull().default(true),
-      group_id: bigint('group_id', { mode: 'number' }).references(
+      // The menu section it sits in (O1) — at most one; a group with live offerings cannot be deleted (O7)
+      offering_group_id: bigint('offering_group_id', { mode: 'number' }).references(
         (): AnyPgColumn => offering_groups.id,
         { onDelete: 'set null' },
       ),
@@ -115,13 +109,9 @@ export const offerings = appSchema
       index('idx_offerings_organization_name')
         .on(table.organization_id, table.name, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
-      index('idx_offerings_default_doctor_membership_id')
-        .on(table.default_doctor_membership_id)
-        .where(sql`${table.default_doctor_membership_id} IS NOT NULL`),
-      index('idx_offerings_default_room_id')
-        .on(table.default_room_id)
-        .where(sql`${table.default_room_id} IS NOT NULL`),
-      index('idx_offerings_group_id').on(table.group_id).where(sql`${table.group_id} IS NOT NULL`),
+      index('idx_offerings_offering_group_id')
+        .on(table.offering_group_id)
+        .where(sql`${table.offering_group_id} IS NOT NULL`),
       uniqueIndex('idx_offerings_organization_offering_number').on(
         table.organization_id,
         table.offering_number,
@@ -150,6 +140,10 @@ export const offerings = appSchema
       check(
         'chk_offerings_offer_price_within_price',
         sql`${table.offer_price} IS NULL OR ${table.offer_price} <= ${table.price}`,
+      ),
+      check(
+        'chk_offerings_min_price_within_offer_price',
+        sql`${table.offer_price} IS NULL OR ${table.min_price} <= ${table.offer_price}`,
       ),
       check('chk_offerings_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(

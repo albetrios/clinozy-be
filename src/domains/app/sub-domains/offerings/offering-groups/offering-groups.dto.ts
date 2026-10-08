@@ -33,11 +33,14 @@ export const UpdateOfferingGroupDto = z
     message: 'Send at least one field',
   });
 
-/** Query of the `offering-groups` list — keyset paging, `q` search, sort and filters. */
+/**
+ * Query of the `offering-groups` list — keyset paging, `q` on the name, sort `sort_order` (default:
+ * the menu order, then name — O8) | `name` | `created_at`.
+ */
 export const listOfferingGroupsQueryDto = listSearchSortSchema([
-  'created_at',
-  'name',
   'sort_order',
+  'name',
+  'created_at',
 ] as const)
   .extend({
     created_from: z.iso.datetime({ offset: true }).optional(),

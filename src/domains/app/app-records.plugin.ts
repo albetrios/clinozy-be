@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import type { AppRecordServices } from './app-records.container.js';
-import { offeringGroupsRoutes } from './sub-domains/offering-groups/offering-groups.routes.js';
+import { offeringGroupsRoutes } from './sub-domains/offerings/offering-groups/offering-groups.routes.js';
 import { branchRoomsRoutes } from './sub-domains/branches/branch-rooms/branch-rooms.routes.js';
 import { branchMachinesRoutes } from './sub-domains/branches/branch-machines/branch-machines.routes.js';
 import { branchHolidaysRoutes } from './sub-domains/branches/branch-holidays/branch-holidays.routes.js';
 import { offeringsRoutes } from './sub-domains/offerings/offerings.routes.js';
-import { offersRoutes } from './sub-domains/offers/offers.routes.js';
+import { offersRoutes } from './sub-domains/offerings/offers/offers.routes.js';
 import { patientsRoutes } from './sub-domains/patients/patients.routes.js';
 import { leadsRoutes } from './sub-domains/leads/leads.routes.js';
 import { messageTemplatesRoutes } from './sub-domains/message-templates/message-templates.routes.js';

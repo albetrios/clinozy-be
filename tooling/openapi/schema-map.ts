@@ -15,7 +15,7 @@ import {
 import {
   CreateOfferingGroupDto as appCreateOfferingGroupDto,
   UpdateOfferingGroupDto as appUpdateOfferingGroupDto,
-} from '@/domains/app/sub-domains/offering-groups/offering-groups.dto.js';
+} from '@/domains/app/sub-domains/offerings/offering-groups/offering-groups.dto.js';
 import {
   CreateBranchRoomDto as appCreateRoomDto,
   UpdateBranchRoomDto as appUpdateRoomDto,
@@ -35,7 +35,7 @@ import {
 import {
   CreateOfferDto as appCreateOfferDto,
   UpdateOfferDto as appUpdateOfferDto,
-} from '@/domains/app/sub-domains/offers/offers.dto.js';
+} from '@/domains/app/sub-domains/offerings/offers/offers.dto.js';
 import {
   CreatePatientDto as appCreatePatientDto,
   UpdatePatientDto as appUpdatePatientDto,

@@ -29,7 +29,7 @@ export function offeringGroupsRoutes(service: OfferingGroupsService): FastifyPlu
         schema: {
           summary: 'List offering groups',
           description:
-            "Returns one page of the active organization's offering groups (newest first by default), with the total count; `q` searches, filters narrow. Requires organization:read (every member).",
+            "Returns one page of the active organization's offering groups in menu order by default (`sort_order`, then name — O8), with the total count on the first page; `q` searches the name; `sort` = `sort_order` | `name` | `created_at`. Requires organization:read (every member).",
           tags: ['Offering'],
           querystring: listOfferingGroupsQueryDto,
         },
@@ -40,12 +40,12 @@ export function offeringGroupsRoutes(service: OfferingGroupsService): FastifyPlu
       '/offering-groups',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.OFFERING_GROUP_CREATE)],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.OFFERING_CREATE)],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Create offering group',
           description:
-            'Adds a offering group to the active organization. Requires offering_group:create.',
+            'Adds an offering group (a menu section) to the active organization: `name` (1–60, unique in the organization in any case — 409 otherwise) and `sort_order` (0–9999, default 0). Requires offering:create.',
           tags: ['Offering'],
           body: CreateOfferingGroupDto,
         },
@@ -61,7 +61,7 @@ export function offeringGroupsRoutes(service: OfferingGroupsService): FastifyPlu
         schema: {
           summary: 'Get offering group',
           description:
-            'Returns one offering group of the active organization. Requires organization:read (every member).',
+            'Returns one live offering group of the active organization; a deleted one is a 404. Requires organization:read (every member).',
           tags: ['Offering'],
           params: offeringGroupsIdParamsDto,
         },
@@ -72,12 +72,12 @@ export function offeringGroupsRoutes(service: OfferingGroupsService): FastifyPlu
       '/offering-groups/:offering_group_id',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.OFFERING_GROUP_UPDATE)],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.OFFERING_UPDATE)],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Update offering group',
           description:
-            "Changes any of a offering group's fields; null clears an optional one. Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 naming who changed it (D43). Requires offering_group:update.",
+            'Renames or reorders an offering group (`name`, `sort_order`); a name another group has is a 409. Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 `record_changed` naming who changed it (D43). Requires offering:update.',
           tags: ['Offering'],
           params: offeringGroupsIdParamsDto,
           body: UpdateOfferingGroupDto,
@@ -89,12 +89,12 @@ export function offeringGroupsRoutes(service: OfferingGroupsService): FastifyPlu
       '/offering-groups/:offering_group_id',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.OFFERING_GROUP_DELETE)],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.OFFERING_DELETE)],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Delete offering group',
           description:
-            "Soft-deletes a offering group with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Restorable until the organization's purge window ends (D38). Requires offering_group:delete.",
+            "Soft-deletes an empty offering group with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. A group live offerings still use is a 409 — move or ungroup them first (O7). Restorable until the organization's purge window ends (D38). Requires offering:delete.",
           tags: ['Offering'],
           params: offeringGroupsIdParamsDto,
           querystring: recordDeleteQuerySchema,
@@ -106,12 +106,12 @@ export function offeringGroupsRoutes(service: OfferingGroupsService): FastifyPlu
       '/offering-groups/:offering_group_id/restore',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.OFFERING_GROUP_DELETE)],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.OFFERING_DELETE)],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Restore offering group',
           description:
-            "Undoes a offering group's delete. A live offering group is a 409. Requires offering_group:delete.",
+            "Undoes an offering group's delete. A live group is a 409 `record_not_deleted`; a name taken meanwhile is a 409 `record_restore_conflict`. Requires offering:delete.",
           tags: ['Offering'],
           params: offeringGroupsIdParamsDto,
         },

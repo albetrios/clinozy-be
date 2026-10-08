@@ -8,18 +8,15 @@ export const APP_PERMISSIONS = {
   BRANCH_CREATE: 'branch:create',
   BRANCH_UPDATE: 'branch:update',
   BRANCH_DELETE: 'branch:delete',
-  OFFERING_GROUP_READ: 'offering_group:read',
-  OFFERING_GROUP_CREATE: 'offering_group:create',
-  OFFERING_GROUP_UPDATE: 'offering_group:update',
-  OFFERING_GROUP_DELETE: 'offering_group:delete',
-  OFFERING_READ: 'offering:read',
+  // Offerings (launch #128, O2): one code set for groups, offerings — prices included — and
+  // offers; reads are every member's (`organization:read`).
   OFFERING_CREATE: 'offering:create',
   OFFERING_UPDATE: 'offering:update',
   OFFERING_DELETE: 'offering:delete',
-  OFFER_READ: 'offer:read',
-  OFFER_CREATE: 'offer:create',
-  OFFER_UPDATE: 'offer:update',
-  OFFER_DELETE: 'offer:delete',
+  /** See an offering's `min_price` — null without it (O15). */
+  OFFERING_LOWER_PRICE_READ: 'offering:lower_price:read',
+  /** Download the offerings CSV (O14). */
+  OFFERING_EXPORT: 'offering:export',
   PATIENT_READ: 'patient:read',
   PATIENT_CREATE: 'patient:create',
   PATIENT_UPDATE: 'patient:update',
@@ -101,9 +98,6 @@ export const APP_PERMISSIONS = {
   TASK_UPDATE: 'task:update',
   TASK_DELETE: 'task:delete',
   // ── Special permissions (D18) and the task rules (D19) — not a table's own actions ──
-  OFFER_PRICE_BILL_BELOW: 'offer_price:bill_below',
-  LOWEST_PRICE_READ: 'lowest_price:read',
-  PRICE_MANAGE: 'price:manage',
   DAY_CLOSE_CLOSE: 'day_close:close',
   PAYMENT_REVERSE_SETTLED: 'payment:reverse_settled',
   REFUND_CREATE: 'refund:create',

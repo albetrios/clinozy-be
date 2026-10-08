@@ -342,18 +342,6 @@ src/
     │   │   │   ├── messages.service.ts
     │   │   │   ├── messages.types.ts
     │   │   │   └── messages.validator.ts
-    │   │   ├── offering-groups/
-    │   │   │   ├── offering-groups.constants.ts
-    │   │   │   ├── offering-groups.controller.ts
-    │   │   │   ├── offering-groups.dto.ts
-    │   │   │   ├── offering-groups.overview.md
-    │   │   │   ├── offering-groups.repository.ts
-    │   │   │   ├── offering-groups.routes.ts
-    │   │   │   ├── offering-groups.schema.ts
-    │   │   │   ├── offering-groups.serializer.ts
-    │   │   │   ├── offering-groups.service.ts
-    │   │   │   ├── offering-groups.types.ts
-    │   │   │   └── offering-groups.validator.ts
     │   │   ├── offering-suggestions/
     │   │   │   ├── offering-suggestions.constants.ts
     │   │   │   ├── offering-suggestions.controller.ts
@@ -367,6 +355,31 @@ src/
     │   │   │   ├── offering-suggestions.types.ts
     │   │   │   └── offering-suggestions.validator.ts
     │   │   ├── offerings/
+    │   │   │   ├── offering-groups/
+    │   │   │   │   ├── offering-groups.controller.ts
+    │   │   │   │   ├── offering-groups.dto.ts
+    │   │   │   │   ├── offering-groups.overview.md
+    │   │   │   │   ├── offering-groups.repository.ts
+    │   │   │   │   ├── offering-groups.routes.ts
+    │   │   │   │   ├── offering-groups.rules.ts
+    │   │   │   │   ├── offering-groups.schema.ts
+    │   │   │   │   ├── offering-groups.serializer.ts
+    │   │   │   │   ├── offering-groups.service.ts
+    │   │   │   │   ├── offering-groups.types.ts
+    │   │   │   │   └── offering-groups.validator.ts
+    │   │   │   ├── offers/
+    │   │   │   │   ├── offers.constants.ts
+    │   │   │   │   ├── offers.controller.ts
+    │   │   │   │   ├── offers.dto.ts
+    │   │   │   │   ├── offers.overview.md
+    │   │   │   │   ├── offers.repository.ts
+    │   │   │   │   ├── offers.routes.ts
+    │   │   │   │   ├── offers.rules.ts
+    │   │   │   │   ├── offers.schema.ts
+    │   │   │   │   ├── offers.serializer.ts
+    │   │   │   │   ├── offers.service.ts
+    │   │   │   │   ├── offers.types.ts
+    │   │   │   │   └── offers.validator.ts
     │   │   │   ├── offerings.constants.ts
     │   │   │   ├── offerings.controller.ts
     │   │   │   ├── offerings.dto.ts
@@ -379,18 +392,6 @@ src/
     │   │   │   ├── offerings.service.ts
     │   │   │   ├── offerings.types.ts
     │   │   │   └── offerings.validator.ts
-    │   │   ├── offers/
-    │   │   │   ├── offers.constants.ts
-    │   │   │   ├── offers.controller.ts
-    │   │   │   ├── offers.dto.ts
-    │   │   │   ├── offers.overview.md
-    │   │   │   ├── offers.repository.ts
-    │   │   │   ├── offers.routes.ts
-    │   │   │   ├── offers.schema.ts
-    │   │   │   ├── offers.serializer.ts
-    │   │   │   ├── offers.service.ts
-    │   │   │   ├── offers.types.ts
-    │   │   │   └── offers.validator.ts
     │   │   ├── patient-clinical-notes/
     │   │   │   ├── patient-clinical-notes.constants.ts
     │   │   │   ├── patient-clinical-notes.controller.ts
