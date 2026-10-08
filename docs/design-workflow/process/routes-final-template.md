@@ -1,27 +1,27 @@
-# Routes-final template — domains and sub-domains
+# Routes-final template — domains and nested sub-domains
 
 The shape of an iteration's route review: `iterations/<iteration>/plans/routes-final.md`, written at
-**be-iteration-planning Step 5** and confirmed by the user one module at a time
+**be-iteration-planning Step 5** and confirmed by the user one sub-domain at a time
 ([iteration guide](iteration-guide.md) › Step 4). Copy the skeleton below, replace the two invented
-modules — **Lanterns** and **Voyages** — with the iteration's own, and keep every section, even
+sub-domains — **Lanterns** and **Voyages** — with the iteration's own, and keep every section, even
 when it only says "None".
 
-The two modules mean nothing; they exist to show every handling once. The table below says where
+The two sub-domains mean nothing; they exist to show every handling once. The table below says where
 each one is.
 
 ## How the file is built
 
 | Rule | What it means |
 | --- | --- |
-| One module = one domain folder | `src/domains/app/sub-domains/<module>/`; its main record sits at the folder root, each other resource in `<module>/sub-domains/<sub-domain>/` |
-| Grouped by connection | what a record owns is a sub-domain of it (its table carries the parent's prefix and its routes nest under the parent); a module comes after every module it points at |
-| Twelve sections per module | 1 Decisions (whole module) · 2 Open questions · 3 Tables and relations · 4 Permissions · 5 Common to every route · 6 Objects returned · 7 Routes · 8 Request details · 9 Errors · 10 Rules worth knowing · 11 Code changes (whole module) · 12 Sub-domains |
-| Eleven sections per sub-domain | the first eleven, numbered `<module>.<letter>.<n>` |
-| Status | `rev n — awaiting your OK` → **`final (rev n, confirmed <date>)`** only after the user confirms that module in chat; reopening a final module bumps its rev |
-| Decisions | one id prefix per module (`LN`, `VY`), unique in the file; each decision states the recommendation and ends with "Other option: …" when there is a real alternative; "your call" marks one the user chose |
+| One folder per sub-domain | `src/domains/app/sub-domains/<sub-domain>/`; its main record sits at the folder root, each nested sub-domain is a folder directly inside it, `<sub-domain>/<nested-sub-domain>/` |
+| Grouped by connection | what a record owns is a nested sub-domain of it (its table carries the parent's prefix and its routes nest under the parent); a sub-domain comes after every sub-domain it points at |
+| Twelve sections per sub-domain | 1 Decisions (whole sub-domain) · 2 Open questions · 3 Tables and relations · 4 Permissions · 5 Common to every route · 6 Objects returned · 7 Routes · 8 Request details · 9 Errors · 10 Rules worth knowing · 11 Code changes (whole sub-domain) · 12 Nested sub-domains |
+| Eleven sections per nested sub-domain | the first eleven, numbered `<sub-domain>.<letter>.<n>` |
+| Status | `rev n — awaiting your OK` → **`final (rev n, confirmed <date>)`** only after the user confirms that sub-domain in chat; reopening a final sub-domain bumps its rev |
+| Decisions | one id prefix per sub-domain (`LN`, `VY`), unique in the file; each decision states the recommendation and ends with "Other option: …" when there is a real alternative; "your call" marks one the user chose |
 | Code changes | one id per change (`LNC1`), citing the decisions it lands |
 | Today | every decision says what the code does today, so each one reads before → after |
-| Agent-os checked up front | each module follows `be-api-contract-guard`, `be-sql-design-guard`, `be-rls-tenant-isolation-guard`, `be-workers-events` and the naming rules, so kickoff confirms the design rather than redesigning it — and where they still disagree at kickoff, agent-os wins and `AS-BUILT.md` records it |
+| Agent-os checked up front | each sub-domain follows `be-api-contract-guard`, `be-sql-design-guard`, `be-rls-tenant-isolation-guard`, `be-workers-events` and the naming rules, so kickoff confirms the design rather than redesigning it — and where they still disagree at kickoff, agent-os wins and `AS-BUILT.md` records it |
 
 ## Every handling, and where the template shows it
 
@@ -29,8 +29,8 @@ each one is.
 | --- | --- |
 | Route naming — the plural table name on top, owned resources nested, path ids `{<table singular>_id}` | 1.7, 2.7 |
 | An organization-wide list of a child (`/lantern-inspections`) beside its nested routes | 1.B.7 |
-| One code set per module in its Roles-matrix row; `<resource>:export`; a field-level code `<resource>:<field>:read` | 1.4, 2.4 |
-| A write gated by another module's code | 2.4 (`contact:read` to pick a traveller) |
+| One code set per sub-domain in its Roles-matrix row; `<resource>:export`; a field-level code `<resource>:<field>:read` | 1.4, 2.4 |
+| A write gated by another sub-domain's code | 2.4 (`contact:read` to pick a traveller) |
 | Soft delete with a reason, and restore | 1.A, 2.A |
 | A child hard-deleted with its parent's rule instead, and why | 2.B (stops) |
 | `X-Idempotency-Key` on every `POST`; `expected_updated_at` on `PATCH` | 1.5, 2.5 |
@@ -47,17 +47,17 @@ each one is.
 | Who did it: a membership pointer `ON DELETE RESTRICT` (members who leave) | 1.A.3, 1.B.3, 2.A.3 |
 | Branch rules: organization-wide, or filtered by `branch:read` | 1.A.1 LN3, 2.A.1 VY3 |
 | A file from the upload domain (`file_key`) | 1.A.3, 1.B.3 |
-| A write into another module through its service, in the same transaction | 2.10 (arrive → lantern burn) |
+| A write into another sub-domain through its service, in the same transaction | 2.10 (arrive → lantern burn) |
 | A `system` entry in the contact's activity | 2.1 VY5 |
 | Background work: pull-based, one job per organization, safe to repeat | 1.B LN9, 2.1 VY6 |
-| A task rule fed by this module | 1.B LN9 |
+| A task rule fed by this sub-domain | 1.B LN9 |
 | Errors 400 · 403 · 404 · 409 · 422 with stable reasons | every .9 |
 | Open questions, and a decision the user still has to take | 2.2 |
 | i18n keys, seeds, tests, OpenAPI tags, the route catalog | 1.11, 2.11 |
 
 ## The skeleton
 
-The file starts with a title (`# <Product> API — final routes, module by module`), a line on where
+The file starts with a title (`# <Product> API — final routes, sub-domain by sub-domain`), a line on where
 it started (branch, commit) and how to read its tables, then the parts below.
 
 ### File header — legend
@@ -66,44 +66,44 @@ How to read the tables: paths are under `/api/v1/app`; `{x_id}` is a public id; 
 permission the caller needs; **Idem** `req` = `X-Idempotency-Key` header required; `*` = required.
 Every paginated list also takes `limit` (1–100) and `after` (cursor), plus `created_from` / `created_to`.
 
-### File header — modules (in build order)
+### File header — sub-domains (in build order)
 
-Each module builds on the ones above it.
+Each sub-domain builds on the ones above it.
 
-| # | Module | Folder (`src/domains/app/sub-domains/…`) | Paths (`/app/…`) | Routes | Builds on | Status |
+| # | Sub-domain | Folder (`src/domains/app/sub-domains/…`) | Paths (`/app/…`) | Routes | Builds on | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Lanterns | `lanterns/` | `lanterns` (+ `exports`, `refuel`, `burn`, `inspections`), `lantern-inspections` | 17 | branches, team | **rev 1 — sub-domains 1.A–1.B, awaiting your OK** |
-| 2 | Voyages | `voyages/` | `voyages` (+ `exports`, `depart`, `arrive`, `cancel`, `stops`) | 14 | 1, contacts, branches, team | **rev 1 — sub-domains 2.A–2.B, awaiting your OK** |
+| 1 | Lanterns | `lanterns/` | `lanterns` (+ `exports`, `refuel`, `burn`, `inspections`), `lantern-inspections` | 17 | branches, team | **rev 1 — nested sub-domains 1.A–1.B, awaiting your OK** |
+| 2 | Voyages | `voyages/` | `voyages` (+ `exports`, `depart`, `arrive`, `cancel`, `stops`) | 14 | 1, contacts, branches, team | **rev 1 — nested sub-domains 2.A–2.B, awaiting your OK** |
 
-App total: **31 routes** — and, against today, what was added or dropped and why, one clause per module.
+App total: **31 routes** — and, against today, what was added or dropped and why, one clause per sub-domain.
 
 ### File header — code layout and tables without routes
 
-Every module is one folder, laid out like a domain; the app's shared kernel stays at `src/domains/app/`.
+Every sub-domain is one folder, laid out like a domain; the app's shared kernel stays at `src/domains/app/`.
 A table with no routes of its own is a persistence part of its parent: schema and repository (and a
 service only when it holds logic) in the parent's folder, **no controller, no routes file**; the
 parent's service writes it.
 
-| Module | Table | Lives in | Written by |
+| Sub-domain | Table | Lives in | Written by |
 | --- | --- | --- | --- |
 | 1 | `app.lantern_branches` | `lanterns/` (folder root) | the lantern service (`branch_ids`) |
 | 1 | `app.lantern_fuel_events` | `lanterns/` (folder root) | the lantern service (refuel, burn, a voyage's arrival) |
 | 2 | `app.voyage_crew` | `voyages/` (folder root) | the voyage service (`crew_membership_ids`) |
 
-### File header — rules for every module
+### File header — rules for every sub-domain
 
-Rules that hold across modules get their own section with ids (`K1`, `K2`, …) — for example what
+Rules that hold across sub-domains get their own section with ids (`K1`, `K2`, …) — for example what
 happens to every membership pointer when a member leaves — and a table of the pointers each
-module holds:
+sub-domain holds:
 
-| Module | Pointer | On delete | When the member leaves |
+| Sub-domain | Pointer | On delete | When the member leaves |
 | --- | --- | --- | --- |
 | 1 | `lanterns.keeper_membership_id`, `lantern_inspections.inspector_membership_id` | `RESTRICT` | the keeper is cleared (current link); inspections keep their inspector (history) |
 | 2 | `voyages.captain_membership_id`, `voyage_crew.membership_id` | `RESTRICT` | planned voyages lose them (current); sailed ones keep them (history) |
 
 ### File header — connections
 
-How the modules connect, in three views: who points at whom, what each row points at, and what one
+How the sub-domains connect, in three views: who points at whom, what each row points at, and what one
 action sets off.
 
 ```text
@@ -132,26 +132,26 @@ action sets off.
 
 ---
 
-## 1. Lanterns — rev 1 (YYYY-MM-DD) — sub-domains 1.A–1.B; awaiting your OK
+## 1. Lanterns — rev 1 (YYYY-MM-DD) — nested sub-domains 1.A–1.B; awaiting your OK
 
-Code: the **`lanterns` module folder** — `src/domains/app/sub-domains/lanterns/` (the lantern at the folder root) with
-`sub-domains/lantern-inspections/`.
+Code: the **`lanterns` sub-domain folder** — `app/sub-domains/lanterns/` (the lantern at the folder root) with
+`lantern-inspections/`.
 
-1.1 Decisions (whole module) · 1.2 Open questions · 1.3 Tables and relations · 1.4 Permissions · 1.5 Common to every route ·
-1.6 Objects returned · 1.7 Routes · 1.8 Request details · 1.9 Errors · 1.10 Rules worth knowing · 1.11 Code changes (whole module) ·
-1.12 Sub-domains · then **1.A Lanterns · 1.B Lantern inspections** — each with the same eleven sections.
+1.1 Decisions (whole sub-domain) · 1.2 Open questions · 1.3 Tables and relations · 1.4 Permissions · 1.5 Common to every route ·
+1.6 Objects returned · 1.7 Routes · 1.8 Request details · 1.9 Errors · 1.10 Rules worth knowing · 1.11 Code changes (whole sub-domain) ·
+1.12 Nested sub-domains · then **1.A Lanterns · 1.B Lantern inspections** — each with the same eleven sections.
 
-What the module is, in two or three lines, and the design files it reads (`<screen>.md`, `schema-routes.md` entities).
+What the sub-domain is, in two or three lines, and the design files it reads (`<screen>.md`, `schema-routes.md` entities).
 Route numbers run 1–17.
 
-### 1.1 Decisions (whole module)
+### 1.1 Decisions (whole sub-domain)
 
 Taken on your standing answer "go with the recommendation" — change any of them before you confirm. A decision that
-belongs to one table is in its sub-domain.
+belongs to one table is in its nested sub-domain.
 
 | # | Decision |
 | --- | --- |
-| LN1 | **Folder and names**: the module folder `lanterns/`; the inspections are the lantern's own — `app.inspections` → **`app.lantern_inspections`** (children carry the parent prefix), nested under `/lanterns/{lantern_id}/inspections`, with the organization-wide list at `/lantern-inspections` (the table's name). Public-id prefixes `lant_`, `linsp_`. |
+| LN1 | **Folder and names**: the sub-domain folder `lanterns/`; the inspections are the lantern's own — `app.inspections` → **`app.lantern_inspections`** (children carry the parent prefix), nested under `/lanterns/{lantern_id}/inspections`, with the organization-wide list at `/lantern-inspections` (the table's name). Public-id prefixes `lant_`, `linsp_`. |
 | LN2 | **One code set, in the Lanterns row**: `lantern:read` · `create` · `update` · `delete` · `export`, covering inspections too; `lantern:fuel_cost:read` shows the cost field (no special codes); `list:export` goes here. Holders: Owner and Admin everything; Front desk read, create, update; Accountant read, export and the cost. |
 | LN3 | **Branch rule**: a lantern belongs to one or more branches (`branch_ids`); callers see lanterns of their branches, everything with `branch:read`. Other option: organization-wide, no branch. |
 
@@ -180,18 +180,18 @@ tenancy.organizations
 A ──< B   one A has many B     A >── B   many A for one B     A ──> B   a column on A points at one B
 ```
 
-Pointing at these from other modules: `voyages.lantern_id` (2 — `ON DELETE RESTRICT`), the task source (tasks).
+Pointing at these from other sub-domains: `voyages.lantern_id` (2 — `ON DELETE RESTRICT`), the task source (tasks).
 
 **PostgreSQL design**
 
 Standard columns on every record table (not repeated below): `id bigint` (identity), `public_id varchar(28)` unique,
 `organization_id bigint` → organizations `ON DELETE CASCADE`, `created_at` / `updated_at timestamptz`,
 `created_by_user_id` / `updated_by_user_id`, and — where it soft-deletes — `deleted_at`, `delete_reason`,
-`delete_note` with their three checks; RLS enabled and forced. Each table's design is in its sub-domain.
+`delete_note` with their three checks; RLS enabled and forced. Each table's design is in its nested sub-domain.
 
 ### 1.4 Permissions
 
-All of the module's codes in one place; each sub-domain's routes repeat the gate.
+All of the sub-domain's codes in one place; each nested sub-domain's routes repeat the gate.
 
 | Code | Roles matrix | Allows | Routes | Held by default |
 | --- | --- | --- | --- | --- |
@@ -222,7 +222,7 @@ All of the module's codes in one place; each sub-domain's routes repeat the gate
 
 ### 1.7 Routes
 
-Every route of the module in one table; each sub-domain repeats its own with the details.
+Every route of the sub-domain in one table; each nested sub-domain repeats its own with the details.
 
 | # | Method | Path | Purpose | Gate | Idem |
 | --- | --- | --- | --- | --- | --- |
@@ -246,18 +246,18 @@ Every route of the module in one table; each sub-domain repeats its own with the
 
 ### 1.8 Request details
 
-In each sub-domain (1.A to 1.B, section .8).
+In each nested sub-domain (1.A to 1.B, section .8).
 
 ### 1.9 Errors
 
-Every route can answer the errors in 1.5; each route's own errors are in its sub-domain (1.A to 1.B, section .9).
+Every route can answer the errors in 1.5; each route's own errors are in its nested sub-domain (1.A to 1.B, section .9).
 
 ### 1.10 Rules worth knowing
 
-- A lantern's fuel moves only through routes 8 and 9 and a voyage's arrival (module 2) — each writes one fuel event.
+- A lantern's fuel moves only through routes 8 and 9 and a voyage's arrival (sub-domain 2) — each writes one fuel event.
 - An inspection that is passed, failed or cancelled is final; a new one is scheduled instead.
 
-### 1.11 Code changes (whole module)
+### 1.11 Code changes (whole sub-domain)
 
 | # | Change |
 | --- | --- |
@@ -265,12 +265,12 @@ Every route can answer the errors in 1.5; each route's own errors are in its sub
 | LNC2 | LN2: codes `lantern:read\|create\|update\|delete\|export` and `lantern:fuel_cost:read` (app permissions, catalog seed, role presets, the Roles matrix row with its Export column); drop `list:export` here; the hidden-field map in the lantern serializer |
 | LNC3 | LN3: `branch_ids` and the branch filter in the base list |
 
-### 1.12 Sub-domains
+### 1.12 Nested sub-domains
 
-| Sub-domain | Folder (`src/domains/app/sub-domains/lanterns/…`) | Tables | Routes | Status |
+| Nested sub-domain | Folder (`src/domains/app/sub-domains/lanterns/…`) | Tables | Routes | Status |
 | --- | --- | --- | --- | --- |
 | 1.A Lanterns | folder root | `app.lanterns`, `app.lantern_branches`, `app.lantern_fuel_events` | 1–9 | awaiting your OK |
-| 1.B Lantern inspections | `sub-domains/lantern-inspections/` | `app.lantern_inspections` | 10–17 | awaiting your OK |
+| 1.B Lantern inspections | `lantern-inspections/` | `app.lantern_inspections` | 10–17 | awaiting your OK |
 
 ---
 
@@ -393,7 +393,7 @@ None beyond 1.10.
 
 ---
 
-### 1.B Lantern inspections — `lanterns/sub-domains/lantern-inspections/` — awaiting your OK
+### 1.B Lantern inspections — `lanterns/lantern-inspections/` — awaiting your OK
 
 #### 1.B.1 Decisions
 
@@ -401,7 +401,7 @@ None beyond 1.10.
 | --- | --- |
 | LN7 | **Fields**: `inspection_date` (today or later when scheduled), `inspector_membership_id` (a live member), `report_file_key` (a confirmed upload, required to pass), `failure_reason` (1–280, required to fail). |
 | LN8 | **Status by actions only**: `scheduled` → `passed` · `failed` · `cancelled` through routes 15–17, each final; anything else → `409 transition_not_allowed`. `PATCH` works only while `scheduled` (`409 inspection_closed`). Today `status` is a field `PATCH` sets to anything. |
-| LN9 | **Due inspections become tasks**: the tasks module's rules worker (pull-based, one job per organization every 5 minutes, safe to repeat — one open task per inspection) opens an `inspection_due` task for the keeper when a scheduled inspection's date has passed, and closes it once the inspection is passed, failed or cancelled. Other option: a daily reminder message instead of a task. |
+| LN9 | **Due inspections become tasks**: the tasks sub-domain's rules worker (pull-based, one job per organization every 5 minutes, safe to repeat — one open task per inspection) opens an `inspection_due` task for the keeper when a scheduled inspection's date has passed, and closes it once the inspection is passed, failed or cancelled. Other option: a daily reminder message instead of a task. |
 
 #### 1.B.2 Open questions
 
@@ -481,7 +481,7 @@ As 1.5.
 
 #### 1.B.10 Rules worth knowing
 
-- The `inspection_due` rule (LN9) lives with the other task rules; this module only exposes what it reads (the scheduled-date index).
+- The `inspection_due` rule (LN9) lives with the other task rules; this sub-domain only exposes what it reads (the scheduled-date index).
 
 #### 1.B.11 Code changes
 
@@ -492,24 +492,24 @@ As 1.5.
 
 ---
 
-## 2. Voyages — rev 1 (YYYY-MM-DD) — sub-domains 2.A–2.B; awaiting your OK
+## 2. Voyages — rev 1 (YYYY-MM-DD) — nested sub-domains 2.A–2.B; awaiting your OK
 
-Code: the **`voyages` module folder** — `src/domains/app/sub-domains/voyages/` (the voyage at the folder root) with
-`sub-domains/voyage-stops/`.
+Code: the **`voyages` sub-domain folder** — `app/sub-domains/voyages/` (the voyage at the folder root) with
+`voyage-stops/`.
 
-2.1 Decisions (whole module) · 2.2 Open questions · 2.3 Tables and relations · 2.4 Permissions · 2.5 Common to every route ·
-2.6 Objects returned · 2.7 Routes · 2.8 Request details · 2.9 Errors · 2.10 Rules worth knowing · 2.11 Code changes (whole module) ·
-2.12 Sub-domains · then **2.A Voyages · 2.B Voyage stops** — each with the same eleven sections.
+2.1 Decisions (whole sub-domain) · 2.2 Open questions · 2.3 Tables and relations · 2.4 Permissions · 2.5 Common to every route ·
+2.6 Objects returned · 2.7 Routes · 2.8 Request details · 2.9 Errors · 2.10 Rules worth knowing · 2.11 Code changes (whole sub-domain) ·
+2.12 Nested sub-domains · then **2.A Voyages · 2.B Voyage stops** — each with the same eleven sections.
 
 A trip for one contact, on one branch, carrying one lantern. Route numbers run 1–14.
 
-### 2.1 Decisions (whole module)
+### 2.1 Decisions (whole sub-domain)
 
 Taken on your standing answer "go with the recommendation" — change any of them before you confirm.
 
 | # | Decision |
 | --- | --- |
-| VY1 | **Folder and names**: the module folder `voyages/`; stops are the voyage's own — `app.voyage_stops`, nested under `/voyages/{voyage_id}/stops`; the crew is a link table with no routes (`app.voyage_crew`). Prefixes `voy_`, `vstp_`. |
+| VY1 | **Folder and names**: the sub-domain folder `voyages/`; stops are the voyage's own — `app.voyage_stops`, nested under `/voyages/{voyage_id}/stops`; the crew is a link table with no routes (`app.voyage_crew`). Prefixes `voy_`, `vstp_`. |
 | VY2 | **One code set, in the Voyages row**: `voyage:read` · `create` · `update` · `delete` · `export`; `voyage:fare:read` shows `fare`, `paid_amount` and `due_amount`. Picking a traveller also needs `contact:read` (contacts). |
 | VY3 | **Branch rule**: a voyage has one branch, fixed once created; lists filter to your branches, everything with `branch:read`. |
 | VY4 | **Who travels is a contact** — `contact_id` → contacts `ON DELETE RESTRICT`, so a contact with a voyage can't be deleted. |
@@ -541,11 +541,11 @@ tenancy.organizations
                       └──< app.voyage_stops ──> app.branches | app.contacts           one of the two (VY11)
 ```
 
-Pointing at these from other modules: `lantern_fuel_events.voyage_id` (1), `contact_activities.voyage_id` (activity), the task source (tasks).
+Pointing at these from other sub-domains: `lantern_fuel_events.voyage_id` (1), `contact_activities.voyage_id` (activity), the task source (tasks).
 
 **PostgreSQL design**
 
-The standard columns as 1.3. `CREATE EXTENSION IF NOT EXISTS btree_gist` for the exclusion constraint. Each table's design is in its sub-domain.
+The standard columns as 1.3. `CREATE EXTENSION IF NOT EXISTS btree_gist` for the exclusion constraint. Each table's design is in its nested sub-domain.
 
 ### 2.4 Permissions
 
@@ -590,18 +590,18 @@ As 1.5.
 
 ### 2.8 Request details
 
-In each sub-domain (2.A to 2.B, section .8).
+In each nested sub-domain (2.A to 2.B, section .8).
 
 ### 2.9 Errors
 
-Every route can answer the errors in 1.5; each route's own errors are in its sub-domain (2.A to 2.B, section .9).
+Every route can answer the errors in 1.5; each route's own errors are in its nested sub-domain (2.A to 2.B, section .9).
 
 ### 2.10 Rules worth knowing
 
-- **Arriving writes into module 1 through its service**, in the same transaction: the lanterns service burns `fuel_used` and writes a `voyage` fuel event (1.A, LN5) — never the voyage repository touching lantern tables. Not enough fuel → `409 not_enough_fuel` and nothing is saved.
-- Money: `paid_amount` is kept by the payments module's writes (a payment may name the voyage), `due_amount` is generated.
+- **Arriving writes into sub-domain 1 through its service**, in the same transaction: the lanterns service burns `fuel_used` and writes a `voyage` fuel event (1.A, LN5) — never the voyage repository touching lantern tables. Not enough fuel → `409 not_enough_fuel` and nothing is saved.
+- Money: `paid_amount` is kept by the payments sub-domain's writes (a payment may name the voyage), `due_amount` is generated.
 
-### 2.11 Code changes (whole module)
+### 2.11 Code changes (whole sub-domain)
 
 | # | Change |
 | --- | --- |
@@ -612,12 +612,12 @@ Every route can answer the errors in 1.5; each route's own errors are in its sub
 | VYC5 | VY6: the reminder worker under `voyages/workers/` (registered in the queue bootstrap and scheduler, DLQ, a test that a repeat sends nothing twice); `reminded_at`; the message template key in i18n |
 | VYC6 | Seeds: reference — none; bulk — voyages per branch with stops (`voyages/seed/`); the route catalog, success statuses and OpenAPI examples regenerated |
 
-### 2.12 Sub-domains
+### 2.12 Nested sub-domains
 
-| Sub-domain | Folder (`src/domains/app/sub-domains/voyages/…`) | Tables | Routes | Status |
+| Nested sub-domain | Folder (`src/domains/app/sub-domains/voyages/…`) | Tables | Routes | Status |
 | --- | --- | --- | --- | --- |
 | 2.A Voyages | folder root | `app.voyages`, `app.voyage_crew` | 1–10 | awaiting your OK |
-| 2.B Voyage stops | `sub-domains/voyage-stops/` | `app.voyage_stops` | 11–14 | awaiting your OK |
+| 2.B Voyage stops | `voyage-stops/` | `app.voyage_stops` | 11–14 | awaiting your OK |
 
 ---
 
@@ -745,14 +745,14 @@ None beyond 2.10.
 
 ---
 
-### 2.B Voyage stops — `voyages/sub-domains/voyage-stops/` — awaiting your OK
+### 2.B Voyage stops — `voyages/voyage-stops/` — awaiting your OK
 
 #### 2.B.1 Decisions
 
 | # | Decision |
 | --- | --- |
 | VY11 | **A stop is a branch or a contact's address — exactly one**: typed nullable links `branch_id` and `contact_id` with `CHECK (num_nonnulls(branch_id, contact_id) = 1)`, instead of a `place_type` + `place_id` pair the database can't check. |
-| VY12 | **Order and lifecycle**: `stop_number` 1–20, unique per voyage, renumbered by the server on add, move and remove. Stops change only while the voyage is `planned` (`409 voyage_not_planned`). A removed stop is **deleted, not soft-deleted** — it is part of an unsailed plan with nothing pointing at it, and it goes with its voyage's own delete (VY10) — the one exception to soft delete in the module. |
+| VY12 | **Order and lifecycle**: `stop_number` 1–20, unique per voyage, renumbered by the server on add, move and remove. Stops change only while the voyage is `planned` (`409 voyage_not_planned`). A removed stop is **deleted, not soft-deleted** — it is part of an unsailed plan with nothing pointing at it, and it goes with its voyage's own delete (VY10) — the one exception to soft delete in the sub-domain. |
 
 #### 2.B.2 Open questions
 
@@ -830,11 +830,11 @@ None beyond 2.10.
 
 ---
 
-## Before you hand a module over for its OK
+## Before you hand a sub-domain over for its OK
 
-- Every table row has its header's number of columns; every module has sections 1–12 and every sub-domain 1–11.
+- Every table row has its header's number of columns; every sub-domain has sections 1–12 and every nested sub-domain 1–11.
 - No decision or code-change id is used twice, and every id the text cites exists.
-- The route numbers run without gaps; the module's count matches the modules table and the app total.
+- The route numbers run without gaps; the sub-domain's count matches the sub-domains table and the app total.
 - Every route has a gate and an Idem cell; every `POST` is `req`.
 - Every table states its RLS, its branch rule and every membership pointer's `ON DELETE`.
-- `plans/route-changes.md`, `plans/db-changes.md` and `plans/worker-changes.md` say the same as the module.
+- `plans/route-changes.md`, `plans/db-changes.md` and `plans/worker-changes.md` say the same as the sub-domain.

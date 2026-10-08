@@ -39,7 +39,7 @@ src/domains/<domain>/              # domain = DB schema
         __tests__/unit/
 ```
 
-**Nested sub-domains:** A sub-domain may contain another sub-domain folder when the child is an aggregate (lifecycle tied to parent). Examples: `sub-domains/webhook/webhook-event/`, `sub-domains/organization/organization-api-key/`, `sub-domains/membership/member-invitation/`. Import: `@/domains/<domain>/sub-domains/<parent>/<nested>/...`.
+**Nested sub-domains:** A sub-domain may contain another sub-domain folder when the child is an aggregate (lifecycle tied to parent). Examples: `sub-domains/webhook/webhook-event/`, `sub-domains/organization/organization-api-key/`, `sub-domains/membership/membership-invitation/`. Import: `@/domains/<domain>/sub-domains/<parent>/<nested>/...`.
 
 ### 1.2 Domain and sub-domain mapping
 
@@ -48,7 +48,7 @@ src/domains/<domain>/              # domain = DB schema
 | **audit**       | (single domain, no sub-domains)                                                                                                                                                 |
 | **auth**        | auth-method (email verification-code, oauth; verification-token nested persistence module), auth-session, auth-mfa, auth-mfa-session (Redis MFA challenge-ticket store), auth-webauthn        |
 | **user**        | user-settings, user-notification-preferences, user-data-export                                                                                                                  |
-| **tenancy**     | organization (organization-settings, organization-notification-policy, organization-api-key), membership (member-invitation, membership-additional-roles), member-roles (member-role-permission), permission |
+| **tenancy**     | organization (organization-settings, organization-notification-policy, organization-api-key), membership (membership-invitation, membership-additional-roles), member-roles (member-role-permission), permission |
 | **billing**     | plan, subscription, stripe-webhook                                                                                                                                              |
 | **notify**      | notification, webhook (webhook-event, webhook-delivery)                                                                                                                          |
 | **upload**      | (single domain, no sub-domains)                                                                                                                                                 |
@@ -62,8 +62,8 @@ src/domains/<domain>/              # domain = DB schema
 | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Sibling resources** — direct children of `sub-domains/`                     | `sub-domains/plan/`, `sub-domains/subscription/`, `sub-domains/permission/`                                                                       |
 | **Nested sub-domains** — folders inside a parent sub-domain                   | `sub-domains/webhook/webhook-event/`                                                                                                              |
-| **Organization / membership / member-roles children**                         | `sub-domains/organization/organization-api-key/`, `sub-domains/membership/member-invitation/`, `sub-domains/member-roles/member-role-permission/` |
-| **Prefix** multi-word names with domain/resource name                         | `organization-settings`, `member-invitation`, `webhook-event`                                                                                     |
+| **Organization / membership / member-roles children**                         | `sub-domains/organization/organization-api-key/`, `sub-domains/membership/membership-invitation/`, `sub-domains/member-roles/member-role-permission/` |
+| **Prefix** multi-word names with domain/resource name                         | `organization-settings`, `membership-invitation`, `webhook-event`                                                                                     |
 | **Implementation modules** (not separate API resources) stay in parent folder | `auth-method/email-login.service.ts`, `auth-method/oauth/` — not extra folders unless a public resource                                            |
 | Prefer depth ≤ 4 under `domains/<domain>/` for new work                       | Flatten if a nested folder has no distinct routes or tests                                                                                        |
 
@@ -125,7 +125,7 @@ app.get(
 | Domain test factories     | `<domain>/__tests__/factories/`                                                     | `tenancy/__tests__/factories/permission.factory.ts`                              |
 | Sub-domain unit           | `sub-domains/<r>/__tests__/unit/` or `sub-domains/<parent>/<child>/__tests__/unit/` | `plan.validator.unit.test.ts`, `organization-api-key.validator.unit.test.ts`               |
 | Sub-domain e2e (optional) | `sub-domains/<parent>/<child>/__tests__/<child>.test.ts`                            | `organization-api-key.test.ts`                                                   |
-| Event handlers / emit     | `sub-domains/<r>/__tests__/unit/events/`                                                 | `auth-method.event-handlers.unit.test.ts`, `member-invitation.event-handlers.unit.test.ts` |
+| Event handlers / emit     | `sub-domains/<r>/__tests__/unit/events/`                                                 | `auth-method.event-handlers.unit.test.ts`, `membership-invitation.event-handlers.unit.test.ts` |
 
 Do **not** add per-sub-domain `factories/` unless the helper is truly local; prefer `src/tests/factories/` or domain `__tests__/factories/`. Full pyramid and commands: **`.cursor/skills/be-test-generator/SKILL.md`** and **`.cursor/rules/be-testing-conventions.mdc`**.
 
@@ -278,7 +278,7 @@ Domain folder = DB schema; each **sub-domain** is a folder with its own controll
   - Notification policies: `GET|POST /api/v1/tenancy/organization/notification-policies`, `PATCH|DELETE .../notification-policies/:notification_policy_id`.
   - Roles: `GET|POST /api/v1/tenancy/organization/roles`, `GET|PATCH|DELETE .../roles/:role_id`; role permissions `GET|PUT .../roles/:role_id/permissions`.
   - Memberships: `GET|POST /api/v1/tenancy/organization/memberships`, `GET|PATCH|DELETE .../memberships/:membership_id`; `POST /api/v1/tenancy/organization/leave`, `POST /api/v1/tenancy/organization/transfer-ownership`.
-  - Invitations: `POST .../invitations/:invitation_id/resend`, `DELETE .../invitations/:invitation_id` (invites are created via `POST .../organization/memberships`); cross-organization accept is account-level: `POST /api/v1/tenancy/invitations/:invitation_id/accept`.
+  - Invitations: `POST .../memberships/:membership_id/invitation/resend`, `DELETE .../memberships/:membership_id/invitation` (invites are created via `POST .../organization/memberships`); cross-organization accept is account-level: `POST /api/v1/tenancy/membership-invitations/:membership_invitation_id/accept`.
   - Permissions (global): `GET /api/v1/tenancy/permissions`.
 
 All `:id` params are **public_id**. Organization **slug** is unique; `getBySlug(slug)` returns same shape as the active-organization get.
@@ -313,7 +313,7 @@ An organization has an immutable `type` — `PERSONAL` (single-owner workspace) 
 ## 5. Conventions summary
 
 - **Domain folders = DB schemas:** Six Postgres schemas: `auth`, `tenancy`, `billing`, `notify`, `audit`, `upload` — each named after its domain folder. Seven domain folders total: `user` has no dedicated schema (its `users` table lives in `auth`).
-- **URL path segments:** Plural, kebab-case (e.g. `member-invitations`, `audit-logs`).
+- **URL path segments:** Plural, kebab-case (e.g. `membership-invitations`, `audit-logs`).
 - **IDs in URLs:** Always **public_id** (21-char NanoID/ULID). Response bodies use `id` for public_id.
 - **Body field casing:** Request body and response body property keys are **snake_case** (`file_name`, `created_at`, `avatar_key`) — matching the DB columns and the `meta`/`pagination` envelope; the single external identifier is `id`. Validation `error.errors[].field` values are snake_case too. Internal TypeScript identifiers may stay camelCase. Verbatim third-party / browser-native payloads (Stripe webhooks, OAuth, WebAuthn W3C JSON) and JWT claims are the only exceptions. Enforced by `src/tests/unit/api/snake-case-body-keys.policy.unit.test.ts`.
 - **API prefix:** `/api/v1/`.

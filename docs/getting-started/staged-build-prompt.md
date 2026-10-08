@@ -33,8 +33,8 @@ If I give feedback, revise ONLY the current stage deliverable and re-submit it f
 
 GLOBAL WORKING RULES (apply in every stage)
 - Scope control:
-- Never touch/modify tables or domain modules unrelated to this feature.
-- If a requirement seems to need extra tables/relations or another domain module, do NOT create those. Instead: flag it as a decision question and pause for my choice.
+- Never touch/modify tables, domains or sub-domains unrelated to this feature.
+- If a requirement seems to need extra tables/relations or another domain or sub-domain, do NOT create those. Instead: flag it as a decision question and pause for my choice.
 - Clarify over guessing:
 - Ask a concise question when missing/contradictory details affect integrity/security.
 - API contract + messages:
@@ -96,7 +96,7 @@ Requirements:
 - Include all implied routes (pagination, filtering, searching, sorting, status transitions, restore/archive, bulk operations, idempotent endpoints) only if applicable to the feature.
 - Keep every route strictly within the approved feature scope.
 - Reuse existing authentication and permission conventions.
-- Do not invent routes for other modules or resources.
+- Do not invent routes for other sub-domains or resources.
 
 STRICT RULES:
 - Output ONLY the table.
@@ -107,7 +107,7 @@ STRICT RULES:
 - Do NOT include implementation details.
 - Do NOT include assumptions or notes.
 
-If any route requires another domain, table, or module, stop and ask for clarification instead of creating the route.
+If any route requires another domain, sub-domain or table, stop and ask for clarification instead of creating the route.
 
 Stop after Stage 2 and wait for my approval before proceeding to Stage 3.
 ========================

@@ -4,7 +4,7 @@ import {
   findMembershipWorkingDays,
 } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
-import { BranchHolidaysRepository } from '@/domains/app/sub-domains/branch-holidays/branch-holidays.repository.js';
+import { BranchHolidaysRepository } from '@/domains/app/sub-domains/branches/branch-holidays/branch-holidays.repository.js';
 import { LeadsRepository } from '@/domains/app/sub-domains/leads/leads.repository.js';
 import { VisitsRepository } from '@/domains/app/sub-domains/visits/visits.repository.js';
 import {
@@ -45,14 +45,14 @@ const SLOT_FIELDS = [
   'start_time',
   'duration_minutes',
   'doctor_membership_id',
-  'room_id',
-  'machine_id',
+  'branch_room_id',
+  'branch_machine_id',
 ] as const;
 /** The resources a slot must be clear for, with the name a `slot_taken` answer gives. */
 const SLOT_RESOURCES = [
   { column: 'doctor_membership_id', resource: 'doctor' },
-  { column: 'room_id', resource: 'room' },
-  { column: 'machine_id', resource: 'machine' },
+  { column: 'branch_room_id', resource: 'room' },
+  { column: 'branch_machine_id', resource: 'machine' },
 ] as const;
 /** The grid walk-ins snap to and slots start on by default (minutes). */
 const WALK_IN_GRID_MINUTES = 5;
@@ -416,8 +416,8 @@ export const appointmentsRules: BaseRecordRules = {
         service_label: existing.service_label,
         doctor_membership_id: existing.doctor_membership_id,
         therapist_membership_id: existing.therapist_membership_id,
-        room_id: existing.room_id,
-        machine_id: existing.machine_id,
+        branch_room_id: existing.branch_room_id,
+        branch_machine_id: existing.branch_machine_id,
         duration_minutes: existing.duration_minutes,
         reason: existing.reason,
         appointment_date: input.appointment_date,
@@ -439,8 +439,8 @@ export const appointmentsRules: BaseRecordRules = {
       const references: Record<string, unknown> = {
         branch_id: input.branch_id,
         doctor_membership_id: input.doctor_membership_id,
-        room_id: input.room_id,
-        machine_id: input.machine_id,
+        branch_room_id: input.branch_room_id,
+        branch_machine_id: input.branch_machine_id,
       };
       await resolveReferences(references);
       const branchId = Number(references.branch_id);
@@ -474,8 +474,8 @@ export const appointmentsRules: BaseRecordRules = {
         durationMinutes: duration,
         resources: {
           doctor_membership_id: idOf(references.doctor_membership_id),
-          room_id: idOf(references.room_id),
-          machine_id: idOf(references.machine_id),
+          branch_room_id: idOf(references.branch_room_id),
+          branch_machine_id: idOf(references.branch_machine_id),
         },
       });
       const slots: { start_time: string; end_time: string }[] = [];

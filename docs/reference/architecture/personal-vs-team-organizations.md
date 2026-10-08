@@ -181,7 +181,7 @@ leave, transfer-ownership). Other domains hang directly off the claim: `/api/v1/
 Account-level routes stay **plural** because they are not scoped to one active organization:
 `POST /api/v1/tenancy/organizations` (create a team organization),
 `GET /api/v1/tenancy/organizations/by-slug/{slug}`, and the cross-organization invitation accept action
-`POST /api/v1/tenancy/invitations/{invitation_id}/accept`.
+`POST /api/v1/tenancy/membership-invitations/{membership_invitation_id}/accept`.
 
 ## Implementation status
 

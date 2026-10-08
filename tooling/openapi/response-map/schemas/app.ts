@@ -92,7 +92,7 @@ export const branchSummaryExample = {
 };
 
 // ── Branch user access ──
-export const branchUserAccessSchema = {
+export const branchMemberSchema = {
   type: 'object',
   properties: {
     membership_id: { type: 'string' },
@@ -100,36 +100,40 @@ export const branchUserAccessSchema = {
   },
 };
 
-export const branchUserAccessExample = {
+export const branchMemberExample = {
   membership_id: 'mem_a1s2d3f4g5h6j7k8l9z0x',
   created_at: '2026-10-07T09:00:00.000Z',
 };
 
-/** `AppUserOutput` — one active team member (`GET /app/users`). */
-export const appUserSchema = {
+/** `AppMembershipOutput` — one team member in the picker and directory (`GET /app/memberships`). */
+export const appMembershipSchema = {
   type: 'object',
   properties: {
-    id: { type: 'string', description: 'The membership (`mbr_…`)' },
+    id: { type: 'string', description: 'The membership (`mem_…`)' },
     user_id: { type: 'string' },
-    name: { type: 'string' },
+    display_name: { type: 'string', description: 'The name the organization keeps' },
     avatar_url: { type: 'string', nullable: true },
     staff_number: { type: 'integer' },
     tone: { type: 'string' },
     role_ids: { type: 'array', items: { type: 'string' } },
     branch_ids: { type: 'array', items: { type: 'string' } },
+    is_active: { type: 'boolean', description: 'Live and active — what a picker offers' },
+    ended_at: { type: 'string', format: 'date-time', nullable: true },
   },
 };
 
-/** Example `AppUserOutput`. */
-export const appUserExample = {
-  id: 'mbr_k7x9m2pqr4w8n1v3a1b2c',
+/** Example `AppMembershipOutput`. */
+export const appMembershipExample = {
+  id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
   user_id: 'usr_a1b2c3d4e5f6g7h8i9j0k',
-  name: 'Dr. Mehta',
+  display_name: 'Dr. Mehta',
   avatar_url: null,
   staff_number: 3,
   tone: 'sky',
   role_ids: ['rol_w3o6gphad7e9bvudnyovy'],
   branch_ids: ['brn_q4w8e2r6t1y5u9i3o7p0a'],
+  is_active: true,
+  ended_at: null,
 };
 
 /** `ContactOutput` — a patient, lead or walk-in buyer (`GET /app/contacts`). */

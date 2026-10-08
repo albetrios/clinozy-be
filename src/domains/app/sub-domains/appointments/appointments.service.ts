@@ -4,12 +4,12 @@ import { ValidationError } from '@/shared/errors/index.js';
 import { appointments } from './appointments.schema.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
-import { machines } from '@/domains/app/sub-domains/machines/machines.schema.js';
+import { branch_machines } from '@/domains/app/sub-domains/branches/branch-machines/branch-machines.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
 import { patient_packages } from '@/domains/app/sub-domains/patient-packages/patient-packages.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
-import { rooms } from '@/domains/app/sub-domains/rooms/rooms.schema.js';
+import { branch_rooms } from '@/domains/app/sub-domains/branches/branch-rooms/branch-rooms.schema.js';
 import type { AppointmentsRepository } from './appointments.repository.js';
 import { serializeAppointment } from './appointments.serializer.js';
 import type { AppointmentOutput } from './appointments.types.js';
@@ -48,8 +48,8 @@ export class AppointmentsService extends BaseRecordService<AppointmentOutput> {
         { field: 'offering_id', table: offerings, label: 'offering' },
         { field: 'doctor_membership_id', table: memberships, label: 'team member' },
         { field: 'therapist_membership_id', table: memberships, label: 'team member' },
-        { field: 'room_id', table: rooms, label: 'room' },
-        { field: 'machine_id', table: machines, label: 'machine' },
+        { field: 'branch_room_id', table: branch_rooms, label: 'room' },
+        { field: 'branch_machine_id', table: branch_machines, label: 'machine' },
         { field: 'copied_from_appointment_id', table: appointments, label: 'appointment' },
         { field: 'patient_package_id', table: patient_packages, label: 'patient package' },
       ],

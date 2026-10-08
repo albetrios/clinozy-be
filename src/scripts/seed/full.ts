@@ -4,13 +4,14 @@
  *
  * Usage: pnpm db:seed:full
  */
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import '@/shared/config/load-env-files.js';
 import '@/scripts/seed/seed-runtime-url.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
   seedBranch,
-  seedBranchUserAccess,
+  seedBranchMember,
 } from '@/domains/app/sub-domains/branches/seed/branches.seed.js';
 import { closeDatabase } from './helpers.js';
 import {
@@ -24,7 +25,7 @@ import {
   seedRole,
   seedMembership,
   seedRolePermissions,
-  seedMemberInvitation,
+  seedMembershipInvitation,
 } from '@/domains/tenancy/seed/tenancy.seed.js';
 import {
   initFakerSeed,
@@ -96,7 +97,7 @@ export async function runFullSeed(): Promise<void> {
     user_id: demoUser.id,
     organization_id: demoOrganization.id,
     role_id: adminRole.id,
-    status: 'ACTIVE',
+    status: MEMBERSHIP_STATUS.ACTIVE,
     created_by_user_id: demoUser.id,
   });
   logger.info('seed.full: demo membership created');
@@ -110,7 +111,7 @@ export async function runFullSeed(): Promise<void> {
       organization_id: demoOrganization.id,
       created_by_user_id: demoUser.id,
     });
-    await seedBranchUserAccess({
+    await seedBranchMember({
       branch_id: branchId,
       organization_id: demoOrganization.id,
       user_id: demoUser.id,
@@ -138,7 +139,7 @@ export async function runFullSeed(): Promise<void> {
           user_id: extraUser.id,
           organization_id: extraOrg.id,
           role_id: memberRole.id,
-          status: 'ACTIVE',
+          status: MEMBERSHIP_STATUS.ACTIVE,
           created_by_user_id: demoUser.id,
         });
         logger.info('seed.full: extra user added to extra organization (common flow)');
@@ -157,7 +158,7 @@ export async function runFullSeed(): Promise<void> {
       user_id: inviteeUser.id,
       organization_id: demoOrganization.id,
       role_id: adminRole.id,
-      status: 'INVITED',
+      status: MEMBERSHIP_STATUS.INVITED,
       created_by_user_id: demoUser.id,
     });
     if (invitedMembership) {
@@ -166,7 +167,7 @@ export async function runFullSeed(): Promise<void> {
         .digest('hex');
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7);
-      await seedMemberInvitation({
+      await seedMembershipInvitation({
         membership_id: invitedMembership.id,
         email: inviteeEmail,
         token_hash: tokenHash,

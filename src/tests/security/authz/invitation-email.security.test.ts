@@ -15,7 +15,7 @@ import {
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { database } from '@/infrastructure/database/connection.js';
-import { member_invitations } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.schema.js';
+import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
 
 /**
  * Invitation email-binding matrix — model `email` in
@@ -64,9 +64,9 @@ describe('Security: invitation email-binding matrix (model: email)', () => {
       status: 'INVITED',
     });
     const [invitation] = await database
-      .insert(member_invitations)
+      .insert(membership_invitations)
       .values({
-        public_id: generatePublicId('memberInvitation'),
+        public_id: generatePublicId('membershipInvitation'),
         membership_id: membership.id,
         email: inviteeEmail,
         token_hash: createHash('sha256').update(RAW_INVITATION_TOKEN).digest('hex'),
@@ -95,8 +95,8 @@ describe('Security: invitation email-binding matrix (model: email)', () => {
     expect(res.statusCode).toBe(403);
     const [row] = await database
       .select()
-      .from(member_invitations)
-      .where(eq(member_invitations.public_id, invitation.public_id));
+      .from(membership_invitations)
+      .where(eq(membership_invitations.public_id, invitation.public_id));
     expect(row?.accepted_at).toBeNull();
   });
 });

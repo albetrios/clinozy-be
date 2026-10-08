@@ -4,20 +4,25 @@ import { trimmedEmail, trimmedStringMinMax } from '@/shared/utils/validation/val
 import {
   addEndAfterStartIssue,
   chipToneSchema,
+  expectedUpdatedAtSchema,
   hourMinuteSchema,
   phoneNumberSchema,
   recordDeleteQuerySchema,
+  recordIdSchema,
   workingDaysSchema,
 } from '@/shared/utils/validation/record-fields.util.js';
 import {
   MEMBERSHIP_COMMISSION_PERCENT_MAX,
+  MEMBERSHIP_DISPLAY_NAME_MAX_LENGTH,
   MEMBERSHIP_ROLE_IDS_MAX,
+  MEMBERSHIP_STATUS,
+  MEMBERSHIP_STATUS_VALUES,
 } from './membership.constants.js';
 
 /** Zod schema for the `:membership_id` path param (get/get-permissions/update/delete membership). */
 export const membershipIdParamsDto = z
   .object({
-    membership_id: trimmedStringMinMax(1, 28),
+    membership_id: recordIdSchema,
   })
   .strict();
 
@@ -84,19 +89,24 @@ export const createMembershipDto = z
   .superRefine(workEndsAfterStarts);
 
 /**
- * Zod schema for the `PATCH /organization/memberships/:membership_id`
- * request body: the membership `status`, its roles (`role_ids` replaces the whole
- * list, main first) and any staff profile field (`branch_ids` replaces the whole
- * list; `phone: null` clears it). At least one field must be provided.
+ * Zod schema for the `PATCH /organization/memberships/:membership_id` request body (launch §2.B.8):
+ * for a live member, the `status` (`active` ↔ `suspended` only, T10), its roles (`role_ids` replaces
+ * the whole list, main first) and any staff profile field (`branch_ids` replaces the whole list;
+ * `phone: null` clears it); for an ended member, `display_name` only (K6, D58). At least one field
+ * besides `expected_updated_at` (T14) must be provided — the service enforces which ones apply.
  */
 export const updateMembershipDto = z
   .object({
-    status: z.enum(['INVITED', 'ACTIVE', 'SUSPENDED']).optional(),
+    status: z.enum([MEMBERSHIP_STATUS.ACTIVE, MEMBERSHIP_STATUS.SUSPENDED]).optional(),
     role_ids: roleIds.optional(),
+    display_name: trimmedStringMinMax(1, MEMBERSHIP_DISPLAY_NAME_MAX_LENGTH).optional(),
+    expected_updated_at: expectedUpdatedAtSchema,
     ...staffProfileFields,
   })
   .strict()
-  .refine((value) => Object.keys(value).length > 0, { message: 'Send at least one field' })
+  .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
+    message: 'Send at least one field',
+  })
   .superRefine(workEndsAfterStarts);
 
 /**
@@ -106,16 +116,20 @@ export const updateMembershipDto = z
 export const deleteMembershipQueryDto = recordDeleteQuerySchema;
 
 /**
- * Zod schema for the `GET /organization/memberships` list query: cursor pagination plus optional
- * `q` (free-text search over the member's email / first name / last name), `sort` (`name` |
- * `created_at`), and `order` (`asc` | `desc`). Brings memberships to parity with the roles / api-key
- * lists (`listSearchSortSchema`) so the FE can sort the members table server-side. `sort` / `order`
- * are `.optional()` (a defaulted param serializes as `required`, a breaking contract change); the
- * repository defaults to `created_at` ascending to preserve the pre-sort ordering. Sorting by `name`
- * orders by the member's `auth.users` display name and is resolved through a SECURITY DEFINER
- * function (that table is FORCE RLS — a plain join under organization-only context matches zero rows).
+ * Zod schema for the `GET /organization/memberships` list query (launch §2.B.8): cursor pagination,
+ * `q` (the member's name or email), `sort` (`name` — the membership's `display_name` — or
+ * `created_at`, the default), `order`, and the filters `status`, `role_id` (main or extra role),
+ * `branch_id` (T2) and `include_ended` (ended members too, D58). `sort` / `order` stay optional (a
+ * defaulted param serializes as `required` in OpenAPI).
  */
-export const listMembershipsQueryDto = listSearchSortSchema(['name', 'created_at'] as const);
+export const listMembershipsQueryDto = listSearchSortSchema(['name', 'created_at'] as const)
+  .extend({
+    status: z.enum(MEMBERSHIP_STATUS_VALUES).optional(),
+    role_id: recordIdSchema.optional(),
+    branch_id: recordIdSchema.optional(),
+    include_ended: z.enum(['true', 'false']).optional().default('false'),
+  })
+  .strict();
 
 /**
  * Zod schema for the `POST /organization/transfer-ownership` request

@@ -26,6 +26,8 @@ async function registerDomainContainers(application: FastifyInstance): Promise<v
     userDataExportService: application.userDomain.userDataExportService,
     // route-audit-#2 follow-up: block deleting a user who still owns organizations.
     organizationOwnership: application.tenancyDomain.organizationService,
+    // Launch K6: deleting the account ends every membership of the login.
+    membershipOffboarding: application.tenancyDomain.membershipService,
   });
 
   application.tenancyDomain.organizationService.wireOffboardingUploadService(
@@ -40,14 +42,14 @@ async function registerDomainContainers(application: FastifyInstance): Promise<v
   // Launch ROUTE #4: the app domain is built on the membership service, so the member invite and
   // edit reach the branch access (`branch_ids`) through a late-wired port.
   application.tenancyDomain.membershipService.wireBranchAccess(
-    application.appDomain.branchUserAccessesService,
+    application.appDomain.branchMembersService,
+  );
+  // Launch K4: ending a membership (removal, leaving, account deletion) also runs the app's part
+  // of the leave step in the same transaction.
+  application.tenancyDomain.membershipService.wireLeaveStep(
+    application.appDomain.membershipLeaveStep,
   );
   application.tenancyDomain.membershipService.wireSeatEnforcement(
-    application.billingDomain.subscriptionService,
-  );
-  // REQ-4: revoking an invitation frees the seat it was holding, so the invitation service needs
-  // the same port to report it (see MemberInvitationService.wireSeatQuantitySync).
-  application.tenancyDomain.memberInvitationService.wireSeatQuantitySync(
     application.billingDomain.subscriptionService,
   );
 

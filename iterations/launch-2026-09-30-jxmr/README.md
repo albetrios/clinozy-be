@@ -8,7 +8,7 @@
 | Opened | 2026-09-30 |
 | Branch | docs/legacy-prd-import |
 | Baseline | none |
-| Status | approved |
+| Status | implementing |
 | Summary | Full clinic app: 12 screens, 93 routes, 40 entities |
 | Drop placed | 2026-10-03 |
 | Drop source | ~/projects/clinozy/clinozy-fe/iterations/launch-2026-09-30-jxmr/intake-files |
@@ -28,3 +28,7 @@
 - 2026-10-08 · approved → planning · build ditto the route review; done rows re-done per routes-final; medical store untouched (user 2026-10-08) · Claude
 - 2026-10-08 · planning → ready-for-approval · — · Claude
 - 2026-10-08 · ready-for-approval → approved · — · Claude
+- 2026-10-08 · approved → planning · Naming: one vocabulary with the code — domain → sub-domain → nested sub-domain; nested sub-domains sit in their parent folder (D54) · Claude
+- 2026-10-08 · planning → ready-for-approval · — · Claude
+- 2026-10-08 · ready-for-approval → approved · — · Claude
+- 2026-10-08 · approved → implementing · — · Claude

@@ -3,12 +3,12 @@ import { SavedViewsRepository } from './sub-domains/saved-views/saved-views.repo
 import { SavedViewsService } from './sub-domains/saved-views/saved-views.service.js';
 import { OfferingGroupsRepository } from './sub-domains/offering-groups/offering-groups.repository.js';
 import { OfferingGroupsService } from './sub-domains/offering-groups/offering-groups.service.js';
-import { RoomsRepository } from './sub-domains/rooms/rooms.repository.js';
-import { RoomsService } from './sub-domains/rooms/rooms.service.js';
-import { MachinesRepository } from './sub-domains/machines/machines.repository.js';
-import { MachinesService } from './sub-domains/machines/machines.service.js';
-import { BranchHolidaysRepository } from './sub-domains/branch-holidays/branch-holidays.repository.js';
-import { BranchHolidaysService } from './sub-domains/branch-holidays/branch-holidays.service.js';
+import { BranchRoomsRepository } from './sub-domains/branches/branch-rooms/branch-rooms.repository.js';
+import { BranchRoomsService } from './sub-domains/branches/branch-rooms/branch-rooms.service.js';
+import { BranchMachinesRepository } from './sub-domains/branches/branch-machines/branch-machines.repository.js';
+import { BranchMachinesService } from './sub-domains/branches/branch-machines/branch-machines.service.js';
+import { BranchHolidaysRepository } from './sub-domains/branches/branch-holidays/branch-holidays.repository.js';
+import { BranchHolidaysService } from './sub-domains/branches/branch-holidays/branch-holidays.service.js';
 import { OfferingsRepository } from './sub-domains/offerings/offerings.repository.js';
 import { OfferingsService } from './sub-domains/offerings/offerings.service.js';
 import { OffersRepository } from './sub-domains/offers/offers.repository.js';
@@ -96,8 +96,8 @@ import { MessagesService } from './sub-domains/messages/messages.service.js';
 export type AppRecordServices = {
   savedViewsService: SavedViewsService;
   offeringGroupsService: OfferingGroupsService;
-  roomsService: RoomsService;
-  machinesService: MachinesService;
+  branchRoomsService: BranchRoomsService;
+  branchMachinesService: BranchMachinesService;
   branchHolidaysService: BranchHolidaysService;
   offeringsService: OfferingsService;
   offersService: OffersService;
@@ -152,8 +152,11 @@ export function createAppRecordServices(
       organizationService,
       new OfferingGroupsRepository(),
     ),
-    roomsService: new RoomsService(organizationService, new RoomsRepository()),
-    machinesService: new MachinesService(organizationService, new MachinesRepository()),
+    branchRoomsService: new BranchRoomsService(organizationService, new BranchRoomsRepository()),
+    branchMachinesService: new BranchMachinesService(
+      organizationService,
+      new BranchMachinesRepository(),
+    ),
     branchHolidaysService: new BranchHolidaysService(
       organizationService,
       new BranchHolidaysRepository(),

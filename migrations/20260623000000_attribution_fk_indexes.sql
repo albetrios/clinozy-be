@@ -12,7 +12,7 @@
 --
 -- Most attribution columns are NULL for the bulk of rows (system-created records),
 -- so each index is PARTIAL on `IS NOT NULL` to stay tiny; the sole NOT NULL column
--- (member_invitations.invited_by_user_id) gets a full index. Mirrors the audit.logs
+-- (membership_invitations.invited_by_user_id) gets a full index. Mirrors the audit.logs
 -- actor-FK indexing already in place. CONCURRENTLY keeps the build online (no table
 -- lock); IF NOT EXISTS makes the migration safe to re-run. Generated from live
 -- pg_attribute introspection (every *_by_user_id column lacking a leading index).
@@ -65,12 +65,12 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_api_keys_updated_by_user_id
   ON tenancy.api_keys (updated_by_user_id)
   WHERE updated_by_user_id IS NOT NULL;
 --> statement-breakpoint
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_member_invitations_created_by_user_id
-  ON tenancy.member_invitations (created_by_user_id)
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_membership_invitations_created_by_user_id
+  ON tenancy.membership_invitations (created_by_user_id)
   WHERE created_by_user_id IS NOT NULL;
 --> statement-breakpoint
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_member_invitations_invited_by_user_id
-  ON tenancy.member_invitations (invited_by_user_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_membership_invitations_invited_by_user_id
+  ON tenancy.membership_invitations (invited_by_user_id);
 --> statement-breakpoint
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_memberships_created_by_user_id
   ON tenancy.memberships (created_by_user_id)

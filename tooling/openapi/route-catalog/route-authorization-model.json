@@ -61,7 +61,7 @@
   "POST /api/v1/notify/webhooks/:webhook_id/test": {
     "model": "organization"
   },
-  "POST /api/v1/tenancy/invitations/:invitation_id/accept": {
+  "POST /api/v1/tenancy/membership-invitations/:membership_invitation_id/accept": {
     "model": "email",
     "verifyNoMutation": true
   },
@@ -87,11 +87,11 @@
     "model": "organization",
     "verifyNoMutation": true
   },
-  "DELETE /api/v1/tenancy/organization/invitations/:invitation_id": {
+  "DELETE /api/v1/tenancy/organization/memberships/:membership_id/invitation": {
     "model": "organization",
     "verifyNoMutation": true
   },
-  "POST /api/v1/tenancy/organization/invitations/:invitation_id/resend": {
+  "POST /api/v1/tenancy/organization/memberships/:membership_id/invitation/resend": {
     "model": "organization"
   },
   "GET /api/v1/tenancy/organization/memberships/:membership_id": {
@@ -184,10 +184,10 @@
     "model": "organization",
     "verifyNoMutation": true
   },
-  "GET /api/v1/app/branches/:branch_id/user-accesses": {
+  "GET /api/v1/app/branches/:branch_id/members": {
     "model": "organization"
   },
-  "PUT /api/v1/app/branches/:branch_id/user-accesses": {
+  "PUT /api/v1/app/branches/:branch_id/members": {
     "model": "organization",
     "verifyNoMutation": true
   },
@@ -228,18 +228,18 @@
     "model": "organization",
     "verifyNoMutation": true
   },
-  "GET /api/v1/app/rooms/:room_id": {
+  "GET /api/v1/app/branches/:branch_id/rooms/:branch_room_id": {
     "model": "organization"
   },
-  "PATCH /api/v1/app/rooms/:room_id": {
+  "PATCH /api/v1/app/branches/:branch_id/rooms/:branch_room_id": {
     "model": "organization",
     "verifyNoMutation": true
   },
-  "DELETE /api/v1/app/rooms/:room_id": {
+  "DELETE /api/v1/app/branches/:branch_id/rooms/:branch_room_id": {
     "model": "organization",
     "verifyNoMutation": true
   },
-  "POST /api/v1/app/rooms/:room_id/restore": {
+  "POST /api/v1/app/branches/:branch_id/rooms/:branch_room_id/restore": {
     "model": "organization",
     "verifyNoMutation": true
   },
@@ -250,33 +250,33 @@
     "model": "organization",
     "verifyNoMutation": true
   },
-  "GET /api/v1/app/machines/:machine_id": {
+  "GET /api/v1/app/branches/:branch_id/machines/:branch_machine_id": {
     "model": "organization"
   },
-  "PATCH /api/v1/app/machines/:machine_id": {
+  "PATCH /api/v1/app/branches/:branch_id/machines/:branch_machine_id": {
     "model": "organization",
     "verifyNoMutation": true
   },
-  "DELETE /api/v1/app/machines/:machine_id": {
+  "DELETE /api/v1/app/branches/:branch_id/machines/:branch_machine_id": {
     "model": "organization",
     "verifyNoMutation": true
   },
-  "POST /api/v1/app/machines/:machine_id/restore": {
+  "POST /api/v1/app/branches/:branch_id/machines/:branch_machine_id/restore": {
     "model": "organization",
     "verifyNoMutation": true
   },
-  "GET /api/v1/app/branch-holidays/:branch_holiday_id": {
+  "GET /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id": {
     "model": "organization"
   },
-  "PATCH /api/v1/app/branch-holidays/:branch_holiday_id": {
+  "PATCH /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id": {
     "model": "organization",
     "verifyNoMutation": true
   },
-  "DELETE /api/v1/app/branch-holidays/:branch_holiday_id": {
+  "DELETE /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id": {
     "model": "organization",
     "verifyNoMutation": true
   },
-  "POST /api/v1/app/branch-holidays/:branch_holiday_id/restore": {
+  "POST /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id/restore": {
     "model": "organization",
     "verifyNoMutation": true
   },
@@ -993,5 +993,9 @@
   },
   "GET /api/v1/app/patients/:patient_id/timeline": {
     "model": "organization"
+  },
+  "POST /api/v1/tenancy/organization/roles/:role_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
   }
 }

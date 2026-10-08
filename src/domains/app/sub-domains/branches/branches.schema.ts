@@ -5,6 +5,7 @@ import {
   bigserial,
   boolean,
   check,
+  foreignKey,
   index,
   pgPolicy,
   text,
@@ -20,8 +21,6 @@ import { memberships } from '@/domains/tenancy/sub-domains/membership/membership
 import {
   PHONE_NUMBER_PATTERN,
   CHIP_TONE_VALUES,
-  RECORD_DELETE_REASON,
-  RECORD_DELETE_REASON_VALUES,
   WEEKDAY_VALUES,
 } from '@/shared/constants/record-fields.constants.js';
 import {
@@ -82,26 +81,22 @@ export const branches = appSchema
         .array()
         .notNull()
         .default([...BRANCH_DEFAULT_WORKING_DAYS]),
-      // The staff a new booking or visit in this branch defaults to, per role. A membership is a
-      // staff member (D5); the service checks the membership holds the role.
-      default_doctor_membership_id: bigint('default_doctor_membership_id', {
-        mode: 'number',
-      }).references(() => memberships.id, { onDelete: 'set null' }),
+      // The staff a new booking or visit in this branch defaults to, per role — each one of the
+      // branch's members (D10), cleared when they stop working here or leave the team (D14). The
+      // composite keys below keep each one a member of this organization (K8).
+      default_doctor_membership_id: bigint('default_doctor_membership_id', { mode: 'number' }),
       default_front_desk_membership_id: bigint('default_front_desk_membership_id', {
         mode: 'number',
-      }).references(() => memberships.id, { onDelete: 'set null' }),
+      }),
       default_therapist_membership_id: bigint('default_therapist_membership_id', {
         mode: 'number',
-      }).references(() => memberships.id, { onDelete: 'set null' }),
+      }),
       default_pharmacist_membership_id: bigint('default_pharmacist_membership_id', {
         mode: 'number',
-      }).references(() => memberships.id, { onDelete: 'set null' }),
+      }),
       is_active: boolean('is_active').notNull().default(true),
       maps_link: varchar('maps_link', { length: 512 }),
       review_link: varchar('review_link', { length: 512 }),
-      deleted_at: timestamp('deleted_at', { withTimezone: true }),
-      delete_reason: varchar('delete_reason', { length: 20 }),
-      delete_note: varchar('delete_note', { length: 280 }),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
@@ -113,31 +108,28 @@ export const branches = appSchema
     },
     (table) => [
       uniqueIndex('idx_branches_public_id').on(table.public_id),
-      // Live names are unique per organization, ignoring case; a deleted branch frees its name.
-      uniqueIndex('idx_branches_organization_name_unique')
-        .on(table.organization_id, sql`lower(${table.name})`)
-        .where(sql`${table.deleted_at} IS NULL`),
-      // At most one live main branch per organization; "at least one" is the service's rule.
+      // Names are unique per organization, ignoring case — a branch is never deleted (D3, D16).
+      uniqueIndex('idx_branches_organization_name_unique').on(
+        table.organization_id,
+        sql`lower(${table.name})`,
+      ),
+      // At most one main branch per organization; "at least one" is the service's rule.
       uniqueIndex('idx_branches_one_main_per_organization')
         .on(table.organization_id)
-        .where(sql`${table.is_main} AND ${table.deleted_at} IS NULL`),
+        .where(sql`${table.is_main}`),
       // Full (not partial): the organization delete cascade needs it, and the list query uses it.
       index('idx_branches_organization_id_name').on(table.organization_id, table.name),
-      // The deleted-record purge (D38) scans deleted rows only.
-      index('idx_branches_deleted_at')
-        .on(table.deleted_at)
-        .where(sql`${table.deleted_at} IS NOT NULL`),
-      index('idx_branches_default_doctor_membership_id')
-        .on(table.default_doctor_membership_id)
+      index('idx_branches_organization_id_default_doctor_membership_id')
+        .on(table.organization_id, table.default_doctor_membership_id)
         .where(sql`${table.default_doctor_membership_id} IS NOT NULL`),
-      index('idx_branches_default_front_desk_membership_id')
-        .on(table.default_front_desk_membership_id)
+      index('idx_branches_organization_id_default_front_desk_membership_id')
+        .on(table.organization_id, table.default_front_desk_membership_id)
         .where(sql`${table.default_front_desk_membership_id} IS NOT NULL`),
-      index('idx_branches_default_therapist_membership_id')
-        .on(table.default_therapist_membership_id)
+      index('idx_branches_organization_id_default_therapist_membership_id')
+        .on(table.organization_id, table.default_therapist_membership_id)
         .where(sql`${table.default_therapist_membership_id} IS NOT NULL`),
-      index('idx_branches_default_pharmacist_membership_id')
-        .on(table.default_pharmacist_membership_id)
+      index('idx_branches_organization_id_default_pharmacist_membership_id')
+        .on(table.organization_id, table.default_pharmacist_membership_id)
         .where(sql`${table.default_pharmacist_membership_id} IS NOT NULL`),
       index('idx_branches_created_by_user_id')
         .on(table.created_by_user_id)
@@ -145,6 +137,34 @@ export const branches = appSchema
       index('idx_branches_updated_by_user_id')
         .on(table.updated_by_user_id)
         .where(sql`${table.updated_by_user_id} IS NOT NULL`),
+      // K8: a member of this organization; the database clears only this column when the
+      // membership row goes (`ON DELETE SET NULL ("default_doctor_membership_id")`).
+      foreignKey({
+        name: 'branches_default_doctor_membership_id_fk',
+        columns: [table.organization_id, table.default_doctor_membership_id],
+        foreignColumns: [memberships.organization_id, memberships.id],
+      }).onDelete('set null'),
+      // K8: a member of this organization; the database clears only this column when the
+      // membership row goes (`ON DELETE SET NULL ("default_front_desk_membership_id")`).
+      foreignKey({
+        name: 'branches_default_front_desk_membership_id_fk',
+        columns: [table.organization_id, table.default_front_desk_membership_id],
+        foreignColumns: [memberships.organization_id, memberships.id],
+      }).onDelete('set null'),
+      // K8: a member of this organization; the database clears only this column when the
+      // membership row goes (`ON DELETE SET NULL ("default_therapist_membership_id")`).
+      foreignKey({
+        name: 'branches_default_therapist_membership_id_fk',
+        columns: [table.organization_id, table.default_therapist_membership_id],
+        foreignColumns: [memberships.organization_id, memberships.id],
+      }).onDelete('set null'),
+      // K8: a member of this organization; the database clears only this column when the
+      // membership row goes (`ON DELETE SET NULL ("default_pharmacist_membership_id")`).
+      foreignKey({
+        name: 'branches_default_pharmacist_membership_id_fk',
+        columns: [table.organization_id, table.default_pharmacist_membership_id],
+        foreignColumns: [memberships.organization_id, memberships.id],
+      }).onDelete('set null'),
       check('chk_branches_tone', inList(table.tone, CHIP_TONE_VALUES)),
       check(
         'chk_branches_postal_code',
@@ -169,15 +189,6 @@ export const branches = appSchema
       ),
       check('chk_branches_maps_link', sql`${table.maps_link} ~ '^https://'`),
       check('chk_branches_review_link', sql`${table.review_link} ~ '^https://'`),
-      check('chk_branches_delete_reason', inList(table.delete_reason, RECORD_DELETE_REASON_VALUES)),
-      check(
-        'chk_branches_delete_reason_when_deleted',
-        sql`(${table.deleted_at} IS NULL) = (${table.delete_reason} IS NULL)`,
-      ),
-      check(
-        'chk_branches_delete_note_when_other',
-        sql`${table.delete_reason} IS DISTINCT FROM ${RECORD_DELETE_REASON.OTHER} OR ${table.delete_note} IS NOT NULL`,
-      ),
       check('chk_branches_updated', sql`${table.updated_at} >= ${table.created_at}`),
       pgPolicy('branches_tenant_isolation', {
         as: 'permissive',

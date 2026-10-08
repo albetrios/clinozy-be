@@ -389,7 +389,7 @@
         "error": {
           "type": "request_error",
           "code": "not_found",
-          "detail": "Member invitation not found",
+          "detail": "Membership invitation not found",
           "documentation_url": "https://example.com/resource"
         },
         "meta": {
@@ -5161,7 +5161,7 @@
         "error": {
           "type": "request_error",
           "code": "not_found",
-          "detail": "Member invitation not found",
+          "detail": "Membership invitation not found",
           "documentation_url": "https://example.com/resource"
         },
         "meta": {
@@ -5377,7 +5377,7 @@
         "error": {
           "type": "request_error",
           "code": "not_found",
-          "detail": "Member invitation not found",
+          "detail": "Membership invitation not found",
           "documentation_url": "https://example.com/resource"
         },
         "meta": {

@@ -39,7 +39,7 @@ row › Record). Only a scope change — a row added or removed, an acceptance c
 — stops for the user.
 
 **With a route review it is ditto.** When the plan has `plans/routes-final.md`, the agent-os checks already
-shaped it, so each row builds its module **exactly as written** — names, routes, gates, statuses, errors,
+shaped it, so each row builds its sub-domain **exactly as written** — names, routes, gates, statuses, errors,
 codes, folders. Where a skill, rule or gate still cannot build something as written, **stop and ask**; the
 agreed change goes into `routes-final.md` first, then into the build — never a silent difference. Only what
 the review leaves open is decided on the way and recorded in `AS-BUILT.md`.
@@ -73,7 +73,7 @@ shape below, dated today, with the Baseline's Standing deviations copied in as t
 
 ## Before the first row — read
 
-- `KICKOFF.md` (the plan and its ROUTE) and every file under `plans/` — for each row, its module's
+- `KICKOFF.md` (the plan and its ROUTE) and every file under `plans/` — for each row, its sub-domain's
   section in `plans/routes-final.md` is the spec and its code changes the checklist.
 - The repository's conventions: `CLAUDE.md`, the skill index
   (`agent-os/skills/be-skill-index/SKILL.md`), the existing domains under `src/domains/`, the
@@ -121,7 +121,7 @@ authorize changing either.
    `full` / `overlay` → the acceptance traced to the PRD; `brief` → the `BRIEF.md` acceptance
    criteria the row covers, and the parts it touches still match the carried-forward PRD and
    `schema-routes.md` except where the brief changes them. MODE incremental, every mode: re-run the
-   existing end-to-end tests for everything touched. Against the plan's own files: what the row built matches its module's
+   existing end-to-end tests for everything touched. Against the plan's own files: what the row built matches its sub-domain's
    section in `plans/routes-final.md`, every route matches its proposal in `plans/route-changes.md`, every table it built matches
    `plans/db-changes.md` (`pnpm db:viewer` — the built table now stands where the plan drew it), and
    every piece of background work it built matches `plans/worker-changes.md` (now with its real queue

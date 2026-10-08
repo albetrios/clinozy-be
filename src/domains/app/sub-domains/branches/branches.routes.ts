@@ -75,7 +75,7 @@ export function branchesRoutes(service: BranchesService): FastifyPluginAsync {
         schema: {
           summary: 'Create branch',
           description:
-            'Adds a branch to the active organization; its creator gets access to it. A name already used here, or a second main branch, is a 409. Requires branch:create.',
+            'Adds a branch with who works there from day one — `membership_ids` (team member ids), else its creator (D13). Each default-staff member must be one of them, else a 400 (D10). A name already used here, or a second main branch, is a 409. Requires branch:create.',
           tags: ['Branch'],
           body: CreateBranchDto,
         },
@@ -91,7 +91,7 @@ export function branchesRoutes(service: BranchesService): FastifyPluginAsync {
         schema: {
           summary: 'Update branch',
           description:
-            'Changes any of a branch’s fields; null clears an optional one. A name already used here, or a second main branch, is a 409. Requires branch:update.',
+            'Changes any of a branch’s fields (retire it with `is_active=false` — a branch is never deleted); null clears an optional one. Each default-staff member must be one of the branch’s members, else a 400 (D10). Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 naming who changed it (D43). A name already used here, or a second main branch, is a 409. Requires branch:update.',
           tags: ['Branch'],
           params: branchIdParamsDto,
           body: UpdateBranchDto,

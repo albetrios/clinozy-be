@@ -56,7 +56,7 @@ Five **nested sub-domain folders** are missing both `OVERVIEW.md` and a co-locat
 | Nested sub-domain | Missing |
 |---|---|
 | `tenancy/sub-domains/member-roles/member-role-permission/` | `OVERVIEW.md`, `__tests__/` |
-| `tenancy/sub-domains/membership/member-invitation/` | `OVERVIEW.md`, `__tests__/` |
+| `tenancy/sub-domains/membership/membership-invitation/` | `OVERVIEW.md`, `__tests__/` |
 | `tenancy/sub-domains/organization/organization-api-key/` | `OVERVIEW.md`, `__tests__/` |
 | `tenancy/sub-domains/organization/organization-notification-policy/` | `OVERVIEW.md`, `__tests__/` |
 | `tenancy/sub-domains/organization/organization-settings/` | `OVERVIEW.md`, `__tests__/` |
@@ -91,7 +91,7 @@ Each of these is a `.ts` file inside a sub-domain that doesn't end with one of t
 - `auth/sub-domains/auth-method/oauth/oauth-user-session.ts`, `oauth-state.ts`, `oauth-pkce.ts` (three sibling utility files)
 - `auth/shared/complete-first-factor-auth.ts` (sibling `audit-login.util.ts` correctly uses `.util.ts`)
 - `billing/sub-domains/subscription/stripe-payment-provider.ts` (sibling `payment-provider.port.ts` is correct)
-- `tenancy/sub-domains/membership/member-invitation/member-invitation.token.ts` (`.token.ts` is not a documented suffix)
+- `tenancy/sub-domains/membership/membership-invitation/membership-invitation.token.ts` (`.token.ts` is not a documented suffix)
 - `tenancy/sub-domains/organization/organization-settings/i18n-locale.cache.ts` (`.cache.ts` is not a documented suffix)
 - `auth/handlers/auth-auth-method.handlers.ts` (double `auth-auth-` prefix; should be `auth-method.handlers.ts` since it's already inside `auth/`)
 - `auth/sub-domains/auth-method/magic-link.service.ts` (bare resource name; siblings use the `auth-method.` prefix → inconsistent within the same folder)
@@ -205,7 +205,7 @@ These are multi-file moves and need careful import-path updates; do as one PR wi
 - `webauthn-challenge.ts` → `webauthn-challenge.util.ts`
 - `oauth-{user-session,state,pkce}.ts` → `.util.ts`
 - `stripe-payment-provider.ts` → `stripe-payment-provider.adapter.ts` (or `.adapter.ts` if we adopt that suffix)
-- `member-invitation.token.ts` → `member-invitation-token.util.ts`
+- `membership-invitation.token.ts` → `membership-invitation-token.util.ts`
 - `i18n-locale.cache.ts` → `i18n-locale-cache.util.ts`
 - `auth/handlers/auth-auth-method.handlers.ts` → `auth/handlers/auth-method.handlers.ts`
 - `auth-method/magic-link.service.ts` → `auth-method-magic-link.service.ts` (or move under a nested `auth-method/auth-method-magic-link/` directory)

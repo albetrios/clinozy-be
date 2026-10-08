@@ -1,3 +1,4 @@
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { AUDIT_PERMISSIONS } from '@/domains/audit/audit.permissions.js';
 import { BILLING_PERMISSIONS } from '@/domains/billing/billing.permissions.js';
@@ -122,10 +123,13 @@ const ADMIN_PERMISSION_CODES: readonly string[] = [
   TENANCY_PERMISSIONS.ORGANIZATION_READ,
   TENANCY_PERMISSIONS.ORGANIZATION_UPDATE,
   TENANCY_PERMISSIONS.MEMBERSHIP_READ,
-  TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
-  TENANCY_PERMISSIONS.INVITATION_MANAGE,
+  TENANCY_PERMISSIONS.MEMBERSHIP_CREATE,
+  TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE,
+  TENANCY_PERMISSIONS.MEMBERSHIP_DELETE,
   TENANCY_PERMISSIONS.ROLE_READ,
-  TENANCY_PERMISSIONS.ROLE_MANAGE,
+  TENANCY_PERMISSIONS.ROLE_CREATE,
+  TENANCY_PERMISSIONS.ROLE_UPDATE,
+  TENANCY_PERMISSIONS.ROLE_DELETE,
   TENANCY_PERMISSIONS.API_KEY_READ,
   TENANCY_PERMISSIONS.API_KEY_MANAGE,
   TENANCY_PERMISSIONS.NOTIFICATION_POLICY_READ,
@@ -281,7 +285,7 @@ async function provisionOrganization(
           user_id: input.ownerUserId,
           organization_id: organization!.id,
           role_id: role!.id,
-          status: 'ACTIVE',
+          status: MEMBERSHIP_STATUS.ACTIVE,
           joined_at: new Date(),
         })
         .returning();

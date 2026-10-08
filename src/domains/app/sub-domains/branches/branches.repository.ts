@@ -1,4 +1,15 @@
-import { and, asc, desc, eq, getTableColumns, inArray, isNull, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  inArray,
+  isNull,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { DEFAULT_REPOSITORY_LIST_LIMIT } from '@/shared/constants/limits.constants.js';
@@ -6,7 +17,7 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
-import { branch_user_accesses } from '@/domains/app/sub-domains/branches/branch-user-accesses/branch-user-accesses.schema.js';
+import { branch_members } from '@/domains/app/sub-domains/branches/branch-members/branch-members.schema.js';
 import type { BranchCreateData, BranchUpdateData } from './branches.types.js';
 
 /** A raw `app.branches` row. */
@@ -17,9 +28,9 @@ const defaultFrontDesk = alias(memberships, 'default_front_desk_membership');
 const defaultTherapist = alias(memberships, 'default_therapist_membership');
 const defaultPharmacist = alias(memberships, 'default_pharmacist_membership');
 
-/** Live (not soft-deleted) rows of one organization. */
-function liveInOrganization(organization_id: number): SQL {
-  return and(eq(branches.organization_id, organization_id), isNull(branches.deleted_at)) as SQL;
+/** The rows of one organization (a branch is never deleted, D16). */
+function inOrganization(organization_id: number): SQL {
+  return eq(branches.organization_id, organization_id);
 }
 
 /** Main branch first, then by name. */
@@ -65,7 +76,7 @@ export class BranchesRepository {
 
   /** Every live branch of the organization (inactive ones only when asked). */
   async listByOrganization(organization_id: number, options: { include_inactive: boolean }) {
-    const conditions: SQL[] = [liveInOrganization(organization_id)];
+    const conditions: SQL[] = [inOrganization(organization_id)];
     if (!options.include_inactive) conditions.push(eq(branches.is_active, true));
     return this.selectRecords()
       .where(and(...conditions))
@@ -78,7 +89,7 @@ export class BranchesRepository {
     return getRequestDatabase()
       .select(branchSummaryColumns)
       .from(branches)
-      .where(and(liveInOrganization(organization_id), eq(branches.is_active, true)))
+      .where(and(inOrganization(organization_id), eq(branches.is_active, true)))
       .orderBy(...BRANCH_ORDER)
       .limit(DEFAULT_REPOSITORY_LIST_LIMIT);
   }
@@ -88,11 +99,11 @@ export class BranchesRepository {
     return getRequestDatabase()
       .select(branchSummaryColumns)
       .from(branches)
-      .innerJoin(branch_user_accesses, eq(branch_user_accesses.branch_id, branches.id))
-      .innerJoin(memberships, eq(memberships.id, branch_user_accesses.membership_id))
+      .innerJoin(branch_members, eq(branch_members.branch_id, branches.id))
+      .innerJoin(memberships, eq(memberships.id, branch_members.membership_id))
       .where(
         and(
-          liveInOrganization(organization_id),
+          inOrganization(organization_id),
           eq(branches.is_active, true),
           eq(memberships.user_id, user_id),
           isNull(memberships.deleted_at),
@@ -105,7 +116,7 @@ export class BranchesRepository {
   /** One live branch of the organization, or null. */
   async findByPublicId(public_id: string, organization_id: number) {
     const rows = await this.selectRecords()
-      .where(and(liveInOrganization(organization_id), eq(branches.public_id, public_id)))
+      .where(and(inOrganization(organization_id), eq(branches.public_id, public_id)))
       .limit(1);
     return rows[0] ?? null;
   }
@@ -119,9 +130,7 @@ export class BranchesRepository {
     const rows = await getRequestDatabase()
       .select({ id: branches.id, public_id: branches.public_id })
       .from(branches)
-      .where(
-        and(liveInOrganization(organization_id), inArray(branches.public_id, [...public_ids])),
-      );
+      .where(and(inOrganization(organization_id), inArray(branches.public_id, [...public_ids])));
     return new Map(rows.map((row) => [row.public_id, row.id]));
   }
 
@@ -137,6 +146,92 @@ export class BranchesRepository {
   }
 
   /** Updates a live branch; returns false when it no longer exists. */
+  /**
+   * Clears every default-staff field that names someone who no longer works at that branch (C15 /
+   * D14) — after a branch's member list or a membership's branches change. `branch_id` limits it to
+   * one branch, `membership_id` to the branches that name that member.
+   */
+  async clearDefaultStaffNotWorkingThere(options: {
+    organization_id: number;
+    branch_id?: number;
+    membership_id?: number;
+  }): Promise<void> {
+    const columns = [
+      branches.default_doctor_membership_id,
+      branches.default_front_desk_membership_id,
+      branches.default_therapist_membership_id,
+      branches.default_pharmacist_membership_id,
+    ] as const;
+    const notWorkingThere = (column: (typeof columns)[number]) =>
+      sql`${column} IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM ${branch_members}
+        WHERE ${branch_members.branch_id} = ${branches.id}
+          AND ${branch_members.membership_id} = ${column}
+      )`;
+    const clearedWhenGone = (column: (typeof columns)[number]) =>
+      sql`CASE WHEN ${notWorkingThere(column)} THEN NULL ELSE ${column} END`;
+    await getRequestDatabase()
+      .update(branches)
+      .set({
+        default_doctor_membership_id: clearedWhenGone(branches.default_doctor_membership_id),
+        default_front_desk_membership_id: clearedWhenGone(
+          branches.default_front_desk_membership_id,
+        ),
+        default_therapist_membership_id: clearedWhenGone(branches.default_therapist_membership_id),
+        default_pharmacist_membership_id: clearedWhenGone(
+          branches.default_pharmacist_membership_id,
+        ),
+        updated_at: sql`greatest(${branches.created_at}, now())`,
+      })
+      .where(
+        and(
+          eq(branches.organization_id, options.organization_id),
+          options.branch_id === undefined ? undefined : eq(branches.id, options.branch_id),
+          options.membership_id === undefined
+            ? undefined
+            : or(...columns.map((column) => eq(column, options.membership_id!))),
+          or(...columns.map((column) => notWorkingThere(column))),
+        ),
+      );
+  }
+
+  /**
+   * Clears a member from every branch's default staff (C15) — the leave step when their membership
+   * ends (launch K4). Touches only the branches that named them.
+   */
+  async clearDefaultStaffForMembership(options: {
+    organization_id: number;
+    membership_id: number;
+  }): Promise<void> {
+    const columns = [
+      branches.default_doctor_membership_id,
+      branches.default_front_desk_membership_id,
+      branches.default_therapist_membership_id,
+      branches.default_pharmacist_membership_id,
+    ] as const;
+    const clearedWhenNamed = (column: (typeof columns)[number]) =>
+      sql`CASE WHEN ${column} = ${options.membership_id} THEN NULL ELSE ${column} END`;
+    await getRequestDatabase()
+      .update(branches)
+      .set({
+        default_doctor_membership_id: clearedWhenNamed(branches.default_doctor_membership_id),
+        default_front_desk_membership_id: clearedWhenNamed(
+          branches.default_front_desk_membership_id,
+        ),
+        default_therapist_membership_id: clearedWhenNamed(branches.default_therapist_membership_id),
+        default_pharmacist_membership_id: clearedWhenNamed(
+          branches.default_pharmacist_membership_id,
+        ),
+        updated_at: sql`greatest(${branches.created_at}, now())`,
+      })
+      .where(
+        and(
+          eq(branches.organization_id, options.organization_id),
+          or(...columns.map((column) => eq(column, options.membership_id))),
+        ),
+      );
+  }
+
   async update(
     id: number,
     data: BranchUpdateData,
@@ -149,7 +244,7 @@ export class BranchesRepository {
         updated_at: sql`greatest(${branches.created_at}, now())`,
         updated_by_user_id,
       })
-      .where(and(eq(branches.id, id), isNull(branches.deleted_at)))
+      .where(eq(branches.id, id))
       .returning({ id: branches.id });
     return rows.length > 0;
   }

@@ -15,7 +15,7 @@ history. It also specifies the **seat-entitlement policy** in full, since that p
 ## 1. Seat-entitlement policy (billing × tenancy)
 
 An organization's **seat ceiling** — the maximum number of seats it may consume (a seat is consumed by
-each `ACTIVE` + `INVITED` membership) — is a function of its **billing entitlement**, not just its
+each `active` + `invited` membership) — is a function of its **billing entitlement**, not just its
 current plan row. Three states were previously under-specified; the policy below closes them.
 
 ### 1.1 Seat-ceiling resolution
@@ -56,11 +56,11 @@ When `changePlan` moves an organization to a plan whose `included_seats` is **be
 count, the **excess members are auto-suspended to fit the new ceiling** rather than the downgrade being
 rejected (the previous F2 behavior was a `409 seat_limit_exceeded_for_plan` block).
 
-- **Selection:** `ACTIVE`, non-owner memberships, ordered by `joined_at` **descending** (most-recently
+- **Selection:** `active`, non-owner memberships, ordered by `joined_at` **descending** (most-recently
   joined are suspended first; longest-tenured members are kept), limited to `activeCount - ceiling`.
 - **Owner is never suspended** (`organizations.owner_user_id` is always excluded), so an organization can never
   lock itself out by downgrading.
-- Suspension sets membership `status = 'SUSPENDED'`. A suspended seat is **not** counted toward the cap
+- Suspension sets membership `status = 'suspended'`. A suspended seat is **not** counted toward the cap
   (consistent with the existing admin suspend/reactivate flow), so the organization immediately fits its new
   ceiling. Re-activating a suspended member re-consumes a seat and is re-checked against the ceiling
   (the F1 reactivation guard), so members can be restored after an upgrade.

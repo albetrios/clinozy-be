@@ -6,14 +6,14 @@ import type { PermissionRepository } from './permission.repository.js';
  * Ensures the caller holds every permission code they attempt to assign to a role or API key.
  *
  * @remarks
- * Prevents privilege escalation where a user with `role:manage` or `api-key:manage` grants
+ * Prevents privilege escalation where a user with `role:update` or `api-key:manage` grants
  * permissions they do not themselves possess (e.g. `organization:delete`, `subscription:manage`).
  *
  * Callers MUST pass the FULL set of codes being added AND removed (the union with the role's
  * existing permission set), not just the new request body. The PUT-role-permissions service
  * does this composition (sec-T2): an empty-array PUT is a *removal* of every currently-held
  * code, and the guard must verify the caller holds them all. Passing only the new set lets
- * a `role:manage` holder downgrade roles they themselves could not have created.
+ * a `role:update` holder downgrade roles they themselves could not have created.
  */
 export async function assertCallerCanGrantPermissionCodes(options: {
   authorizationService: AuthorizationService;

@@ -35,7 +35,7 @@ app.post(
       tags: ['Membership', 'Invitation'],
     },
   },
-  invitationController.acceptMemberInvitation,
+  invitationController.acceptMembershipInvitation,
 );
 ```
 

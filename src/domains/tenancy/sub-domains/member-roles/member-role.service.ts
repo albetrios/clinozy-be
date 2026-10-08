@@ -17,6 +17,7 @@ import type { MemberRolePermissionRepository } from './member-role-permission/me
 import type { MemberRoleOutput, MemberRoleRow } from './member-role.types.js';
 import {
   validateCreateMemberRole,
+  validateDeleteMemberRoleQuery,
   validateUpdateMemberRole,
   validateListMemberRolesQuery,
 } from './member-role.validator.js';
@@ -26,6 +27,7 @@ import type { AuthorizationService } from '@/domains/tenancy/sub-domains/permiss
 import type { PermissionRepository } from '@/domains/tenancy/sub-domains/permission/permission.repository.js';
 import { assertCallerCanGrantPermissionCodes } from '@/domains/tenancy/sub-domains/permission/assert-grantable-permissions.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
+import { assertRecordNotChangedSince } from '@/shared/utils/validation/record-fields.util.js';
 import type { ListMemberRolesQueryInput } from './member-role.dto.js';
 
 /**
@@ -284,6 +286,13 @@ export class MemberRoleService {
         await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
       const role = await this.memberRoleRepository.findByPublicId(role_public_id, organization.id);
       if (!role) throw new NotFoundError('Role');
+      // T14 / D43: a save based on an older version is refused with who and when.
+      await assertRecordNotChangedSince({
+        row: role,
+        expected: parsed.expected_updated_at,
+        resolveUserPublicId: (userInternalId) =>
+          this.organizationService.resolveUserPublicIdByInternalId(userInternalId),
+      });
       // sec-T3: a system role's name is immutable from the API — same guard as delete. Its tone and
       // description (the role's purpose, launch RC-141) stay editable.
       if (role.is_system && parsed.name !== undefined && parsed.name !== role.name) {
@@ -293,10 +302,11 @@ export class MemberRoleService {
         await this.organizationService.resolveUserInternalIdByPublicId(updated_by_user_public_id);
       let updated: MemberRoleRow | null;
       try {
+        const { expected_updated_at: _expectedUpdatedAt, ...changes } = parsed;
         updated = await this.memberRoleRepository.update(
           role_public_id,
           organization.id,
-          omitUndefined(parsed),
+          omitUndefined(changes),
           userId ?? null,
         );
       } catch (error) {
@@ -312,24 +322,28 @@ export class MemberRoleService {
   }
 
   /**
-   * Soft-deletes a custom role.
+   * Soft-deletes a custom role with why (launch T12).
    *
    * @remarks
    * sec-T3 guards:
-   *   1. **`is_system` guard** — Admin/Member seed roles cannot be deleted from the API.
+   *   1. **`is_system` guard** — the seeded roles cannot be deleted from the API.
    *      Surfaces as `ForbiddenError('errors:cannotDeleteSystemRole')`.
-   *   2. **Active-membership guard** — refuses to delete a role currently assigned to one
-   *      or more active memberships, because the permission-resolution join filters
-   *      `isNull(roles.deleted_at)` and would silently strip every member's permission
-   *      set. Surfaces as `ConflictError('errors:roleHasActiveMembers')` — clients
-   *      must reassign members before deleting.
+   *   2. **Member guard** — refuses to delete a role any live member holds (main or extra, any
+   *      status), because the permission-resolution join filters `isNull(roles.deleted_at)` and
+   *      would silently strip every member's permission set. Surfaces as
+   *      `ConflictError('errors:roleHasActiveMembers')` — clients must reassign members first.
    *
-   * Both checks fire BEFORE the repository `softDelete` so a refused attempt leaves no
-   * partial state. The is_system guard runs first so operators get the more actionable
-   * "system role" message in the seeded-Admin case (which is the most common attempt).
+   * Both checks fire BEFORE the write so a refused attempt leaves no partial state. The deleted
+   * role is purged after the role tombstone window — the restore window.
    */
-  async delete(scope: OrganizationPrincipalDatabaseScope, role_public_id: string): Promise<void> {
+  async delete(
+    scope: OrganizationPrincipalDatabaseScope,
+    role_public_id: string,
+    query: unknown,
+    deleted_by_user_public_id: string | undefined,
+  ): Promise<void> {
     const organization_public_id = scope.organizationPublicId;
+    const removal = validateDeleteMemberRoleQuery(query);
     await withAppDatabaseContext(scope, async () => {
       const organization =
         await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
@@ -338,15 +352,22 @@ export class MemberRoleService {
       if (role.is_system) {
         throw new ForbiddenError('errors:cannotDeleteSystemRole');
       }
-      // Atomic guarded delete: the "no active members?" check and the soft-delete run in ONE
+      const userId =
+        await this.organizationService.resolveUserInternalIdByPublicId(deleted_by_user_public_id);
+      // Atomic guarded delete: the "no live members?" check and the soft-delete run in ONE
       // statement (a NOT EXISTS over memberships), so a concurrent member-assignment to this role
       // cannot interleave a separate count and the delete and leave a member on a deleted role —
       // which permission resolution would then silently strip of all permissions (route-audit C2).
-      // `role` was found above, so a zero-row result means active members remain (or a concurrent
+      // `role` was found above, so a zero-row result means members remain (or a concurrent
       // delete) → surface the actionable conflict rather than NotFound.
       const deleted = await this.memberRoleRepository.softDeleteIfNoActiveMembers(
         role_public_id,
         organization.id,
+        {
+          delete_reason: removal.reason,
+          delete_note: removal.note ?? null,
+          updated_by_user_id: userId ?? null,
+        },
       );
       if (!deleted) {
         throw new ConflictError('errors:roleHasActiveMembers');
@@ -355,5 +376,64 @@ export class MemberRoleService {
     // sec-R11: invalidate AFTER the write transaction commits so a concurrent permission recompute
     // cannot re-cache the stale (pre-delete) set for members holding the deleted role.
     await invalidateOrganizationPermissions(organization_public_id);
+  }
+
+  /**
+   * Undoes a role's delete (launch §2.D route 17, T12) while it is not yet purged.
+   *
+   * @remarks
+   * - **Algorithm:** inside the organization context — the deleted role (409 when live, 404 when
+   *   unknown), then the restore; a live role that took the name meanwhile is a 409.
+   * - **Failure modes:** `NotFoundError('Role')`; `ConflictError` `record_not_deleted` /
+   *   `record_restore_conflict`.
+   */
+  async restore(
+    scope: OrganizationPrincipalDatabaseScope,
+    role_public_id: string,
+    restored_by_user_public_id: string | undefined,
+  ): Promise<MemberRoleOutput> {
+    const organization_public_id = scope.organizationPublicId;
+    return withAppDatabaseContext(scope, async () => {
+      const organization =
+        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
+      const deleted = await this.memberRoleRepository.findDeletedByPublicId(
+        role_public_id,
+        organization.id,
+      );
+      if (!deleted) {
+        const live = await this.memberRoleRepository.findByPublicId(
+          role_public_id,
+          organization.id,
+        );
+        if (live) {
+          throw new ConflictError('errors:recordNotDeleted').withReason('record_not_deleted');
+        }
+        throw new NotFoundError('Role');
+      }
+      const userId = await this.organizationService.resolveUserInternalIdByPublicId(
+        restored_by_user_public_id,
+      );
+      let restored: MemberRoleRow | null;
+      try {
+        restored = await this.memberRoleRepository.restore(
+          role_public_id,
+          organization.id,
+          userId ?? null,
+        );
+      } catch (error) {
+        if (isPostgresUniqueViolation(error)) {
+          throw new ConflictError('errors:recordRestoreConflict').withReason(
+            'record_restore_conflict',
+          );
+        }
+        throw error;
+      }
+      if (!restored) throw new NotFoundError('Role');
+      const memberCount = await this.memberRoleRepository.countMembersForRole(
+        restored.id,
+        organization.id,
+      );
+      return serializeMemberRole(restored, memberCount);
+    });
   }
 }

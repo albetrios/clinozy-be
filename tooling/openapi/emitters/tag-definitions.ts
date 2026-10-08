@@ -25,7 +25,7 @@ export function buildTagDefinitions(
     'Notification Policy': 'Organization notification delivery policies',
     'Audit Log': 'Audit trail of actions performed in the organization',
     Membership: 'Organization membership management',
-    Invitation: 'Member invitations — create, accept, decline, resend',
+    Invitation: 'Membership invitations — create, accept, decline, resend',
     Role: 'Custom role management within organizations',
     Permission: 'Available permissions that can be assigned to roles',
     Billing: 'Billing and subscription management',

@@ -71,7 +71,7 @@ System-level narratives sit at the `src/` root only: `src/OVERVIEW.md`, `src/PAT
 | File             | Domain (root)                                            | Sub-domain (no API)                                                                                                              | Sub-domain (has API)                                                                                                                                                                  |
 | ---------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `.routes.ts`     | ✅ (audit, auth, billing, notify, tenancy, upload, user) | ❌                                                                                                                               | ✅ (tenancy: organization, membership, member-roles, permission). Billing/notify sub-domains register via parent composers (`billing.routes.ts`, `notify.routes.ts`) — see Section 7. |
-| `.controller.ts` | ✅ where domain has HTTP API                             | ✅ (e.g. member-invitation, organization-settings, stripe-webhook, user-data-export, webhook-event)              | ✅                                                                                                                                                                                    |
+| `.controller.ts` | ✅ where domain has HTTP API                             | ✅ (e.g. membership-invitation, organization-settings, stripe-webhook, user-data-export, webhook-event)              | ✅                                                                                                                                                                                    |
 | `.validator.ts`  | ✅ where domain has input                                | ✅ or ❌ by sub-domain                                                                                                           | ✅                                                                                                                                                                                    |
 | `.dto.ts`        | ✅ where domain has input                                | ✅ or ❌ by sub-domain                                                                                                           | ✅                                                                                                                                                                                    |
 | `.serializer.ts` | ✅ where domain returns shaped data                      | ✅ or ❌ by sub-domain                                                                                                           | ✅                                                                                                                                                                                    |
@@ -83,7 +83,7 @@ System-level narratives sit at the `src/` root only: `src/OVERVIEW.md`, `src/PAT
 
 **Inconsistencies**
 
-- **Sub-domain has controller but no routes file:** Many sub-domains are exposed only via the parent domain routes (e.g. member-invitation, organization-settings, organization-api-key, organization-notification-policy, webhook-event). Their controllers are used by the parent `billing.routes.ts` or `tenancy.routes.ts` or `notify.routes.ts`; the sub-domain does not have its own `.routes.ts` that is mounted.
+- **Sub-domain has controller but no routes file:** Many sub-domains are exposed only via the parent domain routes (e.g. membership-invitation, organization-settings, organization-api-key, organization-notification-policy, webhook-event). Their controllers are used by the parent `billing.routes.ts` or `tenancy.routes.ts` or `notify.routes.ts`; the sub-domain does not have its own `.routes.ts` that is mounted.
 - **`user-data-export`:** aggregates GDPR export data by calling `list*ForUserDataExport` on auth, tenancy, notify, and audit services (see `wireCrossDomainServices`).
 
 ---
@@ -126,7 +126,7 @@ HTTP Request
 **Domains/sub-domains with all four (schema, dto, types, serializer):**
 
 - **Domain root:** audit, upload, user.
-- **Sub-domains:** subscription, plan, member-invitation, member-role-permission, membership, member-roles (member-role), organization, organization-settings, organization-notification-policy, organization-api-key, permission, user-settings, user-notification-preferences, user-data-export, webhook.
+- **Sub-domains:** subscription, plan, membership-invitation, member-role-permission, membership, member-roles (member-role), organization, organization-settings, organization-notification-policy, organization-api-key, permission, user-settings, user-notification-preferences, user-data-export, webhook.
 
 **Domains/sub-domains missing one or more:**
 
@@ -197,7 +197,7 @@ Always use `.js` extensions in import specifiers. CI gate: `src/tests/global/imp
 | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | ------------------------------------------------ | ----------------- |
 | organization.controller.ts                                                                                         | audit/audit.service.js                                                                          | Type-only `AuditService` for createOrganization  | WRITE (audit log) |
 | auth (auth.service, email verification-code, oauth, auth-method, auth-mfa, auth-session)                                        | user/user.service.js                                                                            | UserService (findByEmail, createFromOAuth, etc.) | READ/WRITE        |
-| tenancy/membership/member-invitation.service                                                                       | user/user.service.js                                                                            | UserService                                      | READ              |
+| tenancy/membership/membership-invitation.service                                                                       | user/user.service.js                                                                            | UserService                                      | READ              |
 | billing (subscription) services                                       | tenancy/organization/organization.service.js                                                    | OrganizationService                              | READ              |
 | audit/audit.service                                                                                                | user/user.service.js, organization/organization.service.js                                      | UserService, OrganizationService                 | READ              |
 | notify/notification.service                                                                                        | user/user.service.js                                                                            | UserService                                      | READ              |
@@ -210,13 +210,13 @@ Always use `.js` extensions in import specifiers. CI gate: `src/tests/global/imp
 
 - `email-login.service.ts` → `eventBus.emit()` → handler → `recordOutboxEmail()` (see Event bus)
 - `auth-method.service.ts` → `eventBus.emit()` → handler → `recordOutboxEmail()`
-- `member-invitation.service.ts` → `eventBus.emit()` → handler → `recordOutboxEmail()` (see Event bus)
+- `membership-invitation.service.ts` → `eventBus.emit()` → handler → `recordOutboxEmail()` (see Event bus)
 
 ### Event bus
 
 - `src/core/events/event-bus.ts` defines `EventBus` and `eventBus` singleton with `on()` and `emit()`.
 - `src/core/events/register-event-handlers.ts` registers domain handlers from `buildApp()` before routes.
-- **Member invitation:** `member-invitation.service.ts` emits `tenancy.member_invitation.created` / `tenancy.member_invitation.resent`; handlers in `tenancy/events/`.
+- **Membership invitation:** `membership-invitation.service.ts` emits `tenancy.membership_invitation.created` / `tenancy.membership_invitation.resent`; handlers in `tenancy/events/`.
 
 ### Violations and follow-up
 
@@ -264,7 +264,7 @@ Always use `.js` extensions in import specifiers. CI gate: `src/tests/global/imp
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | auth    | auth-method/auth-method.schema.ts, auth-method/verification-token/verification-token.schema.ts, auth-session/auth-session.schema.ts, auth-mfa/auth-mfa-method.schema.ts, auth-mfa/auth-mfa-recovery-code.schema.ts, auth-webauthn/webauthn-credential.schema.ts                                                                                                                                                                                                         |
 | user    | user.schema.ts, user-settings/user-settings.schema.ts, user-notification-preferences/user-notification-preferences.schema.ts                                                                                                                                                                                                                                                                                                              |
-| tenancy | organization/organization.schema.ts, organization-settings/organization-settings.schema.ts, organization-notification-policy/organization-notification-policy.schema.ts, organization-api-key/organization-api-key.schema.ts, membership/membership.schema.ts, member-invitation/member-invitation.schema.ts, member-role/member-role.schema.ts, member-role-permission/member-role-permission.schema.ts, permission/permission.schema.ts |
+| tenancy | organization/organization.schema.ts, organization-settings/organization-settings.schema.ts, organization-notification-policy/organization-notification-policy.schema.ts, organization-api-key/organization-api-key.schema.ts, membership/membership.schema.ts, membership-invitation/membership-invitation.schema.ts, member-role/member-role.schema.ts, member-role-permission/member-role-permission.schema.ts, permission/permission.schema.ts |
 | billing | plan/plan.schema.ts, subscription/subscription.schema.ts, stripe-webhook/stripe-webhook.schema.ts                                                                                                                                                                                                                                                                                                    |
 | notify  | notification/notification.schema.ts, webhook/webhook.schema.ts                                                                                                                                                                                                                                                                                                                                                                            |
 | audit   | audit.schema.ts                                                                                                                                                                                                                                                                                                                                                                                                                           |
@@ -284,7 +284,7 @@ Always use `.js` extensions in import specifiers. CI gate: `src/tests/global/imp
 
 - **user:** `user-settings`, `user-notification-preferences`, `user-data-export`
 - **organization (under tenancy):** `organization-settings`, `organization-notification-policy`, `organization-api-key`
-- **membership:** `member-invitation`
+- **membership:** `membership-invitation`
 - **member-roles:** `member-role-permission`
 - **auth:** `auth-method`, `auth-session`, `auth-mfa`, `auth-webauthn`
 - **billing:** `stripe-webhook` (no billing- prefix)

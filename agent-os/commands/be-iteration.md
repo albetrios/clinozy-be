@@ -35,7 +35,7 @@ needs the user, then continue or change.
    [--mode …] [--both] --dry-run`, show the report, then run it for real after the user confirms,
    and check it with `pnpm iteration:intake <iteration> --check`.
 5. **Continue step by step** through the guide — **be-iteration-planning** (Steps 0–7; Step 0
-   confirms the Baseline with `pnpm iteration:baseline`; Step 5 is the route review, one module at a
+   confirms the Baseline with `pnpm iteration:baseline`; Step 5 is the route review, one sub-domain at a
    time) → approval → **be-kickoff-iteration**
    (one ROUTE row at a time, `AS-BUILT.md`) → close → freeze. Both skills stop after each of their
    own steps; keep those stops.

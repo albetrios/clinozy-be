@@ -49,7 +49,7 @@ import type { MemberRoleService } from '@/domains/tenancy/sub-domains/member-rol
 import type { MemberRolePermissionService } from '@/domains/tenancy/sub-domains/member-roles/member-role-permission/member-role-permission.service.js';
 import type { MembershipRepository } from '@/domains/tenancy/sub-domains/membership/membership.repository.js';
 import type { UserService } from '@/domains/user/user.service.js';
-import type { MemberInvitationService } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.service.js';
+import type { MembershipInvitationService } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.service.js';
 import { invalidatePermissions } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
 import { isDisposableEmailBlocked } from '@/shared/utils/text/email.util.js';
 import {
@@ -146,9 +146,9 @@ describe('MembershipService', () => {
     }),
   } as unknown as UserService;
 
-  const memberInvitationService = {
+  const membershipInvitationService = {
     createForMembership: vi.fn().mockResolvedValue({ id: 'inv_public' }),
-  } as unknown as MemberInvitationService;
+  } as unknown as MembershipInvitationService;
 
   const service = new MembershipService(
     organizationService,
@@ -162,7 +162,7 @@ describe('MembershipService', () => {
     undefined,
     undefined,
     userService,
-    memberInvitationService,
+    membershipInvitationService,
   );
 
   beforeEach(() => {
@@ -220,7 +220,7 @@ describe('MembershipService', () => {
     expect(membershipRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({ user_id: 10, role_id: 2, status: 'INVITED' }),
     );
-    expect(memberInvitationService.createForMembership).toHaveBeenCalledWith(
+    expect(membershipInvitationService.createForMembership).toHaveBeenCalledWith(
       expect.objectContaining({ membership_id: 3, email: 'invitee@example.com' }),
     );
     expect(invalidatePermissions).toHaveBeenCalledWith('user_public', 'org_public');
@@ -384,7 +384,7 @@ describe('MembershipService', () => {
       undefined,
       undefined,
       userService,
-      memberInvitationService,
+      membershipInvitationService,
     );
     seatEnforcedService.wireSeatEnforcement({
       reserveSeatCeilingForMemberAdd,

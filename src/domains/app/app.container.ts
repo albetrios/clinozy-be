@@ -5,26 +5,32 @@ import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/
 import type { BaseRecordPorts } from './base-record.types.js';
 import { BranchesRepository } from './sub-domains/branches/branches.repository.js';
 import { BranchesService } from './sub-domains/branches/branches.service.js';
-import { BranchUserAccessesRepository } from './sub-domains/branches/branch-user-accesses/branch-user-accesses.repository.js';
-import { BranchUserAccessesService } from './sub-domains/branches/branch-user-accesses/branch-user-accesses.service.js';
+import { BranchMembersRepository } from './sub-domains/branches/branch-members/branch-members.repository.js';
+import { BranchMembersService } from './sub-domains/branches/branch-members/branch-members.service.js';
 import { type AppRecordServices, createAppRecordServices } from './app-records.container.js';
 import { UserPreferencesRepository } from './sub-domains/user-preferences/user-preferences.repository.js';
 import { UserPreferencesService } from './sub-domains/user-preferences/user-preferences.service.js';
 import { TaskRuleSettingsRepository } from './sub-domains/task-rule-settings/task-rule-settings.repository.js';
 import { TaskRuleSettingsService } from './sub-domains/task-rule-settings/task-rule-settings.service.js';
-import { AppUsersService } from './sub-domains/users/users.service.js';
+import { AppMembershipsService } from './sub-domains/memberships/memberships.service.js';
 import { SearchesService } from './sub-domains/searches/searches.service.js';
 import { ContactsService } from './sub-domains/contacts/contacts.service.js';
+import {
+  type AppMembershipLeaveStep,
+  createAppMembershipLeaveStep,
+} from './app-membership-leave.js';
 
 /** The app domain's services (the app's own records), decorated on Fastify as `appDomain`. */
 export type AppContainer = {
   branchesService: BranchesService;
-  branchUserAccessesService: BranchUserAccessesService;
+  branchMembersService: BranchMembersService;
   userPreferencesService: UserPreferencesService;
   taskRuleSettingsService: TaskRuleSettingsService;
-  appUsersService: AppUsersService;
+  appMembershipsService: AppMembershipsService;
   searchesService: SearchesService;
   contactsService: ContactsService;
+  /** The app's part of the membership leave step (launch K4), wired into tenancy. */
+  membershipLeaveStep: AppMembershipLeaveStep;
 } & AppRecordServices;
 
 /** Builds the app domain container from its repositories and the tenancy services it reads. */
@@ -34,7 +40,7 @@ export function createAppContainer(
   organizationSettingsService: OrganizationSettingsService,
 ): AppContainer {
   const branchesRepository = new BranchesRepository();
-  const branchUserAccessesRepository = new BranchUserAccessesRepository();
+  const branchMembersRepository = new BranchMembersRepository();
   const records = createAppRecordServices(organizationService);
   // What table rules may call outside the app records (BaseRecordPorts) — wired once here.
   const ports: BaseRecordPorts = {
@@ -59,13 +65,13 @@ export function createAppContainer(
       organizationService,
       membershipService,
       branchesRepository,
-      branchUserAccessesRepository,
+      branchMembersRepository,
     ),
-    branchUserAccessesService: new BranchUserAccessesService(
+    branchMembersService: new BranchMembersService(
       organizationService,
       membershipService,
       branchesRepository,
-      branchUserAccessesRepository,
+      branchMembersRepository,
     ),
     userPreferencesService: new UserPreferencesService(
       organizationService,
@@ -75,9 +81,10 @@ export function createAppContainer(
       organizationService,
       new TaskRuleSettingsRepository(),
     ),
-    appUsersService: new AppUsersService(membershipService),
+    appMembershipsService: new AppMembershipsService(membershipService),
     searchesService: new SearchesService(records),
     contactsService: new ContactsService(organizationService, records),
+    membershipLeaveStep: createAppMembershipLeaveStep(),
     ...records,
   };
 }

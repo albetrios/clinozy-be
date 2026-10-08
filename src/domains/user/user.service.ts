@@ -60,6 +60,23 @@ export type UserOrganizationOwnershipPort = {
 };
 
 /**
+ * Ends a deleted account's memberships (launch K6), satisfied by tenancy's `MembershipService`.
+ *
+ * @remarks
+ * - **Algorithm:** account deletion calls it once sessions and credentials are revoked; every live
+ *   membership of the login ends through the leave step with `delete_reason = account_deleted`, so
+ *   a deleted user no longer shows as an active member and each clinic keeps the name it knew.
+ * - **Notes:** a structural port so the user domain does not import tenancy (tenancy already
+ *   depends on the user domain).
+ */
+export type UserMembershipOffboardingPort = {
+  endMembershipsForDeletedAccount(options: {
+    userPublicId: string;
+    userInternalId: number;
+  }): Promise<number>;
+};
+
+/**
  * Cross-domain services injected lazily into {@link UserService} so account deletion can fan out
  * its side effects.
  *
@@ -83,6 +100,8 @@ export type UserOffboardingDependencies = {
    * its members + billing — would be orphaned at a tombstoned owner). Require transfer/delete first.
    */
   organizationOwnership?: UserOrganizationOwnershipPort | undefined;
+  /** Launch K6: ends the login's memberships before the login itself is soft-deleted. */
+  membershipOffboarding?: UserMembershipOffboardingPort | undefined;
 };
 
 /**
@@ -115,6 +134,7 @@ export class UserService {
   private offboardingUploadService: UploadService | null = null;
   private offboardingUserDataExportService: UserDataExportService | null = null;
   private offboardingOrganizationOwnership: UserOrganizationOwnershipPort | null = null;
+  private offboardingMemberships: UserMembershipOffboardingPort | null = null;
   private authSessionService: AuthSessionService | null = null;
   private authMethodService: AuthMethodService | null = null;
 
@@ -129,6 +149,7 @@ export class UserService {
     this.offboardingUploadService = dependencies.uploadService;
     this.offboardingUserDataExportService = dependencies.userDataExportService;
     this.offboardingOrganizationOwnership = dependencies.organizationOwnership ?? null;
+    this.offboardingMemberships = dependencies.membershipOffboarding ?? null;
   }
 
   private get offboardingDependencies(): UserOffboardingDependencies | null {
@@ -148,6 +169,7 @@ export class UserService {
       uploadService: this.offboardingUploadService,
       userDataExportService: this.offboardingUserDataExportService,
       organizationOwnership: this.offboardingOrganizationOwnership ?? undefined,
+      membershipOffboarding: this.offboardingMemberships ?? undefined,
     };
   }
 
@@ -236,6 +258,8 @@ export class UserService {
     //   (2) revoke auth methods → no fresh login can re-mint a session.
     //   (3) invalidate verification tokens → email-code / password-reset issued seconds before
     //       deletion can no longer mint a session for the soon-to-be-deleted user (sec-U1).
+    //   (3b) end every membership (launch K6) through the leave step, `account_deleted` — before
+    //       the login is tombstoned, while its memberships are still live.
     //   (4) purge data-exports + uploads → now that sessions/tokens are dead, no concurrent
     //       writer can re-introduce rows.
     //   (5) softDelete → flip deleted_at; this is the final DB-state mutation.
@@ -246,6 +270,10 @@ export class UserService {
     await offboarding.authSessionService.revokeAllSessions(public_id);
     await offboarding.authMethodService.revokeAllForUser(public_id);
     await offboarding.authMethodService.invalidateAllVerificationTokensForUser(public_id);
+    await offboarding.membershipOffboarding?.endMembershipsForDeletedAccount({
+      userPublicId: public_id,
+      userInternalId: user.id,
+    });
     await offboarding.uploadService.tombstoneAllByUserId(user.id);
     await offboarding.userDataExportService.deleteAllExportsForUser(user.id, public_id);
     // global_admin for the same NEW-row SELECT-visibility reason as the short-circuit path

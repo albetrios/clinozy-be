@@ -29,18 +29,22 @@ function readCodes(resources: readonly string[]): string[] {
   return resources.map((resource) => `${resource}:read`);
 }
 
-/** What every role holds: the organization, the team list, its own saved views and tasks (D12). */
+/**
+ * What every role holds: the organization (the team picker, `GET /app/memberships`), its own saved
+ * views and tasks (D12). The team management list (`membership:read`) is Owner and Admin (T7).
+ */
 const EVERY_ROLE_CODES: readonly string[] = [
   TENANCY_PERMISSIONS.ORGANIZATION_READ,
-  TENANCY_PERMISSIONS.MEMBERSHIP_READ,
   ...sectionCodes('personal', ['read', 'create', 'update', 'delete']),
   ...sectionCodes('tasks', VIEW_CREATE_EDIT),
 ];
 
-/** The pickers a role that books or bills needs: offerings, offers, rooms, machines, holidays. */
+/**
+ * The pickers a role that books or bills needs: offerings and offers. A branch's rooms, machines
+ * and holidays are readable by every member (`organization:read`, D5/D12).
+ */
 const BOOKING_LOOKUP_CODES: readonly string[] = [
   ...readCodes(APP_ACCESS_SECTION_RESOURCES.offerings),
-  ...readCodes(APP_ACCESS_SECTION_RESOURCES.settings),
 ];
 
 /**

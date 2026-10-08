@@ -17,9 +17,9 @@ import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
 import { database } from '@/infrastructure/database/connection.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
-import { member_invitations } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.schema.js';
-import { MemberInvitationRepository } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.repository.js';
-import { hashInvitationToken } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.token.js';
+import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
+import { MembershipInvitationRepository } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.repository.js';
+import { hashInvitationToken } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.token.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 /**
@@ -108,16 +108,16 @@ describe('Security: invitation lifecycle flow abuse', () => {
     const rawToken = `flow-token-${randomUUID()}`;
     let invitation: { public_id: string; id: number };
     if (options?.expired) {
-      // `chk_member_inv_expires` enforces `expires_at > created_at`, so an already-expired row
+      // `chk_membership_invitations_expires` enforces `expires_at > created_at`, so an already-expired row
       // cannot be created with a default `created_at` of now — the only lawful shape for one is a
       // backdated pair. Inserted directly because the repository's `create` does not take
       // `created_at` (by design: nothing in production backdates an invitation).
       const createdAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1_000);
       const expiresAt = new Date(Date.now() - 29 * 24 * 60 * 60 * 1_000);
       const [row] = await database
-        .insert(member_invitations)
+        .insert(membership_invitations)
         .values({
-          public_id: generatePublicId('memberInvitation'),
+          public_id: generatePublicId('membershipInvitation'),
           membership_id: inviteeMembership!.id,
           email: invitee.email,
           token_hash: hashInvitationToken(rawToken),
@@ -129,7 +129,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
         .returning();
       invitation = row!;
     } else {
-      invitation = await new MemberInvitationRepository().create({
+      invitation = await new MembershipInvitationRepository().create({
         membership_id: inviteeMembership!.id,
         email: invitee.email,
         token_hash: hashInvitationToken(rawToken),
@@ -164,7 +164,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
   describe('revoke closes the invitation for every downstream step', () => {
     it('a revoked invitation cannot be accepted, even with the correct token', async () => {
       // Answered **404, not 400**, and deliberately so. The accept route resolves the owning organization
-      // through the SECURITY DEFINER `resolve_member_invitation_lookup_by_public_id`, which
+      // through the SECURITY DEFINER `resolve_membership_invitation_lookup_by_public_id`, which
       // migration 20260608051000 hardened with four guards — `accepted_at IS NULL`,
       // `revoked_at IS NULL`, and both `deleted_at IS NULL`. A revoked invitation therefore does not
       // resolve at all, so the caller learns nothing about its state (no "this was revoked" oracle

@@ -287,12 +287,17 @@ CREATE TABLE "tenancy"."roles" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
 	"updated_by_user_id" bigint,
+	"delete_reason" varchar(20),
+	"delete_note" varchar(280),
 	CONSTRAINT "chk_roles_updated" CHECK ("tenancy"."roles"."updated_at" >= "tenancy"."roles"."created_at"),
-	CONSTRAINT "chk_roles_tone" CHECK ("tenancy"."roles"."tone" IN ('butter', 'lav', 'sky', 'sage', 'blush', 'mint', 'peach', 'plum', 'lime', 'slate', 'stone'))
+	CONSTRAINT "chk_roles_tone" CHECK ("tenancy"."roles"."tone" IN ('butter', 'lav', 'sky', 'sage', 'blush', 'mint', 'peach', 'plum', 'lime', 'slate', 'stone')),
+	CONSTRAINT "chk_roles_delete_reason" CHECK ("tenancy"."roles"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
+	CONSTRAINT "chk_roles_delete_reason_when_deleted" CHECK ("tenancy"."roles"."delete_reason" IS NULL OR "tenancy"."roles"."deleted_at" IS NOT NULL),
+	CONSTRAINT "chk_roles_delete_note_when_other" CHECK ("tenancy"."roles"."delete_reason" IS DISTINCT FROM 'other' OR "tenancy"."roles"."delete_note" IS NOT NULL)
 );
 --> statement-breakpoint
 ALTER TABLE "tenancy"."roles" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE TABLE "tenancy"."member_invitations" (
+CREATE TABLE "tenancy"."membership_invitations" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
 	"membership_id" bigint NOT NULL,
@@ -304,18 +309,18 @@ CREATE TABLE "tenancy"."member_invitations" (
 	"revoked_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
-	CONSTRAINT "chk_member_inv_expires" CHECK ("tenancy"."member_invitations"."expires_at" > "tenancy"."member_invitations"."created_at"),
-	CONSTRAINT "chk_member_inv_accepted" CHECK ("tenancy"."member_invitations"."accepted_at" IS NULL OR "tenancy"."member_invitations"."revoked_at" IS NULL)
+	CONSTRAINT "chk_membership_invitations_expires" CHECK ("tenancy"."membership_invitations"."expires_at" > "tenancy"."membership_invitations"."created_at"),
+	CONSTRAINT "chk_membership_invitations_accepted" CHECK ("tenancy"."membership_invitations"."accepted_at" IS NULL OR "tenancy"."membership_invitations"."revoked_at" IS NULL)
 );
 --> statement-breakpoint
-ALTER TABLE "tenancy"."member_invitations" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "tenancy"."membership_invitations" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "tenancy"."memberships" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
 	"user_id" bigint NOT NULL,
 	"organization_id" bigint NOT NULL,
 	"role_id" bigint NOT NULL,
-	"status" varchar(20) DEFAULT 'INVITED' NOT NULL,
+	"status" varchar(20) DEFAULT 'invited' NOT NULL,
 	"invited_by_user_id" bigint,
 	"joined_at" timestamp with time zone,
 	"deleted_at" timestamp with time zone,
@@ -332,8 +337,9 @@ CREATE TABLE "tenancy"."memberships" (
 	"commission_percent" numeric(5, 2) DEFAULT '0' NOT NULL,
 	"delete_reason" varchar(20),
 	"delete_note" varchar(280),
-	CONSTRAINT "chk_memberships_status" CHECK ("tenancy"."memberships"."status" IN ('INVITED', 'ACTIVE', 'SUSPENDED')),
-	CONSTRAINT "chk_memberships_joined" CHECK ("tenancy"."memberships"."status" != 'ACTIVE' OR "tenancy"."memberships"."joined_at" IS NOT NULL),
+	"display_name" varchar(120) DEFAULT '' NOT NULL,
+	CONSTRAINT "chk_memberships_status" CHECK ("tenancy"."memberships"."status" IN ('invited', 'active', 'suspended')),
+	CONSTRAINT "chk_memberships_joined" CHECK ("tenancy"."memberships"."status" != 'active' OR "tenancy"."memberships"."joined_at" IS NOT NULL),
 	CONSTRAINT "chk_memberships_updated" CHECK ("tenancy"."memberships"."updated_at" >= "tenancy"."memberships"."created_at"),
 	CONSTRAINT "chk_memberships_staff_number" CHECK ("tenancy"."memberships"."staff_number" > 0),
 	CONSTRAINT "chk_memberships_phone" CHECK ("tenancy"."memberships"."phone" ~ '^\+91\d{10}$'),
@@ -342,9 +348,10 @@ CREATE TABLE "tenancy"."memberships" (
 	CONSTRAINT "chk_memberships_working_days_count" CHECK (cardinality("tenancy"."memberships"."working_days") BETWEEN 1 AND 7),
 	CONSTRAINT "chk_memberships_work_hours" CHECK ("tenancy"."memberships"."work_ends_at" > "tenancy"."memberships"."work_starts_at"),
 	CONSTRAINT "chk_memberships_commission_percent" CHECK ("tenancy"."memberships"."commission_percent" BETWEEN 0 AND 100),
-	CONSTRAINT "chk_memberships_delete_reason" CHECK ("tenancy"."memberships"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
+	CONSTRAINT "chk_memberships_delete_reason" CHECK ("tenancy"."memberships"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other', 'left', 'account_deleted')),
 	CONSTRAINT "chk_memberships_delete_reason_when_deleted" CHECK ("tenancy"."memberships"."delete_reason" IS NULL OR "tenancy"."memberships"."deleted_at" IS NOT NULL),
-	CONSTRAINT "chk_memberships_delete_note_when_other" CHECK ("tenancy"."memberships"."delete_reason" IS DISTINCT FROM 'other' OR "tenancy"."memberships"."delete_note" IS NOT NULL)
+	CONSTRAINT "chk_memberships_delete_note_when_other" CHECK ("tenancy"."memberships"."delete_reason" IS DISTINCT FROM 'other' OR "tenancy"."memberships"."delete_note" IS NOT NULL),
+	CONSTRAINT "chk_memberships_display_name" CHECK (btrim("tenancy"."memberships"."display_name") <> '')
 );
 --> statement-breakpoint
 ALTER TABLE "tenancy"."memberships" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
@@ -570,9 +577,9 @@ ALTER TABLE "tenancy"."role_permissions" ADD CONSTRAINT "role_permissions_create
 ALTER TABLE "tenancy"."roles" ADD CONSTRAINT "roles_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tenancy"."roles" ADD CONSTRAINT "roles_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tenancy"."roles" ADD CONSTRAINT "roles_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "tenancy"."member_invitations" ADD CONSTRAINT "member_invitations_membership_id_memberships_id_fk" FOREIGN KEY ("membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "tenancy"."member_invitations" ADD CONSTRAINT "member_invitations_invited_by_user_id_users_id_fk" FOREIGN KEY ("invited_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "tenancy"."member_invitations" ADD CONSTRAINT "member_invitations_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tenancy"."membership_invitations" ADD CONSTRAINT "membership_invitations_membership_id_memberships_id_fk" FOREIGN KEY ("membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tenancy"."membership_invitations" ADD CONSTRAINT "membership_invitations_invited_by_user_id_users_id_fk" FOREIGN KEY ("invited_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tenancy"."membership_invitations" ADD CONSTRAINT "membership_invitations_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tenancy"."memberships" ADD CONSTRAINT "memberships_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tenancy"."memberships" ADD CONSTRAINT "memberships_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tenancy"."memberships" ADD CONSTRAINT "memberships_role_id_roles_id_fk" FOREIGN KEY ("role_id") REFERENCES "tenancy"."roles"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
@@ -647,11 +654,11 @@ CREATE UNIQUE INDEX "idx_roles_public_id" ON "tenancy"."roles" USING btree ("pub
 CREATE INDEX "idx_roles_org_name" ON "tenancy"."roles" USING btree ("organization_id","name");--> statement-breakpoint
 CREATE INDEX "idx_roles_org_system" ON "tenancy"."roles" USING btree ("organization_id","is_system");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_roles_org_name_unique" ON "tenancy"."roles" USING btree ("organization_id","name") WHERE "tenancy"."roles"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX "idx_member_invitations_public_id" ON "tenancy"."member_invitations" USING btree ("public_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "idx_member_invitations_token" ON "tenancy"."member_invitations" USING btree ("token_hash");--> statement-breakpoint
-CREATE INDEX "idx_member_invitations_membership" ON "tenancy"."member_invitations" USING btree ("membership_id");--> statement-breakpoint
-CREATE INDEX "idx_member_invitations_email" ON "tenancy"."member_invitations" USING btree ("email","accepted_at");--> statement-breakpoint
-CREATE INDEX "idx_member_invitations_expires" ON "tenancy"."member_invitations" USING btree ("expires_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_membership_invitations_public_id" ON "tenancy"."membership_invitations" USING btree ("public_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_membership_invitations_token" ON "tenancy"."membership_invitations" USING btree ("token_hash");--> statement-breakpoint
+CREATE INDEX "idx_membership_invitations_membership" ON "tenancy"."membership_invitations" USING btree ("membership_id");--> statement-breakpoint
+CREATE INDEX "idx_membership_invitations_email" ON "tenancy"."membership_invitations" USING btree ("email","accepted_at");--> statement-breakpoint
+CREATE INDEX "idx_membership_invitations_expires" ON "tenancy"."membership_invitations" USING btree ("expires_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_memberships_public_id" ON "tenancy"."memberships" USING btree ("public_id");--> statement-breakpoint
 CREATE INDEX "idx_memberships_user_org" ON "tenancy"."memberships" USING btree ("user_id","organization_id");--> statement-breakpoint
 CREATE INDEX "idx_memberships_org_status" ON "tenancy"."memberships" USING btree ("organization_id","status");--> statement-breakpoint
@@ -659,6 +666,9 @@ CREATE INDEX "idx_memberships_user_status" ON "tenancy"."memberships" USING btre
 CREATE INDEX "idx_memberships_role" ON "tenancy"."memberships" USING btree ("role_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_memberships_user_org_unique" ON "tenancy"."memberships" USING btree ("user_id","organization_id") WHERE "tenancy"."memberships"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_memberships_organization_staff_number" ON "tenancy"."memberships" USING btree ("organization_id","staff_number");--> statement-breakpoint
+-- (organization_id, id): the target of the app's composite membership foreign keys, so a record can only
+-- point at a member of its own organization (launch K8).
+CREATE UNIQUE INDEX "idx_memberships_organization_id_id" ON "tenancy"."memberships" USING btree ("organization_id","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_api_keys_public_id" ON "tenancy"."api_keys" USING btree ("public_id");--> statement-breakpoint
 CREATE INDEX "idx_api_keys_organization" ON "tenancy"."api_keys" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "idx_api_keys_organization_status" ON "tenancy"."api_keys" USING btree ("organization_id","status");--> statement-breakpoint
@@ -762,7 +772,7 @@ CREATE POLICY "roles_tenant_isolation" ON "tenancy"."roles" AS PERMISSIVE FOR AL
             WHERE public_id = current_setting('app.current_organization_id', true)
           )
           OR current_setting('app.global_retention_cleanup', true) = 'true');--> statement-breakpoint
-CREATE POLICY "member_invitations_tenant_isolation" ON "tenancy"."member_invitations" AS PERMISSIVE FOR ALL TO public USING ("tenancy"."member_invitations"."membership_id" IN (
+CREATE POLICY "membership_invitations_tenant_isolation" ON "tenancy"."membership_invitations" AS PERMISSIVE FOR ALL TO public USING ("tenancy"."membership_invitations"."membership_id" IN (
             SELECT id FROM tenancy.memberships
             WHERE organization_id = (
               SELECT id FROM tenancy.organizations
@@ -872,9 +882,6 @@ CREATE TABLE IF NOT EXISTS "app"."branches" (
 	"is_active" boolean DEFAULT true NOT NULL,
 	"maps_link" varchar(512),
 	"review_link" varchar(512),
-	"deleted_at" timestamp with time zone,
-	"delete_reason" varchar(20),
-	"delete_note" varchar(280),
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
@@ -888,29 +895,25 @@ CREATE TABLE IF NOT EXISTS "app"."branches" (
 	CONSTRAINT "chk_branches_working_days_count" CHECK (cardinality("app"."branches"."working_days") BETWEEN 1 AND 7),
 	CONSTRAINT "chk_branches_maps_link" CHECK ("app"."branches"."maps_link" ~ '^https://'),
 	CONSTRAINT "chk_branches_review_link" CHECK ("app"."branches"."review_link" ~ '^https://'),
-	CONSTRAINT "chk_branches_delete_reason" CHECK ("app"."branches"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
-	CONSTRAINT "chk_branches_delete_reason_when_deleted" CHECK (("app"."branches"."deleted_at" IS NULL) = ("app"."branches"."delete_reason" IS NULL)),
-	CONSTRAINT "chk_branches_delete_note_when_other" CHECK ("app"."branches"."delete_reason" IS DISTINCT FROM 'other' OR "app"."branches"."delete_note" IS NOT NULL),
 	CONSTRAINT "chk_branches_updated" CHECK ("app"."branches"."updated_at" >= "app"."branches"."created_at")
 );
 --> statement-breakpoint
 ALTER TABLE "app"."branches" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_default_doctor_membership_id_memberships_id_fk" FOREIGN KEY ("default_doctor_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_default_front_desk_membership_id_memberships_id_fk" FOREIGN KEY ("default_front_desk_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_default_therapist_membership_id_memberships_id_fk" FOREIGN KEY ("default_therapist_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_default_pharmacist_membership_id_memberships_id_fk" FOREIGN KEY ("default_pharmacist_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_default_doctor_membership_id_fk" FOREIGN KEY ("organization_id","default_doctor_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE SET NULL ("default_doctor_membership_id") ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_default_front_desk_membership_id_fk" FOREIGN KEY ("organization_id","default_front_desk_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE SET NULL ("default_front_desk_membership_id") ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_default_therapist_membership_id_fk" FOREIGN KEY ("organization_id","default_therapist_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE SET NULL ("default_therapist_membership_id") ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_default_pharmacist_membership_id_fk" FOREIGN KEY ("organization_id","default_pharmacist_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE SET NULL ("default_pharmacist_membership_id") ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."branches" ADD CONSTRAINT "branches_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_branches_public_id" ON "app"."branches" USING btree ("public_id");--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_branches_organization_name_unique" ON "app"."branches" USING btree ("organization_id", lower("name")) WHERE "app"."branches"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_branches_one_main_per_organization" ON "app"."branches" USING btree ("organization_id") WHERE "app"."branches"."is_main" AND "app"."branches"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_branches_organization_name_unique" ON "app"."branches" USING btree ("organization_id", lower("name"));--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_branches_one_main_per_organization" ON "app"."branches" USING btree ("organization_id") WHERE "app"."branches"."is_main";--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_branches_organization_id_name" ON "app"."branches" USING btree ("organization_id", "name");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_branches_deleted_at" ON "app"."branches" USING btree ("deleted_at") WHERE "app"."branches"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_branches_default_doctor_membership_id" ON "app"."branches" USING btree ("default_doctor_membership_id") WHERE "app"."branches"."default_doctor_membership_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_branches_default_front_desk_membership_id" ON "app"."branches" USING btree ("default_front_desk_membership_id") WHERE "app"."branches"."default_front_desk_membership_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_branches_default_therapist_membership_id" ON "app"."branches" USING btree ("default_therapist_membership_id") WHERE "app"."branches"."default_therapist_membership_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_branches_default_pharmacist_membership_id" ON "app"."branches" USING btree ("default_pharmacist_membership_id") WHERE "app"."branches"."default_pharmacist_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branches_organization_id_default_doctor_membership_id" ON "app"."branches" USING btree ("organization_id","default_doctor_membership_id") WHERE "app"."branches"."default_doctor_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branches_organization_id_default_front_desk_membership_id" ON "app"."branches" USING btree ("organization_id","default_front_desk_membership_id") WHERE "app"."branches"."default_front_desk_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branches_organization_id_default_therapist_membership_id" ON "app"."branches" USING btree ("organization_id","default_therapist_membership_id") WHERE "app"."branches"."default_therapist_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branches_organization_id_default_pharmacist_membership_id" ON "app"."branches" USING btree ("organization_id","default_pharmacist_membership_id") WHERE "app"."branches"."default_pharmacist_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_branches_created_by_user_id" ON "app"."branches" USING btree ("created_by_user_id") WHERE "app"."branches"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_branches_updated_by_user_id" ON "app"."branches" USING btree ("updated_by_user_id") WHERE "app"."branches"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE POLICY "branches_tenant_isolation" ON "app"."branches" AS PERMISSIVE FOR ALL TO public USING ("app"."branches"."organization_id" = (
@@ -921,28 +924,29 @@ CREATE POLICY "branches_tenant_isolation" ON "app"."branches" AS PERMISSIVE FOR 
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
--- app.branch_user_accesses — which branches each person of an organization works in (launch ROUTE #2).
-CREATE TABLE IF NOT EXISTS "app"."branch_user_accesses" (
+-- app.branch_members — who works at which branch (launch ROUTE #2; renamed from branch_members at ROUTE #125, D9).
+-- The member pointer is composite (organization_id, membership_id) so a branch can only list a member
+-- of its own organization (K8); the rows stay when a membership ends (hidden while ended, D57).
+CREATE TABLE IF NOT EXISTS "app"."branch_members" (
 	"branch_id" bigint NOT NULL,
 	"membership_id" bigint NOT NULL,
 	"organization_id" bigint NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
-	CONSTRAINT "branch_user_accesses_pkey" PRIMARY KEY ("branch_id", "membership_id")
+	CONSTRAINT "branch_members_pkey" PRIMARY KEY ("branch_id", "membership_id")
 );
 --> statement-breakpoint
-ALTER TABLE "app"."branch_user_accesses" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
-ALTER TABLE "app"."branch_user_accesses" ADD CONSTRAINT "branch_user_accesses_branch_id_branches_id_fk" FOREIGN KEY ("branch_id") REFERENCES "app"."branches"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."branch_user_accesses" ADD CONSTRAINT "branch_user_accesses_membership_id_memberships_id_fk" FOREIGN KEY ("membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."branch_user_accesses" ADD CONSTRAINT "branch_user_accesses_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."branch_user_accesses" ADD CONSTRAINT "branch_user_accesses_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_branch_user_accesses_membership_id" ON "app"."branch_user_accesses" USING btree ("membership_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_branch_user_accesses_organization_id" ON "app"."branch_user_accesses" USING btree ("organization_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_branch_user_accesses_created_by_user_id" ON "app"."branch_user_accesses" USING btree ("created_by_user_id") WHERE "app"."branch_user_accesses"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE POLICY "branch_user_accesses_tenant_isolation" ON "app"."branch_user_accesses" AS PERMISSIVE FOR ALL TO public USING ("app"."branch_user_accesses"."organization_id" = (
+ALTER TABLE "app"."branch_members" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "app"."branch_members" ADD CONSTRAINT "branch_members_branch_id_branches_id_fk" FOREIGN KEY ("branch_id") REFERENCES "app"."branches"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branch_members" ADD CONSTRAINT "branch_members_membership_fk" FOREIGN KEY ("organization_id","membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branch_members" ADD CONSTRAINT "branch_members_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branch_members" ADD CONSTRAINT "branch_members_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_members_organization_id_membership_id" ON "app"."branch_members" USING btree ("organization_id","membership_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_members_created_by_user_id" ON "app"."branch_members" USING btree ("created_by_user_id") WHERE "app"."branch_members"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "branch_members_tenant_isolation" ON "app"."branch_members" AS PERMISSIVE FOR ALL TO public USING ("app"."branch_members"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )) WITH CHECK ("app"."branch_user_accesses"."organization_id" = (
+          )) WITH CHECK ("app"."branch_members"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -972,6 +976,77 @@ $$;
 CREATE TRIGGER trg_memberships_staff_number
 BEFORE INSERT ON tenancy.memberships
 FOR EACH ROW EXECUTE FUNCTION tenancy.fn_assign_membership_staff_number();
+--> statement-breakpoint
+-- tenancy.memberships.display_name — the name the organization keeps for a member (launch K3): copied
+-- from the login at join and kept equal to the profile while the membership is live; frozen once it
+-- ends, so a clinic they left keeps the name it knew. The name is the login's first and last name, or
+-- its email when both are empty (the team list's rule), cut to 120 characters. SECURITY DEFINER: the
+-- inviter's session cannot see the invitee's `auth.users` row, and a profile update must reach the
+-- member's rows in every organization; both functions are narrow — one login's name, its own rows.
+CREATE OR REPLACE FUNCTION tenancy.fn_membership_display_name(
+  first_name_param text,
+  last_name_param text,
+  email_param text
+) RETURNS varchar
+LANGUAGE sql
+IMMUTABLE
+SET search_path = pg_catalog
+AS $$
+  SELECT left(
+    COALESCE(NULLIF(btrim(concat_ws(' ', first_name_param, last_name_param)), ''), email_param),
+    120
+  )::varchar;
+$$;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION tenancy.fn_set_membership_display_name() RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = tenancy, auth, pg_catalog
+AS $$
+BEGIN
+  -- At join (an empty name), and when an ended membership is live again (restore, re-add): the name
+  -- follows the profile while the membership lasts (launch K3).
+  IF NEW.display_name IS NULL OR btrim(NEW.display_name) = ''
+     OR (TG_OP = 'UPDATE' AND OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL) THEN
+    SELECT tenancy.fn_membership_display_name(u.first_name, u.last_name, u.email)
+      INTO NEW.display_name
+    FROM auth.users AS u
+    WHERE u.id = NEW.user_id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+CREATE TRIGGER trg_memberships_display_name
+BEFORE INSERT OR UPDATE OF deleted_at ON tenancy.memberships
+FOR EACH ROW EXECUTE FUNCTION tenancy.fn_set_membership_display_name();
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION tenancy.fn_sync_membership_display_names() RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = tenancy, auth, pg_catalog
+AS $$
+BEGIN
+  UPDATE tenancy.memberships AS m
+  SET display_name = tenancy.fn_membership_display_name(NEW.first_name, NEW.last_name, NEW.email),
+      updated_at = now()
+  WHERE m.user_id = NEW.id
+    AND m.deleted_at IS NULL
+    AND m.display_name IS DISTINCT FROM
+      tenancy.fn_membership_display_name(NEW.first_name, NEW.last_name, NEW.email);
+  RETURN NULL;
+END;
+$$;
+--> statement-breakpoint
+CREATE TRIGGER trg_users_sync_membership_display_names
+AFTER UPDATE OF first_name, last_name, email ON auth.users
+FOR EACH ROW
+WHEN (
+  OLD.first_name IS DISTINCT FROM NEW.first_name
+  OR OLD.last_name IS DISTINCT FROM NEW.last_name
+  OR OLD.email IS DISTINCT FROM NEW.email
+)
+EXECUTE FUNCTION tenancy.fn_sync_membership_display_names();
 --> statement-breakpoint
 -- tenancy.membership_additional_roles — the roles a person holds besides their main one (launch ROUTE #4, D5).
 CREATE TABLE IF NOT EXISTS "tenancy"."membership_additional_roles" (
@@ -1114,8 +1189,8 @@ CREATE TABLE IF NOT EXISTS "app"."offering_groups" (
 );
 --> statement-breakpoint
 ALTER TABLE "app"."offering_groups" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.rooms — A bookable room of a branch (D28) (launch ROUTE #19).
-CREATE TABLE IF NOT EXISTS "app"."rooms" (
+-- app.branch_rooms — A bookable room of a branch (D28) (launch ROUTE #19; renamed from rooms at ROUTE #125, D9).
+CREATE TABLE IF NOT EXISTS "app"."branch_rooms" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
 	"organization_id" bigint NOT NULL,
@@ -1129,15 +1204,15 @@ CREATE TABLE IF NOT EXISTS "app"."rooms" (
 	"deleted_at" timestamp with time zone,
 	"delete_reason" varchar(20),
 	"delete_note" varchar(280),
-	CONSTRAINT "chk_rooms_updated" CHECK ("app"."rooms"."updated_at" >= "app"."rooms"."created_at"),
-	CONSTRAINT "chk_rooms_delete_reason" CHECK ("app"."rooms"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
-	CONSTRAINT "chk_rooms_delete_reason_when_deleted" CHECK (("app"."rooms"."deleted_at" IS NULL) = ("app"."rooms"."delete_reason" IS NULL)),
-	CONSTRAINT "chk_rooms_delete_note_when_other" CHECK ("app"."rooms"."delete_reason" IS DISTINCT FROM 'other' OR "app"."rooms"."delete_note" IS NOT NULL)
+	CONSTRAINT "chk_branch_rooms_updated" CHECK ("app"."branch_rooms"."updated_at" >= "app"."branch_rooms"."created_at"),
+	CONSTRAINT "chk_branch_rooms_delete_reason" CHECK ("app"."branch_rooms"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
+	CONSTRAINT "chk_branch_rooms_delete_reason_when_deleted" CHECK (("app"."branch_rooms"."deleted_at" IS NULL) = ("app"."branch_rooms"."delete_reason" IS NULL)),
+	CONSTRAINT "chk_branch_rooms_delete_note_when_other" CHECK ("app"."branch_rooms"."delete_reason" IS DISTINCT FROM 'other' OR "app"."branch_rooms"."delete_note" IS NOT NULL)
 );
 --> statement-breakpoint
-ALTER TABLE "app"."rooms" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.machines — A bookable machine of a branch, e.g. a laser (D28) (launch ROUTE #20).
-CREATE TABLE IF NOT EXISTS "app"."machines" (
+ALTER TABLE "app"."branch_rooms" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.branch_machines — A bookable machine of a branch, e.g. a laser (D28) (launch ROUTE #20; renamed from machines at ROUTE #125, D9).
+CREATE TABLE IF NOT EXISTS "app"."branch_machines" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
 	"organization_id" bigint NOT NULL,
@@ -1151,13 +1226,13 @@ CREATE TABLE IF NOT EXISTS "app"."machines" (
 	"deleted_at" timestamp with time zone,
 	"delete_reason" varchar(20),
 	"delete_note" varchar(280),
-	CONSTRAINT "chk_machines_updated" CHECK ("app"."machines"."updated_at" >= "app"."machines"."created_at"),
-	CONSTRAINT "chk_machines_delete_reason" CHECK ("app"."machines"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
-	CONSTRAINT "chk_machines_delete_reason_when_deleted" CHECK (("app"."machines"."deleted_at" IS NULL) = ("app"."machines"."delete_reason" IS NULL)),
-	CONSTRAINT "chk_machines_delete_note_when_other" CHECK ("app"."machines"."delete_reason" IS DISTINCT FROM 'other' OR "app"."machines"."delete_note" IS NOT NULL)
+	CONSTRAINT "chk_branch_machines_updated" CHECK ("app"."branch_machines"."updated_at" >= "app"."branch_machines"."created_at"),
+	CONSTRAINT "chk_branch_machines_delete_reason" CHECK ("app"."branch_machines"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
+	CONSTRAINT "chk_branch_machines_delete_reason_when_deleted" CHECK (("app"."branch_machines"."deleted_at" IS NULL) = ("app"."branch_machines"."delete_reason" IS NULL)),
+	CONSTRAINT "chk_branch_machines_delete_note_when_other" CHECK ("app"."branch_machines"."delete_reason" IS DISTINCT FROM 'other' OR "app"."branch_machines"."delete_note" IS NOT NULL)
 );
 --> statement-breakpoint
-ALTER TABLE "app"."machines" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "app"."branch_machines" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 -- app.branch_holidays — A day a branch is closed — no slots are offered (D41) (launch ROUTE #18).
 CREATE TABLE IF NOT EXISTS "app"."branch_holidays" (
 	"id" bigserial PRIMARY KEY NOT NULL,
@@ -1512,8 +1587,8 @@ CREATE TABLE IF NOT EXISTS "app"."appointments" (
 	"service_label" varchar(120) NOT NULL,
 	"doctor_membership_id" bigint NOT NULL,
 	"therapist_membership_id" bigint,
-	"room_id" bigint,
-	"machine_id" bigint,
+	"branch_room_id" bigint,
+	"branch_machine_id" bigint,
 	"appointment_date" date NOT NULL,
 	"start_time" time NOT NULL,
 	"duration_minutes" integer DEFAULT 30 NOT NULL,
@@ -2801,14 +2876,14 @@ ALTER TABLE "app"."saved_views" ADD CONSTRAINT "saved_views_updated_by_user_id_u
 ALTER TABLE "app"."offering_groups" ADD CONSTRAINT "offering_groups_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offering_groups" ADD CONSTRAINT "offering_groups_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offering_groups" ADD CONSTRAINT "offering_groups_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."rooms" ADD CONSTRAINT "rooms_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."rooms" ADD CONSTRAINT "rooms_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."rooms" ADD CONSTRAINT "rooms_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."rooms" ADD CONSTRAINT "rooms_branch_id_branches_id_fk" FOREIGN KEY ("branch_id") REFERENCES "app"."branches"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."machines" ADD CONSTRAINT "machines_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."machines" ADD CONSTRAINT "machines_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."machines" ADD CONSTRAINT "machines_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."machines" ADD CONSTRAINT "machines_branch_id_branches_id_fk" FOREIGN KEY ("branch_id") REFERENCES "app"."branches"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branch_rooms" ADD CONSTRAINT "branch_rooms_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branch_rooms" ADD CONSTRAINT "branch_rooms_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branch_rooms" ADD CONSTRAINT "branch_rooms_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branch_rooms" ADD CONSTRAINT "branch_rooms_branch_id_branches_id_fk" FOREIGN KEY ("branch_id") REFERENCES "app"."branches"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branch_machines" ADD CONSTRAINT "branch_machines_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branch_machines" ADD CONSTRAINT "branch_machines_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branch_machines" ADD CONSTRAINT "branch_machines_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."branch_machines" ADD CONSTRAINT "branch_machines_branch_id_branches_id_fk" FOREIGN KEY ("branch_id") REFERENCES "app"."branches"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."branch_holidays" ADD CONSTRAINT "branch_holidays_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."branch_holidays" ADD CONSTRAINT "branch_holidays_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."branch_holidays" ADD CONSTRAINT "branch_holidays_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -2817,7 +2892,7 @@ ALTER TABLE "app"."offerings" ADD CONSTRAINT "offerings_organization_id_organiza
 ALTER TABLE "app"."offerings" ADD CONSTRAINT "offerings_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offerings" ADD CONSTRAINT "offerings_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offerings" ADD CONSTRAINT "offerings_default_doctor_membership_id_memberships_id_fk" FOREIGN KEY ("default_doctor_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."offerings" ADD CONSTRAINT "offerings_default_room_id_rooms_id_fk" FOREIGN KEY ("default_room_id") REFERENCES "app"."rooms"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."offerings" ADD CONSTRAINT "offerings_default_room_id_branch_rooms_id_fk" FOREIGN KEY ("default_room_id") REFERENCES "app"."branch_rooms"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offerings" ADD CONSTRAINT "offerings_group_id_offering_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "app"."offering_groups"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offering_branches" ADD CONSTRAINT "offering_branches_offering_id_offerings_id_fk" FOREIGN KEY ("offering_id") REFERENCES "app"."offerings"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offering_branches" ADD CONSTRAINT "offering_branches_branch_id_branches_id_fk" FOREIGN KEY ("branch_id") REFERENCES "app"."branches"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -2874,8 +2949,8 @@ ALTER TABLE "app"."appointments" ADD CONSTRAINT "appointments_branch_id_branches
 ALTER TABLE "app"."appointments" ADD CONSTRAINT "appointments_offering_id_offerings_id_fk" FOREIGN KEY ("offering_id") REFERENCES "app"."offerings"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."appointments" ADD CONSTRAINT "appointments_doctor_membership_id_memberships_id_fk" FOREIGN KEY ("doctor_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."appointments" ADD CONSTRAINT "appointments_therapist_membership_id_memberships_id_fk" FOREIGN KEY ("therapist_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."appointments" ADD CONSTRAINT "appointments_room_id_rooms_id_fk" FOREIGN KEY ("room_id") REFERENCES "app"."rooms"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."appointments" ADD CONSTRAINT "appointments_machine_id_machines_id_fk" FOREIGN KEY ("machine_id") REFERENCES "app"."machines"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."appointments" ADD CONSTRAINT "appointments_branch_room_id_branch_rooms_id_fk" FOREIGN KEY ("branch_room_id") REFERENCES "app"."branch_rooms"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."appointments" ADD CONSTRAINT "appointments_branch_machine_id_branch_machines_id_fk" FOREIGN KEY ("branch_machine_id") REFERENCES "app"."branch_machines"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."appointments" ADD CONSTRAINT "appointments_copied_from_appointment_id_appointments_id_fk" FOREIGN KEY ("copied_from_appointment_id") REFERENCES "app"."appointments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."appointments" ADD CONSTRAINT "appointments_patient_package_id_patient_packages_id_fk" FOREIGN KEY ("patient_package_id") REFERENCES "app"."patient_packages"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."visits" ADD CONSTRAINT "visits_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -3126,40 +3201,40 @@ CREATE POLICY "offering_groups_tenant_isolation" ON "app"."offering_groups" AS P
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
 ALTER TABLE "app"."offering_groups" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_rooms_public_id" ON "app"."rooms" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_rooms_organization_created" ON "app"."rooms" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_rooms_deleted_at" ON "app"."rooms" USING btree ("deleted_at") WHERE "app"."rooms"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_rooms_created_by_user_id" ON "app"."rooms" USING btree ("created_by_user_id") WHERE "app"."rooms"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_rooms_updated_by_user_id" ON "app"."rooms" USING btree ("updated_by_user_id") WHERE "app"."rooms"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_rooms_branch_created" ON "app"."rooms" USING btree ("branch_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_rooms_organization_name" ON "app"."rooms" USING btree ("organization_id","name","id") WHERE "app"."rooms"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_rooms_branch_name_unique" ON "app"."rooms" USING btree ("organization_id","branch_id",lower("name")) WHERE "app"."rooms"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE POLICY "rooms_tenant_isolation" ON "app"."rooms" AS PERMISSIVE FOR ALL TO public USING ("app"."rooms"."organization_id" = (
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_branch_rooms_public_id" ON "app"."branch_rooms" USING btree ("public_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_rooms_organization_created" ON "app"."branch_rooms" USING btree ("organization_id","created_at","id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_rooms_deleted_at" ON "app"."branch_rooms" USING btree ("deleted_at") WHERE "app"."branch_rooms"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_rooms_created_by_user_id" ON "app"."branch_rooms" USING btree ("created_by_user_id") WHERE "app"."branch_rooms"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_rooms_updated_by_user_id" ON "app"."branch_rooms" USING btree ("updated_by_user_id") WHERE "app"."branch_rooms"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_rooms_branch_created" ON "app"."branch_rooms" USING btree ("branch_id","created_at","id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_rooms_organization_name" ON "app"."branch_rooms" USING btree ("organization_id","name","id") WHERE "app"."branch_rooms"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_branch_rooms_branch_name_unique" ON "app"."branch_rooms" USING btree ("organization_id","branch_id",lower("name")) WHERE "app"."branch_rooms"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE POLICY "branch_rooms_tenant_isolation" ON "app"."branch_rooms" AS PERMISSIVE FOR ALL TO public USING ("app"."branch_rooms"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."rooms"."organization_id" = (
+          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."branch_rooms"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
-ALTER TABLE "app"."rooms" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_machines_public_id" ON "app"."machines" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_machines_organization_created" ON "app"."machines" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_machines_deleted_at" ON "app"."machines" USING btree ("deleted_at") WHERE "app"."machines"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_machines_created_by_user_id" ON "app"."machines" USING btree ("created_by_user_id") WHERE "app"."machines"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_machines_updated_by_user_id" ON "app"."machines" USING btree ("updated_by_user_id") WHERE "app"."machines"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_machines_branch_created" ON "app"."machines" USING btree ("branch_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_machines_organization_name" ON "app"."machines" USING btree ("organization_id","name","id") WHERE "app"."machines"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_machines_branch_name_unique" ON "app"."machines" USING btree ("organization_id","branch_id",lower("name")) WHERE "app"."machines"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE POLICY "machines_tenant_isolation" ON "app"."machines" AS PERMISSIVE FOR ALL TO public USING ("app"."machines"."organization_id" = (
+ALTER TABLE "app"."branch_rooms" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_branch_machines_public_id" ON "app"."branch_machines" USING btree ("public_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_machines_organization_created" ON "app"."branch_machines" USING btree ("organization_id","created_at","id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_machines_deleted_at" ON "app"."branch_machines" USING btree ("deleted_at") WHERE "app"."branch_machines"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_machines_created_by_user_id" ON "app"."branch_machines" USING btree ("created_by_user_id") WHERE "app"."branch_machines"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_machines_updated_by_user_id" ON "app"."branch_machines" USING btree ("updated_by_user_id") WHERE "app"."branch_machines"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_machines_branch_created" ON "app"."branch_machines" USING btree ("branch_id","created_at","id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_branch_machines_organization_name" ON "app"."branch_machines" USING btree ("organization_id","name","id") WHERE "app"."branch_machines"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_branch_machines_branch_name_unique" ON "app"."branch_machines" USING btree ("organization_id","branch_id",lower("name")) WHERE "app"."branch_machines"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE POLICY "branch_machines_tenant_isolation" ON "app"."branch_machines" AS PERMISSIVE FOR ALL TO public USING ("app"."branch_machines"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."machines"."organization_id" = (
+          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."branch_machines"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
-ALTER TABLE "app"."machines" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "app"."branch_machines" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_branch_holidays_public_id" ON "app"."branch_holidays" USING btree ("public_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_branch_holidays_organization_created" ON "app"."branch_holidays" USING btree ("organization_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_branch_holidays_deleted_at" ON "app"."branch_holidays" USING btree ("deleted_at") WHERE "app"."branch_holidays"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -3369,8 +3444,8 @@ CREATE INDEX IF NOT EXISTS "idx_appointments_created_by_user_id" ON "app"."appoi
 CREATE INDEX IF NOT EXISTS "idx_appointments_updated_by_user_id" ON "app"."appointments" USING btree ("updated_by_user_id") WHERE "app"."appointments"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_branch_date" ON "app"."appointments" USING btree ("branch_id","appointment_date","start_time");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_doctor_date" ON "app"."appointments" USING btree ("doctor_membership_id","appointment_date","start_time");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_appointments_room_date" ON "app"."appointments" USING btree ("room_id","appointment_date") WHERE "app"."appointments"."room_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_appointments_machine_date" ON "app"."appointments" USING btree ("machine_id","appointment_date") WHERE "app"."appointments"."machine_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_appointments_branch_room_date" ON "app"."appointments" USING btree ("branch_room_id","appointment_date") WHERE "app"."appointments"."branch_room_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_appointments_branch_machine_date" ON "app"."appointments" USING btree ("branch_machine_id","appointment_date") WHERE "app"."appointments"."branch_machine_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_patient_date" ON "app"."appointments" USING btree ("patient_id","appointment_date") WHERE "app"."appointments"."patient_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_lead_id" ON "app"."appointments" USING btree ("lead_id") WHERE "app"."appointments"."lead_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_offering_id" ON "app"."appointments" USING btree ("offering_id") WHERE "app"."appointments"."offering_id" IS NOT NULL;--> statement-breakpoint
@@ -4156,7 +4231,7 @@ ALTER TABLE tenancy.organizations FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE tenancy.memberships FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
-ALTER TABLE tenancy.member_invitations FORCE ROW LEVEL SECURITY;
+ALTER TABLE tenancy.membership_invitations FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE tenancy.roles FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
@@ -4170,7 +4245,7 @@ ALTER TABLE tenancy.api_keys FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE app.branches FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
-ALTER TABLE app.branch_user_accesses FORCE ROW LEVEL SECURITY;
+ALTER TABLE app.branch_members FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE tenancy.membership_additional_roles FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint

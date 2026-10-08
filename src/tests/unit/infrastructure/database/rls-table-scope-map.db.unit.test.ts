@@ -74,7 +74,7 @@ const RLS_TABLE_SCOPE_MAP: Record<string, readonly string[]> = {
   ],
   'notify.webhooks': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
   'tenancy.api_keys': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
-  'tenancy.member_invitations': [
+  'tenancy.membership_invitations': [
     'app.current_organization_public_id',
     'app.global_retention_cleanup',
   ],

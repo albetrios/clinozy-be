@@ -78,7 +78,7 @@ export class MemberRolePermissionService {
         throw new ForbiddenError('errors:roleLocked').withReason('role_locked');
       }
       /**
-       * Owner-role protection (sec-T2): a `ROLE_MANAGE` holder must not be able to alter
+       * Owner-role protection (sec-T2): a `ROLE_UPDATE` holder must not be able to alter
        * the permission set on the role currently assigned to the organization owner — that
        * would strip every permission for everyone holding the role (including the owner)
        * and lock them out of every PERM-gated route until `/transfer-ownership` is invoked.
@@ -100,7 +100,7 @@ export class MemberRolePermissionService {
        * is *also* a permission *wipe* — the diff between the role's current set and the
        * requested set is exactly the set of codes being removed. The grant-guard must
        * therefore verify the caller holds every code being **added** AND every code being
-       * **removed**, not just the new set. Without this, a delegated `ROLE_MANAGE` holder
+       * **removed**, not just the new set. Without this, a delegated `ROLE_UPDATE` holder
        * who does not themselves possess `subscription:manage` could still PUT a smaller
        * set that strips `subscription:manage` from a finance role — a downgrade attack
        * the guard would have refused for the equivalent grant. The previous behavior

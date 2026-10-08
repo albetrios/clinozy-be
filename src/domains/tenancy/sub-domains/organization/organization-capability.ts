@@ -39,7 +39,7 @@ const CAPABILITY_REJECTION_KEY: Record<OrganizationCapability, string> = {
  * - **Failure modes:** PERSONAL organization ⇒ 422 `unprocessable_entity`.
  * - **Side effects:** none (pure guard; throws or returns).
  * - **Notes:** single point of enforcement for the personal-vs-team rule, shared by
- *   member-invitation, membership (add member / transfer ownership), member-role,
+ *   membership-invitation, membership (add member / transfer ownership), member-role,
  *   organization delete, and subscription billing (create / change-plan / cancel /
  *   resume). Team-only affordances are NOT advertised on the API response; a client
  *   derives them from the organization `type` and gates the action itself on the

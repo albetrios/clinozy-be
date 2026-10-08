@@ -20,15 +20,15 @@ rationale and a concrete plan for each.
 
 ### R1 / TEN-32 / TEN-34 — invitation token no longer returned in HTTP responses
 
-- **Fix:** `member-invitation.controller.ts` returns invitation metadata only;
+- **Fix:** `membership-invitation.controller.ts` returns invitation metadata only;
   the raw token leaves the service exclusively through the invitation email.
-- **Tests:** `member-invitation.service.unit.test.ts` — `create` / `resend` assert
-  the result has no `token` field; `member-invitation.controller.unit.test.ts`
+- **Tests:** `membership-invitation.service.unit.test.ts` — `create` / `resend` assert
+  the result has no `token` field; `membership-invitation.controller.unit.test.ts`
   service mocks return token-less invitations.
 
 ### R2 — invitation token issuance + email are atomic
 
-- **Fix:** `member-invitation.service.ts` `create`/`resend` run the invitation
+- **Fix:** `membership-invitation.service.ts` `create`/`resend` run the invitation
   INSERT and the mail-outbox INSERT inside the one organization transaction opened by
   `withOrganizationDatabaseContext`, and emit via `eventBus.emitStrict` (not the
   swallowing `emit`) so a failed outbox write rolls the transaction back. The
@@ -38,7 +38,7 @@ rationale and a concrete plan for each.
 ### R5 / TEN-35 — pending-invitation cursor pagination
 
 - **Fix:** migration `20260614120000_pending_invitation_keyset_pagination.sql`
-  recreates `tenancy.list_pending_member_invitations_for_email` with
+  recreates `tenancy.list_pending_membership_invitations_for_email` with
   `(created_at, id)` keyset params + the invitation id + soft-delete guards;
   repository/service/controller page with `limit` + opaque `after` and expose
   `has_more` / `next_cursor`; the route declares a strict cursor querystring.

@@ -17,6 +17,7 @@
  *   pnpm tool:load-test-credential-pool      (after bulk seed exists)
  *   pnpm db:seed:loadtest                    (runs bulk seed then this script)
  */
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import '@/shared/config/load-env-files.js';
 import '@/scripts/seed/seed-runtime-url.js';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -92,7 +93,7 @@ async function run(env: NodeJS.ProcessEnv): Promise<void> {
       and(
         like(users.email, BULK_EMAIL_PATTERN),
         like(organizations.slug, BULK_ORG_SLUG_PATTERN),
-        eq(memberships.status, 'ACTIVE'),
+        eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
         isNull(memberships.deleted_at),
         eq(users.is_mfa_enabled, false),
         // Same SECURITY DEFINER resolver the login path uses, so this can never drift from it.

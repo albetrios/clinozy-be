@@ -28,8 +28,8 @@ export const RESOURCE_QUOTA_LOCK_NAMESPACE = {
   WEBAUTHN_CREDENTIAL: 0x57_42_41_4e,
   /** Per-user concurrent active-session cap, keyed by user id. ASCII `SESN`. */
   AUTH_SESSION: 0x53_45_53_4e,
-  /** Per-organization pending member-invitation cap, keyed by organization id. ASCII `INVT`. */
-  MEMBER_INVITATION: 0x49_4e_56_54,
+  /** Per-organization pending membership-invitation cap, keyed by organization id. ASCII `INVT`. */
+  MEMBERSHIP_INVITATION: 0x49_4e_56_54,
   /**
    * Per-organization staff-number assignment, keyed by organization id. ASCII `STAF`. Taken by the
    * `tenancy.fn_assign_membership_staff_number()` trigger, not from TypeScript — listed here so no

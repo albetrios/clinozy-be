@@ -18,7 +18,7 @@
 | sec-r4-C3 | Medium | Secrets Management | `SECRETS_ENCRYPTION_KEY` low-entropy guard excludes staging — all-zero key accepted |
 | sec-r4-A1 | Low | Session Management | `revokeAllSessions` clears session cookie despite current session being intentionally preserved |
 | sec-r4-T1 | Low | Authorization / RLS | `organizations_user_discovery` RLS reintroduces soft-deleted organization exposure |
-| sec-r4-T2 | Low | Authorization / Information Disclosure | `resolve_member_invitation_lookup_by_public_id` returns data for revoked/accepted invitations |
+| sec-r4-T2 | Low | Authorization / Information Disclosure | `resolve_membership_invitation_lookup_by_public_id` returns data for revoked/accepted invitations |
 | sec-r4-I1 | Low | Rate Limiting | No per-route rate limit on self-service profile mutation endpoints |
 | sec-r4-I2 | Low | Rate Limiting | No per-route rate limit on organization mutation endpoints |
 | sec-r4-I3 | Low | Rate Limiting | No per-route rate limit on membership lifecycle state-change routes |
@@ -175,7 +175,7 @@ The `organizations_user_discovery` permissive policy (lines 53–70) and its sup
 
 ---
 
-### sec-r4-T2 — Low: `resolve_member_invitation_lookup_by_public_id` returns data for revoked/accepted invitations
+### sec-r4-T2 — Low: `resolve_membership_invitation_lookup_by_public_id` returns data for revoked/accepted invitations
 
 **Severity:** Low
 **Category:** Authorization / Information Disclosure
@@ -190,11 +190,11 @@ WHERE invitation_row.public_id = invitation_public_id_param
 LIMIT 1;
 ```
 
-Contrast with `list_pending_member_invitations_for_email` (lines 150–155) which correctly filters all four conditions. The `SECURITY DEFINER` function is called in `member-invitation.repository.ts:183–209` at the start of `accept()` and `decline()` flows before any organization context is established.
+Contrast with `list_pending_membership_invitations_for_email` (lines 150–155) which correctly filters all four conditions. The `SECURITY DEFINER` function is called in `membership-invitation.repository.ts:183–209` at the start of `accept()` and `decline()` flows before any organization context is established.
 
 **Impact:** A caller who knows the `public_id` of a previously accepted, revoked, or expired invitation can call the accept/decline endpoint with that ID. The lookup resolves and discloses the owning organization's `public_id`. The service then correctly rejects the attempt (`assertInvitationAcceptable` throws for non-pending state). Risk is limited to organization-ID enumeration via invitation history — no membership mutation occurs.
 
-**Recommendation:** Add `AND invitation_row.accepted_at IS NULL AND invitation_row.revoked_at IS NULL AND membership_row.deleted_at IS NULL AND organization_row.deleted_at IS NULL` to `resolve_member_invitation_lookup_by_public_id`, mirroring the guards already present in the companion `list_pending_member_invitations_for_email` function.
+**Recommendation:** Add `AND invitation_row.accepted_at IS NULL AND invitation_row.revoked_at IS NULL AND membership_row.deleted_at IS NULL AND organization_row.deleted_at IS NULL` to `resolve_membership_invitation_lookup_by_public_id`, mirroring the guards already present in the companion `list_pending_membership_invitations_for_email` function.
 
 ---
 

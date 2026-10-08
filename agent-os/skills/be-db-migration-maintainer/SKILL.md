@@ -29,7 +29,7 @@ Postgres schema changes require **both** a co-located Drizzle `*.schema.ts` and 
 
 These are enforced by `pnpm db:migrate:lint` and cannot be overridden by the `-- migration-safety: allow ...` header:
 
-- **No `SET` / `RESET` of the `row_security` GUC** (`disable_row_security_guc`). RLS bypass for trusted lookups must go through `SECURITY DEFINER` + `GRANT EXECUTE`; toggling the session GUC is unnecessary (ownership already bypasses RLS for `SECURITY DEFINER` functions) and inconsistent with the existing `billing.resolve_organization_public_id_for_stripe_subscription` / `tenancy.resolve_member_invitation_lookup_by_public_id` pattern.
+- **No `SET` / `RESET` of the `row_security` GUC** (`disable_row_security_guc`). RLS bypass for trusted lookups must go through `SECURITY DEFINER` + `GRANT EXECUTE`; toggling the session GUC is unnecessary (ownership already bypasses RLS for `SECURITY DEFINER` functions) and inconsistent with the existing `billing.resolve_organization_public_id_for_stripe_subscription` / `tenancy.resolve_membership_invitation_lookup_by_public_id` pattern.
 
 ## Workflow
 

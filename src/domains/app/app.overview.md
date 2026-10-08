@@ -17,14 +17,15 @@ as the launch's ROUTE builds them.
   granted to TEAM owners and the Admin role by default.
 - Everyday reads every member needs (`GET /app/branches/my`) are gated by `organization:read` only;
   management routes by the resource's codes.
-- A person's branches are `app.branch_user_accesses` rows on their membership (D9) — leaving the
-  organization removes them.
+- A person's branches are `app.branch_members` rows on their membership (D9) — an ended
+  membership's rows stay but drop out of every list (D57); a restore brings them back.
 
 ## Sub-domains
 
 | Sub-domain | Tables | Routes |
 | --- | --- | --- |
-| [branches](sub-domains/branches/branches.overview.md) | `app.branches`, `app.branch_user_accesses` (nested `branch-user-accesses/`) | `/app/branches`, `/app/branches/my`, `/app/branches/{branch_id}`, `/app/branches/{branch_id}/user-accesses` |
+| [branches](sub-domains/branches/branches.overview.md) | `app.branches`; nested `app.branch_members`, `app.branch_rooms`, `app.branch_machines`, `app.branch_holidays` | `/app/branches`, `/app/branches/my`, `/app/branches/{branch_id}`, `/app/branches/{branch_id}/{members,rooms,machines,holidays}…` |
+| [memberships](sub-domains/memberships/memberships.overview.md) | reads `tenancy.memberships` (the team picker and member directory) | `/app/memberships` |
 
 ## Patterns used
 

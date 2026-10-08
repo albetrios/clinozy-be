@@ -9,7 +9,10 @@ import {
   getPostgresConstraintName,
   isPostgresUniqueViolation,
 } from '@/shared/utils/infrastructure/postgres-error.util.js';
-import { recordDeleteQuerySchema } from '@/shared/utils/validation/record-fields.util.js';
+import {
+  assertRecordNotChangedSince,
+  recordDeleteQuerySchema,
+} from '@/shared/utils/validation/record-fields.util.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 import {
   type BaseRecordPage,
@@ -115,7 +118,12 @@ export class BaseRecordService<Output> {
       }
       const { parent } = this.descriptor;
       if (parent && parentPublicId !== undefined) {
-        equals[parent.field] = await this.requireParentId(organizationId, parentPublicId);
+        equals[parent.field] = await this.requireVisibleParentId({
+          organizationId,
+          parentPublicId,
+          userId: await this.userId(options.actingUserPublicId),
+          visibility: options.visibility,
+        });
       }
       for (const [field, publicId] of Object.entries(input.referenceEquals ?? {})) {
         if (publicId === undefined) continue;
@@ -169,11 +177,13 @@ export class BaseRecordService<Output> {
     publicId: string,
     actingUserPublicId?: string,
     visibility?: BaseRecordVisibility,
+    parentPublicId?: string,
   ): Promise<Output> {
     return withAppDatabaseContext(scope, async () => {
       const organizationId = await this.organizationId(scope);
       const userId = await this.userId(actingUserPublicId);
       const row = await this.requireRow(organizationId, publicId, userId, visibility);
+      await this.assertUnderParent({ organizationId, row, parentPublicId, userId, visibility });
       return this.serializeOne(row, this.writeContext(scope, organizationId, userId, visibility));
     });
   }
@@ -193,7 +203,12 @@ export class BaseRecordService<Output> {
       const values: Record<string, unknown> = { ...parsed };
       const { parent } = this.descriptor;
       if (parent && parentPublicId !== undefined) {
-        values[parent.field] = await this.requireParentId(organizationId, parentPublicId);
+        values[parent.field] = await this.requireVisibleParentId({
+          organizationId,
+          parentPublicId,
+          userId,
+          visibility,
+        });
       }
       await this.resolveReferences(organizationId, values);
       await this.assertBranchWritable({ organizationId, userId, visibility, values });
@@ -222,12 +237,20 @@ export class BaseRecordService<Output> {
     body: unknown,
     actingUserPublicId: string | undefined,
     visibility?: BaseRecordVisibility,
+    parentPublicId?: string,
   ): Promise<Output> {
     const { expected_updated_at: expectedUpdatedAt, ...parsed } = this.descriptor.parseUpdate(body);
     return withAppDatabaseContext(scope, async () => {
       const organizationId = await this.organizationId(scope);
       const userId = await this.userId(actingUserPublicId);
       const existing = await this.requireRow(organizationId, publicId, userId, visibility);
+      await this.assertUnderParent({
+        organizationId,
+        row: existing,
+        parentPublicId,
+        userId,
+        visibility,
+      });
       await this.assertNotChangedSince(existing, expectedUpdatedAt);
       const values: Record<string, unknown> = { ...parsed };
       await this.resolveReferences(organizationId, values);
@@ -307,12 +330,20 @@ export class BaseRecordService<Output> {
     query: unknown,
     actingUserPublicId: string | undefined,
     visibility?: BaseRecordVisibility,
+    parentPublicId?: string,
   ): Promise<void> {
     const removal = parseWithSchema(recordDeleteQuerySchema, query);
     await withAppDatabaseContext(scope, async () => {
       const organizationId = await this.organizationId(scope);
       const userId = await this.userId(actingUserPublicId);
       const existing = await this.requireRow(organizationId, publicId, userId, visibility);
+      await this.assertUnderParent({
+        organizationId,
+        row: existing,
+        parentPublicId,
+        userId,
+        visibility,
+      });
       const deleted = await this.descriptor.repository.softDelete(
         existing.id,
         { delete_reason: removal.reason, delete_note: removal.note ?? null },
@@ -445,6 +476,7 @@ export class BaseRecordService<Output> {
     publicId: string,
     actingUserPublicId: string | undefined,
     visibility?: BaseRecordVisibility,
+    parentPublicId?: string,
   ): Promise<Output> {
     return withAppDatabaseContext(scope, async () => {
       const organizationId = await this.organizationId(scope);
@@ -456,8 +488,19 @@ export class BaseRecordService<Output> {
       ) {
         throw new NotFoundError(this.descriptor.label);
       }
+      const live = deleted ? null : await repository.findByPublicId(publicId, organizationId);
+      const found = deleted ?? live;
+      if (found) {
+        await this.assertUnderParent({
+          organizationId,
+          row: found,
+          parentPublicId,
+          userId: await this.userId(actingUserPublicId),
+          visibility,
+        });
+      }
       if (!deleted) {
-        if (await repository.findByPublicId(publicId, organizationId)) {
+        if (live) {
           throw new ConflictError('errors:recordNotDeleted').withReason('record_not_deleted');
         }
         throw new NotFoundError(this.descriptor.label);
@@ -691,6 +734,47 @@ export class BaseRecordService<Output> {
     }
   }
 
+  /**
+   * The parent record's id for a route nested under it — 404 (the parent's name) when it is not
+   * here or, on a branch-scoped table nested under its branch, not one of the caller's branches.
+   */
+  private async requireVisibleParentId(options: {
+    organizationId: number;
+    parentPublicId: string;
+    userId: number | null;
+    visibility: BaseRecordVisibility | undefined;
+  }): Promise<number> {
+    const parent = this.descriptor.parent!;
+    const parentId = await this.requireParentId(options.organizationId, options.parentPublicId);
+    if (parent.field === this.descriptor.branchColumn) {
+      const visible = await this.visibleBranchIds(options);
+      if (!branchAllowed(parentId, visible)) throw new NotFoundError(parent.label);
+    }
+    return parentId;
+  }
+
+  /**
+   * A by-id route nested under the parent (`/branches/{branch_id}/rooms/{branch_room_id}`) names
+   * the record's parent too: a record under another parent is a 404, like one not here.
+   */
+  private async assertUnderParent(options: {
+    organizationId: number;
+    row: BaseRecordRow;
+    parentPublicId: string | undefined;
+    userId: number | null;
+    visibility: BaseRecordVisibility | undefined;
+  }): Promise<void> {
+    const { parent } = this.descriptor;
+    if (!(parent && options.parentPublicId !== undefined)) return;
+    const parentId = await this.requireVisibleParentId({
+      organizationId: options.organizationId,
+      parentPublicId: options.parentPublicId,
+      userId: options.userId,
+      visibility: options.visibility,
+    });
+    if (options.row[parent.field] !== parentId) throw new NotFoundError(this.descriptor.label);
+  }
+
   /** The parent record's id; 404 (the parent's name) when it is not here. */
   private async requireParentId(organizationId: number, parentPublicId: string): Promise<number> {
     const parent = this.descriptor.parent!;
@@ -776,16 +860,12 @@ export class BaseRecordService<Output> {
 
   /** D43: a save based on an older version than the stored one is refused with who and when. */
   private async assertNotChangedSince(row: BaseRecordRow, expected: unknown): Promise<void> {
-    if (typeof expected !== 'string') return;
-    if (new Date(expected).getTime() === row.updated_at.getTime()) return;
-    const updatedBy =
-      row.updated_by_user_id === null
-        ? null
-        : await this.organizationService.resolveUserPublicIdByInternalId(row.updated_by_user_id);
-    throw new ConflictError('errors:recordChangedSinceOpened', {
-      updated_at: row.updated_at.toISOString(),
-      updated_by: updatedBy ?? 'someone',
-    }).withReason('record_changed');
+    await assertRecordNotChangedSince({
+      row,
+      expected,
+      resolveUserPublicId: (userInternalId) =>
+        this.organizationService.resolveUserPublicIdByInternalId(userInternalId),
+    });
   }
 
   /** Runs a write; a unique clash the table names becomes a 409. */

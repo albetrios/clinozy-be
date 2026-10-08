@@ -7,6 +7,7 @@
  * Idempotency: only organization indices beyond those already present are created, so a re-run
  * with the same counts is a no-op.
  */
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import { like } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
@@ -74,7 +75,7 @@ export async function seedOrganizationsBulk(context: SeedContext): Promise<void>
         user_id: member.id,
         organization_id: organization.id,
         role_id: adminRole.id,
-        status: 'ACTIVE',
+        status: MEMBERSHIP_STATUS.ACTIVE,
         created_by_user_id: owner.id,
       });
     }

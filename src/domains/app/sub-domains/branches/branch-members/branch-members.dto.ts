@@ -1,0 +1,23 @@
+import { z } from 'zod';
+import { trimmedStringMinMax } from '@/shared/utils/validation/validation.util.js';
+import { BRANCH_MEMBERSHIP_IDS_MAX } from '@/domains/app/sub-domains/branches/branches.constants.js';
+
+/** Path params of the branch members routes. */
+export const branchMembersParamsDto = z
+  .object({
+    branch_id: trimmedStringMinMax(1, 28),
+  })
+  .strict();
+
+/** Body of `PUT /app/branches/{branch_id}/members` — the branch's exact member list. */
+export const ReplaceBranchMembersDto = z
+  .object({
+    membership_ids: z
+      .array(trimmedStringMinMax(1, 28))
+      .max(BRANCH_MEMBERSHIP_IDS_MAX)
+      .refine((ids) => new Set(ids).size === ids.length, { message: 'Each membership once' }),
+  })
+  .strict();
+
+/** Parsed {@link ReplaceBranchMembersDto}. */
+export type ReplaceBranchMembersInput = z.infer<typeof ReplaceBranchMembersDto>;

@@ -11,8 +11,8 @@ export interface AppointmentOutput {
   service_label: string;
   doctor_membership_id: string;
   therapist_membership_id: string | null;
-  room_id: string | null;
-  machine_id: string | null;
+  branch_room_id: string | null;
+  branch_machine_id: string | null;
   appointment_date: string;
   start_time: string;
   duration_minutes: number;

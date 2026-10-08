@@ -11,7 +11,7 @@ import {
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
-import { member_invitations } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.schema.js';
+import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
 import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
 import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
@@ -24,8 +24,8 @@ import { setLocalApplicationRole } from '@/infrastructure/database/contexts/data
  *   1. `organizations_user_discovery` + `memberships_user_self_discovery` PERMISSIVE
  *      policies grant access ONLY when `app.current_user_public_id` matches the row owner
  *      or an active membership. Existing `*_tenant_isolation` policies are unchanged.
- *   2. `tenancy.resolve_member_invitation_lookup_by_public_id` and
- *      `tenancy.list_pending_member_invitations_for_email` SECURITY DEFINER helpers
+ *   2. `tenancy.resolve_membership_invitation_lookup_by_public_id` and
+ *      `tenancy.list_pending_membership_invitations_for_email` SECURITY DEFINER helpers
  *      let the invitation accept route resolve the owning organization
  *      without an active `app.current_organization_public_id` GUC, then wrap the actual write
  *      in `withAppDatabaseContext`.
@@ -149,7 +149,7 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
     expect(rows).toHaveLength(1);
   });
 
-  it('resolve_member_invitation_lookup_by_public_id returns owning organization without organization context', async () => {
+  it('resolve_membership_invitation_lookup_by_public_id returns owning organization without organization context', async () => {
     const owner = await createTestUser();
     const organization = await createTestOrganization({ ownerUserId: owner.id });
     const role = await createRoleWithPermissions({
@@ -168,7 +168,7 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
      * happen. The lookup must return the membership's owning organization.
      */
     const invitationPublicId = `inv_${Math.random().toString(36).slice(2, 12)}`;
-    await database.insert(member_invitations).values({
+    await database.insert(membership_invitations).values({
       public_id: invitationPublicId,
       membership_id: membership.id,
       email: 'invitee@example.com',
@@ -186,14 +186,14 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
       }>
     >`
       SELECT organization_public_id, organization_id, membership_public_id, membership_id
-      FROM tenancy.resolve_member_invitation_lookup_by_public_id(${invitationPublicId})
+      FROM tenancy.resolve_membership_invitation_lookup_by_public_id(${invitationPublicId})
     `;
     expect(rows).toHaveLength(1);
     expect(rows[0]?.organization_public_id).toBe(organization.public_id);
     expect(rows[0]?.membership_public_id).toBe(membership.public_id);
   });
 
-  it('list_pending_member_invitations_for_email returns active invitations across organizations', async () => {
+  it('list_pending_membership_invitations_for_email returns active invitations across organizations', async () => {
     const ownerA = await createTestUser();
     const ownerB = await createTestUser();
     const organizationA = await createTestOrganization({ ownerUserId: ownerA.id });
@@ -218,7 +218,7 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
     });
     const invitationEmail = `invitee-${Math.random().toString(36).slice(2, 8)}@example.com`;
 
-    await database.insert(member_invitations).values([
+    await database.insert(membership_invitations).values([
       {
         public_id: `inv_${Math.random().toString(36).slice(2, 12)}`,
         membership_id: membershipA.id,
@@ -243,8 +243,8 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
         invited_by_user_id: ownerA.id,
         /**
          * Expired invitation must be filtered out by
-         * `list_pending_member_invitations_for_email`. `created_at` is
-         * pinned earlier than `expires_at` so the `chk_member_inv_expires`
+         * `list_pending_membership_invitations_for_email`. `created_at` is
+         * pinned earlier than `expires_at` so the `chk_membership_invitations_expires`
          * check constraint (`expires_at > created_at`) still holds while
          * the row remains past its `expires_at`.
          */
@@ -260,7 +260,7 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
       }>
     >`
       SELECT invitation_public_id, organization_public_id
-      FROM tenancy.list_pending_member_invitations_for_email(${invitationEmail}, 100)
+      FROM tenancy.list_pending_membership_invitations_for_email(${invitationEmail}, 100)
     `;
     expect(rows).toHaveLength(2);
     const organizationIds = new Set(rows.map((row) => row.organization_public_id));

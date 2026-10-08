@@ -1,4 +1,5 @@
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
+import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
@@ -39,7 +40,7 @@ interface MemberRoleListPagination {
  * excluded (a suspended seat is not in use). This constant is the single lever
  * for the counted-status policy — change it here to change every `member_count`.
  */
-const MEMBER_COUNT_STATUSES = ['ACTIVE', 'INVITED'] as const;
+const MEMBER_COUNT_STATUSES = [MEMBERSHIP_STATUS.ACTIVE, MEMBERSHIP_STATUS.INVITED] as const;
 
 /**
  * Drizzle data access for `tenancy.roles`. Active rows are filtered via
@@ -262,23 +263,9 @@ export class MemberRoleRepository extends BaseRepository {
     return (rows[0] ?? null) as MemberRoleRow | null;
   }
 
-  async softDelete(public_id: string, organization_id: number): Promise<MemberRoleRow | null> {
-    const rows = await getRequestDatabase()
-      .update(roles)
-      .set({ deleted_at: databaseNowTimestamp, updated_at: databaseNowTimestamp })
-      .where(
-        and(
-          eq(roles.public_id, public_id),
-          eq(roles.organization_id, organization_id),
-          isNull(roles.deleted_at),
-        ),
-      )
-      .returning();
-    return (rows[0] ?? null) as MemberRoleRow | null;
-  }
-
   /**
-   * Soft-deletes a role ONLY if it has no active (not soft-deleted) members, in ONE statement.
+   * Soft-deletes a role, with why (T12), ONLY if no live member holds it (any status), in ONE
+   * statement.
    *
    * @remarks
    * A `NOT EXISTS` over `memberships` is folded into the delete's WHERE so a concurrent
@@ -291,10 +278,23 @@ export class MemberRoleRepository extends BaseRepository {
   async softDeleteIfNoActiveMembers(
     public_id: string,
     organization_id: number,
+    removal: {
+      delete_reason: string;
+      delete_note: string | null;
+      updated_by_user_id: number | null;
+    },
   ): Promise<MemberRoleRow | null> {
     const rows = await getRequestDatabase()
       .update(roles)
-      .set({ deleted_at: databaseNowTimestamp, updated_at: databaseNowTimestamp })
+      .set({
+        deleted_at: databaseNowTimestamp,
+        updated_at: databaseNowTimestamp,
+        delete_reason: removal.delete_reason,
+        delete_note: removal.delete_note,
+        ...(removal.updated_by_user_id === null
+          ? {}
+          : { updated_by_user_id: removal.updated_by_user_id }),
+      })
       .where(
         and(
           eq(roles.public_id, public_id),
@@ -307,6 +307,54 @@ export class MemberRoleRepository extends BaseRepository {
               AND ${memberships.organization_id} = ${organization_id}
               AND ${memberships.deleted_at} IS NULL
           )`,
+        ),
+      )
+      .returning();
+    return (rows[0] ?? null) as MemberRoleRow | null;
+  }
+
+  /** A deleted role of the organization by public id (the restore path, launch T12), or null. */
+  async findDeletedByPublicId(
+    public_id: string,
+    organization_id: number,
+  ): Promise<MemberRoleRow | null> {
+    const rows = await getRequestDatabase()
+      .select()
+      .from(roles)
+      .where(
+        and(
+          eq(roles.public_id, public_id),
+          eq(roles.organization_id, organization_id),
+          isNotNull(roles.deleted_at),
+        ),
+      )
+      .limit(1);
+    return (rows[0] ?? null) as MemberRoleRow | null;
+  }
+
+  /**
+   * Undoes a role's delete (launch T12): clears `deleted_at`, the reason and the note. Throws a
+   * Postgres unique violation when a live role took the name meanwhile — the caller maps it to a 409.
+   */
+  async restore(
+    public_id: string,
+    organization_id: number,
+    updated_by_user_id: number | null,
+  ): Promise<MemberRoleRow | null> {
+    const rows = await getRequestDatabase()
+      .update(roles)
+      .set({
+        deleted_at: null,
+        delete_reason: null,
+        delete_note: null,
+        updated_at: databaseNowTimestamp,
+        ...(updated_by_user_id === null ? {} : { updated_by_user_id }),
+      })
+      .where(
+        and(
+          eq(roles.public_id, public_id),
+          eq(roles.organization_id, organization_id),
+          isNotNull(roles.deleted_at),
         ),
       )
       .returning();

@@ -73,7 +73,7 @@ describe('Global: event wiring parity', () => {
   const eventKeys = parseEventMaps(sourceFiles);
 
   it('finds event maps to verify', () => {
-    // AUTH_EVENT (2) + MEMBER_INVITATION_EVENT (3) + NOTIFY_EVENT (1) today.
+    // AUTH_EVENT (2) + MEMBERSHIP_INVITATION_EVENT (3) + NOTIFY_EVENT (1) today.
     expect(eventKeys.length).toBeGreaterThanOrEqual(6);
   });
 

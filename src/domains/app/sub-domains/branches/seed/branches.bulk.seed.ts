@@ -1,5 +1,5 @@
 import type { SeedContext } from '@/scripts/seed/seed-contract.js';
-import { seedBranch, seedBranchUserAccess } from './branches.seed.js';
+import { seedBranch, seedBranchMember } from './branches.seed.js';
 
 /** Branches every bulk-seeded organization gets: a main one and a second. */
 const BULK_BRANCHES = [
@@ -28,7 +28,7 @@ export async function seedBranchesBulk(context: SeedContext): Promise<void> {
         is_main: branch.is_main,
         created_by_user_id: organization.ownerUserId,
       });
-      await seedBranchUserAccess({
+      await seedBranchMember({
         branch_id: branchId,
         organization_id: organization.id,
         user_id: organization.ownerUserId,

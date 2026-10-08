@@ -128,7 +128,7 @@ describe('MembershipService — permission cache invalidation', () => {
     }),
   };
 
-  const memberInvitationService = {
+  const membershipInvitationService = {
     createForMembership: vi.fn().mockResolvedValue({ id: 'inv_public' }),
   };
 
@@ -144,7 +144,7 @@ describe('MembershipService — permission cache invalidation', () => {
     undefined,
     undefined,
     userService as never,
-    memberInvitationService as never,
+    membershipInvitationService as never,
   );
 
   beforeEach(() => {

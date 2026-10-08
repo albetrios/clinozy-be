@@ -6,7 +6,7 @@ Multi-resource domains use `src/domains/<domain>/sub-domains/`. **Aggregate chil
 sub-domains/<parent>/<nested-child>/
 ```
 
-Examples: `organization/organization-api-key/`, `membership/member-invitation/`, `webhook/webhook-event/`, `member-roles/member-role-permission/`.
+Examples: `organization/organization-api-key/`, `membership/membership-invitation/`, `webhook/webhook-event/`, `member-roles/member-role-permission/`.
 
 ## Import paths
 

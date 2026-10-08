@@ -8,7 +8,7 @@ import {
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
-import { createTestBranch, grantTestBranchUserAccess } from '@/tests/factories/branches.factory.js';
+import { createTestBranch, grantTestBranchMember } from '@/tests/factories/branches.factory.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import {
@@ -100,7 +100,7 @@ describe('Branches — Integration', () => {
         isActive: false,
       });
       for (const branch of [assigned, inactive]) {
-        await grantTestBranchUserAccess({
+        await grantTestBranchMember({
           branchId: branch.id,
           membershipId: staff.membership.id,
           organizationId: organization.id,

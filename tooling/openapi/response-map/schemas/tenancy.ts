@@ -162,12 +162,11 @@ export const membershipSchema = {
     id: { type: 'string' },
     user_id: { type: 'string' },
     organization_id: { type: 'string' },
-    role_id: { type: 'string' },
     status: {
       type: 'string',
-      enum: ['INVITED', 'ACTIVE', 'SUSPENDED'],
-      description: 'Possible values: INVITED | ACTIVE | SUSPENDED',
-      example: 'INVITED',
+      enum: ['invited', 'active', 'suspended'],
+      description: 'Possible values: invited | active | suspended',
+      example: 'invited',
     },
     joined_at: { type: 'string', format: 'date-time', nullable: true },
     created_at: { type: 'string', format: 'date-time' },
@@ -187,15 +186,25 @@ export const membershipSchema = {
         },
       },
     },
-    role: {
-      type: 'object',
-      properties: {
-        id: { type: 'string' },
-        name: { type: 'string' },
-      },
+    display_name: {
+      type: 'string',
+      description:
+        'The name the organization keeps — the profile name while live, frozen when the membership ends.',
     },
-    // Live (pending) invitation reference — present only on INVITED rows so the frontend can
-    // Resend/Revoke from the members table; null for ACTIVE/SUSPENDED rows.
+    ended_at: {
+      type: 'string',
+      format: 'date-time',
+      nullable: true,
+      description: 'When the membership ended; null while live.',
+    },
+    end_reason: {
+      type: 'string',
+      nullable: true,
+      enum: ['mistake', 'duplicate', 'not_needed', 'other', 'left', 'account_deleted', null],
+      description: 'Why the membership ended; null while live.',
+    },
+    // Live (pending) invitation reference — present only on invited rows so the frontend can
+    // Resend/Revoke from the members table; null for active/suspended rows.
     invitation: {
       type: 'object',
       nullable: true,
@@ -214,7 +223,7 @@ export const membershipSchema = {
     role_ids: {
       type: 'array',
       items: { type: 'string' },
-      description: 'Every role held, the main role first (role_id repeats it).',
+      description: 'Every role held, the main role first.',
     },
     branch_ids: { type: 'array', items: { type: 'string' } },
     working_days: {
@@ -228,11 +237,10 @@ export const membershipSchema = {
 };
 
 export const membershipExample = {
-  id: 'mbr_q8w3n7p2m5k1r4t6',
+  id: 'mem_q8w3n7p2m5k1r4t6a1b2c',
   user_id: 'usr_k7x9m2pqr4w8n1v3a1b2c',
   organization_id: 'org_k7x9m2pqr4w8n1v3a1b2c',
-  role_id: 'rol_m3n7p2q8w5k1r4t6a1b2c',
-  status: 'ACTIVE',
+  status: 'active',
   joined_at: '2026-01-15T10:30:00.000Z',
   created_at: '2026-01-15T10:30:00.000Z',
   updated_at: '2026-02-10T14:20:00.000Z',
@@ -243,10 +251,9 @@ export const membershipExample = {
     last_name: 'Doe',
     avatar_url: 'https://cdn.example.com/avatars/john-doe.jpg',
   },
-  role: {
-    id: 'rol_m3n7p2q8w5k1r4t6a1b2c',
-    name: 'Admin',
-  },
+  display_name: 'John Doe',
+  ended_at: null,
+  end_reason: null,
   invitation: null,
   staff_number: 12,
   phone: '+919825044120',
@@ -259,7 +266,7 @@ export const membershipExample = {
   commission_percent: 10,
 };
 
-// ── Member Invitation ──
+// ── Membership Invitation ──
 export const invitationSchema = {
   type: 'object',
   properties: {
@@ -275,7 +282,7 @@ export const invitationSchema = {
 
 export const invitationExample = {
   id: 'inv_r4t6m3n7p2q8w5k1a1b2c',
-  membership_id: 'mbr_q8w3n7p2m5k1r4t6',
+  membership_id: 'mem_q8w3n7p2m5k1r4t6a1b2c',
   email: 'jane.smith@example.com',
   expires_at: '2026-02-21T10:30:00.000Z',
   accepted_at: null,
@@ -323,28 +330,15 @@ export const memberRoleExample = {
 export const memberRolePermissionSchema = {
   type: 'object',
   properties: {
-    role_id: { type: 'string' },
     permission_code: { type: 'string' },
     created_at: { type: 'string', format: 'date-time' },
   },
 };
 
 export const memberRolePermissionExamples = [
-  {
-    role_id: 'rol_m3n7p2q8w5k1r4t6a1b2c',
-    permission_code: 'ORGANIZATION_READ',
-    created_at: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    role_id: 'rol_m3n7p2q8w5k1r4t6a1b2c',
-    permission_code: 'MEMBERSHIP_READ',
-    created_at: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    role_id: 'rol_m3n7p2q8w5k1r4t6a1b2c',
-    permission_code: 'ROLE_READ',
-    created_at: '2026-01-01T00:00:00.000Z',
-  },
+  { permission_code: 'organization:read', created_at: '2026-01-01T00:00:00.000Z' },
+  { permission_code: 'membership:read', created_at: '2026-01-01T00:00:00.000Z' },
+  { permission_code: 'role:read', created_at: '2026-01-01T00:00:00.000Z' },
 ];
 
 // ── Permission ──

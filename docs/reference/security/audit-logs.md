@@ -63,9 +63,9 @@ through a resolver that sees deleted organizations.
 | `tenancy.membership.delete` | `membership` | Member removed |
 | `tenancy.membership.leave` | `membership` | Member left the organization |
 | `tenancy.membership.transfer_ownership` | `organization` | Ownership transferred — the new owner in `target_user_id` (`WARNING`) |
-| `tenancy.member_invitation.accept` | `member_invitation` | Invitation accepted — recorded in the joined organization's log |
-| `tenancy.member_invitation.resend` | `member_invitation` | Invitation resent |
-| `tenancy.member_invitation.revoke` | `member_invitation` | Invitation revoked |
+| `tenancy.membership_invitation.accept` | `membership_invitation` | Invitation accepted — recorded in the joined organization's log |
+| `tenancy.membership_invitation.resend` | `membership_invitation` | Invitation resent |
+| `tenancy.membership_invitation.revoke` | `membership_invitation` | Invitation revoked |
 | `tenancy.role.create` | `role` | Role created |
 | `tenancy.role.update` | `role` | Role renamed or redescribed |
 | `tenancy.role.delete` | `role` | Role deleted |

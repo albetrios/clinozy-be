@@ -21,7 +21,7 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { offering_groups } from '@/domains/app/sub-domains/offering-groups/offering-groups.schema.js';
-import { rooms } from '@/domains/app/sub-domains/rooms/rooms.schema.js';
+import { branch_rooms } from '@/domains/app/sub-domains/branches/branch-rooms/branch-rooms.schema.js';
 import {
   CHIP_TONE_VALUES,
   RECORD_DELETE_REASON,
@@ -71,7 +71,7 @@ export const offerings = appSchema
         mode: 'number',
       }).references(() => memberships.id, { onDelete: 'set null' }),
       default_room_id: bigint('default_room_id', { mode: 'number' }).references(
-        (): AnyPgColumn => rooms.id,
+        (): AnyPgColumn => branch_rooms.id,
         { onDelete: 'set null' },
       ),
       gst_percent: integer('gst_percent').notNull().default(0),

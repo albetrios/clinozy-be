@@ -35,7 +35,7 @@ import type { MembershipRepository } from '@/domains/tenancy/sub-domains/members
 import type { AuthorizationService } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import type { PermissionRepository } from '@/domains/tenancy/sub-domains/permission/permission.repository.js';
 import type { UserService } from '@/domains/user/user.service.js';
-import type { MemberInvitationService } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.service.js';
+import type { MembershipInvitationService } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.service.js';
 import {
   PRINCIPAL_SCOPE,
   type OrganizationPrincipalDatabaseScope,
@@ -127,9 +127,9 @@ describe('MembershipService.create — grantable-permissions guard (sec-T1)', ()
     }),
   } as unknown as UserService;
 
-  const memberInvitationService = {
+  const membershipInvitationService = {
     createForMembership: vi.fn().mockResolvedValue({ id: 'inv_public' }),
-  } as unknown as MemberInvitationService;
+  } as unknown as MembershipInvitationService;
 
   const service = new MembershipService(
     organizationService,
@@ -143,7 +143,7 @@ describe('MembershipService.create — grantable-permissions guard (sec-T1)', ()
     undefined,
     undefined,
     userService,
-    memberInvitationService,
+    membershipInvitationService,
   );
 
   beforeEach(() => {

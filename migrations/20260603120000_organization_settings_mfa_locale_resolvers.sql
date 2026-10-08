@@ -35,7 +35,7 @@ AS $$
     INNER JOIN tenancy.organization_settings AS settings_row
       ON settings_row.organization_id = membership_row.organization_id
     WHERE membership_row.user_id = user_id_param
-      AND membership_row.status = 'ACTIVE'
+      AND membership_row.status = 'active'
       AND membership_row.deleted_at IS NULL
       -- Match the application's strict `securityPolicy.mfa_required === true`
       -- (JSON boolean true only, not the string "true").

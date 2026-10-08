@@ -10,6 +10,7 @@ import {
   WEEKDAY_VALUES,
   type Weekday,
 } from '@/shared/constants/record-fields.constants.js';
+import { ConflictError } from '@/shared/errors/index.js';
 import { trimmedString } from '@/shared/utils/validation/validation.util.js';
 
 /** `HH:mm`, 00:00–23:59. */
@@ -127,6 +128,34 @@ export function splitRecordIds(value: string | undefined): string[] {
  * with who changed it and when (D43).
  */
 export const expectedUpdatedAtSchema = z.iso.datetime({ offset: true }).optional();
+
+/**
+ * D43: a save sent with `expected_updated_at` older than the stored row is refused — `409
+ * record_changed`, naming who changed it and when. The one check behind every `PATCH` that takes
+ * `expected_updated_at`: the app record kernel, branches, memberships and roles.
+ *
+ * @remarks
+ * - **Algorithm:** no `expected` (not a string) → no check; equal instants → allowed; otherwise the
+ *   editor's public id comes from `resolveUserPublicId`.
+ * - **Failure modes:** `ConflictError('errors:recordChangedSinceOpened')` with reason
+ *   `record_changed`.
+ */
+export async function assertRecordNotChangedSince(options: {
+  row: { updated_at: Date; updated_by_user_id: number | null };
+  expected: unknown;
+  resolveUserPublicId: (userInternalId: number) => Promise<string | null>;
+}): Promise<void> {
+  if (typeof options.expected !== 'string') return;
+  if (new Date(options.expected).getTime() === options.row.updated_at.getTime()) return;
+  const updatedBy =
+    options.row.updated_by_user_id === null
+      ? null
+      : await options.resolveUserPublicId(options.row.updated_by_user_id);
+  throw new ConflictError('errors:recordChangedSinceOpened', {
+    updated_at: options.row.updated_at.toISOString(),
+    updated_by: updatedBy ?? 'someone',
+  }).withReason('record_changed');
+}
 
 /**
  * A stored `numeric` (decimal text) as the number the API speaks.

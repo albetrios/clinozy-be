@@ -1,6 +1,6 @@
 /** OpenAPI success responses — app domain (branches and their user accesses). */
 import type { ResponseDefinition } from '@tooling/openapi/response-map/building-blocks.js';
-import { wrapSuccess } from '@tooling/openapi/response-map/building-blocks.js';
+import { wrapPaginated, wrapSuccess } from '@tooling/openapi/response-map/building-blocks.js';
 import * as schemas from '@tooling/openapi/response-map/resource-schemas.js';
 
 const branchResponse: ResponseDefinition = {
@@ -9,10 +9,10 @@ const branchResponse: ResponseDefinition = {
   example: null,
 };
 
-const branchUserAccessesResponse: ResponseDefinition = {
+const branchMembersResponse: ResponseDefinition = {
   statusCode: 200,
-  schema: wrapSuccess({ type: 'array', items: schemas.branchUserAccessSchema }, [
-    schemas.branchUserAccessExample,
+  schema: wrapSuccess({ type: 'array', items: schemas.branchMemberSchema }, [
+    schemas.branchMemberExample,
   ]),
   example: null,
 };
@@ -54,10 +54,10 @@ export const appRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.userPreferencesRecordSchema, schemas.userPreferencesRecordExample),
     example: null,
   },
-  // ── Users (the team, filtered by role and branch) ──
-  'GET /api/v1/app/users': {
+  // ── Memberships (the team picker and member directory) ──
+  'GET /api/v1/app/memberships': {
     statusCode: 200,
-    schema: wrapSuccess({ type: 'array', items: schemas.appUserSchema }, [schemas.appUserExample]),
+    schema: wrapPaginated(schemas.appMembershipSchema, [schemas.appMembershipExample]),
     example: null,
   },
   // ── Task rules (the whole list) ──
@@ -79,6 +79,6 @@ export const appRouteResponses: Record<string, ResponseDefinition> = {
     example: null,
   },
   // ── Branch user accesses ──
-  'GET /api/v1/app/branches/{branch_id}/user-accesses': branchUserAccessesResponse,
-  'PUT /api/v1/app/branches/{branch_id}/user-accesses': branchUserAccessesResponse,
+  'GET /api/v1/app/branches/{branch_id}/members': branchMembersResponse,
+  'PUT /api/v1/app/branches/{branch_id}/members': branchMembersResponse,
 };

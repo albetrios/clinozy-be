@@ -1,6 +1,6 @@
-# Clinozy API — final routes, module by module
+# Clinozy API — final routes, sub-domain by sub-domain
 
-Started 2026-10-08 from the code on `feat/clinic-launch-api` (commit `e15117b`). Each module is
+Started 2026-10-08 from the code on `feat/clinic-launch-api` (commit `e15117b`). Each sub-domain is
 finalized one at a time: **proposed** → your changes → **final** only after you confirm in chat. The earlier full dump stays in the iteration folder,
 `2026-10-07_routes-by-module_v1.md`. This file is the iteration's route review (`be-iteration-planning` Step 5).
 
@@ -8,9 +8,9 @@ How to read the tables: paths are under `/api/v1/app`; `{x_id}` is a public id; 
 permission the caller needs; **Idem** `req` = `X-Idempotency-Key` header required; `*` = required.
 Every paginated list also takes `limit` (1–100) and `after` (cursor), plus `created_from` / `created_to`.
 
-## Modules (in build order — each builds on the ones above it)
+## Sub-domains (in build order — each builds on the ones above it)
 
-| # | Module | Folder (`src/domains/app/sub-domains/…`) | Paths (`/app/…`) | Routes | Builds on | Status |
+| # | Sub-domain | Folder (`src/domains/app/sub-domains/…`) | Paths (`/app/…`) | Routes | Builds on | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Branches & places | `branches/` | `branches` (+ `my`, `members`, `rooms`, `machines`, `holidays`) | 25 | organization, team | **final (rev 9, confirmed 2026-10-08)** |
 | 2 | Team | `memberships/` (picker, preferences, saved views) · platform `tenancy` domain | `memberships` (picker, `me/preferences`, `me/saved-views`) + tenancy `memberships` (+ `invitation`), `roles`, `membership-invitations`, `permissions` | 27 | 1 | **final (confirmed 2026-10-08)** · old 2 + 14 |
@@ -24,57 +24,59 @@ Every paginated list also takes `limit` (1–100) and `after` (cursor), plus `cr
 | 10 | Tasks & rules | `tasks/` | `tasks` (+ `exports`, `snooze`, `resolve`, `reassign`), `task-rule-settings` | 12 | 2, 4, 5, 6, 7, 8 | **final (rev 1, confirmed 2026-10-08)** · old 13 |
 | — | Platform (outside `/app`, already shipped) | `src/domains/<platform>/` | auth 33 · users/me 20 · tenancy 41 · billing 13 · notify 14 · uploads 4 · audit 1 · mcp 2 | 128 | — | review last |
 
-**Restructured 2026-10-08 (your call): one module per domain folder, grouped by connection** — what a record owns is
-a sub-domain of it, and a module comes after every module it points at
+**Restructured 2026-10-08 (your call): one folder per sub-domain, grouped by connection** — what a record owns is
+a nested sub-domain of it, and a sub-domain comes after every sub-domain it points at
 ([template](../../../docs/design-workflow/process/routes-final-template.md)). Layout only: no decision changed, and every
 decision and code-change id (P…, TR…, PK…, B…, S…) keeps its name.
 
-| Old module | 1 | 2 + 14 | 3 | 3.5 + 4.5 | 4 | 6 | 5 + 8 + 9 | 10 | 12 | 13 | 11 |
+| Old sub-domain | 1 | 2 + 14 | 3 | 3.5 + 4.5 | 4 | 6 | 5 + 8 + 9 | 10 | 12 | 13 | 11 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **New module** | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 (medical store, later) |
+| **New sub-domain** | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 (medical store, later) |
 
-App total: **248 routes** without the medical store (module 2's 19 tenancy routes count with the platform) — was 310 with it at the start: contacts with their activity, and leads +7 — convert is automatic, activity has one route per action; patients drop the timeline and search −2 and patient notes −6 (the old patient-file module merged in); appointments merge the visit in −3 and name their status moves +3; feedback actions nest under their check-in or review −4; patient offerings are bought only by invoicing −3; billing adds refunds, payment history, reversal and settling and drops "checked" +4; saved views lose restore −1; tasks add reassign +1. Rows #68–#72 and the messaging worker are not built yet — their routes land in modules 4, 6, 8, 9, 10 and the medical store.
+App total: **248 routes** without the medical store (sub-domain 2's 19 tenancy routes count with the platform) — was 310 with it at the start: contacts with their activity, and leads +7 — convert is automatic, activity has one route per action; patients drop the timeline and search −2 and patient notes −6 (the old patient-file sub-domain merged in); appointments merge the visit in −3 and name their status moves +3; feedback actions nest under their check-in or review −4; patient offerings are bought only by invoicing −3; billing adds refunds, payment history, reversal and settling and drops "checked" +4; saved views lose restore −1; tasks add reassign +1. Rows #68–#72 and the messaging worker are not built yet — their routes land in sub-domains 4, 6, 8, 9, 10 and the medical store.
 
-**Module 11 (Medical store) is out of this file for now** (your call, 2026-10-08 — covered later). Where another module mentions module 11, medicines or the medical store, it marks where that module will connect.
+**Sub-domain 11 (Medical store) is out of this file for now** (your call, 2026-10-08 — covered later). Where another sub-domain mentions sub-domain 11, medicines or the medical store, it marks where that sub-domain will connect.
 
-**Code layout** (your rule, 2026-10-08): every module is one folder in the app domain,
-`src/domains/app/sub-domains/<module>/`, laid out like a domain — its main record at the folder root
-(`<module>.routes.ts`, controller, service, repository, schema, …) and each sub-module in
-`<module>/sub-domains/<sub-module>/` (e.g. `patients/sub-domains/patient-clinical-notes/`). Folder names follow the
-table: what the main record owns carries its prefix; a table that only lives in the module keeps its own name (P22).
-The app's shared kernel (`base-record.*`, `app.permissions.ts`, `app-role-presets.ts`, `app-access-sections.ts`,
-`app-record-tables.ts`) stays at `src/domains/app/`. Platform domains outside `/app` keep their own layout —
-`src/domains/billing/` is the Stripe subscription (Postgres schema `billing`), so module 8's `app/sub-domains/billing/`
-does not clash with it. **K1** (code change): `CLAUDE.md`'s domain section, the be-domain-generator skill and
-`validate:domain` learn the module folder's `sub-domains/` — today a nested child sits directly in its parent folder
-(the validator only warns past depth 6).
+**Code layout** (your rule, 2026-10-08; names D54): the plan uses the code's words — a **domain** is
+`src/domains/<domain>/` (the platform's `auth`, `tenancy`, `billing`, … and the app's `app`); each numbered section here is a
+**sub-domain** of the app domain, one folder `src/domains/app/sub-domains/<sub-domain>/`, its main record at the folder root
+(`<sub-domain>.routes.ts`, controller, service, repository, schema, …); and what it owns is a **nested sub-domain**, a folder
+directly inside it, `<sub-domain>/<nested-sub-domain>/` (e.g. `patients/patient-clinical-notes/`) — the layout `CLAUDE.md`
+already gives nested sub-domains (`webhook/webhook-event/`). Folder names follow the table: what the main record owns
+carries its prefix; a table that only lives in the sub-domain keeps its own name (P22). The app's shared kernel
+(`base-record.*`, `app.permissions.ts`, `app-role-presets.ts`, `app-access-sections.ts`, `app-record-tables.ts`) stays at
+`src/domains/app/`. Platform domains outside `/app` keep their own layout — `src/domains/billing/` is the Stripe
+subscription (Postgres schema `billing`), so sub-domain 8's `app/sub-domains/billing/` does not clash with it. **K1** (code
+change): `CLAUDE.md`'s domain table lists the app's sub-domains with their nested sub-domains, and the be-domain-generator
+skill and `validate:domain` accept a nested sub-domain folder inside an app sub-domain (the validator only warns past
+depth 6).
 
 **Tables without routes** (K1, as `CLAUDE.md`'s "flatten if a nested folder has no distinct routes"): a table with no routes of
 its own is a persistence part of its parent — its schema and repository (and a service only when it holds logic) sit in the
 parent's folder, with **no controller and no routes file**, and its parent's service writes it. It gets a folder of its own only
-when other modules share it or it is large — and that folder holds only schema, repository and service, like
+when other sub-domains share it or it is large — and that folder holds only schema, repository and service, like
 `auth/…/verification-token/`, `tenancy/…/membership-additional-roles/` and `app/sub-domains/record-counters/` today. Every
-`sub-domains/<x>/` folder in the modules below has routes; these tables have none:
+nested sub-domain folder below has routes; these tables have none:
 
-| Module | Table | Lives in | Written by |
+| Sub-domain | Table | Lives in | Written by |
 | --- | --- | --- | --- |
 | 2 | `tenancy.membership_additional_roles` | `tenancy/sub-domains/membership/membership-additional-roles/` (as today) | the membership service (`role_ids`) |
-| 2 | `app.membership_preference_branches` | `memberships/sub-domains/membership-preferences/` | the preferences service |
+| 2 | `app.membership_preference_branches` | `memberships/membership-preferences/` | the preferences service |
 | 3 | `app.offering_branches` | `offerings/` (folder root) | the offering service (`branch_ids`) |
-| 3 | `app.offer_offerings`, `app.offer_branches` | `offerings/sub-domains/offers/` | the offer service |
+| 3 | `app.offer_offerings`, `app.offer_branches` | `offerings/offers/` | the offer service |
 | 4 | `app.contact_phones` | `contacts/` (folder root) | the contact service (`phones`) |
 | 5 | `app.lead_involved_memberships` | `leads/` | the lead service |
-| 8 | `app.invoice_items`, `app.invoice_members` | `billing/sub-domains/invoices/` | the invoice service |
-| 8 | `app.payment_edits` | `billing/sub-domains/payments/` | the payment service (route 17 is the payments controller's) |
-| 8 | `app.day_close_events` | `billing/sub-domains/day-closes/` | the day-close service and its worker |
-| 9 | `app.stock_count_lines` | `stock/sub-domains/stock-counts/` | the count service |
-| 9 | `app.stock_purchase_items` | `stock/sub-domains/stock-purchases/` | the purchase service |
+| 8 | `app.invoice_items`, `app.invoice_members` | `billing/invoices/` | the invoice service |
+| 8 | `app.payment_edits` | `billing/payments/` | the payment service (route 17 is the payments controller's) |
+| 8 | `app.day_close_events` | `billing/day-closes/` | the day-close service and its worker |
+| 9 | `app.stock_count_lines` | `stock/stock-counts/` | the count service |
+| 9 | `app.stock_purchase_items` | `stock/stock-purchases/` | the purchase service |
 | 10 | `app.task_owner_changes` | `tasks/` (folder root) | the task service (reassign, a member leaving) |
 | shared | `app.record_counters` | `app/sub-domains/record-counters/` (schema only) | the numbering triggers |
 
-## Members who leave — one rule for every module (K2–K8) — final (confirmed 2026-10-08)
+## Members who leave — one rule for every sub-domain (K2–K8) — final (confirmed 2026-10-08)
 
-Your question: a membership id sits on doctors, owners, authors and "by" fields across the modules — what happens
+Your question: a membership id sits on doctors, owners, authors and "by" fields across the sub-domains — what happens
 when that person leaves the clinic, deletes their account, or turns up again, here or in another clinic? What the
 code does today:
 
@@ -92,17 +94,17 @@ code does today:
 | --- | --- |
 | K2 | **A member who has done anything stays.** Removal and leaving stay soft (same row, restorable), and every pointer that records what someone *did* becomes `ON DELETE RESTRICT` — the 90-day purge already skips rows a foreign key holds, so it only ever clears memberships nothing points at (an invite never accepted, a member who did nothing). Memberships' `delete_reason` gains `left` (they left) and `account_deleted` (K6); a removal keeps choosing `mistake` · `duplicate` · `not_needed` · `other`. |
 | K3 | **The organization keeps the name, in sync with the profile**: `tenancy.memberships.display_name` (new) is copied from the profile when they join, and **every profile update writes it** — when the person changes their name (`PATCH /users/me`), the same transaction updates `display_name` on every live membership of that login, in every clinic, so a membership always matches the profile while it lasts. It freezes only when the membership ends (K4, K6): a clinic they left keeps the name it knew. Every screen names a member from the membership, never from the login, so "Dr. Drashti Shah · left" still reads right years later. The avatar stays the profile's (it goes when the account is deleted). |
-| K4 | **Leaving does three things, in one transaction** — the same for removal, leaving and account deletion: what they *do now* is cleared (branch access and the branches' default staff — C15; contact members; lead ownership and hold — the lead returns to the pool; open tasks — back to their role, module 10); what is *theirs alone* goes (preferences and saved views; prescription kits soft-deleted with the membership and back on restore); what they *did* stays (the table below). Their future appointments keep them, shown as left, until someone reassigns them. Pickers offer active members only, and every write refuses an ended membership (`400`, as today). |
-| K5 | **One member directory**: `GET /app/memberships` (module 2, route 1) takes `include_ended=true` and `ids`, and returns `display_name`, `is_active`, `ended_at` and `tone` — the one place the app turns a membership id into a name. Records keep returning ids (a clinic has tens of members; the screens cache the directory). A record's member lists keep ended members instead of dropping them. |
+| K4 | **Leaving does three things, in one transaction** — the same for removal, leaving and account deletion: what they *do now* is cleared (the branches' default staff — C15; their branch access rows stay, hidden from every branch list while the membership is ended and back with a restore — D57; contact members; lead ownership and hold — the lead returns to the pool; open tasks — back to their role, sub-domain 10); what is *theirs alone* goes (preferences and saved views; prescription kits soft-deleted with the membership and back on restore); what they *did* stays (the table below). Their future appointments keep them, shown as left, until someone reassigns them. Pickers offer active members only, and every write refuses an ended membership (`400`, as today). |
+| K5 | **One member directory**: `GET /app/memberships` (sub-domain 2, route 1) takes `include_ended=true` and `ids`, and returns `display_name`, `is_active`, `ended_at` and `tone` — the one place the app turns a membership id into a name. Records keep returning ids (a clinic has tens of members; the screens cache the directory). A record's member lists keep ended members instead of dropping them. |
 | K6 | **Deleting an account** ends every membership of that login (`delete_reason = account_deleted`) — today they stay live. The login itself is anonymised rather than deleted — email, names and avatar scrubbed; the row stays because the audit columns point at it (a platform change, reviewed with the platform). The clinic's records keep the frozen membership name: clinical and tax records must say who treated, prescribed and billed. If a former member must disappear from the clinic's records too, an Owner or Admin renames the ended membership (e.g. "Former member") — the only change an ended membership accepts. |
 | K7 | **Coming back**: the same login invited again **restores** their old membership — same id, staff number and history, status `invited` — instead of inserting a new row. A different login (a deleted account signed up again, even with the same email) is a new member, never merged automatically: an email can pass to another person. The team list shows both — the old one left, the new one active. |
 | K8 | **Another clinic**: one login, one membership per organization, each with its own name, roles, branches and preferences; a profile update reaches its live memberships in every clinic (K3). The database keeps every app pointer inside its organization: unique `(organization_id, id)` on memberships and composite foreign keys `(organization_id, <x>_membership_id)` on every pointer below — today only the app's lookup stops another clinic's member. |
 
-Every pointer to a member, and what happens when they leave (bold = changes here; the modules' table designs say `(K2)`):
+Every pointer to a member, and what happens when they leave (bold = changes here; the sub-domains' table designs say `(K2)`):
 
-| Module | Column | Records | Foreign key | When they leave |
+| Sub-domain | Column | Records | Foreign key | When they leave |
 | --- | --- | --- | --- | --- |
-| 1 | `branch_members.membership_id` | branch access | `CASCADE` (as is) | rows removed |
+| 1 | `branch_members.membership_id` | branch access | `CASCADE` (as is) | rows kept, hidden while ended, back on restore (D57) |
 | 1 | `branches.default_doctor_membership_id` and the other three | default staff | `SET NULL` (as is) | cleared (C15) |
 | 2 | `membership_preferences`, `membership_saved_views` | their own settings | `CASCADE` (as is) | deleted |
 | 4 | `contact_members.membership_id` | who handles the person now | `CASCADE` (as is) | rows removed |
@@ -125,14 +127,14 @@ Every pointer to a member, and what happens when they leave (bold = changes here
 | # | Change |
 | --- | --- |
 | KC1 | K2: `ON DELETE RESTRICT` on every "kept" pointer above (init migration, schemas); memberships' `delete_reason` gains `left` and `account_deleted` |
-| KC2 | K3: `memberships.display_name varchar(120) NOT NULL` (backfilled from the login), set at join; `PATCH /users/me` (platform `user` domain) updates every live membership of that login in the same transaction; frozen when the membership ends; the picker's `name` becomes `display_name` |
+| KC2 | K3: `memberships.display_name varchar(120) NOT NULL`, set at join (no backfill — scratch deployment, user 2026-10-08); `PATCH /users/me` (platform `user` domain) updates every live membership of that login in the same transaction; frozen when the membership ends; the picker's `name` becomes `display_name` |
 | KC3 | K4: one leave step that removal, leaving and account deletion all call — clear the current links, delete the personal rows, soft-delete the kits |
-| KC4 | K5: route 1 (module 2) takes `include_ended` and `ids` and returns `display_name`, `is_active`, `ended_at`; `listLinkedPublicIds` keeps ended members |
-| KC5 | K6: account deletion ends the login's memberships; the login purge anonymises instead of deleting (platform); an Owner or Admin may rename an ended membership (module 2, route 5) |
-| KC6 | K7: adding a member (module 2, route 3) restores the same login's ended membership instead of inserting |
+| KC4 | K5: route 1 (sub-domain 2) takes `include_ended` and `ids` and returns `display_name`, `is_active`, `ended_at`; `listLinkedPublicIds` keeps ended members |
+| KC5 | K6: account deletion ends the login's memberships; the login purge anonymises instead of deleting (platform — deferred to the platform review, D56); an Owner or Admin may rename an ended membership (sub-domain 2, route 5) |
+| KC6 | K7: adding a member (sub-domain 2, route 3) restores the same login's ended membership instead of inserting |
 | KC7 | K8: unique `(organization_id, id)` on memberships; composite foreign keys on every app pointer |
 
-These change module 2's routes 1, 3 and 5 — confirmed with this section and recorded there as TC17.
+These change sub-domain 2's routes 1, 3 and 5 — confirmed with this section and recorded there as TC17.
 
 ---
 
@@ -140,7 +142,7 @@ These change module 2's routes 1, 3 and 5 — confirmed with this section and re
 
 1.1 Decisions · 1.2 Open questions · 1.3 Tables and relations · 1.4 Permissions · 1.5 Common to every route ·
 1.6 Objects returned · 1.7 Routes · 1.8 Request details · 1.9 Errors · 1.10 Rules worth knowing · 1.11 Code changes ·
-1.12 Sub-domains · then **1.A Branches · 1.B Branch members · 1.C Branch rooms · 1.D Branch machines · 1.E Branch holidays** — each with the same eleven sections: .1 Decisions ·
+1.12 Nested sub-domains · then **1.A Branches · 1.B Branch members · 1.C Branch rooms · 1.D Branch machines · 1.E Branch holidays** — each with the same eleven sections: .1 Decisions ·
 .2 Open questions · .3 Tables and relations · .4 Permissions · .5 Common to every route · .6 Objects returned · .7 Routes ·
 .8 Request details · .9 Errors · .10 Rules worth knowing · .11 Code changes
 
@@ -153,10 +155,10 @@ These change module 2's routes 1, 3 and 5 — confirmed with this section and re
 | D5 | Read gates unchanged: rooms, machines and holidays readable by every member; the full branch list needs `branch:read`. |
 | D7 | Rooms and machines nest the same way: `/branches/{branch_id}/rooms/{branch_room_id}` and `/branches/{branch_id}/machines/{branch_machine_id}` — the top-level `/rooms/…` and `/machines/…` paths go. A room or machine never moves branch; an appointment carries `branch_id` next to `branch_room_id` / `branch_machine_id`, so the caller always has both ids. |
 | D9 | Tables a branch owns carry the `branch_` prefix: `app.branch_user_accesses` → `app.branch_members`, `app.rooms` → `app.branch_rooms`, `app.machines` → `app.branch_machines` (with `app.branch_holidays` as is). Under `/branches/{branch_id}/` the path drops the prefix: `members`, `rooms`, `machines`, `holidays`. |
-| D11 | (Q2 → B) Every name follows the table, as holidays already do: path ids `{branch_room_id}` / `{branch_machine_id}`; columns `appointments.branch_room_id` / `branch_machine_id` (module 6 uses these field names). Id prefixes stay `room_` / `mach_`. |
-| D12 | One set of permission codes for the whole module — `branch:read`, `branch:create`, `branch:update`, `branch:delete`; no per-room / machine / holiday codes. `branch:read` = the full branch list and details; `branch:create` = create a branch, add a room / machine / holiday; `branch:update` = change a branch, its members, a room / machine / holiday; `branch:delete` = delete and restore a room / machine / holiday (a branch itself is never deleted, D3). The pickers stay open to every member (D5): `/branches/my` and the room, machine and holiday reads — booking needs them without the full branch list. |
+| D11 | (Q2 → B) Every name follows the table, as holidays already do: path ids `{branch_room_id}` / `{branch_machine_id}`; columns `appointments.branch_room_id` / `branch_machine_id` (sub-domain 6 uses these field names). Id prefixes stay `room_` / `mach_`. |
+| D12 | One set of permission codes for the whole sub-domain — `branch:read`, `branch:create`, `branch:update`, `branch:delete`; no per-room / machine / holiday codes. `branch:read` = the full branch list and details; `branch:create` = create a branch, add a room / machine / holiday; `branch:update` = change a branch, its members, a room / machine / holiday; `branch:delete` = delete and restore a room / machine / holiday (a branch itself is never deleted, D3). The pickers stay open to every member (D5): `/branches/my` and the room, machine and holiday reads — booking needs them without the full branch list. |
 
-Decisions that belong to one sub-domain are in it (1.A to 1.E, section .1).
+Decisions that belong to one nested sub-domain are in it (1.A to 1.E, section .1).
 
 ### 1.2 Open questions
 
@@ -187,21 +189,21 @@ app.branches ── default staff ×4 (optional; each a branch member, D10) ─�
      │                                                                              │
      └──< app.branch_members >──────────────────────────────────────────────────────┘
           key: branch_id + membership_id
-          API: /branches/{branch_id}/members · branch_ids on the membership (module 2)
+          API: /branches/{branch_id}/members · branch_ids on the membership (sub-domain 2)
 
 A ──< B   one A has many B     A >── B   many A for one B     A ──> B   a column on A points at one B
 ```
 
 Branch ↔ membership is two separate links:
 
-| Link | Shape | Column(s) | Written by | When the member is removed from the team (module 2 — a soft delete) |
+| Link | Shape | Column(s) | Written by | When the member is removed from the team (sub-domain 2 — a soft delete) |
 | --- | --- | --- | --- | --- |
 | Works at | many-to-many | `app.branch_members` (`branch_id`, `membership_id`) | `POST /branches` (`membership_ids`, D13), `PUT /branches/{branch_id}/members` and `branch_ids` on the membership (D2) | the row stays, but they drop out of the branch's members and `/branches/my`; a restore brings them back |
 | Default staff | four many-to-one | `branches.default_doctor_membership_id`, `…_front_desk_…`, `…_therapist_…`, `…_pharmacist_…` | `POST` / `PATCH /branches` | the field is cleared (D14) — also when they stop working at that branch |
 
-Used by later modules (each row points at the branch; nothing points back):
+Used by later sub-domains (each row points at the branch; nothing points back):
 
-| Module | Column → table |
+| Sub-domain | Column → table |
 | --- | --- |
 | 3 Offerings | `offering_branches.branch_id`, `offer_branches.branch_id` → branches |
 | 5 Leads | `leads.branch_id` → branches |
@@ -212,7 +214,7 @@ Used by later modules (each row points at the branch; nothing points back):
 
 ### 1.4 Permissions
 
-The module has one set of codes (D12). "Any member" means `organization:read`, which every role holds.
+The sub-domain has one set of codes (D12). "Any member" means `organization:read`, which every role holds.
 
 | Code | Roles matrix (Users row) | Allows | Routes (1.7) | Held by default |
 | --- | --- | --- | --- | --- |
@@ -246,7 +248,7 @@ A missing code is a `403`; a branch the caller cannot see is a `404` (its existe
 One object per table (1.3), in the same order. Every id is a public id; internal ids, the organization
 and audit columns never leave the API.
 
-Each sub-domain lists its own objects (1.A to 1.E, section .6):
+Each nested sub-domain lists its own objects (1.A to 1.E, section .6):
 
 | Object | Where |
 | --- | --- |
@@ -260,7 +262,7 @@ Each sub-domain lists its own objects (1.A to 1.E, section .6):
 
 Everything a branch owns sits under the branch.
 
-| # | Method | Path | Purpose | Gate | Idem | Sub-domain |
+| # | Method | Path | Purpose | Gate | Idem | Nested sub-domain |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/branches` | List every branch (management) | `branch:read` | | 1.A Branches |
 | 2 | GET | `/branches/my` | The caller's branches (after login, pickers) | any member | | 1.A Branches |
@@ -292,7 +294,7 @@ Gates are explained in 1.4. A room, machine or holiday id under the wrong branch
 
 ### 1.8 Request details
 
-In each sub-domain (1.A to 1.E, section .8).
+In each nested sub-domain (1.A to 1.E, section .8).
 
 ### 1.9 Errors
 
@@ -300,12 +302,12 @@ In each sub-domain (1.A to 1.E, section .8).
 | --- | --- | --- |
 | any by-id | `404` | not in the organization, under another branch, or in a branch the caller cannot see |
 
-Each route's own errors are in its sub-domain (1.A to 1.E, section .9).
+Each route's own errors are in its nested sub-domain (1.A to 1.E, section .9).
 
 ### 1.10 Rules worth knowing
 
 - `/branches/my` returns the branches given to the caller; a caller holding `branch:read` gets every active branch (D1).
-- Branch hours, working days and holidays drive appointment slots (module 6); a retired branch (`is_active=false`) takes no bookings.
+- Branch hours, working days and holidays drive appointment slots (sub-domain 6); a retired branch (`is_active=false`) takes no bookings.
 - Deleting a room or machine does not touch past appointments that named it.
 - A default-staff field is always one of the branch's members: set only from them (D10, D13) and cleared when they leave (D14).
 
@@ -316,27 +318,27 @@ Each route's own errors are in its sub-domain (1.A to 1.E, section .9).
 | C5 | The by-id routes check the record belongs to the branch in the path (else `404`) |
 | C6 | Drop the redundant `branch_ids` filter from the per-branch room, machine and holiday lists |
 | C9 | Rename the tables (D9) in `migrations/00000000000000_init.sql` and the Drizzle schemas — `branch_members`, `branch_rooms`, `branch_machines`, with their indexes, constraints and RLS policies — and the code folders to match: `branches/branch-user-accesses/` → `branches/branch-members/`, `rooms/` → `branch-rooms/`, `machines/` → `branch-machines/` |
-| C11 | D11: rename the path ids in the param registry (`branch_room_id`, `branch_machine_id`) and the columns `appointments.branch_room_id` / `branch_machine_id` with their body and response fields (modules 3 and 6) |
+| C11 | D11: rename the path ids in the param registry (`branch_room_id`, `branch_machine_id`) and the columns `appointments.branch_room_id` / `branch_machine_id` with their body and response fields (sub-domains 3 and 6) |
 | C13 | D12: gate the room, machine and holiday writes with `branch:create` / `branch:update` / `branch:delete`; drop the 12 `room:*`, `machine:*`, `branch_holiday:*` codes from the app permissions, the permission catalog seed, the role presets' booking lookups and the `settings` access section (left empty — it goes) |
-| C17 | Layout (1.12 — confirmed 2026-10-08): move `branch-members/` (today `branches/branch-user-accesses/`), `branch-rooms/` (today the top-level `rooms/`), `branch-machines/` (today `machines/`) and `branch-holidays/` (today top-level) into `app/sub-domains/branches/sub-domains/` — what a branch owns lives in its folder, as its routes already nest |
+| C17 | Layout (1.12 — confirmed 2026-10-08): move `branch-members/` (today `branches/branch-user-accesses/`), `branch-rooms/` (today the top-level `rooms/`), `branch-machines/` (today `machines/`) and `branch-holidays/` (today top-level) into `app/sub-domains/branches/` — what a branch owns lives in its folder, as its routes already nest |
 
-Changes that belong to one sub-domain are in it (1.A to 1.E, section .11).
+Changes that belong to one nested sub-domain are in it (1.A to 1.E, section .11).
 
-### 1.12 Sub-domains
+### 1.12 Nested sub-domains
 
-Module ⇔ folder, sub-module ⇔ sub-domain (your rule). Code: the **`branches` module folder** — `src/domains/app/sub-domains/branches/` (the branch itself at the folder root) with `sub-domains/` for what a branch owns.
+One folder per sub-domain, and what it owns are its nested sub-domains, each a folder inside it (your rule, D54). Code: the **`branches` sub-domain folder** — `src/domains/app/sub-domains/branches/` (the branch itself at the folder root) with a nested sub-domain folder for each thing a branch owns.
 
-| Sub-domain | Folder (`src/domains/app/sub-domains/branches/…`) | Table | Routes (1.7) |
+| Nested sub-domain | Folder (`src/domains/app/sub-domains/branches/…`) | Table | Routes (1.7) |
 | --- | --- | --- | --- |
 | 1.A Branches | folder root | `app.branches` | 1–5 |
-| 1.B Branch members | `sub-domains/branch-members/` | `app.branch_members` | 6–7 |
-| 1.C Branch rooms | `sub-domains/branch-rooms/` | `app.branch_rooms` | 8–13 |
-| 1.D Branch machines | `sub-domains/branch-machines/` | `app.branch_machines` | 14–19 |
-| 1.E Branch holidays | `sub-domains/branch-holidays/` | `app.branch_holidays` | 20–25 |
+| 1.B Branch members | `branch-members/` | `app.branch_members` | 6–7 |
+| 1.C Branch rooms | `branch-rooms/` | `app.branch_rooms` | 8–13 |
+| 1.D Branch machines | `branch-machines/` | `app.branch_machines` | 14–19 |
+| 1.E Branch holidays | `branch-holidays/` | `app.branch_holidays` | 20–25 |
 
 The moves are code change C17.
 
-Each sub-domain below has the same eleven sections as the module (2026-10-08 — layout only: the confirmed content is unchanged, only moved; rows that covered several sub-domains appear in each with its own route numbers).
+Each nested sub-domain below has the same eleven sections as the sub-domain (2026-10-08 — layout only: the confirmed content is unchanged, only moved; rows that covered several nested sub-domains appear in each with its own route numbers).
 
 ---
 
@@ -457,7 +459,7 @@ None beyond 1.10.
 
 ---
 
-### 1.B Branch members — `branches/sub-domains/branch-members/` — final
+### 1.B Branch members — `branches/branch-members/` — final
 
 #### 1.B.1 Decisions
 
@@ -496,7 +498,7 @@ As 1.5.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `membership_id` | string | `mem_…` — the team member (names come from the team picker, module 2) |
+| `membership_id` | string | `mem_…` — the team member (names come from the team picker, sub-domain 2) |
 | `created_at` | ISO datetime | when they were added to the branch |
 
 #### 1.B.7 Routes (6–7)
@@ -532,7 +534,7 @@ None beyond 1.10.
 
 ---
 
-### 1.C Branch rooms — `branches/sub-domains/branch-rooms/` — final
+### 1.C Branch rooms — `branches/branch-rooms/` — final
 
 #### 1.C.1 Decisions
 
@@ -617,7 +619,7 @@ None beyond 1.10.
 
 ---
 
-### 1.D Branch machines — `branches/sub-domains/branch-machines/` — final
+### 1.D Branch machines — `branches/branch-machines/` — final
 
 #### 1.D.1 Decisions
 
@@ -702,7 +704,7 @@ None beyond 1.10.
 
 ---
 
-### 1.E Branch holidays — `branches/sub-domains/branch-holidays/` — final
+### 1.E Branch holidays — `branches/branch-holidays/` — final
 
 #### 1.E.1 Decisions
 
@@ -792,15 +794,15 @@ None beyond 1.10.
 
 ---
 
-## 2. Team — final (confirmed 2026-10-08) — sub-domains 2.A–2.G
+## 2. Team — final (confirmed 2026-10-08) — nested sub-domains 2.A–2.G
 
-*Restructured 2026-10-08: old modules 2 (rev 1) and 14 (rev 1) in one section — layout only, no decision changed.*
+*Restructured 2026-10-08: old sub-domains 2 (rev 1) and 14 (rev 1) in one section — layout only, no decision changed.*
 
-Code: the **`memberships` module folder** — `src/domains/app/sub-domains/memberships/` (the team picker at the folder root) with `sub-domains/membership-preferences/` and `sub-domains/membership-saved-views/`; the team itself is the platform `tenancy` domain (2.B–2.E).
+Code: the **`memberships` sub-domain folder** — `src/domains/app/sub-domains/memberships/` (the team picker at the folder root) with `membership-preferences/` and `membership-saved-views/`; the team itself is the platform `tenancy` domain (2.B–2.E).
 
-2.1 Decisions (whole module) · 2.2 Open questions · 2.3 Tables and relations · 2.4 Permissions · 2.5 Common to every route ·
-2.6 Objects returned · 2.7 Routes · 2.8 Request details · 2.9 Errors · 2.10 Rules worth knowing · 2.11 Code changes (whole module) ·
-2.12 Sub-domains · then **2.A Team picker · 2.B Memberships · 2.C Membership invitations · 2.D Roles · 2.E Permission catalog · 2.F Preferences · 2.G Saved views** — each with the same eleven sections: .1 Decisions ·
+2.1 Decisions (whole sub-domain) · 2.2 Open questions · 2.3 Tables and relations · 2.4 Permissions · 2.5 Common to every route ·
+2.6 Objects returned · 2.7 Routes · 2.8 Request details · 2.9 Errors · 2.10 Rules worth knowing · 2.11 Code changes (whole sub-domain) ·
+2.12 Nested sub-domains · then **2.A Team picker · 2.B Memberships · 2.C Membership invitations · 2.D Roles · 2.E Permission catalog · 2.F Preferences · 2.G Saved views** — each with the same eleven sections: .1 Decisions ·
 .2 Open questions · .3 Tables and relations · .4 Permissions · .5 Common to every route · .6 Objects returned · .7 Routes ·
 .8 Request details · .9 Errors · .10 Rules worth knowing · .11 Code changes
 
@@ -808,8 +810,8 @@ The team, and each member's own settings in this organization.
 
 **Team.** The team lives in the tenancy domain (shared by every product built on this backend); the app adds the
 picker list. A team member's id everywhere in the app (`doctor_membership_id`, `owner_membership_id`, …)
-is the **membership id** (`mem_…`). Module 1's rules carry over: names follow the table (D9, D11), what
-a parent owns nests under it, one code set per module (D12), soft delete with a reason plus restore
+is the **membership id** (`mem_…`). Sub-domain 1's rules carry over: names follow the table (D9, D11), what
+a parent owns nests under it, one code set per sub-domain (D12), soft delete with a reason plus restore
 (D3), `X-Idempotency-Key` on every `POST`, `expected_updated_at` on every `PATCH`.
 
 **Personal settings.** A team member's own settings in this organization — pinned sections, theme, branch filter, patient-file pins,
@@ -817,7 +819,7 @@ recent picks — and the list filters they saved as views. Nobody else sees them
 `shell.md` (pins, branch picker, appearance), `patient-file.md` (pins), `_patterns.md` (recent picks, saved views),
 `schema-routes.md` (UserPreference; there is no SavedView entity). Route numbers run 1–27.
 
-### 2.1 Decisions (whole module)
+### 2.1 Decisions (whole sub-domain)
 
 All taken on your standing answer "go with the recommendation" — confirmed 2026-10-08.
 
@@ -825,16 +827,16 @@ All taken on your standing answer "go with the recommendation" — confirmed 202
 | --- | --- |
 | T1 | Two team lists: the **picker** (route 1 — every member, active members only, names / roles / branches) and the **management list** (route 2 — `membership:read`, every status, phone and commission). |
 | T7 | `membership:read` leaves every role's defaults. Today every role holds it, so any member can open the management list with everyone's phone and commission %. Pickers use route 1 (`organization:read`). |
-| T8 | One code set for the module, as D12: `membership:read`, `membership:create`, `membership:update`, `membership:delete` and `role:read`, `role:create`, `role:update`, `role:delete`. They replace `membership:manage`, `invitation:manage` and `role:manage` (invite = create, resend = update, revoke = delete) and join `branch:*` in the **Users** row of the Roles matrix — so a role other than Owner / Admin can be given team management. |
+| T8 | One code set for the sub-domain, as D12: `membership:read`, `membership:create`, `membership:update`, `membership:delete` and `role:read`, `role:create`, `role:update`, `role:delete`. They replace `membership:manage`, `invitation:manage` and `role:manage` (invite = create, resend = update, revoke = delete) and join `branch:*` in the **Users** row of the Roles matrix — so a role other than Owner / Admin can be given team management. |
 | T13 | Every `POST` takes `X-Idempotency-Key` — today restore, resend and accept do not. |
 | T14 | Every `PATCH` takes `expected_updated_at` (memberships, roles) — a stale save → `409 record_changed`. |
 | U1 | **Owned by the membership** — one person in one organization: `app.user_preferences` → `app.membership_preferences`, `app.saved_views` → `app.membership_saved_views`, each with `membership_id` → memberships `ON DELETE CASCADE`; the leave step deletes them when the member leaves (K4). Today the owner is `created_by_user_id`: an API key (no user) shares one owner-less row, and the rows outlive the membership. `schema-routes.md` keys preferences by user across organizations, but the branch filter and pins belong to one organization. Routes nest under the caller's membership — `/memberships/me/preferences`, `/memberships/me/saved-views` — like the platform's `/users/me/…`; an API key gets `403`. |
 | U2 | **Gate**: any member (`organization:read`); a member only ever reaches their own rows (another member's view → `404`). The `saved_view:*` codes (seeded and in every preset, never checked) and the `personal` access section go. Public-id prefixes stay (`upref_`, `svw_`). |
 | U3 | Not branch-scoped; RLS (organization policy, enabled and forced) on every table. |
 
-Taken on your standing answer "go with the recommendation" — confirmed 2026-10-08. A decision that belongs to one table is in its sub-domain.
+Taken on your standing answer "go with the recommendation" — confirmed 2026-10-08. A decision that belongs to one table is in its nested sub-domain.
 
-Decisions that belong to one sub-domain are in it (2.A to 2.E, section .1).
+Decisions that belong to one nested sub-domain are in it (2.A to 2.E, section .1).
 
 ### 2.2 Open questions
 
@@ -852,7 +854,7 @@ None — every decision follows the recommendation.
 | `tenancy.roles` | the organization's roles | name unique among live roles; at most 50 per organization; system roles fixed (T3); soft delete with reason + restore (T12), purged after 90 days |
 | `tenancy.role_permissions` | a role's permission codes | key (`role_id`, `permission_code`); the code must exist in the catalog |
 | `tenancy.permissions` | the code catalog — shared, not per organization | `code` is the key; `category` groups the Roles matrix |
-| `app.branch_members` | where a member works — module 1 | written from both sides (D2) |
+| `app.branch_members` | where a member works — sub-domain 1 | written from both sides (D2) |
 
 ```text
 tenancy.organizations
@@ -864,14 +866,14 @@ tenancy.organizations
             ├──> tenancy.roles                                           main role (role_id)
             ├──< tenancy.membership_additional_roles >── tenancy.roles   extra roles, positions 1–9
             ├──< tenancy.membership_invitations                          the invite, while invited
-            └──< app.branch_members >── app.branches                     where they work (module 1)
+            └──< app.branch_members >── app.branches                     where they work (sub-domain 1)
 
 A ──< B   one A has many B     A >── B   many A for one B     A ──> B   a column on A points at one B
 ```
 
 Pointing at a membership from the app (each keeps pointing after a member is removed — removal is a soft delete, so history keeps its names):
 
-| Module | Column(s) |
+| Sub-domain | Column(s) |
 | --- | --- |
 | 1 Branches | `branch_members.membership_id`; `branches.default_doctor_membership_id`, `…_front_desk_…`, `…_therapist_…`, `…_pharmacist_…` (cleared when the member leaves, D14) |
 | 5 Leads | `leads.owner_membership_id`, `lead_involved_memberships.membership_id` |
@@ -883,7 +885,7 @@ Pointing at a membership from the app (each keeps pointing after a member is rem
 | 8 Billing | `invoice_team_memberships.team_membership_id` |
 | 10 Tasks | `tasks.owner_membership_id`, `task_owner_changes.from_membership_id`, `task_owner_changes.to_membership_id` |
 
-Roles decide every permission gate in every module; working days and hours feed appointment slots (module 6).
+Roles decide every permission gate in every sub-domain; working days and hours feed appointment slots (sub-domain 6).
 
 **Personal settings**
 
@@ -946,7 +948,7 @@ A missing code is a `403`; a member, invite or role of another organization is a
 
 ### 2.6 Objects returned
 
-Each sub-domain lists its own objects (2.A to 2.G, section .6):
+Each nested sub-domain lists its own objects (2.A to 2.G, section .6):
 
 | Object | Where |
 | --- | --- |
@@ -960,9 +962,9 @@ Each sub-domain lists its own objects (2.A to 2.G, section .6):
 
 ### 2.7 Routes
 
-Every route of the module in one table; each sub-domain repeats its own with the details.
+Every route of the sub-domain in one table; each nested sub-domain repeats its own with the details.
 
-| # | Method | Path (`/api/v1/…`) | Purpose | Gate | Idem | Sub-domain |
+| # | Method | Path (`/api/v1/…`) | Purpose | Gate | Idem | Nested sub-domain |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/app/memberships` | Team picker — active members **(renamed, T5)** | any member | | 2.A Team picker |
 | 2 | GET | `/tenancy/organization/memberships` | Team list (every status) | `membership:read` | | 2.B Memberships |
@@ -994,17 +996,17 @@ Every route of the module in one table; each sub-domain repeats its own with the
 
 ### 2.8 Request details
 
-In each sub-domain (2.A to 2.G, section .8).
+In each nested sub-domain (2.A to 2.G, section .8).
 
 ### 2.9 Errors
 
-Every route can answer the errors in 2.5; each route's own errors are in its sub-domain (2.A to 2.G, section .9).
+Every route can answer the errors in 2.5; each route's own errors are in its nested sub-domain (2.A to 2.G, section .9).
 
-Module-wide:
+Sub-domain-wide:
 
 | Route | Status · reason | When |
 | --- | --- | --- |
-| any by-id | `404` | not in the organization (or removed) |
+| any by-id | `404` | not in the organization (or removed — except routes 4, 5 and 7, which reach an ended member, D58) |
 
 ### 2.10 Rules worth knowing
 
@@ -1019,7 +1021,7 @@ Module-wide:
 - Density is worked out from the window size and is not a preference (`shell.md`); language and a default list sort are not designed.
 - A saved view holds filters only — the sort stays in the URL (`schema-routes.md`).
 
-### 2.11 Code changes (whole module)
+### 2.11 Code changes (whole sub-domain)
 
 | # | Change |
 | --- | --- |
@@ -1030,26 +1032,26 @@ Module-wide:
 | TC11 | T15: one Role permission shape for `GET` / `PUT`; `permission_codes` on route 8; resend returns the invitation itself |
 | TC16 | Layout (2.12 — confirmed 2026-10-08): the picker's app folder `users/` → `memberships/` (T5); tenancy `membership/member-invitation/` → `membership/membership-invitation/` (T9) |
 | TC17 | K5–K7 (members who leave — confirmed 2026-10-08): route 1 takes `include_ended` and `ids` and returns `display_name`, `is_active`, `ended_at` (KC4); route 3 restores the same login's ended membership instead of inserting (KC6); route 5 renames only an ended membership — a live one follows the profile (K3, KC5) |
-| UC1 | U1: rename both tables (init migration, schemas, indexes, RLS, the FORCE-RLS and purge lists); `membership_id` replaces the `created_by_user_id` ownership; move the two folders into `app/sub-domains/memberships/sub-domains/`; the `/memberships/me/…` routes; `403` without a membership |
+| UC1 | U1: rename both tables (init migration, schemas, indexes, RLS, the FORCE-RLS and purge lists); `membership_id` replaces the `created_by_user_id` ownership; move the two folders into `app/sub-domains/memberships/`; the `/memberships/me/…` routes; `403` without a membership |
 | UC2 | U2: drop `saved_view:*` (app permissions, catalog seed, presets) and the `personal` section (`app-access-sections.ts`) |
 
-Changes that belong to one sub-domain are in it (2.A to 2.E, section .11).
+Changes that belong to one nested sub-domain are in it (2.A to 2.E, section .11).
 
-### 2.12 Sub-domains
+### 2.12 Nested sub-domains
 
-| Sub-domain | Folder | Tables | Routes | Status |
+| Nested sub-domain | Folder | Tables | Routes | Status |
 | --- | --- | --- | --- | --- |
 | 2.A Team picker | `app/sub-domains/memberships/` (today `users/`) | reads `tenancy.memberships` | 1 | final |
 | 2.B Memberships | `tenancy/sub-domains/membership/` (+ nested `membership-additional-roles/`) | `tenancy.memberships`, `tenancy.membership_additional_roles` | 2–8 | final |
 | 2.C Membership invitations | `tenancy/sub-domains/membership/membership-invitation/` (nested; today `member-invitation/`) | `tenancy.membership_invitations` | 9–11 | final |
 | 2.D Roles | `tenancy/sub-domains/member-roles/` (+ nested `member-role-permission/`) | `tenancy.roles`, `tenancy.role_permissions` | 12–19 | final |
 | 2.E Permission catalog | `tenancy/sub-domains/permission/` | `tenancy.permissions` | 20 | final |
-| 2.F Preferences | `sub-domains/membership-preferences/` | `app.membership_preferences`, `app.membership_preference_branches` | 21–22 | final |
-| 2.G Saved views | `sub-domains/membership-saved-views/` | `app.membership_saved_views` | 23–27 | final |
+| 2.F Preferences | `membership-preferences/` | `app.membership_preferences`, `app.membership_preference_branches` | 21–22 | final |
+| 2.G Saved views | `membership-saved-views/` | `app.membership_saved_views` | 23–27 | final |
 
 The renames are code change TC16.
 
-Each sub-domain below has the same eleven sections as the module (2026-10-08 — layout only: the confirmed content is unchanged, only moved; rows that covered several sub-domains appear in each with its own route numbers).
+Each nested sub-domain below has the same eleven sections as the sub-domain (2026-10-08 — layout only: the confirmed content is unchanged, only moved; rows that covered several nested sub-domains appear in each with its own route numbers).
 
 ---
 
@@ -1135,6 +1137,7 @@ None beyond 2.10.
 | T10 | Status moves by `PATCH` only between `active` and `suspended`; `invited` → `active` happens only by accepting the invite. `joined_at` is kept on reactivation (today any `PATCH` to active resets it). |
 | T16 | The Membership object drops `role_id` and `role` — `role_ids[0]` is the main role (the picker already works this way). |
 | T17 | Status values are lowercase — `invited`, `active`, `suspended` — like every other enum in the API. |
+| D58 | Ended members (found at ROUTE #126): route 2 lists them with `include_ended=true` (default `false`); route 4 opens one; route 5 renames one — `display_name` only, the one change an ended member accepts (K6); routes 6 and 8 answer `404` for one. |
 
 #### 2.B.2 Open questions
 
@@ -1146,7 +1149,7 @@ None.
 | --- | --- | --- |
 | `tenancy.memberships` | one person in the organization: status, staff number, phone, tone, working days and hours, commission % | one live membership per user per organization; `staff_number` set by the database (next in the organization, never changes); soft delete with reason + restore |
 | `tenancy.membership_additional_roles` | the roles a member holds beyond the main one | key (`membership_id`, `role_id`); positions 1–9 → at most 10 roles in all |
-| `app.branch_members` | where a member works — module 1 | written from both sides (D2) |
+| `app.branch_members` | where a member works — sub-domain 1 | written from both sides (D2) |
 
 #### 2.B.4 Permissions
 
@@ -1179,11 +1182,14 @@ As 2.5.
 | `phone` | string \| null | `+91` + 10 digits |
 | `tone` | string | chip colour (default `sky`) |
 | `role_ids` | string[] | `rol_…`, 1–10, main role first (T16) |
-| `branch_ids` | string[] | `brn_…`, up to 100 — module 1 `branch_members` |
+| `branch_ids` | string[] | `brn_…`, up to 100 — sub-domain 1 `branch_members` |
 | `working_days` | string[] | `mon` … `sun`; default Monday–Saturday |
 | `work_starts_at`, `work_ends_at` | string `HH:mm` | default `10:00` – `19:00`; ends after it starts |
 | `commission_percent` | number | 0–100, two decimals; default 0 |
 | `user` | object | `id`, `email`, `first_name`, `last_name`, `avatar_url` |
+| `display_name` | string | the name the organization keeps (K3) — follows the profile while live, frozen when ended (D58) |
+| `ended_at` | ISO datetime \| null | when the membership ended; `null` while live (D58) |
+| `end_reason` | string \| null | `mistake` · `duplicate` · `not_needed` · `other` · `left` · `account_deleted` (K2); `null` while live (D58) |
 | `created_at`, `updated_at` | ISO datetime | |
 
 **Member permissions** — route 8: `permission_codes` (string[]) — every code from the member's roles, main and extra (T15).
@@ -1204,10 +1210,10 @@ As 2.5.
 
 | # | Query | Body | Response |
 | --- | --- | --- | --- |
-| 2 | `q` (email / first / last name, 1–200), `status`, `role_id`, `branch_id` (T2), `sort` = `created_at` (default) \| `name`, `order` (default `asc`), `limit`, `after` | — | Membership[] (paginated) |
+| 2 | `q` (email / first / last name, 1–200), `status`, `role_id`, `branch_id` (T2), `include_ended` (default `false`, D58), `sort` = `created_at` (default) \| `name`, `order` (default `asc`), `limit`, `after` | — | Membership[] (paginated) |
 | 3 | — | `email*` (up to 255; no throw-away domains), `role_ids*` (1–10, no repeats; first = main role), `expires_in_days` (1–365, default 7), `phone`, `tone`, `branch_ids` (up to 100), `working_days`, `work_starts_at`, `work_ends_at`, `commission_percent` | Membership (`status=invited`) |
-| 4 | — | — | Membership |
-| 5 | — | any of `status` (`active` \| `suspended`, T10), `role_ids`, `phone`, `tone`, `branch_ids`, `working_days`, `work_starts_at`, `work_ends_at`, `commission_percent` (at least one), `expected_updated_at` | Membership |
+| 4 | — | — | Membership — an ended one too (D58) |
+| 5 | — | an ended member: `display_name` (1–120) only (K6, D58); a live member: any of `status` (`active` \| `suspended`, T10), `role_ids`, `phone`, `tone`, `branch_ids`, `working_days`, `work_starts_at`, `work_ends_at`, `commission_percent` (at least one), `expected_updated_at` | Membership |
 | 6 | `reason*` = `mistake` \| `duplicate` \| `not_needed` \| `other`, `note` (required for `other`) | — | 204 |
 | 7 | — | — | Membership — back with its earlier status |
 | 8 | — | — | Member permissions |
@@ -1228,6 +1234,9 @@ As 2.5.
 | 5 | `403` (message: the owner's status and roles cannot change) | status or roles of the owner |
 | 6 | `403` (message: the owner cannot be removed) | |
 | 5 | `409` · `record_changed` | `expected_updated_at` is older than the record (T14) |
+| 5 | `400` · `display_name` | `display_name` on a live member — the name follows the profile (K3, D58) |
+| 5 | `400` · `membership_ended` | any field but `display_name` on an ended member (D58) |
+| 6, 8 | `404` | the member has ended (D58) |
 | 7 | `409` · `membership_not_deleted` | the member is not removed |
 
 #### 2.B.10 Rules worth knowing
@@ -1242,7 +1251,7 @@ None beyond 2.10.
 | TC6 | T10: `PATCH` status allows only `active` ↔ `suspended`; keep `joined_at` on reactivation |
 | TC12 | T16: drop `role_id` and `role` from the Membership object |
 | TC13 | T17: lowercase status values — column check, DTOs, serializers and every reader |
-| TC15 | Removing a member clears branch default staff — already module 1 C15 (D14) |
+| TC15 | Removing a member clears branch default staff — already sub-domain 1 C15 (D14) |
 
 ---
 
@@ -1515,13 +1524,13 @@ None beyond 2.10.
 None of its own — 2.11.
 
 ---
-### 2.F Preferences — `memberships/sub-domains/membership-preferences/` — final
+### 2.F Preferences — `memberships/membership-preferences/` — final
 
 #### 2.F.1 Decisions
 
 | # | Decision |
 | --- | --- |
-| U4 | **One row per membership, upserted** (`INSERT … ON CONFLICT (membership_id) DO UPDATE`) — today two first saves at once are a `500`. Before the first save `GET` returns the defaults with `id`, `created_at` and `updated_at` null (as today). `PATCH` replaces each array it sends. Fields: `pinned_sections` (up to 10, distinct, in bar order — `today` and the matrix sections); `theme` (`light` · `dark` · `system`); `branch_ids` (renamed from `branch_filter_ids`; up to 20 of the branches the member can see; empty = every branch — "keep at least one" is the screen's rule); `patient_file_pins` (up to 11, distinct, from the patient file's sections as modules 7 and 8 left them — `overview` · `activity` · `clinical_notes` · `appointments` · `prescriptions` · `treatments` · `images` · `reports` · `packages` · `invoices` · `payments`; `timeline`, `notes` and `team` go with P8, P20 and 4); `recent_picks` (up to 60 `room:field:value` entries — the server keeps the newest 3 per `room:field`, the design's rule that nothing enforces today). The soft-delete columns go (there is no delete). |
+| U4 | **One row per membership, upserted** (`INSERT … ON CONFLICT (membership_id) DO UPDATE`) — today two first saves at once are a `500`. Before the first save `GET` returns the defaults with `id`, `created_at` and `updated_at` null (as today). `PATCH` replaces each array it sends. Fields: `pinned_sections` (up to 10, distinct, in bar order — `today` and the matrix sections); `theme` (`light` · `dark` · `system`); `branch_ids` (renamed from `branch_filter_ids`; up to 20 of the branches the member can see; empty = every branch — "keep at least one" is the screen's rule); `patient_file_pins` (up to 11, distinct, from the patient file's sections as sub-domains 7 and 8 left them — `overview` · `activity` · `clinical_notes` · `appointments` · `prescriptions` · `treatments` · `images` · `reports` · `packages` · `invoices` · `payments`; `timeline`, `notes` and `team` go with P8, P20 and 4); `recent_picks` (up to 60 `room:field:value` entries — the server keeps the newest 3 per `room:field`, the design's rule that nothing enforces today). The soft-delete columns go (there is no delete). |
 
 #### 2.F.2 Open questions
 
@@ -1592,7 +1601,7 @@ None beyond 2.10.
 
 ---
 
-### 2.G Saved views — `memberships/sub-domains/membership-saved-views/` — final
+### 2.G Saved views — `memberships/membership-saved-views/` — final
 
 #### 2.G.1 Decisions
 
@@ -1683,12 +1692,12 @@ None beyond 2.10.
 
 3.1 Decisions · 3.2 Open questions · 3.3 Tables and relations · 3.4 Permissions · 3.5 Common to every route ·
 3.6 Objects returned · 3.7 Routes · 3.8 Request details · 3.9 Errors · 3.10 Rules worth knowing · 3.11 Code changes ·
-3.12 Sub-domains · then **3.A Offering groups · 3.B Offerings · 3.C Offers** — each with the same eleven sections: .1 Decisions ·
+3.12 Nested sub-domains · then **3.A Offering groups · 3.B Offerings · 3.C Offers** — each with the same eleven sections: .1 Decisions ·
 .2 Open questions · .3 Tables and relations · .4 Permissions · .5 Common to every route · .6 Objects returned · .7 Routes ·
 .8 Request details · .9 Errors · .10 Rules worth knowing · .11 Code changes
 
 What the clinic sells (offerings, sorted into groups) and the time-boxed deals on them (offers). Bookings
-(module 6), the patient's plan (7) and bills (8) all pick from here. Modules 1–2's rules carry over.
+(sub-domain 6), the patient's plan (7) and bills (8) all pick from here. Sub-domains 1–2's rules carry over.
 
 ### 3.1 Decisions
 
@@ -1696,11 +1705,11 @@ Taken on your standing answer "go with the recommendation" — confirmed 2026-10
 
 | # | Decision |
 | --- | --- |
-| O2 | One code set for the module (D12): `offering:create`, `offering:update`, `offering:delete` cover groups, offerings — prices included — and offers. Reads are open to every member — booking and billing pick from them. `offering_group:*`, `offering:read`, `offer:*` and the special `price:manage` all go. |
+| O2 | One code set for the sub-domain (D12): `offering:create`, `offering:update`, `offering:delete` cover groups, offerings — prices included — and offers. Reads are open to every member — booking and billing pick from them. `offering_group:*`, `offering:read`, `offer:*` and the special `price:manage` all go. |
 | O3 | Prices need no code of their own: `offering:create` sets them, `offering:update` changes them (`price:manage` is gone, O2). Counsellor holds `offering:create` / `offering:update` by default, so it now also changes prices and runs offers. |
 | O5 | No branches = every branch, for offerings and offers (the design's "All branches"). An offering not offered at a branch is hidden from that branch's bookings and bills. The offering and offer lists filter by `branch_id` (offered there, every-branch ones included). |
 
-Decisions that belong to one sub-domain are in it (3.A to 3.C, section .1).
+Decisions that belong to one nested sub-domain are in it (3.A to 3.C, section .1).
 
 ### 3.2 Open questions
 
@@ -1730,9 +1739,9 @@ tenancy.organizations
 A ──< B   one A has many B     A >── B   many A for one B
 ```
 
-Pointing at an offering from later modules (deleting an offering is a soft delete — these keep it):
+Pointing at an offering from later sub-domains (deleting an offering is a soft delete — these keep it):
 
-| Module | Column |
+| Sub-domain | Column |
 | --- | --- |
 | 6 Appointments | `appointments.offering_id` |
 | 7 Treatments & feedback | `treatments.offering_id`, `check_in_next_offerings.next_offering_id` |
@@ -1741,7 +1750,7 @@ Pointing at an offering from later modules (deleting an offering is a soft delet
 
 ### 3.4 Permissions
 
-"Any member" = `organization:read`, which every role holds. Every code of the module sits in the Offerings row of the Roles matrix.
+"Any member" = `organization:read`, which every role holds. Every code of the sub-domain sits in the Offerings row of the Roles matrix.
 
 | Code | Roles matrix | Allows | Routes (3.7) | Held by default |
 | --- | --- | --- | --- | --- |
@@ -1752,7 +1761,7 @@ Pointing at an offering from later modules (deleting an offering is a soft delet
 | `offering:lower_price:read` | Offerings · Lowest price | see `min_price` — without it every offering response carries `null` (O15) | 7–11 | Owner, Admin, Accountant |
 | `offering:export` | Offerings · Export | download the offerings CSV (O14) | 8 | Owner, Admin, Doctor, Pharmacist, Accountant |
 
-A missing code is a `403`. Nothing in this module is branch-scoped for reading (O5 filters, it does not hide).
+A missing code is a `403`. Nothing in this sub-domain is branch-scoped for reading (O5 filters, it does not hide).
 
 ### 3.5 Common to every route
 
@@ -1770,7 +1779,7 @@ A missing code is a `403`. Nothing in this module is branch-scoped for reading (
 
 One object per table (3.3); the three link tables show up as id lists on their owner.
 
-Each sub-domain lists its own objects (3.A to 3.C, section .6):
+Each nested sub-domain lists its own objects (3.A to 3.C, section .6):
 
 | Object | Where |
 | --- | --- |
@@ -1780,7 +1789,7 @@ Each sub-domain lists its own objects (3.A to 3.C, section .6):
 
 ### 3.7 Routes (19)
 
-| # | Method | Path | Purpose | Gate | Idem | Sub-domain |
+| # | Method | Path | Purpose | Gate | Idem | Nested sub-domain |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/offering-groups` | List groups (menu order) | any member | | 3.A Offering groups |
 | 2 | POST | `/offering-groups` | Add a group | `offering:create` | req | 3.A Offering groups |
@@ -1806,7 +1815,7 @@ Gates are explained in 3.4.
 
 ### 3.8 Request details
 
-In each sub-domain (3.A to 3.C, section .8).
+In each nested sub-domain (3.A to 3.C, section .8).
 
 ### 3.9 Errors
 
@@ -1814,12 +1823,12 @@ In each sub-domain (3.A to 3.C, section .8).
 | --- | --- | --- |
 | any by-id | `404` | not in the organization, or deleted |
 
-Each route's own errors are in its sub-domain (3.A to 3.C, section .9).
+Each route's own errors are in its nested sub-domain (3.A to 3.C, section .9).
 
 ### 3.10 Rules worth knowing
 
 - An offering's GST defaults on create — 0 for a consultation, 18 otherwise; changing the category later does not change it.
-- `offer_price` is what the desk bills (empty = the list price). The desk may bill lower, down to `min_price`, with no extra code — never below `min_price`; checked in module 8 (O16).
+- `offer_price` is what the desk bills (empty = the list price). The desk may bill lower, down to `min_price`, with no extra code — never below `min_price`; checked in sub-domain 8 (O16).
 - "Billed today" on the offerings list (the best live offer for the branch applied to the offer price, never below the lowest price) is worked out by the screen from the offers; billing applies the same rule.
 - Changing a price never changes past invoices — each invoice line keeps its own rate.
 - Deleting an offering hides it from new use; past appointments, treatments and patient offerings keep it. Restore works until the purge (organization setting `deleted_record_purge_days`).
@@ -1829,34 +1838,34 @@ Each route's own errors are in its sub-domain (3.A to 3.C, section .9).
 | # | Change |
 | --- | --- |
 | OC2 | O2: reads gated by `organization:read` (offers today `offer:read`); groups and offers gated by `offering:create` / `offering:update` / `offering:delete`; drop `offering_group:*`, `offering:read`, `offer:*` and `price:manage` from the app permissions, catalog seed, role presets and the Offerings matrix section (the row keeps `offering` only) |
-| OC5 | O5: `branch_id` filter on the offering and offer lists (every-branch rows included); module 6 / 10 enforce "not offered here" when they are built |
-| OC17 | Layout (3.12 — confirmed 2026-10-08): move the top-level `offering-groups/` and `offers/` into `app/sub-domains/offerings/sub-domains/` |
+| OC5 | O5: `branch_id` filter on the offering and offer lists (every-branch rows included); sub-domain 6 / 10 enforce "not offered here" when they are built |
+| OC17 | Layout (3.12 — confirmed 2026-10-08): move the top-level `offering-groups/` and `offers/` into `app/sub-domains/offerings/` |
 
-Changes that belong to one sub-domain are in it (3.A to 3.C, section .11).
+Changes that belong to one nested sub-domain are in it (3.A to 3.C, section .11).
 
-### 3.12 Sub-domains
+### 3.12 Nested sub-domains
 
-Module ⇔ folder, sub-module ⇔ sub-domain (your rule). Code: the **`offerings` module folder** — `src/domains/app/sub-domains/offerings/` (the offering itself at the folder root, with `app.offering_branches`) with `sub-domains/offering-groups/` and `sub-domains/offers/`. Folder names follow the table (P22): `offers` keeps its own name — an offer is not owned by one offering.
+One folder per sub-domain, and what it owns are its nested sub-domains, each a folder inside it (your rule, D54). Code: the **`offerings` sub-domain folder** — `src/domains/app/sub-domains/offerings/` (the offering itself at the folder root, with `app.offering_branches`) with `offering-groups/` and `offers/`. Folder names follow the table (P22): `offers` keeps its own name — an offer is not owned by one offering.
 
-| Sub-domain | Folder (`src/domains/app/sub-domains/offerings/…`) | Table | Routes (3.7) |
+| Nested sub-domain | Folder (`src/domains/app/sub-domains/offerings/…`) | Table | Routes (3.7) |
 | --- | --- | --- | --- |
-| 3.A Offering groups | `sub-domains/offering-groups/` | `app.offering_groups` | 1–6 |
+| 3.A Offering groups | `offering-groups/` | `app.offering_groups` | 1–6 |
 | 3.B Offerings | folder root | `app.offerings`, `app.offering_branches` | 7–13 |
-| 3.C Offers | `sub-domains/offers/` | `app.offers`, `app.offer_offerings`, `app.offer_branches` | 14–19 |
+| 3.C Offers | `offers/` | `app.offers`, `app.offer_offerings`, `app.offer_branches` | 14–19 |
 
 The moves are code change OC17.
 
-Each sub-domain below has the same eleven sections as the module (2026-10-08 — layout only: the confirmed content is unchanged, only moved; rows that covered several sub-domains appear in each with its own route numbers).
+Each nested sub-domain below has the same eleven sections as the sub-domain (2026-10-08 — layout only: the confirmed content is unchanged, only moved; rows that covered several nested sub-domains appear in each with its own route numbers).
 
 ---
 
-### 3.A Offering groups — `offerings/sub-domains/offering-groups/` — final
+### 3.A Offering groups — `offerings/offering-groups/` — final
 
 #### 3.A.1 Decisions
 
 | # | Decision |
 | --- | --- |
-| O7 | A group with live offerings cannot be deleted (`409` — move or ungroup them first), like a role with members (module 2). Today it deletes and its offerings keep pointing at a deleted group. |
+| O7 | A group with live offerings cannot be deleted (`409` — move or ungroup them first), like a role with members (sub-domain 2). Today it deletes and its offerings keep pointing at a deleted group. |
 | O8 | The group list's default order is `sort_order`, then name — that is what `sort_order` is for. Today it is newest first. |
 
 #### 3.A.2 Open questions
@@ -1949,10 +1958,10 @@ None beyond 3.10.
 | O4 | Prices: `min_price` ≤ `offer_price` ≤ `price` (the design's "Offer price can't be above the price", "Lowest price can't be above the offer price") — a `400` naming the field. Today `offer_price` above `price` is a `500` and `offer_price` below `min_price` is not checked. |
 | O6 | Offerings carry no default room and no default doctor: `default_room_id` and `default_doctor_membership_id` go — an offering links only to its group, branches and offers. |
 | O9 | `q` on offerings also searches `search_terms` (aliases such as "laser"). Today they are stored and never searched. |
-| O13 | An inactive offering (`is_active=false`) cannot be newly booked, sold or suggested (modules 6, 7, 8); past records keep it. Today only a deleted offering is refused. |
-| O14 | Exporting offerings has its own code, `offering:export` (was the shared special `list:export`), shown in the Offerings row of the Roles matrix as **Export**. Default holders unchanged: Owner, Admin, Doctor, Pharmacist, Accountant. The other 11 exports keep `list:export` until their modules move them the same way; `list:export` goes once the last one has moved. |
-| O15 | `lowest_price:read` → `offering:lower_price:read` — the module's code for seeing `min_price` (the design's "Lowest price"), in the Offerings row of the Roles matrix. Default holders unchanged: Owner, Admin, Accountant. |
-| O16 | `offer_price:bill_below` goes, with its rule: the desk may bill below an offering's offer price, down to `min_price`, with no extra code. Nobody bills below `min_price` (module 8). |
+| O13 | An inactive offering (`is_active=false`) cannot be newly booked, sold or suggested (sub-domains 6, 7, 8); past records keep it. Today only a deleted offering is refused. |
+| O14 | Exporting offerings has its own code, `offering:export` (was the shared special `list:export`), shown in the Offerings row of the Roles matrix as **Export**. Default holders unchanged: Owner, Admin, Doctor, Pharmacist, Accountant. The other 11 exports keep `list:export` until their sub-domains move them the same way; `list:export` goes once the last one has moved. |
+| O15 | `lowest_price:read` → `offering:lower_price:read` — the sub-domain's code for seeing `min_price` (the design's "Lowest price"), in the Offerings row of the Roles matrix. Default holders unchanged: Owner, Admin, Accountant. |
+| O16 | `offer_price:bill_below` goes, with its rule: the desk may bill below an offering's offer price, down to `min_price`, with no extra code. Nobody bills below `min_price` (sub-domain 8). |
 
 #### 3.B.2 Open questions
 
@@ -2066,14 +2075,14 @@ None beyond 3.10.
 | OC4 | O4: check `min_price` ≤ `offer_price` ≤ `price` in the service (`400`), on create and on the merged row for a `PATCH` |
 | OC6 | O6: drop `offerings.default_room_id` and `default_doctor_membership_id` with their foreign keys (init migration, schema, DTO, serializer, the reference checks) |
 | OC9 | O9: `q` on offerings also matches `search_terms` |
-| OC13 | O13: appointments, invoice lines and offering suggestions refuse an inactive offering — lands with modules 6, 7 and 8 |
+| OC13 | O13: appointments, invoice lines and offering suggestions refuse an inactive offering — lands with sub-domains 6, 7 and 8 |
 | OC14 | O14: new code `offering:export` (app permissions, catalog seed — category `offerings`, role presets for today's `list:export` holders, the matrix's Export column for the Offerings row); route 8 gated by it |
 | OC15 | O15: rename `lowest_price:read` → `offering:lower_price:read` (app permissions, catalog seed — category `offerings`, Accountant's preset, the hidden-field map in `offerings.controller.ts`, the matrix) |
-| OC16 | O16: drop `offer_price:bill_below` (app permissions, catalog seed, Doctor and Counsellor presets); module 8 checks only `min_price` |
+| OC16 | O16: drop `offer_price:bill_below` (app permissions, catalog seed, Doctor and Counsellor presets); sub-domain 8 checks only `min_price` |
 
 ---
 
-### 3.C Offers — `offerings/sub-domains/offers/` — final
+### 3.C Offers — `offerings/offers/` — final
 
 #### 3.C.1 Decisions
 
@@ -2179,10 +2188,10 @@ None beyond 3.10.
 
 ---
 
-## Modules 4–7 — one connected design (2026-10-08)
+## Sub-domains 4–7 — one connected design (2026-10-08)
 
 Rebuilt together on your direction: **one person = one contact**, and the lead, the conversation, the
-patient file and the appointments all hang off it. The four modules below — contacts with their activity, leads, appointments, patients — are written against each other
+patient file and the appointments all hang off it. The four sub-domains below — contacts with their activity, leads, appointments, patients — are written against each other
 and against the design files (`leads.md`, `patients.md`, `appointments.md`, `today.md`, `schema-routes.md`).
 
 ```text
@@ -2212,7 +2221,7 @@ What moves, compared with the code today:
 | `GET /patients/{patient_id}/timeline`, `GET /searches` | the contact's activity (4) and the contacts search (4) |
 | nobody records who looks after a person across leads, visits and the patient file | `app.contact_members` (4) |
 
-**Database rules shared by the five modules** (PostgreSQL; the existing conventions, plus what is new here):
+**Database rules shared by the five sub-domains** (PostgreSQL; the existing conventions, plus what is new here):
 
 | Rule | How |
 | --- | --- |
@@ -2230,15 +2239,15 @@ What moves, compared with the code today:
 
 ---
 
-## 4. Contacts — final (confirmed 2026-10-08) — sub-domains 4.A–4.D
+## 4. Contacts — final (confirmed 2026-10-08) — nested sub-domains 4.A–4.D
 
-*Restructured 2026-10-08: old modules 3.5 (rev 7) and 4.5 (rev 8) in one section — layout only, no decision changed.*
+*Restructured 2026-10-08: old sub-domains 3.5 (rev 7) and 4.5 (rev 8) in one section — layout only, no decision changed.*
 
-Code: the **`contacts` module folder** — `src/domains/app/sub-domains/contacts/` (the contact itself at the folder root) with `sub-domains/contact-members/`, `sub-domains/contact-activities/` and `sub-domains/contact-message-templates/`.
+Code: the **`contacts` sub-domain folder** — `src/domains/app/sub-domains/contacts/` (the contact itself at the folder root) with `contact-members/`, `contact-activities/` and `contact-message-templates/`.
 
-4.1 Decisions (whole module) · 4.2 Open questions · 4.3 Tables and relations · 4.4 Permissions · 4.5 Common to every route ·
-4.6 Objects returned · 4.7 Routes · 4.8 Request details · 4.9 Errors · 4.10 Rules worth knowing · 4.11 Code changes (whole module) ·
-4.12 Sub-domains · then **4.A Contacts · 4.B Contact members · 4.C Contact activities · 4.D Contact message templates** — each with the same eleven sections: .1 Decisions ·
+4.1 Decisions (whole sub-domain) · 4.2 Open questions · 4.3 Tables and relations · 4.4 Permissions · 4.5 Common to every route ·
+4.6 Objects returned · 4.7 Routes · 4.8 Request details · 4.9 Errors · 4.10 Rules worth knowing · 4.11 Code changes (whole sub-domain) ·
+4.12 Nested sub-domains · then **4.A Contacts · 4.B Contact members · 4.C Contact activities · 4.D Contact message templates** — each with the same eleven sections: .1 Decisions ·
 .2 Open questions · .3 Tables and relations · .4 Permissions · .5 Common to every route · .6 Objects returned · .7 Routes ·
 .8 Request details · .9 Errors · .10 Rules worth knowing · .11 Code changes
 
@@ -2246,24 +2255,24 @@ One person, one record — and everything that happens with them in one stream.
 
 **Contacts.** One person — name, numbers, Instagram, preferences — saved once and shared by their lead (5), activity
 (4.C–4.D), patient file (7) and appointments (6). Design: the contact editor ("One contact · shared by leads,
-patients and chats", "C-<5 digits>"). Walk-in buyers (module 11's `medical_contacts`) are not part of it —
-module 11 removes that table.
+patients and chats", "C-<5 digits>"). Walk-in buyers (sub-domain 11's `medical_contacts`) are not part of it —
+sub-domain 11 removes that table.
 
 **Contact activity.** Everything that happens with a contact (4.A–4.B) in one stream — WhatsApp and Instagram messages, call logs, the
 team's notes and system events ("Moved to Clinic visited at check-in") — one stream per person, lead, patient
 or neither. The design calls it "Contact activity"; the lead drawer and appointment form show it as "Chat".
 Plus the reusable templates for outgoing messages. Route numbers run 1–22.
 
-### 4.1 Decisions (whole module)
+### 4.1 Decisions (whole sub-domain)
 
-Taken on your standing answer "go with the recommendation" — confirmed 2026-10-08. A decision that belongs to one table is in its sub-domain.
+Taken on your standing answer "go with the recommendation" — confirmed 2026-10-08. A decision that belongs to one table is in its nested sub-domain.
 
 | # | Decision |
 | --- | --- |
 | CT5 | One code set, in a new **Contacts** row of the Roles matrix: `contact:read`, `contact:create`, `contact:update`, `contact:delete`. |
 | CT6 | Contacts are not branch-scoped — a person may visit any branch; their lead and appointments keep their own branch rules. |
 | M4 | One code set, in a new **Activity** row of the Roles matrix (names follow the table): `contact_activity:read` (read the stream), `contact_activity:create` (send a message, log a call, add a note, a batch; add a template), `contact_activity:update` (resend a failed message; change a template), `contact_activity:delete` (delete or restore a template — entries are never deleted). Templates are readable by every member. `message_template:*` goes. |
-| M10 | **The stream is the person's timeline** (the patient timeline goes, module 7 P8): every module writes a `system` entry linked to its record when something happens — check-in (which also opens the patient file) and completion (6), a prescription approved, a clinical note, an image or report added (7), a treatment session, a check-in score, a review (7), a patient offering bought (7), an invoice or payment (8), a task done (10). **An entry linked to a record shows only to callers who can read that record** (`patient_prescription:read`, `invoice:read`, `patient:clinical_record:read`, …), so the stream keeps the timeline's privacy; the `group` filter (`messages` · `clinical` · `money` · `tasks`) narrows it. |
+| M10 | **The stream is the person's timeline** (the patient timeline goes, sub-domain 7 P8): every sub-domain writes a `system` entry linked to its record when something happens — check-in (which also opens the patient file) and completion (6), a prescription approved, a clinical note, an image or report added (7), a treatment session, a check-in score, a review (7), a patient offering bought (7), an invoice or payment (8), a task done (10). **An entry linked to a record shows only to callers who can read that record** (`patient_prescription:read`, `invoice:read`, `patient:clinical_record:read`, …), so the stream keeps the timeline's privacy; the `group` filter (`messages` · `clinical` · `money` · `tasks`) narrows it. |
 
 ### 4.2 Open questions
 
@@ -2292,7 +2301,7 @@ A ──< B   one A has many B     A >── B   many A for one B     A ──> 
 
 Pointing at a contact (all `ON DELETE RESTRICT` except the activity, which goes with the contact):
 
-| Module | Column |
+| Sub-domain | Column |
 | --- | --- |
 | 5 Leads | `leads.contact_id` — many over time, one open |
 | 4.C Contact activity | `contact_activities.contact_id` (`ON DELETE CASCADE`) |
@@ -2301,7 +2310,7 @@ Pointing at a contact (all `ON DELETE RESTRICT` except the activity, which goes 
 | 8 Billing | `invoices.contact_id` — who is billed; `payments.contact_id`, `pending_credits.contact_id` (B3) |
 | 10 Tasks | `tasks.contact_id` — whom a task is about (`ON DELETE CASCADE`, goes with the contact) |
 
-Standard columns on every record table (not repeated below): `id bigint` (identity), `public_id varchar(28)` unique, `organization_id bigint` → organizations `ON DELETE CASCADE`, `created_at` / `updated_at timestamptz`, `created_by_user_id` / `updated_by_user_id`, and — where it soft-deletes — `deleted_at`, `delete_reason`, `delete_note` with their three checks; RLS enabled and forced. Each table's design is in its sub-domain.
+Standard columns on every record table (not repeated below): `id bigint` (identity), `public_id varchar(28)` unique, `organization_id bigint` → organizations `ON DELETE CASCADE`, `created_at` / `updated_at timestamptz`, `created_by_user_id` / `updated_by_user_id`, and — where it soft-deletes — `deleted_at`, `delete_reason`, `delete_note` with their three checks; RLS enabled and forced. Each table's design is in its nested sub-domain.
 
 **Contact activity**
 
@@ -2363,7 +2372,7 @@ A stream is open to every holder of `contact_activity:read` — like contacts, i
 
 ### 4.6 Objects returned
 
-Each sub-domain lists its own objects (4.A to 4.D, section .6):
+Each nested sub-domain lists its own objects (4.A to 4.D, section .6):
 
 | Object | Where |
 | --- | --- |
@@ -2374,9 +2383,9 @@ Each sub-domain lists its own objects (4.A to 4.D, section .6):
 
 ### 4.7 Routes
 
-Every route of the module in one table; each sub-domain repeats its own with the details.
+Every route of the sub-domain in one table; each nested sub-domain repeats its own with the details.
 
-| # | Method | Path | Purpose | Gate | Idem | Sub-domain |
+| # | Method | Path | Purpose | Gate | Idem | Nested sub-domain |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/contacts` | List / find contacts **(rebuilt)** | `contact:read` | | 4.A Contacts |
 | 2 | POST | `/contacts` | Add a contact **(new)** | `contact:create` | req | 4.A Contacts |
@@ -2403,11 +2412,11 @@ Every route of the module in one table; each sub-domain repeats its own with the
 
 ### 4.8 Request details
 
-In each sub-domain (4.A to 4.D, section .8).
+In each nested sub-domain (4.A to 4.D, section .8).
 
 ### 4.9 Errors
 
-Every route can answer the errors in 4.5; each route's own errors are in its sub-domain (4.A to 4.D, section .9).
+Every route can answer the errors in 4.5; each route's own errors are in its nested sub-domain (4.A to 4.D, section .9).
 
 ### 4.10 Rules worth knowing
 
@@ -2416,30 +2425,30 @@ Every route can answer the errors in 4.5; each route's own errors are in its sub
 - Changing a contact changes it everywhere: lead, patient file, appointments and conversation read the one record.
 - Restore works until the purge (organization setting `deleted_record_purge_days`); a contact in use is never purged.
 
-- A sent whatsapp, instagram or outgoing call moves the contact's open lead from `new` to `contacted` (module 5) and clears "awaiting reply"; a received one sets it.
-- The server writes `system` entries for the moments the team should see in the stream — e.g. check-in (module 6), lead convert (module 5).
+- A sent whatsapp, instagram or outgoing call moves the contact's open lead from `new` to `contacted` (sub-domain 5) and clears "awaiting reply"; a received one sets it.
+- The server writes `system` entries for the moments the team should see in the stream — e.g. check-in (sub-domain 6), lead convert (sub-domain 5).
 - A note is internal — never sent; a call log records a call that happened, either way.
 - Until the messaging worker exists (M8), whatsapp and instagram messages are stored, not sent.
 
-### 4.11 Code changes (whole module)
+### 4.11 Code changes (whole sub-domain)
 
 | # | Change |
 | --- | --- |
-| CTC10 | Layout: the contact at the root of `src/domains/app/sub-domains/contacts/` (today that folder holds only the union search, which goes) with `sub-domains/contact-members/` |
+| CTC10 | Layout: the contact at the root of `src/domains/app/sub-domains/contacts/` (today that folder holds only the union search, which goes) with `contact-members/` |
 | CTC4 | CT7: `ON DELETE RESTRICT` from leads, patients and appointments; soft delete → `409 contact_in_use` while in use |
 | MC2 | M3: drop `app.lead_reads` and `POST /leads/{lead_id}/reads`; "awaiting reply" from `last_received_at` / `last_sent_at` |
 | MC3 | M4: codes `contact_activity:*`, an Activity matrix section, the role presets; templates gated by them; drop `message_template:*` |
-| MC8 | M10: each module writes its `system` entries; the list hides entries whose linked record the caller cannot read; the `group` filter |
-| MC11 | Layout: both sub-domains move into the contacts folder (`app/sub-domains/contacts/sub-domains/…`) — today the top-level `app/sub-domains/messages/` and `message-templates/` |
+| MC8 | M10: each sub-domain writes its `system` entries; the list hides entries whose linked record the caller cannot read; the `group` filter |
+| MC11 | Layout: both nested sub-domains move into the contacts folder (`app/sub-domains/contacts/…`) — today the top-level `app/sub-domains/messages/` and `message-templates/` |
 
-### 4.12 Sub-domains
+### 4.12 Nested sub-domains
 
-| Sub-domain | Folder | Tables | Routes | Status |
+| Nested sub-domain | Folder | Tables | Routes | Status |
 | --- | --- | --- | --- | --- |
 | 4.A Contacts | folder root | `app.contacts`, `app.contact_phones` (no routes of its own — part of the contact) | 1–7 | final |
-| 4.B Contact members | `sub-domains/contact-members/` | `app.contact_members` | 8–9 | final |
-| 4.C Contact activities | `sub-domains/contact-activities/` | `app.contact_activities` | 10–16 | final |
-| 4.D Contact message templates | `sub-domains/contact-message-templates/` | `app.contact_message_templates` | 17–22 | final |
+| 4.B Contact members | `contact-members/` | `app.contact_members` | 8–9 | final |
+| 4.C Contact activities | `contact-activities/` | `app.contact_activities` | 10–16 | final |
+| 4.D Contact message templates | `contact-message-templates/` | `app.contact_message_templates` | 17–22 | final |
 
 ---
 
@@ -2449,7 +2458,7 @@ Every route can answer the errors in 4.5; each route's own errors are in its sub
 
 | # | Decision |
 | --- | --- |
-| CT1 | New table `app.contacts` holds the person: `contact_number` ("C-12345"), `first_name`, `last_name`, `gender`, `date_of_birth`, `email`, `address`, `instagram_handles`, `default_channel`, `preference_tags` (CT14), `has_marketing_consent`, `referral_source`, `referred_by_contact_id` / `referred_by_name` (who sent them — any contact, not only a patient), household. These leave `app.leads` and `app.patients` (module 7, P2). The name is split as the patient design has it; the contact editor's single "Name" box splits on the first space. |
+| CT1 | New table `app.contacts` holds the person: `contact_number` ("C-12345"), `first_name`, `last_name`, `gender`, `date_of_birth`, `email`, `address`, `instagram_handles`, `default_channel`, `preference_tags` (CT14), `has_marketing_consent`, `referral_source`, `referred_by_contact_id` / `referred_by_name` (who sent them — any contact, not only a patient), household. These leave `app.leads` and `app.patients` (sub-domain 7, P2). The name is split as the patient design has it; the contact editor's single "Name" box splits on the first space. |
 | CT2 | Numbers live in `app.contact_phones` (`phone`, `is_primary`, `is_on_whatsapp`) — the design's rows with "★ Primary" and a "WhatsApp" box; 1–5 per contact, exactly one primary (partial unique index). The contact keeps a copy of its primary number, `primary_phone`, written in the same transaction as its numbers, so lead, patient and appointment lists read one table and never join the numbers; the full set is read only when a contact is opened (≤ 5 rows by primary key). |
 | CT3 | Household: every contact has `household_contact_id` — itself when it is the first, else the household's first contact ("New contact in the household of <name>"). A number may sit on several contacts **only inside one household**: an exclusion constraint on `contact_phones` (`organization_id =`, `phone =`, `household_contact_id <>`) holds it, and the phones carry the household through a composite foreign key with `ON UPDATE CASCADE`, so moving a contact to another household re-checks its numbers. A clash → `409 contact_phone_exists` naming the contact ("Using existing contact <name>"). |
 | CT4 | `default_channel` is `whatsapp` · `call` · `instagram` (SMS goes with 4.C–4.D's line types) and follows the last channel used — the contact activity (4.C–4.D) sets it on each sent line. |
@@ -2457,7 +2466,7 @@ Every route can answer the errors in 4.5; each route's own errors are in its sub
 | CT8 | `GET /contacts` is a real paginated list (today: up to 5 patients, leads and walk-in buyers, no paging); the hover-card preview stays. |
 | CT9 | One fast search for every picker (lead, patient, appointment forms): `GET /contacts?q=`. `search_text` holds the first and last name, email, Instagram handles, **every number's 10 digits** and the contact number, kept current by a trigger on `contacts` and `contact_phones`, behind one trigram GIN index — so a name, part of a name, any number or "C-12345" all hit it. `q` needs 3+ characters for a name, 4+ digits for a number, or a whole contact number. An exact number (caller ID, "already exists") uses the `(organization_id, phone)` index. Each result carries what a picker shows: name, primary phone, contact number, patient number, open lead status, last visit. |
 | CT10 | `last_activity_at`, `last_sent_at` and `last_received_at` live on the contact, written in the same transaction as each activity entry (4.C–4.D) — lists sort by recency and show "awaiting reply" without scanning the activity. |
-| CT12 | `GET /contacts?ids=…` (up to 100) loads many contacts in one call — how a patient list shows names now that the Patient object carries only `contact_id` (module 7, P3). |
+| CT12 | `GET /contacts?ids=…` (up to 100) loads many contacts in one call — how a patient list shows names now that the Patient object carries only `contact_id` (sub-domain 7, P3). |
 | CT14 | **Preferences are tags** (your call): `preferences` → `preference_tags`, each a lowercase key in snake_case like every other value in the API — `no_calls`, `sundays_only` — up to 12, no repeats. The design's twelve chips are the known tags: `no_calls` · `text_before_calling` · `mornings` · `evenings` · `after_six_pm` · `weekdays_only` · `weekends_only` · `sundays_only` · `gujarati` · `hindi` · `english` · `female_doctor`, labelled through i18n. "Type a preference" adds a custom tag: the typed words joined by `_` ("Prefers WhatsApp" → `prefers_whatsapp`), 2–40 characters, `a–z`, `0–9` and `_`, starting with a letter; its label is the key with spaces. `language` goes — the design has no language field, only the language chips, which are tags now. The list filters by tag (any of) behind a GIN index, and the tags travel in the task's contact summary (10) and the preview, so screens warn ("Prefers no calls · message instead", "Prefers contact after 6 pm"); the server never refuses a call or a booking over a tag. Other options: kebab-case keys (`no-calls`), or free text as today. |
 | CT13 | `date_of_birth` not in the future and `referred_by_contact_id` only with `referral_source = patient` are checked in the app (`400`) as well as by the database — today a `500` on the patient. |
 
@@ -2548,7 +2557,7 @@ As 4.5.
 | `member_membership_ids` | string[] | `mem_…` — who handles them (CT11) |
 | `patient_id`, `patient_number` | string, integer \| null | their patient file (read-only) — the picker's badge |
 | `open_lead_id`, `open_lead_status` | string \| null | their open lead (read-only) |
-| `last_visit_on`, `next_visit_on` | `YYYY-MM-DD` \| null | latest checked-in / completed and next scheduled / confirmed appointment (module 6) |
+| `last_visit_on`, `next_visit_on` | `YYYY-MM-DD` \| null | latest checked-in / completed and next scheduled / confirmed appointment (sub-domain 6) |
 | `last_activity_at`, `last_sent_at`, `last_received_at` | ISO datetime \| null | (CT10) |
 | `is_awaiting_reply` | boolean | a received entry newer than the team's last sent one (4.C–4.D) |
 | `created_at`, `updated_at` | ISO datetime | |
@@ -2603,8 +2612,8 @@ None beyond 4.10.
 
 | # | Change |
 | --- | --- |
-| CTC1 | CT1–CT3: tables `app.contacts` (with the `contacts.contact_number` counter and the household trigger) and `app.contact_phones` (composite FK, exclusion constraint), `CREATE EXTENSION btree_gist`; the `contacts` sub-domain (routes, service, repository, validator, serializer, seed); RLS on both |
-| CTC2 | CT1: move the person columns off `app.leads` (module 5) and `app.patients` (module 7) |
+| CTC1 | CT1–CT3: tables `app.contacts` (with the `contacts.contact_number` counter and the household trigger) and `app.contact_phones` (composite FK, exclusion constraint), `CREATE EXTENSION btree_gist`; the `contacts` nested sub-domain (routes, service, repository, validator, serializer, seed); RLS on both |
+| CTC2 | CT1: move the person columns off `app.leads` (sub-domain 5) and `app.patients` (sub-domain 7) |
 | CTC3 | CT5: codes `contact:read` / `create` / `update` / `delete`, a Contacts matrix section, the role presets |
 | CTC5 | CT8, CT9: the paginated list (trigram on `search_text`, phone lookup, picker fields) and the preview replace today's union search; the `search_text` trigger on `contacts` and `contact_phones` |
 | CTC6 | CT2: `primary_phone` kept with the numbers |
@@ -2614,13 +2623,13 @@ None beyond 4.10.
 
 ---
 
-### 4.B Contact members — `app/sub-domains/contacts/sub-domains/contact-members/` — final
+### 4.B Contact members — `app/sub-domains/contacts/contact-members/` — final
 
 #### 4.B.1 Decisions
 
 | # | Decision |
 | --- | --- |
-| CT11 | **The team who handle a person** (your point 6): `app.contact_members` (contact ↔ membership), at `/contacts/{contact_id}/members` (as module 1's branch members). The server adds the lead's owner and involved members (5), the patient's usual doctor (7) and each appointment's doctor and therapist (6); the desk can add or remove anyone with `PUT`. Lists filter by `member_membership_id` ("my people"). |
+| CT11 | **The team who handle a person** (your point 6): `app.contact_members` (contact ↔ membership), at `/contacts/{contact_id}/members` (as sub-domain 1's branch members). The server adds the lead's owner and involved members (5), the patient's usual doctor (7) and each appointment's doctor and therapist (6); the desk can add or remove anyone with `PUT`. Lists filter by `member_membership_id` ("my people"). |
 
 #### 4.B.2 Open questions
 
@@ -2676,10 +2685,10 @@ None beyond 4.10.
 
 | # | Change |
 | --- | --- |
-| CTC8 | CT11: table `app.contact_members`, routes 8–9, the automatic adds from modules 5, 7 and 6, the `member_membership_id` filter |
+| CTC8 | CT11: table `app.contact_members`, routes 8–9, the automatic adds from sub-domains 5, 7 and 6, the `member_membership_id` filter |
 
 ---
-### 4.C Contact activities — `app/sub-domains/contacts/sub-domains/contact-activities/` — final
+### 4.C Contact activities — `app/sub-domains/contacts/contact-activities/` — final
 
 #### 4.C.1 Decisions
 
@@ -2814,7 +2823,7 @@ None beyond 4.10.
 
 ---
 
-### 4.D Contact message templates — `app/sub-domains/contacts/sub-domains/contact-message-templates/` — final
+### 4.D Contact message templates — `app/sub-domains/contacts/contact-message-templates/` — final
 
 #### 4.D.1 Decisions
 
@@ -2889,23 +2898,23 @@ None beyond 4.10.
 
 | # | Change |
 | --- | --- |
-| MC9 | M11: rename `app.message_templates` → `app.contact_message_templates` (table, schema, indexes, RLS, the sub-domain folder), the routes and path id, and the activity column `contact_message_template_id` |
+| MC9 | M11: rename `app.message_templates` → `app.contact_message_templates` (table, schema, indexes, RLS, the nested sub-domain folder), the routes and path id, and the activity column `contact_message_template_id` |
 | MC7 | M9: template `type` `whatsapp` \| `instagram`; fill `<first>` / `<interest>` per contact |
 
 ---
 
 ## 5. Leads — final (rev 6, confirmed 2026-10-08)
 
-*Was module 4 before the restructure (2026-10-08) — layout only, no decision changed.*
+*Was sub-domain 4 before the restructure (2026-10-08) — layout only, no decision changed.*
 
 5.1 Decisions · 5.2 Open questions · 5.3 Tables and relations · 5.4 Permissions · 5.5 Common to every route ·
-5.6 Objects returned · 5.7 Routes · 5.8 Request details · 5.9 Errors · 5.10 Rules worth knowing · 5.11 Code changes · 5.12 Sub-domains
+5.6 Objects returned · 5.7 Routes · 5.8 Request details · 5.9 Errors · 5.10 Rules worth knowing · 5.11 Code changes · 5.12 Nested sub-domains
 
 An enquiry and its working state — status, source, interests, owner and hold, follow-up — for one contact.
-The person lives on the contact (4); its activity and the message templates are module 4.
+The person lives on the contact (4); its activity and the message templates are sub-domain 4.
 Design: `leads.md`, `schema-routes.md` (Lead).
 
-Code: `src/domains/app/sub-domains/leads/` — one folder, no sub-domains (5.12).
+Code: `src/domains/app/sub-domains/leads/` — one folder, no nested sub-domains (5.12).
 
 ### 5.1 Decisions
 
@@ -2915,14 +2924,14 @@ Taken on your standing answer "go with the recommendation" — confirmed 2026-10
 | --- | --- |
 | L1 | A lead points at one contact (`contact_id`, required, `ON DELETE RESTRICT`); its person columns move to the contact (CT1). `POST /leads` takes a `contact_id` **or** an inline `contact` and writes both in one transaction ("Creates or updates one contact"). Every lead carries a small `contact` summary for lists. |
 | L2 | Names follow the table: `lead_involved_memberships.involved_membership_id` → `membership_id` (the lead keeps its `involved_membership_ids` field). |
-| L3 | One code set: `lead:read`, `lead:create`, `lead:update`, `lead:delete` — leads only (templates are module 4). |
+| L3 | One code set: `lead:read`, `lead:create`, `lead:update`, `lead:delete` — leads only (templates are sub-domain 4). |
 | L4 | Exporting has its own code, `lead:export` (O14). Default holders: Owner, Admin, Doctor — today's `list:export` holders who can read leads. |
-| L5 | `kind` is `enquiry` · `retarget`; `is_contact_thread` and `kind = contact_thread` go — an appointment points at a contact (module 6), so no hidden lead is needed. `retarget_reason` is server-set (module 10's automation) and only on a re-target lead (`CHECK`). |
+| L5 | `kind` is `enquiry` · `retarget`; `is_contact_thread` and `kind = contact_thread` go — an appointment points at a contact (sub-domain 6), so no hidden lead is needed. `retarget_reason` is server-set (sub-domain 10's automation) and only on a re-target lead (`CHECK`). |
 | L6 | One open lead per contact — open = `new`, `contacted`, `follow_up`, `no_response` — held by a partial unique index; another → `409 lead_open_exists` naming it ("phone already a lead → offer open existing"). A closed lead does not block a new one ("Re-create lead"). |
 | L7 | The list filters as the design's views do: `status`, `source`, `interests` take several values; `is_awaiting_reply` ("Unreplied" = mine + awaiting reply); `ownership` = `open` · `held` · `releasing_today`; `team_membership_id` (owner or involved). `q` searches the contact's names, numbers and contact number, and the lead number. Sorting by a column that can be empty keeps those rows, last — today they drop out. |
-| L8 | **Conversion is automatic — no convert route** (your direction): checking in at an appointment (module 6) moves the contact's open lead to `clinic_visited`, **its last status**, and creates the contact's patient file if it has none (home branch and usual doctor from the appointment, `lead_id` = this lead) through the patient service. `clinic_visited` is set only by check-in and is final — a `PATCH` cannot set it or move a lead out of it (`409 lead_closed`); its other fields stay editable. Nothing is copied or moved — the patient file points at the same contact. `POST /leads/{lead_id}/convert` goes. |
+| L8 | **Conversion is automatic — no convert route** (your direction): checking in at an appointment (sub-domain 6) moves the contact's open lead to `clinic_visited`, **its last status**, and creates the contact's patient file if it has none (home branch and usual doctor from the appointment, `lead_id` = this lead) through the patient service. `clinic_visited` is set only by check-in and is final — a `PATCH` cannot set it or move a lead out of it (`409 lead_closed`); its other fields stay editable. Nothing is copied or moved — the patient file points at the same contact. `POST /leads/{lead_id}/convert` goes. |
 | L9 | Claim: taking a lead over from another owner (their hold ran out, or they left the team) keeps them as involved (the design). Claim and release work on open leads only (`409 lead_closed` otherwise) — today the route text promises a status `409` the code never sends. |
-| L10 | "Awaiting reply" comes from the contact (module 4, M3) — there are no read markers: `POST /leads/{lead_id}/reads` and `app.lead_reads` go. `held_until` needs an owner (`CHECK`). |
+| L10 | "Awaiting reply" comes from the contact (sub-domain 4, M3) — there are no read markers: `POST /leads/{lead_id}/reads` and `app.lead_reads` go. `held_until` needs an owner (`CHECK`). |
 
 ### 5.2 Open questions
 
@@ -2946,7 +2955,7 @@ tenancy.organizations
 A ──< B   one A has many B     A >── B   many A for one B     A ──> B   a column on A points at one B     A ─── B   at most one B per A
 ```
 
-Pointing at a lead from later modules: `patients.lead_id` (7 — the lead it came from), `medical_sales.lead_id` (11), `tasks.lead_id` (10).
+Pointing at a lead from later sub-domains: `patients.lead_id` (7 — the lead it came from), `medical_sales.lead_id` (11), `tasks.lead_id` (10).
 
 **PostgreSQL design**
 
@@ -3021,7 +3030,7 @@ One code set (L3), in the **Leads** row of the Roles matrix.
 | `follow_up_at` | ISO datetime \| null | |
 | `branch_id` | string \| null | `brn_…`; none = visible in every branch |
 | `notes` | string \| null | up to 2000 |
-| `last_activity_at`, `is_awaiting_reply` | | the contact's (module 4) |
+| `last_activity_at`, `is_awaiting_reply` | | the contact's (sub-domain 4) |
 | `created_at`, `updated_at` | ISO datetime | |
 
 **Leads export** — route 2: `file_name` (`leads-YYYY-MM-DD.csv`), `content_type`, `row_count` (up to 5,000), `is_truncated`, `content`.
@@ -3089,11 +3098,11 @@ Moved out: the contact search and preview (4); the activity, batches and templat
 | LC4 | L5: drop `is_contact_thread` and the `contact_thread` kind; `retarget_reason` check |
 | LC5 | L6: partial unique index on open leads per contact → `409 lead_open_exists` |
 | LC6 | L7: multi-value filters, `is_awaiting_reply`, `ownership`, `team_membership_id`; `q` through the contact; sort keeps empty values last |
-| LC7 | L8: drop `POST /leads/{lead_id}/convert`; check-in (module 6) moves the open lead to `clinic_visited` and creates the patient file through the patient service; `clinic_visited` server-only and final (`409 lead_closed`) |
+| LC7 | L8: drop `POST /leads/{lead_id}/convert`; check-in (sub-domain 6) moves the open lead to `clinic_visited` and creates the patient file through the patient service; `clinic_visited` server-only and final (`409 lead_closed`) |
 | LC8 | L9: claim from another owner adds them to involved; claim / release on open leads only |
 | LC9 | L10: drop `app.lead_reads` and `POST /leads/{lead_id}/reads`; `held_until` check |
 
-### 5.12 Sub-domains
+### 5.12 Nested sub-domains
 
 None — one folder, `src/domains/app/sub-domains/leads/`: `app.lead_involved_memberships` is written with the lead and has no routes of its own; `lead-reads/` goes (LC9).
 
@@ -3102,14 +3111,14 @@ None — one folder, `src/domains/app/sub-domains/leads/`: `app.lead_involved_me
 ## 6. Appointments — final (rev 4, confirmed 2026-10-08) — visits merged in
 
 6.1 Decisions · 6.2 Open questions · 6.3 Tables and relations · 6.4 Permissions · 6.5 Common to every route ·
-6.6 Objects returned · 6.7 Routes · 6.8 Request details · 6.9 Errors · 6.10 Rules worth knowing · 6.11 Code changes · 6.12 Sub-domains
+6.6 Objects returned · 6.7 Routes · 6.8 Request details · 6.9 Errors · 6.10 Rules worth knowing · 6.11 Code changes · 6.12 Nested sub-domains
 
 A booking of a contact with a doctor, at a branch, in a room or on a machine — and, once they arrive, its
 stage across the clinic floor. **The visit is no longer a table of its own** (A10). Design: `appointments.md`,
 `today.md`, `schema-routes.md` (Appointment, `appointment_status`). Row #68 (finishing the visit completes
-the appointment and records the package session) lands here and in module 7.
+the appointment and records the package session) lands here and in sub-domain 7.
 
-Code: `src/domains/app/sub-domains/appointments/` — one folder, no sub-domains (6.12).
+Code: `src/domains/app/sub-domains/appointments/` — one folder, no nested sub-domains (6.12).
 
 ### 6.1 Decisions
 
@@ -3118,19 +3127,19 @@ Taken on your standing answer "go with the recommendation" — confirmed 2026-10
 | # | Decision |
 | --- | --- |
 | A1 | An appointment is for a contact (`contact_id`, required, `ON DELETE RESTRICT`); `patient_id` and `lead_id` and their exactly-one rule go. The response still shows `patient_id` and `lead_id` — the contact's patient file and open lead. Anyone can be booked, and a converted lead's appointments need no moving. |
-| A2 | Rooms and machines use module 1's names (`branch_room_id`, `branch_machine_id`, D11) and must belong to the appointment's branch (`400`). |
+| A2 | Rooms and machines use sub-domain 1's names (`branch_room_id`, `branch_machine_id`, D11) and must belong to the appointment's branch (`400`). |
 | A3 | No double booking, held by PostgreSQL: a generated `time_range tsrange` (local date + start + duration) and three exclusion constraints — doctor, room, machine — over live `scheduled` / `confirmed` / `checked_in` / `completed` bookings, walk-ins exempt. A clash → `409 slot_taken` naming the resource from the constraint. Replaces today's JavaScript overlap check (it reads up to 500 rows) and the advisory lock. |
 | A4 | The doctor's working **hours** are checked too (today only their working days) — outside them → `409 slot_closed`, reason `doctor_off`. |
 | A5 | Status moves are named routes — `/confirm`, `/check-in`, `/complete`, `/no-show` — replacing `POST /status` with a body, like `/cancel`, `/reinstate`, `/undo-check-in`. Moves follow schema-routes: `scheduled` → `confirmed` · `checked_in` · `cancelled` · `no_show`; `confirmed` → `checked_in` · `cancelled` · `no_show` (a reschedule returns it to `scheduled`); `checked_in` → `completed`. `checked_in_at` / `completed_at` are set exactly with their status (`CHECK`). |
-| A14 | **Check-in converts** (module 5, L8): it moves the contact's open lead to `clinic_visited` — the lead's last status — and, when the contact has no patient file, creates one through the patient service (home branch = the appointment's branch, usual doctor = its doctor, `lead_id` = the lead), in the same transaction. The caller needs only `appointment:update`; the file is the check-in's side effect. Today a lead's check-in opens no visit and leaves no patient file, and converting is a separate manual step. |
+| A14 | **Check-in converts** (sub-domain 5, L8): it moves the contact's open lead to `clinic_visited` — the lead's last status — and, when the contact has no patient file, creates one through the patient service (home branch = the appointment's branch, usual doctor = its doctor, `lead_id` = the lead), in the same transaction. The caller needs only `appointment:update`; the file is the check-in's side effect. Today a lead's check-in opens no visit and leaves no patient file, and converting is a separate manual step. |
 | A6 | Walk-in: `POST /appointments` with `is_walk_in` — the server sets today and now, so date and start are not sent; checked in at once; exempt from slot clashes (they wait). |
 | A7 | Copy ("book again") goes through the create path — every check and conflict mapping (today it skips them) — and works on any live appointment; the route text promising a status `409` goes. |
 | A8 | Dates in filters are whole days, inclusive at both ends — `appointment_date_to` today is exclusive while daily counts are inclusive. The default order is date then start time, ascending (the day view) — the route text "newest first" is wrong. |
 | A9 | One code set, in the **Appointments** row: `appointment:read`, `appointment:create`, `appointment:update`, `appointment:delete`, `appointment:export` (replaces `list:export`). The floor stage moves use `appointment:update`. |
-| A10 | **The visit merges into the appointment** (your question 1): an appointment and its visit are one-to-one with the same lifecycle, so `app.visits` goes. The floor state becomes columns — `visit_stage` (`waiting` · `with_doctor` · `treatment` · `checkout` · `pharmacy`), `visit_stage_changed_at`, `visit_paused_at` — set only while `checked_in` (`CHECK`); "done" **is** `completed` (`/complete`), and the visit's start is `checked_in_at`. The consult notes, diagnoses and safety checks move to the patient file (module 7, clinical notes linked to the appointment). The floor is `GET /appointments?status=checked_in&visit_stage=…`. Visits are therefore branch-scoped like their appointment (today they are not), and nothing needs a second branch column. |
+| A10 | **The visit merges into the appointment** (your question 1): an appointment and its visit are one-to-one with the same lifecycle, so `app.visits` goes. The floor state becomes columns — `visit_stage` (`waiting` · `with_doctor` · `treatment` · `checkout` · `pharmacy`), `visit_stage_changed_at`, `visit_paused_at` — set only while `checked_in` (`CHECK`); "done" **is** `completed` (`/complete`), and the visit's start is `checked_in_at`. The consult notes, diagnoses and safety checks move to the patient file (sub-domain 7, clinical notes linked to the appointment). The floor is `GET /appointments?status=checked_in&visit_stage=…`. Visits are therefore branch-scoped like their appointment (today they are not), and nothing needs a second branch column. |
 | A11 | The floor stage moves forward only (skipping allowed, never back) through `POST …/stage`; pause only when running, resume only when paused. Today any stage can be set and "done" stamps nothing. |
-| A12 | `patient_package_id` goes (your question 2) — a package session is recorded on the treatment (module 7); `type = package_session` stays as a label. |
-| A13 | Small fixes: duration must be a multiple of 5 (`400`; today a database `500`); `service_label` defaults to the offering's name; `reminder_status` and `is_confirmed_by_reply` are written by the messaging worker (module 4, M8). |
+| A12 | `patient_package_id` goes (your question 2) — a package session is recorded on the treatment (sub-domain 7); `type = package_session` stays as a label. |
+| A13 | Small fixes: duration must be a multiple of 5 (`400`; today a database `500`); `service_label` defaults to the offering's name; `reminder_status` and `is_confirmed_by_reply` are written by the messaging worker (sub-domain 4, M8). |
 
 ### 6.2 Open questions
 
@@ -3146,15 +3155,15 @@ None — every decision above follows the recommendation.
 tenancy.organizations
    │
    └──< app.appointments ──┬──> app.contacts                                            who is booked (4)   — lead, patient or neither
-                           ├──> app.branches · app.branch_rooms · app.branch_machines   where (module 1)
-                           ├──> tenancy.memberships (doctor, therapist)                 who (module 2)
-                           ├──> app.offerings                                           the service (module 3)
+                           ├──> app.branches · app.branch_rooms · app.branch_machines   where (sub-domain 1)
+                           ├──> tenancy.memberships (doctor, therapist)                 who (sub-domain 2)
+                           ├──> app.offerings                                           the service (sub-domain 3)
                            └──> app.appointments (copied_from_appointment_id)           the booking it was copied from
 
 A ──< B   one A has many B     A >── B   many A for one B     A ──> B   a column on A points at one B     A ─── B   at most one B per A
 ```
 
-Pointing at an appointment (all `ON DELETE SET NULL`): the patient file's records — patient prescriptions, images, clinical notes (module 7) — `patient_treatments`, `patient_check_ins`, `patient_reviews` (7), `patient_offering_suggestions` (7), `contact_activities.appointment_id` (4).
+Pointing at an appointment (all `ON DELETE SET NULL`): the patient file's records — patient prescriptions, images, clinical notes (sub-domain 7) — `patient_treatments`, `patient_check_ins`, `patient_reviews` (7), `patient_offering_suggestions` (7), `contact_activities.appointment_id` (4).
 
 **PostgreSQL design**
 
@@ -3293,7 +3302,7 @@ One code set (A9), in the **Appointments** row of the Roles matrix.
 | 19 | POST | `/appointments/{appointment_id}/pause` | Pause the visit **(was the visit's)** | `appointment:update` | req |
 | 20 | POST | `/appointments/{appointment_id}/resume` | Resume it **(was the visit's)** | `appointment:update` | req |
 
-Removed: `POST /appointments/{appointment_id}/status` (now 10–13) and all six `/visits…` routes — the floor list is route 1, stage / pause / resume are 18–20, and the consult notes are the patient file's (module 7).
+Removed: `POST /appointments/{appointment_id}/status` (now 10–13) and all six `/visits…` routes — the floor list is route 1, stage / pause / resume are 18–20, and the consult notes are the patient file's (sub-domain 7).
 
 ### 6.8 Request details
 
@@ -3336,10 +3345,10 @@ Removed: `POST /appointments/{appointment_id}/status` (now 10–13) and all six 
 ### 6.10 Rules worth knowing
 
 - Check-in (route 11, or a walk-in) sets stage `waiting`, moves the contact's open lead to `clinic_visited` (its last status), creates the contact's patient file if it has none (A14), writes a `system` entry in the contact's activity ("Moved to Clinic visited at check-in") and adds the doctor and therapist to the contact's members (4). Undo check-in is allowed while the stage is still `waiting`; the lead stays `clinic_visited` and the patient file stays.
-- Complete ends the visit (stage cleared, `completed_at` set); row #68 adds the package session on the treatment (module 7).
+- Complete ends the visit (stage cleared, `completed_at` set); row #68 adds the package session on the treatment (sub-domain 7).
 - Moving a booking stamps `rescheduled_from` and adds one to `move_count`; a confirmed booking moved returns to `scheduled`.
 - Cancelled and no-show bookings free their slot; restore does not re-take one that was booked meanwhile (`409 slot_taken`).
-- Free slots follow the branch's hours, working days and holidays (module 1), the doctor's working days and hours (module 2), and the three exclusion rules.
+- Free slots follow the branch's hours, working days and holidays (sub-domain 1), the doctor's working days and hours (sub-domain 2), and the three exclusion rules.
 
 ### 6.11 Code changes (not built — the code is frozen)
 
@@ -3355,33 +3364,33 @@ Removed: `POST /appointments/{appointment_id}/status` (now 10–13) and all six 
 | AC7 | A7: copy through the create path |
 | AC8 | A8: inclusive `appointment_date_to`; fix the "newest first" route text |
 | AC9 | A9: new code `appointment:export`; route 2 gated by it |
-| AC10 | A10: drop `app.visits` and the `visits` sub-domain; `visit_stage`, `visit_stage_changed_at`, `visit_paused_at` on `app.appointments` with their `CHECK`s; the consult fields move to the patient file's clinical notes (module 7) |
+| AC10 | A10: drop `app.visits` and the `visits` nested sub-domain; `visit_stage`, `visit_stage_changed_at`, `visit_paused_at` on `app.appointments` with their `CHECK`s; the consult fields move to the patient file's clinical notes (sub-domain 7) |
 | AC11 | A11: routes 18–20 with forward-only stages and pause / resume guards |
 | AC12 | A12: drop `appointments.patient_package_id` |
 | AC13 | A13: multiple-of-5 check in the app; `service_label` default from the offering |
 
-### 6.12 Sub-domains
+### 6.12 Nested sub-domains
 
 None — one folder, `src/domains/app/sub-domains/appointments/`; `visits/` goes (AC10).
 
 ---
 
-## 7. Patients — final (confirmed 2026-10-08) — sub-domains 7.A–7.M
+## 7. Patients — final (confirmed 2026-10-08) — nested sub-domains 7.A–7.M
 
-*Restructured 2026-10-08: old modules 5 (rev 10), 8 (rev 2) and 9 (rev 2) in one section — layout only, no decision changed.*
+*Restructured 2026-10-08: old sub-domains 5 (rev 10), 8 (rev 2) and 9 (rev 2) in one section — layout only, no decision changed.*
 
-Code: the **`patients` module folder** — `src/domains/app/sub-domains/patients/` (the patient file itself at the folder root) with `sub-domains/patient-clinical-notes/`, `patient-prescriptions/`, `prescription-kits/`, `patient-diagnoses/`, `patient-images/`, `patient-reports/`, `patient-treatments/`, `patient-check-ins/`, `patient-reviews/`, `patient-feedback-actions/`, `patient-offerings/` and `patient-offering-suggestions/` (P21, P22).
+Code: the **`patients` sub-domain folder** — `src/domains/app/sub-domains/patients/` (the patient file itself at the folder root) with `patient-clinical-notes/`, `patient-prescriptions/`, `prescription-kits/`, `patient-diagnoses/`, `patient-images/`, `patient-reports/`, `patient-treatments/`, `patient-check-ins/`, `patient-reviews/`, `patient-feedback-actions/`, `patient-offerings/` and `patient-offering-suggestions/` (P21, P22).
 
-7.1 Decisions (whole module) · 7.2 Open questions · 7.3 Tables and relations · 7.4 Permissions · 7.5 Common to every route ·
-7.6 Objects returned · 7.7 Routes · 7.8 Request details · 7.9 Errors · 7.10 Rules worth knowing · 7.11 Code changes (whole module) ·
-7.12 Sub-domains · then **7.A Patients · 7.B Clinical notes · 7.C Prescriptions · 7.D Prescription kits · 7.E Patient diagnoses · 7.F Images · 7.G Reports · 7.H Treatments · 7.I Check-ins · 7.J Reviews · 7.K Feedback actions · 7.L Patient offerings · 7.M Offering suggestions** — each with the same eleven sections: .1 Decisions ·
+7.1 Decisions (whole sub-domain) · 7.2 Open questions · 7.3 Tables and relations · 7.4 Permissions · 7.5 Common to every route ·
+7.6 Objects returned · 7.7 Routes · 7.8 Request details · 7.9 Errors · 7.10 Rules worth knowing · 7.11 Code changes (whole sub-domain) ·
+7.12 Nested sub-domains · then **7.A Patients · 7.B Clinical notes · 7.C Prescriptions · 7.D Prescription kits · 7.E Patient diagnoses · 7.F Images · 7.G Reports · 7.H Treatments · 7.I Check-ins · 7.J Reviews · 7.K Feedback actions · 7.L Patient offerings · 7.M Offering suggestions** — each with the same eleven sections: .1 Decisions ·
 .2 Open questions · .3 Tables and relations · .4 Permissions · .5 Common to every route · .6 Objects returned · .7 Routes ·
 .8 Request details · .9 Errors · .10 Rules worth knowing · .11 Code changes
 
 Everything the clinic records about a patient: the file, what was done and how they felt about it, what they bought and what is planned next.
 
 **The patient file.** A patient file is the **clinical side of a contact** (4) — consents, allergies, usual doctor, home branch,
-status — and, since the old patient-file module merged in, everything the clinic records about their care. Everything about the
+status — and, since the old patient-file sub-domain merged in, everything the clinic records about their care. Everything about the
 person lives on the contact; the timeline is the contact's activity (4); the search is the contacts search
 (4). Design: `patients.md`,
 `patient-file.md`, `schema-routes.md`.
@@ -3390,7 +3399,7 @@ person lives on the contact; the timeline is the contact's activity (4); the sea
 spend), aftercare check-ins, reviews, and what the team did about poor feedback. Every table is the patient's (P21),
 so every route sits under `/patients/{patient_id}/…`. Design: `patient-file.md` (Treatments
 tab, Feedback card, the drawers), `today.md` (the visit sheet), `tasks.md`, `schema-routes.md` (Treatment, CheckIn,
-Review, FeedbackAction). Row #68 (finishing a visit records the package session) lands here and in module 6.
+Review, FeedbackAction). Row #68 (finishing a visit records the package session) lands here and in sub-domain 6.
 
 **Patient offerings and plan.** What a patient has bought — every session-based offering on their bills, a package being one with more than one
 session — and what the clinic plans to sell them next (the patient's plan): suggested (7.M) → bought (7.L) → done
@@ -3398,29 +3407,29 @@ session — and what the clinic plans to sell them next (the patient's plan): su
 `payments.md` (the invoice drawer's "⚡ Package" and "⚡ Plan" fills), `appointments.md` (Package session, "Plan
 ready"), `schema-routes.md` (PatientPackage, OfferingSuggestion). Route numbers run 1–73.
 
-### 7.1 Decisions (whole module)
+### 7.1 Decisions (whole sub-domain)
 
 Taken on your standing answer "go with the recommendation" — confirmed 2026-10-08. A decision
-that belongs to one table is in its sub-domain.
+that belongs to one table is in its nested sub-domain.
 
 | # | Decision |
 | --- | --- |
 | P5 | Two code sets, both in the **Patients** row: `patient:read` · `create` · `update` · `delete` · `export` (replaces `list:export`, O14) with the field-level `patient:clinical_record:read` and `patient:private_album:read` (renamed as O15 did); and `patient_prescription:read` · `create` · `update` · `delete` — prescribing is the doctors'; folding it into `patient:update` would let the front desk prescribe. |
 | P6 | Patients are not branch-scoped — a person may be seen in any branch; `home_branch_id` says where they belong. The patient file's records follow their patient. |
 | P7 | Patients are never purged — soft delete only, restore always possible; every table that points at a patient does so `ON DELETE RESTRICT` (today `NO ACTION`, two `CASCADE` / `SET NULL`). Clinical records must be kept. |
-| P8 | The timeline and the global search go (your point 3): the timeline → the contact's activity (4), where each module writes a `system` entry linked to its record, shown only to callers who can read that record (M10); `GET /searches` → `GET /contacts?q=` (4) plus each list's own number search. |
-| P11 | The old patient-file module merges here (your point 4). **Routes and folders follow ownership** (your rule: modules ⇔ domains, sub-modules ⇔ sub-domains): what a patient owns nests under them — routes under `/patients/{patient_id}/…`, code in the module folder's `sub-domains/` — while prescription kits and the diagnosis catalogue belong to no one patient, so their routes stay top-level — `/prescription-kits`, `/patient-diagnoses` (P22). Today all six are flat siblings of `patients/` and their by-id routes are top-level. |
+| P8 | The timeline and the global search go (your point 3): the timeline → the contact's activity (4), where each sub-domain writes a `system` entry linked to its record, shown only to callers who can read that record (M10); `GET /searches` → `GET /contacts?q=` (4) plus each list's own number search. |
+| P11 | The old patient-file sub-domain merges here (your point 4). **Routes and folders follow ownership** (your rule: a sub-domain is laid out like a domain, and what it owns are its nested sub-domains): what a patient owns nests under them — routes under `/patients/{patient_id}/…`, code in the sub-domain folder's `sub-domains/` — while prescription kits and the diagnosis catalogue belong to no one patient, so their routes stay top-level — `/prescription-kits`, `/patient-diagnoses` (P22). Today all six are flat siblings of `patients/` and their by-id routes are top-level. |
 | P14 | Writing a clinical note, a photo or a report needs `patient:update` **and** `patient:clinical_record:read` (today the front desk writes clinical notes it may not read); reports are read with `patient:clinical_record:read` like notes and photos (today any `patient:read` holder reads lab results). |
 | P20 | Patient notes go — a team note is a `note` in the contact's activity (4); `app.patient_notes` and its 6 routes are dropped. `app.patient_ideas` (a table with no routes) is dropped until its feature is built. |
-| P21 | Every table a patient owns is named `patient_<thing>`, nests under `/patients/{patient_id}/<things>` and lives in `patients/sub-domains/patient-<things>/` (your rule); an organization-wide list uses the table's name. Treatments, check-ins, reviews, feedback actions and what was bought (7.H–7.M) follow it too. |
-| P22 | **Folder names follow the table.** A table the patient owns carries their prefix (`patient_clinical_notes` → `sub-domains/patient-clinical-notes/`), and so does the diagnosis catalogue — `patient_diagnoses`, the diagnoses the clinic records on its patients (your call, P28); `prescription_kits` (a doctor's own) keeps its name → `sub-domains/prescription-kits/`, as `tenancy/sub-domains/permission/` sits beside `organization/` today. Other options for the kits: nest them under `patient-prescriptions/` (they serve prescriptions, but no prescription owns them — breaks "what a parent owns nests under it"), or rename them `patient_prescription_kits`. |
+| P21 | Every table a patient owns is named `patient_<thing>`, nests under `/patients/{patient_id}/<things>` and lives in `patients/patient-<things>/` (your rule); an organization-wide list uses the table's name. Treatments, check-ins, reviews, feedback actions and what was bought (7.H–7.M) follow it too. |
+| P22 | **Folder names follow the table.** A table the patient owns carries their prefix (`patient_clinical_notes` → `patient-clinical-notes/`), and so does the diagnosis catalogue — `patient_diagnoses`, the diagnoses the clinic records on its patients (your call, P28); `prescription_kits` (a doctor's own) keeps its name → `prescription-kits/`, as `tenancy/sub-domains/permission/` sits beside `organization/` today. Other options for the kits: nest them under `patient-prescriptions/` (they serve prescriptions, but no prescription owns them — breaks "what a parent owns nests under it"), or rename them `patient_prescription_kits`. |
 | TR1 | **Names and nesting follow P21**: `app.treatments` → `app.patient_treatments`, `app.check_ins` → `app.patient_check_ins`, `app.reviews` → `app.patient_reviews`, `app.feedback_actions` → `app.patient_feedback_actions`; every by-id route nests under `/patients/{patient_id}/…` (today `/treatments/{treatment_id}`, `/check-ins/…`, `/reviews/…` and a flat `/feedback-actions`); path ids `patient_treatment_id`, `patient_check_in_id`, `patient_review_id`. The organization-wide treatments list is `/patient-treatments` (the table's name, P21). Public-id prefixes stay (`trt_`, `chk_`, `rev_`, `fba_`). |
 | TR2 | **Two code sets in the Patients row**, as the patient file (7.A–7.G) did for prescriptions (P5): treatments get their own — `patient_treatment:read` · `create` · `update` (replaces `treatment:*`) — because recording a session spends a paid session and is the clinicians' work; there is no `:delete`, since a treatment is reversed, never deleted (TR4). Check-ins, reviews and feedback actions are the patient file's own and use `patient:read` / `patient:update` (the desk makes the feedback calls); `review:*` goes. Today treatments are read with `patient:read` while the timeline asked for `treatment:read`. After this, Marketing (today `review:*`) needs Patients · Edit to log reviews. |
 | TR3 | Not branch-scoped — they follow their patient (P6). **Same-patient rule** on every link: an appointment must be the patient's contact's, a treatment or a patient offering the patient's (`400`); today only the package is checked. The path's patient always wins — today `?patient_id=` on a nested list overrides the path. |
-| TR4 | **Follow-up tasks are module 10's** rules over these records: a doctor call-back while a check-in or a review **needs action** (TR9, TR11), an aftercare call while a treatment with `aftercare_call` has no check-in. Today the check-in insert writes the call-back itself — for feel `worse` only, never on a later edit, never for reviews. Until module 10 is built, the writes keep creating it, now for `worse` or a score ≤ 4, a rating ≤ 3, and an edit that turns it on. |
+| TR4 | **Follow-up tasks are sub-domain 10's** rules over these records: a doctor call-back while a check-in or a review **needs action** (TR9, TR11), an aftercare call while a treatment with `aftercare_call` has no check-in. Today the check-in insert writes the call-back itself — for feel `worse` only, never on a later edit, never for reviews. Until sub-domain 10 is built, the writes keep creating it, now for `worse` or a score ≤ 4, a rating ≤ 3, and an edit that turns it on. |
 | TR5 | Recording or reversing a treatment, a check-in and a review each write a `system` entry in the contact's activity, linked to the record and shown only to callers who can read it (4, M10). 4's link columns are renamed to match: `patient_treatment_id`, `patient_check_in_id`, `patient_review_id`. |
 | PK1 | **Names and nesting follow P21**: `app.patient_packages` → **`app.patient_offerings`** — PK4 widens it to every session-based offering bought, so the name says what it holds (the design's PatientPackage and Packages tab read it with `is_package=true`) — under `/patients/{patient_id}/offerings/{patient_offering_id}` (today `/patient-packages/{…}`); `app.offering_suggestions` → `app.patient_offering_suggestions` under `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}`. Public-id prefixes: `poff_` (new, was `ppkg_`), `osug_` stays; the OpenAPI tag `Invoice` becomes `Patient`. |
-| PK2 | **Permissions — the Patients row, plus the billing code for what was billed**: reading both and writing the plan use `patient:read` / `patient:update` (doctors and counsellors plan; therapists see sessions left); a patient offering's terms — its sessions and validity — are what was invoiced, so changing them needs `payment:update` (module 8). Today a package is created with `payment:create`, changed with `patient:update` and deleted with `payment:delete` — the Accountant can sell but not change one, the Doctor change but not sell. |
+| PK2 | **Permissions — the Patients row, plus the billing code for what was billed**: reading both and writing the plan use `patient:read` / `patient:update` (doctors and counsellors plan; therapists see sessions left); a patient offering's terms — its sessions and validity — are what was invoiced, so changing them needs `payment:update` (sub-domain 8). Today a package is created with `payment:create`, changed with `patient:update` and deleted with `payment:delete` — the Accountant can sell but not change one, the Doctor change but not sell. |
 | PK3 | Not branch-scoped — they follow their patient (P6). Links follow the same-patient rule (TR3): an appointment must be the patient's contact's, a check-in the patient's (`400`). |
 
 ### 7.2 Open questions
@@ -3450,7 +3459,7 @@ A ──< B   one A has many B     A >── B   many A for one B     A ──> 
 
 Pointing at a patient (all `ON DELETE RESTRICT` — P7): the patient-file tables, `patient_treatments`, `patient_check_ins`, `patient_reviews` (7.H–7.K), `patient_offerings`, `patient_offering_suggestions` (7.L–7.M). Billing and tasks point at the contact instead (8, B3; 10, TK5); stock points at the treatment (9, S14).
 
-Standard columns on every record table (not repeated below): `id bigint` (identity), `public_id varchar(28)` unique, `organization_id bigint` → organizations `ON DELETE CASCADE`, `created_at` / `updated_at timestamptz`, `created_by_user_id` / `updated_by_user_id`, and — where it soft-deletes — `deleted_at`, `delete_reason`, `delete_note` with their three checks; RLS enabled and forced. Every patient-file table also has `patient_id` → patients `ON DELETE RESTRICT`, an index `(patient_id, created_at, id)`, RLS (organization policy, enabled and forced) and no branch rule (P6). Each table's design is in its sub-domain.
+Standard columns on every record table (not repeated below): `id bigint` (identity), `public_id varchar(28)` unique, `organization_id bigint` → organizations `ON DELETE CASCADE`, `created_at` / `updated_at timestamptz`, `created_by_user_id` / `updated_by_user_id`, and — where it soft-deletes — `deleted_at`, `delete_reason`, `delete_note` with their three checks; RLS enabled and forced. Every patient-file table also has `patient_id` → patients `ON DELETE RESTRICT`, an index `(patient_id, created_at, id)`, RLS (organization policy, enabled and forced) and no branch rule (P6). Each table's design is in its nested sub-domain.
 
 **Treatments and feedback**
 
@@ -3476,7 +3485,7 @@ tenancy.organizations
 A ──< B   one A has many B     A >── B   many A for one B     A ──> B   a column on A points at one B     A ─── B   at most one B per A
 ```
 
-Pointing at these from other modules: `contact_activities.patient_treatment_id` / `patient_check_in_id` / `patient_review_id` (4, TR5), `patient_offering_suggestions.patient_check_in_id` (7.L–7.M — a check-in's next offerings), `stock_item_movements.patient_treatment_id` (9 — the stock a session used), the task source (10).
+Pointing at these from other sub-domains: `contact_activities.patient_treatment_id` / `patient_check_in_id` / `patient_review_id` (4, TR5), `patient_offering_suggestions.patient_check_in_id` (7.L–7.M — a check-in's next offerings), `stock_item_movements.patient_treatment_id` (9 — the stock a session used), the task source (10).
 
 **PostgreSQL design**
 
@@ -3511,12 +3520,12 @@ Standard columns as above.
 
 ### 7.4 Permissions
 
-All of the module's codes in one place; each sub-domain's routes repeat the gate.
+All of the sub-domain's codes in one place; each nested sub-domain's routes repeat the gate.
 
 | Code | Roles matrix | Allows | Routes | Held by default |
 | --- | --- | --- | --- | --- |
 | `patient:read` | Patients · View | patient files; check-ins, reviews and their actions; what was bought, and the plan | 1, 4, 51, 53, 57, 59, 65, 66, 68, 70 | Owner, Admin, Doctor, Therapist, Front desk, Counsellor, Pharmacist, Accountant, Marketing |
-| `patient:create` | Patients · Create | add a patient file by hand (an inline new contact also needs `contact:create`); check-in creates one without it (module 6) | 3 | Owner, Admin, Doctor, Therapist, Front desk, Counsellor |
+| `patient:create` | Patients · Create | add a patient file by hand (an inline new contact also needs `contact:create`); check-in creates one without it (sub-domain 6) | 3 | Owner, Admin, Doctor, Therapist, Front desk, Counsellor |
 | `patient:update` | Patients · Edit | change a patient file; with the clinical code: write clinical notes, photos, reports (P14); write, delete and restore check-ins and reviews; log actions; plan: add, change, remove, restore | 5, 9, 11, 12, 34, 36–38, 40, 42–44, 52, 54–56, 58, 60–64, 69, 71–73 | same |
 | `patient:delete` | Patients · Delete | delete or restore a patient file | 6, 7 | Owner, Admin |
 | `patient:export` | Patients · Export | the patients CSV | 2 | Owner, Admin, Doctor, Pharmacist, Accountant |
@@ -3530,13 +3539,13 @@ All of the module's codes in one place; each sub-domain's routes repeat the gate
 | `patient_treatment:read` | Patients · Treatments · View | treatments | 45, 46, 48 | Owner, Admin, Doctor, Therapist, Front desk, Counsellor |
 | `patient_treatment:create` | Patients · Treatments · Create | record a session — may spend a bought session | 47 | Owner, Admin, Doctor, Therapist |
 | `patient_treatment:update` | Patients · Treatments · Edit | change or reverse a session — reversing gives the session back | 49, 50 | Owner, Admin, Doctor, Therapist |
-| `payment:update` | Payments · Edit | change a patient offering's sessions or validity | 67 | module 8 (Owner, Admin, Front desk, Accountant) |
+| `payment:update` | Payments · Edit | change a patient offering's sessions or validity | 67 | sub-domain 8 (Owner, Admin, Front desk, Accountant) |
 
 "+ clinical" on a route = also `patient:clinical_record:read` (P14); a private photo also needs `patient:private_album:read`.
 
 Holders follow today's presets (`treatment:*`). The design gives the Therapist view only on Patients (`users.md`) while making treatments theirs (`schema-routes.md`: "Doctor, Therapist") — the presets keep the Therapist able to record sessions.
 
-Selling an offering is invoicing it — `payment:create` (module 8).
+Selling an offering is invoicing it — `payment:create` (sub-domain 8).
 
 ### 7.5 Common to every route
 
@@ -3551,7 +3560,7 @@ Selling an offering is invoicing it — `payment:create` (module 8).
 
 ### 7.6 Objects returned
 
-Each sub-domain lists its own objects (7.A to 7.M, section .6):
+Each nested sub-domain lists its own objects (7.A to 7.M, section .6):
 
 | Object | Where |
 | --- | --- |
@@ -3571,9 +3580,9 @@ Each sub-domain lists its own objects (7.A to 7.M, section .6):
 
 ### 7.7 Routes
 
-Every route of the module in one table; each sub-domain repeats its own with the details.
+Every route of the sub-domain in one table; each nested sub-domain repeats its own with the details.
 
-| # | Method | Path | Purpose | Gate | Idem | Sub-domain |
+| # | Method | Path | Purpose | Gate | Idem | Nested sub-domain |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/patients` | List patient files | `patient:read` | | 7.A Patients |
 | 2 | GET | `/patients/exports` | Download the list as CSV | `patient:export` | | 7.A Patients |
@@ -3651,11 +3660,11 @@ Every route of the module in one table; each sub-domain repeats its own with the
 
 ### 7.8 Request details
 
-In each sub-domain (7.A to 7.M, section .8).
+In each nested sub-domain (7.A to 7.M, section .8).
 
 ### 7.9 Errors
 
-Every route can answer the errors in 7.5; each route's own errors are in its sub-domain (7.A to 7.M, section .9).
+Every route can answer the errors in 7.5; each route's own errors are in its nested sub-domain (7.A to 7.M, section .9).
 
 ### 7.10 Rules worth knowing
 
@@ -3663,53 +3672,53 @@ Every route can answer the errors in 7.5; each route's own errors are in its sub
 - Approving a prescription, adding a clinical note, a photo or a report writes a `system` entry in the contact's activity, shown only to callers who can read it (4, M10).
 - Removing a patient file hides it; nothing clinical is deleted, and it can always be restored (P7).
 
-- A bought session is spent only by a treatment linked to its patient offering — when recorded (TR7) or when billed after (TR13) — and given back only by reversing it (7.L–7.M). The Packages card's "Use a session" opens the treatment drawer; Today's "Complete session 4 of 6" records the treatment, then completes the appointment (module 6) — two writes, each with its own idempotency key.
+- A bought session is spent only by a treatment linked to its patient offering — when recorded (TR7) or when billed after (TR13) — and given back only by reversing it (7.L–7.M). The Packages card's "Use a session" opens the treatment drawer; Today's "Complete session 4 of 6" records the treatment, then completes the appointment (sub-domain 6) — two writes, each with its own idempotency key.
 - A check-in's next offerings become the patient's planned offering suggestions, linked back to the check-in (7.L–7.M) — they are not stored twice (TR10).
 - `needs_action` (check-ins and reviews) turns off with the first feedback action — that is what clears the call-back (TR4).
 - The design's field limits are tighter than the API's in places (remark 1,000 vs 2,000; plan 400 vs 500; review text 600 vs 2,000) — the API keeps the wider limit and the screen may hold the user to less.
 
-- Selling: the invoice drawer (module 8) — "Add package" in the patient file opens it with the offering filled in. The invoice line creates the patient offering and, when the line came from the plan, marks that plan row accepted and invoiced.
-- Spending a session: recording a treatment with the patient offering (7.H–7.K, TR7), or billing a treatment already recorded (PK11); "Book next" books a `package_session` appointment (module 6) — the session is spent when its treatment is recorded or billed, not at booking.
+- Selling: the invoice drawer (sub-domain 8) — "Add package" in the patient file opens it with the offering filled in. The invoice line creates the patient offering and, when the line came from the plan, marks that plan row accepted and invoiced.
+- Spending a session: recording a treatment with the patient offering (7.H–7.K, TR7), or billing a treatment already recorded (PK11); "Book next" books a `package_session` appointment (sub-domain 6) — the session is spent when its treatment is recorded or billed, not at booking.
 - The visit flow's Invoice step (`patient-file.md`): "Covered by package · nothing to bill" = today's treatments are all `is_billed=true`; "2 items ready · ₹6,250" = today's `is_billed=false` treatments (7.H–7.K) plus today's prescription; "Create invoice from visit" sends those treatments on their lines (PK11).
 - The appointment's "Plan ready · n offerings" = live `planned` or `accepted` suggestions with its `appointment_id` (`GET …/offering-suggestions?appointment_id=`).
-- Prices in the plan may sit below the lowest price — flagged, not refused; the invoice refuses them (module 8, O16).
+- Prices in the plan may sit below the lowest price — flagged, not refused; the invoice refuses them (sub-domain 8, O16).
 
-### 7.11 Code changes (whole module)
+### 7.11 Code changes (whole sub-domain)
 
 | # | Change |
 | --- | --- |
 | PC4 | P5: codes `patient:export`, `patient:clinical_record:read`, `patient:private_album:read`, `patient_prescription:*` (permissions, catalog seed, presets, matrix) |
 | PC5 | P7: patients out of the purge list; every incoming foreign key `ON DELETE RESTRICT` |
-| PC6 | P8: drop the timeline route and rules, and the `searches` sub-domain |
-| PC8 | P11, P22: move `patient-clinical-notes`, `prescriptions` (→ `patient-prescriptions`), `prescription-kits`, `diagnoses` (→ `patient-diagnoses`), `patient-images`, `patient-reports` into `app/sub-domains/patients/sub-domains/`, and nest the patient-owned by-id routes under `/patients/{patient_id}/…` |
+| PC6 | P8: drop the timeline route and rules, and the `searches` nested sub-domain |
+| PC8 | P11, P22: move `patient-clinical-notes`, `prescriptions` (→ `patient-prescriptions`), `prescription-kits`, `diagnoses` (→ `patient-diagnoses`), `patient-images`, `patient-reports` into `app/sub-domains/patients/`, and nest the patient-owned by-id routes under `/patients/{patient_id}/…` |
 | PC10 | P14: the clinical write routes require `patient:clinical_record:read` too; reports read with it |
 | PC14 | P20: drop `app.patient_notes` (6 routes) and `app.patient_ideas` with their folders |
-| TRC1 | TR1: rename the four tables (init migration, Drizzle schemas, indexes, constraints, RLS policies, the FORCE-RLS and purge lists), the folders into `app/sub-domains/patients/sub-domains/`, the routes, and the path ids in the param registry; 4's link columns (TR5) |
+| TRC1 | TR1: rename the four tables (init migration, Drizzle schemas, indexes, constraints, RLS policies, the FORCE-RLS and purge lists), the folders into `app/sub-domains/patients/`, the routes, and the path ids in the param registry; 4's link columns (TR5) |
 | TRC2 | TR2: codes `patient_treatment:read\|create\|update` replace `treatment:*` (app permissions, catalog seed, presets, matrix); drop `treatment:delete` and `review:*` |
 | TRC3 | TR3: the same-patient checks on every link; the path patient wins over `?patient_id=` (in `base-record.service.ts`, for every nested list) |
-| TRC4 | TR4: the call-back for a score ≤ 4, a rating ≤ 3 and on edits; task shape stays module 10's |
+| TRC4 | TR4: the call-back for a score ≤ 4, a rating ≤ 3 and on edits; task shape stays sub-domain 10's |
 | TRC5 | TR5: `system` entries for treatments (recorded, reversed), check-ins and reviews |
-| PKC1 | PK1: rename `app.patient_packages` → `app.patient_offerings` and `app.offering_suggestions` → `app.patient_offering_suggestions` (tables, schemas, indexes, constraints, RLS, FORCE-RLS and purge lists, folders, the `poff` prefix); move both folders into `app/sub-domains/patients/sub-domains/`; nest the by-id routes; path ids in the param registry; the OpenAPI tag |
+| PKC1 | PK1: rename `app.patient_packages` → `app.patient_offerings` and `app.offering_suggestions` → `app.patient_offering_suggestions` (tables, schemas, indexes, constraints, RLS, FORCE-RLS and purge lists, folders, the `poff` prefix); move both folders into `app/sub-domains/patients/`; nest the by-id routes; path ids in the param registry; the OpenAPI tag |
 | PKC2 | PK2: the package `PATCH` gated by `payment:update`; plan writes by `patient:update` |
 | PKC3 | PK3: same-patient checks on `appointment_id` and `patient_check_in_id` |
 
-### 7.12 Sub-domains
+### 7.12 Nested sub-domains
 
-| Sub-domain | Folder | Tables | Routes | Status |
+| Nested sub-domain | Folder | Tables | Routes | Status |
 | --- | --- | --- | --- | --- |
 | 7.A Patients | folder root | `app.patients` | 1–7 | final |
-| 7.B Clinical notes | `sub-domains/patient-clinical-notes/` | `app.patient_clinical_notes` | 8–12 | final |
-| 7.C Prescriptions | `sub-domains/patient-prescriptions/` | `app.patient_prescriptions` | 13–20 | final |
-| 7.D Prescription kits | `sub-domains/prescription-kits/` | `app.prescription_kits` | 21–26 | final |
-| 7.E Patient diagnoses | `sub-domains/patient-diagnoses/` | `app.patient_diagnoses` | 27–32 | final |
-| 7.F Images | `sub-domains/patient-images/` | `app.patient_images` | 33–38 | final |
-| 7.G Reports | `sub-domains/patient-reports/` | `app.patient_reports` | 39–44 | final |
-| 7.H Treatments | `sub-domains/patient-treatments/` | `app.patient_treatments` | 45–50 | final |
-| 7.I Check-ins | `sub-domains/patient-check-ins/` | `app.patient_check_ins` | 51–56 | final |
-| 7.J Reviews | `sub-domains/patient-reviews/` | `app.patient_reviews` | 57–62 | final |
-| 7.K Feedback actions | `sub-domains/patient-feedback-actions/` | `app.patient_feedback_actions` | 63–64 | final |
-| 7.L Patient offerings | `sub-domains/patient-offerings/` | `app.patient_offerings` | 65–67 | final |
-| 7.M Offering suggestions | `sub-domains/patient-offering-suggestions/` | `app.patient_offering_suggestions` | 68–73 | final |
+| 7.B Clinical notes | `patient-clinical-notes/` | `app.patient_clinical_notes` | 8–12 | final |
+| 7.C Prescriptions | `patient-prescriptions/` | `app.patient_prescriptions` | 13–20 | final |
+| 7.D Prescription kits | `prescription-kits/` | `app.prescription_kits` | 21–26 | final |
+| 7.E Patient diagnoses | `patient-diagnoses/` | `app.patient_diagnoses` | 27–32 | final |
+| 7.F Images | `patient-images/` | `app.patient_images` | 33–38 | final |
+| 7.G Reports | `patient-reports/` | `app.patient_reports` | 39–44 | final |
+| 7.H Treatments | `patient-treatments/` | `app.patient_treatments` | 45–50 | final |
+| 7.I Check-ins | `patient-check-ins/` | `app.patient_check_ins` | 51–56 | final |
+| 7.J Reviews | `patient-reviews/` | `app.patient_reviews` | 57–62 | final |
+| 7.K Feedback actions | `patient-feedback-actions/` | `app.patient_feedback_actions` | 63–64 | final |
+| 7.L Patient offerings | `patient-offerings/` | `app.patient_offerings` | 65–67 | final |
+| 7.M Offering suggestions | `patient-offering-suggestions/` | `app.patient_offering_suggestions` | 68–73 | final |
 
 ---
 
@@ -3724,7 +3733,7 @@ Every route can answer the errors in 7.5; each route's own errors are in its sub
 | P3 | The Patient object carries `contact_id` only — no embedded contact (your point 7); a list shows names with one call, `GET /contacts?ids=…` (4). |
 | P4 | `conversion` means "took a treatment" (schema-routes T-Converted). Creating the file at check-in does not set it — today lead convert sets it, wrongly; treatments and feedback (7.H–7.K) sets it when the first treatment session is recorded, and it stays editable. |
 | P9 | The list searches the patient number and, through the contact, names, numbers and contact number; `types` filters by several values. |
-| P10 | A file is created at check-in when the contact has none (module 6, A14) — or by hand (no appointment yet). `lead_id` is the lead they came from — set at that check-in, read-only. |
+| P10 | A file is created at check-in when the contact has none (sub-domain 6, A14) — or by hand (no appointment yet). `lead_id` is the lead they came from — set at that check-in, read-only. |
 
 #### 7.A.2 Open questions
 
@@ -3758,7 +3767,7 @@ Indexes: unique `public_id`; unique `(organization_id, patient_number)`; unique 
 | Code | Roles matrix | Allows | Routes | Held by default |
 | --- | --- | --- | --- | --- |
 | `patient:read` | Patients · View | patient files; check-ins, reviews and their actions; what was bought, and the plan | 1, 4 | Owner, Admin, Doctor, Therapist, Front desk, Counsellor, Pharmacist, Accountant, Marketing |
-| `patient:create` | Patients · Create | add a patient file by hand (an inline new contact also needs `contact:create`); check-in creates one without it (module 6) | 3 | Owner, Admin, Doctor, Therapist, Front desk, Counsellor |
+| `patient:create` | Patients · Create | add a patient file by hand (an inline new contact also needs `contact:create`); check-in creates one without it (sub-domain 6) | 3 | Owner, Admin, Doctor, Therapist, Front desk, Counsellor |
 | `patient:update` | Patients · Edit | change a patient file; with the clinical code: write clinical notes, photos, reports (P14); write, delete and restore check-ins and reviews; log actions; plan: add, change, remove, restore | 5 | same |
 | `patient:delete` | Patients · Delete | delete or restore a patient file | 6, 7 | Owner, Admin |
 | `patient:export` | Patients · Export | the patients CSV | 2 | Owner, Admin, Doctor, Pharmacist, Accountant |
@@ -3844,13 +3853,13 @@ None beyond 7.10.
 
 ---
 
-### 7.B Clinical notes — `patients/sub-domains/patient-clinical-notes/` — final
+### 7.B Clinical notes — `patients/patient-clinical-notes/` — final
 
 #### 7.B.1 Decisions
 
 | # | Decision |
 | --- | --- |
-| P12 | Clinical notes take over the visit's consult notes (module 6, A10): kinds `complaint` · `finding` · `diagnosis` · `treatment_suggestion` · `future_suggestion` · `safety_check`; `appointment_id` ties a note to the visit; a `diagnosis` note may point at the catalogue (`patient_diagnosis_id` — today the visit's diagnoses were free text). Notes are never edited (a medical record) — a wrong one is deleted with a reason and written again; the unused update DTO goes. Writing needs `patient:update` + the clinical code (P14). |
+| P12 | Clinical notes take over the visit's consult notes (sub-domain 6, A10): kinds `complaint` · `finding` · `diagnosis` · `treatment_suggestion` · `future_suggestion` · `safety_check`; `appointment_id` ties a note to the visit; a `diagnosis` note may point at the catalogue (`patient_diagnosis_id` — today the visit's diagnoses were free text). Notes are never edited (a medical record) — a wrong one is deleted with a reason and written again; the unused update DTO goes. Writing needs `patient:update` + the clinical code (P14). |
 
 #### 7.B.2 Open questions
 
@@ -3913,19 +3922,19 @@ None beyond 7.10.
 
 | # | Change |
 | --- | --- |
-| PC9 | P12: kinds `finding` and `safety_check`; `appointment_id`, `patient_diagnosis_id` and the kind check; the visit's consult fields move here (module 6, AC10); drop the unused update DTO |
+| PC9 | P12: kinds `finding` and `safety_check`; `appointment_id`, `patient_diagnosis_id` and the kind check; the visit's consult fields move here (sub-domain 6, AC10); drop the unused update DTO |
 
 ---
 
-### 7.C Prescriptions — `patients/sub-domains/patient-prescriptions/` — final
+### 7.C Prescriptions — `patients/patient-prescriptions/` — final
 
 #### 7.C.1 Decisions
 
 | # | Decision |
 | --- | --- |
-| P15 | An approved prescription is final — `PATCH` **and** `DELETE` are refused (today delete passes); `approved_by_membership_id` records who approved (missing today); approve needs at least one line; a line's `medicine_id` must be a live medicine (module 11 — today unchecked); the nested list ignores a `?patient_id=` (today it overrides the path). |
+| P15 | An approved prescription is final — `PATCH` **and** `DELETE` are refused (today delete passes); `approved_by_membership_id` records who approved (missing today); approve needs at least one line; a line's `medicine_id` must be a live medicine (sub-domain 11 — today unchecked); the nested list ignores a `?patient_id=` (today it overrides the path). |
 | P16 | Lines stay `jsonb` (≤ 30, always read, printed and approved with their prescription) with `CHECK (jsonb_typeof(items) = 'array' AND jsonb_array_length(items) <= 30)` — a lines table would cost a join on every read for no query that needs one. |
-| P27 | Renamed `app.prescriptions` → `app.patient_prescriptions` (path id `{patient_prescription_id}`, codes `patient_prescription:*`); the pharmacy queue is `GET /patient-prescriptions`. Invoices and medical sales point at it as `patient_prescription_id` (modules 8, 11). |
+| P27 | Renamed `app.prescriptions` → `app.patient_prescriptions` (path id `{patient_prescription_id}`, codes `patient_prescription:*`); the pharmacy queue is `GET /patient-prescriptions`. Invoices and medical sales point at it as `patient_prescription_id` (sub-domains 8, 11). |
 
 #### 7.C.2 Open questions
 
@@ -4000,11 +4009,11 @@ None beyond 7.10.
 | # | Change |
 | --- | --- |
 | PC11 | P15, P16: refuse `DELETE` of an approved prescription; `approved_by_membership_id` and its check; resolve `medicine_id`; the path wins over `?patient_id=`; the `items` checks |
-| PC15 | P27: rename `app.prescriptions` → `app.patient_prescriptions` (table, schema, indexes, RLS, the counter key, the folder), the path ids, the `/patient-prescriptions` list, the codes; `patient_prescription_id` on invoices and medical sales (modules 8, 11) |
+| PC15 | P27: rename `app.prescriptions` → `app.patient_prescriptions` (table, schema, indexes, RLS, the counter key, the folder), the path ids, the `/patient-prescriptions` list, the codes; `patient_prescription_id` on invoices and medical sales (sub-domains 8, 11) |
 
 ---
 
-### 7.D Prescription kits — `patients/sub-domains/prescription-kits/` — final
+### 7.D Prescription kits — `patients/prescription-kits/` — final
 
 #### 7.D.1 Decisions
 
@@ -4079,14 +4088,14 @@ None beyond 7.10.
 
 ---
 
-### 7.E Patient diagnoses — `patients/sub-domains/patient-diagnoses/` — final
+### 7.E Patient diagnoses — `patients/patient-diagnoses/` — final
 
 #### 7.E.1 Decisions
 
 | # | Decision |
 | --- | --- |
 | P18 | The organization's diagnosis catalogue: readable by every member (a picker); writes need `patient_prescription:*`; names unique in the organization (any case); a clinical note of kind `diagnosis` may point at an entry (P12). |
-| P28 | **Renamed `app.diagnoses` → `app.patient_diagnoses`** (your call): folder `sub-domains/patient-diagnoses/`, routes `/patient-diagnoses`, path id `{patient_diagnosis_id}`, and the clinical notes' `patient_diagnosis_id`. It stays a catalogue — no `patient_id`, and its routes are not under a patient, since no one patient owns an entry; the public-id prefix `dgn_` stays. |
+| P28 | **Renamed `app.diagnoses` → `app.patient_diagnoses`** (your call): folder `patient-diagnoses/`, routes `/patient-diagnoses`, path id `{patient_diagnosis_id}`, and the clinical notes' `patient_diagnosis_id`. It stays a catalogue — no `patient_id`, and its routes are not under a patient, since no one patient owns an entry; the public-id prefix `dgn_` stays. |
 
 #### 7.E.2 Open questions
 
@@ -4158,7 +4167,7 @@ None beyond 7.10.
 
 ---
 
-### 7.F Images — `patients/sub-domains/patient-images/` — final
+### 7.F Images — `patients/patient-images/` — final
 
 #### 7.F.1 Decisions
 
@@ -4267,7 +4276,7 @@ None beyond 7.10.
 
 ---
 
-### 7.G Reports — `patients/sub-domains/patient-reports/` — final
+### 7.G Reports — `patients/patient-reports/` — final
 
 #### 7.G.1 Decisions
 
@@ -4342,16 +4351,16 @@ None beyond 7.10.
 | PC21 | P29: check `file_keys` against the organization's confirmed uploads; reads gated by the clinical code (PC10) |
 
 ---
-### 7.H Treatments — `patients/sub-domains/patient-treatments/` — final
+### 7.H Treatments — `patients/patient-treatments/` — final
 
 #### 7.H.1 Decisions
 
 | # | Decision |
 | --- | --- |
-| TR6 | **Reversed, never deleted** (`today.md`: "Cancelled or wrong sessions are reversed with a reason, never deleted"): `POST …/reverse` with a reason, final (no un-reverse); a reversed treatment can't be changed (`409 treatment_reversed`). Reversing gives its session back and clears `patient_offering_id` in the same transaction, so a wrong bill can then be fixed (module 8, B12). The soft-delete columns go — no route ever set them, and the patient file's "Delete" becomes "Reverse". |
+| TR6 | **Reversed, never deleted** (`today.md`: "Cancelled or wrong sessions are reversed with a reason, never deleted"): `POST …/reverse` with a reason, final (no un-reverse); a reversed treatment can't be changed (`409 treatment_reversed`). Reversing gives its session back and clears `patient_offering_id` in the same transaction, so a wrong bill can then be fixed (sub-domain 8, B12). The soft-delete columns go — no route ever set them, and the patient file's "Delete" becomes "Reverse". |
 | TR7 | **Paid before the visit**: `patient_offering_id` is sent on create only (TR13 covers billing after). The patient offering must be the patient's, live, not past `valid_until` (organization time zone) and have a session left; its offering becomes the treatment's `offering_id` (a different one sent → `400`); one guarded `UPDATE … SET sessions_used = sessions_used + 1 WHERE sessions_used < sessions_total` spends it (`409 offering_used_up`), and `session_number` becomes its new count — server-set, so it can't be sent or changed for a linked session. Changing or removing the link later is refused — reverse and record again. Today the package can't be changed but its session number can, and reversing a session whose package was deleted silently gives nothing back (a patient offering now goes only with its invoice, patient offerings and plan (7.L–7.M)). |
 | TR8 | Fields: `name` stays required (1–120; the drawer's quick chips fill it); `body_parts` uses the patient file's one body-part list (7.F, P25 — 15 parts, adding the skin areas the design lists), up to 12 — teeth, physio regions and other template detail go in `parameters`; `session_number` 1–999 (packages may hold up to 999 sessions, patient offerings and plan (7.L–7.M)); `performed_at` not in the future; a linked appointment must be checked in or completed, and an offering active (O13). The aftercare values keep `in_two_days` (the design's `in_2_days` breaks the no-digits rule). |
-| TR13 | **Billed after the visit** (7.L–7.M, PK11): a done treatment with an offering and no `patient_offering_id` is not billed until an invoice line names it in `patient_treatment_ids` (module 8, B28) — the save sets the link, spends the session and sets `session_number` to the patient offering's count, under the same guarded `UPDATE`. `is_billed` is derived: `true` with a link, `false` for a done treatment with an offering and none, null when it has no offering or is reversed; lists 1 and 2 filter on it (the visit's "items ready", and work done but not billed). |
+| TR13 | **Billed after the visit** (7.L–7.M, PK11): a done treatment with an offering and no `patient_offering_id` is not billed until an invoice line names it in `patient_treatment_ids` (sub-domain 8, B28) — the save sets the link, spends the session and sets `session_number` to the patient offering's count, under the same guarded `UPDATE`. `is_billed` is derived: `true` with a link, `false` for a done treatment with an offering and none, null when it has no offering or is reversed; lists 1 and 2 filter on it (the visit's "items ready", and work done but not billed). |
 
 #### 7.H.2 Open questions
 
@@ -4451,7 +4460,7 @@ None beyond 7.10.
 
 ---
 
-### 7.I Check-ins — `patients/sub-domains/patient-check-ins/` — final
+### 7.I Check-ins — `patients/patient-check-ins/` — final
 
 #### 7.I.1 Decisions
 
@@ -4481,7 +4490,7 @@ None.
 | `current_state`, `next_plan` | `varchar(500)` | yes | | |
 | `check_in_date` | `date` | no | | not in the future |
 
-Indexes: unique `public_id`; `WHERE deleted_at IS NULL`: `(patient_id, check_in_date DESC, id)` — the card and the previous score, `(patient_treatment_id, check_in_date DESC) WHERE patient_treatment_id IS NOT NULL` — a treatment's latest check-in, `(organization_id, created_at) WHERE feel = 'worse' OR score <= 4` — module 10's call-back rule; `(appointment_id) WHERE appointment_id IS NOT NULL`.
+Indexes: unique `public_id`; `WHERE deleted_at IS NULL`: `(patient_id, check_in_date DESC, id)` — the card and the previous score, `(patient_treatment_id, check_in_date DESC) WHERE patient_treatment_id IS NOT NULL` — a treatment's latest check-in, `(organization_id, created_at) WHERE feel = 'worse' OR score <= 4` — sub-domain 10's call-back rule; `(appointment_id) WHERE appointment_id IS NOT NULL`.
 RLS: organization policy, enabled and forced. Branch: none.
 
 #### 7.I.4 Permissions
@@ -4545,7 +4554,7 @@ None beyond 7.10.
 
 ---
 
-### 7.J Reviews — `patients/sub-domains/patient-reviews/` — final
+### 7.J Reviews — `patients/patient-reviews/` — final
 
 #### 7.J.1 Decisions
 
@@ -4572,7 +4581,7 @@ None.
 | `file_keys` | `text[]` | no | `'{}'` | `cardinality ≤ 10` |
 | `review_date` | `date` | no | | not in the future |
 
-Indexes: unique `public_id`; `WHERE deleted_at IS NULL`: `(patient_id, review_date DESC, id)`, `(organization_id, created_at) WHERE rating <= 3` — module 10's call-back rule; `(appointment_id) WHERE appointment_id IS NOT NULL`.
+Indexes: unique `public_id`; `WHERE deleted_at IS NULL`: `(patient_id, review_date DESC, id)`, `(organization_id, created_at) WHERE rating <= 3` — sub-domain 10's call-back rule; `(appointment_id) WHERE appointment_id IS NOT NULL`.
 RLS: organization policy, enabled and forced. Branch: none.
 
 #### 7.J.4 Permissions
@@ -4635,7 +4644,7 @@ None beyond 7.10.
 
 ---
 
-### 7.K Feedback actions — `patients/sub-domains/patient-feedback-actions/` — final
+### 7.K Feedback actions — `patients/patient-feedback-actions/` — final
 
 #### 7.K.1 Decisions
 
@@ -4710,16 +4719,16 @@ None beyond 7.10.
 | TRC11 | TR12: drop the six `/feedback-actions` routes, the update DTO and the soft-delete columns; the two nested routes; `author_membership_id`; `actions` inside the check-in and review serializers |
 
 ---
-### 7.L Patient offerings — `patients/sub-domains/patient-offerings/` — final
+### 7.L Patient offerings — `patients/patient-offerings/` — final
 
 #### 7.L.1 Decisions
 
 | # | Decision |
 | --- | --- |
-| PK4 | **A patient offering is bought only by invoicing it** (`schema-routes.md`: "written by invoicing a package offering" — widened to every session-based offering). Saving an invoice line whose offering is a `treatment`, `package` or `lhr` creates one in the same transaction (module 8) — not a `consultation` (the visit itself) or a `product`, and never a medicine: `sessions_total` = the offering's sessions × the line's quantity (+ the extra sessions of an `extra` offer on the line); `valid_until` = the invoice date + `validity_days`, or none when that is 0 (the design: "0 = no expiry"). A package is one with more than one session (`is_package`) — a 7-session LHR pack is category `lhr`. `POST /patients/{patient_id}/packages` goes: the patient file's "Add package" opens the invoice drawer instead, so no session can be spent without a bill (the design's "Package added · invoice it from Invoices" would allow that). Other option: keep a manual create with `payment:create`, e.g. for packages sold before Clinozy. |
+| PK4 | **A patient offering is bought only by invoicing it** (`schema-routes.md`: "written by invoicing a package offering" — widened to every session-based offering). Saving an invoice line whose offering is a `treatment`, `package` or `lhr` creates one in the same transaction (sub-domain 8) — not a `consultation` (the visit itself) or a `product`, and never a medicine: `sessions_total` = the offering's sessions × the line's quantity (+ the extra sessions of an `extra` offer on the line); `valid_until` = the invoice date + `validity_days`, or none when that is 0 (the design: "0 = no expiry"). A package is one with more than one session (`is_package`) — a 7-session LHR pack is category `lhr`. `POST /patients/{patient_id}/packages` goes: the patient file's "Add package" opens the invoice drawer instead, so no session can be spent without a bill (the design's "Package added · invoice it from Invoices" would allow that). Other option: keep a manual create with `payment:create`, e.g. for packages sold before Clinozy. |
 | PK5 | **Sessions move only with treatments** — spent when a treatment is linked to it, before or after the bill (7.H–7.K, TR7; PK11), given back by reversing one; no bare "use a session" counter, so every spent session has a treatment behind it (the card's button opens the treatment drawer). `status` is derived: `active` (a session left, not expired) · `used_up` · `expired` — the appointment form's "active package". |
-| PK6 | **Changing one**: `valid_until` (extend, or none) and `sessions_total` (never below `sessions_used` → `400`; today a database `500`), with `payment:update` (PK2). A refund of unused sessions is a credit note on its invoice (module 8) plus lowering `sessions_total` to `sessions_used`. A patient offering goes and comes back with its invoice — no delete or restore of its own (today `payment:delete`); an invoice whose patient offering has a spent session can't be deleted (module 8). |
-| PK11 | **Paid before or after the visit — one link either way**: a treatment points at the patient offering that pays for it (`patient_treatments.patient_offering_id`, 7.H–7.K). **Before** — the session is recorded with it (a package, or a single session paid ahead; 7.H–7.K, TR7). **After** — the visit flow's "Create invoice from visit": the invoice line carries `patient_treatment_ids` (the patient's done, unbilled treatments of that offering, up to its sessions) and the save links them and spends their sessions in the same transaction (module 8, B28; 7.H–7.K, TR13). A treatment with an offering and no link is **not billed**: `is_billed` on the treatment and its `is_billed=false` filter give the Invoice step's "items ready" and a list of work done but not billed. A free session is a line at 100% discount, so it still counts as billed. Other option: packages only — a single session billed after the visit stays unlinked, and nothing shows what was done but not billed. |
+| PK6 | **Changing one**: `valid_until` (extend, or none) and `sessions_total` (never below `sessions_used` → `400`; today a database `500`), with `payment:update` (PK2). A refund of unused sessions is a credit note on its invoice (sub-domain 8) plus lowering `sessions_total` to `sessions_used`. A patient offering goes and comes back with its invoice — no delete or restore of its own (today `payment:delete`); an invoice whose patient offering has a spent session can't be deleted (sub-domain 8). |
+| PK11 | **Paid before or after the visit — one link either way**: a treatment points at the patient offering that pays for it (`patient_treatments.patient_offering_id`, 7.H–7.K). **Before** — the session is recorded with it (a package, or a single session paid ahead; 7.H–7.K, TR7). **After** — the visit flow's "Create invoice from visit": the invoice line carries `patient_treatment_ids` (the patient's done, unbilled treatments of that offering, up to its sessions) and the save links them and spends their sessions in the same transaction (sub-domain 8, B28; 7.H–7.K, TR13). A treatment with an offering and no link is **not billed**: `is_billed` on the treatment and its `is_billed=false` filter give the Invoice step's "items ready" and a list of work done but not billed. A free session is a line at 100% discount, so it still counts as billed. Other option: packages only — a single session billed after the visit stays unlinked, and nothing shows what was done but not billed. |
 
 #### 7.L.2 Open questions
 
@@ -4746,7 +4755,7 @@ RLS: organization policy, enabled and forced. Branch: none.
 | Code | Roles matrix | Allows | Routes | Held by default |
 | --- | --- | --- | --- | --- |
 | `patient:read` | Patients · View | patient files; check-ins, reviews and their actions; what was bought, and the plan | 65, 66 | Owner, Admin, Doctor, Therapist, Front desk, Counsellor, Pharmacist, Accountant, Marketing |
-| `payment:update` | Payments · Edit | change a patient offering's sessions or validity | 67 | module 8 (Owner, Admin, Front desk, Accountant) |
+| `payment:update` | Payments · Edit | change a patient offering's sessions or validity | 67 | sub-domain 8 (Owner, Admin, Front desk, Accountant) |
 
 The codes as a whole, with their notes: 7.4.
 
@@ -4790,22 +4799,22 @@ None beyond 7.10.
 
 | # | Change |
 | --- | --- |
-| PKC4 | PK4: drop `POST /patients/{patient_id}/packages` and the create DTO; the invoice service creates patient offerings for `treatment`, `package` and `lhr` lines (module 8); `invoice_item_id` replaces `invoice_id`; `valid_until` nullable; sessions `smallint` 1–999 |
+| PKC4 | PK4: drop `POST /patients/{patient_id}/packages` and the create DTO; the invoice service creates patient offerings for `treatment`, `package` and `lhr` lines (sub-domain 8); `invoice_item_id` replaces `invoice_id`; `valid_until` nullable; sessions `smallint` 1–999 |
 | PKC5 | PK5: derived `status`, `sessions_left`, `is_package` (and its filter), `offering_name` in the serializer |
 | PKC6 | PK6: drop the package `DELETE` and restore routes; the `sessions_total` check in the service; the unused list-limit constant |
-| PKC11 | PK11: the sessions-left index; linking at invoicing lives in the invoice service (module 8, BC25) and `is_billed` on treatments (7.H–7.K, TRC12) |
+| PKC11 | PK11: the sessions-left index; linking at invoicing lives in the invoice service (sub-domain 8, BC25) and `is_billed` on treatments (7.H–7.K, TRC12) |
 
 ---
 
-### 7.M Offering suggestions — `patients/sub-domains/patient-offering-suggestions/` — final
+### 7.M Offering suggestions — `patients/patient-offering-suggestions/` — final
 
 #### 7.M.1 Decisions
 
 | # | Decision |
 | --- | --- |
-| PK7 | **Status and invoicing**: `planned` (default) · `accepted` · `next_time` · `declined`, moved freely by the team, and set to `accepted` when an invoice line is linked (module 8). "Invoiced" is derived from the linked invoice lines — `invoiced_quantity` = their total quantity, fully invoiced when it reaches `quantity` (the design's "✓ Invoiced" / "Invoiced · 1 of 2"). The jsonb `invoice_links` (never written today) is replaced by `invoice_items.patient_offering_suggestion_id` (module 8): a line serves one plan row, a plan row may be invoiced over several lines. `quantity` can't drop below `invoiced_quantity`. |
+| PK7 | **Status and invoicing**: `planned` (default) · `accepted` · `next_time` · `declined`, moved freely by the team, and set to `accepted` when an invoice line is linked (sub-domain 8). "Invoiced" is derived from the linked invoice lines — `invoiced_quantity` = their total quantity, fully invoiced when it reaches `quantity` (the design's "✓ Invoiced" / "Invoiced · 1 of 2"). The jsonb `invoice_links` (never written today) is replaced by `invoice_items.patient_offering_suggestion_id` (sub-domain 8): a line serves one plan row, a plan row may be invoiced over several lines. `quantity` can't drop below `invoiced_quantity`. |
 | PK8 | **Where it came from is a real link**: `appointment_id` (planned at a visit) and `patient_check_in_id` (a check-in's next offering, TR10); `source_label` is derived ("Check-in · 26 Sep", "Appt #2790 · Consultation", else "Patient file") instead of stored text; `suggested_by_membership_id` = the caller (the design's "by"). |
-| PK9 | **Price and total**: `price` is the line's final amount for the whole quantity, none = the offering's billed price × quantity. Below the offering's lowest price × quantity is allowed here ("warns, not blocks") and flagged `is_below_lowest_price` — the invoice refuses it (module 8). The list's `meta.plan_total` = the planned and accepted rows (the card's total). **No duplicates**: the same offering again → `409 suggestion_exists` while a live row for it is planned, next time, or accepted and not fully invoiced; declined rows stay as a record ("Use Declined instead to keep a record"). |
+| PK9 | **Price and total**: `price` is the line's final amount for the whole quantity, none = the offering's billed price × quantity. Below the offering's lowest price × quantity is allowed here ("warns, not blocks") and flagged `is_below_lowest_price` — the invoice refuses it (sub-domain 8). The list's `meta.plan_total` = the planned and accepted rows (the card's total). **No duplicates**: the same offering again → `409 suggestion_exists` while a live row for it is planned, next time, or accepted and not fully invoiced; declined rows stay as a record ("Use Declined instead to keep a record"). |
 | PK10 | Remove = soft delete with a reason + restore (your rule; the design hard-deletes). The offering must be active (O13). The design's "ideas" (computed, never stored) are not in this API. |
 
 #### 7.M.2 Open questions
@@ -4888,22 +4897,22 @@ None beyond 7.10.
 
 | # | Change |
 | --- | --- |
-| PKC7 | PK7: drop `invoice_links`; `invoiced_quantity` / `is_fully_invoiced` from `invoice_items` (module 8); `accepted` on link; the `quantity` check |
+| PKC7 | PK7: drop `invoice_links`; `invoiced_quantity` / `is_fully_invoiced` from `invoice_items` (sub-domain 8); `accepted` on link; the `quantity` check |
 | PKC8 | PK8: drop `source_label`; add `patient_check_in_id` and `suggested_by_membership_id`; derived `source_label` |
 | PKC9 | PK9: `is_below_lowest_price`, `meta.plan_total`, the duplicate check (`409`) |
 | PKC10 | PK10: the active-offering check; `offering_name` in the serializer |
 
 ---
 
-## 8. Billing — final (rev 2, confirmed 2026-10-08) — sub-domains 8.A–8.E
+## 8. Billing — final (rev 2, confirmed 2026-10-08) — nested sub-domains 8.A–8.E
 
-*Was module 10 before the restructure (2026-10-08) — layout only, no decision changed.*
+*Was sub-domain 10 before the restructure (2026-10-08) — layout only, no decision changed.*
 
-Code: the **`billing` module folder** (your call) — `src/domains/app/sub-domains/billing/` (only `billing.routes.ts` and `billing.container.ts` at the root) with `sub-domains/invoices/`, `invoice-credit-notes/`, `payments/`, `pending-credits/`, `day-closes/`. The platform's `src/domains/billing/` (the Stripe subscription, Postgres schema `billing`) is a different folder and schema.
+Code: the **`billing` sub-domain folder** (your call) — `src/domains/app/sub-domains/billing/` (only `billing.routes.ts` and `billing.container.ts` at the root) with `invoices/`, `invoice-credit-notes/`, `payments/`, `pending-credits/`, `day-closes/`. The platform's `src/domains/billing/` (the Stripe subscription, Postgres schema `billing`) is a different folder and schema.
 
-8.1 Decisions (whole module) · 8.2 Open questions · 8.3 Tables and relations · 8.4 Permissions · 8.5 Common to every route ·
-8.6 Objects returned · 8.7 Routes · 8.8 Request details · 8.9 Errors · 8.10 Rules worth knowing · 8.11 Code changes (whole module) ·
-8.12 Sub-domains · then **8.A Invoices · 8.B Invoice credit notes · 8.C Payments · 8.D Pending credits · 8.E Day closes** — each with the same eleven sections: .1 Decisions ·
+8.1 Decisions (whole sub-domain) · 8.2 Open questions · 8.3 Tables and relations · 8.4 Permissions · 8.5 Common to every route ·
+8.6 Objects returned · 8.7 Routes · 8.8 Request details · 8.9 Errors · 8.10 Rules worth knowing · 8.11 Code changes (whole sub-domain) ·
+8.12 Nested sub-domains · then **8.A Invoices · 8.B Invoice credit notes · 8.C Payments · 8.D Pending credits · 8.E Day closes** — each with the same eleven sections: .1 Decisions ·
 .2 Open questions · .3 Tables and relations · .4 Permissions · .5 Common to every route · .6 Objects returned · .7 Routes ·
 .8 Request details · .9 Errors · .10 Rules worth knowing · .11 Code changes
 
@@ -4913,19 +4922,19 @@ that splits add up, settles, refunds, reverses or locks a day. Route numbers run
 `patient-file.md` (Invoices, Payments tabs), `today.md` (checkout), `users.md` (Payments row, special switches),
 `schema-routes.md` (Invoice, InvoiceItem, Payment, CreditNote, PendingCredit, DayClose).
 
-### 8.1 Decisions (whole module)
+### 8.1 Decisions (whole sub-domain)
 
-Taken on your standing answer "go with the recommendation" — confirmed 2026-10-08. A decision that belongs to one table is in its sub-domain.
+Taken on your standing answer "go with the recommendation" — confirmed 2026-10-08. A decision that belongs to one table is in its nested sub-domain.
 
 | # | Decision |
 | --- | --- |
-| B1 | **Folders and names follow the tables** (P22): five sub-domains named after their tables; what an invoice owns carries its prefix — `invoice_items` (new, B5), `invoice_members` (today `invoice_team_memberships`, like `branch_members` / `contact_members`), `invoice_credit_notes` (today `credit_notes`) — and credit notes nest under their invoice: `/invoices/{invoice_id}/credit-notes`, with the organization-wide list at `/invoice-credit-notes` (the table's name, as P21). |
-| B2 | **One code set, in the Payments row**: `payment:read` · `create` · `update` · `delete` · `export`. The design's special switches fold into it (no special codes — your rule): "Give refunds & credit notes" → `payment:create`; "Close the day" → `payment:update`; "Reverse settled payments" and "Void sales & delete invoices" (for invoices) → `payment:delete`; "Export lists" → `payment:export`. `invoice:*`, `day_close:*`, `day_close:close`, `payment:reverse_settled`, `refund:create` and `list:export` (here) go; `sale:void` stays only for module 11's medical sales. |
-| B3 | **The billed person is a contact** (4 — one person, one record): `invoices.contact_id`, `payments.contact_id` and `pending_credits.contact_id` replace `patient_id` and `medical_contact_id` (module 11 drops `medical_contacts`; a walk-in buyer becomes a contact from a name and a mobile — the design's "Add contact + Mobile"). A clinic or consultation invoice needs a contact with a patient file (`400 patient_file_required` — the design's picker offers only patients); a medical invoice may have no contact (module 11 decides). Responses carry the contact summary and its `patient_id`; the patient file's Invoices and Payments tabs list by the patient's contact. |
+| B1 | **Folders and names follow the tables** (P22): five nested sub-domains named after their tables; what an invoice owns carries its prefix — `invoice_items` (new, B5), `invoice_members` (today `invoice_team_memberships`, like `branch_members` / `contact_members`), `invoice_credit_notes` (today `credit_notes`) — and credit notes nest under their invoice: `/invoices/{invoice_id}/credit-notes`, with the organization-wide list at `/invoice-credit-notes` (the table's name, as P21). |
+| B2 | **One code set, in the Payments row**: `payment:read` · `create` · `update` · `delete` · `export`. The design's special switches fold into it (no special codes — your rule): "Give refunds & credit notes" → `payment:create`; "Close the day" → `payment:update`; "Reverse settled payments" and "Void sales & delete invoices" (for invoices) → `payment:delete`; "Export lists" → `payment:export`. `invoice:*`, `day_close:*`, `day_close:close`, `payment:reverse_settled`, `refund:create` and `list:export` (here) go; `sale:void` stays only for sub-domain 11's medical sales. |
+| B3 | **The billed person is a contact** (4 — one person, one record): `invoices.contact_id`, `payments.contact_id` and `pending_credits.contact_id` replace `patient_id` and `medical_contact_id` (sub-domain 11 drops `medical_contacts`; a walk-in buyer becomes a contact from a name and a mobile — the design's "Add contact + Mobile"). A clinic or consultation invoice needs a contact with a patient file (`400 patient_file_required` — the design's picker offers only patients); a medical invoice may have no contact (sub-domain 11 decides). Responses carry the contact summary and its `patient_id`; the patient file's Invoices and Payments tabs list by the patient's contact. |
 | B4 | **Branch**: invoices, payments and day closes are branch-filtered (`branch:read` to see every branch, as today); credit notes follow their invoice's branch (today none); pending credits are the organization's. A record's branch is fixed once created. |
 | B5 | **Money is computed and stored by the server**: invoice lines become rows (`app.invoice_items`) instead of a jsonb array, and each save computes and stores every line's and the invoice's amounts (8.A, B9). `paid_amount` is kept by the payment writes in the same transaction; `due_amount` and `payment_status` are generated columns. |
 | B6 | **A closed day locks its money**: a payment belongs to its branch's day (the organization date of `paid_at`); once that day is closed it can't be changed, deleted or restored, and nothing can be added to it (`409 day_closed`) — settled money is undone only by a reversal (8.C). Every payment write reads the day close `FOR SHARE` and closing takes it `FOR UPDATE`, so a close and a payment never interleave. `payments.day_close_id` goes — the branch and date already name the day. |
-| B7 | Saving an invoice, receiving, refunding and reversing write a `system` entry in the contact's activity (4, M10). "Payment due" (an invoice with a due) and a pending credit's `settle_by` are module 10's task rules. |
+| B7 | Saving an invoice, receiving, refunding and reversing write a `system` entry in the contact's activity (4, M10). "Payment due" (an invoice with a due) and a pending credit's `settle_by` are sub-domain 10's task rules. |
 
 ### 8.2 Open questions
 
@@ -4964,15 +4973,15 @@ tenancy.organizations
 A ──< B   one A has many B     A >── B   many A for one B     A ──> B   a column on A points at one B     A ─── B   at most one B per A
 ```
 
-Pointing at these from other modules: `patient_offerings.invoice_item_id` (7), `contact_activities.invoice_id` / `payment_id` (4), `medical_sales.invoice_id` (11), the task source (10).
+Pointing at these from other sub-domains: `patient_offerings.invoice_item_id` (7), `contact_activities.invoice_id` / `payment_id` (4), `medical_sales.invoice_id` (11), the task source (10).
 
 **PostgreSQL design**
 
-Standard columns on every record table (not repeated below): `id bigint` (identity), `public_id varchar(28)` unique, `organization_id bigint` → organizations `ON DELETE CASCADE`, `created_at` / `updated_at timestamptz`, `created_by_user_id` / `updated_by_user_id`, and — where it soft-deletes — `deleted_at`, `delete_reason`, `delete_note` with their three checks; RLS enabled and forced. Money is `numeric(12,2)` in rupees everywhere; a payment's day is the organization-local date of `paid_at`. RLS: organization policy, enabled and forced, on every table, link and log tables included. Each table's design is in its sub-domain.
+Standard columns on every record table (not repeated below): `id bigint` (identity), `public_id varchar(28)` unique, `organization_id bigint` → organizations `ON DELETE CASCADE`, `created_at` / `updated_at timestamptz`, `created_by_user_id` / `updated_by_user_id`, and — where it soft-deletes — `deleted_at`, `delete_reason`, `delete_note` with their three checks; RLS enabled and forced. Money is `numeric(12,2)` in rupees everywhere; a payment's day is the organization-local date of `paid_at`. RLS: organization policy, enabled and forced, on every table, link and log tables included. Each table's design is in its nested sub-domain.
 
 ### 8.4 Permissions
 
-One code set (B2), in the **Payments** row of the Roles matrix; each sub-domain's routes repeat the gate.
+One code set (B2), in the **Payments** row of the Roles matrix; each nested sub-domain's routes repeat the gate.
 
 | Code | Roles matrix | Allows | Routes | Held by default |
 | --- | --- | --- | --- | --- |
@@ -4997,7 +5006,7 @@ Holders follow today's presets. The design gives the Accountant "Reverse settled
 
 ### 8.6 Objects returned
 
-Each sub-domain lists its own objects (8.A to 8.E, section .6):
+Each nested sub-domain lists its own objects (8.A to 8.E, section .6):
 
 | Object | Where |
 | --- | --- |
@@ -5009,9 +5018,9 @@ Each sub-domain lists its own objects (8.A to 8.E, section .6):
 
 ### 8.7 Routes
 
-Every route of the module in one table; each sub-domain repeats its own with the details.
+Every route of the sub-domain in one table; each nested sub-domain repeats its own with the details.
 
-| # | Method | Path | Purpose | Gate | Idem | Sub-domain |
+| # | Method | Path | Purpose | Gate | Idem | Nested sub-domain |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/invoices` | List invoices | `payment:read` | | 8.A Invoices |
 | 2 | GET | `/invoices/exports` | The invoices CSV | `payment:export` | | 8.A Invoices |
@@ -5048,11 +5057,11 @@ Every route of the module in one table; each sub-domain repeats its own with the
 
 ### 8.8 Request details
 
-In each sub-domain (8.A to 8.E, section .8).
+In each nested sub-domain (8.A to 8.E, section .8).
 
 ### 8.9 Errors
 
-Every route can answer the errors in 8.5; each route's own errors are in its sub-domain (8.A to 8.E, section .9).
+Every route can answer the errors in 8.5; each route's own errors are in its nested sub-domain (8.A to 8.E, section .9).
 
 ### 8.10 Rules worth knowing
 
@@ -5061,43 +5070,43 @@ Every route can answer the errors in 8.5; each route's own errors are in its sub
 - Selling an offering or a plan row is invoicing it (7): a `treatment`, `package` or `lhr` line creates the patient offering, links the plan row and marks it accepted, and links the treatments it bills (B28).
 - Today's checkout "Previous due" and "Advance paid" are separate entries: a receipt against the older invoice, and an advance (a receipt with no invoice) moved onto the bill by changing its invoice on an open day.
 
-### 8.11 Code changes (whole module)
+### 8.11 Code changes (whole sub-domain)
 
 | # | Change |
 | --- | --- |
-| BC1 | B1: move the five folders into `app/sub-domains/billing/sub-domains/` with `billing.routes.ts` / `billing.container.ts`; rename `credit_notes` → `invoice_credit_notes` and `invoice_team_memberships` → `invoice_members` (init migration, schemas, indexes, constraints, RLS, the FORCE-RLS and purge lists, the counter key); the routes and path ids |
+| BC1 | B1: move the five folders into `app/sub-domains/billing/` with `billing.routes.ts` / `billing.container.ts`; rename `credit_notes` → `invoice_credit_notes` and `invoice_team_memberships` → `invoice_members` (init migration, schemas, indexes, constraints, RLS, the FORCE-RLS and purge lists, the counter key); the routes and path ids |
 | BC2 | B2: codes `payment:read\|create\|update\|delete\|export` (app permissions, catalog seed, presets, the Payments row with Export); drop `invoice:*`, `day_close:*`, `day_close:close`, `payment:reverse_settled`, `refund:create`, `list:export` here; invoices stop using `sale:void` |
 | BC3 | B3: `contact_id` on invoices (required except `medical`), payments and pending credits; drop `patient_id` and `medical_contact_id` with their checks; the patient-file check; the contact summary and `patient_id` in responses |
 | BC4 | B4: credit notes filtered through their invoice's branch; `branch_id` refused on `PATCH` |
 | BC5 | B6: the day lock (`FOR SHARE` / `FOR UPDATE`) in every payment write; drop `payments.day_close_id` and its filter |
 | BC6 | B7: `system` entries for invoices, receipts, refunds, reversals |
 
-### 8.12 Sub-domains
+### 8.12 Nested sub-domains
 
-| Sub-domain | Folder (`src/domains/app/sub-domains/billing/…`) | Tables | Routes | Status |
+| Nested sub-domain | Folder (`src/domains/app/sub-domains/billing/…`) | Tables | Routes | Status |
 | --- | --- | --- | --- | --- |
-| 8.A Invoices | `sub-domains/invoices/` | `app.invoices`, `app.invoice_items`, `app.invoice_members` | 1–7 | final |
-| 8.B Invoice credit notes | `sub-domains/invoice-credit-notes/` | `app.invoice_credit_notes` | 8–11 | final |
-| 8.C Payments | `sub-domains/payments/` | `app.payments`, `app.payment_edits` | 12–20 | final |
-| 8.D Pending credits | `sub-domains/pending-credits/` | `app.pending_credits` | 21–27 | final |
-| 8.E Day closes | `sub-domains/day-closes/` (+ the auto-close worker) | `app.day_closes`, `app.day_close_events` | 28–32 | final |
+| 8.A Invoices | `invoices/` | `app.invoices`, `app.invoice_items`, `app.invoice_members` | 1–7 | final |
+| 8.B Invoice credit notes | `invoice-credit-notes/` | `app.invoice_credit_notes` | 8–11 | final |
+| 8.C Payments | `payments/` | `app.payments`, `app.payment_edits` | 12–20 | final |
+| 8.D Pending credits | `pending-credits/` | `app.pending_credits` | 21–27 | final |
+| 8.E Day closes | `day-closes/` (+ the auto-close worker) | `app.day_closes`, `app.day_close_events` | 28–32 | final |
 
 ---
 
-### 8.A Invoices — `billing/sub-domains/invoices/` — final
+### 8.A Invoices — `billing/invoices/` — final
 
 #### 8.A.1 Decisions
 
 | # | Decision |
 | --- | --- |
-| B8 | Types stay `clinic` · `consultation` · `medical`; a line is an offering (clinic, consultation — a consultation invoice takes consultation offerings only) or a medicine (medical, module 11) — exactly one. An offering must be active (O13) and offered at the invoice's branch (O5). Medical invoices are written through module 11's sale, which points at the invoice; `invoices.medical_sale_id` (the second copy of that link, never settable) goes. |
+| B8 | Types stay `clinic` · `consultation` · `medical`; a line is an offering (clinic, consultation — a consultation invoice takes consultation offerings only) or a medicine (medical, sub-domain 11) — exactly one. An offering must be active (O13) and offered at the invoice's branch (O5). Medical invoices are written through sub-domain 11's sale, which points at the invoice; `invoices.medical_sale_id` (the second copy of that link, never settable) goes. |
 | B9 | **Amounts**, per line: gross = quantity × rate; line discount = gross × `discount_percent` ÷ 100; the overall discount is shared across lines in proportion to what is left after their line discounts ("Discount (before tax)", `today.md`); net = gross − line discount − share; taxable = net ÷ (1 + GST ÷ 100) when the offering's GST is inclusive, else net; GST = taxable × GST ÷ 100; amount = taxable + GST. Invoice: subtotal = Σ gross, discount total = Σ discounts and shares, taxable total, GST total, total = Σ amount. Each line rounds to the paisa; the last line absorbs the overall discount's rounding. `rate` is server-set — the offering's billed price (offer price, else list price, O4) or the medicine's price (11) — as the design shows it read-only (the quick line's "@500" goes); `discount_percent` 0–100 with 2 decimals, so a typed "Final" maps back exactly; `overall_discount` is an amount, at most what the lines come to after their discounts (the design's % field sends the amount — `schema-routes.md` already says amount). |
 | B10 | **Lowest price**: a line's net per unit (after its share of the overall discount, before GST) below the offering's `min_price` → `400 below_lowest_price` (O16 — nobody bills below it; the message shows the floor only with `offering:lower_price:read`). |
 | B11 | **Numbers as built**: `invoice_sequence` "#1042" (organization-wide, for search) and the statutory `invoice_number` per branch and financial year (April–March, "2026-27/0412"), both from triggers and never reused. Because the number depends on them, `branch_id` can't change and `invoice_date` can't move to another financial year (`400`) — today a `PATCH` leaves the number stale. |
 | B12 | **Editing until settled**: an invoice can be changed until it has a payment on a closed day (`409 invoice_settled` — then a credit note, as `today.md`: "Changes now go through Cancel bill or Credit note"); the new total can't fall below what is paid (`409 below_paid`), the contact can't change once anything is paid, and every change is in the audit log (design: "Changes are logged"). Lines are kept by id: sent with an id = changed, without = added, left out = removed; a line whose patient offering has a spent session can't be removed or change its offering or quantity (`409 offering_in_use` — reverse its treatments first, 7, TR6), otherwise its patient offering follows. |
 | B13 | **A save does the rest in the same transaction**: a `treatment`, `package` or `lhr` line creates its patient offering (7, PK4) and links the treatments it bills (B28); a line carrying `patient_offering_suggestion_id` — or, when none is sent, the patient's live planned or accepted plan row for the same offering — is linked and the row marked accepted (7, PK7; design: "it links itself when the offering matches"); `payment` in the body (the drawer's "Paid now") records the receipt (8.C), up to the total. |
 | B14 | **Delete only unpaid**: nothing paid and no credit note (`409 invoice_paid`); its patient offerings go and come back with it (`409 offering_in_use` when one has a spent session); linked plan rows count as not invoiced while it is deleted. |
-| B15 | The team (`member_ids`, up to 10 — who is credited; the drawer fills the contact's team) is `invoice_members`. The prescription link is `patient_prescription_id` (module 7, PC15). |
+| B15 | The team (`member_ids`, up to 10 — who is credited; the drawer fills the contact's team) is `invoice_members`. The prescription link is `patient_prescription_id` (sub-domain 7, PC15). |
 | B28 | **A line bills the visit's treatments** (7, PK11): on a new or changed line, `patient_treatment_ids` (up to its sessions left) names the patient's treatments it pays for — done, of the line's offering, not yet billed (`400 patient_treatment_ids`; billed by another line meanwhile → `409 treatment_billed`). The save links each (`patient_treatments.patient_offering_id`) and spends its session in the same transaction (7, TR13). "Create invoice from visit" sends today's not-billed treatments this way; a line without them leaves its sessions to spend later. Links are added, never removed here — reversing the treatment removes one (7, TR6). |
 
 #### 8.A.2 Open questions
@@ -5125,7 +5134,7 @@ None.
 | `remark` | `varchar(500)` | yes | | printed |
 | `patient_prescription_id` | `bigint` | yes | | → patient_prescriptions `ON DELETE SET NULL` |
 
-Dropped: `items` (jsonb), `patient_id`, `medical_contact_id`, `medical_sale_id`, the patient-unless-medical check. Indexes: unique `public_id`; unique `(organization_id, invoice_sequence)`; unique `(organization_id, branch_id, financial_year, invoice_number)`; `WHERE deleted_at IS NULL`: `(organization_id, invoice_date DESC, id)`, `(contact_id, invoice_date DESC, id)` — the patient file's tab, `(branch_id, invoice_date)`, `(organization_id, invoice_date) WHERE due_amount > 0` — dues and module 10's reminder.
+Dropped: `items` (jsonb), `patient_id`, `medical_contact_id`, `medical_sale_id`, the patient-unless-medical check. Indexes: unique `public_id`; unique `(organization_id, invoice_sequence)`; unique `(organization_id, branch_id, financial_year, invoice_number)`; `WHERE deleted_at IS NULL`: `(organization_id, invoice_date DESC, id)`, `(contact_id, invoice_date DESC, id)` — the patient file's tab, `(branch_id, invoice_date)`, `(organization_id, invoice_date) WHERE due_amount > 0` — dues and sub-domain 10's reminder.
 RLS: organization policy, enabled and forced. Branch: application filter on `branch_id`.
 
 `app.invoice_items` (rows go with their invoice; a removed line is deleted)
@@ -5236,7 +5245,7 @@ None beyond 8.10.
 
 ---
 
-### 8.B Invoice credit notes — `billing/sub-domains/invoice-credit-notes/` — final
+### 8.B Invoice credit notes — `billing/invoice-credit-notes/` — final
 
 #### 8.B.1 Decisions
 
@@ -5318,13 +5327,13 @@ None beyond 8.10.
 
 ---
 
-### 8.C Payments — `billing/sub-domains/payments/` — final
+### 8.C Payments — `billing/payments/` — final
 
 #### 8.C.1 Decisions
 
 | # | Decision |
 | --- | --- |
-| B17 | **Kind fixes direction**: received — `receipt` (from a contact, optionally against one of their invoices; without one it is an advance) and `money_back` (money coming back to the clinic); paid — `expense` (category and payee required), `supplier_bill` (its purchase link lands with modules 11 and 9 — `bill_ref` and `bill_allocations` jsonb go) and `refund` (only through a credit note or a pending credit); `reversal` only through `/reverse`, opposite to what it undoes. `POST /payments` takes `receipt`, `money_back`, `expense`, `supplier_bill`. |
+| B17 | **Kind fixes direction**: received — `receipt` (from a contact, optionally against one of their invoices; without one it is an advance) and `money_back` (money coming back to the clinic); paid — `expense` (category and payee required), `supplier_bill` (its purchase link lands with sub-domains 11 and 9 — `bill_ref` and `bill_allocations` jsonb go) and `refund` (only through a credit note or a pending credit); `reversal` only through `/reverse`, opposite to what it undoes. `POST /payments` takes `receipt`, `money_back`, `expense`, `supplier_bill`. |
 | B18 | **Splits as columns**: `cash_amount`, `upi_amount`, `card_amount`, `credit_amount` with `CHECK (their sum = amount)` — the database holds "splits add up" (today unchecked jsonb), and the day close sums `cash_amount` directly. The API keeps `splits: [{ mode, amount }]`. `credit` is only a pending credit used on a bill (8.D). `amount` > 0 is checked in the app (today 0 passes and the database answers `500`). |
 | B19 | **Receipts**: against an invoice → that invoice's contact, at most its due (`409 more_than_due`). |
 | B20 | **Changes are recorded**: a payment changes only on an open day (B6); each `PATCH` writes the changed fields (before → after) to `app.payment_edits` in the same transaction — the ledger's "Edited 1× · last ₹600 UPI → ₹700 UPI" (today nothing records it) — read at `GET /payments/{payment_id}/edits`. Kind, direction and branch never change. |
@@ -5359,7 +5368,7 @@ None.
 | `note` | `varchar(280)` | yes | | |
 | `attachment_keys` | `text[]` | no | `'{}'` | `cardinality ≤ 5`; confirmed uploads |
 
-Dropped: `splits`, `bill_ref`, `bill_allocations` (modules 11 and 9 add typed purchase links), `day_close_id`, `is_checked_at_close`, `patient_id`, `credit_note_id` (renamed). Indexes: unique `public_id`; unique `(organization_id, payment_number)`; `WHERE deleted_at IS NULL`: `(organization_id, paid_at DESC, id)`, `(branch_id, paid_at)` — the day close's sums, `(contact_id, paid_at DESC) WHERE contact_id IS NOT NULL` — the patient file's tab; `(invoice_id)`, `(pending_credit_id)` `WHERE … IS NOT NULL`; unique `(reverses_payment_id)` and `(invoice_credit_note_id)` `WHERE … IS NOT NULL`.
+Dropped: `splits`, `bill_ref`, `bill_allocations` (sub-domains 11 and 9 add typed purchase links), `day_close_id`, `is_checked_at_close`, `patient_id`, `credit_note_id` (renamed). Indexes: unique `public_id`; unique `(organization_id, payment_number)`; `WHERE deleted_at IS NULL`: `(organization_id, paid_at DESC, id)`, `(branch_id, paid_at)` — the day close's sums, `(contact_id, paid_at DESC) WHERE contact_id IS NOT NULL` — the patient file's tab; `(invoice_id)`, `(pending_credit_id)` `WHERE … IS NOT NULL`; unique `(reverses_payment_id)` and `(invoice_credit_note_id)` `WHERE … IS NOT NULL`.
 RLS: organization policy, enabled and forced. Branch: application filter on `branch_id`.
 
 `app.payment_edits` (append-only — no `updated_*` or soft-delete columns): `payment_id` → payments `ON DELETE CASCADE`, `changes jsonb` (`{ field: { from, to } }`, changed fields only, `jsonb_typeof = 'object'`), `author_membership_id` → memberships `ON DELETE RESTRICT` (K2). Index `(payment_id, created_at DESC)`. RLS: organization policy, enabled and forced.
@@ -5447,13 +5456,13 @@ None beyond 8.10.
 
 ---
 
-### 8.D Pending credits — `billing/sub-domains/pending-credits/` — final
+### 8.D Pending credits — `billing/pending-credits/` — final
 
 #### 8.D.1 Decisions
 
 | # | Decision |
 | --- | --- |
-| B23 | **Who**: a contact (`contact_id`) or a typed name (`party_name`) — a supplier link lands with module 11; `party_kind` goes. Fields the design has and the table lacks: `invoice_id` ("For invoice"), `settle_by` ("Creates a task due then" — module 10) and `note` (≤ 300). Status: `open` until settled in full, then `given_back` · `got_back` · `used`, by how the last part was settled. |
+| B23 | **Who**: a contact (`contact_id`) or a typed name (`party_name`) — a supplier link lands with sub-domain 11; `party_kind` goes. Fields the design has and the table lacks: `invoice_id` ("For invoice"), `settle_by` ("Creates a task due then" — sub-domain 10) and `note` (≤ 300). Status: `open` until settled in full, then `given_back` · `got_back` · `used`, by how the last part was settled. |
 | B24 | **Settle in parts** — `POST /pending-credits/{pending_credit_id}/settle` with up to what is left (design: "partial amounts leave the remainder open"): `give` + money → a refund payment (with a credit note when the credit names an invoice); `take` + money → a `money_back` receipt; `give` + `use_on_bill` → a receipt on one of the party's invoices paid by `credit_amount` (no cash moves; design: "Use on next bill"). Each settlement is a payment pointing at the credit; `settled_amount` is their total, kept in the same transaction; the single `settled_payment_id` goes. Change, delete and restore only while nothing is settled. |
 
 #### 8.D.2 Open questions
@@ -5479,7 +5488,7 @@ None.
 | `source_payment_id` | `bigint` | yes | | → payments `ON DELETE SET NULL` |
 | `settle_by` | `date` | yes | | |
 
-Dropped: `party_kind`, `patient_id`, `settled_payment_id`. Indexes: unique `public_id`; unique `(organization_id, pending_credit_number)`; `WHERE deleted_at IS NULL`: `(organization_id, created_at DESC, id)`, `(organization_id, settle_by) WHERE status = 'open'` — module 10's reminder; `(contact_id) WHERE contact_id IS NOT NULL`.
+Dropped: `party_kind`, `patient_id`, `settled_payment_id`. Indexes: unique `public_id`; unique `(organization_id, pending_credit_number)`; `WHERE deleted_at IS NULL`: `(organization_id, created_at DESC, id)`, `(organization_id, settle_by) WHERE status = 'open'` — sub-domain 10's reminder; `(contact_id) WHERE contact_id IS NOT NULL`.
 RLS: organization policy, enabled and forced. Branch: none — the organization's (B4).
 
 #### 8.D.4 Permissions
@@ -5551,7 +5560,7 @@ None beyond 8.10.
 
 ---
 
-### 8.E Day closes — `billing/sub-domains/day-closes/` — final
+### 8.E Day closes — `billing/day-closes/` — final
 
 #### 8.E.1 Decisions
 
@@ -5650,20 +5659,20 @@ None beyond 8.10.
 | # | Change |
 | --- | --- |
 | BC22 | B25: `opening_source` `carried` / `recounted` with the carried default; who accepted; `expected_cash` and the generated `difference` at close; the reason check; reopen with `payment:delete` and a reason; drop the soft-delete columns and the unused update DTO |
-| BC23 | B26: the auto-close worker (`billing/sub-domains/day-closes/workers/`), its repeatable job in the scheduler, tests per the queue rules |
+| BC23 | B26: the auto-close worker (`billing/day-closes/workers/`), its repeatable job in the scheduler, tests per the queue rules |
 | BC24 | B27: write `app.day_close_events` at each step (the repository is never instantiated today); the live figures and `events` in the serializer |
 
 ---
 
-## 9. Stock — final (rev 2, confirmed 2026-10-08) — sub-domains 9.A–9.E
+## 9. Stock — final (rev 2, confirmed 2026-10-08) — nested sub-domains 9.A–9.E
 
-*Was module 12 before the restructure (2026-10-08) — layout only, no decision changed.*
+*Was sub-domain 12 before the restructure (2026-10-08) — layout only, no decision changed.*
 
-Code: the **`stock` module folder** — `src/domains/app/sub-domains/stock/` (only `stock.routes.ts` and `stock.container.ts` at the root, like `billing/`) with `sub-domains/stock-items/`, `stock-item-movements/`, `stock-counts/`, `stock-purchases/`, `stock-vendors/`.
+Code: the **`stock` sub-domain folder** — `src/domains/app/sub-domains/stock/` (only `stock.routes.ts` and `stock.container.ts` at the root, like `billing/`) with `stock-items/`, `stock-item-movements/`, `stock-counts/`, `stock-purchases/`, `stock-vendors/`.
 
-9.1 Decisions (whole module) · 9.2 Open questions · 9.3 Tables and relations · 9.4 Permissions · 9.5 Common to every route ·
-9.6 Objects returned · 9.7 Routes · 9.8 Request details · 9.9 Errors · 9.10 Rules worth knowing · 9.11 Code changes (whole module) ·
-9.12 Sub-domains · then **9.A Stock items · 9.B Stock item movements · 9.C Stock counts · 9.D Stock purchases · 9.E Stock vendors** — each with the same eleven sections: .1 Decisions ·
+9.1 Decisions (whole sub-domain) · 9.2 Open questions · 9.3 Tables and relations · 9.4 Permissions · 9.5 Common to every route ·
+9.6 Objects returned · 9.7 Routes · 9.8 Request details · 9.9 Errors · 9.10 Rules worth knowing · 9.11 Code changes (whole sub-domain) ·
+9.12 Nested sub-domains · then **9.A Stock items · 9.B Stock item movements · 9.C Stock counts · 9.D Stock purchases · 9.E Stock vendors** — each with the same eleven sections: .1 Decisions ·
 .2 Open questions · .3 Tables and relations · .4 Permissions · .5 Common to every route · .6 Objects returned · .7 Routes ·
 .8 Request details · .9 Errors · .10 Rules worth knowing · .11 Code changes
 
@@ -5673,13 +5682,13 @@ records — nothing moves an item's quantity (it stays 0), counts and purchases 
 an editable number. Route numbers run 1–28. Design: `clinic-stock.md`, `payments.md` (paying a purchase), `schema-routes.md`
 (StockItem, StockMovement, StockCount, StockPurchase, StockVendor).
 
-### 9.1 Decisions (whole module)
+### 9.1 Decisions (whole sub-domain)
 
-Taken on your standing answer "go with the recommendation" — confirmed 2026-10-08. A decision that belongs to one table is in its sub-domain.
+Taken on your standing answer "go with the recommendation" — confirmed 2026-10-08. A decision that belongs to one table is in its nested sub-domain.
 
 | # | Decision |
 | --- | --- |
-| S1 | **Folder and names**: the module folder `stock/` (routes and container only, like `billing/`); five sub-domains named after their tables (P22). An item's movements are its own — `app.stock_movements` → **`app.stock_item_movements`** (children carry the parent prefix, as `branch_rooms`), nested under `/stock-items/{stock_item_id}/movements`, with the organization-wide list at `/stock-item-movements` (the Movements tab). Count and purchase lines become rows — `app.stock_count_lines`, `app.stock_purchase_items` (no routes of their own, K1) — instead of unchecked jsonb. Public-id prefixes stay (`sitm_`, `smov_`, `scnt_`, `spur_`, `svnd_`). |
+| S1 | **Folder and names**: the sub-domain folder `stock/` (routes and container only, like `billing/`); five nested sub-domains named after their tables (P22). An item's movements are its own — `app.stock_movements` → **`app.stock_item_movements`** (children carry the parent prefix, as `branch_rooms`), nested under `/stock-items/{stock_item_id}/movements`, with the organization-wide list at `/stock-item-movements` (the Movements tab). Count and purchase lines become rows — `app.stock_count_lines`, `app.stock_purchase_items` (no routes of their own, K1) — instead of unchecked jsonb. Public-id prefixes stay (`sitm_`, `smov_`, `scnt_`, `spur_`, `svnd_`). |
 | S2 | **One code set, in the Clinic stock row**: `stock_item:read` · `create` · `update` · `delete` · `export` — items, movements, counts, purchases and vendors; `stock_vendor:*`, `stock_purchase:*` and `list:export` (here) go. Using, receiving, adjusting and reverting stock and counting are `stock_item:update`. Holders follow today's presets plus the design's Pharmacist: Owner and Admin everything; Therapist, Front desk and Pharmacist read, create and update (they use stock in procedures — PRD "clinic stock usage"); Accountant read and export. |
 | S3 | **Organization-wide** — no stock record has a branch (design: "See every branch" does not apply). Other option: stock per branch (`branch_id` on movements and a per-branch balance) — later, if clinics keep separate cupboards. |
 | S4 | **Quantities are exact decimals**: `numeric(12,3)` columns and plain numbers in the API (`quantity: 2.5`), instead of the design's `*_milli` integers (an engineering workaround PostgreSQL does not need). Other option: keep the `_milli` integers. |
@@ -5716,15 +5725,15 @@ tenancy.organizations
 A ──< B   one A has many B     A >── B   many A for one B     A ──> B   a column on A points at one B     A ─── B   at most one B per A
 ```
 
-Pointing at these from other modules: `payments.stock_purchase_id` (8 — the typed link module 8 left for supplier bills, S11).
+Pointing at these from other sub-domains: `payments.stock_purchase_id` (8 — the typed link sub-domain 8 left for supplier bills, S11).
 
 **PostgreSQL design**
 
-Standard columns on every record table (not repeated below): `id bigint` (identity), `public_id varchar(28)` unique, `organization_id bigint` → organizations `ON DELETE CASCADE`, `created_at` / `updated_at timestamptz`, `created_by_user_id` / `updated_by_user_id`, and — where it soft-deletes — `deleted_at`, `delete_reason`, `delete_note` with their three checks; RLS enabled and forced. Quantities are `numeric(12,3)`, money `numeric(12,2)`. RLS: organization policy, enabled and forced, on every table, link and line tables included; no branch rule (S3). Each table's design is in its sub-domain.
+Standard columns on every record table (not repeated below): `id bigint` (identity), `public_id varchar(28)` unique, `organization_id bigint` → organizations `ON DELETE CASCADE`, `created_at` / `updated_at timestamptz`, `created_by_user_id` / `updated_by_user_id`, and — where it soft-deletes — `deleted_at`, `delete_reason`, `delete_note` with their three checks; RLS enabled and forced. Quantities are `numeric(12,3)`, money `numeric(12,2)`. RLS: organization policy, enabled and forced, on every table, link and line tables included; no branch rule (S3). Each table's design is in its nested sub-domain.
 
 ### 9.4 Permissions
 
-One code set (S2), in the **Clinic stock** row of the Roles matrix; each sub-domain's routes repeat the gate.
+One code set (S2), in the **Clinic stock** row of the Roles matrix; each nested sub-domain's routes repeat the gate.
 
 | Code | Roles matrix | Allows | Routes | Held by default |
 | --- | --- | --- | --- | --- |
@@ -5734,7 +5743,7 @@ One code set (S2), in the **Clinic stock** row of the Roles matrix; each sub-dom
 | `stock_item:delete` | Clinic stock · Delete | delete or restore an item, an unpaid purchase, a vendor | 6, 7, 21, 22, 27, 28 | Owner, Admin |
 | `stock_item:export` | Clinic stock · Export | the items and purchases CSVs | 2, 17 | Owner, Admin, Accountant |
 
-Paying a purchase is a payment — `payment:create` (module 8).
+Paying a purchase is a payment — `payment:create` (sub-domain 8).
 
 ### 9.5 Common to every route
 
@@ -5749,7 +5758,7 @@ Paying a purchase is a payment — `payment:create` (module 8).
 
 ### 9.6 Objects returned
 
-Each sub-domain lists its own objects (9.A to 9.E, section .6):
+Each nested sub-domain lists its own objects (9.A to 9.E, section .6):
 
 | Object | Where |
 | --- | --- |
@@ -5761,9 +5770,9 @@ Each sub-domain lists its own objects (9.A to 9.E, section .6):
 
 ### 9.7 Routes
 
-Every route of the module in one table; each sub-domain repeats its own with the details.
+Every route of the sub-domain in one table; each nested sub-domain repeats its own with the details.
 
-| # | Method | Path | Purpose | Gate | Idem | Sub-domain |
+| # | Method | Path | Purpose | Gate | Idem | Nested sub-domain |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/stock-items` | The Items tab | `stock_item:read` | | 9.A Stock items |
 | 2 | GET | `/stock-items/exports` | The items CSV | `stock_item:export` | | 9.A Stock items |
@@ -5796,41 +5805,41 @@ Every route of the module in one table; each sub-domain repeats its own with the
 
 ### 9.8 Request details
 
-In each sub-domain (9.A to 9.E, section .8).
+In each nested sub-domain (9.A to 9.E, section .8).
 
 ### 9.9 Errors
 
-Every route can answer the errors in 9.5; each route's own errors are in its sub-domain (9.A to 9.E, section .9).
+Every route can answer the errors in 9.5; each route's own errors are in its nested sub-domain (9.A to 9.E, section .9).
 
 ### 9.10 Rules worth knowing
 
 - "Use" (the popover), "Receive stock", "Log usage", "Damaged", "Returned" and "Adjust count" are all one route — a movement on the item (route 10); "Undo" on the toast is a revert (route 12), so both rows stay in the history.
 - "⚡ Reorder low items" fills a purchase from `GET /stock-items?stock_level=low`, each at maximum − quantity.
 - Low stock shows in the list (`stock_level`, `lasts_days`); no task is raised for it — the design has none.
-- The Items and Purchases lists can be saved as views (module 2 — `stock_items`, `stock_purchases`).
+- The Items and Purchases lists can be saved as views (sub-domain 2 — `stock_items`, `stock_purchases`).
 
-### 9.11 Code changes (whole module)
+### 9.11 Code changes (whole sub-domain)
 
 | # | Change |
 | --- | --- |
-| SC1 | S1: move the five folders into `app/sub-domains/stock/sub-domains/` with `stock.routes.ts` / `stock.container.ts`; rename `app.stock_movements` → `app.stock_item_movements` (init migration, schemas, indexes, constraints, RLS, the FORCE-RLS and purge lists); new `app.stock_count_lines` and `app.stock_purchase_items` replacing the jsonb `lines`; the routes and path ids |
+| SC1 | S1: move the five folders into `app/sub-domains/stock/` with `stock.routes.ts` / `stock.container.ts`; rename `app.stock_movements` → `app.stock_item_movements` (init migration, schemas, indexes, constraints, RLS, the FORCE-RLS and purge lists); new `app.stock_count_lines` and `app.stock_purchase_items` replacing the jsonb `lines`; the routes and path ids |
 | SC2 | S2: codes `stock_item:read\|create\|update\|delete\|export` (app permissions, catalog seed, presets — Pharmacist added, the Clinic stock row with Export); drop `stock_vendor:*`, `stock_purchase:*` and `list:export` here |
 | SC3 | S4: `*_milli` integers → `numeric(12,3)` columns and decimal fields in DTOs and serializers |
 | SC4 | S5: the guarded balance update in the movement service, used by every writer (items, movements, counts, purchases) |
 
-### 9.12 Sub-domains
+### 9.12 Nested sub-domains
 
-| Sub-domain | Folder (`src/domains/app/sub-domains/stock/…`) | Tables | Routes | Status |
+| Nested sub-domain | Folder (`src/domains/app/sub-domains/stock/…`) | Tables | Routes | Status |
 | --- | --- | --- | --- | --- |
-| 9.A Stock items | `sub-domains/stock-items/` | `app.stock_items` | 1–7 | final |
-| 9.B Stock item movements | `sub-domains/stock-item-movements/` | `app.stock_item_movements` | 8–12 | final |
-| 9.C Stock counts | `sub-domains/stock-counts/` | `app.stock_counts`, `app.stock_count_lines` | 13–15 | final |
-| 9.D Stock purchases | `sub-domains/stock-purchases/` | `app.stock_purchases`, `app.stock_purchase_items` | 16–22 | final |
-| 9.E Stock vendors | `sub-domains/stock-vendors/` | `app.stock_vendors` | 23–28 | final |
+| 9.A Stock items | `stock-items/` | `app.stock_items` | 1–7 | final |
+| 9.B Stock item movements | `stock-item-movements/` | `app.stock_item_movements` | 8–12 | final |
+| 9.C Stock counts | `stock-counts/` | `app.stock_counts`, `app.stock_count_lines` | 13–15 | final |
+| 9.D Stock purchases | `stock-purchases/` | `app.stock_purchases`, `app.stock_purchase_items` | 16–22 | final |
+| 9.E Stock vendors | `stock-vendors/` | `app.stock_vendors` | 23–28 | final |
 
 ---
 
-### 9.A Stock items — `stock/sub-domains/stock-items/` — final
+### 9.A Stock items — `stock/stock-items/` — final
 
 #### 9.A.1 Decisions
 
@@ -5931,7 +5940,7 @@ None beyond 9.10.
 
 ---
 
-### 9.B Stock item movements — `stock/sub-domains/stock-item-movements/` — final
+### 9.B Stock item movements — `stock/stock-item-movements/` — final
 
 #### 9.B.1 Decisions
 
@@ -6029,7 +6038,7 @@ None beyond 9.10.
 
 ---
 
-### 9.C Stock counts — `stock/sub-domains/stock-counts/` — final
+### 9.C Stock counts — `stock/stock-counts/` — final
 
 #### 9.C.1 Decisions
 
@@ -6100,14 +6109,14 @@ None beyond 9.10.
 
 ---
 
-### 9.D Stock purchases — `stock/sub-domains/stock-purchases/` — final
+### 9.D Stock purchases — `stock/stock-purchases/` — final
 
 #### 9.D.1 Decisions
 
 | # | Decision |
 | --- | --- |
 | S10 | **Lines are what arrived**: `app.stock_purchase_items` (item, quantity > 0, rate, amount) — each writes a `received` movement and sets the item's `last_rate`, in the same transaction; "Not in the list · add as typed" creates the item in the same call. Lines can't change once saved (`409 purchase_received`); vendor, bill number, date and bill amount can. `bill_amount` defaults to the lines' total and may be changed (design), never below what is paid. No stages (design). |
-| S11 | **Paying is module 8's**: `paid_amount` is kept by supplier-bill payments that point at the purchase — `payments.stock_purchase_id`, `ON DELETE RESTRICT` (the typed link module 8 left for this module); the drawer's "Paid" records that payment in the same transaction (like an invoice's "Paid now"), category `consumables`; "Pay ₹1,710" opens Payments with the bill picked. `due_amount` and `payment_status` (`paid` · `partial` · `unpaid`) are generated columns, as on invoices. The vendor's payable = the open dues of its purchases. |
+| S11 | **Paying is sub-domain 8's**: `paid_amount` is kept by supplier-bill payments that point at the purchase — `payments.stock_purchase_id`, `ON DELETE RESTRICT` (the typed link sub-domain 8 left for this sub-domain); the drawer's "Paid" records that payment in the same transaction (like an invoice's "Paid now"), category `consumables`; "Pay ₹1,710" opens Payments with the bill picked. `due_amount` and `payment_status` (`paid` · `partial` · `unpaid`) are generated columns, as on invoices. The vendor's payable = the open dues of its purchases. |
 | S12 | **Delete only unpaid**: nothing paid (`409 purchase_paid`); deleting reverts its `received` movements (`409 not_enough_stock` when some was used since), restoring re-applies them. |
 
 #### 9.D.2 Open questions
@@ -6201,18 +6210,18 @@ None beyond 9.10.
 | # | Change |
 | --- | --- |
 | SC9 | S10: `app.stock_purchase_items` replacing `lines` jsonb; `received` movements and `last_rate` on create; quick items; lines fixed after save; the bill default |
-| SC10 | S11: `payments.stock_purchase_id` (module 8's table; `RESTRICT`, at most one purchase link per payment, supplier bills only); `paid_amount` kept by payments; "Paid" through the payment service; the generated `due_amount` / `payment_status`; `meta.due_total` |
+| SC10 | S11: `payments.stock_purchase_id` (sub-domain 8's table; `RESTRICT`, at most one purchase link per payment, supplier bills only); `paid_amount` kept by payments; "Paid" through the payment service; the generated `due_amount` / `payment_status`; `meta.due_total` |
 | SC11 | S12: delete only unpaid, reverting the received movements; restore re-applies them |
 
 ---
 
-### 9.E Stock vendors — `stock/sub-domains/stock-vendors/` — final
+### 9.E Stock vendors — `stock/stock-vendors/` — final
 
 #### 9.E.1 Decisions
 
 | # | Decision |
 | --- | --- |
-| S13 | Vendors are the stock module's own — never the medical store's suppliers (design). Name (unique, any case), phone, `is_quick` (true when a picker adds it inline — the design's stacked drawer). Derived `payable` = the open dues of its purchases. Delete only without open dues (`409 vendor_has_dues`); its items keep pointing nowhere (`SET NULL`), its purchases keep it (`RESTRICT`). |
+| S13 | Vendors are the stock sub-domain's own — never the medical store's suppliers (design). Name (unique, any case), phone, `is_quick` (true when a picker adds it inline — the design's stacked drawer). Derived `payable` = the open dues of its purchases. Delete only without open dues (`409 vendor_has_dues`); its items keep pointing nowhere (`SET NULL`), its purchases keep it (`RESTRICT`). |
 
 #### 9.E.2 Open questions
 
@@ -6284,15 +6293,15 @@ None beyond 9.10.
 
 ---
 
-## 10. Tasks & rules — final (rev 1, confirmed 2026-10-08) — sub-domains 10.A–10.B
+## 10. Tasks & rules — final (rev 1, confirmed 2026-10-08) — nested sub-domains 10.A–10.B
 
-*Was module 13 before the restructure (2026-10-08) — layout only, no decision changed.*
+*Was sub-domain 13 before the restructure (2026-10-08) — layout only, no decision changed.*
 
-Code: the **`tasks` module folder** — `src/domains/app/sub-domains/tasks/` (the task itself at the folder root, with `app.task_owner_changes` beside it — no routes of its own, K1) with `sub-domains/task-rule-settings/`.
+Code: the **`tasks` sub-domain folder** — `src/domains/app/sub-domains/tasks/` (the task itself at the folder root, with `app.task_owner_changes` beside it — no routes of its own, K1) with `task-rule-settings/`.
 
-10.1 Decisions (whole module) · 10.2 Open questions · 10.3 Tables and relations · 10.4 Permissions · 10.5 Common to every route ·
-10.6 Objects returned · 10.7 Routes · 10.8 Request details · 10.9 Errors · 10.10 Rules worth knowing · 10.11 Code changes (whole module) ·
-10.12 Sub-domains · then **10.A Tasks · 10.B Task rule settings** — each with the same eleven sections: .1 Decisions ·
+10.1 Decisions (whole sub-domain) · 10.2 Open questions · 10.3 Tables and relations · 10.4 Permissions · 10.5 Common to every route ·
+10.6 Objects returned · 10.7 Routes · 10.8 Request details · 10.9 Errors · 10.10 Rules worth knowing · 10.11 Code changes (whole sub-domain) ·
+10.12 Nested sub-domains · then **10.A Tasks · 10.B Task rule settings** — each with the same eleven sections: .1 Decisions ·
 .2 Open questions · .3 Tables and relations · .4 Permissions · .5 Common to every route · .6 Objects returned · .7 Routes ·
 .8 Request details · .9 Errors · .10 Rules worth knowing · .11 Code changes
 
@@ -6302,13 +6311,13 @@ rule exists (a check-in that feels worse), nothing closes or wakes a task, and n
 Route numbers run 1–12. Design: `tasks.md`, `today.md`, `schema-routes.md` (Task, TaskRuleSetting, `task_kind`,
 `task_outcome`), `users.md` (Tasks row).
 
-### 10.1 Decisions (whole module)
+### 10.1 Decisions (whole sub-domain)
 
-Taken on your standing answer "go with the recommendation" — confirmed 2026-10-08. A decision that belongs to one table is in its sub-domain.
+Taken on your standing answer "go with the recommendation" — confirmed 2026-10-08. A decision that belongs to one table is in its nested sub-domain.
 
 | # | Decision |
 | --- | --- |
-| TK1 | **Folder and names**: the task at the root of `tasks/`; `app.task_owner_changes` beside it — written by a reassignment and read inside the task (no routes of its own, K1); `task-rule-settings/` its one sub-domain. Public-id prefixes stay (`task_`, `toc_`, `trs_`). |
+| TK1 | **Folder and names**: the task at the root of `tasks/`; `app.task_owner_changes` beside it — written by a reassignment and read inside the task (no routes of its own, K1); `task-rule-settings/` its one nested sub-domain. Public-id prefixes stay (`task_`, `toc_`, `trs_`). |
 | TK2 | **One code set, in the Tasks row**: `task:read` · `create` · `update` · `delete` · `export` (`list:export` here goes). Turning rules on and off is an organization setting — `organization:update` (Owner, Admin) replaces the special `task_rule:update`. Holders follow the design (`users.md`, `tasks.md`): Owner and Admin everything; Doctor, Therapist, Front desk and Counsellor read, create and update (the therapist makes the aftercare calls, and `tasks.md` lets everyone who sees a task take its outcome); Pharmacist, Accountant and Marketing see no tasks by default (today every role holds `task:read` · `create` · `update`). |
 | TK3 | **Mine and Everyone** (`tasks.md`): `scope=mine` (default) = owned by me, or unowned in the queue of one of my roles; `scope=everyone` = every task — for everyone who sees tasks (PRD says only the Owner; the screen spec wins). A task carries its record's branch (lead, appointment, invoice) and is filtered like that record (`branch:read` sees every branch; no branch = every branch) — a lead's task must not show a lead the caller cannot see. |
 | TK4 | **The server opens and closes rule tasks**: a worker — pull-based, one job per organization every 5 minutes, under the queue rules — opens a task for each record that meets a rule that is on, and closes the open ones whose record no longer does ("Done by Clinozy" — `tasks.md`: "A task closes itself when its record changes"). A rule that fires on a write (a check-in or review needing action, 8 TR4) opens its task in that write's transaction through the same service. One open task per rule per record: a unique partial index on `(rule_key, source_key)` — today nothing stops duplicates. Snoozed tasks wake when their time comes (today they never do). |
@@ -6342,11 +6351,11 @@ Pointing at tasks: `contact_activities.task_id` (4).
 
 **PostgreSQL design**
 
-Standard columns on every record table (not repeated below): `id bigint` (identity), `public_id varchar(28)` unique, `organization_id bigint` → organizations `ON DELETE CASCADE`, `created_at` / `updated_at timestamptz`, `created_by_user_id` / `updated_by_user_id`, and — where it soft-deletes — `deleted_at`, `delete_reason`, `delete_note` with their three checks; RLS enabled and forced. RLS: organization policy, enabled and forced, on every table. Each table's design is in its sub-domain.
+Standard columns on every record table (not repeated below): `id bigint` (identity), `public_id varchar(28)` unique, `organization_id bigint` → organizations `ON DELETE CASCADE`, `created_at` / `updated_at timestamptz`, `created_by_user_id` / `updated_by_user_id`, and — where it soft-deletes — `deleted_at`, `delete_reason`, `delete_note` with their three checks; RLS enabled and forced. RLS: organization policy, enabled and forced, on every table. Each table's design is in its nested sub-domain.
 
 ### 10.4 Permissions
 
-One code set (TK2), in the **Tasks** row of the Roles matrix; each sub-domain's routes repeat the gate.
+One code set (TK2), in the **Tasks** row of the Roles matrix; each nested sub-domain's routes repeat the gate.
 
 | Code | Roles matrix | Allows | Routes | Held by default |
 | --- | --- | --- | --- | --- |
@@ -6370,7 +6379,7 @@ One code set (TK2), in the **Tasks** row of the Roles matrix; each sub-domain's 
 
 ### 10.6 Objects returned
 
-Each sub-domain lists its own objects (10.A to 10.B, section .6):
+Each nested sub-domain lists its own objects (10.A to 10.B, section .6):
 
 | Object | Where |
 | --- | --- |
@@ -6379,9 +6388,9 @@ Each sub-domain lists its own objects (10.A to 10.B, section .6):
 
 ### 10.7 Routes
 
-Every route of the module in one table; each sub-domain repeats its own with the details.
+Every route of the sub-domain in one table; each nested sub-domain repeats its own with the details.
 
-| # | Method | Path | Purpose | Gate | Idem | Sub-domain |
+| # | Method | Path | Purpose | Gate | Idem | Nested sub-domain |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | GET | `/tasks` | The Tasks tabs — To do, Snoozed, Done | `task:read` | | 10.A Tasks |
 | 2 | GET | `/tasks/exports` | The tasks CSV | `task:export` | | 10.A Tasks |
@@ -6398,35 +6407,35 @@ Every route of the module in one table; each sub-domain repeats its own with the
 
 ### 10.8 Request details
 
-In each sub-domain (10.A to 10.B, section .8).
+In each nested sub-domain (10.A to 10.B, section .8).
 
 ### 10.9 Errors
 
-Every route can answer the errors in 10.5; each route's own errors are in its sub-domain (10.A to 10.B, section .9).
+Every route can answer the errors in 10.5; each route's own errors are in its nested sub-domain (10.A to 10.B, section .9).
 
 ### 10.10 Rules worth knowing
 
 - Today's work queue (`today.md`) is its own list, not these tasks.
 - A rule that is off hides its open tasks from every tab; turning it on again shows them (design: "drop out of every tab").
 - Outcomes act on the record: "Doing well" writes a Better check-in (7), `unhappy` on a feedback task opens a `call_back`, "Claim it" claims the lead (5).
-- The Tasks list can be saved as a view (module 2 — `tasks`).
+- The Tasks list can be saved as a view (sub-domain 2 — `tasks`).
 
-### 10.11 Code changes (whole module)
+### 10.11 Code changes (whole sub-domain)
 
 | # | Change |
 | --- | --- |
-| TKC1 | TK1: `app.task_owner_changes` written (today never) and read inside the task; `task-rule-settings/` under `tasks/sub-domains/` |
+| TKC1 | TK1: `app.task_owner_changes` written (today never) and read inside the task; `task-rule-settings/` under `tasks/` |
 | TKC2 | TK2: `task:export`; drop the special `task_rule:update` and `list:export` here; rule settings gated by `organization:update`; presets per the design (Pharmacist, Accountant, Marketing lose the task codes from `EVERY_ROLE_CODES`) |
 | TKC3 | TK3: `scope`; `branch_id` copied from the record; the branch filter |
-| TKC4 | TK4: the rules worker (domain-owned under `tasks/workers/`, its repeatable job in the scheduler, tests per the queue rules); automatic close; snooze wake-up; the unique open-task index; module 7's write-time call-back through the task service |
+| TKC4 | TK4: the rules worker (domain-owned under `tasks/workers/`, its repeatable job in the scheduler, tests per the queue rules); automatic close; snooze wake-up; the unique open-task index; sub-domain 7's write-time call-back through the task service |
 | TKC5 | TK5: `contact_id` and the typed links replace `patient_id`, `source_type`, `source_id`; the generated `source_key` |
 
-### 10.12 Sub-domains
+### 10.12 Nested sub-domains
 
-| Sub-domain | Folder (`src/domains/app/sub-domains/tasks/…`) | Tables | Routes | Status |
+| Nested sub-domain | Folder (`src/domains/app/sub-domains/tasks/…`) | Tables | Routes | Status |
 | --- | --- | --- | --- | --- |
 | 10.A Tasks | folder root | `app.tasks`, `app.task_owner_changes` | 1–10 | final |
-| 10.B Task rule settings | `sub-domains/task-rule-settings/` | `app.task_rule_settings` | 11–12 | final |
+| 10.B Task rule settings | `task-rule-settings/` | `app.task_rule_settings` | 11–12 | final |
 
 ---
 
@@ -6438,7 +6447,7 @@ Every route can answer the errors in 10.5; each route's own errors are in its su
 | --- | --- |
 | TK6 | **Kinds and owners**: `kind` is `rule` (with its `rule_key`) · `follow_up` (from "What's next" — the design's "Follow-ups you set") · `manual` — the seven old kinds go (the rule key already says what a rule task is). A task has an owner (`owner_membership_id`) or, when nobody has it yet, a role queue (`owner_role`) — one of the two (design: "null = role queue"; today `owner_role` is required and defaults to `admin`). An owner must be an active member who can see tasks. |
 | TK7 | **Lifecycle**: `open` → `snoozed` (until a future time — the worker wakes it) → `done` (by hand with an outcome, or by Clinozy). Outcomes stay effect codes — `done` · `no_answer` (snoozes 3 h) · `doing_well` (writes a Better check-in, 7) · `log_check_in` · `happy` · `unhappy` (opens a `call_back`) — and the design's ~40 per-rule labels are the `result_text` (≤ 200). Resolving may set the next step (design "What's next": title, due, owner, note) — a `follow_up` task in the same transaction. Rule tasks are never edited (design); `PATCH` changes a `manual` or `follow_up` task's title, why, due and priority only (`409 rule_task`). `should_remind_before` (never used) goes. |
-| TK8 | **Reassign** (`POST …/reassign`) to a member or a role queue writes a `task_owner_changes` row (from → to, by whom); the task shows who had it (design: "Was A → B"). A lead's task also moves the lead's owner through the lead service (module 5's claim rules). A member who leaves (K4): their open tasks go back to their role queue, each with an owner-change row. |
+| TK8 | **Reassign** (`POST …/reassign`) to a member or a role queue writes a `task_owner_changes` row (from → to, by whom); the task shows who had it (design: "Was A → B"). A lead's task also moves the lead's owner through the lead service (sub-domain 5's claim rules). A member who leaves (K4): their open tasks go back to their role queue, each with an owner-change row. |
 | TK9 | **Delete** only `manual` and `follow_up` tasks (soft, with a reason, restore); a rule task goes when its record changes or its rule is turned off. |
 
 #### 10.A.2 Open questions
@@ -6576,13 +6585,13 @@ The rules — each opens one task per record while its condition holds, and clos
 
 ---
 
-### 10.B Task rule settings — `tasks/sub-domains/task-rule-settings/` — final
+### 10.B Task rule settings — `tasks/task-rule-settings/` — final
 
 #### 10.B.1 Decisions
 
 | # | Decision |
 | --- | --- |
-| TK10 | **One switch per rule** for the organization: `is_on` and `is_automatic` ("Let Clinozy handle"); no row = on, by hand. `PUT` saves the sent rules in one transaction (today row by row, so a save can half-apply) and needs `organization:update` (TK2). "Let Clinozy handle" works only for rules with a step the server can take — `confirm` (the confirmation message), `payment_due` (the reminder message), `feedback` (the review request), `gone_quiet` (the re-target lead) — the worker takes it and resolves the task "Done by Clinozy"; for the others it is refused (`400`). There are no thresholds (the design has none — a lead's hold length is module 5's). The soft-delete columns go. |
+| TK10 | **One switch per rule** for the organization: `is_on` and `is_automatic` ("Let Clinozy handle"); no row = on, by hand. `PUT` saves the sent rules in one transaction (today row by row, so a save can half-apply) and needs `organization:update` (TK2). "Let Clinozy handle" works only for rules with a step the server can take — `confirm` (the confirmation message), `payment_due` (the reminder message), `feedback` (the review request), `gone_quiet` (the re-target lead) — the worker takes it and resolves the task "Done by Clinozy"; for the others it is refused (`400`). There are no thresholds (the design has none — a lead's hold length is sub-domain 5's). The soft-delete columns go. |
 
 #### 10.B.2 Open questions
 

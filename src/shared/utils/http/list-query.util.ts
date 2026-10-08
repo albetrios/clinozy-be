@@ -78,13 +78,23 @@ export function buildSearchCondition(
   return conditions.length === 1 ? conditions[0] : or(...conditions);
 }
 
-/** SHA-256 fingerprint of the sort/filter set a cursor was minted under (stable key order). */
+/**
+ * SHA-256 fingerprint of the sort/filter set a cursor was minted under (stable key order). A list
+ * with filters beyond `q` passes them in `filters`, so a cursor never crosses to another filter set;
+ * without `filters` the fingerprint is the same as before.
+ */
 export function computeListFilterFingerprint(parts: {
   q: string | undefined;
   sort: string;
   order: 'asc' | 'desc';
+  filters?: Readonly<Record<string, unknown>> | undefined;
 }): string {
-  const normalized = { q: parts.q ?? '', sort: parts.sort, order: parts.order };
+  const normalized = {
+    q: parts.q ?? '',
+    sort: parts.sort,
+    order: parts.order,
+    ...(parts.filters === undefined ? {} : { filters: parts.filters }),
+  };
   return createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
 }
 
@@ -109,6 +119,8 @@ export function resolveKeysetSort<Row>(args: {
   sort: string | undefined;
   order?: 'asc' | 'desc' | undefined;
   q?: string | undefined;
+  /** The list's other filters, folded into the cursor fingerprint. */
+  filters?: Readonly<Record<string, unknown>> | undefined;
   after: string | undefined;
 }): {
   sortField: string;
@@ -130,6 +142,7 @@ export function resolveKeysetSort<Row>(args: {
     q: args.q,
     sort: sortField,
     order: effectiveOrder,
+    filters: args.filters,
   });
 
   // Ignore a cursor minted under a different sort/filter — restart rather than interleave pages.

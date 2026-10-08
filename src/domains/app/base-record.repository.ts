@@ -19,7 +19,7 @@ import { BaseRepository } from '@/infrastructure/database/base-repository.js';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
-import { branch_user_accesses } from '@/domains/app/sub-domains/branches/branch-user-accesses/branch-user-accesses.schema.js';
+import { branch_members } from '@/domains/app/sub-domains/branches/branch-members/branch-members.schema.js';
 import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
 import { buildSearchCondition } from '@/shared/utils/http/list-query.util.js';
 import { createOpaqueCursorFromRow, parseListCursor } from '@/shared/utils/http/pagination.util.js';
@@ -92,7 +92,7 @@ export interface BaseRecordLinkTable {
   ownerColumn: string;
   /** The column naming the referenced record (e.g. `branch_id`). */
   targetColumn: string;
-  /** The referenced table (has `id`, `public_id`, `deleted_at`). */
+  /** The referenced table (has `id`, `public_id`, and `deleted_at` when it is soft-deleted). */
   targetTable: PgTable;
 }
 
@@ -101,6 +101,15 @@ export function columnOf(table: PgTable, name: string): AnyPgColumn {
   const column = (getTableColumns(table) as Record<string, AnyPgColumn>)[name];
   if (!column) throw new Error(`Column ${name} is not on this table`);
   return column;
+}
+
+/**
+ * The live-row filter of `table`: `deleted_at IS NULL`, or none for a table that is never
+ * soft-deleted (`app.branches` retires with `is_active` instead).
+ */
+function liveRowFilter(table: PgTable): SQL | undefined {
+  const deletedAt = (getTableColumns(table) as Record<string, AnyPgColumn>).deleted_at;
+  return deletedAt ? isNull(deletedAt) : undefined;
 }
 
 /**
@@ -128,7 +137,7 @@ export async function resolveRecordIds(options: {
       and(
         inArray(publicIdColumn, unique),
         eq(columnOf(options.table, 'organization_id'), options.organizationId),
-        isNull(columnOf(options.table, 'deleted_at')),
+        liveRowFilter(options.table),
       ),
     )) as { id: number; public_id: string }[];
   return new Map(rows.map((row) => [row.public_id, row.id]));
@@ -176,9 +185,7 @@ export async function listLinkedPublicIds(options: {
     .select({ owner_id: owner, public_id: columnOf(link.targetTable, 'public_id') })
     .from(link.table)
     .innerJoin(link.targetTable, eq(columnOf(link.targetTable, 'id'), target))
-    .where(
-      and(inArray(owner, [...options.ownerIds]), isNull(columnOf(link.targetTable, 'deleted_at'))),
-    )
+    .where(and(inArray(owner, [...options.ownerIds]), liveRowFilter(link.targetTable)))
     .orderBy(columnOf(link.table, 'created_at'))) as { owner_id: number; public_id: string }[];
   for (const row of rows) {
     const list = byOwner.get(row.owner_id) ?? [];
@@ -234,7 +241,7 @@ export async function replaceLinkedIds(options: {
  * The live, active branches the user is given in the organization, as ids (D9).
  *
  * @remarks
- * - **Algorithm:** `app.branch_user_accesses` joined to the user's live membership — the same
+ * - **Algorithm:** `app.branch_members` joined to the user's live membership — the same
  *   rows `GET /app/branches/my` lists.
  */
 export async function listVisibleBranchIds(options: {
@@ -244,12 +251,11 @@ export async function listVisibleBranchIds(options: {
   const rows = await getRequestDatabase()
     .select({ id: branches.id })
     .from(branches)
-    .innerJoin(branch_user_accesses, eq(branch_user_accesses.branch_id, branches.id))
-    .innerJoin(memberships, eq(memberships.id, branch_user_accesses.membership_id))
+    .innerJoin(branch_members, eq(branch_members.branch_id, branches.id))
+    .innerJoin(memberships, eq(memberships.id, branch_members.membership_id))
     .where(
       and(
         eq(branches.organization_id, options.organizationId),
-        isNull(branches.deleted_at),
         eq(branches.is_active, true),
         eq(memberships.user_id, options.userId),
         isNull(memberships.deleted_at),
@@ -311,11 +317,7 @@ export async function findBranchBookingHours(options: {
     })
     .from(branches)
     .where(
-      and(
-        eq(branches.id, options.branchId),
-        eq(branches.organization_id, options.organizationId),
-        isNull(branches.deleted_at),
-      ),
+      and(eq(branches.id, options.branchId), eq(branches.organization_id, options.organizationId)),
     )
     .limit(1);
   return rows[0] ?? null;

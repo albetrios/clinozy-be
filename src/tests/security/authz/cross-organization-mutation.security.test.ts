@@ -23,7 +23,7 @@ import { generateTestToken } from '@/tests/helpers/test-auth.js';
 import { seedTwoOrganizationsWithSubscriptions } from '@/tests/helpers/test-organization.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { database } from '@/infrastructure/database/connection.js';
-import { member_invitations } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.schema.js';
+import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
 
 /**
  * Cross-organization MUTATION isolation matrix â€” model `organization` (write side) in
@@ -101,9 +101,9 @@ describe('Security: cross-organization mutation isolation (model: organization â
       status: 'INVITED',
     });
     const [invitation] = await database
-      .insert(member_invitations)
+      .insert(membership_invitations)
       .values({
-        public_id: generatePublicId('memberInvitation'),
+        public_id: generatePublicId('membershipInvitation'),
         membership_id: inviteeMembership.id,
         email: invitee.email,
         token_hash: createHash('sha256').update(randomUUID()).digest('hex'),

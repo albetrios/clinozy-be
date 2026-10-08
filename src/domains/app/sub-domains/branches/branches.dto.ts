@@ -4,10 +4,15 @@ import {
   addEndAfterStartIssue,
   phoneNumberSchema,
   chipToneSchema,
+  expectedUpdatedAtSchema,
   hourMinuteSchema,
   workingDaysSchema,
 } from '@/shared/utils/validation/record-fields.util.js';
-import { BRANCH_GST_NUMBER_PATTERN, BRANCH_POSTAL_CODE_PATTERN } from './branches.constants.js';
+import {
+  BRANCH_GST_NUMBER_PATTERN,
+  BRANCH_MEMBERSHIP_IDS_MAX,
+  BRANCH_POSTAL_CODE_PATTERN,
+} from './branches.constants.js';
 
 const membershipPublicId = trimmedStringMinMax(1, 28);
 const httpsLink = trimmedString()
@@ -70,10 +75,19 @@ export const listBranchesQueryDto = z
   })
   .strict();
 
-/** Body of `POST /app/branches`. */
-export const CreateBranchDto = z.object(branchCreateFields).strict().superRefine(closesAfterOpens);
+/** Body of `POST /app/branches` — `membership_ids` are who works there from day one (D13). */
+export const CreateBranchDto = z
+  .object({
+    ...branchCreateFields,
+    membership_ids: z.array(membershipPublicId).max(BRANCH_MEMBERSHIP_IDS_MAX).optional(),
+  })
+  .strict()
+  .superRefine(closesAfterOpens);
 
-/** Body of `PATCH /app/branches/{branch_id}` — any field, at least one. */
+/**
+ * Body of `PATCH /app/branches/{branch_id}` — any field, at least one; `expected_updated_at` refuses
+ * a stale save (C12). Who works there changes through `PUT …/members` (D2).
+ */
 export const UpdateBranchDto = z
   .object({
     ...branchCreateFields,
@@ -84,9 +98,12 @@ export const UpdateBranchDto = z
     postal_code: branchCreateFields.postal_code.optional(),
     phone: branchCreateFields.phone.optional(),
     email: branchCreateFields.email.optional(),
+    expected_updated_at: expectedUpdatedAtSchema,
   })
   .strict()
-  .refine((value) => Object.keys(value).length > 0, { message: 'Send at least one field' })
+  .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
+    message: 'Send at least one field',
+  })
   .superRefine(closesAfterOpens);
 
 /** Parsed {@link listBranchesQueryDto}. */

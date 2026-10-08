@@ -19,7 +19,7 @@ import { organization_settings } from '@/domains/tenancy/sub-domains/organizatio
 import { organization_notification_policies } from '@/domains/tenancy/sub-domains/organization/organization-notification-policy/organization-notification-policy.schema.js';
 import { api_keys } from '@/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.schema.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
-import { branch_user_accesses } from '@/domains/app/sub-domains/branches/branch-user-accesses/branch-user-accesses.schema.js';
+import { branch_members } from '@/domains/app/sub-domains/branches/branch-members/branch-members.schema.js';
 import { membership_additional_roles } from '@/domains/tenancy/sub-domains/membership/membership-additional-roles/membership-additional-roles.schema.js';
 import { user_settings } from '@/domains/user/sub-domains/user-settings/user-settings.schema.js';
 import { user_data_exports } from '@/domains/user/sub-domains/user-data-export/user-data-export.schema.js';
@@ -77,13 +77,13 @@ export type RlsUserFixture = {
 /** Tables excluded from generic UPDATE/DELETE matrix (policy shape or parent FK setup). */
 export const RLS_MATRIX_SKIP_CRUD_TABLES = new Set([
   tableKey('tenancy', 'organizations'),
-  tableKey('tenancy', 'member_invitations'),
+  tableKey('tenancy', 'membership_invitations'),
   tableKey('tenancy', 'role_permissions'),
   tableKey('tenancy', 'organization_settings'),
   // Composite key (branch_id, membership_id), no `id` — cross-organization isolation is asserted
   // through the user-accesses routes in the authz security suites.
-  tableKey('app', 'branch_user_accesses'),
-  // Composite key (membership_id, role_id), no `id` — same reason as branch_user_accesses.
+  tableKey('app', 'branch_members'),
+  // Composite key (membership_id, role_id), no `id` — same reason as branch_members.
   tableKey('tenancy', 'membership_additional_roles'),
   tableKey('notify', 'webhook_delivery_attempts'),
   tableKey('auth', 'verification_tokens'),
@@ -393,7 +393,7 @@ export async function seedRlsMatrixFixtures(): Promise<RlsTenantFixture> {
     organizationA: branchA!.id,
     organizationB: branchB!.id,
   });
-  await database.insert(branch_user_accesses).values([
+  await database.insert(branch_members).values([
     { branch_id: branchA!.id, membership_id: membershipA.id, organization_id: organizationA.id },
     { branch_id: branchB!.id, membership_id: membershipB.id, organization_id: organizationB.id },
   ]);

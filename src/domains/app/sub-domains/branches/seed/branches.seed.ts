@@ -3,7 +3,7 @@ import { getRequestDatabase } from '@/infrastructure/database/contexts/database-
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
-import { branch_user_accesses } from '@/domains/app/sub-domains/branches/branch-user-accesses/branch-user-accesses.schema.js';
+import { branch_members } from '@/domains/app/sub-domains/branches/branch-members/branch-members.schema.js';
 
 /** A branch to seed: its name and whether it is the organization's main branch. */
 export interface SeedBranchPayload {
@@ -27,7 +27,6 @@ export async function seedBranch(payload: SeedBranchPayload): Promise<number> {
       and(
         eq(branches.organization_id, payload.organization_id),
         sql`lower(${branches.name}) = lower(${payload.name})`,
-        isNull(branches.deleted_at),
       ),
     )
     .limit(1);
@@ -53,7 +52,7 @@ export async function seedBranch(payload: SeedBranchPayload): Promise<number> {
 }
 
 /** Gives the user's live membership in the organization access to the branch (idempotent). */
-export async function seedBranchUserAccess(options: {
+export async function seedBranchMember(options: {
   branch_id: number;
   organization_id: number;
   user_id: number;
@@ -71,7 +70,7 @@ export async function seedBranchUserAccess(options: {
     .limit(1);
   if (!membership) return;
   await getRequestDatabase()
-    .insert(branch_user_accesses)
+    .insert(branch_members)
     .values({
       branch_id: options.branch_id,
       membership_id: membership.id,

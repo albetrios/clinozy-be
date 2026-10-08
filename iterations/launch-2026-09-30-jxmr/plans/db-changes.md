@@ -7,7 +7,7 @@ is unclear) decides each table's physical design (types, indexes, constraints, t
 differences go into `AS-BUILT.md` and this file is synced with the final table and field names. See it drawn in the DB
 Viewer's plan mode: `pnpm db:viewer`, then click this iteration under ◇ Plans.
 
-Status: the 2026-10-03 plan, synced with the route review per module from 2026-10-08 (see Route review sync). Planning Step 5: D1–D44 and the Reconciliation P verdicts applied; each table has its ROUTE row in KICKOFF.md
+Status: the 2026-10-03 plan, synced with the route review per sub-domain from 2026-10-08 (see Route review sync). Planning Step 5: D1–D44 and the Reconciliation P verdicts applied; each table has its ROUTE row in KICKOFF.md
 ([coverage.md › Reconciliation](coverage.md#reconciliation)); every screen-only field was answered. Mode initial
 (Baseline `none`) · Intake hash `036cbb592ac5`.
 
@@ -32,10 +32,10 @@ reason — `schema-routes.md:126–134`, plus `updated_by` — `patients.md:28`)
 
 ## Route review sync (2026-10-08)
 
-The route review ([routes-final.md](routes-final.md), [D46](decisions.md)) is the design now. Its tables, by module, as
+The route review ([routes-final.md](routes-final.md), [D46](decisions.md)) is the design now. Its tables, by sub-domain, as
 its table designs name them (60 tables; the medical store's wait for its own review, [D49](decisions.md)):
 
-| Module | Tables (route review) | Design | Built at |
+| Sub-domain | Tables (route review) | Design | Built at |
 | --- | --- | --- | --- |
 | 1. Branches & places | `app.branches`, `app.branch_members`, `app.branch_rooms`, `app.branch_machines`, `app.branch_holidays` | §1 | #125 |
 | 2. Team | `app.membership_preferences`, `app.membership_preference_branches`, `app.membership_saved_views`, `tenancy.memberships`, `tenancy.membership_additional_roles`, `tenancy.membership_invitations`, `tenancy.roles`, `tenancy.role_permissions`, `tenancy.permissions` | §2 | #126–#127 |
@@ -52,7 +52,7 @@ its table designs name them (60 tables; the medical store's wait for its own rev
 `stock_item_movements`, `invoice_credit_notes`, `invoice_members`, `patient_offerings` …), the new tables
 (`app.contacts`, `app.contact_phones`, `app.contact_members`, `app.invoice_items`, the count and purchase lines …), and
 the dropped ones (`app.visits`, `app.lead_reads`, `app.patient_notes`, `app.patient_ideas`, the old `medical_contacts`
-link). The stage diagrams below are the 2026-10-03 plan; each module row redraws its tables here when it is built
+link). The stage diagrams below are the 2026-10-03 plan; each sub-domain row redraws its tables here when it is built
 (`be-kickoff-iteration` › Record), so this file ends as the true record.
 
 ## Decided so far
@@ -305,7 +305,7 @@ erDiagram
 - **Sources:** schema-routes.md:154–180 · PRD.md:151 · users.md:79–95, 126–156
 - **Added** (a frontend request, D3, unless a decision is named): `maps_link` (leads.md:427–432), `review_link` (leads.md:427–432); soft delete `delete_reason`, `delete_note` (schema-routes.md:126–134)
 - **Renamed at build** (repository rules): `address_line1/2` → `address_line_one/two`, `pin` → `postal_code`, `active` → `is_active`, `default_*_id` → `default_*_membership_id` (a membership is the staff member, D5)
-- **Open:** none — own branches, Owner and Admin all (D9 → `app.branch_user_accesses`); maps and review links for templates (D3)
+- **Open:** none — own branches, Owner and Admin all (D9 → `app.branch_members`); maps and review links for templates (D3)
 
 ```mermaid
 erDiagram
@@ -333,21 +333,22 @@ erDiagram
     boolean is_active
     text maps_link
     text review_link
-    choice delete_reason
-    text delete_note
   }
 ```
 
+- **Built (ROUTE #125, sub-domain 1):** never deleted — `deleted_at`, `delete_reason`, `delete_note` and their checks dropped; a branch retires with `is_active` (D3, C16); the name-unique and one-main indexes cover every row. The four default-staff fields are keys `(organization_id, default_<role>_membership_id)` → `tenancy.memberships (organization_id, id)` `ON DELETE SET NULL` on the staff column only (K8), each with a partial index `idx_branches_organization_id_default_<role>_membership_id`; each names one of the branch's live members (D10, C10) and is cleared when that member stops working there or leaves (D14, C15). Code `app/sub-domains/branches/` (the branch at the folder root, D54).
+
 ### branch_user_accesses · NEW (built, not planned)
 
-- **Holds:** Who works in which branch — one row per (branch, membership). Read by `GET /app/branches/my` (every member's branch picker); written by `PUT /app/branches/{branch_id}/user-accesses` and, at row #4, the staff invite and edit.
-- **Table (built, ROUTE #2):** `app.branch_user_accesses` — code `app/sub-domains/branches/branch-user-accesses/`
+- **Holds:** Who works in which branch — one row per (branch, membership). Read by `GET /app/branches/my` (every member's branch picker); written by `PUT /app/branches/{branch_id}/members` and, at row #4, the staff invite and edit.
+- **Table (built, ROUTE #2; renamed at ROUTE #125, D9):** `app.branch_members` — code `app/sub-domains/branches/branch-members/`
 - **Sources:** D9 · users.md:126–156 (the plan held "branches" on the membership, row #4; built as a link table so each access is a real foreign key, user 2026-10-07)
 - **Open:** none
+- **Built (ROUTE #125, sub-domain 1):** key `(organization_id, membership_id)` → `tenancy.memberships (organization_id, id)` `ON DELETE CASCADE` (K8) with index `idx_branch_members_organization_id_membership_id`; an ended membership's rows stay but drop out of the members list and `/branches/my`, and a members `PUT` keeps them (D57); `POST /branches` writes the first rows from `membership_ids` (D13, C14).
 
 ```mermaid
 erDiagram
-  branch_user_accesses["app.branch_user_accesses · NEW"] {
+  branch_members["app.branch_members · NEW"] {
     id branch_id FK "→ branch"
     id membership_id FK "→ membership"
   }
@@ -379,6 +380,8 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `roles` (D5; users.md:110), `seq` (users.md:32), `phone` (users.md:106), `tone` (users.md:109), `working_days` (users.md:113), `starts_at` (users.md:114), `ends_at` (users.md:115), `commission_pct` (users.md:116), `branch_ids` (users.md:112)
 - **Open:** none — the first role listed is the main one (D40)
 - **Built (ROUTE #4):** `staff_number` integer (trigger `trg_memberships_staff_number`, unique per organization, never reused), `phone` varchar(16), `tone` varchar(10) (`sky`), `working_days` text[] (Mon–Sat), `work_starts_at` / `work_ends_at` time (10:00 / 19:00, ends after starts), `commission_percent` numeric(5,2) 0–100, `delete_reason` / `delete_note`; `roles` → main stays `role_id` + new `tenancy.membership_additional_roles` (membership_id, role_id, organization_id, position 1–9); `branch_ids` → `app.branch_user_accesses` (ROUTE #2); `seq` → `staff_number`, `starts_at`/`ends_at` → `work_starts_at`/`work_ends_at`, `commission_pct` → `commission_percent`
+- **Built (ROUTE #124, K2–K8):** `display_name` varchar(120) NOT NULL (the login's first + last name, or its email, copied at join by `trg_memberships_display_name`; kept equal to the profile while live by `trg_users_sync_membership_display_names` on `auth.users`; frozen once ended), `delete_reason` gains `left` and `account_deleted`, unique `(organization_id, id)` (`idx_memberships_organization_id_id`) for the app's composite membership keys
+- **Built (ROUTE #126, sub-domain 2):** `status` values lowercase — `invited`, `active`, `suspended` (T17; `chk_memberships_status`, `chk_memberships_joined`, default `invited`, the SQL resolvers that read it); `joined_at` set only by accepting the invite (T10); `trg_memberships_display_name` also fires when an ended membership is live again (restore, re-add — K3, K7); the invite table `tenancy.member_invitations` → **`tenancy.membership_invitations`** (T9 — indexes, checks `chk_membership_invitations_*`, policy, keys and its SQL resolvers renamed); the name sort reads `display_name` and the name-sort SECURITY DEFINER function is gone.
 
 ```mermaid
 erDiagram
@@ -406,6 +409,7 @@ erDiagram
 - **Open:** none — default matrix D12; special-permission presets D18, D25; only Admin is locked (D40)
 
 - **Built:** `tone` varchar(10) (`sky`), `is_locked` boolean (false); `purpose` → existing `description` · ROUTE #5
+- **Built (ROUTE #126, sub-domain 2):** `delete_reason` varchar(20) + `delete_note` varchar(280) with `chk_roles_delete_reason`, `chk_roles_delete_reason_when_deleted`, `chk_roles_delete_note_when_other` (T12 — a role is deleted with why and restorable until the tombstone purge).
 ```mermaid
 erDiagram
   role["role · CHANGED"] {
@@ -724,7 +728,7 @@ erDiagram
 - **Sources:** D41 · H:2349
 - **Open:** none
 
-- **Built:** `app.branch_holidays` · ROUTE #18 (2026-10-07)
+- **Built:** `app.branch_holidays` · ROUTE #18 (2026-10-07); code moved to `app/sub-domains/branches/branch-holidays/`, served under `/branches/{branch_id}/holidays` · ROUTE #125 (2026-10-08)
 ```mermaid
 erDiagram
   branch_holiday["branch_holiday · NEW"] {
@@ -742,7 +746,7 @@ erDiagram
 - **Sources:** PRD.md:56–57 · D28
 - **Open:** none
 
-- **Built:** `app.rooms` · ROUTE #19 (2026-10-07)
+- **Built:** `app.rooms` · ROUTE #19 (2026-10-07) → **`app.branch_rooms`** (D9), code `app/sub-domains/branches/branch-rooms/`, served under `/branches/{branch_id}/rooms` · ROUTE #125 (2026-10-08)
 ```mermaid
 erDiagram
   room["room · NEW"] {
@@ -760,7 +764,7 @@ erDiagram
 - **Sources:** PRD.md:56–57 · D28
 - **Open:** none
 
-- **Built:** `app.machines` · ROUTE #20 (2026-10-07)
+- **Built:** `app.machines` · ROUTE #20 (2026-10-07) → **`app.branch_machines`** (D9), code `app/sub-domains/branches/branch-machines/`, served under `/branches/{branch_id}/machines` · ROUTE #125 (2026-10-08)
 ```mermaid
 erDiagram
   machine["machine · NEW"] {

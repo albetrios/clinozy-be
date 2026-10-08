@@ -1,7 +1,8 @@
 /**
  * The access sections of the Users › Roles matrix (D10, D12): each section is the resources whose
  * `<resource>:read|create|update|delete` codes it holds — the permission catalog's `category`.
- * `settings` (rooms, machines, holidays) and `personal` (saved views) are not matrix rows.
+ * `personal` (saved views) is not a matrix row. A branch's rooms, machines and holidays carry no codes of
+ * their own — the branch's (`users` section) gate them (D12).
  *
  * @remarks
  * - **Notes:** generated with the app tables; the catalog seed carries the same categories.
@@ -22,8 +23,8 @@ export const APP_ACCESS_SECTION_RESOURCES = {
   payments: ['invoice', 'payment', 'day_close'],
   tasks: ['task'],
   offerings: ['offering', 'offering_group', 'offer'],
-  users: ['branch'],
-  settings: ['room', 'machine', 'branch_holiday'],
+  // The team's codes are tenancy's (membership, role — launch T8); they sit in the Users row.
+  users: ['branch', 'membership', 'role'],
   personal: ['saved_view'],
 } as const;
 

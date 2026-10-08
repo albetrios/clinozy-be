@@ -5,19 +5,19 @@ kickoff confirms each route when it builds it and records any change in `AS-BUIL
 `docs/routes.txt`.
 
 Status: **regenerated 2026-10-08 from the route review** ([routes-final.md](routes-final.md), [D46](decisions.md)) — one
-section per module, in build order ([D47](decisions.md)). The proposals of 2026-10-03 are superseded (git history keeps
+section per sub-domain, in build order ([D47](decisions.md)). The proposals of 2026-10-03 are superseded (git history keeps
 them). Mode initial (Baseline `none`) · Intake hash `036cbb592ac5`.
 
-Paths are under `/api/v1/app`, except module 2's team routes (2.B–2.E), which are the platform's, under `/api/v1`.
-**#** is `<module>.<route>` as the route review numbers them. **Change** is against the code today: `NEW` — a route
+Paths are under `/api/v1/app`, except sub-domain 2's team routes (2.B–2.E), which are the platform's, under `/api/v1`.
+**#** is `<sub-domain>.<route>` as the route review numbers them. **Change** is against the code today: `NEW` — a route
 that does not exist yet; `CHANGED` — moved, renamed or rebuilt (the route review's marker); `KEPT` — the same method
-and path, whatever its behaviour now follows. Routes the review removes are named in each module's decisions
+and path, whatever its behaviour now follows. Routes the review removes are named in each sub-domain's decisions
 (for example the patient timeline, the global search, patient notes); `docs/routes.txt` shows them go when the row
 that drops them is built. The medical store's routes wait for its own review ([D49](decisions.md)).
 
 ## Counts
 
-| Module | NEW | CHANGED | KEPT | Total |
+| Sub-domain | NEW | CHANGED | KEPT | Total |
 | --- | --- | --- | --- | --- |
 | 1. Branches & places | 0 | 14 | 11 | 25 |
 | 2. Team | 1 | 11 | 15 | 27 |
@@ -33,65 +33,65 @@ that drops them is built. The medical store's routes wait for its own review ([D
 
 ## 1. Branches & places
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1.1 | KEPT | GET | `/branches` | `branch:read` | List every branch (management) | routes-final §1.A.7 |
-| 1.2 | KEPT | GET | `/branches/my` | any member | The caller's branches (after login, pickers) | routes-final §1.A.7 |
-| 1.3 | KEPT | POST | `/branches` | `branch:create` | Create a branch | routes-final §1.A.7 |
-| 1.4 | KEPT | GET | `/branches/{branch_id}` | `branch:read` | Get a branch | routes-final §1.A.7 |
-| 1.5 | KEPT | PATCH | `/branches/{branch_id}` | `branch:update` | Change a branch (or retire: `is_active=false`) | routes-final §1.A.7 |
-| 1.6 | CHANGED | GET | `/branches/{branch_id}/members` | `branch:update` | Who works at the branch | routes-final §1.B.7 |
-| 1.7 | CHANGED | PUT | `/branches/{branch_id}/members` | `branch:update` | Replace who works at the branch | routes-final §1.B.7 |
-| 1.8 | KEPT | GET | `/branches/{branch_id}/rooms` | any member | List the branch's rooms | routes-final §1.C.7 |
-| 1.9 | KEPT | POST | `/branches/{branch_id}/rooms` | `branch:create` | Add a room | routes-final §1.C.7 |
-| 1.10 | CHANGED | GET | `/branches/{branch_id}/rooms/{branch_room_id}` | any member | Get a room | routes-final §1.C.7 |
-| 1.11 | CHANGED | PATCH | `/branches/{branch_id}/rooms/{branch_room_id}` | `branch:update` | Change a room | routes-final §1.C.7 |
-| 1.12 | CHANGED | DELETE | `/branches/{branch_id}/rooms/{branch_room_id}` | `branch:delete` | Delete a room | routes-final §1.C.7 |
-| 1.13 | CHANGED | POST | `/branches/{branch_id}/rooms/{branch_room_id}/restore` | `branch:delete` | Undo a delete | routes-final §1.C.7 |
-| 1.14 | KEPT | GET | `/branches/{branch_id}/machines` | any member | List the branch's machines | routes-final §1.D.7 |
-| 1.15 | KEPT | POST | `/branches/{branch_id}/machines` | `branch:create` | Add a machine | routes-final §1.D.7 |
-| 1.16 | CHANGED | GET | `/branches/{branch_id}/machines/{branch_machine_id}` | any member | Get a machine | routes-final §1.D.7 |
-| 1.17 | CHANGED | PATCH | `/branches/{branch_id}/machines/{branch_machine_id}` | `branch:update` | Change a machine | routes-final §1.D.7 |
-| 1.18 | CHANGED | DELETE | `/branches/{branch_id}/machines/{branch_machine_id}` | `branch:delete` | Delete a machine | routes-final §1.D.7 |
-| 1.19 | CHANGED | POST | `/branches/{branch_id}/machines/{branch_machine_id}/restore` | `branch:delete` | Undo a delete | routes-final §1.D.7 |
-| 1.20 | KEPT | GET | `/branches/{branch_id}/holidays` | any member | List the branch's holidays | routes-final §1.E.7 |
-| 1.21 | KEPT | POST | `/branches/{branch_id}/holidays` | `branch:create` | Add a holiday | routes-final §1.E.7 |
-| 1.22 | CHANGED | GET | `/branches/{branch_id}/holidays/{branch_holiday_id}` | any member | Get a holiday | routes-final §1.E.7 |
-| 1.23 | CHANGED | PATCH | `/branches/{branch_id}/holidays/{branch_holiday_id}` | `branch:update` | Change a holiday | routes-final §1.E.7 |
-| 1.24 | CHANGED | DELETE | `/branches/{branch_id}/holidays/{branch_holiday_id}` | `branch:delete` | Delete a holiday | routes-final §1.E.7 |
-| 1.25 | CHANGED | POST | `/branches/{branch_id}/holidays/{branch_holiday_id}/restore` | `branch:delete` | Undo a delete | routes-final §1.E.7 |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1.1 | KEPT | GET | `/branches` | `branch:read` | List every branch (management) | routes-final §1.A.7 | `GET /api/v1/app/branches` · #125 (uncommitted) |
+| 1.2 | KEPT | GET | `/branches/my` | any member | The caller's branches (after login, pickers) | routes-final §1.A.7 | `GET /api/v1/app/branches/my` · #125 (uncommitted) |
+| 1.3 | KEPT | POST | `/branches` | `branch:create` | Create a branch | routes-final §1.A.7 | `POST /api/v1/app/branches` · #125 (uncommitted) |
+| 1.4 | KEPT | GET | `/branches/{branch_id}` | `branch:read` | Get a branch | routes-final §1.A.7 | `GET /api/v1/app/branches/:branch_id` · #125 (uncommitted) |
+| 1.5 | KEPT | PATCH | `/branches/{branch_id}` | `branch:update` | Change a branch (or retire: `is_active=false`) | routes-final §1.A.7 | `PATCH /api/v1/app/branches/:branch_id` · #125 (uncommitted) |
+| 1.6 | CHANGED | GET | `/branches/{branch_id}/members` | `branch:update` | Who works at the branch | routes-final §1.B.7 | `GET /api/v1/app/branches/:branch_id/members` · #125 (uncommitted) |
+| 1.7 | CHANGED | PUT | `/branches/{branch_id}/members` | `branch:update` | Replace who works at the branch | routes-final §1.B.7 | `PUT /api/v1/app/branches/:branch_id/members` · #125 (uncommitted) |
+| 1.8 | KEPT | GET | `/branches/{branch_id}/rooms` | any member | List the branch's rooms | routes-final §1.C.7 | `GET /api/v1/app/branches/:branch_id/rooms` · #125 (uncommitted) |
+| 1.9 | KEPT | POST | `/branches/{branch_id}/rooms` | `branch:create` | Add a room | routes-final §1.C.7 | `POST /api/v1/app/branches/:branch_id/rooms` · #125 (uncommitted) |
+| 1.10 | CHANGED | GET | `/branches/{branch_id}/rooms/{branch_room_id}` | any member | Get a room | routes-final §1.C.7 | `GET /api/v1/app/branches/:branch_id/rooms/:branch_room_id` · #125 (uncommitted) |
+| 1.11 | CHANGED | PATCH | `/branches/{branch_id}/rooms/{branch_room_id}` | `branch:update` | Change a room | routes-final §1.C.7 | `PATCH /api/v1/app/branches/:branch_id/rooms/:branch_room_id` · #125 (uncommitted) |
+| 1.12 | CHANGED | DELETE | `/branches/{branch_id}/rooms/{branch_room_id}` | `branch:delete` | Delete a room | routes-final §1.C.7 | `DELETE /api/v1/app/branches/:branch_id/rooms/:branch_room_id` · #125 (uncommitted) |
+| 1.13 | CHANGED | POST | `/branches/{branch_id}/rooms/{branch_room_id}/restore` | `branch:delete` | Undo a delete | routes-final §1.C.7 | `POST /api/v1/app/branches/:branch_id/rooms/:branch_room_id/restore` · #125 (uncommitted) |
+| 1.14 | KEPT | GET | `/branches/{branch_id}/machines` | any member | List the branch's machines | routes-final §1.D.7 | `GET /api/v1/app/branches/:branch_id/machines` · #125 (uncommitted) |
+| 1.15 | KEPT | POST | `/branches/{branch_id}/machines` | `branch:create` | Add a machine | routes-final §1.D.7 | `POST /api/v1/app/branches/:branch_id/machines` · #125 (uncommitted) |
+| 1.16 | CHANGED | GET | `/branches/{branch_id}/machines/{branch_machine_id}` | any member | Get a machine | routes-final §1.D.7 | `GET /api/v1/app/branches/:branch_id/machines/:branch_machine_id` · #125 (uncommitted) |
+| 1.17 | CHANGED | PATCH | `/branches/{branch_id}/machines/{branch_machine_id}` | `branch:update` | Change a machine | routes-final §1.D.7 | `PATCH /api/v1/app/branches/:branch_id/machines/:branch_machine_id` · #125 (uncommitted) |
+| 1.18 | CHANGED | DELETE | `/branches/{branch_id}/machines/{branch_machine_id}` | `branch:delete` | Delete a machine | routes-final §1.D.7 | `DELETE /api/v1/app/branches/:branch_id/machines/:branch_machine_id` · #125 (uncommitted) |
+| 1.19 | CHANGED | POST | `/branches/{branch_id}/machines/{branch_machine_id}/restore` | `branch:delete` | Undo a delete | routes-final §1.D.7 | `POST /api/v1/app/branches/:branch_id/machines/:branch_machine_id/restore` · #125 (uncommitted) |
+| 1.20 | KEPT | GET | `/branches/{branch_id}/holidays` | any member | List the branch's holidays | routes-final §1.E.7 | `GET /api/v1/app/branches/:branch_id/holidays` · #125 (uncommitted) |
+| 1.21 | KEPT | POST | `/branches/{branch_id}/holidays` | `branch:create` | Add a holiday | routes-final §1.E.7 | `POST /api/v1/app/branches/:branch_id/holidays` · #125 (uncommitted) |
+| 1.22 | CHANGED | GET | `/branches/{branch_id}/holidays/{branch_holiday_id}` | any member | Get a holiday | routes-final §1.E.7 | `GET /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id` · #125 (uncommitted) |
+| 1.23 | CHANGED | PATCH | `/branches/{branch_id}/holidays/{branch_holiday_id}` | `branch:update` | Change a holiday | routes-final §1.E.7 | `PATCH /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id` · #125 (uncommitted) |
+| 1.24 | CHANGED | DELETE | `/branches/{branch_id}/holidays/{branch_holiday_id}` | `branch:delete` | Delete a holiday | routes-final §1.E.7 | `DELETE /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id` · #125 (uncommitted) |
+| 1.25 | CHANGED | POST | `/branches/{branch_id}/holidays/{branch_holiday_id}/restore` | `branch:delete` | Undo a delete | routes-final §1.E.7 | `POST /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id/restore` · #125 (uncommitted) |
 
 ## 2. Team
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| 2.1 | CHANGED | GET | `/app/memberships` | any member | Team picker — active members | routes-final §2.A.7 |
-| 2.2 | KEPT | GET | `/tenancy/organization/memberships` | `membership:read` | Team list (every status) | routes-final §2.B.7 |
-| 2.3 | KEPT | POST | `/tenancy/organization/memberships` | `membership:create` | Add a member by email (sends the invite) | routes-final §2.B.7 |
-| 2.4 | KEPT | GET | `/tenancy/organization/memberships/{membership_id}` | `membership:read` | Get a member | routes-final §2.B.7 |
-| 2.5 | KEPT | PATCH | `/tenancy/organization/memberships/{membership_id}` | `membership:update` | Change roles, branches, hours, status | routes-final §2.B.7 |
-| 2.6 | KEPT | DELETE | `/tenancy/organization/memberships/{membership_id}` | `membership:delete` | Remove a member | routes-final §2.B.7 |
-| 2.7 | KEPT | POST | `/tenancy/organization/memberships/{membership_id}/restore` | `membership:delete` | Undo a removal | routes-final §2.B.7 |
-| 2.8 | KEPT | GET | `/tenancy/organization/memberships/{membership_id}/permissions` | `membership:read` | A member's effective codes | routes-final §2.B.7 |
-| 2.9 | CHANGED | DELETE | `/tenancy/organization/memberships/{membership_id}/invitation` | `membership:delete` | Revoke the pending invite | routes-final §2.C.7 |
-| 2.10 | CHANGED | POST | `/tenancy/organization/memberships/{membership_id}/invitation/resend` | `membership:update` | Resend the invite | routes-final §2.C.7 |
-| 2.11 | CHANGED | POST | `/tenancy/membership-invitations/{membership_invitation_id}/accept` | signed in | The invitee accepts | routes-final §2.C.7 |
-| 2.12 | KEPT | GET | `/tenancy/organization/roles` | `role:read` | List roles (with member counts) | routes-final §2.D.7 |
-| 2.13 | KEPT | POST | `/tenancy/organization/roles` | `role:create` | Create a role (optionally copy another) | routes-final §2.D.7 |
-| 2.14 | KEPT | GET | `/tenancy/organization/roles/{role_id}` | `role:read` | Get a role | routes-final §2.D.7 |
-| 2.15 | KEPT | PATCH | `/tenancy/organization/roles/{role_id}` | `role:update` | Rename / recolour a role | routes-final §2.D.7 |
-| 2.16 | KEPT | DELETE | `/tenancy/organization/roles/{role_id}` | `role:delete` | Delete a custom role | routes-final §2.D.7 |
-| 2.17 | NEW | POST | `/tenancy/organization/roles/{role_id}/restore` | `role:delete` | Undo a delete | routes-final §2.D.7 |
-| 2.18 | KEPT | GET | `/tenancy/organization/roles/{role_id}/permissions` | `role:read` | A role's codes | routes-final §2.D.7 |
-| 2.19 | KEPT | PUT | `/tenancy/organization/roles/{role_id}/permissions` | `role:update` | Replace a role's codes (the matrix) | routes-final §2.D.7 |
-| 2.20 | KEPT | GET | `/tenancy/permissions` | signed in | The permission catalog | routes-final §2.E.7 |
-| 2.21 | CHANGED | GET | `/memberships/me/preferences` | `organization:read` | My preferences (the defaults before the first save) | routes-final §2.F.7 |
-| 2.22 | CHANGED | PATCH | `/memberships/me/preferences` | `organization:read` | Save them | routes-final §2.F.7 |
-| 2.23 | CHANGED | GET | `/memberships/me/saved-views` | `organization:read` | My saved views | routes-final §2.G.7 |
-| 2.24 | CHANGED | POST | `/memberships/me/saved-views` | `organization:read` | Save a view | routes-final §2.G.7 |
-| 2.25 | CHANGED | GET | `/memberships/me/saved-views/{membership_saved_view_id}` | `organization:read` | Get one | routes-final §2.G.7 |
-| 2.26 | CHANGED | PATCH | `/memberships/me/saved-views/{membership_saved_view_id}` | `organization:read` | Rename it or change its filters | routes-final §2.G.7 |
-| 2.27 | CHANGED | DELETE | `/memberships/me/saved-views/{membership_saved_view_id}` | `organization:read` | Remove it — for good (U6) | routes-final §2.G.7 |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 2.1 | CHANGED | GET | `/app/memberships` | any member | Team picker — active members | routes-final §2.A.7 | `GET /api/v1/app/memberships` · #126 (uncommitted) |
+| 2.2 | KEPT | GET | `/tenancy/organization/memberships` | `membership:read` | Team list (every status) | routes-final §2.B.7 | `GET /api/v1/tenancy/organization/memberships` · #126 (uncommitted) |
+| 2.3 | KEPT | POST | `/tenancy/organization/memberships` | `membership:create` | Add a member by email (sends the invite) | routes-final §2.B.7 | `POST /api/v1/tenancy/organization/memberships` · #126 (uncommitted) |
+| 2.4 | KEPT | GET | `/tenancy/organization/memberships/{membership_id}` | `membership:read` | Get a member | routes-final §2.B.7 | `GET /api/v1/tenancy/organization/memberships/:membership_id` · #126 (uncommitted) |
+| 2.5 | KEPT | PATCH | `/tenancy/organization/memberships/{membership_id}` | `membership:update` | Change roles, branches, hours, status | routes-final §2.B.7 | `PATCH /api/v1/tenancy/organization/memberships/:membership_id` · #126 (uncommitted) |
+| 2.6 | KEPT | DELETE | `/tenancy/organization/memberships/{membership_id}` | `membership:delete` | Remove a member | routes-final §2.B.7 | `DELETE /api/v1/tenancy/organization/memberships/:membership_id` · #126 (uncommitted) |
+| 2.7 | KEPT | POST | `/tenancy/organization/memberships/{membership_id}/restore` | `membership:delete` | Undo a removal | routes-final §2.B.7 | `POST /api/v1/tenancy/organization/memberships/:membership_id/restore` · #126 (uncommitted) |
+| 2.8 | KEPT | GET | `/tenancy/organization/memberships/{membership_id}/permissions` | `membership:read` | A member's effective codes | routes-final §2.B.7 | `GET /api/v1/tenancy/organization/memberships/:membership_id/permissions` · #126 (uncommitted) |
+| 2.9 | CHANGED | DELETE | `/tenancy/organization/memberships/{membership_id}/invitation` | `membership:delete` | Revoke the pending invite | routes-final §2.C.7 | `DELETE /api/v1/tenancy/organization/memberships/:membership_id/invitation` · #126 (uncommitted) |
+| 2.10 | CHANGED | POST | `/tenancy/organization/memberships/{membership_id}/invitation/resend` | `membership:update` | Resend the invite | routes-final §2.C.7 | `POST /api/v1/tenancy/organization/memberships/:membership_id/invitation/resend` · #126 (uncommitted) |
+| 2.11 | CHANGED | POST | `/tenancy/membership-invitations/{membership_invitation_id}/accept` | signed in | The invitee accepts | routes-final §2.C.7 | `POST /api/v1/tenancy/membership-invitations/:membership_invitation_id/accept` · #126 (uncommitted) |
+| 2.12 | KEPT | GET | `/tenancy/organization/roles` | `role:read` | List roles (with member counts) | routes-final §2.D.7 | `GET /api/v1/tenancy/organization/roles` · #126 (uncommitted) |
+| 2.13 | KEPT | POST | `/tenancy/organization/roles` | `role:create` | Create a role (optionally copy another) | routes-final §2.D.7 | `POST /api/v1/tenancy/organization/roles` · #126 (uncommitted) |
+| 2.14 | KEPT | GET | `/tenancy/organization/roles/{role_id}` | `role:read` | Get a role | routes-final §2.D.7 | `GET /api/v1/tenancy/organization/roles/:role_id` · #126 (uncommitted) |
+| 2.15 | KEPT | PATCH | `/tenancy/organization/roles/{role_id}` | `role:update` | Rename / recolour a role | routes-final §2.D.7 | `PATCH /api/v1/tenancy/organization/roles/:role_id` · #126 (uncommitted) |
+| 2.16 | KEPT | DELETE | `/tenancy/organization/roles/{role_id}` | `role:delete` | Delete a custom role | routes-final §2.D.7 | `DELETE /api/v1/tenancy/organization/roles/:role_id` · #126 (uncommitted) |
+| 2.17 | NEW | POST | `/tenancy/organization/roles/{role_id}/restore` | `role:delete` | Undo a delete | routes-final §2.D.7 | `POST /api/v1/tenancy/organization/roles/:role_id/restore` · #126 (uncommitted) |
+| 2.18 | KEPT | GET | `/tenancy/organization/roles/{role_id}/permissions` | `role:read` | A role's codes | routes-final §2.D.7 | `GET /api/v1/tenancy/organization/roles/:role_id/permissions` · #126 (uncommitted) |
+| 2.19 | KEPT | PUT | `/tenancy/organization/roles/{role_id}/permissions` | `role:update` | Replace a role's codes (the matrix) | routes-final §2.D.7 | `PUT /api/v1/tenancy/organization/roles/:role_id/permissions` · #126 (uncommitted) |
+| 2.20 | KEPT | GET | `/tenancy/permissions` | signed in | The permission catalog | routes-final §2.E.7 | `GET /api/v1/tenancy/permissions` · #126 (uncommitted) |
+| 2.21 | CHANGED | GET | `/memberships/me/preferences` | `organization:read` | My preferences (the defaults before the first save) | routes-final §2.F.7 | — (#127) |
+| 2.22 | CHANGED | PATCH | `/memberships/me/preferences` | `organization:read` | Save them | routes-final §2.F.7 | — (#127) |
+| 2.23 | CHANGED | GET | `/memberships/me/saved-views` | `organization:read` | My saved views | routes-final §2.G.7 | — (#127) |
+| 2.24 | CHANGED | POST | `/memberships/me/saved-views` | `organization:read` | Save a view | routes-final §2.G.7 | — (#127) |
+| 2.25 | CHANGED | GET | `/memberships/me/saved-views/{membership_saved_view_id}` | `organization:read` | Get one | routes-final §2.G.7 | — (#127) |
+| 2.26 | CHANGED | PATCH | `/memberships/me/saved-views/{membership_saved_view_id}` | `organization:read` | Rename it or change its filters | routes-final §2.G.7 | — (#127) |
+| 2.27 | CHANGED | DELETE | `/memberships/me/saved-views/{membership_saved_view_id}` | `organization:read` | Remove it — for good (U6) | routes-final §2.G.7 | — (#127) |
 
 ## 3. Offerings
 

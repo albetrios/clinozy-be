@@ -148,7 +148,7 @@ export function requireRole(
  * @param permissionCode - The permission code to check (use domain constants, never bare strings)
  *
  * Usage:
- *   { preHandler: [app.authenticate, requireOrganizationPermission(TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE)] }
+ *   { preHandler: [app.authenticate, requireOrganizationPermission(TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE)] }
  */
 export function requireOrganizationPermission(
   permissionCode: string,

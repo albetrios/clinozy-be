@@ -10,16 +10,17 @@ import { OauthCallbackQueryDto } from '@/domains/auth/auth.dto.js';
 import { listInvoicesQueryDto } from '@/domains/billing/sub-domains/subscription/subscription.dto.js';
 import { listNotificationsQueryDto } from '@/domains/notify/sub-domains/notification/notification.dto.js';
 import { listMembershipsQueryDto } from '@/domains/tenancy/sub-domains/membership/membership.dto.js';
-import { listAppUsersQueryDto } from '@/domains/app/sub-domains/users/users.dto.js';
+import { listAppMembershipsQueryDto } from '@/domains/app/sub-domains/memberships/memberships.dto.js';
 import { listMemberRolesQueryDto } from '@/domains/tenancy/sub-domains/member-roles/member-role.dto.js';
 import { listOrganizationApiKeysQueryDto } from '@/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.dto.js';
 import { listOrganizationsQueryDto } from '@/domains/tenancy/sub-domains/organization/organization.dto.js';
 import { ListUsersDto } from '@/domains/user/user.dto.js';
 import { listSavedViewsQueryDto as appSavedViewsListQueryDto } from '@/domains/app/sub-domains/saved-views/saved-views.dto.js';
 import { listOfferingGroupsQueryDto as appOfferingGroupsListQueryDto } from '@/domains/app/sub-domains/offering-groups/offering-groups.dto.js';
-import { listRoomsQueryDto as appRoomsListQueryDto } from '@/domains/app/sub-domains/rooms/rooms.dto.js';
-import { listMachinesQueryDto as appMachinesListQueryDto } from '@/domains/app/sub-domains/machines/machines.dto.js';
-import { listBranchHolidaysQueryDto as appBranchHolidaysListQueryDto } from '@/domains/app/sub-domains/branch-holidays/branch-holidays.dto.js';
+import { listBranchRoomsQueryDto as appRoomsListQueryDto } from '@/domains/app/sub-domains/branches/branch-rooms/branch-rooms.dto.js';
+import { listBranchMachinesQueryDto as appMachinesListQueryDto } from '@/domains/app/sub-domains/branches/branch-machines/branch-machines.dto.js';
+import { listBranchHolidaysQueryDto as appBranchHolidaysListQueryDto } from '@/domains/app/sub-domains/branches/branch-holidays/branch-holidays.dto.js';
+import { listBranchesQueryDto as appBranchesListQueryDto } from '@/domains/app/sub-domains/branches/branches.dto.js';
 import { listOfferingsQueryDto as appOfferingsListQueryDto } from '@/domains/app/sub-domains/offerings/offerings.dto.js';
 import { listOffersQueryDto as appOffersListQueryDto } from '@/domains/app/sub-domains/offers/offers.dto.js';
 import {
@@ -80,13 +81,15 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/tenancy/organization/audit-logs': ListAuditLogsQueryDto,
   'GET /api/v1/tenancy/organization/api-keys': listOrganizationApiKeysQueryDto,
   'GET /api/v1/tenancy/organization/memberships': listMembershipsQueryDto,
-  'GET /api/v1/app/users': listAppUsersQueryDto,
+  'GET /api/v1/app/memberships': listAppMembershipsQueryDto,
   'GET /api/v1/tenancy/organization/roles': listMemberRolesQueryDto,
   'GET /api/v1/notify/notifications': listNotificationsQueryDto,
   'GET /api/v1/notify/webhooks/{webhook_id}/delivery-attempts': listLimitQuerySchema,
   'GET /api/v1/auth/oauth/{provider}/callback': OauthCallbackQueryDto,
   'GET /api/v1/app/saved-views': appSavedViewsListQueryDto,
   'GET /api/v1/app/offering-groups': appOfferingGroupsListQueryDto,
+  // C7: `include_inactive` on the full branch list.
+  'GET /api/v1/app/branches': appBranchesListQueryDto,
   'GET /api/v1/app/branches/{branch_id}/rooms': appRoomsListQueryDto,
   'GET /api/v1/app/branches/{branch_id}/machines': appMachinesListQueryDto,
   'GET /api/v1/app/branches/{branch_id}/holidays': appBranchHolidaysListQueryDto,

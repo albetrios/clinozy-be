@@ -173,6 +173,7 @@ export class BaseRecordController<Output extends { id: string }> {
       this.readId(request),
       this.actor(request),
       await this.visibility(request),
+      this.readParentId(request),
     );
     return successResponse(await this.present(request, data), getRequestIdentifier(request));
   };
@@ -201,6 +202,7 @@ export class BaseRecordController<Output extends { id: string }> {
       request.body,
       this.actor(request),
       await this.visibility(request),
+      this.readParentId(request),
     );
     await this.audit(request, 'update', publicId, {
       changed_fields: listBodyFieldNames(request.body),
@@ -217,6 +219,7 @@ export class BaseRecordController<Output extends { id: string }> {
       request.query,
       this.actor(request),
       await this.visibility(request),
+      this.readParentId(request),
     );
     await this.audit(request, 'delete', publicId, {
       delete_reason: (request.query as { reason?: string }).reason,
@@ -232,6 +235,7 @@ export class BaseRecordController<Output extends { id: string }> {
       publicId,
       this.actor(request),
       await this.visibility(request),
+      this.readParentId(request),
     );
     await this.audit(request, 'restore', publicId);
     return successResponse(await this.present(request, data), getRequestIdentifier(request));

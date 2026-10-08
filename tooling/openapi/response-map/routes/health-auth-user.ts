@@ -188,7 +188,7 @@ export const healthAuthUserRouteResponses: Record<string, ResponseDefinition> = 
       {
         access_token: schemas.accessTokenExample.access_token,
         active_organization: schemas.organizationExample,
-        my_permissions: ['organization:read', 'membership:manage'],
+        my_permissions: ['organization:read', 'membership:create'],
         global_role: null,
       },
     ),

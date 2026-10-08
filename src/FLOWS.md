@@ -163,7 +163,7 @@ sequenceDiagram
 
 ### Trigger
 
-Organization admin adds a teammate by email: `POST /api/v1/tenancy/organization/memberships {email, role_id, expires_in_days?}` (REQ-1). That single call provisions/finds the user, creates the `INVITED` membership, and issues the invitation — there is no separate "create invitation" route.
+Organization admin adds a teammate by email: `POST /api/v1/tenancy/organization/memberships {email, role_ids, expires_in_days?, …}` (REQ-1). That single call provisions/finds the user, creates the `INVITED` membership, and issues the invitation — there is no separate "create invitation" route.
 
 ### Sequence
 
@@ -172,7 +172,7 @@ sequenceDiagram
   participant Admin as Admin Client
   participant Mem as MembershipService
   participant Usr as UserService
-  participant Inv as MemberInvitationService
+  participant Inv as MembershipInvitationService
   participant DB as Postgres (RLS scoped to organization)
   participant Bus as event-bus
   participant Mail as mail.processor
@@ -182,20 +182,20 @@ sequenceDiagram
   Mem->>Usr: findOrCreateInvitedByEmail(email)
   Usr->>DB: resolve by email (SECURITY DEFINER) — else INSERT auth.users (ACTIVE, is_email_verified=false, no auth method)
   Mem->>DB: BEGIN; SET LOCAL app.current_organization_public_id
-  Mem->>DB: privilege-escalation guard; INSERT memberships (status=INVITED)
+  Mem->>DB: privilege-escalation guard; INSERT memberships (status=invited)
   Mem->>Inv: createForMembership(...)
-  Inv->>DB: INSERT member_invitations (token_hash, expires_at)
-  Inv->>Bus: emitStrict MEMBER_INVITATION_EVENT.CREATED {email, raw_token, organization_name, ...}
+  Inv->>DB: INSERT membership_invitations (token_hash, expires_at)
+  Inv->>Bus: emitStrict MEMBERSHIP_INVITATION_EVENT.CREATED {email, raw_token, organization_name, ...}
   Mem->>DB: COMMIT
   Bus->>Mail: recordOutboxEmail (via event handler)
   Mail-->>Invitee: invitation email (raw_token in URL)
 
   Note over Invitee,Auth: invitee onboards (claims the pre-created user) via email verification-code login or OAuth — find-by-email reuses the row and email-code/OAuth set is_email_verified
-  Invitee->>Inv: POST /tenancy/invitations/:invitation_id/accept {token} (authenticated)
+  Invitee->>Inv: POST /tenancy/membership-invitations/:membership_invitation_id/accept {token} (authenticated)
   Inv->>Usr: requireUserRecordByPublicId(actingUser) — 403 if email unverified, 403 if email ≠ invitee
   Inv->>DB: BEGIN; SET LOCAL app.current_organization_public_id
-  Inv->>DB: UPDATE member_invitations SET accepted_at=NOW() WHERE token_hash=$1 (atomic, single-use)
-  Inv->>DB: UPDATE memberships SET status=ACTIVE, joined_at=NOW() (activateForInvitationAccept)
+  Inv->>DB: UPDATE membership_invitations SET accepted_at=NOW() WHERE token_hash=$1 (atomic, single-use)
+  Inv->>DB: UPDATE memberships SET status=active, joined_at=NOW() (activateForInvitationAccept)
   Inv->>DB: COMMIT
   Inv-->>Invitee: 200 {invitation}
 ```
@@ -203,15 +203,15 @@ sequenceDiagram
 ### Side effects
 
 - New invitee → a bare ACTIVE `auth.users` row (`is_email_verified=false`, no auth method), claimed on first onboarding — **email verification-code login** or **OAuth**; an existing address resolves to that account.
-- `INVITED` `memberships` row + `member_invitations` row (hashed token; the raw token leaves the platform only via the email payload, parallel to the email verification code).
-- `MEMBER_INVITATION_EVENT.CREATED` (emitStrict — a failed outbox write rolls back the whole organization transaction) → mail outbox → invitation email.
+- `invited` `memberships` row + `membership_invitations` row (hashed token; the raw token leaves the platform only via the email payload, parallel to the email verification code).
+- `MEMBERSHIP_INVITATION_EVENT.CREATED` (emitStrict — a failed outbox write rolls back the whole organization transaction) → mail outbox → invitation email.
 - Accept requires authentication, a **verified** email, and an email matching the invitee (sec-T4 + follow-up) — so a forwarded invite token alone, or a password-claim that has not yet verified, cannot join the organization. On accept the membership is activated (`status=ACTIVE`, `joined_at`) and the member's permission cache invalidated.
-- On revoke (`DELETE /organization/invitations/:id`): the invitation is revoked AND the auto-created `INVITED` membership is soft-deleted (no ghost invitee in the members table).
+- On revoke (`DELETE /organization/memberships/:membership_id/invitation`): the invitation is revoked AND the auto-created `invited` membership is soft-deleted (no ghost invitee in the members table).
 
 ### Failure modes
 
 - **Disposable email** → 400 `errors:disposableEmail`.
-- **Already a member (ACTIVE or live INVITED) for that email** → 409 `errors:membershipAlreadyExists`.
+- **Already a member (active or live invited) for that email** → 409 `errors:membershipAlreadyExists`.
 - **Personal organization** (single-member) → 422 (team-only route).
 - **Token expired / invalid / revoked / already accepted** → `ValidationError` on accept.
 - **Token reuse** → the atomic accept consumes the row on first accept; a second attempt fails validation.

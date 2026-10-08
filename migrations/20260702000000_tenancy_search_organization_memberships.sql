@@ -1,5 +1,5 @@
--- Server-side member search: resolve the set of an organization's membership ids whose member's
--- user email or name matches a search term. The caller (repository) then applies the existing
+-- Server-side member search: resolve the set of an organization's membership ids whose name (the
+-- membership's display_name, launch K3) or login email matches a search term. The caller (repository) then applies the existing
 -- (created_at, id) keyset + limit over these ids through the normal typed Drizzle query, so row
 -- typing, serialization, and pagination stay identical to the non-search path.
 --
@@ -29,17 +29,15 @@ STABLE
 SECURITY DEFINER
 SET search_path = tenancy, auth, public
 AS $$
+  -- The name is the membership's own (display_name, launch K3); the email is the login's. Live and
+  -- ended memberships both match — the caller decides which it lists (launch D58).
   SELECT membership_row.id
   FROM tenancy.memberships AS membership_row
   JOIN auth.users AS user_row ON user_row.id = membership_row.user_id
   WHERE membership_row.organization_id = organization_id_param
-    AND membership_row.deleted_at IS NULL
     AND (
-      user_row.email ILIKE search_pattern_param
-      OR user_row.first_name ILIKE search_pattern_param
-      OR user_row.last_name ILIKE search_pattern_param
-      OR (coalesce(user_row.first_name, '') || ' ' || coalesce(user_row.last_name, ''))
-        ILIKE search_pattern_param
+      membership_row.display_name ILIKE search_pattern_param
+      OR user_row.email ILIKE search_pattern_param
     );
 $$;
 

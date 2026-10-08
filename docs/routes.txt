@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 443
+  Total routes: 444
 ================================================================================
 
 Legend:
@@ -31,22 +31,30 @@ Legend:
   GET    /api/v1/app/appointments/daily-counts                    200  -    both  PERM: appointment:read
   GET    /api/v1/app/appointments/exports                         200  -    both  PERM: list:export
   GET    /api/v1/app/appointments/slots                           200  -    both  PERM: appointment:read
-  GET    /api/v1/app/branch-holidays/:branch_holiday_id           200  -    both  PERM: organization:read
-  PATCH  /api/v1/app/branch-holidays/:branch_holiday_id           200  -    both  PERM: branch_holiday:update
-  DELETE /api/v1/app/branch-holidays/:branch_holiday_id           204  -    both  PERM: branch_holiday:delete
-  POST   /api/v1/app/branch-holidays/:branch_holiday_id/restore   200  req  both  PERM: branch_holiday:delete
   GET    /api/v1/app/branches                                     200  -    both  PERM: branch:read
   POST   /api/v1/app/branches                                     200  req  both  PERM: branch:create
   GET    /api/v1/app/branches/:branch_id                          200  -    both  PERM: branch:read
   PATCH  /api/v1/app/branches/:branch_id                          200  -    both  PERM: branch:update
   GET    /api/v1/app/branches/:branch_id/holidays                 200  -    both  PERM: organization:read
-  POST   /api/v1/app/branches/:branch_id/holidays                 200  req  both  PERM: branch_holiday:create
+  POST   /api/v1/app/branches/:branch_id/holidays                 200  req  both  PERM: branch:create
+  GET    /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id  200  -    both  PERM: organization:read
+  PATCH  /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id  200  -    both  PERM: branch:update
+  DELETE /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id  204  -    both  PERM: branch:delete
+  POST   /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id/restore  200  req  both  PERM: branch:delete
   GET    /api/v1/app/branches/:branch_id/machines                 200  -    both  PERM: organization:read
-  POST   /api/v1/app/branches/:branch_id/machines                 200  req  both  PERM: machine:create
+  POST   /api/v1/app/branches/:branch_id/machines                 200  req  both  PERM: branch:create
+  GET    /api/v1/app/branches/:branch_id/machines/:branch_machine_id  200  -    both  PERM: organization:read
+  PATCH  /api/v1/app/branches/:branch_id/machines/:branch_machine_id  200  -    both  PERM: branch:update
+  DELETE /api/v1/app/branches/:branch_id/machines/:branch_machine_id  204  -    both  PERM: branch:delete
+  POST   /api/v1/app/branches/:branch_id/machines/:branch_machine_id/restore  200  req  both  PERM: branch:delete
+  GET    /api/v1/app/branches/:branch_id/members                  200  -    both  PERM: branch:update
+  PUT    /api/v1/app/branches/:branch_id/members                  200  -    both  PERM: branch:update
   GET    /api/v1/app/branches/:branch_id/rooms                    200  -    both  PERM: organization:read
-  POST   /api/v1/app/branches/:branch_id/rooms                    200  req  both  PERM: room:create
-  GET    /api/v1/app/branches/:branch_id/user-accesses            200  -    both  PERM: branch:update
-  PUT    /api/v1/app/branches/:branch_id/user-accesses            200  -    both  PERM: branch:update
+  POST   /api/v1/app/branches/:branch_id/rooms                    200  req  both  PERM: branch:create
+  GET    /api/v1/app/branches/:branch_id/rooms/:branch_room_id    200  -    both  PERM: organization:read
+  PATCH  /api/v1/app/branches/:branch_id/rooms/:branch_room_id    200  -    both  PERM: branch:update
+  DELETE /api/v1/app/branches/:branch_id/rooms/:branch_room_id    204  -    both  PERM: branch:delete
+  POST   /api/v1/app/branches/:branch_id/rooms/:branch_room_id/restore  200  req  both  PERM: branch:delete
   GET    /api/v1/app/branches/my                                  200  -    both  PERM: organization:read
   GET    /api/v1/app/check-ins/:check_in_id                       200  -    both  PERM: patient:read
   PATCH  /api/v1/app/check-ins/:check_in_id                       200  -    both  PERM: patient:update
@@ -91,10 +99,6 @@ Legend:
   POST   /api/v1/app/leads/:lead_id/release                       200  req  both  PERM: lead:update
   POST   /api/v1/app/leads/:lead_id/restore                       200  req  both  PERM: lead:delete
   GET    /api/v1/app/leads/exports                                200  -    both  PERM: list:export
-  GET    /api/v1/app/machines/:machine_id                         200  -    both  PERM: organization:read
-  PATCH  /api/v1/app/machines/:machine_id                         200  -    both  PERM: machine:update
-  DELETE /api/v1/app/machines/:machine_id                         204  -    both  PERM: machine:delete
-  POST   /api/v1/app/machines/:machine_id/restore                 200  req  both  PERM: machine:delete
   GET    /api/v1/app/manufacturers                                200  -    both  PERM: manufacturer:read
   POST   /api/v1/app/manufacturers                                200  req  both  PERM: manufacturer:create
   GET    /api/v1/app/manufacturers/:manufacturer_id               200  -    both  PERM: manufacturer:read
@@ -142,6 +146,7 @@ Legend:
   DELETE /api/v1/app/medicines/:medicine_id                       204  -    both  PERM: medicine:delete
   POST   /api/v1/app/medicines/:medicine_id/restore               200  req  both  PERM: medicine:delete
   GET    /api/v1/app/medicines/exports                            200  -    both  PERM: list:export
+  GET    /api/v1/app/memberships                                  200  -    both  PERM: organization:read
   GET    /api/v1/app/message-templates                            200  -    both  PERM: lead:read
   POST   /api/v1/app/message-templates                            200  req  both  PERM: message_template:create
   GET    /api/v1/app/message-templates/:message_template_id       200  -    both  PERM: lead:read
@@ -253,10 +258,6 @@ Legend:
   PATCH  /api/v1/app/reviews/:review_id                           200  -    both  PERM: review:update
   DELETE /api/v1/app/reviews/:review_id                           204  -    both  PERM: review:delete
   POST   /api/v1/app/reviews/:review_id/restore                   200  req  both  PERM: review:delete
-  GET    /api/v1/app/rooms/:room_id                               200  -    both  PERM: organization:read
-  PATCH  /api/v1/app/rooms/:room_id                               200  -    both  PERM: room:update
-  DELETE /api/v1/app/rooms/:room_id                               204  -    both  PERM: room:delete
-  POST   /api/v1/app/rooms/:room_id/restore                       200  req  both  PERM: room:delete
   GET    /api/v1/app/saved-views                                  200  -    both  PERM: organization:read
   POST   /api/v1/app/saved-views                                  200  req  both  PERM: organization:read
   GET    /api/v1/app/saved-views/:saved_view_id                   200  -    both  PERM: organization:read
@@ -320,7 +321,6 @@ Legend:
   POST   /api/v1/app/treatments/:treatment_id/reverse             200  req  both  PERM: treatment:update
   GET    /api/v1/app/user-preferences                             200  -    both  PERM: organization:read
   PATCH  /api/v1/app/user-preferences                             200  -    both  PERM: organization:read
-  GET    /api/v1/app/users                                        200  -    both  PERM: organization:read
   GET    /api/v1/app/visits                                       200  -    both  PERM: appointment:read
   GET    /api/v1/app/visits/:visit_id                             200  -    both  PERM: appointment:read
   PATCH  /api/v1/app/visits/:visit_id                             200  -    both  PERM: patient:update
@@ -425,11 +425,11 @@ Legend:
 
 ================================================================================
   DOMAIN: TENANCY (/api/v1/tenancy)
-  Routes: 41
+  Routes: 42
 ================================================================================
 
   — Sub Domains —
-  POST   /api/v1/tenancy/invitations/:invitation_id/accept        200  -    both  AUTH
+  POST   /api/v1/tenancy/membership-invitations/:membership_invitation_id/accept  200  req  both  AUTH
   GET    /api/v1/tenancy/organization                             200  -    both  AUTH
   PATCH  /api/v1/tenancy/organization                             200  -    both  PERM: organization:update
   DELETE /api/v1/tenancy/organization                             204  -    team  PERM: organization:delete
@@ -440,30 +440,31 @@ Legend:
   DELETE /api/v1/tenancy/organization/api-keys/:api_key_id        204  -    both  PERM: api-key:manage
   POST   /api/v1/tenancy/organization/api-keys/:api_key_id/rotate  200  -    both  PERM: api-key:manage
   GET    /api/v1/tenancy/organization/audit-logs                  200  -    both  PERM: audit-log:read
-  DELETE /api/v1/tenancy/organization/invitations/:invitation_id  204  -    both  PERM: invitation:manage
-  POST   /api/v1/tenancy/organization/invitations/:invitation_id/resend  200  -    both  PERM: invitation:manage
   POST   /api/v1/tenancy/organization/leave                       200  -    both  AUTH
   PUT    /api/v1/tenancy/organization/logo                        200  -    both  PERM: organization:update
   DELETE /api/v1/tenancy/organization/logo                        204  -    both  PERM: organization:update
   GET    /api/v1/tenancy/organization/memberships                 200  -    both  PERM: membership:read
-  POST   /api/v1/tenancy/organization/memberships                 200  req  team  PERM: membership:manage
+  POST   /api/v1/tenancy/organization/memberships                 200  req  team  PERM: membership:create
   GET    /api/v1/tenancy/organization/memberships/:membership_id  200  -    both  PERM: membership:read
-  PATCH  /api/v1/tenancy/organization/memberships/:membership_id  200  -    both  PERM: membership:manage
-  DELETE /api/v1/tenancy/organization/memberships/:membership_id  204  -    both  PERM: membership:manage
+  PATCH  /api/v1/tenancy/organization/memberships/:membership_id  200  -    both  PERM: membership:update
+  DELETE /api/v1/tenancy/organization/memberships/:membership_id  204  -    both  PERM: membership:delete
+  DELETE /api/v1/tenancy/organization/memberships/:membership_id/invitation  204  -    both  PERM: membership:delete
+  POST   /api/v1/tenancy/organization/memberships/:membership_id/invitation/resend  200  req  both  PERM: membership:update
   GET    /api/v1/tenancy/organization/memberships/:membership_id/permissions  200  -    both  PERM: membership:read
-  POST   /api/v1/tenancy/organization/memberships/:membership_id/restore  200  -    team  PERM: membership:manage
+  POST   /api/v1/tenancy/organization/memberships/:membership_id/restore  200  req  team  PERM: membership:delete
   GET    /api/v1/tenancy/organization/notification-policies       200  -    both  PERM: notification-policy:read
   POST   /api/v1/tenancy/organization/notification-policies       200  req  both  PERM: notification-policy:manage
   GET    /api/v1/tenancy/organization/notification-policies/:notification_policy_id  200  -    both  PERM: notification-policy:read
   PATCH  /api/v1/tenancy/organization/notification-policies/:notification_policy_id  200  -    both  PERM: notification-policy:manage
   DELETE /api/v1/tenancy/organization/notification-policies/:notification_policy_id  204  -    both  PERM: notification-policy:manage
   GET    /api/v1/tenancy/organization/roles                       200  -    both  PERM: role:read
-  POST   /api/v1/tenancy/organization/roles                       200  req  team  PERM: role:manage
+  POST   /api/v1/tenancy/organization/roles                       200  req  team  PERM: role:create
   GET    /api/v1/tenancy/organization/roles/:role_id              200  -    both  PERM: role:read
-  PATCH  /api/v1/tenancy/organization/roles/:role_id              200  -    both  PERM: role:manage
-  DELETE /api/v1/tenancy/organization/roles/:role_id              204  -    both  PERM: role:manage
+  PATCH  /api/v1/tenancy/organization/roles/:role_id              200  -    both  PERM: role:update
+  DELETE /api/v1/tenancy/organization/roles/:role_id              204  -    both  PERM: role:delete
   GET    /api/v1/tenancy/organization/roles/:role_id/permissions  200  -    both  PERM: role:read
-  PUT    /api/v1/tenancy/organization/roles/:role_id/permissions  200  -    both  PERM: role:manage
+  PUT    /api/v1/tenancy/organization/roles/:role_id/permissions  200  -    both  PERM: role:update
+  POST   /api/v1/tenancy/organization/roles/:role_id/restore      200  req  both  PERM: role:delete
   GET    /api/v1/tenancy/organization/settings                    200  -    both  PERM: organization:read
   PATCH  /api/v1/tenancy/organization/settings                    200  -    both  PERM: organization:update
   POST   /api/v1/tenancy/organization/transfer-ownership          200  req  team  AUTH
@@ -534,16 +535,16 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 443
+  Total routes    : 444
   Public          : 16
   Authenticated   : 51
   Role-guarded    : 9
-  Perm-guarded    : 362
+  Perm-guarded    : 363
   Token-guarded   : 5
   Team-only (O)   : 10
 
 ================================================================================
-  IDEMPOTENCY-REQUIRED WRITES (122) — X-Idempotency-Key required
+  IDEMPOTENCY-REQUIRED WRITES (126) — X-Idempotency-Key required
 ================================================================================
 
   Routes flagged I = req reject a missing or reused key (422); every other write
@@ -556,11 +557,13 @@ Legend:
     POST /api/v1/app/appointments/:appointment_id/restore
     POST /api/v1/app/appointments/:appointment_id/status
     POST /api/v1/app/appointments/:appointment_id/undo-check-in
-    POST /api/v1/app/branch-holidays/:branch_holiday_id/restore
     POST /api/v1/app/branches
     POST /api/v1/app/branches/:branch_id/holidays
+    POST /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id/restore
     POST /api/v1/app/branches/:branch_id/machines
+    POST /api/v1/app/branches/:branch_id/machines/:branch_machine_id/restore
     POST /api/v1/app/branches/:branch_id/rooms
+    POST /api/v1/app/branches/:branch_id/rooms/:branch_room_id/restore
     POST /api/v1/app/check-ins/:check_in_id/restore
     POST /api/v1/app/day-closes
     POST /api/v1/app/day-closes/:day_close_id/close
@@ -577,7 +580,6 @@ Legend:
     POST /api/v1/app/leads/:lead_id/reads
     POST /api/v1/app/leads/:lead_id/release
     POST /api/v1/app/leads/:lead_id/restore
-    POST /api/v1/app/machines/:machine_id/restore
     POST /api/v1/app/manufacturers
     POST /api/v1/app/manufacturers/:manufacturer_id/restore
     POST /api/v1/app/medical-contacts
@@ -634,7 +636,6 @@ Legend:
     POST /api/v1/app/prescriptions/:prescription_id/approve
     POST /api/v1/app/prescriptions/:prescription_id/restore
     POST /api/v1/app/reviews/:review_id/restore
-    POST /api/v1/app/rooms/:room_id/restore
     POST /api/v1/app/saved-views
     POST /api/v1/app/saved-views/:saved_view_id/restore
     POST /api/v1/app/stock-counts
@@ -664,10 +665,14 @@ Legend:
     POST /api/v1/billing/subscriptions/:subscription_id/change-plan
     POST /api/v1/billing/subscriptions/:subscription_id/resume
     POST /api/v1/notify/webhooks
+    POST /api/v1/tenancy/membership-invitations/:membership_invitation_id/accept
     POST /api/v1/tenancy/organization/api-keys
     POST /api/v1/tenancy/organization/memberships
+    POST /api/v1/tenancy/organization/memberships/:membership_id/invitation/resend
+    POST /api/v1/tenancy/organization/memberships/:membership_id/restore
     POST /api/v1/tenancy/organization/notification-policies
     POST /api/v1/tenancy/organization/roles
+    POST /api/v1/tenancy/organization/roles/:role_id/restore
     POST /api/v1/tenancy/organization/transfer-ownership
     POST /api/v1/tenancy/organizations
     POST /api/v1/uploads
@@ -679,10 +684,11 @@ Legend:
 ================================================================================
 
   Tenancy:
-    api-key:manage                api-key:read                  invitation:manage
-    membership:manage             membership:read               notification-policy:manage
-    notification-policy:read      organization:delete           organization:read
-    organization:update           role:manage                   role:read
+    api-key:manage                api-key:read                  membership:create
+    membership:delete             membership:read               membership:update
+    notification-policy:manage    notification-policy:read      organization:delete
+    organization:read             organization:update           role:create
+    role:delete                   role:read                     role:update
 
   Billing:
     subscription:manage           subscription:read
@@ -699,35 +705,31 @@ Legend:
   App:
     appointment:create            appointment:delete            appointment:read
     appointment:update            branch:create                 branch:delete
-    branch:read                   branch:update                 branch_holiday:create
-    branch_holiday:delete         branch_holiday:read           branch_holiday:update
-    clinical_record:read          day_close:close               day_close:create
-    day_close:delete              day_close:read                day_close:update
-    invoice:create                invoice:delete                invoice:read
-    invoice:update                lead:create                   lead:delete
-    lead:read                     lead:update                   list:export
-    lowest_price:read             machine:create                machine:delete
-    machine:read                  machine:update                manufacturer:create
-    manufacturer:delete           manufacturer:read             manufacturer:update
-    medical_purchase_order:create medical_purchase_order:delete medical_purchase_order:read
-    medical_purchase_order:update medical_rep:create            medical_rep:delete
-    medical_rep:read              medical_rep:update            medical_sale:create
-    medical_sale:delete           medical_sale:read             medical_sale:update
-    medicine:create               medicine:delete               medicine:read
-    medicine:update               message_template:create       message_template:delete
-    message_template:read         message_template:update       offer:create
-    offer:delete                  offer:read                    offer:update
-    offer_price:bill_below        offering:create               offering:delete
-    offering:read                 offering:update               offering_group:create
-    offering_group:delete         offering_group:read           offering_group:update
-    patient:create                patient:delete                patient:read
-    patient:update                payment:create                payment:delete
-    payment:read                  payment:reverse_settled       payment:update
-    prescription:create           prescription:delete           prescription:read
-    prescription:update           price:manage                  private_album:read
-    refund:create                 review:create                 review:delete
-    review:read                   review:update                 room:create
-    room:delete                   room:read                     room:update
+    branch:read                   branch:update                 clinical_record:read
+    day_close:close               day_close:create              day_close:delete
+    day_close:read                day_close:update              invoice:create
+    invoice:delete                invoice:read                  invoice:update
+    lead:create                   lead:delete                   lead:read
+    lead:update                   list:export                   lowest_price:read
+    manufacturer:create           manufacturer:delete           manufacturer:read
+    manufacturer:update           medical_purchase_order:create medical_purchase_order:delete
+    medical_purchase_order:read   medical_purchase_order:update medical_rep:create
+    medical_rep:delete            medical_rep:read              medical_rep:update
+    medical_sale:create           medical_sale:delete           medical_sale:read
+    medical_sale:update           medicine:create               medicine:delete
+    medicine:read                 medicine:update               message_template:create
+    message_template:delete       message_template:read         message_template:update
+    offer:create                  offer:delete                  offer:read
+    offer:update                  offer_price:bill_below        offering:create
+    offering:delete               offering:read                 offering:update
+    offering_group:create         offering_group:delete         offering_group:read
+    offering_group:update         patient:create                patient:delete
+    patient:read                  patient:update                payment:create
+    payment:delete                payment:read                  payment:reverse_settled
+    payment:update                prescription:create           prescription:delete
+    prescription:read             prescription:update           price:manage
+    private_album:read            refund:create                 review:create
+    review:delete                 review:read                   review:update
     sale:void                     saved_view:create             saved_view:delete
     saved_view:read               saved_view:update             stock_item:create
     stock_item:delete             stock_item:read               stock_item:update

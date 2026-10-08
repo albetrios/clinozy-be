@@ -28,7 +28,7 @@ const ALLOWED_IMPORTERS = [
   // recipient's public id now travels in its job, so it mints PRINCIPAL_SCOPE.JOB.)
   'src/domains/notify/sub-domains/notification/notification.service.ts',
   // Invite flow: inviter's request acts on the invited user / target organization.
-  'src/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.service.ts',
+  'src/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.service.ts',
   'src/domains/tenancy/sub-domains/membership/membership.service.ts',
   // API-key authentication resolves the organization from the verified key itself.
   'src/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.service.ts',

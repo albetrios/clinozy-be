@@ -76,7 +76,7 @@ function createMembershipWriteHandlers(service: MembershipService) {
         target_user_public_id: data.user_id,
         metadata: {
           membership_public_id: data.id,
-          role_public_id: data.role_id,
+          role_public_ids: data.role_ids,
           invitation_public_id: data.invitation?.id ?? null,
         },
       });
@@ -101,7 +101,7 @@ function createMembershipWriteHandlers(service: MembershipService) {
         target_user_public_id: data.user_id,
         metadata: {
           membership_public_id: membershipId,
-          role_public_id: data.role_id,
+          role_public_ids: data.role_ids,
           changed_fields: listBodyFieldNames(request.body),
         },
       });
@@ -120,6 +120,20 @@ function createMembershipWriteHandlers(service: MembershipService) {
         resource_type: 'membership',
         organizationPublicId: scope.organizationPublicId,
         metadata: { membership_public_id: membershipId, delete_reason: removal.reason },
+      });
+      return reply.code(204).send();
+    },
+    revokeInvitation: async (request: FastifyRequest, reply: FastifyReply) => {
+      const auth = requirePrincipal(request);
+      const scope = requireOrganizationScope(request);
+      const membershipId = readMembershipIdParam(request);
+      await service.revokeInvitation(scope, membershipId);
+      await recordScopedAuditEvent(request, {
+        ...buildAuditActorFields(auth),
+        action: 'tenancy.membership_invitation.revoke',
+        resource_type: 'membership_invitation',
+        organizationPublicId: scope.organizationPublicId,
+        metadata: { membership_public_id: membershipId },
       });
       return reply.code(204).send();
     },

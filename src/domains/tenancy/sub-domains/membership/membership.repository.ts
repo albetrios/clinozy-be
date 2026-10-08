@@ -1,3 +1,4 @@
+import { MEMBERSHIP_STATUS } from './membership.constants.js';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql, type SQL } from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import {
@@ -6,7 +7,7 @@ import {
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { membershipHoldsRole } from '@/domains/tenancy/sub-domains/membership/membership-additional-roles/membership-additional-roles.schema.js';
-import { member_invitations } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.schema.js';
+import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
 import { role_permissions } from '@/domains/tenancy/sub-domains/member-roles/member-role-permission/member-role-permission.schema.js';
@@ -19,29 +20,44 @@ import {
   SEAT_CONSUMING_MEMBERSHIP_STATUSES,
 } from './membership.types.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
-import { parseListCursor } from '@/shared/utils/http/pagination.util.js';
+import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
 import {
   buildContainsLikePattern,
-  computeListFilterFingerprint,
   finishKeysetPage,
   resolveKeysetSort,
 } from '@/shared/utils/http/list-query.util.js';
 
-interface MembershipListPagination {
-  after?: string;
+/** What {@link MembershipRepository.list} reads: paging, sort, search and the filters. */
+export interface MembershipListQuery {
+  after?: string | undefined;
   limit: number;
-  /** Optional free-text search over the member's email / first name / last name. */
-  q?: string;
-  /** Sort field. `created_at` (default) uses a local `(created_at, id)` keyset; `name` orders by the member's `auth.users` display name via the SECURITY DEFINER resolver. */
-  sort?: 'name' | 'created_at';
-  /** Sort direction; defaults to ascending. */
-  order?: 'asc' | 'desc';
+  /** The member's name (`display_name`) or login email. */
+  q?: string | undefined;
+  /** `created_at` (default) or `name` — the membership's `display_name`. */
+  sort?: 'name' | 'created_at' | undefined;
+  order?: 'asc' | 'desc' | undefined;
+  /** Only these statuses; every status when absent. */
+  statuses?: readonly string[] | undefined;
+  /** Only members holding this role (internal id), main or extra. */
+  roleId?: number | undefined;
+  /** Only these memberships (internal ids) — e.g. the members of one branch. */
+  membershipIds?: readonly number[] | undefined;
+  /** Only these memberships (public ids). */
+  publicIds?: readonly string[] | undefined;
+  /** Ended (soft-deleted) memberships too (launch K5, D58). */
+  includeEnded?: boolean | undefined;
+  /** Count the (capped) total on the first page. */
+  withTotal?: boolean | undefined;
 }
 
-/** One ordered `(id, sort_value)` row from `tenancy.list_organization_membership_ids_by_name`. */
-interface OrderedMembershipIdRow {
-  id: number;
-  sort_value: string;
+/** One page of {@link MembershipRepository.list}. */
+export interface MembershipPage {
+  items: MembershipRow[];
+  /** The capped total on the first page when asked; `null` otherwise. */
+  total: number | null;
+  limit: number;
+  has_more: boolean;
+  next_cursor: string | null;
 }
 
 /** Row shape returned by {@link MembershipRepository.listOrganizationsForUserDataExport}. */
@@ -80,10 +96,35 @@ export interface MembershipInvitationRefRow {
  * Drizzle data access for `tenancy.memberships`. Active rows are filtered via
  * `deleted_at IS NULL` (soft-delete semantics) and a partial unique index
  * keeps the `(user_id, organization_id)` pair unique among active rows.
- * Listing uses a `(created_at, id)` keyset cursor; `update` flips
- * `joined_at` to `now()` when the status transitions to `ACTIVE`.
+ * Listing uses a `(created_at, id)` or `(display_name, id)` keyset cursor; `joined_at` is set once,
+ * when the invite is accepted (launch T10).
  */
 export class MembershipRepository extends BaseRepository {
+  /**
+   * A login's live memberships with their organization's public id (account deletion, K6). Runs
+   * under the login's own user context — the same cross-organization read as the data export.
+   */
+  async listLiveForUser(user_id: number): Promise<
+    {
+      id: number;
+      public_id: string;
+      organization_id: number;
+      organization_public_id: string;
+    }[]
+  > {
+    return getRequestDatabase()
+      .select({
+        id: memberships.id,
+        public_id: memberships.public_id,
+        organization_id: memberships.organization_id,
+        organization_public_id: organizations.public_id,
+      })
+      .from(memberships)
+      .innerJoin(organizations, eq(memberships.organization_id, organizations.id))
+      .where(and(eq(memberships.user_id, user_id), isNull(memberships.deleted_at)))
+      .orderBy(memberships.id);
+  }
+
   async listOrganizationsForUserDataExport(
     user_id: number,
     limit: number,
@@ -108,173 +149,87 @@ export class MembershipRepository extends BaseRepository {
   }
 
   /**
-   * Lists an organization's memberships with cursor pagination + optional `q` search and `sort` /
-   * `order`. `created_at` (the default) sorts on the local `(created_at, id)` keyset; `name` sorts by
-   * the member's `auth.users` display name, which — because that table is FORCE RLS — is resolved
-   * through the `tenancy.list_organization_membership_ids_by_name` SECURITY DEFINER function. Both
-   * paths mint the same opaque cursor (`sort_value` + `filter_fingerprint`) so `has_more`,
-   * `next_cursor`, and the sort/filter binding behave identically to the roles / api-key lists.
+   * One page of an organization's memberships (launch §2.A / §2.B): the team list and the team
+   * picker both read here.
+   *
+   * @remarks
+   * - **Algorithm:** one keyset query over `tenancy.memberships` — `created_at` (default) or `name`
+   *   (the membership's own `display_name`, K3) with the `id` tie-break; the filters are columns
+   *   (`status`, `public_id`, `id`), the role (main or extra, {@link membershipHoldsRole}) and `q`
+   *   (ids from the SECURITY DEFINER search, which reads the login's email). Every filter is in the
+   *   cursor fingerprint, so a cursor never crosses to another filter set. The capped total runs on
+   *   the first page only when asked.
+   * - **Failure modes:** none beyond the query; an empty id filter is an empty page.
    */
-  async findByOrganizationId(organization_id: number, pagination: MembershipListPagination) {
-    return pagination.sort === 'name'
-      ? this.listByNameSort(organization_id, pagination)
-      : this.listByCreatedAtSort(organization_id, pagination);
-  }
-
-  /**
-   * `created_at` sort path (default). `q` still resolves the matching membership ids through the
-   * SECURITY DEFINER search resolver (see {@link searchMembershipIds}) and adds `id IN (...)`; the
-   * `(created_at, id)` keyset + cursor come from the shared `resolveKeysetSort` / `finishKeysetPage`
-   * helpers, so `order` (asc/desc) and the `filter_fingerprint` binding work exactly as for roles.
-   */
-  private async listByCreatedAtSort(organization_id: number, pagination: MembershipListPagination) {
-    const { after, limit, q, order } = pagination;
-    let searchIdFilter: SQL | undefined;
-    if (q !== undefined) {
-      const matchingIds = await this.searchMembershipIds(organization_id, q);
-      if (matchingIds.length === 0) {
-        return {
-          items: [] as MembershipRow[],
-          total: null,
-          limit,
-          has_more: false,
-          next_cursor: null,
-        };
-      }
-      searchIdFilter = inArray(memberships.id, matchingIds);
+  async list(organization_id: number, query: MembershipListQuery): Promise<MembershipPage> {
+    const emptyPage: MembershipPage = {
+      items: [],
+      total: query.withTotal ? 0 : null,
+      limit: query.limit,
+      has_more: false,
+      next_cursor: null,
+    };
+    let searchIds: readonly number[] | undefined;
+    if (query.q !== undefined) {
+      searchIds = await this.searchMembershipIds(organization_id, query.q);
+      if (searchIds.length === 0) return emptyPage;
     }
+    if (query.membershipIds?.length === 0 || query.publicIds?.length === 0) return emptyPage;
+    const where = and(
+      eq(memberships.organization_id, organization_id),
+      query.includeEnded ? undefined : isNull(memberships.deleted_at),
+      query.statuses === undefined ? undefined : inArray(memberships.status, [...query.statuses]),
+      query.roleId === undefined ? undefined : membershipHoldsRole(query.roleId),
+      query.membershipIds === undefined
+        ? undefined
+        : inArray(memberships.id, [...query.membershipIds]),
+      query.publicIds === undefined
+        ? undefined
+        : inArray(memberships.public_id, [...query.publicIds]),
+      searchIds === undefined ? undefined : inArray(memberships.id, [...searchIds]),
+    );
     const { orderBy, cursorCondition, sortValueFor, filterFingerprint } =
       resolveKeysetSort<MembershipRow>({
-        columns: { created_at: { column: memberships.created_at, kind: 'created_at' } },
+        columns: {
+          created_at: { column: memberships.created_at, kind: 'created_at' },
+          name: {
+            column: memberships.display_name,
+            kind: 'text',
+            getSortValue: (row) => row.display_name,
+          },
+        },
         idColumn: memberships.id,
         defaultSort: 'created_at',
-        sort: 'created_at',
-        order,
-        q,
-        after,
+        sort: query.sort,
+        order: query.order,
+        q: query.q,
+        filters: {
+          statuses: query.statuses ?? null,
+          role: query.roleId ?? null,
+          members: query.membershipIds ?? null,
+          ids: query.publicIds ?? null,
+          ended: query.includeEnded ?? false,
+        },
+        after: query.after,
       });
     const rows = (await getRequestDatabase()
       .select()
       .from(memberships)
-      .where(
-        and(
-          eq(memberships.organization_id, organization_id),
-          isNull(memberships.deleted_at),
-          searchIdFilter,
-          cursorCondition,
-        ),
-      )
+      .where(and(where, cursorCondition))
       .orderBy(...orderBy)
-      .limit(limit + 1)) as MembershipRow[];
-    return finishKeysetPage(rows, { limit, sortValueFor, filterFingerprint });
+      .limit(query.limit + 1)) as MembershipRow[];
+    const page = finishKeysetPage(rows, { limit: query.limit, sortValueFor, filterFingerprint });
+    const total =
+      query.withTotal && query.after === undefined
+        ? await countWithCap({ database: getRequestDatabase(), table: memberships, where })
+        : null;
+    return { ...page, total };
   }
 
   /**
-   * `name` sort path. Ordering by the member's `auth.users` display name can't happen in a plain
-   * query under organization-only context (FORCE RLS matches zero rows), so the definer function
-   * `tenancy.list_organization_membership_ids_by_name` does the ordering + keyset + `q` filter + limit
-   * and returns the page's `(id, sort_value)`. The typed `MembershipRow`s are then fetched by
-   * `id IN (...)` under the organization RLS context and reordered to the function's order before the shared
-   * `finishKeysetPage` mints the cursor. A cursor whose `filter_fingerprint` no longer matches the
-   * current `{q, sort, order}` is ignored (resets to the first page) — never interleaving pages.
-   */
-  private async listByNameSort(organization_id: number, pagination: MembershipListPagination) {
-    const { after, limit, q, order } = pagination;
-    const effectiveOrder = order ?? 'asc';
-    const filterFingerprint = computeListFilterFingerprint({
-      q,
-      sort: 'name',
-      order: effectiveOrder,
-    });
-    let cursor = parseListCursor(after);
-    if (
-      cursor?.filter_fingerprint !== undefined &&
-      cursor.filter_fingerprint !== filterFingerprint
-    ) {
-      cursor = null;
-    }
-    const ordered = await this.listMembershipIdsByName({
-      organization_id,
-      searchPattern: q !== undefined ? buildContainsLikePattern(q) : null,
-      orderDesc: effectiveOrder === 'desc',
-      afterSortValue: cursor?.sort_value ?? null,
-      afterId: cursor?.id ?? null,
-      // Fetch one extra id so finishKeysetPage can compute has_more without a count.
-      limit: limit + 1,
-    });
-    if (ordered.length === 0) {
-      return {
-        items: [] as MembershipRow[],
-        total: null,
-        limit,
-        has_more: false,
-        next_cursor: null,
-      };
-    }
-    const sortValueById = new Map(ordered.map((row) => [row.id, row.sort_value]));
-    const idsInOrder = ordered.map((row) => row.id);
-    const rowsById = await this.findByIdsForOrganization(idsInOrder, organization_id);
-    // Preserve the definer function's ordering; drop any id the RLS-scoped fetch didn't return.
-    const rows = idsInOrder
-      .map((id) => rowsById.get(id))
-      .filter((row): row is MembershipRow => row !== undefined);
-    return finishKeysetPage(rows, {
-      limit,
-      sortValueFor: (row) => sortValueById.get(row.id),
-      filterFingerprint,
-    });
-  }
-
-  /**
-   * Executes the `tenancy.list_organization_membership_ids_by_name` SECURITY DEFINER function,
-   * returning the ordered `(id, sort_value)` page. `searchPattern` / `afterSortValue` / `afterId` are
-   * bound as NULL on the first page (or when no `q`); casts are explicit so drizzle binds the correct
-   * Postgres types.
-   */
-  private async listMembershipIdsByName(args: {
-    organization_id: number;
-    searchPattern: string | null;
-    orderDesc: boolean;
-    afterSortValue: string | null;
-    afterId: number | null;
-    limit: number;
-  }): Promise<OrderedMembershipIdRow[]> {
-    const result = await getRequestDatabase().execute(
-      sql`SELECT id, sort_value FROM tenancy.list_organization_membership_ids_by_name(${args.organization_id}::bigint, ${args.searchPattern}::text, ${args.orderDesc}::boolean, ${args.afterSortValue}::text, ${args.afterId}::bigint, ${args.limit}::int)`,
-    );
-    const rows = (
-      Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? [])
-    ) as { id: number | string; sort_value: string }[];
-    return rows.map((row) => ({ id: Number(row.id), sort_value: row.sort_value }));
-  }
-
-  /**
-   * Batch-fetches typed `MembershipRow`s by internal id within an organization (active rows only),
-   * keyed by id so the caller can restore an externally-computed ordering. Runs under the organization RLS
-   * context — `memberships` is organization-scoped, so no resolver is needed.
-   */
-  private async findByIdsForOrganization(
-    ids: readonly number[],
-    organization_id: number,
-  ): Promise<Map<number, MembershipRow>> {
-    if (ids.length === 0) return new Map();
-    const rows = (await getRequestDatabase()
-      .select()
-      .from(memberships)
-      .where(
-        and(
-          inArray(memberships.id, [...ids]),
-          eq(memberships.organization_id, organization_id),
-          isNull(memberships.deleted_at),
-        ),
-      )) as MembershipRow[];
-    return new Map(rows.map((row) => [row.id, row]));
-  }
-
-  /**
-   * Resolves the membership ids in an organization whose member's user email / first name / last
-   * name matches `q`. `auth.users` is FORCE RLS behind a self-owner policy, so under organization-only context
-   * a plain join matches zero rows — the search goes through the
+   * Resolves the membership ids in an organization (live or ended) whose name (`display_name`) or
+   * login email matches `q`. `auth.users` is FORCE RLS behind a self-owner policy, so under
+   * organization-only context a plain join matches zero rows — the search goes through the
    * `tenancy.search_organization_membership_ids` SECURITY DEFINER function (20260702000000), which
    * bypasses RLS by explicit organization scoping and exposes no `auth.users` columns. The term is
    * escaped into a `%…%` `ILIKE` pattern before binding.
@@ -355,7 +310,7 @@ export class MembershipRepository extends BaseRepository {
 
   /**
    * Returns the internal user ids of every ACTIVE member of an organization whose (non-deleted)
-   * role grants the given permission code — e.g. all `membership:manage` holders, for the
+   * role grants the given permission code — e.g. all `membership:create` holders, for the
    * invite-accepted notification fan-out.
    *
    * @remarks Runs under the organization RLS context (`memberships` / `roles` / `role_permissions` are all
@@ -380,7 +335,7 @@ export class MembershipRepository extends BaseRepository {
       .where(
         and(
           eq(memberships.organization_id, organization_id),
-          eq(memberships.status, 'ACTIVE'),
+          eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
           isNull(memberships.deleted_at),
         ),
       );
@@ -390,7 +345,7 @@ export class MembershipRepository extends BaseRepository {
   /**
    * Maps internal membership ids to their live (pending — not accepted, not revoked) invitation, so
    * the serializer can embed an `invitation` ref on `INVITED` rows (the frontend drives Resend /
-   * Revoke from the members table). Runs under the organization RLS context (`member_invitations` is scoped
+   * Revoke from the members table). Runs under the organization RLS context (`membership_invitations` is scoped
    * to the org's memberships) — no SECURITY DEFINER needed. Ordered ascending so the newest live
    * invite wins for a membership with more than one historical row.
    */
@@ -400,19 +355,19 @@ export class MembershipRepository extends BaseRepository {
     if (membershipInternalIds.length === 0) return new Map();
     const rows = await getRequestDatabase()
       .select({
-        membership_id: member_invitations.membership_id,
-        public_id: member_invitations.public_id,
-        expires_at: member_invitations.expires_at,
+        membership_id: membership_invitations.membership_id,
+        public_id: membership_invitations.public_id,
+        expires_at: membership_invitations.expires_at,
       })
-      .from(member_invitations)
+      .from(membership_invitations)
       .where(
         and(
-          inArray(member_invitations.membership_id, [...membershipInternalIds]),
-          isNull(member_invitations.accepted_at),
-          isNull(member_invitations.revoked_at),
+          inArray(membership_invitations.membership_id, [...membershipInternalIds]),
+          isNull(membership_invitations.accepted_at),
+          isNull(membership_invitations.revoked_at),
         ),
       )
-      .orderBy(asc(member_invitations.created_at), asc(member_invitations.id));
+      .orderBy(asc(membership_invitations.created_at), asc(membership_invitations.id));
     return new Map(
       rows.map((row) => [
         row.membership_id,
@@ -491,7 +446,7 @@ export class MembershipRepository extends BaseRepository {
    *   subquery and let the caller log exactly how many were suspended.
    * - **Failure modes:** none beyond the underlying queries; runs inside the caller's organization
    *   DB context (RLS-scoped) and transaction.
-   * - **Side effects:** writes `status = 'SUSPENDED'` (a suspended seat is not counted toward the
+   * - **Side effects:** writes `status = 'suspended'` (a suspended seat is not counted toward the
    *   cap, so this lowers the org's seat usage). Returns the internal `user_id`s actually suspended
    *   (empty when no non-owner ACTIVE members remain — e.g. an owner-only organization that can't shrink
    *   further) so the caller can purge each suspended member's permission cache.
@@ -508,7 +463,7 @@ export class MembershipRepository extends BaseRepository {
       .where(
         and(
           eq(memberships.organization_id, options.organization_id),
-          eq(memberships.status, 'ACTIVE'),
+          eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
           ne(memberships.user_id, options.owner_user_id),
           isNull(memberships.deleted_at),
         ),
@@ -518,7 +473,7 @@ export class MembershipRepository extends BaseRepository {
     if (candidates.length === 0) return [];
     await getRequestDatabase()
       .update(memberships)
-      .set({ status: 'SUSPENDED', updated_at: new Date() })
+      .set({ status: MEMBERSHIP_STATUS.SUSPENDED, updated_at: new Date() })
       .where(
         inArray(
           memberships.id,
@@ -599,7 +554,7 @@ export class MembershipRepository extends BaseRepository {
         organization_id: data.organization_id,
         user_id: data.user_id,
         role_id: data.role_id,
-        status: data.status ?? 'INVITED',
+        status: data.status ?? MEMBERSHIP_STATUS.INVITED,
         invited_by_user_id: data.invited_by_user_id ?? undefined,
         created_by_user_id: data.created_by_user_id ?? undefined,
         updated_by_user_id: data.created_by_user_id ?? undefined,
@@ -618,7 +573,6 @@ export class MembershipRepository extends BaseRepository {
     const payload: MembershipProfileData & {
       status?: string;
       role_id?: number;
-      joined_at?: Date;
       updated_at: Date | SQL;
       updated_by_user_id?: number;
     } = omitUndefined({
@@ -627,7 +581,7 @@ export class MembershipRepository extends BaseRepository {
       updated_by_user_id: updated_by_user_id ?? undefined,
     });
     if (data.status) payload.status = data.status;
-    if (data.status === 'ACTIVE') payload.joined_at = new Date();
+    // T10: `joined_at` is set once, when the invite is accepted — a reactivation keeps it.
     if (data.role_id !== undefined) payload.role_id = data.role_id;
     const rows = await getRequestDatabase()
       .update(memberships)
@@ -657,7 +611,11 @@ export class MembershipRepository extends BaseRepository {
   ): Promise<MembershipRow | null> {
     const rows = await getRequestDatabase()
       .update(memberships)
-      .set({ status: 'ACTIVE', joined_at: new Date(), updated_at: databaseNowTimestamp })
+      .set({
+        status: MEMBERSHIP_STATUS.ACTIVE,
+        joined_at: new Date(),
+        updated_at: databaseNowTimestamp,
+      })
       .where(
         and(
           eq(memberships.id, membership_id),
@@ -668,7 +626,7 @@ export class MembershipRepository extends BaseRepository {
           // joined_at is still NULL (so a joined_at-only guard would miss it). Mirrors the PATCH
           // guard that already blocks INVITED→ACTIVE via the manager route; permission resolution
           // keys on status='ACTIVE', so this is the access kill-switch.
-          eq(memberships.status, 'INVITED'),
+          eq(memberships.status, MEMBERSHIP_STATUS.INVITED),
           isNull(memberships.deleted_at),
         ),
       )
@@ -724,6 +682,109 @@ export class MembershipRepository extends BaseRepository {
         ),
       )
       .limit(1);
+    return (rows[0] ?? null) as MembershipRow | null;
+  }
+
+  /** A membership of the organization by public id, live or ended (launch D58), or null. */
+  async findAnyByPublicId(
+    public_id: string,
+    organization_id: number,
+  ): Promise<MembershipRow | null> {
+    const rows = await getRequestDatabase()
+      .select()
+      .from(memberships)
+      .where(
+        and(eq(memberships.public_id, public_id), eq(memberships.organization_id, organization_id)),
+      )
+      .limit(1);
+    return (rows[0] ?? null) as MembershipRow | null;
+  }
+
+  /**
+   * Renames an ended membership — the one change it accepts (launch K6, D58). A live one is never
+   * renamed here: its name follows the profile (K3).
+   */
+  async renameEnded(options: {
+    publicId: string;
+    organizationId: number;
+    displayName: string;
+    updatedByUserId: number | null;
+  }): Promise<MembershipRow | null> {
+    const rows = await getRequestDatabase()
+      .update(memberships)
+      .set({
+        display_name: options.displayName,
+        updated_at: databaseNowTimestamp,
+        ...(options.updatedByUserId === null
+          ? {}
+          : { updated_by_user_id: options.updatedByUserId }),
+      })
+      .where(
+        and(
+          eq(memberships.public_id, options.publicId),
+          eq(memberships.organization_id, options.organizationId),
+          isNotNull(memberships.deleted_at),
+        ),
+      )
+      .returning();
+    return (rows[0] ?? null) as MembershipRow | null;
+  }
+
+  /** The login's most recently ended membership in the organization (launch K7), or null. */
+  async findLatestEndedForUser(options: {
+    userId: number;
+    organizationId: number;
+  }): Promise<MembershipRow | null> {
+    const rows = await getRequestDatabase()
+      .select()
+      .from(memberships)
+      .where(
+        and(
+          eq(memberships.user_id, options.userId),
+          eq(memberships.organization_id, options.organizationId),
+          isNotNull(memberships.deleted_at),
+        ),
+      )
+      .orderBy(desc(memberships.deleted_at), desc(memberships.id))
+      .limit(1);
+    return (rows[0] ?? null) as MembershipRow | null;
+  }
+
+  /**
+   * Brings an ended membership back as invited (launch K7 — the same login added again): same id,
+   * staff number and history; the new main role and profile; `joined_at` cleared until the invite
+   * is accepted. The display name follows the profile again (`trg_memberships_display_name`).
+   * Throws a Postgres unique violation when the login holds a live membership already.
+   */
+  async reviveAsInvited(options: {
+    id: number;
+    organizationId: number;
+    roleId: number;
+    invitedByUserId: number;
+    profile: MembershipProfileData;
+  }): Promise<MembershipRow | null> {
+    const rows = await getRequestDatabase()
+      .update(memberships)
+      .set({
+        ...options.profile,
+        role_id: options.roleId,
+        status: MEMBERSHIP_STATUS.INVITED,
+        joined_at: null,
+        invited_by_user_id: options.invitedByUserId,
+        deleted_at: null,
+        delete_reason: null,
+        delete_note: null,
+        updated_at: databaseNowTimestamp,
+        updated_by_user_id: options.invitedByUserId,
+      })
+      .where(
+        and(
+          eq(memberships.id, options.id),
+          eq(memberships.organization_id, options.organizationId),
+          isNotNull(memberships.deleted_at),
+        ),
+      )
+      .returning();
     return (rows[0] ?? null) as MembershipRow | null;
   }
 

@@ -1,14 +1,24 @@
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 import {
   createMemberRoleDto,
+  deleteMemberRoleQueryDto,
   updateMemberRoleDto,
   listMemberRolesQueryDto,
 } from './member-role.dto.js';
 import type {
   CreateMemberRoleInput,
+  DeleteMemberRoleQueryInput,
   UpdateMemberRoleInput,
   ListMemberRolesQueryInput,
 } from './member-role.dto.js';
+
+/**
+ * Validates a `DELETE /organization/roles/:role_id` query against {@link deleteMemberRoleQueryDto}
+ * (the reason, and a note for `other`).
+ */
+export function validateDeleteMemberRoleQuery(data: unknown): DeleteMemberRoleQueryInput {
+  return parseWithSchema(deleteMemberRoleQueryDto, data);
+}
 
 /**
  * Validates a `POST /organization/roles` body against

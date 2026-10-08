@@ -21,7 +21,7 @@
     "src/domains/billing/**/*.service.ts",
     "src/domains/tenancy/sub-domains/membership/membership.service.ts",
     "src/domains/tenancy/sub-domains/organization/organization.service.ts",
-    "src/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.service.ts",
+    "src/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.service.ts",
     "src/domains/tenancy/sub-domains/member-roles/member-role.service.ts",
     "src/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.service.ts",
     "src/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.ts",

@@ -8,7 +8,7 @@ const ENTITY_LABELS: Record<PublicIdEntity, string> = {
   user: 'user',
   organization: 'organization',
   membership: 'membership',
-  memberInvitation: 'invitation',
+  membershipInvitation: 'invitation',
   memberRole: 'role',
   organizationApiKey: 'API key',
   branch: 'branch',

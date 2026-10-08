@@ -146,9 +146,13 @@ export const tenancyRouteResponses: Record<string, ResponseDefinition> = {
   },
   'GET /api/v1/tenancy/organization/memberships/{membership_id}/permissions': {
     statusCode: 200,
-    schema: wrapSuccess({ type: 'array', items: schemas.permissionSchema }, [
-      schemas.permissionExample,
-    ]),
+    schema: wrapSuccess(
+      {
+        type: 'object',
+        properties: { permission_codes: { type: 'array', items: { type: 'string' } } },
+      },
+      { permission_codes: ['organization:read', 'membership:read'] },
+    ),
     example: null,
   },
   'POST /api/v1/tenancy/organization/memberships': {
@@ -183,7 +187,7 @@ export const tenancyRouteResponses: Record<string, ResponseDefinition> = {
   },
 
   // ── Invitations ── (add-member issues invitations via POST /organization/memberships, REQ-1)
-  'POST /api/v1/tenancy/invitations/{invitation_id}/accept': {
+  'POST /api/v1/tenancy/membership-invitations/{membership_invitation_id}/accept': {
     // Returns the accepted invitation plus `organization_id` (the organization just joined) so the client
     // can POST /auth/switch-to-organization into it without a separate lookup.
     statusCode: 200,
@@ -207,12 +211,12 @@ export const tenancyRouteResponses: Record<string, ResponseDefinition> = {
     ),
     example: null,
   },
-  'DELETE /api/v1/tenancy/organization/invitations/{invitation_id}': {
+  'DELETE /api/v1/tenancy/organization/memberships/{membership_id}/invitation': {
     statusCode: 204,
     schema: null,
     example: null,
   },
-  'POST /api/v1/tenancy/organization/invitations/{invitation_id}/resend': {
+  'POST /api/v1/tenancy/organization/memberships/{membership_id}/invitation/resend': {
     statusCode: 200,
     schema: wrapSuccess(schemas.invitationSchema, {
       ...schemas.invitationExample,
@@ -252,22 +256,21 @@ export const tenancyRouteResponses: Record<string, ResponseDefinition> = {
     schema: null,
     example: null,
   },
+  'POST /api/v1/tenancy/organization/roles/{role_id}/restore': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.memberRoleSchema, schemas.memberRoleExample),
+    example: null,
+  },
 
   // ── Role Permissions ──
   'GET /api/v1/tenancy/organization/roles/{role_id}/permissions': {
     statusCode: 200,
-    schema: wrapSuccess(
-      { type: 'array', items: schemas.memberRolePermissionSchema },
-      schemas.memberRolePermissionExamples,
-    ),
+    schema: wrapPaginated(schemas.memberRolePermissionSchema, schemas.memberRolePermissionExamples),
     example: null,
   },
   'PUT /api/v1/tenancy/organization/roles/{role_id}/permissions': {
     statusCode: 200,
-    schema: wrapSuccess(
-      { type: 'array', items: schemas.memberRolePermissionSchema },
-      schemas.memberRolePermissionExamples,
-    ),
+    schema: wrapPaginated(schemas.memberRolePermissionSchema, schemas.memberRolePermissionExamples),
     example: null,
   },
 
@@ -280,7 +283,7 @@ export const tenancyRouteResponses: Record<string, ResponseDefinition> = {
         code: 'membership:read',
         name: 'View Members',
         description: null,
-        category: 'tenancy',
+        category: 'users',
         created_at: '2026-01-01T00:00:00.000Z',
       },
       {

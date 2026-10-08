@@ -1,3 +1,4 @@
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import {
@@ -171,7 +172,7 @@ export class OrganizationRepository extends BaseRepository {
             .where(
               and(
                 eq(memberships.user_id, userId),
-                eq(memberships.status, 'ACTIVE'),
+                eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
                 isNull(memberships.deleted_at),
               ),
             ),
@@ -249,7 +250,7 @@ export class OrganizationRepository extends BaseRepository {
         and(
           eq(authUsers.public_id, user_public_id),
           eq(organizations.public_id, organization_public_id),
-          eq(memberships.status, 'ACTIVE'),
+          eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
           isNull(memberships.deleted_at),
           isNull(organizations.deleted_at),
         ),
@@ -275,7 +276,7 @@ export class OrganizationRepository extends BaseRepository {
       .where(
         and(
           eq(memberships.user_id, user_id),
-          eq(memberships.status, 'ACTIVE'),
+          eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
           isNull(organizations.deleted_at),
           eq(organizations.status, 'ACTIVE'),
           includePersonalOrganizations ? undefined : sql`${organizations.type} <> 'PERSONAL'`,
@@ -302,7 +303,7 @@ export class OrganizationRepository extends BaseRepository {
       .where(
         and(
           eq(memberships.user_id, user_id),
-          eq(memberships.status, 'ACTIVE'),
+          eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
           eq(organizations.public_id, organization_public_id),
           isNull(organizations.deleted_at),
           eq(organizations.status, 'ACTIVE'),
@@ -348,7 +349,7 @@ export class OrganizationRepository extends BaseRepository {
       .where(
         and(
           eq(memberships.user_id, user_id),
-          eq(memberships.status, 'ACTIVE'),
+          eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
           eq(organizations.public_id, organization_public_id),
           isNull(organizations.deleted_at),
           eq(organizations.status, 'ACTIVE'),
@@ -374,7 +375,7 @@ export class OrganizationRepository extends BaseRepository {
       .where(
         and(
           eq(memberships.user_id, user_id),
-          eq(memberships.status, 'ACTIVE'),
+          eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
           eq(organizations.id, organization_id),
           isNull(organizations.deleted_at),
           eq(organizations.status, 'ACTIVE'),
@@ -476,7 +477,7 @@ export class OrganizationRepository extends BaseRepository {
             SELECT 1 FROM ${memberships}
             WHERE ${memberships.user_id} = ${owner_user_id}
               AND ${memberships.organization_id} = ${organizations.id}
-              AND ${memberships.status} = 'ACTIVE'
+              AND ${memberships.status} = ${MEMBERSHIP_STATUS.ACTIVE}
               AND ${memberships.deleted_at} IS NULL
           )`,
         ),

@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  */
 describe('registerNotifyEventHandlers', () => {
   const WEBHOOK_DELIVERY_REQUESTED = 'notify.webhook_delivery.requested';
-  const MEMBER_INVITATION_ACCEPTED = 'tenancy.member_invitation.accepted';
+  const MEMBERSHIP_INVITATION_ACCEPTED = 'tenancy.membership_invitation.accepted';
 
   beforeEach(() => {
     vi.resetModules();
@@ -38,13 +38,13 @@ describe('registerNotifyEventHandlers', () => {
     expect(onSpy).toHaveBeenCalledWith(WEBHOOK_DELIVERY_REQUESTED, expect.any(Function));
   });
 
-  it('subscribes the cross-domain member-invitation-accepted handler', async () => {
+  it('subscribes the cross-domain membership-invitation-accepted handler', async () => {
     // The only cross-domain event edge in the codebase — notify consumes a tenancy event.
     const { onSpy, registerNotifyEventHandlers } = await loadWithSpy();
 
     registerNotifyEventHandlers();
 
-    expect(onSpy).toHaveBeenCalledWith(MEMBER_INVITATION_ACCEPTED, expect.any(Function));
+    expect(onSpy).toHaveBeenCalledWith(MEMBERSHIP_INVITATION_ACCEPTED, expect.any(Function));
   });
 
   it('registers both handlers exactly once when called twice', async () => {
@@ -58,7 +58,9 @@ describe('registerNotifyEventHandlers', () => {
 
     const subscribedTypes = onSpy.mock.calls.map(([eventType]) => eventType);
     expect(subscribedTypes.filter((type) => type === WEBHOOK_DELIVERY_REQUESTED)).toHaveLength(1);
-    expect(subscribedTypes.filter((type) => type === MEMBER_INVITATION_ACCEPTED)).toHaveLength(1);
+    expect(subscribedTypes.filter((type) => type === MEMBERSHIP_INVITATION_ACCEPTED)).toHaveLength(
+      1,
+    );
   });
 
   it('subscribes nothing until it is called', async () => {

@@ -40,8 +40,8 @@ export function validateListAppointmentsQuery(data: unknown): BaseRecordListInpu
       lead_id: query.lead_id,
       branch_id: query.branch_id,
       doctor_membership_id: query.doctor_membership_id,
-      room_id: query.room_id,
-      machine_id: query.machine_id,
+      branch_room_id: query.branch_room_id,
+      branch_machine_id: query.branch_machine_id,
     },
     ranges: {
       appointment_date: { from: query.appointment_date_from, to: query.appointment_date_to },

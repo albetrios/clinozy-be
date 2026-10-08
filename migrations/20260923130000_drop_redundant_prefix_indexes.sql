@@ -17,7 +17,7 @@
 --   auth.idx_user_data_exports_user_id           ⊂  idx_user_data_exports_user_id_status
 --   billing.idx_plans_active                     ⊂  idx_plans_active_price
 --   tenancy.idx_api_keys_organization            ⊂  idx_api_keys_organization_status
---   tenancy.idx_member_invitations_membership    ⊂  idx_member_invitations_membership_created_id
+--   tenancy.idx_membership_invitations_membership    ⊂  idx_membership_invitations_membership_created_id
 --
 -- Why it matters: four of these sit on `audit.logs`, the heaviest append-only table, so every
 -- audit write was maintaining four indexes that no query needs. Foreign-key coverage is
@@ -39,4 +39,4 @@ DROP INDEX CONCURRENTLY IF EXISTS billing.idx_plans_active;
 --> statement-breakpoint
 DROP INDEX CONCURRENTLY IF EXISTS tenancy.idx_api_keys_organization;
 --> statement-breakpoint
-DROP INDEX CONCURRENTLY IF EXISTS tenancy.idx_member_invitations_membership;
+DROP INDEX CONCURRENTLY IF EXISTS tenancy.idx_membership_invitations_membership;

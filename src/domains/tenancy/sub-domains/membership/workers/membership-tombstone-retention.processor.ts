@@ -18,7 +18,7 @@ import { env } from '@/shared/config/env.config.js';
  *   `blockedCount` return; any other database error bubbles up so BullMQ can
  *   retry.
  * - **Side effects:** issues DELETE batches against `tenancy.memberships`;
- *   child `tenancy.member_invitations` rows cascade automatically via
+ *   child `tenancy.membership_invitations` rows cascade automatically via
  *   `ON DELETE CASCADE`.
  * - **Notes:** must run under the global retention cleanup context which
  *   sets `app.global_retention_cleanup = 'true'` so RLS is bypassed.

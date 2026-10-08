@@ -76,18 +76,22 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.roomsRecordSchema, schemas.roomsRecordExample),
     example: null,
   },
-  'GET /api/v1/app/rooms/{room_id}': {
+  'GET /api/v1/app/branches/{branch_id}/rooms/{branch_room_id}': {
     statusCode: 200,
     schema: wrapSuccess(schemas.roomsRecordSchema, schemas.roomsRecordExample),
     example: null,
   },
-  'PATCH /api/v1/app/rooms/{room_id}': {
+  'PATCH /api/v1/app/branches/{branch_id}/rooms/{branch_room_id}': {
     statusCode: 200,
     schema: wrapSuccess(schemas.roomsRecordSchema, schemas.roomsRecordExample),
     example: null,
   },
-  'DELETE /api/v1/app/rooms/{room_id}': { statusCode: 204, schema: null, example: null },
-  'POST /api/v1/app/rooms/{room_id}/restore': {
+  'DELETE /api/v1/app/branches/{branch_id}/rooms/{branch_room_id}': {
+    statusCode: 204,
+    schema: null,
+    example: null,
+  },
+  'POST /api/v1/app/branches/{branch_id}/rooms/{branch_room_id}/restore': {
     statusCode: 200,
     schema: wrapSuccess(schemas.roomsRecordSchema, schemas.roomsRecordExample),
     example: null,
@@ -102,18 +106,22 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.machinesRecordSchema, schemas.machinesRecordExample),
     example: null,
   },
-  'GET /api/v1/app/machines/{machine_id}': {
+  'GET /api/v1/app/branches/{branch_id}/machines/{branch_machine_id}': {
     statusCode: 200,
     schema: wrapSuccess(schemas.machinesRecordSchema, schemas.machinesRecordExample),
     example: null,
   },
-  'PATCH /api/v1/app/machines/{machine_id}': {
+  'PATCH /api/v1/app/branches/{branch_id}/machines/{branch_machine_id}': {
     statusCode: 200,
     schema: wrapSuccess(schemas.machinesRecordSchema, schemas.machinesRecordExample),
     example: null,
   },
-  'DELETE /api/v1/app/machines/{machine_id}': { statusCode: 204, schema: null, example: null },
-  'POST /api/v1/app/machines/{machine_id}/restore': {
+  'DELETE /api/v1/app/branches/{branch_id}/machines/{branch_machine_id}': {
+    statusCode: 204,
+    schema: null,
+    example: null,
+  },
+  'POST /api/v1/app/branches/{branch_id}/machines/{branch_machine_id}/restore': {
     statusCode: 200,
     schema: wrapSuccess(schemas.machinesRecordSchema, schemas.machinesRecordExample),
     example: null,
@@ -130,22 +138,22 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.branchHolidaysRecordSchema, schemas.branchHolidaysRecordExample),
     example: null,
   },
-  'GET /api/v1/app/branch-holidays/{branch_holiday_id}': {
+  'GET /api/v1/app/branches/{branch_id}/holidays/{branch_holiday_id}': {
     statusCode: 200,
     schema: wrapSuccess(schemas.branchHolidaysRecordSchema, schemas.branchHolidaysRecordExample),
     example: null,
   },
-  'PATCH /api/v1/app/branch-holidays/{branch_holiday_id}': {
+  'PATCH /api/v1/app/branches/{branch_id}/holidays/{branch_holiday_id}': {
     statusCode: 200,
     schema: wrapSuccess(schemas.branchHolidaysRecordSchema, schemas.branchHolidaysRecordExample),
     example: null,
   },
-  'DELETE /api/v1/app/branch-holidays/{branch_holiday_id}': {
+  'DELETE /api/v1/app/branches/{branch_id}/holidays/{branch_holiday_id}': {
     statusCode: 204,
     schema: null,
     example: null,
   },
-  'POST /api/v1/app/branch-holidays/{branch_holiday_id}/restore': {
+  'POST /api/v1/app/branches/{branch_id}/holidays/{branch_holiday_id}/restore': {
     statusCode: 200,
     schema: wrapSuccess(schemas.branchHolidaysRecordSchema, schemas.branchHolidaysRecordExample),
     example: null,

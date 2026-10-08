@@ -1,7 +1,7 @@
 # KICKOFF — launch-2026-09-30-jxmr
 
 > The plan and the ROUTE ledger for the launch — frozen at approval. The design is the route review,
-> [plans/routes-final.md](plans/routes-final.md) (D46); each ROUTE row builds one module (or part of one) **exactly as it says**
+> [plans/routes-final.md](plans/routes-final.md) (D46); each ROUTE row builds one sub-domain (or part of one) **exactly as it says**
 > (D52). Anything the review leaves open is decided at kickoff by agent-os and recorded in `AS-BUILT.md`.
 
 ## 1. Header
@@ -17,7 +17,7 @@
 | Intake hash | 036cbb592ac5 |
 | Schema-routes | 5f90325208e1 |
 | Date | 2026-10-03 · re-planned 2026-10-08 ([D50](plans/decisions.md)) |
-| Route review | [plans/routes-final.md](plans/routes-final.md) — modules 1–10 ([D46](plans/decisions.md), [D47](plans/decisions.md)) |
+| Route review | [plans/routes-final.md](plans/routes-final.md) — sub-domains 1–10 ([D46](plans/decisions.md), [D47](plans/decisions.md)) |
 
 ## 2. Goal and scope
 
@@ -25,8 +25,8 @@
 schema-routes operation (schema-routes.md:1537–1755), plus the frontend's backend requests (its Appendix F),
 so that every frontend room can leave its fixtures ([D2](plans/decisions.md), [D3](plans/decisions.md)).
 
-**In scope:** the 10 modules of the route review ([routes-final.md](plans/routes-final.md): 248 app routes and module 2's
-tenancy routes), built per module ([D48](plans/decisions.md)) over the tables of [db-changes.md](plans/db-changes.md), the routes of [route-changes.md](plans/route-changes.md),
+**In scope:** the 10 sub-domains of the route review ([routes-final.md](plans/routes-final.md): 248 app routes and sub-domain 2's
+tenancy routes), built per sub-domain ([D48](plans/decisions.md)) over the tables of [db-changes.md](plans/db-changes.md), the routes of [route-changes.md](plans/route-changes.md),
 the background work of [worker-changes.md](plans/worker-changes.md); real WhatsApp ([D32](plans/decisions.md)), reminders
 ([D34](plans/decisions.md)), AI ideas ([D39](plans/decisions.md)).
 
@@ -84,18 +84,19 @@ banner ([D40](plans/decisions.md)).
 | [D43](plans/decisions.md) | What happens when two people edit the same record? | Refuse, and say who and when | RED |
 | [D44](plans/decisions.md) | Which AI drafts beyond ideas belong in this launch? | None at launch | SCOPE |
 | [D46](plans/decisions.md) | Does the route review replace the plan's design? | Yes — routes-final.md is the design | RED |
-| [D47](plans/decisions.md) | How are the modules grouped? | One module per domain folder, renumbered 1–10 | RED |
-| [D48](plans/decisions.md) | How is the reviewed design built? | Rebuild per module; old folders go in the same row | RED |
+| [D47](plans/decisions.md) | How are the sub-domains grouped? | One folder per sub-domain, renumbered 1–10 | RED |
+| [D48](plans/decisions.md) | How is the reviewed design built? | Rebuild per sub-domain; old folders go in the same row | RED |
 | [D49](plans/decisions.md) | Is the medical store in this build? | Paused until its route review | SCOPE |
 | [D50](plans/decisions.md) | Back to planning | ROUTE re-planned as rows #124–#153 | SCOPE |
+| [D54](plans/decisions.md) | What do we call the levels? | The code's words: domain → sub-domain → nested sub-domain; a nested sub-domain sits in its parent's folder | RED |
 
 ## 4. Features and order
 
-The route review ([routes-final.md](plans/routes-final.md), [D46](plans/decisions.md)) builds in **modules** — one per
-domain folder, in build order ([D47](plans/decisions.md)). Each module delivers the screen features below; the flows
-come after the modules they involve. The stories stay the requirements; the route review is how each is met.
+The route review ([routes-final.md](plans/routes-final.md), [D46](plans/decisions.md)) builds in **sub-domains** — one
+folder each under `app/sub-domains/`, in build order ([D47](plans/decisions.md)). Each sub-domain delivers the screen features below; the flows
+come after the sub-domains they involve. The stories stay the requirements; the route review is how each is met.
 
-| # | Module (route review) | Features it delivers | Depends on |
+| # | Sub-domain (route review) | Features it delivers | Depends on |
 | --- | --- | --- | --- |
 | 1 | Branches & places (§1) | [team-and-access](plans/features/team-and-access/story.md) — branches, rooms, machines, holidays | — |
 | 2 | Team (§2) | [team-and-access](plans/features/team-and-access/story.md) — members, roles, invitations; [shell-and-patterns](plans/features/shell-and-patterns/story.md) — preferences, saved views | 1 |
@@ -108,25 +109,25 @@ come after the modules they involve. The stories stay the requirements; the rout
 | 9 | Stock (§9) | [clinic-stock](plans/features/clinic-stock/story.md) | 1, 7, 8 |
 | 10 | Tasks & rules (§10) | [tasks](plans/features/tasks/story.md) | 2, 4–8 |
 | 11 | Medical store | [medical-store](plans/features/medical-store/story.md) — **deferred** ([D49](plans/decisions.md)) | — |
-| flow | — | [flow-enquiry-to-patient](plans/features/flow-enquiry-to-patient/story.md), [flow-visit-to-payment](plans/features/flow-visit-to-payment/story.md) (without the medicine sale, [D49](plans/decisions.md)), [flow-plan-and-feedback](plans/features/flow-plan-and-feedback/story.md) | the modules they involve |
+| flow | — | [flow-enquiry-to-patient](plans/features/flow-enquiry-to-patient/story.md), [flow-visit-to-payment](plans/features/flow-visit-to-payment/story.md) (without the medicine sale, [D49](plans/decisions.md)), [flow-plan-and-feedback](plans/features/flow-plan-and-feedback/story.md) | the sub-domains they involve |
 
 ## 5. ROUTE
 
 Re-planned 2026-10-08 ([D50](plans/decisions.md)). Rows #1–#60 built the tables of the 2026-10-03 plan; the
-module rows below **rebuild** them from the route review, one module (or one part of a large module) per row,
-in build order ([D48](plans/decisions.md)): each row builds its module's folder from its section of
-[routes-final.md](plans/routes-final.md) and deletes that module's old flat folders in the same row — never old and new
-side by side. Then background work, flows and acceptance. Driver: the module's NEW tables through the
+sub-domain rows below **rebuild** them from the route review, one sub-domain (or one part of a large sub-domain) per row,
+in build order ([D48](plans/decisions.md)): each row builds its sub-domain's folder from its section of
+[routes-final.md](plans/routes-final.md) and deletes that sub-domain's old flat folders in the same row — never old and new
+side by side. Then background work, flows and acceptance. Driver: the sub-domain's NEW tables through the
 staged-build prompt (`docs/getting-started/staged-build-prompt.md`), everything else through
 `/be-build-requirement`. Each row is one stop for your review (`be-kickoff-iteration` › Each ROUTE row).
 
-**Ditto the route review** ([D52](plans/decisions.md)). Each row builds its module exactly as
+**Ditto the route review** ([D52](plans/decisions.md)). Each row builds its sub-domain exactly as
 [routes-final.md](plans/routes-final.md) says — table and column names, routes, gates, statuses, errors, permission
 codes, folders. Where an agent-os skill, rule or gate cannot build something as written, the row **stops and asks**;
 an agreed change is written into routes-final.md first, then built — never a silent difference. Only what the review
 leaves open is decided on the way and recorded in `AS-BUILT.md`.
 
-**Done rows are re-done.** What rows #1–#64 built is replaced module by module so it matches the review; the
+**Done rows are re-done.** What rows #1–#64 built is replaced sub-domain by sub-domain so it matches the review; the
 superseded ledger below names the row that re-does each. Platform changes the review does not redesign (#1 the
 organization's settings, #3 a user's presence) stay as built.
 
@@ -139,21 +140,21 @@ its links working (the invoices' medical lines and links) until the medical stor
 
 | # | Work item | Kind | Depends on | Skill/driver | Acceptance | Assignee | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 124 | **Rules for every module** — K1 (the module-folder layout: `CLAUDE.md`, be-domain-generator, `validate:domain`) and K2–K8 (members who leave: `display_name`, `RESTRICT` pointers, the leave step, composite keys) | feature | — | `/be-build-requirement` | [routes-final.md](plans/routes-final.md) › Code layout, Members who leave — KC1–KC7 and K1 built | — | open |
-| 125 | **Module 1 — Branches & places** (§1, 1.A–1.E) — `branches/` with `branch-members`, `branch-rooms`, `branch-machines`, `branch-holidays`; old `branch-holidays/`, `rooms/`, `machines/` go | module | #124 | staged-build prompt (NEW tables) · `/be-build-requirement` | §1 as reviewed — 25 routes, C1–C17, tests | — | open |
-| 126 | **Module 2 — Team** (§2, 2.A–2.E) — the picker (`users/` → `memberships/`), the tenancy membership, invitation, role and permission changes | module | #124, #125 | `/be-build-requirement` | §2 2.A–2.E — 20 routes, TC1–TC17, tests | — | open |
-| 127 | **Module 2 — Personal settings** (§2, 2.F–2.G) — `user-preferences/`, `saved-views/` → `memberships/sub-domains/membership-preferences/`, `membership-saved-views/` | module | #126 | `/be-build-requirement` | §2 2.F–2.G — routes 21–27, UC1–UC5, tests | — | open |
-| 128 | **Module 3 — Offerings** (§3, 3.A–3.C) — `offerings/` with `offering-groups`, `offers`; old `offering-groups/`, `offers/` go | module | #125, #126 | `/be-build-requirement` | §3 — 19 routes, OC1–OC17, tests | — | open |
-| 129 | **Module 4 — Contacts** (§4, 4.A–4.B) — NEW `app.contacts`, `contact_phones`, `contact_members`; the person's fields leave leads and patients; `searches/` goes | module | #126 | staged-build prompt (NEW tables) · `/be-build-requirement` | §4 4.A–4.B — routes 1–9, CTC1–CTC11, tests | — | open |
-| 130 | **Module 4 — Contact activity** (§4, 4.C–4.D) — `messages/` → `contacts/sub-domains/contact-activities/`, `message-templates/` → `contact-message-templates/`; `lead-reads/` goes | module | #129 | `/be-build-requirement` | §4 4.C–4.D — routes 10–22, MC1–MC11, tests | — | open |
-| 131 | **Module 5 — Leads** (§5) — `leads/` rebuilt on the contact | module | #129, #130 | `/be-build-requirement` | §5 — 9 routes, LC1–LC9, tests | — | open |
-| 132 | **Module 6 — Appointments** (§6) — `appointments/` on the contact, the visit merged in (`visits/` goes), exclusion constraints | module | #125, #128, #129 | `/be-build-requirement` | §6 — 20 routes, AC1–AC14, tests | — | open |
-| 133 | **Module 7 — The patient file** (§7, 7.A–7.G) — `patients/` with clinical notes, prescriptions, kits, diagnoses, images, reports; `patient-notes/`, `patient-ideas/` go | module | #129, #132 | `/be-build-requirement` | §7 7.A–7.G — routes 1–44, PC1–PC21, tests | — | open |
-| 134 | **Module 7 — Treatments and feedback** (§7, 7.H–7.K) — `treatments/`, `check-ins/`, `reviews/`, `feedback-actions/` → `patients/sub-domains/patient-…` | module | #128, #132, #133 | `/be-build-requirement` | §7 7.H–7.K — routes 45–64, TRC1–TRC12, tests | — | open |
-| 135 | **Module 7 — Patient offerings and plan** (§7, 7.L–7.M) — `patient-packages/` → `patient-offerings/`, `offering-suggestions/` → `patient-offering-suggestions/`; the invoice-line link lands with #136 | module | #133, #134 | `/be-build-requirement` | §7 7.L–7.M — routes 65–73, PKC1–PKC11, tests | — | open |
-| 136 | **Module 8 — Billing** (§8, 8.A–8.E) — `invoices/`, `credit-notes/`, `payments/`, `payment-edits/`, `pending-credits/`, `day-closes/`, `day-close-events/` → `billing/`; invoice lines, patient offerings and billed treatments; the day auto-close (WC-39) | module | #129, #133, #135 | staged-build prompt (`invoice_items`) · `/be-build-requirement` | §8 — 32 routes, BC1–BC25, WC-39, tests | — | open |
-| 137 | **Module 9 — Stock** (§9, 9.A–9.E) — `stock-*` → `stock/`; movements on treatments | module | #134, #136 | `/be-build-requirement` | §9 — 28 routes, SC1–SC13, tests | — | open |
-| 138 | **Module 10 — Tasks & rules** (§10, 10.A–10.B) — `tasks/`, `task-owner-changes/`, `task-rule-settings/` → `tasks/`; the rules worker: WC-18–WC-33 and WC-35–WC-38 as the 14 rules of 10.A.10 (`onboarding` dropped, `unhappy` folded into `call_back`) | module | #131, #132, #134, #136 | `/be-build-requirement` | §10 — 12 routes, TKC1–TKC10, the 14 rules, tests | — | open |
+| 124 | **Rules for every sub-domain** — K1 (nested sub-domains inside each app sub-domain folder: `CLAUDE.md`, be-domain-generator, `validate:domain`) and K2–K8 (members who leave: `display_name`, `RESTRICT` pointers, the leave step, composite keys) | feature | — | `/be-build-requirement` | [routes-final.md](plans/routes-final.md) › Code layout, Members who leave — KC1–KC7 and K1 built | — | done |
+| 125 | **Sub-domain 1 — Branches & places** (§1, 1.A–1.E) — `branches/` with `branch-members`, `branch-rooms`, `branch-machines`, `branch-holidays`; old `branch-holidays/`, `rooms/`, `machines/` go | sub-domain | #124 | staged-build prompt (NEW tables) · `/be-build-requirement` | §1 as reviewed — 25 routes, C1–C17, tests | — | done |
+| 126 | **Sub-domain 2 — Team** (§2, 2.A–2.E) — the picker (`users/` → `memberships/`), the tenancy membership, invitation, role and permission changes | sub-domain | #124, #125 | `/be-build-requirement` | §2 2.A–2.E — 20 routes, TC1–TC17, tests | — | done |
+| 127 | **Sub-domain 2 — Personal settings** (§2, 2.F–2.G) — `user-preferences/`, `saved-views/` → `memberships/membership-preferences/`, `membership-saved-views/` | sub-domain | #126 | `/be-build-requirement` | §2 2.F–2.G — routes 21–27, UC1–UC5, tests | — | open |
+| 128 | **Sub-domain 3 — Offerings** (§3, 3.A–3.C) — `offerings/` with `offering-groups`, `offers`; old `offering-groups/`, `offers/` go | sub-domain | #125, #126 | `/be-build-requirement` | §3 — 19 routes, OC1–OC17, tests | — | open |
+| 129 | **Sub-domain 4 — Contacts** (§4, 4.A–4.B) — NEW `app.contacts`, `contact_phones`, `contact_members`; the person's fields leave leads and patients; `searches/` goes | sub-domain | #126 | staged-build prompt (NEW tables) · `/be-build-requirement` | §4 4.A–4.B — routes 1–9, CTC1–CTC11, tests | — | open |
+| 130 | **Sub-domain 4 — Contact activity** (§4, 4.C–4.D) — `messages/` → `contacts/contact-activities/`, `message-templates/` → `contact-message-templates/`; `lead-reads/` goes | sub-domain | #129 | `/be-build-requirement` | §4 4.C–4.D — routes 10–22, MC1–MC11, tests | — | open |
+| 131 | **Sub-domain 5 — Leads** (§5) — `leads/` rebuilt on the contact | sub-domain | #129, #130 | `/be-build-requirement` | §5 — 9 routes, LC1–LC9, tests | — | open |
+| 132 | **Sub-domain 6 — Appointments** (§6) — `appointments/` on the contact, the visit merged in (`visits/` goes), exclusion constraints | sub-domain | #125, #128, #129 | `/be-build-requirement` | §6 — 20 routes, AC1–AC14, tests | — | open |
+| 133 | **Sub-domain 7 — The patient file** (§7, 7.A–7.G) — `patients/` with clinical notes, prescriptions, kits, diagnoses, images, reports; `patient-notes/`, `patient-ideas/` go | sub-domain | #129, #132 | `/be-build-requirement` | §7 7.A–7.G — routes 1–44, PC1–PC21, tests | — | open |
+| 134 | **Sub-domain 7 — Treatments and feedback** (§7, 7.H–7.K) — `treatments/`, `check-ins/`, `reviews/`, `feedback-actions/` → `patients/patient-…` | sub-domain | #128, #132, #133 | `/be-build-requirement` | §7 7.H–7.K — routes 45–64, TRC1–TRC12, tests | — | open |
+| 135 | **Sub-domain 7 — Patient offerings and plan** (§7, 7.L–7.M) — `patient-packages/` → `patient-offerings/`, `offering-suggestions/` → `patient-offering-suggestions/`; the invoice-line link lands with #136 | sub-domain | #133, #134 | `/be-build-requirement` | §7 7.L–7.M — routes 65–73, PKC1–PKC11, tests | — | open |
+| 136 | **Sub-domain 8 — Billing** (§8, 8.A–8.E) — `invoices/`, `credit-notes/`, `payments/`, `payment-edits/`, `pending-credits/`, `day-closes/`, `day-close-events/` → `billing/`; invoice lines, patient offerings and billed treatments; the day auto-close (WC-39) | sub-domain | #129, #133, #135 | staged-build prompt (`invoice_items`) · `/be-build-requirement` | §8 — 32 routes, BC1–BC25, WC-39, tests | — | open |
+| 137 | **Sub-domain 9 — Stock** (§9, 9.A–9.E) — `stock-*` → `stock/`; movements on treatments | sub-domain | #134, #136 | `/be-build-requirement` | §9 — 28 routes, SC1–SC13, tests | — | open |
+| 138 | **Sub-domain 10 — Tasks & rules** (§10, 10.A–10.B) — `tasks/`, `task-owner-changes/`, `task-rule-settings/` → `tasks/`; the rules worker: WC-18–WC-33 and WC-35–WC-38 as the 14 rules of 10.A.10 (`onboarding` dropped, `unhappy` folded into `call_back`) | sub-domain | #131, #132, #134, #136 | `/be-build-requirement` | §10 — 12 routes, TKC1–TKC10, the 14 rules, tests | — | open |
 | 139 | **Messaging** — WC-1–WC-4, WC-13: deliver WhatsApp / Instagram messages and follow their status, hold them while WhatsApp is down, take in replies, flag a call when WhatsApp fails, bulk drafts | background | #130 | `/be-build-requirement` | WC-1–WC-4, WC-13 (`background.message-*`, `inbound-messages`, `channel-fallback`, `bulk-message-drafts`) | — | open |
 | 140 | **Booking messages** — WC-5–WC-8: confirm request, the day-before reminder, rescheduling, confirm on reply | background | #132, #139 | `/be-build-requirement` | WC-5–WC-8 | — | open |
 | 141 | **Money messages** — WC-9, WC-10, WC-12: payment receipt, day-close summary, bulk payment reminders | background | #136, #139 | `/be-build-requirement` | WC-9, WC-10, WC-12 | — | open |
@@ -168,11 +169,11 @@ its links working (the invoices' medical lines and links) until the medical stor
 | 150 | [Flow 3 — treatment plan and feedback](plans/features/flow-plan-and-feedback/story.md) — end-to-end | flow | #134, #135, #136, #138 | `/be-build-requirement` | flow-plan-and-feedback.1 | — | open |
 | 151 | Acceptance — every criterion in [acceptance.md](plans/acceptance.md) checked with evidence (the medical store's deferred) | flow | #148, #149, #150 | `be-kickoff-iteration` › Close | every row of plans/acceptance.md | — | open |
 | 152 | **AI ideas** — WC-47 — deferred: `app.patient_ideas` is dropped until its feature is built (§7, P20) | background | — | — | — | — | deferred |
-| 153 | **Module 11 — Medical store** — its feature, WC-34, WC-45 and the medicine sale in Flow 2 — deferred until its route review ([D49](plans/decisions.md)) | module | — | — | — | — | deferred |
+| 153 | **Sub-domain 11 — Medical store** — its feature, WC-34, WC-45 and the medicine sale in Flow 2 — deferred until its route review ([D49](plans/decisions.md)) | sub-domain | — | — | — | — | deferred |
 
 ### Superseded ledger (the plan of 2026-10-03)
 
-Rows #1–#60 built the first version of every table (see `AS-BUILT.md`); their Status names the module row that re-does each to match the route review, or why it is kept.
+Rows #1–#60 built the first version of every table (see `AS-BUILT.md`); their Status names the sub-domain row that re-does each to match the route review, or why it is kept.
 Rows #61–#123 never finished and are superseded by the rows named in their Status.
 
 | # | Work item | Kind | Depends on | Skill/driver | Acceptance | Assignee | Status |
@@ -182,7 +183,7 @@ Rows #61–#123 never finished and are superseded by the rows named in their Sta
 | 3 | `user` — CHANGE table (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#user--changed) approved and built (`data.stage-foundation`) | — | done · kept (platform, not redesigned) |
 | 4 | `membership` — CHANGE table (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#membership--changed) approved and built (`data.stage-foundation`) | — | done · re-done at #124, #126 |
 | 5 | `role` — CHANGE table (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#role--changed) approved and built (`data.stage-foundation`) | — | done · re-done at #126 |
-| 6 | `permission` — seed codes (no schema change) (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#permission--existing) approved and built (`data.stage-foundation`) | — | done · re-done at #126 and every module row (its codes) |
+| 6 | `permission` — seed codes (no schema change) (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#permission--existing) approved and built (`data.stage-foundation`) | — | done · re-done at #126 and every sub-domain row (its codes) |
 | 7 | `role_permission` — seed codes (no schema change) (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#role_permission--existing) approved and built (`data.stage-foundation`) | — | done · re-done at #126 |
 | 8 | `user_preference` — NEW table (Stage 1) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#user_preference--new) approved and built (`data.stage-foundation`) | — | done · re-done at #127 |
 | 9 | `saved_view` — NEW table (Stage 1) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#saved_view--new) approved and built (`data.stage-foundation`) | — | done · re-done at #127 |
@@ -455,8 +456,8 @@ Rows #61–#123 never finished and are superseded by the rows named in their Sta
 
 ## 7. Open AMBER items
 
-- **The change files follow the route review module by module:** `route-changes.md` is regenerated from it; `db-changes.md` keeps its
-  diagrams with the route review's table list on top, and `worker-changes.md` maps each piece to its new row — each module row redraws
+- **The change files follow the route review sub-domain by sub-domain:** `route-changes.md` is regenerated from it; `db-changes.md` keeps its
+  diagrams with the route review's table list on top, and `worker-changes.md` maps each piece to its new row — each sub-domain row redraws
   its tables when it is built (`be-kickoff-iteration` › Record).
 - Every AMBER default of the first plan stays accepted ([D40](plans/decisions.md)).
 
@@ -478,7 +479,7 @@ plans from the drop, to be confirmed in `AS-BUILT.md` and carried to the next it
 | Delete | restore within 10 s (schema-routes.md:1546) | restorable until the 7-day purge | [D38](plans/decisions.md) |
 
 The route review adds its own — one contact per person instead of copies on leads and patients, patient-owned tables named
-`patient_*`, what a patient bought as patient offerings, money in rupees, preferences as tags, and the rest its modules list
+`patient_*`, what a patient bought as patient offerings, money in rupees, preferences as tags, and the rest its sub-domains list
 ([D46](plans/decisions.md)). Each joins `AS-BUILT.md` › Standing deviations when the row that builds it is done.
 
 ## 9. Definition of done
@@ -495,7 +496,7 @@ The route review adds its own — one contact per person instead of copies on le
 
 - **Intake mode `full`:** the PRD's acceptance, traced in [plans/acceptance.md](plans/acceptance.md) — every row cites its
   `intake-files/PRD.md` line.
-- **Each module row:** its route-review section built as reviewed — every route, every code change, the module's old folders
+- **Each sub-domain row:** its route-review section built as reviewed — every route, every code change, the sub-domain's old folders
   gone — with its unit, integration and RLS tests (`be-test-generator`, `pnpm test:rls-role`).
 - **Gates:** `pnpm iteration:intake launch-2026-09-30-jxmr --check`, `pnpm ci:local`, `pnpm test:rls-role`, `pnpm routes:catalog:check`,
   `pnpm tsdoc:check`, `pnpm validate:route-success-coverage`.

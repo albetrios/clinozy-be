@@ -9,8 +9,13 @@ import {
   getPostgresConstraintName,
   isPostgresUniqueViolation,
 } from '@/shared/utils/infrastructure/postgres-error.util.js';
+import { assertRecordNotChangedSince } from '@/shared/utils/validation/record-fields.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
-import type { BranchUserAccessesRepository } from './branch-user-accesses/branch-user-accesses.repository.js';
+import type { BranchMembersRepository } from './branch-members/branch-members.repository.js';
+import {
+  branchMembershipNotFoundError,
+  resolveBranchMembershipIds,
+} from './branch-members/branch-members.rules.js';
 import type { BranchesRepository } from './branches.repository.js';
 import { BranchesSerializer } from './branches.serializer.js';
 import type { BranchUpdateData } from './branches.types.js';
@@ -27,6 +32,9 @@ const DEFAULT_STAFF_FIELDS = [
 
 type DefaultStaffField = (typeof DEFAULT_STAFF_FIELDS)[number];
 
+/** D10: a default-staff member who does not work at the branch. */
+const DEFAULT_STAFF_NOT_MEMBER_KEY = 'errors:validation.defaultStaffNotBranchMember';
+
 /** Unique indexes whose violation is a client conflict, with the message each one gives. */
 const UNIQUE_CONFLICT_KEYS: Record<string, string> = {
   idx_branches_organization_name_unique: 'errors:branchNameExists',
@@ -41,8 +49,8 @@ const UNIQUE_CONFLICT_KEYS: Record<string, string> = {
  * - **Algorithm:** every call runs inside `withAppDatabaseContext` with the caller's
  *   organization scope, resolves the organization, then reads or writes through the repositories.
  *   `listMine` returns every active branch to a caller who may read all branches, else the
- *   branches in `app.branch_user_accesses` for the caller's membership (D9).
- * - **Failure modes:** `NotFoundError('Branch')` for an unknown, deleted or foreign branch;
+ *   branches in `app.branch_members` for the caller's membership (D9).
+ * - **Failure modes:** `NotFoundError('Branch')` for an unknown or foreign branch;
  *   `ValidationError` for a bad body, a default-staff id that is no member here, or a closing time
  *   at or before the opening time; `ConflictError` for a taken name or a second main branch.
  * - **Side effects:** a create gives its creator access to the new branch.
@@ -52,7 +60,7 @@ export class BranchesService {
     private readonly organizationService: OrganizationService,
     private readonly membershipService: MembershipService,
     private readonly branchesRepository: BranchesRepository,
-    private readonly branchUserAccessesRepository: BranchUserAccessesRepository,
+    private readonly branchMembersRepository: BranchMembersRepository,
   ) {}
 
   async listMine(options: {
@@ -117,23 +125,41 @@ export class BranchesService {
         (await this.organizationService.resolveUserInternalIdByPublicId(actingUserPublicId)) ??
         undefined;
       const defaultStaff = await this.resolveDefaultStaff(organization.id, parsed);
+      const { membership_ids: membershipPublicIds, ...fields } = parsed;
+      const memberIds =
+        membershipPublicIds === undefined
+          ? undefined
+          : await this.resolveMemberIds(organization.id, membershipPublicIds);
       const created = await this.mapConflicts(parsed.name, () =>
         this.branchesRepository.create(
           omitUndefined({
-            ...withoutDefaultStaff(parsed),
-            ...defaultStaff,
+            ...withoutDefaultStaff(fields),
             organization_id: organization.id,
             created_by_user_id: userId,
           }),
         ),
       );
-      if (userId !== undefined) {
-        await this.branchUserAccessesRepository.grantToUser({
+      // D13: who works there from day one — the list given, else the creator.
+      if (memberIds !== undefined) {
+        await this.branchMembersRepository.replaceForBranch({
+          branch_id: created.id,
+          organization_id: organization.id,
+          membership_ids: [...memberIds],
+          created_by_user_id: userId,
+        });
+      } else if (userId !== undefined) {
+        await this.branchMembersRepository.grantToUser({
           branch_id: created.id,
           organization_id: organization.id,
           user_id: userId,
           created_by_user_id: userId,
         });
+      }
+      // D10: the default staff are among the branch's members (checked against the rows just
+      // written, so it holds whichever way the list was given).
+      await this.assertDefaultStaffAreMembers(created.id, defaultStaff);
+      if (Object.keys(defaultStaff).length > 0) {
+        await this.branchesRepository.update(created.id, defaultStaff, userId);
       }
       const branch = await this.branchesRepository.findByPublicId(
         created.public_id,
@@ -159,6 +185,13 @@ export class BranchesService {
         organization.id,
       );
       if (!existing) throw new NotFoundError('Branch');
+      // C12 / D43: a save based on an older version is refused with who and when.
+      await assertRecordNotChangedSince({
+        row: existing,
+        expected: parsed.expected_updated_at,
+        resolveUserPublicId: (userInternalId) =>
+          this.organizationService.resolveUserPublicIdByInternalId(userInternalId),
+      });
       assertClosesAfterOpens({
         opens_at: parsed.opens_at ?? existing.opens_at.slice(0, 5),
         closes_at: parsed.closes_at ?? existing.closes_at.slice(0, 5),
@@ -167,8 +200,10 @@ export class BranchesService {
         (await this.organizationService.resolveUserInternalIdByPublicId(actingUserPublicId)) ??
         undefined;
       const defaultStaff = await this.resolveDefaultStaff(organization.id, parsed);
+      await this.assertDefaultStaffAreMembers(existing.id, defaultStaff);
+      const { expected_updated_at: _expectedUpdatedAt, ...fields } = parsed;
       const changes: BranchUpdateData = omitUndefined({
-        ...withoutDefaultStaff(parsed),
+        ...withoutDefaultStaff(fields),
         ...defaultStaff,
       });
       const updated = await this.mapConflicts(parsed.name ?? existing.name, () =>
@@ -203,15 +238,47 @@ export class BranchesService {
     for (const { field, publicId } of requested) {
       const membershipId = resolved.get(publicId);
       if (membershipId === undefined) {
-        throw new ValidationError(
-          'errors:validation.branchMembershipNotFound',
-          { membership_id: publicId },
-          { [field]: [`${publicId} is not a member of this organization`] },
-        );
+        throw branchMembershipNotFoundError({ field, membershipPublicIds: [publicId] });
       }
       result[field] = membershipId;
     }
     return result;
+  }
+
+  /** `membership_ids` → live membership ids of this organization; an unknown one is a 400. */
+  private async resolveMemberIds(
+    organizationId: number,
+    membershipPublicIds: readonly string[],
+  ): Promise<Set<number>> {
+    const resolved = await resolveBranchMembershipIds({
+      membershipService: this.membershipService,
+      organizationId,
+      membershipPublicIds,
+    });
+    return new Set(resolved.values());
+  }
+
+  /** D10: every default-staff member named is one of the branch's live members, else a 400. */
+  private async assertDefaultStaffAreMembers(
+    branchId: number,
+    defaultStaff: Partial<Record<DefaultStaffField, number | null>>,
+  ): Promise<void> {
+    const named = DEFAULT_STAFF_FIELDS.filter((field) => typeof defaultStaff[field] === 'number');
+    if (named.length === 0) return;
+    const members = await this.branchMembersRepository.listLiveMembershipIds(branchId);
+    const outside = named.filter((field) => !members.has(defaultStaff[field] as number));
+    if (outside.length > 0) {
+      throw new ValidationError(
+        DEFAULT_STAFF_NOT_MEMBER_KEY,
+        { field: outside[0]! },
+        undefined,
+        outside.map((field) => ({
+          field,
+          messageKey: DEFAULT_STAFF_NOT_MEMBER_KEY,
+          messageParams: { field },
+        })),
+      );
+    }
   }
 
   /** Runs a write; a taken name or a second main branch becomes a 409. */

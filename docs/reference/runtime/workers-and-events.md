@@ -42,7 +42,7 @@ flowchart LR
 | Registrar                               | Example event types                                                   | Side effect             |
 | --------------------------------------- | --------------------------------------------------------------------- | ----------------------- |
 | `registerAuthMethodEventHandlers`       | `AUTH_EVENT.EMAIL_VERIFICATION_CODE_REQUESTED`, password reset, email verification | Mail queue              |
-| `registerMemberInvitationEventHandlers` | `MEMBER_INVITATION_EVENT.CREATED`, `RESENT`                           | Mail queue              |
+| `registerMembershipInvitationEventHandlers` | `MEMBERSHIP_INVITATION_EVENT.CREATED`, `RESENT`                           | Mail queue              |
 | `registerNotifyEventHandlers`           | `NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED`                             | BullMQ webhook delivery |
 
 Billing side effects use BullMQ directly (for example [`stripe-webhook`](../../../src/domains/billing/sub-domains/stripe-webhook/)) — there is no top-level `billing/events/` aggregator.
@@ -299,11 +299,11 @@ Every `enqueue*` helper injects the active W3C trace context (`captureTraceConte
 
 ## Canonical examples
 
-**Tenancy — member invitation**
+**Tenancy — membership invitation**
 
 ```text
-member-invitation.service.ts  →  eventBus.emit(tenancy.member_invitation.created|resent)
-tenancy/sub-domains/member-invitation/events/*.ts  →  recordOutboxEmail() + onCommit(dispatchOutboxEmail)
+membership-invitation.service.ts  →  eventBus.emit(tenancy.membership_invitation.created|resent)
+tenancy/sub-domains/membership-invitation/events/*.ts  →  recordOutboxEmail() + onCommit(dispatchOutboxEmail)
 tenancy/events/index.ts  →  registerTenancyEventHandlers()
 ```
 

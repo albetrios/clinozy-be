@@ -25,7 +25,7 @@ export const tenancyRoutesPlugin: FastifyPluginAsync = async (app) => {
   await app.register(
     membershipRoutes({
       membershipService: tenancyDomain.membershipService,
-      memberInvitationService: tenancyDomain.memberInvitationService,
+      membershipInvitationService: tenancyDomain.membershipInvitationService,
     }),
   );
   await app.register(

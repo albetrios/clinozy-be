@@ -19,7 +19,7 @@ The folder: `README.md` (field table + History, written by the commands — exce
 1. **Branch** — `git switch -c <type>/<topic>`.
 2. **Open** — `pnpm iteration:new <type> [topic] [--both] --dry-run`, check the name and suggested Baseline, then run it (README only, Status `planning`); write the Summary.
 3. **Place the drop** — `pnpm iteration:intake <iteration> <source> [--mode full|overlay|brief] [--both] --dry-run`, then for real: a full snapshot in `intake-files/` (`overlay` lays the changed files over the Baseline's; `brief` adds a `BRIEF.md` to it), the Drop, Intake and Schema-routes rows filled; check it with `pnpm iteration:intake <iteration> --check`.
-4. **Plan, no code** — "plan iteration `<iteration>`" → **be-iteration-planning** Steps 0–7 (Step 0 confirms the iteration and the Baseline → `pnpm iteration:baseline`, then the gate `pnpm iteration:intake <iteration> --check` — stop if it fails; incremental delta = `pnpm iteration:diff <baseline> <iteration>` — `intake-files/` only — plus the designer's notes, or `BRIEF.md` in brief mode; the Baseline's Standing deviations; RED questions to the user; Step 5 the route review — `plans/routes-final.md` from `docs/design-workflow/process/routes-final-template.md`, one module per domain folder, each confirmed by the user) → `KICKOFF.md` + `plans/` → `ready-for-approval`.
+4. **Plan, no code** — "plan iteration `<iteration>`" → **be-iteration-planning** Steps 0–7 (Step 0 confirms the iteration and the Baseline → `pnpm iteration:baseline`, then the gate `pnpm iteration:intake <iteration> --check` — stop if it fails; incremental delta = `pnpm iteration:diff <baseline> <iteration>` — `intake-files/` only — plus the designer's notes, or `BRIEF.md` in brief mode; the Baseline's Standing deviations; RED questions to the user; Step 5 the route review — `plans/routes-final.md` from `docs/design-workflow/process/routes-final-template.md`, one folder per sub-domain with its nested sub-domains inside, each confirmed by the user) → `KICKOFF.md` + `plans/` → `ready-for-approval`.
 5. **Approve** — the user reviews `KICKOFF.md` and `plans/` → `pnpm iteration:status <iteration> approved` (or back: `planning --reason "<why>"`).
 6. **Kick off** — "kickoff iteration `<iteration>`" → **be-kickoff-iteration** Step 0 confirms, runs the gate → `implementing`; then **one ROUTE row at a time**: do (NEW table → `docs/getting-started/staged-build-prompt.md`; CHANGE table, flow, background work → `/be-build-requirement`) → verify → the `AS-BUILT.md` row → impact check (scope change → stop and ask) → the user's review. **The plan proposes; agent-os decides:** the backend's agent-os (skills, rules, agents) is the expert — whenever the plan and agent-os disagree or anything is unclear, agent-os wins, and it may change the plan's names, types, paths or job details on the way — record each difference in `AS-BUILT.md` and sync it back into `plans/db-changes.md`, `route-changes.md` and `worker-changes.md`. A route review (`plans/routes-final.md`) is built **ditto** — where agent-os cannot build it as written, stop and ask; the agreed change goes into the review first.
 7. **Close** — the gates, `/be-pre-merge-review` (review only), `plans/acceptance.md` filled, the `AS-BUILT.md` summary → `pnpm iteration:status <iteration> done`.
@@ -143,11 +143,11 @@ Flat domains (`audit`, `upload`) keep layers at domain root (no `sub-domains/`).
 | **audit**       | (single domain, no sub-domains)                                                                                                                                                                                                                                                             |
 | **auth**        | auth-method (email verification-code, oauth as services in auth-method/; verification-token/ nested persistence module — service/repository/schema, no routes), auth-session, auth-mfa, auth-mfa-session (Redis MFA challenge-ticket store shared by auth-mfa/auth-webauthn), auth-webauthn |
 | **user**        | user-settings, user-notification-preferences, user-data-export                                                                                                                                                                                                                              |
-| **tenancy**     | organization (organization-settings, organization-notification-policy, organization-api-key), membership (member-invitation, membership-additional-roles), member-roles (member-role-permission), permission                                                                                                             |
+| **tenancy**     | organization (organization-settings, organization-notification-policy, organization-api-key), membership (membership-invitation, membership-additional-roles), member-roles (member-role-permission), permission                                                                                                             |
 | **billing**     | plan, subscription, stripe-webhook                                                                                                                                                                                                                                                          |
 | **notify**      | notification, webhook (webhook-event, webhook-delivery)                                                                                                                                                                                                                                     |
 | **upload**      | (single domain, no sub-domains)                                                                                                                                                                                                                                                             |
-| **app**         | branches (branch-user-accesses) — the app's own records, Postgres schema `app`                                                                                                                                                                                                                 |
+| **app**         | the app's own records, Postgres schema `app` — one sub-domain per section of the launch route review, each with its nested sub-domains inside: branches (branch-members, branch-rooms, branch-machines, branch-holidays), memberships, offerings, contacts, leads, appointments, patients, billing, stock, tasks (rebuilt one by one, launch ROUTE #125–#138); the medical store's folders stay flat until their own review |
 
 **Permission resolution** (tenancy domain, not under `shared/`):
 
@@ -156,7 +156,7 @@ Flat domains (`audit`, `upload`) keep layers at domain root (no `sub-domains/`).
 
 ### File naming
 
-- Domain/sub-domain folders: **singular** or **kebab-case** for multi-word (`member-roles`, `member-invitation`).
+- Domain/sub-domain folders: **singular** or **kebab-case** for multi-word (`member-roles`, `membership-invitation`).
 - Files inside a sub-domain: **singular** for the main resource (`user.service.ts`, `organization.repository.ts`).
 - Controllers export: `create<Resource>Controller(service)` or `create<Resource>Controller(container)` when multiple sub-domain services are wired.
 - Always prefix sub-domain directories with parent domain name.
@@ -169,9 +169,10 @@ A **top-level sub-domain** is a direct child of `sub-domains/<name>/`. A **neste
 | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | **Sibling resources** live under `sub-domains/` only                                      | `sub-domains/plan/`, `sub-domains/subscription/`                                    |
 | **Nested sub-domains** live inside the parent sub-domain folder                           | `sub-domains/webhook/webhook-event/`                                                |
+| **App sub-domains** nest what their main record owns the same way                         | `app/sub-domains/patients/patient-treatments/`, `app/sub-domains/branches/branch-rooms/` |
 | **Organization children** nest under `organization/`                                      | `sub-domains/organization/organization-api-key/`, `organization-settings/`          |
-| **Membership / member-roles children** nest under parent                                  | `sub-domains/membership/member-invitation/`, `member-roles/member-role-permission/` |
-| **Prefix** multi-word names with domain/resource name                                     | `organization-settings`, `member-invitation`, `webhook-event`                       |
+| **Membership / member-roles children** nest under parent                                  | `sub-domains/membership/membership-invitation/`, `member-roles/member-role-permission/` |
+| **Prefix** multi-word names with domain/resource name                                     | `organization-settings`, `membership-invitation`, `webhook-event`                       |
 | **Implementation modules** (not separate API resources) stay as services in parent folder | `auth-method/email-login.service.ts`, `oauth/` under `auth-method/`                 |
 | Prefer depth ≤ 4 under `domains/<domain>/` for new work                                   | Flatten if a nested folder has no distinct routes or tests                          |
 
@@ -304,13 +305,13 @@ Typical flow: `service` → `eventBus.emit` → handler → `recordOutboxEmail()
   1. `buildApp()` → `registerEventHandlers()` ([`register-event-handlers.ts`](src/core/events/register-event-handlers.ts)) **before** routes — auth + tenancy email handlers only.
   2. `registerRoutes()` → [`domain-containers.plugin.ts`](src/domains/domain-containers.plugin.ts) → `registerNotifyContainer()` → `registerNotifyEventHandlers()` — notify handlers registered after the DI container is composed.
 - **Rule:** Handlers that only enqueue mail (`recordOutboxEmail()`) or have no container deps → register via `register-event-handlers.ts`. Handlers that need repositories from the composition root → register in the domain’s `register*Container()` (notify today).
-- **Example (core path):** `tenancy/sub-domains/membership/member-invitation/` — service emits; handler calls `recordOutboxEmail()`.
+- **Example (core path):** `tenancy/sub-domains/membership/membership-invitation/` — service emits; handler calls `recordOutboxEmail()`.
 - **Example (container path):** `notify/events/notify.event-handlers.ts` → `registerWebhookDeliveryEventHandlers()` — subscribes to `NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED` and enqueues outbound webhook delivery.
 
 | Registrar                               | Event types (examples)                                                                | Side effect             |
 | --------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------- |
 | `registerAuthMethodEventHandlers`       | `AUTH_EVENT.EMAIL_VERIFICATION_CODE_REQUESTED`, `AUTH_EVENT.PASSWORD_RESET_REQUESTED` | Mail queue              |
-| `registerMemberInvitationEventHandlers` | `MEMBER_INVITATION_EVENT.CREATED`, `RESENT`                                           | Mail queue              |
+| `registerMembershipInvitationEventHandlers` | `MEMBERSHIP_INVITATION_EVENT.CREATED`, `RESENT`                                           | Mail queue              |
 | `registerNotifyEventHandlers`           | `NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED`                                             | BullMQ webhook delivery |
 
 ## Key Patterns

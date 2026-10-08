@@ -53,7 +53,7 @@ export const SUBDOMAIN_HTTP_INTEGRATION_WITHOUT_ROUTES: ReadonlyArray<{
   { domain: 'tenancy', resource: 'organization-settings' },
   { domain: 'tenancy', resource: 'organization-notification-policy' },
   { domain: 'tenancy', resource: 'organization-api-key' },
-  { domain: 'tenancy', resource: 'member-invitation' },
+  { domain: 'tenancy', resource: 'membership-invitation' },
   { domain: 'tenancy', resource: 'member-role-permission' },
   { domain: 'notify', resource: 'webhook-event' },
 ];

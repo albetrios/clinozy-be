@@ -20,12 +20,12 @@ import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
-import { machines } from '@/domains/app/sub-domains/machines/machines.schema.js';
+import { branch_machines } from '@/domains/app/sub-domains/branches/branch-machines/branch-machines.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
 import { patient_packages } from '@/domains/app/sub-domains/patient-packages/patient-packages.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
-import { rooms } from '@/domains/app/sub-domains/rooms/rooms.schema.js';
+import { branch_rooms } from '@/domains/app/sub-domains/branches/branch-rooms/branch-rooms.schema.js';
 import {
   RECORD_DELETE_REASON,
   RECORD_DELETE_REASON_VALUES,
@@ -85,11 +85,14 @@ export const appointments = appSchema
         () => memberships.id,
         { onDelete: 'set null' },
       ),
-      room_id: bigint('room_id', { mode: 'number' }).references((): AnyPgColumn => rooms.id, {
-        onDelete: 'set null',
-      }),
-      machine_id: bigint('machine_id', { mode: 'number' }).references(
-        (): AnyPgColumn => machines.id,
+      branch_room_id: bigint('branch_room_id', { mode: 'number' }).references(
+        (): AnyPgColumn => branch_rooms.id,
+        {
+          onDelete: 'set null',
+        },
+      ),
+      branch_machine_id: bigint('branch_machine_id', { mode: 'number' }).references(
+        (): AnyPgColumn => branch_machines.id,
         { onDelete: 'set null' },
       ),
       appointment_date: date('appointment_date', { mode: 'string' }).notNull(),
@@ -155,12 +158,12 @@ export const appointments = appSchema
         table.appointment_date,
         table.start_time,
       ),
-      index('idx_appointments_room_date')
-        .on(table.room_id, table.appointment_date)
-        .where(sql`${table.room_id} IS NOT NULL`),
-      index('idx_appointments_machine_date')
-        .on(table.machine_id, table.appointment_date)
-        .where(sql`${table.machine_id} IS NOT NULL`),
+      index('idx_appointments_branch_room_date')
+        .on(table.branch_room_id, table.appointment_date)
+        .where(sql`${table.branch_room_id} IS NOT NULL`),
+      index('idx_appointments_branch_machine_date')
+        .on(table.branch_machine_id, table.appointment_date)
+        .where(sql`${table.branch_machine_id} IS NOT NULL`),
       index('idx_appointments_patient_date')
         .on(table.patient_id, table.appointment_date)
         .where(sql`${table.patient_id} IS NOT NULL`),

@@ -22,7 +22,6 @@ import {
   PHONE_NUMBER_PATTERN,
   CHIP_TONE_VALUES,
   RECORD_DELETE_REASON,
-  RECORD_DELETE_REASON_VALUES,
   WEEKDAY_VALUES,
 } from '@/shared/constants/record-fields.constants.js';
 import {
@@ -30,6 +29,10 @@ import {
   MEMBERSHIP_DEFAULT_TONE,
   MEMBERSHIP_DEFAULT_WORK_ENDS_AT,
   MEMBERSHIP_DEFAULT_WORK_STARTS_AT,
+  MEMBERSHIP_DELETE_REASON_VALUES,
+  MEMBERSHIP_DISPLAY_NAME_MAX_LENGTH,
+  MEMBERSHIP_STATUS,
+  MEMBERSHIP_STATUS_VALUES,
 } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 
 /** `'a', 'b', …` from a value list, for an `IN (…)` or `ARRAY[…]` CHECK. */
@@ -42,7 +45,7 @@ function joinValues(values: readonly string[]) {
 
 /**
  * `tenancy.memberships` table — links a user to an organization with a role
- * and a lifecycle `status` (INVITED, ACTIVE, SUSPENDED, enforced by
+ * and a lifecycle `status` (invited, active, suspended, enforced by
  * `chk_memberships_status`). A partial unique index keeps `(user_id,
  * organization_id)` unique only for active rows so a user can rejoin after
  * being soft-deleted. RLS scopes rows to the caller's organization.
@@ -62,7 +65,7 @@ export const memberships = tenancySchema
       role_id: bigint('role_id', { mode: 'number' })
         .notNull()
         .references(() => roles.id, { onDelete: 'restrict' }),
-      status: varchar('status', { length: 20 }).notNull().default('INVITED'),
+      status: varchar('status', { length: 20 }).notNull().default(MEMBERSHIP_STATUS.INVITED),
       invited_by_user_id: bigint('invited_by_user_id', { mode: 'number' }).references(
         () => users.id,
       ),
@@ -92,10 +95,17 @@ export const memberships = tenancySchema
       commission_percent: numeric('commission_percent', { precision: 5, scale: 2 })
         .notNull()
         .default('0'),
-      // Why a manager removed the member (`DELETE …?reason=&note=`); other soft deletes (leave,
-      // account deletion) carry none, so a reason implies a delete but not the other way round.
+      // Why the membership ended (K2): a manager's removal picks a record reason
+      // (`DELETE …?reason=&note=`), leaving records `left`, deleting the account `account_deleted`.
       delete_reason: varchar('delete_reason', { length: 20 }),
       delete_note: varchar('delete_note', { length: 280 }),
+      // The name the organization keeps for the member (K3). An insert leaves it '' and
+      // `trg_memberships_display_name` copies the login's name (or email); while the membership is
+      // live, `trg_users_sync_membership_display_names` keeps it equal to the profile; once it ends
+      // it is frozen.
+      display_name: varchar('display_name', { length: MEMBERSHIP_DISPLAY_NAME_MAX_LENGTH })
+        .notNull()
+        .default(''),
     },
     (table) => [
       // Attribution FK indexes (partial on IS NOT NULL) from migration 20260623000000 — declared so
@@ -120,16 +130,24 @@ export const memberships = tenancySchema
       uniqueIndex('idx_memberships_user_org_unique')
         .on(table.user_id, table.organization_id)
         .where(sql`${table.deleted_at} IS NULL`),
-      check('chk_memberships_status', sql`${table.status} IN ('INVITED', 'ACTIVE', 'SUSPENDED')`),
+      check(
+        'chk_memberships_status',
+        sql`${table.status} IN (${sql.join(
+          MEMBERSHIP_STATUS_VALUES.map((status) => sql`${status}`),
+          sql`, `,
+        )})`,
+      ),
       check(
         'chk_memberships_joined',
-        sql`${table.status} != 'ACTIVE' OR ${table.joined_at} IS NOT NULL`,
+        sql`${table.status} != 'active' OR ${table.joined_at} IS NOT NULL`,
       ),
       check('chk_memberships_updated', sql`${table.updated_at} >= ${table.created_at}`),
       uniqueIndex('idx_memberships_organization_staff_number').on(
         table.organization_id,
         table.staff_number,
       ),
+      // The target of the app's composite membership foreign keys (K8).
+      uniqueIndex('idx_memberships_organization_id_id').on(table.organization_id, table.id),
       check('chk_memberships_staff_number', sql`${table.staff_number} > 0`),
       check('chk_memberships_phone', sql`${table.phone} ~ ${sql.raw(`'${PHONE_NUMBER_PATTERN}'`)}`),
       check('chk_memberships_tone', sql`${table.tone} IN (${joinValues(CHIP_TONE_VALUES)})`),
@@ -148,7 +166,7 @@ export const memberships = tenancySchema
       ),
       check(
         'chk_memberships_delete_reason',
-        sql`${table.delete_reason} IN (${joinValues(RECORD_DELETE_REASON_VALUES)})`,
+        sql`${table.delete_reason} IN (${joinValues(MEMBERSHIP_DELETE_REASON_VALUES)})`,
       ),
       check(
         'chk_memberships_delete_reason_when_deleted',
@@ -158,6 +176,7 @@ export const memberships = tenancySchema
         'chk_memberships_delete_note_when_other',
         sql`${table.delete_reason} IS DISTINCT FROM ${RECORD_DELETE_REASON.OTHER} OR ${table.delete_note} IS NOT NULL`,
       ),
+      check('chk_memberships_display_name', sql`btrim(${table.display_name}) <> ''`),
       pgPolicy('memberships_tenant_isolation', {
         as: 'permissive',
         for: 'all',

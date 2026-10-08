@@ -3,7 +3,7 @@ import { BaseRecordService } from '@/domains/app/base-record.service.js';
 import { ValidationError } from '@/shared/errors/index.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { offering_groups } from '@/domains/app/sub-domains/offering-groups/offering-groups.schema.js';
-import { rooms } from '@/domains/app/sub-domains/rooms/rooms.schema.js';
+import { branch_rooms } from '@/domains/app/sub-domains/branches/branch-rooms/branch-rooms.schema.js';
 import { OFFERING_BRANCHES_LINK, type OfferingsRepository } from './offerings.repository.js';
 import { serializeOffering } from './offerings.serializer.js';
 import type { OfferingOutput } from './offerings.types.js';
@@ -35,7 +35,7 @@ export class OfferingsService extends BaseRecordService<OfferingOutput> {
       serialize: serializeOffering,
       references: [
         { field: 'default_doctor_membership_id', table: memberships, label: 'team member' },
-        { field: 'default_room_id', table: rooms, label: 'room' },
+        { field: 'default_room_id', table: branch_rooms, label: 'room' },
         { field: 'group_id', table: offering_groups, label: 'offering group' },
       ],
       referenceLists: [{ field: 'branch_ids', link: OFFERING_BRANCHES_LINK, label: 'branch' }],

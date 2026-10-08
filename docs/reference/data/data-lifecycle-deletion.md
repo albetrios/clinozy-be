@@ -34,7 +34,7 @@ How clinozy-be treats **removal** of persisted rows: tombstones (`deleted_at`), 
 Each area must be **documented and implemented** (correct queries, migrations, workers, or explicit guardrails). Work may ship in **multiple PRs**; ordering is for blast radius, not deferring scope.
 
 - **Tenant-config delete** — webhooks, API keys, roles, organization notification policies, etc.
-- **Membership / RBAC teardown** — memberships, role-permission links.
+- **Membership / RBAC teardown** — memberships, role-permission links. A membership ends through **one leave step** (`MembershipService`, launch K4) for a removal (`delete_reason` = the manager's reason), leaving (`left`) and a deleted account (`account_deleted`): it soft-deletes the row, revokes the person's API keys and runs the app's part (`src/domains/app/app-membership-leave.ts` — branch default staff cleared; branch access rows stay, hidden while ended and back on restore) in the same transaction. The membership keeps its `display_name`, frozen once it ends.
 - **Offboarding identity** — users, settings, notification preferences, uploads, linked rows.
 - **Immutable operational ledger** — subscriptions and `billing.stripe_webhook_events`: **no** naive `deleted_at`; enforce **no stray SQL delete** and provider-aligned `status`.
 - **Ephemeral secrets / credentials** — sessions, verification tokens; retention and hard delete.
@@ -87,7 +87,7 @@ See migrations **`20260516000002_*` … `*_04_*`** for `deleted_at` columns and 
 | Entity / table         | On HTTP soft-delete (immediate)                                                                             | After `TOMBSTONE_RETENTION_DAYS` (delayed)                                                   |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | `uploads`              | `DELETE` removes S3 object + sets `deleted_at`; user offboarding tombstones all user uploads (+ S3 per row) | Hard-delete row + S3 (`upload-tombstone-retention`)                                          |
-| `users`                | Revoke all sessions + auth methods; clear avatar S3 key; tombstone uploads; **delete all GDPR export S3 keys + `auth.user_data_exports` rows** | Hard-delete row (`user-tombstone-retention`; blocked if still `organizations.owner_user_id`) |
+| `users`                | Revoke all sessions + auth methods; **end every membership of the login (`delete_reason = account_deleted`, the leave step)**; clear avatar S3 key; tombstone uploads; **delete all GDPR export S3 keys + `auth.user_data_exports` rows** | Hard-delete row (`user-tombstone-retention`; blocked if still `organizations.owner_user_id`) |
 | `user_data_exports`    | Removed on user offboarding (`deleteAllExportsForUser`)                                                     | Daily `user-data-export-retention` when `expires_at` passed; S3 lifecycle on prefix `user-data-export/` (7 days) |
 | `organizations`        | Clear logo S3 key; tombstone organization-scoped uploads (DB only); **no** child membership/role/API tombstone       | Hard-delete organization (`organization-tombstone-retention`; CASCADE children)                       |
 | Other tombstone tables | API `DELETE` sets `deleted_at` only                                                                         | Matching `*-tombstone-retention` worker                                                      |
@@ -124,7 +124,7 @@ Batch deletes use `deleteInBatchesByCondition` with per-row FK fallback (`blocke
 | `verification_tokens`                | auth    | Ephemeral               | `expires_at`, `used_at`                   | Audit-retention worker hard-deletes rows 7 days past `expires_at`               |
 | `organizations`                      | tenancy | Tombstone               | `deleted_at`, `status`                    | Logo S3 + organization upload tombstone; no child cascade on soft-delete                 |
 | `memberships`                        | tenancy | Tombstone               | `deleted_at`                              |                                                                                 |
-| `member_invitations`                 | tenancy | Revocation + TTL        | `revoked_at`, `expires_at`, `accepted_at` |                                                                                 |
+| `membership_invitations`                 | tenancy | Revocation + TTL        | `revoked_at`, `expires_at`, `accepted_at` |                                                                                 |
 | `roles`                              | tenancy | Tombstone               | `deleted_at`                              |                                                                                 |
 | `role_permissions`                   | tenancy | Junction                | none                                      | Drops when role hard-removed — align with tombstone role                        |
 | `permissions`                        | tenancy | Reference               | none                                      | Seeds only                                                                      |

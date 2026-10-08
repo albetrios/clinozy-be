@@ -1,6 +1,6 @@
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
-import { branch_user_accesses } from '@/domains/app/sub-domains/branches/branch-user-accesses/branch-user-accesses.schema.js';
+import { branch_members } from '@/domains/app/sub-domains/branches/branch-members/branch-members.schema.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 /** Options for {@link createTestBranch}. */
@@ -36,12 +36,12 @@ export async function createTestBranch(options: CreateBranchOptions) {
 }
 
 /** Gives a membership access to a branch (operator connection). */
-export async function grantTestBranchUserAccess(options: {
+export async function grantTestBranchMember(options: {
   branchId: number;
   membershipId: number;
   organizationId: number;
 }) {
-  await getOperatorDatabase().insert(branch_user_accesses).values({
+  await getOperatorDatabase().insert(branch_members).values({
     branch_id: options.branchId,
     membership_id: options.membershipId,
     organization_id: options.organizationId,

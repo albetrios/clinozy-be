@@ -17,17 +17,17 @@ import {
   UpdateOfferingGroupDto as appUpdateOfferingGroupDto,
 } from '@/domains/app/sub-domains/offering-groups/offering-groups.dto.js';
 import {
-  CreateRoomDto as appCreateRoomDto,
-  UpdateRoomDto as appUpdateRoomDto,
-} from '@/domains/app/sub-domains/rooms/rooms.dto.js';
+  CreateBranchRoomDto as appCreateRoomDto,
+  UpdateBranchRoomDto as appUpdateRoomDto,
+} from '@/domains/app/sub-domains/branches/branch-rooms/branch-rooms.dto.js';
 import {
-  CreateMachineDto as appCreateMachineDto,
-  UpdateMachineDto as appUpdateMachineDto,
-} from '@/domains/app/sub-domains/machines/machines.dto.js';
+  CreateBranchMachineDto as appCreateMachineDto,
+  UpdateBranchMachineDto as appUpdateMachineDto,
+} from '@/domains/app/sub-domains/branches/branch-machines/branch-machines.dto.js';
 import {
   CreateBranchHolidayDto as appCreateBranchHolidayDto,
   UpdateBranchHolidayDto as appUpdateBranchHolidayDto,
-} from '@/domains/app/sub-domains/branch-holidays/branch-holidays.dto.js';
+} from '@/domains/app/sub-domains/branches/branch-holidays/branch-holidays.dto.js';
 import {
   CreateOfferingDto as appCreateOfferingDto,
   UpdateOfferingDto as appUpdateOfferingDto,
@@ -240,9 +240,9 @@ import {
 } from '@/domains/tenancy/sub-domains/membership/membership.dto.js';
 
 import {
-  acceptMemberInvitationDto,
-  resendMemberInvitationDto,
-} from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.dto.js';
+  acceptMembershipInvitationDto,
+  resendMembershipInvitationDto,
+} from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.dto.js';
 
 // ─── Tenancy: Roles & Permissions ──────────────────────────────────────
 import {
@@ -266,7 +266,7 @@ import {
   CreateBranchDto,
   UpdateBranchDto,
 } from '@/domains/app/sub-domains/branches/branches.dto.js';
-import { ReplaceBranchUserAccessesDto } from '@/domains/app/sub-domains/branches/branch-user-accesses/branch-user-accesses.dto.js';
+import { ReplaceBranchMembersDto } from '@/domains/app/sub-domains/branches/branch-members/branch-members.dto.js';
 
 // ─── Notify ────────────────────────────────────────────────────────────
 import {
@@ -327,8 +327,10 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'POST /api/v1/tenancy/organization/transfer-ownership': transferOwnershipDto,
 
   // ── Invitations ── (add-member issues invitations via POST /organization/memberships, REQ-1)
-  'POST /api/v1/tenancy/invitations/{invitation_id}/accept': acceptMemberInvitationDto,
-  'POST /api/v1/tenancy/organization/invitations/{invitation_id}/resend': resendMemberInvitationDto,
+  'POST /api/v1/tenancy/membership-invitations/{membership_invitation_id}/accept':
+    acceptMembershipInvitationDto,
+  'POST /api/v1/tenancy/organization/memberships/{membership_id}/invitation/resend':
+    resendMembershipInvitationDto,
 
   // ── Roles ──
   'POST /api/v1/tenancy/organization/roles': createMemberRoleDto,
@@ -433,11 +435,11 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'POST /api/v1/app/offers': appCreateOfferDto,
   'PATCH /api/v1/app/offerings/{offering_id}': appUpdateOfferingDto,
   'POST /api/v1/app/offerings': appCreateOfferingDto,
-  'PATCH /api/v1/app/branch-holidays/{branch_holiday_id}': appUpdateBranchHolidayDto,
+  'PATCH /api/v1/app/branches/{branch_id}/holidays/{branch_holiday_id}': appUpdateBranchHolidayDto,
   'POST /api/v1/app/branches/{branch_id}/holidays': appCreateBranchHolidayDto,
-  'PATCH /api/v1/app/machines/{machine_id}': appUpdateMachineDto,
+  'PATCH /api/v1/app/branches/{branch_id}/machines/{branch_machine_id}': appUpdateMachineDto,
   'POST /api/v1/app/branches/{branch_id}/machines': appCreateMachineDto,
-  'PATCH /api/v1/app/rooms/{room_id}': appUpdateRoomDto,
+  'PATCH /api/v1/app/branches/{branch_id}/rooms/{branch_room_id}': appUpdateRoomDto,
   'POST /api/v1/app/branches/{branch_id}/rooms': appCreateRoomDto,
   'PATCH /api/v1/app/offering-groups/{offering_group_id}': appUpdateOfferingGroupDto,
   'POST /api/v1/app/offering-groups': appCreateOfferingGroupDto,
@@ -446,7 +448,7 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'PATCH /api/v1/app/user-preferences': UpdateUserPreferenceDto,
   'PUT /api/v1/app/task-rule-settings': ReplaceTaskRulesDto,
   'PATCH /api/v1/app/branches/{branch_id}': UpdateBranchDto,
-  'PUT /api/v1/app/branches/{branch_id}/user-accesses': ReplaceBranchUserAccessesDto,
+  'PUT /api/v1/app/branches/{branch_id}/members': ReplaceBranchMembersDto,
 
   // ── User: Avatar & export ──
   'PUT /api/v1/users/me/avatar': UploadAvatarDto,

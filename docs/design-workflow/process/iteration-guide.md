@@ -81,14 +81,14 @@ skill runs Steps 0–7 and stops after each:
 | 2 — Delta (incremental) | full / overlay: `pnpm iteration:diff <baseline> <iteration>` vs the designer's notes — are the findings intended? brief: `BRIEF.md` is the change list, and nothing else changed. Always: the Baseline's Standing deviations |
 | 3 — Reconcile | for each PRD ↔ schema-routes mismatch: which source wins? Anything only the screens or the prototype say (not in the PRD or schema-routes, nor an accepted frontend request): what do you want? — the plan never decides it |
 | 4 — Blocking questions | the RED questions — ownership, scope (organization or narrower), lifecycle and delete policy, who may do what, background timing, notification channels, realtime, outside systems, and where new tables live (the domain for each group, and their plural snake_case names) |
-| 5 — Route review | one module at a time in `plans/routes-final.md` ([template](routes-final-template.md)): its tables and connections, routes, permissions, errors and decisions with a recommendation — is it right? Your OK makes the module final; a change reopens it |
-| 6 — KICKOFF.md + plans/ | the plan, the ROUTE ledger (one row per module of the route review, or per table, background piece, flow), the requirements, the stories |
+| 5 — Route review | one sub-domain at a time in `plans/routes-final.md` ([template](routes-final-template.md)): its tables and connections, routes, permissions, errors and decisions with a recommendation — is it right? Your OK makes the sub-domain final; a change reopens it |
+| 6 — KICKOFF.md + plans/ | the plan, the ROUTE ledger (one row per sub-domain of the route review, or per table, background piece, flow), the requirements, the stories |
 | 7 — Self-check | the skill runs `pnpm iteration:status <iteration> ready-for-approval` |
 
 **Reviewing as it goes — no PR diff.** From Step 1 the skill keeps three files current: the database
 changes in `plans/db-changes.md` (the Mermaid data diagrams — open the DB Viewer URL it gives you and
 click the iteration under ◇ Plans to see it drawn as Latest + its changes), the route review in
-`plans/routes-final.md` (one section per module, final once you confirm it), the proposed routes in
+`plans/routes-final.md` (one section per sub-domain, final once you confirm it), the proposed routes in
 `plans/route-changes.md` (a table per area) and the background work in `plans/worker-changes.md` (what
 runs without a user, when, on failure, who is told). Anything existing that changes — a table, a
 route, background work or a requirement — gets a **before → after** row. Every step ends with a **step review** — what changed, those review links,
@@ -103,7 +103,7 @@ pnpm iteration:status <iteration> approved
 pnpm iteration:status <iteration> planning --reason "<what must change>"   # send it back
 ```
 
-**Ask before approving:** is every module of the route review final? Is every coverage row covered
+**Ask before approving:** is every sub-domain of the route review final? Is every coverage row covered
 or out of scope? Is every RED answered? Is the ROUTE order right — schema first? Are the open AMBER items acceptable? From approval on,
 `KICKOFF.md` and `intake-files/` are frozen.
 
@@ -128,7 +128,7 @@ skill confirms the iteration (eligible: `approved`, Baseline `none` or `done`/`f
 the expert: whenever the plan and agent-os disagree, or anything is unclear, agent-os wins, and it may
 change the plan's names, types, paths or job details on the way. Every such change lands in `AS-BUILT.md` and is synced back
 into `plans/db-changes.md`, `route-changes.md` and `worker-changes.md`; only a scope change stops for
-you. **A route review is the exception:** its modules are built exactly as `plans/routes-final.md` says, and
+you. **A route review is the exception:** its sub-domains are built exactly as `plans/routes-final.md` says, and
 where agent-os cannot, the row stops and asks before anything differs.
 
 **Ask after every row:** does what was built match the plan — and if not, is the reason in

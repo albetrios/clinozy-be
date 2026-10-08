@@ -73,7 +73,7 @@ When the requirement comes from a design iteration ([iterations/README.md](../..
 **Details to provide:**
 
 - **Domain** (must match an existing DB schema): `auth` | `user` | `tenancy` | `billing` | `notify` | `audit` | `upload`
-- **Sub-domain name** (domain-prefixed, e.g. `organization-settings`, `member-invitation`): **\*\***\_**\*\***
+- **Sub-domain name** (domain-prefixed, e.g. `organization-settings`, `membership-invitation`): **\*\***\_**\*\***
 - **Parent sub-domain** (if nested aggregate child): e.g. `organization` → `organization-api-key`, `webhook` → `webhook-event` — path is `sub-domains/<parent>/<child>/`
 - **API shape**: list (GET), get-by-id (GET :id), create (POST), update (PATCH :id), delete (DELETE :id), or custom (describe path + method + body/query)
 - **Access**: `public` | `authenticated` | `org-permission:<code>` | `global-role:admin` (or list which routes need which)

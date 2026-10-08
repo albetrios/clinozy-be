@@ -87,7 +87,7 @@ export function createMemberRoleController(service: MemberRoleService) {
       const scope = requireOrganizationScope(request);
       const organizationId = scope.organizationPublicId;
       const roleId = validatePublicIdParam(rawDeleteRoleId ?? '', 'role_id');
-      await service.delete(scope, roleId);
+      await service.delete(scope, roleId, request.query, getActingUserPublicId(auth));
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
         action: 'tenancy.role.delete',
@@ -96,6 +96,21 @@ export function createMemberRoleController(service: MemberRoleService) {
         metadata: { role_public_id: roleId },
       });
       return reply.code(204).send();
+    },
+    restoreRole: async (request: FastifyRequest, _reply: FastifyReply) => {
+      const auth = requirePrincipal(request);
+      const { role_id: rawRestoreRoleId } = (request.params as { role_id?: string }) ?? {};
+      const scope = requireOrganizationScope(request);
+      const roleId = validatePublicIdParam(rawRestoreRoleId ?? '', 'role_id');
+      const data = await service.restore(scope, roleId, getActingUserPublicId(auth));
+      await recordScopedAuditEvent(request, {
+        ...buildAuditActorFields(auth),
+        action: 'tenancy.role.restore',
+        resource_type: 'role',
+        organizationPublicId: scope.organizationPublicId,
+        metadata: { role_public_id: roleId },
+      });
+      return successResponse(data, getRequestIdentifier(request));
     },
   };
 }

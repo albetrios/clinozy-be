@@ -15,14 +15,15 @@ Before scaffolding, confirm:
 1. **Which domain?** (folder = DB schema)
    - **auth** — sub-domains: `auth-method/`, `auth-session/`, `auth-mfa/`, `auth-mfa-session/`, `auth-webauthn/`
    - **user** — sub-domains: `user-settings/`, `user-notification-preferences/`, `user-data-export/`
-   - **tenancy** — sub-domains: `organization/` (nested: `organization-settings/`, `organization-notification-policy/`, `organization-api-key/`), `membership/` (nested: `member-invitation/`), `member-roles/` (nested: `member-role-permission/`), `permission/`
+   - **tenancy** — sub-domains: `organization/` (nested: `organization-settings/`, `organization-notification-policy/`, `organization-api-key/`), `membership/` (nested: `membership-invitation/`), `member-roles/` (nested: `member-role-permission/`), `permission/`
    - **billing** — sub-domains: `plan/`, `subscription/`, `stripe-webhook/`
    - **notify** — sub-domains: `notification/`, `webhook/` (nested: `webhook-event/` (event types) and `webhook-delivery/` (delivery attempts, queues, workers, DLQ))
+   - **app** — the app's own records (Postgres schema `app`): one sub-domain per section of the launch route review, each with its nested sub-domains inside (`branches/` nested: `branch-members/`, `branch-rooms/`, `branch-machines/`, `branch-holidays/`; `patients/` nested: `patient-treatments/`, …); the shared kernel (`base-record.*`, `app.permissions.ts`, …) stays at the domain root
    - **audit**, **upload** — flat domains (no `sub-domains/`)
 
 2. **Top-level or nested sub-domain?**
    - **Top-level:** `src/domains/<domain>/sub-domains/<resource>/`
-   - **Nested (aggregate child):** `src/domains/<domain>/sub-domains/<parent>/<child>/` — only when lifecycle is tied to parent (organization-api-key, member-invitation, webhook-event, member-role-permission).
+   - **Nested (aggregate child):** `src/domains/<domain>/sub-domains/<parent>/<child>/` — only when lifecycle is tied to parent (organization-api-key, membership-invitation, webhook-event, member-role-permission).
 
 3. **What routes/API?**
    - List, get by id, create, update, delete; or sub-resource routes under parent.

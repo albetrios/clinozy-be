@@ -10,8 +10,8 @@ import {
   createRoleWithPermissions,
   seedAllPermissions,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
-import { MemberInvitationRepository } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.repository.js';
-import { hashInvitationToken } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.token.js';
+import { MembershipInvitationRepository } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.repository.js';
+import { hashInvitationToken } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.token.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import {
@@ -290,7 +290,7 @@ describe('tenancy audit trail — organization governance changes reach the audi
     const pending = await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
       () =>
-        new MemberInvitationRepository().create({
+        new MembershipInvitationRepository().create({
           membership_id: inviteeMembership!.id,
           email: invitee.email,
           token_hash: hashInvitationToken(rawToken),
@@ -312,14 +312,14 @@ describe('tenancy audit trail — organization governance changes reach the audi
       organization_public_id: organization.public_id,
       metadata: { invitation_public_id: invitationId },
     };
-    expect(await stagedRows('tenancy.member_invitation.resend')).toEqual([
+    expect(await stagedRows('tenancy.membership_invitation.resend')).toEqual([
       expect.objectContaining(byOwner),
     ]);
-    expect(await stagedRows('tenancy.member_invitation.revoke')).toEqual([
+    expect(await stagedRows('tenancy.membership_invitation.revoke')).toEqual([
       expect.objectContaining(byOwner),
     ]);
     // The invitee had no organization in their token; the row belongs to the organization joined.
-    expect(await stagedRows('tenancy.member_invitation.accept')).toEqual([
+    expect(await stagedRows('tenancy.membership_invitation.accept')).toEqual([
       expect.objectContaining({
         actor_user_public_id: invitee.public_id,
         organization_public_id: organization.public_id,

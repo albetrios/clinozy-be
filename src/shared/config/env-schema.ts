@@ -549,7 +549,7 @@ const envSchemaBase = z.object({
     .max(1000)
     .default(100),
   /**
-   * Max number of live pending (not accepted, not revoked, not expired) member invitations allowed
+   * Max number of live pending (not accepted, not revoked, not expired) membership invitations allowed
    * per organization. Parity with `WEBHOOK_MAX_PER_ORG`. Invitations are otherwise only seat-bounded,
    * and a PERSONAL / free-tier organization has no seat ceiling (null), so without this cap an Admin could
    * enqueue an unbounded backlog of outstanding invites — each sending an email (amplification) and

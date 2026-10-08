@@ -8,7 +8,12 @@ import { trimmedStringMinMax } from '@/shared/utils/validation/validation.util.j
  */
 export const putMemberRolePermissionsDto = z
   .object({
-    permission_codes: z.array(trimmedStringMinMax(1, 100)).min(0).max(200),
+    permission_codes: z
+      .array(trimmedStringMinMax(1, 100))
+      .min(0)
+      .max(200)
+      // TC14: a repeated code is a 400 (it was a database error).
+      .refine((codes) => new Set(codes).size === codes.length, { message: 'Each code once' }),
   })
   .strict();
 

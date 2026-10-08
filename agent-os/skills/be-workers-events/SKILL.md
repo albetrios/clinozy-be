@@ -109,11 +109,11 @@ For a visual flow diagram (Service → EventBus → Handler → Queue → Redis 
 
 ## Canonical examples
 
-**Tenancy — member invitation**
+**Tenancy — membership invitation**
 
 ```text
-member-invitation.service.ts  →  eventBus.emit(tenancy.member_invitation.created|resent)
-tenancy/sub-domains/membership/member-invitation/events/*.ts  →  recordOutboxEmail() + onCommit(dispatchOutboxEmail)
+membership-invitation.service.ts  →  eventBus.emit(tenancy.membership_invitation.created|resent)
+tenancy/sub-domains/membership/membership-invitation/events/*.ts  →  recordOutboxEmail() + onCommit(dispatchOutboxEmail)
 tenancy/events/index.ts  →  registerTenancyEventHandlers()
 ```
 
@@ -128,8 +128,8 @@ auth/events/index.ts  →  registerAuthEventHandlers()
 **Notify — in-app notification** (invitation accepted)
 
 ```text
-member-invitation.service  →  eventBus.emit(tenancy.member_invitation.accepted)
-notify/sub-domains/notification/events/member-invitation-accepted.event-handlers.ts  →  notification row + enqueue
+membership-invitation.service  →  eventBus.emit(tenancy.membership_invitation.accepted)
+notify/sub-domains/notification/events/membership-invitation-accepted.event-handlers.ts  →  notification row + enqueue
 ```
 
 Billing emits no domain events today (`billing.overview.md`).

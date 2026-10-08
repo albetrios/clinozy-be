@@ -1,10 +1,9 @@
 import type { PgTable } from 'drizzle-orm/pg-core';
-import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import { saved_views } from '@/domains/app/sub-domains/saved-views/saved-views.schema.js';
 import { offering_groups } from '@/domains/app/sub-domains/offering-groups/offering-groups.schema.js';
-import { rooms } from '@/domains/app/sub-domains/rooms/rooms.schema.js';
-import { machines } from '@/domains/app/sub-domains/machines/machines.schema.js';
-import { branch_holidays } from '@/domains/app/sub-domains/branch-holidays/branch-holidays.schema.js';
+import { branch_rooms } from '@/domains/app/sub-domains/branches/branch-rooms/branch-rooms.schema.js';
+import { branch_machines } from '@/domains/app/sub-domains/branches/branch-machines/branch-machines.schema.js';
+import { branch_holidays } from '@/domains/app/sub-domains/branches/branch-holidays/branch-holidays.schema.js';
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
 import { offers } from '@/domains/app/sub-domains/offers/offers.schema.js';
 import { user_preferences } from '@/domains/app/sub-domains/user-preferences/user-preferences.schema.js';
@@ -59,7 +58,8 @@ import { messages } from '@/domains/app/sub-domains/messages/messages.schema.js'
  * purge erases them in, so a parent goes after the rows that named it (D38).
  *
  * @remarks
- * - **Notes:** generated with the app tables; `branches` (hand-built) is last.
+ * - **Notes:** generated with the app tables. `app.branches` is not here — a branch is never
+ *   deleted (D3, D16).
  */
 export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   { table: messages, label: 'app.messages' },
@@ -111,9 +111,8 @@ export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   { table: offers, label: 'app.offers' },
   { table: offerings, label: 'app.offerings' },
   { table: branch_holidays, label: 'app.branch_holidays' },
-  { table: machines, label: 'app.machines' },
-  { table: rooms, label: 'app.rooms' },
+  { table: branch_machines, label: 'app.branch_machines' },
+  { table: branch_rooms, label: 'app.branch_rooms' },
   { table: offering_groups, label: 'app.offering_groups' },
   { table: saved_views, label: 'app.saved_views' },
-  { table: branches, label: 'app.branches' },
 ];

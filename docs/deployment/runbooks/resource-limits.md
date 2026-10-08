@@ -176,7 +176,7 @@ Organization-scoped HTTP routes hold **one pool checkout per unit of work** via 
 
 Org-scoped HTTP handlers wrap database work in `withAppDatabaseContext` — there is no per-request transaction pin. Keep Stripe / S3 / Resend calls **outside** those callbacks (enforced by `rls-context-network-isolation.global.test.ts`).
 
-Cross-organization reads (organization list/get/getBySlug/create) and invitation flows MUST use a user principal scope (`withAppDatabaseContext`) or the `tenancy.resolve_member_invitation_lookup_by_public_id` / `tenancy.list_pending_member_invitations_for_email` SECURITY DEFINER helpers (see migration `20260520000004_organization_discovery_and_invitation_lookup_rls.sql`).
+Cross-organization reads (organization list/get/getBySlug/create) and invitation flows MUST use a user principal scope (`withAppDatabaseContext`) or the `tenancy.resolve_membership_invitation_lookup_by_public_id` / `tenancy.list_pending_membership_invitations_for_email` SECURITY DEFINER helpers (see migration `20260520000004_organization_discovery_and_invitation_lookup_rls.sql`).
 
 ### Pool exhaustion alerting (API)
 

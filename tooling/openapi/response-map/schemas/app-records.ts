@@ -112,7 +112,7 @@ export const offeringGroupsRecordExample = {
   updated_at: '2026-10-07T10:30:00.000Z',
 };
 
-/** `RoomOutput`. */
+/** `BranchRoomOutput`. */
 export const roomsRecordSchema = {
   type: 'object',
   properties: {
@@ -140,7 +140,7 @@ export const roomsRecordSchema = {
   },
 };
 
-/** Example `RoomOutput`. */
+/** Example `BranchRoomOutput`. */
 export const roomsRecordExample = {
   id: 'room_k7x9m2pqr4w8n1v3a1b2c',
   branch_id: 'bra_k7x9m2pqr4w8n1v3a1b2c',
@@ -150,7 +150,7 @@ export const roomsRecordExample = {
   updated_at: '2026-10-07T10:30:00.000Z',
 };
 
-/** `MachineOutput`. */
+/** `BranchMachineOutput`. */
 export const machinesRecordSchema = {
   type: 'object',
   properties: {
@@ -178,7 +178,7 @@ export const machinesRecordSchema = {
   },
 };
 
-/** Example `MachineOutput`. */
+/** Example `BranchMachineOutput`. */
 export const machinesRecordExample = {
   id: 'mach_k7x9m2pqr4w8n1v3a1b2c',
   branch_id: 'bra_k7x9m2pqr4w8n1v3a1b2c',
@@ -982,11 +982,11 @@ export const appointmentsRecordSchema = {
       type: 'string',
       nullable: true,
     },
-    room_id: {
+    branch_room_id: {
       type: 'string',
       nullable: true,
     },
-    machine_id: {
+    branch_machine_id: {
       type: 'string',
       nullable: true,
     },
@@ -1094,8 +1094,8 @@ export const appointmentsRecordExample = {
   service_label: 'Sample service label',
   doctor_membership_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
   therapist_membership_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  room_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  machine_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
+  branch_room_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
+  branch_machine_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
   appointment_date: '2026-10-08',
   start_time: '10:00',
   duration_minutes: 5,

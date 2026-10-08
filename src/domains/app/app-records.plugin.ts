@@ -2,9 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import type { AppRecordServices } from './app-records.container.js';
 import { savedViewsRoutes } from './sub-domains/saved-views/saved-views.routes.js';
 import { offeringGroupsRoutes } from './sub-domains/offering-groups/offering-groups.routes.js';
-import { roomsRoutes } from './sub-domains/rooms/rooms.routes.js';
-import { machinesRoutes } from './sub-domains/machines/machines.routes.js';
-import { branchHolidaysRoutes } from './sub-domains/branch-holidays/branch-holidays.routes.js';
+import { branchRoomsRoutes } from './sub-domains/branches/branch-rooms/branch-rooms.routes.js';
+import { branchMachinesRoutes } from './sub-domains/branches/branch-machines/branch-machines.routes.js';
+import { branchHolidaysRoutes } from './sub-domains/branches/branch-holidays/branch-holidays.routes.js';
 import { offeringsRoutes } from './sub-domains/offerings/offerings.routes.js';
 import { offersRoutes } from './sub-domains/offers/offers.routes.js';
 import { patientsRoutes } from './sub-domains/patients/patients.routes.js';
@@ -54,8 +54,8 @@ export async function registerAppRecordRoutes(
 ): Promise<void> {
   await app.register(savedViewsRoutes(services.savedViewsService));
   await app.register(offeringGroupsRoutes(services.offeringGroupsService));
-  await app.register(roomsRoutes(services.roomsService));
-  await app.register(machinesRoutes(services.machinesService));
+  await app.register(branchRoomsRoutes(services.branchRoomsService));
+  await app.register(branchMachinesRoutes(services.branchMachinesService));
   await app.register(branchHolidaysRoutes(services.branchHolidaysService));
   await app.register(offeringsRoutes(services.offeringsService));
   await app.register(offersRoutes(services.offersService));

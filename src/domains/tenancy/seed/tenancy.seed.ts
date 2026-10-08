@@ -2,6 +2,10 @@
  * Tenancy domain seed — organizations, roles, memberships, role_permissions, invitations.
  * Domain-owned; used by scripts/seed orchestration. Data is passed in (no faker here).
  */
+import {
+  MEMBERSHIP_STATUS,
+  type MembershipStatus,
+} from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import { sql } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
@@ -9,7 +13,7 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { role_permissions } from '@/domains/tenancy/sub-domains/member-roles/member-role-permission/member-role-permission.schema.js';
-import { member_invitations } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.schema.js';
+import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
 
 /** Input for {@link seedOrganization}; `owner_user_id` is the internal id of the future organization owner. */
 export interface SeedOrganizationPayload {
@@ -80,12 +84,12 @@ export async function seedRole(payload: SeedRolePayload) {
   return row ?? null;
 }
 
-/** Input for {@link seedMembership}; `status` defaults to `'ACTIVE'`, `invited_by_user_id` is optional. */
+/** Input for {@link seedMembership}; `status` defaults to `'active'`, `invited_by_user_id` is optional. */
 export interface SeedMembershipPayload {
   user_id: number;
   organization_id: number;
   role_id: number;
-  status?: string;
+  status?: MembershipStatus;
   created_by_user_id: number;
   joined_at?: Date | null;
   invited_by_user_id?: number;
@@ -93,13 +97,13 @@ export interface SeedMembershipPayload {
 
 /**
  * Inserts a membership row joining a seeded user to an organization with a
- * given role. When status is `INVITED` `joined_at` is left null; otherwise it
+ * given role. When status is `invited` `joined_at` is left null; otherwise it
  * defaults to `now()` so demo flows can immediately resolve permissions.
  * `invited_by_user_id` is recorded when provided (e.g. seeded invitations).
  * Idempotent: re-running updates `role_id` and `status` on (user_id, organization_id) conflict.
  */
 export async function seedMembership(payload: SeedMembershipPayload) {
-  const status = payload.status ?? 'ACTIVE';
+  const status = payload.status ?? MEMBERSHIP_STATUS.ACTIVE;
   const [row] = await getRequestDatabase()
     .insert(memberships)
     .values({
@@ -108,7 +112,7 @@ export async function seedMembership(payload: SeedMembershipPayload) {
       organization_id: payload.organization_id,
       role_id: payload.role_id,
       status,
-      joined_at: payload.joined_at ?? (status === 'INVITED' ? null : new Date()),
+      joined_at: payload.joined_at ?? (status === MEMBERSHIP_STATUS.INVITED ? null : new Date()),
       created_by_user_id: payload.created_by_user_id,
       invited_by_user_id: payload.invited_by_user_id ?? null,
     })
@@ -145,10 +149,10 @@ export async function seedRolePermissions(
 }
 
 /**
- * Input for {@link seedMemberInvitation}; `token_hash` is the SHA-256 of the raw invitation token.
+ * Input for {@link seedMembershipInvitation}; `token_hash` is the SHA-256 of the raw invitation token.
  * `created_at` is optional and only set by seeders that need a back-dated (e.g. expired) invitation.
  */
-export interface SeedMemberInvitationPayload {
+export interface SeedMembershipInvitationPayload {
   membership_id: number;
   email: string;
   token_hash: string;
@@ -159,17 +163,17 @@ export interface SeedMemberInvitationPayload {
 }
 
 /**
- * Inserts a pending member-invitation row tied to an existing membership in
- * `INVITED` status. Used by demo flows to materialise an outstanding
+ * Inserts a pending membership-invitation row tied to an existing membership in
+ * `invited` status. Used by demo flows to materialise an outstanding
  * acceptance link without going through the full invitation service. When
  * `created_at` is supplied it is back-dated explicitly (so an expired invitation
  * still satisfies the `expires_at > created_at` check); otherwise it defaults to now().
  */
-export async function seedMemberInvitation(payload: SeedMemberInvitationPayload) {
+export async function seedMembershipInvitation(payload: SeedMembershipInvitationPayload) {
   const [row] = await getRequestDatabase()
-    .insert(member_invitations)
+    .insert(membership_invitations)
     .values({
-      public_id: generatePublicId('memberInvitation'),
+      public_id: generatePublicId('membershipInvitation'),
       membership_id: payload.membership_id,
       email: payload.email,
       token_hash: payload.token_hash,

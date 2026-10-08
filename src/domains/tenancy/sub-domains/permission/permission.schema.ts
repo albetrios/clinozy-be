@@ -3,7 +3,7 @@ import { tenancySchema } from '@/infrastructure/database/pg-schemas.js';
 
 /**
  * `tenancy.permissions` catalog table — global, organization-agnostic list of
- * permission codes. `code` is the primary key (e.g. `membership:manage`) so
+ * permission codes. `code` is the primary key (e.g. `membership:create`) so
  * `role_permissions` can reference it directly; no RLS policy, since the
  * catalog is identical for every tenant.
  */

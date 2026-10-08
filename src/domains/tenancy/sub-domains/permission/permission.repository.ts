@@ -1,3 +1,4 @@
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import { permissions } from '@/domains/tenancy/sub-domains/permission/permission.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { membershipHoldsRole } from '@/domains/tenancy/sub-domains/membership/membership-additional-roles/membership-additional-roles.schema.js';
@@ -81,7 +82,7 @@ export class PermissionRepository {
         and(
           eq(memberships.user_id, internalUserId),
           eq(organizations.public_id, organizationPublicId),
-          eq(memberships.status, 'ACTIVE'),
+          eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
           isNull(memberships.deleted_at),
           isNull(roles.deleted_at),
           isNull(organizations.deleted_at),
