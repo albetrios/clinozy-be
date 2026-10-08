@@ -1,7 +1,13 @@
-import { UnrecoverableError } from 'bullmq';
+import { DelayedError, UnrecoverableError } from 'bullmq';
 import { describe, expect, it, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import * as fieldSecretEncryption from '@/shared/utils/security/field-secret-encryption.util.js';
 import {
+  acquireWebhookDeliveryHostSlot,
+  resetWebhookDeliveryHostSlots,
+  WebhookDeliveryHostAtCapacity,
+} from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery-host-gate.js';
+import {
+  deferWebhookDeliveryWhenHostAtCapacity,
   processWebhookDeliveryAttempt,
   WebhookEndpointFailure,
   type WebhookDeliveryFetch,
@@ -103,6 +109,7 @@ describe('processWebhookDeliveryAttempt', () => {
     });
 
   beforeEach(() => {
+    resetWebhookDeliveryHostSlots();
     fetchMock = respond(200);
     repository = createDeliveryAttemptRepositoryMock();
     findDeliveryContextMock.mockReset().mockResolvedValue({ ...deliveryContextFixture });
@@ -310,5 +317,46 @@ describe('processWebhookDeliveryAttempt', () => {
       response_body: 'empty_signing_secret',
       next_retry_at: null,
     });
+  });
+
+  it('does not claim or record a failure when the destination host is at the in-flight cap', async () => {
+    acquireWebhookDeliveryHostSlot('example.com');
+    acquireWebhookDeliveryHostSlot('example.com');
+
+    await expect(deliver()).rejects.toBeInstanceOf(WebhookDeliveryHostAtCapacity);
+
+    expect(repository.tryMarkSending).not.toHaveBeenCalled();
+    expect(repository.recordOutcome).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('parks a host-at-capacity delivery without spending an attempt', async () => {
+    const moveToDelayed = vi.fn().mockResolvedValue(undefined);
+    const error = new WebhookDeliveryHostAtCapacity('example.com');
+
+    await expect(
+      deferWebhookDeliveryWhenHostAtCapacity({
+        error,
+        job: { moveToDelayed },
+        token: 'lock-token',
+      }),
+    ).rejects.toBeInstanceOf(DelayedError);
+
+    expect(moveToDelayed).toHaveBeenCalledOnce();
+    const [delayedUntil, token] = moveToDelayed.mock.calls[0] ?? [];
+    expect(token).toBe('lock-token');
+    expect(delayedUntil).toBeGreaterThan(Date.now());
+  });
+
+  it('rethrows a host-at-capacity error when the worker has no lock token', async () => {
+    const error = new WebhookDeliveryHostAtCapacity('example.com');
+
+    await expect(
+      deferWebhookDeliveryWhenHostAtCapacity({
+        error,
+        job: { moveToDelayed: vi.fn() },
+        token: undefined,
+      }),
+    ).rejects.toBe(error);
   });
 });

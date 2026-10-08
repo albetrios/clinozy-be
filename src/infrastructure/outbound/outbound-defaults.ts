@@ -1,6 +1,7 @@
 import { env } from '@/shared/config/env.config.js';
 import {
   FIVE_SECONDS_MS,
+  MILLISECONDS_PER_SECOND,
   TEN_SECONDS_MS,
   THIRTY_SECONDS_MS,
 } from '@/shared/constants/ttl.constants.js';
@@ -44,6 +45,20 @@ export interface OutboundIntegrationDefaults {
 
 const OAUTH_HTTP_TIMEOUT_MS = TEN_SECONDS_MS;
 const WEBHOOK_DELIVERY_TIMEOUT_MS = THIRTY_SECONDS_MS;
+
+/**
+ * Concurrent webhook POSTs one worker process may have in flight to a single destination host.
+ *
+ * The shared webhook worker defaults to four concurrent jobs. Two leaves the rest of that pool
+ * for other hosts when one receiver is slow. Excess deliveries for that host are deferred, not dropped.
+ */
+export const WEBHOOK_DELIVERY_PER_HOST_IN_FLIGHT_LIMIT = 2;
+
+/**
+ * Delay before a webhook delivery parked for a destination host at the in-flight cap
+ * becomes eligible to run again.
+ */
+export const WEBHOOK_DELIVERY_HOST_DEFER_DELAY_MS = MILLISECONDS_PER_SECOND;
 const WEBHOOK_TEST_TIMEOUT_MS = TEN_SECONDS_MS;
 const TURNSTILE_HTTP_TIMEOUT_MS = FIVE_SECONDS_MS;
 /** Wall-clock cap for S3 SDK calls (SDK also uses maxAttempts). */

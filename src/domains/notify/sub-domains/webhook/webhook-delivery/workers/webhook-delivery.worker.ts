@@ -1,11 +1,18 @@
 import { createHmac } from 'node:crypto';
-import { UnrecoverableError, Worker } from 'bullmq';
+import { DelayedError, UnrecoverableError, Worker } from 'bullmq';
 import { captureMessage } from '@/infrastructure/observability/sentry/sentry.js';
 import {
   getBullMQConnectionOptions,
   getBullMQKeyPrefix,
 } from '@/infrastructure/queue/connection.js';
+import { WEBHOOK_DELIVERY_HOST_DEFER_DELAY_MS } from '@/infrastructure/outbound/outbound-defaults.js';
 import { buildOutboundCallOptions, outboundCall } from '@/infrastructure/outbound/index.js';
+import {
+  acquireWebhookDeliveryHostSlot,
+  releaseWebhookDeliveryHostSlot,
+  webhookDeliveryDestinationHost,
+  WebhookDeliveryHostAtCapacity,
+} from './webhook-delivery-host-gate.js';
 import { createPinnedWebhookFetch } from '@/shared/utils/security/webhook-outbound-fetch.util.js';
 import { getWebhookWorkerOptions } from '@/infrastructure/queue/worker-runtime/worker-options.js';
 import {
@@ -201,7 +208,12 @@ export class WebhookEndpointFailure extends Error {
 /** Result of the claim phase — a skip (already sent, webhook disabled) or a claimed attempt. */
 type WebhookDeliveryClaim =
   | { status: 'skipped'; reason: 'already_sent' | 'webhook_disabled' }
-  | { status: 'claimed'; deliveryContext: WebhookDeliveryAttemptWithWebhook };
+  | {
+      status: 'claimed';
+      deliveryContext: WebhookDeliveryAttemptWithWebhook;
+      /** Host whose in-flight slot this claim reserved, or null when the URL has no hostname. */
+      destinationHost: string | null;
+    };
 
 /**
  * Phase 1 (short DB transaction): load the attempt + webhook under the organization RLS scope and
@@ -245,13 +257,29 @@ async function claimWebhookDeliveryAttempt(options: {
         });
         return { status: 'skipped', reason: 'webhook_disabled' };
       }
-      const sendingClaim = await attemptRepository.tryMarkSending(
-        deliveryContext.deliveryAttemptId,
-      );
-      if (sendingClaim === 'already_sent') {
-        return { status: 'skipped', reason: 'already_sent' };
+      const destinationHost = webhookDeliveryDestinationHost(deliveryContext.webhookUrl);
+      if (destinationHost !== null) {
+        // Reserve before the claim so a host that is already full does not mark the row SENDING
+        // or spend an attempt. The caller releases the slot after the HTTP call.
+        acquireWebhookDeliveryHostSlot(destinationHost);
       }
-      return { status: 'claimed', deliveryContext };
+      try {
+        const sendingClaim = await attemptRepository.tryMarkSending(
+          deliveryContext.deliveryAttemptId,
+        );
+        if (sendingClaim === 'already_sent') {
+          if (destinationHost !== null) {
+            releaseWebhookDeliveryHostSlot(destinationHost);
+          }
+          return { status: 'skipped', reason: 'already_sent' };
+        }
+        return { status: 'claimed', deliveryContext, destinationHost };
+      } catch (error) {
+        if (destinationHost !== null) {
+          releaseWebhookDeliveryHostSlot(destinationHost);
+        }
+        throw error;
+      }
     },
   );
 }
@@ -641,7 +669,9 @@ async function deliverClaimedWebhook(options: {
  *   reaches the dead-letter ledger without a page. `410 Gone` records `FAILED`, turns the webhook
  *   off and completes. An unreadable or empty signing secret, or a missing attempt row, throws
  *   `UnrecoverableError` (recorded and alerted). A disabled or deleted webhook records `FAILED`
- *   and skips.
+ *   and skips. A destination host already at {@link WEBHOOK_DELIVERY_PER_HOST_IN_FLIGHT_LIMIT}
+ *   throws {@link WebhookDeliveryHostAtCapacity} before the row is claimed; the worker parks
+ *   that job with `moveToDelayed` and does not record `FAILED`.
  * - **Side effects:** outbound HTTPS POST; updates to `webhook_delivery_attempts` (and
  *   `webhooks.is_enabled` on a 410); structured logs at every transition.
  * - **Notes:** the dependency-injection seam (`fetchImplementation`, `deliveryAttemptRepository`)
@@ -671,13 +701,59 @@ export async function processWebhookDeliveryAttempt(options: {
     return { outcome: 'skipped', reason: claim.reason };
   }
 
-  return deliverClaimedWebhook({
-    organizationPublicId,
-    jobContext,
-    fetchImplementation: options.fetchImplementation ?? globalThis.fetch,
-    deliveryAttemptRepository,
-    deliveryContext: claim.deliveryContext,
-  });
+  try {
+    return await deliverClaimedWebhook({
+      organizationPublicId,
+      jobContext,
+      fetchImplementation: options.fetchImplementation ?? globalThis.fetch,
+      deliveryAttemptRepository,
+      deliveryContext: claim.deliveryContext,
+    });
+  } finally {
+    if (claim.destinationHost !== null) {
+      releaseWebhookDeliveryHostSlot(claim.destinationHost);
+    }
+  }
+}
+
+/**
+ * Parks a delivery whose destination host is already at the in-flight cap, without spending an attempt.
+ *
+ * @remarks
+ * Algorithm:
+ * 1. Errors other than {@link WebhookDeliveryHostAtCapacity} are rethrown unchanged.
+ * 2. Without a BullMQ lock token the same error is rethrown, because `moveToDelayed` cannot run.
+ * 3. Otherwise the job is delayed by {@link WEBHOOK_DELIVERY_HOST_DEFER_DELAY_MS} and
+ *    {@link DelayedError} is thrown so BullMQ does not count the park as a failed attempt.
+ *
+ * Failure modes:
+ * - A missing lock token rethrows {@link WebhookDeliveryHostAtCapacity}.
+ * - `moveToDelayed` failures propagate and BullMQ may retry the job.
+ *
+ * Side effects:
+ * - Moves the BullMQ job to delayed. Does not write the attempt row.
+ *
+ * Notes:
+ * - The slot is not held while the job waits, so other hosts keep the rest of the pool.
+ * - The row stays unclaimed (or `SENDING` from an earlier crashed execution) and the next run claims it.
+ */
+export async function deferWebhookDeliveryWhenHostAtCapacity(options: {
+  error: unknown;
+  job: { moveToDelayed: (timestamp: number, token?: string) => Promise<void> };
+  token: string | undefined;
+}): Promise<never> {
+  if (!(options.error instanceof WebhookDeliveryHostAtCapacity)) {
+    throw options.error;
+  }
+  if (options.token === undefined) {
+    throw options.error;
+  }
+  logger.info(
+    { host: options.error.host, delayMs: WEBHOOK_DELIVERY_HOST_DEFER_DELAY_MS },
+    'webhook.delivery.host_deferred',
+  );
+  await options.job.moveToDelayed(Date.now() + WEBHOOK_DELIVERY_HOST_DEFER_DELAY_MS, options.token);
+  throw new DelayedError();
 }
 
 /**
@@ -691,7 +767,9 @@ export async function processWebhookDeliveryAttempt(options: {
  * - **Failure modes:** receiver failures are persisted on the attempt row and rethrown so BullMQ
  *   retries up to {@link WEBHOOK_DELIVERY_JOB_ATTEMPTS} times using
  *   {@link webhookDeliveryBackoffWithJitter} (the delivery schedule plus up to 20% jitter); the
- *   final failure routes the job to the per-queue DLQ via the bootstrap dead-letter wiring.
+ *   final failure routes the job to the per-queue DLQ via the bootstrap dead-letter wiring. A
+ *   destination host at the in-flight cap is parked with `moveToDelayed` ({@link
+ *   deferWebhookDeliveryWhenHostAtCapacity}) and does not spend an attempt.
  * - **Side effects:** subscribes a `Worker` to Redis with webhook-tuned options; performs
  *   outbound HTTPS calls via a pinned fetch wrapped in a per-webhook circuit breaker; writes the
  *   audit trail to `notify.webhook_delivery_attempts`.
@@ -703,24 +781,33 @@ export async function processWebhookDeliveryAttempt(options: {
 export function createWebhookDeliveryWorker(): WorkerHandle {
   const worker = new Worker<WebhookDeliveryJobData>(
     WEBHOOK_DELIVERY_QUEUE_NAME,
-    async (job) => {
-      const { deliveryAttemptPublicId, organizationPublicId, requestId, traceparent, tracestate } =
-        await parseJobDataOrDeadLetter({
+    async (job, token) => {
+      try {
+        const {
+          deliveryAttemptPublicId,
+          organizationPublicId,
+          requestId,
+          traceparent,
+          tracestate,
+        } = await parseJobDataOrDeadLetter({
           schema: webhookDeliveryJobDataSchema,
           job,
           queueName: WEBHOOK_DELIVERY_QUEUE_NAME,
         });
-      return runWithPropagatedTraceContext({ traceparent, tracestate }, job.name, () =>
-        processWebhookDeliveryAttempt({
-          deliveryAttemptPublicId,
-          organizationPublicId,
-          jobContext: omitUndefined({
-            id: job.id,
-            attemptsMade: job.attemptsMade,
-            requestId,
+        return await runWithPropagatedTraceContext({ traceparent, tracestate }, job.name, () =>
+          processWebhookDeliveryAttempt({
+            deliveryAttemptPublicId,
+            organizationPublicId,
+            jobContext: omitUndefined({
+              id: job.id,
+              attemptsMade: job.attemptsMade,
+              requestId,
+            }),
           }),
-        }),
-      );
+        );
+      } catch (error) {
+        return deferWebhookDeliveryWhenHostAtCapacity({ error, job, token });
+      }
     },
     {
       connection: getBullMQConnectionOptions(),

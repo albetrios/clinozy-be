@@ -99,7 +99,9 @@ what to do, why, and what enforces it. The mechanisms behind the rules are expla
    120 s); connection `getBullMQConnectionOptions()`; `prefix: getBullMQKeyPrefix()`.
 2. **Concurrency**: a throughput worker reads its family's setting (`getWorkerConcurrencyMail /
    Notify / Webhook / Stripe`, default `WORKER_CONCURRENCY` = 4); a cron or sweep runs at
-   `RETENTION_WORKER_CONCURRENCY` (1).
+   `RETENTION_WORKER_CONCURRENCY` (1). Webhook delivery also caps in-flight POSTs per destination
+   host (`WEBHOOK_DELIVERY_PER_HOST_IN_FLIGHT_LIMIT`) and parks the extra jobs with `moveToDelayed`
+   so one slow receiver cannot occupy the pool.
 3. **Return a `WorkerHandle`** (`buildWorkerHandle`) and log the `stalled` event. Bootstrap attaches
    the dead-letter + Sentry hook, the job-duration histogram and the queue heartbeat to every
    registered worker — do not add your own `failed` handler that reports to Sentry.
