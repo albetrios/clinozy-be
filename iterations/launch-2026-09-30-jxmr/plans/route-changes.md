@@ -1,345 +1,435 @@
 # Route changes — launch-2026-09-30-jxmr
 
-The iteration's proposed routes, in one file, kept current at every planning step
-(`be-iteration-planning` › Route changes). Proposals only — kickoff confirms each route when it builds
-it and records any change in `AS-BUILT.md`; the built truth is `docs/routes.txt`.
+The iteration's proposed routes, in one file (`be-iteration-planning` › Route changes). Proposals only —
+kickoff confirms each route when it builds it and records any change in `AS-BUILT.md`; the built truth is
+`docs/routes.txt`.
 
-Status: ready — planning Step 5, with D1–D44 applied; each route reaches its ROUTE row through its feature. Mode initial (Baseline `none`) ·
-Intake hash `036cbb592ac5` · 2026-10-03.
+Status: **regenerated 2026-10-08 from the route review** ([routes-final.md](routes-final.md), [D46](decisions.md)) — one
+section per module, in build order ([D47](decisions.md)). The proposals of 2026-10-03 are superseded (git history keeps
+them). Mode initial (Baseline `none`) · Intake hash `036cbb592ac5`.
 
-**Provisional prefix.** New clinic routes are drafted under `/api/v1/app/…` — the domain is not chosen
-yet (Step 4 asks where new tables live; the route prefix follows the domain, as every existing route
-does). Paths follow the API contract: plural kebab-case segments, semantic snake_case params, no
-organization segment (the active organization is the sign-in token's), lifecycle actions as `POST`
-sub-paths. A patient's records are listed and created under the patient and addressed by their own
-id afterwards (`/patients/{patient_id}/prescriptions` → `/prescriptions/{prescription_id}`).
-
-**Lists** return a total count with every page (P38, D40). **Every save** on a record changed since it was opened is refused with who changed it and when (D43).
-
-**Access** names the clinic section and action from the role × section matrix (`patients · edit`), or
-a role where the drop fixes one — settled: rooms and actions per D12, role-named actions as permission codes (D13, D14), the Accountant and Marketing slices (D15, D16), `billing.*` = Payments (D17), special permissions (D18).
+Paths are under `/api/v1/app`, except module 2's team routes (2.B–2.E), which are the platform's, under `/api/v1`.
+**#** is `<module>.<route>` as the route review numbers them. **Change** is against the code today: `NEW` — a route
+that does not exist yet; `CHANGED` — moved, renamed or rebuilt (the route review's marker); `KEPT` — the same method
+and path, whatever its behaviour now follows. Routes the review removes are named in each module's decisions
+(for example the patient timeline, the global search, patient notes); `docs/routes.txt` shows them go when the row
+that drops them is built. The medical store's routes wait for its own review ([D49](decisions.md)).
 
 ## Counts
 
-| Area | NEW | CHANGED | REMOVED |
-| --- | --- | --- | --- |
-| Team, roles and preferences | 9 | 11 | 0 |
-| Branches | 14 | 0 | 0 |
-| Leads and messages | 18 | 0 | 0 |
-| Appointments and Today | 20 | 0 | 0 |
-| Patients | 6 | 0 | 0 |
-| Patient file | 41 | 0 | 0 |
-| Offerings and offers | 9 | 0 | 0 |
-| Invoices and payments | 21 | 0 | 0 |
-| Medical store | 33 | 0 | 0 |
-| Clinic stock | 13 | 0 | 0 |
-| Tasks | 9 | 0 | 0 |
-| Search | 2 | 0 | 0 |
-| **Total** | **195** | **11** | **0** |
+| Module | NEW | CHANGED | KEPT | Total |
+| --- | --- | --- | --- | --- |
+| 1. Branches & places | 0 | 14 | 11 | 25 |
+| 2. Team | 1 | 11 | 15 | 27 |
+| 3. Offerings | 0 | 0 | 19 | 19 |
+| 4. Contacts | 10 | 3 | 9 | 22 |
+| 5. Leads | 0 | 0 | 9 | 9 |
+| 6. Appointments | 4 | 3 | 13 | 20 |
+| 7. Patients | 0 | 43 | 30 | 73 |
+| 8. Billing | 4 | 2 | 26 | 32 |
+| 9. Stock | 1 | 3 | 24 | 28 |
+| 10. Tasks & rules | 1 | 0 | 11 | 12 |
+| **Total** | **21** | **79** | **167** | **267** |
 
-Plus `DELETE` + `POST …/restore` on every clinic resource (see Delete and restore). RC-141 to RC-191
-are the frontend's requests (D3), traced to the full drop's specs and prototype; RC-192 to RC-206 follow
-your Step 4 answers (rooms and machines D28, offering groups D29, clinic settings D34–D35, the
-messaging webhook D32, branch holidays D41).
+## 1. Branches & places
 
-## Team, roles and preferences
+| # | Change | Method | Path | Access | Operation | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1.1 | KEPT | GET | `/branches` | `branch:read` | List every branch (management) | routes-final §1.A.7 |
+| 1.2 | KEPT | GET | `/branches/my` | any member | The caller's branches (after login, pickers) | routes-final §1.A.7 |
+| 1.3 | KEPT | POST | `/branches` | `branch:create` | Create a branch | routes-final §1.A.7 |
+| 1.4 | KEPT | GET | `/branches/{branch_id}` | `branch:read` | Get a branch | routes-final §1.A.7 |
+| 1.5 | KEPT | PATCH | `/branches/{branch_id}` | `branch:update` | Change a branch (or retire: `is_active=false`) | routes-final §1.A.7 |
+| 1.6 | CHANGED | GET | `/branches/{branch_id}/members` | `branch:update` | Who works at the branch | routes-final §1.B.7 |
+| 1.7 | CHANGED | PUT | `/branches/{branch_id}/members` | `branch:update` | Replace who works at the branch | routes-final §1.B.7 |
+| 1.8 | KEPT | GET | `/branches/{branch_id}/rooms` | any member | List the branch's rooms | routes-final §1.C.7 |
+| 1.9 | KEPT | POST | `/branches/{branch_id}/rooms` | `branch:create` | Add a room | routes-final §1.C.7 |
+| 1.10 | CHANGED | GET | `/branches/{branch_id}/rooms/{branch_room_id}` | any member | Get a room | routes-final §1.C.7 |
+| 1.11 | CHANGED | PATCH | `/branches/{branch_id}/rooms/{branch_room_id}` | `branch:update` | Change a room | routes-final §1.C.7 |
+| 1.12 | CHANGED | DELETE | `/branches/{branch_id}/rooms/{branch_room_id}` | `branch:delete` | Delete a room | routes-final §1.C.7 |
+| 1.13 | CHANGED | POST | `/branches/{branch_id}/rooms/{branch_room_id}/restore` | `branch:delete` | Undo a delete | routes-final §1.C.7 |
+| 1.14 | KEPT | GET | `/branches/{branch_id}/machines` | any member | List the branch's machines | routes-final §1.D.7 |
+| 1.15 | KEPT | POST | `/branches/{branch_id}/machines` | `branch:create` | Add a machine | routes-final §1.D.7 |
+| 1.16 | CHANGED | GET | `/branches/{branch_id}/machines/{branch_machine_id}` | any member | Get a machine | routes-final §1.D.7 |
+| 1.17 | CHANGED | PATCH | `/branches/{branch_id}/machines/{branch_machine_id}` | `branch:update` | Change a machine | routes-final §1.D.7 |
+| 1.18 | CHANGED | DELETE | `/branches/{branch_id}/machines/{branch_machine_id}` | `branch:delete` | Delete a machine | routes-final §1.D.7 |
+| 1.19 | CHANGED | POST | `/branches/{branch_id}/machines/{branch_machine_id}/restore` | `branch:delete` | Undo a delete | routes-final §1.D.7 |
+| 1.20 | KEPT | GET | `/branches/{branch_id}/holidays` | any member | List the branch's holidays | routes-final §1.E.7 |
+| 1.21 | KEPT | POST | `/branches/{branch_id}/holidays` | `branch:create` | Add a holiday | routes-final §1.E.7 |
+| 1.22 | CHANGED | GET | `/branches/{branch_id}/holidays/{branch_holiday_id}` | any member | Get a holiday | routes-final §1.E.7 |
+| 1.23 | CHANGED | PATCH | `/branches/{branch_id}/holidays/{branch_holiday_id}` | `branch:update` | Change a holiday | routes-final §1.E.7 |
+| 1.24 | CHANGED | DELETE | `/branches/{branch_id}/holidays/{branch_holiday_id}` | `branch:delete` | Delete a holiday | routes-final §1.E.7 |
+| 1.25 | CHANGED | POST | `/branches/{branch_id}/holidays/{branch_holiday_id}/restore` | `branch:delete` | Undo a delete | routes-final §1.E.7 |
 
-| # | Change | Method | Path | Access | Operation | Source | Built |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| RC-1 | CHANGED | GET | `/api/v1/auth/me/context` | signed in | getSession | `schema-routes.md:1563` | `user.presence` added (via `getMe`) · ROUTE #3; `my_role_ids` (main first) · ROUTE #4 |
-| RC-2 | CHANGED | GET | `/api/v1/tenancy/organization/memberships` | users · view | listUsers | `schema-routes.md:1746` | + `staff_number`, `phone`, `tone`, `role_ids`, `branch_ids`, `working_days`, `work_starts_at`, `work_ends_at`, `commission_percent` · ROUTE #4 |
-| RC-3 | CHANGED | POST | `/api/v1/tenancy/organization/memberships` | users · create | createUser (as an invitation, D4) | `schema-routes.md:1752` | invite + `role_ids` (main first, replaces `role_id`) + staff profile + `branch_ids` · ROUTE #4 |
-| RC-4 | CHANGED | PATCH | `/api/v1/tenancy/organization/memberships/{membership_id}` | users · edit | updateUser | `schema-routes.md:1752` | `role_ids` / `branch_ids` replace the list + staff profile; owner profile editable · ROUTE #4 |
-| RC-5 | CHANGED | GET | `/api/v1/tenancy/organization/roles/{role_id}/permissions` | users · view | listRolePermissions | `schema-routes.md:1747` | unchanged (union of roles at #4) · ROUTE #5 |
-| RC-6 | CHANGED | PUT | `/api/v1/tenancy/organization/roles/{role_id}/permissions` | users · edit | updateRolePermission | `schema-routes.md:1753` | locked role → 403 · ROUTE #5 |
-| RC-7 | CHANGED | PATCH | `/api/v1/tenancy/organization` | Owner, Admin | Organization clinic fields (D7) | `schema-routes.md:138–152` | + `specialties`, `timezone`, read-only `currency` in and out · ROUTE #62 |
-| RC-8 | NEW | GET | `/api/v1/app/preferences` | signed in | getSession (preferences part) | `schema-routes.md:227–240, 1563` | built (2026-10-07) |
-| RC-9 | NEW | PATCH | `/api/v1/app/preferences` | signed in | updatePreference | `schema-routes.md:1570` | built (2026-10-07) |
-| RC-10 | NEW | PUT | `/api/v1/users/me/presence` | signed in | setPresence | `schema-routes.md:1571` | `PUT /api/v1/users/me/presence` (signed in, `{presence}`) · ROUTE #3; built (2026-10-07) |
-| RC-11 | NEW | GET | `/api/v1/app/staff` | any role | person pickers (doctors, therapists, owners) | `schema-routes.md:186` | built as `GET /api/v1/app/users` (filters `role_id`, `branch_id`, `q`) · ROUTE #61 |
-| RC-141 | CHANGED | PATCH | `/api/v1/tenancy/organization/roles/{role_id}` | users · edit (Change roles & access) | role tone and purpose (D3) | `users.md:49–50, 61, 71` | + `tone`, `description` (= purpose), system roles too · ROUTE #5 |
-| RC-142 | CHANGED | POST | `/api/v1/tenancy/organization/roles` | users · edit (Change roles & access) | custom role (+ copy access from) | `users.md:236, 361, 368` | + `tone`, `copy_from_role_id` · ROUTE #5 |
-| RC-143 | CHANGED | DELETE | `/api/v1/tenancy/organization/memberships/{membership_id}` | users · delete | remove a member with reason and note | `users.md:247–252` | `?reason=&note=` → `delete_reason`, `delete_note` · ROUTE #4 |
-| RC-201 | CHANGED | PATCH | `/api/v1/tenancy/organization/settings` | Owner, Admin | clinic settings: the reminder hour (D34), re-target days (D35) and the deleted-record purge days (D38) | D34, D35, D38 |  |
-| RC-144 | NEW | POST | `/api/v1/tenancy/organization/memberships/{membership_id}/restore` | users · delete | undo a member removal (10 s) | `users.md:252` | `POST …/memberships/{membership_id}/restore` (`membership:manage`) · ROUTE #4; built (2026-10-07) |
-| RC-145 | NEW | GET | `/api/v1/app/saved-views` | signed in (own) | saved views per list | `patients.md:129, 274`; `payments.md:39` | built (2026-10-07) |
-| RC-146 | NEW | POST | `/api/v1/app/saved-views` | signed in (own) | save a view | `patients.md:129`; `H:968` | built (2026-10-07) |
-| RC-147 | NEW | PATCH | `/api/v1/app/saved-views/{saved_view_id}` | signed in (own) | rename / update a view | `patients.md:274` | built (2026-10-07) |
-| RC-148 | NEW | DELETE | `/api/v1/app/saved-views/{saved_view_id}` | signed in (own) | remove a view | `H:968` | built (2026-10-07) |
+## 2. Team
 
-## Branches
+| # | Change | Method | Path | Access | Operation | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2.1 | CHANGED | GET | `/app/memberships` | any member | Team picker — active members | routes-final §2.A.7 |
+| 2.2 | KEPT | GET | `/tenancy/organization/memberships` | `membership:read` | Team list (every status) | routes-final §2.B.7 |
+| 2.3 | KEPT | POST | `/tenancy/organization/memberships` | `membership:create` | Add a member by email (sends the invite) | routes-final §2.B.7 |
+| 2.4 | KEPT | GET | `/tenancy/organization/memberships/{membership_id}` | `membership:read` | Get a member | routes-final §2.B.7 |
+| 2.5 | KEPT | PATCH | `/tenancy/organization/memberships/{membership_id}` | `membership:update` | Change roles, branches, hours, status | routes-final §2.B.7 |
+| 2.6 | KEPT | DELETE | `/tenancy/organization/memberships/{membership_id}` | `membership:delete` | Remove a member | routes-final §2.B.7 |
+| 2.7 | KEPT | POST | `/tenancy/organization/memberships/{membership_id}/restore` | `membership:delete` | Undo a removal | routes-final §2.B.7 |
+| 2.8 | KEPT | GET | `/tenancy/organization/memberships/{membership_id}/permissions` | `membership:read` | A member's effective codes | routes-final §2.B.7 |
+| 2.9 | CHANGED | DELETE | `/tenancy/organization/memberships/{membership_id}/invitation` | `membership:delete` | Revoke the pending invite | routes-final §2.C.7 |
+| 2.10 | CHANGED | POST | `/tenancy/organization/memberships/{membership_id}/invitation/resend` | `membership:update` | Resend the invite | routes-final §2.C.7 |
+| 2.11 | CHANGED | POST | `/tenancy/membership-invitations/{membership_invitation_id}/accept` | signed in | The invitee accepts | routes-final §2.C.7 |
+| 2.12 | KEPT | GET | `/tenancy/organization/roles` | `role:read` | List roles (with member counts) | routes-final §2.D.7 |
+| 2.13 | KEPT | POST | `/tenancy/organization/roles` | `role:create` | Create a role (optionally copy another) | routes-final §2.D.7 |
+| 2.14 | KEPT | GET | `/tenancy/organization/roles/{role_id}` | `role:read` | Get a role | routes-final §2.D.7 |
+| 2.15 | KEPT | PATCH | `/tenancy/organization/roles/{role_id}` | `role:update` | Rename / recolour a role | routes-final §2.D.7 |
+| 2.16 | KEPT | DELETE | `/tenancy/organization/roles/{role_id}` | `role:delete` | Delete a custom role | routes-final §2.D.7 |
+| 2.17 | NEW | POST | `/tenancy/organization/roles/{role_id}/restore` | `role:delete` | Undo a delete | routes-final §2.D.7 |
+| 2.18 | KEPT | GET | `/tenancy/organization/roles/{role_id}/permissions` | `role:read` | A role's codes | routes-final §2.D.7 |
+| 2.19 | KEPT | PUT | `/tenancy/organization/roles/{role_id}/permissions` | `role:update` | Replace a role's codes (the matrix) | routes-final §2.D.7 |
+| 2.20 | KEPT | GET | `/tenancy/permissions` | signed in | The permission catalog | routes-final §2.E.7 |
+| 2.21 | CHANGED | GET | `/memberships/me/preferences` | `organization:read` | My preferences (the defaults before the first save) | routes-final §2.F.7 |
+| 2.22 | CHANGED | PATCH | `/memberships/me/preferences` | `organization:read` | Save them | routes-final §2.F.7 |
+| 2.23 | CHANGED | GET | `/memberships/me/saved-views` | `organization:read` | My saved views | routes-final §2.G.7 |
+| 2.24 | CHANGED | POST | `/memberships/me/saved-views` | `organization:read` | Save a view | routes-final §2.G.7 |
+| 2.25 | CHANGED | GET | `/memberships/me/saved-views/{membership_saved_view_id}` | `organization:read` | Get one | routes-final §2.G.7 |
+| 2.26 | CHANGED | PATCH | `/memberships/me/saved-views/{membership_saved_view_id}` | `organization:read` | Rename it or change its filters | routes-final §2.G.7 |
+| 2.27 | CHANGED | DELETE | `/memberships/me/saved-views/{membership_saved_view_id}` | `organization:read` | Remove it — for good (U6) | routes-final §2.G.7 |
 
-| # | Change | Method | Path | Access | Operation | Source | Built |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| RC-12 | NEW | GET | `/api/v1/app/branches` | any role (active only); users · view (incl. inactive) | listBranches, listBranches (settings) | `schema-routes.md:1564, 1748` | `GET /api/v1/app/branches` (`branch:read`) + `GET /api/v1/app/branches/my` (every member) · ROUTE #2; built (2026-10-07) |
-| RC-13 | NEW | POST | `/api/v1/app/branches` | users · create | create Branch | `schema-routes.md:1754` | `POST /api/v1/app/branches` (`branch:create`) · ROUTE #2; built (2026-10-07) |
-| RC-14 | NEW | PATCH | `/api/v1/app/branches/{branch_id}` | users · edit | update Branch | `schema-routes.md:1754` | `PATCH /api/v1/app/branches/{branch_id}` (`branch:update`) · ROUTE #2; built (2026-10-07) |
-| RC-15 | NEW | GET | `/api/v1/app/branches/{branch_id}` | users · view | Branch drawer | `schema-routes.md:110` | `GET /api/v1/app/branches/{branch_id}` (`branch:read`) · ROUTE #2; built (2026-10-07) |
-| RC-149 | NEW | PUT | `/api/v1/app/branches/{branch_id}/team` | users · edit | set a branch's team in one write | `users.md:146` | `GET`/`PUT /api/v1/app/branches/{branch_id}/user-accesses` (`branch:update`) · ROUTE #2 |
-| RC-192 | NEW | GET | `/api/v1/app/branches/{branch_id}/rooms` | any role (pickers) | a branch's rooms | D28; `PRD.md:56–57` | —; built (2026-10-07) |
-| RC-193 | NEW | POST | `/api/v1/app/branches/{branch_id}/rooms` | users · edit | add a room | D28 | —; built (2026-10-07) |
-| RC-194 | NEW | PATCH | `/api/v1/app/rooms/{room_id}` | users · edit | rename or deactivate a room | D28 | —; built (2026-10-07) |
-| RC-195 | NEW | GET | `/api/v1/app/branches/{branch_id}/machines` | any role (pickers) | a branch's machines | D28; `PRD.md:56–57` | —; built (2026-10-07) |
-| RC-196 | NEW | POST | `/api/v1/app/branches/{branch_id}/machines` | users · edit | add a machine | D28 | —; built (2026-10-07) |
-| RC-197 | NEW | PATCH | `/api/v1/app/machines/{machine_id}` | users · edit | rename or deactivate a machine | D28 | —; built (2026-10-07) |
-| RC-204 | NEW | GET | `/api/v1/app/branches/{branch_id}/holidays` | any role (booking) | a branch's holidays | D41; `H:2349` | —; built (2026-10-07) |
-| RC-205 | NEW | POST | `/api/v1/app/branches/{branch_id}/holidays` | users · edit | add a holiday | D41 | —; built (2026-10-07) |
-| RC-206 | NEW | PATCH | `/api/v1/app/branch-holidays/{branch_holiday_id}` | users · edit | change a holiday's date or label | D41 | —; built (2026-10-07) |
+## 3. Offerings
 
-## Leads and messages
+| # | Change | Method | Path | Access | Operation | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| 3.1 | KEPT | GET | `/offering-groups` | any member | List groups (menu order) | routes-final §3.A.7 |
+| 3.2 | KEPT | POST | `/offering-groups` | `offering:create` | Add a group | routes-final §3.A.7 |
+| 3.3 | KEPT | GET | `/offering-groups/{offering_group_id}` | any member | Get a group | routes-final §3.A.7 |
+| 3.4 | KEPT | PATCH | `/offering-groups/{offering_group_id}` | `offering:update` | Rename / reorder a group | routes-final §3.A.7 |
+| 3.5 | KEPT | DELETE | `/offering-groups/{offering_group_id}` | `offering:delete` | Delete an empty group (O7) | routes-final §3.A.7 |
+| 3.6 | KEPT | POST | `/offering-groups/{offering_group_id}/restore` | `offering:delete` | Undo a delete | routes-final §3.A.7 |
+| 3.7 | KEPT | GET | `/offerings` | any member | List offerings | routes-final §3.B.7 |
+| 3.8 | KEPT | GET | `/offerings/exports` | `offering:export` | Download the list as CSV | routes-final §3.B.7 |
+| 3.9 | KEPT | POST | `/offerings` | `offering:create` | Add an offering | routes-final §3.B.7 |
+| 3.10 | KEPT | GET | `/offerings/{offering_id}` | any member | Get an offering | routes-final §3.B.7 |
+| 3.11 | KEPT | PATCH | `/offerings/{offering_id}` | `offering:update` | Change an offering (prices included) | routes-final §3.B.7 |
+| 3.12 | KEPT | DELETE | `/offerings/{offering_id}` | `offering:delete` | Delete an offering | routes-final §3.B.7 |
+| 3.13 | KEPT | POST | `/offerings/{offering_id}/restore` | `offering:delete` | Undo a delete | routes-final §3.B.7 |
+| 3.14 | KEPT | GET | `/offers` | any member | List offers (Live → Scheduled → Paused → Ended) | routes-final §3.C.7 |
+| 3.15 | KEPT | POST | `/offers` | `offering:create` | Add an offer | routes-final §3.C.7 |
+| 3.16 | KEPT | GET | `/offers/{offer_id}` | any member | Get an offer | routes-final §3.C.7 |
+| 3.17 | KEPT | PATCH | `/offers/{offer_id}` | `offering:update` | Change, pause or resume an offer | routes-final §3.C.7 |
+| 3.18 | KEPT | DELETE | `/offers/{offer_id}` | `offering:delete` | Delete an offer | routes-final §3.C.7 |
+| 3.19 | KEPT | POST | `/offers/{offer_id}/restore` | `offering:delete` | Undo a delete | routes-final §3.C.7 |
 
-| # | Change | Method | Path | Access | Operation | Source | Built |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| RC-202 | NEW | GET | `/api/v1/app/webhooks/messaging` | public — the provider's verification handshake | confirm the webhook to Meta | D32 |  |
-| RC-203 | NEW | POST | `/api/v1/app/webhooks/messaging` | public, provider-signed | WhatsApp and Instagram replies and delivery reports (WC-1, WC-3) | D32, D3 |  |
-| RC-16 | NEW | GET | `/api/v1/app/leads` | leads · view | listLeads | `schema-routes.md:1588` | built (2026-10-07) |
-| RC-17 | NEW | POST | `/api/v1/app/leads` | leads · create | createLead | `schema-routes.md:1593` | built (2026-10-07) |
-| RC-18 | NEW | GET | `/api/v1/app/leads/{lead_id}` | leads · view | getLead | `schema-routes.md:1589` | built (2026-10-07) |
-| RC-19 | NEW | PATCH | `/api/v1/app/leads/{lead_id}` | leads · edit | updateLead | `schema-routes.md:1594` | built (2026-10-07) |
-| RC-20 | NEW | GET | `/api/v1/app/leads/{lead_id}/messages` | leads · view | getLead (messages, cursor) | `schema-routes.md:1589` | built (2026-10-07) |
-| RC-21 | NEW | POST | `/api/v1/app/leads/{lead_id}/messages` | leads · edit | sendMessage | `schema-routes.md:1595` | built (2026-10-07) |
-| RC-22 | NEW | POST | `/api/v1/app/leads/bulk-messages` | leads · edit | bulkMessage | `schema-routes.md:1596` | built as `POST /api/v1/app/messages/batches` (`contact_ids`) · ROUTE #64 |
-| RC-23 | NEW | POST | `/api/v1/app/leads/exports` | leads · view | bulkExport | `schema-routes.md:1596` | built as `GET /api/v1/app/leads/exports` · ROUTE #64 |
-| RC-150 | NEW | POST | `/api/v1/app/leads/{lead_id}/claim` | leads · edit | claim a lead whose hold is open | `leads.md:37, 65, 402–403`; `tasks.md:194` | built · ROUTE #64 |
-| RC-151 | NEW | POST | `/api/v1/app/leads/{lead_id}/release` | leads · edit (owner) | release a lead to the team | `leads.md:65, 403` | built · ROUTE #64 |
-| RC-152 | NEW | POST | `/api/v1/app/leads/{lead_id}/read` | leads · view | mark a lead read (per viewer) | `leads.md:32, 36` | built as `POST /api/v1/app/leads/{lead_id}/reads` · ROUTE #64 |
-| RC-153 | NEW | POST | `/api/v1/app/leads/{lead_id}/messages/{lead_message_id}/resend` | leads · edit | resend a failed message | `leads.md:52, 116`; `tasks.md:196` | built as `POST /api/v1/app/messages/{message_id}/resend` · ROUTE #64 |
-| RC-154 | NEW | GET | `/api/v1/app/message-templates` | leads · view | templates in the composer | `leads.md:427–432`; `_patterns.md:178–183` | built (2026-10-07) |
-| RC-155 | NEW | POST | `/api/v1/app/message-templates` | Owner, Admin (open) | create a template | `_patterns.md:178–183` | built (2026-10-07) |
-| RC-156 | NEW | PATCH | `/api/v1/app/message-templates/{message_template_id}` | Owner, Admin (open) | edit a template | `_patterns.md:178–183` | built (2026-10-07) |
-| RC-157 | NEW | GET | `/api/v1/app/phone-lookup` | leads · create, patients · create | who already has this mobile (warns, never blocks) | `leads.md:79`; `H:5646–5647` | built as `GET /api/v1/app/contacts?phone=` · ROUTE #64 |
+## 4. Contacts
 
-## Appointments and Today
+| # | Change | Method | Path | Access | Operation | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| 4.1 | CHANGED | GET | `/contacts` | `contact:read` | List / find contacts | routes-final §4.A.7 |
+| 4.2 | NEW | POST | `/contacts` | `contact:create` | Add a contact | routes-final §4.A.7 |
+| 4.3 | NEW | GET | `/contacts/{contact_id}` | `contact:read` | Get a contact | routes-final §4.A.7 |
+| 4.4 | NEW | PATCH | `/contacts/{contact_id}` | `contact:update` | Change a contact | routes-final §4.A.7 |
+| 4.5 | NEW | DELETE | `/contacts/{contact_id}` | `contact:delete` | Delete a contact not in use | routes-final §4.A.7 |
+| 4.6 | NEW | POST | `/contacts/{contact_id}/restore` | `contact:delete` | Undo a delete | routes-final §4.A.7 |
+| 4.7 | KEPT | GET | `/contacts/{contact_id}/preview` | `contact:read` | The hover card | routes-final §4.A.7 |
+| 4.8 | NEW | GET | `/contacts/{contact_id}/members` | `contact:read` | Who handles this person | routes-final §4.B.7 |
+| 4.9 | NEW | PUT | `/contacts/{contact_id}/members` | `contact:update` | Replace who handles them | routes-final §4.B.7 |
+| 4.10 | CHANGED | GET | `/contacts/{contact_id}/activities` | `contact_activity:read` | The contact's stream | routes-final §4.C.7 |
+| 4.11 | NEW | POST | `/contacts/{contact_id}/activities/send-message` | `contact_activity:create` | Send a WhatsApp or Instagram message | routes-final §4.C.7 |
+| 4.12 | NEW | POST | `/contacts/{contact_id}/activities/log-call` | `contact_activity:create` | Log a call that happened | routes-final §4.C.7 |
+| 4.13 | NEW | POST | `/contacts/{contact_id}/activities/add-note` | `contact_activity:create` | Add an internal note | routes-final §4.C.7 |
+| 4.14 | KEPT | GET | `/contacts/{contact_id}/activities/{contact_activity_id}` | `contact_activity:read` | Get an entry | routes-final §4.C.7 |
+| 4.15 | KEPT | POST | `/contacts/{contact_id}/activities/{contact_activity_id}/resend` | `contact_activity:update` | Re-queue a failed message | routes-final §4.C.7 |
+| 4.16 | CHANGED | POST | `/contact-activities/message-batches` | `contact_activity:create` | One message to many contacts | routes-final §4.C.7 |
+| 4.17 | KEPT | GET | `/contact-message-templates` | any member | List templates | routes-final §4.D.7 |
+| 4.18 | KEPT | POST | `/contact-message-templates` | `contact_activity:create` | Add a template | routes-final §4.D.7 |
+| 4.19 | KEPT | GET | `/contact-message-templates/{contact_message_template_id}` | any member | Get a template | routes-final §4.D.7 |
+| 4.20 | KEPT | PATCH | `/contact-message-templates/{contact_message_template_id}` | `contact_activity:update` | Change a template | routes-final §4.D.7 |
+| 4.21 | KEPT | DELETE | `/contact-message-templates/{contact_message_template_id}` | `contact_activity:delete` | Delete a template | routes-final §4.D.7 |
+| 4.22 | KEPT | POST | `/contact-message-templates/{contact_message_template_id}/restore` | `contact_activity:delete` | Undo a delete | routes-final §4.D.7 |
 
-| # | Change | Method | Path | Access | Operation | Source | Built |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| RC-24 | NEW | GET | `/api/v1/app/today` | any role | listTodayFloor, todayPulse | `schema-routes.md:1577–1578` |  |
-| RC-25 | NEW | GET | `/api/v1/app/appointments` | appointments · view | listAppointmentsRange, listAppointments — by doctor, room or machine (D28) | `schema-routes.md:1602–1603` | built (2026-10-07) |
-| RC-26 | NEW | GET | `/api/v1/app/appointments/available-slots` | appointments · create | availableSlots | `schema-routes.md:1605` |  |
-| RC-27 | NEW | POST | `/api/v1/app/appointments` | appointments · create | createAppointment — a room and a machine may be named (D28); the slot must be free for person, room and machine, inside branch hours and outside holidays (D41) | `schema-routes.md:1609` | built (2026-10-07) |
-| RC-28 | NEW | GET | `/api/v1/app/appointments/{appointment_id}` | appointments · view | getAppointment | `schema-routes.md:1604` | built (2026-10-07) |
-| RC-29 | NEW | PATCH | `/api/v1/app/appointments/{appointment_id}` | appointments · edit | updateAppointment | `schema-routes.md:1610` | built (2026-10-07) |
-| RC-30 | NEW | POST | `/api/v1/app/appointments/{appointment_id}/status` | appointments · edit | setAppointmentStatus — no-show by staff only after the start time (D30) | `schema-routes.md:1582` | built (2026-10-07) |
-| RC-31 | NEW | POST | `/api/v1/app/appointments/{appointment_id}/cancel` | appointments · edit | cancelAppointment | `schema-routes.md:1611` | built (2026-10-07) |
-| RC-32 | NEW | POST | `/api/v1/app/appointments/{appointment_id}/reinstate` | appointments · edit | restoreAppointment (undo a cancel — named apart from the delete-undo `…/restore`) | `schema-routes.md:1612` | built (2026-10-07) |
-| RC-33 | NEW | POST | `/api/v1/app/appointments/{appointment_id}/copy` | appointments · create | Copy (copyOf) | `schema-routes.md:27, 350` |  |
-| RC-34 | NEW | POST | `/api/v1/app/appointments/{appointment_id}/photos` | patients · edit | uploadVisitPhotos | `schema-routes.md:1613` |  |
-| RC-158 | NEW | GET | `/api/v1/app/appointments/day-counts` | appointments · view | booked / confirmed / awaiting per day | `appointments.md:40, 51, 53, 107` |  |
-| RC-159 | NEW | POST | `/api/v1/app/appointments/{appointment_id}/visit` | appointments · edit | start the visit | `patient-file.md:17, 92`; `today.md:41` |  |
-| RC-160 | NEW | GET | `/api/v1/app/visits/{visit_id}` | appointments · view | the Visit sheet / visit flow | `today.md:125–137` | built (2026-10-07) |
-| RC-161 | NEW | PATCH | `/api/v1/app/visits/{visit_id}` | patients · edit | consult note, safety checks (autosave) | `today.md:82–85, 135, 250`; `patient-file.md:396` | built (2026-10-07) |
-| RC-162 | NEW | POST | `/api/v1/app/visits/{visit_id}/stage` | appointments · edit | move the visit to its next floor stage | `today.md:42, 92, 120` | built (2026-10-07) |
-| RC-163 | NEW | POST | `/api/v1/app/visits/{visit_id}/pause` | appointments · edit | pause the visit | `patient-file.md:17, 402` | built (2026-10-07) |
-| RC-164 | NEW | POST | `/api/v1/app/visits/{visit_id}/resume` | appointments · edit | resume the visit | `patient-file.md:17` | built (2026-10-07) |
-| RC-165 | NEW | POST | `/api/v1/app/visits/{visit_id}/complete` | appointments · edit | complete the visit (completes the appointment, uses a package session) | `patient-file.md:402`; `today.md:120` |  |
-| RC-166 | NEW | POST | `/api/v1/app/appointments/{appointment_id}/undo-check-in` | appointments · edit | undo a check-in | `today.md:41, 208` | built (2026-10-07) |
+## 5. Leads
 
-## Patients
+| # | Change | Method | Path | Access | Operation | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| 5.1 | KEPT | GET | `/leads` | `lead:read` | List leads (Mine · Unreplied · All are filters) | routes-final §5.7 |
+| 5.2 | KEPT | GET | `/leads/exports` | `lead:export` | Download the list as CSV | routes-final §5.7 |
+| 5.3 | KEPT | POST | `/leads` | `lead:create` | Add a lead (for a contact, or with a new one) | routes-final §5.7 |
+| 5.4 | KEPT | GET | `/leads/{lead_id}` | `lead:read` | Get a lead | routes-final §5.7 |
+| 5.5 | KEPT | PATCH | `/leads/{lead_id}` | `lead:update` | Change a lead | routes-final §5.7 |
+| 5.6 | KEPT | DELETE | `/leads/{lead_id}` | `lead:delete` | Remove a lead | routes-final §5.7 |
+| 5.7 | KEPT | POST | `/leads/{lead_id}/restore` | `lead:delete` | Undo a removal | routes-final §5.7 |
+| 5.8 | KEPT | POST | `/leads/{lead_id}/claim` | `lead:update` | Take the lead (and hold it) | routes-final §5.7 |
+| 5.9 | KEPT | POST | `/leads/{lead_id}/release` | `lead:update` | Give it back to the team | routes-final §5.7 |
 
-| # | Change | Method | Path | Access | Operation | Source | Built |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| RC-35 | NEW | GET | `/api/v1/app/patients` | patients · view | listPatients | `schema-routes.md:1619` | built (2026-10-07) |
-| RC-36 | NEW | POST | `/api/v1/app/patients` | patients · create | createPatient | `schema-routes.md:1623` | built (2026-10-07) |
-| RC-37 | NEW | GET | `/api/v1/app/patients/{patient_id}` | patients · view | getPatient | `schema-routes.md:1629` | built (2026-10-07) |
-| RC-38 | NEW | PATCH | `/api/v1/app/patients/{patient_id}` | patients · edit | updatePatient | `schema-routes.md:1640` | built (2026-10-07) |
-| RC-39 | NEW | GET | `/api/v1/app/patients/{patient_id}/timeline` | patients · view | Timeline section (B4) | `schema-routes.md:1208` |  |
-| RC-167 | NEW | GET | `/api/v1/app/patients/{patient_id}/activity` | patients · view | merged history (messages + record events) | `patient-file.md:25`; `today.md:251–252` |  |
+## 6. Appointments
 
-## Patient file
+| # | Change | Method | Path | Access | Operation | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| 6.1 | KEPT | GET | `/appointments` | `appointment:read` | List appointments — and the clinic floor (`status=checked_in`) | routes-final §6.7 |
+| 6.2 | KEPT | GET | `/appointments/exports` | `appointment:export` | Download the list as CSV | routes-final §6.7 |
+| 6.3 | KEPT | GET | `/appointments/slots` | `appointment:read` | Free slots for a day | routes-final §6.7 |
+| 6.4 | KEPT | GET | `/appointments/daily-counts` | `appointment:read` | Counts per day and status | routes-final §6.7 |
+| 6.5 | KEPT | POST | `/appointments` | `appointment:create` | Book, or record a walk-in | routes-final §6.7 |
+| 6.6 | KEPT | GET | `/appointments/{appointment_id}` | `appointment:read` | Get an appointment | routes-final §6.7 |
+| 6.7 | KEPT | PATCH | `/appointments/{appointment_id}` | `appointment:update` | Change or move a booking | routes-final §6.7 |
+| 6.8 | KEPT | DELETE | `/appointments/{appointment_id}` | `appointment:delete` | Delete a booking | routes-final §6.7 |
+| 6.9 | KEPT | POST | `/appointments/{appointment_id}/restore` | `appointment:delete` | Undo a delete | routes-final §6.7 |
+| 6.10 | NEW | POST | `/appointments/{appointment_id}/confirm` | `appointment:update` | They said yes | routes-final §6.7 |
+| 6.11 | NEW | POST | `/appointments/{appointment_id}/check-in` | `appointment:update` | They arrived — stage `waiting` | routes-final §6.7 |
+| 6.12 | NEW | POST | `/appointments/{appointment_id}/complete` | `appointment:update` | The visit is done | routes-final §6.7 |
+| 6.13 | NEW | POST | `/appointments/{appointment_id}/no-show` | `appointment:update` | They did not come | routes-final §6.7 |
+| 6.14 | KEPT | POST | `/appointments/{appointment_id}/cancel` | `appointment:update` | Cancel with a reason | routes-final §6.7 |
+| 6.15 | KEPT | POST | `/appointments/{appointment_id}/reinstate` | `appointment:update` | Undo a cancel | routes-final §6.7 |
+| 6.16 | KEPT | POST | `/appointments/{appointment_id}/undo-check-in` | `appointment:update` | Undo a mistaken check-in | routes-final §6.7 |
+| 6.17 | KEPT | POST | `/appointments/{appointment_id}/copy` | `appointment:create` | Book again on another day | routes-final §6.7 |
+| 6.18 | CHANGED | POST | `/appointments/{appointment_id}/stage` | `appointment:update` | Move to a later floor stage | routes-final §6.7 |
+| 6.19 | CHANGED | POST | `/appointments/{appointment_id}/pause` | `appointment:update` | Pause the visit | routes-final §6.7 |
+| 6.20 | CHANGED | POST | `/appointments/{appointment_id}/resume` | `appointment:update` | Resume it | routes-final §6.7 |
 
-| # | Change | Method | Path | Access | Operation | Source | Built |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| RC-40 | NEW | GET | `/api/v1/app/patients/{patient_id}/prescriptions` | patients · view | listPrescriptions | `schema-routes.md:1630` | built (2026-10-07) |
-| RC-41 | NEW | POST | `/api/v1/app/patients/{patient_id}/prescriptions` | prescribe code — Doctor, Admin (D14) | createPrescription | `schema-routes.md:1641` | built (2026-10-07) |
-| RC-42 | NEW | GET | `/api/v1/app/prescriptions/{prescription_id}` | patients · view | Prescription viewer | `schema-routes.md:36` | built (2026-10-07) |
-| RC-43 | NEW | PATCH | `/api/v1/app/prescriptions/{prescription_id}` | prescribe code — Doctor, Admin (D14) | updatePrescription | `schema-routes.md:1641` | built (2026-10-07) |
-| RC-44 | NEW | GET | `/api/v1/app/patients/{patient_id}/treatments` | patients · view | listTreatments | `schema-routes.md:1631` | built (2026-10-07) |
-| RC-45 | NEW | POST | `/api/v1/app/patients/{patient_id}/treatments` | treatments code — Doctor, Therapist (D12, D13) | createTreatment | `schema-routes.md:1642` | built (2026-10-07) |
-| RC-46 | NEW | PATCH | `/api/v1/app/treatments/{treatment_id}` | treatments code — Doctor, Therapist (D12, D13) | updateTreatment | `schema-routes.md:1642` | built (2026-10-07) |
-| RC-47 | NEW | GET | `/api/v1/app/patients/{patient_id}/images` | patients · view (Private album: Doctor, Admin) | listImages | `schema-routes.md:1632, 40` | built (2026-10-07) |
-| RC-48 | NEW | POST | `/api/v1/app/patients/{patient_id}/images` | patients · edit | uploadImages | `schema-routes.md:1643` | built (2026-10-07) |
-| RC-49 | NEW | PATCH | `/api/v1/app/images/{image_id}` | patients · edit | updateImage | `schema-routes.md:1643` | built (2026-10-07) |
-| RC-50 | NEW | GET | `/api/v1/app/patients/{patient_id}/reports` | patients · view | listReports | `schema-routes.md:1633` | built (2026-10-07) |
-| RC-51 | NEW | POST | `/api/v1/app/patients/{patient_id}/reports` | patients · edit | createReport | `schema-routes.md:1644` | built (2026-10-07) |
-| RC-52 | NEW | GET | `/api/v1/app/reports/{report_id}` | patients · view | Report viewer | `schema-routes.md:43` | built (2026-10-07) |
-| RC-53 | NEW | GET | `/api/v1/app/patients/{patient_id}/packages` | patients · view | listPackages | `schema-routes.md:1633` | built (2026-10-07) |
-| RC-54 | NEW | GET | `/api/v1/app/patients/{patient_id}/notes` | patients · view | listNotes | `schema-routes.md:1633` | built (2026-10-07) |
-| RC-55 | NEW | POST | `/api/v1/app/patients/{patient_id}/notes` | patients · edit | addNote | `schema-routes.md:1645` | built (2026-10-07) |
-| RC-56 | NEW | GET | `/api/v1/app/patients/{patient_id}/plan` | patients · view | getPlan — ideas from the AI on a de-identified summary, rules as the fallback (D39) | `schema-routes.md:1635` |  |
-| RC-57 | NEW | POST | `/api/v1/app/patients/{patient_id}/offering-suggestions` | patients · edit | addSuggestion | `schema-routes.md:1646` | built (2026-10-07) |
-| RC-58 | NEW | PATCH | `/api/v1/app/offering-suggestions/{offering_suggestion_id}` | patients · edit | updateSuggestion | `schema-routes.md:1646` | built (2026-10-07) |
-| RC-59 | NEW | POST | `/api/v1/app/offering-suggestions/{offering_suggestion_id}/link-invoice` | payments · edit (D17) | linkSuggestionInvoice | `schema-routes.md:1647` |  |
-| RC-60 | NEW | POST | `/api/v1/app/offering-suggestions/{offering_suggestion_id}/unlink-invoice` | payments · edit (D17) | unlinkSuggestionInvoice | `schema-routes.md:1647` |  |
-| RC-61 | NEW | GET | `/api/v1/app/patients/{patient_id}/feedback` | patients · view | listFeedback | `schema-routes.md:1636` |  |
-| RC-62 | NEW | POST | `/api/v1/app/patients/{patient_id}/check-ins` | patients · edit | createCheckIn | `schema-routes.md:1648` | built (2026-10-07) |
-| RC-63 | NEW | PATCH | `/api/v1/app/check-ins/{check_in_id}` | patients · edit | updateCheckIn | `schema-routes.md:1648` | built (2026-10-07) |
-| RC-64 | NEW | POST | `/api/v1/app/patients/{patient_id}/reviews` | patients · edit, or the reviews code — Marketing (D16) | createReview | `schema-routes.md:1649` | built (2026-10-07) |
-| RC-65 | NEW | PATCH | `/api/v1/app/reviews/{review_id}` | patients · edit, or the reviews code — Marketing (D16) | updateReview | `schema-routes.md:1649` | built (2026-10-07) |
-| RC-66 | NEW | POST | `/api/v1/app/feedback-actions` | patients · edit | logFeedbackAction (a check-in or a review) | `schema-routes.md:1650` | built (2026-10-07) |
-| RC-67 | NEW | GET | `/api/v1/app/check-ins/{check_in_id}` | patients · view | Check-in drawer | `schema-routes.md:45` | built (2026-10-07) |
-| RC-68 | NEW | GET | `/api/v1/app/reviews/{review_id}` | patients · view, or the reviews code (D16) | Review drawer | `schema-routes.md:47` | built (2026-10-07) |
-| RC-168 | NEW | POST | `/api/v1/app/patients/{patient_id}/clinical-notes` | patients · edit (clinical sections; the Accountant and Marketing never — D15, D16) | add a clinical note item | `patient-file.md:53, 225` | built (2026-10-07) |
-| RC-169 | NEW | DELETE | `/api/v1/app/clinical-notes/{patient_clinical_note_id}` | patients · edit (clinical sections; the Accountant and Marketing never — D15, D16) | remove a clinical note item | `patient-file.md:56, 225` | built (2026-10-07) |
-| RC-170 | NEW | GET | `/api/v1/app/diagnoses` | patients · view | diagnosis catalogue | `today.md:84` | built (2026-10-07) |
-| RC-171 | NEW | POST | `/api/v1/app/diagnoses` | prescribe code — Doctor, Admin (D14) | add to the catalogue | `today.md:84` | built (2026-10-07) |
-| RC-172 | NEW | POST | `/api/v1/app/prescriptions/{prescription_id}/approve` | prescribe code — Doctor, Admin (D14) | approve (draft → approved; every copied line reviewed first), print and send to the pharmacy (D31) | `today.md:86–92` | built (2026-10-07) |
-| RC-173 | NEW | GET | `/api/v1/app/prescription-kits` | prescribe code — Doctor, Admin (D14) | my kits / quick-adds | `patient-file.md:278`; `today.md:86` | built (2026-10-07) |
-| RC-174 | NEW | POST | `/api/v1/app/prescription-kits` | prescribe code — Doctor, Admin (D14) | create a kit | `patient-file.md:278` | built (2026-10-07) |
-| RC-175 | NEW | PATCH | `/api/v1/app/prescription-kits/{prescription_kit_id}` | prescribe code — Doctor, Admin (D14) | edit a kit | `patient-file.md:278` | built (2026-10-07) |
-| RC-176 | NEW | DELETE | `/api/v1/app/prescription-kits/{prescription_kit_id}` | prescribe code — Doctor, Admin (D14) | remove a kit | `patient-file.md:278` | built (2026-10-07) |
-| RC-177 | NEW | POST | `/api/v1/app/treatments/{treatment_id}/reverse` | treatments code — Doctor, Therapist (D12, D13) | reverse a session with a reason (never deleted) (P89, D40) | `today.md:105, 107` | built (2026-10-07) |
-| RC-178 | NEW | POST | `/api/v1/app/patients/{patient_id}/packages` | payments · create (D17) | add a package before its invoice | `patient-file.md:159–169` | built (2026-10-07) |
-| RC-179 | NEW | POST | `/api/v1/app/packages/{patient_package_id}/use-session` | patients · edit | use a session by hand | `patient-file.md:78` |  |
+## 7. Patients
 
-## Offerings and offers
+| # | Change | Method | Path | Access | Operation | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| 7.1 | KEPT | GET | `/patients` | `patient:read` | List patient files | routes-final §7.A.7 |
+| 7.2 | KEPT | GET | `/patients/exports` | `patient:export` | Download the list as CSV | routes-final §7.A.7 |
+| 7.3 | KEPT | POST | `/patients` | `patient:create` | Add a patient file (for a contact, or with a new one) | routes-final §7.A.7 |
+| 7.4 | KEPT | GET | `/patients/{patient_id}` | `patient:read` | Get a patient file | routes-final §7.A.7 |
+| 7.5 | KEPT | PATCH | `/patients/{patient_id}` | `patient:update` | Change a patient file | routes-final §7.A.7 |
+| 7.6 | KEPT | DELETE | `/patients/{patient_id}` | `patient:delete` | Remove a patient file | routes-final §7.A.7 |
+| 7.7 | KEPT | POST | `/patients/{patient_id}/restore` | `patient:delete` | Undo a removal | routes-final §7.A.7 |
+| 7.8 | KEPT | GET | `/patients/{patient_id}/clinical-notes` | `patient:clinical_record:read` | The clinical notes | routes-final §7.B.7 |
+| 7.9 | KEPT | POST | `/patients/{patient_id}/clinical-notes` | `patient:update` + clinical | Add a clinical note | routes-final §7.B.7 |
+| 7.10 | CHANGED | GET | `/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}` | `patient:clinical_record:read` | Get one | routes-final §7.B.7 |
+| 7.11 | CHANGED | DELETE | `/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}` | `patient:update` + clinical | Delete a wrong note | routes-final §7.B.7 |
+| 7.12 | CHANGED | POST | `/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}/restore` | `patient:update` + clinical | Undo | routes-final §7.B.7 |
+| 7.13 | KEPT | GET | `/patient-prescriptions` | `patient_prescription:read` | All prescriptions — the pharmacy queue | routes-final §7.C.7 |
+| 7.14 | KEPT | GET | `/patients/{patient_id}/prescriptions` | `patient_prescription:read` | A patient's prescriptions | routes-final §7.C.7 |
+| 7.15 | KEPT | POST | `/patients/{patient_id}/prescriptions` | `patient_prescription:create` | Write a prescription | routes-final §7.C.7 |
+| 7.16 | CHANGED | GET | `/patients/{patient_id}/prescriptions/{patient_prescription_id}` | `patient_prescription:read` | Get one | routes-final §7.C.7 |
+| 7.17 | CHANGED | PATCH | `/patients/{patient_id}/prescriptions/{patient_prescription_id}` | `patient_prescription:update` | Change a draft | routes-final §7.C.7 |
+| 7.18 | CHANGED | POST | `/patients/{patient_id}/prescriptions/{patient_prescription_id}/approve` | `patient_prescription:update` | Approve — final | routes-final §7.C.7 |
+| 7.19 | CHANGED | DELETE | `/patients/{patient_id}/prescriptions/{patient_prescription_id}` | `patient_prescription:delete` | Delete a draft | routes-final §7.C.7 |
+| 7.20 | CHANGED | POST | `/patients/{patient_id}/prescriptions/{patient_prescription_id}/restore` | `patient_prescription:delete` | Undo | routes-final §7.C.7 |
+| 7.21 | KEPT | GET | `/prescription-kits` | `patient_prescription:create` | My kits | routes-final §7.D.7 |
+| 7.22 | KEPT | POST | `/prescription-kits` | `patient_prescription:create` | Save a kit | routes-final §7.D.7 |
+| 7.23 | KEPT | GET | `/prescription-kits/{prescription_kit_id}` | `patient_prescription:create` | Get a kit | routes-final §7.D.7 |
+| 7.24 | KEPT | PATCH | `/prescription-kits/{prescription_kit_id}` | `patient_prescription:create` | Change a kit | routes-final §7.D.7 |
+| 7.25 | KEPT | DELETE | `/prescription-kits/{prescription_kit_id}` | `patient_prescription:create` | Delete a kit | routes-final §7.D.7 |
+| 7.26 | KEPT | POST | `/prescription-kits/{prescription_kit_id}/restore` | `patient_prescription:create` | Undo | routes-final §7.D.7 |
+| 7.27 | CHANGED | GET | `/patient-diagnoses` | any member | The diagnosis catalogue | routes-final §7.E.7 |
+| 7.28 | CHANGED | POST | `/patient-diagnoses` | `patient_prescription:create` | Add a diagnosis | routes-final §7.E.7 |
+| 7.29 | CHANGED | GET | `/patient-diagnoses/{patient_diagnosis_id}` | any member | Get one | routes-final §7.E.7 |
+| 7.30 | CHANGED | PATCH | `/patient-diagnoses/{patient_diagnosis_id}` | `patient_prescription:update` | Rename one | routes-final §7.E.7 |
+| 7.31 | CHANGED | DELETE | `/patient-diagnoses/{patient_diagnosis_id}` | `patient_prescription:delete` | Delete one | routes-final §7.E.7 |
+| 7.32 | CHANGED | POST | `/patient-diagnoses/{patient_diagnosis_id}/restore` | `patient_prescription:delete` | Undo | routes-final §7.E.7 |
+| 7.33 | KEPT | GET | `/patients/{patient_id}/images` | `patient:clinical_record:read` | The photos — one album tab, or all you can see | routes-final §7.F.7 |
+| 7.34 | KEPT | POST | `/patients/{patient_id}/images` | `patient:update` + clinical | Add a photo to an album | routes-final §7.F.7 |
+| 7.35 | CHANGED | GET | `/patients/{patient_id}/images/{patient_image_id}` | `patient:clinical_record:read` | Get one | routes-final §7.F.7 |
+| 7.36 | CHANGED | PATCH | `/patients/{patient_id}/images/{patient_image_id}` | `patient:update` + clinical | Change its details or move it to another album | routes-final §7.F.7 |
+| 7.37 | CHANGED | DELETE | `/patients/{patient_id}/images/{patient_image_id}` | `patient:update` + clinical | Delete one | routes-final §7.F.7 |
+| 7.38 | CHANGED | POST | `/patients/{patient_id}/images/{patient_image_id}/restore` | `patient:update` + clinical | Undo | routes-final §7.F.7 |
+| 7.39 | KEPT | GET | `/patients/{patient_id}/reports` | `patient:clinical_record:read` | The reports | routes-final §7.G.7 |
+| 7.40 | KEPT | POST | `/patients/{patient_id}/reports` | `patient:update` + clinical | Add a report | routes-final §7.G.7 |
+| 7.41 | CHANGED | GET | `/patients/{patient_id}/reports/{patient_report_id}` | `patient:clinical_record:read` | Get one | routes-final §7.G.7 |
+| 7.42 | CHANGED | PATCH | `/patients/{patient_id}/reports/{patient_report_id}` | `patient:update` + clinical | Change one | routes-final §7.G.7 |
+| 7.43 | CHANGED | DELETE | `/patients/{patient_id}/reports/{patient_report_id}` | `patient:update` + clinical | Delete one | routes-final §7.G.7 |
+| 7.44 | CHANGED | POST | `/patients/{patient_id}/reports/{patient_report_id}/restore` | `patient:update` + clinical | Undo | routes-final §7.G.7 |
+| 7.45 | CHANGED | GET | `/patient-treatments` | `patient_treatment:read` | Every patient's treatments — a doctor's or therapist's sessions | routes-final §7.H.7 |
+| 7.46 | KEPT | GET | `/patients/{patient_id}/treatments` | `patient_treatment:read` | The patient's treatments | routes-final §7.H.7 |
+| 7.47 | KEPT | POST | `/patients/{patient_id}/treatments` | `patient_treatment:create` | Record a session (may spend a bought session) | routes-final §7.H.7 |
+| 7.48 | CHANGED | GET | `/patients/{patient_id}/treatments/{patient_treatment_id}` | `patient_treatment:read` | Get one | routes-final §7.H.7 |
+| 7.49 | CHANGED | PATCH | `/patients/{patient_id}/treatments/{patient_treatment_id}` | `patient_treatment:update` | Change a session | routes-final §7.H.7 |
+| 7.50 | CHANGED | POST | `/patients/{patient_id}/treatments/{patient_treatment_id}/reverse` | `patient_treatment:update` | Reverse it with a reason | routes-final §7.H.7 |
+| 7.51 | KEPT | GET | `/patients/{patient_id}/check-ins` | `patient:read` | The patient's check-ins | routes-final §7.I.7 |
+| 7.52 | KEPT | POST | `/patients/{patient_id}/check-ins` | `patient:update` | Log a check-in | routes-final §7.I.7 |
+| 7.53 | CHANGED | GET | `/patients/{patient_id}/check-ins/{patient_check_in_id}` | `patient:read` | Get one | routes-final §7.I.7 |
+| 7.54 | CHANGED | PATCH | `/patients/{patient_id}/check-ins/{patient_check_in_id}` | `patient:update` | Change it | routes-final §7.I.7 |
+| 7.55 | CHANGED | DELETE | `/patients/{patient_id}/check-ins/{patient_check_in_id}` | `patient:update` | Remove it | routes-final §7.I.7 |
+| 7.56 | CHANGED | POST | `/patients/{patient_id}/check-ins/{patient_check_in_id}/restore` | `patient:update` | Undo | routes-final §7.I.7 |
+| 7.57 | KEPT | GET | `/patients/{patient_id}/reviews` | `patient:read` | The patient's reviews | routes-final §7.J.7 |
+| 7.58 | KEPT | POST | `/patients/{patient_id}/reviews` | `patient:update` | Log a review | routes-final §7.J.7 |
+| 7.59 | CHANGED | GET | `/patients/{patient_id}/reviews/{patient_review_id}` | `patient:read` | Get one | routes-final §7.J.7 |
+| 7.60 | CHANGED | PATCH | `/patients/{patient_id}/reviews/{patient_review_id}` | `patient:update` | Change it | routes-final §7.J.7 |
+| 7.61 | CHANGED | DELETE | `/patients/{patient_id}/reviews/{patient_review_id}` | `patient:update` | Remove it | routes-final §7.J.7 |
+| 7.62 | CHANGED | POST | `/patients/{patient_id}/reviews/{patient_review_id}/restore` | `patient:update` | Undo | routes-final §7.J.7 |
+| 7.63 | CHANGED | POST | `/patients/{patient_id}/check-ins/{patient_check_in_id}/actions` | `patient:update` | Log what was done about a check-in | routes-final §7.K.7 |
+| 7.64 | CHANGED | POST | `/patients/{patient_id}/reviews/{patient_review_id}/actions` | `patient:update` | Log what was done about a review | routes-final §7.K.7 |
+| 7.65 | CHANGED | GET | `/patients/{patient_id}/offerings` | `patient:read` | What the patient bought — the Packages tab with `is_package=true` | routes-final §7.L.7 |
+| 7.66 | CHANGED | GET | `/patients/{patient_id}/offerings/{patient_offering_id}` | `patient:read` | Get one | routes-final §7.L.7 |
+| 7.67 | CHANGED | PATCH | `/patients/{patient_id}/offerings/{patient_offering_id}` | `payment:update` | Change its sessions or validity | routes-final §7.L.7 |
+| 7.68 | KEPT | GET | `/patients/{patient_id}/offering-suggestions` | `patient:read` | The patient's plan | routes-final §7.M.7 |
+| 7.69 | KEPT | POST | `/patients/{patient_id}/offering-suggestions` | `patient:update` | Add to the plan | routes-final §7.M.7 |
+| 7.70 | CHANGED | GET | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:read` | Get one | routes-final §7.M.7 |
+| 7.71 | CHANGED | PATCH | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:update` | Change quantity, price, status, reason | routes-final §7.M.7 |
+| 7.72 | CHANGED | DELETE | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:update` | Remove from the plan | routes-final §7.M.7 |
+| 7.73 | CHANGED | POST | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}/restore` | `patient:update` | Undo | routes-final §7.M.7 |
 
-| # | Change | Method | Path | Access | Operation | Source | Built |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| RC-69 | NEW | GET | `/api/v1/app/offerings` | offerings · view (pickers: any role) | listOfferings | `schema-routes.md:1734` | built (2026-10-07) |
-| RC-70 | NEW | POST | `/api/v1/app/offerings` | offerings · create | create Offering | `schema-routes.md:1739` | built (2026-10-07) |
-| RC-71 | NEW | PATCH | `/api/v1/app/offerings/{offering_id}` | offerings · edit | update Offering | `schema-routes.md:1739` | built (2026-10-07) |
-| RC-72 | NEW | GET | `/api/v1/app/offers` | offerings · view | listOffers | `schema-routes.md:1735` | built (2026-10-07) |
-| RC-73 | NEW | POST | `/api/v1/app/offers` | offerings · create | create Offer | `schema-routes.md:1740` | built (2026-10-07) |
-| RC-74 | NEW | PATCH | `/api/v1/app/offers/{offer_id}` | offerings · edit | update Offer | `schema-routes.md:1740` | built (2026-10-07) |
-| RC-198 | NEW | GET | `/api/v1/app/offering-groups` | any role (pickers) | the clinic's offering groups | D29; `PRD.md:169–173` | built (2026-10-07) |
-| RC-199 | NEW | POST | `/api/v1/app/offering-groups` | offerings · create | add a group | D29 | built (2026-10-07) |
-| RC-200 | NEW | PATCH | `/api/v1/app/offering-groups/{offering_group_id}` | offerings · edit | rename or reorder a group | D29 | built (2026-10-07) |
+## 8. Billing
 
-## Invoices and payments
+| # | Change | Method | Path | Access | Operation | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| 8.1 | KEPT | GET | `/invoices` | `payment:read` | List invoices | routes-final §8.A.7 |
+| 8.2 | KEPT | GET | `/invoices/exports` | `payment:export` | The invoices CSV | routes-final §8.A.7 |
+| 8.3 | KEPT | POST | `/invoices` | `payment:create` | Bill — optionally with "Paid now" | routes-final §8.A.7 |
+| 8.4 | KEPT | GET | `/invoices/{invoice_id}` | `payment:read` | Get an invoice (the print preview) | routes-final §8.A.7 |
+| 8.5 | KEPT | PATCH | `/invoices/{invoice_id}` | `payment:update` | Change it, until settled | routes-final §8.A.7 |
+| 8.6 | KEPT | DELETE | `/invoices/{invoice_id}` | `payment:delete` | Delete an unpaid invoice | routes-final §8.A.7 |
+| 8.7 | KEPT | POST | `/invoices/{invoice_id}/restore` | `payment:delete` | Undo | routes-final §8.A.7 |
+| 8.8 | CHANGED | GET | `/invoice-credit-notes` | `payment:read` | Every credit note | routes-final §8.B.7 |
+| 8.9 | KEPT | GET | `/invoices/{invoice_id}/credit-notes` | `payment:read` | An invoice's credit notes | routes-final §8.B.7 |
+| 8.10 | NEW | POST | `/invoices/{invoice_id}/credit-notes` | `payment:create` | Refund: credit note + refund payment | routes-final §8.B.7 |
+| 8.11 | CHANGED | GET | `/invoices/{invoice_id}/credit-notes/{invoice_credit_note_id}` | `payment:read` | Get one | routes-final §8.B.7 |
+| 8.12 | KEPT | GET | `/payments` | `payment:read` | The ledger | routes-final §8.C.7 |
+| 8.13 | KEPT | GET | `/payments/exports` | `payment:export` | The payments CSV | routes-final §8.C.7 |
+| 8.14 | KEPT | POST | `/payments` | `payment:create` | Receive, pay an expense or a supplier bill, record money back | routes-final §8.C.7 |
+| 8.15 | KEPT | GET | `/payments/{payment_id}` | `payment:read` | Get a payment | routes-final §8.C.7 |
+| 8.16 | KEPT | PATCH | `/payments/{payment_id}` | `payment:update` | Change it on an open day — recorded | routes-final §8.C.7 |
+| 8.17 | NEW | GET | `/payments/{payment_id}/edits` | `payment:read` | What changed | routes-final §8.C.7 |
+| 8.18 | NEW | POST | `/payments/{payment_id}/reverse` | `payment:delete` | Undo a settled payment | routes-final §8.C.7 |
+| 8.19 | KEPT | DELETE | `/payments/{payment_id}` | `payment:delete` | Delete on an open day | routes-final §8.C.7 |
+| 8.20 | KEPT | POST | `/payments/{payment_id}/restore` | `payment:delete` | Undo | routes-final §8.C.7 |
+| 8.21 | KEPT | GET | `/pending-credits` | `payment:read` | List pending credits | routes-final §8.D.7 |
+| 8.22 | KEPT | POST | `/pending-credits` | `payment:create` | Add one — give or take | routes-final §8.D.7 |
+| 8.23 | KEPT | GET | `/pending-credits/{pending_credit_id}` | `payment:read` | Get one | routes-final §8.D.7 |
+| 8.24 | KEPT | PATCH | `/pending-credits/{pending_credit_id}` | `payment:update` | Change it, while nothing is settled | routes-final §8.D.7 |
+| 8.25 | KEPT | DELETE | `/pending-credits/{pending_credit_id}` | `payment:delete` | Delete it, while nothing is settled | routes-final §8.D.7 |
+| 8.26 | KEPT | POST | `/pending-credits/{pending_credit_id}/restore` | `payment:delete` | Undo | routes-final §8.D.7 |
+| 8.27 | NEW | POST | `/pending-credits/{pending_credit_id}/settle` | `payment:create` | Give back, get back, or use on a bill | routes-final §8.D.7 |
+| 8.28 | KEPT | GET | `/day-closes` | `payment:read` | Past and open days | routes-final §8.E.7 |
+| 8.29 | KEPT | POST | `/day-closes` | `payment:update` | Open the day — accept or recount the opening cash | routes-final §8.E.7 |
+| 8.30 | KEPT | GET | `/day-closes/{day_close_id}` | `payment:read` | A day, with its live figures and events | routes-final §8.E.7 |
+| 8.31 | KEPT | POST | `/day-closes/{day_close_id}/close` | `payment:update` | Count and close — locks the day | routes-final §8.E.7 |
+| 8.32 | KEPT | POST | `/day-closes/{day_close_id}/reopen` | `payment:delete` | Reopen a closed day | routes-final §8.E.7 |
 
-| # | Change | Method | Path | Access | Operation | Source | Built |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| RC-75 | NEW | GET | `/api/v1/app/invoices` | payments · view (D17) | listOpenInvoices, listPatientInvoices | `schema-routes.md:1702, 1634` | built (2026-10-07) |
-| RC-76 | NEW | POST | `/api/v1/app/invoices` | payments · create (Counsellor too, D12) | createInvoice — numbered per branch GSTIN and financial year (D23); overall discount before tax, GST-inclusive lines where marked (D20, D21) | `schema-routes.md:1716` | built (2026-10-07) |
-| RC-77 | NEW | GET | `/api/v1/app/invoices/{invoice_id}` | payments · view | getInvoice | `schema-routes.md:1704` | built (2026-10-07) |
-| RC-78 | NEW | PATCH | `/api/v1/app/invoices/{invoice_id}` | payments · edit | updateInvoice | `schema-routes.md:1716` | built (2026-10-07) |
-| RC-79 | NEW | POST | `/api/v1/app/invoices/{invoice_id}/refunds` | refund code — Accountant, Owner, Admin (D25) | refundPayment (credit note + refund; a credit note only against an invoice, D22) | `schema-routes.md:1711` |  |
-| RC-80 | NEW | GET | `/api/v1/app/payments` | payments · view | listLedger, listPatientPayments, listMedicalPayments | `schema-routes.md:1699, 1634, 1662` | built (2026-10-07) |
-| RC-81 | NEW | POST | `/api/v1/app/payments` | payments · create | receivePayment, payExpense (by direction) | `schema-routes.md:1708–1709` | built (2026-10-07) |
-| RC-82 | NEW | GET | `/api/v1/app/payments/{payment_id}` | payments · view | Receive / Pay drawer (edit) | `schema-routes.md:87` | built (2026-10-07) |
-| RC-83 | NEW | PATCH | `/api/v1/app/payments/{payment_id}` | payments · edit | updatePayment | `schema-routes.md:1710` | built (2026-10-07) |
-| RC-84 | NEW | GET | `/api/v1/app/supplier-bills` | payments · view | listOpenSupplierBills | `schema-routes.md:1701` |  |
-| RC-85 | NEW | GET | `/api/v1/app/pending-credits` | payments · view | listPendingCredits | `schema-routes.md:1700` | built (2026-10-07) |
-| RC-86 | NEW | POST | `/api/v1/app/pending-credits` | payments · create | create PendingCredit | `schema-routes.md:1712` | built (2026-10-07) |
-| RC-87 | NEW | PATCH | `/api/v1/app/pending-credits/{pending_credit_id}` | payments · edit | update PendingCredit | `schema-routes.md:1712` | built (2026-10-07) |
-| RC-88 | NEW | POST | `/api/v1/app/pending-credits/{pending_credit_id}/settle` | payments · edit; a give-back needs the refund code (D25) | settleCredit — a give-back with no invoice is a refund payment, not a credit note (D22) | `schema-routes.md:1713` |  |
-| RC-89 | NEW | GET | `/api/v1/app/day-closes` | close-the-day code — Accountant, Owner, Admin (D13, D18) | getDayClose (branch + date) | `schema-routes.md:1703` | built (2026-10-07) |
-| RC-90 | NEW | POST | `/api/v1/app/day-closes` | close-the-day code — Accountant, Owner, Admin (D13, D18) | acceptOpeningCash (opens the day) | `schema-routes.md:1714` | built (2026-10-07) |
-| RC-91 | NEW | POST | `/api/v1/app/day-closes/{day_close_id}/close` | close-the-day code — Accountant, Owner, Admin (D13, D18) | closeDay — a reason when the count differs (D24) | `schema-routes.md:1715` | built (2026-10-07) |
-| RC-92 | NEW | GET | `/api/v1/app/credit-notes/{credit_note_id}` | payments · view | Credit note (from the ledger) | `schema-routes.md:666–678` | built (2026-10-07) |
-| RC-180 | NEW | POST | `/api/v1/app/payments/{payment_id}/checked` | Close the day (ability) | tick an entry in the day-close review | `payments.md:61, 67` | built (2026-10-07) |
-| RC-181 | NEW | POST | `/api/v1/app/payments/{payment_id}/reverse` | Reverse settled payments (ability) | reverse with refund / credit / correction | `users.md:71`; `H:4040–4053` |  |
-| RC-182 | NEW | POST | `/api/v1/app/day-closes/{day_close_id}/reopen` | Close the day (ability) | reopen a closed day | `payments.md:191, 193` | built (2026-10-07) |
+## 9. Stock
 
-## Medical store
+| # | Change | Method | Path | Access | Operation | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| 9.1 | KEPT | GET | `/stock-items` | `stock_item:read` | The Items tab | routes-final §9.A.7 |
+| 9.2 | KEPT | GET | `/stock-items/exports` | `stock_item:export` | The items CSV | routes-final §9.A.7 |
+| 9.3 | KEPT | POST | `/stock-items` | `stock_item:create` | Add an item, with its opening quantity | routes-final §9.A.7 |
+| 9.4 | KEPT | GET | `/stock-items/{stock_item_id}` | `stock_item:read` | Get an item | routes-final §9.A.7 |
+| 9.5 | KEPT | PATCH | `/stock-items/{stock_item_id}` | `stock_item:update` | Change an item (not its quantity) | routes-final §9.A.7 |
+| 9.6 | KEPT | DELETE | `/stock-items/{stock_item_id}` | `stock_item:delete` | Delete an item at zero | routes-final §9.A.7 |
+| 9.7 | KEPT | POST | `/stock-items/{stock_item_id}/restore` | `stock_item:delete` | Undo | routes-final §9.A.7 |
+| 9.8 | CHANGED | GET | `/stock-item-movements` | `stock_item:read` | Every movement — the Movements tab | routes-final §9.B.7 |
+| 9.9 | KEPT | GET | `/stock-items/{stock_item_id}/movements` | `stock_item:read` | An item's history | routes-final §9.B.7 |
+| 9.10 | CHANGED | POST | `/stock-items/{stock_item_id}/movements` | `stock_item:update` | Use, receive, damage, return or adjust | routes-final §9.B.7 |
+| 9.11 | CHANGED | GET | `/stock-items/{stock_item_id}/movements/{stock_item_movement_id}` | `stock_item:read` | Get one | routes-final §9.B.7 |
+| 9.12 | NEW | POST | `/stock-items/{stock_item_id}/movements/{stock_item_movement_id}/revert` | `stock_item:update` | Revert it with a reason | routes-final §9.B.7 |
+| 9.13 | KEPT | GET | `/stock-counts` | `stock_item:read` | Past stock checks | routes-final §9.C.7 |
+| 9.14 | KEPT | POST | `/stock-counts` | `stock_item:update` | Save a stock check — adjusts what differs | routes-final §9.C.7 |
+| 9.15 | KEPT | GET | `/stock-counts/{stock_count_id}` | `stock_item:read` | Get one | routes-final §9.C.7 |
+| 9.16 | KEPT | GET | `/stock-purchases` | `stock_item:read` | The Purchases tab | routes-final §9.D.7 |
+| 9.17 | KEPT | GET | `/stock-purchases/exports` | `stock_item:export` | The purchases CSV | routes-final §9.D.7 |
+| 9.18 | KEPT | POST | `/stock-purchases` | `stock_item:create` | Record a purchase — receives its lines, optionally pays | routes-final §9.D.7 |
+| 9.19 | KEPT | GET | `/stock-purchases/{stock_purchase_id}` | `stock_item:read` | Get one | routes-final §9.D.7 |
+| 9.20 | KEPT | PATCH | `/stock-purchases/{stock_purchase_id}` | `stock_item:update` | Change the bill details | routes-final §9.D.7 |
+| 9.21 | KEPT | DELETE | `/stock-purchases/{stock_purchase_id}` | `stock_item:delete` | Delete an unpaid purchase | routes-final §9.D.7 |
+| 9.22 | KEPT | POST | `/stock-purchases/{stock_purchase_id}/restore` | `stock_item:delete` | Undo | routes-final §9.D.7 |
+| 9.23 | KEPT | GET | `/stock-vendors` | `stock_item:read` | The vendor picker | routes-final §9.E.7 |
+| 9.24 | KEPT | POST | `/stock-vendors` | `stock_item:create` | Add a vendor | routes-final §9.E.7 |
+| 9.25 | KEPT | GET | `/stock-vendors/{stock_vendor_id}` | `stock_item:read` | Get one | routes-final §9.E.7 |
+| 9.26 | KEPT | PATCH | `/stock-vendors/{stock_vendor_id}` | `stock_item:update` | Change one | routes-final §9.E.7 |
+| 9.27 | KEPT | DELETE | `/stock-vendors/{stock_vendor_id}` | `stock_item:delete` | Delete one with nothing owed | routes-final §9.E.7 |
+| 9.28 | KEPT | POST | `/stock-vendors/{stock_vendor_id}/restore` | `stock_item:delete` | Undo | routes-final §9.E.7 |
 
-| # | Change | Method | Path | Access | Operation | Source | Built |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| RC-93 | NEW | GET | `/api/v1/app/medical-sales` | medical · view | listSales | `schema-routes.md:1657` | built (2026-10-07) |
-| RC-94 | NEW | POST | `/api/v1/app/medical-sales` | medical · create | createSale — never more than a batch holds, never an expired batch, never above MRP (D42) | `schema-routes.md:1666` | built (2026-10-07) |
-| RC-95 | NEW | GET | `/api/v1/app/medical-sales/{medical_sale_id}` | medical · view | Sale view | `schema-routes.md:51` | built (2026-10-07) |
-| RC-96 | NEW | POST | `/api/v1/app/medical-sales/{medical_sale_id}/returns` | medical · edit | returnSale | `schema-routes.md:1667` |  |
-| RC-97 | NEW | POST | `/api/v1/app/medical-sales/{medical_sale_id}/void` | medical · edit | voidSale | `schema-routes.md:1668` | built (2026-10-07) |
-| RC-98 | NEW | GET | `/api/v1/app/prescriptions` | medical · view | listPrescriptionsToFill | `schema-routes.md:1658` | built (2026-10-07) |
-| RC-99 | NEW | GET | `/api/v1/app/medicines` | medical · view (pickers: Doctor too) | listMedicines | `schema-routes.md:1659` | built (2026-10-07) |
-| RC-100 | NEW | POST | `/api/v1/app/medicines` | medical · create (quick create: Doctor too) | createMedicine, quickCreateMedicine | `schema-routes.md:1669–1670` | built (2026-10-07) |
-| RC-101 | NEW | GET | `/api/v1/app/medicines/{medicine_id}` | medical · view | Medicine drawer | `schema-routes.md:55` | built (2026-10-07) |
-| RC-102 | NEW | PATCH | `/api/v1/app/medicines/{medicine_id}` | medical · edit | updateMedicine | `schema-routes.md:1669` | built (2026-10-07) |
-| RC-103 | NEW | GET | `/api/v1/app/medical-purchase-orders` | medical · view | listPurchaseOrders | `schema-routes.md:1660` | built (2026-10-07) |
-| RC-104 | NEW | POST | `/api/v1/app/medical-purchase-orders` | medical · create | createPO | `schema-routes.md:1671` | built (2026-10-07) |
-| RC-105 | NEW | GET | `/api/v1/app/medical-purchase-orders/{medical_purchase_order_id}` | medical · view | PO view | `schema-routes.md:58` | built (2026-10-07) |
-| RC-106 | NEW | PATCH | `/api/v1/app/medical-purchase-orders/{medical_purchase_order_id}` | medical · edit | updatePO | `schema-routes.md:1671` | built (2026-10-07) |
-| RC-107 | NEW | POST | `/api/v1/app/medical-purchase-orders/{medical_purchase_order_id}/receive` | medical · edit | receivePO | `schema-routes.md:1672` | built (2026-10-07) |
-| RC-108 | NEW | POST | `/api/v1/app/medical-purchase-orders/{medical_purchase_order_id}/cancel` | medical · edit | cancelPO | `schema-routes.md:1673` | built (2026-10-07) |
-| RC-109 | NEW | GET | `/api/v1/app/suppliers` | medical · view | listSuppliers | `schema-routes.md:1661` | built (2026-10-07) |
-| RC-110 | NEW | POST | `/api/v1/app/suppliers` | medical · create | create Supplier | `schema-routes.md:1674` | built (2026-10-07) |
-| RC-111 | NEW | PATCH | `/api/v1/app/suppliers/{supplier_id}` | medical · edit | update Supplier | `schema-routes.md:1674` | built (2026-10-07) |
-| RC-112 | NEW | GET | `/api/v1/app/manufacturers` | medical · view | listManufacturers | `schema-routes.md:1661` | built (2026-10-07) |
-| RC-113 | NEW | POST | `/api/v1/app/manufacturers` | medical · create | create Manufacturer | `schema-routes.md:1674` | built (2026-10-07) |
-| RC-114 | NEW | PATCH | `/api/v1/app/manufacturers/{manufacturer_id}` | medical · edit | update Manufacturer | `schema-routes.md:1674` | built (2026-10-07) |
-| RC-115 | NEW | GET | `/api/v1/app/medical-reps` | medical · view | listMRs | `schema-routes.md:1661` | built (2026-10-07) |
-| RC-116 | NEW | POST | `/api/v1/app/medical-reps` | medical · create | create MR | `schema-routes.md:1674` | built (2026-10-07) |
-| RC-117 | NEW | PATCH | `/api/v1/app/medical-reps/{medical_rep_id}` | medical · edit | update MR | `schema-routes.md:1674` | built (2026-10-07) |
-| RC-118 | NEW | POST | `/api/v1/app/medical-reps/{medical_rep_id}/visits` | medical · edit | logMRVisit (table `medical_rep_visit`, D36) | `schema-routes.md:1675` | built (2026-10-07) |
-| RC-119 | NEW | GET | `/api/v1/app/medical-contacts` | medical · view | sale Customer picker | `schema-routes.md:834` | built (2026-10-07) |
-| RC-120 | NEW | GET | `/api/v1/app/suppliers/{supplier_id}` | medical · view | Supplier drawer (+ Account) | `schema-routes.md:63` | built (2026-10-07) |
-| RC-183 | NEW | POST | `/api/v1/app/medicines/{medicine_id}/return-expiring` | medical · edit | return expiring stock to a supplier (supplier credit) | `medical.md:297–309` |  |
-| RC-184 | NEW | GET | `/api/v1/app/supplier-credits` | medical · view | supplier credits | `medical.md:200, 308` | built (2026-10-07) |
-| RC-185 | NEW | POST | `/api/v1/app/medicines/near-expiry-discount` | medical · edit | sell expiring medicines at a discount (all or one) | `medical.md:17, 50` |  |
-| RC-186 | NEW | GET | `/api/v1/app/medicines/reorder-suggestions` | medical · view | reorder low stock at the best rate | `medical.md:264` |  |
-| RC-187 | NEW | GET | `/api/v1/app/suppliers/{supplier_id}/account` | medical · view | supplier account history | `medical.md:200, 433` |  |
+## 10. Tasks & rules
 
-## Clinic stock
-
-| # | Change | Method | Path | Access | Operation | Source | Built |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| RC-121 | NEW | GET | `/api/v1/app/stock-items` | stock · view | listStockItems | `schema-routes.md:1681` | built (2026-10-07) |
-| RC-122 | NEW | POST | `/api/v1/app/stock-items` | stock · create | create StockItem | `schema-routes.md:1691` | built (2026-10-07) |
-| RC-123 | NEW | PATCH | `/api/v1/app/stock-items/{stock_item_id}` | stock · edit | update StockItem | `schema-routes.md:1691` | built (2026-10-07) |
-| RC-124 | NEW | GET | `/api/v1/app/stock-movements` | stock · view | listMovements | `schema-routes.md:1682` | built (2026-10-07) |
-| RC-125 | NEW | POST | `/api/v1/app/stock-movements` | stock · edit | useStock | `schema-routes.md:1688` | built (2026-10-07) |
-| RC-126 | NEW | POST | `/api/v1/app/stock-movements/{stock_movement_id}/revert` | stock · edit | revertMovement | `schema-routes.md:1689` |  |
-| RC-127 | NEW | POST | `/api/v1/app/stock-counts` | stock · edit | saveStockCount | `schema-routes.md:1690` | built (2026-10-07) |
-| RC-128 | NEW | GET | `/api/v1/app/stock-purchases` | stock · view | listStockPurchases | `schema-routes.md:1683` | built (2026-10-07) |
-| RC-129 | NEW | POST | `/api/v1/app/stock-purchases` | stock · create | create StockPurchase | `schema-routes.md:1692` | built (2026-10-07) |
-| RC-130 | NEW | PATCH | `/api/v1/app/stock-purchases/{stock_purchase_id}` | stock · edit | update StockPurchase | `schema-routes.md:1692` | built (2026-10-07) |
-| RC-131 | NEW | GET | `/api/v1/app/stock-vendors` | stock · view | listVendors | `schema-routes.md:1684` | built (2026-10-07) |
-| RC-132 | NEW | POST | `/api/v1/app/stock-vendors` | stock · create | create StockVendor | `schema-routes.md:1693` | built (2026-10-07) |
-| RC-133 | NEW | PATCH | `/api/v1/app/stock-vendors/{stock_vendor_id}` | stock · edit | update StockVendor | `schema-routes.md:1693` | built (2026-10-07) |
-
-## Tasks
-
-| # | Change | Method | Path | Access | Operation | Source | Built |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| RC-134 | NEW | GET | `/api/v1/app/tasks` | tasks · view (own; Owner, Admin: everyone's) | listTasks | `schema-routes.md:1722` | built (2026-10-07) |
-| RC-135 | NEW | POST | `/api/v1/app/tasks` | tasks · create | createTask | `schema-routes.md:1727` | built (2026-10-07) |
-| RC-136 | NEW | GET | `/api/v1/app/tasks/{task_id}` | tasks · view | getTask | `schema-routes.md:1723` | built (2026-10-07) |
-| RC-137 | NEW | PATCH | `/api/v1/app/tasks/{task_id}` | tasks · edit | updateTask (incl. reassign) | `schema-routes.md:1727` | built (2026-10-07) |
-| RC-138 | NEW | POST | `/api/v1/app/tasks/{task_id}/resolve` | tasks · edit | resolveTask | `schema-routes.md:1728` | built (2026-10-07) |
-| RC-188 | NEW | GET | `/api/v1/app/task-rules` | tasks · view | the task rules and their on / automatic settings | `tasks.md:148–162` | built (2026-10-07) |
-| RC-189 | NEW | PUT | `/api/v1/app/task-rules` | Owner, Admin (A22) | switch rules on / off, set "Clinozy handles it" | `tasks.md:162` | built (2026-10-07) |
-| RC-190 | NEW | POST | `/api/v1/app/tasks/{task_id}/snooze` | tasks · edit | snooze with a chosen time and label | `tasks.md:178, 351` | built (2026-10-07) |
-| RC-191 | NEW | POST | `/api/v1/app/tasks/{task_id}/automate` | tasks · edit | "Let Clinozy do it" | `tasks.md:123, 227, 347–348` |  |
-
-## Search
-
-| # | Change | Method | Path | Access | Operation | Source | Built |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| RC-139 | NEW | GET | `/api/v1/app/search` | any role (results filtered by access) | commandSearch | `schema-routes.md:1565` | built as `GET /api/v1/app/searches` · ROUTE #62 |
-| RC-140 | NEW | GET | `/api/v1/app/contact-card` | any role | contactCard (a patient, lead or walk-in customer) | `schema-routes.md:1566` | built as `GET /api/v1/app/contacts` + `GET /api/v1/app/contacts/{contact_id}/preview` · ROUTE #62 |
-
-## Delete and restore — every clinic resource
-
-Every clinic resource above with a `{…_id}` path also gets `DELETE /api/v1/app/<resource>/{…_id}`
-(soft delete with a reason, `{reason, note}`) and `POST /api/v1/app/<resource>/{…_id}/restore` (the
-10-second Undo on screen; the API restores until the purge — 7 days by default, D38) —
-`schema-routes.md:132–134, 1546`. Money records follow the money rules instead (sales are voided —
-P54; payments reversed — P77; refunds and credit notes — D22, D25; an unpaid invoice is deleted with
-the void permission — D18). The delete policy is settled (D38); the per-resource list comes with the
-ROUTE rows at Step 5.
-
-## Served by existing routes — no change
-
-| Operation | Existing route | Source |
-| --- | --- | --- |
-| signIn | the platform's sign-in routes (password, email code, Google, passkeys, MFA) | `schema-routes.md:1556` |
-| signOut | `POST /api/v1/auth/logout` | `schema-routes.md:1557` |
-| file uploads (photos, reports, review files, bills) | `POST /api/v1/uploads` + `…/{upload_id}/confirm` | `schema-routes.md:428, 447, 536` |
-| organization switch (the drop's org slug) | `POST /api/v1/auth/switch-to-organization` | `schema-routes.md:19–20` |
-| the access sections (dynamic) | `GET /api/v1/tenancy/permissions` — the catalog, now with the clinic section codes seeded (D10) | `schema-routes.md:1009–1021`; `users.md:61–65` |
+| # | Change | Method | Path | Access | Operation | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| 10.1 | KEPT | GET | `/tasks` | `task:read` | The Tasks tabs — To do, Snoozed, Done | routes-final §10.A.7 |
+| 10.2 | KEPT | GET | `/tasks/exports` | `task:export` | The tasks CSV | routes-final §10.A.7 |
+| 10.3 | KEPT | POST | `/tasks` | `task:create` | Add a task by hand | routes-final §10.A.7 |
+| 10.4 | KEPT | GET | `/tasks/{task_id}` | `task:read` | Get a task (the drawer) | routes-final §10.A.7 |
+| 10.5 | KEPT | PATCH | `/tasks/{task_id}` | `task:update` | Change a task made by hand | routes-final §10.A.7 |
+| 10.6 | KEPT | POST | `/tasks/{task_id}/snooze` | `task:update` | Snooze it | routes-final §10.A.7 |
+| 10.7 | KEPT | POST | `/tasks/{task_id}/resolve` | `task:update` | Take an outcome — optionally set the next step | routes-final §10.A.7 |
+| 10.8 | NEW | POST | `/tasks/{task_id}/reassign` | `task:update` | Give it to someone or a role queue | routes-final §10.A.7 |
+| 10.9 | KEPT | DELETE | `/tasks/{task_id}` | `task:delete` | Delete a task made by hand | routes-final §10.A.7 |
+| 10.10 | KEPT | POST | `/tasks/{task_id}/restore` | `task:delete` | Undo | routes-final §10.A.7 |
+| 10.11 | KEPT | GET | `/task-rule-settings` | `task:read` | Every rule and its switches (the Rules popover) | routes-final §10.B.7 |
+| 10.12 | KEPT | PUT | `/task-rule-settings` | `organization:update` | Turn rules on or off; let Clinozy handle them | routes-final §10.B.7 |
 
 ## Before → after
 
+One row per `CHANGED` route; the decision in **Why** gives the path or shape it replaces.
+
 | # | Route | What changes | Before | After | Why |
 | --- | --- | --- | --- | --- | --- |
-| RC-1 | `GET /api/v1/auth/me/context` | output | the user, the active organization and its permissions | also the clinic roles held, the assigned branches and the clinic section permissions | getSession; D5, D9 |
-| RC-2 | `GET /api/v1/tenancy/organization/memberships` | output, filters | members with one role | members with one or more roles, their branches and staff profile; filter by role, branch and search | D5; listUsers |
-| RC-3 | `POST /api/v1/tenancy/organization/memberships` | input | invite with one role | invite with one or more roles, branches and the staff profile (hours, colour, commission) | D4, D5 |
-| RC-4 | `PATCH /api/v1/tenancy/organization/memberships/{membership_id}` | input | change the one role | change the roles, branches and staff profile | D5 |
-| RC-5 | `GET /api/v1/tenancy/organization/roles/{role_id}/permissions` | output | platform permission codes | also the clinic section codes (section × view / create / edit / delete) from the catalog | D5, D10; seeded per D12, D13, D16–D19; unchanged (union of roles at #4) · ROUTE #5 |
-| RC-6 | `PUT /api/v1/tenancy/organization/roles/{role_id}/permissions` | input | platform permission codes | also the clinic section codes, for the 9 seeded clinic roles and any custom role | D5, D10; seeded per D12, D13, D16–D19; locked role → 403 · ROUTE #5 |
-| RC-7 | `PATCH /api/v1/tenancy/organization` | input, output | name, slug, settings | also specialties, timezone (currency fixed to INR) | D7; + `specialties`, `timezone`, read-only `currency` in and out · ROUTE #62 |
-| RC-141 | `PATCH /api/v1/tenancy/organization/roles/{role_id}` | input, output | name and description | also tone and purpose (special permissions travel as catalog codes through RC-6 — D10, D18) | D3, D10; `users.md:49–50, 71`; + `tone`, `description` (= purpose), system roles too · ROUTE #5 |
-| RC-142 | `POST /api/v1/tenancy/organization/roles` | input | a new role with platform permissions | a custom clinic role, optionally copying another role's access | D3; `users.md:236, 361`; + `tone`, `copy_from_role_id` · ROUTE #5 |
-| RC-143 | `DELETE /api/v1/tenancy/organization/memberships/{membership_id}` | input, behaviour | removes the member | removes with a reason and note; restorable for 10 s (RC-144) | D3; `users.md:247–252` |
-| RC-201 | `PATCH /api/v1/tenancy/organization/settings` | input, output | the organization's existing settings | also the clinic settings: the reminder hour (D34), the re-target days, default 90 (D35), and the deleted-record purge days, default 7 (D38) | D34, D35, D38 |
+| 1.6 | GET `/branches/{branch_id}/members` | renamed | see the decision named in Why — today's path or shape | GET `/branches/{branch_id}/members` | §1 |
+| 1.7 | PUT `/branches/{branch_id}/members` | renamed | see the decision named in Why — today's path or shape | PUT `/branches/{branch_id}/members` | §1 |
+| 1.10 | GET `/branches/{branch_id}/rooms/{branch_room_id}` | moved | see the decision named in Why — today's path or shape | GET `/branches/{branch_id}/rooms/{branch_room_id}` | §1 |
+| 1.11 | PATCH `/branches/{branch_id}/rooms/{branch_room_id}` | moved | see the decision named in Why — today's path or shape | PATCH `/branches/{branch_id}/rooms/{branch_room_id}` | §1 |
+| 1.12 | DELETE `/branches/{branch_id}/rooms/{branch_room_id}` | moved | see the decision named in Why — today's path or shape | DELETE `/branches/{branch_id}/rooms/{branch_room_id}` | §1 |
+| 1.13 | POST `/branches/{branch_id}/rooms/{branch_room_id}/restore` | moved | see the decision named in Why — today's path or shape | POST `/branches/{branch_id}/rooms/{branch_room_id}/restore` | §1 |
+| 1.16 | GET `/branches/{branch_id}/machines/{branch_machine_id}` | moved | see the decision named in Why — today's path or shape | GET `/branches/{branch_id}/machines/{branch_machine_id}` | §1 |
+| 1.17 | PATCH `/branches/{branch_id}/machines/{branch_machine_id}` | moved | see the decision named in Why — today's path or shape | PATCH `/branches/{branch_id}/machines/{branch_machine_id}` | §1 |
+| 1.18 | DELETE `/branches/{branch_id}/machines/{branch_machine_id}` | moved | see the decision named in Why — today's path or shape | DELETE `/branches/{branch_id}/machines/{branch_machine_id}` | §1 |
+| 1.19 | POST `/branches/{branch_id}/machines/{branch_machine_id}/restore` | moved | see the decision named in Why — today's path or shape | POST `/branches/{branch_id}/machines/{branch_machine_id}/restore` | §1 |
+| 1.22 | GET `/branches/{branch_id}/holidays/{branch_holiday_id}` | moved | see the decision named in Why — today's path or shape | GET `/branches/{branch_id}/holidays/{branch_holiday_id}` | §1 |
+| 1.23 | PATCH `/branches/{branch_id}/holidays/{branch_holiday_id}` | moved | see the decision named in Why — today's path or shape | PATCH `/branches/{branch_id}/holidays/{branch_holiday_id}` | §1 |
+| 1.24 | DELETE `/branches/{branch_id}/holidays/{branch_holiday_id}` | moved | see the decision named in Why — today's path or shape | DELETE `/branches/{branch_id}/holidays/{branch_holiday_id}` | §1 |
+| 1.25 | POST `/branches/{branch_id}/holidays/{branch_holiday_id}/restore` | moved | see the decision named in Why — today's path or shape | POST `/branches/{branch_id}/holidays/{branch_holiday_id}/restore` | §1 |
+| 2.1 | GET `/app/memberships` | renamed | see the decision named in Why — today's path or shape | GET `/app/memberships` | T5 |
+| 2.9 | DELETE `/tenancy/organization/memberships/{membership_id}/invitation` | moved | see the decision named in Why — today's path or shape | DELETE `/tenancy/organization/memberships/{membership_id}/invitation` | T9 |
+| 2.10 | POST `/tenancy/organization/memberships/{membership_id}/invitation/resend` | moved | see the decision named in Why — today's path or shape | POST `/tenancy/organization/memberships/{membership_id}/invitation/resend` | T9 |
+| 2.11 | POST `/tenancy/membership-invitations/{membership_invitation_id}/accept` | renamed | see the decision named in Why — today's path or shape | POST `/tenancy/membership-invitations/{membership_invitation_id}/accept` | T9 |
+| 2.21 | GET `/memberships/me/preferences` | renamed | see the decision named in Why — today's path or shape | GET `/memberships/me/preferences` | §2 |
+| 2.22 | PATCH `/memberships/me/preferences` | renamed | see the decision named in Why — today's path or shape | PATCH `/memberships/me/preferences` | §2 |
+| 2.23 | GET `/memberships/me/saved-views` | renamed | see the decision named in Why — today's path or shape | GET `/memberships/me/saved-views` | §2 |
+| 2.24 | POST `/memberships/me/saved-views` | renamed | see the decision named in Why — today's path or shape | POST `/memberships/me/saved-views` | §2 |
+| 2.25 | GET `/memberships/me/saved-views/{membership_saved_view_id}` | renamed | see the decision named in Why — today's path or shape | GET `/memberships/me/saved-views/{membership_saved_view_id}` | §2 |
+| 2.26 | PATCH `/memberships/me/saved-views/{membership_saved_view_id}` | renamed | see the decision named in Why — today's path or shape | PATCH `/memberships/me/saved-views/{membership_saved_view_id}` | §2 |
+| 2.27 | DELETE `/memberships/me/saved-views/{membership_saved_view_id}` | renamed | see the decision named in Why — today's path or shape | DELETE `/memberships/me/saved-views/{membership_saved_view_id}` | §2 |
+| 4.1 | GET `/contacts` | rebuilt | see the decision named in Why — today's path or shape | GET `/contacts` | §4 |
+| 4.10 | GET `/contacts/{contact_id}/activities` | moved | see the decision named in Why — today's path or shape | GET `/contacts/{contact_id}/activities` | M1 |
+| 4.16 | POST `/contact-activities/message-batches` | renamed | see the decision named in Why — today's path or shape | POST `/contact-activities/message-batches` | M12 |
+| 6.18 | POST `/appointments/{appointment_id}/stage` | was the visit's | see the decision named in Why — today's path or shape | POST `/appointments/{appointment_id}/stage` | A10 |
+| 6.19 | POST `/appointments/{appointment_id}/pause` | was the visit's | see the decision named in Why — today's path or shape | POST `/appointments/{appointment_id}/pause` | §6 |
+| 6.20 | POST `/appointments/{appointment_id}/resume` | was the visit's | see the decision named in Why — today's path or shape | POST `/appointments/{appointment_id}/resume` | §6 |
+| 7.10 | GET `/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}` | moved | see the decision named in Why — today's path or shape | GET `/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}` | §7 |
+| 7.11 | DELETE `/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}` | moved | see the decision named in Why — today's path or shape | DELETE `/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}` | §7 |
+| 7.12 | POST `/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}/restore` | moved | see the decision named in Why — today's path or shape | POST `/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}/restore` | §7 |
+| 7.16 | GET `/patients/{patient_id}/prescriptions/{patient_prescription_id}` | moved | see the decision named in Why — today's path or shape | GET `/patients/{patient_id}/prescriptions/{patient_prescription_id}` | §7 |
+| 7.17 | PATCH `/patients/{patient_id}/prescriptions/{patient_prescription_id}` | moved | see the decision named in Why — today's path or shape | PATCH `/patients/{patient_id}/prescriptions/{patient_prescription_id}` | §7 |
+| 7.18 | POST `/patients/{patient_id}/prescriptions/{patient_prescription_id}/approve` | moved | see the decision named in Why — today's path or shape | POST `/patients/{patient_id}/prescriptions/{patient_prescription_id}/approve` | §7 |
+| 7.19 | DELETE `/patients/{patient_id}/prescriptions/{patient_prescription_id}` | moved | see the decision named in Why — today's path or shape | DELETE `/patients/{patient_id}/prescriptions/{patient_prescription_id}` | §7 |
+| 7.20 | POST `/patients/{patient_id}/prescriptions/{patient_prescription_id}/restore` | moved | see the decision named in Why — today's path or shape | POST `/patients/{patient_id}/prescriptions/{patient_prescription_id}/restore` | §7 |
+| 7.27 | GET `/patient-diagnoses` | renamed | see the decision named in Why — today's path or shape | GET `/patient-diagnoses` | §7 |
+| 7.28 | POST `/patient-diagnoses` | renamed | see the decision named in Why — today's path or shape | POST `/patient-diagnoses` | §7 |
+| 7.29 | GET `/patient-diagnoses/{patient_diagnosis_id}` | renamed | see the decision named in Why — today's path or shape | GET `/patient-diagnoses/{patient_diagnosis_id}` | §7 |
+| 7.30 | PATCH `/patient-diagnoses/{patient_diagnosis_id}` | renamed | see the decision named in Why — today's path or shape | PATCH `/patient-diagnoses/{patient_diagnosis_id}` | §7 |
+| 7.31 | DELETE `/patient-diagnoses/{patient_diagnosis_id}` | renamed | see the decision named in Why — today's path or shape | DELETE `/patient-diagnoses/{patient_diagnosis_id}` | §7 |
+| 7.32 | POST `/patient-diagnoses/{patient_diagnosis_id}/restore` | renamed | see the decision named in Why — today's path or shape | POST `/patient-diagnoses/{patient_diagnosis_id}/restore` | §7 |
+| 7.35 | GET `/patients/{patient_id}/images/{patient_image_id}` | moved | see the decision named in Why — today's path or shape | GET `/patients/{patient_id}/images/{patient_image_id}` | §7 |
+| 7.36 | PATCH `/patients/{patient_id}/images/{patient_image_id}` | moved | see the decision named in Why — today's path or shape | PATCH `/patients/{patient_id}/images/{patient_image_id}` | §7 |
+| 7.37 | DELETE `/patients/{patient_id}/images/{patient_image_id}` | moved | see the decision named in Why — today's path or shape | DELETE `/patients/{patient_id}/images/{patient_image_id}` | §7 |
+| 7.38 | POST `/patients/{patient_id}/images/{patient_image_id}/restore` | moved | see the decision named in Why — today's path or shape | POST `/patients/{patient_id}/images/{patient_image_id}/restore` | §7 |
+| 7.41 | GET `/patients/{patient_id}/reports/{patient_report_id}` | moved | see the decision named in Why — today's path or shape | GET `/patients/{patient_id}/reports/{patient_report_id}` | §7 |
+| 7.42 | PATCH `/patients/{patient_id}/reports/{patient_report_id}` | moved | see the decision named in Why — today's path or shape | PATCH `/patients/{patient_id}/reports/{patient_report_id}` | §7 |
+| 7.43 | DELETE `/patients/{patient_id}/reports/{patient_report_id}` | moved | see the decision named in Why — today's path or shape | DELETE `/patients/{patient_id}/reports/{patient_report_id}` | §7 |
+| 7.44 | POST `/patients/{patient_id}/reports/{patient_report_id}/restore` | moved | see the decision named in Why — today's path or shape | POST `/patients/{patient_id}/reports/{patient_report_id}/restore` | §7 |
+| 7.45 | GET `/patient-treatments` | renamed | see the decision named in Why — today's path or shape | GET `/patient-treatments` | §7 |
+| 7.48 | GET `/patients/{patient_id}/treatments/{patient_treatment_id}` | moved | see the decision named in Why — today's path or shape | GET `/patients/{patient_id}/treatments/{patient_treatment_id}` | §7 |
+| 7.49 | PATCH `/patients/{patient_id}/treatments/{patient_treatment_id}` | moved | see the decision named in Why — today's path or shape | PATCH `/patients/{patient_id}/treatments/{patient_treatment_id}` | §7 |
+| 7.50 | POST `/patients/{patient_id}/treatments/{patient_treatment_id}/reverse` | moved | see the decision named in Why — today's path or shape | POST `/patients/{patient_id}/treatments/{patient_treatment_id}/reverse` | §7 |
+| 7.53 | GET `/patients/{patient_id}/check-ins/{patient_check_in_id}` | moved | see the decision named in Why — today's path or shape | GET `/patients/{patient_id}/check-ins/{patient_check_in_id}` | §7 |
+| 7.54 | PATCH `/patients/{patient_id}/check-ins/{patient_check_in_id}` | moved | see the decision named in Why — today's path or shape | PATCH `/patients/{patient_id}/check-ins/{patient_check_in_id}` | §7 |
+| 7.55 | DELETE `/patients/{patient_id}/check-ins/{patient_check_in_id}` | moved | see the decision named in Why — today's path or shape | DELETE `/patients/{patient_id}/check-ins/{patient_check_in_id}` | §7 |
+| 7.56 | POST `/patients/{patient_id}/check-ins/{patient_check_in_id}/restore` | moved | see the decision named in Why — today's path or shape | POST `/patients/{patient_id}/check-ins/{patient_check_in_id}/restore` | §7 |
+| 7.59 | GET `/patients/{patient_id}/reviews/{patient_review_id}` | moved | see the decision named in Why — today's path or shape | GET `/patients/{patient_id}/reviews/{patient_review_id}` | §7 |
+| 7.60 | PATCH `/patients/{patient_id}/reviews/{patient_review_id}` | moved | see the decision named in Why — today's path or shape | PATCH `/patients/{patient_id}/reviews/{patient_review_id}` | §7 |
+| 7.61 | DELETE `/patients/{patient_id}/reviews/{patient_review_id}` | moved | see the decision named in Why — today's path or shape | DELETE `/patients/{patient_id}/reviews/{patient_review_id}` | §7 |
+| 7.62 | POST `/patients/{patient_id}/reviews/{patient_review_id}/restore` | moved | see the decision named in Why — today's path or shape | POST `/patients/{patient_id}/reviews/{patient_review_id}/restore` | §7 |
+| 7.63 | POST `/patients/{patient_id}/check-ins/{patient_check_in_id}/actions` | moved | see the decision named in Why — today's path or shape | POST `/patients/{patient_id}/check-ins/{patient_check_in_id}/actions` | §7 |
+| 7.64 | POST `/patients/{patient_id}/reviews/{patient_review_id}/actions` | moved | see the decision named in Why — today's path or shape | POST `/patients/{patient_id}/reviews/{patient_review_id}/actions` | §7 |
+| 7.65 | GET `/patients/{patient_id}/offerings` | renamed | see the decision named in Why — today's path or shape | GET `/patients/{patient_id}/offerings` | §7 |
+| 7.66 | GET `/patients/{patient_id}/offerings/{patient_offering_id}` | moved | see the decision named in Why — today's path or shape | GET `/patients/{patient_id}/offerings/{patient_offering_id}` | §7 |
+| 7.67 | PATCH `/patients/{patient_id}/offerings/{patient_offering_id}` | moved | see the decision named in Why — today's path or shape | PATCH `/patients/{patient_id}/offerings/{patient_offering_id}` | §7 |
+| 7.70 | GET `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | moved | see the decision named in Why — today's path or shape | GET `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | §7 |
+| 7.71 | PATCH `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | moved | see the decision named in Why — today's path or shape | PATCH `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | §7 |
+| 7.72 | DELETE `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | moved | see the decision named in Why — today's path or shape | DELETE `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | §7 |
+| 7.73 | POST `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}/restore` | moved | see the decision named in Why — today's path or shape | POST `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}/restore` | §7 |
+| 8.8 | GET `/invoice-credit-notes` | renamed | see the decision named in Why — today's path or shape | GET `/invoice-credit-notes` | §8 |
+| 8.11 | GET `/invoices/{invoice_id}/credit-notes/{invoice_credit_note_id}` | moved | see the decision named in Why — today's path or shape | GET `/invoices/{invoice_id}/credit-notes/{invoice_credit_note_id}` | §8 |
+| 9.8 | GET `/stock-item-movements` | renamed | see the decision named in Why — today's path or shape | GET `/stock-item-movements` | §9 |
+| 9.10 | POST `/stock-items/{stock_item_id}/movements` | moved | see the decision named in Why — today's path or shape | POST `/stock-items/{stock_item_id}/movements` | §9 |
+| 9.11 | GET `/stock-items/{stock_item_id}/movements/{stock_item_movement_id}` | moved | see the decision named in Why — today's path or shape | GET `/stock-items/{stock_item_id}/movements/{stock_item_movement_id}` | §9 |

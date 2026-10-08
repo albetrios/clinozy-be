@@ -7,7 +7,7 @@ is unclear) decides each table's physical design (types, indexes, constraints, t
 differences go into `AS-BUILT.md` and this file is synced with the final table and field names. See it drawn in the DB
 Viewer's plan mode: `pnpm db:viewer`, then click this iteration under ◇ Plans.
 
-Status: draft — planning Step 5: D1–D44 and the Reconciliation P verdicts applied; each table has its ROUTE row in KICKOFF.md
+Status: the 2026-10-03 plan, synced with the route review per module from 2026-10-08 (see Route review sync). Planning Step 5: D1–D44 and the Reconciliation P verdicts applied; each table has its ROUTE row in KICKOFF.md
 ([coverage.md › Reconciliation](coverage.md#reconciliation)); every screen-only field was answered. Mode initial
 (Baseline `none`) · Intake hash `036cbb592ac5`.
 
@@ -29,6 +29,31 @@ draws every new table under `app` with its plural name (`branch` → `app.branch
 medicine batches and supplier rates, purchase lines, sale returns, stock purchase and count lines);
 the common fields on every table (organization, created / updated time and by, soft delete with
 reason — `schema-routes.md:126–134`, plus `updated_by` — `patients.md:28`) are not repeated.
+
+## Route review sync (2026-10-08)
+
+The route review ([routes-final.md](routes-final.md), [D46](decisions.md)) is the design now. Its tables, by module, as
+its table designs name them (60 tables; the medical store's wait for its own review, [D49](decisions.md)):
+
+| Module | Tables (route review) | Design | Built at |
+| --- | --- | --- | --- |
+| 1. Branches & places | `app.branches`, `app.branch_members`, `app.branch_rooms`, `app.branch_machines`, `app.branch_holidays` | §1 | #125 |
+| 2. Team | `app.membership_preferences`, `app.membership_preference_branches`, `app.membership_saved_views`, `tenancy.memberships`, `tenancy.membership_additional_roles`, `tenancy.membership_invitations`, `tenancy.roles`, `tenancy.role_permissions`, `tenancy.permissions` | §2 | #126–#127 |
+| 3. Offerings | `app.offering_groups`, `app.offerings`, `app.offering_branches`, `app.offers`, `app.offer_offerings`, `app.offer_branches` | §3 | #128 |
+| 4. Contacts | `app.contacts`, `app.contact_phones`, `app.contact_members`, `app.contact_activities`, `app.contact_message_templates` | §4 | #129–#130 |
+| 5. Leads | `app.leads`, `app.lead_involved_memberships` | §5 | #131 |
+| 6. Appointments | `app.appointments` | §6 | #132 |
+| 7. Patients | `app.patients`, `app.patient_clinical_notes`, `app.patient_prescriptions`, `app.prescription_kits`, `app.patient_diagnoses`, `app.patient_images`, `app.patient_reports`, `app.patient_treatments`, `app.patient_check_ins`, `app.patient_reviews`, `app.patient_feedback_actions`, `app.patient_offerings`, `app.patient_offering_suggestions` | §7 | #133–#135 |
+| 8. Billing | `app.invoices`, `app.invoice_items`, `app.invoice_members`, `app.invoice_credit_notes`, `app.payments`, `app.payment_edits`, `app.pending_credits`, `app.day_closes`, `app.day_close_events` | §8 | #136 |
+| 9. Stock | `app.stock_items`, `app.stock_item_movements`, `app.stock_counts`, `app.stock_count_lines`, `app.stock_purchases`, `app.stock_purchase_items`, `app.stock_vendors` | §9 | #137 |
+| 10. Tasks & rules | `app.tasks`, `app.task_owner_changes`, `app.task_rule_settings` | §10 | #138 |
+
+**Where this file and the route review differ, the route review wins** — the renames (`patient_*`, `contact_*`,
+`stock_item_movements`, `invoice_credit_notes`, `invoice_members`, `patient_offerings` …), the new tables
+(`app.contacts`, `app.contact_phones`, `app.contact_members`, `app.invoice_items`, the count and purchase lines …), and
+the dropped ones (`app.visits`, `app.lead_reads`, `app.patient_notes`, `app.patient_ideas`, the old `medical_contacts`
+link). The stage diagrams below are the 2026-10-03 plan; each module row redraws its tables here when it is built
+(`be-kickoff-iteration` › Record), so this file ends as the true record.
 
 ## Decided so far
 

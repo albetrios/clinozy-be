@@ -33,7 +33,7 @@ change touches; `pnpm iteration:new <type> <topic> --both` creates it in both.
 | `README.md` | the field table, then a `## History` list | `iteration:new`, then only the commands |
 | `intake-files/` | the **full snapshot** — files received from outside, exactly as delivered, flat, never edited (see Intake modes) | `iteration:intake` |
 | `KICKOFF.md` | the plan and its ordered ROUTE ledger | be-iteration-planning |
-| `plans/` | our supporting documents: `decisions.md`, `coverage.md`, `db-changes.md`, `route-changes.md`, `worker-changes.md`, `requirements/`, `features/`, `acceptance.md` | be-iteration-planning (+ scope decisions during implementation) |
+| `plans/` | our supporting documents: `decisions.md`, `coverage.md`, `db-changes.md`, `route-changes.md`, `worker-changes.md`, `routes-final.md` (the route review, confirmed module by module — [template](../docs/design-workflow/process/routes-final-template.md)), `requirements/`, `features/`, `acceptance.md` | be-iteration-planning (+ scope decisions during implementation) |
 | `AS-BUILT.md` | per ROUTE row: planned · actually built · difference · why · decision · commit; revisions to upcoming rows; a closing summary; the **Standing deviations** | be-kickoff-iteration |
 
 - **`intake-files/`** holds a **full snapshot** in every iteration, not only the launch, whatever

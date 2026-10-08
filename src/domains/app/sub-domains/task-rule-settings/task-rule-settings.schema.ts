@@ -28,7 +28,7 @@ function joinValues(values: readonly string[]): SQL {
 }
 
 /**
- * Drizzle table for `app.task_rule_settings` — Whether a task rule is on, and whether the organization lets it run by itself ("Clinozy handles it") (launch ROUTE #60, domain `app`).
+ * Drizzle table for `app.task_rule_settings` — Whether a task rule is on, and whether the organization lets it run by itself ("let the app handle it") (launch ROUTE #60, domain `app`).
  * Standard app record columns (public id, organization, attribution, soft delete with its reason);
  * RLS is the `task_rule_settings_tenant_isolation` policy on the organization GUC, with the retention-cleanup arm
  * for the deleted-record purge.

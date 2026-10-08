@@ -25,7 +25,7 @@ export interface MessageOutput {
   delivered_at: string | null;
   read_at: string | null;
   failed_at: string | null;
-  /** Written by Clinozy (a reminder, a receipt) */
+  /** Written by the app itself (a reminder, a receipt) */
   is_system: boolean;
   author_membership_id: string | null;
   /** What the line points at */

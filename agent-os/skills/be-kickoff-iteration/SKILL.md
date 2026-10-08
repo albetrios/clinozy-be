@@ -25,8 +25,8 @@ The iteration rules: [`iterations/README.md`](../../../iterations/README.md).
 
 ## The plan proposes; agent-os decides — remember this on every row
 
-The plan (`KICKOFF.md`, `plans/db-changes.md`, `route-changes.md`, `worker-changes.md`) states
-requirements and proposals in logical terms. **The backend's agent-os — its skills, rules and agents
+The plan (`KICKOFF.md`, `plans/routes-final.md`, `db-changes.md`, `route-changes.md`, `worker-changes.md`)
+states requirements and proposals — the route review in full design detail, the rest in logical terms. **The backend's agent-os — its skills, rules and agents
 under `agent-os/` — is the expert.** Whenever the plan and agent-os disagree, or anything is unclear,
 follow agent-os. That covers the skills each row runs — the
 schema chain (`be-schema-generator`, `be-sql-design-guard`, `be-db-migration-maintainer`,
@@ -37,6 +37,12 @@ rules, paths, statuses, idempotency, job names. Follow them, never the plan's wo
 differ; record each difference in the row's `AS-BUILT.md` entry and sync the change files (Each ROUTE
 row › Record). Only a scope change — a row added or removed, an acceptance changed, the order changed
 — stops for the user.
+
+**With a route review it is ditto.** When the plan has `plans/routes-final.md`, the agent-os checks already
+shaped it, so each row builds its module **exactly as written** — names, routes, gates, statuses, errors,
+codes, folders. Where a skill, rule or gate still cannot build something as written, **stop and ask**; the
+agreed change goes into `routes-final.md` first, then into the build — never a silent difference. Only what
+the review leaves open is decided on the way and recorded in `AS-BUILT.md`.
 
 ## Step 0 — Confirm the iteration, then stop until confirmed
 
@@ -67,7 +73,8 @@ shape below, dated today, with the Baseline's Standing deviations copied in as t
 
 ## Before the first row — read
 
-- `KICKOFF.md` (the plan and its ROUTE) and every file under `plans/`.
+- `KICKOFF.md` (the plan and its ROUTE) and every file under `plans/` — for each row, its module's
+  section in `plans/routes-final.md` is the spec and its code changes the checklist.
 - The repository's conventions: `CLAUDE.md`, the skill index
   (`agent-os/skills/be-skill-index/SKILL.md`), the existing domains under `src/domains/`, the
   permission model (`src/domains/tenancy/sub-domains/permission/authorization.service.ts` and the
@@ -108,8 +115,8 @@ Each driver runs the matching skill chain (schema-change, route-change, worker-c
    `full` / `overlay` → the acceptance traced to the PRD; `brief` → the `BRIEF.md` acceptance
    criteria the row covers, and the parts it touches still match the carried-forward PRD and
    `schema-routes.md` except where the brief changes them. MODE incremental, every mode: re-run the
-   existing end-to-end tests for everything touched. Against the plan's own files: every route the
-   row built matches its proposal in `plans/route-changes.md`, every table it built matches
+   existing end-to-end tests for everything touched. Against the plan's own files: what the row built matches its module's
+   section in `plans/routes-final.md`, every route matches its proposal in `plans/route-changes.md`, every table it built matches
    `plans/db-changes.md` (`pnpm db:viewer` — the built table now stands where the plan drew it), and
    every piece of background work it built matches `plans/worker-changes.md` (now with its real queue
    and job names); any difference goes into the AS-BUILT row.

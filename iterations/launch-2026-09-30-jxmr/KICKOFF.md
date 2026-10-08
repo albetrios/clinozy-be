@@ -1,7 +1,8 @@
 # KICKOFF — launch-2026-09-30-jxmr
 
-> The plan and the ROUTE ledger for the launch — frozen at approval. Requirements and decisions only; each
-> ROUTE row's technical design is decided at kickoff by agent-os and recorded in `AS-BUILT.md`.
+> The plan and the ROUTE ledger for the launch — frozen at approval. The design is the route review,
+> [plans/routes-final.md](plans/routes-final.md) (D46); each ROUTE row builds one module (or part of one) **exactly as it says**
+> (D52). Anything the review leaves open is decided at kickoff by agent-os and recorded in `AS-BUILT.md`.
 
 ## 1. Header
 
@@ -15,7 +16,8 @@
 | Drop placed | 2026-10-03 |
 | Intake hash | 036cbb592ac5 |
 | Schema-routes | 5f90325208e1 |
-| Date | 2026-10-03 |
+| Date | 2026-10-03 · re-planned 2026-10-08 ([D50](plans/decisions.md)) |
+| Route review | [plans/routes-final.md](plans/routes-final.md) — modules 1–10 ([D46](plans/decisions.md), [D47](plans/decisions.md)) |
 
 ## 2. Goal and scope
 
@@ -23,11 +25,12 @@
 schema-routes operation (schema-routes.md:1537–1755), plus the frontend's backend requests (its Appendix F),
 so that every frontend room can leave its fixtures ([D2](plans/decisions.md), [D3](plans/decisions.md)).
 
-**In scope:** the 60 tables of [db-changes.md](plans/db-changes.md), the routes of [route-changes.md](plans/route-changes.md),
+**In scope:** the 10 modules of the route review ([routes-final.md](plans/routes-final.md): 248 app routes and module 2's
+tenancy routes), built per module ([D48](plans/decisions.md)) over the tables of [db-changes.md](plans/db-changes.md), the routes of [route-changes.md](plans/route-changes.md),
 the background work of [worker-changes.md](plans/worker-changes.md); real WhatsApp ([D32](plans/decisions.md)), reminders
 ([D34](plans/decisions.md)), AI ideas ([D39](plans/decisions.md)).
 
-**Out of scope:** presentation and every `frontend only` item ([D1](plans/decisions.md), [D11](plans/decisions.md)); phone layout
+**Out of scope:** the medical store, until its own route review ([D49](plans/decisions.md)); presentation and every `frontend only` item ([D1](plans/decisions.md), [D11](plans/decisions.md)); phone layout
 and the patient-facing app (PRD.md:204–205); SMS and email to patients ([D33](plans/decisions.md)); AI drafts beyond ideas
 ([D44](plans/decisions.md)); legacy import ([D40](plans/decisions.md)); push updates ([D37](plans/decisions.md)); the "verify your email"
 banner ([D40](plans/decisions.md)).
@@ -80,161 +83,223 @@ banner ([D40](plans/decisions.md)).
 | [D42](plans/decisions.md) | Which medicine-sale rules does the server enforce? | All three | RED |
 | [D43](plans/decisions.md) | What happens when two people edit the same record? | Refuse, and say who and when | RED |
 | [D44](plans/decisions.md) | Which AI drafts beyond ideas belong in this launch? | None at launch | SCOPE |
+| [D46](plans/decisions.md) | Does the route review replace the plan's design? | Yes — routes-final.md is the design | RED |
+| [D47](plans/decisions.md) | How are the modules grouped? | One module per domain folder, renumbered 1–10 | RED |
+| [D48](plans/decisions.md) | How is the reviewed design built? | Rebuild per module; old folders go in the same row | RED |
+| [D49](plans/decisions.md) | Is the medical store in this build? | Paused until its route review | SCOPE |
+| [D50](plans/decisions.md) | Back to planning | ROUTE re-planned as rows #124–#153 | SCOPE |
 
 ## 4. Features and order
 
-Screen features first (each owns its tables), then the flows that involve them.
+The route review ([routes-final.md](plans/routes-final.md), [D46](plans/decisions.md)) builds in **modules** — one per
+domain folder, in build order ([D47](plans/decisions.md)). Each module delivers the screen features below; the flows
+come after the modules they involve. The stories stay the requirements; the route review is how each is met.
 
-| # | Feature | Kind | Depends on | Tables |
-| --- | --- | --- | --- | --- |
-| 1 | [Team, roles and branches](plans/features/team-and-access/story.md) | screen | — | organization, branch, user, membership, role, permission, role_permission |
-| 2 | [Shell, lists and record rules](plans/features/shell-and-patterns/story.md) | screen | team-and-access | user_preference, saved_view |
-| 3 | [Offerings and offers](plans/features/offerings/story.md) | screen | team-and-access | offering_group, offering, offer |
-| 4 | [Leads and conversations](plans/features/leads-and-messages/story.md) | screen | team-and-access, shell-and-patterns | lead, lead_message, lead_read, message_template |
-| 5 | [Patients](plans/features/patients/story.md) | screen | team-and-access, shell-and-patterns | patient |
-| 6 | [Appointments](plans/features/appointments/story.md) | screen | team-and-access, patients, leads-and-messages | branch_holiday, room, machine, appointment |
-| 7 | [Patient file and clinical record](plans/features/patient-file/story.md) | screen | patients, appointments, offerings | diagnosis, patient_clinical_note, prescription, prescription_kit, patient_image, patient_report, patient_note, patient_package, offering_suggestion, patient_idea, treatment, check_in, review, feedback_action |
-| 8 | [Today and the visit](plans/features/today-floor/story.md) | screen | appointments, patient-file | visit |
-| 9 | [Invoices, payments and day close](plans/features/payments-and-invoices/story.md) | screen | patients, offerings, patient-file | invoice, payment, payment_edit, credit_note, pending_credit, day_close, day_close_event |
-| 10 | [Medical store](plans/features/medical-store/story.md) | screen | payments-and-invoices, patient-file | manufacturer, supplier, medical_rep, medical_rep_visit, medicine, medical_purchase_order, medical_contact, medical_sale, supplier_credit |
-| 11 | [Clinic stock](plans/features/clinic-stock/story.md) | screen | payments-and-invoices | stock_vendor, stock_item, stock_purchase, stock_movement, stock_count |
-| 12 | [Tasks and rules](plans/features/tasks/story.md) | screen | leads-and-messages, appointments, patient-file, payments-and-invoices | task, task_owner_change, task_rule_setting |
-| 13 | [Flow 1 — an enquiry becomes a patient](plans/features/flow-enquiry-to-patient/story.md) | flow | leads-and-messages, appointments, today-floor, patients | — |
-| 14 | [Flow 2 — visit, prescription, sale, payment](plans/features/flow-visit-to-payment/story.md) | flow | today-floor, patient-file, medical-store, payments-and-invoices | — |
-| 15 | [Flow 3 — treatment plan and feedback](plans/features/flow-plan-and-feedback/story.md) | flow | patient-file, payments-and-invoices, tasks | — |
+| # | Module (route review) | Features it delivers | Depends on |
+| --- | --- | --- | --- |
+| 1 | Branches & places (§1) | [team-and-access](plans/features/team-and-access/story.md) — branches, rooms, machines, holidays | — |
+| 2 | Team (§2) | [team-and-access](plans/features/team-and-access/story.md) — members, roles, invitations; [shell-and-patterns](plans/features/shell-and-patterns/story.md) — preferences, saved views | 1 |
+| 3 | Offerings (§3) | [offerings](plans/features/offerings/story.md) | 1, 2 |
+| 4 | Contacts (§4) | [leads-and-messages](plans/features/leads-and-messages/story.md) — the person and the conversation; [shell-and-patterns](plans/features/shell-and-patterns/story.md) — search | 1, 2 |
+| 5 | Leads (§5) | [leads-and-messages](plans/features/leads-and-messages/story.md) — leads | 1, 2, 4 |
+| 6 | Appointments (§6) | [appointments](plans/features/appointments/story.md), [today-floor](plans/features/today-floor/story.md) — the visit is merged in | 1, 2, 3, 4 |
+| 7 | Patients (§7) | [patients](plans/features/patients/story.md), [patient-file](plans/features/patient-file/story.md) — the file, treatments and feedback, what was bought and the plan | 1–4, 6 |
+| 8 | Billing (§8) | [payments-and-invoices](plans/features/payments-and-invoices/story.md) | 1, 3, 4, 7 |
+| 9 | Stock (§9) | [clinic-stock](plans/features/clinic-stock/story.md) | 1, 7, 8 |
+| 10 | Tasks & rules (§10) | [tasks](plans/features/tasks/story.md) | 2, 4–8 |
+| 11 | Medical store | [medical-store](plans/features/medical-store/story.md) — **deferred** ([D49](plans/decisions.md)) | — |
+| flow | — | [flow-enquiry-to-patient](plans/features/flow-enquiry-to-patient/story.md), [flow-visit-to-payment](plans/features/flow-visit-to-payment/story.md) (without the medicine sale, [D49](plans/decisions.md)), [flow-plan-and-feedback](plans/features/flow-plan-and-feedback/story.md) | the modules they involve |
 
 ## 5. ROUTE
 
-One row per work item, in build order: tables (the stages of db-changes.md) → screen features → background
-work → flows → acceptance. Driver: NEW table → the staged-build prompt (`docs/getting-started/staged-build-prompt.md`);
-CHANGE table, feature, background work, flow → `/be-build-requirement`. Each row is one stop for your review
-(`be-kickoff-iteration` › Each ROUTE row).
+Re-planned 2026-10-08 ([D50](plans/decisions.md)). Rows #1–#60 built the tables of the 2026-10-03 plan; the
+module rows below **rebuild** them from the route review, one module (or one part of a large module) per row,
+in build order ([D48](plans/decisions.md)): each row builds its module's folder from its section of
+[routes-final.md](plans/routes-final.md) and deletes that module's old flat folders in the same row — never old and new
+side by side. Then background work, flows and acceptance. Driver: the module's NEW tables through the
+staged-build prompt (`docs/getting-started/staged-build-prompt.md`), everything else through
+`/be-build-requirement`. Each row is one stop for your review (`be-kickoff-iteration` › Each ROUTE row).
+
+**Ditto the route review** ([D52](plans/decisions.md)). Each row builds its module exactly as
+[routes-final.md](plans/routes-final.md) says — table and column names, routes, gates, statuses, errors, permission
+codes, folders. Where an agent-os skill, rule or gate cannot build something as written, the row **stops and asks**;
+an agreed change is written into routes-final.md first, then built — never a silent difference. Only what the review
+leaves open is decided on the way and recorded in `AS-BUILT.md`.
+
+**Done rows are re-done.** What rows #1–#64 built is replaced module by module so it matches the review; the
+superseded ledger below names the row that re-does each. Platform changes the review does not redesign (#1 the
+organization's settings, #3 a user's presence) stay as built.
+
+**The medical store is not touched** ([D49](plans/decisions.md), [D52](plans/decisions.md)). Its folders
+(`manufacturers/`, `suppliers/`, `medical-reps/`, `medical-rep-visits/`, `medicines/`, `medical-purchase-orders/`,
+`medical-contacts/`, `medical-sales/`, `supplier-credits/`) are not redesigned. A row that moves or renames something
+the medical code uses changes there only the import paths and names that move forces — no behaviour — and lists each
+in `AS-BUILT.md`. The rows that rebuild what it uses — #131 leads, #133 patients and prescriptions, #136 invoices — keep
+its links working (the invoices' medical lines and links) until the medical store's own review, and its tests pass.
 
 | # | Work item | Kind | Depends on | Skill/driver | Acceptance | Assignee | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `organization` — CHANGE table (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#organization--changed) approved and built (`data.stage-foundation`) | — | done |
-| 2 | `branch` — NEW table (Stage 1) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#branch--new) approved and built (`data.stage-foundation`) | — | done |
-| 3 | `user` — CHANGE table (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#user--changed) approved and built (`data.stage-foundation`) | — | done |
-| 4 | `membership` — CHANGE table (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#membership--changed) approved and built (`data.stage-foundation`) | — | done |
-| 5 | `role` — CHANGE table (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#role--changed) approved and built (`data.stage-foundation`) | — | done |
-| 6 | `permission` — seed codes (no schema change) (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#permission--existing) approved and built (`data.stage-foundation`) | — | done |
-| 7 | `role_permission` — seed codes (no schema change) (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#role_permission--existing) approved and built (`data.stage-foundation`) | — | done |
-| 8 | `user_preference` — NEW table (Stage 1) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#user_preference--new) approved and built (`data.stage-foundation`) | — | done |
-| 9 | `saved_view` — NEW table (Stage 1) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#saved_view--new) approved and built (`data.stage-foundation`) | — | done |
-| 10 | `offering_group` — NEW table (Stage 2) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#offering_group--new) approved and built (`data.stage-catalogue`) | — | done |
-| 11 | `offering` — NEW table (Stage 2) | table | #10 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#offering--new) approved and built (`data.stage-catalogue`) | — | done |
-| 12 | `offer` — NEW table (Stage 2) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#offer--new) approved and built (`data.stage-catalogue`) | — | done |
-| 13 | `patient` — NEW table (Stage 3); its link to `lead` lands with #14 | table | #2 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#patient--new) approved and built (`data.stage-people`) | — | done |
-| 14 | `lead` — NEW table (Stage 3) | table | #2, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#lead--new) approved and built (`data.stage-people`) | — | done |
-| 15 | `lead_message` — NEW table (Stage 3); its link to `task` lands with #58 | table | #14 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#lead_message--new) approved and built (`data.stage-people`) | — | done |
-| 16 | `lead_read` — NEW table (Stage 3) | table | #14 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#lead_read--new) approved and built (`data.stage-people`) | — | done |
-| 17 | `message_template` — NEW table (Stage 3) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#message_template--new) approved and built (`data.stage-people`) | — | done |
-| 18 | `branch_holiday` — NEW table (Stage 4) | table | #2 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#branch_holiday--new) approved and built (`data.stage-scheduling`) | — | done |
-| 19 | `room` — NEW table (Stage 4) | table | #2 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#room--new) approved and built (`data.stage-scheduling`) | — | done |
-| 20 | `machine` — NEW table (Stage 4) | table | #2 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#machine--new) approved and built (`data.stage-scheduling`) | — | done |
-| 21 | `appointment` — NEW table (Stage 4); its link to `patient_package` lands with #31 | table | #2, #14, #20, #11, #13, #19 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#appointment--new) approved and built (`data.stage-scheduling`) | — | done |
-| 22 | `visit` — NEW table (Stage 4) | table | #21, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#visit--new) approved and built (`data.stage-scheduling`) | — | done |
-| 23 | `diagnosis` — NEW table (Stage 5) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#diagnosis--new) approved and built (`data.stage-clinical-record`) | — | done |
-| 24 | `patient_clinical_note` — NEW table (Stage 5) | table | #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#patient_clinical_note--new) approved and built (`data.stage-clinical-record`) | — | done |
-| 25 | `prescription` — NEW table (Stage 5) | table | #21, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#prescription--new) approved and built (`data.stage-clinical-record`) | — | done |
-| 26 | `prescription_kit` — NEW table (Stage 5) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#prescription_kit--new) approved and built (`data.stage-clinical-record`) | — | done |
-| 27 | `patient_image` — NEW table (Stage 5) | table | #21, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#patient_image--new) approved and built (`data.stage-clinical-record`) | — | done |
-| 28 | `patient_report` — NEW table (Stage 5) | table | #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#patient_report--new) approved and built (`data.stage-clinical-record`) | — | done |
-| 29 | `patient_note` — NEW table (Stage 5) | table | #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#patient_note--new) approved and built (`data.stage-clinical-record`) | — | done |
-| 30 | `invoice` — NEW table (Stage 6); its link to `medical_contact` lands with #50; its link to `medical_sale` lands with #51 | table | #2, #13, #25 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#invoice--new) approved and built (`data.stage-billing`) | — | done |
-| 31 | `patient_package` — NEW table (Stage 6) | table | #30, #11, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#patient_package--new) approved and built (`data.stage-billing`) | — | done |
-| 32 | `offering_suggestion` — NEW table (Stage 6) | table | #21, #11, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#offering_suggestion--new) approved and built (`data.stage-billing`) | — | done |
-| 33 | `patient_idea` — NEW table (Stage 6) | table | #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#patient_idea--new) approved and built (`data.stage-billing`) | — | done |
-| 34 | `payment` — NEW table (Stage 6); its link to `credit_note` lands with #36; its link to `day_close` lands with #38; its link to `pending_credit` lands with #37 | table | #2, #30, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#payment--new) approved and built (`data.stage-billing`) | — | done |
-| 35 | `payment_edit` — NEW table (Stage 6) | table | #34 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#payment_edit--new) approved and built (`data.stage-billing`) | — | done |
-| 36 | `credit_note` — NEW table (Stage 6) | table | #30 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#credit_note--new) approved and built (`data.stage-billing`) | — | done |
-| 37 | `pending_credit` — NEW table (Stage 6) | table | #30, #13, #34 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#pending_credit--new) approved and built (`data.stage-billing`) | — | done |
-| 38 | `day_close` — NEW table (Stage 6) | table | #2 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#day_close--new) approved and built (`data.stage-billing`) | — | done |
-| 39 | `day_close_event` — NEW table (Stage 6) | table | #38 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#day_close_event--new) approved and built (`data.stage-billing`) | — | done |
-| 40 | `treatment` — NEW table (Stage 7) | table | #21, #11, #13, #31 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#treatment--new) approved and built (`data.stage-treatments-feedback`) | — | done |
-| 41 | `check_in` — NEW table (Stage 7) | table | #21, #13, #40 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#check_in--new) approved and built (`data.stage-treatments-feedback`) | — | done |
-| 42 | `review` — NEW table (Stage 7) | table | #21, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#review--new) approved and built (`data.stage-treatments-feedback`) | — | done |
-| 43 | `feedback_action` — NEW table (Stage 7) | table | #41, #42 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#feedback_action--new) approved and built (`data.stage-treatments-feedback`) | — | done |
-| 44 | `manufacturer` — NEW table (Stage 8) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#manufacturer--new) approved and built (`data.stage-medical-store`) | — | done |
-| 45 | `supplier` — NEW table (Stage 8) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#supplier--new) approved and built (`data.stage-medical-store`) | — | done |
-| 46 | `medical_rep` — NEW table (Stage 8) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#medical_rep--new) approved and built (`data.stage-medical-store`) | — | done |
-| 47 | `medical_rep_visit` — NEW table (Stage 8) | table | #46 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#medical_rep_visit--new) approved and built (`data.stage-medical-store`) | — | done |
-| 48 | `medicine` — NEW table (Stage 8) | table | #44 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#medicine--new) approved and built (`data.stage-medical-store`) | — | done |
-| 49 | `medical_purchase_order` — NEW table (Stage 8) | table | #45 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#medical_purchase_order--new) approved and built (`data.stage-medical-store`) | — | done |
-| 50 | `medical_contact` — NEW table (Stage 8) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#medical_contact--new) approved and built (`data.stage-medical-store`) | — | done |
-| 51 | `medical_sale` — NEW table (Stage 8) | table | #30, #14, #50, #13, #25 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#medical_sale--new) approved and built (`data.stage-medical-store`) | — | done |
-| 52 | `supplier_credit` — NEW table (Stage 8) | table | #48, #45 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#supplier_credit--new) approved and built (`data.stage-medical-store`) | — | done |
-| 53 | `stock_vendor` — NEW table (Stage 9) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#stock_vendor--new) approved and built (`data.stage-clinic-stock`) | — | done |
-| 54 | `stock_item` — NEW table (Stage 9) | table | #53 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#stock_item--new) approved and built (`data.stage-clinic-stock`) | — | done |
-| 55 | `stock_purchase` — NEW table (Stage 9) | table | #53 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#stock_purchase--new) approved and built (`data.stage-clinic-stock`) | — | done |
-| 56 | `stock_movement` — NEW table (Stage 9); its link to `stock_count` lands with #57 | table | #13, #54, #55 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#stock_movement--new) approved and built (`data.stage-clinic-stock`) | — | done |
-| 57 | `stock_count` — NEW table (Stage 9) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#stock_count--new) approved and built (`data.stage-clinic-stock`) | — | done |
-| 58 | `task` — NEW table (Stage 10) | table | #14, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#task--new) approved and built (`data.stage-tasks`) | — | done |
-| 59 | `task_owner_change` — NEW table (Stage 10) | table | #58 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#task_owner_change--new) approved and built (`data.stage-tasks`) | — | done |
-| 60 | `task_rule_setting` — NEW table (Stage 10) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#task_rule_setting--new) approved and built (`data.stage-tasks`) | — | done |
-| 61 | [Team, roles and branches](plans/features/team-and-access/story.md) — the screen's cross-table operations and rules | feature | #1, #2, #3, #4, #5, #6, #7 | `/be-build-requirement` | team-and-access.1–6 | — | open |
-| 62 | [Shell, lists and record rules](plans/features/shell-and-patterns/story.md) — the screen's cross-table operations and rules | feature | #8, #9, #61 | `/be-build-requirement` | shell-and-patterns.1–5 | — | open |
-| 63 | [Offerings and offers](plans/features/offerings/story.md) — the screen's cross-table operations and rules | feature | #10, #11, #12, #61 | `/be-build-requirement` | offerings.1–3 | — | open |
-| 64 | [Leads and conversations](plans/features/leads-and-messages/story.md) — the screen's cross-table operations and rules | feature | #14, #15, #16, #17, #61, #62 | `/be-build-requirement` | leads-and-messages.1–6 | — | open |
-| 65 | [Patients](plans/features/patients/story.md) — the screen's cross-table operations and rules | feature | #13, #61, #62 | `/be-build-requirement` | patients.1–3 | — | open |
-| 66 | [Appointments](plans/features/appointments/story.md) — the screen's cross-table operations and rules | feature | #18, #19, #20, #21, #61, #65, #64 | `/be-build-requirement` | appointments.1–6 | — | open |
-| 67 | [Patient file and clinical record](plans/features/patient-file/story.md) — the screen's cross-table operations and rules | feature | #23, #24, #25, #26, #27, #28, #29, #31, #32, #33, #40, #41, #42, #43, #65, #66, #63 | `/be-build-requirement` | patient-file.1–6 | — | open |
-| 68 | [Today and the visit](plans/features/today-floor/story.md) — the screen's cross-table operations and rules | feature | #22, #66, #67 | `/be-build-requirement` | today-floor.1–4 | — | open |
-| 69 | [Invoices, payments and day close](plans/features/payments-and-invoices/story.md) — the screen's cross-table operations and rules | feature | #30, #34, #35, #36, #37, #38, #39, #65, #63, #67 | `/be-build-requirement` | payments-and-invoices.1–6 | — | open |
-| 70 | [Medical store](plans/features/medical-store/story.md) — the screen's cross-table operations and rules | feature | #44, #45, #46, #47, #48, #49, #50, #51, #52, #69, #67 | `/be-build-requirement` | medical-store.1–4 | — | open |
-| 71 | [Clinic stock](plans/features/clinic-stock/story.md) — the screen's cross-table operations and rules | feature | #53, #54, #55, #56, #57, #69 | `/be-build-requirement` | clinic-stock.1–3 | — | open |
-| 72 | [Tasks and rules](plans/features/tasks/story.md) — the screen's cross-table operations and rules | feature | #58, #59, #60, #64, #66, #67, #69 | `/be-build-requirement` | tasks.1–4 | — | open |
-| 73 | WC-1 `background.message-delivery` — send an outgoing message through the WhatsApp Business API (or Instagram) and follow its delivery (Sending → Sent → Delivered → Read, or Failed) (D32) | background | #64 | `/be-build-requirement` | WC-1 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 74 | WC-2 `background.message-outage-queue` — hold messages while WhatsApp is down and send them when it is back | background | #64 | `/be-build-requirement` | WC-2 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 75 | WC-3 `background.inbound-messages` — take in replies (WhatsApp, Instagram) and add them to the person's conversation | background | #64 | `/be-build-requirement` | WC-3 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 76 | WC-4 `background.channel-fallback` — when WhatsApp fails, flag a call — no SMS at launch (D33) | background | #64 | `/be-build-requirement` | WC-4 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 77 | WC-5 `background.booking-confirm-request` — ask the patient to confirm right after booking ("Yes" confirms) (D34) | background | #66 | `/be-build-requirement` | WC-5 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 78 | WC-6 `background.appointment-reminder` — remind the patient the day before the visit, at the hour the clinic sets — no 2-hour nudge (D34) | background | #66 | `/be-build-requirement` | WC-6 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 79 | WC-7 `background.reminder-rescheduling` — move reminders when a visit is rescheduled, stop them when it is cancelled, restart them on restore (D34) | background | #66 | `/be-build-requirement` | WC-7 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 80 | WC-8 `background.auto-confirm-on-reply` — confirm the appointment when the patient replies "Yes" | background | #66 | `/be-build-requirement` | WC-8 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 81 | WC-9 `background.payment-receipt` — send the receipt to the patient on WhatsApp | background | #69 | `/be-build-requirement` | WC-9 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 82 | WC-10 `background.day-close-summary` — send the day-close summary to the admin on WhatsApp | background | #69 | `/be-build-requirement` | WC-10 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 83 | WC-11 `background.visit-share` — deliver the "Share Rx, invoice & photos" message | background | #67 | `/be-build-requirement` | WC-11 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 84 | WC-12 `background.bulk-payment-reminders` — deliver bulk payment reminders | background | #69 | `/be-build-requirement` | WC-12 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 85 | WC-13 `background.bulk-message-drafts` — prepare bulk WhatsApp drafts | background | #64 | `/be-build-requirement` | WC-13 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 86 | WC-14 `background.lead-hold-release` — open a held lead to the team after its idle days (default 3), or at once when its owner has left; warn the day before | background | #64 | `/be-build-requirement` | WC-14 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 87 | WC-15 `background.lead-status-auto` — move a lead's status by itself: first reply or logged call → Contacted; check-in → Clinic visited — each with a system line in the chat (P21, D40) | background | #64 | `/be-build-requirement` | WC-15 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 88 | WC-16 `background.lead-involved-auto` — add a team member to "involved" when they reply, call, note or book | background | #64 | `/be-build-requirement` | WC-16 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 89 | WC-17 `background.retarget-leads` — create re-target leads for lapsed patients — no visit in N days (clinic setting, default 90), marketing consent given, nothing booked; staff send the first message, nothing goes out by itself (D35) | background | #64 | `/be-build-requirement` | WC-17 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 90 | WC-18 `background.task-reply` — **Reply** task — a lead's last message is from them | background | #72 | `/be-build-requirement` | WC-18 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 91 | WC-19 `background.task-failed-message` — **Message failed** task | background | #72 | `/be-build-requirement` | WC-19 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 92 | WC-20 `background.task-follow-up` — **Follow-up** task — lead in Follow-up / Contacted / No response, follow-up date reached | background | #72 | `/be-build-requirement` | WC-20 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 93 | WC-21 `background.task-call-back` — **Call back** task when a lead is set to No response (unless one is open) | background | #72 | `/be-build-requirement` | WC-21 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 94 | WC-22 `background.task-claim` — **Claim** task — a lead's hold is open and it is not yours | background | #72 | `/be-build-requirement` | WC-22 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 95 | WC-23 `background.task-confirm` — **Confirm** task — visit Scheduled within 48 h and not confirmed | background | #72 | `/be-build-requirement` | WC-23 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 96 | WC-24 `background.task-arrive` — **Arrived?** task — 15 min past start, not checked in | background | #72 | `/be-build-requirement` | WC-24 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 97 | WC-25 `background.task-rebook` — **Rebook** task after a no-show | background | #72 | `/be-build-requirement` | WC-25 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 98 | WC-26 `background.task-feedback` — **Feedback** task — visit completed 1–3 days ago | background | #72 | `/be-build-requirement` | WC-26 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 99 | WC-27 `background.task-aftercare` — **Aftercare call** task — a treatment asked for a call and no check-in exists | background | #72 | `/be-build-requirement` | WC-27 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 100 | WC-28 `background.task-next-visit` — **Next visit** task — last visit 1–45 days ago, nothing booked, no follow-up date | background | #72 | `/be-build-requirement` | WC-28 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 101 | WC-29 `background.task-gone-quiet` — **Gone quiet** task — 30+ days since the last visit, with a package left or 2+ visits; up to 3 come-back reminders first | background | #72 | `/be-build-requirement` | WC-29 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 102 | WC-30 `background.task-payment-due` — **Payment due** task — an invoice or sale is saved with money left to pay | background | #72 | `/be-build-requirement` | WC-30 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 103 | WC-31 `background.task-onboarding` — **Onboarding** task — collect consent, date of birth and a first photo | background | #72 | `/be-build-requirement` | WC-31 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 104 | WC-32 `background.task-unhappy` — **Doctor call-back** task — a check-in says Worse or scores 4 or less (due in 3 h), or a review rates 3 or less (due in 4 h) | background | #72 | `/be-build-requirement` | WC-32 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 105 | WC-33 `background.task-settle-by` — **Settle by** task for a pending credit | background | #72 | `/be-build-requirement` | WC-33 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 106 | WC-34 `background.task-medical-rep-visit` — **MR next visit** reminder | background | #72 | `/be-build-requirement` | WC-34 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 107 | WC-35 `background.task-auto-resolve` — close a task by itself when its condition is gone, logged "Done by Clinozy" | background | #72 | `/be-build-requirement` | WC-35 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 108 | WC-36 `background.task-snooze-return` — bring a snoozed task back | background | #72 | `/be-build-requirement` | WC-36 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 109 | WC-37 `background.task-automation` — "Clinozy handles it": send the rule's canned message and close the task (first reply with prices + free slots, check-in, reminder, two slots, feedback form, aftercare check-in) | background | #72 | `/be-build-requirement` | WC-37 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 110 | WC-38 `background.task-dedupe` — never create a second open task of the same kind for the same person | background | #72 | `/be-build-requirement` | WC-38 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 111 | WC-39 `background.day-auto-close` — close a past day that nobody closed, taking the cash as expected, and lock its entries | background | #69 | `/be-build-requirement` | WC-39 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 112 | WC-40 `background.permission-refresh` — apply a role's permission change to everyone holding it at once | background | #61 | `/be-build-requirement` | WC-40 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 113 | WC-41 `background.inactive-sign-out` — sign out a staff member set to Inactive | background | #61 | `/be-build-requirement` | WC-41 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 114 | WC-42 `background.photo-cleanup` — remove location data from uploaded photos, keeping capture order | background | #67 | `/be-build-requirement` | WC-42 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 115 | WC-43 `background.photo-pairing` — pair before photos with the matching after photos | background | #67 | `/be-build-requirement` | WC-43 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 116 | WC-44 `background.floor-live` — tell the doctor's queue and room that a patient checked in, and move the card for everyone on Today | background | #68 | `/be-build-requirement` | WC-44 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 117 | WC-45 `background.pharmacy-queue` — put an approved prescription in the pharmacy queue (D31) | background | #68 | `/be-build-requirement` | WC-45 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 118 | WC-46 `background.deleted-record-purge` — erase deleted records for good once their restore window ends (default 7 days, a clinic setting); live records are never touched | background | #62 | `/be-build-requirement` | WC-46 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 119 | WC-47 `background.patient-ideas` — refresh a patient's AI ideas from a de-identified summary (Data consent only) | background | #67 | `/be-build-requirement` | WC-47 as in [worker-changes.md](plans/worker-changes.md) | — | open |
-| 120 | [Flow 1 — an enquiry becomes a patient](plans/features/flow-enquiry-to-patient/story.md) — end-to-end | flow | #64, #66, #68, #65 | `/be-build-requirement` | flow-enquiry-to-patient.1 | — | open |
-| 121 | [Flow 2 — visit, prescription, sale, payment](plans/features/flow-visit-to-payment/story.md) — end-to-end | flow | #68, #67, #70, #69 | `/be-build-requirement` | flow-visit-to-payment.1 | — | open |
-| 122 | [Flow 3 — treatment plan and feedback](plans/features/flow-plan-and-feedback/story.md) — end-to-end | flow | #67, #69, #72 | `/be-build-requirement` | flow-plan-and-feedback.1 | — | open |
-| 123 | Acceptance — every criterion in [acceptance.md](plans/acceptance.md) checked with evidence | flow | #120, #121, #122 | `be-kickoff-iteration` › Close | every row of plans/acceptance.md | — | open |
+| 124 | **Rules for every module** — K1 (the module-folder layout: `CLAUDE.md`, be-domain-generator, `validate:domain`) and K2–K8 (members who leave: `display_name`, `RESTRICT` pointers, the leave step, composite keys) | feature | — | `/be-build-requirement` | [routes-final.md](plans/routes-final.md) › Code layout, Members who leave — KC1–KC7 and K1 built | — | open |
+| 125 | **Module 1 — Branches & places** (§1, 1.A–1.E) — `branches/` with `branch-members`, `branch-rooms`, `branch-machines`, `branch-holidays`; old `branch-holidays/`, `rooms/`, `machines/` go | module | #124 | staged-build prompt (NEW tables) · `/be-build-requirement` | §1 as reviewed — 25 routes, C1–C17, tests | — | open |
+| 126 | **Module 2 — Team** (§2, 2.A–2.E) — the picker (`users/` → `memberships/`), the tenancy membership, invitation, role and permission changes | module | #124, #125 | `/be-build-requirement` | §2 2.A–2.E — 20 routes, TC1–TC17, tests | — | open |
+| 127 | **Module 2 — Personal settings** (§2, 2.F–2.G) — `user-preferences/`, `saved-views/` → `memberships/sub-domains/membership-preferences/`, `membership-saved-views/` | module | #126 | `/be-build-requirement` | §2 2.F–2.G — routes 21–27, UC1–UC5, tests | — | open |
+| 128 | **Module 3 — Offerings** (§3, 3.A–3.C) — `offerings/` with `offering-groups`, `offers`; old `offering-groups/`, `offers/` go | module | #125, #126 | `/be-build-requirement` | §3 — 19 routes, OC1–OC17, tests | — | open |
+| 129 | **Module 4 — Contacts** (§4, 4.A–4.B) — NEW `app.contacts`, `contact_phones`, `contact_members`; the person's fields leave leads and patients; `searches/` goes | module | #126 | staged-build prompt (NEW tables) · `/be-build-requirement` | §4 4.A–4.B — routes 1–9, CTC1–CTC11, tests | — | open |
+| 130 | **Module 4 — Contact activity** (§4, 4.C–4.D) — `messages/` → `contacts/sub-domains/contact-activities/`, `message-templates/` → `contact-message-templates/`; `lead-reads/` goes | module | #129 | `/be-build-requirement` | §4 4.C–4.D — routes 10–22, MC1–MC11, tests | — | open |
+| 131 | **Module 5 — Leads** (§5) — `leads/` rebuilt on the contact | module | #129, #130 | `/be-build-requirement` | §5 — 9 routes, LC1–LC9, tests | — | open |
+| 132 | **Module 6 — Appointments** (§6) — `appointments/` on the contact, the visit merged in (`visits/` goes), exclusion constraints | module | #125, #128, #129 | `/be-build-requirement` | §6 — 20 routes, AC1–AC14, tests | — | open |
+| 133 | **Module 7 — The patient file** (§7, 7.A–7.G) — `patients/` with clinical notes, prescriptions, kits, diagnoses, images, reports; `patient-notes/`, `patient-ideas/` go | module | #129, #132 | `/be-build-requirement` | §7 7.A–7.G — routes 1–44, PC1–PC21, tests | — | open |
+| 134 | **Module 7 — Treatments and feedback** (§7, 7.H–7.K) — `treatments/`, `check-ins/`, `reviews/`, `feedback-actions/` → `patients/sub-domains/patient-…` | module | #128, #132, #133 | `/be-build-requirement` | §7 7.H–7.K — routes 45–64, TRC1–TRC12, tests | — | open |
+| 135 | **Module 7 — Patient offerings and plan** (§7, 7.L–7.M) — `patient-packages/` → `patient-offerings/`, `offering-suggestions/` → `patient-offering-suggestions/`; the invoice-line link lands with #136 | module | #133, #134 | `/be-build-requirement` | §7 7.L–7.M — routes 65–73, PKC1–PKC11, tests | — | open |
+| 136 | **Module 8 — Billing** (§8, 8.A–8.E) — `invoices/`, `credit-notes/`, `payments/`, `payment-edits/`, `pending-credits/`, `day-closes/`, `day-close-events/` → `billing/`; invoice lines, patient offerings and billed treatments; the day auto-close (WC-39) | module | #129, #133, #135 | staged-build prompt (`invoice_items`) · `/be-build-requirement` | §8 — 32 routes, BC1–BC25, WC-39, tests | — | open |
+| 137 | **Module 9 — Stock** (§9, 9.A–9.E) — `stock-*` → `stock/`; movements on treatments | module | #134, #136 | `/be-build-requirement` | §9 — 28 routes, SC1–SC13, tests | — | open |
+| 138 | **Module 10 — Tasks & rules** (§10, 10.A–10.B) — `tasks/`, `task-owner-changes/`, `task-rule-settings/` → `tasks/`; the rules worker: WC-18–WC-33 and WC-35–WC-38 as the 14 rules of 10.A.10 (`onboarding` dropped, `unhappy` folded into `call_back`) | module | #131, #132, #134, #136 | `/be-build-requirement` | §10 — 12 routes, TKC1–TKC10, the 14 rules, tests | — | open |
+| 139 | **Messaging** — WC-1–WC-4, WC-13: deliver WhatsApp / Instagram messages and follow their status, hold them while WhatsApp is down, take in replies, flag a call when WhatsApp fails, bulk drafts | background | #130 | `/be-build-requirement` | WC-1–WC-4, WC-13 (`background.message-*`, `inbound-messages`, `channel-fallback`, `bulk-message-drafts`) | — | open |
+| 140 | **Booking messages** — WC-5–WC-8: confirm request, the day-before reminder, rescheduling, confirm on reply | background | #132, #139 | `/be-build-requirement` | WC-5–WC-8 | — | open |
+| 141 | **Money messages** — WC-9, WC-10, WC-12: payment receipt, day-close summary, bulk payment reminders | background | #136, #139 | `/be-build-requirement` | WC-9, WC-10, WC-12 | — | open |
+| 142 | **Visit share** — WC-11: "Share Rx, invoice & photos" | background | #133, #136, #139 | `/be-build-requirement` | WC-11 | — | open |
+| 143 | **Lead automation** — WC-14–WC-17: hold release, status moves, involved members, re-target leads — as §4 and §5 settle them (some now happen in the write itself) | background | #130, #131 | `/be-build-requirement` | WC-14–WC-17 | — | open |
+| 144 | **Team** — WC-40, WC-41: apply a role's permission change at once, sign out an inactive member | background | #126 | `/be-build-requirement` | WC-40, WC-41 | — | open |
+| 145 | **Photos** — WC-42, WC-43: strip location data, pair before and after | background | #133 | `/be-build-requirement` | WC-42, WC-43 | — | open |
+| 146 | **Floor** — WC-44: the doctor's queue and room learn of a check-in (refresh, no push — D37) | background | #132 | `/be-build-requirement` | WC-44 | — | open |
+| 147 | **Purge** — WC-46: erase deleted records once their restore window ends | background | #124 | `/be-build-requirement` | WC-46 | — | open |
+| 148 | [Flow 1 — an enquiry becomes a patient](plans/features/flow-enquiry-to-patient/story.md) — end-to-end | flow | #131, #132, #133 | `/be-build-requirement` | flow-enquiry-to-patient.1 | — | open |
+| 149 | [Flow 2 — visit, prescription, payment](plans/features/flow-visit-to-payment/story.md) — end-to-end, without the medicine sale ([D49](plans/decisions.md)) | flow | #133, #136 | `/be-build-requirement` | flow-visit-to-payment.1 (sale part deferred) | — | open |
+| 150 | [Flow 3 — treatment plan and feedback](plans/features/flow-plan-and-feedback/story.md) — end-to-end | flow | #134, #135, #136, #138 | `/be-build-requirement` | flow-plan-and-feedback.1 | — | open |
+| 151 | Acceptance — every criterion in [acceptance.md](plans/acceptance.md) checked with evidence (the medical store's deferred) | flow | #148, #149, #150 | `be-kickoff-iteration` › Close | every row of plans/acceptance.md | — | open |
+| 152 | **AI ideas** — WC-47 — deferred: `app.patient_ideas` is dropped until its feature is built (§7, P20) | background | — | — | — | — | deferred |
+| 153 | **Module 11 — Medical store** — its feature, WC-34, WC-45 and the medicine sale in Flow 2 — deferred until its route review ([D49](plans/decisions.md)) | module | — | — | — | — | deferred |
+
+### Superseded ledger (the plan of 2026-10-03)
+
+Rows #1–#60 built the first version of every table (see `AS-BUILT.md`); their Status names the module row that re-does each to match the route review, or why it is kept.
+Rows #61–#123 never finished and are superseded by the rows named in their Status.
+
+| # | Work item | Kind | Depends on | Skill/driver | Acceptance | Assignee | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | `organization` — CHANGE table (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#organization--changed) approved and built (`data.stage-foundation`) | — | done · kept (platform, not redesigned) |
+| 2 | `branch` — NEW table (Stage 1) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#branch--new) approved and built (`data.stage-foundation`) | — | done · re-done at #125 |
+| 3 | `user` — CHANGE table (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#user--changed) approved and built (`data.stage-foundation`) | — | done · kept (platform, not redesigned) |
+| 4 | `membership` — CHANGE table (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#membership--changed) approved and built (`data.stage-foundation`) | — | done · re-done at #124, #126 |
+| 5 | `role` — CHANGE table (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#role--changed) approved and built (`data.stage-foundation`) | — | done · re-done at #126 |
+| 6 | `permission` — seed codes (no schema change) (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#permission--existing) approved and built (`data.stage-foundation`) | — | done · re-done at #126 and every module row (its codes) |
+| 7 | `role_permission` — seed codes (no schema change) (Stage 1) | table | — | `/be-build-requirement` | its [db-changes.md section](plans/db-changes.md#role_permission--existing) approved and built (`data.stage-foundation`) | — | done · re-done at #126 |
+| 8 | `user_preference` — NEW table (Stage 1) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#user_preference--new) approved and built (`data.stage-foundation`) | — | done · re-done at #127 |
+| 9 | `saved_view` — NEW table (Stage 1) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#saved_view--new) approved and built (`data.stage-foundation`) | — | done · re-done at #127 |
+| 10 | `offering_group` — NEW table (Stage 2) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#offering_group--new) approved and built (`data.stage-catalogue`) | — | done · re-done at #128 |
+| 11 | `offering` — NEW table (Stage 2) | table | #10 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#offering--new) approved and built (`data.stage-catalogue`) | — | done · re-done at #128 |
+| 12 | `offer` — NEW table (Stage 2) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#offer--new) approved and built (`data.stage-catalogue`) | — | done · re-done at #128 |
+| 13 | `patient` — NEW table (Stage 3); its link to `lead` lands with #14 | table | #2 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#patient--new) approved and built (`data.stage-people`) | — | done · re-done at #133 |
+| 14 | `lead` — NEW table (Stage 3) | table | #2, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#lead--new) approved and built (`data.stage-people`) | — | done · re-done at #131 |
+| 15 | `lead_message` — NEW table (Stage 3); its link to `task` lands with #58 | table | #14 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#lead_message--new) approved and built (`data.stage-people`) | — | done · re-done at #130 |
+| 16 | `lead_read` — NEW table (Stage 3) | table | #14 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#lead_read--new) approved and built (`data.stage-people`) | — | done · re-done at #130 (dropped) |
+| 17 | `message_template` — NEW table (Stage 3) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#message_template--new) approved and built (`data.stage-people`) | — | done · re-done at #130 |
+| 18 | `branch_holiday` — NEW table (Stage 4) | table | #2 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#branch_holiday--new) approved and built (`data.stage-scheduling`) | — | done · re-done at #125 |
+| 19 | `room` — NEW table (Stage 4) | table | #2 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#room--new) approved and built (`data.stage-scheduling`) | — | done · re-done at #125 |
+| 20 | `machine` — NEW table (Stage 4) | table | #2 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#machine--new) approved and built (`data.stage-scheduling`) | — | done · re-done at #125 |
+| 21 | `appointment` — NEW table (Stage 4); its link to `patient_package` lands with #31 | table | #2, #14, #20, #11, #13, #19 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#appointment--new) approved and built (`data.stage-scheduling`) | — | done · re-done at #132 |
+| 22 | `visit` — NEW table (Stage 4) | table | #21, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#visit--new) approved and built (`data.stage-scheduling`) | — | done · re-done at #132 (merged in) |
+| 23 | `diagnosis` — NEW table (Stage 5) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#diagnosis--new) approved and built (`data.stage-clinical-record`) | — | done · re-done at #133 |
+| 24 | `patient_clinical_note` — NEW table (Stage 5) | table | #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#patient_clinical_note--new) approved and built (`data.stage-clinical-record`) | — | done · re-done at #133 |
+| 25 | `prescription` — NEW table (Stage 5) | table | #21, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#prescription--new) approved and built (`data.stage-clinical-record`) | — | done · re-done at #133 |
+| 26 | `prescription_kit` — NEW table (Stage 5) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#prescription_kit--new) approved and built (`data.stage-clinical-record`) | — | done · re-done at #133 |
+| 27 | `patient_image` — NEW table (Stage 5) | table | #21, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#patient_image--new) approved and built (`data.stage-clinical-record`) | — | done · re-done at #133 |
+| 28 | `patient_report` — NEW table (Stage 5) | table | #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#patient_report--new) approved and built (`data.stage-clinical-record`) | — | done · re-done at #133 |
+| 29 | `patient_note` — NEW table (Stage 5) | table | #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#patient_note--new) approved and built (`data.stage-clinical-record`) | — | done · re-done at #133 (dropped) |
+| 30 | `invoice` — NEW table (Stage 6); its link to `medical_contact` lands with #50; its link to `medical_sale` lands with #51 | table | #2, #13, #25 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#invoice--new) approved and built (`data.stage-billing`) | — | done · re-done at #136 |
+| 31 | `patient_package` — NEW table (Stage 6) | table | #30, #11, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#patient_package--new) approved and built (`data.stage-billing`) | — | done · re-done at #135 |
+| 32 | `offering_suggestion` — NEW table (Stage 6) | table | #21, #11, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#offering_suggestion--new) approved and built (`data.stage-billing`) | — | done · re-done at #135 |
+| 33 | `patient_idea` — NEW table (Stage 6) | table | #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#patient_idea--new) approved and built (`data.stage-billing`) | — | done · re-done at #133 (dropped) |
+| 34 | `payment` — NEW table (Stage 6); its link to `credit_note` lands with #36; its link to `day_close` lands with #38; its link to `pending_credit` lands with #37 | table | #2, #30, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#payment--new) approved and built (`data.stage-billing`) | — | done · re-done at #136 |
+| 35 | `payment_edit` — NEW table (Stage 6) | table | #34 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#payment_edit--new) approved and built (`data.stage-billing`) | — | done · re-done at #136 |
+| 36 | `credit_note` — NEW table (Stage 6) | table | #30 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#credit_note--new) approved and built (`data.stage-billing`) | — | done · re-done at #136 |
+| 37 | `pending_credit` — NEW table (Stage 6) | table | #30, #13, #34 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#pending_credit--new) approved and built (`data.stage-billing`) | — | done · re-done at #136 |
+| 38 | `day_close` — NEW table (Stage 6) | table | #2 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#day_close--new) approved and built (`data.stage-billing`) | — | done · re-done at #136 |
+| 39 | `day_close_event` — NEW table (Stage 6) | table | #38 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#day_close_event--new) approved and built (`data.stage-billing`) | — | done · re-done at #136 |
+| 40 | `treatment` — NEW table (Stage 7) | table | #21, #11, #13, #31 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#treatment--new) approved and built (`data.stage-treatments-feedback`) | — | done · re-done at #134 |
+| 41 | `check_in` — NEW table (Stage 7) | table | #21, #13, #40 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#check_in--new) approved and built (`data.stage-treatments-feedback`) | — | done · re-done at #134 |
+| 42 | `review` — NEW table (Stage 7) | table | #21, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#review--new) approved and built (`data.stage-treatments-feedback`) | — | done · re-done at #134 |
+| 43 | `feedback_action` — NEW table (Stage 7) | table | #41, #42 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#feedback_action--new) approved and built (`data.stage-treatments-feedback`) | — | done · re-done at #134 |
+| 44 | `manufacturer` — NEW table (Stage 8) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#manufacturer--new) approved and built (`data.stage-medical-store`) | — | done · untouched — medical store (D49) |
+| 45 | `supplier` — NEW table (Stage 8) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#supplier--new) approved and built (`data.stage-medical-store`) | — | done · untouched — medical store (D49) |
+| 46 | `medical_rep` — NEW table (Stage 8) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#medical_rep--new) approved and built (`data.stage-medical-store`) | — | done · untouched — medical store (D49) |
+| 47 | `medical_rep_visit` — NEW table (Stage 8) | table | #46 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#medical_rep_visit--new) approved and built (`data.stage-medical-store`) | — | done · untouched — medical store (D49) |
+| 48 | `medicine` — NEW table (Stage 8) | table | #44 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#medicine--new) approved and built (`data.stage-medical-store`) | — | done · untouched — medical store (D49) |
+| 49 | `medical_purchase_order` — NEW table (Stage 8) | table | #45 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#medical_purchase_order--new) approved and built (`data.stage-medical-store`) | — | done · untouched — medical store (D49) |
+| 50 | `medical_contact` — NEW table (Stage 8) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#medical_contact--new) approved and built (`data.stage-medical-store`) | — | done · untouched — medical store (D49) |
+| 51 | `medical_sale` — NEW table (Stage 8) | table | #30, #14, #50, #13, #25 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#medical_sale--new) approved and built (`data.stage-medical-store`) | — | done · untouched — medical store (D49) |
+| 52 | `supplier_credit` — NEW table (Stage 8) | table | #48, #45 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#supplier_credit--new) approved and built (`data.stage-medical-store`) | — | done · untouched — medical store (D49) |
+| 53 | `stock_vendor` — NEW table (Stage 9) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#stock_vendor--new) approved and built (`data.stage-clinic-stock`) | — | done · re-done at #137 |
+| 54 | `stock_item` — NEW table (Stage 9) | table | #53 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#stock_item--new) approved and built (`data.stage-clinic-stock`) | — | done · re-done at #137 |
+| 55 | `stock_purchase` — NEW table (Stage 9) | table | #53 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#stock_purchase--new) approved and built (`data.stage-clinic-stock`) | — | done · re-done at #137 |
+| 56 | `stock_movement` — NEW table (Stage 9); its link to `stock_count` lands with #57 | table | #13, #54, #55 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#stock_movement--new) approved and built (`data.stage-clinic-stock`) | — | done · re-done at #137 |
+| 57 | `stock_count` — NEW table (Stage 9) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#stock_count--new) approved and built (`data.stage-clinic-stock`) | — | done · re-done at #137 |
+| 58 | `task` — NEW table (Stage 10) | table | #14, #13 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#task--new) approved and built (`data.stage-tasks`) | — | done · re-done at #138 |
+| 59 | `task_owner_change` — NEW table (Stage 10) | table | #58 | staged-build prompt | its [db-changes.md section](plans/db-changes.md#task_owner_change--new) approved and built (`data.stage-tasks`) | — | done · re-done at #138 |
+| 60 | `task_rule_setting` — NEW table (Stage 10) | table | — | staged-build prompt | its [db-changes.md section](plans/db-changes.md#task_rule_setting--new) approved and built (`data.stage-tasks`) | — | done · re-done at #138 |
+| 61 | [Team, roles and branches](plans/features/team-and-access/story.md) — the screen's cross-table operations and rules | feature | #1, #2, #3, #4, #5, #6, #7 | `/be-build-requirement` | team-and-access.1–6 | — | superseded → #126, #125 |
+| 62 | [Shell, lists and record rules](plans/features/shell-and-patterns/story.md) — the screen's cross-table operations and rules | feature | #8, #9, #61 | `/be-build-requirement` | shell-and-patterns.1–5 | — | superseded → #127, #129 |
+| 63 | [Offerings and offers](plans/features/offerings/story.md) — the screen's cross-table operations and rules | feature | #10, #11, #12, #61 | `/be-build-requirement` | offerings.1–3 | — | superseded → #128 |
+| 64 | [Leads and conversations](plans/features/leads-and-messages/story.md) — the screen's cross-table operations and rules | feature | #14, #15, #16, #17, #61, #62 | `/be-build-requirement` | leads-and-messages.1–6 | — | superseded → #130, #131 |
+| 65 | [Patients](plans/features/patients/story.md) — the screen's cross-table operations and rules | feature | #13, #61, #62 | `/be-build-requirement` | patients.1–3 | — | superseded → #133 |
+| 66 | [Appointments](plans/features/appointments/story.md) — the screen's cross-table operations and rules | feature | #18, #19, #20, #21, #61, #65, #64 | `/be-build-requirement` | appointments.1–6 | — | superseded → #132 |
+| 67 | [Patient file and clinical record](plans/features/patient-file/story.md) — the screen's cross-table operations and rules | feature | #23, #24, #25, #26, #27, #28, #29, #31, #32, #33, #40, #41, #42, #43, #65, #66, #63 | `/be-build-requirement` | patient-file.1–6 | — | superseded → #133–#135 |
+| 68 | [Today and the visit](plans/features/today-floor/story.md) — the screen's cross-table operations and rules | feature | #22, #66, #67 | `/be-build-requirement` | today-floor.1–4 | — | superseded → #132 |
+| 69 | [Invoices, payments and day close](plans/features/payments-and-invoices/story.md) — the screen's cross-table operations and rules | feature | #30, #34, #35, #36, #37, #38, #39, #65, #63, #67 | `/be-build-requirement` | payments-and-invoices.1–6 | — | superseded → #136 |
+| 70 | [Medical store](plans/features/medical-store/story.md) — the screen's cross-table operations and rules | feature | #44, #45, #46, #47, #48, #49, #50, #51, #52, #69, #67 | `/be-build-requirement` | medical-store.1–4 | — | superseded → #153 (deferred) |
+| 71 | [Clinic stock](plans/features/clinic-stock/story.md) — the screen's cross-table operations and rules | feature | #53, #54, #55, #56, #57, #69 | `/be-build-requirement` | clinic-stock.1–3 | — | superseded → #137 |
+| 72 | [Tasks and rules](plans/features/tasks/story.md) — the screen's cross-table operations and rules | feature | #58, #59, #60, #64, #66, #67, #69 | `/be-build-requirement` | tasks.1–4 | — | superseded → #138 |
+| 73 | WC-1 `background.message-delivery` — send an outgoing message through the WhatsApp Business API (or Instagram) and follow its delivery (Sending → Sent → Delivered → Read, or Failed) (D32) | background | #64 | `/be-build-requirement` | WC-1 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #139 |
+| 74 | WC-2 `background.message-outage-queue` — hold messages while WhatsApp is down and send them when it is back | background | #64 | `/be-build-requirement` | WC-2 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #139 |
+| 75 | WC-3 `background.inbound-messages` — take in replies (WhatsApp, Instagram) and add them to the person's conversation | background | #64 | `/be-build-requirement` | WC-3 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #139 |
+| 76 | WC-4 `background.channel-fallback` — when WhatsApp fails, flag a call — no SMS at launch (D33) | background | #64 | `/be-build-requirement` | WC-4 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #139 |
+| 77 | WC-5 `background.booking-confirm-request` — ask the patient to confirm right after booking ("Yes" confirms) (D34) | background | #66 | `/be-build-requirement` | WC-5 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #140 |
+| 78 | WC-6 `background.appointment-reminder` — remind the patient the day before the visit, at the hour the clinic sets — no 2-hour nudge (D34) | background | #66 | `/be-build-requirement` | WC-6 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #140 |
+| 79 | WC-7 `background.reminder-rescheduling` — move reminders when a visit is rescheduled, stop them when it is cancelled, restart them on restore (D34) | background | #66 | `/be-build-requirement` | WC-7 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #140 |
+| 80 | WC-8 `background.auto-confirm-on-reply` — confirm the appointment when the patient replies "Yes" | background | #66 | `/be-build-requirement` | WC-8 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #140 |
+| 81 | WC-9 `background.payment-receipt` — send the receipt to the patient on WhatsApp | background | #69 | `/be-build-requirement` | WC-9 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #141 |
+| 82 | WC-10 `background.day-close-summary` — send the day-close summary to the admin on WhatsApp | background | #69 | `/be-build-requirement` | WC-10 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #141 |
+| 83 | WC-11 `background.visit-share` — deliver the "Share Rx, invoice & photos" message | background | #67 | `/be-build-requirement` | WC-11 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #142 |
+| 84 | WC-12 `background.bulk-payment-reminders` — deliver bulk payment reminders | background | #69 | `/be-build-requirement` | WC-12 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #141 |
+| 85 | WC-13 `background.bulk-message-drafts` — prepare bulk WhatsApp drafts | background | #64 | `/be-build-requirement` | WC-13 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #139 |
+| 86 | WC-14 `background.lead-hold-release` — open a held lead to the team after its idle days (default 3), or at once when its owner has left; warn the day before | background | #64 | `/be-build-requirement` | WC-14 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #143 |
+| 87 | WC-15 `background.lead-status-auto` — move a lead's status by itself: first reply or logged call → Contacted; check-in → Clinic visited — each with a system line in the chat (P21, D40) | background | #64 | `/be-build-requirement` | WC-15 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #143 |
+| 88 | WC-16 `background.lead-involved-auto` — add a team member to "involved" when they reply, call, note or book | background | #64 | `/be-build-requirement` | WC-16 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #143 |
+| 89 | WC-17 `background.retarget-leads` — create re-target leads for lapsed patients — no visit in N days (clinic setting, default 90), marketing consent given, nothing booked; staff send the first message, nothing goes out by itself (D35) | background | #64 | `/be-build-requirement` | WC-17 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #143 |
+| 90 | WC-18 `background.task-reply` — **Reply** task — a lead's last message is from them | background | #72 | `/be-build-requirement` | WC-18 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 91 | WC-19 `background.task-failed-message` — **Message failed** task | background | #72 | `/be-build-requirement` | WC-19 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 92 | WC-20 `background.task-follow-up` — **Follow-up** task — lead in Follow-up / Contacted / No response, follow-up date reached | background | #72 | `/be-build-requirement` | WC-20 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 93 | WC-21 `background.task-call-back` — **Call back** task when a lead is set to No response (unless one is open) | background | #72 | `/be-build-requirement` | WC-21 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 94 | WC-22 `background.task-claim` — **Claim** task — a lead's hold is open and it is not yours | background | #72 | `/be-build-requirement` | WC-22 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 95 | WC-23 `background.task-confirm` — **Confirm** task — visit Scheduled within 48 h and not confirmed | background | #72 | `/be-build-requirement` | WC-23 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 96 | WC-24 `background.task-arrive` — **Arrived?** task — 15 min past start, not checked in | background | #72 | `/be-build-requirement` | WC-24 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 97 | WC-25 `background.task-rebook` — **Rebook** task after a no-show | background | #72 | `/be-build-requirement` | WC-25 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 98 | WC-26 `background.task-feedback` — **Feedback** task — visit completed 1–3 days ago | background | #72 | `/be-build-requirement` | WC-26 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 99 | WC-27 `background.task-aftercare` — **Aftercare call** task — a treatment asked for a call and no check-in exists | background | #72 | `/be-build-requirement` | WC-27 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 100 | WC-28 `background.task-next-visit` — **Next visit** task — last visit 1–45 days ago, nothing booked, no follow-up date | background | #72 | `/be-build-requirement` | WC-28 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 101 | WC-29 `background.task-gone-quiet` — **Gone quiet** task — 30+ days since the last visit, with a package left or 2+ visits; up to 3 come-back reminders first | background | #72 | `/be-build-requirement` | WC-29 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 102 | WC-30 `background.task-payment-due` — **Payment due** task — an invoice or sale is saved with money left to pay | background | #72 | `/be-build-requirement` | WC-30 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 103 | WC-31 `background.task-onboarding` — **Onboarding** task — collect consent, date of birth and a first photo | background | #72 | `/be-build-requirement` | WC-31 as in [worker-changes.md](plans/worker-changes.md) | — | dropped — `onboarding` goes (§10, 10.A.10) |
+| 104 | WC-32 `background.task-unhappy` — **Doctor call-back** task — a check-in says Worse or scores 4 or less (due in 3 h), or a review rates 3 or less (due in 4 h) | background | #72 | `/be-build-requirement` | WC-32 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 (folded into `call_back`) |
+| 105 | WC-33 `background.task-settle-by` — **Settle by** task for a pending credit | background | #72 | `/be-build-requirement` | WC-33 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 106 | WC-34 `background.task-medical-rep-visit` — **MR next visit** reminder | background | #72 | `/be-build-requirement` | WC-34 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #153 (deferred) |
+| 107 | WC-35 `background.task-auto-resolve` — close a task by itself when its condition is gone, logged "Done by Clinozy" | background | #72 | `/be-build-requirement` | WC-35 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 108 | WC-36 `background.task-snooze-return` — bring a snoozed task back | background | #72 | `/be-build-requirement` | WC-36 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 109 | WC-37 `background.task-automation` — "Clinozy handles it": send the rule's canned message and close the task (first reply with prices + free slots, check-in, reminder, two slots, feedback form, aftercare check-in) | background | #72 | `/be-build-requirement` | WC-37 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 110 | WC-38 `background.task-dedupe` — never create a second open task of the same kind for the same person | background | #72 | `/be-build-requirement` | WC-38 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #138 |
+| 111 | WC-39 `background.day-auto-close` — close a past day that nobody closed, taking the cash as expected, and lock its entries | background | #69 | `/be-build-requirement` | WC-39 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #136 |
+| 112 | WC-40 `background.permission-refresh` — apply a role's permission change to everyone holding it at once | background | #61 | `/be-build-requirement` | WC-40 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #144 |
+| 113 | WC-41 `background.inactive-sign-out` — sign out a staff member set to Inactive | background | #61 | `/be-build-requirement` | WC-41 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #144 |
+| 114 | WC-42 `background.photo-cleanup` — remove location data from uploaded photos, keeping capture order | background | #67 | `/be-build-requirement` | WC-42 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #145 |
+| 115 | WC-43 `background.photo-pairing` — pair before photos with the matching after photos | background | #67 | `/be-build-requirement` | WC-43 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #145 |
+| 116 | WC-44 `background.floor-live` — tell the doctor's queue and room that a patient checked in, and move the card for everyone on Today | background | #68 | `/be-build-requirement` | WC-44 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #146 |
+| 117 | WC-45 `background.pharmacy-queue` — put an approved prescription in the pharmacy queue (D31) | background | #68 | `/be-build-requirement` | WC-45 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #153 (deferred) |
+| 118 | WC-46 `background.deleted-record-purge` — erase deleted records for good once their restore window ends (default 7 days, a clinic setting); live records are never touched | background | #62 | `/be-build-requirement` | WC-46 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #147 |
+| 119 | WC-47 `background.patient-ideas` — refresh a patient's AI ideas from a de-identified summary (Data consent only) | background | #67 | `/be-build-requirement` | WC-47 as in [worker-changes.md](plans/worker-changes.md) | — | superseded → #152 (deferred) |
+| 120 | [Flow 1 — an enquiry becomes a patient](plans/features/flow-enquiry-to-patient/story.md) — end-to-end | flow | #64, #66, #68, #65 | `/be-build-requirement` | flow-enquiry-to-patient.1 | — | superseded → #148 |
+| 121 | [Flow 2 — visit, prescription, sale, payment](plans/features/flow-visit-to-payment/story.md) — end-to-end | flow | #68, #67, #70, #69 | `/be-build-requirement` | flow-visit-to-payment.1 | — | superseded → #149 |
+| 122 | [Flow 3 — treatment plan and feedback](plans/features/flow-plan-and-feedback/story.md) — end-to-end | flow | #67, #69, #72 | `/be-build-requirement` | flow-plan-and-feedback.1 | — | superseded → #150 |
+| 123 | Acceptance — every criterion in [acceptance.md](plans/acceptance.md) checked with evidence | flow | #120, #121, #122 | `be-kickoff-iteration` › Close | every row of plans/acceptance.md | — | superseded → #151 |
 
 ## 6. Requirements index
 
@@ -390,7 +455,10 @@ CHANGE table, feature, background work, flow → `/be-build-requirement`. Each r
 
 ## 7. Open AMBER items
 
-none — every AMBER default is accepted ([D40](plans/decisions.md)).
+- **The change files follow the route review module by module:** `route-changes.md` is regenerated from it; `db-changes.md` keeps its
+  diagrams with the route review's table list on top, and `worker-changes.md` maps each piece to its new row — each module row redraws
+  its tables when it is built (`be-kickoff-iteration` › Record).
+- Every AMBER default of the first plan stays accepted ([D40](plans/decisions.md)).
 
 ## 8. Standing deviations
 
@@ -409,9 +477,15 @@ plans from the drop, to be confirmed in `AS-BUILT.md` and carried to the next it
 | Prescriptions | final on save, filled derived (schema-routes.md:372) | draft → approved | [D31](plans/decisions.md) |
 | Delete | restore within 10 s (schema-routes.md:1546) | restorable until the 7-day purge | [D38](plans/decisions.md) |
 
+The route review adds its own — one contact per person instead of copies on leads and patients, patient-owned tables named
+`patient_*`, what a patient bought as patient offerings, money in rupees, preferences as tags, and the rest its modules list
+([D46](plans/decisions.md)). Each joins `AS-BUILT.md` › Standing deviations when the row that builds it is done.
+
 ## 9. Definition of done
 
-- Every ROUTE row `done` (or `deferred` with your OK).
+- Every ROUTE row #124–#153 `done` (or `deferred` with your OK — #152 and #153 are deferred already).
+- Every built table, route, gate, error and code matches [routes-final.md](plans/routes-final.md), ditto ([D52](plans/decisions.md)); what #1–#64
+  built is re-done or listed as kept; the medical store's code is unchanged in behaviour and its tests pass.
 - [plans/acceptance.md](plans/acceptance.md) filled — every criterion with a result and evidence.
 - `AS-BUILT.md`: every row recorded, its summary and Standing deviations written; db-changes.md, route-changes.md
   and worker-changes.md synced to what was built.
@@ -421,6 +495,8 @@ plans from the drop, to be confirmed in `AS-BUILT.md` and carried to the next it
 
 - **Intake mode `full`:** the PRD's acceptance, traced in [plans/acceptance.md](plans/acceptance.md) — every row cites its
   `intake-files/PRD.md` line.
+- **Each module row:** its route-review section built as reviewed — every route, every code change, the module's old folders
+  gone — with its unit, integration and RLS tests (`be-test-generator`, `pnpm test:rls-role`).
 - **Gates:** `pnpm iteration:intake launch-2026-09-30-jxmr --check`, `pnpm ci:local`, `pnpm test:rls-role`, `pnpm routes:catalog:check`,
   `pnpm tsdoc:check`, `pnpm validate:route-success-coverage`.
 - **Before launch, outside the code:** the clinic's accountant confirms the tax rules (D20, D21, D23); the clinic's

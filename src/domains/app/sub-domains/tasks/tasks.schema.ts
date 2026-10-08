@@ -81,7 +81,7 @@ export const tasks = appSchema
       snooze_label: varchar('snooze_label', { length: 40 }),
       outcome: varchar('outcome', { length: 12 }),
       resolved_at: timestamp('resolved_at', { withTimezone: true }),
-      // "Done by Clinozy"
+      // "Done automatically" — closed by the app
       is_resolved_automatically: boolean('is_resolved_automatically').notNull().default(false),
       result_text: varchar('result_text', { length: 280 }),
       note: varchar('note', { length: 280 }),

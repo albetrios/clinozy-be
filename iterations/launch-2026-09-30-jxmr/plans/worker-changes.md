@@ -14,6 +14,27 @@ task rules (coverage P26, D3) and who changes their settings (D19), refresh ever
 (D40). Nothing is open.
 Requirement identifiers are provisional until Step 5.
 
+## Route review sync (2026-10-08)
+
+The route review ([routes-final.md](routes-final.md), [D46](decisions.md)) settles how each piece below is built; the
+re-planned ROUTE ([D50](decisions.md)) gives each one its row:
+
+| Pieces | ROUTE row | What the route review changes |
+| --- | --- | --- |
+| WC-1–WC-4, WC-13 — messaging | #139 | the stream is the contact's activity (§4, M1, M8): messages are stored now and sent once this row lands |
+| WC-5–WC-8 — booking messages | #140 | on the contact's booking (§6) |
+| WC-9, WC-10, WC-12 — money messages | #141 | receipts and dues on the contact's invoices (§8, B3) |
+| WC-11 — visit share | #142 | — |
+| WC-14–WC-17 — lead automation | #143 | status moves and involved members happen in the activity write itself (§4, §5); hold release and re-target stay background |
+| WC-18–WC-33, WC-35–WC-38 — task rules | #138 | one rules worker, 14 rules (§10, 10.A.10): `onboarding` (WC-31) goes — no rule designed; `unhappy` (WC-32) folds into `call_back`; `gone_quiet` (WC-29) counts paid sessions left, not packages only (§7, PK11) |
+| WC-39 — day auto-close | #136 | §8, 8.E |
+| WC-40, WC-41 — team | #144 | — |
+| WC-42, WC-43 — photos | #145 | pairing uses a photo's session and stage (§7, P24) |
+| WC-44 — floor | #146 | refresh, no push ([D37](decisions.md)) |
+| WC-46 — purge | #147 | — |
+| WC-34 (MR visit), WC-45 (pharmacy queue) | #153 — deferred | the medical store waits for its own review ([D49](decisions.md)) |
+| WC-47 — AI ideas | #152 — deferred | `app.patient_ideas` is dropped until its feature is built (§7, P20) |
+
 ## Counts
 
 | Area | NEW | CHANGED | REMOVED |

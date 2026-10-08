@@ -10,7 +10,7 @@ every step with its questions is in the [step-by-step guide](iteration-guide.md)
 ```mermaid
 flowchart TB
   NEW["pnpm iteration:new<br/>Status: planning"] --> INTAKE["pnpm iteration:intake --mode full|overlay|brief<br/>full snapshot → intake-files/ · --check gate"]
-  INTAKE --> PLAN["be-iteration-planning — no code<br/>Steps 0–6 → KICKOFF.md + plans/"]
+  INTAKE --> PLAN["be-iteration-planning — no code<br/>Steps 0–7 → routes-final.md (module by module)<br/>+ KICKOFF.md + plans/"]
   PLAN --> READY["Status: ready-for-approval"]
   READY -->|your go-ahead| APPROVED["Status: approved<br/>KICKOFF.md + intake-files/ freeze"]
   APPROVED --> KICK["be-kickoff-iteration<br/>Step 0 confirm → Status: implementing"]
@@ -24,7 +24,7 @@ flowchart TB
 | --- | --- | --- | --- |
 | Open | `pnpm iteration:new <type> [topic]` | the folder + README (`Status: planning`) | the opening questions ([guide](iteration-guide.md)) |
 | Intake | `pnpm iteration:intake <iteration> <source> [--mode full\|overlay\|brief]` | a full snapshot in `intake-files/`; the README's Drop, Intake and Schema-routes rows | a missing mandatory file; a different snapshot already there |
-| Plan | **be-iteration-planning**, [prompt](../prompts/iteration-planning-prompt.md) | `KICKOFF.md` (plan + ROUTE ledger) and `plans/`; `Status: ready-for-approval` | which iteration and Baseline (Step 0); every step; RED questions |
+| Plan | **be-iteration-planning**, [prompt](../prompts/iteration-planning-prompt.md) | `plans/routes-final.md` (the route review, [template](routes-final-template.md)), `KICKOFF.md` (plan + ROUTE ledger) and `plans/`; `Status: ready-for-approval` | which iteration and Baseline (Step 0); every step; RED questions; your OK on each module of the route review |
 | Approve | you — `pnpm iteration:status <iteration> approved` | `Status: approved`, logged in `plans/decisions.md` | — |
 | Kick off | **be-kickoff-iteration**, [prompt](../prompts/kickoff-iteration-prompt.md) | `Status: implementing` | which iteration (Step 0) |
 | Build | one ROUTE row at a time | code, migrations, tests; one `AS-BUILT.md` row each | your review after every row; any scope change |
@@ -55,13 +55,20 @@ flowchart TB
   (`plans/worker-changes.md`) current at every step, with before → after for anything that changes,
   and every step ends with a step review — what changed, the review links, continue or change — so
   nothing waits for a PR diff.
-- **Planning is WHAT, never HOW.** `KICKOFF.md` and `plans/` hold requirements and decisions — no
-  SQL, endpoint paths (the proposals in `plans/route-changes.md` are the one exception), `src/` paths
-  or queue names. Each row's technical design is decided while it
-  is built and recorded in `AS-BUILT.md`.
+- **Planning is WHAT, never HOW — except the route review.** `KICKOFF.md` and `plans/` hold
+  requirements and decisions — no SQL, endpoint paths (the proposals in `plans/route-changes.md` are
+  the exception), `src/` paths or queue names. The design itself lives in one place,
+  `plans/routes-final.md`: module by module, each confirmed by you before `KICKOFF.md` is written.
+  Anything it leaves open is decided while the row is built and recorded in `AS-BUILT.md`.
+- **Route review before the plan.** Planning Step 5 writes `plans/routes-final.md` from the
+  [template](routes-final-template.md) — one module per domain folder, grouped by connection, twelve
+  sections per module and eleven per sub-domain, a recommendation on every decision — and stops after
+  each module for your OK. The ROUTE then builds those modules in order.
 - **Schema first.** The ROUTE runs tables (in dependency order) → features → background work →
   flows → acceptance; an incremental ROUTE runs schema changes first and never edits an existing
   migration.
+- **A route review is built ditto.** Kickoff builds each module exactly as `plans/routes-final.md` says;
+  where agent-os cannot, the row stops and asks, and the agreed change goes into the review first.
 - **Every ROUTE row has a driver.** A NEW table goes through the
   [staged-build prompt](../../getting-started/staged-build-prompt.md); a CHANGE table, a flow or
   background work through `/be-build-requirement` ([requirement intake](../../getting-started/requirement-intake.md)).
@@ -79,6 +86,7 @@ flowchart TB
 - Prompts: [iteration-planning-prompt.md](../prompts/iteration-planning-prompt.md) ·
   [kickoff-iteration-prompt.md](../prompts/kickoff-iteration-prompt.md)
 - Every step with its questions: [iteration-guide.md](iteration-guide.md) — `/be-iteration` walks it
+- The route review's shape, with two invented modules: [routes-final-template.md](routes-final-template.md)
 - Building a NEW table: [staged-build-prompt.md](../../getting-started/staged-build-prompt.md)
 - Requirements outside an iteration: [requirement-intake.md](../../getting-started/requirement-intake.md)
 - The iteration rules: [iterations/README.md](../../../iterations/README.md)

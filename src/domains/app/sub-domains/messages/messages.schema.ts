@@ -94,7 +94,7 @@ export const messages = appSchema
       delivered_at: timestamp('delivered_at', { withTimezone: true }),
       read_at: timestamp('read_at', { withTimezone: true }),
       failed_at: timestamp('failed_at', { withTimezone: true }),
-      // Written by Clinozy (a reminder, a receipt)
+      // Written by the app itself (a reminder, a receipt)
       is_system: boolean('is_system').notNull().default(false),
       author_membership_id: bigint('author_membership_id', { mode: 'number' }).references(
         () => memberships.id,

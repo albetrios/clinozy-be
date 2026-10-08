@@ -33,7 +33,7 @@ export type TaskRuleOutput =
 
 /**
  * The organization's task rules (launch ROUTE #60, RC-188/RC-189): whether each rule creates
- * tasks, and whether the organization lets Clinozy handle it by itself.
+ * tasks, and whether the organization lets the app handle it by itself.
  *
  * @remarks
  * - **Algorithm:** the shared app record service over `app.task_rule_settings`; `listRules` merges

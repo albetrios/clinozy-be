@@ -23,7 +23,7 @@ export function taskRuleSettingsRoutes(service: TaskRuleSettingsService): Fastif
         schema: {
           summary: 'List task rules',
           description:
-            'Returns every task rule with whether it is on and whether Clinozy handles it by itself — the saved setting, or the default (id null: on, not automatic).',
+            'Returns every task rule with whether it is on and whether the app handles it by itself — the saved setting, or the default (id null: on, not automatic).',
           tags: ['Task'],
         },
       },
@@ -38,7 +38,7 @@ export function taskRuleSettingsRoutes(service: TaskRuleSettingsService): Fastif
         schema: {
           summary: 'Save task rules',
           description:
-            'Switches the named rules on or off and sets "Clinozy handles it"; the rules not named keep their setting. Returns the whole rule list. Owner and Admin (A22).',
+            'Switches the named rules on or off and sets whether the app handles it; the rules not named keep their setting. Returns the whole rule list. Owner and Admin (A22).',
           tags: ['Task'],
           body: ReplaceTaskRulesDto,
         },

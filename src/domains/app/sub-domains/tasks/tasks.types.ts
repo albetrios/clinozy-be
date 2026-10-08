@@ -20,7 +20,7 @@ export interface TaskOutput {
   snooze_label: string | null;
   outcome: string | null;
   resolved_at: string | null;
-  /** "Done by Clinozy" */
+  /** "Done automatically" — closed by the app */
   is_resolved_automatically: boolean;
   result_text: string | null;
   note: string | null;
