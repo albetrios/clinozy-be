@@ -237,15 +237,24 @@ export class BaseRecordService<Output> {
     });
   }
 
-  /** Creates a record (under the parent when nested). */
+  /**
+   * Creates a record (under the parent when nested) — with the table's create body, or with one of
+   * its named creates (`createName`, one route per action — `send-message`, `add-note`).
+   */
   async create(
     scope: OrganizationPrincipalDatabaseScope,
     body: unknown,
     actingUserPublicId: string | undefined,
     parentPublicId?: string,
     visibility?: BaseRecordVisibility,
+    createName?: string,
   ): Promise<Output> {
-    const parsed = this.descriptor.parseCreate(body);
+    const parse =
+      createName === undefined
+        ? this.descriptor.parseCreate
+        : this.descriptor.namedCreates?.[createName];
+    if (!parse) throw new NotFoundError(this.descriptor.label);
+    const parsed = parse(body);
     return withAppDatabaseContext(scope, async () => {
       const organizationId = await this.organizationId(scope);
       const userId = await this.userId(actingUserPublicId);
@@ -322,7 +331,10 @@ export class BaseRecordService<Output> {
     });
   }
 
-  /** Runs a lifecycle action (`cancel`, `approve`, …) if the record's status allows it. */
+  /**
+   * Runs a lifecycle action (`cancel`, `approve`, …) if the record's status allows it — under the
+   * parent when the route is nested (`…/{contact_id}/activities/{contact_activity_id}/resend`).
+   */
   async transition(
     scope: OrganizationPrincipalDatabaseScope,
     publicId: string,
@@ -330,6 +342,7 @@ export class BaseRecordService<Output> {
     body: unknown,
     actingUserPublicId: string | undefined,
     visibility?: BaseRecordVisibility,
+    parentPublicId?: string,
   ): Promise<Output> {
     const custom = this.descriptor.actions?.[action];
     if (custom) {
@@ -340,6 +353,7 @@ export class BaseRecordService<Output> {
         body,
         actingUserPublicId,
         visibility,
+        parentPublicId,
         run: custom,
       });
     }
@@ -350,6 +364,13 @@ export class BaseRecordService<Output> {
       const organizationId = await this.organizationId(scope);
       const userId = await this.userId(actingUserPublicId);
       const existing = await this.requireRow(organizationId, publicId, userId, visibility);
+      await this.assertUnderParent({
+        organizationId,
+        row: existing,
+        parentPublicId,
+        userId,
+        visibility,
+      });
       const statusColumn = transition.statusColumn ?? 'status';
       const status = String(existing[statusColumn] ?? '');
       if (transition.from && !transition.from.includes(status)) {
@@ -423,6 +444,7 @@ export class BaseRecordService<Output> {
     body: unknown;
     actingUserPublicId: string | undefined;
     visibility: BaseRecordVisibility | undefined;
+    parentPublicId: string | undefined;
     run: (input: BaseRecordActionInput) => Promise<BaseRecordRow>;
   }): Promise<Output> {
     const { scope } = options;
@@ -435,6 +457,13 @@ export class BaseRecordService<Output> {
         userId,
         options.visibility,
       );
+      await this.assertUnderParent({
+        organizationId,
+        row: existing,
+        parentPublicId: options.parentPublicId,
+        userId,
+        visibility: options.visibility,
+      });
       const context = this.writeContext(scope, organizationId, userId, options.visibility);
       const row = await options.run({
         existing,
@@ -575,10 +604,13 @@ export class BaseRecordService<Output> {
         throw error;
       }
       if (!restored) throw new NotFoundError(this.descriptor.label);
-      await this.descriptor.afterWrite?.(
-        restored,
-        { kind: 'restore' },
-        this.writeContext(scope, organizationId, userId, visibility),
+      // A rule's own restore writes (a contact's numbers) may clash too — the table's 409, not a 500.
+      await this.mapConflicts(async () =>
+        this.descriptor.afterWrite?.(
+          restored,
+          { kind: 'restore' },
+          this.writeContext(scope, organizationId, userId, visibility),
+        ),
       );
       return this.serializeOne(
         restored,
@@ -1022,6 +1054,9 @@ function referenceNotFound(
 /** Ports before the app container wires them — a rule that calls one fails loudly. */
 const UNWIRED_PORTS: BaseRecordPorts = {
   organizationSettings: () => {
+    throw new Error('BaseRecordService ports are not wired (app.container.ts → usePorts)');
+  },
+  isConfirmedUpload: () => {
     throw new Error('BaseRecordService ports are not wired (app.container.ts → usePorts)');
   },
 };

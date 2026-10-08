@@ -17,8 +17,10 @@ import { PatientsRepository } from './sub-domains/patients/patients.repository.j
 import { PatientsService } from './sub-domains/patients/patients.service.js';
 import { LeadsRepository } from './sub-domains/leads/leads.repository.js';
 import { LeadsService } from './sub-domains/leads/leads.service.js';
-import { MessageTemplatesRepository } from './sub-domains/message-templates/message-templates.repository.js';
-import { MessageTemplatesService } from './sub-domains/message-templates/message-templates.service.js';
+import { ContactActivitiesRepository } from './sub-domains/contacts/contact-activities/contact-activities.repository.js';
+import { ContactActivitiesService } from './sub-domains/contacts/contact-activities/contact-activities.service.js';
+import { ContactMessageTemplatesRepository } from './sub-domains/contacts/contact-message-templates/contact-message-templates.repository.js';
+import { ContactMessageTemplatesService } from './sub-domains/contacts/contact-message-templates/contact-message-templates.service.js';
 import { AppointmentsRepository } from './sub-domains/appointments/appointments.repository.js';
 import { AppointmentsService } from './sub-domains/appointments/appointments.service.js';
 import { VisitsRepository } from './sub-domains/visits/visits.repository.js';
@@ -89,8 +91,6 @@ import { StockMovementsRepository } from './sub-domains/stock-movements/stock-mo
 import { StockMovementsService } from './sub-domains/stock-movements/stock-movements.service.js';
 import { TasksRepository } from './sub-domains/tasks/tasks.repository.js';
 import { TasksService } from './sub-domains/tasks/tasks.service.js';
-import { MessagesRepository } from './sub-domains/messages/messages.repository.js';
-import { MessagesService } from './sub-domains/messages/messages.service.js';
 
 /** The services of the app record tables (launch iteration), one per table. */
 export type AppRecordServices = {
@@ -101,9 +101,10 @@ export type AppRecordServices = {
   offeringsService: OfferingsService;
   offersService: OffersService;
   contactsService: ContactsService;
+  contactActivitiesService: ContactActivitiesService;
+  contactMessageTemplatesService: ContactMessageTemplatesService;
   patientsService: PatientsService;
   leadsService: LeadsService;
-  messageTemplatesService: MessageTemplatesService;
   appointmentsService: AppointmentsService;
   visitsService: VisitsService;
   diagnosesService: DiagnosesService;
@@ -139,13 +140,12 @@ export type AppRecordServices = {
   stockCountsService: StockCountsService;
   stockMovementsService: StockMovementsService;
   tasksService: TasksService;
-  messagesService: MessagesService;
 };
 
 /**
  * The services of the places, offerings and people every booking and bill picks from — a branch's
- * rooms, machines and holidays (§1), the offering groups, offerings and offers (§3) and the contacts
- * (§4).
+ * rooms, machines and holidays (§1), the offering groups, offerings and offers (§3), and the
+ * contacts with their activity and message templates (§4).
  */
 function createPlaceOfferingContactServices(organizationService: OrganizationService) {
   return {
@@ -165,6 +165,14 @@ function createPlaceOfferingContactServices(organizationService: OrganizationSer
     offeringsService: new OfferingsService(organizationService, new OfferingsRepository()),
     offersService: new OffersService(organizationService, new OffersRepository()),
     contactsService: new ContactsService(organizationService, new ContactsRepository()),
+    contactActivitiesService: new ContactActivitiesService(
+      organizationService,
+      new ContactActivitiesRepository(),
+    ),
+    contactMessageTemplatesService: new ContactMessageTemplatesService(
+      organizationService,
+      new ContactMessageTemplatesRepository(),
+    ),
   };
 }
 
@@ -176,10 +184,6 @@ export function createAppRecordServices(
     ...createPlaceOfferingContactServices(organizationService),
     patientsService: new PatientsService(organizationService, new PatientsRepository()),
     leadsService: new LeadsService(organizationService, new LeadsRepository()),
-    messageTemplatesService: new MessageTemplatesService(
-      organizationService,
-      new MessageTemplatesRepository(),
-    ),
     appointmentsService: new AppointmentsService(organizationService, new AppointmentsRepository()),
     visitsService: new VisitsService(organizationService, new VisitsRepository()),
     diagnosesService: new DiagnosesService(organizationService, new DiagnosesRepository()),
@@ -263,6 +267,5 @@ export function createAppRecordServices(
       new StockMovementsRepository(),
     ),
     tasksService: new TasksService(organizationService, new TasksRepository()),
-    messagesService: new MessagesService(organizationService, new MessagesRepository()),
   };
 }

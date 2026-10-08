@@ -51,7 +51,8 @@ export async function seedContact(payload: SeedContactPayload): Promise<number> 
         : { household_contact_id: payload.household_contact_id }),
       created_by_user_id: payload.created_by_user_id,
       updated_by_user_id: payload.created_by_user_id,
-    })
+      // Absent = the contact's own household — the database's `trg_contacts_household` fills it.
+    } as typeof contacts.$inferInsert)
     .returning({ id: contacts.id, household_contact_id: contacts.household_contact_id });
   await database.insert(contact_phones).values({
     contact_id: row!.id,

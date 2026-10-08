@@ -2714,7 +2714,7 @@ None.
 | Column | Type | Null | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `contact_id` | `bigint` | no | | → contacts `ON DELETE CASCADE` |
-| `type` | `varchar(8)` | no | | `IN ('whatsapp','instagram','call_log','note','system')` |
+| `type` | `varchar(9)` | no | | `IN ('whatsapp','instagram','call_log','note','system')` — 9 characters for `instagram` (D62) |
 | `direction` | `varchar(8)` | yes | | `IN ('sent','received')`; `(type IN ('note','system')) = (direction IS NULL)` |
 | `body` | `varchar(1000)` | no | | `char_length(btrim(body)) ≥ 1` |
 | `contact_message_template_id` | `bigint` | yes | | → templates `ON DELETE SET NULL` |

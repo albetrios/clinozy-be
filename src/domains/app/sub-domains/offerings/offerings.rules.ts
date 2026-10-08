@@ -1,5 +1,5 @@
 import type { BaseRecordRules } from '@/domains/app/base-record.types.js';
-import { ValidationError } from '@/shared/errors/index.js';
+import { fieldValidationError, type ValidationError } from '@/shared/errors/index.js';
 import type { OFFERING_CATEGORY_VALUES } from './offerings.constants.js';
 
 /** The GST a consultation starts with — consultations are exempt (offerings rule). */
@@ -11,7 +11,7 @@ const CONSULTATION: (typeof OFFERING_CATEGORY_VALUES)[number] = 'consultation';
 
 /** The 400 naming the price field that breaks `min_price` ≤ `offer_price` ≤ `price` (O4). */
 function priceOrderError(field: 'offer_price' | 'min_price', messageKey: string): ValidationError {
-  return new ValidationError(messageKey, { field }, undefined, [{ field, messageKey }]);
+  return fieldValidationError({ field, messageKey });
 }
 
 /**

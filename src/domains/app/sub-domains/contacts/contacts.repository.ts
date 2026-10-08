@@ -1,4 +1,5 @@
 import { and, count, eq, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import {
   BaseRecordRepository,
@@ -167,5 +168,41 @@ export class ContactsRepository extends BaseRecordRepository {
       .update(contact_phones)
       .set({ deleted_at: deletedAt })
       .where(eq(contact_phones.contact_id, contactId));
+  }
+
+  /**
+   * Writes what an activity entry changes on its contact (CT10, CT4, M7): the last activity, and
+   * for a sent or received message or call the last sent / received time; a sent one also moves
+   * `default_channel`.
+   *
+   * @remarks
+   * - **Algorithm:** one `UPDATE` with `greatest(...)`, so an entry written late never moves a time
+   *   back. It leaves `updated_at` / `updated_by_user_id` alone — the stream is not an edit of the
+   *   contact, and a desk save in progress must not read it as one (`record_changed`, D43).
+   */
+  async recordActivity(options: {
+    contactId: number;
+    occurredAt: Date;
+    direction: string | null;
+    channel: string | null;
+  }): Promise<void> {
+    const at = sql`${options.occurredAt.toISOString()}::timestamptz`;
+    const latest = (column: AnyPgColumn) =>
+      sql`greatest(coalesce(${column}, '-infinity'::timestamptz), ${at})`;
+    await getRequestDatabase()
+      .update(contacts)
+      .set({
+        last_activity_at: latest(contacts.last_activity_at),
+        ...(options.direction === 'sent'
+          ? {
+              last_sent_at: latest(contacts.last_sent_at),
+              ...(options.channel === null ? {} : { default_channel: options.channel }),
+            }
+          : {}),
+        ...(options.direction === 'received'
+          ? { last_received_at: latest(contacts.last_received_at) }
+          : {}),
+      })
+      .where(eq(contacts.id, options.contactId));
   }
 }

@@ -96,6 +96,9 @@ export function buildTagDefinitions(
     'Branch',
     'Saved view',
     'Offering',
+    'Contact',
+    'Contact activity',
+    'Contact message template',
     'Branch resource',
     'Preference',
     'Patient',
@@ -110,8 +113,6 @@ export function buildTagDefinitions(
     'Medical store',
     'Stock',
     'Task',
-    'Search',
-    'Message',
   ];
 
   const sortedTags = [...tagSet].sort((left, right) => {

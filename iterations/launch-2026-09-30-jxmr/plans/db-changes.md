@@ -40,7 +40,7 @@ its table designs name them (60 tables; the medical store's wait for its own rev
 | 1. Branches & places | `app.branches`, `app.branch_members`, `app.branch_rooms`, `app.branch_machines`, `app.branch_holidays` | §1 | #125 |
 | 2. Team | `app.membership_preferences`, `app.membership_preference_branches`, `app.membership_saved_views`, `tenancy.memberships`, `tenancy.membership_additional_roles`, `tenancy.membership_invitations`, `tenancy.roles`, `tenancy.role_permissions`, `tenancy.permissions` | §2 | #126–#127 |
 | 3. Offerings | `app.offering_groups`, `app.offerings`, `app.offering_branches`, `app.offers`, `app.offer_offerings`, `app.offer_branches` | §3 | #128 |
-| 4. Contacts | `app.contacts`, `app.contact_phones`, `app.contact_members`, `app.contact_activities`, `app.contact_message_templates` | §4 | #129 (contacts, phones, members) · #130 |
+| 4. Contacts | `app.contacts`, `app.contact_phones`, `app.contact_members`, `app.contact_activities`, `app.contact_message_templates` | §4 | #129 (contacts, phones, members) · #130 (activities, templates) |
 | 5. Leads | `app.leads`, `app.lead_involved_memberships` | §5 | #131 |
 | 6. Appointments | `app.appointments` | §6 | #132 |
 | 7. Patients | `app.patients`, `app.patient_clinical_notes`, `app.patient_prescriptions`, `app.prescription_kits`, `app.patient_diagnoses`, `app.patient_images`, `app.patient_reports`, `app.patient_treatments`, `app.patient_check_ins`, `app.patient_reviews`, `app.patient_feedback_actions`, `app.patient_offerings`, `app.patient_offering_suggestions` | §7 | #133–#135 |
@@ -634,6 +634,35 @@ erDiagram
   contacts ||--|{ contact_phones : "has 1–5 numbers (one primary)"
   contacts ||--o{ contact_members : "is handled by"
   contacts |o--o{ contacts : "household / referred by"
+```
+
+- **Built (ROUTE #130, sub-domain 4 — 4.C–4.D):** `app.messages` → `app.contact_activities` — append-only (no soft-delete columns, not in the purge list; goes with its contact `ON DELETE CASCADE`), `contact_id`, `type` `varchar(9)` (D62) `whatsapp` · `instagram` · `call_log` · `note` · `system`, `direction`, `body varchar(1000)`, `contact_message_template_id`, `attachment_keys`, `reply_to_contact_activity_id`, `delivery_status` (exactly on a sent message), `provider_message_id` (unique per organization), `failure_reason`, `occurred_at`, `delivered_at` / `read_at` / `failed_at`, `author_membership_id` (composite key to memberships, `RESTRICT` — K2, K8), the twelve record links (`num_nonnulls ≤ 1`, each `SET NULL` to today's table — D63); indexes `(contact_id, occurred_at, id)`, `(contact_id, created_at, id)`, the worker queue `(organization_id, occurred_at) WHERE delivery_status IN ('queued','failed')`, one per link. `app.message_templates` → `app.contact_message_templates` — `type` `whatsapp` · `instagram` (was `channel` with six values), `body varchar(1000)`, the list index `(organization_id, created_at DESC, id)` on live rows. `app.lead_reads` dropped (M3). Code `app/sub-domains/contacts/contact-activities/`, `contact-message-templates/`.
+```mermaid
+erDiagram
+  contact_activities["app.contact_activities · NEW"] {
+    id id PK
+    id contact_id FK "→ contact"
+    choice type
+    choice direction
+    text body
+    id contact_message_template_id FK "→ contact_message_template"
+    json attachment_keys
+    id reply_to_contact_activity_id FK "→ contact_activity"
+    choice delivery_status
+    text provider_message_id
+    text failure_reason
+    datetime occurred_at
+    id author_membership_id FK "→ membership"
+    id appointment_id FK "→ appointment (one of twelve links)"
+  }
+  contact_message_templates["app.contact_message_templates · NEW"] {
+    id id PK
+    text name
+    text body
+    choice type
+  }
+  contacts ||--o{ contact_activities : "has a stream"
+  contact_message_templates |o--o{ contact_activities : "is used by"
 ```
 
 ### patient · NEW

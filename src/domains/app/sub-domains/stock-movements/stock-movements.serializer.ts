@@ -1,6 +1,5 @@
 import type { BaseRecordRow } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordReferenceLookup } from '@/domains/app/base-record.types.js';
-import { toInstant } from '@/shared/utils/validation/record-fields.util.js';
 import type { StockMovementOutput } from './stock-movements.types.js';
 
 /** Shapes a `app.stock_movements` row as the API returns it (public ids, numbers, ISO times). */

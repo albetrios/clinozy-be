@@ -84,7 +84,11 @@
     "contactDateOfBirthFuture": "La fecha de nacimiento no puede ser futura",
     "contactReferredByNotPatient": "Indica el contacto que lo refirió solo cuando el origen de la referencia es paciente",
     "contactSearchTooShort": "Escribe al menos 3 letras, 4 dígitos de un número o un número de contacto completo, como C-12345",
-    "contactHouseholdHasMembers": "Este contacto es el primero de un hogar con otros contactos, así que se queda en su propio hogar"
+    "contactHouseholdHasMembers": "Este contacto es el primero de un hogar con otros contactos, así que se queda en su propio hogar",
+    "contactActivityTemplateType": "La plantilla es de otro canal que este mensaje",
+    "contactActivityAttachmentNotConfirmed": "{{key}} no es una subida confirmada de esta organización",
+    "contactActivityReplyOtherContact": "La entrada respondida pertenece a otro contacto",
+    "contactActivityBodyTooLong": "El mensaje supera los 1000 caracteres al completar sus marcadores"
   },
   "missingSessionCookie": "Falta la cookie de sesión",
   "disposableEmail": "Este dominio de correo no está permitido.",

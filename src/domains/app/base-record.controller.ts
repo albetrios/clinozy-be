@@ -176,7 +176,15 @@ export class BaseRecordController<Output extends { id: string }> {
   };
 
   /** `POST` — creates a record (under the parent when nested). */
-  readonly create = async (request: FastifyRequest, _reply: FastifyReply) => {
+  readonly create = async (request: FastifyRequest, _reply: FastifyReply) =>
+    this.createRecord(request, undefined);
+
+  /** `POST …/<name>` — a named create with its own body (`send-message`, `add-note`). */
+  readonly createNamed = (name: string) => async (request: FastifyRequest, _reply: FastifyReply) =>
+    this.createRecord(request, name);
+
+  /** Creates a record with the table's create body or a named one; audited as a create. */
+  private async createRecord(request: FastifyRequest, createName: string | undefined) {
     await this.assertFieldsAllowed(request);
     const data = await this.service.create(
       requireOrganizationScope(request),
@@ -184,10 +192,11 @@ export class BaseRecordController<Output extends { id: string }> {
       this.actor(request),
       this.readParentId(request),
       await this.visibility(request),
+      createName,
     );
-    await this.audit(request, 'create', data.id);
+    await this.audit(request, createName ?? 'create', data.id);
     return successResponse(await this.present(request, data), getRequestIdentifier(request));
-  };
+  }
 
   /** `PATCH …/{id}` — changes a live record. */
   readonly update = async (request: FastifyRequest, _reply: FastifyReply) => {
@@ -312,6 +321,7 @@ export class BaseRecordController<Output extends { id: string }> {
         request.body,
         this.actor(request),
         await this.visibility(request),
+        this.readParentId(request),
       );
       await this.audit(request, action, publicId);
       return successResponse(await this.present(request, data), getRequestIdentifier(request));

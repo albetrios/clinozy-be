@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import type { MembershipService } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
 import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.js';
+import { ValidationError } from '@/shared/errors/index.js';
 import type { BaseRecordPorts } from './base-record.types.js';
 import { BranchesRepository } from './sub-domains/branches/branches.repository.js';
 import { BranchesService } from './sub-domains/branches/branches.service.js';
@@ -34,6 +35,8 @@ export type AppContainer = {
   contactMembersService: ContactMembersService;
   /** The app's part of the membership leave step (launch K4), wired into tenancy. */
   membershipLeaveStep: AppMembershipLeaveStep;
+  /** The ports every app record rule calls outside the app (one object, shared by every service). */
+  ports: BaseRecordPorts;
 } & AppRecordServices;
 
 /** Builds the app domain container from its repositories and the tenancy services it reads. */
@@ -60,6 +63,10 @@ export function createAppContainer(
         deleted_record_purge_days: settings.deleted_record_purge_days,
         timezone,
       };
+    },
+    // Late-wired by the composition root (`wireAppUploads`) — the upload domain registers after app.
+    isConfirmedUpload: () => {
+      throw new Error('App uploads are not wired (domain-containers.plugin.ts → wireAppUploads)');
     },
   };
   for (const service of Object.values(records)) service.usePorts(ports);
@@ -97,7 +104,36 @@ export function createAppContainer(
       new ContactMembersRepository(),
     ),
     membershipLeaveStep: createAppMembershipLeaveStep(),
+    ports,
     ...records,
+  };
+}
+
+/** What the app's upload port needs of the upload domain. */
+export interface AppUploadChecker {
+  assertKeyConfirmedForOwner(options: {
+    fileKey: string;
+    organizationInternalId?: number;
+  }): Promise<{ mimeType: string }>;
+}
+
+/**
+ * Wires the app's upload port (`isConfirmedUpload`) to the upload domain — called by the
+ * composition root once both containers exist (the upload container registers after the app's).
+ *
+ * @remarks
+ * - **Failure modes:** the port answers false for a key that is missing, unconfirmed or another
+ *   organization's (the upload service's `ValidationError`); any other error propagates.
+ */
+export function wireAppUploads(container: AppContainer, uploads: AppUploadChecker): void {
+  container.ports.isConfirmedUpload = async ({ organizationId, fileKey }) => {
+    try {
+      await uploads.assertKeyConfirmedForOwner({ fileKey, organizationInternalId: organizationId });
+      return true;
+    } catch (error) {
+      if (error instanceof ValidationError) return false;
+      throw error;
+    }
   };
 }
 

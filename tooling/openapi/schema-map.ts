@@ -51,9 +51,9 @@ import {
   UpdateLeadDto as appUpdateLeadDto,
 } from '@/domains/app/sub-domains/leads/leads.dto.js';
 import {
-  CreateMessageTemplateDto as appCreateMessageTemplateDto,
-  UpdateMessageTemplateDto as appUpdateMessageTemplateDto,
-} from '@/domains/app/sub-domains/message-templates/message-templates.dto.js';
+  CreateContactMessageTemplateDto,
+  UpdateContactMessageTemplateDto,
+} from '@/domains/app/sub-domains/contacts/contact-message-templates/contact-message-templates.dto.js';
 import {
   cancelAppointmentDto as appCancelAppointmentDto,
   copyAppointmentDto as appCopyAppointmentDto,
@@ -183,9 +183,11 @@ import {
   UpdateTaskDto as appUpdateTaskDto,
 } from '@/domains/app/sub-domains/tasks/tasks.dto.js';
 import {
-  batchesMessagesBodyDto as appBatchesMessagesBodyDto,
-  CreateMessageDto as appCreateMessageDto,
-} from '@/domains/app/sub-domains/messages/messages.dto.js';
+  AddContactNoteDto,
+  ContactMessageBatchDto,
+  LogContactCallDto,
+  SendContactMessageDto,
+} from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.dto.js';
 import type { ZodTypeAny } from 'zod';
 
 // ─── Auth ──────────────────────────────────────────────────────────────
@@ -357,8 +359,10 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'POST /api/v1/app/branches': CreateBranchDto,
   'POST /api/v1/app/appointments/{appointment_id}/copy': appCopyAppointmentDto,
   'POST /api/v1/app/leads/{lead_id}/convert': appConvertLeadDto,
-  'POST /api/v1/app/messages/batches': appBatchesMessagesBodyDto,
-  'POST /api/v1/app/messages': appCreateMessageDto,
+  'POST /api/v1/app/contacts/{contact_id}/activities/send-message': SendContactMessageDto,
+  'POST /api/v1/app/contacts/{contact_id}/activities/log-call': LogContactCallDto,
+  'POST /api/v1/app/contacts/{contact_id}/activities/add-note': AddContactNoteDto,
+  'POST /api/v1/app/contact-activities/message-batches': ContactMessageBatchDto,
   'PATCH /api/v1/app/patient-packages/{patient_package_id}': appUpdatePatientPackageDto,
   'PATCH /api/v1/app/patient-reports/{patient_report_id}': appUpdatePatientReportDto,
   'PATCH /api/v1/app/patient-images/{patient_image_id}': appUpdatePatientImageDto,
@@ -430,8 +434,9 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'POST /api/v1/app/appointments/{appointment_id}/status': appStatusAppointmentDto,
   'PATCH /api/v1/app/appointments/{appointment_id}': appUpdateAppointmentDto,
   'POST /api/v1/app/appointments': appCreateAppointmentDto,
-  'PATCH /api/v1/app/message-templates/{message_template_id}': appUpdateMessageTemplateDto,
-  'POST /api/v1/app/message-templates': appCreateMessageTemplateDto,
+  'PATCH /api/v1/app/contact-message-templates/{contact_message_template_id}':
+    UpdateContactMessageTemplateDto,
+  'POST /api/v1/app/contact-message-templates': CreateContactMessageTemplateDto,
   'PATCH /api/v1/app/leads/{lead_id}': appUpdateLeadDto,
   'POST /api/v1/app/leads': appCreateLeadDto,
   'PATCH /api/v1/app/patients/{patient_id}': appUpdatePatientDto,

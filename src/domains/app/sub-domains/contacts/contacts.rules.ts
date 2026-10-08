@@ -4,7 +4,7 @@ import {
   listChildRows,
   replaceChildRows,
 } from '@/domains/app/base-record.repository.js';
-import { ConflictError, ValidationError } from '@/shared/errors/index.js';
+import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
 import { calendarDateInTimeZone } from '@/shared/utils/validation/record-fields.util.js';
 import { CONTACT_REFERRAL_SOURCE } from './contacts.constants.js';
 import {
@@ -27,11 +27,6 @@ interface ContactPhoneInput {
  */
 const DATABASE_TIME_ZONE = 'UTC';
 
-/** A 400 naming one field, with a translated message. */
-function fieldError(field: string, messageKey: string): ValidationError {
-  return new ValidationError(messageKey, undefined, undefined, [{ field, messageKey }]);
-}
-
 /**
  * CT13: `date_of_birth` is not in the future, and `referred_by_contact_id` is set only while
  * `referral_source` is `patient` — checked on a create's values and on the row a `PATCH` would
@@ -47,13 +42,19 @@ export function assertContactValues(values: Record<string, unknown>): void {
     typeof values.date_of_birth === 'string' &&
     values.date_of_birth > calendarDateInTimeZone(DATABASE_TIME_ZONE)
   ) {
-    throw fieldError('date_of_birth', 'errors:validation.contactDateOfBirthFuture');
+    throw fieldValidationError({
+      field: 'date_of_birth',
+      messageKey: 'errors:validation.contactDateOfBirthFuture',
+    });
   }
   if (
     values.referred_by_contact_id != null &&
     values.referral_source !== CONTACT_REFERRAL_SOURCE.PATIENT
   ) {
-    throw fieldError('referred_by_contact_id', 'errors:validation.contactReferredByNotPatient');
+    throw fieldValidationError({
+      field: 'referred_by_contact_id',
+      messageKey: 'errors:validation.contactReferredByNotPatient',
+    });
   }
 }
 
@@ -62,7 +63,6 @@ function contactPhoneExistsError(clash: ContactPhoneClash): ConflictError {
   return new ConflictError('errors:contactPhoneExists', {
     phone: clash.phone,
     name: [clash.first_name, clash.last_name].filter(Boolean).join(' '),
-    contact_id: clash.contact_public_id,
     contact_number: clash.contact_number,
   }).withReason('contact_phone_exists');
 }
@@ -125,7 +125,10 @@ export function createContactsRules(repository: ContactsRepository): BaseRecordR
     if (target === existing.household_contact_id) return undefined;
     const isFirst = existing.household_contact_id === existing.id;
     if (isFirst && (await repository.countHouseholdMembers(existing.id)) > 0) {
-      throw fieldError('household_contact_id', 'errors:validation.contactHouseholdHasMembers');
+      throw fieldValidationError({
+        field: 'household_contact_id',
+        messageKey: 'errors:validation.contactHouseholdHasMembers',
+      });
     }
     return target;
   };

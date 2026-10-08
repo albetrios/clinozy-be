@@ -8,8 +8,7 @@ import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.
 import { offers } from '@/domains/app/sub-domains/offerings/offers/offers.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
-import { lead_reads } from '@/domains/app/sub-domains/lead-reads/lead-reads.schema.js';
-import { message_templates } from '@/domains/app/sub-domains/message-templates/message-templates.schema.js';
+import { contact_message_templates } from '@/domains/app/sub-domains/contacts/contact-message-templates/contact-message-templates.schema.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import { visits } from '@/domains/app/sub-domains/visits/visits.schema.js';
 import { diagnoses } from '@/domains/app/sub-domains/diagnoses/diagnoses.schema.js';
@@ -50,7 +49,6 @@ import { stock_movements } from '@/domains/app/sub-domains/stock-movements/stock
 import { tasks } from '@/domains/app/sub-domains/tasks/tasks.schema.js';
 import { task_owner_changes } from '@/domains/app/sub-domains/task-owner-changes/task-owner-changes.schema.js';
 import { task_rule_settings } from '@/domains/app/sub-domains/task-rule-settings/task-rule-settings.schema.js';
-import { messages } from '@/domains/app/sub-domains/messages/messages.schema.js';
 
 /**
  * Every soft-deleting `app.*` table, children before parents — the order the deleted-record
@@ -61,7 +59,6 @@ import { messages } from '@/domains/app/sub-domains/messages/messages.schema.js'
  *   deleted (D3, D16).
  */
 export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
-  { table: messages, label: 'app.messages' },
   { table: task_rule_settings, label: 'app.task_rule_settings' },
   { table: task_owner_changes, label: 'app.task_owner_changes' },
   { table: tasks, label: 'app.tasks' },
@@ -102,8 +99,7 @@ export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   { table: diagnoses, label: 'app.diagnoses' },
   { table: visits, label: 'app.visits' },
   { table: appointments, label: 'app.appointments' },
-  { table: message_templates, label: 'app.message_templates' },
-  { table: lead_reads, label: 'app.lead_reads' },
+  { table: contact_message_templates, label: 'app.contact_message_templates' },
   { table: leads, label: 'app.leads' },
   { table: patients, label: 'app.patients' },
   // A contact goes after the leads, patients and appointments that name it (and its numbers with it)

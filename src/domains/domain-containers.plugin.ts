@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import fp from 'fastify-plugin';
-import { registerAppContainer } from '@/domains/app/app.container.js';
+import { registerAppContainer, wireAppUploads } from '@/domains/app/app.container.js';
 import { registerAuditContainer } from '@/domains/audit/audit.container.js';
 import { registerAuthContainer } from '@/domains/auth/auth.container.js';
 import { registerBillingContainer } from '@/domains/billing/billing.container.js';
@@ -49,6 +49,8 @@ async function registerDomainContainers(application: FastifyInstance): Promise<v
   application.tenancyDomain.membershipService.wireLeaveStep(
     application.appDomain.membershipLeaveStep,
   );
+  // Launch #130 (M6): an activity's attachments must be confirmed uploads of the organization.
+  wireAppUploads(application.appDomain, application.uploadDomain.uploadService);
   application.tenancyDomain.membershipService.wireSeatEnforcement(
     application.billingDomain.subscriptionService,
   );

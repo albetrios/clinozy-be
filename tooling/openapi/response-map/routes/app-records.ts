@@ -272,50 +272,6 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.leadsRecordSchema, schemas.leadsRecordExample),
     example: null,
   },
-  'GET /api/v1/app/message-templates': {
-    statusCode: 200,
-    schema: wrapPaginated(schemas.messageTemplatesRecordSchema, [
-      schemas.messageTemplatesRecordExample,
-    ]),
-    example: null,
-  },
-  'POST /api/v1/app/message-templates': {
-    statusCode: 200,
-    schema: wrapSuccess(
-      schemas.messageTemplatesRecordSchema,
-      schemas.messageTemplatesRecordExample,
-    ),
-    example: null,
-  },
-  'GET /api/v1/app/message-templates/{message_template_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(
-      schemas.messageTemplatesRecordSchema,
-      schemas.messageTemplatesRecordExample,
-    ),
-    example: null,
-  },
-  'PATCH /api/v1/app/message-templates/{message_template_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(
-      schemas.messageTemplatesRecordSchema,
-      schemas.messageTemplatesRecordExample,
-    ),
-    example: null,
-  },
-  'DELETE /api/v1/app/message-templates/{message_template_id}': {
-    statusCode: 204,
-    schema: null,
-    example: null,
-  },
-  'POST /api/v1/app/message-templates/{message_template_id}/restore': {
-    statusCode: 200,
-    schema: wrapSuccess(
-      schemas.messageTemplatesRecordSchema,
-      schemas.messageTemplatesRecordExample,
-    ),
-    example: null,
-  },
   'GET /api/v1/app/appointments': {
     statusCode: 200,
     schema: wrapPaginated(schemas.appointmentsRecordSchema, [schemas.appointmentsRecordExample]),
@@ -1481,33 +1437,6 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
   'POST /api/v1/app/tasks/{task_id}/restore': {
     statusCode: 200,
     schema: wrapSuccess(schemas.tasksRecordSchema, schemas.tasksRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/messages': {
-    statusCode: 200,
-    schema: wrapPaginated(schemas.messagesRecordSchema, [schemas.messagesRecordExample]),
-    example: null,
-  },
-  'POST /api/v1/app/messages': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.messagesRecordSchema, schemas.messagesRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/messages/{message_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.messagesRecordSchema, schemas.messagesRecordExample),
-    example: null,
-  },
-  'POST /api/v1/app/messages/{message_id}/resend': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.messagesRecordSchema, schemas.messagesRecordExample),
-    example: null,
-  },
-  'POST /api/v1/app/messages/batches': {
-    statusCode: 200,
-    schema: wrapSuccess({ type: 'array', items: schemas.messagesRecordSchema }, [
-      schemas.messagesRecordExample,
-    ]),
     example: null,
   },
 };

@@ -148,22 +148,6 @@ export function leadsRoutes(service: LeadsService): FastifyPluginAsync {
       },
       controller.transition('convert'),
     );
-    zodApplication.post<{ Params: { lead_id: string } }>(
-      '/leads/:lead_id/reads',
-      {
-        onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.LEAD_READ)],
-        config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
-        schema: {
-          summary: 'Mark lead read',
-          description:
-            'Records that the caller has read the conversation up to now (`app.lead_reads`, per viewer) \u2014 `is_unread` turns false for them until the next line. A lead whose status does not allow it is a 409. Requires lead:read.',
-          tags: ['Lead'],
-          params: leadsIdParamsDto,
-        },
-      },
-      controller.transition('reads'),
-    );
     zodApplication.delete<{ Params: { lead_id: string } }>(
       '/leads/:lead_id',
       {

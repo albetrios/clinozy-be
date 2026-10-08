@@ -343,21 +343,6 @@
     "model": "organization",
     "verifyNoMutation": true
   },
-  "GET /api/v1/app/message-templates/:message_template_id": {
-    "model": "organization"
-  },
-  "PATCH /api/v1/app/message-templates/:message_template_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "DELETE /api/v1/app/message-templates/:message_template_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "POST /api/v1/app/message-templates/:message_template_id/restore": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
   "GET /api/v1/app/appointments/:appointment_id": {
     "model": "organization"
   },
@@ -968,17 +953,6 @@
     "model": "organization",
     "verifyNoMutation": true
   },
-  "POST /api/v1/app/leads/:lead_id/reads": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "GET /api/v1/app/messages/:message_id": {
-    "model": "organization"
-  },
-  "POST /api/v1/app/messages/:message_id/resend": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
   "POST /api/v1/app/leads/:lead_id/convert": {
     "model": "organization",
     "verifyNoMutation": true
@@ -991,6 +965,68 @@
     "model": "organization"
   },
   "POST /api/v1/tenancy/organization/roles/:role_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/contact-message-templates/:contact_message_template_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/contact-message-templates/:contact_message_template_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/contact-message-templates/:contact_message_template_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/contact-message-templates/:contact_message_template_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/contacts/:contact_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/contacts/:contact_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/contacts/:contact_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/contacts/:contact_id/activities": {
+    "model": "organization"
+  },
+  "GET /api/v1/app/contacts/:contact_id/activities/:contact_activity_id": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/contacts/:contact_id/activities/:contact_activity_id/resend": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/contacts/:contact_id/activities/add-note": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/contacts/:contact_id/activities/log-call": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/contacts/:contact_id/activities/send-message": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/contacts/:contact_id/members": {
+    "model": "organization"
+  },
+  "PUT /api/v1/app/contacts/:contact_id/members": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/contacts/:contact_id/preview": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/contacts/:contact_id/restore": {
     "model": "organization",
     "verifyNoMutation": true
   }

@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 449
+  Total routes: 450
 ================================================================================
 
 Legend:
@@ -13,7 +13,7 @@ Legend:
 
 ================================================================================
   DOMAIN: APP (/api/v1/app)
-  Routes: 315
+  Routes: 316
 ================================================================================
 
   — Sub Domains —
@@ -60,11 +60,24 @@ Legend:
   PATCH  /api/v1/app/check-ins/:check_in_id                       200  -    both  PERM: patient:update
   DELETE /api/v1/app/check-ins/:check_in_id                       204  -    both  PERM: patient:update
   POST   /api/v1/app/check-ins/:check_in_id/restore               200  req  both  PERM: patient:update
+  POST   /api/v1/app/contact-activities/message-batches           200  -    both  PERM: contact_activity:create
+  GET    /api/v1/app/contact-message-templates                    200  -    both  PERM: organization:read
+  POST   /api/v1/app/contact-message-templates                    200  req  both  PERM: contact_activity:create
+  GET    /api/v1/app/contact-message-templates/:contact_message_template_id  200  -    both  PERM: organization:read
+  PATCH  /api/v1/app/contact-message-templates/:contact_message_template_id  200  -    both  PERM: contact_activity:update
+  DELETE /api/v1/app/contact-message-templates/:contact_message_template_id  204  -    both  PERM: contact_activity:delete
+  POST   /api/v1/app/contact-message-templates/:contact_message_template_id/restore  200  req  both  PERM: contact_activity:delete
   GET    /api/v1/app/contacts                                     200  -    both  PERM: contact:read
   POST   /api/v1/app/contacts                                     200  req  both  PERM: contact:create
   GET    /api/v1/app/contacts/:contact_id                         200  -    both  PERM: contact:read
   PATCH  /api/v1/app/contacts/:contact_id                         200  -    both  PERM: contact:update
   DELETE /api/v1/app/contacts/:contact_id                         204  -    both  PERM: contact:delete
+  GET    /api/v1/app/contacts/:contact_id/activities              200  -    both  PERM: contact_activity:read
+  GET    /api/v1/app/contacts/:contact_id/activities/:contact_activity_id  200  -    both  PERM: contact_activity:read
+  POST   /api/v1/app/contacts/:contact_id/activities/:contact_activity_id/resend  200  -    both  PERM: contact_activity:update
+  POST   /api/v1/app/contacts/:contact_id/activities/add-note     200  -    both  PERM: contact_activity:create
+  POST   /api/v1/app/contacts/:contact_id/activities/log-call     200  -    both  PERM: contact_activity:create
+  POST   /api/v1/app/contacts/:contact_id/activities/send-message  200  -    both  PERM: contact_activity:create
   GET    /api/v1/app/contacts/:contact_id/members                 200  -    both  PERM: contact:read
   PUT    /api/v1/app/contacts/:contact_id/members                 200  -    both  PERM: contact:update
   GET    /api/v1/app/contacts/:contact_id/preview                 200  -    both  PERM: contact:read
@@ -102,7 +115,6 @@ Legend:
   DELETE /api/v1/app/leads/:lead_id                               204  -    both  PERM: lead:delete
   POST   /api/v1/app/leads/:lead_id/claim                         200  req  both  PERM: lead:update
   POST   /api/v1/app/leads/:lead_id/convert                       200  req  both  PERM: patient:create
-  POST   /api/v1/app/leads/:lead_id/reads                         200  req  both  PERM: lead:read
   POST   /api/v1/app/leads/:lead_id/release                       200  req  both  PERM: lead:update
   POST   /api/v1/app/leads/:lead_id/restore                       200  req  both  PERM: lead:delete
   GET    /api/v1/app/leads/exports                                200  -    both  PERM: list:export
@@ -161,17 +173,6 @@ Legend:
   GET    /api/v1/app/memberships/me/saved-views/:membership_saved_view_id  200  -    both  PERM: organization:read
   PATCH  /api/v1/app/memberships/me/saved-views/:membership_saved_view_id  200  -    both  PERM: organization:read
   DELETE /api/v1/app/memberships/me/saved-views/:membership_saved_view_id  204  -    both  PERM: organization:read
-  GET    /api/v1/app/message-templates                            200  -    both  PERM: lead:read
-  POST   /api/v1/app/message-templates                            200  req  both  PERM: message_template:create
-  GET    /api/v1/app/message-templates/:message_template_id       200  -    both  PERM: lead:read
-  PATCH  /api/v1/app/message-templates/:message_template_id       200  -    both  PERM: message_template:update
-  DELETE /api/v1/app/message-templates/:message_template_id       204  -    both  PERM: message_template:delete
-  POST   /api/v1/app/message-templates/:message_template_id/restore  200  req  both  PERM: message_template:delete
-  GET    /api/v1/app/messages                                     200  -    both  PERM: lead:read
-  POST   /api/v1/app/messages                                     200  req  both  PERM: lead:update
-  GET    /api/v1/app/messages/:message_id                         200  -    both  PERM: lead:read
-  POST   /api/v1/app/messages/:message_id/resend                  200  req  both  PERM: lead:update
-  POST   /api/v1/app/messages/batches                             200  req  both  PERM: lead:update
   GET    /api/v1/app/offering-groups                              200  -    both  PERM: organization:read
   POST   /api/v1/app/offering-groups                              200  req  both  PERM: offering:create
   GET    /api/v1/app/offering-groups/:offering_group_id           200  -    both  PERM: organization:read
@@ -540,16 +541,16 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 449
+  Total routes    : 450
   Public          : 16
   Authenticated   : 51
   Role-guarded    : 9
-  Perm-guarded    : 368
+  Perm-guarded    : 369
   Token-guarded   : 5
   Team-only (O)   : 10
 
 ================================================================================
-  IDEMPOTENCY-REQUIRED WRITES (127) — X-Idempotency-Key required
+  IDEMPOTENCY-REQUIRED WRITES (123) — X-Idempotency-Key required
 ================================================================================
 
   Routes flagged I = req reject a missing or reused key (422); every other write
@@ -570,6 +571,8 @@ Legend:
     POST /api/v1/app/branches/:branch_id/rooms
     POST /api/v1/app/branches/:branch_id/rooms/:branch_room_id/restore
     POST /api/v1/app/check-ins/:check_in_id/restore
+    POST /api/v1/app/contact-message-templates
+    POST /api/v1/app/contact-message-templates/:contact_message_template_id/restore
     POST /api/v1/app/contacts
     POST /api/v1/app/contacts/:contact_id/restore
     POST /api/v1/app/day-closes
@@ -584,7 +587,6 @@ Legend:
     POST /api/v1/app/leads
     POST /api/v1/app/leads/:lead_id/claim
     POST /api/v1/app/leads/:lead_id/convert
-    POST /api/v1/app/leads/:lead_id/reads
     POST /api/v1/app/leads/:lead_id/release
     POST /api/v1/app/leads/:lead_id/restore
     POST /api/v1/app/manufacturers
@@ -605,11 +607,6 @@ Legend:
     POST /api/v1/app/medicines
     POST /api/v1/app/medicines/:medicine_id/restore
     POST /api/v1/app/memberships/me/saved-views
-    POST /api/v1/app/message-templates
-    POST /api/v1/app/message-templates/:message_template_id/restore
-    POST /api/v1/app/messages
-    POST /api/v1/app/messages/:message_id/resend
-    POST /api/v1/app/messages/batches
     POST /api/v1/app/offering-groups
     POST /api/v1/app/offering-groups/:offering_group_id/restore
     POST /api/v1/app/offering-suggestions/:offering_suggestion_id/restore
@@ -713,19 +710,19 @@ Legend:
     appointment:update            branch:create                 branch:delete
     branch:read                   branch:update                 clinical_record:read
     contact:create                contact:delete                contact:read
-    contact:update                day_close:close               day_close:create
-    day_close:delete              day_close:read                day_close:update
-    invoice:create                invoice:delete                invoice:read
-    invoice:update                lead:create                   lead:delete
-    lead:read                     lead:update                   list:export
-    manufacturer:create           manufacturer:delete           manufacturer:read
-    manufacturer:update           medical_purchase_order:create medical_purchase_order:delete
-    medical_purchase_order:read   medical_purchase_order:update medical_rep:create
-    medical_rep:delete            medical_rep:read              medical_rep:update
-    medical_sale:create           medical_sale:delete           medical_sale:read
-    medical_sale:update           medicine:create               medicine:delete
-    medicine:read                 medicine:update               message_template:create
-    message_template:delete       message_template:read         message_template:update
+    contact:update                contact_activity:create       contact_activity:delete
+    contact_activity:read         contact_activity:update       day_close:close
+    day_close:create              day_close:delete              day_close:read
+    day_close:update              invoice:create                invoice:delete
+    invoice:read                  invoice:update                lead:create
+    lead:delete                   lead:read                     lead:update
+    list:export                   manufacturer:create           manufacturer:delete
+    manufacturer:read             manufacturer:update           medical_purchase_order:create
+    medical_purchase_order:delete medical_purchase_order:read   medical_purchase_order:update
+    medical_rep:create            medical_rep:delete            medical_rep:read
+    medical_rep:update            medical_sale:create           medical_sale:delete
+    medical_sale:read             medical_sale:update           medicine:create
+    medicine:delete               medicine:read                 medicine:update
     offering:create               offering:delete               offering:export
     offering:lower_price:read     offering:update               patient:create
     patient:delete                patient:read                  patient:update

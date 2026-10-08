@@ -12,7 +12,6 @@ import {
 } from '@/infrastructure/database/contexts/database-context.js';
 import type { OrganizationRepository } from '@/domains/tenancy/sub-domains/organization/organization.repository.js';
 import type { MembershipRepository } from '@/domains/tenancy/sub-domains/membership/membership.repository.js';
-import type { MembershipSeatEnforcementPort } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import type { MembershipInvitationRepository } from './membership-invitation.repository.js';
 import type {

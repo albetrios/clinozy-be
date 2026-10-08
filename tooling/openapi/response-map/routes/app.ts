@@ -23,6 +23,18 @@ const contactMembersResponse: ResponseDefinition = {
   example: null,
 };
 
+const contactActivityResponse: ResponseDefinition = {
+  statusCode: 200,
+  schema: wrapSuccess(schemas.contactActivitySchema, schemas.contactActivityExample),
+  example: null,
+};
+
+const contactMessageTemplateResponse: ResponseDefinition = {
+  statusCode: 200,
+  schema: wrapSuccess(schemas.contactMessageTemplateSchema, schemas.contactMessageTemplateExample),
+  example: null,
+};
+
 const branchMembersResponse: ResponseDefinition = {
   statusCode: 200,
   schema: wrapSuccess({ type: 'array', items: schemas.branchMemberSchema }, [
@@ -115,6 +127,44 @@ export const appRouteResponses: Record<string, ResponseDefinition> = {
   },
   'GET /api/v1/app/contacts/{contact_id}/members': contactMembersResponse,
   'PUT /api/v1/app/contacts/{contact_id}/members': contactMembersResponse,
+  // ── Contact activity and message templates (launch #130, routes-final 4.C–4.D) ──
+  'GET /api/v1/app/contacts/{contact_id}/activities': {
+    statusCode: 200,
+    schema: wrapPaginated(schemas.contactActivitySchema, [schemas.contactActivityExample]),
+    example: null,
+  },
+  'POST /api/v1/app/contacts/{contact_id}/activities/send-message': contactActivityResponse,
+  'POST /api/v1/app/contacts/{contact_id}/activities/log-call': contactActivityResponse,
+  'POST /api/v1/app/contacts/{contact_id}/activities/add-note': contactActivityResponse,
+  'GET /api/v1/app/contacts/{contact_id}/activities/{contact_activity_id}': contactActivityResponse,
+  'POST /api/v1/app/contacts/{contact_id}/activities/{contact_activity_id}/resend':
+    contactActivityResponse,
+  'POST /api/v1/app/contact-activities/message-batches': {
+    statusCode: 200,
+    schema: wrapSuccess({ type: 'array', items: schemas.contactActivitySchema }, [
+      schemas.contactActivityExample,
+    ]),
+    example: null,
+  },
+  'GET /api/v1/app/contact-message-templates': {
+    statusCode: 200,
+    schema: wrapPaginated(schemas.contactMessageTemplateSchema, [
+      schemas.contactMessageTemplateExample,
+    ]),
+    example: null,
+  },
+  'POST /api/v1/app/contact-message-templates': contactMessageTemplateResponse,
+  'GET /api/v1/app/contact-message-templates/{contact_message_template_id}':
+    contactMessageTemplateResponse,
+  'PATCH /api/v1/app/contact-message-templates/{contact_message_template_id}':
+    contactMessageTemplateResponse,
+  'DELETE /api/v1/app/contact-message-templates/{contact_message_template_id}': {
+    statusCode: 204,
+    schema: null,
+    example: null,
+  },
+  'POST /api/v1/app/contact-message-templates/{contact_message_template_id}/restore':
+    contactMessageTemplateResponse,
   // ── Branch user accesses ──
   'GET /api/v1/app/branches/{branch_id}/members': branchMembersResponse,
   'PUT /api/v1/app/branches/{branch_id}/members': branchMembersResponse,

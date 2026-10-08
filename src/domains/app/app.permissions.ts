@@ -23,6 +23,12 @@ export const APP_PERMISSIONS = {
   CONTACT_CREATE: 'contact:create',
   CONTACT_UPDATE: 'contact:update',
   CONTACT_DELETE: 'contact:delete',
+  // Contact activity (launch #130, M4): the stream and the message templates — templates are read
+  // by every member (`organization:read`).
+  CONTACT_ACTIVITY_READ: 'contact_activity:read',
+  CONTACT_ACTIVITY_CREATE: 'contact_activity:create',
+  CONTACT_ACTIVITY_UPDATE: 'contact_activity:update',
+  CONTACT_ACTIVITY_DELETE: 'contact_activity:delete',
   PATIENT_READ: 'patient:read',
   PATIENT_CREATE: 'patient:create',
   PATIENT_UPDATE: 'patient:update',
@@ -31,10 +37,6 @@ export const APP_PERMISSIONS = {
   LEAD_CREATE: 'lead:create',
   LEAD_UPDATE: 'lead:update',
   LEAD_DELETE: 'lead:delete',
-  MESSAGE_TEMPLATE_READ: 'message_template:read',
-  MESSAGE_TEMPLATE_CREATE: 'message_template:create',
-  MESSAGE_TEMPLATE_UPDATE: 'message_template:update',
-  MESSAGE_TEMPLATE_DELETE: 'message_template:delete',
   APPOINTMENT_READ: 'appointment:read',
   APPOINTMENT_CREATE: 'appointment:create',
   APPOINTMENT_UPDATE: 'appointment:update',

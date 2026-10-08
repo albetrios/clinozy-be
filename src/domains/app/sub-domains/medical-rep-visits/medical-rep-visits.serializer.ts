@@ -1,6 +1,5 @@
 import type { BaseRecordRow } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordReferenceLookup } from '@/domains/app/base-record.types.js';
-import { toInstant } from '@/shared/utils/validation/record-fields.util.js';
 import type { MedicalRepVisitOutput } from './medical-rep-visits.types.js';
 
 /** Shapes a `app.medical_rep_visits` row as the API returns it (public ids, numbers, ISO times). */

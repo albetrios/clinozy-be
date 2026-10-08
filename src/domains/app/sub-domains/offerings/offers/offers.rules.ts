@@ -1,5 +1,5 @@
 import type { BaseRecordRules } from '@/domains/app/base-record.types.js';
-import { ValidationError } from '@/shared/errors/index.js';
+import { fieldValidationError, type ValidationError } from '@/shared/errors/index.js';
 import { calendarDateInTimeZone } from '@/shared/utils/validation/record-fields.util.js';
 import {
   OFFER_EXTRA_SESSIONS_MAX,
@@ -31,7 +31,7 @@ export function offerStatusOn(offer: OfferStatusInput, today: string): OfferStat
 
 /** The 400 on one field of an offer, with its own message. */
 function offerFieldError(field: 'value' | 'ends_on', messageKey: string): ValidationError {
-  return new ValidationError(messageKey, { field }, undefined, [{ field, messageKey }]);
+  return fieldValidationError({ field, messageKey });
 }
 
 /** Whether `value` is a whole number from 1 to `max`. */

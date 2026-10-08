@@ -42,12 +42,13 @@ const EVERY_ROLE_CODES: readonly string[] = [
 ];
 
 /**
- * What every role that deals with people holds — all but the Accountant: {@link EVERY_ROLE_CODES}
- * and the contacts' View · Create · Edit (launch #129, CT5).
+ * What every role that deals with people holds — all but the Accountant: {@link EVERY_ROLE_CODES},
+ * the contacts' View · Create · Edit (launch #129, CT5) and the activity's (launch #130, M4).
  */
-const CONTACT_EDITING_ROLE_CODES: readonly string[] = [
+const PERSON_FACING_ROLE_CODES: readonly string[] = [
   ...EVERY_ROLE_CODES,
   ...sectionCodes('contacts', VIEW_CREATE_EDIT),
+  ...sectionCodes('activity', VIEW_CREATE_EDIT),
 ];
 
 /**
@@ -75,6 +76,131 @@ function unique(codes: readonly string[]): readonly string[] {
   return [...new Set(codes)];
 }
 
+/** The Doctor role preset (D12). */
+const DOCTOR_PRESET: AppRolePreset = {
+  name: 'Doctor',
+  description: 'Sees patients, writes prescriptions and records treatments.',
+  tone: CHIP_TONE.SKY,
+  isLocked: false,
+  permissionCodes: unique([
+    ...PERSON_FACING_ROLE_CODES,
+    ...sectionCodes('leads', VIEW_CREATE_EDIT),
+    ...sectionCodes('appointments', VIEW_CREATE_EDIT),
+    ...sectionCodes('patients', VIEW_CREATE_EDIT),
+    ...readCodes(['medicine', 'manufacturer']),
+    APP_PERMISSIONS.CLINICAL_RECORD_READ,
+    APP_PERMISSIONS.PRIVATE_ALBUM_READ,
+    APP_PERMISSIONS.LIST_EXPORT,
+    APP_PERMISSIONS.OFFERING_EXPORT,
+  ]),
+};
+
+/** The Therapist role preset (D12). */
+const THERAPIST_PRESET: AppRolePreset = {
+  name: 'Therapist',
+  description: 'Runs treatment sessions and uses clinic stock.',
+  tone: CHIP_TONE.MINT,
+  isLocked: false,
+  permissionCodes: unique([
+    ...PERSON_FACING_ROLE_CODES,
+    ...sectionCodes('appointments', VIEW_CREATE_EDIT),
+    ...resourceCodes('patient', VIEW_CREATE_EDIT),
+    ...resourceCodes('treatment', VIEW_CREATE_EDIT),
+    ...readCodes(['prescription', 'review']),
+    ...sectionCodes('stock', VIEW_CREATE_EDIT),
+    APP_PERMISSIONS.CLINICAL_RECORD_READ,
+  ]),
+};
+
+/** The Front desk role preset (D12). */
+const FRONT_DESK_PRESET: AppRolePreset = {
+  name: 'Front desk',
+  description: 'Answers leads, books and confirms visits, takes payments.',
+  tone: CHIP_TONE.BUTTER,
+  isLocked: false,
+  permissionCodes: unique([
+    ...PERSON_FACING_ROLE_CODES,
+    ...sectionCodes('leads', VIEW_CREATE_EDIT),
+    ...sectionCodes('appointments', VIEW_CREATE_EDIT),
+    ...resourceCodes('patient', VIEW_CREATE_EDIT),
+    ...resourceCodes('review', VIEW_CREATE_EDIT),
+    ...readCodes(['treatment']),
+    ...sectionCodes('stock', VIEW_CREATE_EDIT),
+    ...sectionCodes('payments', VIEW_CREATE_EDIT),
+  ]),
+};
+
+/** The Counsellor role preset (D12). */
+const COUNSELLOR_PRESET: AppRolePreset = {
+  name: 'Counsellor',
+  description: 'Plans treatments with patients and sells packages.',
+  tone: CHIP_TONE.LAVENDER,
+  isLocked: false,
+  permissionCodes: unique([
+    ...PERSON_FACING_ROLE_CODES,
+    ...sectionCodes('leads', VIEW_CREATE_EDIT),
+    ...sectionCodes('appointments', VIEW_CREATE_EDIT),
+    ...resourceCodes('patient', VIEW_CREATE_EDIT),
+    ...resourceCodes('review', VIEW_CREATE_EDIT),
+    ...readCodes(['prescription', 'treatment']),
+    ...sectionCodes('payments', ['read', 'create']),
+    // Groups, offerings — prices included — and offers (O2, O3)
+    ...sectionCodes('offerings', ['create', 'update']),
+    APP_PERMISSIONS.CLINICAL_RECORD_READ,
+  ]),
+};
+
+/** The Pharmacist role preset (D12). */
+const PHARMACIST_PRESET: AppRolePreset = {
+  name: 'Pharmacist',
+  description: 'Runs the medical store: medicines, orders and sales.',
+  tone: CHIP_TONE.SAGE,
+  isLocked: false,
+  permissionCodes: unique([
+    ...PERSON_FACING_ROLE_CODES,
+    ...sectionCodes('medical', VIEW_CREATE_EDIT),
+    ...readCodes(['patient', 'prescription']),
+    APP_PERMISSIONS.LIST_EXPORT,
+    APP_PERMISSIONS.OFFERING_EXPORT,
+    APP_PERMISSIONS.SALE_VOID,
+  ]),
+};
+
+/** The Accountant role preset (D12). */
+const ACCOUNTANT_PRESET: AppRolePreset = {
+  name: 'Accountant',
+  description: 'Reconciles payments, closes the day and checks the books.',
+  tone: CHIP_TONE.PEACH,
+  isLocked: false,
+  permissionCodes: unique([
+    ...EVERY_ROLE_CODES,
+    ...readCodes(['patient']),
+    ...sectionCodes('payments', VIEW_CREATE_EDIT),
+    ...sectionCodes('medical', VIEW_CREATE_EDIT),
+    ...sectionCodes('stock', ['read']),
+    APP_PERMISSIONS.DAY_CLOSE_CLOSE,
+    APP_PERMISSIONS.PAYMENT_REVERSE_SETTLED,
+    APP_PERMISSIONS.LIST_EXPORT,
+    APP_PERMISSIONS.OFFERING_EXPORT,
+    APP_PERMISSIONS.OFFERING_LOWER_PRICE_READ,
+    APP_PERMISSIONS.REFUND_CREATE,
+  ]),
+};
+
+/** The Marketing role preset (D12). */
+const MARKETING_PRESET: AppRolePreset = {
+  name: 'Marketing',
+  description: 'Works leads and campaigns, and logs reviews.',
+  tone: CHIP_TONE.BLUSH,
+  isLocked: false,
+  permissionCodes: unique([
+    ...PERSON_FACING_ROLE_CODES,
+    ...sectionCodes('leads', VIEW_CREATE_EDIT),
+    ...readCodes(['patient']),
+    ...resourceCodes('review', VIEW_CREATE_EDIT),
+  ]),
+};
+
 /**
  * The clinic roles seeded into every TEAM organization next to Owner (D12, D13, D15, D16, D18, D19).
  *
@@ -97,116 +223,12 @@ export function appRolePresets(adminCodes: readonly string[]): readonly AppRoleP
       isLocked: true,
       permissionCodes: unique(adminCodes),
     },
-    {
-      name: 'Doctor',
-      description: 'Sees patients, writes prescriptions and records treatments.',
-      tone: CHIP_TONE.SKY,
-      isLocked: false,
-      permissionCodes: unique([
-        ...CONTACT_EDITING_ROLE_CODES,
-        ...sectionCodes('leads', VIEW_CREATE_EDIT),
-        ...sectionCodes('appointments', VIEW_CREATE_EDIT),
-        ...sectionCodes('patients', VIEW_CREATE_EDIT),
-        ...readCodes(['medicine', 'manufacturer']),
-        APP_PERMISSIONS.CLINICAL_RECORD_READ,
-        APP_PERMISSIONS.PRIVATE_ALBUM_READ,
-        APP_PERMISSIONS.LIST_EXPORT,
-        APP_PERMISSIONS.OFFERING_EXPORT,
-      ]),
-    },
-    {
-      name: 'Therapist',
-      description: 'Runs treatment sessions and uses clinic stock.',
-      tone: CHIP_TONE.MINT,
-      isLocked: false,
-      permissionCodes: unique([
-        ...CONTACT_EDITING_ROLE_CODES,
-        ...sectionCodes('appointments', VIEW_CREATE_EDIT),
-        ...resourceCodes('patient', VIEW_CREATE_EDIT),
-        ...resourceCodes('treatment', VIEW_CREATE_EDIT),
-        ...readCodes(['prescription', 'review']),
-        ...sectionCodes('stock', VIEW_CREATE_EDIT),
-        APP_PERMISSIONS.CLINICAL_RECORD_READ,
-      ]),
-    },
-    {
-      name: 'Front desk',
-      description: 'Answers leads, books and confirms visits, takes payments.',
-      tone: CHIP_TONE.BUTTER,
-      isLocked: false,
-      permissionCodes: unique([
-        ...CONTACT_EDITING_ROLE_CODES,
-        ...sectionCodes('leads', VIEW_CREATE_EDIT),
-        ...sectionCodes('appointments', VIEW_CREATE_EDIT),
-        ...resourceCodes('patient', VIEW_CREATE_EDIT),
-        ...resourceCodes('review', VIEW_CREATE_EDIT),
-        ...readCodes(['treatment']),
-        ...sectionCodes('stock', VIEW_CREATE_EDIT),
-        ...sectionCodes('payments', VIEW_CREATE_EDIT),
-      ]),
-    },
-    {
-      name: 'Counsellor',
-      description: 'Plans treatments with patients and sells packages.',
-      tone: CHIP_TONE.LAVENDER,
-      isLocked: false,
-      permissionCodes: unique([
-        ...CONTACT_EDITING_ROLE_CODES,
-        ...sectionCodes('leads', VIEW_CREATE_EDIT),
-        ...sectionCodes('appointments', VIEW_CREATE_EDIT),
-        ...resourceCodes('patient', VIEW_CREATE_EDIT),
-        ...resourceCodes('review', VIEW_CREATE_EDIT),
-        ...readCodes(['prescription', 'treatment']),
-        ...sectionCodes('payments', ['read', 'create']),
-        // Groups, offerings — prices included — and offers (O2, O3)
-        ...sectionCodes('offerings', ['create', 'update']),
-        APP_PERMISSIONS.CLINICAL_RECORD_READ,
-      ]),
-    },
-    {
-      name: 'Pharmacist',
-      description: 'Runs the medical store: medicines, orders and sales.',
-      tone: CHIP_TONE.SAGE,
-      isLocked: false,
-      permissionCodes: unique([
-        ...CONTACT_EDITING_ROLE_CODES,
-        ...sectionCodes('medical', VIEW_CREATE_EDIT),
-        ...readCodes(['patient', 'prescription']),
-        APP_PERMISSIONS.LIST_EXPORT,
-        APP_PERMISSIONS.OFFERING_EXPORT,
-        APP_PERMISSIONS.SALE_VOID,
-      ]),
-    },
-    {
-      name: 'Accountant',
-      description: 'Reconciles payments, closes the day and checks the books.',
-      tone: CHIP_TONE.PEACH,
-      isLocked: false,
-      permissionCodes: unique([
-        ...EVERY_ROLE_CODES,
-        ...readCodes(['patient']),
-        ...sectionCodes('payments', VIEW_CREATE_EDIT),
-        ...sectionCodes('medical', VIEW_CREATE_EDIT),
-        ...sectionCodes('stock', ['read']),
-        APP_PERMISSIONS.DAY_CLOSE_CLOSE,
-        APP_PERMISSIONS.PAYMENT_REVERSE_SETTLED,
-        APP_PERMISSIONS.LIST_EXPORT,
-        APP_PERMISSIONS.OFFERING_EXPORT,
-        APP_PERMISSIONS.OFFERING_LOWER_PRICE_READ,
-        APP_PERMISSIONS.REFUND_CREATE,
-      ]),
-    },
-    {
-      name: 'Marketing',
-      description: 'Works leads and campaigns, and logs reviews.',
-      tone: CHIP_TONE.BLUSH,
-      isLocked: false,
-      permissionCodes: unique([
-        ...CONTACT_EDITING_ROLE_CODES,
-        ...sectionCodes('leads', VIEW_CREATE_EDIT),
-        ...readCodes(['patient']),
-        ...resourceCodes('review', VIEW_CREATE_EDIT),
-      ]),
-    },
+    DOCTOR_PRESET,
+    THERAPIST_PRESET,
+    FRONT_DESK_PRESET,
+    COUNSELLOR_PRESET,
+    PHARMACIST_PRESET,
+    ACCOUNTANT_PRESET,
+    MARKETING_PRESET,
   ];
 }

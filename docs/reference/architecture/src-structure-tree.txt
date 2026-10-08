@@ -108,6 +108,19 @@ src/
     │   │   │   ├── check-ins.types.ts
     │   │   │   └── check-ins.validator.ts
     │   │   ├── contacts/
+    │   │   │   ├── contact-activities/
+    │   │   │   │   ├── contact-activities.constants.ts
+    │   │   │   │   ├── contact-activities.controller.ts
+    │   │   │   │   ├── contact-activities.dto.ts
+    │   │   │   │   ├── contact-activities.overview.md
+    │   │   │   │   ├── contact-activities.repository.ts
+    │   │   │   │   ├── contact-activities.routes.ts
+    │   │   │   │   ├── contact-activities.rules.ts
+    │   │   │   │   ├── contact-activities.schema.ts
+    │   │   │   │   ├── contact-activities.serializer.ts
+    │   │   │   │   ├── contact-activities.service.ts
+    │   │   │   │   ├── contact-activities.types.ts
+    │   │   │   │   └── contact-activities.validator.ts
     │   │   │   ├── contact-members/
     │   │   │   │   ├── contact-members.controller.ts
     │   │   │   │   ├── contact-members.dto.ts
@@ -118,6 +131,18 @@ src/
     │   │   │   │   ├── contact-members.service.ts
     │   │   │   │   ├── contact-members.types.ts
     │   │   │   │   └── contact-members.validator.ts
+    │   │   │   ├── contact-message-templates/
+    │   │   │   │   ├── contact-message-templates.constants.ts
+    │   │   │   │   ├── contact-message-templates.controller.ts
+    │   │   │   │   ├── contact-message-templates.dto.ts
+    │   │   │   │   ├── contact-message-templates.overview.md
+    │   │   │   │   ├── contact-message-templates.repository.ts
+    │   │   │   │   ├── contact-message-templates.routes.ts
+    │   │   │   │   ├── contact-message-templates.schema.ts
+    │   │   │   │   ├── contact-message-templates.serializer.ts
+    │   │   │   │   ├── contact-message-templates.service.ts
+    │   │   │   │   ├── contact-message-templates.types.ts
+    │   │   │   │   └── contact-message-templates.validator.ts
     │   │   │   ├── seed/
     │   │   │   │   ├── contacts.bulk.seed.ts
     │   │   │   │   ├── contacts.seed.ts
@@ -198,10 +223,6 @@ src/
     │   │   │   ├── invoices.service.ts
     │   │   │   ├── invoices.types.ts
     │   │   │   └── invoices.validator.ts
-    │   │   ├── lead-reads/
-    │   │   │   ├── lead-reads.constants.ts
-    │   │   │   ├── lead-reads.repository.ts
-    │   │   │   └── lead-reads.schema.ts
     │   │   ├── leads/
     │   │   │   ├── leads.constants.ts
     │   │   │   ├── leads.controller.ts
@@ -334,31 +355,6 @@ src/
     │   │   │   ├── memberships.service.ts
     │   │   │   ├── memberships.types.ts
     │   │   │   └── memberships.validator.ts
-    │   │   ├── message-templates/
-    │   │   │   ├── message-templates.constants.ts
-    │   │   │   ├── message-templates.controller.ts
-    │   │   │   ├── message-templates.dto.ts
-    │   │   │   ├── message-templates.overview.md
-    │   │   │   ├── message-templates.repository.ts
-    │   │   │   ├── message-templates.routes.ts
-    │   │   │   ├── message-templates.schema.ts
-    │   │   │   ├── message-templates.serializer.ts
-    │   │   │   ├── message-templates.service.ts
-    │   │   │   ├── message-templates.types.ts
-    │   │   │   └── message-templates.validator.ts
-    │   │   ├── messages/
-    │   │   │   ├── messages.constants.ts
-    │   │   │   ├── messages.controller.ts
-    │   │   │   ├── messages.dto.ts
-    │   │   │   ├── messages.overview.md
-    │   │   │   ├── messages.repository.ts
-    │   │   │   ├── messages.routes.ts
-    │   │   │   ├── messages.rules.ts
-    │   │   │   ├── messages.schema.ts
-    │   │   │   ├── messages.serializer.ts
-    │   │   │   ├── messages.service.ts
-    │   │   │   ├── messages.types.ts
-    │   │   │   └── messages.validator.ts
     │   │   ├── offering-suggestions/
     │   │   │   ├── offering-suggestions.constants.ts
     │   │   │   ├── offering-suggestions.controller.ts

@@ -8,7 +8,6 @@ import type { BaseRecordActionInput, BaseRecordRules } from '@/domains/app/base-
 import { AppointmentsRepository } from '@/domains/app/sub-domains/appointments/appointments.repository.js';
 import { CheckInsRepository } from '@/domains/app/sub-domains/check-ins/check-ins.repository.js';
 import { InvoicesRepository } from '@/domains/app/sub-domains/invoices/invoices.repository.js';
-import { MessagesRepository } from '@/domains/app/sub-domains/messages/messages.repository.js';
 import { PatientClinicalNotesRepository } from '@/domains/app/sub-domains/patient-clinical-notes/patient-clinical-notes.repository.js';
 import { patientImagesRules } from '@/domains/app/sub-domains/patient-images/patient-images.rules.js';
 import { PatientImagesRepository } from '@/domains/app/sub-domains/patient-images/patient-images.repository.js';
@@ -125,13 +124,6 @@ const TIMELINE_SOURCES: readonly TimelineSource[] = [
     repository: new PaymentsRepository(),
     permission: APP_PERMISSIONS.PAYMENT_READ,
     fields: ['payment_number', 'direction', 'kind', 'amount', 'paid_at'],
-  },
-  {
-    kind: 'message',
-    group: 'messages',
-    repository: new MessagesRepository(),
-    permission: APP_PERMISSIONS.LEAD_READ,
-    fields: ['channel', 'direction', 'kind', 'body', 'delivery_status'],
   },
 ];
 

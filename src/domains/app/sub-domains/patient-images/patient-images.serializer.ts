@@ -1,6 +1,5 @@
 import type { BaseRecordRow } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordReferenceLookup } from '@/domains/app/base-record.types.js';
-import { toInstant } from '@/shared/utils/validation/record-fields.util.js';
 import type { PatientImageOutput } from './patient-images.types.js';
 
 /** Shapes a `app.patient_images` row as the API returns it (public ids, numbers, ISO times). */

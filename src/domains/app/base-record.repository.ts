@@ -571,12 +571,17 @@ export class BaseRecordRepository extends BaseRepository {
     return columnOf(this.config.table, name);
   }
 
-  /** Live rows of one organization. */
+  /** Live rows of one organization (every row of an append-only table — no `deleted_at`). */
   protected liveInOrganization(organization_id: number): SQL {
     return and(
       eq(this.column('organization_id'), organization_id),
-      isNull(this.column('deleted_at')),
+      liveRowFilter(this.config.table),
     ) as SQL;
+  }
+
+  /** Whether the table soft-deletes (has `deleted_at`) — an append-only log does not. */
+  protected get softDeletes(): boolean {
+    return liveRowFilter(this.config.table) !== undefined;
   }
 
   /** `q` over the search columns, or the running number when `q` reads as one. */
@@ -600,13 +605,7 @@ export class BaseRecordRepository extends BaseRepository {
     const conditions: SQL[] = [];
     for (const [name, value] of Object.entries(query.equals ?? {})) {
       if (value === undefined) continue;
-      conditions.push(
-        Array.isArray(value)
-          ? inArray(this.column(name), value)
-          : value === null
-            ? isNull(this.column(name))
-            : eq(this.column(name), value),
-      );
+      conditions.push(this.equalsCondition(name, value));
     }
     for (const [name, range] of Object.entries(query.ranges ?? {})) {
       if (range.from !== undefined) conditions.push(gte(this.column(name), range.from));
@@ -616,6 +615,20 @@ export class BaseRecordRepository extends BaseRepository {
     for (const filter of query.linked ?? []) conditions.push(this.linkedCondition(filter));
     conditions.push(...this.derivedConditions(query.derived, organizationId));
     return conditions;
+  }
+
+  /**
+   * `column = value`, `IN (values)` or `IS NULL` — a list holding `null` also keeps the rows without
+   * a value (a read scope that allows only unlinked rows is `[null]`).
+   */
+  private equalsCondition(name: string, value: unknown): SQL {
+    const column = this.column(name);
+    if (value === null) return isNull(column);
+    if (!Array.isArray(value)) return eq(column, value);
+    const present = value.filter((entry) => entry !== null);
+    const values = present.length === 0 ? undefined : inArray(column, present);
+    if (present.length === value.length) return values ?? sql`false`;
+    return values ? (or(values, isNull(column)) as SQL) : isNull(column);
   }
 
   /** Rows of the scope's branches — or of no branch, on a nullable branch column (D9). */
@@ -888,7 +901,7 @@ export class BaseRecordRepository extends BaseRepository {
     const rows = (await getRequestDatabase()
       .select()
       .from(this.config.table)
-      .where(and(eq(this.column('id'), id), isNull(this.column('deleted_at'))))
+      .where(and(eq(this.column('id'), id), liveRowFilter(this.config.table)))
       .limit(1)) as BaseRecordRow[];
     return rows[0] ?? null;
   }
@@ -899,6 +912,7 @@ export class BaseRecordRepository extends BaseRepository {
     organization_id: number,
     options: { deleted?: boolean } = {},
   ): Promise<BaseRecordRow | null> {
+    if (options.deleted && !this.softDeletes) return null;
     const rows = (await getRequestDatabase()
       .select()
       .from(this.config.table)
@@ -906,9 +920,7 @@ export class BaseRecordRepository extends BaseRepository {
         and(
           eq(this.column('public_id'), public_id),
           eq(this.column('organization_id'), organization_id),
-          options.deleted
-            ? isNotNull(this.column('deleted_at'))
-            : isNull(this.column('deleted_at')),
+          options.deleted ? isNotNull(this.column('deleted_at')) : liveRowFilter(this.config.table),
         ),
       )
       .limit(1)) as BaseRecordRow[];
@@ -939,7 +951,7 @@ export class BaseRecordRepository extends BaseRepository {
         updated_at: sql`greatest(${this.column('created_at')}, now())`,
         updated_by_user_id,
       } as never)
-      .where(and(eq(this.column('id'), id), isNull(this.column('deleted_at'))))
+      .where(and(eq(this.column('id'), id), liveRowFilter(this.config.table)))
       .returning()) as BaseRecordRow[];
     return rows[0] ?? null;
   }
@@ -973,7 +985,7 @@ export class BaseRecordRepository extends BaseRepository {
       .where(
         and(
           eq(this.column('id'), options.id),
-          isNull(this.column('deleted_at')),
+          liveRowFilter(this.config.table),
           sql`${moved} >= 0`,
           options.ceilingColumn
             ? sql`${moved} <= ${this.column(options.ceilingColumn)}`

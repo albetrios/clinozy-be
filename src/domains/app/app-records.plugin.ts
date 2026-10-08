@@ -9,7 +9,8 @@ import { offersRoutes } from './sub-domains/offerings/offers/offers.routes.js';
 import { contactsRoutes } from './sub-domains/contacts/contacts.routes.js';
 import { patientsRoutes } from './sub-domains/patients/patients.routes.js';
 import { leadsRoutes } from './sub-domains/leads/leads.routes.js';
-import { messageTemplatesRoutes } from './sub-domains/message-templates/message-templates.routes.js';
+import { contactActivitiesRoutes } from './sub-domains/contacts/contact-activities/contact-activities.routes.js';
+import { contactMessageTemplatesRoutes } from './sub-domains/contacts/contact-message-templates/contact-message-templates.routes.js';
 import { appointmentsRoutes } from './sub-domains/appointments/appointments.routes.js';
 import { visitsRoutes } from './sub-domains/visits/visits.routes.js';
 import { diagnosesRoutes } from './sub-domains/diagnoses/diagnoses.routes.js';
@@ -45,7 +46,6 @@ import { stockPurchasesRoutes } from './sub-domains/stock-purchases/stock-purcha
 import { stockCountsRoutes } from './sub-domains/stock-counts/stock-counts.routes.js';
 import { stockMovementsRoutes } from './sub-domains/stock-movements/stock-movements.routes.js';
 import { tasksRoutes } from './sub-domains/tasks/tasks.routes.js';
-import { messagesRoutes } from './sub-domains/messages/messages.routes.js';
 
 /** Registers every app record table's routes on the `/api/v1/app` plugin. */
 export async function registerAppRecordRoutes(
@@ -59,9 +59,10 @@ export async function registerAppRecordRoutes(
   await app.register(offeringsRoutes(services.offeringsService));
   await app.register(offersRoutes(services.offersService));
   await app.register(contactsRoutes(services.contactsService));
+  await app.register(contactActivitiesRoutes(services.contactActivitiesService));
+  await app.register(contactMessageTemplatesRoutes(services.contactMessageTemplatesService));
   await app.register(patientsRoutes(services.patientsService));
   await app.register(leadsRoutes(services.leadsService));
-  await app.register(messageTemplatesRoutes(services.messageTemplatesService));
   await app.register(appointmentsRoutes(services.appointmentsService));
   await app.register(visitsRoutes(services.visitsService));
   await app.register(diagnosesRoutes(services.diagnosesService));
@@ -97,5 +98,4 @@ export async function registerAppRecordRoutes(
   await app.register(stockCountsRoutes(services.stockCountsService));
   await app.register(stockMovementsRoutes(services.stockMovementsService));
   await app.register(tasksRoutes(services.tasksService));
-  await app.register(messagesRoutes(services.messagesService));
 }

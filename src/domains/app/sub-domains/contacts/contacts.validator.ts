@@ -1,5 +1,5 @@
 import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
-import { ValidationError } from '@/shared/errors/index.js';
+import { fieldValidationError, type ValidationError } from '@/shared/errors/index.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 import { splitRecordIds } from '@/shared/utils/validation/record-fields.util.js';
 import {
@@ -29,8 +29,10 @@ type ContactSearch =
 
 /** The 400 for a `q` too short to search (CT9). */
 function searchTooShortError(): ValidationError {
-  const messageKey = 'errors:validation.contactSearchTooShort';
-  return new ValidationError(messageKey, undefined, undefined, [{ field: 'q', messageKey }]);
+  return fieldValidationError({
+    field: 'q',
+    messageKey: 'errors:validation.contactSearchTooShort',
+  });
 }
 
 /**
@@ -45,7 +47,9 @@ function readContactSearch(q: string | undefined): ContactSearch {
     return { kind: 'contact_number', contactNumber: Number(contactNumber) };
   if (PHONE_QUERY.test(q) && /\d/.test(q)) {
     let digits = q.replace(/\D/g, '');
-    if (
+    // A typed country code (`+91 98250…`, even part of a number) or a full number's `91` / `0`
+    if (q.startsWith('+91')) digits = digits.slice(2);
+    else if (
       digits.length > LOCAL_NUMBER_LENGTH &&
       (digits.startsWith('91') || digits.startsWith('0'))
     ) {

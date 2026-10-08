@@ -149,6 +149,7 @@ export const membershipPreferencesSchema = {
         enum: [
           'today',
           'contacts',
+          'activity',
           'leads',
           'appointments',
           'patients',
@@ -386,3 +387,102 @@ export const contactMemberSchema = branchMemberSchema;
 
 /** Example `ContactMemberOutput`. */
 export const contactMemberExample = branchMemberExample;
+
+/** `ContactActivityOutput` — one entry of a contact's stream (launch #130, routes-final 4.C.6). */
+export const contactActivitySchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', example: 'msg_k7x9m2pqr4w8n1v3a1b2c' },
+    contact_id: { type: 'string' },
+    type: { type: 'string', enum: ['whatsapp', 'instagram', 'call_log', 'note', 'system'] },
+    direction: { type: ['string', 'null'], enum: ['sent', 'received', null] },
+    body: { type: 'string', maxLength: 1000 },
+    contact_message_template_id: nullableString,
+    attachment_keys: { type: 'array', maxItems: 5, items: { type: 'string' } },
+    reply_to_contact_activity_id: nullableString,
+    delivery_status: {
+      type: ['string', 'null'],
+      enum: ['queued', 'sent', 'delivered', 'read', 'failed', null],
+    },
+    provider_message_id: nullableString,
+    failure_reason: nullableString,
+    occurred_at: { type: 'string', format: 'date-time' },
+    delivered_at: nullableInstant,
+    read_at: nullableInstant,
+    failed_at: nullableInstant,
+    author_membership_id: nullableString,
+    appointment_id: nullableString,
+    invoice_id: nullableString,
+    payment_id: nullableString,
+    patient_prescription_id: nullableString,
+    patient_offering_id: nullableString,
+    patient_review_id: nullableString,
+    patient_check_in_id: nullableString,
+    task_id: nullableString,
+    patient_treatment_id: nullableString,
+    patient_clinical_note_id: nullableString,
+    patient_image_id: nullableString,
+    patient_report_id: nullableString,
+    group: { type: 'string', enum: ['messages', 'clinical', 'money', 'tasks'] },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
+  },
+};
+
+/** Example `ContactActivityOutput` — a queued WhatsApp message. */
+export const contactActivityExample = {
+  id: 'msg_k7x9m2pqr4w8n1v3a1b2c',
+  contact_id: 'con_k7x9m2pqr4w8n1v3a1b2c',
+  type: 'whatsapp',
+  direction: 'sent',
+  body: 'Hi Riya, your slot is confirmed for tomorrow at 11.',
+  contact_message_template_id: null,
+  attachment_keys: [],
+  reply_to_contact_activity_id: null,
+  delivery_status: 'queued',
+  provider_message_id: null,
+  failure_reason: null,
+  occurred_at: '2026-10-08T10:30:00.000Z',
+  delivered_at: null,
+  read_at: null,
+  failed_at: null,
+  author_membership_id: 'mem_a1s2d3f4g5h6j7k8l9z0x',
+  appointment_id: null,
+  invoice_id: null,
+  payment_id: null,
+  patient_prescription_id: null,
+  patient_offering_id: null,
+  patient_review_id: null,
+  patient_check_in_id: null,
+  task_id: null,
+  patient_treatment_id: null,
+  patient_clinical_note_id: null,
+  patient_image_id: null,
+  patient_report_id: null,
+  group: 'messages',
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
+};
+
+/** `ContactMessageTemplateOutput` — a reusable outgoing text (launch #130, routes-final 4.D.6). */
+export const contactMessageTemplateSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', example: 'mtpl_k7x9m2pqr4w8n1v3a1b2c' },
+    name: { type: 'string', maxLength: 60 },
+    body: { type: 'string', maxLength: 1000 },
+    type: { type: 'string', enum: ['whatsapp', 'instagram'] },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
+  },
+};
+
+/** Example `ContactMessageTemplateOutput`. */
+export const contactMessageTemplateExample = {
+  id: 'mtpl_k7x9m2pqr4w8n1v3a1b2c',
+  name: 'Slot confirmed',
+  body: 'Hi <first>, your slot is confirmed.',
+  type: 'whatsapp',
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
+};

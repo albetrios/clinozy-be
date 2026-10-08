@@ -126,6 +126,12 @@ export interface BaseRecordPorts {
   organizationSettings: (
     scope: OrganizationPrincipalDatabaseScope,
   ) => Promise<OrganizationOperatingSettings>;
+  /**
+   * Whether `fileKey` is a confirmed upload of the organization (an entry's attachments, M6) —
+   * late-wired from the upload domain; false for a key that is missing, pending or another
+   * organization's.
+   */
+  isConfirmedUpload: (options: { organizationId: number; fileKey: string }) => Promise<boolean>;
 }
 
 /** Where a write runs — the organization, the actor and the scope (for other services). */
@@ -266,6 +272,11 @@ export interface BaseRecordDescriptor<Output> extends BaseRecordRules {
   label: string;
   repository: BaseRecordRepository;
   parseCreate: (body: unknown) => Record<string, unknown>;
+  /**
+   * Creates of their own body, one route each (`POST …/send-message`, `…/log-call`): name → parser.
+   * The rest of the create — references, rules, conflicts — is the table's.
+   */
+  namedCreates?: Readonly<Record<string, (body: unknown) => Record<string, unknown>>>;
   parseUpdate: (body: unknown) => Record<string, unknown>;
   parseList: (query: unknown) => BaseRecordListInput;
   serialize: (row: BaseRecordRow, references: BaseRecordReferenceLookup) => Output;

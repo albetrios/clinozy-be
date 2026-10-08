@@ -28,7 +28,8 @@ import {
   timelinePatientQueryDto as appTimelinePatientQueryDto,
 } from '@/domains/app/sub-domains/patients/patients.dto.js';
 import { listLeadsQueryDto as appLeadsListQueryDto } from '@/domains/app/sub-domains/leads/leads.dto.js';
-import { listMessageTemplatesQueryDto as appMessageTemplatesListQueryDto } from '@/domains/app/sub-domains/message-templates/message-templates.dto.js';
+import { listContactMessageTemplatesQueryDto } from '@/domains/app/sub-domains/contacts/contact-message-templates/contact-message-templates.dto.js';
+import { listContactActivitiesQueryDto } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.dto.js';
 import {
   dailyCountsAppointmentsQueryDto as appDailyCountsAppointmentsQueryDto,
   listAppointmentsQueryDto as appAppointmentsListQueryDto,
@@ -69,7 +70,6 @@ import { listStockCountsQueryDto as appStockCountsListQueryDto } from '@/domains
 import { listStockMovementsQueryDto as appStockMovementsListQueryDto } from '@/domains/app/sub-domains/stock-movements/stock-movements.dto.js';
 import { listTasksQueryDto as appTasksListQueryDto } from '@/domains/app/sub-domains/tasks/tasks.dto.js';
 import { listContactsQueryDto } from '@/domains/app/sub-domains/contacts/contacts.dto.js';
-import { listMessagesQueryDto as appMessagesListQueryDto } from '@/domains/app/sub-domains/messages/messages.dto.js';
 import { listLimitQuerySchema } from '@/shared/utils/http/pagination.util.js';
 
 export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
@@ -96,7 +96,7 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/app/offers': appOffersListQueryDto,
   'GET /api/v1/app/patients': appPatientsListQueryDto,
   'GET /api/v1/app/leads': appLeadsListQueryDto,
-  'GET /api/v1/app/message-templates': appMessageTemplatesListQueryDto,
+  'GET /api/v1/app/contact-message-templates': listContactMessageTemplatesQueryDto,
   'GET /api/v1/app/appointments': appAppointmentsListQueryDto,
   'GET /api/v1/app/visits': appVisitsListQueryDto,
   'GET /api/v1/app/diagnoses': appDiagnosesListQueryDto,
@@ -147,7 +147,7 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/app/stock-items/exports': appStockItemsListQueryDto,
   'GET /api/v1/app/stock-purchases/exports': appStockPurchasesListQueryDto,
   'GET /api/v1/app/tasks/exports': appTasksListQueryDto,
-  'GET /api/v1/app/messages': appMessagesListQueryDto,
+  'GET /api/v1/app/contacts/{contact_id}/activities': listContactActivitiesQueryDto,
   'GET /api/v1/app/appointments/slots': appSlotsAppointmentsQueryDto,
   'GET /api/v1/app/appointments/daily-counts': appDailyCountsAppointmentsQueryDto,
   'GET /api/v1/app/patients/{patient_id}/timeline': appTimelinePatientQueryDto,

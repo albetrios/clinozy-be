@@ -29,8 +29,6 @@ export interface LeadOutput {
   household: string | null;
   /** The owner's hold — open to the team after it (D40) */
   held_until: string | null;
-  /** The conversation has lines the caller has not read (per viewer, computed on read) */
-  is_unread: boolean;
   created_at: string;
   updated_at: string;
 }

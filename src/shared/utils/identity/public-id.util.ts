@@ -42,7 +42,7 @@ export const PUBLIC_ID_PREFIXES = {
   patient: 'pat',
   lead: 'lead',
   leadRead: 'lread',
-  messageTemplate: 'mtpl',
+  contactMessageTemplate: 'mtpl',
   appointment: 'appt',
   visit: 'vis',
   diagnosis: 'dgn',
@@ -83,7 +83,7 @@ export const PUBLIC_ID_PREFIXES = {
   task: 'task',
   taskOwnerChange: 'toc',
   taskRuleSetting: 'trs',
-  message: 'msg',
+  contactActivity: 'msg',
 } as const;
 
 /** Entity keys of {@link PUBLIC_ID_PREFIXES}. */
@@ -167,7 +167,7 @@ export const PARAM_NAME_TO_ENTITY = {
   patient_id: 'patient',
   lead_id: 'lead',
   lead_read_id: 'leadRead',
-  message_template_id: 'messageTemplate',
+  contact_message_template_id: 'contactMessageTemplate',
   appointment_id: 'appointment',
   visit_id: 'visit',
   diagnosis_id: 'diagnosis',
@@ -208,7 +208,7 @@ export const PARAM_NAME_TO_ENTITY = {
   task_rule_setting_id: 'taskRuleSetting',
   patient_image_id: 'patientImage',
   patient_report_id: 'patientReport',
-  message_id: 'message',
+  contact_activity_id: 'contactActivity',
 } as const satisfies Record<string, PublicIdEntity>;
 
 /** Deterministic placeholder id for an entity (valid shape, never a real row). */

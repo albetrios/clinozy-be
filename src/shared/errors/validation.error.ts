@@ -55,3 +55,22 @@ function objectToFieldMessages(details: Record<string, unknown>): ValidationErro
     message: resolveFieldMessage(value),
   }));
 }
+
+/**
+ * The 400 naming one field, with a translated message for the whole error and for the field —
+ * the one shape every business rule refuses a field with (`date_of_birth` in the future, a price
+ * out of order).
+ *
+ * @remarks
+ * - **Notes:** `messageParams` defaults to `{ field }` for the top-level message.
+ */
+export function fieldValidationError(options: {
+  field: string;
+  messageKey: string;
+  messageParams?: Record<string, string | number>;
+}): ValidationError {
+  const { field, messageKey, messageParams } = options;
+  return new ValidationError(messageKey, messageParams ?? { field }, undefined, [
+    { field, messageKey, ...(messageParams ? { messageParams } : {}) },
+  ]);
+}

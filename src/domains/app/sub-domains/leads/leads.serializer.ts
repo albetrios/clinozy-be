@@ -33,7 +33,6 @@ export function serializeLead(
     preferences: row.preferences as unknown,
     household: row.household as string | null,
     held_until: toInstant(row.held_until),
-    is_unread: false,
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),
   };

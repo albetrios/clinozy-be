@@ -24,6 +24,8 @@ branch (CT6).
 | `contacts.repository.ts` | the shared app record layers on this table: sorts (`name`, `match`, `created_at`, `last_activity_at`), derived filters (`phone`, `is_awaiting_reply`, `preference_tags`, `is_patient`, `has_open_lead`), the clash read |
 | `contacts.service.ts` / `.controller.ts` / `.routes.ts` | routes 1–7 below |
 | `contact-members/` | `app.contact_members` + `GET`/`PUT /app/contacts/{contact_id}/members`; its leave part (K4) removes an ended member's rows |
+| [`contact-activities/`](contact-activities/contact-activities.overview.md) | `app.contact_activities` — the person's stream (routes 10–16, ROUTE #130) |
+| [`contact-message-templates/`](contact-message-templates/contact-message-templates.overview.md) | `app.contact_message_templates` — reusable outgoing texts (routes 17–22, ROUTE #130) |
 | `seed/` | `seedContact`, `seedContactMember` and `seedContactsBulk` (three contacts per organization, two sharing a household) |
 
 ## Routes

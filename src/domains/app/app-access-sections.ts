@@ -13,7 +13,9 @@
 export const APP_ACCESS_SECTION_RESOURCES = {
   // The person every lead, patient file and appointment points at (launch #129, CT5).
   contacts: ['contact'],
-  leads: ['lead', 'message_template'],
+  // The stream and its templates (launch #130, M4) — the Activity row.
+  activity: ['contact_activity'],
+  leads: ['lead'],
   appointments: ['appointment'],
   patients: ['patient', 'prescription', 'treatment', 'review'],
   medical: [
@@ -40,6 +42,7 @@ export type AppAccessSection = keyof typeof APP_ACCESS_SECTION_RESOURCES;
 /** The matrix rows, in the Users › Roles order (Today is not a row). */
 export const APP_MATRIX_SECTIONS = [
   'contacts',
+  'activity',
   'leads',
   'appointments',
   'patients',

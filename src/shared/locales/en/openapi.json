@@ -41,10 +41,13 @@
     "Branch": "Branches — locations, hours and who works where",
     "Saved view": "Saved list views — each person's named filters and hidden columns",
     "Offering": "Offerings, offering groups and offers — what the organization sells and at what price",
+    "Contact": "Contacts — one record per person, shared by their lead, patient file, appointments and activity",
+    "Contact activity": "A contact's stream — WhatsApp and Instagram messages, call logs, notes and server events",
+    "Contact message template": "Reusable texts for outgoing WhatsApp and Instagram messages",
     "Branch resource": "Rooms, machines and holidays of a branch",
     "Preference": "Each person's own settings — pinned sections, branch filter, theme",
     "Patient": "Patients — registration, contact and consent",
-    "Lead": "Leads, their conversations and message templates",
+    "Lead": "Leads — enquiries until the person becomes a patient",
     "Appointment": "Appointments — booking, confirming, check-in, cancel and the slots",
     "Visit": "Visits in progress — the floor stage, the consult note and the safety checks",
     "Patient file": "A patient's file — clinical notes, prescriptions, images, reports and notes",
@@ -54,9 +57,7 @@
     "Feedback": "Check-ins, reviews and the actions taken on them",
     "Medical store": "The medical store — medicines, suppliers, manufacturers, reps, purchase orders and sales",
     "Stock": "Consumable stock — items, vendors, purchases, movements and counts",
-    "Task": "Tasks — the work queue, its rules and their automatic handling",
-    "Search": "The command search and contact cards — patients, leads, appointments, invoices",
-    "Message": "Conversations — every line with a patient, a lead or a walk-in buyer, on any channel"
+    "Task": "Tasks — the work queue, its rules and their automatic handling"
   },
   "components": {
     "bearerAuthDescription": "JWT access token obtained from the login or token refresh endpoint."
