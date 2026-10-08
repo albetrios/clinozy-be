@@ -98,20 +98,12 @@ step "[1/${TOTAL}] Node runtime"
 required_major="24"
 [ -f .nvmrc ] && required_major="$(tr -dc '0-9.' < .nvmrc | cut -d. -f1)"
 node_prefix="${NODE_INSTALL_PREFIX:-/opt}"
-# The pinned Node goes to <prefix>/node<major>, which needs root: run as root, else via
-# passwordless sudo and then hand the directory to this user (so corepack/pnpm can write
-# shims without sudo), else best-effort on the session Node. Off Linux, install-node.sh
-# exits early — a developer machine's Node comes from nvm.
-if [ "$(id -u)" -eq 0 ] || [ "$(uname -s)" != "Linux" ]; then
-  NODE_INSTALL_PREFIX="${node_prefix}" bash "${AGENT_DIR}/install-node.sh" >&2 \
-    || skip "install-node best-effort (using session Node)"
-elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-  sudo -n env NODE_INSTALL_PREFIX="${node_prefix}" bash "${AGENT_DIR}/install-node.sh" >&2 \
-    && sudo -n chown -R "$(id -u):$(id -g)" "${node_prefix}/node${required_major}" 2>/dev/null \
-    || skip "install-node best-effort (using session Node)"
-else
-  skip "install-node: ${node_prefix} needs root and passwordless sudo is unavailable — using session Node"
-fi
+# The pinned Node goes to <prefix>/node<major>, which needs root — install-node.sh runs
+# itself through passwordless sudo when this user cannot write there; else best-effort on
+# the session Node. Off Linux, install-node.sh exits early — a developer machine's Node
+# comes from nvm.
+NODE_INSTALL_PREFIX="${node_prefix}" bash "${AGENT_DIR}/install-node.sh" >&2 \
+  || skip "install-node best-effort (using session Node)"
 
 # install-node.sh drops the pinned Node into <prefix>/node<major>, but it runs
 # in a child process and so cannot change THIS shell's PATH. Activate it here so

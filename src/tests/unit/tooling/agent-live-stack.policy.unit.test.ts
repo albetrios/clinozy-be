@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const sessionStart = readFileSync('agent-os/hooks/session-start.sh', 'utf8');
 const bootstrap = readFileSync('tooling/setup/agent/bootstrap.sh', 'utf8');
+const installNode = readFileSync('tooling/setup/agent/install-node.sh', 'utf8');
 const stack = readFileSync('tooling/setup/agent/stack.sh', 'utf8');
 const packageScripts = (
   JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> }
@@ -20,6 +21,15 @@ describe('live playground stack policy', () => {
       `setsid nohup bash tooling/setup/agent/bootstrap.sh >"\${stack_directory}/bootstrap.log"`,
     );
     expect(sessionStart).toContain('disown');
+  });
+
+  it('a web session with no pinned Node on disk installs it before the dependency install', () => {
+    const installNodeCall = sessionStart.indexOf('bash tooling/setup/agent/install-node.sh >&2');
+    expect(installNodeCall).toBeGreaterThan(-1);
+    expect(installNodeCall).toBeLessThan(sessionStart.indexOf('pnpm install --prefer-offline'));
+    // The installer elevates itself, so the hook and bootstrap.sh call it the same way.
+    expect(installNode).toContain('sudo -n env NODE_INSTALL_PREFIX=');
+    expect(bootstrap).not.toContain('sudo -n env NODE_INSTALL_PREFIX=');
   });
 
   it('the hook can be switched off per environment and never launches twice', () => {
