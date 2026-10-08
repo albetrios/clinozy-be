@@ -1,4 +1,5 @@
 import type { Redis } from 'ioredis';
+import { resolveApiReplicaCount } from '@/shared/config/deployment-replica-count.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 /**
@@ -78,9 +79,9 @@ export function scaleProcessLocalRateLimitCount(options: {
  * - **Side effects:** writes Redis keys; maintains a bounded in-memory counter map capped at
  *   {@link LOCAL_COUNTER_MAX_KEYS}; emits a rate-limited `rate_limit.redis_failover.local`
  *   warning while degraded.
- * - **Notes:** the local fallback is process-local. Scaling by `DEPLOYMENT_API_REPLICA_COUNT`
- *   (or `DEPLOYMENT_TOTAL_REPLICA_COUNT` when the split count is unset) keeps N replicas from
- *   granting N times the configured budget. Redis counts are not scaled — they are already shared.
+ * - **Notes:** the local fallback is process-local. Scaling by {@link resolveApiReplicaCount}
+ *   keeps N replicas from granting N times the configured budget. Redis counts are not scaled —
+ *   they are already shared.
  */
 class RedisFallbackRateLimitStore {
   private readonly localCounters = new Map<string, { count: number; expiresAtMs: number }>();
@@ -178,18 +179,19 @@ class RedisFallbackRateLimitStore {
  *   `redis` and `replicaCount`, delegating all counting to {@link RedisFallbackRateLimitStore}.
  * - **Failure modes:** none.
  * - **Side effects:** none at build time; the returned store performs Redis/in-memory writes.
- * - **Notes:** pass as `options.store`; do not also pass `options.redis`. `replicaCount` is
- *   `DEPLOYMENT_API_REPLICA_COUNT`, else `DEPLOYMENT_TOTAL_REPLICA_COUNT`, else 1.
+ * - **Notes:** pass as `options.store`; do not also pass `options.redis`. `replicaCount` defaults
+ *   to {@link resolveApiReplicaCount}. Tests pass an explicit count.
  */
 export function createRedisFallbackRateLimitStore(options: {
   redis: Redis;
-  replicaCount: number;
+  replicaCount?: number;
 }): new (
   params: unknown,
 ) => unknown {
+  const replicaCount = options.replicaCount ?? resolveApiReplicaCount();
   return class BoundRedisFallbackRateLimitStore extends RedisFallbackRateLimitStore {
     constructor(_params: unknown) {
-      super(options.redis, RATE_LIMIT_KEY_PREFIX, options.replicaCount);
+      super(options.redis, RATE_LIMIT_KEY_PREFIX, replicaCount);
     }
   };
 }
@@ -201,7 +203,7 @@ export function createRedisFallbackRateLimitStore(options: {
 export function createRateLimitCounter(options: {
   redis: Redis;
   keyPrefix: string;
-  replicaCount: number;
+  replicaCount?: number;
 }): {
   increment(incrementOptions: {
     key: string;
@@ -212,7 +214,7 @@ export function createRateLimitCounter(options: {
   const store = new RedisFallbackRateLimitStore(
     options.redis,
     options.keyPrefix,
-    options.replicaCount,
+    options.replicaCount ?? resolveApiReplicaCount(),
   );
   return {
     increment(incrementOptions) {

@@ -93,7 +93,7 @@ const RATE_LIMIT_ALLOWLISTED_PATHS = new Set(['/livez', '/readyz']);
  * never turn `/livez` / `/readyz` and every other request into a 5xx).
  *
  * The trade-off is **reduced precision over availability**: the local fallback is process-local,
- * and each hit is multiplied by {@link resolveApiRateLimitReplicaCount} before it is compared
+ * and each hit is multiplied by `resolveApiReplicaCount` before it is compared
  * with `max`, so N replicas do not grant N times the configured budget. That is preferable to
  * either a blanket outage or unmetered traffic. Defense in depth is preserved by (1) the
  * per-route auth-gated presets, (2) the per-organization request budget appended on every route
@@ -109,21 +109,11 @@ const RATE_LIMIT_ALLOWLISTED_PATHS = new Set(['/livez', '/readyz']);
  * limiter via `app.rateLimit(...)` (e.g. the per-email throttle in `auth.routes.ts`) need the
  * `rateLimit` decorator visible at the instance where routes register.
  */
-/**
- * API process count used to divide the in-memory rate-limit budget while Redis is down.
- * Prefers the API replica count, then the deployment total, then a single process.
- */
-function resolveApiRateLimitReplicaCount(): number {
-  return env.DEPLOYMENT_API_REPLICA_COUNT ?? env.DEPLOYMENT_TOTAL_REPLICA_COUNT ?? 1;
-}
-
 const rateLimitMiddleware: FastifyPluginAsync = async (app) => {
   const plugin = fastifyRateLimit as unknown as FastifyPluginAsync<RateLimitPluginOptions>;
-  const replicaCount = resolveApiRateLimitReplicaCount();
   const organizationRequestBudget = createRateLimitCounter({
     redis: redisConnection,
     keyPrefix: ORGANIZATION_REQUEST_BUDGET_KEY_PREFIX,
-    replicaCount,
   });
 
   /**
@@ -183,7 +173,6 @@ const rateLimitMiddleware: FastifyPluginAsync = async (app) => {
   if (env.REDIS_URL && !redisTestsForcedOff) {
     options.store = createRedisFallbackRateLimitStore({
       redis: redisConnection,
-      replicaCount,
     }) as unknown as NonNullable<RateLimitPluginOptions['store']>;
   }
 

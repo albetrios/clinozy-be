@@ -1,5 +1,6 @@
 import { sql } from '@/infrastructure/database/connection.js';
 import { computeWorkerPostgresPoolDemand } from '@/infrastructure/queue/worker-runtime/worker-connection-budget.js';
+import { resolveApiReplicaCount } from '@/shared/config/deployment-replica-count.js';
 import { env } from '@/shared/config/env.config.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
@@ -80,7 +81,8 @@ function resolveDeploymentCounts(): ResolvedDeploymentCounts | undefined {
   if (apiExplicit !== undefined && workerExplicit !== undefined) {
     return {
       kind: 'split',
-      apiProcessCount: apiExplicit,
+      // Both counts are set, so this equals apiExplicit. The helper is the one replica formula.
+      apiProcessCount: resolveApiReplicaCount(),
       workerProcessCount: workerExplicit,
       usedInferredLocalDefaults: false,
     };

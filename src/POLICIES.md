@@ -184,6 +184,16 @@ The canonical exports live under [src/shared/constants/](src/shared/constants/) 
   - Increasing → more support pressure on legitimate-user lockouts.
 - **Last reviewed**: 2026-05-28
 
+## RATE_LIMIT_ORGANIZATION_MAX
+
+- **Value**: 1000 requests per `RATE_LIMIT_WINDOW_MS` (default 60 seconds) for one organization. Lifted to 100000 when `RATE_LIMIT_RELAXED_CAPS` is set.
+- **Source**: [src/shared/config/env-schema.ts](src/shared/config/env-schema.ts) (`RATE_LIMIT_ORGANIZATION_MAX`); applied as `ORGANIZATION_REQUEST_BUDGET_MAX` in [rate-limit-presets.constants.ts](src/shared/middlewares/rate-limit/rate-limit-presets.constants.ts)
+- **Rationale**: The per-IP global cap (`RATE_LIMIT_MAX`) does not bound a shared NAT or a busy organization. One Redis counter per organization public id is the shared ceiling across that organization's members and API keys. It is its own env var, not a hidden multiple of `RATE_LIMIT_MAX`. While Redis is down, the in-memory fallback multiplies each process's hits by `resolveApiReplicaCount()` before comparing them with this ceiling, the same way it scales the global cap, so N API replicas do not grant N times the budget.
+- **Consequences of change**:
+  - Decreasing → a busy organization receives 429 sooner; load tests that raise only `RATE_LIMIT_MAX` still stop at this ceiling.
+  - Increasing → one organization can drive more of the process before the shared ceiling engages. The schema rejects values outside 1..100000.
+- **Last reviewed**: 2026-10-08
+
 ## STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES
 
 - **Value**: 15 minutes

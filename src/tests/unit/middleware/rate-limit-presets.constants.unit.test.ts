@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mockEnv = vi.hoisted(() => ({
   RATE_LIMIT_RELAXED_CAPS: true as boolean,
+  RATE_LIMIT_ORGANIZATION_MAX: undefined as number | undefined,
 }));
 
 vi.mock('@/shared/config/env.config.js', () => ({
@@ -20,6 +21,7 @@ vi.mock('@/infrastructure/observability/sentry/sentry.js', () => ({
 describe('rate-limit-presets', () => {
   afterEach(() => {
     mockEnv.RATE_LIMIT_RELAXED_CAPS = true;
+    mockEnv.RATE_LIMIT_ORGANIZATION_MAX = undefined;
     vi.resetModules();
   });
 
@@ -48,6 +50,23 @@ describe('rate-limit-presets', () => {
     expect(STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS.max).toBe(5);
     expect(STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS.timeWindow).toBe(15 * 60_000);
     expect(STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS.hook).toBe('preHandler');
+  });
+
+  it('ORGANIZATION_REQUEST_BUDGET_MAX reads RATE_LIMIT_ORGANIZATION_MAX when caps are strict', async () => {
+    mockEnv.RATE_LIMIT_RELAXED_CAPS = false;
+    mockEnv.RATE_LIMIT_ORGANIZATION_MAX = 1000;
+    const { ORGANIZATION_REQUEST_BUDGET_MAX } = await import(
+      '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js'
+    );
+    expect(ORGANIZATION_REQUEST_BUDGET_MAX).toBe(1000);
+  });
+
+  it('ORGANIZATION_REQUEST_BUDGET_MAX lifts to the schema ceiling when caps are relaxed', async () => {
+    mockEnv.RATE_LIMIT_RELAXED_CAPS = true;
+    const { ORGANIZATION_REQUEST_BUDGET_MAX } = await import(
+      '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js'
+    );
+    expect(ORGANIZATION_REQUEST_BUDGET_MAX).toBe(100_000);
   });
 
   it('STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS lifts the cap when RATE_LIMIT_RELAXED_CAPS', async () => {

@@ -1258,6 +1258,28 @@ describe('env-schema', () => {
       });
       expect(parsed.success && parsed.data.RATE_LIMIT_MAX).toBe(500);
     });
+
+    it('defaults RATE_LIMIT_ORGANIZATION_MAX to 1000 and rejects values outside 1..100000', () => {
+      const defaults = envSchema.safeParse({
+        ...commonRequiredBase,
+        NODE_ENV: 'development',
+      });
+      expect(defaults.success && defaults.data.RATE_LIMIT_ORGANIZATION_MAX).toBe(1000);
+
+      const tooHigh = envSchema.safeParse({
+        ...commonRequiredBase,
+        NODE_ENV: 'development',
+        RATE_LIMIT_ORGANIZATION_MAX: '100001',
+      });
+      expect(tooHigh.success).toBe(false);
+
+      const zero = envSchema.safeParse({
+        ...commonRequiredBase,
+        NODE_ENV: 'development',
+        RATE_LIMIT_ORGANIZATION_MAX: '0',
+      });
+      expect(zero.success).toBe(false);
+    });
   });
 
   describe('unauthenticated /reference production guard (audit #7)', () => {

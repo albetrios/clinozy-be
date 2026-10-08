@@ -19,11 +19,12 @@ well-behaved clients succeed once Redis recovers. (Reads, and writes without an 
 unaffected by this gate.)
 
 Rate limiting degrades **gracefully** instead — the limiter falls back to a per-process in-memory
-counter (`rate-limit-fallback-store.ts`). Each process's hits are multiplied by the API replica
-count (`DEPLOYMENT_API_REPLICA_COUNT`, else `DEPLOYMENT_TOTAL_REPLICA_COUNT`, else 1) before they
-are compared with `max`, so the cluster ceiling stays near `max` instead of `max × replicas`. A
-budget smaller than the replica count cannot be split and stays per process. The same store backs
-the per-organization request budget (ten times `RATE_LIMIT_MAX` over `RATE_LIMIT_WINDOW_MS`), which
+counter (`rate-limit-fallback-store.ts`). Each process's hits are multiplied by
+`resolveApiReplicaCount()` (`DEPLOYMENT_API_REPLICA_COUNT`, else `DEPLOYMENT_TOTAL_REPLICA_COUNT`,
+else 1) before they are compared with `max`, so the cluster ceiling stays near `max` instead of
+`max × replicas`. A budget smaller than the replica count cannot be split and stays per process.
+The same store backs the per-organization request budget (`RATE_LIMIT_ORGANIZATION_MAX`, default
+1000, over `RATE_LIMIT_WINDOW_MS`; lifted to 100000 when `RATE_LIMIT_RELAXED_CAPS` is set), which
 runs after authentication and is skipped when the request has no organization. The permission cache
 degrades to a direct DB lookup.
 

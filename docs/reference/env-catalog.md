@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**13 / 238** variables migrated to an explicit `{ allowed, description }` entry.
+**13 / 239** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -155,6 +155,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `RAILWAY_WORKER_SERVICE_ID` | — | — *(optional)* |  | — |
 | `RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED` | — | `false` |  | — |
 | `RATE_LIMIT_MAX` | — | `100` |  | — |
+| `RATE_LIMIT_ORGANIZATION_MAX` | — | `1000` |  | — |
 | `RATE_LIMIT_RELAXED_CAPS` | — | `false` |  | — |
 | `RATE_LIMIT_WINDOW_MS` | — | `60000` |  | — |
 | `READYZ_503_ON_OPEN_CIRCUIT` | — | `false` |  | — |

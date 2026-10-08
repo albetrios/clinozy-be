@@ -13,6 +13,7 @@ vi.mock('@/shared/config/env.config.js', () => ({
   env: {
     NODE_ENV: 'development',
     RATE_LIMIT_MAX: 100,
+    RATE_LIMIT_ORGANIZATION_MAX: 1000,
     RATE_LIMIT_WINDOW_MS: 60_000,
     REDIS_URL: 'redis://127.0.0.1:6379',
     RATE_LIMIT_RELAXED_CAPS: false,

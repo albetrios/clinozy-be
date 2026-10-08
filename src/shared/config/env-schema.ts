@@ -411,17 +411,19 @@ const envSchemaBase = z.object({
    */
   REDIS_READY_CHECK_ENABLED: booleanString('true'),
   /**
-   * Category-B. Lift the strict public/authenticated rate-limit caps to 5000 so loopback E2E and
-   * dev UX are not throttled. Defaults false (hardened); development sets it true in `.env` and the
-   * test harness sets it true; a refine forbids `true` in production where credential-stuffing
-   * protection must stay on.
+   * Category-B. Lift the strict public/authenticated rate-limit caps to 5000, and the shared
+   * per-organization ceiling to 100000, so loopback E2E and dev UX are not throttled. Defaults
+   * false (hardened); development sets it true in `.env` and the test harness sets it true; a
+   * refine forbids `true` in production where credential-stuffing protection must stay on.
    */
   RATE_LIMIT_RELAXED_CAPS: booleanString('false'),
   /**
    * Category-B. Allow the chaos suite's `RUN_REDIS_TESTS=0` to force the in-memory rate-limit store.
    * Defaults false (hardened); the chaos harness sets it true; a refine forbids `true` in production
    * so a stray RUN_REDIS_TESTS=0 can never silently downgrade the cluster-wide Redis limiter to
-   * per-process counting.
+   * per-process counting. While that store is active, each process's hits are multiplied by
+   * `resolveApiReplicaCount()` before they are compared with the configured max (global or
+   * `RATE_LIMIT_ORGANIZATION_MAX`), so N API replicas do not grant N times the budget.
    */
   RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED: booleanString('false'),
   /**
@@ -483,10 +485,18 @@ const envSchemaBase = z.object({
   // Rate limiting
   // Upper bound (audit #34) catches a fat-fingered value that would silently disable global
   // throttling. During a Redis failover the fallback store counts per process and multiplies
-  // that count by DEPLOYMENT_API_REPLICA_COUNT (else DEPLOYMENT_TOTAL_REPLICA_COUNT, else 1)
-  // before comparing it with RATE_LIMIT_MAX, so N replicas do not grant N times the budget.
-  // A budget smaller than the replica count cannot be split and stays per process.
+  // that count by resolveApiReplicaCount() — DEPLOYMENT_API_REPLICA_COUNT, else
+  // DEPLOYMENT_TOTAL_REPLICA_COUNT, else 1 — before comparing it with RATE_LIMIT_MAX, so N
+  // replicas do not grant N times the budget. A budget smaller than the replica count cannot
+  // be split and stays per process.
   RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(100_000).default(100),
+  /**
+   * Shared request ceiling for one organization per `RATE_LIMIT_WINDOW_MS`, across every
+   * member and API key. Independent of `RATE_LIMIT_MAX` (the per-IP global cap). Lifted to
+   * 100000 when `RATE_LIMIT_RELAXED_CAPS` is true. The in-memory fallback store scales hits by
+   * `resolveApiReplicaCount()` the same way it scales the global cap.
+   */
+  RATE_LIMIT_ORGANIZATION_MAX: z.coerce.number().int().min(1).max(100_000).default(1_000),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1).default(60_000),
   /** Comma-separated hostnames allowed for outbound webhooks (optional; empty = no extra restriction). */
   WEBHOOK_URL_ALLOWLIST: z

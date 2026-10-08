@@ -324,6 +324,33 @@ sequenceDiagram
 
 Full write-up, including when *not* to cache: [docs/reference/runtime/read-caching.md](docs/reference/runtime/read-caching.md).
 
+## rate-limiting
+
+### Purpose
+
+Bound abusive traffic without letting one organization, or a Redis outage, multiply the configured budget by the number of API processes.
+
+### Where it lives
+
+- Global per-IP limiter and the per-organization ceiling: [rate-limit.middleware.ts](src/shared/middlewares/rate-limit/rate-limit.middleware.ts)
+- Route presets: [rate-limit-presets.constants.ts](src/shared/middlewares/rate-limit/rate-limit-presets.constants.ts)
+- Redis store with an in-memory fallback: [rate-limit-fallback-store.ts](src/shared/middlewares/rate-limit/rate-limit-fallback-store.ts)
+- Replica count shared with the connection-budget guard: [deployment-replica-count.ts](src/shared/config/deployment-replica-count.ts)
+
+### Implementation
+
+The global limiter is one `@fastify/rate-limit` registration keyed by IP (`RATE_LIMIT_MAX` per `RATE_LIMIT_WINDOW_MS`). A second registration is not stacked on the same route: the plugin sets a marker on the first limiter and later `app.rateLimit()` hooks no-op.
+
+The per-organization ceiling is a custom `preHandler` appended on every route. It counts `organization:<public id>` in Redis, up to `RATE_LIMIT_ORGANIZATION_MAX` (default 1000) over the same window, and skips requests with no organization. `RATE_LIMIT_RELAXED_CAPS` lifts that ceiling to 100000 the way it lifts the route presets (those lift to 5000).
+
+When Redis errors, the fallback store counts in the process and multiplies the local hit by `resolveApiReplicaCount()` (`DEPLOYMENT_API_REPLICA_COUNT`, else `DEPLOYMENT_TOTAL_REPLICA_COUNT`, else 1) before the plugin compares it with `max`. Redis counts are not scaled — they are already shared. A max smaller than the replica count cannot be split (`floor(max / replicas) < 1`) and stays per process, so the first request is still allowed. `X-RateLimit-*` stays consistent because the plugin sees the scaled count against the same `max`.
+
+### How to apply
+
+- Put a new per-route cap in the presets file and spread it on the route. Do not call `app.rateLimit()` in front of a route that already sets `config.rateLimit`.
+- Read the API replica count from `resolveApiReplicaCount()`. Do not copy the `??` chain.
+- The organization ceiling is `RATE_LIMIT_ORGANIZATION_MAX`, not a multiple of `RATE_LIMIT_MAX`.
+
 ## import-paths
 
 ### Purpose

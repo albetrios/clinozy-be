@@ -1498,6 +1498,7 @@ src/
     │   ├── __tests__/
     │   │   └── unit/
     │   │   │   └── worker-concurrency.util.unit.test.ts
+    │   ├── deployment-replica-count.ts
     │   ├── env-schema.ts
     │   ├── env-var-registry.ts
     │   ├── env.config.ts
@@ -2045,6 +2046,7 @@ src/
     │   │   ├── billing-mutation-rate-limit.security.test.ts
     │   │   ├── cross-tenant-rate-limit.security.test.ts
     │   │   ├── notify-mutation-rate-limit.security.test.ts
+    │   │   ├── organization-request-budget.security.test.ts
     │   │   ├── preset-authed-burst.security.test.ts
     │   │   ├── rate-limit-burst.security.test.ts
     │   │   └── rate-limiting.security.test.ts
@@ -2146,6 +2148,7 @@ src/
     │   │   ├── user-container-trim.policy.unit.test.ts
     │   │   └── worker-containers.unit.test.ts
     │   ├── config/
+    │   │   ├── deployment-replica-count.unit.test.ts
     │   │   ├── env-schema-boolean-coerce.unit.test.ts
     │   │   ├── env-schema-default-format.unit.test.ts
     │   │   ├── env-schema.unit.test.ts

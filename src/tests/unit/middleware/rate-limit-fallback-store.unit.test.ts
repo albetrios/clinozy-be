@@ -130,4 +130,33 @@ describe('createRedisFallbackRateLimitStore', () => {
     expect(scaleProcessLocalRateLimitCount({ localCount: 1, max: 3, replicaCount: 4 })).toBe(1);
     expect(scaleProcessLocalRateLimitCount({ localCount: 2, max: 100, replicaCount: 1 })).toBe(2);
   });
+
+  it('counts the 34th local hit over a max of 100 across 3 replicas', async () => {
+    const redis = {
+      eval: vi.fn().mockRejectedValue(new Error('down')),
+    } as unknown as Redis;
+    const StoreCtor = createRedisFallbackRateLimitStore({ redis, replicaCount: 3 });
+    const store = new StoreCtor({}) as never;
+
+    let lastCurrent = 0;
+    for (let index = 0; index < 33; index++) {
+      lastCurrent = (await incrAsync(store, 'shared', 60_000, 100)).current;
+    }
+    expect(lastCurrent).toBe(99);
+
+    const overBudget = await incrAsync(store, 'shared', 60_000, 100);
+    expect(overBudget.current).toBe(102);
+  });
+
+  it('allows the first hit when max 2 cannot be split across 3 replicas', async () => {
+    const redis = {
+      eval: vi.fn().mockRejectedValue(new Error('down')),
+    } as unknown as Redis;
+    const StoreCtor = createRedisFallbackRateLimitStore({ redis, replicaCount: 3 });
+    const store = new StoreCtor({}) as never;
+
+    const first = await incrAsync(store, 'shared', 60_000, 2);
+    expect(first.current).toBe(1);
+    expect(scaleProcessLocalRateLimitCount({ localCount: 1, max: 2, replicaCount: 3 })).toBe(1);
+  });
 });

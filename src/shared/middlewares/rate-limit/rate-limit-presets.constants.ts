@@ -291,19 +291,24 @@ export const ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT = {
 } as const;
 
 /**
- * How many times `RATE_LIMIT_MAX` one organization may spend in {@link ORGANIZATION_REQUEST_BUDGET_WINDOW_MS}.
- * The per-IP cap stays in place; this is the shared ceiling across that organization's members and API keys.
- *
- * Falls back to the schema default of 100 when a test mocks a partial env object.
+ * Relaxed shared ceiling. Other route presets lift to 5000; this one lifts to the schema maximum
+ * because the unlifted default is already 1000 and the test harness raises `RATE_LIMIT_MAX` to
+ * 1000 (the old derived budget was 10000). A 5000 lift would tighten loopback suites.
  */
-const ORGANIZATION_REQUEST_BUDGET_TO_GLOBAL_MAX_RATIO = 10;
+const ORGANIZATION_REQUEST_BUDGET_RELAXED_MAX = 100_000;
 
 /**
- * Shared request ceiling for one organization across every route.
- * Ten times the global per-IP `RATE_LIMIT_MAX`, over the same window.
+ * Shared request ceiling for one organization across every route, per
+ * {@link ORGANIZATION_REQUEST_BUDGET_WINDOW_MS}. `RATE_LIMIT_ORGANIZATION_MAX` (default 1000),
+ * lifted to {@link ORGANIZATION_REQUEST_BUDGET_RELAXED_MAX} when `RATE_LIMIT_RELAXED_CAPS` is set.
+ * The per-IP cap stays in place; this is the shared ceiling across that organization's members
+ * and API keys.
+ *
+ * Falls back to 1000 when a test mocks a partial env object.
  */
-export const ORGANIZATION_REQUEST_BUDGET_MAX =
-  (env.RATE_LIMIT_MAX ?? 100) * ORGANIZATION_REQUEST_BUDGET_TO_GLOBAL_MAX_RATIO;
+export const ORGANIZATION_REQUEST_BUDGET_MAX = RATE_LIMIT_CAPS_RELAXED
+  ? ORGANIZATION_REQUEST_BUDGET_RELAXED_MAX
+  : (env.RATE_LIMIT_ORGANIZATION_MAX ?? 1_000);
 
 /**
  * Window for {@link ORGANIZATION_REQUEST_BUDGET_MAX}. Matches `RATE_LIMIT_WINDOW_MS`.
