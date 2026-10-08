@@ -197,6 +197,30 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     expect(repository.update).toHaveBeenCalledWith('sub_public', 1, { seats: 4 });
   });
 
+  it('clamps zero members to one seat and reuses the quantity key on retry', async () => {
+    vi.mocked(repository.findActiveByOrganization).mockResolvedValue(baseRow() as never);
+    vi.mocked(membershipSeatUsage.countActiveMembers).mockResolvedValue(0);
+
+    await service.syncSeatQuantityForOrganization('org_public', 'zero-seat-retry');
+    await service.syncSeatQuantityForOrganization('org_public', 'zero-seat-retry');
+
+    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenCalledTimes(2);
+    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(
+      1,
+      'sub_x',
+      1,
+      'zero-seat-retry:qty:1',
+    );
+    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(
+      2,
+      'sub_x',
+      1,
+      'zero-seat-retry:qty:1',
+    );
+    expect(repository.update).toHaveBeenCalledTimes(2);
+    expect(repository.update).toHaveBeenCalledWith('sub_public', 1, { seats: 1 });
+  });
+
   it('syncSeatQuantityForOrganization derives a DIFFERENT key when the recomputed quantity changes (no Stripe param-mismatch on retry)', async () => {
     vi.mocked(repository.findActiveByOrganization).mockResolvedValue(baseRow() as never);
 

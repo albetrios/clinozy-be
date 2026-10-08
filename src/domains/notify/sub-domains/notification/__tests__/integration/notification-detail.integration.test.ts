@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
@@ -59,6 +60,17 @@ describe('Notification detail — happy paths', () => {
       token,
     });
     expect(response.statusCode, response.body).toBe(200);
+    const body = response.json() as { data: Record<string, unknown> };
+    expect(body.data).toMatchObject({
+      id: notificationId,
+      type: 'system',
+      title: 'Detail happy-path notification',
+      message: 'Created directly for the notification detail routes.',
+      is_read: false,
+      read_at: null,
+    });
+    expect(body.data).not.toHaveProperty('user_id');
+    expect(body.data).not.toHaveProperty('organization_id');
   });
 
   it('PATCH /notify/notifications/:id/read marks it read', async () => {
@@ -76,6 +88,18 @@ describe('Notification detail — happy paths', () => {
       token,
     });
     expect(response.statusCode, response.body).toBe(200);
+    const body = response.json() as { data: { id: string; is_read: boolean; read_at: string } };
+    expect(body.data.id).toBe(notificationId);
+    expect(body.data.is_read).toBe(true);
+    expect(new Date(body.data.read_at).toISOString()).toBe(body.data.read_at);
+
+    const [persisted] = await getOperatorDatabase()
+      .select()
+      .from(notifications)
+      .where(eq(notifications.public_id, notificationId));
+    expect(persisted).toMatchObject({ public_id: notificationId, is_read: true });
+    expect(persisted?.read_at).toBeInstanceOf(Date);
+    expect(persisted?.read_at?.toISOString()).toBe(body.data.read_at);
   });
 
   it('DELETE /notify/notifications/:notification_id removes it', async () => {
@@ -93,5 +117,17 @@ describe('Notification detail — happy paths', () => {
       token,
     });
     expect(response.statusCode, response.body).toBe(204);
+    const persisted = await getOperatorDatabase()
+      .select()
+      .from(notifications)
+      .where(eq(notifications.public_id, notificationId));
+    expect(persisted).toEqual([]);
+
+    const afterDelete = await injectAuthenticated(app, {
+      method: 'GET',
+      url: testApiPath(`/notify/notifications/${notificationId}`),
+      token,
+    });
+    expect(afterDelete.statusCode, afterDelete.body).toBe(404);
   });
 });

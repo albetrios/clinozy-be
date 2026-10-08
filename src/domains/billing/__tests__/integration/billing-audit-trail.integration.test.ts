@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { audit_outbox } from '@/domains/audit/audit-outbox.schema.js';
+import { logs } from '@/domains/audit/audit.schema.js';
 import { runAuditOutboxDrainJob } from '@/domains/audit/workers/audit-outbox-drain.processor.js';
 import { createTestSubscription } from '@/domains/billing/__tests__/factories/subscription.factory.js';
 import {
@@ -104,6 +105,10 @@ describe('billing audit trail — subscription changes reach the audit log', () 
     return getOperatorDatabase().select().from(audit_outbox).where(eq(audit_outbox.action, action));
   }
 
+  async function persistedRows(action: string) {
+    return getOperatorDatabase().select().from(logs).where(eq(logs.action, action));
+  }
+
   async function expectEveryStagedRowToDrain() {
     const result = await withMaintenanceDatabaseContext(
       MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
@@ -112,6 +117,13 @@ describe('billing audit trail — subscription changes reach the audit log', () 
     expect(result.transientFailed + result.permanentlyFailed).toBe(0);
     const outbox = await getOperatorDatabase().select().from(audit_outbox);
     expect(outbox.filter((row) => row.status !== 'PROCESSED')).toEqual([]);
+    const ledger = await getOperatorDatabase().select().from(logs).orderBy(logs.id);
+    const secondPass = await withMaintenanceDatabaseContext(
+      MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+      (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
+    );
+    expect(secondPass).toEqual({ drained: 0, transientFailed: 0, permanentlyFailed: 0 });
+    expect(await getOperatorDatabase().select().from(logs).orderBy(logs.id)).toEqual(ledger);
   }
 
   it('records a new subscription with its plan', async () => {
@@ -134,6 +146,13 @@ describe('billing audit trail — subscription changes reach the audit log', () 
       }),
     ]);
     await expectEveryStagedRowToDrain();
+    expect(await persistedRows('billing.subscription.create')).toEqual([
+      expect.objectContaining({
+        actor_user_id: user.id,
+        organization_id: organization.id,
+        metadata: { subscription_public_id: subscriptionId, plan_public_id: plan.public_id },
+      }),
+    ]);
   });
 
   it('records a plan change, a cancellation and a resumption', async () => {
@@ -173,5 +192,21 @@ describe('billing audit trail — subscription changes reach the audit log', () 
       ]);
     }
     await expectEveryStagedRowToDrain();
+    for (const action of [
+      'billing.subscription.change_plan',
+      'billing.subscription.cancel',
+      'billing.subscription.resume',
+    ]) {
+      expect(await persistedRows(action)).toEqual([
+        expect.objectContaining({
+          actor_user_id: user.id,
+          organization_id: organization.id,
+          metadata: {
+            subscription_public_id: subscription.public_id,
+            plan_public_id: newPlan.public_id,
+          },
+        }),
+      ]);
+    }
   });
 });

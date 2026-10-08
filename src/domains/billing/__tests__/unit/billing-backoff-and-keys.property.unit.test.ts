@@ -75,15 +75,16 @@ describe('stripe webhook backoff curve (property)', () => {
     );
   });
 
-  it('the five queue attempts add up inside the documented ~5-minute dead-letter window', () => {
-    const total = [1, 2, 3, 4, 5]
+  it('five job executions permit four exponential retry waits totaling 150–180 seconds', () => {
+    // stripe-webhook.queue.ts configures attempts: 5, including the initial execution.
+    const configuredExecutions = 5;
+    const total = Array.from({ length: configuredExecutions - 1 }, (_, index) => index + 1)
       .map((attempt) => stripeWebhookBackoffStrategy(attempt, undefined, undefined))
       .reduce((sum, delay) => sum + delay, 0);
-    // 10+20+40+80+160s = 310s, plus at most 20% jitter. The curve has no intrinsic clamp — THIS
-    // extrinsic bound (attempts: 5) is what keeps a failing event from waiting hours. If the sum
-    // moves, the DLQ runbook's "~5 minutes into an outage" claim moved with it.
-    expect(total).toBeGreaterThanOrEqual(310_000);
-    expect(total).toBeLessThanOrEqual(372_000);
+    // 10+20+40+80s = 150s, plus at most 20% jitter. This measures retry waits only:
+    // processing time, circuit overrides, provider pauses and ledger reclaim cycles are separate.
+    expect(total).toBeGreaterThanOrEqual(150_000);
+    expect(total).toBeLessThanOrEqual(180_000);
   });
 });
 

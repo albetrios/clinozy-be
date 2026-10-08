@@ -28,8 +28,9 @@ describe('Security: CORS', () => {
         'access-control-request-method': 'POST',
       },
     });
-    // CORS preflight should return 204 or 200
-    expect([200, 204]).toContain(response.statusCode);
+    expect(response.statusCode).toBe(204);
+    expect(response.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+    expect(response.headers['access-control-allow-credentials']).toBe('true');
   });
 
   it('should include Access-Control-Allow-Methods header', async () => {
@@ -42,9 +43,35 @@ describe('Security: CORS', () => {
       },
     });
     const allowMethods = response.headers['access-control-allow-methods'];
-    if (allowMethods) {
-      expect(typeof allowMethods).toBe('string');
-    }
+    expect(response.statusCode).toBe(204);
+    expect(typeof allowMethods).toBe('string');
+    expect(
+      String(allowMethods)
+        .split(',')
+        .map((method) => method.trim())
+        .sort(),
+    ).toEqual(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'].sort());
+  });
+
+  it('permits the CSRF header on a credentialed refresh preflight', async () => {
+    const response = await injectUnauthenticated(app, {
+      method: 'OPTIONS',
+      url: testApiPath('/auth/refresh'),
+      headers: {
+        origin: 'http://localhost:3000',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'content-type,x-csrf-token',
+      },
+    });
+    expect(response.statusCode).toBe(204);
+    expect(response.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+    expect(response.headers['access-control-allow-credentials']).toBe('true');
+    const advertisedHeaders = String(response.headers['access-control-allow-headers'])
+      .toLowerCase()
+      .split(',')
+      .map((header) => header.trim());
+    expect(advertisedHeaders).toContain('x-csrf-token');
+    expect(advertisedHeaders).toContain('content-type');
   });
 
   it('should handle requests from allowed origins', async () => {

@@ -256,7 +256,7 @@ describe('opaque keyset cursor (property)', () => {
     );
   });
 
-  it('rejects a cursor whose payload was tampered with after decoding', () => {
+  it('rejects an encrypted cursor whose payload contains an invalid id', () => {
     fc.assert(
       fc.property(
         fc.date({
@@ -271,15 +271,31 @@ describe('opaque keyset cursor (property)', () => {
           // page", never as a partially-trusted cursor.
           const tampered = encodeListCursor({
             created_at: createdAt.toISOString(),
+            id: 0,
           } as never);
-          const decoded = decodeListCursor(tampered);
-          // Either it validates cleanly or it is rejected outright — never a half-populated object.
-          if (decoded !== null) {
-            expect(decoded.created_at).toBe(createdAt.toISOString());
-          }
-          expect(() => parseListCursor(tampered)).not.toThrow();
+          expect(decodeListCursor(tampered)).toBeNull();
+          expect(parseListCursor(tampered)).toBeNull();
         },
       ),
+      propertyOptions,
+    );
+  });
+
+  it('rejects an authenticated cursor after a ciphertext byte is modified', () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 1_000_000 }), (id) => {
+        const cursor = createOpaqueCursorFromRow({
+          created_at: new Date('2026-01-01T00:00:00Z'),
+          id,
+        });
+        expect(parseListCursor(cursor)?.id).toBe(id);
+        const corrupted = Buffer.from(cursor, 'base64url');
+        const lastIndex = corrupted.length - 1;
+        corrupted[lastIndex] = corrupted[lastIndex]! ^ 1;
+        const tampered = corrupted.toString('base64url');
+        expect(decodeListCursor(tampered)).toBeNull();
+        expect(parseListCursor(tampered)).toBeNull();
+      }),
       propertyOptions,
     );
   });

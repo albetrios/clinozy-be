@@ -208,6 +208,7 @@ packageExtensionsChecksum: sha256-twx7wYqe04LeRfJrPtLfa4XgAE/MqkzVmdVQ8xx6Tx4=
 
 patchedDependencies:
   '@stryker-mutator/vitest-runner@10.0.0': 2635868beea712de5d4bbcc561738d55c888a27c2cd24b06de9b6c1bf1309485
+  drizzle-orm@0.45.3: 5d8f3cfe6176ed1caf91f684a6d5f1ec12815f54094da098a3affd4a6ef3d630
 
 importers:
 
@@ -287,7 +288,7 @@ importers:
         version: 18.0.5
       drizzle-orm:
         specifier: '>=0.45.2'
-        version: 0.45.3(@opentelemetry/api@1.9.1)(postgres@3.4.9)
+        version: 0.45.3(patch_hash=5d8f3cfe6176ed1caf91f684a6d5f1ec12815f54094da098a3affd4a6ef3d630)(@opentelemetry/api@1.9.1)(postgres@3.4.9)
       fastify:
         specifier: '>=5.8.5'
         version: 5.12.5
@@ -9650,7 +9651,7 @@ snapshots:
       esbuild: 0.28.2
       tsx: 4.23.15
 
-  drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(postgres@3.4.9):
+  drizzle-orm@0.45.3(patch_hash=5d8f3cfe6176ed1caf91f684a6d5f1ec12815f54094da098a3affd4a6ef3d630)(@opentelemetry/api@1.9.1)(postgres@3.4.9):
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       postgres: 3.4.9

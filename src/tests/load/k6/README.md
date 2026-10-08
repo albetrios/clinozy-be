@@ -25,7 +25,9 @@ Org-scoped routes are flat — they carry **no** `/organizations/{organization_i
 - `pnpm load:breakpoint` — capacity test: ramps arrival rate (10 → 300 req/s) until SLOs break (finds max throughput)
 - `pnpm test:bench` — Autocannon on `/readyz`
 
-**Full confidence:** Run `pnpm load:stress` (health) and `pnpm load:stress:api` (API with TEST_TOKEN + TEST_ORG_ID). See [docs/reference/testing/load-testing.md](../../../../docs/reference/testing/load-testing.md#full-confidence-recommended).
+**Scoped stress checks:** Run `pnpm load:stress` (health) and `pnpm load:stress:api` (API with TEST_TOKEN + TEST_ORG_ID). See [docs/reference/testing/load-testing.md](../../../../docs/reference/testing/load-testing.md#scoped-load-coverage).
+
+**Read breadth:** `pnpm load:read-surface` exercises 23 nondestructive GET routes with a TEAM-scoped `TEST_TOKEN` / `TEST_ORG_ID`. See the [coverage and intent rules](../../../../docs/reference/testing/load-testing.md#route-coverage-and-test-intent); scenario presence is not proof of execution.
 
 **Nightly CI:** [.github/workflows/scheduled-k6-load-slo.yml](../../../../.github/workflows/scheduled-k6-load-slo.yml) (`Scheduled k6 API load & SLO`) — gate on `load:stress`-equivalent and `load:stress:api`-equivalent k6 runs; see [docs/reference/testing/load-testing.md](../../../../docs/reference/testing/load-testing.md#nightly-ci-gate-github-actions).
 
@@ -39,7 +41,7 @@ Org-scoped routes are flat — they carry **no** `/organizations/{organization_i
 | Health stress   | `scenarios/health-stress.js`   | (optional `BASE_URL`)                                    | `pnpm load:stress`                                |
 | Health breakpoint | `scenarios/health-breakpoint.js` | (optional `BASE_URL`)                                | `pnpm load:breakpoint`                            |
 | API stress      | `scenarios/api-stress.js`      | `TEST_TOKEN`, `TEST_ORG_ID`                              | `pnpm load:stress:api`                            |
-| Auth onboarding | `scenarios/auth-onboarding.js` | `DEMO_EMAIL`, `DEMO_PASSWORD` (or use defaults)          | `pnpm load:auth`                                  |
+| Auth onboarding | `scenarios/auth-onboarding.js` | `DEMO_EMAIL`, `DEMO_PASSWORD` (required)          | `pnpm load:auth`                                  |
 | Passwordless signup | `scenarios/passwordless-signup.js` | API started with `TEST_MODE=true` (echoes the code); no creds — unique user per run | `pnpm load:signup`                |
 | Daily ops       | `scenarios/daily-ops.js`       | `TEST_TOKEN`, `TEST_ORG_ID`                              | `pnpm load:daily-ops`                             |
 | Billing         | `scenarios/billing.js`         | `TEST_TOKEN`, `TEST_ORG_ID` (optional for authed routes) | `pnpm load:billing`                               |
@@ -48,7 +50,7 @@ Org-scoped routes are flat — they carry **no** `/organizations/{organization_i
 | Admin           | `scenarios/admin.js`           | `ADMIN_TOKEN`                                            | `pnpm load:admin` (after `pnpm tool:admin-token`) |
 | **User journey** | `scenarios/user-journey.js`  | credential pool (see below) + API started with `WEBHOOK_URL_ALLOWLIST=example.com` | `pnpm load:user-journey`                          |
 | **clinozy-fe journey** | `scenarios/fe-login-to-organization.js` | credential pool + API on `TEST_MODE=true` with `AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED` | `VUS=50 POOL=50 k6 run src/tests/load/k6/scenarios/fe-login-to-organization.js` — the full front-end journey, one pass per VU (VUs are users). Knobs: `VUS`, `POOL`, `AUTH` (`code`\|`password`\|`otp`), `STATIC_CODE`, `STAGGER`, `RESULT_TAG` |
-| **Session journey** | `scenarios/session-refresh-journey.js` | `DEMO_EMAIL`, `DEMO_PASSWORD` (or use defaults) | `pnpm load:session-journey` — login → Bearer read → cookie+CSRF refresh → rotated-token read → logout → refresh 401 |
+| **Session journey** | `scenarios/session-refresh-journey.js` | `DEMO_EMAIL`, `DEMO_PASSWORD` (required) | `pnpm load:session-journey` — login → Bearer read → cookie+CSRF refresh → rotated-token read → logout → refresh 401 |
 | **Comprehensive journey** | `scenarios/comprehensive-journey.js` | none — `setup-loadtest.sh` seeds the pool and starts a cluster on `:3001` with its settings in the gitignored `data/loadtest-overrides.env` (your env files are never edited) | `pnpm load:journey` (setup + run), `pnpm load:journey:down`, `pnpm load:reset` (leaked journey rows + this namespace's rate-limit counters, local database only). See [COMPREHENSIVE-JOURNEY.md](COMPREHENSIVE-JOURNEY.md) |
 | Login burst (rate limit) | `scenarios/login-burst-rate-limit.js` | none (dedicated non-existent identity; optional `BURST_EMAIL`) | `pnpm load:login-burst` — brute-force burst must yield only 401/429 and ≥1 429 proves a limiter engaged. Holds locally too: the per-IP failed-login throttle (50 failures / 15 min) is not relaxed by `RATE_LIMIT_RELAXED_CAPS`. Kept OUT of the nightly gate: that throttle then refuses every login from the IP for the rest of its window |
 

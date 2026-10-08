@@ -13,6 +13,7 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
 });
 
 const workerState = vi.hoisted(() => ({
+  queueName: undefined as string | undefined,
   processor: undefined as (() => Promise<unknown>) | undefined,
   options: undefined as Record<string, unknown> | undefined,
   onHandlers: {} as Record<string, (...args: unknown[]) => void>,
@@ -23,6 +24,7 @@ const runMemberRoleTombstoneRetentionJobMock = vi.fn();
 
 vi.mock('bullmq', () => ({
   Worker: vi.fn().mockImplementation(function WorkerMock(_queueName, processor, options) {
+    workerState.queueName = _queueName;
     workerState.processor = processor;
     workerState.options = options;
     return {
@@ -70,6 +72,7 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
 
 describe('member-role-tombstone-retention.worker', () => {
   beforeEach(() => {
+    workerState.queueName = undefined;
     workerState.processor = undefined;
     workerState.options = undefined;
     workerState.onHandlers = {};
@@ -91,6 +94,7 @@ describe('member-role-tombstone-retention.worker', () => {
     const handle = createMemberRoleTombstoneRetentionWorker();
 
     expect(handle.queueName).toBe('member-role-tombstone-retention');
+    expect(workerState.queueName).toBe('member-role-tombstone-retention');
   });
 
   it('creates worker with RETENTION_WORKER_CONCURRENCY of 1', async () => {

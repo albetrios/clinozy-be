@@ -22,12 +22,14 @@ describe.runIf(runAsApplicationBehaviour)('Integration: migrations forward', () 
     const applied = await sql<{ filename: string }[]>`
       SELECT filename FROM public.schema_migrations ORDER BY filename ASC
     `;
-    if (applied.length === 0) {
-      console.warn(
-        'Skipping migration file parity check: schema_migrations is empty. Run pnpm db:migrate (CI applies migrations before tests).',
-      );
-      return;
-    }
+    expect(
+      allFiles.length,
+      'Expected migration files to compare against the ledger',
+    ).toBeGreaterThan(0);
+    expect(
+      applied.length,
+      'schema_migrations is empty; run pnpm db:migrate before this suite',
+    ).toBeGreaterThan(0);
     const appliedSet = new Set(applied.map((row) => row.filename));
 
     const missing = allFiles.filter((filename) => !appliedSet.has(filename));

@@ -20,12 +20,21 @@ describe('worker shutdown integration', () => {
   it('bounded worker.close drains within SHUTDOWN_TIMEOUT_MS default (15s)', async () => {
     const queueName = `worker-shutdown-drain-${randomUUID()}`;
     let processorCompletedAt = 0;
+    let signalProcessorStarted: () => void = () => {};
+    const processorStarted = new Promise<void>((resolve) => {
+      signalProcessorStarted = resolve;
+    });
+    let releaseProcessor: () => void = () => {};
+    const processorHeld = new Promise<void>((resolve) => {
+      releaseProcessor = resolve;
+    });
 
     const connection = getBullMQConnectionOptions();
     worker = new Worker(
       queueName,
       async () => {
-        await new Promise<void>((resolve) => setTimeout(resolve, 300));
+        signalProcessorStarted();
+        await processorHeld;
         processorCompletedAt = Date.now();
       },
       { connection, prefix: getBullMQKeyPrefix(), concurrency: 1 },
@@ -44,10 +53,22 @@ describe('worker shutdown integration', () => {
     await worker.waitUntilReady();
     await queue.waitUntilReady();
     await queue.add('drain', {});
-    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    await processorStarted;
 
     const closeStartedAt = Date.now();
-    await handle.close();
+    let closeSettled = false;
+    const closing = handle.close().then(() => {
+      closeSettled = true;
+    });
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(processorCompletedAt).toBe(0);
+      expect(closeSettled).toBe(false);
+    } finally {
+      // Release even when an assertion fails, so suite cleanup cannot hang on this job.
+      releaseProcessor();
+    }
+    await closing;
     const closeFinishedAt = Date.now();
 
     expect(processorCompletedAt).toBeGreaterThan(0);

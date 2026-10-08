@@ -157,28 +157,36 @@ describe('auth event handlers', () => {
           expires_in_minutes: 60,
         },
       ],
-    ])('re-throws so the event bus surfaces the failure for %s', async (eventType, payload) => {
-      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    ])(
+      'isolates a non-strict handler failure but propagates the original error from emitStrict for %s',
+      async (eventType, payload) => {
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
-      try {
-        await expect(
-          emitAndFlushOnCommit({ type: eventType, payload, timestamp: new Date() }),
-        ).resolves.toBeUndefined();
+        try {
+          await expect(
+            emitAndFlushOnCommit({ type: eventType, payload, timestamp: new Date() }),
+          ).resolves.toBeUndefined();
 
-        expect(warnSpy).toHaveBeenCalledWith(
-          expect.objectContaining({ error: recordError, eventType }),
-          expect.stringMatching(/\.email\.enqueue\.failed$/),
-        );
-        expect(errorSpy).toHaveBeenCalledWith(
-          expect.objectContaining({ error: recordError, eventType }),
-          'Domain event handler failed',
-        );
-        expect(dispatchOutboxEmailMock).not.toHaveBeenCalled();
-      } finally {
-        errorSpy.mockRestore();
-        warnSpy.mockRestore();
-      }
-    });
+          expect(warnSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ error: recordError, eventType }),
+            expect.stringMatching(/\.email\.enqueue\.failed$/),
+          );
+          expect(errorSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ error: recordError, eventType }),
+            'Domain event handler failed',
+          );
+          expect(dispatchOutboxEmailMock).not.toHaveBeenCalled();
+          await expect(
+            eventBus.emitStrict({ type: eventType, payload, timestamp: new Date() }),
+          ).rejects.toBe(recordError);
+          expect(recordOutboxEmailMock).toHaveBeenCalledTimes(2);
+          expect(dispatchOutboxEmailMock).not.toHaveBeenCalled();
+        } finally {
+          errorSpy.mockRestore();
+          warnSpy.mockRestore();
+        }
+      },
+    );
   });
 });

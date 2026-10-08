@@ -63,7 +63,9 @@ export function shouldShedRequest(options: {
  *   throw {@link ServiceUnavailableError} with `Retry-After`.
  * - **Why:** without a valve, a backlog grows an unbounded queue and tail latency runs to multiple
  *   seconds. Shedding bounds the tail — requests the box cannot serve promptly get a fast, cheap
- *   503 instead of occupying a worker for seconds. The event-loop signal alone is blind to pool
+ *   503 instead of occupying a worker for seconds. Rejections carry an internal reason
+ *   (`event_loop_overload` or `database_pool_overload`) in the structured error-handler log;
+ *   the 5xx response does not expose it. The event-loop signal alone is blind to pool
  *   exhaustion: a request awaiting a pooled connection leaves the loop *idle*, so without the pool
  *   condition requests would queue behind postgres.js (which has no acquire timeout of its own)
  *   until `DATABASE_POOL_ACQUIRE_TIMEOUT_MS`. The pool ratio (`env.OVERLOAD_DB_POOL_SHED_RATIO`,
@@ -104,16 +106,24 @@ const overloadGuardMiddleware: FastifyPluginAsync = async (application) => {
 
   application.addHook('onRequest', async (request) => {
     const path = request.url.split('?', 1)[0] ?? '';
+    const activeDbCheckouts = getActiveOrganizationRlsCheckoutCount();
     if (
       shouldShedRequest({
         path,
         recentEventLoopDelayMs,
         thresholdMs: shedThresholdMs,
-        activeDbCheckouts: getActiveOrganizationRlsCheckoutCount(),
+        activeDbCheckouts,
         dbCheckoutShedThreshold,
       })
     ) {
-      throw new ServiceUnavailableError().withRetryAfter(OVERLOAD_RETRY_AFTER_SECONDS);
+      // Internal reason is logged by the error handler; 5xx responses never expose it.
+      throw new ServiceUnavailableError()
+        .withReason(
+          recentEventLoopDelayMs >= shedThresholdMs
+            ? 'event_loop_overload'
+            : 'database_pool_overload',
+        )
+        .withRetryAfter(OVERLOAD_RETRY_AFTER_SECONDS);
     }
   });
 };

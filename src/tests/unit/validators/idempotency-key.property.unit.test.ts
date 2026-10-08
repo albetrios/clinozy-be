@@ -76,13 +76,13 @@ describe('idempotency key (property)', () => {
       fc.property(
         fc
           .array(fc.constantFrom(...IDEMPOTENCY_KEY_ALLOWED_CHARACTERS), {
-            minLength: 1,
+            minLength: IDEMPOTENCY_KEY_MIN_LENGTH,
             maxLength: 24,
           })
           .map((characters) => characters.join('')),
         fc
           .array(fc.constantFrom(...IDEMPOTENCY_KEY_ALLOWED_CHARACTERS), {
-            minLength: 1,
+            minLength: IDEMPOTENCY_KEY_MIN_LENGTH,
             maxLength: 24,
           })
           .map((characters) => characters.join('')),

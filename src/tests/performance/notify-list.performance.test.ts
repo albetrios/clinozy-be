@@ -61,7 +61,7 @@ describe('Performance: notification inbox', () => {
     return { user, token };
   }
 
-  it('GET /notify/notifications does not scale its work with inbox size', async () => {
+  it('GET /notify/notifications returns a 25-row fixture within the local timing budget', async () => {
     const { token } = await createInboxContext();
 
     // Warm the app, connection pool, and JIT before measuring.
@@ -86,7 +86,7 @@ describe('Performance: notification inbox', () => {
     expect(elapsedMs).toBeLessThan(2_000);
   });
 
-  it('GET /notify/notifications/unread-count stays a single bounded count', async () => {
+  it('GET /notify/notifications/unread-count returns the fixture count within the local timing budget', async () => {
     const { token } = await createInboxContext();
 
     await injectAuthenticated(app, {
@@ -109,7 +109,7 @@ describe('Performance: notification inbox', () => {
   });
 
   it.runIf(runExplainTests)(
-    'inbox keyset query uses idx_notifications_user_created_id (no seq scan)',
+    'inbox keyset query can use idx_notifications_user_created_id with sequential scans discouraged',
     async () => {
       const { user } = await createInboxContext();
       await sql`ANALYZE notify.notifications`;

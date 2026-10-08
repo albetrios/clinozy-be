@@ -49,6 +49,9 @@ describe('Integration: mail worker concurrency race', () => {
         result.value.messageId === 'msg_race_single',
     );
 
+    expect(results.map((result) => result.status)).toEqual(
+      Array(PARALLEL_WORKER_COUNT).fill('fulfilled'),
+    );
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
     expect(sentOnce).toBe(true);
 

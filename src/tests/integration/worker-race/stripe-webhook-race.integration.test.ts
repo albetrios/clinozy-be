@@ -19,6 +19,7 @@ import { StripeWebhookService } from '@/domains/billing/sub-domains/stripe-webho
 import type { SubscriptionService } from '@/domains/billing/sub-domains/subscription/subscription.service.js';
 import { StripeWebhookEventRepository } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-event.repository.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
+import { StripeWebhookRetryLaterError } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook.types.js';
 
 const PARALLEL_WORKER_COUNT = 10;
 
@@ -28,7 +29,7 @@ describe('Integration: stripe-webhook worker concurrency race', () => {
     retrieveStripeEventMock.mockReset();
   });
 
-  it('processes the same Stripe event id exactly once under parallel workers', async () => {
+  it('records one processed Stripe ledger row; competing executions only defer for its lease', async () => {
     const stripeEventId = `evt_race_${randomUUID()}`;
     const eventPayload = {
       id: stripeEventId,
@@ -50,7 +51,7 @@ describe('Integration: stripe-webhook worker concurrency race', () => {
       { findByStripePriceId: vi.fn() } as never,
     );
 
-    await Promise.allSettled(
+    const results = await Promise.allSettled(
       Array.from({ length: PARALLEL_WORKER_COUNT }, (_, index) =>
         processStripeWebhookJob(
           { stripeEventId, requestId: `req-race-${String(index)}` },
@@ -59,6 +60,15 @@ describe('Integration: stripe-webhook worker concurrency race', () => {
         ),
       ),
     );
+
+    expect(results.some((result) => result.status === 'fulfilled')).toBe(true);
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        expect(result.reason).toBeInstanceOf(StripeWebhookRetryLaterError);
+      }
+    }
+    // Once the winning execution completes, duplicate executions must finish without error.
+    await processStripeWebhookJob({ stripeEventId }, stripeWebhookService, 'job-after-race');
 
     const processedCountRows = await sql<{ count: string }[]>`
       SELECT COUNT(*)::text AS count

@@ -59,7 +59,9 @@ describe('webhook-url.util', () => {
   });
 
   it('rejects localhost hostname without DNS lookup', async () => {
-    await expect(validateWebhookUrl('http://localhost/hook')).rejects.toThrow(ValidationError);
+    await expect(validateWebhookUrl('https://localhost/hook')).rejects.toMatchObject({
+      messageKey: 'errors:webhookUrlNotAllowed',
+    });
     expect(mockedLookup).not.toHaveBeenCalled();
   });
 
@@ -83,29 +85,31 @@ describe('webhook-url.util', () => {
   });
 
   it('rejects IPv4-mapped IPv6 loopback literal without DNS lookup', async () => {
-    await expect(validateWebhookUrl('http://[::ffff:127.0.0.1]/hook')).rejects.toThrow(
-      ValidationError,
-    );
+    await expect(validateWebhookUrl('https://[::ffff:127.0.0.1]/hook')).rejects.toMatchObject({
+      messageKey: 'errors:webhookUrlNotAllowed',
+    });
     expect(mockedLookup).not.toHaveBeenCalled();
   });
 
   it('rejects IPv4-mapped IPv6 loopback in hex form without DNS lookup', async () => {
-    await expect(validateWebhookUrl('http://[::ffff:7f00:1]/hook')).rejects.toThrow(
-      ValidationError,
-    );
+    await expect(validateWebhookUrl('https://[::ffff:7f00:1]/hook')).rejects.toMatchObject({
+      messageKey: 'errors:webhookUrlNotAllowed',
+    });
     expect(mockedLookup).not.toHaveBeenCalled();
   });
 
   it('rejects IPv4-mapped private IPv4 literal without DNS lookup', async () => {
-    await expect(validateWebhookUrl('http://[::ffff:10.0.0.1]/hook')).rejects.toThrow(
-      ValidationError,
-    );
+    await expect(validateWebhookUrl('https://[::ffff:10.0.0.1]/hook')).rejects.toMatchObject({
+      messageKey: 'errors:webhookUrlNotAllowed',
+    });
     expect(mockedLookup).not.toHaveBeenCalled();
   });
 
   it('rejects IPv4-mapped link-local metadata literal without DNS lookup', async () => {
-    await expect(validateWebhookUrl('http://[::ffff:169.254.169.254]/hook')).rejects.toThrow(
-      ValidationError,
+    await expect(validateWebhookUrl('https://[::ffff:169.254.169.254]/hook')).rejects.toMatchObject(
+      {
+        messageKey: 'errors:webhookUrlNotAllowed',
+      },
     );
     expect(mockedLookup).not.toHaveBeenCalled();
   });

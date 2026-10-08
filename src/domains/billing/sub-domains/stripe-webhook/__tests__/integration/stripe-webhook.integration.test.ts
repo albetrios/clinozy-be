@@ -53,7 +53,7 @@ describe('Stripe Webhook Sub-Domain — Integration', () => {
     it('duplicate signed POST records a single webhook ledger row', async () => {
       const webhookSigningSecret = env.STRIPE_WEBHOOK_SECRET;
       if (!webhookSigningSecret) {
-        return;
+        throw new Error('Signed webhook deduplication requires STRIPE_WEBHOOK_SECRET');
       }
 
       const user = await createTestUser();

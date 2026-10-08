@@ -30,7 +30,7 @@ describe('Performance: membership list', () => {
       await cleanupDatabase();
     });
 
-    it('issues one select query for N memberships with joined public ids', async () => {
+    it('returns all membership rows with joined identifiers', async () => {
       const owner = await createTestUser();
       const organization = await createTestOrganization({ ownerUserId: owner.id });
       const role = await createRoleWithPermissions({
@@ -80,7 +80,9 @@ describe('Performance: membership list', () => {
       await seedPermissions(MEMBERSHIP_LIST_PERMISSIONS);
     });
 
-    it('lists many memberships without N+1 query degradation', { timeout: 30000 }, async () => {
+    it('lists a 20-member fixture within the local response-time budget', {
+      timeout: 30000,
+    }, async () => {
       const owner = await createTestUser();
       const organization = await createTestOrganization({ ownerUserId: owner.id });
       const role = await createRoleWithPermissions({

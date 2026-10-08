@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { getOperatorSql } from '@/tests/helpers/operator-database.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
@@ -74,6 +75,10 @@ describe('Tenancy role and membership detail — happy paths', () => {
       token,
     });
     expect(get.statusCode, get.body).toBe(200);
+    expect((get.json() as { data: Record<string, unknown> }).data).toMatchObject({
+      id: targetRole.public_id,
+      name: 'Detail Target Role',
+    });
 
     const patch = await injectAuthenticated(app, {
       method: 'PATCH',
@@ -82,6 +87,19 @@ describe('Tenancy role and membership detail — happy paths', () => {
       payload: { name: 'Detail Target Role Updated' },
     });
     expect(patch.statusCode, patch.body).toBe(200);
+    const reread = await injectAuthenticated(app, {
+      method: 'GET',
+      url: testApiPath(basePath),
+      token,
+    });
+    expect(reread.statusCode, reread.body).toBe(200);
+    expect((reread.json() as { data: Record<string, unknown> }).data).toMatchObject({
+      id: targetRole.public_id,
+      name: 'Detail Target Role Updated',
+    });
+    const [persistedRole] =
+      await getOperatorSql()`SELECT name FROM tenancy.roles WHERE id = ${targetRole.id}`;
+    expect(persistedRole?.name).toBe('Detail Target Role Updated');
 
     const remove = await injectAuthenticated(app, {
       method: 'DELETE',
@@ -89,6 +107,16 @@ describe('Tenancy role and membership detail — happy paths', () => {
       token,
     });
     expect(remove.statusCode, remove.body).toBe(204);
+    const removed = await injectAuthenticated(app, {
+      method: 'GET',
+      url: testApiPath(basePath),
+      token,
+    });
+    expect(removed.statusCode, removed.body).toBe(404);
+    const [roleTombstone] =
+      await getOperatorSql()`SELECT deleted_at FROM tenancy.roles WHERE id = ${targetRole.id}`;
+    expect(roleTombstone).toBeDefined();
+    expect(roleTombstone?.deleted_at).not.toBeNull();
   });
 
   it('GET, PATCH, and DELETE a membership detail', async () => {
@@ -113,14 +141,31 @@ describe('Tenancy role and membership detail — happy paths', () => {
       token,
     });
     expect(get.statusCode, get.body).toBe(200);
+    expect((get.json() as { data: Record<string, unknown> }).data).toMatchObject({
+      id: membership.public_id,
+      status: 'ACTIVE',
+    });
 
     const patch = await injectAuthenticated(app, {
       method: 'PATCH',
       url: testApiPath(basePath),
       token,
-      payload: { status: 'ACTIVE' },
+      payload: { status: 'SUSPENDED' },
     });
     expect(patch.statusCode, patch.body).toBe(200);
+    const reread = await injectAuthenticated(app, {
+      method: 'GET',
+      url: testApiPath(basePath),
+      token,
+    });
+    expect(reread.statusCode, reread.body).toBe(200);
+    expect((reread.json() as { data: Record<string, unknown> }).data).toMatchObject({
+      id: membership.public_id,
+      status: 'SUSPENDED',
+    });
+    const [persistedMembership] =
+      await getOperatorSql()`SELECT status FROM tenancy.memberships WHERE id = ${membership.id}`;
+    expect(persistedMembership?.status).toBe('SUSPENDED');
 
     const remove = await injectAuthenticated(app, {
       method: 'DELETE',
@@ -128,5 +173,15 @@ describe('Tenancy role and membership detail — happy paths', () => {
       token,
     });
     expect(remove.statusCode, remove.body).toBe(204);
+    const removed = await injectAuthenticated(app, {
+      method: 'GET',
+      url: testApiPath(basePath),
+      token,
+    });
+    expect(removed.statusCode, removed.body).toBe(404);
+    const [membershipTombstone] =
+      await getOperatorSql()`SELECT deleted_at FROM tenancy.memberships WHERE id = ${membership.id}`;
+    expect(membershipTombstone).toBeDefined();
+    expect(membershipTombstone?.deleted_at).not.toBeNull();
   });
 });

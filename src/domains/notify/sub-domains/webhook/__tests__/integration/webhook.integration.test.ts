@@ -268,6 +268,25 @@ describe('Webhook Sub-Domain — Integration', () => {
         token,
       });
       expect(response.statusCode, response.body).toBe(204);
+      const [stored] = await getOperatorDatabase()
+        .select()
+        .from(webhooks)
+        .where(eq(webhooks.id, webhook.id));
+      expect(stored?.deleted_at).toBeInstanceOf(Date);
+      const afterDelete = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath(`/notify/webhooks/${webhook.public_id}`),
+        token,
+      });
+      expect(afterDelete.statusCode, afterDelete.body).toBe(404);
+      const listed = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/notify/webhooks'),
+        token,
+      });
+      expect(listed.statusCode, listed.body).toBe(200);
+      const listBody = listed.json() as { data: { id: string }[] };
+      expect(listBody.data.map((row) => row.id)).not.toContain(webhook.public_id);
     });
 
     it('returns 401 without authentication', async () => {
@@ -389,6 +408,18 @@ describe('Webhook Sub-Domain — Integration', () => {
       expect(body.data?.id).toBe(webhook.public_id);
       expect(body.data?.events).toEqual(['subscription.updated']);
       expect(body.data?.is_enabled).toBe(false);
+      const [persisted] = await getOperatorDatabase()
+        .select()
+        .from(webhooks)
+        .where(eq(webhooks.id, webhook.id));
+      expect(persisted).toMatchObject({
+        public_id: webhook.public_id,
+        organization_id: organization.id,
+        url: webhook.url,
+        events: ['subscription.updated'],
+        is_enabled: false,
+        encrypted_secret: webhook.encrypted_secret,
+      });
     });
 
     it('returns 400 for a rejected body', async () => {

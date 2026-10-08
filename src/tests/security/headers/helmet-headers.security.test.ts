@@ -18,17 +18,14 @@ describe('Security: Helmet Headers', () => {
     await app.close();
   });
 
-  it('should set X-Content-Type-Options header when present', async () => {
+  it('sets the required X-Content-Type-Options header', async () => {
     const response = await injectUnauthenticated(app, {
       method: 'GET',
       url: '/livez',
     });
     const value =
       response.headers['x-content-type-options'] ?? response.headers['X-Content-Type-Options'];
-    if (value) {
-      expect(String(value).toLowerCase()).toBe('nosniff');
-    }
-    // Helmet may omit this in some versions; other security headers are still asserted below.
+    expect(value).toBe('nosniff');
   });
 
   it('should set X-Frame-Options header', async () => {
@@ -37,9 +34,7 @@ describe('Security: Helmet Headers', () => {
       url: '/livez',
     });
     const frameOptions = response.headers['x-frame-options'];
-    if (frameOptions) {
-      expect(['DENY', 'SAMEORIGIN']).toContain(frameOptions);
-    }
+    expect(frameOptions).toBe('SAMEORIGIN');
   });
 
   it('should set Referrer-Policy header', async () => {
@@ -48,10 +43,7 @@ describe('Security: Helmet Headers', () => {
       url: '/livez',
     });
     const referrerPolicy = response.headers['referrer-policy'];
-    if (referrerPolicy) {
-      expect(typeof referrerPolicy).toBe('string');
-      expect(String(referrerPolicy).length).toBeGreaterThan(0);
-    }
+    expect(referrerPolicy).toBe('strict-origin-when-cross-origin');
   });
 
   it('should set Strict-Transport-Security header', async () => {
@@ -60,32 +52,19 @@ describe('Security: Helmet Headers', () => {
       url: '/livez',
     });
     const hsts = response.headers['strict-transport-security'];
-    if (hsts) {
-      expect(String(hsts)).toContain('max-age');
-    }
+    expect(hsts).toMatch(/^max-age=31536000(?:;|$)/);
   });
 
-  it('should set at least one of CSP, X-XSS-Protection, X-Content-Type-Options, or other Helmet headers', async () => {
+  it('sets all configured core browser security policies', async () => {
     const response = await injectUnauthenticated(app, {
       method: 'GET',
       url: '/livez',
     });
-    const securityHeaderKeys = [
-      'content-security-policy',
-      'x-xss-protection',
-      'x-content-type-options',
-      'x-frame-options',
-      'referrer-policy',
-      'strict-transport-security',
-    ];
-    const keys = Object.keys(response.headers).map((k) => k.toLowerCase());
-    const hasSecurityHeader = securityHeaderKeys.some((name) => keys.includes(name));
-    // In some test runs (e.g. parallel workers) Helmet may not attach headers; other tests in this file assert specific headers when present.
-    if (!hasSecurityHeader) {
-      expect(keys.length).toBeGreaterThan(0);
-      return;
-    }
-    expect(hasSecurityHeader).toBe(true);
+    expect(response.headers['content-security-policy']).toContain("default-src 'self'");
+    expect(response.headers['content-security-policy']).toContain("frame-ancestors 'none'");
+    expect(response.headers['cross-origin-embedder-policy']).toBe('require-corp');
+    expect(response.headers['cross-origin-opener-policy']).toBe('same-origin');
+    expect(response.headers['cross-origin-resource-policy']).toBe('same-origin');
   });
 
   it('should not expose server version', async () => {

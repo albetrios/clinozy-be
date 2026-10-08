@@ -28,7 +28,7 @@ function mockWebhookDnsLookup(): void {
   >);
 }
 
-describe('Notify e2e: webhook delivery', () => {
+describe('Notify e2e: webhook subscriptions', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
@@ -75,7 +75,13 @@ describe('Notify e2e: webhook delivery', () => {
       },
       headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
     });
-    expect([200]).toContain(createResponse.statusCode);
+    expect(createResponse.statusCode, createResponse.body).toBe(200);
+    const created = (
+      createResponse.json() as { data: { id: string; url: string; events: string[] } }
+    ).data;
+    expect(created.id).toMatch(/^whk_[a-z0-9]{21}$/);
+    expect(created.url).toBe('https://example.com/webhook');
+    expect(created.events).toEqual(['subscription.created']);
 
     const listResponse = await injectAuthenticated(app, {
       method: 'GET',
@@ -84,8 +90,15 @@ describe('Notify e2e: webhook delivery', () => {
     });
     expect(listResponse.statusCode).toBe(200);
     const listBody = listResponse.json() as {
+      data: { id: string; url: string; events: string[] }[];
       meta?: { pagination?: { has_more?: boolean; next?: string | null } };
     };
     expect(listBody.meta?.pagination).toMatchObject({ has_more: false, next: null });
+    expect(listBody.data).toHaveLength(1);
+    expect(listBody.data[0]).toMatchObject({
+      id: created.id,
+      url: created.url,
+      events: created.events,
+    });
   });
 });

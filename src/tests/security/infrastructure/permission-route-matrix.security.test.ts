@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -15,6 +15,18 @@ import {
 import { invalidatePermissions } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
 import { loadOrganizationPermissionRoutesFromCatalog } from '@/tests/helpers/route-catalog-registry.js';
 import type { FastifyInstance } from 'fastify';
+
+// Keep provider responses deterministic: this suite proves permission dispatch,
+// while signed webhook/provider transport contracts are exercised separately.
+vi.mock('@/infrastructure/payment/stripe.client.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/infrastructure/payment/stripe.client.js')>();
+  return {
+    ...actual,
+    isStripeConfigured: () => true,
+    createStripeCustomer: vi.fn(async () => ({ id: 'cus_permission_matrix' })),
+    createStripeSubscription: vi.fn(async () => ({ id: 'sub_permission_matrix' })),
+  };
+});
 
 const organizationPermissionRoutes = loadOrganizationPermissionRoutesFromCatalog();
 import {
@@ -36,6 +48,7 @@ function materializeOrganizationScopedPath(path: string, organizationPublicId: s
 function payloadForPermissionRoute(
   route: (typeof organizationPermissionRoutes)[number],
   planPublicId: string = publicIdPlaceholderFor('plan'),
+  rolePublicId: string = publicIdPlaceholderFor('memberRole'),
 ): Record<string, unknown> | undefined {
   if (route.method === 'GET' || route.method === 'DELETE') return undefined;
   if (route.path.includes('/subscriptions/:subscription_id/change-plan')) {
@@ -80,7 +93,7 @@ function payloadForPermissionRoute(
     // always creates an INVITED membership; status is no longer an input).
     return {
       email: 'matrix-member@example.test',
-      role_id: publicIdPlaceholderFor('plan'),
+      role_id: rolePublicId,
     };
   }
   if (route.path.includes('/memberships/:membership_id')) {
@@ -116,6 +129,21 @@ function idempotencyHeadersForPermissionRoute(
 ): Record<string, string> | undefined {
   if (route.method === 'GET' || route.method === 'DELETE') return undefined;
   return { 'x-idempotency-key': `permission-matrix-${randomUUID()}` };
+}
+
+/** The positive half proves permission dispatch, not success of missing resource fixtures. */
+function expectedAuthorizedStatus(route: (typeof organizationPermissionRoutes)[number]): number {
+  // Every resource path parameter is a deliberately absent but valid public id.
+  if (/:[a-zA-Z_]+/.test(route.path.replace(':organization_id', ''))) return 404;
+  if (route.method === 'PUT' && route.path.endsWith('/logo')) {
+    // Placeholder logo key fails ownership validation after permission dispatch.
+    return 400;
+  }
+  if (route.method === 'POST' && route.path.endsWith('/payment-methods/setup')) {
+    // Fresh organizations have no Stripe customer/subscription to set up payment against.
+    return 422;
+  }
+  return route.method === 'DELETE' ? 204 : 200;
 }
 
 /**
@@ -164,7 +192,7 @@ describe('Security: Permission route matrix', () => {
       );
       const plan = routeNeedsExistingPlan(route) ? await createTestPlan() : undefined;
       const headers = idempotencyHeadersForPermissionRoute(route);
-      const payload = payloadForPermissionRoute(route, plan?.public_id);
+      const payload = payloadForPermissionRoute(route, plan?.public_id, role.public_id);
 
       const response = await injectAuthenticated(app, {
         method: route.method,
@@ -177,7 +205,7 @@ describe('Security: Permission route matrix', () => {
       expect(response.statusCode, response.body).toBe(403);
     });
 
-    it(`${route.method} ${route.path} does not return 403 with ${route.permissionCode}`, async () => {
+    it(`${route.method} ${route.path} reaches its documented authorized outcome with ${route.permissionCode}`, async () => {
       await seedPermissions([route.permissionCode]);
 
       const user = await createTestUser();
@@ -203,7 +231,7 @@ describe('Security: Permission route matrix', () => {
       );
       const plan = routeNeedsExistingPlan(route) ? await createTestPlan() : undefined;
       const headers = idempotencyHeadersForPermissionRoute(route);
-      const payload = payloadForPermissionRoute(route, plan?.public_id);
+      const payload = payloadForPermissionRoute(route, plan?.public_id, role.public_id);
 
       const response = await injectAuthenticated(app, {
         method: route.method,
@@ -213,7 +241,19 @@ describe('Security: Permission route matrix', () => {
         ...(payload !== undefined ? { payload } : {}),
       });
 
-      expect(response.statusCode).not.toBe(403);
+      const expectedStatus = expectedAuthorizedStatus(route);
+      expect(response.statusCode, `${route.method} ${route.path}: ${response.body}`).toBe(
+        expectedStatus,
+      );
+      if (expectedStatus >= 400) {
+        const body = response.json() as {
+          error?: { type?: string; code?: string; reason?: string };
+        };
+        expect(body.error).toBeDefined();
+        if (expectedStatus === 404) expect(body.error?.code).toBe('not_found');
+        if (expectedStatus === 400) expect(body.error?.type).toBe('validation_error');
+        if (expectedStatus === 422) expect(body.error?.code).toBe('unprocessable_entity');
+      }
     });
   }
 });

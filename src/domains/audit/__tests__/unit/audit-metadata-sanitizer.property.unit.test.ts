@@ -83,18 +83,20 @@ describe('audit metadata sanitizer (property)', () => {
       .stringMatching(/^[a-z][a-z0-9_]{0,20}$/)
       .filter(
         (key) =>
-          !/password|passwd|secret|token|api[_-]?key|authorization|credential|private[_-]?key|access[_-]?key/i.test(
-            key,
+          !(
+            ['auth_method_id', 'mfa_method_id'].includes(key) ||
+            /password|passwd|secret|token|api[_-]?key|authorization|credential|private[_-]?key|access[_-]?key/i.test(
+              key,
+            )
           ),
       );
     fc.assert(
       fc.property(safeKey, fc.string({ maxLength: 40 }), (key, value) => {
         const sanitized = serializedMetadata({ [key]: value });
-        if (key in sanitized) {
-          // If the key survives the internal-key filter it must arrive untouched — a
-          // sanitizer that mutates benign values corrupts the forensic record.
-          expect(sanitized[key]).toBe(value);
-        }
+        // Intentionally stripped internal keys are excluded from the generator. Every
+        // benign generated key must survive: dropping it must fail this property.
+        expect(sanitized).toHaveProperty(key);
+        expect(sanitized[key]).toBe(value);
       }),
       propertyOptions,
     );

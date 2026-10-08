@@ -49,7 +49,11 @@ describe('Chaos resilience: Redis outage for Redis-backed billing rate-limit sto
             },
           });
 
-        expect(catalogueResponseAwaitingIsolation.statusCode).toBeLessThan(500);
+        expect(
+          catalogueResponseAwaitingIsolation.statusCode,
+          catalogueResponseAwaitingIsolation.body,
+        ).toBe(200);
+        expect(Array.isArray(catalogueResponseAwaitingIsolation.json().data)).toBe(true);
       },
     );
   });

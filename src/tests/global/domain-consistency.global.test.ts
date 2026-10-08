@@ -14,6 +14,10 @@ function getDirectories(directory: string): string[] {
 describe('Domain Structural Consistency', () => {
   const domains = getDirectories(DOMAINS_DIR);
 
+  it('finds domain directories before checking their structure', () => {
+    expect(domains.length).toBeGreaterThan(0);
+  });
+
   it('all domains should use kebab-case names', () => {
     for (const domain of domains) {
       expect(domain, `Domain "${domain}" must be kebab-case`).toMatch(/^[a-z][a-z0-9-]*$/);

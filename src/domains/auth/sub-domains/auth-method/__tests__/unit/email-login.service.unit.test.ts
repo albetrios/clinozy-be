@@ -310,10 +310,13 @@ describe('EmailLoginService', () => {
     );
     vi.mocked(userService.findByEmail).mockResolvedValue(null);
     vi.mocked(userService.createForEmailCode).mockResolvedValue(user as never);
+    vi.mocked(enforceMinimumDuration).mockClear();
     await service.sendCode({ email: 'missing@example.com' });
+    expect(enforceMinimumDuration).toHaveBeenCalledTimes(1);
+    vi.mocked(enforceMinimumDuration).mockClear();
     vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
     await service.sendCode({ email: user.email });
-    expect(vi.mocked(enforceMinimumDuration)).toHaveBeenCalledTimes(2);
+    expect(enforceMinimumDuration).toHaveBeenCalledTimes(1);
   });
 
   it('sendCode rejects disposable email addresses', async () => {
@@ -397,6 +400,9 @@ describe('EmailLoginService', () => {
       service.login({ email: 'missing@example.com', code: 'ABCDEF' }, '127.0.0.1'),
     ).rejects.toThrow();
 
+    expect(enforceMinimumDuration).toHaveBeenCalledTimes(1);
+    vi.mocked(enforceMinimumDuration).mockClear();
+
     // Attempt-cap branch: a known email over the per-user cap.
     vi.mocked(userService.findByEmail).mockResolvedValueOnce(user as never);
     vi.mocked(redis.eval).mockResolvedValueOnce(99);
@@ -404,7 +410,7 @@ describe('EmailLoginService', () => {
       service.login({ email: user.email, code: 'ABCDEF' }, '127.0.0.1'),
     ).rejects.toThrow();
 
-    expect(vi.mocked(enforceMinimumDuration)).toHaveBeenCalledTimes(2);
+    expect(enforceMinimumDuration).toHaveBeenCalledTimes(1);
   });
 
   it('login rejects a wrong or expired code', async () => {

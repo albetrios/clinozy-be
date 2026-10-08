@@ -183,6 +183,12 @@ describe('MemberRolePermissionService', () => {
           requestedPermissionCodes: ['tenancy:read', 'tenancy:write'],
         }),
       );
+      expect(memberRolePermissionRepository.replace).toHaveBeenCalledOnce();
+      expect(
+        vi.mocked(assertCallerCanGrantPermissionCodes).mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        vi.mocked(memberRolePermissionRepository.replace).mock.invocationCallOrder[0]!,
+      );
     });
 
     it('replaces the role permission set and invalidates the whole organization namespace', async () => {

@@ -56,13 +56,39 @@ single box, more API processes make it slower.
 
 ## The load-shed valve
 
-`overload-guard.middleware.ts` returns `503` when event-loop lag crosses its
-threshold — deliberate back-pressure that protects liveness under genuine CPU
-saturation. In the single-instance ladder it **never fired** (the loop stayed
-healthy); in the oversubscribed cluster it fired ~4,900 times. A burst of `503`s
-in production is the signal that the API tier is CPU-starved (too many
-processes per core, or a runaway handler) — not that the DB is the limit. See
+`overload-guard.middleware.ts` returns `503` with `Retry-After: 1` when either
+event-loop lag crosses its threshold or in-flight database units of work reach
+`ceil(DATABASE_POOL_MAX × OVERLOAD_DB_POOL_SHED_RATIO)`. The default ratio is
+three; the count includes units waiting for a connection as well as running
+transactions. Liveness, readiness and metrics paths bypass this guard.
+
+The structured `request.service_unavailable` log identifies the triggering signal
+as `event_loop_overload` or `database_pool_overload` in its `reason` field. If both
+signals cross their thresholds, event-loop overload takes precedence. Internal
+reasons remain absent from the HTTP error body. A calm event loop therefore does
+not rule out deliberate database-pressure shedding. Compare checkout pressure,
+transaction duration and PostgreSQL activity before diagnosing the bottleneck;
+the connection gauge named `waiting` is not an application pool queue count.
+
+In the historical single-instance ladder the event-loop valve **never fired**;
+in the oversubscribed cluster it fired ~4,900 times. See
 [degraded-mode-runbook](degraded-mode-runbook.md).
+
+## Statement planning on direct database connections
+
+The version-pinned Drizzle postgres.js driver patch in `pnpm-workspace.yaml`
+enables statement preparation on its `unsafe()` execution paths. Without the
+patch, those calls explicitly disable preparation, so repeated parameterized
+reads are parsed and planned again even when the connection pool permits reuse.
+The patch covers both ESM and CommonJS driver builds and uses bound parameters;
+it does not cache query results or remove authorization or RLS checks.
+
+postgres.js also checks the pool's `prepare` option, so the existing
+`prepare: false` setting for detected transaction-pooler connections still wins.
+Do not force PostgreSQL's `plan_cache_mode` globally: parameter-sensitive queries
+may need custom plans. The regression suite verifies plan reuse, changing
+transaction-local organization settings and the disabled-preparation path.
+Remove the patch when the upstream driver provides the same behavior.
 
 ## Concurrency correctness under stress
 

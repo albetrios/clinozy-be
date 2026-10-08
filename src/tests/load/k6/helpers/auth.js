@@ -16,9 +16,11 @@ export function login(email, password) {
 
   if (response.status === 200) {
     const body = JSON.parse(response.body);
-    return body.data?.access_token || body.data?.token || null;
+    const token = body.data?.access_token || body.data?.token;
+    if (typeof token === 'string' && token.length > 0) return token;
+    throw new Error('Load login returned no access token');
   }
-  return null;
+  throw new Error(`Load login failed with HTTP ${response.status}`);
 }
 
 /**
@@ -32,11 +34,14 @@ export function switchToOrganization(token, organizationPublicId) {
     JSON.stringify({ organization_id: organizationPublicId }),
     { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } },
   );
-  if (response.status === 200 || response.status === 200) {
+  if (response.status === 200) {
     const body = JSON.parse(response.body);
-    return body.data?.access_token || null;
+    if (typeof body.data?.access_token !== 'string' || !body.data.access_token) {
+      throw new Error('Load organization switch returned no access token');
+    }
+    return body.data.access_token;
   }
-  return null;
+  throw new Error(`Load organization switch failed with HTTP ${response.status}`);
 }
 
 /**
@@ -47,22 +52,25 @@ export function switchToPersonal(token) {
   const response = http.post(`${API_PREFIX}/auth/switch-to-personal`, null, {
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
   });
-  if (response.status === 200 || response.status === 200) {
+  if (response.status === 200) {
     const body = JSON.parse(response.body);
-    return body.data?.access_token || null;
+    if (typeof body.data?.access_token !== 'string' || !body.data.access_token) {
+      throw new Error('Load organization switch returned no access token');
+    }
+    return body.data.access_token;
   }
-  return null;
+  throw new Error(`Load organization switch failed with HTTP ${response.status}`);
 }
 
 /**
  * Convenience: log in, then switch the active organization so the returned token is scoped to
- * `organizationPublicId`. Falls back to the plain login token when no organization is given or the switch
- * fails. Returns the (organization-scoped) token, or null when login itself fails.
+ * `organizationPublicId`. Returns the plain login token only when no organization is requested.
+ * Login or requested scope failure aborts setup instead of targeting another tenant.
  */
 export function loginScopedToOrganization(email, password, organizationPublicId) {
   const token = login(email, password);
   if (!(token && organizationPublicId)) return token;
-  return switchToOrganization(token, organizationPublicId) || token;
+  return switchToOrganization(token, organizationPublicId);
 }
 
 /**

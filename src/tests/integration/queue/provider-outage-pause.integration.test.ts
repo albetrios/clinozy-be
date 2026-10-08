@@ -210,7 +210,6 @@ describe('Integration: provider outage pauses the queue', () => {
 
   it('paces the queue to its limiter across every replica', async () => {
     // Two replicas, two jobs a second between them: six jobs take three windows, not one burst.
-    const startedAt = Date.now();
     const processedAt: number[] = [];
     await startReplicas(
       async () => {
@@ -225,7 +224,8 @@ describe('Integration: provider outage pauses the queue', () => {
     );
     await waitFor(async () => processedAt.length === 6, 10_000);
 
-    expect(Math.max(...processedAt) - startedAt).toBeGreaterThanOrEqual(1_900);
+    expect(processedAt).toHaveLength(6);
+    expect(Math.max(...processedAt) - Math.min(...processedAt)).toBeGreaterThanOrEqual(1_900);
   }, 20_000);
 
   it('keeps spending attempts on a failure that is the job’s own', async () => {

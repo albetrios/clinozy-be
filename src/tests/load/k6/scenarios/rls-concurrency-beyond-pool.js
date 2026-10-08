@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { sleep } from 'k6';
 import { API_PREFIX } from '../helpers/config.js';
-import { checkOk, checkResponseTime } from '../helpers/checks.js';
+import { checkStatus } from '../helpers/checks.js';
 import { authHeaders } from '../helpers/auth.js';
 
 /**
@@ -41,9 +41,22 @@ export const options = {
   thresholds: {
     // The audit ceiling: requests must not fail when concurrency exceeds the pool.
     http_req_failed: ['rate<0.01'],
+    checks: ['rate>0.99'],
+    'http_reqs{name:rls-beyond-pool}': ['count>0'],
     'http_req_duration{name:rls-beyond-pool}': ['p(95)<800', 'p(99)<1500'],
   },
 };
+
+export function setup() {
+  if (!(__ENV.TEST_TOKEN && __ENV.TEST_ORG_ID)) {
+    throw new Error('RLS load requires TEST_TOKEN scoped to TEST_ORG_ID');
+  }
+  if (
+    ![poolMax, beyondPoolFactor, targetVus].every((value) => Number.isInteger(value) && value > 0)
+  ) {
+    throw new Error('Pool and VU configuration must contain positive integers');
+  }
+}
 
 export function rlsConcurrencyBeyondPool() {
   const token = __ENV.TEST_TOKEN;
@@ -58,8 +71,8 @@ export function rlsConcurrencyBeyondPool() {
     ...authHeaders(token),
     tags: { name: 'rls-beyond-pool' },
   });
-  checkOk(response, 'rls-beyond-pool');
-  checkResponseTime(response, 800, 'rls-beyond-pool');
+  checkStatus(response, 200, 'rls-beyond-pool');
+  // Latency acceptance is percentile-based in thresholds, separate from exact HTTP status.
 
   // Keep requests in flight to maximize concurrent in-process checkouts.
   sleep(0.1);

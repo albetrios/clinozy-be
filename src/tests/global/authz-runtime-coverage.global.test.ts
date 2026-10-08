@@ -2,19 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { loadRouteAuthorizationModel } from '@/tests/helpers/route-authorization-model.js';
 
 /**
- * Runtime-coverage gate for the declarative authorization model.
+ * Structural parity between the authorization model and the reviewed attack-test map.
  *
- * The companion `authz-model-coverage.global.test.ts` proves every object-by-id
- * route *declares* a model. This gate goes one step further: it proves every
- * modelled route is *actually exercised* by a dedicated attacker test in
- * `src/tests/security/authz/`, by requiring an entry in `RUNTIME_COVERAGE`
- * below. Adding a new by-id route therefore fails CI twice until both a model
- * entry AND a runtime attack test (mapped here) exist — closing the
- * "authorization test silently never written" gap by construction.
- *
- * Each value names the suite + scenario that asserts the attacker outcome, so
- * the map doubles as a route→test index. It is kept in lockstep with the model
- * (this gate fails on any drift in either direction).
+ * Every modeled route must have a descriptive mapping below, with no orphan entries.
+ * These labels document the intended security scenarios. This gate does not resolve
+ * labels to test declarations, execute attacker requests, or prove that mapped tests
+ * still exist. Observed authorization coverage must come from the security test run.
  */
 const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
   // ── model: user — cross-user BOLA (object-ownership.security.test.ts) ──────
@@ -105,14 +98,14 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
   'POST /api/v1/users/:user_id/unsuspend': 'admin-only: regular user denied',
 };
 
-describe('Global: authorization-model runtime coverage', () => {
+describe('Global: authorization-model attack-test mapping parity', () => {
   const model = loadRouteAuthorizationModel();
 
-  it('every modelled route has a dedicated runtime attack test', () => {
+  it('every modeled route has a reviewed attack-test mapping', () => {
     const missing = Object.keys(model).filter((key) => !(key in RUNTIME_COVERAGE));
     expect(
       missing,
-      `Modelled routes with no runtime attack test (add one in src/tests/security/authz/ and map it here):\n${missing.join('\n')}`,
+      `Modeled routes missing an attack-test mapping (review the security scenario and document it here):\n${missing.join('\n')}`,
     ).toEqual([]);
   });
 

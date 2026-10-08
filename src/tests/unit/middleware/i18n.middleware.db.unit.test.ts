@@ -22,7 +22,7 @@ describe('i18n.middleware (via application stack)', () => {
       payload: {},
     });
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.detail).toBeTruthy();
+    expect(response.json().error.detail).toBe('Invalid values for fields in request');
   });
 
   it('accepts Accept-Language header without failing the request', async () => {
@@ -36,12 +36,12 @@ describe('i18n.middleware (via application stack)', () => {
     expect(response.json().error).toBeDefined();
   });
 
-  it('skips i18n for health live route', async () => {
+  it('returns the raw liveness response', async () => {
     const response = await application.inject({ method: 'GET', url: '/livez' });
     expect(response.statusCode).toBe(200);
   });
 
-  it('skips i18n for health ready route', async () => {
+  it('returns a raw readiness response without an error envelope', async () => {
     const response = await application.inject({ method: 'GET', url: '/readyz' });
     expect([200, 503]).toContain(response.statusCode);
     expect(response.json().error).toBeUndefined();
@@ -62,8 +62,10 @@ describe('i18n.middleware (via application stack)', () => {
     });
     expect(englishResponse.statusCode).toBe(400);
     expect(spanishResponse.statusCode).toBe(400);
-    expect(englishResponse.json().error.detail).toBeTruthy();
-    expect(spanishResponse.json().error.detail).toBeTruthy();
+    expect(englishResponse.json().error.detail).toBe('Invalid values for fields in request');
+    expect(spanishResponse.json().error.detail).toBe(
+      'Valores no válidos en los campos de la solicitud',
+    );
   });
 
   it('returns validation errors for unsupported and supported Accept-Language', async () => {
@@ -88,9 +90,9 @@ describe('i18n.middleware (via application stack)', () => {
     expect(english.statusCode).toBe(400);
     expect(spanish.statusCode).toBe(400);
     expect(fallback.statusCode).toBe(400);
-    expect(english.json().error.detail).toBeTruthy();
-    expect(spanish.json().error.detail).toBeTruthy();
-    expect(fallback.json().error.detail).toBeTruthy();
+    expect(english.json().error.detail).toBe('Invalid values for fields in request');
+    expect(spanish.json().error.detail).toBe('Valores no válidos en los campos de la solicitud');
+    expect(fallback.json().error.detail).toBe('Invalid values for fields in request');
     expect(fallback.json().error.detail).toBe(english.json().error.detail);
   });
 });

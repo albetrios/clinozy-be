@@ -7,7 +7,8 @@ import type { FastifyInstance } from 'fastify';
 import type { TestRequestAgent } from '@/tests/helpers/test-app.js';
 
 /**
- * Concurrent request tests — verify server stability under parallel load.
+ * Concurrent in-process requests — verify every request succeeds through app.inject().
+ * TCP listener behavior and external capacity are covered separately by live load tests.
  */
 describe('Performance: Concurrent Requests', () => {
   let app: FastifyInstance;
@@ -28,18 +29,10 @@ describe('Performance: Concurrent Requests', () => {
   });
 
   it('should handle 50 parallel unauthenticated requests', async () => {
-    const promises = Array.from({ length: 50 }, () =>
-      request.get('/livez').catch(() => ({ status: 503 })),
-    );
+    const results = await Promise.all(Array.from({ length: 50 }, () => request.get('/livez')));
 
-    const results = await Promise.all(promises);
-    const failedCount = results.filter(
-      (r) => ((r as { status?: number }).status ?? 0) >= 500,
-    ).length;
-    const successCount = results.length - failedCount;
-    // Under load (no-file-parallelism, shared app), many requests may get ECONNRESET/503; require majority succeed
-    expect(successCount).toBeGreaterThanOrEqual(1);
-    expect(failedCount).toBeLessThanOrEqual(results.length);
+    expect(results).toHaveLength(50);
+    expect(results.map((response) => response.status)).toEqual(Array(50).fill(200));
   });
 
   it('should handle batched parallel authenticated requests', { timeout: 20000 }, async () => {
@@ -58,7 +51,7 @@ describe('Performance: Concurrent Requests', () => {
       successCount += responses.filter((response) => response.status === 200).length;
     }
 
-    expect(successCount).toBeGreaterThanOrEqual(batchSize);
+    expect(successCount).toBe(batchSize * batchCount);
   });
 
   it('should handle mixed read/write concurrent requests in batches', {
@@ -67,25 +60,38 @@ describe('Performance: Concurrent Requests', () => {
     const user = await createTestUser();
     const token = await generateTestToken({ userId: user.public_id });
     const batchSize = 3;
+    const batchCount = 4;
     let successfulResponses = 0;
 
-    for (let batch = 0; batch < 4; batch += 1) {
+    for (let batch = 0; batch < batchCount; batch += 1) {
       const reads = Array.from({ length: batchSize }, () =>
         request.get('/api/v1/users/me').set('Authorization', `Bearer ${token}`),
       );
-      const writes = Array.from({ length: batchSize }, () =>
+      // Independent owners avoid making this availability test a quota/rate-limit test.
+      const writerTokens = await Promise.all(
+        Array.from({ length: batchSize }, async () => {
+          const writer = await createTestUser();
+          return generateTestToken({ userId: writer.public_id });
+        }),
+      );
+      const writes = writerTokens.map((writerToken, index) =>
         request
           .post('/api/v1/tenancy/organizations')
-          .set('Authorization', `Bearer ${token}`)
+          .set('Authorization', `Bearer ${writerToken}`)
+          .set('X-Idempotency-Key', `concurrency-${batch}-${index}-${Date.now()}`)
           .send({
-            name: `ConcOrg-${batch}-${Math.random()}`,
-            slug: `conc-${Date.now()}-${batch}-${Math.random().toString(36).slice(2, 8)}`,
+            name: `ConcOrg-${batch}-${index}`,
+            slug: `conc-${Date.now()}-${batch}-${index}-${Math.random().toString(36).slice(2, 8)}`,
           }),
       );
       const responses = await Promise.all([...reads, ...writes]);
-      successfulResponses += responses.filter((response) => response.status < 500).length;
+      expect(responses.map((response) => response.status)).toEqual(Array(batchSize * 2).fill(200));
+      for (const response of responses.slice(batchSize)) {
+        expect(response.body).toMatchObject({ data: { id: expect.any(String) } });
+      }
+      successfulResponses += responses.filter((response) => response.status === 200).length;
     }
 
-    expect(successfulResponses).toBeGreaterThanOrEqual(batchSize * 2);
+    expect(successfulResponses).toBe(batchSize * 2 * batchCount);
   });
 });

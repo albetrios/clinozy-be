@@ -8,7 +8,11 @@ import errorHandlerMiddleware from '@/shared/middlewares/core/error-handler.midd
 import overloadGuardMiddleware, {
   shouldShedRequest,
 } from '@/shared/middlewares/core/overload-guard.middleware.js';
-import { resetSharedEventLoopHistogram } from '@/shared/utils/infrastructure/event-loop-monitor.js';
+import {
+  getSharedEventLoopHistogram,
+  resetSharedEventLoopHistogram,
+} from '@/shared/utils/infrastructure/event-loop-monitor.js';
+import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 vi.mock('@/infrastructure/observability/sentry/sentry.js', () => ({
   captureException: vi.fn(),
@@ -129,12 +133,50 @@ describe('overload-guard.middleware', () => {
       await app.register(overloadGuardMiddleware);
       app.get('/x', async () => ({ ok: true }));
       try {
+        const warning = vi.spyOn(logger, 'warn');
         const response = await app.inject({ method: 'GET', url: '/x' });
         expect(response.statusCode).toBe(503);
         expect(response.headers['retry-after']).toBe('1');
+        expect(response.json().error.reason).toBeUndefined();
+        expect(warning).toHaveBeenCalledWith(
+          expect.objectContaining({ reason: 'database_pool_overload' }),
+          'request.service_unavailable',
+        );
       } finally {
+        vi.restoreAllMocks();
         resetOrganizationRlsCheckoutCountForTests();
         await app.close();
+      }
+    });
+
+    it('logs event-loop overload without exposing the internal reason to clients', async () => {
+      resetOrganizationRlsCheckoutCountForTests();
+      resetSharedEventLoopHistogram();
+      const app = Fastify();
+      app.decorateRequest(
+        't',
+        ((key: string) => key) as unknown as NonNullable<Parameters<typeof app.decorateRequest>[1]>,
+      );
+      await app.register(errorHandlerMiddleware);
+      await app.register(overloadGuardMiddleware);
+      app.get('/x', async () => ({ ok: true }));
+      await app.ready();
+      vi.spyOn(getSharedEventLoopHistogram(), 'percentile').mockReturnValue(300_000_000);
+      const warning = vi.spyOn(logger, 'warn');
+      try {
+        await new Promise((resolve) => setTimeout(resolve, SAMPLE_INTERVAL_MS + 50));
+        const response = await app.inject({ method: 'GET', url: '/x' });
+        expect(response.statusCode).toBe(503);
+        expect(response.headers['retry-after']).toBe('1');
+        expect(response.json().error.reason).toBeUndefined();
+        expect(warning).toHaveBeenCalledWith(
+          expect.objectContaining({ reason: 'event_loop_overload' }),
+          'request.service_unavailable',
+        );
+      } finally {
+        vi.restoreAllMocks();
+        await app.close();
+        resetSharedEventLoopHistogram();
       }
     });
 

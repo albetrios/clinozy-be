@@ -159,8 +159,8 @@ describe('parseIdempotencyKeyHeader', () => {
   });
 
   it('returns invalid for disallowed characters', () => {
-    expect(parseIdempotencyKeyHeader('foo bar').kind).toBe('invalid');
-    expect(parseIdempotencyKeyHeader('你好').kind).toBe('invalid');
+    expect(parseIdempotencyKeyHeader('abcdefghijklmno bar').kind).toBe('invalid');
+    expect(parseIdempotencyKeyHeader('abcdefghijklmno你好').kind).toBe('invalid');
   });
 
   it('uses the first value when the header is an array', () => {

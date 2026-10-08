@@ -32,7 +32,8 @@ describe('tenancy member-invitation event handlers', () => {
   }
 
   it('records outbox and dispatches after commit on tenancy.member_invitation.created', async () => {
-    await emitAndFlushOnCommit({
+    enterOnCommitScope();
+    await eventBus.emit({
       type: MEMBER_INVITATION_EVENT.CREATED,
       payload: {
         email: 'invitee@example.com',
@@ -46,6 +47,8 @@ describe('tenancy member-invitation event handlers', () => {
     });
 
     expect(recordOutboxEmailMock).toHaveBeenCalledOnce();
+    expect(dispatchOutboxEmailMock).not.toHaveBeenCalled();
+    await eventBus.flushOnCommit();
     expect(recordOutboxEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'invitee@example.com',
@@ -79,7 +82,8 @@ describe('tenancy member-invitation event handlers', () => {
   });
 
   it('records outbox and dispatches after commit on tenancy.member_invitation.resent', async () => {
-    await emitAndFlushOnCommit({
+    enterOnCommitScope();
+    await eventBus.emit({
       type: MEMBER_INVITATION_EVENT.RESENT,
       payload: {
         email: 'invitee@example.com',
@@ -93,6 +97,8 @@ describe('tenancy member-invitation event handlers', () => {
     });
 
     expect(recordOutboxEmailMock).toHaveBeenCalledOnce();
+    expect(dispatchOutboxEmailMock).not.toHaveBeenCalled();
+    await eventBus.flushOnCommit();
     expect(dispatchOutboxEmailMock).toHaveBeenCalledOnce();
   });
 

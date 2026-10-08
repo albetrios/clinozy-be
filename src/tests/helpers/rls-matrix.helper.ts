@@ -236,9 +236,12 @@ export async function updateRowAsTenant(
   const qualified = `"${schemaName}"."${tableName}"`;
   return executeAsClinozyBeAppTenant(organizationPublicId, async (transaction) => {
     const result = await transaction.execute(
-      drizzleSql.raw(`UPDATE ${qualified} SET id = id WHERE id = ${rowId}`),
+      drizzleSql.raw(`UPDATE ${qualified} SET id = id WHERE id = ${rowId} RETURNING id`),
     );
-    return Number((result as { rowCount?: number }).rowCount ?? 0);
+    // Drizzle postgres-js execute returns row arrays, not a node-postgres rowCount.
+    // RETURNING makes an accidental cross-tenant mutation directly observable.
+    const rows = Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? []);
+    return rows.length;
   });
 }
 
@@ -251,9 +254,12 @@ export async function deleteRowAsTenant(
   const qualified = `"${schemaName}"."${tableName}"`;
   return executeAsClinozyBeAppTenant(organizationPublicId, async (transaction) => {
     const result = await transaction.execute(
-      drizzleSql.raw(`DELETE FROM ${qualified} WHERE id = ${rowId}`),
+      drizzleSql.raw(`DELETE FROM ${qualified} WHERE id = ${rowId} RETURNING id`),
     );
-    return Number((result as { rowCount?: number }).rowCount ?? 0);
+    // Drizzle postgres-js execute returns row arrays, not a node-postgres rowCount.
+    // RETURNING makes an accidental cross-tenant mutation directly observable.
+    const rows = Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? []);
+    return rows.length;
   });
 }
 
