@@ -13,7 +13,8 @@ describe('idempotency cached body cap policy', () => {
     expect(source).toContain('IDEMPOTENCY_CACHED_BODY_BYTES');
     expect(source).toContain('idempotency.cache.body.too_large');
     expect(source).toContain('bodyByteLength > IDEMPOTENCY_CACHED_BODY_BYTES');
-    expect(source).toContain('redisConnection.del(cacheKey)');
+    expect(source).toContain('delete requestWithIdempotency._idempotencyPendingCompleted');
+    expect(source).toContain('IDEMPOTENCY_RELEASE_IF_CLAIMED_LUA');
   });
 
   it('uses discriminated state machine entries (no fake CachedResponse placeholder)', () => {

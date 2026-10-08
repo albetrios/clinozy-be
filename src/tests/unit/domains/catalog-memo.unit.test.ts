@@ -76,6 +76,9 @@ describe.each(MEMOS)('$name in-process memo', ({ memoize, reset }) => {
     );
 
     const concurrentReads = [memoize(load), memoize(load), memoize(load)];
+    // Plan catalog singleflight defers `load` one microtask so a synchronous throw is a shared
+    // rejection. Flush that tick before resolving, or this release hits the placeholder.
+    await Promise.resolve();
     releaseLoad([{ id: 'shared' }]);
 
     await expect(Promise.all(concurrentReads)).resolves.toEqual([
