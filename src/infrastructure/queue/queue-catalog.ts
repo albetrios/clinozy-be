@@ -24,6 +24,8 @@ import { USER_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/user/workers/user
 import { ORGANIZATION_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/workers/organization-tombstone-retention.constants.js';
 import { MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/membership/workers/membership-tombstone-retention.constants.js';
 import { APP_RECORD_PURGE_QUEUE_NAME } from '@/domains/app/workers/app-record-purge.constants.js';
+import { DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/billing/day-closes/workers/day-close-auto-close.constants.js';
+import { DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME } from '@/domains/app/sub-domains/billing/day-closes/queues/day-close-auto-close.queue.js';
 import { MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.constants.js';
 import { ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/organization-api-key/workers/organization-api-key-tombstone-retention.constants.js';
 import { UPLOAD_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/upload/workers/upload-tombstone-retention.constants.js';
@@ -73,6 +75,8 @@ export const WORKER_QUEUE_NAMES = [
   ORGANIZATION_TOMBSTONE_RETENTION_QUEUE_NAME,
   MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME,
   APP_RECORD_PURGE_QUEUE_NAME,
+  DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME,
+  DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME,
   MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME,
   ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_QUEUE_NAME,
   UPLOAD_TOMBSTONE_RETENTION_QUEUE_NAME,
@@ -100,4 +104,5 @@ export const WORKER_THROUGHPUT_QUEUE_NAMES = [
   WEBHOOK_DELIVERY_QUEUE_NAME,
   STRIPE_WEBHOOK_QUEUE_NAME,
   SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME,
+  DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME,
 ] as const;

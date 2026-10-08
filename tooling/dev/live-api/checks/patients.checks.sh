@@ -436,14 +436,34 @@ YESTERDAY="$(calendar_day -1)"
 IN_A_MONTH="$(calendar_day 30)"
 NOWHERE_CHECK_IN=chk_aaaaaaaaaaaaaaaaaaaaa
 
-# bought_offering FILE OFFERING TOTAL VALID_UNTIL — a bought offering of the patient (sub-domain 8
-# writes these through an invoice); prints its public id.
-bought_offering() {
+# invoice_on FILE DATE [KEY] — a bill of nothing for the patient's contact at the fixture's Vesu
+# branch dated DATE (the numbers come from the triggers); prints its public id. KEY tells apart two
+# bills of one patient and day.
+invoice_on() {
   local public_id
+  public_id="invc_$(printf '%s' "${T}-invoice-$1-$2-${3:-}" | md5sum | head -c 21)"
+  patient_sql "INSERT INTO app.invoices (public_id, organization_id, branch_id, contact_id, invoice_date)
+    SELECT '${public_id}', b.organization_id, b.id, p.contact_id, '$2'
+    FROM app.branches b, app.patients p WHERE b.public_id = '${VESU}' AND p.public_id = '$1';" >/dev/null
+  printf '%s' "${public_id}"
+}
+
+# bought_offering FILE OFFERING TOTAL VALID_UNTIL [INVOICE] — a bought offering of the patient on a
+# line of INVOICE (a bill of its own when none is named) — the shape an invoice's save writes, with
+# TOTAL sessions and VALID_UNTIL as the check needs them; prints its public id.
+bought_offering() {
+  local public_id invoice
   public_id="poff_$(printf '%s' "${T}-$1-$2-$3-$4" | md5sum | head -c 21)"
-  patient_sql "INSERT INTO app.patient_offerings (public_id, organization_id, patient_id, offering_id, sessions_total, valid_until)
-    SELECT '${public_id}', p.organization_id, p.id, f.id, $3, '$4'
-    FROM app.patients p, app.offerings f WHERE p.public_id = '$1' AND f.public_id = '$2';" >/dev/null
+  invoice="${5:-$(invoice_on "$1" "${TODAY}" "${public_id}")}"
+  patient_sql "WITH line AS (
+      INSERT INTO app.invoice_items (public_id, organization_id, invoice_id, line_number, offering_id, name, quantity, rate, gst_percent, is_gst_inclusive, taxable_amount, gst_amount, amount)
+      SELECT 'iitm_$(printf '%s' "${public_id}" | md5sum | head -c 21)', i.organization_id, i.id,
+        (SELECT count(*) + 1 FROM app.invoice_items WHERE invoice_id = i.id), f.id, f.name, 1, 0, 0, true, 0, 0, 0
+      FROM app.invoices i, app.offerings f WHERE i.public_id = '${invoice}' AND f.public_id = '$2'
+      RETURNING id)
+    INSERT INTO app.patient_offerings (public_id, organization_id, patient_id, offering_id, invoice_item_id, sessions_total, valid_until)
+    SELECT '${public_id}', p.organization_id, p.id, f.id, line.id, $3, '$4'
+    FROM line, app.patients p, app.offerings f WHERE p.public_id = '$1' AND f.public_id = '$2';" >/dev/null
   printf '%s' "${public_id}"
 }
 
@@ -665,21 +685,9 @@ expect 403 "the pharmacist logs no action" POST "/app/patients/${CHETAN_FILE}/re
 as_role owner
 
 # ==== #135 — 7.L patient offerings, 7.M the plan =================================================
-# invoice_on FILE DATE — an invoice of the patient at the fixture's Vesu branch dated DATE
-# (sub-domain 8 writes these through its routes from #136); prints its public id.
-invoice_on() {
-  local public_id
-  public_id="invc_$(printf '%s' "${T}-invoice-$1-$2" | md5sum | head -c 21)"
-  patient_sql "INSERT INTO app.invoices (public_id, organization_id, invoice_number, financial_year, branch_id, patient_id, invoice_date)
-    SELECT '${public_id}', b.organization_id, 'CHK-${S}', '2026-27', b.id, p.id, '$2'
-    FROM app.branches b, app.patients p WHERE b.public_id = '${VESU}' AND p.public_id = '$1';" >/dev/null
-  printf '%s' "${public_id}"
-}
-
 as_role owner
 TODAY_INVOICE="$(invoice_on "${CHETAN_FILE}" "${TODAY}")"
-SEVEN_PACK="$(bought_offering "${CHETAN_FILE}" "${PEEL}" 7 "${IN_A_MONTH}")"
-patient_sql "UPDATE app.patient_offerings SET invoice_id = (SELECT id FROM app.invoices WHERE public_id = '${TODAY_INVOICE}') WHERE public_id = '${SEVEN_PACK}';" >/dev/null
+SEVEN_PACK="$(bought_offering "${CHETAN_FILE}" "${PEEL}" 7 "${IN_A_MONTH}" "${TODAY_INVOICE}")"
 SINGLE_SESSION="$(bought_offering "${CHETAN_FILE}" "${HYDRA}" 1 "${IN_A_MONTH}")"
 patient_sql "UPDATE app.patient_offerings SET valid_until = NULL WHERE public_id = '${SINGLE_SESSION}';" >/dev/null
 

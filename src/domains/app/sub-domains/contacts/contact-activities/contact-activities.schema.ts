@@ -20,8 +20,8 @@ import { memberships } from '@/domains/tenancy/sub-domains/membership/membership
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import { contact_message_templates } from '@/domains/app/sub-domains/contacts/contact-message-templates/contact-message-templates.schema.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
-import { invoices } from '@/domains/app/sub-domains/invoices/invoices.schema.js';
-import { payments } from '@/domains/app/sub-domains/payments/payments.schema.js';
+import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
+import { payments } from '@/domains/app/sub-domains/billing/payments/payments.schema.js';
 import { patient_prescriptions } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.schema.js';
 import { patient_offerings } from '@/domains/app/sub-domains/patients/patient-offerings/patient-offerings.schema.js';
 import { patient_reviews } from '@/domains/app/sub-domains/patients/patient-reviews/patient-reviews.schema.js';

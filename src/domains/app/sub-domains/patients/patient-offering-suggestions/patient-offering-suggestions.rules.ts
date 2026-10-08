@@ -1,7 +1,9 @@
 import {
   findMembershipIdOfUser,
+  resolveRecordIds,
   type BaseRecordRow,
 } from '@/domains/app/base-record.repository.js';
+import { InvoicesRepository } from '@/domains/app/sub-domains/billing/invoices/invoices.repository.js';
 import type { BaseRecordRules } from '@/domains/app/base-record.types.js';
 import { OfferingsRepository } from '@/domains/app/sub-domains/offerings/offerings.repository.js';
 import {
@@ -9,7 +11,7 @@ import {
   assertOfferingActive,
   shortCalendarDate,
 } from '@/domains/app/sub-domains/patients/patients.rules.js';
-import { ConflictError } from '@/shared/errors/index.js';
+import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
 import {
   PATIENT_OFFERING_SUGGESTION_HELD_STATUS_VALUES,
   PATIENT_OFFERING_SUGGESTION_STATUS,
@@ -18,7 +20,9 @@ import type {
   PatientOfferingSuggestionSources,
   PatientOfferingSuggestionsRepository,
 } from './patient-offering-suggestions.repository.js';
+import { patient_offering_suggestions } from './patient-offering-suggestions.schema.js';
 
+const invoicesRepository = new InvoicesRepository();
 const offeringsRepository = new OfferingsRepository();
 
 /** Whether a status holds the offering in the plan (PK9). */
@@ -50,10 +54,12 @@ function sourceLabel(
  *   patient's contact's, records the caller's membership as `suggested_by_membership_id` (PK8), and
  *   refuses a second row holding the offering — planned, next time or accepted (PK9); a declined row
  *   is a record and never clashes. A change that moves a declined row back, and a restore of a held
- *   one, run the same check. `decorate` names the offering, derives `source_label` and flags a
- *   `price` below the offering's lowest price × quantity (warns, not blocks — PK9).
- * - **Failure modes:** `ValidationError` on `offering_id`, `appointment_id`; `ConflictError`
- *   `suggestion_exists`.
+ *   one, run the same check; an accepted row invoiced in full no longer holds it. A change never
+ *   takes `quantity` below what is invoiced (PK7). `decorate` names the offering, derives
+ *   `source_label`, flags a `price` below the offering's lowest price × quantity (warns, not
+ *   blocks — PK9) and reads what live invoices' lines invoiced.
+ * - **Failure modes:** `ValidationError` on `offering_id`, `appointment_id`, `quantity`;
+ *   `ConflictError` `suggestion_exists`.
  */
 export function createPatientOfferingSuggestionsRules(
   repository: PatientOfferingSuggestionsRepository,
@@ -88,6 +94,18 @@ export function createPatientOfferingSuggestionsRules(
       }
     },
     prepareUpdate: async (values, existing) => {
+      if (typeof values.quantity === 'number') {
+        const invoiced = (await invoicesRepository.findInvoicedQuantities([existing.id])).get(
+          existing.id,
+        );
+        if (invoiced !== undefined && values.quantity < invoiced) {
+          throw fieldValidationError({
+            field: 'quantity',
+            messageKey: 'errors:validation.patientOfferingSuggestionQuantityBelowInvoiced',
+            messageParams: { invoiced },
+          });
+        }
+      }
       if (!isHeld(existing.status) && isHeld(values.status)) {
         await assertNotInPlan(existing, existing.id);
       }
@@ -95,7 +113,13 @@ export function createPatientOfferingSuggestionsRules(
     prepareRestore: async (deleted: BaseRecordRow) => {
       if (isHeld(deleted.status)) await assertNotInPlan(deleted, deleted.id);
     },
-    decorate: async (outputs) => {
+    decorate: async (outputs, context) => {
+      const idsByPublicId = await resolveRecordIds({
+        table: patient_offering_suggestions,
+        organizationId: context.organizationId,
+        publicIds: outputs.map((output) => String(output.id)),
+      });
+      const invoiced = await invoicesRepository.findInvoicedQuantities([...idsByPublicId.values()]);
       const summaries = await offeringsRepository.findSummaries(
         outputs.map((output) => String(output.offering_id)),
       );
@@ -115,6 +139,9 @@ export function createPatientOfferingSuggestionsRules(
           typeof output.price === 'number' &&
           offering !== undefined &&
           output.price < offering.min_price * Number(output.quantity);
+        const id = idsByPublicId.get(String(output.id));
+        output.invoiced_quantity = id === undefined ? 0 : (invoiced.get(id) ?? 0);
+        output.is_fully_invoiced = Number(output.invoiced_quantity) >= Number(output.quantity);
       }
     },
   };

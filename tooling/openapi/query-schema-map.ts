@@ -38,13 +38,19 @@ import { listPatientPrescriptionsQueryDto as appPrescriptionsListQueryDto } from
 import { listPrescriptionKitsQueryDto as appPrescriptionKitsListQueryDto } from '@/domains/app/sub-domains/patients/prescription-kits/prescription-kits.dto.js';
 import { listPatientImagesQueryDto as appPatientImagesListQueryDto } from '@/domains/app/sub-domains/patients/patient-images/patient-images.dto.js';
 import { listPatientReportsQueryDto as appPatientReportsListQueryDto } from '@/domains/app/sub-domains/patients/patient-reports/patient-reports.dto.js';
-import { listInvoicesQueryDto as appInvoicesListQueryDto } from '@/domains/app/sub-domains/invoices/invoices.dto.js';
+import { listInvoicesQueryDto as appInvoicesListQueryDto } from '@/domains/app/sub-domains/billing/invoices/invoices.dto.js';
 import { listPatientOfferingsQueryDto as appPatientOfferingsListQueryDto } from '@/domains/app/sub-domains/patients/patient-offerings/patient-offerings.dto.js';
 import { listPatientOfferingSuggestionsQueryDto as appPatientOfferingSuggestionsListQueryDto } from '@/domains/app/sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.dto.js';
-import { listPaymentsQueryDto as appPaymentsListQueryDto } from '@/domains/app/sub-domains/payments/payments.dto.js';
-import { listCreditNotesQueryDto as appCreditNotesListQueryDto } from '@/domains/app/sub-domains/credit-notes/credit-notes.dto.js';
-import { listPendingCreditsQueryDto as appPendingCreditsListQueryDto } from '@/domains/app/sub-domains/pending-credits/pending-credits.dto.js';
-import { listDayClosesQueryDto as appDayClosesListQueryDto } from '@/domains/app/sub-domains/day-closes/day-closes.dto.js';
+import {
+  listPaymentEditsQueryDto as appPaymentEditsListQueryDto,
+  listPaymentsQueryDto as appPaymentsListQueryDto,
+} from '@/domains/app/sub-domains/billing/payments/payments.dto.js';
+import {
+  listInvoiceCreditNotesNestedQueryDto as appInvoiceCreditNotesNestedListQueryDto,
+  listInvoiceCreditNotesQueryDto as appInvoiceCreditNotesListQueryDto,
+} from '@/domains/app/sub-domains/billing/invoice-credit-notes/invoice-credit-notes.dto.js';
+import { listPendingCreditsQueryDto as appPendingCreditsListQueryDto } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.dto.js';
+import { listDayClosesQueryDto as appDayClosesListQueryDto } from '@/domains/app/sub-domains/billing/day-closes/day-closes.dto.js';
 import { listPatientTreatmentsQueryDto as appPatientTreatmentsListQueryDto } from '@/domains/app/sub-domains/patients/patient-treatments/patient-treatments.dto.js';
 import { listPatientCheckInsQueryDto as appPatientCheckInsListQueryDto } from '@/domains/app/sub-domains/patients/patient-check-ins/patient-check-ins.dto.js';
 import { listPatientReviewsQueryDto as appPatientReviewsListQueryDto } from '@/domains/app/sub-domains/patients/patient-reviews/patient-reviews.dto.js';
@@ -104,7 +110,9 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/app/patients/{patient_id}/offering-suggestions':
     appPatientOfferingSuggestionsListQueryDto,
   'GET /api/v1/app/payments': appPaymentsListQueryDto,
-  'GET /api/v1/app/credit-notes': appCreditNotesListQueryDto,
+  'GET /api/v1/app/payments/{payment_id}/edits': appPaymentEditsListQueryDto,
+  'GET /api/v1/app/invoice-credit-notes': appInvoiceCreditNotesListQueryDto,
+  'GET /api/v1/app/invoices/{invoice_id}/credit-notes': appInvoiceCreditNotesNestedListQueryDto,
   'GET /api/v1/app/pending-credits': appPendingCreditsListQueryDto,
   'GET /api/v1/app/day-closes': appDayClosesListQueryDto,
   'GET /api/v1/app/patients/{patient_id}/treatments': appPatientTreatmentsListQueryDto,

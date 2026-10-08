@@ -3,8 +3,8 @@
  *
  * @remarks
  * - **Notes:** `sessions_left`, `is_package` (more than one session) and `status` (`active` ·
- *   `used_up` · `expired`, the organization's today) are derived (PK5); `invoice_item_id` is null
- *   until sub-domain 8's invoice lines (#136).
+ *   `used_up` · `expired`, the organization's today) are derived (PK5); `invoice_item_id` is the
+ *   invoice line that sold it and `invoice_id` that line's bill (PK4).
  */
 export interface PatientOfferingOutput {
   id: string;

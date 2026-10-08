@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { BaseRecordRepository } from '@/domains/app/base-record.repository.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
@@ -49,5 +49,34 @@ export class PatientTreatmentsRepository extends BaseRecordRepository {
       .from(patient_treatments)
       .where(eq(patient_treatments.patient_id, patientId));
     return rows[0]?.total ?? 0;
+  }
+
+  /**
+   * TR13, B28: bills a done, unbilled session to a patient offering — its number becomes the
+   * offering's count; false when it was billed or reversed meanwhile.
+   */
+  async linkToPatientOffering(options: {
+    treatmentId: number;
+    patientOfferingId: number;
+    sessionNumber: number;
+    userId: number | null;
+  }): Promise<boolean> {
+    const rows = await getRequestDatabase()
+      .update(patient_treatments)
+      .set({
+        patient_offering_id: options.patientOfferingId,
+        session_number: options.sessionNumber,
+        updated_at: sql`greatest(${patient_treatments.created_at}, now())`,
+        updated_by_user_id: options.userId,
+      } as never)
+      .where(
+        and(
+          eq(patient_treatments.id, options.treatmentId),
+          eq(patient_treatments.status, PATIENT_TREATMENT_STATUS.DONE),
+          isNull(patient_treatments.patient_offering_id),
+        ),
+      )
+      .returning({ id: patient_treatments.id });
+    return rows.length > 0;
   }
 }

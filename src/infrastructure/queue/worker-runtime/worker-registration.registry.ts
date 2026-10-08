@@ -36,6 +36,10 @@ import { ORGANIZATION_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/s
 import { createMembershipTombstoneRetentionWorker } from '@/domains/tenancy/sub-domains/membership/workers/membership-tombstone-retention.worker.js';
 import { MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/membership/workers/membership-tombstone-retention.constants.js';
 import { createAppRecordPurgeWorker } from '@/domains/app/workers/app-record-purge.worker.js';
+import { createDayCloseAutoCloseSweepWorker } from '@/domains/app/sub-domains/billing/day-closes/workers/day-close-auto-close-sweep.worker.js';
+import { createDayCloseAutoCloseWorker } from '@/domains/app/sub-domains/billing/day-closes/workers/day-close-auto-close.worker.js';
+import { DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/billing/day-closes/workers/day-close-auto-close.constants.js';
+import { DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME } from '@/domains/app/sub-domains/billing/day-closes/queues/day-close-auto-close.queue.js';
 import { APP_RECORD_PURGE_QUEUE_NAME } from '@/domains/app/workers/app-record-purge.constants.js';
 import { createMemberRoleTombstoneRetentionWorker } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.worker.js';
 import { MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.constants.js';
@@ -373,6 +377,25 @@ const WORKER_QUEUE_REGISTRATION_DEFINITIONS: WorkerQueueRegistrationDefinition[]
     logLabel: 'app record purge worker',
     create: () => createAppRecordPurgeWorker(),
   }),
+  // WC-39: the hourly sweep adds one job per organization with a past day to close; each job
+  // closes that organization's days in its own context (B26).
+  retentionDefinition({
+    queueName: DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME,
+    family: 'retention',
+    logLabel: 'day close auto-close sweep worker',
+    create: () => createDayCloseAutoCloseSweepWorker(),
+  }),
+  {
+    queueName: DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME,
+    family: 'retention',
+    logLabel: 'day close auto-close worker',
+    usesPostgres: true,
+    scheduled: false,
+    criticality: 'throughput',
+    holdsConnectionDuringExternalIo: false,
+    resolvePostgresConcurrency: () => RETENTION_WORKER_CONCURRENCY,
+    create: () => createDayCloseAutoCloseWorker(),
+  },
   retentionDefinition({
     queueName: MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME,
     family: 'retention',

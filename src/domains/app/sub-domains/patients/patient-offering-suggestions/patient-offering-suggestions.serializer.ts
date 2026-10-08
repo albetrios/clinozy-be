@@ -3,13 +3,10 @@ import type { BaseRecordReferenceLookup } from '@/domains/app/base-record.types.
 import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import type { PatientOfferingSuggestionOutput } from './patient-offering-suggestions.types.js';
 
-/** Until sub-domain 8's invoice lines name a plan row (#136), nothing of it is invoiced. */
-const INVOICED_QUANTITY = 0;
-
 /**
  * Shapes an `app.patient_offering_suggestions` row as the API returns it (routes-final 7.M.6). The
- * offering's name, the label and the lowest-price flag are the rules' `decorate` (one read each per
- * page) — empty here.
+ * offering's name, the label, the lowest-price flag and what is invoiced are the rules' `decorate`
+ * (one read each per page) — empty here.
  */
 export function serializePatientOfferingSuggestion(
   row: BaseRecordRow,
@@ -29,8 +26,8 @@ export function serializePatientOfferingSuggestion(
     patient_check_in_id: references.publicIdOf('patient_check_in_id', row),
     source_label: '',
     suggested_by_membership_id: references.publicIdOf('suggested_by_membership_id', row),
-    invoiced_quantity: INVOICED_QUANTITY,
-    is_fully_invoiced: INVOICED_QUANTITY >= quantity,
+    invoiced_quantity: 0,
+    is_fully_invoiced: false,
     is_below_lowest_price: false,
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),

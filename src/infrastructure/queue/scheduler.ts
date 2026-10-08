@@ -25,6 +25,7 @@ import { ORGANIZATION_OFFBOARDING_RECONCILE_QUEUE_NAME } from '@/domains/tenancy
 import { ORGANIZATION_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/workers/organization-tombstone-retention.constants.js';
 import { MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/membership/workers/membership-tombstone-retention.constants.js';
 import { APP_RECORD_PURGE_QUEUE_NAME } from '@/domains/app/workers/app-record-purge.constants.js';
+import { DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/billing/day-closes/workers/day-close-auto-close.constants.js';
 import { MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.constants.js';
 import { ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/organization-api-key/workers/organization-api-key-tombstone-retention.constants.js';
 import { UPLOAD_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/upload/workers/upload-tombstone-retention.constants.js';
@@ -88,6 +89,8 @@ const DEFAULT_ORGANIZATION_NOTIFICATION_POLICY_TOMBSTONE_RETENTION_CRON = '48 5 
 const DEFAULT_MEMBERSHIP_TOMBSTONE_RETENTION_CRON = '50 5 * * *';
 /** Daily erase of deleted app records past each organization's restore window (WC-46, D38). */
 const DEFAULT_APP_RECORD_PURGE_CRON = '56 5 * * *';
+/** Hourly: a day closes itself within the hour after the day following it ends, in any time zone (WC-39). */
+const DEFAULT_DAY_CLOSE_AUTO_CLOSE_SWEEP_CRON = '7 * * * *';
 const DEFAULT_MEMBER_ROLE_TOMBSTONE_RETENTION_CRON = '51 5 * * *';
 const DEFAULT_ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_CRON = '52 5 * * *';
 const DEFAULT_USER_TOMBSTONE_RETENTION_CRON = '53 5 * * *';
@@ -305,6 +308,12 @@ export function getScheduledJobs(): ScheduledJob[] {
       jobName: 'catchup-missing-stripe-webhook-events',
       cronPattern:
         env.STRIPE_WEBHOOK_EVENT_CATCHUP_CRON ?? DEFAULT_STRIPE_WEBHOOK_EVENT_CATCHUP_CRON,
+    }),
+    withSchedulerTimezone(timezone, {
+      queueName: DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME,
+      schedulerId: 'hourly-day-close-auto-close-sweep',
+      jobName: 'find-days-to-auto-close',
+      cronPattern: DEFAULT_DAY_CLOSE_AUTO_CLOSE_SWEEP_CRON,
     }),
     withSchedulerTimezone(timezone, {
       queueName: WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME,

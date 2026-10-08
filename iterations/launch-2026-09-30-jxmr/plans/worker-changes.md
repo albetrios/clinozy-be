@@ -112,9 +112,9 @@ A task appears by itself when its condition becomes true, and closes by itself w
 
 ## Money
 
-| # | Change | Background work | When it runs | What it touches | On failure | Who is told | Requirement | Source |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| WC-39 | NEW | close a past day that nobody closed, taking the cash as expected, and lock its entries | after the grace period (midnight after the day) | DayClose, the day's payments | safe to run again; never closes today | the admin / accountant see "Auto-closed" | `background.day-auto-close` | `payments.md:277, 327, 331`; `H:5085–5087` |
+| # | Change | Background work | When it runs | What it touches | On failure | Who is told | Requirement | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| WC-39 | NEW | close a past day that nobody closed, taking the cash as expected, and lock its entries | after the grace period (midnight after the day) | DayClose, the day's payments | safe to run again; never closes today | the admin / accountant see "Auto-closed" | `background.day-auto-close` | `payments.md:277, 327, 331`; `H:5085–5087` | `day-close-auto-close-sweep` (cron `7 * * * *`, cross-tenant read) → one `day-close-auto-close` job per organization (`organizationPublicId`, deduplicated) — `billing/day-closes/workers/` · #136 |
 
 ## Team and access
 

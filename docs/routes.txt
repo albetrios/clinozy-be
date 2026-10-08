@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 435
+  Total routes: 439
 ================================================================================
 
 Legend:
@@ -13,7 +13,7 @@ Legend:
 
 ================================================================================
   DOMAIN: APP (/api/v1/app)
-  Routes: 301
+  Routes: 305
 ================================================================================
 
   — Sub Domains —
@@ -84,20 +84,22 @@ Legend:
   PUT    /api/v1/app/contacts/:contact_id/members                 200  -    both  PERM: contact:update
   GET    /api/v1/app/contacts/:contact_id/preview                 200  -    both  PERM: contact:read
   POST   /api/v1/app/contacts/:contact_id/restore                 200  req  both  PERM: contact:delete
-  GET    /api/v1/app/credit-notes                                 200  -    both  PERM: payment:read
-  GET    /api/v1/app/credit-notes/:credit_note_id                 200  -    both  PERM: payment:read
-  GET    /api/v1/app/day-closes                                   200  -    both  PERM: day_close:read
-  POST   /api/v1/app/day-closes                                   200  req  both  PERM: day_close:create
-  GET    /api/v1/app/day-closes/:day_close_id                     200  -    both  PERM: day_close:read
-  POST   /api/v1/app/day-closes/:day_close_id/close               200  req  both  PERM: day_close:close
-  POST   /api/v1/app/day-closes/:day_close_id/reopen              200  req  both  PERM: day_close:close
-  GET    /api/v1/app/invoices                                     200  -    both  PERM: invoice:read
-  POST   /api/v1/app/invoices                                     200  req  both  PERM: invoice:create
-  GET    /api/v1/app/invoices/:invoice_id                         200  -    both  PERM: invoice:read
-  PATCH  /api/v1/app/invoices/:invoice_id                         200  -    both  PERM: invoice:update
-  DELETE /api/v1/app/invoices/:invoice_id                         204  -    both  PERM: sale:void
-  POST   /api/v1/app/invoices/:invoice_id/restore                 200  req  both  PERM: sale:void
-  GET    /api/v1/app/invoices/exports                             200  -    both  PERM: list:export
+  GET    /api/v1/app/day-closes                                   200  -    both  PERM: payment:read
+  POST   /api/v1/app/day-closes                                   200  req  both  PERM: payment:update
+  GET    /api/v1/app/day-closes/:day_close_id                     200  -    both  PERM: payment:read
+  POST   /api/v1/app/day-closes/:day_close_id/close               200  req  both  PERM: payment:update
+  POST   /api/v1/app/day-closes/:day_close_id/reopen              200  req  both  PERM: payment:delete
+  GET    /api/v1/app/invoice-credit-notes                         200  -    both  PERM: payment:read
+  GET    /api/v1/app/invoices                                     200  -    both  PERM: payment:read
+  POST   /api/v1/app/invoices                                     200  req  both  PERM: payment:create
+  GET    /api/v1/app/invoices/:invoice_id                         200  -    both  PERM: payment:read
+  PATCH  /api/v1/app/invoices/:invoice_id                         200  -    both  PERM: payment:update
+  DELETE /api/v1/app/invoices/:invoice_id                         204  -    both  PERM: payment:delete
+  GET    /api/v1/app/invoices/:invoice_id/credit-notes            200  -    both  PERM: payment:read
+  POST   /api/v1/app/invoices/:invoice_id/credit-notes            200  req  both  PERM: payment:create
+  GET    /api/v1/app/invoices/:invoice_id/credit-notes/:invoice_credit_note_id  200  -    both  PERM: payment:read
+  POST   /api/v1/app/invoices/:invoice_id/restore                 200  req  both  PERM: payment:delete
+  GET    /api/v1/app/invoices/exports                             200  -    both  PERM: payment:export
   GET    /api/v1/app/leads                                        200  -    both  PERM: lead:read
   POST   /api/v1/app/leads                                        200  req  both  PERM: lead:create
   GET    /api/v1/app/leads/:lead_id                               200  -    both  PERM: lead:read
@@ -253,15 +255,17 @@ Legend:
   GET    /api/v1/app/payments/:payment_id                         200  -    both  PERM: payment:read
   PATCH  /api/v1/app/payments/:payment_id                         200  -    both  PERM: payment:update
   DELETE /api/v1/app/payments/:payment_id                         204  -    both  PERM: payment:delete
-  POST   /api/v1/app/payments/:payment_id/checked                 200  req  both  PERM: day_close:update
+  GET    /api/v1/app/payments/:payment_id/edits                   200  -    both  PERM: payment:read
   POST   /api/v1/app/payments/:payment_id/restore                 200  req  both  PERM: payment:delete
-  GET    /api/v1/app/payments/exports                             200  -    both  PERM: list:export
+  POST   /api/v1/app/payments/:payment_id/reverse                 200  req  both  PERM: payment:delete
+  GET    /api/v1/app/payments/exports                             200  -    both  PERM: payment:export
   GET    /api/v1/app/pending-credits                              200  -    both  PERM: payment:read
   POST   /api/v1/app/pending-credits                              200  req  both  PERM: payment:create
   GET    /api/v1/app/pending-credits/:pending_credit_id           200  -    both  PERM: payment:read
   PATCH  /api/v1/app/pending-credits/:pending_credit_id           200  -    both  PERM: payment:update
   DELETE /api/v1/app/pending-credits/:pending_credit_id           204  -    both  PERM: payment:delete
   POST   /api/v1/app/pending-credits/:pending_credit_id/restore   200  req  both  PERM: payment:delete
+  POST   /api/v1/app/pending-credits/:pending_credit_id/settle    200  req  both  PERM: payment:create
   GET    /api/v1/app/prescription-kits                            200  -    both  PERM: patient_prescription:create
   POST   /api/v1/app/prescription-kits                            200  req  both  PERM: patient_prescription:create
   GET    /api/v1/app/prescription-kits/:prescription_kit_id       200  -    both  PERM: patient_prescription:create
@@ -526,16 +530,16 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 435
+  Total routes    : 439
   Public          : 16
   Authenticated   : 51
   Role-guarded    : 9
-  Perm-guarded    : 354
+  Perm-guarded    : 358
   Token-guarded   : 5
   Team-only (O)   : 10
 
 ================================================================================
-  IDEMPOTENCY-REQUIRED WRITES (121) — X-Idempotency-Key required
+  IDEMPOTENCY-REQUIRED WRITES (123) — X-Idempotency-Key required
 ================================================================================
 
   Routes flagged I = req reject a missing or reused key (422); every other write
@@ -569,6 +573,7 @@ Legend:
     POST /api/v1/app/day-closes/:day_close_id/close
     POST /api/v1/app/day-closes/:day_close_id/reopen
     POST /api/v1/app/invoices
+    POST /api/v1/app/invoices/:invoice_id/credit-notes
     POST /api/v1/app/invoices/:invoice_id/restore
     POST /api/v1/app/leads
     POST /api/v1/app/leads/:lead_id/claim
@@ -622,10 +627,11 @@ Legend:
     POST /api/v1/app/patients/:patient_id/treatments
     POST /api/v1/app/patients/:patient_id/treatments/:patient_treatment_id/reverse
     POST /api/v1/app/payments
-    POST /api/v1/app/payments/:payment_id/checked
     POST /api/v1/app/payments/:payment_id/restore
+    POST /api/v1/app/payments/:payment_id/reverse
     POST /api/v1/app/pending-credits
     POST /api/v1/app/pending-credits/:pending_credit_id/restore
+    POST /api/v1/app/pending-credits/:pending_credit_id/settle
     POST /api/v1/app/prescription-kits
     POST /api/v1/app/prescription-kits/:prescription_kit_id/restore
     POST /api/v1/app/stock-counts
@@ -694,10 +700,7 @@ Legend:
     branch:delete                 branch:read                   branch:update
     contact:create                contact:delete                contact:read
     contact:update                contact_activity:create       contact_activity:delete
-    contact_activity:read         contact_activity:update       day_close:close
-    day_close:create              day_close:delete              day_close:read
-    day_close:update              invoice:create                invoice:delete
-    invoice:read                  invoice:update                lead:create
+    contact_activity:read         contact_activity:update       lead:create
     lead:delete                   lead:export                   lead:read
     lead:update                   list:export                   manufacturer:create
     manufacturer:delete           manufacturer:read             manufacturer:update
@@ -713,15 +716,15 @@ Legend:
     patient:update                patient_prescription:create   patient_prescription:delete
     patient_prescription:read     patient_prescription:update   patient_treatment:create
     patient_treatment:read        patient_treatment:update      payment:create
-    payment:delete                payment:read                  payment:reverse_settled
-    payment:update                refund:create                 sale:void
-    stock_item:create             stock_item:delete             stock_item:read
-    stock_item:update             stock_purchase:create         stock_purchase:delete
-    stock_purchase:read           stock_purchase:update         stock_vendor:create
-    stock_vendor:delete           stock_vendor:read             stock_vendor:update
-    supplier:create               supplier:delete               supplier:read
-    supplier:update               task:create                   task:delete
-    task:read                     task:update                   task_rule:update
+    payment:delete                payment:export                payment:read
+    payment:update                sale:void                     stock_item:create
+    stock_item:delete             stock_item:read               stock_item:update
+    stock_purchase:create         stock_purchase:delete         stock_purchase:read
+    stock_purchase:update         stock_vendor:create           stock_vendor:delete
+    stock_vendor:read             stock_vendor:update           supplier:create
+    supplier:delete               supplier:read                 supplier:update
+    task:create                   task:delete                   task:read
+    task:update                   task_rule:update
 
   Global Roles:
     super_admin                   user

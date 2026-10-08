@@ -1,7 +1,7 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import { BaseRecordService } from '@/domains/app/base-record.service.js';
 import { ValidationError } from '@/shared/errors/index.js';
-import { invoices } from '@/domains/app/sub-domains/invoices/invoices.schema.js';
+import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
 import { medical_contacts } from '@/domains/app/sub-domains/medical-contacts/medical-contacts.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';

@@ -1173,6 +1173,7 @@ erDiagram
 - **Open:** none — numbered per branch GSTIN and financial year, own series without a GSTIN (D23, D40); overall discount before tax, GST-inclusive lines where marked (D20, D21) — to confirm with the accountant
 
 - **Built:** `app.invoices` · ROUTE #30 (2026-10-07)
+- **Built (ROUTE #136, routes-final 8.A, code `billing/invoices/`):** `app.invoices` — `invoice_sequence` and `invoice_number` / `financial_year` from the triggers (B11); `contact_id` → contacts `RESTRICT`, required except `medical` (B3, `chk_invoices_contact_unless_medical`; `patient_id` and `medical_contact_id` go); `subtotal`, `discount_total`, `taxable_total`, `gst_total`, `total` (`= taxable_total + gst_total`), `overall_discount`, `paid_amount` (`0 ≤ paid ≤ total`) stored by the save and the payment writes; generated `due_amount` and `payment_status`; `patient_prescription_id` `SET NULL`; the jsonb `items` goes. NEW **`app.invoice_items`** — one row per line: `line_number` (DEFERRABLE unique per invoice), exactly one of `offering_id` / `medicine_id` (`RESTRICT`), the snapshot (`name`, `pack_size`, `rate`, `gst_percent` 0/5/12/18/28, `is_gst_inclusive`), `quantity` 1–999, `discount_percent`, the computed `discount_amount` / `taxable_amount` / `gst_amount` / `amount`, `patient_offering_suggestion_id` `SET NULL`, `batch_number`. Renamed **`app.invoice_members`** (was `invoice_team_memberships`) — key `(invoice_id, membership_id)`, K8 `RESTRICT`. FORCE RLS on all three.
 ```mermaid
 erDiagram
   invoice["invoice · NEW"] {
@@ -1203,6 +1204,7 @@ erDiagram
 
 - **Built:** `app.patient_packages` · ROUTE #31 (2026-10-07)
 - **Built (ROUTE #135, routes-final 7.L):** renamed **`app.patient_offerings`** (code `patients/patient-offerings/`, PK4) — `sessions_total` / `sessions_used` `smallint` with `chk_patient_offerings_sessions_total` (1–999) and `chk_patient_offerings_sessions_used` (`0 ≤ used ≤ total`; the redundant `BETWEEN 0 AND 99` went); `valid_until` nullable (none = no expiry); `patient_id` and `offering_id` `RESTRICT`; indexes the tab `(patient_id, created_at DESC, id)`, the sessions-left `(patient_id, offering_id) WHERE sessions_used < sessions_total`, `(offering_id)`; FORCE RLS with the purge arm. **`invoice_id` stays** (nullable, `SET NULL`) until #136 replaces it with `invoice_item_id` → `app.invoice_items` `CASCADE`, unique (D71); every pointer to it repointed (`patient_treatments.patient_offering_id` `RESTRICT`, `contact_activities.patient_offering_id`)
+- **Built (ROUTE #136, D72):** `invoice_item_id` `NOT NULL` → `app.invoice_items` `ON DELETE CASCADE`, unique (one patient offering per line, PK4); `invoice_id` goes — the response reads the invoice through the line.
 ```mermaid
 erDiagram
   patient_package["patient_package · NEW"] {
@@ -1272,6 +1274,7 @@ erDiagram
 - **Open:** none — reversal per schema-routes (P77); an amount above the due is refused (P78); one payment may cover several supplier bills (P58, D40)
 
 - **Built:** `app.payments` · ROUTE #34 (2026-10-07)
+- **Built (ROUTE #136, routes-final 8.C, code `billing/payments/`):** `app.payments` — `kind` (six) fixes `direction` (`chk_payments_kind_direction`, B17); `cash_amount`, `upi_amount`, `card_amount`, `credit_amount` with the sum CHECK (B18; the jsonb `splits` goes), `credit_amount > 0` only with `pending_credit_id`; `contact_id` (required for a receipt), `invoice_id`, `invoice_credit_note_id` (unique), `pending_credit_id`, `reverses_payment_id` (unique, `(kind = 'reversal') = (… IS NOT NULL)`); `payee_name` for expenses and supplier bills, `expense_category` only on an expense; `attachment_keys` ≤ 5; `bill_ref`, `bill_allocations`, `day_close_id`, `is_checked_at_close`, `patient_id` go (B6, B22).
 ```mermaid
 erDiagram
   payment["payment · NEW"] {
@@ -1307,6 +1310,7 @@ erDiagram
 - **Open:** none
 
 - **Built:** `app.payment_edits` · ROUTE #35 (2026-10-07)
+- **Built (ROUTE #136, routes-final 8.C, B20):** `app.payment_edits` — append-only; `changes` jsonb object (`{ field: { from, to } }`), `author_membership_id` K8 `RESTRICT`; written by every `PATCH`, read at `GET /payments/{payment_id}/edits` (the repository folds into `payments.repository`).
 ```mermaid
 erDiagram
   payment_edit["payment_edit · NEW"] {
@@ -1327,6 +1331,7 @@ erDiagram
 - **Open:** none — only against an invoice (D22)
 
 - **Built:** `app.credit_notes` · ROUTE #36 (2026-10-07)
+- **Built (ROUTE #136, routes-final 8.B, code `billing/invoice-credit-notes/`):** renamed **`app.invoice_credit_notes`** — `credit_note_number` (the counter), `invoice_id` `RESTRICT`, `amount > 0`, `reason` 1–280; written only with its refund payment (B16).
 ```mermaid
 erDiagram
   credit_note["credit_note · NEW"] {
@@ -1347,6 +1352,7 @@ erDiagram
 - **Open:** none — reasons from the one stored set + additions (P35); a give-back with no invoice is a refund payment, not a credit note (D22)
 
 - **Built:** `app.pending_credits` · ROUTE #37 (2026-10-07)
+- **Built (ROUTE #136, routes-final 8.D, code `billing/pending-credits/`):** `app.pending_credits` — `contact_id` or `party_name` (B23; `party_kind`, `patient_id`, `settled_payment_id` go), `settled_amount` (`0 ≤ … ≤ amount`, kept by the settlements, B24), `status` open exactly while some is left, `invoice_id` `SET NULL`, `source_payment_id` `SET NULL`, `settle_by` (the open partial index), `note` ≤ 300.
 ```mermaid
 erDiagram
   pending_credit["pending_credit · NEW"] {
@@ -1377,6 +1383,7 @@ erDiagram
 - **Open:** none — a reason when the count differs (D24); a day nobody closed is closed at midnight after it (D40); the close-the-day code on Accountant, Owner, Admin (D13, D18)
 
 - **Built:** `app.day_closes` · ROUTE #38 (2026-10-07)
+- **Built (ROUTE #136, routes-final 8.E, code `billing/day-closes/`):** `app.day_closes` — one per branch and day; `opening_source` `carried` · `recounted` (B25), `opening_accepted_by_membership_id` and `closed_by_membership_id` K8 `RESTRICT`; `expected_cash`, `counted_cash`, generated `difference`, the reason when it is not zero; `close_kind` `manual` · `auto` (B26); closed exactly when the close's fields are set; no soft-delete columns; the retention-cleanup read arm for the auto-close sweep (WC-39, D72).
 ```mermaid
 erDiagram
   day_close["day_close · NEW"] {
@@ -1405,6 +1412,7 @@ erDiagram
 - **Open:** none
 
 - **Built:** `app.day_close_events` · ROUTE #39 (2026-10-07)
+- **Built (ROUTE #136, routes-final 8.E, B27):** `app.day_close_events` — append-only; `kind` (opened · recounted · closed · auto_closed · reopened), `text`, `membership_id` K8 `RESTRICT`, `occurred_at`; written by each step (the repository folds into `day-closes.repository`).
 ```mermaid
 erDiagram
   day_close_event["day_close_event · NEW"] {

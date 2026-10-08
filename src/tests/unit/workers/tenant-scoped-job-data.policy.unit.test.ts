@@ -22,6 +22,12 @@ const TENANT_SCOPING_EXEMPT_QUEUE_NAME_PATTERNS = [
   /audit-outbox-drain/i,
   /user-data-export/i,
   /pending-sweep/i,
+  // The deleted-record purge erases every organization's expired rows in one global-retention
+  // context (WC-46) — no per-job tenant payload.
+  /app-record-purge/i,
+  // The day auto-close sweep reads every organization's due days in the global-retention context
+  // (WC-39); the per-organization jobs it adds carry organizationPublicId.
+  /day-close-auto-close-sweep/i,
 ] as const;
 
 function collectWorkerFiles(directory: string, collected: string[] = []): string[] {

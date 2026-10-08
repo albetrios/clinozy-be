@@ -48,6 +48,7 @@ import {
 import { getShutdownWatchdogMs } from '@/infrastructure/queue/worker-runtime/shutdown-timing.util.js';
 import { closeStripeWebhookQueue } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
 import { closeSubscriptionSeatSyncQueue } from '@/domains/billing/sub-domains/subscription/queues/subscription-seat-sync.queue.js';
+import { closeDayCloseAutoCloseQueue } from '@/domains/app/sub-domains/billing/day-closes/queues/day-close-auto-close.queue.js';
 import { closeMailQueue } from '@/infrastructure/mail/queues/mail.queue.js';
 import { closeNotificationQueue } from '@/domains/notify/sub-domains/notification/queues/notification.queue.js';
 import { closeWebhookDeliveryQueue } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
@@ -139,6 +140,7 @@ async function main() {
         closeNotificationQueue(),
         closeWebhookDeliveryQueue(),
         closeUserDataExportQueue(), // sec-r4-R1: was missing from shutdown sequence
+        closeDayCloseAutoCloseQueue(), // WC-39: the auto-close sweep's producer queue
       ]);
       // Pooled BullMQ clients (queue gauges, readiness depth probes, the Redis-saturation
       // sampler) hold Redis sockets for the process lifetime — release them before the

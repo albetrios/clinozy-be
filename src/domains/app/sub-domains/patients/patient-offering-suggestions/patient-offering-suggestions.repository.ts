@@ -6,10 +6,21 @@ import { appointments } from '@/domains/app/sub-domains/appointments/appointment
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
 import { patient_check_ins } from '@/domains/app/sub-domains/patients/patient-check-ins/patient-check-ins.schema.js';
 import {
+  invoice_items,
+  invoices,
+} from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
+import {
   PATIENT_OFFERING_SUGGESTION_HELD_STATUS_VALUES,
+  PATIENT_OFFERING_SUGGESTION_STATUS,
   PATIENT_OFFERING_SUGGESTION_TOTAL_STATUS_VALUES,
 } from './patient-offering-suggestions.constants.js';
 import { patient_offering_suggestions } from './patient-offering-suggestions.schema.js';
+
+/** PK7: how much of a plan row live invoices' lines invoiced — a deleted invoice's lines do not count (B14). */
+const INVOICED_QUANTITY = sql`coalesce((select sum(${invoice_items.quantity}) from ${invoice_items} join ${invoices} on ${invoices.id} = ${invoice_items.invoice_id} where ${invoice_items.patient_offering_suggestion_id} = ${patient_offering_suggestions.id} and ${invoices.deleted_at} is null), 0)`;
+
+/** A row still open to invoicing — not yet invoiced in full (PK7). */
+const NOT_FULLY_INVOICED = sql`${INVOICED_QUANTITY} < ${patient_offering_suggestions.quantity}`;
 
 /** Where a plan row came from, as its label reads it (PK8). */
 export interface PatientOfferingSuggestionSources {
@@ -41,7 +52,7 @@ export class PatientOfferingSuggestionsRepository extends BaseRecordRepository {
     });
   }
 
-  /** PK9: whether another live row holds the offering in the patient's plan. */
+  /** PK9: whether another live row holds the offering in the patient's plan (an accepted one only until invoiced in full). */
   async hasHeldRow(options: {
     patientId: number;
     offeringId: number;
@@ -57,6 +68,8 @@ export class PatientOfferingSuggestionsRepository extends BaseRecordRepository {
           inArray(patient_offering_suggestions.status, [
             ...PATIENT_OFFERING_SUGGESTION_HELD_STATUS_VALUES,
           ]),
+          // An accepted row invoiced in full no longer holds the offering (PK9)
+          sql`(${patient_offering_suggestions.status} <> ${PATIENT_OFFERING_SUGGESTION_STATUS.ACCEPTED} or ${NOT_FULLY_INVOICED})`,
           isNull(patient_offering_suggestions.deleted_at),
           options.exceptId === undefined
             ? undefined
@@ -118,5 +131,29 @@ export class PatientOfferingSuggestionsRepository extends BaseRecordRepository {
       checkInDates: new Map(checkIns.map((row) => [row.public_id, row.check_in_date])),
       visits: new Map(visits.map(({ public_id, ...visit }) => [public_id, visit])),
     };
+  }
+
+  /**
+   * PK7, B13: the plan row an invoice line for this offering invoices when it names none — the
+   * patient's oldest live planned or accepted row for it not yet invoiced in full.
+   */
+  async findOpenRow(options: { patientId: number; offeringId: number }): Promise<number | null> {
+    const rows = await getRequestDatabase()
+      .select({ id: patient_offering_suggestions.id })
+      .from(patient_offering_suggestions)
+      .where(
+        and(
+          eq(patient_offering_suggestions.patient_id, options.patientId),
+          eq(patient_offering_suggestions.offering_id, options.offeringId),
+          inArray(patient_offering_suggestions.status, [
+            ...PATIENT_OFFERING_SUGGESTION_TOTAL_STATUS_VALUES,
+          ]),
+          isNull(patient_offering_suggestions.deleted_at),
+          NOT_FULLY_INVOICED,
+        ),
+      )
+      .orderBy(patient_offering_suggestions.id)
+      .limit(1);
+    return rows[0]?.id ?? null;
   }
 }

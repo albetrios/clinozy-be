@@ -29,6 +29,88 @@ src/
     │   │   │   ├── appointments.service.ts
     │   │   │   ├── appointments.types.ts
     │   │   │   └── appointments.validator.ts
+    │   │   ├── billing/
+    │   │   │   ├── day-closes/
+    │   │   │   │   ├── queues/
+    │   │   │   │   │   ├── day-close-auto-close.job.schema.ts
+    │   │   │   │   │   └── day-close-auto-close.queue.ts
+    │   │   │   │   ├── workers/
+    │   │   │   │   │   ├── day-close-auto-close-sweep.processor.ts
+    │   │   │   │   │   ├── day-close-auto-close-sweep.worker.ts
+    │   │   │   │   │   ├── day-close-auto-close.constants.ts
+    │   │   │   │   │   ├── day-close-auto-close.processor.ts
+    │   │   │   │   │   └── day-close-auto-close.worker.ts
+    │   │   │   │   ├── day-close-auto-close.repository.ts
+    │   │   │   │   ├── day-closes.constants.ts
+    │   │   │   │   ├── day-closes.controller.ts
+    │   │   │   │   ├── day-closes.dto.ts
+    │   │   │   │   ├── day-closes.overview.md
+    │   │   │   │   ├── day-closes.repository.ts
+    │   │   │   │   ├── day-closes.routes.ts
+    │   │   │   │   ├── day-closes.rules.ts
+    │   │   │   │   ├── day-closes.schema.ts
+    │   │   │   │   ├── day-closes.serializer.ts
+    │   │   │   │   ├── day-closes.service.ts
+    │   │   │   │   ├── day-closes.types.ts
+    │   │   │   │   └── day-closes.validator.ts
+    │   │   │   ├── invoice-credit-notes/
+    │   │   │   │   ├── invoice-credit-notes.constants.ts
+    │   │   │   │   ├── invoice-credit-notes.controller.ts
+    │   │   │   │   ├── invoice-credit-notes.dto.ts
+    │   │   │   │   ├── invoice-credit-notes.overview.md
+    │   │   │   │   ├── invoice-credit-notes.repository.ts
+    │   │   │   │   ├── invoice-credit-notes.routes.ts
+    │   │   │   │   ├── invoice-credit-notes.rules.ts
+    │   │   │   │   ├── invoice-credit-notes.schema.ts
+    │   │   │   │   ├── invoice-credit-notes.serializer.ts
+    │   │   │   │   ├── invoice-credit-notes.service.ts
+    │   │   │   │   ├── invoice-credit-notes.types.ts
+    │   │   │   │   └── invoice-credit-notes.validator.ts
+    │   │   │   ├── invoices/
+    │   │   │   │   ├── invoices.amounts.ts
+    │   │   │   │   ├── invoices.constants.ts
+    │   │   │   │   ├── invoices.controller.ts
+    │   │   │   │   ├── invoices.dto.ts
+    │   │   │   │   ├── invoices.lines.ts
+    │   │   │   │   ├── invoices.overview.md
+    │   │   │   │   ├── invoices.repository.ts
+    │   │   │   │   ├── invoices.routes.ts
+    │   │   │   │   ├── invoices.rules.ts
+    │   │   │   │   ├── invoices.schema.ts
+    │   │   │   │   ├── invoices.serializer.ts
+    │   │   │   │   ├── invoices.service.ts
+    │   │   │   │   ├── invoices.types.ts
+    │   │   │   │   └── invoices.validator.ts
+    │   │   │   ├── payments/
+    │   │   │   │   ├── payments.constants.ts
+    │   │   │   │   ├── payments.controller.ts
+    │   │   │   │   ├── payments.dto.ts
+    │   │   │   │   ├── payments.ledger.ts
+    │   │   │   │   ├── payments.overview.md
+    │   │   │   │   ├── payments.repository.ts
+    │   │   │   │   ├── payments.routes.ts
+    │   │   │   │   ├── payments.rules.ts
+    │   │   │   │   ├── payments.schema.ts
+    │   │   │   │   ├── payments.serializer.ts
+    │   │   │   │   ├── payments.service.ts
+    │   │   │   │   ├── payments.types.ts
+    │   │   │   │   └── payments.validator.ts
+    │   │   │   ├── pending-credits/
+    │   │   │   │   ├── pending-credits.constants.ts
+    │   │   │   │   ├── pending-credits.controller.ts
+    │   │   │   │   ├── pending-credits.dto.ts
+    │   │   │   │   ├── pending-credits.overview.md
+    │   │   │   │   ├── pending-credits.repository.ts
+    │   │   │   │   ├── pending-credits.routes.ts
+    │   │   │   │   ├── pending-credits.rules.ts
+    │   │   │   │   ├── pending-credits.schema.ts
+    │   │   │   │   ├── pending-credits.serializer.ts
+    │   │   │   │   ├── pending-credits.service.ts
+    │   │   │   │   ├── pending-credits.types.ts
+    │   │   │   │   └── pending-credits.validator.ts
+    │   │   │   ├── billing.container.ts
+    │   │   │   ├── billing.overview.md
+    │   │   │   └── billing.routes.ts
     │   │   ├── branches/
     │   │   │   ├── __tests__/
     │   │   │   │   └── integration/
@@ -146,46 +228,6 @@ src/
     │   │   │   ├── contacts.service.ts
     │   │   │   ├── contacts.types.ts
     │   │   │   └── contacts.validator.ts
-    │   │   ├── credit-notes/
-    │   │   │   ├── credit-notes.constants.ts
-    │   │   │   ├── credit-notes.controller.ts
-    │   │   │   ├── credit-notes.dto.ts
-    │   │   │   ├── credit-notes.overview.md
-    │   │   │   ├── credit-notes.repository.ts
-    │   │   │   ├── credit-notes.routes.ts
-    │   │   │   ├── credit-notes.schema.ts
-    │   │   │   ├── credit-notes.serializer.ts
-    │   │   │   ├── credit-notes.service.ts
-    │   │   │   ├── credit-notes.types.ts
-    │   │   │   └── credit-notes.validator.ts
-    │   │   ├── day-close-events/
-    │   │   │   ├── day-close-events.constants.ts
-    │   │   │   ├── day-close-events.repository.ts
-    │   │   │   └── day-close-events.schema.ts
-    │   │   ├── day-closes/
-    │   │   │   ├── day-closes.constants.ts
-    │   │   │   ├── day-closes.controller.ts
-    │   │   │   ├── day-closes.dto.ts
-    │   │   │   ├── day-closes.overview.md
-    │   │   │   ├── day-closes.repository.ts
-    │   │   │   ├── day-closes.routes.ts
-    │   │   │   ├── day-closes.schema.ts
-    │   │   │   ├── day-closes.serializer.ts
-    │   │   │   ├── day-closes.service.ts
-    │   │   │   ├── day-closes.types.ts
-    │   │   │   └── day-closes.validator.ts
-    │   │   ├── invoices/
-    │   │   │   ├── invoices.constants.ts
-    │   │   │   ├── invoices.controller.ts
-    │   │   │   ├── invoices.dto.ts
-    │   │   │   ├── invoices.overview.md
-    │   │   │   ├── invoices.repository.ts
-    │   │   │   ├── invoices.routes.ts
-    │   │   │   ├── invoices.schema.ts
-    │   │   │   ├── invoices.serializer.ts
-    │   │   │   ├── invoices.service.ts
-    │   │   │   ├── invoices.types.ts
-    │   │   │   └── invoices.validator.ts
     │   │   ├── leads/
     │   │   │   ├── seed/
     │   │   │   │   ├── index.ts
@@ -524,34 +566,6 @@ src/
     │   │   │   ├── patients.service.ts
     │   │   │   ├── patients.types.ts
     │   │   │   └── patients.validator.ts
-    │   │   ├── payment-edits/
-    │   │   │   ├── payment-edits.constants.ts
-    │   │   │   ├── payment-edits.repository.ts
-    │   │   │   └── payment-edits.schema.ts
-    │   │   ├── payments/
-    │   │   │   ├── payments.constants.ts
-    │   │   │   ├── payments.controller.ts
-    │   │   │   ├── payments.dto.ts
-    │   │   │   ├── payments.overview.md
-    │   │   │   ├── payments.repository.ts
-    │   │   │   ├── payments.routes.ts
-    │   │   │   ├── payments.schema.ts
-    │   │   │   ├── payments.serializer.ts
-    │   │   │   ├── payments.service.ts
-    │   │   │   ├── payments.types.ts
-    │   │   │   └── payments.validator.ts
-    │   │   ├── pending-credits/
-    │   │   │   ├── pending-credits.constants.ts
-    │   │   │   ├── pending-credits.controller.ts
-    │   │   │   ├── pending-credits.dto.ts
-    │   │   │   ├── pending-credits.overview.md
-    │   │   │   ├── pending-credits.repository.ts
-    │   │   │   ├── pending-credits.routes.ts
-    │   │   │   ├── pending-credits.schema.ts
-    │   │   │   ├── pending-credits.serializer.ts
-    │   │   │   ├── pending-credits.service.ts
-    │   │   │   ├── pending-credits.types.ts
-    │   │   │   └── pending-credits.validator.ts
     │   │   ├── record-counters/
     │   │   │   ├── record-counters.overview.md
     │   │   │   └── record-counters.schema.ts

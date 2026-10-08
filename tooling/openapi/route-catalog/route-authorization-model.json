@@ -442,10 +442,6 @@
     "model": "organization",
     "verifyNoMutation": true
   },
-  "POST /api/v1/app/payments/:payment_id/checked": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
   "DELETE /api/v1/app/payments/:payment_id": {
     "model": "organization",
     "verifyNoMutation": true
@@ -453,9 +449,6 @@
   "POST /api/v1/app/payments/:payment_id/restore": {
     "model": "organization",
     "verifyNoMutation": true
-  },
-  "GET /api/v1/app/credit-notes/:credit_note_id": {
-    "model": "organization"
   },
   "GET /api/v1/app/pending-credits/:pending_credit_id": {
     "model": "organization"
@@ -984,6 +977,27 @@
     "model": "organization"
   },
   "PATCH /api/v1/app/patients/:patient_id/offerings/:patient_offering_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/invoices/:invoice_id/credit-notes": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/invoices/:invoice_id/credit-notes": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/invoices/:invoice_id/credit-notes/:invoice_credit_note_id": {
+    "model": "organization"
+  },
+  "GET /api/v1/app/payments/:payment_id/edits": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/payments/:payment_id/reverse": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/pending-credits/:pending_credit_id/settle": {
     "model": "organization",
     "verifyNoMutation": true
   }

@@ -70,4 +70,22 @@ export class OfferingsRepository extends BaseRecordRepository {
       ]),
     );
   }
+
+  /** The branches each offering is offered at — none listed = every branch (O5). */
+  async findOfferedBranches(offeringIds: readonly number[]): Promise<Map<number, number[]>> {
+    const unique = [...new Set(offeringIds)];
+    if (unique.length === 0) return new Map();
+    const rows = await getRequestDatabase()
+      .select({
+        offering_id: offering_branches.offering_id,
+        branch_id: offering_branches.branch_id,
+      })
+      .from(offering_branches)
+      .where(inArray(offering_branches.offering_id, unique));
+    const offered = new Map<number, number[]>();
+    for (const row of rows) {
+      offered.set(row.offering_id, [...(offered.get(row.offering_id) ?? []), row.branch_id]);
+    }
+    return offered;
+  }
 }

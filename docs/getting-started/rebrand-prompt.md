@@ -99,7 +99,7 @@ The rename changes the Compose container names **and** the Postgres volume, so:
   with an empty log — the first rename lost nine hours to this.
 - A `.env.local` scaffolded before the worker-pool fix still has `DATABASE_POOL_MAX=20` and
   `POSTGRES_MAX_CONNECTIONS=100`; the worker's boot guard then refuses to start. The template now
-  ships `DATABASE_POOL_MAX=60` with `POSTGRES_MAX_CONNECTIONS` unset.
+  ships `DATABASE_POOL_MAX=70` with `POSTGRES_MAX_CONNECTIONS` unset.
 
 Health endpoints: `GET /livez` and `GET /readyz` on the API (`:3000`), `GET /readyz` on the worker
 (`:9090`). There is no `/health`.

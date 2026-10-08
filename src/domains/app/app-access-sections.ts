@@ -6,7 +6,7 @@
  * their own with `organization:read` (launch U2). Offerings have no View code — every member reads
  * them (launch O2); their row adds Lowest price (`offering:lower_price:read`) and Export
  * (`offering:export`). The Leads and Appointments rows add Export (`lead:export`, `appointment:export` — launch #131
- * L4, #132 A9).
+ * L4, #132 A9); the Payments row adds Export (`payment:export` — launch #136, B2).
  *
  * @remarks
  * - **Notes:** generated with the app tables; the catalog seed carries the same categories.
@@ -28,7 +28,9 @@ export const APP_ACCESS_SECTION_RESOURCES = {
     'medical_sale',
   ],
   stock: ['stock_vendor', 'stock_item', 'stock_purchase'],
-  payments: ['invoice', 'payment', 'day_close'],
+  // One code set for invoices, credit notes, payments, pending credits and day closes (launch
+  // #136, B2); the row adds Export (`payment:export`).
+  payments: ['payment'],
   tasks: ['task'],
   // One code set for groups, offerings and offers (launch #128, O2); no `offering:read` — every
   // member reads them.

@@ -5,8 +5,8 @@ import type { PatientOfferingOutput } from './patient-offerings.types.js';
 
 /**
  * Shapes an `app.patient_offerings` row as the API returns it (routes-final 7.L.6). The offering's
- * name and an expired `status` (the organization's today) are the rules' `decorate` — here the
- * status knows only whether a session is left.
+ * name, the invoice (through its line) and an expired `status` (the organization's today) are the
+ * rules' `decorate` — here the status knows only whether a session is left.
  */
 export function serializePatientOffering(
   row: BaseRecordRow,
@@ -19,8 +19,8 @@ export function serializePatientOffering(
     patient_id: references.publicIdOf('patient_id', row) ?? '',
     offering_id: references.publicIdOf('offering_id', row) ?? '',
     offering_name: '',
-    invoice_id: references.publicIdOf('invoice_id', row),
-    invoice_item_id: null,
+    invoice_id: null,
+    invoice_item_id: references.publicIdOf('invoice_item_id', row),
     sessions_total: sessionsTotal,
     sessions_used: sessionsUsed,
     sessions_left: sessionsTotal - sessionsUsed,

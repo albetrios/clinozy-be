@@ -4,8 +4,8 @@
  * @remarks
  * - **Notes:** `source_label` is derived from where it came from — "Check-in · 26 Sep", "Appt
  *   #2790 · Consultation", else "Patient file" (PK8); `is_below_lowest_price` = `price` below the
- *   offering's lowest price × quantity (PK9); `invoiced_quantity` / `is_fully_invoiced` read
- *   sub-domain 8's invoice lines (0 / false until #136).
+ *   offering's lowest price × quantity (PK9); `invoiced_quantity` / `is_fully_invoiced` read the
+ *   live invoices' lines that name it (PK7).
  */
 export interface PatientOfferingSuggestionOutput {
   id: string;

@@ -15,7 +15,7 @@ import {
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
-import { invoices } from '@/domains/app/sub-domains/invoices/invoices.schema.js';
+import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
 import { medical_contacts } from '@/domains/app/sub-domains/medical-contacts/medical-contacts.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';

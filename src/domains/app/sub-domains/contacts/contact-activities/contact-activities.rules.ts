@@ -27,7 +27,7 @@ import { validateContactMessageBatch } from './contact-activities.validator.js';
 /** The read gate of each record link today (M10, D63) — an entry linked to one the caller cannot read is hidden. */
 const LINK_READ_PERMISSIONS: Readonly<Record<ContactActivityLinkColumn, string>> = {
   appointment_id: APP_PERMISSIONS.APPOINTMENT_READ,
-  invoice_id: APP_PERMISSIONS.INVOICE_READ,
+  invoice_id: APP_PERMISSIONS.PAYMENT_READ,
   payment_id: APP_PERMISSIONS.PAYMENT_READ,
   patient_prescription_id: APP_PERMISSIONS.PATIENT_PRESCRIPTION_READ,
   patient_offering_id: APP_PERMISSIONS.PATIENT_READ,

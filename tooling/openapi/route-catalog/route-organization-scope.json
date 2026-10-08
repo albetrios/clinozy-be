@@ -232,11 +232,8 @@
   "POST /api/v1/app/payments": "both",
   "GET /api/v1/app/payments/:payment_id": "both",
   "PATCH /api/v1/app/payments/:payment_id": "both",
-  "POST /api/v1/app/payments/:payment_id/checked": "both",
   "DELETE /api/v1/app/payments/:payment_id": "both",
   "POST /api/v1/app/payments/:payment_id/restore": "both",
-  "GET /api/v1/app/credit-notes": "both",
-  "GET /api/v1/app/credit-notes/:credit_note_id": "both",
   "GET /api/v1/app/pending-credits": "both",
   "POST /api/v1/app/pending-credits": "both",
   "GET /api/v1/app/pending-credits/:pending_credit_id": "both",
@@ -433,5 +430,12 @@
   "POST /api/v1/app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id/restore": "both",
   "GET /api/v1/app/patients/:patient_id/offerings": "both",
   "GET /api/v1/app/patients/:patient_id/offerings/:patient_offering_id": "both",
-  "PATCH /api/v1/app/patients/:patient_id/offerings/:patient_offering_id": "both"
+  "PATCH /api/v1/app/patients/:patient_id/offerings/:patient_offering_id": "both",
+  "GET /api/v1/app/invoice-credit-notes": "both",
+  "GET /api/v1/app/invoices/:invoice_id/credit-notes": "both",
+  "POST /api/v1/app/invoices/:invoice_id/credit-notes": "both",
+  "GET /api/v1/app/invoices/:invoice_id/credit-notes/:invoice_credit_note_id": "both",
+  "GET /api/v1/app/payments/:payment_id/edits": "both",
+  "POST /api/v1/app/payments/:payment_id/reverse": "both",
+  "POST /api/v1/app/pending-credits/:pending_credit_id/settle": "both"
 }

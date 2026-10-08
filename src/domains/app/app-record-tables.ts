@@ -15,15 +15,12 @@ import { patient_prescriptions } from '@/domains/app/sub-domains/patients/patien
 import { prescription_kits } from '@/domains/app/sub-domains/patients/prescription-kits/prescription-kits.schema.js';
 import { patient_images } from '@/domains/app/sub-domains/patients/patient-images/patient-images.schema.js';
 import { patient_reports } from '@/domains/app/sub-domains/patients/patient-reports/patient-reports.schema.js';
-import { invoices } from '@/domains/app/sub-domains/invoices/invoices.schema.js';
+import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
 import { patient_offerings } from '@/domains/app/sub-domains/patients/patient-offerings/patient-offerings.schema.js';
 import { patient_offering_suggestions } from '@/domains/app/sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.schema.js';
-import { payments } from '@/domains/app/sub-domains/payments/payments.schema.js';
-import { payment_edits } from '@/domains/app/sub-domains/payment-edits/payment-edits.schema.js';
-import { credit_notes } from '@/domains/app/sub-domains/credit-notes/credit-notes.schema.js';
-import { pending_credits } from '@/domains/app/sub-domains/pending-credits/pending-credits.schema.js';
-import { day_closes } from '@/domains/app/sub-domains/day-closes/day-closes.schema.js';
-import { day_close_events } from '@/domains/app/sub-domains/day-close-events/day-close-events.schema.js';
+import { payments } from '@/domains/app/sub-domains/billing/payments/payments.schema.js';
+import { invoice_credit_notes } from '@/domains/app/sub-domains/billing/invoice-credit-notes/invoice-credit-notes.schema.js';
+import { pending_credits } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.schema.js';
 import { patient_check_ins } from '@/domains/app/sub-domains/patients/patient-check-ins/patient-check-ins.schema.js';
 import { patient_reviews } from '@/domains/app/sub-domains/patients/patient-reviews/patient-reviews.schema.js';
 import { manufacturers } from '@/domains/app/sub-domains/manufacturers/manufacturers.schema.js';
@@ -51,7 +48,9 @@ import { task_rule_settings } from '@/domains/app/sub-domains/task-rule-settings
  * @remarks
  * - **Notes:** generated with the app tables. `app.branches` is not here — a branch is never
  *   deleted (D3, D16) — nor `app.patients` (never purged, P7), nor the tables that never soft-delete
- *   (`app.patient_treatments` — reversed, TR6; the append-only `app.patient_feedback_actions`).
+ *   (`app.patient_treatments` — reversed, TR6; the append-only `app.patient_feedback_actions`,
+ *   `app.payment_edits`, `app.day_close_events`; `app.day_closes` — opened and closed, B25; an
+ *   invoice's lines and members, which go with it).
  */
 export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   { table: task_rule_settings, label: 'app.task_rule_settings' },
@@ -74,12 +73,10 @@ export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   // A feedback action goes with its check-in or review (append-only, `ON DELETE CASCADE`)
   { table: patient_reviews, label: 'app.patient_reviews' },
   { table: patient_check_ins, label: 'app.patient_check_ins' },
-  { table: day_close_events, label: 'app.day_close_events' },
-  { table: day_closes, label: 'app.day_closes' },
   { table: pending_credits, label: 'app.pending_credits' },
-  { table: credit_notes, label: 'app.credit_notes' },
-  { table: payment_edits, label: 'app.payment_edits' },
+  // A payment edit goes with its payment (append-only); a credit note after the refund naming it
   { table: payments, label: 'app.payments' },
+  { table: invoice_credit_notes, label: 'app.invoice_credit_notes' },
   { table: patient_offering_suggestions, label: 'app.patient_offering_suggestions' },
   { table: patient_offerings, label: 'app.patient_offerings' },
   { table: invoices, label: 'app.invoices' },

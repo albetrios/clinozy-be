@@ -35,20 +35,14 @@ import { PatientImagesRepository } from './sub-domains/patients/patient-images/p
 import { PatientImagesService } from './sub-domains/patients/patient-images/patient-images.service.js';
 import { PatientReportsRepository } from './sub-domains/patients/patient-reports/patient-reports.repository.js';
 import { PatientReportsService } from './sub-domains/patients/patient-reports/patient-reports.service.js';
-import { InvoicesRepository } from './sub-domains/invoices/invoices.repository.js';
-import { InvoicesService } from './sub-domains/invoices/invoices.service.js';
+import {
+  type BillingServices,
+  createBillingServices,
+} from './sub-domains/billing/billing.container.js';
 import { PatientOfferingsRepository } from './sub-domains/patients/patient-offerings/patient-offerings.repository.js';
 import { PatientOfferingsService } from './sub-domains/patients/patient-offerings/patient-offerings.service.js';
 import { PatientOfferingSuggestionsRepository } from './sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.repository.js';
 import { PatientOfferingSuggestionsService } from './sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.service.js';
-import { PaymentsRepository } from './sub-domains/payments/payments.repository.js';
-import { PaymentsService } from './sub-domains/payments/payments.service.js';
-import { CreditNotesRepository } from './sub-domains/credit-notes/credit-notes.repository.js';
-import { CreditNotesService } from './sub-domains/credit-notes/credit-notes.service.js';
-import { PendingCreditsRepository } from './sub-domains/pending-credits/pending-credits.repository.js';
-import { PendingCreditsService } from './sub-domains/pending-credits/pending-credits.service.js';
-import { DayClosesRepository } from './sub-domains/day-closes/day-closes.repository.js';
-import { DayClosesService } from './sub-domains/day-closes/day-closes.service.js';
 import { PatientTreatmentsRepository } from './sub-domains/patients/patient-treatments/patient-treatments.repository.js';
 import { PatientTreatmentsService } from './sub-domains/patients/patient-treatments/patient-treatments.service.js';
 import { PatientCheckInsRepository } from './sub-domains/patients/patient-check-ins/patient-check-ins.repository.js';
@@ -87,7 +81,7 @@ import { TasksRepository } from './sub-domains/tasks/tasks.repository.js';
 import { TasksService } from './sub-domains/tasks/tasks.service.js';
 
 /** The services of the app record tables (launch iteration), one per table. */
-export type AppRecordServices = {
+export type AppRecordServices = BillingServices & {
   offeringGroupsService: OfferingGroupsService;
   branchRoomsService: BranchRoomsService;
   branchMachinesService: BranchMachinesService;
@@ -106,13 +100,8 @@ export type AppRecordServices = {
   prescriptionKitsService: PrescriptionKitsService;
   patientImagesService: PatientImagesService;
   patientReportsService: PatientReportsService;
-  invoicesService: InvoicesService;
   patientOfferingsService: PatientOfferingsService;
   patientOfferingSuggestionsService: PatientOfferingSuggestionsService;
-  paymentsService: PaymentsService;
-  creditNotesService: CreditNotesService;
-  pendingCreditsService: PendingCreditsService;
-  dayClosesService: DayClosesService;
   patientTreatmentsService: PatientTreatmentsService;
   patientCheckInsService: PatientCheckInsService;
   patientReviewsService: PatientReviewsService;
@@ -240,14 +229,7 @@ export function createAppRecordServices(
     ),
     appointmentsService: new AppointmentsService(organizationService, new AppointmentsRepository()),
     ...createPatientFileServices(organizationService),
-    invoicesService: new InvoicesService(organizationService, new InvoicesRepository()),
-    paymentsService: new PaymentsService(organizationService, new PaymentsRepository()),
-    creditNotesService: new CreditNotesService(organizationService, new CreditNotesRepository()),
-    pendingCreditsService: new PendingCreditsService(
-      organizationService,
-      new PendingCreditsRepository(),
-    ),
-    dayClosesService: new DayClosesService(organizationService, new DayClosesRepository()),
+    ...createBillingServices(organizationService),
     manufacturersService: new ManufacturersService(
       organizationService,
       new ManufacturersRepository(),

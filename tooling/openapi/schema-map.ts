@@ -84,24 +84,28 @@ import {
 import {
   CreateInvoiceDto as appCreateInvoiceDto,
   UpdateInvoiceDto as appUpdateInvoiceDto,
-} from '@/domains/app/sub-domains/invoices/invoices.dto.js';
+} from '@/domains/app/sub-domains/billing/invoices/invoices.dto.js';
 import { UpdatePatientOfferingDto as appUpdatePatientOfferingDto } from '@/domains/app/sub-domains/patients/patient-offerings/patient-offerings.dto.js';
 import {
   CreatePatientOfferingSuggestionDto as appCreatePatientOfferingSuggestionDto,
   UpdatePatientOfferingSuggestionDto as appUpdatePatientOfferingSuggestionDto,
 } from '@/domains/app/sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.dto.js';
+import { CreateInvoiceCreditNoteDto as appCreateInvoiceCreditNoteDto } from '@/domains/app/sub-domains/billing/invoice-credit-notes/invoice-credit-notes.dto.js';
 import {
   CreatePaymentDto as appCreatePaymentDto,
+  ReversePaymentDto as appReversePaymentDto,
   UpdatePaymentDto as appUpdatePaymentDto,
-} from '@/domains/app/sub-domains/payments/payments.dto.js';
+} from '@/domains/app/sub-domains/billing/payments/payments.dto.js';
 import {
   CreatePendingCreditDto as appCreatePendingCreditDto,
+  SettlePendingCreditDto as appSettlePendingCreditDto,
   UpdatePendingCreditDto as appUpdatePendingCreditDto,
-} from '@/domains/app/sub-domains/pending-credits/pending-credits.dto.js';
+} from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.dto.js';
 import {
-  closeDayCloseDto as appCloseDayCloseDto,
+  CloseDayCloseDto as appCloseDayCloseDto,
   CreateDayCloseDto as appCreateDayCloseDto,
-} from '@/domains/app/sub-domains/day-closes/day-closes.dto.js';
+  ReopenDayCloseDto as appReopenDayCloseDto,
+} from '@/domains/app/sub-domains/billing/day-closes/day-closes.dto.js';
 import {
   CreatePatientTreatmentDto as appCreatePatientTreatmentDto,
   ReversePatientTreatmentDto as appReversePatientTreatmentDto,
@@ -397,11 +401,15 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
     appUpdatePatientTreatmentDto,
   'POST /api/v1/app/patients/{patient_id}/treatments': appCreatePatientTreatmentDto,
   'POST /api/v1/app/day-closes/{day_close_id}/close': appCloseDayCloseDto,
+  'POST /api/v1/app/day-closes/{day_close_id}/reopen': appReopenDayCloseDto,
   'POST /api/v1/app/day-closes': appCreateDayCloseDto,
+  'POST /api/v1/app/pending-credits/{pending_credit_id}/settle': appSettlePendingCreditDto,
   'PATCH /api/v1/app/pending-credits/{pending_credit_id}': appUpdatePendingCreditDto,
   'POST /api/v1/app/pending-credits': appCreatePendingCreditDto,
+  'POST /api/v1/app/payments/{payment_id}/reverse': appReversePaymentDto,
   'PATCH /api/v1/app/payments/{payment_id}': appUpdatePaymentDto,
   'POST /api/v1/app/payments': appCreatePaymentDto,
+  'POST /api/v1/app/invoices/{invoice_id}/credit-notes': appCreateInvoiceCreditNoteDto,
   'PATCH /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}':
     appUpdatePatientOfferingSuggestionDto,
   'POST /api/v1/app/patients/{patient_id}/offering-suggestions':

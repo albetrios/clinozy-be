@@ -251,52 +251,52 @@ that drops them is built. The medical store's routes wait for its own review ([D
 | 7.62 | CHANGED | POST | `/patients/{patient_id}/reviews/{patient_review_id}/restore` | `patient:update` | Undo | routes-final §7.J.7 | `POST /api/v1/app/patients/{patient_id}/reviews/{patient_review_id}/restore` · #134 · a052c28 |
 | 7.63 | CHANGED | POST | `/patients/{patient_id}/check-ins/{patient_check_in_id}/actions` | `patient:update` | Log what was done about a check-in | routes-final §7.K.7 | `POST /api/v1/app/patients/{patient_id}/check-ins/{patient_check_in_id}/actions` · #134 · a052c28 |
 | 7.64 | CHANGED | POST | `/patients/{patient_id}/reviews/{patient_review_id}/actions` | `patient:update` | Log what was done about a review | routes-final §7.K.7 | `POST /api/v1/app/patients/{patient_id}/reviews/{patient_review_id}/actions` · #134 · a052c28 |
-| 7.65 | CHANGED | GET | `/patients/{patient_id}/offerings` | `patient:read` | What the patient bought — the Packages tab with `is_package=true` | routes-final §7.L.7 | `GET /api/v1/app/patients/{patient_id}/offerings` · #135 |
-| 7.66 | CHANGED | GET | `/patients/{patient_id}/offerings/{patient_offering_id}` | `patient:read` | Get one | routes-final §7.L.7 | `GET /api/v1/app/patients/{patient_id}/offerings/{patient_offering_id}` · #135 |
-| 7.67 | CHANGED | PATCH | `/patients/{patient_id}/offerings/{patient_offering_id}` | `payment:update` | Change its sessions or validity | routes-final §7.L.7 | `PATCH /api/v1/app/patients/{patient_id}/offerings/{patient_offering_id}` · #135 |
-| 7.68 | KEPT | GET | `/patients/{patient_id}/offering-suggestions` | `patient:read` | The patient's plan | routes-final §7.M.7 | `GET /api/v1/app/patients/{patient_id}/offering-suggestions` · #135 |
-| 7.69 | KEPT | POST | `/patients/{patient_id}/offering-suggestions` | `patient:update` | Add to the plan | routes-final §7.M.7 | `POST /api/v1/app/patients/{patient_id}/offering-suggestions` · #135 |
-| 7.70 | CHANGED | GET | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:read` | Get one | routes-final §7.M.7 | `GET /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` · #135 |
-| 7.71 | CHANGED | PATCH | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:update` | Change quantity, price, status, reason | routes-final §7.M.7 | `PATCH /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` · #135 |
-| 7.72 | CHANGED | DELETE | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:update` | Remove from the plan | routes-final §7.M.7 | `DELETE /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` · #135 |
-| 7.73 | CHANGED | POST | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}/restore` | `patient:update` | Undo | routes-final §7.M.7 | `POST /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}/restore` · #135 |
+| 7.65 | CHANGED | GET | `/patients/{patient_id}/offerings` | `patient:read` | What the patient bought — the Packages tab with `is_package=true` | routes-final §7.L.7 | `GET /api/v1/app/patients/{patient_id}/offerings` · #135 · e8903a2 |
+| 7.66 | CHANGED | GET | `/patients/{patient_id}/offerings/{patient_offering_id}` | `patient:read` | Get one | routes-final §7.L.7 | `GET /api/v1/app/patients/{patient_id}/offerings/{patient_offering_id}` · #135 · e8903a2 |
+| 7.67 | CHANGED | PATCH | `/patients/{patient_id}/offerings/{patient_offering_id}` | `payment:update` | Change its sessions or validity | routes-final §7.L.7 | `PATCH /api/v1/app/patients/{patient_id}/offerings/{patient_offering_id}` · #135 · e8903a2 |
+| 7.68 | KEPT | GET | `/patients/{patient_id}/offering-suggestions` | `patient:read` | The patient's plan | routes-final §7.M.7 | `GET /api/v1/app/patients/{patient_id}/offering-suggestions` · #135 · e8903a2 |
+| 7.69 | KEPT | POST | `/patients/{patient_id}/offering-suggestions` | `patient:update` | Add to the plan | routes-final §7.M.7 | `POST /api/v1/app/patients/{patient_id}/offering-suggestions` · #135 · e8903a2 |
+| 7.70 | CHANGED | GET | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:read` | Get one | routes-final §7.M.7 | `GET /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` · #135 · e8903a2 |
+| 7.71 | CHANGED | PATCH | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:update` | Change quantity, price, status, reason | routes-final §7.M.7 | `PATCH /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` · #135 · e8903a2 |
+| 7.72 | CHANGED | DELETE | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:update` | Remove from the plan | routes-final §7.M.7 | `DELETE /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` · #135 · e8903a2 |
+| 7.73 | CHANGED | POST | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}/restore` | `patient:update` | Undo | routes-final §7.M.7 | `POST /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}/restore` · #135 · e8903a2 |
 
 ## 8. Billing
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| 8.1 | KEPT | GET | `/invoices` | `payment:read` | List invoices | routes-final §8.A.7 |
-| 8.2 | KEPT | GET | `/invoices/exports` | `payment:export` | The invoices CSV | routes-final §8.A.7 |
-| 8.3 | KEPT | POST | `/invoices` | `payment:create` | Bill — optionally with "Paid now" | routes-final §8.A.7 |
-| 8.4 | KEPT | GET | `/invoices/{invoice_id}` | `payment:read` | Get an invoice (the print preview) | routes-final §8.A.7 |
-| 8.5 | KEPT | PATCH | `/invoices/{invoice_id}` | `payment:update` | Change it, until settled | routes-final §8.A.7 |
-| 8.6 | KEPT | DELETE | `/invoices/{invoice_id}` | `payment:delete` | Delete an unpaid invoice | routes-final §8.A.7 |
-| 8.7 | KEPT | POST | `/invoices/{invoice_id}/restore` | `payment:delete` | Undo | routes-final §8.A.7 |
-| 8.8 | CHANGED | GET | `/invoice-credit-notes` | `payment:read` | Every credit note | routes-final §8.B.7 |
-| 8.9 | KEPT | GET | `/invoices/{invoice_id}/credit-notes` | `payment:read` | An invoice's credit notes | routes-final §8.B.7 |
-| 8.10 | NEW | POST | `/invoices/{invoice_id}/credit-notes` | `payment:create` | Refund: credit note + refund payment | routes-final §8.B.7 |
-| 8.11 | CHANGED | GET | `/invoices/{invoice_id}/credit-notes/{invoice_credit_note_id}` | `payment:read` | Get one | routes-final §8.B.7 |
-| 8.12 | KEPT | GET | `/payments` | `payment:read` | The ledger | routes-final §8.C.7 |
-| 8.13 | KEPT | GET | `/payments/exports` | `payment:export` | The payments CSV | routes-final §8.C.7 |
-| 8.14 | KEPT | POST | `/payments` | `payment:create` | Receive, pay an expense or a supplier bill, record money back | routes-final §8.C.7 |
-| 8.15 | KEPT | GET | `/payments/{payment_id}` | `payment:read` | Get a payment | routes-final §8.C.7 |
-| 8.16 | KEPT | PATCH | `/payments/{payment_id}` | `payment:update` | Change it on an open day — recorded | routes-final §8.C.7 |
-| 8.17 | NEW | GET | `/payments/{payment_id}/edits` | `payment:read` | What changed | routes-final §8.C.7 |
-| 8.18 | NEW | POST | `/payments/{payment_id}/reverse` | `payment:delete` | Undo a settled payment | routes-final §8.C.7 |
-| 8.19 | KEPT | DELETE | `/payments/{payment_id}` | `payment:delete` | Delete on an open day | routes-final §8.C.7 |
-| 8.20 | KEPT | POST | `/payments/{payment_id}/restore` | `payment:delete` | Undo | routes-final §8.C.7 |
-| 8.21 | KEPT | GET | `/pending-credits` | `payment:read` | List pending credits | routes-final §8.D.7 |
-| 8.22 | KEPT | POST | `/pending-credits` | `payment:create` | Add one — give or take | routes-final §8.D.7 |
-| 8.23 | KEPT | GET | `/pending-credits/{pending_credit_id}` | `payment:read` | Get one | routes-final §8.D.7 |
-| 8.24 | KEPT | PATCH | `/pending-credits/{pending_credit_id}` | `payment:update` | Change it, while nothing is settled | routes-final §8.D.7 |
-| 8.25 | KEPT | DELETE | `/pending-credits/{pending_credit_id}` | `payment:delete` | Delete it, while nothing is settled | routes-final §8.D.7 |
-| 8.26 | KEPT | POST | `/pending-credits/{pending_credit_id}/restore` | `payment:delete` | Undo | routes-final §8.D.7 |
-| 8.27 | NEW | POST | `/pending-credits/{pending_credit_id}/settle` | `payment:create` | Give back, get back, or use on a bill | routes-final §8.D.7 |
-| 8.28 | KEPT | GET | `/day-closes` | `payment:read` | Past and open days | routes-final §8.E.7 |
-| 8.29 | KEPT | POST | `/day-closes` | `payment:update` | Open the day — accept or recount the opening cash | routes-final §8.E.7 |
-| 8.30 | KEPT | GET | `/day-closes/{day_close_id}` | `payment:read` | A day, with its live figures and events | routes-final §8.E.7 |
-| 8.31 | KEPT | POST | `/day-closes/{day_close_id}/close` | `payment:update` | Count and close — locks the day | routes-final §8.E.7 |
-| 8.32 | KEPT | POST | `/day-closes/{day_close_id}/reopen` | `payment:delete` | Reopen a closed day | routes-final §8.E.7 |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 8.1 | KEPT | GET | `/invoices` | `payment:read` | List invoices | routes-final §8.A.7 | `GET /api/v1/app/invoices` · #136 |
+| 8.2 | KEPT | GET | `/invoices/exports` | `payment:export` | The invoices CSV | routes-final §8.A.7 | `GET /api/v1/app/invoices/exports` · #136 |
+| 8.3 | KEPT | POST | `/invoices` | `payment:create` | Bill — optionally with "Paid now" | routes-final §8.A.7 | `POST /api/v1/app/invoices` · #136 |
+| 8.4 | KEPT | GET | `/invoices/{invoice_id}` | `payment:read` | Get an invoice (the print preview) | routes-final §8.A.7 | `GET /api/v1/app/invoices/{invoice_id}` · #136 |
+| 8.5 | KEPT | PATCH | `/invoices/{invoice_id}` | `payment:update` | Change it, until settled | routes-final §8.A.7 | `PATCH /api/v1/app/invoices/{invoice_id}` · #136 |
+| 8.6 | KEPT | DELETE | `/invoices/{invoice_id}` | `payment:delete` | Delete an unpaid invoice | routes-final §8.A.7 | `DELETE /api/v1/app/invoices/{invoice_id}` · #136 |
+| 8.7 | KEPT | POST | `/invoices/{invoice_id}/restore` | `payment:delete` | Undo | routes-final §8.A.7 | `POST /api/v1/app/invoices/{invoice_id}/restore` · #136 |
+| 8.8 | CHANGED | GET | `/invoice-credit-notes` | `payment:read` | Every credit note | routes-final §8.B.7 | `GET /api/v1/app/invoice-credit-notes` · #136 |
+| 8.9 | KEPT | GET | `/invoices/{invoice_id}/credit-notes` | `payment:read` | An invoice's credit notes | routes-final §8.B.7 | `GET /api/v1/app/invoices/{invoice_id}/credit-notes` · #136 |
+| 8.10 | NEW | POST | `/invoices/{invoice_id}/credit-notes` | `payment:create` | Refund: credit note + refund payment | routes-final §8.B.7 | `POST /api/v1/app/invoices/{invoice_id}/credit-notes` · #136 |
+| 8.11 | CHANGED | GET | `/invoices/{invoice_id}/credit-notes/{invoice_credit_note_id}` | `payment:read` | Get one | routes-final §8.B.7 | `GET /api/v1/app/invoices/{invoice_id}/credit-notes/{invoice_credit_note_id}` · #136 |
+| 8.12 | KEPT | GET | `/payments` | `payment:read` | The ledger | routes-final §8.C.7 | `GET /api/v1/app/payments` · #136 |
+| 8.13 | KEPT | GET | `/payments/exports` | `payment:export` | The payments CSV | routes-final §8.C.7 | `GET /api/v1/app/payments/exports` · #136 |
+| 8.14 | KEPT | POST | `/payments` | `payment:create` | Receive, pay an expense or a supplier bill, record money back | routes-final §8.C.7 | `POST /api/v1/app/payments` · #136 |
+| 8.15 | KEPT | GET | `/payments/{payment_id}` | `payment:read` | Get a payment | routes-final §8.C.7 | `GET /api/v1/app/payments/{payment_id}` · #136 |
+| 8.16 | KEPT | PATCH | `/payments/{payment_id}` | `payment:update` | Change it on an open day — recorded | routes-final §8.C.7 | `PATCH /api/v1/app/payments/{payment_id}` · #136 |
+| 8.17 | NEW | GET | `/payments/{payment_id}/edits` | `payment:read` | What changed | routes-final §8.C.7 | `GET /api/v1/app/payments/{payment_id}/edits` · #136 |
+| 8.18 | NEW | POST | `/payments/{payment_id}/reverse` | `payment:delete` | Undo a settled payment | routes-final §8.C.7 | `POST /api/v1/app/payments/{payment_id}/reverse` · #136 |
+| 8.19 | KEPT | DELETE | `/payments/{payment_id}` | `payment:delete` | Delete on an open day | routes-final §8.C.7 | `DELETE /api/v1/app/payments/{payment_id}` · #136 |
+| 8.20 | KEPT | POST | `/payments/{payment_id}/restore` | `payment:delete` | Undo | routes-final §8.C.7 | `POST /api/v1/app/payments/{payment_id}/restore` · #136 |
+| 8.21 | KEPT | GET | `/pending-credits` | `payment:read` | List pending credits | routes-final §8.D.7 | `GET /api/v1/app/pending-credits` · #136 |
+| 8.22 | KEPT | POST | `/pending-credits` | `payment:create` | Add one — give or take | routes-final §8.D.7 | `POST /api/v1/app/pending-credits` · #136 |
+| 8.23 | KEPT | GET | `/pending-credits/{pending_credit_id}` | `payment:read` | Get one | routes-final §8.D.7 | `GET /api/v1/app/pending-credits/{pending_credit_id}` · #136 |
+| 8.24 | KEPT | PATCH | `/pending-credits/{pending_credit_id}` | `payment:update` | Change it, while nothing is settled | routes-final §8.D.7 | `PATCH /api/v1/app/pending-credits/{pending_credit_id}` · #136 |
+| 8.25 | KEPT | DELETE | `/pending-credits/{pending_credit_id}` | `payment:delete` | Delete it, while nothing is settled | routes-final §8.D.7 | `DELETE /api/v1/app/pending-credits/{pending_credit_id}` · #136 |
+| 8.26 | KEPT | POST | `/pending-credits/{pending_credit_id}/restore` | `payment:delete` | Undo | routes-final §8.D.7 | `POST /api/v1/app/pending-credits/{pending_credit_id}/restore` · #136 |
+| 8.27 | NEW | POST | `/pending-credits/{pending_credit_id}/settle` | `payment:create` | Give back, get back, or use on a bill | routes-final §8.D.7 | `POST /api/v1/app/pending-credits/{pending_credit_id}/settle` · #136 |
+| 8.28 | KEPT | GET | `/day-closes` | `payment:read` | Past and open days | routes-final §8.E.7 | `GET /api/v1/app/day-closes` · #136 |
+| 8.29 | KEPT | POST | `/day-closes` | `payment:update` | Open the day — accept or recount the opening cash | routes-final §8.E.7 | `POST /api/v1/app/day-closes` · #136 |
+| 8.30 | KEPT | GET | `/day-closes/{day_close_id}` | `payment:read` | A day, with its live figures and events | routes-final §8.E.7 | `GET /api/v1/app/day-closes/{day_close_id}` · #136 |
+| 8.31 | KEPT | POST | `/day-closes/{day_close_id}/close` | `payment:update` | Count and close — locks the day | routes-final §8.E.7 | `POST /api/v1/app/day-closes/{day_close_id}/close` · #136 |
+| 8.32 | KEPT | POST | `/day-closes/{day_close_id}/reopen` | `payment:delete` | Reopen a closed day | routes-final §8.E.7 | `POST /api/v1/app/day-closes/{day_close_id}/reopen` · #136 |
 
 ## 9. Stock
 

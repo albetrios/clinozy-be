@@ -1,10 +1,10 @@
 import type { ZodType } from 'zod';
 import { listAppointmentsQueryDto } from '@/domains/app/sub-domains/appointments/appointments.dto.js';
-import { listInvoicesQueryDto } from '@/domains/app/sub-domains/invoices/invoices.dto.js';
+import { listInvoicesQueryDto } from '@/domains/app/sub-domains/billing/invoices/invoices.dto.js';
 import { listLeadsQueryDto } from '@/domains/app/sub-domains/leads/leads.dto.js';
 import { listOfferingsQueryDto } from '@/domains/app/sub-domains/offerings/offerings.dto.js';
 import { listPatientsQueryDto } from '@/domains/app/sub-domains/patients/patients.dto.js';
-import { listPaymentsQueryDto } from '@/domains/app/sub-domains/payments/payments.dto.js';
+import { listPaymentsQueryDto } from '@/domains/app/sub-domains/billing/payments/payments.dto.js';
 import { listMembershipsQueryDto } from '@/domains/tenancy/sub-domains/membership/membership.dto.js';
 
 /** The query parameters that page or sort a list — never part of a saved view (the sort stays in the URL). */

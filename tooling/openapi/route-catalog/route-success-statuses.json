@@ -232,11 +232,8 @@
   "POST /api/v1/app/payments": 200,
   "GET /api/v1/app/payments/:payment_id": 200,
   "PATCH /api/v1/app/payments/:payment_id": 200,
-  "POST /api/v1/app/payments/:payment_id/checked": 200,
   "DELETE /api/v1/app/payments/:payment_id": 204,
   "POST /api/v1/app/payments/:payment_id/restore": 200,
-  "GET /api/v1/app/credit-notes": 200,
-  "GET /api/v1/app/credit-notes/:credit_note_id": 200,
   "GET /api/v1/app/pending-credits": 200,
   "POST /api/v1/app/pending-credits": 200,
   "GET /api/v1/app/pending-credits/:pending_credit_id": 200,
@@ -433,5 +430,12 @@
   "POST /api/v1/app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id/restore": 200,
   "GET /api/v1/app/patients/:patient_id/offerings": 200,
   "GET /api/v1/app/patients/:patient_id/offerings/:patient_offering_id": 200,
-  "PATCH /api/v1/app/patients/:patient_id/offerings/:patient_offering_id": 200
+  "PATCH /api/v1/app/patients/:patient_id/offerings/:patient_offering_id": 200,
+  "GET /api/v1/app/invoice-credit-notes": 200,
+  "GET /api/v1/app/invoices/:invoice_id/credit-notes": 200,
+  "POST /api/v1/app/invoices/:invoice_id/credit-notes": 200,
+  "GET /api/v1/app/invoices/:invoice_id/credit-notes/:invoice_credit_note_id": 200,
+  "GET /api/v1/app/payments/:payment_id/edits": 200,
+  "POST /api/v1/app/payments/:payment_id/reverse": 200,
+  "POST /api/v1/app/pending-credits/:pending_credit_id/settle": 200
 }

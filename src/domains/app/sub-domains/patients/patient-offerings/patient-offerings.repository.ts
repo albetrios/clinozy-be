@@ -1,4 +1,5 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { eq, sql, type SQL } from 'drizzle-orm';
+import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { BaseRecordRepository, nullsLastSortKeys } from '@/domains/app/base-record.repository.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { PATIENT_OFFERING_STATUS } from './patient-offerings.constants.js';
@@ -61,5 +62,10 @@ export class PatientOfferingsRepository extends BaseRecordRepository {
       defaultSort: 'created_at',
       defaultOrder: 'desc',
     });
+  }
+
+  /** Removes a patient offering whose line no longer sells sessions (nothing spent — PK4, B12). */
+  async deleteById(id: number): Promise<void> {
+    await getRequestDatabase().delete(patient_offerings).where(eq(patient_offerings.id, id));
   }
 }

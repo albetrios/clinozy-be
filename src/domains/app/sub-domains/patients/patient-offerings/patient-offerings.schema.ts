@@ -15,7 +15,7 @@ import {
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
-import { invoices } from '@/domains/app/sub-domains/invoices/invoices.schema.js';
+import { invoice_items } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
 import { RECORD_DELETE_REASON_VALUES } from '@/shared/constants/record-fields.constants.js';
@@ -33,8 +33,8 @@ function literalList(values: readonly string[]): SQL {
  * @remarks
  * - **Notes:** bought only by invoicing it (PK4) — written by the invoice service, its soft-delete
  *   columns only with its invoice; sessions move only with treatments (PK5) through one guarded
- *   update, `0 ≤ sessions_used ≤ sessions_total ≤ 999`; `valid_until` none = no expiry. `invoice_id`
- *   names the bill until sub-domain 8's invoice lines replace it with `invoice_item_id` (#136). The
+ *   update, `0 ≤ sessions_used ≤ sessions_total ≤ 999`; `valid_until` none = no expiry; one per
+ *   invoice line (`invoice_item_id`, unique, `CASCADE` — held by its treatments' `RESTRICT`). The
  *   patient and the offering `ON DELETE RESTRICT`; the sessions-left index serves what a treatment
  *   can spend. RLS on the organization GUC with the retention-cleanup arm for the purge; not
  *   branch-scoped.
@@ -54,11 +54,10 @@ export const patient_offerings = appSchema
       offering_id: bigint('offering_id', { mode: 'number' })
         .notNull()
         .references((): AnyPgColumn => offerings.id, { onDelete: 'restrict' }),
-      // The bill it was bought on — invoice lines replace it (#136)
-      invoice_id: bigint('invoice_id', { mode: 'number' }).references(
-        (): AnyPgColumn => invoices.id,
-        { onDelete: 'set null' },
-      ),
+      // The invoice line that sold it — one per line; it goes with its line (PK4)
+      invoice_item_id: bigint('invoice_item_id', { mode: 'number' })
+        .notNull()
+        .references((): AnyPgColumn => invoice_items.id, { onDelete: 'cascade' }),
       sessions_total: smallint('sessions_total').notNull(),
       sessions_used: smallint('sessions_used').notNull().default(0),
       // None = no expiry
@@ -88,9 +87,7 @@ export const patient_offerings = appSchema
           sql`${table.deleted_at} IS NULL AND ${table.sessions_used} < ${table.sessions_total}`,
         ),
       index('idx_patient_offerings_offering_id').on(table.offering_id),
-      index('idx_patient_offerings_invoice_id')
-        .on(table.invoice_id)
-        .where(sql`${table.invoice_id} IS NOT NULL`),
+      uniqueIndex('idx_patient_offerings_invoice_item_id').on(table.invoice_item_id),
       index('idx_patient_offerings_deleted_at')
         .on(table.deleted_at)
         .where(sql`${table.deleted_at} IS NOT NULL`),

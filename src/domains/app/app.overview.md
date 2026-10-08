@@ -31,6 +31,7 @@ as the launch's ROUTE builds them.
 | [leads](sub-domains/leads/leads.overview.md) | `app.leads`, `app.lead_involved_memberships` | `/app/leads…` |
 | [appointments](sub-domains/appointments/appointments.overview.md) | `app.appointments` (the visit merged in) | `/app/appointments…` |
 | [patients](sub-domains/patients/patients.overview.md) | `app.patients`; nested `app.patient_clinical_notes`, `app.patient_prescriptions`, `app.prescription_kits`, `app.patient_diagnoses`, `app.patient_images`, `app.patient_reports`, `app.patient_treatments`, `app.patient_check_ins`, `app.patient_reviews`, `app.patient_feedback_actions`, `app.patient_offerings`, `app.patient_offering_suggestions` | `/app/patients…`, `/app/patients/{patient_id}/{clinical-notes,prescriptions,images,reports,treatments,check-ins,reviews,offerings,offering-suggestions}…`, `/app/patient-prescriptions`, `/app/patient-treatments`, `/app/prescription-kits…`, `/app/patient-diagnoses…` |
+| [billing](sub-domains/billing/billing.overview.md) | nested `app.invoices`, `app.invoice_items`, `app.invoice_members`, `app.invoice_credit_notes`, `app.payments`, `app.payment_edits`, `app.pending_credits`, `app.day_closes`, `app.day_close_events`; the day auto-close worker (WC-39) | `/app/invoices…`, `/app/invoices/{invoice_id}/credit-notes…`, `/app/invoice-credit-notes`, `/app/payments…`, `/app/pending-credits…`, `/app/day-closes…` |
 
 ## Patterns used
 
