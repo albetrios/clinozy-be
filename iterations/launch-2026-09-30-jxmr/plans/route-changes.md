@@ -13,7 +13,7 @@ Paths are under `/api/v1/app`, except sub-domain 2's team routes (2.B–2.E), wh
 that does not exist yet; `CHANGED` — moved, renamed or rebuilt (the route review's marker); `KEPT` — the same method
 and path, whatever its behaviour now follows. Routes the review removes are named in each sub-domain's decisions
 (for example the patient timeline, the global search, patient notes); `docs/routes.txt` shows them go when the row
-that drops them is built. The medical store's routes wait for its own review ([D49](decisions.md)).
+that drops them is built. The medical store's routes are §11's — back in the build with [D75](decisions.md) (D49's pause ends).
 
 ## Counts
 
@@ -29,7 +29,8 @@ that drops them is built. The medical store's routes wait for its own review ([D
 | 8. Billing | 4 | 2 | 26 | 32 |
 | 9. Stock | 1 | 3 | 24 | 28 |
 | 10. Tasks & rules | 1 | 0 | 11 | 12 |
-| **Total** | **21** | **79** | **167** | **267** |
+| 11. Medical store | 4 | 3 | 44 | 51 |
+| **Total** | **25** | **82** | **211** | **318** |
 
 ## 1. Branches & places
 
@@ -347,6 +348,62 @@ that drops them is built. The medical store's routes wait for its own review ([D
 | 10.10 | KEPT | POST | `/tasks/{task_id}/restore` | `task:delete` | Undo | routes-final §10.A.7 | `POST /api/v1/app/tasks/{task_id}/restore` · #138 |
 | 10.11 | KEPT | GET | `/task-rule-settings` | `task:read` | Every rule and its switches (the Rules popover) | routes-final §10.B.7 | `GET /api/v1/app/task-rule-settings` · #138 |
 | 10.12 | KEPT | PUT | `/task-rule-settings` | `organization:update` | Turn rules on or off; let Clinozy handle them | routes-final §10.B.7 | `PUT /api/v1/app/task-rule-settings` · #138 |
+
+## 11. Medical store
+
+| # | Change | Method | Path | Access | Operation | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| 11.1 | KEPT | GET | `/manufacturers` | `medicine:read` | The Manufacturers tab and picker | routes-final §11.A.7 |
+| 11.2 | KEPT | POST | `/manufacturers` | `medicine:create` | Add one (or a quick one from a picker) | routes-final §11.A.7 |
+| 11.3 | KEPT | GET | `/manufacturers/{manufacturer_id}` | `medicine:read` | Get one | routes-final §11.A.7 |
+| 11.4 | KEPT | PATCH | `/manufacturers/{manufacturer_id}` | `medicine:update` | Change one and its suppliers and MRs | routes-final §11.A.7 |
+| 11.5 | KEPT | DELETE | `/manufacturers/{manufacturer_id}` | `medicine:delete` | Delete one without medicines | routes-final §11.A.7 |
+| 11.6 | KEPT | POST | `/manufacturers/{manufacturer_id}/restore` | `medicine:delete` | Undo | routes-final §11.A.7 |
+| 11.7 | KEPT | GET | `/suppliers` | `medicine:read` | The Suppliers tab and picker | routes-final §11.B.7 |
+| 11.8 | KEPT | POST | `/suppliers` | `medicine:create` | Add one | routes-final §11.B.7 |
+| 11.9 | KEPT | GET | `/suppliers/{supplier_id}` | `medicine:read` | Get one with what is owed | routes-final §11.B.7 |
+| 11.10 | KEPT | PATCH | `/suppliers/{supplier_id}` | `medicine:update` | Change one | routes-final §11.B.7 |
+| 11.11 | KEPT | DELETE | `/suppliers/{supplier_id}` | `medicine:delete` | Delete one with nothing owed | routes-final §11.B.7 |
+| 11.12 | KEPT | POST | `/suppliers/{supplier_id}/restore` | `medicine:delete` | Undo | routes-final §11.B.7 |
+| 11.13 | NEW | POST | `/suppliers/{supplier_id}/payments` | `payment:create` | Pay what is due — "Pay ₹827" | routes-final §11.B.7 |
+| 11.14 | KEPT | GET | `/supplier-credits` | `medicine:read` | Every credit — a supplier's account | routes-final §11.C.7 |
+| 11.15 | KEPT | POST | `/supplier-credits` | `medicine:update` | Return expiring stock and take credit | routes-final §11.C.7 |
+| 11.16 | KEPT | GET | `/supplier-credits/{supplier_credit_id}` | `medicine:read` | Get one | routes-final §11.C.7 |
+| 11.17 | KEPT | GET | `/medicines` | `medicine:read` | The Medicines tab and the pickers | routes-final §11.D.7 |
+| 11.18 | KEPT | GET | `/medicines/exports` | `medicine:export` | The medicines CSV | routes-final §11.D.7 |
+| 11.19 | KEPT | POST | `/medicines` | `medicine:create` | Add a medicine with its batches and supplier prices | routes-final §11.D.7 |
+| 11.20 | KEPT | GET | `/medicines/{medicine_id}` | `medicine:read` | Get one | routes-final §11.D.7 |
+| 11.21 | KEPT | PATCH | `/medicines/{medicine_id}` | `medicine:update` | Change one, its batches and prices | routes-final §11.D.7 |
+| 11.22 | KEPT | DELETE | `/medicines/{medicine_id}` | `medicine:delete` | Delete one at zero stock | routes-final §11.D.7 |
+| 11.23 | KEPT | POST | `/medicines/{medicine_id}/restore` | `medicine:delete` | Undo | routes-final §11.D.7 |
+| 11.24 | NEW | POST | `/medicines/near-expiry-discount` | `medicine:update` | "Sell all at 20% off" / remove it | routes-final §11.D.7 |
+| 11.25 | KEPT | GET | `/medical-purchase-orders` | `medicine:read` | The Purchases tab | routes-final §11.E.7 |
+| 11.26 | KEPT | GET | `/medical-purchase-orders/exports` | `medicine:export` | The orders CSV | routes-final §11.E.7 |
+| 11.27 | KEPT | POST | `/medical-purchase-orders` | `medicine:create` | Create an order | routes-final §11.E.7 |
+| 11.28 | KEPT | GET | `/medical-purchase-orders/{medical_purchase_order_id}` | `medicine:read` | Get one | routes-final §11.E.7 |
+| 11.29 | KEPT | PATCH | `/medical-purchase-orders/{medical_purchase_order_id}` | `medicine:update` | Change an order not yet received | routes-final §11.E.7 |
+| 11.30 | KEPT | DELETE | `/medical-purchase-orders/{medical_purchase_order_id}` | `medicine:delete` | Cancel an order not yet received | routes-final §11.E.7 |
+| 11.31 | KEPT | POST | `/medical-purchase-orders/{medical_purchase_order_id}/restore` | `medicine:delete` | Undo the cancel | routes-final §11.E.7 |
+| 11.32 | KEPT | POST | `/medical-purchase-orders/{medical_purchase_order_id}/receive` | `medicine:update` | Receive goods — lines become batches | routes-final §11.E.7 |
+| 11.33 | KEPT | GET | `/medical-reps` | `medicine:read` | The MRs tab and picker | routes-final §11.F.7 |
+| 11.34 | KEPT | POST | `/medical-reps` | `medicine:create` | Add an MR | routes-final §11.F.7 |
+| 11.35 | KEPT | GET | `/medical-reps/{medical_rep_id}` | `medicine:read` | Get one | routes-final §11.F.7 |
+| 11.36 | KEPT | PATCH | `/medical-reps/{medical_rep_id}` | `medicine:update` | Change one | routes-final §11.F.7 |
+| 11.37 | KEPT | DELETE | `/medical-reps/{medical_rep_id}` | `medicine:delete` | Delete one | routes-final §11.F.7 |
+| 11.38 | KEPT | POST | `/medical-reps/{medical_rep_id}/restore` | `medicine:delete` | Undo | routes-final §11.F.7 |
+| 11.39 | KEPT | GET | `/medical-reps/{medical_rep_id}/visits` | `medicine:read` | An MR's visits | routes-final §11.G.7 |
+| 11.40 | KEPT | POST | `/medical-reps/{medical_rep_id}/visits` | `medicine:create` | Log a visit | routes-final §11.G.7 |
+| 11.41 | CHANGED | GET | `/medical-reps/{medical_rep_id}/visits/{medical_rep_visit_id}` | `medicine:read` | Get one | routes-final §11.G.7 |
+| 11.42 | CHANGED | DELETE | `/medical-reps/{medical_rep_id}/visits/{medical_rep_visit_id}` | `medicine:delete` | Delete one | routes-final §11.G.7 |
+| 11.43 | CHANGED | POST | `/medical-reps/{medical_rep_id}/visits/{medical_rep_visit_id}/restore` | `medicine:delete` | Undo | routes-final §11.G.7 |
+| 11.44 | KEPT | GET | `/medical-sales` | `medicine:read` | The Sales tab | routes-final §11.H.7 |
+| 11.45 | KEPT | GET | `/medical-sales/exports` | `medicine:export` | The sales CSV | routes-final §11.H.7 |
+| 11.46 | KEPT | POST | `/medical-sales` | `medicine:create` | New sale — the medical invoice, stock by earliest expiry | routes-final §11.H.7 |
+| 11.47 | KEPT | GET | `/medical-sales/{medical_sale_id}` | `medicine:read` | Get one (the Sale drawer) | routes-final §11.H.7 |
+| 11.48 | KEPT | DELETE | `/medical-sales/{medical_sale_id}` | `medicine:delete` | Void an unpaid sale — stock goes back | routes-final §11.H.7 |
+| 11.49 | KEPT | POST | `/medical-sales/{medical_sale_id}/restore` | `medicine:delete` | Undo the void | routes-final §11.H.7 |
+| 11.50 | NEW | POST | `/medical-sales/{medical_sale_id}/returns` | `payment:create` | Return from patient — refund, stock back | routes-final §11.H.7 |
+| 11.51 | NEW | GET | `/medical-payments` | `medicine:read` | The store's Payments tab | routes-final §11.H.7 |
 
 ## Before → after
 

@@ -127,6 +127,7 @@ Baseline: none · KICKOFF.md approved 2026-10-03 · implementing since 2026-10-0
 - Test phase: the treatment and feedback suites (7.H–7.K) — the spend / give-back race on the last session, every 400 / 409 above, P4, `is_billed`, the call-back bridge, the plan rows and their skip, append-only actions.
 - #136 (PK4, PK7, PK11, D71 — from #135): `app.invoice_items` brings `patient_offerings.invoice_item_id` (`NOT NULL`, unique, `CASCADE`) in place of `invoice_id`, the invoice service creating a patient offering for each `treatment` / `package` / `lhr` line (sessions × quantity + an `extra` offer's, `valid_until` = invoice date + `validity_days`, none for 0); `invoice_items.patient_offering_suggestion_id` sets the plan row `accepted` and feeds `invoiced_quantity` / `is_fully_invoiced`, the `quantity` floor (400) and the duplicate rule's "not fully invoiced" part; an invoice whose patient offering has a spent session can't be deleted.
 - Test phase: the patient-offering and plan suites (7.L–7.M) — the derived statuses at the day's edge, PK6's checks, PK9 on every write, the plan total, the labels.
+- #153 (sub-domain 11 — Medical store): **back in the build** — D49's pause ends with [D75](plans/decisions.md) (user 2026-10-08); built after #138 to routes-final §11 (rev 1, by recommendation): 51 routes under `medical/`, WC-34 as the `medical_rep_visit` task rule, WC-45 as the pharmacy queue's `is_filled` filter; #149's medicine sale and #151's medical acceptance come back with it — #138, 2026-10-08.
 
 ## Summary
 

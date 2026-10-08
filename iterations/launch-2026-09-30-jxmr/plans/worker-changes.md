@@ -32,7 +32,7 @@ re-planned ROUTE ([D50](decisions.md)) gives each one its row:
 | WC-42, WC-43 — photos | #145 | pairing uses a photo's session and stage (§7, P24) |
 | WC-44 — floor | #146 | refresh, no push ([D37](decisions.md)) |
 | WC-46 — purge | #147 | — |
-| WC-34 (MR visit), WC-45 (pharmacy queue) | #153 — deferred | the medical store waits for its own review ([D49](decisions.md)) |
+| WC-34 (MR visit), WC-45 (pharmacy queue) | #153 | back with [D75](decisions.md): WC-34 is the `medical_rep_visit` task rule (§11 MD8); WC-45 is `GET /patient-prescriptions?is_filled=false` (§7), no worker |
 | WC-47 — AI ideas | #152 — deferred | `app.patient_ideas` is dropped until its feature is built (§7, P20) |
 
 ## Counts
