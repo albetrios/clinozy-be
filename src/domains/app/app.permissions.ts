@@ -17,6 +17,12 @@ export const APP_PERMISSIONS = {
   OFFERING_LOWER_PRICE_READ: 'offering:lower_price:read',
   /** Download the offerings CSV (O14). */
   OFFERING_EXPORT: 'offering:export',
+  // Contacts (launch #129, CT5): one person shared by leads, patients and appointments — not
+  // branch-scoped (CT6).
+  CONTACT_READ: 'contact:read',
+  CONTACT_CREATE: 'contact:create',
+  CONTACT_UPDATE: 'contact:update',
+  CONTACT_DELETE: 'contact:delete',
   PATIENT_READ: 'patient:read',
   PATIENT_CREATE: 'patient:create',
   PATIENT_UPDATE: 'patient:update',

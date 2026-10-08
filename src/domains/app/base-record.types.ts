@@ -1,6 +1,7 @@
 import type { PgTable } from 'drizzle-orm/pg-core';
 import type { OrganizationPrincipalDatabaseScope } from '@/infrastructure/database/contexts/database-context.js';
 import type {
+  BaseRecordChildTable,
   BaseRecordLinkTable,
   BaseRecordListQuery,
   BaseRecordRepository,
@@ -30,6 +31,17 @@ export interface BaseRecordReferenceList {
   notFoundKey?: string;
   /** An empty list means every record (no branches = every branch, O5): a list filter keeps the unlinked rows too. */
   emptyMeansEvery?: boolean;
+}
+
+/**
+ * A body field that is a set of child rows in their own table, without public ids (`phones` on a
+ * contact): taken from a write's values after the rules' prepare hooks, written after the record
+ * (a sent set replaces the whole set), and read back for single-record responses only — a list
+ * page never reads it.
+ */
+export interface BaseRecordChildList extends BaseRecordChildTable {
+  /** Body and response field (`phones`). */
+  field: string;
 }
 
 /** The record a nested route lives under (`/patients/{patient_id}/notes`). */
@@ -86,6 +98,8 @@ export interface BaseRecordVisibility {
 export interface BaseRecordReferenceLookup {
   publicIdOf(field: string, row: BaseRecordRow): string | null;
   listOf(field: string, row: BaseRecordRow): string[];
+  /** A child list's rows (`phones`) — `undefined` on a list page, which never reads them. */
+  childrenOf(field: string, row: BaseRecordRow): Record<string, unknown>[] | undefined;
 }
 
 /** The organization's operating settings a rule reads (launch #1) and its time zone (D41). */
@@ -257,9 +271,13 @@ export interface BaseRecordDescriptor<Output> extends BaseRecordRules {
   serialize: (row: BaseRecordRow, references: BaseRecordReferenceLookup) => Output;
   references?: readonly BaseRecordReference[];
   referenceLists?: readonly BaseRecordReferenceList[];
+  childLists?: readonly BaseRecordChildList[];
   parent?: BaseRecordParent;
-  /** Unique index name → conflict message key (409). */
-  conflicts?: Readonly<Record<string, string>>;
+  /**
+   * Unique index or exclusion constraint name → the 409's message key, or the key and its `reason`
+   * code (`{ key, reason: 'contact_phone_exists' }`).
+   */
+  conflicts?: Readonly<Record<string, string | { key: string; reason: string }>>;
   /** Cross-field rules on the values a write would leave (create values, or row + update). */
   checkValues?: (values: Record<string, unknown>) => void;
   transitions?: Readonly<Record<string, BaseRecordTransition>>;

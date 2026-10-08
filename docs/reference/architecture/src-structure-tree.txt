@@ -63,7 +63,6 @@ src/
     │   │   │   │   ├── branch-members.dto.ts
     │   │   │   │   ├── branch-members.repository.ts
     │   │   │   │   ├── branch-members.routes.ts
-    │   │   │   │   ├── branch-members.rules.ts
     │   │   │   │   ├── branch-members.schema.ts
     │   │   │   │   ├── branch-members.serializer.ts
     │   │   │   │   ├── branch-members.service.ts
@@ -109,10 +108,28 @@ src/
     │   │   │   ├── check-ins.types.ts
     │   │   │   └── check-ins.validator.ts
     │   │   ├── contacts/
+    │   │   │   ├── contact-members/
+    │   │   │   │   ├── contact-members.controller.ts
+    │   │   │   │   ├── contact-members.dto.ts
+    │   │   │   │   ├── contact-members.repository.ts
+    │   │   │   │   ├── contact-members.routes.ts
+    │   │   │   │   ├── contact-members.schema.ts
+    │   │   │   │   ├── contact-members.serializer.ts
+    │   │   │   │   ├── contact-members.service.ts
+    │   │   │   │   ├── contact-members.types.ts
+    │   │   │   │   └── contact-members.validator.ts
+    │   │   │   ├── seed/
+    │   │   │   │   ├── contacts.bulk.seed.ts
+    │   │   │   │   ├── contacts.seed.ts
+    │   │   │   │   └── index.ts
+    │   │   │   ├── contacts.constants.ts
     │   │   │   ├── contacts.controller.ts
     │   │   │   ├── contacts.dto.ts
     │   │   │   ├── contacts.overview.md
+    │   │   │   ├── contacts.repository.ts
     │   │   │   ├── contacts.routes.ts
+    │   │   │   ├── contacts.rules.ts
+    │   │   │   ├── contacts.schema.ts
     │   │   │   ├── contacts.serializer.ts
     │   │   │   ├── contacts.service.ts
     │   │   │   ├── contacts.types.ts
@@ -538,14 +555,6 @@ src/
     │   │   │   ├── reviews.service.ts
     │   │   │   ├── reviews.types.ts
     │   │   │   └── reviews.validator.ts
-    │   │   ├── searches/
-    │   │   │   ├── searches.controller.ts
-    │   │   │   ├── searches.dto.ts
-    │   │   │   ├── searches.overview.md
-    │   │   │   ├── searches.routes.ts
-    │   │   │   ├── searches.service.ts
-    │   │   │   ├── searches.types.ts
-    │   │   │   └── searches.validator.ts
     │   │   ├── stock-counts/
     │   │   │   ├── stock-counts.constants.ts
     │   │   │   ├── stock-counts.controller.ts

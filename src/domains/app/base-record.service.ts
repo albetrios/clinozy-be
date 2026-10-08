@@ -7,6 +7,7 @@ import {
 import { ConflictError, NotFoundError, ValidationError } from '@/shared/errors/index.js';
 import {
   getPostgresConstraintName,
+  isPostgresExclusionViolation,
   isPostgresUniqueViolation,
 } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import {
@@ -18,13 +19,16 @@ import {
   type BaseRecordLinkFilter,
   type BaseRecordPage,
   type BaseRecordRow,
+  listChildRows,
   listLinkedPublicIds,
   listVisibleBranchIds,
+  replaceChildRows,
   replaceLinkedIds,
   resolveRecordIds,
   resolveRecordPublicIds,
 } from './base-record.repository.js';
 import type {
+  BaseRecordChildList,
   BaseRecordDescriptor,
   BaseRecordListInput,
   BaseRecordListResult,
@@ -261,6 +265,7 @@ export class BaseRecordService<Output> {
       const context = this.writeContext(scope, organizationId, userId, visibility);
       await this.descriptor.prepareCreate?.(values, context);
       this.descriptor.checkValues?.(values);
+      const children = this.takeChildLists(values);
       const row = await this.mapConflicts(() =>
         this.descriptor.repository.insert({
           ...values,
@@ -270,6 +275,7 @@ export class BaseRecordService<Output> {
         }),
       );
       await this.writeReferenceLists({ organizationId, ownerId: row.id, lists, userId });
+      await this.writeChildLists(row, children);
       await this.descriptor.afterWrite?.(row, { kind: 'create' }, context);
       return this.serializeOne(row, context);
     });
@@ -304,11 +310,13 @@ export class BaseRecordService<Output> {
       const context = this.writeContext(scope, organizationId, userId, visibility);
       await this.descriptor.prepareUpdate?.(values, existing, context);
       this.descriptor.checkValues?.({ ...existing, ...values });
+      const children = this.takeChildLists(values);
       const updated = await this.mapConflicts(() =>
         this.descriptor.repository.update(existing.id, values, userId),
       );
       if (!updated) throw new NotFoundError(this.descriptor.label);
       await this.writeReferenceLists({ organizationId, ownerId: updated.id, lists, userId });
+      await this.writeChildLists(updated, children);
       await this.descriptor.afterWrite?.(updated, { kind: 'update', before: existing }, context);
       return this.serializeOne(updated, context);
     });
@@ -579,8 +587,14 @@ export class BaseRecordService<Output> {
     });
   }
 
-  /** Serializes rows with their references' public ids read in one batch per field. */
-  protected async serializeRows(rows: BaseRecordRow[]): Promise<Output[]> {
+  /**
+   * Serializes rows with their references' public ids read in one batch per field — and, for a
+   * single-record response (`withChildren`), their child lists.
+   */
+  protected async serializeRows(
+    rows: BaseRecordRow[],
+    options: { withChildren?: boolean } = {},
+  ): Promise<Output[]> {
     const references = [
       ...(this.descriptor.references ?? []),
       ...(this.descriptor.parent ? [this.descriptor.parent] : []),
@@ -599,12 +613,25 @@ export class BaseRecordService<Output> {
         await listLinkedPublicIds({ link: list.link, ownerIds: rows.map((row) => row.id) }),
       );
     }
+    const children = new Map<string, Map<number, Record<string, unknown>[]>>();
+    if (options.withChildren) {
+      for (const child of this.descriptor.childLists ?? []) {
+        children.set(
+          child.field,
+          await listChildRows({ child, ownerIds: rows.map((row) => row.id) }),
+        );
+      }
+    }
     const lookup: BaseRecordReferenceLookup = {
       publicIdOf: (field, row) => {
         const value = row[field];
         return typeof value === 'number' ? (publicIds.get(field)?.get(value) ?? null) : null;
       },
       listOf: (field, row) => lists.get(field)?.get(row.id) ?? [],
+      childrenOf: (field, row) => {
+        const byOwner = children.get(field);
+        return byOwner ? (byOwner.get(row.id) ?? []) : undefined;
+      },
     };
     return rows.map((row) => this.descriptor.serialize(row, lookup));
   }
@@ -614,7 +641,7 @@ export class BaseRecordService<Output> {
     row: BaseRecordRow,
     context?: BaseRecordWriteContext,
   ): Promise<Output> {
-    const [output] = await this.serializeRows([row]);
+    const [output] = await this.serializeRows([row], { withChildren: true });
     if (context) await this.decorate([output!], context);
     return output!;
   }
@@ -897,6 +924,29 @@ export class BaseRecordService<Output> {
     return lists;
   }
 
+  /** Removes the child-list fields from `values`; the sent ones, to write after the record. */
+  private takeChildLists(
+    values: Record<string, unknown>,
+  ): Map<BaseRecordChildList, Record<string, unknown>[]> {
+    const children = new Map<BaseRecordChildList, Record<string, unknown>[]>();
+    for (const child of this.descriptor.childLists ?? []) {
+      const value = values[child.field];
+      delete values[child.field];
+      if (Array.isArray(value)) children.set(child, value as Record<string, unknown>[]);
+    }
+    return children;
+  }
+
+  /** Replaces each sent child list's rows; a constraint the table names becomes a 409. */
+  private async writeChildLists(
+    owner: BaseRecordRow,
+    children: Map<BaseRecordChildList, Record<string, unknown>[]>,
+  ): Promise<void> {
+    for (const [child, rows] of children) {
+      await this.mapConflicts(() => replaceChildRows({ child, owner, rows }));
+    }
+  }
+
   /** Writes each sent reference list to its link table. */
   private async writeReferenceLists(options: {
     organizationId: number;
@@ -925,14 +975,15 @@ export class BaseRecordService<Output> {
     });
   }
 
-  /** Runs a write; a unique clash the table names becomes a 409. */
+  /** Runs a write; a unique or exclusion clash the table names becomes a 409. */
   private async mapConflicts<T>(write: () => Promise<T>): Promise<T> {
     try {
       return await write();
     } catch (error) {
-      if (isPostgresUniqueViolation(error)) {
-        const key = this.descriptor.conflicts?.[getPostgresConstraintName(error) ?? ''];
-        if (key) throw new ConflictError(key);
+      if (isPostgresUniqueViolation(error) || isPostgresExclusionViolation(error)) {
+        const conflict = this.descriptor.conflicts?.[getPostgresConstraintName(error) ?? ''];
+        if (typeof conflict === 'string') throw new ConflictError(conflict);
+        if (conflict) throw new ConflictError(conflict.key).withReason(conflict.reason);
       }
       throw error;
     }

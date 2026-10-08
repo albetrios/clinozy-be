@@ -111,12 +111,23 @@ export const instantSchema = z.iso.datetime({ offset: true });
 export const recordIdSchema = trimmedString().min(1).max(28);
 
 /**
+ * A query list of up to `maximum` public ids, comma-separated (`?ids=con_…,con_…`); split it with
+ * {@link splitRecordIds}.
+ */
+export function recordIdListSchemaOf(maximum: number): z.ZodString {
+  return z
+    .string()
+    .regex(
+      new RegExp(`^[a-z0-9_]{1,28}(,[a-z0-9_]{1,28}){0,${maximum - 1}}$`),
+      `Up to ${maximum} ids, comma-separated`,
+    );
+}
+
+/**
  * A query list of up to 20 public ids, comma-separated (`?branch_ids=brn_…,brn_…`); split it
  * with {@link splitRecordIds}.
  */
-export const recordIdListSchema = z
-  .string()
-  .regex(/^[a-z0-9_]{1,28}(,[a-z0-9_]{1,28}){0,19}$/, 'Up to 20 ids, comma-separated');
+export const recordIdListSchema = recordIdListSchemaOf(20);
 
 /** The ids of a {@link recordIdListSchema} value (none when absent). */
 export function splitRecordIds(value: string | undefined): string[] {

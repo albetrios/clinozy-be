@@ -1,7 +1,53 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
+import type { MembershipService } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
 import { findMembershipIdOfUser } from '@/domains/app/base-record.repository.js';
 import type { OrganizationPrincipalDatabaseScope } from '@/infrastructure/database/contexts/database-context.js';
-import { ForbiddenError } from '@/shared/errors/index.js';
+import { ForbiddenError, ValidationError } from '@/shared/errors/index.js';
+
+const MEMBERSHIP_NOT_FOUND_KEY = 'errors:validation.membershipNotFound';
+
+/**
+ * The 400 for `mem_` ids that are no live member of the organization, on the field that named them.
+ *
+ * @remarks The field message is a translation key, so a Spanish caller reads it in Spanish too.
+ */
+export function membershipNotFoundError(options: {
+  field: string;
+  membershipPublicIds: readonly string[];
+}): ValidationError {
+  const params = { membership_id: options.membershipPublicIds.join(', ') };
+  return new ValidationError(MEMBERSHIP_NOT_FOUND_KEY, params, undefined, [
+    { field: options.field, messageKey: MEMBERSHIP_NOT_FOUND_KEY, messageParams: params },
+  ]);
+}
+
+/**
+ * `membership_ids` → the organization's live membership ids, keyed by public id; any unknown id is
+ * a 400 naming it on `field`.
+ *
+ * @remarks The one resolver for a list of team members an app record takes: who works at a branch
+ * (`POST /branches`, `PUT /branches/{branch_id}/members` — launch D13) and who handles a contact
+ * (`PUT /contacts/{contact_id}/members` — CT11).
+ */
+export async function resolveMembershipIds(options: {
+  membershipService: MembershipService;
+  organizationId: number;
+  membershipPublicIds: readonly string[];
+  field?: string;
+}): Promise<Map<string, number>> {
+  const resolved = await options.membershipService.resolveMembershipIdsByPublicIds({
+    organizationId: options.organizationId,
+    membershipPublicIds: options.membershipPublicIds,
+  });
+  const unknown = options.membershipPublicIds.filter((publicId) => !resolved.has(publicId));
+  if (unknown.length > 0) {
+    throw membershipNotFoundError({
+      field: options.field ?? 'membership_ids',
+      membershipPublicIds: unknown,
+    });
+  }
+  return resolved;
+}
 
 /** The caller's own live membership in the active organization, as internal ids. */
 export interface CallerMembership {

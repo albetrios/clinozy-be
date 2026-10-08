@@ -1,58 +1,56 @@
-import type { AppointmentOutput } from '@/domains/app/sub-domains/appointments/appointments.types.js';
-import type { LeadOutput } from '@/domains/app/sub-domains/leads/leads.types.js';
-import type { MedicalContactOutput } from '@/domains/app/sub-domains/medical-contacts/medical-contacts.types.js';
-import type { PatientOutput } from '@/domains/app/sub-domains/patients/patients.types.js';
-import type { ContactAppointmentSummary, ContactOutput } from './contacts.types.js';
+import type { BaseRecordRow } from '@/domains/app/base-record.repository.js';
+import type { BaseRecordReferenceLookup } from '@/domains/app/base-record.types.js';
+import { toInstant } from '@/shared/utils/validation/record-fields.util.js';
+import type { ContactOutput, ContactPhoneOutput } from './contacts.types.js';
 
-/** A patient as a contact. */
-export function patientContact(patient: PatientOutput): ContactOutput {
-  return {
-    kind: 'patient',
-    id: patient.id,
-    name: [patient.first_name, patient.last_name].filter(Boolean).join(' '),
-    phone: patient.phone,
-    email: patient.email,
-    number: patient.patient_number,
-    created_at: patient.created_at,
-  };
+/** A received entry newer than the team's last sent one (4.C–4.D). */
+function isAwaitingReply(row: BaseRecordRow): boolean {
+  const received = row.last_received_at as Date | null;
+  const sent = row.last_sent_at as Date | null;
+  return received !== null && (sent === null || received > sent);
 }
 
-/** A lead as a contact. */
-export function leadContact(lead: LeadOutput): ContactOutput {
+/**
+ * Shapes an `app.contacts` row as the API returns it (routes-final 4.A.6): public ids, ISO times,
+ * `phones` only on a single-contact response (the lookup has them), the reply state from the
+ * activity times. The patient, open-lead and visit fields are null until #131–#133 (D61).
+ */
+export function serializeContact(
+  row: BaseRecordRow,
+  references: BaseRecordReferenceLookup,
+): ContactOutput {
+  const phones = references.childrenOf('phones', row) as ContactPhoneOutput[] | undefined;
   return {
-    kind: 'lead',
-    id: lead.id,
-    name: lead.name,
-    phone: lead.phone,
-    email: lead.email,
-    number: lead.lead_number,
-    created_at: lead.created_at,
-  };
-}
-
-/** A walk-in buyer as a contact. */
-export function medicalContactContact(contact: MedicalContactOutput): ContactOutput {
-  return {
-    kind: 'medical_contact',
-    id: contact.id,
-    name: contact.name,
-    phone: contact.phone,
-    email: null,
-    number: null,
-    created_at: contact.created_at,
-  };
-}
-
-/** An appointment as a preview line. */
-export function appointmentSummary(
-  appointment: AppointmentOutput | undefined,
-): ContactAppointmentSummary | null {
-  if (!appointment) return null;
-  return {
-    id: appointment.id,
-    appointment_date: appointment.appointment_date,
-    start_time: appointment.start_time,
-    service_label: appointment.service_label,
-    status: appointment.status,
+    id: row.public_id,
+    contact_number: row.contact_number as number,
+    first_name: row.first_name as string,
+    last_name: row.last_name as string | null,
+    gender: row.gender as string | null,
+    date_of_birth: row.date_of_birth as string | null,
+    primary_phone: row.primary_phone as string,
+    ...(phones === undefined ? {} : { phones }),
+    email: row.email as string | null,
+    address: row.address as string | null,
+    instagram_handles: row.instagram_handles as string[],
+    default_channel: row.default_channel as string,
+    preference_tags: row.preference_tags as string[],
+    has_marketing_consent: row.has_marketing_consent as boolean,
+    referral_source: row.referral_source as string | null,
+    referred_by_contact_id: references.publicIdOf('referred_by_contact_id', row),
+    referred_by_name: row.referred_by_name as string | null,
+    household_contact_id: references.publicIdOf('household_contact_id', row) ?? row.public_id,
+    member_membership_ids: references.listOf('member_membership_ids', row),
+    patient_id: null,
+    patient_number: null,
+    open_lead_id: null,
+    open_lead_status: null,
+    last_visit_on: null,
+    next_visit_on: null,
+    last_activity_at: toInstant(row.last_activity_at),
+    last_sent_at: toInstant(row.last_sent_at),
+    last_received_at: toInstant(row.last_received_at),
+    is_awaiting_reply: isAwaitingReply(row),
+    created_at: row.created_at.toISOString(),
+    updated_at: row.updated_at.toISOString(),
   };
 }

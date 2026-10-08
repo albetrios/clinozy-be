@@ -72,6 +72,7 @@ const ENTITY_LABELS: Record<PublicIdEntity, string> = {
   membershipPreference: 'membership preference',
   offer: 'offer',
   offering: 'offering',
+  contact: 'contact',
   branchHoliday: 'branch holiday',
   machine: 'machine',
   room: 'room',

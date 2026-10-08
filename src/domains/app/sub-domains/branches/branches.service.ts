@@ -13,9 +13,9 @@ import { assertRecordNotChangedSince } from '@/shared/utils/validation/record-fi
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import type { BranchMembersRepository } from './branch-members/branch-members.repository.js';
 import {
-  branchMembershipNotFoundError,
-  resolveBranchMembershipIds,
-} from './branch-members/branch-members.rules.js';
+  membershipNotFoundError,
+  resolveMembershipIds,
+} from '@/domains/app/sub-domains/memberships/memberships.rules.js';
 import type { BranchesRepository } from './branches.repository.js';
 import { BranchesSerializer } from './branches.serializer.js';
 import type { BranchUpdateData } from './branches.types.js';
@@ -238,7 +238,7 @@ export class BranchesService {
     for (const { field, publicId } of requested) {
       const membershipId = resolved.get(publicId);
       if (membershipId === undefined) {
-        throw branchMembershipNotFoundError({ field, membershipPublicIds: [publicId] });
+        throw membershipNotFoundError({ field, membershipPublicIds: [publicId] });
       }
       result[field] = membershipId;
     }
@@ -250,7 +250,7 @@ export class BranchesService {
     organizationId: number,
     membershipPublicIds: readonly string[],
   ): Promise<Set<number>> {
-    const resolved = await resolveBranchMembershipIds({
+    const resolved = await resolveMembershipIds({
       membershipService: this.membershipService,
       organizationId,
       membershipPublicIds,

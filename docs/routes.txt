@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 443
+  Total routes: 449
 ================================================================================
 
 Legend:
@@ -13,7 +13,7 @@ Legend:
 
 ================================================================================
   DOMAIN: APP (/api/v1/app)
-  Routes: 309
+  Routes: 315
 ================================================================================
 
   — Sub Domains —
@@ -60,8 +60,15 @@ Legend:
   PATCH  /api/v1/app/check-ins/:check_in_id                       200  -    both  PERM: patient:update
   DELETE /api/v1/app/check-ins/:check_in_id                       204  -    both  PERM: patient:update
   POST   /api/v1/app/check-ins/:check_in_id/restore               200  req  both  PERM: patient:update
-  GET    /api/v1/app/contacts                                     200  -    both  PERM: organization:read
-  GET    /api/v1/app/contacts/:contact_id/preview                 200  -    both  PERM: organization:read
+  GET    /api/v1/app/contacts                                     200  -    both  PERM: contact:read
+  POST   /api/v1/app/contacts                                     200  req  both  PERM: contact:create
+  GET    /api/v1/app/contacts/:contact_id                         200  -    both  PERM: contact:read
+  PATCH  /api/v1/app/contacts/:contact_id                         200  -    both  PERM: contact:update
+  DELETE /api/v1/app/contacts/:contact_id                         204  -    both  PERM: contact:delete
+  GET    /api/v1/app/contacts/:contact_id/members                 200  -    both  PERM: contact:read
+  PUT    /api/v1/app/contacts/:contact_id/members                 200  -    both  PERM: contact:update
+  GET    /api/v1/app/contacts/:contact_id/preview                 200  -    both  PERM: contact:read
+  POST   /api/v1/app/contacts/:contact_id/restore                 200  req  both  PERM: contact:delete
   GET    /api/v1/app/credit-notes                                 200  -    both  PERM: payment:read
   GET    /api/v1/app/credit-notes/:credit_note_id                 200  -    both  PERM: payment:read
   GET    /api/v1/app/day-closes                                   200  -    both  PERM: day_close:read
@@ -265,7 +272,6 @@ Legend:
   PATCH  /api/v1/app/reviews/:review_id                           200  -    both  PERM: review:update
   DELETE /api/v1/app/reviews/:review_id                           204  -    both  PERM: review:delete
   POST   /api/v1/app/reviews/:review_id/restore                   200  req  both  PERM: review:delete
-  GET    /api/v1/app/searches                                     200  -    both  PERM: organization:read
   GET    /api/v1/app/stock-counts                                 200  -    both  PERM: stock_item:read
   POST   /api/v1/app/stock-counts                                 200  req  both  PERM: stock_item:update
   GET    /api/v1/app/stock-counts/:stock_count_id                 200  -    both  PERM: stock_item:read
@@ -534,16 +540,16 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 443
+  Total routes    : 449
   Public          : 16
   Authenticated   : 51
   Role-guarded    : 9
-  Perm-guarded    : 362
+  Perm-guarded    : 368
   Token-guarded   : 5
   Team-only (O)   : 10
 
 ================================================================================
-  IDEMPOTENCY-REQUIRED WRITES (125) — X-Idempotency-Key required
+  IDEMPOTENCY-REQUIRED WRITES (127) — X-Idempotency-Key required
 ================================================================================
 
   Routes flagged I = req reject a missing or reused key (422); every other write
@@ -564,6 +570,8 @@ Legend:
     POST /api/v1/app/branches/:branch_id/rooms
     POST /api/v1/app/branches/:branch_id/rooms/:branch_room_id/restore
     POST /api/v1/app/check-ins/:check_in_id/restore
+    POST /api/v1/app/contacts
+    POST /api/v1/app/contacts/:contact_id/restore
     POST /api/v1/app/day-closes
     POST /api/v1/app/day-closes/:day_close_id/close
     POST /api/v1/app/day-closes/:day_close_id/reopen
@@ -704,36 +712,37 @@ Legend:
     appointment:create            appointment:delete            appointment:read
     appointment:update            branch:create                 branch:delete
     branch:read                   branch:update                 clinical_record:read
-    day_close:close               day_close:create              day_close:delete
-    day_close:read                day_close:update              invoice:create
-    invoice:delete                invoice:read                  invoice:update
-    lead:create                   lead:delete                   lead:read
-    lead:update                   list:export                   manufacturer:create
-    manufacturer:delete           manufacturer:read             manufacturer:update
-    medical_purchase_order:create medical_purchase_order:delete medical_purchase_order:read
-    medical_purchase_order:update medical_rep:create            medical_rep:delete
-    medical_rep:read              medical_rep:update            medical_sale:create
-    medical_sale:delete           medical_sale:read             medical_sale:update
-    medicine:create               medicine:delete               medicine:read
-    medicine:update               message_template:create       message_template:delete
-    message_template:read         message_template:update       offering:create
-    offering:delete               offering:export               offering:lower_price:read
-    offering:update               patient:create                patient:delete
-    patient:read                  patient:update                payment:create
-    payment:delete                payment:read                  payment:reverse_settled
-    payment:update                prescription:create           prescription:delete
-    prescription:read             prescription:update           private_album:read
-    refund:create                 review:create                 review:delete
-    review:read                   review:update                 sale:void
-    stock_item:create             stock_item:delete             stock_item:read
-    stock_item:update             stock_purchase:create         stock_purchase:delete
-    stock_purchase:read           stock_purchase:update         stock_vendor:create
-    stock_vendor:delete           stock_vendor:read             stock_vendor:update
-    supplier:create               supplier:delete               supplier:read
-    supplier:update               task:create                   task:delete
-    task:read                     task:update                   task_rule:update
-    treatment:create              treatment:delete              treatment:read
-    treatment:update
+    contact:create                contact:delete                contact:read
+    contact:update                day_close:close               day_close:create
+    day_close:delete              day_close:read                day_close:update
+    invoice:create                invoice:delete                invoice:read
+    invoice:update                lead:create                   lead:delete
+    lead:read                     lead:update                   list:export
+    manufacturer:create           manufacturer:delete           manufacturer:read
+    manufacturer:update           medical_purchase_order:create medical_purchase_order:delete
+    medical_purchase_order:read   medical_purchase_order:update medical_rep:create
+    medical_rep:delete            medical_rep:read              medical_rep:update
+    medical_sale:create           medical_sale:delete           medical_sale:read
+    medical_sale:update           medicine:create               medicine:delete
+    medicine:read                 medicine:update               message_template:create
+    message_template:delete       message_template:read         message_template:update
+    offering:create               offering:delete               offering:export
+    offering:lower_price:read     offering:update               patient:create
+    patient:delete                patient:read                  patient:update
+    payment:create                payment:delete                payment:read
+    payment:reverse_settled       payment:update                prescription:create
+    prescription:delete           prescription:read             prescription:update
+    private_album:read            refund:create                 review:create
+    review:delete                 review:read                   review:update
+    sale:void                     stock_item:create             stock_item:delete
+    stock_item:read               stock_item:update             stock_purchase:create
+    stock_purchase:delete         stock_purchase:read           stock_purchase:update
+    stock_vendor:create           stock_vendor:delete           stock_vendor:read
+    stock_vendor:update           supplier:create               supplier:delete
+    supplier:read                 supplier:update               task:create
+    task:delete                   task:read                     task:update
+    task_rule:update              treatment:create              treatment:delete
+    treatment:read                treatment:update
 
   Global Roles:
     super_admin                   user

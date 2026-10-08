@@ -1,5 +1,6 @@
 import type { PgTable } from 'drizzle-orm/pg-core';
 import { offering_groups } from '@/domains/app/sub-domains/offerings/offering-groups/offering-groups.schema.js';
+import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import { branch_rooms } from '@/domains/app/sub-domains/branches/branch-rooms/branch-rooms.schema.js';
 import { branch_machines } from '@/domains/app/sub-domains/branches/branch-machines/branch-machines.schema.js';
 import { branch_holidays } from '@/domains/app/sub-domains/branches/branch-holidays/branch-holidays.schema.js';
@@ -105,6 +106,8 @@ export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   { table: lead_reads, label: 'app.lead_reads' },
   { table: leads, label: 'app.leads' },
   { table: patients, label: 'app.patients' },
+  // A contact goes after the leads, patients and appointments that name it (and its numbers with it)
+  { table: contacts, label: 'app.contacts' },
   { table: offers, label: 'app.offers' },
   { table: offerings, label: 'app.offerings' },
   { table: branch_holidays, label: 'app.branch_holidays' },

@@ -3,6 +3,9 @@
 -- migration-safety: allow add_foreign_key_without_not_valid reason="Single scratch-database init migration creates empty tables before data exists."
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 --> statement-breakpoint
+-- btree_gist: the contacts' exclusion constraint (a number lives in one household, launch CT3).
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+--> statement-breakpoint
 CREATE SCHEMA "audit";
 --> statement-breakpoint
 CREATE SCHEMA "auth";
@@ -1460,6 +1463,187 @@ CREATE TABLE IF NOT EXISTS "app"."offer_branches" (
 );
 --> statement-breakpoint
 ALTER TABLE "app"."offer_branches" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.contacts — one person, shared by their leads, conversation, patient file and appointments (launch ROUTE #129, routes-final 4.A).
+CREATE TABLE IF NOT EXISTS "app"."contacts" (
+	"id" bigserial PRIMARY KEY NOT NULL,
+	"public_id" varchar(28) NOT NULL,
+	"organization_id" bigint NOT NULL,
+	"contact_number" integer DEFAULT 0 NOT NULL,
+	"first_name" varchar(60) NOT NULL,
+	"last_name" varchar(60),
+	"gender" varchar(6),
+	"date_of_birth" date,
+	"email" varchar(120),
+	"address" varchar(240),
+	"instagram_handles" text[] DEFAULT '{}' NOT NULL,
+	"default_channel" varchar(9) DEFAULT 'whatsapp' NOT NULL,
+	"preference_tags" text[] DEFAULT '{}' NOT NULL,
+	"has_marketing_consent" boolean DEFAULT false NOT NULL,
+	"referral_source" varchar(9),
+	"referred_by_contact_id" bigint,
+	"referred_by_name" varchar(120),
+	"household_contact_id" bigint NOT NULL,
+	"primary_phone" varchar(13) NOT NULL,
+	"last_activity_at" timestamp with time zone,
+	"last_sent_at" timestamp with time zone,
+	"last_received_at" timestamp with time zone,
+	"search_text" text DEFAULT '' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_by_user_id" bigint,
+	"updated_by_user_id" bigint,
+	"deleted_at" timestamp with time zone,
+	"delete_reason" varchar(20),
+	"delete_note" varchar(280),
+	CONSTRAINT "chk_contacts_contact_number" CHECK ("app"."contacts"."contact_number" > 0),
+	CONSTRAINT "chk_contacts_first_name" CHECK (length(btrim("app"."contacts"."first_name")) > 0),
+	CONSTRAINT "chk_contacts_gender" CHECK ("app"."contacts"."gender" IN ('female', 'male', 'other')),
+	CONSTRAINT "chk_contacts_date_of_birth_past" CHECK ("app"."contacts"."date_of_birth" IS NULL OR "app"."contacts"."date_of_birth" <= CURRENT_DATE),
+	CONSTRAINT "chk_contacts_instagram_handles" CHECK (cardinality("app"."contacts"."instagram_handles") <= 5),
+	CONSTRAINT "chk_contacts_default_channel" CHECK ("app"."contacts"."default_channel" IN ('whatsapp', 'call', 'instagram')),
+	CONSTRAINT "chk_contacts_preference_tags" CHECK (cardinality("app"."contacts"."preference_tags") <= 12 AND array_to_string("app"."contacts"."preference_tags", ',') ~ '^([a-z][a-z0-9_]{1,39}(,[a-z][a-z0-9_]{1,39})*)?$'),
+	CONSTRAINT "chk_contacts_referral_source" CHECK ("app"."contacts"."referral_source" IN ('patient', 'doctor', 'instagram', 'google', 'walk_in', 'other')),
+	CONSTRAINT "chk_contacts_referred_by_patient" CHECK ("app"."contacts"."referred_by_contact_id" IS NULL OR "app"."contacts"."referral_source" = 'patient'),
+	CONSTRAINT "chk_contacts_primary_phone" CHECK ("app"."contacts"."primary_phone" ~ '^\+91\d{10}$'),
+	CONSTRAINT "chk_contacts_updated" CHECK ("app"."contacts"."updated_at" >= "app"."contacts"."created_at"),
+	CONSTRAINT "chk_contacts_delete_reason" CHECK ("app"."contacts"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
+	CONSTRAINT "chk_contacts_delete_reason_when_deleted" CHECK (("app"."contacts"."deleted_at" IS NULL) = ("app"."contacts"."delete_reason" IS NULL)),
+	CONSTRAINT "chk_contacts_delete_note_when_other" CHECK ("app"."contacts"."delete_reason" IS DISTINCT FROM 'other' OR "app"."contacts"."delete_note" IS NOT NULL)
+);
+--> statement-breakpoint
+ALTER TABLE "app"."contacts" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "app"."contacts" ADD CONSTRAINT "contacts_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."contacts" ADD CONSTRAINT "contacts_referred_by_contact_id_contacts_id_fk" FOREIGN KEY ("referred_by_contact_id") REFERENCES "app"."contacts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."contacts" ADD CONSTRAINT "contacts_household_contact_id_contacts_id_fk" FOREIGN KEY ("household_contact_id") REFERENCES "app"."contacts"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."contacts" ADD CONSTRAINT "contacts_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."contacts" ADD CONSTRAINT "contacts_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_contacts_public_id" ON "app"."contacts" USING btree ("public_id");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_contacts_organization_contact_number" ON "app"."contacts" USING btree ("organization_id","contact_number");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_contacts_id_household_contact_id" ON "app"."contacts" USING btree ("id","household_contact_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contacts_search_text_trgm" ON "app"."contacts" USING gin ("search_text" gin_trgm_ops) WHERE "app"."contacts"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contacts_organization_name" ON "app"."contacts" USING btree ("organization_id","first_name",coalesce("last_name", ''),"id") WHERE "app"."contacts"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contacts_organization_created" ON "app"."contacts" USING btree ("organization_id","created_at","id") WHERE "app"."contacts"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contacts_organization_last_activity_at" ON "app"."contacts" USING btree ("organization_id",coalesce("last_activity_at", '-infinity'::timestamptz),"id") WHERE "app"."contacts"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contacts_preference_tags_gin" ON "app"."contacts" USING gin ("preference_tags") WHERE "app"."contacts"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contacts_household_contact_id" ON "app"."contacts" USING btree ("household_contact_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contacts_referred_by_contact_id" ON "app"."contacts" USING btree ("referred_by_contact_id") WHERE "app"."contacts"."referred_by_contact_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contacts_deleted_at" ON "app"."contacts" USING btree ("deleted_at") WHERE "app"."contacts"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contacts_created_by_user_id" ON "app"."contacts" USING btree ("created_by_user_id") WHERE "app"."contacts"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contacts_updated_by_user_id" ON "app"."contacts" USING btree ("updated_by_user_id") WHERE "app"."contacts"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "contacts_tenant_isolation" ON "app"."contacts" AS PERMISSIVE FOR ALL TO public USING ("app"."contacts"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )
+          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."contacts"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."contacts" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.contact_phones — a contact's numbers (CT2, CT3): no public id, part of the contact.
+CREATE TABLE IF NOT EXISTS "app"."contact_phones" (
+	"contact_id" bigint NOT NULL,
+	"household_contact_id" bigint NOT NULL,
+	"organization_id" bigint NOT NULL,
+	"phone" varchar(13) NOT NULL,
+	"is_primary" boolean DEFAULT false NOT NULL,
+	"is_on_whatsapp" boolean DEFAULT true NOT NULL,
+	"deleted_at" timestamp with time zone,
+	CONSTRAINT "contact_phones_pkey" PRIMARY KEY ("contact_id", "phone"),
+	CONSTRAINT "chk_contact_phones_phone" CHECK ("app"."contact_phones"."phone" ~ '^\+91\d{10}$')
+);
+--> statement-breakpoint
+ALTER TABLE "app"."contact_phones" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "app"."contact_phones" ADD CONSTRAINT "contact_phones_contact_household_fk" FOREIGN KEY ("contact_id","household_contact_id") REFERENCES "app"."contacts"("id","household_contact_id") ON DELETE cascade ON UPDATE cascade;--> statement-breakpoint
+ALTER TABLE "app"."contact_phones" ADD CONSTRAINT "contact_phones_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+-- A live number belongs to one household (CT3): the same number may sit on several contacts only
+-- when they share a household. Moving a contact to another household re-checks its numbers (the
+-- composite key cascades the new household onto them).
+ALTER TABLE "app"."contact_phones" ADD CONSTRAINT "excl_contact_phones_phone_household" EXCLUDE USING gist ("organization_id" WITH =, "phone" WITH =, "household_contact_id" WITH <>) WHERE ("deleted_at" IS NULL);--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_contact_phones_contact_id_primary" ON "app"."contact_phones" USING btree ("contact_id") WHERE "app"."contact_phones"."is_primary";--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contact_phones_organization_id_phone" ON "app"."contact_phones" USING btree ("organization_id","phone") WHERE "app"."contact_phones"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contact_phones_household_contact_id" ON "app"."contact_phones" USING btree ("household_contact_id");--> statement-breakpoint
+CREATE POLICY "contact_phones_tenant_isolation" ON "app"."contact_phones" AS PERMISSIVE FOR ALL TO public USING ("app"."contact_phones"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )) WITH CHECK ("app"."contact_phones"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."contact_phones" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.fn_set_contact_household() — a new contact's household is itself unless it names one (CT3).
+CREATE OR REPLACE FUNCTION app.fn_set_contact_household() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = app, pg_catalog
+AS $$
+BEGIN
+  IF NEW.household_contact_id IS NULL THEN
+    NEW.household_contact_id := NEW.id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+-- app.fn_set_contact_search_text() — one string for every picker's search (CT9): the names, email,
+-- Instagram handles, the contact number ("c-12345") and every live number's 10 digits, lowercase.
+CREATE OR REPLACE FUNCTION app.fn_set_contact_search_text() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = app, pg_catalog
+AS $$
+BEGIN
+  NEW.search_text := lower(concat_ws(' ',
+    NEW.first_name,
+    NEW.last_name,
+    NEW.email,
+    array_to_string(NEW.instagram_handles, ' '),
+    'c-' || NEW.contact_number,
+    (SELECT string_agg(right(phone.phone, 10), ' ' ORDER BY phone.phone)
+       FROM app.contact_phones AS phone
+      WHERE phone.contact_id = NEW.id AND phone.deleted_at IS NULL)));
+  RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+-- app.fn_touch_contact_search_text() — a contact's numbers changed: recompute its search_text.
+CREATE OR REPLACE FUNCTION app.fn_touch_contact_search_text() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = app, pg_catalog
+AS $$
+BEGIN
+  UPDATE app.contacts SET search_text = search_text
+   WHERE id = CASE WHEN TG_OP = 'DELETE' THEN OLD.contact_id ELSE NEW.contact_id END;
+  RETURN NULL;
+END;
+$$;
+--> statement-breakpoint
+CREATE TRIGGER trg_contacts_contact_number BEFORE INSERT ON "app"."contacts" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('contact_number');--> statement-breakpoint
+CREATE TRIGGER trg_contacts_household BEFORE INSERT ON "app"."contacts" FOR EACH ROW EXECUTE FUNCTION app.fn_set_contact_household();--> statement-breakpoint
+CREATE TRIGGER trg_contacts_search_text BEFORE INSERT OR UPDATE ON "app"."contacts" FOR EACH ROW EXECUTE FUNCTION app.fn_set_contact_search_text();--> statement-breakpoint
+CREATE TRIGGER trg_contact_phones_search_text AFTER INSERT OR UPDATE OR DELETE ON "app"."contact_phones" FOR EACH ROW EXECUTE FUNCTION app.fn_touch_contact_search_text();--> statement-breakpoint
+-- app.contact_members — the team members who handle a person (launch ROUTE #129, routes-final 4.B, CT11).
+CREATE TABLE IF NOT EXISTS "app"."contact_members" (
+	"contact_id" bigint NOT NULL,
+	"membership_id" bigint NOT NULL,
+	"organization_id" bigint NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_by_user_id" bigint,
+	CONSTRAINT "contact_members_pkey" PRIMARY KEY ("contact_id", "membership_id")
+);
+--> statement-breakpoint
+ALTER TABLE "app"."contact_members" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "app"."contact_members" ADD CONSTRAINT "contact_members_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "app"."contacts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."contact_members" ADD CONSTRAINT "contact_members_membership_fk" FOREIGN KEY ("organization_id","membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."contact_members" ADD CONSTRAINT "contact_members_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."contact_members" ADD CONSTRAINT "contact_members_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contact_members_organization_id_membership_id" ON "app"."contact_members" USING btree ("organization_id","membership_id","contact_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contact_members_created_by_user_id" ON "app"."contact_members" USING btree ("created_by_user_id") WHERE "app"."contact_members"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "contact_members_tenant_isolation" ON "app"."contact_members" AS PERMISSIVE FOR ALL TO public USING ("app"."contact_members"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )) WITH CHECK ("app"."contact_members"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."contact_members" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 -- app.patients — A registered patient (launch ROUTE #13).
 CREATE TABLE IF NOT EXISTS "app"."patients" (
 	"id" bigserial PRIMARY KEY NOT NULL,

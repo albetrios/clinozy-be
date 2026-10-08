@@ -87,8 +87,11 @@ export interface BaseRecordPage {
 
 /** One key of a {@link BaseRecordSortSpec}. */
 export interface BaseRecordSortKey {
-  /** A column of the table, or an SQL expression of the row built for the organization (a derived status). */
-  value: string | ((organizationId: number) => SQL);
+  /**
+   * A column of the table, or an SQL expression of the row built for the organization and the
+   * query (a derived status; the best match for `q`).
+   */
+  value: string | ((organizationId: number, query: BaseRecordListQuery) => SQL);
   /** The SQL type the cursor's text value casts back to — required for an expression; a column's own otherwise. */
   sqlType?: string;
   /** `true` = this key runs against the list's order (status first, then newest first inside each). */
@@ -307,6 +310,90 @@ export async function listLinkedPublicIds(options: {
     byOwner.set(row.owner_id, list);
   }
   return byOwner;
+}
+
+/** A child table a record keeps a set of rows in, without public ids (`app.contact_phones`). */
+export interface BaseRecordChildTable {
+  table: PgTable;
+  /** The column naming the owning record (`contact_id`). */
+  ownerColumn: string;
+  /** The columns each child is written with and read back as (`phone`, `is_primary`, …). */
+  columns: readonly string[];
+  /** Child column → owner column, copied from the owner onto every child (`household_contact_id`). */
+  copiedFromOwner?: Readonly<Record<string, string>>;
+  /** Read order: column names, `-` first for descending (`['-is_primary', 'phone']`). */
+  order?: readonly string[];
+}
+
+/**
+ * Each owner's child rows (only the child list's `columns`), in the list's order.
+ *
+ * @remarks
+ * - **Algorithm:** one `owner IN (...)` read of the child table on the request's handle.
+ * - **Failure modes:** none; an owner with no children is absent from the map.
+ */
+export async function listChildRows(options: {
+  child: BaseRecordChildTable;
+  ownerIds: readonly number[];
+}): Promise<Map<number, Record<string, unknown>[]>> {
+  const byOwner = new Map<number, Record<string, unknown>[]>();
+  if (options.ownerIds.length === 0) return byOwner;
+  const { child } = options;
+  const owner = columnOf(child.table, child.ownerColumn);
+  const selection: Record<string, AnyPgColumn> = { owner_id: owner };
+  for (const name of child.columns) selection[name] = columnOf(child.table, name);
+  const rows = (await getRequestDatabase()
+    .select(selection)
+    .from(child.table)
+    .where(inArray(owner, [...options.ownerIds]))
+    .orderBy(
+      owner,
+      ...(child.order ?? []).map((name) =>
+        name.startsWith('-')
+          ? desc(columnOf(child.table, name.slice(1)))
+          : asc(columnOf(child.table, name)),
+      ),
+    )) as ({ owner_id: number } & Record<string, unknown>)[];
+  for (const { owner_id, ...row } of rows) {
+    const list = byOwner.get(owner_id) ?? [];
+    list.push(row);
+    byOwner.set(owner_id, list);
+  }
+  return byOwner;
+}
+
+/**
+ * Makes `rows` an owner's exact set of child rows: deletes the old set, inserts the new one with
+ * the owner, the organization and the columns copied from the owner.
+ *
+ * @remarks
+ * - **Failure modes:** a unique or exclusion violation propagates (the service maps it).
+ */
+export async function replaceChildRows(options: {
+  child: BaseRecordChildTable;
+  owner: BaseRecordRow;
+  rows: readonly Record<string, unknown>[];
+}): Promise<void> {
+  const { child, owner } = options;
+  const database = getRequestDatabase();
+  await database.delete(child.table).where(eq(columnOf(child.table, child.ownerColumn), owner.id));
+  if (options.rows.length === 0) return;
+  const copied = Object.fromEntries(
+    Object.entries(child.copiedFromOwner ?? {}).map(([childColumn, ownerColumn]) => [
+      childColumn,
+      owner[ownerColumn],
+    ]),
+  );
+  await database.insert(child.table).values(
+    options.rows.map((row) => ({
+      ...Object.fromEntries(
+        child.columns.filter((name) => name in row).map((name) => [name, row[name]]),
+      ),
+      ...copied,
+      [child.ownerColumn]: owner.id,
+      organization_id: owner.organization_id,
+    })) as never,
+  );
 }
 
 /**
@@ -591,7 +678,7 @@ export class BaseRecordRepository extends BaseRepository {
       } else {
         if (!key.sqlType) throw new Error(`Sort ${name}: an expression key names its SQL type`);
         keys.push({
-          expression: key.value(organizationId),
+          expression: key.value(organizationId, query),
           castType: key.sqlType,
           isTimestamp: false,
           direction,

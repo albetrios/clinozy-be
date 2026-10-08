@@ -1,1 +1,16 @@
-{}
+{
+  "contactPreferenceTags": {
+    "no_calls": "No calls",
+    "text_before_calling": "Text before calling",
+    "mornings": "Mornings",
+    "evenings": "Evenings",
+    "after_six_pm": "After 6 pm",
+    "weekdays_only": "Weekdays only",
+    "weekends_only": "Weekends only",
+    "sundays_only": "Sundays only",
+    "gujarati": "Gujarati",
+    "hindi": "Hindi",
+    "english": "English",
+    "female_doctor": "Female doctor"
+  }
+}

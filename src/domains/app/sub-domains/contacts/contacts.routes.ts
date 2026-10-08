@@ -2,12 +2,18 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT } from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
 import { requireOrganizationPermission } from '@/shared/utils/auth/authorization.util.js';
-import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
-import { createContactsController } from './contacts.controller.js';
-import { contactIdParamsDto, listContactsQueryDto } from './contacts.dto.js';
+import { recordDeleteQuerySchema } from '@/shared/utils/validation/record-fields.util.js';
+import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
 import type { ContactsService } from './contacts.service.js';
+import { createContactsController } from './contacts.controller.js';
+import {
+  CreateContactDto,
+  UpdateContactDto,
+  contactsIdParamsDto,
+  listContactsQueryDto,
+} from './contacts.dto.js';
 
-/** Registers `GET /app/contacts` and `GET /app/contacts/{contact_id}/preview` (prefix `/api/v1/app`). */
+/** Registers the `contacts` routes (prefix `/api/v1/app`) — routes-final 4.A, routes 1–7. */
 export function contactsRoutes(service: ContactsService): FastifyPluginAsync {
   const controller = createContactsController(service);
 
@@ -17,33 +23,115 @@ export function contactsRoutes(service: ContactsService): FastifyPluginAsync {
       '/contacts',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.ORGANIZATION_READ)],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.CONTACT_READ)],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'List contacts',
           description:
-            'Every person as one kind of record — patients, leads and walk-in buyers — matching q, or phone (who already has this mobile: the new-lead warning, never a block) (≥ 3 characters: a name, phone digits or a number), up to 5 per kind; kind narrows to one. Kinds the caller may not read are left out.',
-          tags: ['Search'],
+            'Returns one page of the active organization\'s contacts — the one search every picker uses (CT9). `q` matches a name or part of one, the email, an Instagram handle, any number (4+ digits) or a whole contact number (`C-12345`); text needs 3+ characters (a 400 otherwise). Sort `name` (default — the best match first while `q` is set), `created_at` or `last_activity_at` (newest first). Filters: `phone` (every contact with that number, household included), `ids` (up to 100, CT12), `is_patient`, `has_open_lead`, `is_awaiting_reply`, `member_membership_id` ("my people"), `household_contact_id`, `preference_tags` (comma-separated — any of). The list carries `primary_phone`, not `phones`. Requires contact:read.',
+          tags: ['Contact'],
           querystring: listContactsQueryDto,
         },
       },
       controller.list,
     );
+    zodApplication.post(
+      '/contacts',
+      {
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.CONTACT_CREATE)],
+        config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
+        schema: {
+          summary: 'Create contact',
+          description:
+            "Adds a person: `first_name` and 1–5 `phones` (`+91` and 10 digits, each once, exactly one `is_primary`). `household_contact_id` puts them in that contact's household (absent = their own); a number may sit on several contacts only inside one household — a number on another household is a 409 `contact_phone_exists` naming that contact (CT3). `date_of_birth` not in the future, `referred_by_contact_id` only with `referral_source` patient (400s, CT13); `preference_tags` are lowercase keys (`no_calls`), up to 12 (CT14). Requires contact:create.",
+          tags: ['Contact'],
+          body: CreateContactDto,
+        },
+      },
+      controller.create,
+    );
+    zodApplication.get<{ Params: { contact_id: string } }>(
+      '/contacts/:contact_id',
+      {
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.CONTACT_READ)],
+        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        schema: {
+          summary: 'Get contact',
+          description:
+            'Returns one live contact of the active organization with its `phones` (the primary first); a deleted one is a 404. Requires contact:read.',
+          tags: ['Contact'],
+          params: contactsIdParamsDto,
+        },
+      },
+      controller.get,
+    );
+    zodApplication.patch<{ Params: { contact_id: string } }>(
+      '/contacts/:contact_id',
+      {
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.CONTACT_UPDATE)],
+        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        schema: {
+          summary: 'Update contact',
+          description:
+            "Changes any of a contact's fields — the change applies everywhere the person appears (lead, patient file, appointments, activity). Null clears an optional field; `phones` replaces the whole set; `household_contact_id` moves them to that contact's household (null = their own; the first contact of a household with others in it stays — a 400). A number on another household is a 409 `contact_phone_exists`. Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 `record_changed` (D43). Requires contact:update.",
+          tags: ['Contact'],
+          params: contactsIdParamsDto,
+          body: UpdateContactDto,
+        },
+      },
+      controller.update,
+    );
+    zodApplication.delete<{ Params: { contact_id: string } }>(
+      '/contacts/:contact_id',
+      {
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.CONTACT_DELETE)],
+        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        schema: {
+          summary: 'Delete contact',
+          description:
+            "Soft-deletes a contact with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Its numbers leave with it, free for another household. Restorable until the organization's purge window ends (D38). Requires contact:delete.",
+          tags: ['Contact'],
+          params: contactsIdParamsDto,
+          querystring: recordDeleteQuerySchema,
+        },
+      },
+      controller.remove,
+    );
+    zodApplication.post<{ Params: { contact_id: string } }>(
+      '/contacts/:contact_id/restore',
+      {
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.CONTACT_DELETE)],
+        config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
+        schema: {
+          summary: 'Restore contact',
+          description:
+            "Undoes a contact's delete, with its numbers. A live contact is a 409 `record_not_deleted`; a number another household took meanwhile is a 409 `contact_phone_exists` naming that contact. Requires contact:delete.",
+          tags: ['Contact'],
+          params: contactsIdParamsDto,
+        },
+      },
+      controller.restore,
+    );
     zodApplication.get<{ Params: { contact_id: string } }>(
       '/contacts/:contact_id/preview',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.ORGANIZATION_READ)],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.CONTACT_READ)],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Preview contact',
           description:
-            'The hover preview of a patient (pat_…), lead (lead_…) or walk-in buyer (mcon_…): name, phone, number, the next and the last appointment in the organization’s own date, a lead’s status and converted patient. 404 for a kind the caller may not read.',
-          tags: ['Search'],
-          params: contactIdParamsDto,
+            'The hover card: the contact (with `primary_phone`, not `phones`) plus `open_lead`, `patient`, `next_appointment` and `last_appointment` — each null until leads, patient files and appointments point at contacts (D61). Requires contact:read.',
+          tags: ['Contact'],
+          params: contactsIdParamsDto,
         },
       },
-      controller.preview,
+      controller.view('preview'),
     );
   };
 }

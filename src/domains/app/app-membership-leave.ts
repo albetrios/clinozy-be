@@ -1,5 +1,6 @@
 import type { MembershipLeavePort } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
 import { BranchesRepository } from './sub-domains/branches/branches.repository.js';
+import { ContactMembersRepository } from './sub-domains/contacts/contact-members/contact-members.repository.js';
 import { MembershipPreferencesRepository } from './sub-domains/memberships/membership-preferences/membership-preferences.repository.js';
 import { MembershipSavedViewsRepository } from './sub-domains/memberships/membership-saved-views/membership-saved-views.repository.js';
 
@@ -38,12 +39,14 @@ export class AppMembershipLeaveStep implements MembershipLeavePort {
  * Today's parts: sub-domain 1 — every branch's default staff naming them is cleared (C15); their
  * branch access rows stay, hidden while the membership is ended and back with a restore (D57).
  * Sub-domain 2 — their preferences and saved views are theirs alone and are deleted (U1); a restore
- * starts them from the defaults again.
+ * starts them from the defaults again. Sub-domain 4 — they stop handling every contact (their
+ * `app.contact_members` rows are deleted, CT11).
  */
 export function createAppMembershipLeaveStep(): AppMembershipLeaveStep {
   const branchesRepository = new BranchesRepository();
   const membershipPreferencesRepository = new MembershipPreferencesRepository();
   const membershipSavedViewsRepository = new MembershipSavedViewsRepository();
+  const contactMembersRepository = new ContactMembersRepository();
   return new AppMembershipLeaveStep([
     ({ organizationId, membershipId }) =>
       branchesRepository.clearDefaultStaffForMembership({
@@ -57,6 +60,11 @@ export function createAppMembershipLeaveStep(): AppMembershipLeaveStep {
       }),
     ({ organizationId, membershipId }) =>
       membershipSavedViewsRepository.deleteForMembership({
+        organization_id: organizationId,
+        membership_id: membershipId,
+      }),
+    ({ organizationId, membershipId }) =>
+      contactMembersRepository.deleteForMembership({
         organization_id: organizationId,
         membership_id: membershipId,
       }),

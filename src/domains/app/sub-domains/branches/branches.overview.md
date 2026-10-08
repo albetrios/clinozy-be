@@ -21,7 +21,7 @@ at the folder root.
 | `branches.repository.ts` | reads (full rows with default staff as `mem_` ids; summaries for `/my`), writes, and the default-staff clean-up |
 | `branches.service.ts` | `listMine`, `list`, `get`, `create`, `update` — the rules below |
 | `branches.controller.ts` / `branches.routes.ts` | the five `/app/branches` routes |
-| [`branch-members/`](branch-members/) | `app.branch_members` + `GET`/`PUT /app/branches/{branch_id}/members`; `branch-members.rules.ts` resolves `membership_ids` for both writers |
+| [`branch-members/`](branch-members/) | `app.branch_members` + `GET`/`PUT /app/branches/{branch_id}/members`; `resolveMembershipIds` (`memberships/memberships.rules.ts`) resolves `membership_ids` for both writers |
 | [`branch-rooms/`](branch-rooms/branch-rooms.overview.md) | `app.branch_rooms` + `/app/branches/{branch_id}/rooms…` |
 | [`branch-machines/`](branch-machines/branch-machines.overview.md) | `app.branch_machines` + `/app/branches/{branch_id}/machines…` |
 | [`branch-holidays/`](branch-holidays/branch-holidays.overview.md) | `app.branch_holidays` + `/app/branches/{branch_id}/holidays…` |

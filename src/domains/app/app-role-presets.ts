@@ -32,12 +32,22 @@ function readCodes(resources: readonly string[]): string[] {
 /**
  * What every role holds: the organization (the team picker `GET /app/memberships`, the member's
  * own preferences and saved views — launch U2 — and the offering groups, offerings and offers every
- * booking and bill picks from — launch O2) and tasks (D12). The team management list
+ * booking and bill picks from — launch O2), tasks (D12) and reading contacts (CT5). The team management list
  * (`membership:read`) is Owner and Admin (T7).
  */
 const EVERY_ROLE_CODES: readonly string[] = [
   TENANCY_PERMISSIONS.ORGANIZATION_READ,
   ...sectionCodes('tasks', VIEW_CREATE_EDIT),
+  APP_PERMISSIONS.CONTACT_READ,
+];
+
+/**
+ * What every role that deals with people holds — all but the Accountant: {@link EVERY_ROLE_CODES}
+ * and the contacts' View · Create · Edit (launch #129, CT5).
+ */
+const CONTACT_EDITING_ROLE_CODES: readonly string[] = [
+  ...EVERY_ROLE_CODES,
+  ...sectionCodes('contacts', VIEW_CREATE_EDIT),
 ];
 
 /**
@@ -93,7 +103,7 @@ export function appRolePresets(adminCodes: readonly string[]): readonly AppRoleP
       tone: CHIP_TONE.SKY,
       isLocked: false,
       permissionCodes: unique([
-        ...EVERY_ROLE_CODES,
+        ...CONTACT_EDITING_ROLE_CODES,
         ...sectionCodes('leads', VIEW_CREATE_EDIT),
         ...sectionCodes('appointments', VIEW_CREATE_EDIT),
         ...sectionCodes('patients', VIEW_CREATE_EDIT),
@@ -110,7 +120,7 @@ export function appRolePresets(adminCodes: readonly string[]): readonly AppRoleP
       tone: CHIP_TONE.MINT,
       isLocked: false,
       permissionCodes: unique([
-        ...EVERY_ROLE_CODES,
+        ...CONTACT_EDITING_ROLE_CODES,
         ...sectionCodes('appointments', VIEW_CREATE_EDIT),
         ...resourceCodes('patient', VIEW_CREATE_EDIT),
         ...resourceCodes('treatment', VIEW_CREATE_EDIT),
@@ -125,7 +135,7 @@ export function appRolePresets(adminCodes: readonly string[]): readonly AppRoleP
       tone: CHIP_TONE.BUTTER,
       isLocked: false,
       permissionCodes: unique([
-        ...EVERY_ROLE_CODES,
+        ...CONTACT_EDITING_ROLE_CODES,
         ...sectionCodes('leads', VIEW_CREATE_EDIT),
         ...sectionCodes('appointments', VIEW_CREATE_EDIT),
         ...resourceCodes('patient', VIEW_CREATE_EDIT),
@@ -141,7 +151,7 @@ export function appRolePresets(adminCodes: readonly string[]): readonly AppRoleP
       tone: CHIP_TONE.LAVENDER,
       isLocked: false,
       permissionCodes: unique([
-        ...EVERY_ROLE_CODES,
+        ...CONTACT_EDITING_ROLE_CODES,
         ...sectionCodes('leads', VIEW_CREATE_EDIT),
         ...sectionCodes('appointments', VIEW_CREATE_EDIT),
         ...resourceCodes('patient', VIEW_CREATE_EDIT),
@@ -159,7 +169,7 @@ export function appRolePresets(adminCodes: readonly string[]): readonly AppRoleP
       tone: CHIP_TONE.SAGE,
       isLocked: false,
       permissionCodes: unique([
-        ...EVERY_ROLE_CODES,
+        ...CONTACT_EDITING_ROLE_CODES,
         ...sectionCodes('medical', VIEW_CREATE_EDIT),
         ...readCodes(['patient', 'prescription']),
         APP_PERMISSIONS.LIST_EXPORT,
@@ -192,7 +202,7 @@ export function appRolePresets(adminCodes: readonly string[]): readonly AppRoleP
       tone: CHIP_TONE.BLUSH,
       isLocked: false,
       permissionCodes: unique([
-        ...EVERY_ROLE_CODES,
+        ...CONTACT_EDITING_ROLE_CODES,
         ...sectionCodes('leads', VIEW_CREATE_EDIT),
         ...readCodes(['patient']),
         ...resourceCodes('review', VIEW_CREATE_EDIT),

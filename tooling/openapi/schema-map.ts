@@ -37,6 +37,11 @@ import {
   UpdateOfferDto as appUpdateOfferDto,
 } from '@/domains/app/sub-domains/offerings/offers/offers.dto.js';
 import {
+  CreateContactDto as appCreateContactDto,
+  UpdateContactDto as appUpdateContactDto,
+} from '@/domains/app/sub-domains/contacts/contacts.dto.js';
+import { ReplaceContactMembersDto } from '@/domains/app/sub-domains/contacts/contact-members/contact-members.dto.js';
+import {
   CreatePatientDto as appCreatePatientDto,
   UpdatePatientDto as appUpdatePatientDto,
 } from '@/domains/app/sub-domains/patients/patients.dto.js';
@@ -435,6 +440,9 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'POST /api/v1/app/offers': appCreateOfferDto,
   'PATCH /api/v1/app/offerings/{offering_id}': appUpdateOfferingDto,
   'POST /api/v1/app/offerings': appCreateOfferingDto,
+  'PATCH /api/v1/app/contacts/{contact_id}': appUpdateContactDto,
+  'POST /api/v1/app/contacts': appCreateContactDto,
+  'PUT /api/v1/app/contacts/{contact_id}/members': ReplaceContactMembersDto,
   'PATCH /api/v1/app/branches/{branch_id}/holidays/{branch_holiday_id}': appUpdateBranchHolidayDto,
   'POST /api/v1/app/branches/{branch_id}/holidays': appCreateBranchHolidayDto,
   'PATCH /api/v1/app/branches/{branch_id}/machines/{branch_machine_id}': appUpdateMachineDto,

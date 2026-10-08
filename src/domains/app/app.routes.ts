@@ -6,8 +6,7 @@ import { membershipPreferencesRoutes } from './sub-domains/memberships/membershi
 import { membershipSavedViewsRoutes } from './sub-domains/memberships/membership-saved-views/membership-saved-views.routes.js';
 import { taskRuleSettingsRoutes } from './sub-domains/task-rule-settings/task-rule-settings.routes.js';
 import { appMembershipsRoutes } from './sub-domains/memberships/memberships.routes.js';
-import { searchesRoutes } from './sub-domains/searches/searches.routes.js';
-import { contactsRoutes } from './sub-domains/contacts/contacts.routes.js';
+import { contactMembersRoutes } from './sub-domains/contacts/contact-members/contact-members.routes.js';
 
 /** Registers the app domain's routes under `/api/v1/app`. */
 export const appRoutesPlugin: FastifyPluginAsync = async (app) => {
@@ -18,7 +17,6 @@ export const appRoutesPlugin: FastifyPluginAsync = async (app) => {
   await app.register(appMembershipsRoutes(appDomain.appMembershipsService));
   await app.register(membershipPreferencesRoutes(appDomain.membershipPreferencesService));
   await app.register(membershipSavedViewsRoutes(appDomain.membershipSavedViewsService));
-  await app.register(searchesRoutes(appDomain.searchesService));
-  await app.register(contactsRoutes(appDomain.contactsService));
+  await app.register(contactMembersRoutes(appDomain.contactMembersService));
   await registerAppRecordRoutes(app, appDomain);
 };

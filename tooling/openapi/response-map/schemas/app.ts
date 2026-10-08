@@ -148,6 +148,7 @@ export const membershipPreferencesSchema = {
         type: 'string',
         enum: [
           'today',
+          'contacts',
           'leads',
           'appointments',
           'patients',
@@ -236,44 +237,104 @@ export const membershipSavedViewExample = {
   updated_at: '2026-10-08T10:30:00.000Z',
 };
 
-/** `ContactOutput` — a patient, lead or walk-in buyer (`GET /app/contacts`). */
+const nullableInstant = { type: ['string', 'null'], format: 'date-time' };
+
+/** `ContactPhoneOutput` — one of a contact's numbers (routes-final 4.A.6). */
+const contactPhoneSchema = {
+  type: 'object',
+  properties: {
+    phone: { type: 'string', pattern: '^\\+91\\d{10}$' },
+    is_primary: { type: 'boolean' },
+    is_on_whatsapp: { type: 'boolean' },
+  },
+};
+
+/** `ContactOutput` — one person, shared by leads, patients and appointments (launch #129, 4.A.6). */
 export const contactSchema = {
   type: 'object',
   properties: {
-    kind: { type: 'string', enum: ['patient', 'lead', 'medical_contact'] },
-    id: { type: 'string' },
-    name: { type: 'string' },
-    phone: { type: 'string', nullable: true },
-    email: { type: 'string', nullable: true },
-    number: { type: 'integer', nullable: true },
+    id: { type: 'string', example: 'con_k7x9m2pqr4w8n1v3a1b2c' },
+    contact_number: { type: 'integer', description: 'Shown as "C-12345"' },
+    first_name: { type: 'string', maxLength: 60 },
+    last_name: { ...nullableString, maxLength: 60 },
+    gender: { type: 'string', enum: ['female', 'male', 'other'], nullable: true },
+    date_of_birth: { type: 'string', format: 'date', nullable: true },
+    primary_phone: { type: 'string', pattern: '^\\+91\\d{10}$' },
+    phones: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 5,
+      items: contactPhoneSchema,
+      description: 'On single-contact responses only (routes 2–6)',
+    },
+    email: nullableString,
+    address: nullableString,
+    instagram_handles: { type: 'array', maxItems: 5, items: { type: 'string' } },
+    default_channel: { type: 'string', enum: ['whatsapp', 'call', 'instagram'] },
+    preference_tags: {
+      type: 'array',
+      maxItems: 12,
+      items: { type: 'string', pattern: '^[a-z][a-z0-9_]{1,39}$' },
+    },
+    has_marketing_consent: { type: 'boolean' },
+    referral_source: {
+      type: 'string',
+      enum: ['patient', 'doctor', 'instagram', 'google', 'walk_in', 'other'],
+      nullable: true,
+    },
+    referred_by_contact_id: nullableString,
+    referred_by_name: nullableString,
+    household_contact_id: { type: 'string', description: "The household's first contact" },
+    member_membership_ids: { type: 'array', items: { type: 'string' } },
+    patient_id: nullableString,
+    patient_number: { type: 'integer', nullable: true },
+    open_lead_id: nullableString,
+    open_lead_status: nullableString,
+    last_visit_on: { type: 'string', format: 'date', nullable: true },
+    next_visit_on: { type: 'string', format: 'date', nullable: true },
+    last_activity_at: nullableInstant,
+    last_sent_at: nullableInstant,
+    last_received_at: nullableInstant,
+    is_awaiting_reply: { type: 'boolean' },
     created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
-/** Example `ContactOutput`. */
+/** Example `ContactOutput` (a single-contact response — with `phones`). */
 export const contactExample = {
-  kind: 'patient',
-  id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
-  name: 'Riya Shah',
-  phone: '+919825044120',
+  id: 'con_k7x9m2pqr4w8n1v3a1b2c',
+  contact_number: 12345,
+  first_name: 'Riya',
+  last_name: 'Shah',
+  gender: 'female',
+  date_of_birth: '1994-03-12',
+  primary_phone: '+919825044120',
+  phones: [{ phone: '+919825044120', is_primary: true, is_on_whatsapp: true }],
   email: null,
-  number: 3508,
+  address: 'Satellite, Ahmedabad',
+  instagram_handles: [],
+  default_channel: 'whatsapp',
+  preference_tags: ['no_calls', 'after_six_pm'],
+  has_marketing_consent: false,
+  referral_source: 'instagram',
+  referred_by_contact_id: null,
+  referred_by_name: null,
+  household_contact_id: 'con_k7x9m2pqr4w8n1v3a1b2c',
+  member_membership_ids: ['mem_a1s2d3f4g5h6j7k8l9z0x'],
+  patient_id: null,
+  patient_number: null,
+  open_lead_id: null,
+  open_lead_status: null,
+  last_visit_on: null,
+  next_visit_on: null,
+  last_activity_at: null,
+  last_sent_at: null,
+  last_received_at: null,
+  is_awaiting_reply: false,
   created_at: '2026-10-07T10:30:00.000Z',
+  updated_at: '2026-10-07T10:30:00.000Z',
 };
-
-/** `SearchOutput` — 10 records per kind (`GET /app/searches`). */
-export const searchSchema = {
-  type: 'object',
-  properties: {
-    patients: { type: 'array', items: { type: 'object' } },
-    leads: { type: 'array', items: { type: 'object' } },
-    appointments: { type: 'array', items: { type: 'object' } },
-    invoices: { type: 'array', items: { type: 'object' } },
-  },
-};
-
-/** Example `SearchOutput`. */
-export const searchExample = { patients: [], leads: [], appointments: [], invoices: [] };
 
 const contactAppointmentSummarySchema = {
   type: 'object',
@@ -287,29 +348,41 @@ const contactAppointmentSummarySchema = {
   },
 };
 
-/** `ContactPreviewOutput` — the hover preview (`GET /app/contacts/{contact_id}/preview`). */
+/** `ContactPreviewOutput` — the hover card (`GET /app/contacts/{contact_id}/preview`). */
 export const contactPreviewSchema = {
   type: 'object',
   properties: {
     ...contactSchema.properties,
+    open_lead: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        id: { type: 'string' },
+        status: { type: 'string' },
+        owner_membership_id: nullableString,
+      },
+    },
+    patient: {
+      type: 'object',
+      nullable: true,
+      properties: { id: { type: 'string' }, patient_number: { type: 'integer' } },
+    },
     next_appointment: contactAppointmentSummarySchema,
     last_appointment: contactAppointmentSummarySchema,
-    lead_status: { type: 'string', nullable: true },
-    linked_patient_id: { type: 'string', nullable: true },
   },
 };
 
 /** Example `ContactPreviewOutput`. */
 export const contactPreviewExample = {
-  ...contactExample,
-  next_appointment: {
-    id: 'appt_k7x9m2pqr4w8n1v3a1b2c',
-    appointment_date: '2026-10-09',
-    start_time: '11:00',
-    service_label: 'Hydrafacial',
-    status: 'confirmed',
-  },
+  ...Object.fromEntries(Object.entries(contactExample).filter(([key]) => key !== 'phones')),
+  open_lead: null,
+  patient: null,
+  next_appointment: null,
   last_appointment: null,
-  lead_status: null,
-  linked_patient_id: null,
 };
+
+/** `ContactMemberOutput` — a team member who handles a contact (CT11). */
+export const contactMemberSchema = branchMemberSchema;
+
+/** Example `ContactMemberOutput`. */
+export const contactMemberExample = branchMemberExample;

@@ -2613,13 +2613,13 @@ None beyond 4.10.
 | # | Change |
 | --- | --- |
 | CTC1 | CT1–CT3: tables `app.contacts` (with the `contacts.contact_number` counter and the household trigger) and `app.contact_phones` (composite FK, exclusion constraint), `CREATE EXTENSION btree_gist`; the `contacts` nested sub-domain (routes, service, repository, validator, serializer, seed); RLS on both |
-| CTC2 | CT1: move the person columns off `app.leads` (sub-domain 5) and `app.patients` (sub-domain 7) |
+| CTC2 | CT1: move the person columns off `app.leads` (sub-domain 5) and `app.patients` (sub-domain 7) — built with those sub-domains: leads at ROUTE #131 (LC1), patients at #133 (PC1); #129 builds the contact (D61, 2026-10-08) |
 | CTC3 | CT5: codes `contact:read` / `create` / `update` / `delete`, a Contacts matrix section, the role presets |
 | CTC5 | CT8, CT9: the paginated list (trigram on `search_text`, phone lookup, picker fields) and the preview replace today's union search; the `search_text` trigger on `contacts` and `contact_phones` |
 | CTC6 | CT2: `primary_phone` kept with the numbers |
 | CTC7 | CT10: `last_activity_at` / `last_sent_at` / `last_received_at` written by the contact activity (4.C–4.D) in the entry's transaction |
 | CTC11 | CT14: `preferences` → `preference_tags` (init migration, schema, the `CHECK`, GIN index, DTO, filter, serializer); drop `language`; the known keys and their labels in `src/shared/locales/en/` |
-| CTC9 | CT1, CT12, CT13: the person columns from `app.patients` (gender, date of birth, referral); `ids` filter; the two checks |
+| CTC9 | CT1, CT12, CT13: the person columns from `app.patients` (gender, date of birth, referral); `ids` filter; the two checks — the contact's columns, `ids` and the checks at #129; their removal from `app.patients` at #133 (D61) |
 
 ---
 

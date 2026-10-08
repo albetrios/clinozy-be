@@ -11,7 +11,7 @@ import { NotFoundError, ValidationError } from '@/shared/errors/index.js';
 import type { BranchesRepository } from '@/domains/app/sub-domains/branches/branches.repository.js';
 import type { BranchMembersRepository } from './branch-members.repository.js';
 import { BranchMembersSerializer } from './branch-members.serializer.js';
-import { resolveBranchMembershipIds } from './branch-members.rules.js';
+import { resolveMembershipIds } from '@/domains/app/sub-domains/memberships/memberships.rules.js';
 import { validateReplaceBranchMembers } from './branch-members.validator.js';
 
 /**
@@ -53,7 +53,7 @@ export class BranchMembersService implements MembershipBranchAccessPort {
     const parsed = validateReplaceBranchMembers(body);
     return withAppDatabaseContext(scope, async () => {
       const ids = await this.requireBranchId(scope, branchPublicId);
-      const resolved = await resolveBranchMembershipIds({
+      const resolved = await resolveMembershipIds({
         membershipService: this.membershipService,
         organizationId: ids.organization,
         membershipPublicIds: parsed.membership_ids,

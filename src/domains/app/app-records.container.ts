@@ -11,6 +11,8 @@ import { OfferingsRepository } from './sub-domains/offerings/offerings.repositor
 import { OfferingsService } from './sub-domains/offerings/offerings.service.js';
 import { OffersRepository } from './sub-domains/offerings/offers/offers.repository.js';
 import { OffersService } from './sub-domains/offerings/offers/offers.service.js';
+import { ContactsRepository } from './sub-domains/contacts/contacts.repository.js';
+import { ContactsService } from './sub-domains/contacts/contacts.service.js';
 import { PatientsRepository } from './sub-domains/patients/patients.repository.js';
 import { PatientsService } from './sub-domains/patients/patients.service.js';
 import { LeadsRepository } from './sub-domains/leads/leads.repository.js';
@@ -98,6 +100,7 @@ export type AppRecordServices = {
   branchHolidaysService: BranchHolidaysService;
   offeringsService: OfferingsService;
   offersService: OffersService;
+  contactsService: ContactsService;
   patientsService: PatientsService;
   leadsService: LeadsService;
   messageTemplatesService: MessageTemplatesService;
@@ -139,10 +142,12 @@ export type AppRecordServices = {
   messagesService: MessagesService;
 };
 
-/** Builds every app record table's service on its repository. */
-export function createAppRecordServices(
-  organizationService: OrganizationService,
-): AppRecordServices {
+/**
+ * The services of the places, offerings and people every booking and bill picks from — a branch's
+ * rooms, machines and holidays (§1), the offering groups, offerings and offers (§3) and the contacts
+ * (§4).
+ */
+function createPlaceOfferingContactServices(organizationService: OrganizationService) {
   return {
     offeringGroupsService: new OfferingGroupsService(
       organizationService,
@@ -159,6 +164,16 @@ export function createAppRecordServices(
     ),
     offeringsService: new OfferingsService(organizationService, new OfferingsRepository()),
     offersService: new OffersService(organizationService, new OffersRepository()),
+    contactsService: new ContactsService(organizationService, new ContactsRepository()),
+  };
+}
+
+/** Builds every app record table's service on its repository. */
+export function createAppRecordServices(
+  organizationService: OrganizationService,
+): AppRecordServices {
+  return {
+    ...createPlaceOfferingContactServices(organizationService),
     patientsService: new PatientsService(organizationService, new PatientsRepository()),
     leadsService: new LeadsService(organizationService, new LeadsRepository()),
     messageTemplatesService: new MessageTemplatesService(

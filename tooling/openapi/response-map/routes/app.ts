@@ -9,6 +9,20 @@ const branchResponse: ResponseDefinition = {
   example: null,
 };
 
+const contactResponse: ResponseDefinition = {
+  statusCode: 200,
+  schema: wrapSuccess(schemas.contactSchema, schemas.contactExample),
+  example: null,
+};
+
+const contactMembersResponse: ResponseDefinition = {
+  statusCode: 200,
+  schema: wrapSuccess({ type: 'array', items: schemas.contactMemberSchema }, [
+    schemas.contactMemberExample,
+  ]),
+  example: null,
+};
+
 const branchMembersResponse: ResponseDefinition = {
   statusCode: 200,
   schema: wrapSuccess({ type: 'array', items: schemas.branchMemberSchema }, [
@@ -83,21 +97,24 @@ export const appRouteResponses: Record<string, ResponseDefinition> = {
   // ── Task rules (the whole list) ──
   'GET /api/v1/app/task-rule-settings': taskRulesResponse,
   'PUT /api/v1/app/task-rule-settings': taskRulesResponse,
-  'GET /api/v1/app/searches': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.searchSchema, schemas.searchExample),
-    example: null,
-  },
+  // ── Contacts (launch #129, routes-final 4.A–4.B) ──
   'GET /api/v1/app/contacts': {
     statusCode: 200,
-    schema: wrapSuccess({ type: 'array', items: schemas.contactSchema }, [schemas.contactExample]),
+    schema: wrapPaginated(schemas.contactSchema, [schemas.contactExample]),
     example: null,
   },
+  'POST /api/v1/app/contacts': contactResponse,
+  'GET /api/v1/app/contacts/{contact_id}': contactResponse,
+  'PATCH /api/v1/app/contacts/{contact_id}': contactResponse,
+  'DELETE /api/v1/app/contacts/{contact_id}': { statusCode: 204, schema: null, example: null },
+  'POST /api/v1/app/contacts/{contact_id}/restore': contactResponse,
   'GET /api/v1/app/contacts/{contact_id}/preview': {
     statusCode: 200,
     schema: wrapSuccess(schemas.contactPreviewSchema, schemas.contactPreviewExample),
     example: null,
   },
+  'GET /api/v1/app/contacts/{contact_id}/members': contactMembersResponse,
+  'PUT /api/v1/app/contacts/{contact_id}/members': contactMembersResponse,
   // ── Branch user accesses ──
   'GET /api/v1/app/branches/{branch_id}/members': branchMembersResponse,
   'PUT /api/v1/app/branches/{branch_id}/members': branchMembersResponse,

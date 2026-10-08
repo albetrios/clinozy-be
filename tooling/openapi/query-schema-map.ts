@@ -68,7 +68,6 @@ import { listStockPurchasesQueryDto as appStockPurchasesListQueryDto } from '@/d
 import { listStockCountsQueryDto as appStockCountsListQueryDto } from '@/domains/app/sub-domains/stock-counts/stock-counts.dto.js';
 import { listStockMovementsQueryDto as appStockMovementsListQueryDto } from '@/domains/app/sub-domains/stock-movements/stock-movements.dto.js';
 import { listTasksQueryDto as appTasksListQueryDto } from '@/domains/app/sub-domains/tasks/tasks.dto.js';
-import { listSearchesQueryDto } from '@/domains/app/sub-domains/searches/searches.dto.js';
 import { listContactsQueryDto } from '@/domains/app/sub-domains/contacts/contacts.dto.js';
 import { listMessagesQueryDto as appMessagesListQueryDto } from '@/domains/app/sub-domains/messages/messages.dto.js';
 import { listLimitQuerySchema } from '@/shared/utils/http/pagination.util.js';
@@ -135,7 +134,6 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/app/stock-counts': appStockCountsListQueryDto,
   'GET /api/v1/app/stock-movements': appStockMovementsListQueryDto,
   'GET /api/v1/app/tasks': appTasksListQueryDto,
-  'GET /api/v1/app/searches': listSearchesQueryDto,
   'GET /api/v1/app/contacts': listContactsQueryDto,
   'GET /api/v1/app/offerings/exports': appOfferingsListQueryDto,
   'GET /api/v1/app/patients/exports': appPatientsListQueryDto,

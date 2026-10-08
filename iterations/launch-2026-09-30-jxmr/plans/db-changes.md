@@ -40,7 +40,7 @@ its table designs name them (60 tables; the medical store's wait for its own rev
 | 1. Branches & places | `app.branches`, `app.branch_members`, `app.branch_rooms`, `app.branch_machines`, `app.branch_holidays` | §1 | #125 |
 | 2. Team | `app.membership_preferences`, `app.membership_preference_branches`, `app.membership_saved_views`, `tenancy.memberships`, `tenancy.membership_additional_roles`, `tenancy.membership_invitations`, `tenancy.roles`, `tenancy.role_permissions`, `tenancy.permissions` | §2 | #126–#127 |
 | 3. Offerings | `app.offering_groups`, `app.offerings`, `app.offering_branches`, `app.offers`, `app.offer_offerings`, `app.offer_branches` | §3 | #128 |
-| 4. Contacts | `app.contacts`, `app.contact_phones`, `app.contact_members`, `app.contact_activities`, `app.contact_message_templates` | §4 | #129–#130 |
+| 4. Contacts | `app.contacts`, `app.contact_phones`, `app.contact_members`, `app.contact_activities`, `app.contact_message_templates` | §4 | #129 (contacts, phones, members) · #130 |
 | 5. Leads | `app.leads`, `app.lead_involved_memberships` | §5 | #131 |
 | 6. Appointments | `app.appointments` | §6 | #132 |
 | 7. Patients | `app.patients`, `app.patient_clinical_notes`, `app.patient_prescriptions`, `app.prescription_kits`, `app.patient_diagnoses`, `app.patient_images`, `app.patient_reports`, `app.patient_treatments`, `app.patient_check_ins`, `app.patient_reviews`, `app.patient_feedback_actions`, `app.patient_offerings`, `app.patient_offering_suggestions` | §7 | #133–#135 |
@@ -586,6 +586,55 @@ erDiagram
 ```
 
 ## Stage 3 — People and conversations
+
+### contact · NEW (route review)
+
+- **Holds:** One person — name, numbers, Instagram, preferences, household — shared by their lead, activity, patient file and appointments (CT1). Read by every person picker (`GET /app/contacts?q=`), the contact editor and the hover card; written by the contact editor.
+- **Table:** `app.contacts` + `app.contact_phones` + `app.contact_members` — routes-final §4.A–4.B (CT1–CT3, CT9–CT14)
+- **Sources:** routes-final §4.A.3, §4.B.3 · D61
+- **Open:** none
+
+- **Built (ROUTE #129, sub-domain 4):** `app.contacts` as 4.A.3 — `contact_number` from the record counter (`trg_contacts_contact_number`), `household_contact_id` defaulting to the row itself (`trg_contacts_household`, `ON DELETE RESTRICT`), `search_text` (lower-cased names, email, Instagram, `c-<number>`, every live number's last 10 digits) kept by `trg_contacts_search_text` and `trg_contact_phones_search_text`, `primary_phone` written by the service with the numbers; CHECKs for gender, channel, referral source, the tag list (`array_to_string` against the key pattern, ≤ 12), Instagram ≤ 5, birth date ≤ `CURRENT_DATE`, referrer only with source `patient`, the soft-delete trio; indexes: trigram GIN on `search_text`, `(organization_id, first_name, coalesce(last_name, ''), id)`, `(organization_id, created_at, id)`, `(organization_id, coalesce(last_activity_at, '-infinity'), id)` (all live rows), GIN on `preference_tags`, unique `(id, household_contact_id)`. `app.contact_phones` (no public id) — key `(contact_id, phone)`, composite key `(contact_id, household_contact_id)` → `app.contacts` `ON UPDATE CASCADE ON DELETE CASCADE`, one primary (partial unique), `EXCLUDE USING gist (organization_id =, phone =, household_contact_id <>)` on live numbers (`btree_gist`), `deleted_at` follows the contact. `app.contact_members` — key `(contact_id, membership_id)`, `(organization_id, membership_id)` → `tenancy.memberships` `ON DELETE CASCADE` (K8), index `(organization_id, membership_id, contact_id)`. RLS ENABLE + FORCE on all three; the purge's retention arm on `app.contacts`. The person columns leave `app.leads` (#131) and `app.patients` (#133) with their rows (D61). Code `app/sub-domains/contacts/` (+ `contact-members/`).
+```mermaid
+erDiagram
+  contacts["app.contacts · NEW"] {
+    id id PK
+    number contact_number
+    text first_name
+    text last_name
+    choice gender
+    date date_of_birth
+    text email
+    text address
+    json instagram_handles
+    choice default_channel
+    json preference_tags
+    boolean has_marketing_consent
+    choice referral_source
+    id referred_by_contact_id FK "→ contact"
+    text referred_by_name
+    id household_contact_id FK "→ contact"
+    text primary_phone
+    datetime last_activity_at
+    datetime last_sent_at
+    datetime last_received_at
+    text search_text
+  }
+  contact_phones["app.contact_phones · NEW"] {
+    id contact_id FK "→ contact"
+    id household_contact_id FK "→ contact"
+    text phone
+    boolean is_primary
+    boolean is_on_whatsapp
+  }
+  contact_members["app.contact_members · NEW"] {
+    id contact_id FK "→ contact"
+    id membership_id FK "→ membership"
+  }
+  contacts ||--|{ contact_phones : "has 1–5 numbers (one primary)"
+  contacts ||--o{ contact_members : "is handled by"
+  contacts |o--o{ contacts : "household / referred by"
+```
 
 ### patient · NEW
 

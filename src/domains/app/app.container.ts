@@ -15,8 +15,9 @@ import { MembershipSavedViewsService } from './sub-domains/memberships/membershi
 import { TaskRuleSettingsRepository } from './sub-domains/task-rule-settings/task-rule-settings.repository.js';
 import { TaskRuleSettingsService } from './sub-domains/task-rule-settings/task-rule-settings.service.js';
 import { AppMembershipsService } from './sub-domains/memberships/memberships.service.js';
-import { SearchesService } from './sub-domains/searches/searches.service.js';
-import { ContactsService } from './sub-domains/contacts/contacts.service.js';
+import { ContactsRepository } from './sub-domains/contacts/contacts.repository.js';
+import { ContactMembersRepository } from './sub-domains/contacts/contact-members/contact-members.repository.js';
+import { ContactMembersService } from './sub-domains/contacts/contact-members/contact-members.service.js';
 import {
   type AppMembershipLeaveStep,
   createAppMembershipLeaveStep,
@@ -30,8 +31,7 @@ export type AppContainer = {
   membershipSavedViewsService: MembershipSavedViewsService;
   taskRuleSettingsService: TaskRuleSettingsService;
   appMembershipsService: AppMembershipsService;
-  searchesService: SearchesService;
-  contactsService: ContactsService;
+  contactMembersService: ContactMembersService;
   /** The app's part of the membership leave step (launch K4), wired into tenancy. */
   membershipLeaveStep: AppMembershipLeaveStep;
 } & AppRecordServices;
@@ -90,8 +90,12 @@ export function createAppContainer(
       new TaskRuleSettingsRepository(),
     ),
     appMembershipsService: new AppMembershipsService(membershipService),
-    searchesService: new SearchesService(records),
-    contactsService: new ContactsService(organizationService, records),
+    contactMembersService: new ContactMembersService(
+      organizationService,
+      membershipService,
+      new ContactsRepository(),
+      new ContactMembersRepository(),
+    ),
     membershipLeaveStep: createAppMembershipLeaveStep(),
     ...records,
   };

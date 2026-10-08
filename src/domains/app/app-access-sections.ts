@@ -11,6 +11,8 @@
  * - **Notes:** generated with the app tables; the catalog seed carries the same categories.
  */
 export const APP_ACCESS_SECTION_RESOURCES = {
+  // The person every lead, patient file and appointment points at (launch #129, CT5).
+  contacts: ['contact'],
   leads: ['lead', 'message_template'],
   appointments: ['appointment'],
   patients: ['patient', 'prescription', 'treatment', 'review'],
@@ -37,6 +39,7 @@ export type AppAccessSection = keyof typeof APP_ACCESS_SECTION_RESOURCES;
 
 /** The matrix rows, in the Users › Roles order (Today is not a row). */
 export const APP_MATRIX_SECTIONS = [
+  'contacts',
   'leads',
   'appointments',
   'patients',

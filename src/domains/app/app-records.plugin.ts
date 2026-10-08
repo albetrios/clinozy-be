@@ -6,6 +6,7 @@ import { branchMachinesRoutes } from './sub-domains/branches/branch-machines/bra
 import { branchHolidaysRoutes } from './sub-domains/branches/branch-holidays/branch-holidays.routes.js';
 import { offeringsRoutes } from './sub-domains/offerings/offerings.routes.js';
 import { offersRoutes } from './sub-domains/offerings/offers/offers.routes.js';
+import { contactsRoutes } from './sub-domains/contacts/contacts.routes.js';
 import { patientsRoutes } from './sub-domains/patients/patients.routes.js';
 import { leadsRoutes } from './sub-domains/leads/leads.routes.js';
 import { messageTemplatesRoutes } from './sub-domains/message-templates/message-templates.routes.js';
@@ -57,6 +58,7 @@ export async function registerAppRecordRoutes(
   await app.register(branchHolidaysRoutes(services.branchHolidaysService));
   await app.register(offeringsRoutes(services.offeringsService));
   await app.register(offersRoutes(services.offersService));
+  await app.register(contactsRoutes(services.contactsService));
   await app.register(patientsRoutes(services.patientsService));
   await app.register(leadsRoutes(services.leadsService));
   await app.register(messageTemplatesRoutes(services.messageTemplatesService));
