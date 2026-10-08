@@ -136,14 +136,14 @@ Response **200** when the worker is ready and dependencies are healthy:
   "redis": "connected",
   "bullmq": "connected",
   "latencyMs": { "database": 2, "redis": 1, "bullmq": 3 },
-  "workersRegistered": 37,
+  "workersRegistered": 39,
   "worker_queues": [
     { "queue": "mail", "last_job_at": "2026-05-20T12:00:00.000Z" }
   ]
 }
 ```
 
-`workersRegistered` counts the handles the process started: the repeatable-job scheduler plus each enabled worker of its `WORKER_QUEUE_FAMILIES`. With every family and every secret it is the registry size plus one (37 for the 36 registry workers in [workers-and-events.md](../runtime/workers-and-events.md#worker-registry-and-queue-families)); a skipped worker or an unselected family lowers it.
+`workersRegistered` counts the handles the process started: the repeatable-job scheduler plus each enabled worker of its `WORKER_QUEUE_FAMILIES`. With every family and every secret it is the registry size plus one (39 for the 38 registry workers in [workers-and-events.md](../runtime/workers-and-events.md#worker-registry-and-queue-families)); a skipped worker or an unselected family lowers it.
 
 | HTTP | Status | When |
 | ---- | ------ | ---- |

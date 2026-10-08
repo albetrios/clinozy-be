@@ -437,5 +437,6 @@
   "GET /api/v1/app/stock-items/:stock_item_id/movements": "both",
   "POST /api/v1/app/stock-items/:stock_item_id/movements": "both",
   "GET /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id": "both",
-  "POST /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id/revert": "both"
+  "POST /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id/revert": "both",
+  "POST /api/v1/app/tasks/:task_id/reassign": "both"
 }

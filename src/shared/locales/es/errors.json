@@ -150,7 +150,14 @@
     "stockPurchaseUnknownItem": "No hay ningún artículo de stock {{id}} aquí",
     "stockPurchaseDateInFuture": "La fecha de compra no puede ser futura",
     "stockPurchaseBillBelowPaid": "La factura no puede ser menor que lo ya pagado",
-    "paymentStockPurchaseOnlySupplierBill": "Solo una factura de proveedor paga una compra de stock"
+    "paymentStockPurchaseOnlySupplierBill": "Solo una factura de proveedor paga una compra de stock",
+    "taskOwnerOrQueue": "Asigna la tarea a un miembro del equipo o a una cola de rol",
+    "taskOwnerCannotWork": "Este miembro del equipo no puede trabajar en tareas: elige un miembro activo que pueda ver las tareas",
+    "taskOneRecord": "Una tarea puede apuntar como máximo a un registro",
+    "taskRecordNotContacts": "El registro debe existir y pertenecer a la persona de la tarea",
+    "taskSnoozeInPast": "Pospón hasta una hora en el futuro",
+    "taskOutcomeNeedsPatient": "Este resultado necesita que la persona tenga una ficha de paciente",
+    "taskRuleNotAutomatic": "Clinozy no puede gestionar esta regla por sí solo: solo Confirmar, Pago pendiente, Opinión y Sin visitas"
   },
   "missingSessionCookie": "Falta la cookie de sesión",
   "disposableEmail": "Este dominio de correo no está permitido.",
@@ -324,5 +331,6 @@
   "stockItemHasStock": "Este artículo aún tiene stock: dalo de baja antes de eliminarlo",
   "stockMovementAlreadyReverted": "Este movimiento ya se revirtió, o es en sí una reversión",
   "stockPurchaseReceived": "Las líneas de una compra quedan fijas al guardarla: registra otra compra o revierte un movimiento",
-  "stockPurchasePaid": "Esta compra tiene algo pagado: no se puede eliminar"
+  "stockPurchasePaid": "Esta compra tiene algo pagado: no se puede eliminar",
+  "taskRuleTask": "Una tarea abierta por las reglas no se puede cambiar ni eliminar a mano: se cierra sola cuando cambia su registro"
 }

@@ -2531,63 +2531,39 @@ export const stockPurchasesRecordExample = {
   updated_at: '2026-10-08T10:30:00.000Z',
 };
 
-/** `TaskOutput`. */
+/** `TaskOutput` (routes-final 10.A.6). */
 export const tasksRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'task_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    kind: {
-      type: 'string',
-      enum: [
-        'manual',
-        'follow_up',
-        'aftercare_call',
-        'callback',
-        'payment_reminder',
-        'confirm_visit',
-        'review_request',
-      ],
-    },
+    id: { type: 'string', example: 'task_k7x9m2pqr4w8n1v3a1b2c' },
+    kind: { type: 'string', enum: ['rule', 'follow_up', 'manual'] },
     rule_key: {
       type: 'string',
       enum: [
         'reply',
         'failed_message',
         'follow_up',
-        'call_back',
         'claim',
         'confirm',
         'arrive',
         'rebook',
         'feedback',
         'aftercare',
+        'call_back',
         'next_visit',
         'gone_quiet',
         'payment_due',
-        'onboarding',
-        'unhappy',
         'settle_by',
-        'medical_rep_visit',
       ],
       nullable: true,
     },
-    title: {
-      type: 'string',
-    },
-    why: {
-      type: 'string',
-      nullable: true,
-    },
-    owner_membership_id: {
-      type: 'string',
-      nullable: true,
-    },
+    title: { type: 'string' },
+    why: { type: 'string', nullable: true },
+    owner_membership_id: { type: 'string', nullable: true },
     owner_role: {
       type: 'string',
       enum: [
+        'owner',
         'admin',
         'doctor',
         'therapist',
@@ -2596,163 +2572,141 @@ export const tasksRecordSchema = {
         'pharmacist',
         'accountant',
         'marketing',
-        'owner',
       ],
-    },
-    patient_id: {
-      type: 'string',
       nullable: true,
     },
-    lead_id: {
-      type: 'string',
+    contact: {
+      type: 'object',
       nullable: true,
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        primary_phone: { type: 'string', nullable: true },
+        preference_tags: { type: 'array', items: { type: 'string' } },
+      },
     },
-    source_type: {
-      type: 'string',
-      enum: ['lead', 'appointment', 'treatment', 'check_in', 'review', 'invoice'],
-      nullable: true,
-    },
-    source_id: {
-      type: 'string',
-      nullable: true,
-    },
-    due_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    status: {
-      type: 'string',
-      enum: ['open', 'snoozed', 'done'],
-    },
-    snoozed_until: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
-    },
-    snooze_label: {
-      type: 'string',
-      nullable: true,
-    },
+    lead_id: { type: 'string', nullable: true },
+    appointment_id: { type: 'string', nullable: true },
+    patient_treatment_id: { type: 'string', nullable: true },
+    patient_check_in_id: { type: 'string', nullable: true },
+    patient_review_id: { type: 'string', nullable: true },
+    invoice_id: { type: 'string', nullable: true },
+    pending_credit_id: { type: 'string', nullable: true },
+    branch_id: { type: 'string', nullable: true },
+    due_at: { type: 'string', format: 'date-time' },
+    status: { type: 'string', enum: ['open', 'snoozed', 'done'] },
+    snoozed_until: { type: 'string', format: 'date-time', nullable: true },
+    snooze_label: { type: 'string', nullable: true },
     outcome: {
       type: 'string',
-      enum: ['log_check_in', 'doing_well', 'no_answer', 'happy', 'done'],
+      enum: ['done', 'no_answer', 'doing_well', 'log_check_in', 'happy', 'unhappy'],
       nullable: true,
     },
-    resolved_at: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
+    result_text: { type: 'string', nullable: true },
+    note: { type: 'string', nullable: true },
+    resolved_at: { type: 'string', format: 'date-time', nullable: true },
+    is_resolved_automatically: { type: 'boolean' },
+    resolved_by_membership_id: { type: 'string', nullable: true },
+    priority: { type: 'string', enum: ['low', 'normal', 'high'] },
+    owner_changes: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          from_membership_id: { type: 'string', nullable: true },
+          from_role: { type: 'string', nullable: true },
+          to_membership_id: { type: 'string', nullable: true },
+          to_role: { type: 'string', nullable: true },
+          changed_by_membership_id: { type: 'string', nullable: true },
+          created_at: { type: 'string', format: 'date-time' },
+        },
+      },
     },
-    is_resolved_automatically: {
-      type: 'boolean',
-    },
-    result_text: {
-      type: 'string',
-      nullable: true,
-    },
-    note: {
-      type: 'string',
-      nullable: true,
-    },
-    priority: {
-      type: 'string',
-      enum: ['low', 'normal', 'high'],
-    },
-    should_remind_before: {
-      type: 'boolean',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    can_clinozy_handle: { type: 'boolean' },
+    next_task_id: { type: 'string', nullable: true },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
-/** Example `TaskOutput`. */
+/** Example `TaskOutput` — a Confirm task in the front desk queue. */
 export const tasksRecordExample = {
   id: 'task_k7x9m2pqr4w8n1v3a1b2c',
-  kind: 'manual',
-  rule_key: 'reply',
-  title: 'Sample title',
-  why: 'Sample why',
-  owner_membership_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  owner_role: 'admin',
-  patient_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  lead_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  source_type: 'lead',
-  source_id: 'Sample source id',
-  due_at: '2026-10-08T10:00:00+05:30',
+  kind: 'rule',
+  rule_key: 'confirm',
+  title: "Confirm Asha's visit",
+  why: 'Visit on 09 Oct at 11:30',
+  owner_membership_id: null,
+  owner_role: 'front_desk',
+  contact: {
+    id: 'con_k7x9m2pqr4w8n1v3a1b2c',
+    name: 'Asha Rao',
+    primary_phone: '+919812345678',
+    preference_tags: ['prefers_whatsapp'],
+  },
+  lead_id: null,
+  appointment_id: 'appt_k7x9m2pqr4w8n1v3a1b2c',
+  patient_treatment_id: null,
+  patient_check_in_id: null,
+  patient_review_id: null,
+  invoice_id: null,
+  pending_credit_id: null,
+  branch_id: 'brn_k7x9m2pqr4w8n1v3a1b2c',
+  due_at: '2026-10-08T12:30:00.000Z',
   status: 'open',
-  snoozed_until: '2026-10-08T10:00:00+05:30',
-  snooze_label: 'Sample snooze label',
-  outcome: 'log_check_in',
-  resolved_at: '2026-10-08T10:00:00+05:30',
-  is_resolved_automatically: true,
-  result_text: 'Sample result text',
-  note: 'Sample note',
+  snoozed_until: null,
+  snooze_label: null,
+  outcome: null,
+  result_text: null,
+  note: null,
+  resolved_at: null,
+  is_resolved_automatically: false,
+  resolved_by_membership_id: null,
   priority: 'normal',
-  should_remind_before: true,
+  owner_changes: [],
+  can_clinozy_handle: true,
+  next_task_id: null,
   created_at: '2026-10-07T10:30:00.000Z',
   updated_at: '2026-10-07T10:30:00.000Z',
 };
 
-/** `TaskRuleSettingOutput`. */
+/** `TaskRuleSettingOutput` (routes-final 10.B.6) — `id` and `updated_at` null for a rule never saved. */
 export const taskRuleSettingsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'trs_k7x9m2pqr4w8n1v3a1b2c',
-    },
+    id: { type: 'string', nullable: true, example: 'trs_k7x9m2pqr4w8n1v3a1b2c' },
     rule_key: {
       type: 'string',
       enum: [
         'reply',
         'failed_message',
         'follow_up',
-        'call_back',
         'claim',
         'confirm',
         'arrive',
         'rebook',
         'feedback',
         'aftercare',
+        'call_back',
         'next_visit',
         'gone_quiet',
         'payment_due',
-        'onboarding',
-        'unhappy',
         'settle_by',
-        'medical_rep_visit',
       ],
     },
-    is_on: {
-      type: 'boolean',
-    },
-    is_automatic: {
-      type: 'boolean',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    is_on: { type: 'boolean' },
+    is_automatic: { type: 'boolean' },
+    can_be_automatic: { type: 'boolean' },
+    updated_at: { type: 'string', format: 'date-time', nullable: true },
   },
 };
 
 /** Example `TaskRuleSettingOutput`. */
 export const taskRuleSettingsRecordExample = {
   id: 'trs_k7x9m2pqr4w8n1v3a1b2c',
-  rule_key: 'reply',
+  rule_key: 'confirm',
   is_on: true,
   is_automatic: true,
-  created_at: '2026-10-07T10:30:00.000Z',
+  can_be_automatic: true,
   updated_at: '2026-10-07T10:30:00.000Z',
 };

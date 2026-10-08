@@ -28,6 +28,9 @@ const TENANT_SCOPING_EXEMPT_QUEUE_NAME_PATTERNS = [
   // The day auto-close sweep reads every organization's due days in the global-retention context
   // (WC-39); the per-organization jobs it adds carry organizationPublicId.
   /day-close-auto-close-sweep/i,
+  // The task rules sweep pages through the organizations in the global-retention context (TK4);
+  // the per-organization jobs it adds carry organizationPublicId.
+  /task-rules-sweep/i,
 ] as const;
 
 function collectWorkerFiles(directory: string, collected: string[] = []): string[] {

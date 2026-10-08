@@ -111,9 +111,14 @@ export class BaseRecordService<Output> {
       withTotal?: boolean | undefined;
       /** Reference filters by many public ids (`{ patient_id: [pat_…] }`) — one `IN`, internal only. */
       referenceIn?: Readonly<Record<string, readonly string[]>> | undefined;
+      /** Derived filters the service adds beside the query's (the caller's queues — a task's `mine`). */
+      derived?: Readonly<Record<string, unknown>> | undefined;
     } = {},
   ): Promise<BaseRecordListResult<Output>> {
-    const input = this.descriptor.parseList(query);
+    const parsed = this.descriptor.parseList(query);
+    const input = options.derived
+      ? { ...parsed, derived: { ...parsed.derived, ...options.derived } }
+      : parsed;
     const parentPublicId = options.parentPublicId;
     return withAppDatabaseContext(scope, async () => {
       const organizationId = await this.organizationId(scope);

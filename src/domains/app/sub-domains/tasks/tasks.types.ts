@@ -1,31 +1,60 @@
-/** A task as the API returns it (launch ROUTE #58). */
+/** The person a task is about, as the drawer shows them (the screen warns on `no_calls`). */
+export interface TaskContactOutput {
+  id: string;
+  name: string;
+  primary_phone: string | null;
+  preference_tags: string[];
+}
+
+/** One owner change of a task (TK8). */
+export interface TaskOwnerChangeOutput {
+  from_membership_id: string | null;
+  from_role: string | null;
+  to_membership_id: string | null;
+  to_role: string | null;
+  changed_by_membership_id: string | null;
+  created_at: string;
+}
+
+/**
+ * A task as the API returns it (launch ROUTE #138, routes-final 10.A.6).
+ *
+ * @remarks
+ * - **Notes:** an owner or a role queue (TK6); the person and at most one record (TK5); its
+ *   lifecycle and outcome (TK7); the latest owner changes (TK8); `can_clinozy_handle` — its rule has
+ *   a step the server can take (TK10); `next_task_id` the follow-up a resolve just set.
+ */
 export interface TaskOutput {
   id: string;
   kind: string;
-  /** The rule that made it */
   rule_key: string | null;
   title: string;
   why: string | null;
   owner_membership_id: string | null;
-  /** The role queue — where the task falls back when no one owns it */
-  owner_role: string;
-  patient_id: string | null;
+  owner_role: string | null;
+  contact: TaskContactOutput | null;
   lead_id: string | null;
-  source_type: string | null;
-  /** The source record's public id */
-  source_id: string | null;
+  appointment_id: string | null;
+  patient_treatment_id: string | null;
+  patient_check_in_id: string | null;
+  patient_review_id: string | null;
+  invoice_id: string | null;
+  pending_credit_id: string | null;
+  branch_id: string | null;
   due_at: string;
   status: string;
   snoozed_until: string | null;
   snooze_label: string | null;
   outcome: string | null;
-  resolved_at: string | null;
-  /** "Done automatically" — closed by the app */
-  is_resolved_automatically: boolean;
   result_text: string | null;
   note: string | null;
+  resolved_at: string | null;
+  is_resolved_automatically: boolean;
+  resolved_by_membership_id: string | null;
   priority: string;
-  should_remind_before: boolean;
+  owner_changes: TaskOwnerChangeOutput[];
+  can_clinozy_handle: boolean;
+  next_task_id: string | null;
   created_at: string;
   updated_at: string;
 }

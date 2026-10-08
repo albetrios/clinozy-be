@@ -1003,5 +1003,9 @@
   "POST /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id/revert": {
     "model": "organization",
     "verifyNoMutation": true
+  },
+  "POST /api/v1/app/tasks/:task_id/reassign": {
+    "model": "organization",
+    "verifyNoMutation": true
   }
 }

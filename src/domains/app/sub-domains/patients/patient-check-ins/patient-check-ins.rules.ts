@@ -2,6 +2,7 @@ import { resolveRecordIds, type BaseRecordRow } from '@/domains/app/base-record.
 import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import { AppointmentsRepository } from '@/domains/app/sub-domains/appointments/appointments.repository.js';
 import { TasksRepository } from '@/domains/app/sub-domains/tasks/tasks.repository.js';
+import { openCallBackTask } from '@/domains/app/sub-domains/tasks/tasks.rule-tasks.js';
 import { patientFileValueLabel } from '@/domains/app/sub-domains/patients/patients.constants.js';
 import {
   assertAppointmentOfPatient,
@@ -25,7 +26,6 @@ import type { PatientCheckInsRepository } from './patient-check-ins.repository.j
 import { patient_check_ins } from './patient-check-ins.schema.js';
 
 /** How soon a doctor calls back a patient who needs it (TR4). */
-const CALL_BACK_WITHIN_MILLISECONDS = 2 * 60 * 60 * 1000;
 /** The longest server-filled context. */
 const CONTEXT_MAX = 80;
 
@@ -71,33 +71,31 @@ export async function doctorOfVisitOrPatient(row: BaseRecordRow): Promise<number
 }
 
 /**
- * TR4, until sub-domain 10 owns it: a doctor call-back task for a check-in or review that needs
- * action — due in two hours, high priority, sourced to the record.
+ * TR4 through the task rules (launch #138, TK4): a doctor call-back for a check-in or review that
+ * needs action — the patient's contact and the visit's branch, one open per record.
  */
 export async function createCallBackTask(options: {
   context: BaseRecordWriteContext;
   row: BaseRecordRow;
-  sourceType: 'check_in' | 'review';
+  link: 'patient_check_in_id' | 'patient_review_id';
   title: string;
   why: string;
   doctorMembershipId: number | null;
 }): Promise<void> {
   const { context, row } = options;
-  await tasksRepository.insert({
-    organization_id: context.organizationId,
-    kind: 'callback',
-    rule_key: 'call_back',
+  const record = await tasksRepository.findRecordContext({ link: options.link, id: row.id });
+  await openCallBackTask({
+    organizationId: context.organizationId,
+    contactId: record?.contactId ?? null,
+    link:
+      options.link === 'patient_check_in_id'
+        ? { patient_check_in_id: row.id }
+        : { patient_review_id: row.id },
+    doctorMembershipId: options.doctorMembershipId,
+    branchId: record?.branchId ?? null,
     title: options.title,
     why: options.why,
-    owner_membership_id: options.doctorMembershipId,
-    owner_role: 'doctor',
-    patient_id: row.patient_id,
-    source_type: options.sourceType,
-    source_id: row.public_id,
-    due_at: new Date(Date.now() + CALL_BACK_WITHIN_MILLISECONDS),
-    priority: 'high',
-    created_by_user_id: context.userId,
-    updated_by_user_id: context.userId,
+    userId: context.userId,
   });
 }
 
@@ -166,7 +164,7 @@ export function createPatientCheckInsRules(repository: PatientCheckInsRepository
       await createCallBackTask({
         context,
         row,
-        sourceType: 'check_in',
+        link: 'patient_check_in_id',
         title: 'Call back — the patient needs it after a check-in',
         why: String(row.context),
         doctorMembershipId: await doctorOfCheckIn(row),

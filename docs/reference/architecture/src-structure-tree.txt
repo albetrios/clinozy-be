@@ -662,29 +662,36 @@ src/
     │   │   │   ├── suppliers.service.ts
     │   │   │   ├── suppliers.types.ts
     │   │   │   └── suppliers.validator.ts
-    │   │   ├── task-owner-changes/
-    │   │   │   ├── task-owner-changes.constants.ts
-    │   │   │   ├── task-owner-changes.repository.ts
-    │   │   │   └── task-owner-changes.schema.ts
-    │   │   ├── task-rule-settings/
-    │   │   │   ├── task-rule-settings.constants.ts
-    │   │   │   ├── task-rule-settings.controller.ts
-    │   │   │   ├── task-rule-settings.dto.ts
-    │   │   │   ├── task-rule-settings.overview.md
-    │   │   │   ├── task-rule-settings.repository.ts
-    │   │   │   ├── task-rule-settings.routes.ts
-    │   │   │   ├── task-rule-settings.schema.ts
-    │   │   │   ├── task-rule-settings.serializer.ts
-    │   │   │   ├── task-rule-settings.service.ts
-    │   │   │   ├── task-rule-settings.types.ts
-    │   │   │   └── task-rule-settings.validator.ts
     │   │   └── tasks/
+    │   │   │   ├── queues/
+    │   │   │       ├── task-rules.job.schema.ts
+    │   │   │       └── task-rules.queue.ts
+    │   │   │   ├── task-rule-settings/
+    │   │   │       ├── task-rule-settings.controller.ts
+    │   │   │       ├── task-rule-settings.dto.ts
+    │   │   │       ├── task-rule-settings.overview.md
+    │   │   │       ├── task-rule-settings.repository.ts
+    │   │   │       ├── task-rule-settings.routes.ts
+    │   │   │       ├── task-rule-settings.schema.ts
+    │   │   │       ├── task-rule-settings.service.ts
+    │   │   │       ├── task-rule-settings.types.ts
+    │   │   │       └── task-rule-settings.validator.ts
+    │   │   │   ├── workers/
+    │   │   │       ├── task-rules-sweep.processor.ts
+    │   │   │       ├── task-rules-sweep.worker.ts
+    │   │   │       ├── task-rules.constants.ts
+    │   │   │       ├── task-rules.processor.ts
+    │   │   │       └── task-rules.worker.ts
+    │   │   │   ├── task-rule-conditions.repository.ts
+    │   │   │   ├── task-rules.repository.ts
     │   │   │   ├── tasks.constants.ts
     │   │   │   ├── tasks.controller.ts
     │   │   │   ├── tasks.dto.ts
     │   │   │   ├── tasks.overview.md
     │   │   │   ├── tasks.repository.ts
     │   │   │   ├── tasks.routes.ts
+    │   │   │   ├── tasks.rule-tasks.ts
+    │   │   │   ├── tasks.rules.ts
     │   │   │   ├── tasks.schema.ts
     │   │   │   ├── tasks.serializer.ts
     │   │   │   ├── tasks.service.ts

@@ -43,7 +43,6 @@ const branchMembersResponse: ResponseDefinition = {
   example: null,
 };
 
-/** The whole task rule list — saved settings, or the default (id null) per rule. */
 const membershipPreferencesResponse: ResponseDefinition = {
   statusCode: 200,
   schema: wrapSuccess(schemas.membershipPreferencesSchema, schemas.membershipPreferencesExample),
@@ -56,6 +55,7 @@ const membershipSavedViewResponse: ResponseDefinition = {
   example: null,
 };
 
+/** Every rule with its switches (10.B.6) — a rule never saved answers `id` null, on, by hand. */
 const taskRulesResponse: ResponseDefinition = {
   statusCode: 200,
   schema: wrapSuccess({ type: 'array', items: schemas.taskRuleSettingsRecordSchema }, [

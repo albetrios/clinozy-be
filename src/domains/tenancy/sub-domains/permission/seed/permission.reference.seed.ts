@@ -55,6 +55,7 @@ export const SYSTEM_PERMISSIONS = [
   { code: 'branch:create', name: 'Create Branches', category: 'users' },
   { code: 'branch:update', name: 'Update Branches', category: 'users' },
   { code: 'branch:delete', name: 'Delete Branches', category: 'users' },
+  { code: 'task:export', name: 'Export Tasks', category: 'tasks' },
   { code: 'task:delete', name: 'Delete Tasks', category: 'tasks' },
   { code: 'task:update', name: 'Update Tasks', category: 'tasks' },
   { code: 'task:create', name: 'Create Tasks', category: 'tasks' },
@@ -139,7 +140,6 @@ export const SYSTEM_PERMISSIONS = [
   { code: 'sale:void', name: 'Void Sales And Delete Invoices', category: 'special' },
   { code: 'patient:clinical_record:read', name: 'Read The Clinical Record', category: 'patients' },
   { code: 'list:export', name: 'Export Lists', category: 'special' },
-  { code: 'task_rule:update', name: 'Change Task Rules', category: 'special' },
   { code: 'patient:private_album:read', name: 'See The Private Photo Album', category: 'patients' },
 ] as const;
 

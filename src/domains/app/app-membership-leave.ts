@@ -5,6 +5,7 @@ import { LeadsRepository } from './sub-domains/leads/leads.repository.js';
 import { MembershipPreferencesRepository } from './sub-domains/memberships/membership-preferences/membership-preferences.repository.js';
 import { MembershipSavedViewsRepository } from './sub-domains/memberships/membership-saved-views/membership-saved-views.repository.js';
 import { PrescriptionKitsRepository } from './sub-domains/patients/prescription-kits/prescription-kits.repository.js';
+import { TasksRepository } from './sub-domains/tasks/tasks.repository.js';
 
 /** The membership a part of the leave step releases: its organization's and its own internal id. */
 export type EndedMembershipReference = { organizationId: number; membershipId: number };
@@ -45,7 +46,8 @@ export class AppMembershipLeaveStep implements MembershipLeavePort {
  * `app.contact_members` rows are deleted, CT11). Sub-domain 5 — every lead they own returns to the
  * pool (no owner, no hold) and keeps them as involved (L9). Sub-domain 7 — their prescription kits
  * are theirs alone and are soft-deleted (P17); the patient files naming them as usual doctor keep
- * them (K2).
+ * them (K2). Sub-domain 10 — their open tasks go back to their role queue, each with an owner-change
+ * row (TK8).
  */
 export function createAppMembershipLeaveStep(): AppMembershipLeaveStep {
   const branchesRepository = new BranchesRepository();
@@ -54,6 +56,7 @@ export function createAppMembershipLeaveStep(): AppMembershipLeaveStep {
   const contactMembersRepository = new ContactMembersRepository();
   const leadsRepository = new LeadsRepository();
   const prescriptionKitsRepository = new PrescriptionKitsRepository();
+  const tasksRepository = new TasksRepository();
   return new AppMembershipLeaveStep([
     ({ organizationId, membershipId }) =>
       branchesRepository.clearDefaultStaffForMembership({
@@ -85,5 +88,7 @@ export function createAppMembershipLeaveStep(): AppMembershipLeaveStep {
         organization_id: organizationId,
         membership_id: membershipId,
       }),
+    ({ organizationId, membershipId }) =>
+      tasksRepository.releaseForMembership({ organizationId, membershipId }),
   ]);
 }

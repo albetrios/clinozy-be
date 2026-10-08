@@ -3,7 +3,10 @@ import { BaseRecordController } from '@/domains/app/base-record.controller.js';
 import type { TasksService } from './tasks.service.js';
 import type { TaskOutput } from './tasks.types.js';
 
-/** HTTP handlers for the `tasks` routes — {@link BaseRecordController} on {@link TasksService}. */
+/**
+ * HTTP handlers for the `tasks` routes — {@link BaseRecordController} on {@link TasksService}; the
+ * export answers the list as CSV (TK2).
+ */
 export class TasksController extends BaseRecordController<TaskOutput> {
   constructor(service: TasksService) {
     super(service, {

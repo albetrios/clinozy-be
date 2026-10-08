@@ -1,0 +1,392 @@
+import { and, asc, eq, gt, inArray, isNull, lte, type SQL, sql } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+import { assertWorkerDatabaseContext } from '@/infrastructure/database/contexts/database-context-runtime.js';
+import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
+import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
+import { contact_activities } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.schema.js';
+import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
+import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
+import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
+import { task_rule_settings } from './task-rule-settings/task-rule-settings.schema.js';
+import {
+  TASK_DONE_BY_CLINOZY,
+  TASK_KIND,
+  TASK_OUTCOME,
+  TASK_STATUS,
+  type TaskRule,
+} from './tasks.constants.js';
+import {
+  ruleStillHolds,
+  TASK_SOURCE_KEY_PREFIX,
+  type TaskRuleScope,
+  type TaskRuleSource,
+} from './task-rule-conditions.repository.js';
+import { tasks } from './tasks.schema.js';
+import {
+  TASK_RULES_SWEEP_BATCH,
+  TASK_RULES_TASKS_PER_RULE,
+} from './workers/task-rules.constants.js';
+
+/** A rule's switches for an organization (TK10) — no row: on, by hand. */
+export interface TaskRuleSwitch {
+  isOn: boolean;
+  isAutomatic: boolean;
+}
+
+/** An open task "Let Clinozy handle" takes (TK10), with what its message says. */
+export interface ClinozyStepTask {
+  taskId: number;
+  rule: TaskRule;
+  contactId: number | null;
+  firstName: string | null;
+  branchId: number | null;
+  appointmentId: number | null;
+  invoiceId: number | null;
+  visitDate: string | null;
+  visitTime: string | null;
+  invoiceNumber: string | null;
+  dueAmount: string | null;
+}
+
+/** A candidate row of a rule's SELECT (bigint and timestamp columns come back as text or Date). */
+type CandidateRow = {
+  record_id: string | number;
+  contact_id: string | number | null;
+  branch_id: string | number | null;
+  owner_membership_id: string | number | null;
+  due_at: string | Date;
+  title: string;
+  why: string | null;
+};
+
+/** A nullable id column read through `execute`. */
+function idOrNull(value: string | number | null): number | null {
+  return value === null ? null : Number(value);
+}
+
+/**
+ * The sweep's read (TK4): the active team organizations after `afterId`, in id order, one batch —
+ * the sweep pages through all of them every five minutes.
+ *
+ * @remarks
+ * - **Algorithm:** one keyset read of `tenancy.organizations` under the global retention cleanup
+ *   context.
+ * - **Failure modes:** `WorkerDatabaseContextError` outside that context.
+ */
+export async function findOrganizationsForTaskRules(
+  databaseHandle: WorkerDatabaseHandle,
+  afterId: number,
+): Promise<{ id: number; publicId: string }[]> {
+  assertWorkerDatabaseContext(['global_retention_cleanup']);
+  return databaseHandle
+    .select({ id: organizations.id, publicId: organizations.public_id })
+    .from(organizations)
+    .where(
+      and(
+        gt(organizations.id, afterId),
+        eq(organizations.type, 'TEAM'),
+        eq(organizations.status, 'ACTIVE'),
+        isNull(organizations.deleted_at),
+        isNull(organizations.deletion_started_at),
+      ),
+    )
+    .orderBy(asc(organizations.id))
+    .limit(TASK_RULES_SWEEP_BATCH);
+}
+
+/**
+ * The task rules job's reads and writes (TK4, TK10) on an explicit handle pinned to one
+ * organization's context.
+ *
+ * @remarks
+ * - **Algorithm:** every rule is SQL ({@link TaskRuleSource}): its open tasks whose record no
+ *   longer qualifies close "Done by Clinozy"; its records that qualify and have no open task — nor
+ *   one a person resolved since the condition began — get one (at most a batch per rule per run;
+ *   the unique open-task index keeps it one per rule per record under a race).
+ */
+export class TaskRulesRepository {
+  constructor(private readonly databaseHandle: WorkerDatabaseHandle) {}
+
+  /** The organization's internal id and time zone. */
+  async findOrganization(
+    organizationPublicId: string,
+  ): Promise<{ id: number; timeZone: string } | null> {
+    const rows = await this.databaseHandle
+      .select({ id: organizations.id, timeZone: organizations.timezone })
+      .from(organizations)
+      .where(eq(organizations.public_id, organizationPublicId))
+      .limit(1);
+    const row = rows[0];
+    return row ? { id: row.id, timeZone: row.timeZone ?? 'UTC' } : null;
+  }
+
+  /** TK7: snoozed tasks whose time has come are open again. */
+  async wakeSnoozed(organizationId: number): Promise<number> {
+    const rows = await this.databaseHandle
+      .update(tasks)
+      .set({
+        status: TASK_STATUS.OPEN,
+        snoozed_until: null,
+        snooze_label: null,
+        updated_at: sql`greatest(now(), ${tasks.created_at})`,
+      } as never)
+      .where(
+        and(
+          eq(tasks.organization_id, organizationId),
+          eq(tasks.status, TASK_STATUS.SNOOZED),
+          lte(tasks.snoozed_until, sql`now()`),
+          isNull(tasks.deleted_at),
+        ),
+      )
+      .returning({ id: tasks.id });
+    return rows.length;
+  }
+
+  /** TK10: the organization's saved switches, by rule. */
+  async findRuleSwitches(organizationId: number): Promise<Map<string, TaskRuleSwitch>> {
+    const rows = await this.databaseHandle
+      .select({
+        rule: task_rule_settings.rule_key,
+        isOn: task_rule_settings.is_on,
+        isAutomatic: task_rule_settings.is_automatic,
+      })
+      .from(task_rule_settings)
+      .where(eq(task_rule_settings.organization_id, organizationId));
+    return new Map(rows.map((row) => [row.rule, { isOn: row.isOn, isAutomatic: row.isAutomatic }]));
+  }
+
+  /** TK4: closes the rule's open tasks whose record no longer qualifies — "Done by Clinozy". */
+  async closeGoneTasks(options: {
+    organizationId: number;
+    source: TaskRuleSource;
+  }): Promise<number> {
+    const rows = await this.databaseHandle
+      .update(tasks)
+      .set(closedByClinozy())
+      .where(
+        and(
+          eq(tasks.organization_id, options.organizationId),
+          eq(tasks.kind, TASK_KIND.RULE),
+          eq(tasks.rule_key, options.source.rule),
+          inArray(tasks.status, [TASK_STATUS.OPEN, TASK_STATUS.SNOOZED]),
+          isNull(tasks.deleted_at),
+          sql`not ${ruleStillHolds(options.source)}`,
+        ),
+      )
+      .returning({ id: tasks.id });
+    return rows.length;
+  }
+
+  /** TK4: opens the rule's tasks for the records that qualify now — at most a batch per run. */
+  async openTasks(options: { scope: TaskRuleScope; source: TaskRuleSource }): Promise<number> {
+    const { scope, source } = options;
+    if (!source.canOpen) return 0;
+    const candidates = (await this.databaseHandle.execute(
+      candidatesQuery(scope, source),
+    )) as unknown as CandidateRow[];
+    if (candidates.length === 0) return 0;
+    const linkColumn = source.link ?? 'contact_id';
+    const rows = await this.databaseHandle
+      .insert(tasks)
+      .values(
+        candidates.map((candidate) => ({
+          public_id: generatePublicId('task'),
+          organization_id: scope.organizationId,
+          kind: TASK_KIND.RULE,
+          rule_key: source.rule,
+          title: candidate.title.slice(0, 120),
+          why: candidate.why?.slice(0, 280) ?? null,
+          owner_membership_id: idOrNull(candidate.owner_membership_id),
+          owner_role: candidate.owner_membership_id === null ? source.ownerRole : null,
+          contact_id: idOrNull(candidate.contact_id),
+          [linkColumn]: Number(candidate.record_id),
+          branch_id: idOrNull(candidate.branch_id),
+          due_at: new Date(candidate.due_at),
+          priority: source.priority,
+        })) as never,
+      )
+      .onConflictDoNothing()
+      .returning({ id: tasks.id });
+    return rows.length;
+  }
+
+  /** TK10: the open tasks of the rules Clinozy handles here that have fallen due. */
+  async findDueClinozySteps(options: {
+    organizationId: number;
+    rules: readonly TaskRule[];
+  }): Promise<ClinozyStepTask[]> {
+    if (options.rules.length === 0) return [];
+    const rows = await this.databaseHandle
+      .select({
+        taskId: tasks.id,
+        rule: tasks.rule_key,
+        contactId: tasks.contact_id,
+        firstName: contacts.first_name,
+        branchId: tasks.branch_id,
+        appointmentId: tasks.appointment_id,
+        invoiceId: tasks.invoice_id,
+        visitDate: sql<string | null>`to_char(${appointments.appointment_date}, 'DD Mon')`,
+        visitTime: sql<string | null>`to_char(${appointments.start_time}, 'HH24:MI')`,
+        invoiceNumber: invoices.invoice_number,
+        dueAmount: sql<string | null>`${invoices.due_amount}::text`,
+      })
+      .from(tasks)
+      .leftJoin(contacts, eq(contacts.id, tasks.contact_id))
+      .leftJoin(appointments, eq(appointments.id, tasks.appointment_id))
+      .leftJoin(invoices, eq(invoices.id, tasks.invoice_id))
+      .where(
+        and(
+          eq(tasks.organization_id, options.organizationId),
+          eq(tasks.kind, TASK_KIND.RULE),
+          eq(tasks.status, TASK_STATUS.OPEN),
+          isNull(tasks.deleted_at),
+          inArray(tasks.rule_key, [...options.rules]),
+          lte(tasks.due_at, sql`now()`),
+        ),
+      )
+      .orderBy(asc(tasks.due_at), asc(tasks.id))
+      .limit(TASK_RULES_TASKS_PER_RULE);
+    return rows.map((row) => ({ ...row, rule: row.rule as TaskRule }));
+  }
+
+  /**
+   * TK10's message: a queued WhatsApp message from Clinozy (no author) on the person's stream — the
+   * messaging worker sends it — with the contact's activity times and a `new` lead moved to
+   * `contacted`, as a person's send does (M7, 5.10).
+   */
+  async queueClinozyMessage(options: {
+    organizationId: number;
+    contactId: number;
+    body: string;
+    link: { appointment_id: number } | { invoice_id: number } | Record<string, never>;
+  }): Promise<void> {
+    await this.databaseHandle.insert(contact_activities).values({
+      public_id: generatePublicId('contactActivity'),
+      organization_id: options.organizationId,
+      contact_id: options.contactId,
+      type: 'whatsapp',
+      direction: 'sent',
+      body: options.body,
+      delivery_status: 'queued',
+      ...options.link,
+    } as never);
+    const latest = (column: AnyPgColumn) =>
+      sql`greatest(coalesce(${column}, '-infinity'::timestamptz), now())`;
+    await this.databaseHandle
+      .update(contacts)
+      .set({
+        last_activity_at: latest(contacts.last_activity_at),
+        last_sent_at: latest(contacts.last_sent_at),
+        default_channel: 'whatsapp',
+      } as never)
+      .where(eq(contacts.id, options.contactId));
+    await this.databaseHandle
+      .update(leads)
+      .set({ status: 'contacted', updated_at: sql`greatest(now(), ${leads.created_at})` } as never)
+      .where(
+        and(
+          eq(leads.contact_id, options.contactId),
+          eq(leads.status, 'new'),
+          isNull(leads.deleted_at),
+        ),
+      );
+  }
+
+  /** TK10 `confirm`: the booking's reminder status says the confirmation went out. */
+  async markConfirmRequested(appointmentId: number): Promise<void> {
+    await this.databaseHandle
+      .update(appointments)
+      .set({ reminder_status: 'confirm_requested' } as never)
+      .where(and(eq(appointments.id, appointmentId), eq(appointments.reminder_status, 'not_sent')));
+  }
+
+  /**
+   * TK10 `gone_quiet`: a re-target lead for the person (5, `retarget_reason`) — none when they have
+   * an open lead already (L6); true when it opened one.
+   */
+  async openRetargetLead(options: {
+    organizationId: number;
+    contactId: number;
+    branchId: number | null;
+    reason: string;
+  }): Promise<boolean> {
+    const rows = await this.databaseHandle
+      .insert(leads)
+      .values({
+        public_id: generatePublicId('lead'),
+        organization_id: options.organizationId,
+        contact_id: options.contactId,
+        source: 'retarget',
+        kind: 'retarget',
+        retarget_reason: options.reason,
+        branch_id: options.branchId,
+      } as never)
+      .onConflictDoNothing()
+      .returning({ id: leads.id });
+    return rows.length > 0;
+  }
+
+  /** TK10: closes a task Clinozy took — "Done by Clinozy". */
+  async closeTaskByClinozy(taskId: number): Promise<void> {
+    await this.databaseHandle
+      .update(tasks)
+      .set(closedByClinozy())
+      .where(and(eq(tasks.id, taskId), eq(tasks.status, TASK_STATUS.OPEN)));
+  }
+}
+
+/** A task closed by the server (TK4, TK10): outcome `done`, "Done by Clinozy", no resolver. */
+function closedByClinozy(): never {
+  return {
+    status: TASK_STATUS.DONE,
+    outcome: TASK_OUTCOME.DONE,
+    result_text: TASK_DONE_BY_CLINOZY,
+    is_resolved_automatically: true,
+    resolved_at: sql`now()`,
+    resolved_by_membership_id: null,
+    snoozed_until: null,
+    snooze_label: null,
+    updated_at: sql`greatest(now(), ${tasks.created_at})`,
+  } as never;
+}
+
+/**
+ * A rule's candidates (TK4): its records that qualify and open now, without an open task of the
+ * rule — nor one a person resolved since the condition began (`anchor_at`) — earliest due first.
+ */
+function candidatesQuery(scope: TaskRuleScope, source: TaskRuleSource): SQL {
+  const { columns } = source;
+  const prefix = TASK_SOURCE_KEY_PREFIX[source.link ?? 'contact_id'];
+  return sql`select * from (
+    select ${source.recordId} as record_id,
+      ${columns.contactId} as contact_id,
+      ${columns.branchId} as branch_id,
+      ${columns.ownerMembershipId} as owner_membership_id,
+      ${source.due(sql`now()`)} as due_at,
+      ${columns.title} as title,
+      ${columns.why} as why,
+      ${columns.anchorAt} as anchor_at
+    from ${source.from}
+    where ${source.organizationColumn} = ${scope.organizationId}
+      and ${source.qualifies} and ${source.opens}
+  ) as candidate
+  where not exists (select 1 from ${tasks}
+      where ${tasks.organization_id} = ${scope.organizationId}
+        and ${tasks.rule_key} = ${source.rule}
+        and ${tasks.source_key} = ${prefix} || ':' || candidate.record_id
+        and ${tasks.deleted_at} is null
+        and (${tasks.status} <> ${TASK_STATUS.DONE}
+          or (not ${tasks.is_resolved_automatically} and ${tasks.created_at} >= candidate.anchor_at)))
+  order by candidate.due_at, candidate.record_id
+  limit ${TASK_RULES_TASKS_PER_RULE}`;
+}
+
+/** Worker-only factory — a handle pinned to one organization's context (TK4). */
+export function createWorkerTaskRulesRepository(
+  databaseHandle: WorkerDatabaseHandle,
+): TaskRulesRepository {
+  assertWorkerDatabaseContext(['organization']);
+  return new TaskRulesRepository(databaseHandle);
+}

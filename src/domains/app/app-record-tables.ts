@@ -36,8 +36,6 @@ import { stock_vendors } from '@/domains/app/sub-domains/stock/stock-vendors/sto
 import { stock_items } from '@/domains/app/sub-domains/stock/stock-items/stock-items.schema.js';
 import { stock_purchases } from '@/domains/app/sub-domains/stock/stock-purchases/stock-purchases.schema.js';
 import { tasks } from '@/domains/app/sub-domains/tasks/tasks.schema.js';
-import { task_owner_changes } from '@/domains/app/sub-domains/task-owner-changes/task-owner-changes.schema.js';
-import { task_rule_settings } from '@/domains/app/sub-domains/task-rule-settings/task-rule-settings.schema.js';
 
 /**
  * Every soft-deleting `app.*` table, children before parents — the order the deleted-record
@@ -47,13 +45,13 @@ import { task_rule_settings } from '@/domains/app/sub-domains/task-rule-settings
  * - **Notes:** generated with the app tables. `app.branches` is not here — a branch is never
  *   deleted (D3, D16) — nor `app.patients` (never purged, P7), nor the tables that never soft-delete
  *   (`app.patient_treatments` — reversed, TR6; the append-only `app.patient_feedback_actions`,
- *   `app.payment_edits`, `app.day_close_events`, `app.stock_item_movements`, `app.stock_counts`;
- *   `app.day_closes` — opened and closed, B25; an invoice's lines and members, a purchase's lines
- *   and a count's lines, which go with it).
+ *   `app.payment_edits`, `app.day_close_events`, `app.stock_item_movements`, `app.stock_counts`,
+ *   `app.task_owner_changes`; `app.task_rule_settings` — upserted; `app.day_closes` — opened and
+ *   closed, B25; an invoice's lines and members, a purchase's lines and a count's lines, which go
+ *   with it).
  */
 export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
-  { table: task_rule_settings, label: 'app.task_rule_settings' },
-  { table: task_owner_changes, label: 'app.task_owner_changes' },
+  // A task's owner changes go with it (append-only, `ON DELETE CASCADE`)
   { table: tasks, label: 'app.tasks' },
   // A purchase's lines go with it; one whose movements still name it stays blocked (`RESTRICT`)
   { table: stock_purchases, label: 'app.stock_purchases' },

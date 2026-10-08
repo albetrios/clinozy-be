@@ -105,6 +105,7 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
   'PATCH /api/v1/app/tasks/:task_id': 'cross-organization-resource: task',
   'POST /api/v1/app/tasks/:task_id/resolve': 'cross-organization-resource: task',
   'POST /api/v1/app/tasks/:task_id/snooze': 'cross-organization-resource: task',
+  'POST /api/v1/app/tasks/:task_id/reassign': 'cross-organization-resource: task',
   'DELETE /api/v1/app/tasks/:task_id': 'cross-organization-resource: task',
   'POST /api/v1/app/tasks/:task_id/restore': 'cross-organization-resource: task',
   'GET /api/v1/app/manufacturers/:manufacturer_id': 'cross-organization-resource: manufacturer',

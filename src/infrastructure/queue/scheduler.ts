@@ -26,6 +26,7 @@ import { ORGANIZATION_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/s
 import { MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/membership/workers/membership-tombstone-retention.constants.js';
 import { APP_RECORD_PURGE_QUEUE_NAME } from '@/domains/app/workers/app-record-purge.constants.js';
 import { DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/billing/day-closes/workers/day-close-auto-close.constants.js';
+import { TASK_RULES_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/tasks/workers/task-rules.constants.js';
 import { MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.constants.js';
 import { ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/organization-api-key/workers/organization-api-key-tombstone-retention.constants.js';
 import { UPLOAD_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/upload/workers/upload-tombstone-retention.constants.js';
@@ -91,6 +92,8 @@ const DEFAULT_MEMBERSHIP_TOMBSTONE_RETENTION_CRON = '50 5 * * *';
 const DEFAULT_APP_RECORD_PURGE_CRON = '56 5 * * *';
 /** Hourly: a day closes itself within the hour after the day following it ends, in any time zone (WC-39). */
 const DEFAULT_DAY_CLOSE_AUTO_CLOSE_SWEEP_CRON = '7 * * * *';
+/** Every five minutes: rule tasks open and close, snoozed tasks wake, Clinozy takes its steps (TK4). */
+const DEFAULT_TASK_RULES_SWEEP_CRON = '*/5 * * * *';
 const DEFAULT_MEMBER_ROLE_TOMBSTONE_RETENTION_CRON = '51 5 * * *';
 const DEFAULT_ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_CRON = '52 5 * * *';
 const DEFAULT_USER_TOMBSTONE_RETENTION_CRON = '53 5 * * *';
@@ -195,6 +198,24 @@ function getTombstoneRetentionScheduledJobs(timezone: string | undefined): Sched
       cronPattern:
         env.WEBHOOK_DELIVERY_ATTEMPT_RETENTION_CRON ??
         DEFAULT_WEBHOOK_DELIVERY_ATTEMPT_RETENTION_CRON,
+    }),
+  ];
+}
+
+/** The app's cross-tenant sweeps: the day auto-close (WC-39) and the task rules (TK4). */
+function getAppSweepScheduledJobs(timezone: string | undefined): ScheduledJob[] {
+  return [
+    withSchedulerTimezone(timezone, {
+      queueName: DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME,
+      schedulerId: 'hourly-day-close-auto-close-sweep',
+      jobName: 'find-days-to-auto-close',
+      cronPattern: DEFAULT_DAY_CLOSE_AUTO_CLOSE_SWEEP_CRON,
+    }),
+    withSchedulerTimezone(timezone, {
+      queueName: TASK_RULES_SWEEP_QUEUE_NAME,
+      schedulerId: 'task-rules-sweep',
+      jobName: 'find-organizations-for-task-rules',
+      cronPattern: DEFAULT_TASK_RULES_SWEEP_CRON,
     }),
   ];
 }
@@ -309,12 +330,7 @@ export function getScheduledJobs(): ScheduledJob[] {
       cronPattern:
         env.STRIPE_WEBHOOK_EVENT_CATCHUP_CRON ?? DEFAULT_STRIPE_WEBHOOK_EVENT_CATCHUP_CRON,
     }),
-    withSchedulerTimezone(timezone, {
-      queueName: DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME,
-      schedulerId: 'hourly-day-close-auto-close-sweep',
-      jobName: 'find-days-to-auto-close',
-      cronPattern: DEFAULT_DAY_CLOSE_AUTO_CLOSE_SWEEP_CRON,
-    }),
+    ...getAppSweepScheduledJobs(timezone),
     withSchedulerTimezone(timezone, {
       queueName: WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME,
       schedulerId: 'webhook-delivery-reclaim',

@@ -150,7 +150,14 @@
     "stockPurchaseUnknownItem": "No stock item {{id}} here",
     "stockPurchaseDateInFuture": "The purchase date can't be in the future",
     "stockPurchaseBillBelowPaid": "The bill can't be under what is already paid",
-    "paymentStockPurchaseOnlySupplierBill": "Only a supplier bill pays a stock purchase"
+    "paymentStockPurchaseOnlySupplierBill": "Only a supplier bill pays a stock purchase",
+    "taskOwnerOrQueue": "Give the task either a team member or a role queue",
+    "taskOwnerCannotWork": "This team member can't work on tasks — choose an active member who can see tasks",
+    "taskOneRecord": "A task can point at one record at most",
+    "taskRecordNotContacts": "The record must exist and belong to the task's person",
+    "taskSnoozeInPast": "Snooze until a time in the future",
+    "taskOutcomeNeedsPatient": "This outcome needs the person to have a patient file",
+    "taskRuleNotAutomatic": "Clinozy can't handle this rule by itself — only Confirm, Payment due, Feedback and Gone quiet"
   },
   "missingSessionCookie": "Missing session cookie",
   "disposableEmail": "This email domain is not allowed.",
@@ -324,5 +331,6 @@
   "stockItemHasStock": "This item still has stock — write it off before deleting it",
   "stockMovementAlreadyReverted": "This movement was reverted before, or is itself a revert",
   "stockPurchaseReceived": "A purchase's lines are fixed once saved — record another purchase or revert a movement",
-  "stockPurchasePaid": "Something is paid on this purchase — it can't be deleted"
+  "stockPurchasePaid": "Something is paid on this purchase — it can't be deleted",
+  "taskRuleTask": "A task the rules opened can't be changed or deleted by hand — it closes itself when its record changes"
 }

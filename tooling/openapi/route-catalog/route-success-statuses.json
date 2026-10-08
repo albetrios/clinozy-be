@@ -437,5 +437,6 @@
   "GET /api/v1/app/stock-items/:stock_item_id/movements": 200,
   "POST /api/v1/app/stock-items/:stock_item_id/movements": 200,
   "GET /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id": 200,
-  "POST /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id/revert": 200
+  "POST /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id/revert": 200,
+  "POST /api/v1/app/tasks/:task_id/reassign": 200
 }

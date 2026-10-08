@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 439
+  Total routes: 440
 ================================================================================
 
 Legend:
@@ -13,7 +13,7 @@ Legend:
 
 ================================================================================
   DOMAIN: APP (/api/v1/app)
-  Routes: 305
+  Routes: 306
 ================================================================================
 
   — Sub Domains —
@@ -312,16 +312,17 @@ Legend:
   DELETE /api/v1/app/suppliers/:supplier_id                       204  -    both  PERM: supplier:delete
   POST   /api/v1/app/suppliers/:supplier_id/restore               200  req  both  PERM: supplier:delete
   GET    /api/v1/app/task-rule-settings                           200  -    both  PERM: task:read
-  PUT    /api/v1/app/task-rule-settings                           200  -    both  PERM: task_rule:update
+  PUT    /api/v1/app/task-rule-settings                           200  -    both  PERM: organization:update
   GET    /api/v1/app/tasks                                        200  -    both  PERM: task:read
   POST   /api/v1/app/tasks                                        200  req  both  PERM: task:create
   GET    /api/v1/app/tasks/:task_id                               200  -    both  PERM: task:read
   PATCH  /api/v1/app/tasks/:task_id                               200  -    both  PERM: task:update
   DELETE /api/v1/app/tasks/:task_id                               204  -    both  PERM: task:delete
+  POST   /api/v1/app/tasks/:task_id/reassign                      200  req  both  PERM: task:update
   POST   /api/v1/app/tasks/:task_id/resolve                       200  req  both  PERM: task:update
   POST   /api/v1/app/tasks/:task_id/restore                       200  req  both  PERM: task:delete
   POST   /api/v1/app/tasks/:task_id/snooze                        200  req  both  PERM: task:update
-  GET    /api/v1/app/tasks/exports                                200  -    both  PERM: list:export
+  GET    /api/v1/app/tasks/exports                                200  -    both  PERM: task:export
 
 ================================================================================
   DOMAIN: AUDIT (/api/v1/audit)
@@ -530,16 +531,16 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 439
+  Total routes    : 440
   Public          : 16
   Authenticated   : 51
   Role-guarded    : 9
-  Perm-guarded    : 358
+  Perm-guarded    : 359
   Token-guarded   : 5
   Team-only (O)   : 10
 
 ================================================================================
-  IDEMPOTENCY-REQUIRED WRITES (123) — X-Idempotency-Key required
+  IDEMPOTENCY-REQUIRED WRITES (124) — X-Idempotency-Key required
 ================================================================================
 
   Routes flagged I = req reject a missing or reused key (422); every other write
@@ -648,6 +649,7 @@ Legend:
     POST /api/v1/app/suppliers
     POST /api/v1/app/suppliers/:supplier_id/restore
     POST /api/v1/app/tasks
+    POST /api/v1/app/tasks/:task_id/reassign
     POST /api/v1/app/tasks/:task_id/resolve
     POST /api/v1/app/tasks/:task_id/restore
     POST /api/v1/app/tasks/:task_id/snooze
@@ -721,8 +723,8 @@ Legend:
     stock_item:delete             stock_item:export             stock_item:read
     stock_item:update             supplier:create               supplier:delete
     supplier:read                 supplier:update               task:create
-    task:delete                   task:read                     task:update
-    task_rule:update
+    task:delete                   task:export                   task:read
+    task:update
 
   Global Roles:
     super_admin                   user

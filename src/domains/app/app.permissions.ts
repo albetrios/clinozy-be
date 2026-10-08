@@ -92,14 +92,16 @@ export const APP_PERMISSIONS = {
   STOCK_ITEM_DELETE: 'stock_item:delete',
   /** Download the stock items and purchases CSVs (launch #137, S2). */
   STOCK_ITEM_EXPORT: 'stock_item:export',
+  // Tasks (launch #138, TK2): one code set; turning rules on and off is `organization:update`.
   TASK_READ: 'task:read',
   TASK_CREATE: 'task:create',
   TASK_UPDATE: 'task:update',
   TASK_DELETE: 'task:delete',
-  // ── Special permissions (D18) and the task rules (D19) — not a table's own actions ──
+  /** Download the tasks CSV (launch #138, TK2). */
+  TASK_EXPORT: 'task:export',
+  // ── Special permissions (D18) — not a table's own actions ──
   SALE_VOID: 'sale:void',
   PATIENT_CLINICAL_RECORD_READ: 'patient:clinical_record:read',
   LIST_EXPORT: 'list:export',
-  TASK_RULE_UPDATE: 'task_rule:update',
   PATIENT_PRIVATE_ALBUM_READ: 'patient:private_album:read',
 } as const;

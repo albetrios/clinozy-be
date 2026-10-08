@@ -1859,6 +1859,7 @@ erDiagram
 - **Open:** none — Mine = mine + my roles' unowned queue (P5, A23, D40); rules (P26, D3); rule settings by Owner and Admin (D19)
 
 - **Built:** `app.tasks` · ROUTE #58 (2026-10-07)
+- **Built (ROUTE #138, 10.A):** `kind` `rule` · `follow_up` · `manual` (TK6) with `rule_key` (the 14 rules, `(kind = 'rule') = (rule_key IS NOT NULL)`); `owner_membership_id` or `owner_role` (one of the two — an owner keeps no queue; the CHECK needs at least one); the person `contact_id` and at most one record — `lead_id`, `appointment_id`, `patient_treatment_id`, `patient_check_in_id`, `patient_review_id`, `invoice_id`, `pending_credit_id` (`num_nonnulls ≤ 1`, TK5) — with the generated `source_key` (`<record>:<id>`, else `contact:<id>`) and the unique partial index `idx_tasks_open_rule_source` on `(organization_id, rule_key, source_key)` for open rule tasks (TK4); `branch_id` copied from the record; the 6 outcomes, `result_text ≤ 200`, `resolved_by_membership_id` (K8 `RESTRICT`), `is_resolved_automatically`; `snoozed_until` exactly while snoozed; `should_remind_before`, `patient_id`, `source_type` / `source_id` go; RLS ENABLE + FORCE with the purge's retention arm
 ```mermaid
 erDiagram
   task["task · NEW"] {
@@ -1896,6 +1897,7 @@ erDiagram
 - **Open:** none
 
 - **Built:** `app.task_owner_changes` · ROUTE #59 (2026-10-07)
+- **Built (ROUTE #138, TK8):** append-only (no `updated_*`, no soft delete): `from_membership_id` / `from_role`, `to_membership_id` / `to_role` (a member or a queue), `changed_by_membership_id` (null for the leave step) — the three member keys K8 `RESTRICT`; the task's 5 latest answer on it; RLS ENABLE + FORCE
 ```mermaid
 erDiagram
   task_owner_change["task_owner_change · NEW"] {
@@ -1915,6 +1917,7 @@ erDiagram
 - **Open:** none — Owner and Admin change them (D19)
 
 - **Built:** `app.task_rule_settings` · ROUTE #60 (2026-10-07)
+- **Built (ROUTE #138, TK10):** moved under `tasks/task-rule-settings/`; the soft-delete columns go; unique `(organization_id, rule_key)` (upsert); `chk_task_rule_settings_automatic` — `is_automatic` only on `confirm`, `payment_due`, `feedback`, `gone_quiet`; RLS ENABLE + FORCE
 ```mermaid
 erDiagram
   task_rule_setting["task_rule_setting · NEW"] {

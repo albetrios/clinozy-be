@@ -4,7 +4,7 @@ import { branchMembersRoutes } from './sub-domains/branches/branch-members/branc
 import { registerAppRecordRoutes } from './app-records.plugin.js';
 import { membershipPreferencesRoutes } from './sub-domains/memberships/membership-preferences/membership-preferences.routes.js';
 import { membershipSavedViewsRoutes } from './sub-domains/memberships/membership-saved-views/membership-saved-views.routes.js';
-import { taskRuleSettingsRoutes } from './sub-domains/task-rule-settings/task-rule-settings.routes.js';
+import { taskRuleSettingsRoutes } from './sub-domains/tasks/task-rule-settings/task-rule-settings.routes.js';
 import { appMembershipsRoutes } from './sub-domains/memberships/memberships.routes.js';
 import { contactMembersRoutes } from './sub-domains/contacts/contact-members/contact-members.routes.js';
 

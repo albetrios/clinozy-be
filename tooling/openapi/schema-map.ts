@@ -7,7 +7,7 @@
  * When adding a new route with a body, add its mapping here.
  */
 import { updateMembershipPreferencesDto } from '@/domains/app/sub-domains/memberships/membership-preferences/membership-preferences.dto.js';
-import { ReplaceTaskRulesDto } from '@/domains/app/sub-domains/task-rule-settings/task-rule-settings.dto.js';
+import { ReplaceTaskRulesDto } from '@/domains/app/sub-domains/tasks/task-rule-settings/task-rule-settings.dto.js';
 import {
   createMembershipSavedViewDto,
   updateMembershipSavedViewDto,
@@ -170,8 +170,9 @@ import {
 } from '@/domains/app/sub-domains/stock/stock-item-movements/stock-item-movements.dto.js';
 import {
   CreateTaskDto as appCreateTaskDto,
-  resolveTaskDto as appResolveTaskDto,
-  snoozeTaskDto as appSnoozeTaskDto,
+  ReassignTaskDto as appReassignTaskDto,
+  ResolveTaskDto as appResolveTaskDto,
+  SnoozeTaskDto as appSnoozeTaskDto,
   UpdateTaskDto as appUpdateTaskDto,
 } from '@/domains/app/sub-domains/tasks/tasks.dto.js';
 import {
@@ -360,6 +361,7 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'PATCH /api/v1/app/patients/{patient_id}/images/{patient_image_id}': appUpdatePatientImageDto,
   'POST /api/v1/app/tasks/{task_id}/snooze': appSnoozeTaskDto,
   'POST /api/v1/app/tasks/{task_id}/resolve': appResolveTaskDto,
+  'POST /api/v1/app/tasks/{task_id}/reassign': appReassignTaskDto,
   'PATCH /api/v1/app/tasks/{task_id}': appUpdateTaskDto,
   'POST /api/v1/app/tasks': appCreateTaskDto,
   'POST /api/v1/app/stock-items/{stock_item_id}/movements/{stock_item_movement_id}/revert':

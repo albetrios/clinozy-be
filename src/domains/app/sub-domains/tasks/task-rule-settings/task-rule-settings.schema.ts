@@ -10,28 +10,28 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { appSchema } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import {
-  RECORD_DELETE_REASON,
-  RECORD_DELETE_REASON_VALUES,
-} from '@/shared/constants/record-fields.constants.js';
-import { TASK_RULE_SETTING_RULE_KEY_VALUES } from '@/domains/app/sub-domains/task-rule-settings/task-rule-settings.constants.js';
+  TASK_AUTOMATIC_RULE_VALUES,
+  TASK_RULE_VALUES,
+} from '@/domains/app/sub-domains/tasks/tasks.constants.js';
 
-/** `'a', 'b', …` from a value list, for an `IN (…)` or `ARRAY[…]` CHECK. */
-function joinValues(values: readonly string[]): SQL {
-  return sql.join(
-    values.map((value) => sql`${value}`),
-    sql`, `,
-  );
+/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` CHECK. */
+function literalList(values: readonly string[]): SQL {
+  return sql.raw(values.map((value) => `'${value}'`).join(', '));
 }
 
 /**
- * Drizzle table for `app.task_rule_settings` — Whether a task rule is on, and whether the organization lets it run by itself ("let the app handle it") (launch ROUTE #60, domain `app`).
- * Standard app record columns (public id, organization, attribution, soft delete with its reason);
- * RLS is the `task_rule_settings_tenant_isolation` policy on the organization GUC, with the retention-cleanup arm
- * for the deleted-record purge.
+ * Drizzle table for `app.task_rule_settings` — one task rule's switches for the organization (launch
+ * ROUTE #138, routes-final 10.B, TK10).
+ *
+ * @remarks
+ * - **Notes:** one row per rule (`idx_task_rule_settings_organization_rule`); no row = on, by hand;
+ *   "Let Clinozy handle" (`is_automatic`) only on the rules with a step the server can take
+ *   (`chk_task_rule_settings_automatic`). No soft delete — a save upserts. RLS on the organization
+ *   GUC.
  */
 export const task_rule_settings = appSchema
   .table(
@@ -44,6 +44,7 @@ export const task_rule_settings = appSchema
         .references(() => organizations.id, { onDelete: 'cascade' }),
       rule_key: varchar('rule_key', { length: 17 }).notNull(),
       is_on: boolean('is_on').notNull().default(true),
+      // "Let Clinozy handle"
       is_automatic: boolean('is_automatic').notNull().default(false),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -53,46 +54,28 @@ export const task_rule_settings = appSchema
       updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(
         () => users.id,
       ),
-      deleted_at: timestamp('deleted_at', { withTimezone: true }),
-      delete_reason: varchar('delete_reason', { length: 20 }),
-      delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
       uniqueIndex('idx_task_rule_settings_public_id').on(table.public_id),
-      index('idx_task_rule_settings_organization_created').on(
+      uniqueIndex('idx_task_rule_settings_organization_rule').on(
         table.organization_id,
-        table.created_at,
-        table.id,
+        table.rule_key,
       ),
-      index('idx_task_rule_settings_deleted_at')
-        .on(table.deleted_at)
-        .where(sql`${table.deleted_at} IS NOT NULL`),
       index('idx_task_rule_settings_created_by_user_id')
         .on(table.created_by_user_id)
         .where(sql`${table.created_by_user_id} IS NOT NULL`),
       index('idx_task_rule_settings_updated_by_user_id')
         .on(table.updated_by_user_id)
         .where(sql`${table.updated_by_user_id} IS NOT NULL`),
-      uniqueIndex('idx_task_rule_settings_organization_rule_unique')
-        .on(table.organization_id, table.rule_key)
-        .where(sql`${table.deleted_at} IS NULL`),
       check(
         'chk_task_rule_settings_rule_key',
-        sql`${table.rule_key} IN (${joinValues(TASK_RULE_SETTING_RULE_KEY_VALUES)})`,
+        sql`${table.rule_key} IN (${literalList(TASK_RULE_VALUES)})`,
+      ),
+      check(
+        'chk_task_rule_settings_automatic',
+        sql`NOT ${table.is_automatic} OR ${table.rule_key} IN (${literalList(TASK_AUTOMATIC_RULE_VALUES)})`,
       ),
       check('chk_task_rule_settings_updated', sql`${table.updated_at} >= ${table.created_at}`),
-      check(
-        'chk_task_rule_settings_delete_reason',
-        sql`${table.delete_reason} IN (${joinValues(RECORD_DELETE_REASON_VALUES)})`,
-      ),
-      check(
-        'chk_task_rule_settings_delete_reason_when_deleted',
-        sql`(${table.deleted_at} IS NULL) = (${table.delete_reason} IS NULL)`,
-      ),
-      check(
-        'chk_task_rule_settings_delete_note_when_other',
-        sql`${table.delete_reason} IS DISTINCT FROM ${RECORD_DELETE_REASON.OTHER} OR ${table.delete_note} IS NOT NULL`,
-      ),
       pgPolicy('task_rule_settings_tenant_isolation', {
         as: 'permissive',
         for: 'all',
@@ -100,8 +83,7 @@ export const task_rule_settings = appSchema
         using: sql`${table.organization_id} = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR ${maintenanceBypassArm('app.global_retention_cleanup')}`,
+          )`,
         withCheck: sql`${table.organization_id} = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)

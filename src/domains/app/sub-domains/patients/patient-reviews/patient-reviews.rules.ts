@@ -85,7 +85,7 @@ export const patientReviewsRules: BaseRecordRules = {
     await createCallBackTask({
       context,
       row,
-      sourceType: 'review',
+      link: 'patient_review_id',
       title: 'Call back — the patient left a low rating',
       why: `${patientFileValueLabel(String(row.source))} review, ${String(row.rating)}/5`,
       doctorMembershipId: await doctorOfVisitOrPatient(row),

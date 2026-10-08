@@ -2785,32 +2785,47 @@ CREATE TABLE IF NOT EXISTS "app"."stock_item_movements" (
 	CONSTRAINT "chk_stock_item_movements_note_when_other" CHECK ("app"."stock_item_movements"."revert_reason" IS DISTINCT FROM 'other' OR "app"."stock_item_movements"."note" IS NOT NULL)
 );--> statement-breakpoint
 ALTER TABLE "app"."stock_item_movements" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.tasks — A to-do in the work queue — by hand or from a rule (launch ROUTE #58).
+-- app.tasks — one thing someone has to do, and who it moved between (launch ROUTE #138, 10.A)
 CREATE TABLE IF NOT EXISTS "app"."tasks" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
 	"organization_id" bigint NOT NULL,
-	"kind" varchar(16) DEFAULT 'manual' NOT NULL,
+	"kind" varchar(9) DEFAULT 'manual' NOT NULL,
 	"rule_key" varchar(17),
 	"title" varchar(120) NOT NULL,
 	"why" varchar(280),
 	"owner_membership_id" bigint,
-	"owner_role" varchar(10) DEFAULT 'admin' NOT NULL,
-	"patient_id" bigint,
+	"owner_role" varchar(10),
+	"contact_id" bigint,
 	"lead_id" bigint,
-	"source_type" varchar(11),
-	"source_id" varchar(28),
+	"appointment_id" bigint,
+	"patient_treatment_id" bigint,
+	"patient_check_in_id" bigint,
+	"patient_review_id" bigint,
+	"invoice_id" bigint,
+	"pending_credit_id" bigint,
+	"source_key" text GENERATED ALWAYS AS (CASE
+      WHEN lead_id IS NOT NULL THEN 'lead:' || lead_id
+      WHEN appointment_id IS NOT NULL THEN 'appointment:' || appointment_id
+      WHEN patient_treatment_id IS NOT NULL THEN 'patient_treatment:' || patient_treatment_id
+      WHEN patient_check_in_id IS NOT NULL THEN 'patient_check_in:' || patient_check_in_id
+      WHEN patient_review_id IS NOT NULL THEN 'patient_review:' || patient_review_id
+      WHEN invoice_id IS NOT NULL THEN 'invoice:' || invoice_id
+      WHEN pending_credit_id IS NOT NULL THEN 'pending_credit:' || pending_credit_id
+      WHEN contact_id IS NOT NULL THEN 'contact:' || contact_id
+    END) STORED,
+	"branch_id" bigint,
 	"due_at" timestamp with time zone NOT NULL,
 	"status" varchar(7) DEFAULT 'open' NOT NULL,
 	"snoozed_until" timestamp with time zone,
 	"snooze_label" varchar(40),
 	"outcome" varchar(12),
+	"result_text" varchar(200),
+	"note" varchar(280),
 	"resolved_at" timestamp with time zone,
 	"is_resolved_automatically" boolean DEFAULT false NOT NULL,
-	"result_text" varchar(280),
-	"note" varchar(280),
+	"resolved_by_membership_id" bigint,
 	"priority" varchar(6) DEFAULT 'normal' NOT NULL,
-	"should_remind_before" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
@@ -2818,44 +2833,43 @@ CREATE TABLE IF NOT EXISTS "app"."tasks" (
 	"deleted_at" timestamp with time zone,
 	"delete_reason" varchar(20),
 	"delete_note" varchar(280),
-	CONSTRAINT "chk_tasks_kind" CHECK ("app"."tasks"."kind" IN ('manual', 'follow_up', 'aftercare_call', 'callback', 'payment_reminder', 'confirm_visit', 'review_request')),
-	CONSTRAINT "chk_tasks_rule_key" CHECK ("app"."tasks"."rule_key" IN ('reply', 'failed_message', 'follow_up', 'call_back', 'claim', 'confirm', 'arrive', 'rebook', 'feedback', 'aftercare', 'next_visit', 'gone_quiet', 'payment_due', 'onboarding', 'unhappy', 'settle_by', 'medical_rep_visit')),
-	CONSTRAINT "chk_tasks_owner_role" CHECK ("app"."tasks"."owner_role" IN ('admin', 'doctor', 'therapist', 'front_desk', 'counsellor', 'pharmacist', 'accountant', 'marketing', 'owner')),
-	CONSTRAINT "chk_tasks_source_type" CHECK ("app"."tasks"."source_type" IN ('lead', 'appointment', 'treatment', 'check_in', 'review', 'invoice')),
+	CONSTRAINT "chk_tasks_kind" CHECK ("app"."tasks"."kind" IN ('rule', 'follow_up', 'manual')),
+	CONSTRAINT "chk_tasks_rule_key" CHECK ("app"."tasks"."rule_key" IN ('reply', 'failed_message', 'follow_up', 'claim', 'confirm', 'arrive', 'rebook', 'feedback', 'aftercare', 'call_back', 'next_visit', 'gone_quiet', 'payment_due', 'settle_by')),
+	CONSTRAINT "chk_tasks_rule_kind" CHECK (("app"."tasks"."kind" = 'rule') = ("app"."tasks"."rule_key" IS NOT NULL)),
+	CONSTRAINT "chk_tasks_title" CHECK (char_length("app"."tasks"."title") > 0),
+	CONSTRAINT "chk_tasks_owner_role" CHECK ("app"."tasks"."owner_role" IN ('owner', 'admin', 'doctor', 'therapist', 'front_desk', 'counsellor', 'pharmacist', 'accountant', 'marketing')),
+	CONSTRAINT "chk_tasks_owner_or_queue" CHECK ("app"."tasks"."owner_membership_id" IS NOT NULL OR "app"."tasks"."owner_role" IS NOT NULL),
+	CONSTRAINT "chk_tasks_one_record" CHECK (num_nonnulls("app"."tasks"."lead_id", "app"."tasks"."appointment_id", "app"."tasks"."patient_treatment_id", "app"."tasks"."patient_check_in_id", "app"."tasks"."patient_review_id", "app"."tasks"."invoice_id", "app"."tasks"."pending_credit_id") <= 1),
 	CONSTRAINT "chk_tasks_status" CHECK ("app"."tasks"."status" IN ('open', 'snoozed', 'done')),
-	CONSTRAINT "chk_tasks_outcome" CHECK ("app"."tasks"."outcome" IN ('log_check_in', 'doing_well', 'no_answer', 'happy', 'done')),
+	CONSTRAINT "chk_tasks_snoozed" CHECK (("app"."tasks"."status" = 'snoozed') = ("app"."tasks"."snoozed_until" IS NOT NULL)),
+	CONSTRAINT "chk_tasks_outcome" CHECK ("app"."tasks"."outcome" IN ('done', 'no_answer', 'doing_well', 'log_check_in', 'happy', 'unhappy')),
+	CONSTRAINT "chk_tasks_done" CHECK (("app"."tasks"."status" = 'done') = ("app"."tasks"."outcome" IS NOT NULL AND "app"."tasks"."resolved_at" IS NOT NULL)),
 	CONSTRAINT "chk_tasks_priority" CHECK ("app"."tasks"."priority" IN ('low', 'normal', 'high')),
 	CONSTRAINT "chk_tasks_updated" CHECK ("app"."tasks"."updated_at" >= "app"."tasks"."created_at"),
 	CONSTRAINT "chk_tasks_delete_reason" CHECK ("app"."tasks"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
 	CONSTRAINT "chk_tasks_delete_reason_when_deleted" CHECK (("app"."tasks"."deleted_at" IS NULL) = ("app"."tasks"."delete_reason" IS NULL)),
 	CONSTRAINT "chk_tasks_delete_note_when_other" CHECK ("app"."tasks"."delete_reason" IS DISTINCT FROM 'other' OR "app"."tasks"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
+);--> statement-breakpoint
 ALTER TABLE "app"."tasks" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.task_owner_changes — A reassignment of a task — from whom, to whom, when (launch ROUTE #59).
+-- app.task_owner_changes — one thing someone has to do, and who it moved between (launch ROUTE #138, 10.A)
 CREATE TABLE IF NOT EXISTS "app"."task_owner_changes" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
 	"organization_id" bigint NOT NULL,
 	"task_id" bigint NOT NULL,
 	"from_membership_id" bigint,
+	"from_role" varchar(10),
 	"to_membership_id" bigint,
-	"changed_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"to_role" varchar(10),
+	"changed_by_membership_id" bigint,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
-	"updated_by_user_id" bigint,
-	"deleted_at" timestamp with time zone,
-	"delete_reason" varchar(20),
-	"delete_note" varchar(280),
-	CONSTRAINT "chk_task_owner_changes_updated" CHECK ("app"."task_owner_changes"."updated_at" >= "app"."task_owner_changes"."created_at"),
-	CONSTRAINT "chk_task_owner_changes_delete_reason" CHECK ("app"."task_owner_changes"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
-	CONSTRAINT "chk_task_owner_changes_delete_reason_when_deleted" CHECK (("app"."task_owner_changes"."deleted_at" IS NULL) = ("app"."task_owner_changes"."delete_reason" IS NULL)),
-	CONSTRAINT "chk_task_owner_changes_delete_note_when_other" CHECK ("app"."task_owner_changes"."delete_reason" IS DISTINCT FROM 'other' OR "app"."task_owner_changes"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
+	CONSTRAINT "chk_task_owner_changes_from_role" CHECK ("app"."task_owner_changes"."from_role" IN ('owner', 'admin', 'doctor', 'therapist', 'front_desk', 'counsellor', 'pharmacist', 'accountant', 'marketing')),
+	CONSTRAINT "chk_task_owner_changes_to_role" CHECK ("app"."task_owner_changes"."to_role" IN ('owner', 'admin', 'doctor', 'therapist', 'front_desk', 'counsellor', 'pharmacist', 'accountant', 'marketing')),
+	CONSTRAINT "chk_task_owner_changes_to" CHECK ("app"."task_owner_changes"."to_membership_id" IS NOT NULL OR "app"."task_owner_changes"."to_role" IS NOT NULL)
+);--> statement-breakpoint
 ALTER TABLE "app"."task_owner_changes" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.task_rule_settings — Whether a task rule is on, and whether the organization lets it run by itself ("Clinozy handles it") (launch ROUTE #60).
+-- app.task_rule_settings — one task rule's switches (launch ROUTE #138, 10.B)
 CREATE TABLE IF NOT EXISTS "app"."task_rule_settings" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
@@ -2867,16 +2881,10 @@ CREATE TABLE IF NOT EXISTS "app"."task_rule_settings" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
 	"updated_by_user_id" bigint,
-	"deleted_at" timestamp with time zone,
-	"delete_reason" varchar(20),
-	"delete_note" varchar(280),
-	CONSTRAINT "chk_task_rule_settings_rule_key" CHECK ("app"."task_rule_settings"."rule_key" IN ('reply', 'failed_message', 'follow_up', 'call_back', 'claim', 'confirm', 'arrive', 'rebook', 'feedback', 'aftercare', 'next_visit', 'gone_quiet', 'payment_due', 'onboarding', 'unhappy', 'settle_by', 'medical_rep_visit')),
-	CONSTRAINT "chk_task_rule_settings_updated" CHECK ("app"."task_rule_settings"."updated_at" >= "app"."task_rule_settings"."created_at"),
-	CONSTRAINT "chk_task_rule_settings_delete_reason" CHECK ("app"."task_rule_settings"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
-	CONSTRAINT "chk_task_rule_settings_delete_reason_when_deleted" CHECK (("app"."task_rule_settings"."deleted_at" IS NULL) = ("app"."task_rule_settings"."delete_reason" IS NULL)),
-	CONSTRAINT "chk_task_rule_settings_delete_note_when_other" CHECK ("app"."task_rule_settings"."delete_reason" IS DISTINCT FROM 'other' OR "app"."task_rule_settings"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
+	CONSTRAINT "chk_task_rule_settings_rule_key" CHECK ("app"."task_rule_settings"."rule_key" IN ('reply', 'failed_message', 'follow_up', 'claim', 'confirm', 'arrive', 'rebook', 'feedback', 'aftercare', 'call_back', 'next_visit', 'gone_quiet', 'payment_due', 'settle_by')),
+	CONSTRAINT "chk_task_rule_settings_automatic" CHECK (NOT "app"."task_rule_settings"."is_automatic" OR "app"."task_rule_settings"."rule_key" IN ('confirm', 'payment_due', 'feedback', 'gone_quiet')),
+	CONSTRAINT "chk_task_rule_settings_updated" CHECK ("app"."task_rule_settings"."updated_at" >= "app"."task_rule_settings"."created_at")
+);--> statement-breakpoint
 ALTER TABLE "app"."task_rule_settings" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "app"."offering_groups" ADD CONSTRAINT "offering_groups_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offering_groups" ADD CONSTRAINT "offering_groups_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -2957,21 +2965,6 @@ ALTER TABLE "app"."supplier_credits" ADD CONSTRAINT "supplier_credits_created_by
 ALTER TABLE "app"."supplier_credits" ADD CONSTRAINT "supplier_credits_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."supplier_credits" ADD CONSTRAINT "supplier_credits_supplier_id_suppliers_id_fk" FOREIGN KEY ("supplier_id") REFERENCES "app"."suppliers"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."supplier_credits" ADD CONSTRAINT "supplier_credits_medicine_id_medicines_id_fk" FOREIGN KEY ("medicine_id") REFERENCES "app"."medicines"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_owner_membership_id_memberships_id_fk" FOREIGN KEY ("owner_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "app"."leads"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."task_owner_changes" ADD CONSTRAINT "task_owner_changes_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."task_owner_changes" ADD CONSTRAINT "task_owner_changes_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."task_owner_changes" ADD CONSTRAINT "task_owner_changes_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."task_owner_changes" ADD CONSTRAINT "task_owner_changes_task_id_tasks_id_fk" FOREIGN KEY ("task_id") REFERENCES "app"."tasks"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."task_owner_changes" ADD CONSTRAINT "task_owner_changes_from_membership_id_memberships_id_fk" FOREIGN KEY ("from_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."task_owner_changes" ADD CONSTRAINT "task_owner_changes_to_membership_id_memberships_id_fk" FOREIGN KEY ("to_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."task_rule_settings" ADD CONSTRAINT "task_rule_settings_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."task_rule_settings" ADD CONSTRAINT "task_rule_settings_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."task_rule_settings" ADD CONSTRAINT "task_rule_settings_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_offering_groups_public_id" ON "app"."offering_groups" USING btree ("public_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_offering_groups_organization_created" ON "app"."offering_groups" USING btree ("organization_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_offering_groups_deleted_at" ON "app"."offering_groups" USING btree ("deleted_at") WHERE "app"."offering_groups"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -3284,56 +3277,6 @@ CREATE POLICY "supplier_credits_tenant_isolation" ON "app"."supplier_credits" AS
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
 ALTER TABLE "app"."supplier_credits" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_tasks_public_id" ON "app"."tasks" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_tasks_organization_created" ON "app"."tasks" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_tasks_deleted_at" ON "app"."tasks" USING btree ("deleted_at") WHERE "app"."tasks"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_tasks_created_by_user_id" ON "app"."tasks" USING btree ("created_by_user_id") WHERE "app"."tasks"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_tasks_updated_by_user_id" ON "app"."tasks" USING btree ("updated_by_user_id") WHERE "app"."tasks"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_tasks_owner_due" ON "app"."tasks" USING btree ("owner_membership_id","due_at") WHERE "app"."tasks"."owner_membership_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_tasks_patient_id" ON "app"."tasks" USING btree ("patient_id") WHERE "app"."tasks"."patient_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_tasks_lead_id" ON "app"."tasks" USING btree ("lead_id") WHERE "app"."tasks"."lead_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_tasks_organization_due_at" ON "app"."tasks" USING btree ("organization_id","due_at","id") WHERE "app"."tasks"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE POLICY "tasks_tenant_isolation" ON "app"."tasks" AS PERMISSIVE FOR ALL TO public USING ("app"."tasks"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."tasks"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."tasks" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_task_owner_changes_public_id" ON "app"."task_owner_changes" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_organization_created" ON "app"."task_owner_changes" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_deleted_at" ON "app"."task_owner_changes" USING btree ("deleted_at") WHERE "app"."task_owner_changes"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_created_by_user_id" ON "app"."task_owner_changes" USING btree ("created_by_user_id") WHERE "app"."task_owner_changes"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_updated_by_user_id" ON "app"."task_owner_changes" USING btree ("updated_by_user_id") WHERE "app"."task_owner_changes"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_task_id" ON "app"."task_owner_changes" USING btree ("task_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_from_membership_id" ON "app"."task_owner_changes" USING btree ("from_membership_id") WHERE "app"."task_owner_changes"."from_membership_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_to_membership_id" ON "app"."task_owner_changes" USING btree ("to_membership_id") WHERE "app"."task_owner_changes"."to_membership_id" IS NOT NULL;--> statement-breakpoint
-CREATE POLICY "task_owner_changes_tenant_isolation" ON "app"."task_owner_changes" AS PERMISSIVE FOR ALL TO public USING ("app"."task_owner_changes"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."task_owner_changes"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."task_owner_changes" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_task_rule_settings_public_id" ON "app"."task_rule_settings" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_task_rule_settings_organization_created" ON "app"."task_rule_settings" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_task_rule_settings_deleted_at" ON "app"."task_rule_settings" USING btree ("deleted_at") WHERE "app"."task_rule_settings"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_task_rule_settings_created_by_user_id" ON "app"."task_rule_settings" USING btree ("created_by_user_id") WHERE "app"."task_rule_settings"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_task_rule_settings_updated_by_user_id" ON "app"."task_rule_settings" USING btree ("updated_by_user_id") WHERE "app"."task_rule_settings"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_task_rule_settings_organization_rule_unique" ON "app"."task_rule_settings" USING btree ("organization_id","rule_key") WHERE "app"."task_rule_settings"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE POLICY "task_rule_settings_tenant_isolation" ON "app"."task_rule_settings" AS PERMISSIVE FOR ALL TO public USING ("app"."task_rule_settings"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."task_rule_settings"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."task_rule_settings" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 -- app.contact_message_templates — reusable texts for outgoing WhatsApp and Instagram messages; `<first>` / `<interest>` filled per contact (launch ROUTE #130, routes-final 4.D).
 CREATE TABLE IF NOT EXISTS "app"."contact_message_templates" (
 	"id" bigserial PRIMARY KEY NOT NULL,
@@ -4283,6 +4226,85 @@ CREATE POLICY "payments_tenant_isolation" ON "app"."payments" AS PERMISSIVE FOR 
           ));--> statement-breakpoint
 ALTER TABLE "app"."payments" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TRIGGER trg_payments_payment_number BEFORE INSERT ON "app"."payments" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('payment_number');--> statement-breakpoint
+-- app.tasks, app.task_owner_changes (folded from the Drizzle schema): keys, indexes, RLS.
+ALTER TABLE "app"."task_owner_changes" ADD CONSTRAINT "task_owner_changes_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."task_owner_changes" ADD CONSTRAINT "task_owner_changes_task_id_tasks_id_fk" FOREIGN KEY ("task_id") REFERENCES "app"."tasks"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."task_owner_changes" ADD CONSTRAINT "task_owner_changes_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."task_owner_changes" ADD CONSTRAINT "task_owner_changes_from_membership_fk" FOREIGN KEY ("organization_id","from_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."task_owner_changes" ADD CONSTRAINT "task_owner_changes_to_membership_fk" FOREIGN KEY ("organization_id","to_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."task_owner_changes" ADD CONSTRAINT "task_owner_changes_changed_by_membership_fk" FOREIGN KEY ("organization_id","changed_by_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_owner_membership_id_memberships_id_fk" FOREIGN KEY ("owner_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "app"."contacts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "app"."leads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_appointment_id_appointments_id_fk" FOREIGN KEY ("appointment_id") REFERENCES "app"."appointments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_patient_treatment_id_patient_treatments_id_fk" FOREIGN KEY ("patient_treatment_id") REFERENCES "app"."patient_treatments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_patient_check_in_id_patient_check_ins_id_fk" FOREIGN KEY ("patient_check_in_id") REFERENCES "app"."patient_check_ins"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_patient_review_id_patient_reviews_id_fk" FOREIGN KEY ("patient_review_id") REFERENCES "app"."patient_reviews"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_invoice_id_invoices_id_fk" FOREIGN KEY ("invoice_id") REFERENCES "app"."invoices"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_pending_credit_id_pending_credits_id_fk" FOREIGN KEY ("pending_credit_id") REFERENCES "app"."pending_credits"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_branch_id_branches_id_fk" FOREIGN KEY ("branch_id") REFERENCES "app"."branches"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_resolved_by_membership_fk" FOREIGN KEY ("organization_id","resolved_by_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_task_owner_changes_public_id" ON "app"."task_owner_changes" USING btree ("public_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_task_created" ON "app"."task_owner_changes" USING btree ("task_id","created_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_created_by_user_id" ON "app"."task_owner_changes" USING btree ("created_by_user_id") WHERE "app"."task_owner_changes"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_from_membership_id" ON "app"."task_owner_changes" USING btree ("organization_id","from_membership_id") WHERE "app"."task_owner_changes"."from_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_to_membership_id" ON "app"."task_owner_changes" USING btree ("organization_id","to_membership_id") WHERE "app"."task_owner_changes"."to_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_changed_by_membership_id" ON "app"."task_owner_changes" USING btree ("organization_id","changed_by_membership_id") WHERE "app"."task_owner_changes"."changed_by_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_tasks_public_id" ON "app"."tasks" USING btree ("public_id");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_tasks_open_rule_source" ON "app"."tasks" USING btree ("organization_id","rule_key","source_key") WHERE "app"."tasks"."kind" = 'rule' AND "app"."tasks"."status" <> 'done' AND "app"."tasks"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_owner_status_due" ON "app"."tasks" USING btree ("owner_membership_id","status","due_at") WHERE "app"."tasks"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_organization_queue" ON "app"."tasks" USING btree ("organization_id","owner_role","status","due_at") WHERE "app"."tasks"."deleted_at" IS NULL AND "app"."tasks"."owner_membership_id" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_organization_status_due" ON "app"."tasks" USING btree ("organization_id","status","due_at","id") WHERE "app"."tasks"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_snoozed_until" ON "app"."tasks" USING btree ("snoozed_until") WHERE "app"."tasks"."status" = 'snoozed' AND "app"."tasks"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_contact_id" ON "app"."tasks" USING btree ("contact_id") WHERE "app"."tasks"."contact_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_lead_id" ON "app"."tasks" USING btree ("lead_id") WHERE "app"."tasks"."lead_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_appointment_id" ON "app"."tasks" USING btree ("appointment_id") WHERE "app"."tasks"."appointment_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_patient_treatment_id" ON "app"."tasks" USING btree ("patient_treatment_id") WHERE "app"."tasks"."patient_treatment_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_patient_check_in_id" ON "app"."tasks" USING btree ("patient_check_in_id") WHERE "app"."tasks"."patient_check_in_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_patient_review_id" ON "app"."tasks" USING btree ("patient_review_id") WHERE "app"."tasks"."patient_review_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_invoice_id" ON "app"."tasks" USING btree ("invoice_id") WHERE "app"."tasks"."invoice_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_pending_credit_id" ON "app"."tasks" USING btree ("pending_credit_id") WHERE "app"."tasks"."pending_credit_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_branch_id" ON "app"."tasks" USING btree ("branch_id") WHERE "app"."tasks"."branch_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_resolved_by_membership_id" ON "app"."tasks" USING btree ("organization_id","resolved_by_membership_id") WHERE "app"."tasks"."resolved_by_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_deleted_at" ON "app"."tasks" USING btree ("deleted_at") WHERE "app"."tasks"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_created_by_user_id" ON "app"."tasks" USING btree ("created_by_user_id") WHERE "app"."tasks"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_updated_by_user_id" ON "app"."tasks" USING btree ("updated_by_user_id") WHERE "app"."tasks"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "task_owner_changes_tenant_isolation" ON "app"."task_owner_changes" AS PERMISSIVE FOR ALL TO public USING ("app"."task_owner_changes"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )) WITH CHECK ("app"."task_owner_changes"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+CREATE POLICY "tasks_tenant_isolation" ON "app"."tasks" AS PERMISSIVE FOR ALL TO public USING ("app"."tasks"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )
+          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."tasks"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."tasks" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "app"."task_owner_changes" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.task_rule_settings (folded from the Drizzle schema): keys, indexes, RLS.
+ALTER TABLE "app"."task_rule_settings" ADD CONSTRAINT "task_rule_settings_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."task_rule_settings" ADD CONSTRAINT "task_rule_settings_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."task_rule_settings" ADD CONSTRAINT "task_rule_settings_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_task_rule_settings_public_id" ON "app"."task_rule_settings" USING btree ("public_id");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_task_rule_settings_organization_rule" ON "app"."task_rule_settings" USING btree ("organization_id","rule_key");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_task_rule_settings_created_by_user_id" ON "app"."task_rule_settings" USING btree ("created_by_user_id") WHERE "app"."task_rule_settings"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_task_rule_settings_updated_by_user_id" ON "app"."task_rule_settings" USING btree ("updated_by_user_id") WHERE "app"."task_rule_settings"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "task_rule_settings_tenant_isolation" ON "app"."task_rule_settings" AS PERMISSIVE FOR ALL TO public USING ("app"."task_rule_settings"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )) WITH CHECK ("app"."task_rule_settings"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."task_rule_settings" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 -- ── end of app records ──
 GRANT USAGE ON SCHEMA auth, tenancy, billing, notify, audit, upload, app TO clinozy_be_app;
 --> statement-breakpoint

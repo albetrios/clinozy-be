@@ -265,6 +265,7 @@ export class ContactsRepository extends BaseRecordRepository {
         first_name: contacts.first_name,
         last_name: contacts.last_name,
         primary_phone: contacts.primary_phone,
+        preference_tags: contacts.preference_tags,
         default_channel: contacts.default_channel,
         last_activity_at: contacts.last_activity_at,
         last_sent_at: contacts.last_sent_at,

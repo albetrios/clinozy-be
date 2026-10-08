@@ -471,7 +471,12 @@ bought_offering() {
 sessions_used() { patient_sql "SELECT sessions_used FROM app.patient_offerings WHERE public_id = '$1';"; }
 
 # call_backs SOURCE — the call-back tasks a check-in or review made (TR4).
-call_backs() { patient_sql "SELECT count(*) FROM app.tasks WHERE source_id = '$1' AND rule_key = 'call_back';"; }
+call_backs() {
+  patient_sql "SELECT count(*) FROM app.tasks t
+    LEFT JOIN app.patient_check_ins c ON c.id = t.patient_check_in_id
+    LEFT JOIN app.patient_reviews r ON r.id = t.patient_review_id
+    WHERE t.rule_key = 'call_back' AND '$1' IN (c.public_id, r.public_id);"
+}
 
 as_role owner
 expect 200 "offering Hydrafacial" POST /app/offerings "{\"name\":\"Hydrafacial ${S}\",\"price\":4000,\"sessions\":2,\"validity_days\":60}"

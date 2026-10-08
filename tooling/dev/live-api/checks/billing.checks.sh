@@ -406,7 +406,7 @@ expect_value "yesterday" '[.data[].id] | join(",")' "${DC_Y}"
 # ---- WC-39: the auto-close worker (B26) ------------------------------------------------------------
 expect 200 "money on a day nobody opened" POST /app/payments \
   "$(payment money_back "${BB}" '[{"mode":"cash","amount":200}]' "$(jq -nc --arg at "$(at "${FOUR_DAYS_AGO}")" '{paid_at: $at}')")"
-npx tsx tooling/dev/live-api/trigger-day-close-sweep.ts >/dev/null 2>&1
+npx tsx tooling/dev/live-api/trigger-sweep.ts day-close >/dev/null 2>&1
 for _ in $(seq 1 20); do
   api GET "/app/day-closes?branch_id=${BB}&close_date_from=${FOUR_DAYS_AGO}&close_date_to=${THREE_DAYS_AGO}" >/dev/null
   [ "$(last '[.data[] | select(.status == "closed")] | length')" = 2 ] && break

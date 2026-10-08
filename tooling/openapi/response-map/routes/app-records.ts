@@ -1478,6 +1478,11 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.tasksRecordSchema, schemas.tasksRecordExample),
     example: null,
   },
+  'POST /api/v1/app/tasks/{task_id}/reassign': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.tasksRecordSchema, schemas.tasksRecordExample),
+    example: null,
+  },
   'DELETE /api/v1/app/tasks/{task_id}': { statusCode: 204, schema: null, example: null },
   'POST /api/v1/app/tasks/{task_id}/restore': {
     statusCode: 200,

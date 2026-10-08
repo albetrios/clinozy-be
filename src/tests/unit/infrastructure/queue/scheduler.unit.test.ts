@@ -51,10 +51,10 @@ describe('infrastructure queue scheduler', () => {
     vi.resetModules();
   });
 
-  it('getScheduledJobs returns audit, session, stripe retention, audit export, tombstone retention, app record purge, idempotency, dlq depth, mail sweeper, upload pending sweep, stripe reclaim, day auto-close sweep, webhook delivery reclaim, and audit-outbox drain jobs', async () => {
+  it('getScheduledJobs returns audit, session, stripe retention, audit export, tombstone retention, app record purge, idempotency, dlq depth, mail sweeper, upload pending sweep, stripe reclaim, day auto-close sweep, task rules sweep, webhook delivery reclaim, and audit-outbox drain jobs', async () => {
     const { getScheduledJobs } = await import('@/infrastructure/queue/scheduler.js');
     const scheduledJobs = getScheduledJobs();
-    expect(scheduledJobs).toHaveLength(29);
+    expect(scheduledJobs).toHaveLength(30);
     expect(scheduledJobs.map((job) => job.queueName)).toEqual([
       'audit-retention',
       'audit-outbox-drain',
@@ -80,6 +80,8 @@ describe('infrastructure queue scheduler', () => {
       'stripe-webhook-event-catchup',
       // WC-39: the hourly day auto-close sweep
       'day-close-auto-close-sweep',
+      // TK4: the five-minute task rules sweep
+      'task-rules-sweep',
       'webhook-delivery-reclaim',
     ]);
   });
@@ -150,13 +152,13 @@ describe('infrastructure queue scheduler', () => {
   it('registerScheduledJobs registers one repeatable job per cleanup queue when enabled', async () => {
     const { registerScheduledJobs } = await import('@/infrastructure/queue/scheduler.js');
     const schedulerHandle = await registerScheduledJobs();
-    expect(upsertJobSchedulerMock).toHaveBeenCalledTimes(29);
-    // Each scheduled job opens one Queue for upsert (27) + the reconcile pass opens one Queue per
-    // unique queue name (27), each closed in its own loop iteration. The 27 upsert queues are
+    expect(upsertJobSchedulerMock).toHaveBeenCalledTimes(30);
+    // Each scheduled job opens one Queue for upsert (30) + the reconcile pass opens one Queue per
+    // unique queue name (30), each closed in its own loop iteration. The 30 upsert queues are
     // closed as soon as registration ends — not held open for the life of the process.
-    expect(queueCloseMock).toHaveBeenCalledTimes(58);
+    expect(queueCloseMock).toHaveBeenCalledTimes(60);
     await schedulerHandle.close();
-    expect(queueCloseMock).toHaveBeenCalledTimes(58);
+    expect(queueCloseMock).toHaveBeenCalledTimes(60);
   });
 
   it('registerScheduledJobs does not instantiate queues when SCHEDULER_ENABLED is false', async () => {

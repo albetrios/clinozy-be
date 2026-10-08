@@ -90,6 +90,8 @@ export type ContactSummaryRow = {
   first_name: string;
   last_name: string | null;
   primary_phone: string;
+  /** How the person likes to be reached (`no_calls` …) — a task's screen warns on it (CT14). */
+  preference_tags: string[];
   default_channel: string;
   last_activity_at: Date | null;
   last_sent_at: Date | null;

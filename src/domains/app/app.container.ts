@@ -13,8 +13,8 @@ import { MembershipPreferencesRepository } from './sub-domains/memberships/membe
 import { MembershipPreferencesService } from './sub-domains/memberships/membership-preferences/membership-preferences.service.js';
 import { MembershipSavedViewsRepository } from './sub-domains/memberships/membership-saved-views/membership-saved-views.repository.js';
 import { MembershipSavedViewsService } from './sub-domains/memberships/membership-saved-views/membership-saved-views.service.js';
-import { TaskRuleSettingsRepository } from './sub-domains/task-rule-settings/task-rule-settings.repository.js';
-import { TaskRuleSettingsService } from './sub-domains/task-rule-settings/task-rule-settings.service.js';
+import { TaskRuleSettingsRepository } from './sub-domains/tasks/task-rule-settings/task-rule-settings.repository.js';
+import { TaskRuleSettingsService } from './sub-domains/tasks/task-rule-settings/task-rule-settings.service.js';
 import { AppMembershipsService } from './sub-domains/memberships/memberships.service.js';
 import { ContactsRepository } from './sub-domains/contacts/contacts.repository.js';
 import { ContactMembersRepository } from './sub-domains/contacts/contact-members/contact-members.repository.js';

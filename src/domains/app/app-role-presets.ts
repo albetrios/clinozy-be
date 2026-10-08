@@ -32,14 +32,20 @@ function readCodes(resources: readonly string[]): string[] {
 /**
  * What every role holds: the organization (the team picker `GET /app/memberships`, the member's
  * own preferences and saved views — launch U2 — and the offering groups, offerings and offers every
- * booking and bill picks from — launch O2), tasks (D12) and reading contacts (CT5). The team management list
+ * booking and bill picks from — launch O2) and reading contacts (CT5). The team management list
  * (`membership:read`) is Owner and Admin (T7).
  */
 const EVERY_ROLE_CODES: readonly string[] = [
   TENANCY_PERMISSIONS.ORGANIZATION_READ,
-  ...sectionCodes('tasks', VIEW_CREATE_EDIT),
   APP_PERMISSIONS.CONTACT_READ,
 ];
+
+/**
+ * The tasks' View · Create · Edit (launch #138, TK2) — the roles that work the to-do list: Doctor,
+ * Therapist (the aftercare calls), Front desk and Counsellor; Pharmacist, Accountant and Marketing
+ * see no tasks by default.
+ */
+const TASK_WORKER_CODES: readonly string[] = sectionCodes('tasks', VIEW_CREATE_EDIT);
 
 /**
  * What every role that deals with people holds — all but the Accountant: {@link EVERY_ROLE_CODES},
@@ -84,6 +90,7 @@ const DOCTOR_PRESET: AppRolePreset = {
   isLocked: false,
   permissionCodes: unique([
     ...PERSON_FACING_ROLE_CODES,
+    ...TASK_WORKER_CODES,
     ...sectionCodes('leads', VIEW_CREATE_EDIT),
     ...sectionCodes('appointments', VIEW_CREATE_EDIT),
     ...sectionCodes('patients', VIEW_CREATE_EDIT),
@@ -106,6 +113,7 @@ const THERAPIST_PRESET: AppRolePreset = {
   isLocked: false,
   permissionCodes: unique([
     ...PERSON_FACING_ROLE_CODES,
+    ...TASK_WORKER_CODES,
     ...sectionCodes('appointments', VIEW_CREATE_EDIT),
     ...resourceCodes('patient', VIEW_CREATE_EDIT),
     ...resourceCodes('patient_treatment', VIEW_CREATE_EDIT),
@@ -123,6 +131,7 @@ const FRONT_DESK_PRESET: AppRolePreset = {
   isLocked: false,
   permissionCodes: unique([
     ...PERSON_FACING_ROLE_CODES,
+    ...TASK_WORKER_CODES,
     ...sectionCodes('leads', VIEW_CREATE_EDIT),
     ...sectionCodes('appointments', VIEW_CREATE_EDIT),
     ...resourceCodes('patient', VIEW_CREATE_EDIT),
@@ -140,6 +149,7 @@ const COUNSELLOR_PRESET: AppRolePreset = {
   isLocked: false,
   permissionCodes: unique([
     ...PERSON_FACING_ROLE_CODES,
+    ...TASK_WORKER_CODES,
     ...sectionCodes('leads', VIEW_CREATE_EDIT),
     ...sectionCodes('appointments', VIEW_CREATE_EDIT),
     ...resourceCodes('patient', VIEW_CREATE_EDIT),
@@ -205,14 +215,14 @@ const MARKETING_PRESET: AppRolePreset = {
 };
 
 /**
- * The clinic roles seeded into every TEAM organization next to Owner (D12, D13, D15, D16, D18, D19).
+ * The clinic roles seeded into every TEAM organization next to Owner (D12, D13, D15, D16, D18, TK2).
  *
  * @remarks
  * - **Algorithm:** each role holds View · Create · Edit in its sections (D12), the read codes of
  *   the pickers it needs, and its special permissions (D18); only Admin deletes. Role-named
  *   actions are codes (D13): prescriptions are written by Doctor, treatments by Doctor and
  *   Therapist. The Accountant sees the patient file's billing only (D15); Marketing logs reviews
- *   only (D16); task rules are Owner and Admin (D19).
+ *   only (D16); the task rules are an organization setting — Owner and Admin (TK2).
  * - **Notes:** Admin is everything Owner holds in the app and the team, minus deleting the
  *   organization (D8), and is the one locked role. Every other role is a system role (its name
  *   is fixed, it cannot be deleted) whose access each organization edits.

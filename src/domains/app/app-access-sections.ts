@@ -7,7 +7,7 @@
  * them (launch O2); their row adds Lowest price (`offering:lower_price:read`) and Export
  * (`offering:export`). The Leads and Appointments rows add Export (`lead:export`, `appointment:export` — launch #131
  * L4, #132 A9); the Payments row adds Export (`payment:export` — launch #136, B2), the Clinic stock row Export
- * (`stock_item:export` — launch #137, S2).
+ * (`stock_item:export` — launch #137, S2), the Tasks row Export (`task:export` — launch #138, TK2).
  *
  * @remarks
  * - **Notes:** generated with the app tables; the catalog seed carries the same categories.
@@ -34,6 +34,7 @@ export const APP_ACCESS_SECTION_RESOURCES = {
   // One code set for invoices, credit notes, payments, pending credits and day closes (launch
   // #136, B2); the row adds Export (`payment:export`).
   payments: ['payment'],
+  // The row adds Export (`task:export` — launch #138, TK2).
   tasks: ['task'],
   // One code set for groups, offerings and offers (launch #128, O2); no `offering:read` — every
   // member reads them.

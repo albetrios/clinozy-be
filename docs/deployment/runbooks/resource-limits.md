@@ -86,7 +86,7 @@ Each entry in [`worker-registration.registry.ts`](../../../src/infrastructure/qu
 | `criticality`                     | `throughput` / `maintenance` / `observability` — surfaced in `worker.queue_families.selected` and pool alerts so operators can correlate latency-critical workloads with pool pressure                                         |
 | `holdsConnectionDuringExternalIo` | `true` when the Postgres checkout is held during an outbound HTTP/S3/Resend call — these workers turn slow externals into pool starvation, so their concurrency is also reported as `peakPostgresConcurrencyHoldingExternalIo` |
 
-#### Per-family registry breakdown (36 workers; 33 use Postgres)
+#### Per-family registry breakdown (38 workers; 35 use Postgres)
 
 With default concurrency (`WORKER_CONCURRENCY=4`):
 
@@ -96,9 +96,9 @@ With default concurrency (`WORKER_CONCURRENCY=4`):
 | `notify`               | `notification` (throughput), `user-data-export` (throughput)                                                                                                           | 2 / 2    | `4 + 4 = 8`     | `0` (the export uploads between two short contexts)                                    |
 | `webhook`              | `webhook-delivery` (throughput), `webhook-delivery-reclaim` (1)                                                                                                        | 2 / 2    | `4 + 1 = 5`     | `0` (short transactions around the POST, not across it; the reclaim adds jobs after its read) |
 | `stripe`               | `stripe-webhook` (throughput), `subscription-seat-sync` (throughput), `stripe-webhook-event-retention` (1), `stripe-webhook-event-reclaim` (1), `stripe-webhook-event-catchup` (1) | 5 / 5    | `4 + 4 + 1 + 1 + 1 = 11` | `0`                                                                                    |
-| `retention`            | 21 single-concurrency workers (audit retention/export/drain, session cleanup, notification retention, 2 offboarding reconcilers, 11 tombstone/retention/sweep workers, the app record purge, the day auto-close sweep and its per-organization jobs) | 21 / 21  | `21 × 1 = 21`   | `0` (the audit export, the upload sweep and both S3 retention purges keep S3 calls outside their short contexts) |
+| `retention`            | 23 single-concurrency workers (audit retention/export/drain, session cleanup, notification retention, 2 offboarding reconcilers, 11 tombstone/retention/sweep workers, the app record purge, the day auto-close and task rules sweeps and their per-organization jobs) | 23 / 23  | `23 × 1 = 23`   | `0` (the audit export, the upload sweep and both S3 retention purges keep S3 calls outside their short contexts) |
 | `observability`        | `idempotency-cardinality`, `dlq-depth` (Redis-only), `dlq-auto-retry` (1)                                                                                              | 1 / 3    | `1`             | `0`                                                                                    |
-| **Total (monolithic)** | **36**                                                                                                                                                                 | **33**   | **`51`**        | **`0`**                                                                                |
+| **Total (monolithic)** | **38**                                                                                                                                                                 | **35**   | **`53`**        | **`0`**                                                                                |
 
 The `External-IO holding` column is the **at-risk slice** of the Postgres budget — these are the slots that can starve when Stripe, Resend, or S3 latency spikes. Watch the `workerPeakPostgresConcurrencyHoldingExternalIo` extra in the `database.pool.exhaustion.*` Sentry alerts.
 

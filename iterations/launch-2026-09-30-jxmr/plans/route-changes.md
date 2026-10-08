@@ -333,20 +333,20 @@ that drops them is built. The medical store's routes wait for its own review ([D
 
 ## 10. Tasks & rules
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| 10.1 | KEPT | GET | `/tasks` | `task:read` | The Tasks tabs — To do, Snoozed, Done | routes-final §10.A.7 |
-| 10.2 | KEPT | GET | `/tasks/exports` | `task:export` | The tasks CSV | routes-final §10.A.7 |
-| 10.3 | KEPT | POST | `/tasks` | `task:create` | Add a task by hand | routes-final §10.A.7 |
-| 10.4 | KEPT | GET | `/tasks/{task_id}` | `task:read` | Get a task (the drawer) | routes-final §10.A.7 |
-| 10.5 | KEPT | PATCH | `/tasks/{task_id}` | `task:update` | Change a task made by hand | routes-final §10.A.7 |
-| 10.6 | KEPT | POST | `/tasks/{task_id}/snooze` | `task:update` | Snooze it | routes-final §10.A.7 |
-| 10.7 | KEPT | POST | `/tasks/{task_id}/resolve` | `task:update` | Take an outcome — optionally set the next step | routes-final §10.A.7 |
-| 10.8 | NEW | POST | `/tasks/{task_id}/reassign` | `task:update` | Give it to someone or a role queue | routes-final §10.A.7 |
-| 10.9 | KEPT | DELETE | `/tasks/{task_id}` | `task:delete` | Delete a task made by hand | routes-final §10.A.7 |
-| 10.10 | KEPT | POST | `/tasks/{task_id}/restore` | `task:delete` | Undo | routes-final §10.A.7 |
-| 10.11 | KEPT | GET | `/task-rule-settings` | `task:read` | Every rule and its switches (the Rules popover) | routes-final §10.B.7 |
-| 10.12 | KEPT | PUT | `/task-rule-settings` | `organization:update` | Turn rules on or off; let Clinozy handle them | routes-final §10.B.7 |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 10.1 | KEPT | GET | `/tasks` | `task:read` | The Tasks tabs — To do, Snoozed, Done | routes-final §10.A.7 | `GET /api/v1/app/tasks` · #138 |
+| 10.2 | KEPT | GET | `/tasks/exports` | `task:export` | The tasks CSV | routes-final §10.A.7 | `GET /api/v1/app/tasks/exports` · #138 |
+| 10.3 | KEPT | POST | `/tasks` | `task:create` | Add a task by hand | routes-final §10.A.7 | `POST /api/v1/app/tasks` · #138 |
+| 10.4 | KEPT | GET | `/tasks/{task_id}` | `task:read` | Get a task (the drawer) | routes-final §10.A.7 | `GET /api/v1/app/tasks/{task_id}` · #138 |
+| 10.5 | KEPT | PATCH | `/tasks/{task_id}` | `task:update` | Change a task made by hand | routes-final §10.A.7 | `PATCH /api/v1/app/tasks/{task_id}` · #138 |
+| 10.6 | KEPT | POST | `/tasks/{task_id}/snooze` | `task:update` | Snooze it | routes-final §10.A.7 | `POST /api/v1/app/tasks/{task_id}/snooze` · #138 |
+| 10.7 | KEPT | POST | `/tasks/{task_id}/resolve` | `task:update` | Take an outcome — optionally set the next step | routes-final §10.A.7 | `POST /api/v1/app/tasks/{task_id}/resolve` · #138 |
+| 10.8 | NEW | POST | `/tasks/{task_id}/reassign` | `task:update` | Give it to someone or a role queue | routes-final §10.A.7 | `POST /api/v1/app/tasks/{task_id}/reassign` · #138 |
+| 10.9 | KEPT | DELETE | `/tasks/{task_id}` | `task:delete` | Delete a task made by hand | routes-final §10.A.7 | `DELETE /api/v1/app/tasks/{task_id}` · #138 |
+| 10.10 | KEPT | POST | `/tasks/{task_id}/restore` | `task:delete` | Undo | routes-final §10.A.7 | `POST /api/v1/app/tasks/{task_id}/restore` · #138 |
+| 10.11 | KEPT | GET | `/task-rule-settings` | `task:read` | Every rule and its switches (the Rules popover) | routes-final §10.B.7 | `GET /api/v1/app/task-rule-settings` · #138 |
+| 10.12 | KEPT | PUT | `/task-rule-settings` | `organization:update` | Turn rules on or off; let Clinozy handle them | routes-final §10.B.7 | `PUT /api/v1/app/task-rule-settings` · #138 |
 
 ## Before → after
 
