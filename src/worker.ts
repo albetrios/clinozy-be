@@ -13,9 +13,8 @@ import { closeBullMQMetricsQueues } from '@/infrastructure/observability/metrics
 import { OTEL_SERVICE_NAME_WORKER } from '@/shared/constants/project-identity.constants.js';
 import { createUnhandledRejectionHandler } from '@/infrastructure/observability/unhandled-rejection.handler.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
-import { closeRedis, connectRedis, redisConnection } from '@/infrastructure/cache/redis.client.js';
+import { closeRedis, connectRedis } from '@/infrastructure/cache/redis.client.js';
 import {
-  bullmqRedisConnection,
   closeBullMqRedis,
   connectBullMqRedis,
 } from '@/infrastructure/cache/bullmq-redis.client.js';
@@ -28,8 +27,7 @@ import {
 } from '@/infrastructure/database/safety/assert-database-rls-safety.js';
 import { assertDatabaseTlsVerification } from '@/infrastructure/database/safety/assert-database-tls-safety.js';
 import { assertRedisTlsVerification } from '@/infrastructure/cache/assert-redis-tls-safety.js';
-import { assertRedisEvictionPolicy } from '@/infrastructure/cache/assert-redis-eviction-policy.js';
-import { usesSeparateBullMqRedisDatabase } from '@/infrastructure/cache/redis-url.util.js';
+import { assertRedisEvictionPolicies } from '@/infrastructure/cache/assert-redis-eviction-policy.js';
 import { computeWorkerPostgresPoolDemand } from '@/infrastructure/queue/worker-runtime/worker-connection-budget.js';
 import { setWorkerPostgresPoolDemandContext } from '@/infrastructure/queue/worker-runtime/worker-pool-demand-context.js';
 import { registerPostgresPoolMetrics } from '@/infrastructure/observability/metrics/db-pool-metrics.js';
@@ -95,12 +93,8 @@ async function main() {
   await connectRedis();
   await connectBullMqRedis();
   warnWhenBullMqSharesCacheRedisHost();
-  // BullMQ loses job data and lock keys on an evicting Redis — refuse to start on one.
-  await assertRedisEvictionPolicy(
-    usesSeparateBullMqRedisDatabase()
-      ? { client: bullmqRedisConnection, endpointName: 'REDIS_BULLMQ_URL' }
-      : { client: redisConnection, endpointName: 'REDIS_URL' },
-  );
+  // Cache keys and BullMQ job data both vanish on an evicting Redis — check both endpoints.
+  await assertRedisEvictionPolicies();
   setWorkerPostgresPoolDemandContext(computeWorkerPostgresPoolDemand());
   await assertPostgresConnectionBudget({ assertWorkerConcurrency: true });
   await assertDatabaseRoleRlsSafety();

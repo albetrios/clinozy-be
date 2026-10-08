@@ -1,3 +1,7 @@
+import { bullmqRedisConnection } from '@/infrastructure/cache/bullmq-redis.client.js';
+import { redisConnection } from '@/infrastructure/cache/redis.client.js';
+import { usesSeparateBullMqRedisDatabase } from '@/infrastructure/cache/redis-url.util.js';
+import { captureMessage } from '@/infrastructure/observability/sentry/sentry.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 /** The one `maxmemory-policy` BullMQ is safe on: Redis refuses writes when full, it never evicts. */
@@ -21,10 +25,9 @@ function readMemorySettings(info: string): { policy: string | null; maxMemory: n
  *   and lock keys (jobs vanish, or a live job's lock disappears and a second worker runs it). An
  *   unreadable `INFO` (some managed Redis restrict it) only warns — the same on the API and the worker.
  * - **Side effects:** one `INFO memory`; a log line with the policy.
- * - **Notes:** the API calls this on `REDIS_URL` after `connectRedis`. The worker calls it on the
- *   Redis BullMQ uses (`REDIS_BULLMQ_URL` when that endpoint is separate, otherwise `REDIS_URL`).
- *   With `noeviction` a full Redis rejects writes instead — loud, recoverable, and what the Redis
- *   memory alerts watch for.
+ * - **Notes:** both boot paths call {@link assertRedisEvictionPolicies}, which checks `REDIS_URL`
+ *   and, when BullMQ uses a separate endpoint, `REDIS_BULLMQ_URL`. With `noeviction` a full Redis
+ *   rejects writes instead — loud, recoverable, and what the Redis memory alerts watch for.
  */
 export async function assertRedisEvictionPolicy(options: {
   client: { info(section: string): Promise<string> };
@@ -34,15 +37,15 @@ export async function assertRedisEvictionPolicy(options: {
   try {
     info = await options.client.info('memory');
   } catch (error) {
-    logger.warn(
-      { endpoint: options.endpointName, error: error instanceof Error ? error.message : error },
-      'redis.eviction_policy.unreadable',
-    );
+    warnUnreadableEvictionPolicy({
+      endpointName: options.endpointName,
+      error: error instanceof Error ? error.message : error,
+    });
     return;
   }
   const { policy, maxMemory } = readMemorySettings(info);
   if (policy === null) {
-    logger.warn({ endpoint: options.endpointName }, 'redis.eviction_policy.unreadable');
+    warnUnreadableEvictionPolicy({ endpointName: options.endpointName });
     return;
   }
   if (policy === SAFE_EVICTION_POLICY || maxMemory === 0) {
@@ -57,4 +60,33 @@ export async function assertRedisEvictionPolicy(options: {
       'Set maxmemory-policy noeviction on the Redis server. ' +
       'See docs/deployment/runbooks/redis-topology.md.',
   );
+}
+
+/**
+ * Checks every Redis this process depends on for an evicting `maxmemory-policy`.
+ *
+ * @remarks
+ * Always checks the cache client (`REDIS_URL`). When BullMQ uses a separate endpoint it also
+ * checks that client (`REDIS_BULLMQ_URL`), after the cache check. A shared endpoint is one Redis,
+ * so the cache check covers BullMQ too. Both the API and the worker call this after their connects.
+ */
+export async function assertRedisEvictionPolicies(): Promise<void> {
+  await assertRedisEvictionPolicy({ client: redisConnection, endpointName: 'REDIS_URL' });
+  if (!usesSeparateBullMqRedisDatabase()) return;
+  await assertRedisEvictionPolicy({
+    client: bullmqRedisConnection,
+    endpointName: 'REDIS_BULLMQ_URL',
+  });
+}
+
+/** Logs and reports an unreadable `INFO memory` without refusing to boot. */
+function warnUnreadableEvictionPolicy(options: { endpointName: string; error?: unknown }): void {
+  logger.warn(
+    { endpoint: options.endpointName, error: options.error },
+    'redis.eviction_policy.unreadable',
+  );
+  captureMessage('redis.eviction_policy.unreadable', {
+    level: 'warning',
+    extra: { endpoint: options.endpointName, error: options.error },
+  });
 }

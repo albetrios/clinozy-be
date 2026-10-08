@@ -8,8 +8,8 @@ import { initOpenTelemetry } from '@/infrastructure/observability/tracing/otel.j
 import { initPostHog } from '@/infrastructure/observability/posthog/posthog.js';
 import { OTEL_SERVICE_NAME_API } from '@/shared/constants/project-identity.constants.js';
 import { createUnhandledRejectionHandler } from '@/infrastructure/observability/unhandled-rejection.handler.js';
-import { connectRedis, redisConnection } from '@/infrastructure/cache/redis.client.js';
-import { assertRedisEvictionPolicy } from '@/infrastructure/cache/assert-redis-eviction-policy.js';
+import { connectRedis } from '@/infrastructure/cache/redis.client.js';
+import { assertRedisEvictionPolicies } from '@/infrastructure/cache/assert-redis-eviction-policy.js';
 import { connectBullMqRedis } from '@/infrastructure/cache/bullmq-redis.client.js';
 import { warnWhenBullMqSharesCacheRedisHost } from '@/infrastructure/cache/redis-topology-warn.util.js';
 import { assertPostgresConnectionBudget } from '@/infrastructure/database/safety/assert-connection-budget.js';
@@ -73,11 +73,10 @@ async function main() {
    * enableOfflineQueue:false) and fails with "Stream isn't writeable" before
    * the lazy connect completes. */
   await connectRedis();
-  // Idempotency placeholders, permission cache, and rate-limit counters live on REDIS_URL.
-  // An evicting policy drops them under memory pressure (a replay runs the handler twice).
-  // The worker checks the BullMQ client separately; this check is the API cache.
-  await assertRedisEvictionPolicy({ client: redisConnection, endpointName: 'REDIS_URL' });
   await connectBullMqRedis();
+  // Idempotency placeholders live on REDIS_URL; BullMQ job data lives on its own Redis when
+  // the endpoint is separate. Both must refuse to evict, or a replay runs twice and a job vanishes.
+  await assertRedisEvictionPolicies();
   warnWhenBullMqSharesCacheRedisHost();
   await assertPostgresConnectionBudget();
   await assertDatabaseRoleRlsSafety();

@@ -30,7 +30,7 @@ describe('assertRedisEvictionPolicy', () => {
           client: redisReporting(`maxmemory:268435456\r\nmaxmemory_policy:${policy}\r\n`),
           endpointName: 'REDIS_URL',
         }),
-      ).rejects.toThrow(/redis\.eviction_policy\.unsafe/);
+      ).rejects.toThrow(/redis\.eviction_policy\.unsafe[\s\S]*REDIS_URL/);
     },
   );
 
