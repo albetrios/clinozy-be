@@ -70,7 +70,9 @@
     "roleToCopyNotFound": "{{role_id}} is not a role of this organization",
     "recordFieldRule": "The {{field}} field breaks a record rule",
     "recordReferenceNotFound": "{{id}} is not a {{label}} of this organization",
-    "branchNotYours": "{{field}} is not one of your branches"
+    "branchNotYours": "{{field}} is not one of your branches",
+    "preferenceBranchNotVisible": "Not a branch you can see: {{branch_id}}",
+    "savedViewFilterNotTaken": "The {{list_key}} list does not take this filter or value: {{filter}}"
   },
   "missingSessionCookie": "Missing session cookie",
   "disposableEmail": "This email domain is not allowed.",
@@ -205,5 +207,8 @@
   "prescriptionApproved": "An approved prescription cannot be changed",
   "packageExpired": "This package has expired",
   "packageUsedUp": "Every session of this package is used",
-  "treatmentReversed": "A reversed session cannot be changed"
+  "treatmentReversed": "A reversed session cannot be changed",
+  "ownMembershipRequired": "Preferences and saved views belong to a member signed in as themselves — an API key has none",
+  "savedViewExists": "You already have a view with this name on this list",
+  "savedViewLimit": "You can keep up to {{max}} views on a list — remove one first"
 }

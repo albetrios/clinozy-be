@@ -300,10 +300,12 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
     'cross-organization-resource: message template',
   'GET /api/v1/app/branches/:branch_id/holidays': 'cross-organization-resource: branch holiday',
   'POST /api/v1/app/branches/:branch_id/holidays': 'cross-organization-resource: branch holiday',
-  'GET /api/v1/app/saved-views/:saved_view_id': 'cross-organization-resource: saved view',
-  'PATCH /api/v1/app/saved-views/:saved_view_id': 'cross-organization-resource: saved view',
-  'DELETE /api/v1/app/saved-views/:saved_view_id': 'cross-organization-resource: saved view',
-  'POST /api/v1/app/saved-views/:saved_view_id/restore': 'cross-organization-resource: saved view',
+  'GET /api/v1/app/memberships/me/saved-views/:membership_saved_view_id':
+    "object-ownership: saved views (the member's own)",
+  'PATCH /api/v1/app/memberships/me/saved-views/:membership_saved_view_id':
+    "object-ownership: saved views (the member's own)",
+  'DELETE /api/v1/app/memberships/me/saved-views/:membership_saved_view_id':
+    "object-ownership: saved views (the member's own)",
   'GET /api/v1/app/offering-groups/:offering_group_id':
     'cross-organization-resource: offering group',
   'PATCH /api/v1/app/offering-groups/:offering_group_id':

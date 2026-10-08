@@ -18,6 +18,18 @@ const branchMembersResponse: ResponseDefinition = {
 };
 
 /** The whole task rule list — saved settings, or the default (id null) per rule. */
+const membershipPreferencesResponse: ResponseDefinition = {
+  statusCode: 200,
+  schema: wrapSuccess(schemas.membershipPreferencesSchema, schemas.membershipPreferencesExample),
+  example: null,
+};
+
+const membershipSavedViewResponse: ResponseDefinition = {
+  statusCode: 200,
+  schema: wrapSuccess(schemas.membershipSavedViewSchema, schemas.membershipSavedViewExample),
+  example: null,
+};
+
 const taskRulesResponse: ResponseDefinition = {
   statusCode: 200,
   schema: wrapSuccess({ type: 'array', items: schemas.taskRuleSettingsRecordSchema }, [
@@ -43,21 +55,29 @@ export const appRouteResponses: Record<string, ResponseDefinition> = {
   'GET /api/v1/app/branches/{branch_id}': branchResponse,
   'POST /api/v1/app/branches': branchResponse,
   'PATCH /api/v1/app/branches/{branch_id}': branchResponse,
-  // ── Preferences (singleton) ──
-  'GET /api/v1/app/user-preferences': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.userPreferencesRecordSchema, schemas.userPreferencesRecordExample),
-    example: null,
-  },
-  'PATCH /api/v1/app/user-preferences': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.userPreferencesRecordSchema, schemas.userPreferencesRecordExample),
-    example: null,
-  },
   // ── Memberships (the team picker and member directory) ──
   'GET /api/v1/app/memberships': {
     statusCode: 200,
     schema: wrapPaginated(schemas.appMembershipSchema, [schemas.appMembershipExample]),
+    example: null,
+  },
+  // ── The member's own preferences (launch §2.F) ──
+  'GET /api/v1/app/memberships/me/preferences': membershipPreferencesResponse,
+  'PATCH /api/v1/app/memberships/me/preferences': membershipPreferencesResponse,
+  // ── The member's own saved views (launch §2.G) ──
+  'GET /api/v1/app/memberships/me/saved-views': {
+    statusCode: 200,
+    schema: wrapPaginated(schemas.membershipSavedViewSchema, [schemas.membershipSavedViewExample]),
+    example: null,
+  },
+  'POST /api/v1/app/memberships/me/saved-views': membershipSavedViewResponse,
+  'GET /api/v1/app/memberships/me/saved-views/{membership_saved_view_id}':
+    membershipSavedViewResponse,
+  'PATCH /api/v1/app/memberships/me/saved-views/{membership_saved_view_id}':
+    membershipSavedViewResponse,
+  'DELETE /api/v1/app/memberships/me/saved-views/{membership_saved_view_id}': {
+    statusCode: 204,
+    schema: null,
     example: null,
   },
   // ── Task rules (the whole list) ──

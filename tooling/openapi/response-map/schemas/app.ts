@@ -136,6 +136,106 @@ export const appMembershipExample = {
   ended_at: null,
 };
 
+/** `MembershipPreferencesOutput` — a member's own settings (launch §2.F); `id` and times null before the first save. */
+export const membershipPreferencesSchema = {
+  type: 'object',
+  properties: {
+    id: { type: ['string', 'null'], example: 'upref_k7x9m2pqr4w8n1v3a1b2c' },
+    pinned_sections: {
+      type: 'array',
+      maxItems: 10,
+      items: {
+        type: 'string',
+        enum: [
+          'today',
+          'leads',
+          'appointments',
+          'patients',
+          'medical',
+          'stock',
+          'payments',
+          'tasks',
+          'offerings',
+          'users',
+        ],
+      },
+    },
+    theme: { type: 'string', enum: ['light', 'dark', 'system'] },
+    branch_ids: { type: 'array', maxItems: 20, items: { type: 'string' } },
+    patient_file_pins: {
+      type: 'array',
+      maxItems: 11,
+      items: {
+        type: 'string',
+        enum: [
+          'overview',
+          'activity',
+          'clinical_notes',
+          'appointments',
+          'prescriptions',
+          'treatments',
+          'images',
+          'reports',
+          'packages',
+          'invoices',
+          'payments',
+        ],
+      },
+    },
+    recent_picks: { type: 'array', maxItems: 60, items: { type: 'string' } },
+    created_at: { type: ['string', 'null'], format: 'date-time' },
+    updated_at: { type: ['string', 'null'], format: 'date-time' },
+  },
+};
+
+/** Example `MembershipPreferencesOutput`. */
+export const membershipPreferencesExample = {
+  id: 'upref_k7x9m2pqr4w8n1v3a1b2c',
+  pinned_sections: ['appointments', 'leads', 'patients', 'payments'],
+  theme: 'light',
+  branch_ids: ['brn_k7x9m2pqr4w8n1v3a1b2c'],
+  patient_file_pins: ['clinical_notes', 'appointments', 'prescriptions', 'invoices'],
+  recent_picks: ['appointments:doctor:mem_k7x9m2pqr4w8n1v3a1b2c'],
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
+};
+
+/** `MembershipSavedViewOutput` — a list's filters under a label (launch §2.G). */
+export const membershipSavedViewSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', example: 'svw_k7x9m2pqr4w8n1v3a1b2c' },
+    list_key: {
+      type: 'string',
+      enum: [
+        'patients',
+        'leads',
+        'appointments',
+        'invoices',
+        'payments',
+        'offerings',
+        'memberships',
+      ],
+    },
+    label: { type: 'string', maxLength: 60 },
+    filters: { type: 'object', additionalProperties: true },
+    hidden_columns: { type: 'array', maxItems: 40, items: { type: 'string' } },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
+  },
+};
+
+/** Example `MembershipSavedViewOutput`. */
+export const membershipSavedViewExample = {
+  id: 'svw_k7x9m2pqr4w8n1v3a1b2c',
+  list_key: 'patients',
+  label: 'Due this week',
+  filters: { q: 'shah' },
+  hidden_columns: ['phone'],
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
+};
+
 /** `ContactOutput` — a patient, lead or walk-in buyer (`GET /app/contacts`). */
 export const contactSchema = {
   type: 'object',

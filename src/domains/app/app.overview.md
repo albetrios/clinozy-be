@@ -25,7 +25,7 @@ as the launch's ROUTE builds them.
 | Sub-domain | Tables | Routes |
 | --- | --- | --- |
 | [branches](sub-domains/branches/branches.overview.md) | `app.branches`; nested `app.branch_members`, `app.branch_rooms`, `app.branch_machines`, `app.branch_holidays` | `/app/branches`, `/app/branches/my`, `/app/branches/{branch_id}`, `/app/branches/{branch_id}/{members,rooms,machines,holidays}…` |
-| [memberships](sub-domains/memberships/memberships.overview.md) | reads `tenancy.memberships` (the team picker and member directory) | `/app/memberships` |
+| [memberships](sub-domains/memberships/memberships.overview.md) | reads `tenancy.memberships` (the team picker and member directory); nested `app.membership_preferences`, `app.membership_preference_branches`, `app.membership_saved_views` | `/app/memberships`, `/app/memberships/me/{preferences,saved-views…}` |
 
 ## Patterns used
 

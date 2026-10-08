@@ -30,12 +30,12 @@ function readCodes(resources: readonly string[]): string[] {
 }
 
 /**
- * What every role holds: the organization (the team picker, `GET /app/memberships`), its own saved
- * views and tasks (D12). The team management list (`membership:read`) is Owner and Admin (T7).
+ * What every role holds: the organization (the team picker `GET /app/memberships`, and the member's
+ * own preferences and saved views — launch U2) and tasks (D12). The team management list
+ * (`membership:read`) is Owner and Admin (T7).
  */
 const EVERY_ROLE_CODES: readonly string[] = [
   TENANCY_PERMISSIONS.ORGANIZATION_READ,
-  ...sectionCodes('personal', ['read', 'create', 'update', 'delete']),
   ...sectionCodes('tasks', VIEW_CREATE_EDIT),
 ];
 

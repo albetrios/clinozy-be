@@ -8,8 +8,10 @@ import { BranchesService } from './sub-domains/branches/branches.service.js';
 import { BranchMembersRepository } from './sub-domains/branches/branch-members/branch-members.repository.js';
 import { BranchMembersService } from './sub-domains/branches/branch-members/branch-members.service.js';
 import { type AppRecordServices, createAppRecordServices } from './app-records.container.js';
-import { UserPreferencesRepository } from './sub-domains/user-preferences/user-preferences.repository.js';
-import { UserPreferencesService } from './sub-domains/user-preferences/user-preferences.service.js';
+import { MembershipPreferencesRepository } from './sub-domains/memberships/membership-preferences/membership-preferences.repository.js';
+import { MembershipPreferencesService } from './sub-domains/memberships/membership-preferences/membership-preferences.service.js';
+import { MembershipSavedViewsRepository } from './sub-domains/memberships/membership-saved-views/membership-saved-views.repository.js';
+import { MembershipSavedViewsService } from './sub-domains/memberships/membership-saved-views/membership-saved-views.service.js';
 import { TaskRuleSettingsRepository } from './sub-domains/task-rule-settings/task-rule-settings.repository.js';
 import { TaskRuleSettingsService } from './sub-domains/task-rule-settings/task-rule-settings.service.js';
 import { AppMembershipsService } from './sub-domains/memberships/memberships.service.js';
@@ -24,7 +26,8 @@ import {
 export type AppContainer = {
   branchesService: BranchesService;
   branchMembersService: BranchMembersService;
-  userPreferencesService: UserPreferencesService;
+  membershipPreferencesService: MembershipPreferencesService;
+  membershipSavedViewsService: MembershipSavedViewsService;
   taskRuleSettingsService: TaskRuleSettingsService;
   appMembershipsService: AppMembershipsService;
   searchesService: SearchesService;
@@ -73,9 +76,14 @@ export function createAppContainer(
       branchesRepository,
       branchMembersRepository,
     ),
-    userPreferencesService: new UserPreferencesService(
+    membershipPreferencesService: new MembershipPreferencesService(
       organizationService,
-      new UserPreferencesRepository(),
+      branchesRepository,
+      new MembershipPreferencesRepository(),
+    ),
+    membershipSavedViewsService: new MembershipSavedViewsService(
+      organizationService,
+      new MembershipSavedViewsRepository(),
     ),
     taskRuleSettingsService: new TaskRuleSettingsService(
       organizationService,

@@ -70,7 +70,9 @@
     "roleToCopyNotFound": "{{role_id}} no es un rol de esta organización",
     "recordFieldRule": "El campo {{field}} incumple una regla del registro",
     "recordReferenceNotFound": "{{id}} no es un registro de tipo {{label}} de esta organización",
-    "branchNotYours": "{{field}} no es una de tus sucursales"
+    "branchNotYours": "{{field}} no es una de tus sucursales",
+    "preferenceBranchNotVisible": "No es una sucursal que puedas ver: {{branch_id}}",
+    "savedViewFilterNotTaken": "La lista {{list_key}} no admite este filtro o valor: {{filter}}"
   },
   "missingSessionCookie": "Falta la cookie de sesión",
   "disposableEmail": "Este dominio de correo no está permitido.",
@@ -205,5 +207,8 @@
   "prescriptionApproved": "Una receta aprobada no se puede cambiar",
   "packageExpired": "Este paquete ha caducado",
   "packageUsedUp": "Ya se usaron todas las sesiones de este paquete",
-  "treatmentReversed": "Una sesión revertida no se puede cambiar"
+  "treatmentReversed": "Una sesión revertida no se puede cambiar",
+  "ownMembershipRequired": "Las preferencias y las vistas guardadas pertenecen a un miembro que ha iniciado sesión como sí mismo; una clave de API no tiene",
+  "savedViewExists": "Ya tienes una vista con este nombre en esta lista",
+  "savedViewLimit": "Puedes guardar hasta {{max}} vistas por lista: elimina una primero"
 }

@@ -4,36 +4,6 @@ import { wrapPaginated, wrapSuccess } from '@tooling/openapi/response-map/buildi
 import * as schemas from '@tooling/openapi/response-map/resource-schemas.js';
 
 export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
-  'GET /api/v1/app/saved-views': {
-    statusCode: 200,
-    schema: wrapPaginated(schemas.savedViewsRecordSchema, [schemas.savedViewsRecordExample]),
-    example: null,
-  },
-  'POST /api/v1/app/saved-views': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.savedViewsRecordSchema, schemas.savedViewsRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/saved-views/{saved_view_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.savedViewsRecordSchema, schemas.savedViewsRecordExample),
-    example: null,
-  },
-  'PATCH /api/v1/app/saved-views/{saved_view_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.savedViewsRecordSchema, schemas.savedViewsRecordExample),
-    example: null,
-  },
-  'DELETE /api/v1/app/saved-views/{saved_view_id}': {
-    statusCode: 204,
-    schema: null,
-    example: null,
-  },
-  'POST /api/v1/app/saved-views/{saved_view_id}/restore': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.savedViewsRecordSchema, schemas.savedViewsRecordExample),
-    example: null,
-  },
   'GET /api/v1/app/offering-groups': {
     statusCode: 200,
     schema: wrapPaginated(schemas.offeringGroupsRecordSchema, [

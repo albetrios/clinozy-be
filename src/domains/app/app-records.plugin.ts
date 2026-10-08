@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 import type { AppRecordServices } from './app-records.container.js';
-import { savedViewsRoutes } from './sub-domains/saved-views/saved-views.routes.js';
 import { offeringGroupsRoutes } from './sub-domains/offering-groups/offering-groups.routes.js';
 import { branchRoomsRoutes } from './sub-domains/branches/branch-rooms/branch-rooms.routes.js';
 import { branchMachinesRoutes } from './sub-domains/branches/branch-machines/branch-machines.routes.js';
@@ -52,7 +51,6 @@ export async function registerAppRecordRoutes(
   app: FastifyInstance,
   services: AppRecordServices,
 ): Promise<void> {
-  await app.register(savedViewsRoutes(services.savedViewsService));
   await app.register(offeringGroupsRoutes(services.offeringGroupsService));
   await app.register(branchRoomsRoutes(services.branchRoomsService));
   await app.register(branchMachinesRoutes(services.branchMachinesService));

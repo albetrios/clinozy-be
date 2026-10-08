@@ -283,10 +283,36 @@ src/
     │   │   │   ├── medicines.types.ts
     │   │   │   └── medicines.validator.ts
     │   │   ├── memberships/
+    │   │   │   ├── membership-preferences/
+    │   │   │   │   ├── membership-preferences.constants.ts
+    │   │   │   │   ├── membership-preferences.controller.ts
+    │   │   │   │   ├── membership-preferences.dto.ts
+    │   │   │   │   ├── membership-preferences.overview.md
+    │   │   │   │   ├── membership-preferences.repository.ts
+    │   │   │   │   ├── membership-preferences.routes.ts
+    │   │   │   │   ├── membership-preferences.schema.ts
+    │   │   │   │   ├── membership-preferences.serializer.ts
+    │   │   │   │   ├── membership-preferences.service.ts
+    │   │   │   │   ├── membership-preferences.types.ts
+    │   │   │   │   └── membership-preferences.validator.ts
+    │   │   │   ├── membership-saved-views/
+    │   │   │   │   ├── membership-saved-views.constants.ts
+    │   │   │   │   ├── membership-saved-views.controller.ts
+    │   │   │   │   ├── membership-saved-views.dto.ts
+    │   │   │   │   ├── membership-saved-views.lists.ts
+    │   │   │   │   ├── membership-saved-views.overview.md
+    │   │   │   │   ├── membership-saved-views.repository.ts
+    │   │   │   │   ├── membership-saved-views.routes.ts
+    │   │   │   │   ├── membership-saved-views.schema.ts
+    │   │   │   │   ├── membership-saved-views.serializer.ts
+    │   │   │   │   ├── membership-saved-views.service.ts
+    │   │   │   │   ├── membership-saved-views.types.ts
+    │   │   │   │   └── membership-saved-views.validator.ts
     │   │   │   ├── memberships.controller.ts
     │   │   │   ├── memberships.dto.ts
     │   │   │   ├── memberships.overview.md
     │   │   │   ├── memberships.routes.ts
+    │   │   │   ├── memberships.rules.ts
     │   │   │   ├── memberships.serializer.ts
     │   │   │   ├── memberships.service.ts
     │   │   │   ├── memberships.types.ts
@@ -511,18 +537,6 @@ src/
     │   │   │   ├── reviews.service.ts
     │   │   │   ├── reviews.types.ts
     │   │   │   └── reviews.validator.ts
-    │   │   ├── saved-views/
-    │   │   │   ├── saved-views.constants.ts
-    │   │   │   ├── saved-views.controller.ts
-    │   │   │   ├── saved-views.dto.ts
-    │   │   │   ├── saved-views.overview.md
-    │   │   │   ├── saved-views.repository.ts
-    │   │   │   ├── saved-views.routes.ts
-    │   │   │   ├── saved-views.schema.ts
-    │   │   │   ├── saved-views.serializer.ts
-    │   │   │   ├── saved-views.service.ts
-    │   │   │   ├── saved-views.types.ts
-    │   │   │   └── saved-views.validator.ts
     │   │   ├── searches/
     │   │   │   ├── searches.controller.ts
     │   │   │   ├── searches.dto.ts
@@ -656,18 +670,6 @@ src/
     │   │   │   ├── treatments.service.ts
     │   │   │   ├── treatments.types.ts
     │   │   │   └── treatments.validator.ts
-    │   │   ├── user-preferences/
-    │   │   │   ├── user-preferences.constants.ts
-    │   │   │   ├── user-preferences.controller.ts
-    │   │   │   ├── user-preferences.dto.ts
-    │   │   │   ├── user-preferences.overview.md
-    │   │   │   ├── user-preferences.repository.ts
-    │   │   │   ├── user-preferences.routes.ts
-    │   │   │   ├── user-preferences.schema.ts
-    │   │   │   ├── user-preferences.serializer.ts
-    │   │   │   ├── user-preferences.service.ts
-    │   │   │   ├── user-preferences.types.ts
-    │   │   │   └── user-preferences.validator.ts
     │   │   └── visits/
     │   │   │   ├── visits.constants.ts
     │   │   │   ├── visits.controller.ts
@@ -1418,12 +1420,6 @@ src/
     │   │   │   │   │   ├── membership.service.seat-downgrade.unit.test.ts
     │   │   │   │   │   ├── membership.service.unit.test.ts
     │   │   │   │   │   └── membership.validator.unit.test.ts
-    │   │   │   ├── member-invitation/
-    │   │   │   │   ├── __tests__/
-    │   │   │   │   │   └── unit/
-    │   │   │   │   │   │   └── events/
-    │   │   │   │   ├── events/
-    │   │   │   │   └── seed/
     │   │   │   ├── membership-additional-roles/
     │   │   │   │   ├── membership-additional-roles.overview.md
     │   │   │   │   ├── membership-additional-roles.repository.ts

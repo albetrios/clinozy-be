@@ -48,6 +48,11 @@ export const RESOURCE_QUOTA_LOCK_NAMESPACE = {
    * concurrent bookings can never both take a doctor's, room's or machine's slot.
    */
   APPOINTMENT_SLOT: 0x53_4c_4f_54,
+  /**
+   * Per-(membership, list) saved-view cap, keyed by `<membership id>:<list_key>`. ASCII `SVWS`.
+   * Serializes the count and the insert, so two saves at once never pass the 20-view cap (launch U5).
+   */
+  MEMBERSHIP_SAVED_VIEW: 0x53_56_57_53,
 } as const;
 
 /**

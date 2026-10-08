@@ -940,7 +940,7 @@ A missing code is a `403`; a member, invite or role of another organization is a
 
 | Item | Value |
 | --- | --- |
-| Base | `/api/v1` — route 1 under `/app`, the rest under `/tenancy` |
+| Base | `/api/v1` — routes 1 and 21–27 under `/app` (D60), the rest under `/tenancy` |
 | Auth | `Authorization: Bearer <access token>`; the active organization comes from the token (no organization id in the path) |
 | Writes | every `POST` needs `X-Idempotency-Key` (T13); `PATCH` takes an optional `expected_updated_at` (T14) |
 | Success | `200` with `{ data, meta }`; lists `{ data: [...], meta: { pagination: { per_page, next, has_more, estimated_total } } }`; `DELETE` → `204` |
@@ -986,13 +986,13 @@ Every route of the sub-domain in one table; each nested sub-domain repeats its o
 | 18 | GET | `/tenancy/organization/roles/{role_id}/permissions` | A role's codes | `role:read` | | 2.D Roles |
 | 19 | PUT | `/tenancy/organization/roles/{role_id}/permissions` | Replace a role's codes (the matrix) | `role:update` | | 2.D Roles |
 | 20 | GET | `/tenancy/permissions` | The permission catalog | signed in | | 2.E Permission catalog |
-| 21 | GET | `/memberships/me/preferences` | My preferences (the defaults before the first save) **(renamed)** | `organization:read` | | 2.F Preferences |
-| 22 | PATCH | `/memberships/me/preferences` | Save them **(renamed)** | `organization:read` | | 2.F Preferences |
-| 23 | GET | `/memberships/me/saved-views` | My saved views **(renamed)** | `organization:read` | | 2.G Saved views |
-| 24 | POST | `/memberships/me/saved-views` | Save a view **(renamed)** | `organization:read` | req | 2.G Saved views |
-| 25 | GET | `/memberships/me/saved-views/{membership_saved_view_id}` | Get one **(renamed)** | `organization:read` | | 2.G Saved views |
-| 26 | PATCH | `/memberships/me/saved-views/{membership_saved_view_id}` | Rename it or change its filters **(renamed)** | `organization:read` | | 2.G Saved views |
-| 27 | DELETE | `/memberships/me/saved-views/{membership_saved_view_id}` | Remove it — for good (U6) **(renamed)** | `organization:read` | | 2.G Saved views |
+| 21 | GET | `/app/memberships/me/preferences` | My preferences (the defaults before the first save) **(renamed)** | `organization:read` | | 2.F Preferences |
+| 22 | PATCH | `/app/memberships/me/preferences` | Save them **(renamed)** | `organization:read` | | 2.F Preferences |
+| 23 | GET | `/app/memberships/me/saved-views` | My saved views **(renamed)** | `organization:read` | | 2.G Saved views |
+| 24 | POST | `/app/memberships/me/saved-views` | Save a view **(renamed)** | `organization:read` | req | 2.G Saved views |
+| 25 | GET | `/app/memberships/me/saved-views/{membership_saved_view_id}` | Get one **(renamed)** | `organization:read` | | 2.G Saved views |
+| 26 | PATCH | `/app/memberships/me/saved-views/{membership_saved_view_id}` | Rename it or change its filters **(renamed)** | `organization:read` | | 2.G Saved views |
+| 27 | DELETE | `/app/memberships/me/saved-views/{membership_saved_view_id}` | Remove it — for good (U6) **(renamed)** | `organization:read` | | 2.G Saved views |
 
 ### 2.8 Request details
 
@@ -1571,8 +1571,8 @@ As 2.5.
 
 | # | Method | Path | Purpose | Gate | Idem |
 | --- | --- | --- | --- | --- | --- |
-| 21 | GET | `/memberships/me/preferences` | My preferences (the defaults before the first save) **(renamed)** | `organization:read` | |
-| 22 | PATCH | `/memberships/me/preferences` | Save them **(renamed)** | `organization:read` | |
+| 21 | GET | `/app/memberships/me/preferences` | My preferences (the defaults before the first save) **(renamed)** | `organization:read` | |
+| 22 | PATCH | `/app/memberships/me/preferences` | Save them **(renamed)** | `organization:read` | |
 
 #### 2.F.8 Request details
 
@@ -1648,11 +1648,11 @@ As 2.5.
 
 | # | Method | Path | Purpose | Gate | Idem |
 | --- | --- | --- | --- | --- | --- |
-| 23 | GET | `/memberships/me/saved-views` | My saved views **(renamed)** | `organization:read` | |
-| 24 | POST | `/memberships/me/saved-views` | Save a view **(renamed)** | `organization:read` | req |
-| 25 | GET | `/memberships/me/saved-views/{membership_saved_view_id}` | Get one **(renamed)** | `organization:read` | |
-| 26 | PATCH | `/memberships/me/saved-views/{membership_saved_view_id}` | Rename it or change its filters **(renamed)** | `organization:read` | |
-| 27 | DELETE | `/memberships/me/saved-views/{membership_saved_view_id}` | Remove it — for good (U6) **(renamed)** | `organization:read` | |
+| 23 | GET | `/app/memberships/me/saved-views` | My saved views **(renamed)** | `organization:read` | |
+| 24 | POST | `/app/memberships/me/saved-views` | Save a view **(renamed)** | `organization:read` | req |
+| 25 | GET | `/app/memberships/me/saved-views/{membership_saved_view_id}` | Get one **(renamed)** | `organization:read` | |
+| 26 | PATCH | `/app/memberships/me/saved-views/{membership_saved_view_id}` | Rename it or change its filters **(renamed)** | `organization:read` | |
+| 27 | DELETE | `/app/memberships/me/saved-views/{membership_saved_view_id}` | Remove it — for good (U6) **(renamed)** | `organization:read` | |
 
 `POST /saved-views/{saved_view_id}/restore` goes (U6).
 

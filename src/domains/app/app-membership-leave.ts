@@ -1,5 +1,7 @@
 import type { MembershipLeavePort } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
 import { BranchesRepository } from './sub-domains/branches/branches.repository.js';
+import { MembershipPreferencesRepository } from './sub-domains/memberships/membership-preferences/membership-preferences.repository.js';
+import { MembershipSavedViewsRepository } from './sub-domains/memberships/membership-saved-views/membership-saved-views.repository.js';
 
 /** The membership a part of the leave step releases: its organization's and its own internal id. */
 export type EndedMembershipReference = { organizationId: number; membershipId: number };
@@ -35,12 +37,26 @@ export class AppMembershipLeaveStep implements MembershipLeavePort {
  * @remarks
  * Today's parts: sub-domain 1 — every branch's default staff naming them is cleared (C15); their
  * branch access rows stay, hidden while the membership is ended and back with a restore (D57).
+ * Sub-domain 2 — their preferences and saved views are theirs alone and are deleted (U1); a restore
+ * starts them from the defaults again.
  */
 export function createAppMembershipLeaveStep(): AppMembershipLeaveStep {
   const branchesRepository = new BranchesRepository();
+  const membershipPreferencesRepository = new MembershipPreferencesRepository();
+  const membershipSavedViewsRepository = new MembershipSavedViewsRepository();
   return new AppMembershipLeaveStep([
     ({ organizationId, membershipId }) =>
       branchesRepository.clearDefaultStaffForMembership({
+        organization_id: organizationId,
+        membership_id: membershipId,
+      }),
+    ({ organizationId, membershipId }) =>
+      membershipPreferencesRepository.deleteForMembership({
+        organization_id: organizationId,
+        membership_id: membershipId,
+      }),
+    ({ organizationId, membershipId }) =>
+      membershipSavedViewsRepository.deleteForMembership({
         organization_id: organizationId,
         membership_id: membershipId,
       }),

@@ -191,19 +191,15 @@
     "model": "organization",
     "verifyNoMutation": true
   },
-  "GET /api/v1/app/saved-views/:saved_view_id": {
-    "model": "organization"
+  "GET /api/v1/app/memberships/me/saved-views/:membership_saved_view_id": {
+    "model": "user"
   },
-  "PATCH /api/v1/app/saved-views/:saved_view_id": {
-    "model": "organization",
+  "PATCH /api/v1/app/memberships/me/saved-views/:membership_saved_view_id": {
+    "model": "user",
     "verifyNoMutation": true
   },
-  "DELETE /api/v1/app/saved-views/:saved_view_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "POST /api/v1/app/saved-views/:saved_view_id/restore": {
-    "model": "organization",
+  "DELETE /api/v1/app/memberships/me/saved-views/:membership_saved_view_id": {
+    "model": "user",
     "verifyNoMutation": true
   },
   "GET /api/v1/app/offering-groups/:offering_group_id": {

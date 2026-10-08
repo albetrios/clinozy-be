@@ -1,6 +1,4 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
-import { SavedViewsRepository } from './sub-domains/saved-views/saved-views.repository.js';
-import { SavedViewsService } from './sub-domains/saved-views/saved-views.service.js';
 import { OfferingGroupsRepository } from './sub-domains/offering-groups/offering-groups.repository.js';
 import { OfferingGroupsService } from './sub-domains/offering-groups/offering-groups.service.js';
 import { BranchRoomsRepository } from './sub-domains/branches/branch-rooms/branch-rooms.repository.js';
@@ -94,7 +92,6 @@ import { MessagesService } from './sub-domains/messages/messages.service.js';
 
 /** The services of the app record tables (launch iteration), one per table. */
 export type AppRecordServices = {
-  savedViewsService: SavedViewsService;
   offeringGroupsService: OfferingGroupsService;
   branchRoomsService: BranchRoomsService;
   branchMachinesService: BranchMachinesService;
@@ -147,7 +144,6 @@ export function createAppRecordServices(
   organizationService: OrganizationService,
 ): AppRecordServices {
   return {
-    savedViewsService: new SavedViewsService(organizationService, new SavedViewsRepository()),
     offeringGroupsService: new OfferingGroupsService(
       organizationService,
       new OfferingGroupsRepository(),

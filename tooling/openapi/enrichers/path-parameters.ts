@@ -69,14 +69,14 @@ const ENTITY_LABELS: Record<PublicIdEntity, string> = {
   leadRead: 'lead read',
   lead: 'lead',
   patient: 'patient',
-  userPreference: 'user preference',
+  membershipPreference: 'membership preference',
   offer: 'offer',
   offering: 'offering',
   branchHoliday: 'branch holiday',
   machine: 'machine',
   room: 'room',
   offeringGroup: 'offering group',
-  savedView: 'saved view',
+  membershipSavedView: 'membership saved view',
 };
 
 /** Stable, realistic 21-char example core (alphabet [a-z0-9]). */

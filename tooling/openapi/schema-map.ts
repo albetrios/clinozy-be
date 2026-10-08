@@ -6,12 +6,12 @@
  *
  * When adding a new route with a body, add its mapping here.
  */
-import { UpdateUserPreferenceDto } from '@/domains/app/sub-domains/user-preferences/user-preferences.dto.js';
+import { updateMembershipPreferencesDto } from '@/domains/app/sub-domains/memberships/membership-preferences/membership-preferences.dto.js';
 import { ReplaceTaskRulesDto } from '@/domains/app/sub-domains/task-rule-settings/task-rule-settings.dto.js';
 import {
-  CreateSavedViewDto as appCreateSavedViewDto,
-  UpdateSavedViewDto as appUpdateSavedViewDto,
-} from '@/domains/app/sub-domains/saved-views/saved-views.dto.js';
+  createMembershipSavedViewDto,
+  updateMembershipSavedViewDto,
+} from '@/domains/app/sub-domains/memberships/membership-saved-views/membership-saved-views.dto.js';
 import {
   CreateOfferingGroupDto as appCreateOfferingGroupDto,
   UpdateOfferingGroupDto as appUpdateOfferingGroupDto,
@@ -443,9 +443,10 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'POST /api/v1/app/branches/{branch_id}/rooms': appCreateRoomDto,
   'PATCH /api/v1/app/offering-groups/{offering_group_id}': appUpdateOfferingGroupDto,
   'POST /api/v1/app/offering-groups': appCreateOfferingGroupDto,
-  'PATCH /api/v1/app/saved-views/{saved_view_id}': appUpdateSavedViewDto,
-  'POST /api/v1/app/saved-views': appCreateSavedViewDto,
-  'PATCH /api/v1/app/user-preferences': UpdateUserPreferenceDto,
+  'POST /api/v1/app/memberships/me/saved-views': createMembershipSavedViewDto,
+  'PATCH /api/v1/app/memberships/me/saved-views/{membership_saved_view_id}':
+    updateMembershipSavedViewDto,
+  'PATCH /api/v1/app/memberships/me/preferences': updateMembershipPreferencesDto,
   'PUT /api/v1/app/task-rule-settings': ReplaceTaskRulesDto,
   'PATCH /api/v1/app/branches/{branch_id}': UpdateBranchDto,
   'PUT /api/v1/app/branches/{branch_id}/members': ReplaceBranchMembersDto,

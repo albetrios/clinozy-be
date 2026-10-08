@@ -159,7 +159,7 @@ erDiagram
   organization ||--o{ branch : "has"
   branch }o--o{ user : "staffs"
   user }o--o{ role_permission : "is granted through roles"
-  user ||--|| user_preference : "keeps"
+  membership ||--|| user_preference : "keeps"
   user ||--o{ membership : "is a member through"
   membership }o--o{ role : "ADDED: holds one or more"
   branch |o--o{ lead : "receives"
@@ -244,7 +244,7 @@ erDiagram
   stock_item }o--o{ stock_count : "is counted in"
   patient |o--o{ stock_movement : "is used for"
   stock_movement |o--o| stock_movement : "reverts"
-  user ||--o{ saved_view : "saves"
+  membership ||--o{ saved_view : "saves"
   lead ||--o{ lead_read : "is read by"
   user ||--o{ lead_read : "reads"
   patient ||--o{ patient_clinical_note : "has"
@@ -450,37 +450,40 @@ erDiagram
 
 ### user_preference · NEW
 
-- **Holds:** Per-user UI state. Read on app load; written by header pin toggles, branch picker, Appearance, dropdown Recent.
-- **Table (proposal):** `app.user_preferences` — domain not chosen yet (Step 4)
+- **Holds:** A member's own UI state in one organization. Read on app load; written by header pin toggles, branch picker, Appearance, dropdown Recent.
+- **Table (built, ROUTE #8; renamed at ROUTE #127, U1):** `app.membership_preferences` + `app.membership_preference_branches` — code `app/sub-domains/memberships/membership-preferences/`
 - **Sources:** schema-routes.md:227–238 · shell.md:9, 26–27, 43
-- **Open:** none — per user on the server (schema-routes + D3; P29); the branch filter per organization (C7, D40); theme on the device (frontend only)
+- **Open:** none — per membership (U1, the branch filter and pins belong to one organization); theme on the server with the rest (U4)
+- **Built (ROUTE #127, sub-domain 2):** owned by `membership_id` (unique — the upsert's conflict target, U4) with key `(organization_id, membership_id)` → `tenancy.memberships (organization_id, id)` `ON DELETE CASCADE` (K8); `created_by_user_id` ownership and the soft-delete columns gone; `pinned_sections` Today + the matrix sections (≤ 10), `patient_file_pins` the 11 patient-file sections (≤ 11, default `clinical_notes, appointments, prescriptions, invoices`), `recent_picks` ≤ 60 (newest 3 per `room:field`, trimmed by the server); the branch filter `branch_filter_ids` → `branch_ids` on `app.membership_preference_branches (membership_preference_id, branch_id)`. RLS organization policy ENABLE + FORCE on both, no retention arm; out of the purge list; the leave step deletes the row (K4)
 
-- **Built:** `app.user_preferences` · ROUTE #8 (2026-10-07)
 ```mermaid
 erDiagram
-  user_preference["user_preference · NEW"] {
-    id user_id PK "→ user"
+  membership_preferences["app.membership_preferences · NEW"] {
+    id membership_id FK "→ membership (unique)"
     json pinned_sections
-    json branch_filter "→ branch list"
     choice theme
     json patient_file_pins
     json recent_picks
   }
+  membership_preference_branches["app.membership_preference_branches · NEW"] {
+    id membership_preference_id FK "→ membership_preferences"
+    id branch_id FK "→ branch"
+  }
+  membership_preferences ||--o{ membership_preference_branches : "filters to"
 ```
 
 ### saved_view · NEW
 
-- **Holds:** A named filter set + hidden columns a user saves on a list.
-- **Table (proposal):** `app.saved_views` — domain not chosen yet (Step 4)
+- **Holds:** A list's filters under a label + the columns it hides — a member's own shortcut on a list.
+- **Table (built, ROUTE #9; renamed at ROUTE #127, U1):** `app.membership_saved_views` — code `app/sub-domains/memberships/membership-saved-views/`
 - **Sources:** patients.md:129, 274 · payments.md:39 · H:968, 1545
 - **Open:** none
+- **Built (ROUTE #127, sub-domain 2):** owned by `membership_id` with key `(organization_id, membership_id)` → `tenancy.memberships (organization_id, id)` `ON DELETE CASCADE` (K8); `list_key` one of the registry's lists (`~ '^[a-z_]+$'`), `label` 1–60 unique per member and list case-insensitive (`(membership_id, list_key, lower(label))`), `filters` a JSON object of the list's query parameters, `hidden_columns` ≤ 40; index `(membership_id, list_key, created_at)`; no soft delete (U6 — removed for good); RLS organization policy ENABLE + FORCE, no retention arm; out of the purge list; the leave step deletes a member's views (K4)
 
-- **Built:** `app.saved_views` · ROUTE #9 (2026-10-07)
 ```mermaid
 erDiagram
-  saved_view["saved_view · NEW"] {
-    id id PK
-    id user_id FK "→ user"
+  membership_saved_views["app.membership_saved_views · NEW"] {
+    id membership_id FK "→ membership"
     text list_key
     text label
     json filters
