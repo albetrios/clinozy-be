@@ -347,7 +347,7 @@ When Redis errors, the fallback store counts in the process and multiplies the l
 
 ### How to apply
 
-- Put a new per-route cap in the presets file and spread it on the route. Do not call `app.rateLimit()` in front of a route that already sets `config.rateLimit`.
+- Put a new per-route cap in the presets file and spread it on the route. Do not call `app.rateLimit()` in front of a route that already sets `config.rateLimit` — that hook no-ops. A second bucket (the per-email login cap) uses `app.createRateLimit()` inside its own preHandler and throws `RateLimitedError`.
 - Read the API replica count from `resolveApiReplicaCount()`. Do not copy the `??` chain.
 - The organization ceiling is `RATE_LIMIT_ORGANIZATION_MAX`, not a multiple of `RATE_LIMIT_MAX`.
 

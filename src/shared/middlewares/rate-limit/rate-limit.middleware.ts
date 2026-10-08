@@ -105,9 +105,10 @@ const RATE_LIMIT_ALLOWLISTED_PATHS = new Set(['/livez', '/readyz']);
  * Wrapped with `fastify-plugin` so `@fastify/rate-limit` decorates the root app rather than an
  * encapsulated child context. This is required for two reasons: (1) the `global: true` limiter's
  * `onRequest` hook must apply to every route (and run before any handler opens a database
- * transaction, so a throttled request never takes a pooled connection), and (2) per-route presets that build a second
- * limiter via `app.rateLimit(...)` (e.g. the per-email throttle in `auth.routes.ts`) need the
- * `rateLimit` decorator visible at the instance where routes register.
+ * transaction, so a throttled request never takes a pooled connection), and (2) `app.createRateLimit`
+ * (the per-email throttle in `auth.routes.ts`) needs the decorator visible where routes register.
+ * A second `app.rateLimit()` hook on a route that already sets `config.rateLimit` does not count:
+ * the first limiter sets `rateLimitRan` and the later hook returns immediately.
  */
 const rateLimitMiddleware: FastifyPluginAsync = async (app) => {
   const plugin = fastifyRateLimit as unknown as FastifyPluginAsync<RateLimitPluginOptions>;

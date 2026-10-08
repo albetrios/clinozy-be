@@ -148,19 +148,10 @@ describe('auth public-route rate-limit + captcha policy (public go-live surface)
     expect(findRouteOptionsObject('get', '/oauth/:provider')).not.toContain('captchaPreHandler');
   });
 
-  // Per-identity (per-email) throttle layered on the IP cap so spoofed-IP rotation cannot bypass
-  // the public limit on the highest-value credential / email-sending endpoints.
-  const PER_EMAIL_THROTTLED_ROUTES: Array<{ method: string; url: string }> = [
-    { method: 'post', url: '/login' },
-    { method: 'post', url: '/email/send-code' },
-    { method: 'post', url: '/password/forgot' },
-    { method: 'post', url: '/webauthn/authenticate/options' },
-  ];
-  for (const route of PER_EMAIL_THROTTLED_ROUTES) {
-    it(`${route.method.toUpperCase()} ${route.url} carries the per-email throttle`, () => {
-      expect(findRouteOptionsObject(route.method, route.url)).toContain('perEmailRateLimit');
-    });
-  }
+  // The per-email throttle is not source-scanned. `app.rateLimit()` in front of
+  // `config.rateLimit` no-ops (`rateLimitRan`), so a textual `perEmailRateLimit` check
+  // stayed green while the bucket never counted. The behavioral proof is
+  // `auth-public-rate-limit.security.test.ts` (6 logins, one email, rotating IPs).
 
   it('POST /refresh carries REFRESH_RATE_LIMIT', () => {
     expect(findRouteOptionsObject('post', '/refresh')).toContain('...REFRESH_RATE_LIMIT');

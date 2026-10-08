@@ -10,9 +10,9 @@ import {
   MODERATE_AUTHED_RATE_LIMIT,
   REFRESH_RATE_LIMIT,
   STRICT_AUTHED_RATE_LIMIT,
-  STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS,
   STRICT_PUBLIC_RATE_LIMIT,
 } from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
+import { createPerEmailRateLimitPreHandler } from '@/shared/middlewares/rate-limit/per-email-rate-limit.js';
 import { createAuthController } from './auth.controller.js';
 import {
   authMethodPublicIdParamsDto,
@@ -48,7 +48,7 @@ export const authRoutesPlugin: FastifyPluginAsync = async (app) => {
   // Per-identity (per-email) throttle layered on top of the IP-only STRICT_PUBLIC_RATE_LIMIT.
   // Applied to unauthenticated credential and outbound-email endpoints so abuse cannot bypass
   // the cap by rotating spoofed IPs (defense in depth alongside Turnstile CAPTCHA).
-  const perEmailRateLimit = app.rateLimit(STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS);
+  const perEmailRateLimit = createPerEmailRateLimitPreHandler(app);
 
   // Public — strict rate limits on login/email-code/password endpoints
   zodApplication.post('/login', {

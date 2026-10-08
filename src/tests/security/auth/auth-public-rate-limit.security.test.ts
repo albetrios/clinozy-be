@@ -133,13 +133,13 @@ describe('Security: Auth public rate limit burst (429)', () => {
   async function createPerEmailRouteApp() {
     mockEnv.RATE_LIMIT_RELAXED_CAPS = false;
     vi.resetModules();
-    const { STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS } = await import(
-      '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js'
+    const { createPerEmailRateLimitPreHandler } = await import(
+      '@/shared/middlewares/rate-limit/per-email-rate-limit.js'
     );
 
     const application = Fastify();
     await application.register(rateLimit, { global: false });
-    const perEmailRateLimit = application.rateLimit(STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS);
+    const perEmailRateLimit = createPerEmailRateLimitPreHandler(application);
     application.post('/auth/login', { preHandler: [perEmailRateLimit] }, async () => ({
       data: { message: 'ok' },
     }));
@@ -147,6 +147,50 @@ describe('Security: Auth public rate limit burst (429)', () => {
     apps.push(application);
     return application;
   }
+
+  async function createStackedPerEmailRouteApp() {
+    mockEnv.RATE_LIMIT_RELAXED_CAPS = false;
+    vi.resetModules();
+    const { STRICT_PUBLIC_RATE_LIMIT } = await import(
+      '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js'
+    );
+    const { createPerEmailRateLimitPreHandler } = await import(
+      '@/shared/middlewares/rate-limit/per-email-rate-limit.js'
+    );
+
+    const application = Fastify();
+    await application.register(rateLimit, { global: false });
+    // Same stacking as auth.routes.ts: the route's per-IP limiter runs first.
+    const perEmailRateLimit = createPerEmailRateLimitPreHandler(application);
+    application.post(
+      '/login',
+      {
+        ...STRICT_PUBLIC_RATE_LIMIT,
+        preHandler: [perEmailRateLimit],
+      },
+      async () => ({ ok: true }),
+    );
+    await application.ready();
+    apps.push(application);
+    return application;
+  }
+
+  it('caps one email at 5 logins from rotating IPs (6th returns 429)', async () => {
+    const application = await createStackedPerEmailRouteApp();
+    const responses = [];
+    for (let attempt = 1; attempt <= 6; attempt += 1) {
+      responses.push(
+        await application.inject({
+          method: 'POST',
+          url: '/login',
+          remoteAddress: `203.0.113.${attempt}`,
+          payload: { email: 'victim@example.com', password: 'x' },
+        }),
+      );
+    }
+    expect(responses.slice(0, 5).every((response) => response.statusCode === 200)).toBe(true);
+    expect(responses[5]?.statusCode).toBe(429);
+  });
 
   it('caps a single email at 5 attempts / window regardless of IP (6th returns 429)', async () => {
     const application = await createPerEmailRouteApp();
