@@ -11,18 +11,20 @@ function readMemorySettings(info: string): { policy: string | null; maxMemory: n
 }
 
 /**
- * Refuses to start a worker on a Redis that evicts keys under memory pressure.
+ * Refuses to boot when Redis evicts keys under memory pressure.
  *
  * @remarks
  * - **Algorithm:** reads `INFO memory`. `noeviction` passes; so does any policy while `maxmemory` is
  *   0 (no limit, so nothing is ever evicted). Any other policy with a limit throws.
- * - **Failure modes:** throws `redis.eviction_policy.unsafe` — an evicting Redis drops BullMQ job
- *   hashes and lock keys at the worst moment (memory is full because a backlog built up): jobs
- *   vanish, or a live job's lock disappears and a second worker runs it again. An unreadable
- *   `INFO` (some managed Redis restrict it) only warns.
+ * - **Failure modes:** throws `redis.eviction_policy.unsafe`. An evicting cache drops idempotency
+ *   placeholders (a replay runs the handler twice) and an evicting BullMQ Redis drops job hashes
+ *   and lock keys (jobs vanish, or a live job's lock disappears and a second worker runs it). An
+ *   unreadable `INFO` (some managed Redis restrict it) only warns — the same on the API and the worker.
  * - **Side effects:** one `INFO memory`; a log line with the policy.
- * - **Notes:** runs at worker boot, on the Redis BullMQ uses. With `noeviction` a full Redis
- *   rejects writes instead — loud, recoverable, and what the Redis memory alerts watch for.
+ * - **Notes:** the API calls this on `REDIS_URL` after `connectRedis`. The worker calls it on the
+ *   Redis BullMQ uses (`REDIS_BULLMQ_URL` when that endpoint is separate, otherwise `REDIS_URL`).
+ *   With `noeviction` a full Redis rejects writes instead — loud, recoverable, and what the Redis
+ *   memory alerts watch for.
  */
 export async function assertRedisEvictionPolicy(options: {
   client: { info(section: string): Promise<string> };
@@ -49,8 +51,9 @@ export async function assertRedisEvictionPolicy(options: {
   }
   throw new Error(
     `redis.eviction_policy.unsafe: ${options.endpointName} runs maxmemory-policy "${policy}" ` +
-      `with a ${maxMemory ?? 'set'}-byte limit. BullMQ needs "${SAFE_EVICTION_POLICY}": an evicting ` +
-      'Redis drops job data and lock keys when memory fills, losing jobs or running them twice. ' +
+      `with a ${maxMemory ?? 'set'}-byte limit. Idempotency keys and BullMQ need ` +
+      `"${SAFE_EVICTION_POLICY}": an evicting Redis drops keys when memory fills, so a write can ` +
+      'run twice and a job can vanish or run twice. ' +
       'Set maxmemory-policy noeviction on the Redis server. ' +
       'See docs/deployment/runbooks/redis-topology.md.',
   );

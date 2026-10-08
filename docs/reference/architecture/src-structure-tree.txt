@@ -564,6 +564,7 @@ src/
     │   │   │       │   └── unit/
     │   │   │       │   │   ├── events/
     │   │   │       │   │       ├── worker/
+    │   │   │       │   │       │   ├── webhook-delivery-host-gate.unit.test.ts
     │   │   │       │   │       │   ├── webhook-delivery.worker.dual-sign.unit.test.ts
     │   │   │       │   │       │   ├── webhook-delivery.worker.durability.unit.test.ts
     │   │   │       │   │       │   └── webhook-delivery.worker.unit.test.ts
@@ -584,6 +585,7 @@ src/
     │   │   │       │   ├── webhook-delivery.job.schema.ts
     │   │   │       │   └── webhook-delivery.queue.ts
     │   │   │       ├── workers/
+    │   │   │       │   ├── webhook-delivery-host-gate.ts
     │   │   │       │   ├── webhook-delivery-reclaim.constants.ts
     │   │   │       │   ├── webhook-delivery-reclaim.processor.ts
     │   │   │       │   ├── webhook-delivery-reclaim.worker.ts
@@ -1622,6 +1624,7 @@ src/
     │   │   ├── readiness-probe-timeout.util.ts
     │   │   ├── readiness-probes.util.ts
     │   │   ├── redis-counter.util.ts
+    │   │   ├── singleflight.util.ts
     │   │   └── timeout-error.util.ts
     │   ├── security/
     │   │   ├── __tests__/
@@ -2147,6 +2150,8 @@ src/
     │   │   ├── env.config.unit.test.ts
     │   │   ├── load-env-files.unit.test.ts
     │   │   └── static-verification-code-gate.unit.test.ts
+    │   ├── constants/
+    │   │   └── idempotency-placeholder-ttl.unit.test.ts
     │   ├── database/
     │   │   └── role-least-privilege-migration.policy.unit.test.ts
     │   ├── domains/
@@ -2231,6 +2236,7 @@ src/
     │   │   ├── metrics.middleware.unit.test.ts
     │   │   ├── middleware-order.unit.test.ts
     │   │   ├── ops.middleware.unit.test.ts
+    │   │   ├── organization-request-budget.unit.test.ts
     │   │   ├── overload-guard.middleware.unit.test.ts
     │   │   ├── rate-limit-fallback-store.unit.test.ts
     │   │   ├── rate-limit-presets.constants.unit.test.ts
@@ -2357,6 +2363,7 @@ src/
     │   │   │   ├── process-memory-monitor.util.unit.test.ts
     │   │   │   ├── readiness-probe-timeout.util.unit.test.ts
     │   │   │   ├── readiness-probes.util.unit.test.ts
+    │   │   │   ├── singleflight.util.unit.test.ts
     │   │   │   └── timeout-error.util.unit.test.ts
     │   │   ├── security/
     │   │   │   ├── allowed-origins.util.unit.test.ts

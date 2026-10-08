@@ -6,8 +6,9 @@ function redisReporting(info: string) {
 }
 
 /**
- * BullMQ keeps job data and lock keys in Redis. An evicting Redis drops them exactly when memory
- * fills — under a backlog — and jobs vanish or run twice. The worker refuses to start on one.
+ * Idempotency keys and BullMQ job data live in Redis. An evicting Redis drops them exactly when
+ * memory fills, so a write runs twice or a job vanishes. The API (REDIS_URL) and the worker refuse
+ * to start on one.
  */
 describe('assertRedisEvictionPolicy', () => {
   it('passes on noeviction', async () => {

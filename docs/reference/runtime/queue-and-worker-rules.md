@@ -168,7 +168,7 @@ what to do, why, and what enforces it. The mechanisms behind the rules are expla
 | `SCHEDULER_ENABLED` | `true` | `true` on every worker service (§7) |
 | `RESEND_MAX_REQUESTS_PER_SECOND` | 10 | Your Resend plan's limit; shared by every replica |
 | `DATABASE_POOL_MAX` / `DATABASE_MAINTENANCE_POOL_MAX` | 30 / 10 | replicas × (pool + maintenance) must fit `max_connections`; the worker's peak demand must fit its pool, checked at boot **(test)** `worker-pool-budget.policy.unit.test.ts` |
-| Redis `maxmemory-policy` | — | `noeviction` (or no `maxmemory`); the worker refuses to start otherwise |
+| Redis `maxmemory-policy` | — | `noeviction` (or no `maxmemory`); the API refuses to start on an evicting `REDIS_URL`, and the worker refuses to start on an evicting BullMQ Redis |
 | `DLQ_AUTO_RETRY_*` | on, 3 times, 30 min cooldown, 20 per run | Leave on |
 
 A new worker changes facts that live in several places — keep them in step:
