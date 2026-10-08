@@ -77,6 +77,7 @@ src/
     │   │   │   ├── check-ins.overview.md
     │   │   │   ├── check-ins.repository.ts
     │   │   │   ├── check-ins.routes.ts
+    │   │   │   ├── check-ins.rules.ts
     │   │   │   ├── check-ins.schema.ts
     │   │   │   ├── check-ins.serializer.ts
     │   │   │   ├── check-ins.service.ts
@@ -365,6 +366,7 @@ src/
     │   │   │   ├── patient-images.overview.md
     │   │   │   ├── patient-images.repository.ts
     │   │   │   ├── patient-images.routes.ts
+    │   │   │   ├── patient-images.rules.ts
     │   │   │   ├── patient-images.schema.ts
     │   │   │   ├── patient-images.serializer.ts
     │   │   │   ├── patient-images.service.ts
@@ -466,6 +468,7 @@ src/
     │   │   │   ├── prescriptions.overview.md
     │   │   │   ├── prescriptions.repository.ts
     │   │   │   ├── prescriptions.routes.ts
+    │   │   │   ├── prescriptions.rules.ts
     │   │   │   ├── prescriptions.schema.ts
     │   │   │   ├── prescriptions.serializer.ts
     │   │   │   ├── prescriptions.service.ts
@@ -637,6 +640,7 @@ src/
     │   │   │   ├── treatments.overview.md
     │   │   │   ├── treatments.repository.ts
     │   │   │   ├── treatments.routes.ts
+    │   │   │   ├── treatments.rules.ts
     │   │   │   ├── treatments.schema.ts
     │   │   │   ├── treatments.serializer.ts
     │   │   │   ├── treatments.service.ts
