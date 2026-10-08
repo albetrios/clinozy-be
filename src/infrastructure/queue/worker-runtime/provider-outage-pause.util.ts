@@ -176,8 +176,10 @@ async function extendQueuePause(options: {
  *   (`queue.provider_outage.paused`; `queue.provider_throttle.paused` at info for a throttle) and
  *   `bullmq_provider_outage_parked_jobs_total{reason}`.
  * - **Notes:** for event-driven queues only. A scheduled sweep simply retries on its next tick.
- *   Webhook delivery does not use this: one customer's endpoint being down is not an outage of
- *   every other customer's. `limiter` defaults to {@link PROVIDER_OUTAGE_PAUSABLE_LIMITER}; a queue
+ *   Webhook delivery does not use this queue-wide pause: one customer's endpoint being down is
+ *   not an outage of every other customer's. A destination host already at its in-flight cap is
+ *   parked per job with `moveToDelayed` and `DelayedError` (the same two calls) and is not a
+ *   provider outage. `limiter` defaults to {@link PROVIDER_OUTAGE_PAUSABLE_LIMITER}; a queue
  *   that must also pace itself to a provider's rate limit passes its own (mail: Resend's
  *   requests per second). `pauseMs` exists so a test can shorten the pause.
  */

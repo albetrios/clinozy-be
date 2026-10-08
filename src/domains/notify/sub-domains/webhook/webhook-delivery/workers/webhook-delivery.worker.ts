@@ -5,12 +5,12 @@ import {
   getBullMQConnectionOptions,
   getBullMQKeyPrefix,
 } from '@/infrastructure/queue/connection.js';
-import { WEBHOOK_DELIVERY_HOST_DEFER_DELAY_MS } from '@/infrastructure/outbound/outbound-defaults.js';
+import { addRetryJitter } from '@/infrastructure/queue/retry-jitter.util.js';
+import { recordWebhookDeliveryHostBusyParked } from '@/infrastructure/observability/metrics/prometheus-metrics.js';
 import { buildOutboundCallOptions, outboundCall } from '@/infrastructure/outbound/index.js';
 import {
-  acquireWebhookDeliveryHostSlot,
-  releaseWebhookDeliveryHostSlot,
-  webhookDeliveryDestinationHost,
+  acquireWebhookHostSlot,
+  releaseWebhookHostSlot,
   WebhookDeliveryHostAtCapacity,
 } from './webhook-delivery-host-gate.js';
 import { createPinnedWebhookFetch } from '@/shared/utils/security/webhook-outbound-fetch.util.js';
@@ -47,7 +47,7 @@ import {
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
-import { MILLISECONDS_PER_HOUR } from '@/shared/constants/ttl.constants.js';
+import { FIVE_SECONDS_MS, MILLISECONDS_PER_HOUR } from '@/shared/constants/ttl.constants.js';
 import { env } from '@/shared/config/env.config.js';
 
 /** Maximum response-body length persisted to the delivery-attempt record (bounds storage growth). */
@@ -211,8 +211,6 @@ type WebhookDeliveryClaim =
   | {
       status: 'claimed';
       deliveryContext: WebhookDeliveryAttemptWithWebhook;
-      /** Host whose in-flight slot this claim reserved, or null when the URL has no hostname. */
-      destinationHost: string | null;
     };
 
 /**
@@ -257,29 +255,13 @@ async function claimWebhookDeliveryAttempt(options: {
         });
         return { status: 'skipped', reason: 'webhook_disabled' };
       }
-      const destinationHost = webhookDeliveryDestinationHost(deliveryContext.webhookUrl);
-      if (destinationHost !== null) {
-        // Reserve before the claim so a host that is already full does not mark the row SENDING
-        // or spend an attempt. The caller releases the slot after the HTTP call.
-        acquireWebhookDeliveryHostSlot(destinationHost);
+      const sendingClaim = await attemptRepository.tryMarkSending(
+        deliveryContext.deliveryAttemptId,
+      );
+      if (sendingClaim === 'already_sent') {
+        return { status: 'skipped', reason: 'already_sent' };
       }
-      try {
-        const sendingClaim = await attemptRepository.tryMarkSending(
-          deliveryContext.deliveryAttemptId,
-        );
-        if (sendingClaim === 'already_sent') {
-          if (destinationHost !== null) {
-            releaseWebhookDeliveryHostSlot(destinationHost);
-          }
-          return { status: 'skipped', reason: 'already_sent' };
-        }
-        return { status: 'claimed', deliveryContext, destinationHost };
-      } catch (error) {
-        if (destinationHost !== null) {
-          releaseWebhookDeliveryHostSlot(destinationHost);
-        }
-        throw error;
-      }
+      return { status: 'claimed', deliveryContext };
     },
   );
 }
@@ -669,9 +651,10 @@ async function deliverClaimedWebhook(options: {
  *   reaches the dead-letter ledger without a page. `410 Gone` records `FAILED`, turns the webhook
  *   off and completes. An unreadable or empty signing secret, or a missing attempt row, throws
  *   `UnrecoverableError` (recorded and alerted). A disabled or deleted webhook records `FAILED`
- *   and skips. A destination host already at {@link WEBHOOK_DELIVERY_PER_HOST_IN_FLIGHT_LIMIT}
- *   throws {@link WebhookDeliveryHostAtCapacity} before the row is claimed; the worker parks
- *   that job with `moveToDelayed` and does not record `FAILED`.
+ *   and skips. A destination host already at `WEBHOOK_DELIVERY_MAX_IN_FLIGHT_PER_HOST` throws
+ *   {@link WebhookDeliveryHostAtCapacity} before Postgres is opened; the worker parks that job
+ *   with `moveToDelayed` and does not record `FAILED`. A Redis error while taking the lease
+ *   fails open and the delivery still runs.
  * - **Side effects:** outbound HTTPS POST; updates to `webhook_delivery_attempts` (and
  *   `webhooks.is_enabled` on a 410); structured logs at every transition.
  * - **Notes:** the dependency-injection seam (`fetchImplementation`, `deliveryAttemptRepository`)
@@ -681,27 +664,38 @@ async function deliverClaimedWebhook(options: {
 export async function processWebhookDeliveryAttempt(options: {
   deliveryAttemptPublicId: string;
   organizationPublicId: string;
+  destinationHost: string;
   jobContext: WebhookDeliveryJobContext;
   fetchImplementation?: WebhookDeliveryFetch;
   deliveryAttemptRepository?: WebhookDeliveryAttemptRepository;
 }): Promise<WebhookDeliveryJobResult> {
-  const { deliveryAttemptPublicId, organizationPublicId, jobContext, deliveryAttemptRepository } =
-    options;
-  const claim = await claimWebhookDeliveryAttempt({
+  const {
     deliveryAttemptPublicId,
     organizationPublicId,
+    destinationHost,
+    jobContext,
     deliveryAttemptRepository,
-  });
-
-  if (claim.status === 'skipped') {
-    logger.info(
-      { deliveryAttemptPublicId, requestId: jobContext.requestId },
-      `webhook.delivery.${claim.reason}`,
-    );
-    return { outcome: 'skipped', reason: claim.reason };
+  } = options;
+  const slot = await acquireWebhookHostSlot({ destinationHost, deliveryAttemptPublicId });
+  if (slot === 'busy') {
+    throw new WebhookDeliveryHostAtCapacity(destinationHost);
   }
-
+  const holdsSlot = slot === 'acquired';
   try {
+    const claim = await claimWebhookDeliveryAttempt({
+      deliveryAttemptPublicId,
+      organizationPublicId,
+      deliveryAttemptRepository,
+    });
+
+    if (claim.status === 'skipped') {
+      logger.info(
+        { deliveryAttemptPublicId, requestId: jobContext.requestId },
+        `webhook.delivery.${claim.reason}`,
+      );
+      return { outcome: 'skipped', reason: claim.reason };
+    }
+
     return await deliverClaimedWebhook({
       organizationPublicId,
       jobContext,
@@ -710,8 +704,8 @@ export async function processWebhookDeliveryAttempt(options: {
       deliveryContext: claim.deliveryContext,
     });
   } finally {
-    if (claim.destinationHost !== null) {
-      releaseWebhookDeliveryHostSlot(claim.destinationHost);
+    if (holdsSlot) {
+      await releaseWebhookHostSlot({ destinationHost, deliveryAttemptPublicId });
     }
   }
 }
@@ -723,8 +717,8 @@ export async function processWebhookDeliveryAttempt(options: {
  * Algorithm:
  * 1. Errors other than {@link WebhookDeliveryHostAtCapacity} are rethrown unchanged.
  * 2. Without a BullMQ lock token the same error is rethrown, because `moveToDelayed` cannot run.
- * 3. Otherwise the job is delayed by {@link WEBHOOK_DELIVERY_HOST_DEFER_DELAY_MS} and
- *    {@link DelayedError} is thrown so BullMQ does not count the park as a failed attempt.
+ * 3. Otherwise the job is delayed by five seconds plus retry jitter and {@link DelayedError}
+ *    is thrown so BullMQ does not count the park as a failed attempt.
  *
  * Failure modes:
  * - A missing lock token rethrows {@link WebhookDeliveryHostAtCapacity}.
@@ -748,11 +742,10 @@ export async function deferWebhookDeliveryWhenHostAtCapacity(options: {
   if (options.token === undefined) {
     throw options.error;
   }
-  logger.info(
-    { host: options.error.host, delayMs: WEBHOOK_DELIVERY_HOST_DEFER_DELAY_MS },
-    'webhook.delivery.host_deferred',
-  );
-  await options.job.moveToDelayed(Date.now() + WEBHOOK_DELIVERY_HOST_DEFER_DELAY_MS, options.token);
+  const delayMs = addRetryJitter(FIVE_SECONDS_MS);
+  logger.info({ host: options.error.host, delayMs }, 'webhook.delivery.host_deferred');
+  recordWebhookDeliveryHostBusyParked();
+  await options.job.moveToDelayed(Date.now() + delayMs, options.token);
   throw new DelayedError();
 }
 
@@ -786,6 +779,7 @@ export function createWebhookDeliveryWorker(): WorkerHandle {
         const {
           deliveryAttemptPublicId,
           organizationPublicId,
+          destinationHost,
           requestId,
           traceparent,
           tracestate,
@@ -798,6 +792,7 @@ export function createWebhookDeliveryWorker(): WorkerHandle {
           processWebhookDeliveryAttempt({
             deliveryAttemptPublicId,
             organizationPublicId,
+            destinationHost,
             jobContext: omitUndefined({
               id: job.id,
               attemptsMade: job.attemptsMade,

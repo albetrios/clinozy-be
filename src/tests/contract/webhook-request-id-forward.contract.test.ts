@@ -90,7 +90,10 @@ describe('Webhook request id forward contract', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    findOrganizationPublicIdByDeliveryAttemptPublicIdMock.mockResolvedValue('org_public_contract');
+    findOrganizationPublicIdByDeliveryAttemptPublicIdMock.mockResolvedValue({
+      organizationPublicId: 'org_public_contract',
+      webhookUrl: 'https://example.com/hook',
+    });
     registerWebhookDeliveryEventHandlers();
   });
 
@@ -110,12 +113,14 @@ describe('Webhook request id forward contract', () => {
     expect(enqueueWebhookDeliveryMock).toHaveBeenCalledWith({
       deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
       organizationPublicId: 'org_public_contract',
+      destinationHost: 'example.com:443',
       requestId: correlationRequestId,
     });
 
     await processWebhookDeliveryAttempt({
       deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
       organizationPublicId: 'org_public_contract',
+      destinationHost: 'example.com:443',
       jobContext: { id: 'job-contract', attemptsMade: 0, requestId: correlationRequestId },
       fetchImplementation: fetchMock,
       deliveryAttemptRepository: deliveryAttemptRepository as never,

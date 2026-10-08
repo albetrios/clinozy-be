@@ -5,14 +5,16 @@ import { dlqReplayJobFieldsSchema } from '@/infrastructure/queue/dlq/dlq-replay-
 /**
  * Zod schema for `webhook-delivery` BullMQ job payloads — validates the delivery attempt's public
  * id (never the bigserial: a job outlives a database restore that restarts it), the organization
- * public id used for tenant scoping, and the optional request id used for tracing. Also merges
- * the W3C trace-context fields and the shared DLQ replay metadata so jobs replayed from the DLQ
- * keep their provenance.
+ * public id used for tenant scoping, the destination host (lowercased hostname and port) the
+ * worker uses to take a cluster-wide in-flight lease without reading Postgres, and the optional
+ * request id used for tracing. Also merges the W3C trace-context fields and the shared DLQ replay
+ * metadata so jobs replayed from the DLQ keep their provenance.
  */
 export const webhookDeliveryJobDataSchema = z
   .object({
     deliveryAttemptPublicId: z.string().min(1).max(28),
     organizationPublicId: z.string().min(1).max(28),
+    destinationHost: z.string().min(1).max(255),
     requestId: z.string().min(1).max(128).optional(),
   })
   .extend(traceContextJobFieldsSchema.shape)

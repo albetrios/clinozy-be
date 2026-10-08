@@ -58,12 +58,14 @@ describe('dlq-replay.util', () => {
       original_data_summary: {
         delivery_attempt_public_id: 'wda_9z3rura5kqvcv8zggriym',
         organization_public_id: 'org_public_abc',
+        destination_host: 'example.com:443',
       },
     };
 
     expect(buildReplayJobPayload(webhookData)).toEqual({
       deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
       organizationPublicId: 'org_public_abc',
+      destinationHost: 'example.com:443',
       replayFromDlq: true,
       dlqReplayAttempt: 1,
     });
@@ -146,6 +148,7 @@ describe('dlq-replay.util', () => {
         payload_summary: {
           delivery_attempt_public_id: 'wda_9z3rura5kqvcv8zggriym',
           organization_public_id: 'org_public_abc',
+          destination_host: 'example.com:443',
         },
         attempts_made: 8,
         replay_depth: 2,
@@ -153,6 +156,7 @@ describe('dlq-replay.util', () => {
     ).toEqual({
       deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
       organizationPublicId: 'org_public_abc',
+      destinationHost: 'example.com:443',
       replayFromDlq: true,
       dlqReplayAttempt: 3,
     });

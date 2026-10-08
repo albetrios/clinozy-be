@@ -125,6 +125,7 @@ describe('processWebhookDeliveryAttempt — notify durability (sec-N1 + sec-N3)'
     await processWebhookDeliveryAttempt({
       deliveryAttemptPublicId: activeContextFixture.deliveryAttemptPublicId,
       organizationPublicId: 'org_public_1',
+      destinationHost: 'example.com:443',
       jobContext: { id: 'job-1', attemptsMade: 0 },
       fetchImplementation: fetchMock,
       deliveryAttemptRepository: repository as never,
@@ -147,6 +148,7 @@ describe('processWebhookDeliveryAttempt — notify durability (sec-N1 + sec-N3)'
     const result = await processWebhookDeliveryAttempt({
       deliveryAttemptPublicId: activeContextFixture.deliveryAttemptPublicId,
       organizationPublicId: 'org_public_1',
+      destinationHost: 'example.com:443',
       jobContext: { id: 'job-disabled', attemptsMade: 0 },
       fetchImplementation: fetchMock,
       deliveryAttemptRepository: repository as never,
@@ -174,6 +176,7 @@ describe('processWebhookDeliveryAttempt — notify durability (sec-N1 + sec-N3)'
     const result = await processWebhookDeliveryAttempt({
       deliveryAttemptPublicId: activeContextFixture.deliveryAttemptPublicId,
       organizationPublicId: 'org_public_1',
+      destinationHost: 'example.com:443',
       jobContext: { id: 'job-deleted', attemptsMade: 0 },
       fetchImplementation: fetchMock,
       deliveryAttemptRepository: repository as never,

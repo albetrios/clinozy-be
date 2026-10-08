@@ -143,6 +143,7 @@ describe('Chaos resilience: BullMQ webhook delivery survives transient Postgres 
         {
           deliveryAttemptPublicId: pendingWebhookDeliveryAttemptAwaitingIsolation.publicId,
           organizationPublicId: organizationAwaitingWebhookFixtureIsolation.public_id,
+          destinationHost: 'example.com:443',
         },
         {
           jobId: randomJobPublicIdentifierAwaitingIsolation,

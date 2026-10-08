@@ -42,7 +42,10 @@ describe('webhook delivery event handlers', () => {
   beforeEach(() => {
     enqueueWebhookDeliveryMock.mockReset();
     findOrganizationPublicIdByDeliveryAttemptPublicIdMock.mockReset();
-    findOrganizationPublicIdByDeliveryAttemptPublicIdMock.mockResolvedValue('org_public_test_99');
+    findOrganizationPublicIdByDeliveryAttemptPublicIdMock.mockResolvedValue({
+      organizationPublicId: 'org_public_test_99',
+      webhookUrl: 'https://example.com/hook',
+    });
   });
 
   it('enqueues webhook delivery on notify.webhook_delivery.requested', async () => {
@@ -62,6 +65,7 @@ describe('webhook delivery event handlers', () => {
     expect(enqueueWebhookDeliveryMock).toHaveBeenCalledExactlyOnceWith({
       deliveryAttemptPublicId: 'wda_attempt99',
       organizationPublicId: 'org_public_test_99',
+      destinationHost: 'example.com:443',
     });
   });
 
@@ -75,6 +79,7 @@ describe('webhook delivery event handlers', () => {
     expect(enqueueWebhookDeliveryMock).toHaveBeenCalledExactlyOnceWith({
       deliveryAttemptPublicId: 'wda_attempt42',
       organizationPublicId: 'org_public_test_99',
+      destinationHost: 'example.com:443',
     });
   });
 
@@ -89,6 +94,7 @@ describe('webhook delivery event handlers', () => {
     expect(enqueueWebhookDeliveryMock).toHaveBeenCalledExactlyOnceWith({
       deliveryAttemptPublicId: 'wda_attempt43',
       organizationPublicId: 'org_public_test_99',
+      destinationHost: 'example.com:443',
       requestId: 'request-43',
     });
   });

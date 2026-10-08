@@ -75,6 +75,7 @@ describe('Security: Worker tenant isolation', () => {
       processWebhookDeliveryAttempt({
         deliveryAttemptPublicId: pendingAttempt.publicId,
         organizationPublicId: organizationB.public_id,
+        destinationHost: 'example.com:443',
         jobContext: { id: 'security-test', attemptsMade: 0 },
         fetchImplementation: vi.fn(),
       }),

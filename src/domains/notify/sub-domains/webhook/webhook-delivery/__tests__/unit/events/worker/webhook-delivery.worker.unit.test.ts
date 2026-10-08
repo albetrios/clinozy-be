@@ -2,10 +2,21 @@ import { DelayedError, UnrecoverableError } from 'bullmq';
 import { describe, expect, it, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import * as fieldSecretEncryption from '@/shared/utils/security/field-secret-encryption.util.js';
 import {
-  acquireWebhookDeliveryHostSlot,
-  resetWebhookDeliveryHostSlots,
+  webhookHostSlotKey,
   WebhookDeliveryHostAtCapacity,
 } from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery-host-gate.js';
+
+const { redisEvalMock, redisZremMock } = vi.hoisted(() => ({
+  redisEvalMock: vi.fn(),
+  redisZremMock: vi.fn(),
+}));
+
+vi.mock('@/infrastructure/cache/redis.client.js', () => ({
+  redisConnection: {
+    eval: (...arguments_: unknown[]) => redisEvalMock(...arguments_),
+    zrem: (...arguments_: unknown[]) => redisZremMock(...arguments_),
+  },
+}));
 import {
   deferWebhookDeliveryWhenHostAtCapacity,
   processWebhookDeliveryAttempt,
@@ -35,6 +46,7 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
 });
 
 const DELIVERY_ATTEMPT_PUBLIC_ID = 'wda_0y8vf3ktxqnhcm1ze21ab';
+const DESTINATION_HOST = 'example.com:443';
 
 const { deliveryContextFixture, findDeliveryContextMock, disableWebhookMock } = vi.hoisted(() => {
   const fixture = {
@@ -103,13 +115,15 @@ describe('processWebhookDeliveryAttempt', () => {
     processWebhookDeliveryAttempt({
       deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
       organizationPublicId: 'org_public_1',
+      destinationHost: DESTINATION_HOST,
       jobContext: { id: 'job-1', attemptsMade, ...(requestId ? { requestId } : {}) },
       fetchImplementation: fetchMock,
       deliveryAttemptRepository: repository as never,
     });
 
   beforeEach(() => {
-    resetWebhookDeliveryHostSlots();
+    redisEvalMock.mockReset().mockResolvedValue(1);
+    redisZremMock.mockReset().mockResolvedValue(1);
     fetchMock = respond(200);
     repository = createDeliveryAttemptRepositoryMock();
     findDeliveryContextMock.mockReset().mockResolvedValue({ ...deliveryContextFixture });
@@ -320,19 +334,47 @@ describe('processWebhookDeliveryAttempt', () => {
   });
 
   it('does not claim or record a failure when the destination host is at the in-flight cap', async () => {
-    acquireWebhookDeliveryHostSlot('example.com');
-    acquireWebhookDeliveryHostSlot('example.com');
+    redisEvalMock.mockResolvedValueOnce(0);
 
     await expect(deliver()).rejects.toBeInstanceOf(WebhookDeliveryHostAtCapacity);
 
+    expect(findDeliveryContextMock).not.toHaveBeenCalled();
     expect(repository.tryMarkSending).not.toHaveBeenCalled();
     expect(repository.recordOutcome).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(redisZremMock).not.toHaveBeenCalled();
+  });
+
+  it('releases the host slot after a successful delivery and after a receiver failure', async () => {
+    await deliver();
+    expect(redisZremMock).toHaveBeenCalledExactlyOnceWith(
+      webhookHostSlotKey(DESTINATION_HOST),
+      DELIVERY_ATTEMPT_PUBLIC_ID,
+    );
+
+    redisZremMock.mockClear();
+    fetchMock = respond(500, 'server error');
+    await expect(deliver()).rejects.toBeInstanceOf(WebhookEndpointFailure);
+    expect(redisZremMock).toHaveBeenCalledExactlyOnceWith(
+      webhookHostSlotKey(DESTINATION_HOST),
+      DELIVERY_ATTEMPT_PUBLIC_ID,
+    );
+  });
+
+  it('delivers when Redis cannot take a host slot', async () => {
+    redisEvalMock.mockRejectedValueOnce(new Error('redis down'));
+
+    const result = await deliver();
+
+    expect(result).toEqual({ outcome: 'delivered', httpStatus: 200 });
+    expect(repository.tryMarkSending).toHaveBeenCalledOnce();
+    expect(redisZremMock).not.toHaveBeenCalled();
   });
 
   it('parks a host-at-capacity delivery without spending an attempt', async () => {
     const moveToDelayed = vi.fn().mockResolvedValue(undefined);
     const error = new WebhookDeliveryHostAtCapacity('example.com');
+    const beforeMs = Date.now();
 
     await expect(
       deferWebhookDeliveryWhenHostAtCapacity({
@@ -345,7 +387,9 @@ describe('processWebhookDeliveryAttempt', () => {
     expect(moveToDelayed).toHaveBeenCalledOnce();
     const [delayedUntil, token] = moveToDelayed.mock.calls[0] ?? [];
     expect(token).toBe('lock-token');
-    expect(delayedUntil).toBeGreaterThan(Date.now());
+    const jitterCeilingMs = Math.floor(5_000 * 0.2);
+    expect(delayedUntil).toBeGreaterThanOrEqual(beforeMs + 5_000);
+    expect(delayedUntil).toBeLessThanOrEqual(Date.now() + 5_000 + jitterCeilingMs);
   });
 
   it('rethrows a host-at-capacity error when the worker has no lock token', async () => {

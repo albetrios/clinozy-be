@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**13 / 239** variables migrated to an explicit `{ allowed, description }` entry.
+**13 / 240** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -236,6 +236,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `WEBHOOK_ALLOWLIST_REQUIRED` | — | `true` |  | — |
 | `WEBHOOK_DELIVERY_ATTEMPT_RETENTION_CRON` | — | — *(optional)* |  | — |
 | `WEBHOOK_DELIVERY_ATTEMPT_RETENTION_DAYS` | — | `30` |  | — |
+| `WEBHOOK_DELIVERY_MAX_IN_FLIGHT_PER_HOST` | — | `2` |  | — |
 | `WEBHOOK_MAX_PER_ORG` | — | `25` |  | — |
 | `WEBHOOK_SECRET_ROTATION_OVERLAP_HOURS` | — | `24` |  | — |
 | `WEBHOOK_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |

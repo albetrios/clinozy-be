@@ -1280,6 +1280,28 @@ describe('env-schema', () => {
       });
       expect(zero.success).toBe(false);
     });
+
+    it('defaults WEBHOOK_DELIVERY_MAX_IN_FLIGHT_PER_HOST to 2 and rejects values outside 1..100', () => {
+      const defaults = envSchema.safeParse({
+        ...commonRequiredBase,
+        NODE_ENV: 'development',
+      });
+      expect(defaults.success && defaults.data.WEBHOOK_DELIVERY_MAX_IN_FLIGHT_PER_HOST).toBe(2);
+
+      const tooHigh = envSchema.safeParse({
+        ...commonRequiredBase,
+        NODE_ENV: 'development',
+        WEBHOOK_DELIVERY_MAX_IN_FLIGHT_PER_HOST: '101',
+      });
+      expect(tooHigh.success).toBe(false);
+
+      const zero = envSchema.safeParse({
+        ...commonRequiredBase,
+        NODE_ENV: 'development',
+        WEBHOOK_DELIVERY_MAX_IN_FLIGHT_PER_HOST: '0',
+      });
+      expect(zero.success).toBe(false);
+    });
   });
 
   describe('unauthenticated /reference production guard (audit #7)', () => {

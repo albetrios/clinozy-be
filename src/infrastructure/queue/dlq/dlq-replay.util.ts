@@ -120,7 +120,7 @@ export function buildReplayJobPayloadFromLedger(
  * Reconstructs the minimal job payload needed to re-enqueue a dead-lettered job onto its
  * original BullMQ queue. Webhook delivery and notification jobs pull their required identifiers
  * out of {@link DeadLetterJobData.original_data_summary}: webhook (`delivery_attempt_public_id` +
- * `organization_public_id`), notification (`notification_public_id` + nullable
+ * `organization_public_id` + `destination_host`), notification (`notification_public_id` + nullable
  * `organization_public_id` + `user_public_id`). Every other queue — mail and Stripe webhook
  * included, see {@link DLQ_REPLAY_SOURCE_QUEUE_NAMES} — or a summary missing a required key returns `null` so
  * the caller skips the replay. The payload is tagged with {@link DlqReplayJobFields} markers:
@@ -135,10 +135,15 @@ export function buildReplayJobPayload(data: DeadLetterJobData): Record<string, u
     case WEBHOOK_DELIVERY_QUEUE_NAME: {
       const deliveryAttemptPublicId = summary.delivery_attempt_public_id;
       const organizationPublicId = summary.organization_public_id;
-      if (typeof deliveryAttemptPublicId !== 'string' || typeof organizationPublicId !== 'string') {
+      const destinationHost = summary.destination_host;
+      if (
+        typeof deliveryAttemptPublicId !== 'string' ||
+        typeof organizationPublicId !== 'string' ||
+        typeof destinationHost !== 'string'
+      ) {
         return null;
       }
-      basePayload = { deliveryAttemptPublicId, organizationPublicId };
+      basePayload = { deliveryAttemptPublicId, organizationPublicId, destinationHost };
       break;
     }
     case NOTIFICATION_QUEUE_NAME: {

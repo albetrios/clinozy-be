@@ -16,6 +16,7 @@ Customer-configured outbound webhook endpoints + the entire delivery pipeline: p
 - **Request-id propagation**: outbound deliveries carry the originating `X-Request-Id` so customers can correlate their server logs with our audit.
 - **HMAC signature on every payload**: each delivery is signed with the per-webhook secret; customers verify signature in their handler.
 - **Retry schedule**: eight attempts over about a day (1 min, 5 min, 30 min, 2 h, 5 h, 10 h, 10 h, plus up to 20% jitter); the final receiver failure reaches the dead-letter ledger at warn level, without a Sentry page. `410 Gone` stops retrying and turns the webhook off.
+- **Per-host in-flight cap**: every worker replica shares a Redis lease of `WEBHOOK_DELIVERY_MAX_IN_FLIGHT_PER_HOST` (default 2) POSTs to one destination host and port. A further delivery is parked for five seconds plus jitter without spending an attempt. Detail: [webhook-delivery](webhook-delivery/webhook-delivery.overview.md).
 - **Tenant-scoped**: webhook configurations belong to organizations; deliveries fire only to URLs that organization owns.
 - **Secrets never logged in URLs**: structured logs and circuit-breaker events record origin, path, and a short hash of the full URL — never query strings, fragments, or embedded credentials.
 

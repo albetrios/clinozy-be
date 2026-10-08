@@ -27,6 +27,7 @@ async function seedLedgerRow(options: { replayDepth: number }) {
       payload_summary: {
         delivery_attempt_public_id: DELIVERY_ATTEMPT_PUBLIC_ID,
         organization_public_id: ORGANIZATION_PUBLIC_ID,
+        destination_host: 'example.com:443',
       },
       failed_reason: 'Webhook delivery failed with HTTP 500',
       attempts_made: WEBHOOK_DELIVERY_JOB_ATTEMPTS,
@@ -93,6 +94,7 @@ describe('Integration: DLQ auto-retry sweeper', () => {
     expect(replays[0]!.data).toMatchObject({
       deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
       organizationPublicId: ORGANIZATION_PUBLIC_ID,
+      destinationHost: 'example.com:443',
       replayFromDlq: true,
       dlqReplayAttempt: 1,
     });

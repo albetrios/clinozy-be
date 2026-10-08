@@ -100,8 +100,10 @@ what to do, why, and what enforces it. The mechanisms behind the rules are expla
 2. **Concurrency**: a throughput worker reads its family's setting (`getWorkerConcurrencyMail /
    Notify / Webhook / Stripe`, default `WORKER_CONCURRENCY` = 4); a cron or sweep runs at
    `RETENTION_WORKER_CONCURRENCY` (1). Webhook delivery also caps in-flight POSTs per destination
-   host (`WEBHOOK_DELIVERY_PER_HOST_IN_FLIGHT_LIMIT`) and parks the extra jobs with `moveToDelayed`
-   so one slow receiver cannot occupy the pool.
+   host across every worker replica (`WEBHOOK_DELIVERY_MAX_IN_FLIGHT_PER_HOST`, default 2) with a
+   Redis lease on `webhook:host-slots:<host>`. A further delivery is parked with `moveToDelayed`
+   for five seconds plus jitter, without spending an attempt and without opening Postgres, so one
+   slow receiver cannot occupy the pool.
 3. **Return a `WorkerHandle`** (`buildWorkerHandle`) and log the `stalled` event. Bootstrap attaches
    the dead-letter + Sentry hook, the job-duration histogram and the queue heartbeat to every
    registered worker — do not add your own `failed` handler that reports to Sentry.
@@ -135,7 +137,9 @@ what to do, why, and what enforces it. The mechanisms behind the rules are expla
    half-open). A throttle
    (HTTP 429) throws `ProviderOutageError` with `retryAfterMs`, which pauses for that time only.
    A queue calling customer endpoints does **not** pause (one endpoint's outage must not stop the
-   others); it relies on its per-endpoint circuit and retry schedule.
+   others); it relies on its per-endpoint circuit and retry schedule. Webhook delivery still parks
+   one job when that destination host is already at `WEBHOOK_DELIVERY_MAX_IN_FLIGHT_PER_HOST`,
+   using `moveToDelayed` and `DelayedError` for that job only.
 3. **A refusal of one request is not an outage**: a provider error that concerns only this request
    (an invalid recipient — `countsAsCircuitFailure: false` — or a missing S3 key) does not count
    against the circuit, so it neither opens it nor pauses the queue; the job fails on its own.

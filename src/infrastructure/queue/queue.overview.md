@@ -48,7 +48,7 @@ BullMQ + Redis runtime for the platform. Owns connection management, the worker 
 - **Redis unavailable** → workers fail fast and exit; Railway / Kubernetes restarts the pod once Redis recovers.
 - **Worker crashes mid-job** → BullMQ stalls the job and another worker picks it up after the lock duration.
 - **Job exceeds retries, or can never succeed** → final failure → ledger + DLQ + Sentry (warn and no Sentry for an expected one). Replay tooling lives in [dlq/dlq-replay.util.ts](src/infrastructure/queue/dlq/).
-- **Third-party provider down** → its queues (`mail`; `stripe-webhook`, `subscription-seat-sync`; `user-data-export`) pause and probe every five minutes; jobs wait, they are not dead-lettered (`queue.provider_outage.paused`, `bullmq_provider_outage_parked_jobs_total`).
+- **Third-party provider down** → its queues (`mail`; `stripe-webhook`, `subscription-seat-sync`; `user-data-export`) pause and probe every five minutes; jobs wait, they are not dead-lettered (`queue.provider_outage.paused`, `bullmq_provider_outage_parked_jobs_total`). Webhook delivery does not pause the queue; a destination host already at `WEBHOOK_DELIVERY_MAX_IN_FLIGHT_PER_HOST` parks that one job (`webhook_delivery_host_busy_parked_total`).
 
 ## Related runbooks
 

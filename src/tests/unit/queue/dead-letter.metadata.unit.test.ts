@@ -191,16 +191,19 @@ describe('enqueueDeadLetter metadata', () => {
         data: {
           deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
           organizationPublicId: 'org_public_abc',
+          destinationHost: 'example.com:443',
           requestId: 'req-1',
           secret: 'should-not-be-captured',
         },
         expectedSummary: {
           delivery_attempt_public_id: 'wda_9z3rura5kqvcv8zggriym',
           organization_public_id: 'org_public_abc',
+          destination_host: 'example.com:443',
         },
         expectedReplay: {
           deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
           organizationPublicId: 'org_public_abc',
+          destinationHost: 'example.com:443',
         },
       },
       {

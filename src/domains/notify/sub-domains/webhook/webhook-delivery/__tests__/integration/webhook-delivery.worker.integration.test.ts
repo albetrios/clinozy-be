@@ -105,6 +105,7 @@ describe('webhook-delivery.worker — status transitions', () => {
     const result = await processWebhookDeliveryAttempt({
       deliveryAttemptPublicId: deliveryAttempt.publicId,
       organizationPublicId: organization.public_id,
+      destinationHost: 'example.com:443',
       jobContext: { id: 'unit-test', attemptsMade: 0 },
       fetchImplementation: fetchMock,
     });
@@ -125,6 +126,7 @@ describe('webhook-delivery.worker — status transitions', () => {
       processWebhookDeliveryAttempt({
         deliveryAttemptPublicId: deliveryAttempt.publicId,
         organizationPublicId: organization.public_id,
+        destinationHost: 'example.com:443',
         jobContext: { id: `wh-test-failure-${randomUUID()}`, attemptsMade: 0 },
         fetchImplementation: fetchMock,
       }),
@@ -146,6 +148,7 @@ describe('webhook-delivery.worker — status transitions', () => {
       processWebhookDeliveryAttempt({
         deliveryAttemptPublicId: deliveryAttempt.publicId,
         organizationPublicId: organization.public_id,
+        destinationHost: 'example.com:443',
         jobContext: { id: 'retry-job', attemptsMade: 0 },
         fetchImplementation: vi.fn(async () => new Response('busy', { status: 503 })),
       }),
@@ -154,6 +157,7 @@ describe('webhook-delivery.worker — status transitions', () => {
     const result = await processWebhookDeliveryAttempt({
       deliveryAttemptPublicId: deliveryAttempt.publicId,
       organizationPublicId: organization.public_id,
+      destinationHost: 'example.com:443',
       jobContext: { id: 'retry-job', attemptsMade: 1 },
       fetchImplementation: vi.fn(async () => new Response('ok', { status: 200 })),
     });
@@ -170,6 +174,7 @@ describe('webhook-delivery.worker — status transitions', () => {
     await processWebhookDeliveryAttempt({
       deliveryAttemptPublicId: deliveryAttempt.publicId,
       organizationPublicId: organization.public_id,
+      destinationHost: 'example.com:443',
       jobContext: { id: 'first-job', attemptsMade: 0 },
       fetchImplementation: vi.fn(async () => new Response('ok', { status: 200 })),
     });
@@ -178,6 +183,7 @@ describe('webhook-delivery.worker — status transitions', () => {
     const result = await processWebhookDeliveryAttempt({
       deliveryAttemptPublicId: deliveryAttempt.publicId,
       organizationPublicId: organization.public_id,
+      destinationHost: 'example.com:443',
       jobContext: { id: 'duplicate-job', attemptsMade: 0 },
       fetchImplementation: duplicateFetch,
     });
@@ -193,6 +199,7 @@ describe('webhook-delivery.worker — status transitions', () => {
     const result = await processWebhookDeliveryAttempt({
       deliveryAttemptPublicId: deliveryAttempt.publicId,
       organizationPublicId: organization.public_id,
+      destinationHost: 'example.com:443',
       jobContext: { id: 'gone-job', attemptsMade: 0 },
       fetchImplementation: vi.fn(async () => new Response('gone', { status: 410 })),
     });
@@ -230,6 +237,7 @@ describe('webhook-delivery.worker — status transitions', () => {
       {
         deliveryAttemptPublicId: deliveryAttempt.publicId,
         organizationPublicId: organization.public_id,
+        destinationHost: 'example.com:443',
       },
       { jobId, attempts: 1 },
     );
@@ -264,6 +272,7 @@ describe('webhook-delivery.worker — status transitions', () => {
       processWebhookDeliveryAttempt({
         deliveryAttemptPublicId: deliveryAttempt.publicId,
         organizationPublicId: organizationB.public_id,
+        destinationHost: 'example.com:443',
         jobContext: { id: 'tenant-isolation', attemptsMade: 0 },
         fetchImplementation: vi.fn(async () => new Response('ok', { status: 200 })),
       }),

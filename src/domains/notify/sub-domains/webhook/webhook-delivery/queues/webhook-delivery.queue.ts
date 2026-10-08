@@ -84,15 +84,17 @@ export function getWebhookDeliveryQueue(): Queue<WebhookDeliveryJobData> {
 export async function enqueueWebhookDelivery(options: {
   deliveryAttemptPublicId: string;
   organizationPublicId: string;
+  destinationHost: string;
   requestId?: string;
 }): Promise<void> {
-  const { deliveryAttemptPublicId, organizationPublicId, requestId } = options;
+  const { deliveryAttemptPublicId, organizationPublicId, destinationHost, requestId } = options;
   const queue = getWebhookDeliveryQueue();
   const jobData = parseBullMQJobData(
     webhookDeliveryJobDataSchema,
     omitUndefined({
       deliveryAttemptPublicId,
       organizationPublicId,
+      destinationHost,
       requestId,
       ...captureTraceContextForPropagation(),
     }),

@@ -98,7 +98,10 @@ describe('webhook-delivery.repository (database)', () => {
     const organizationByAttempt = await findOrganizationPublicIdByDeliveryAttemptPublicId(
       deliveryAttempt!.publicId,
     );
-    expect(organizationByAttempt).toBe(organization.public_id);
+    expect(organizationByAttempt).toEqual({
+      organizationPublicId: organization.public_id,
+      webhookUrl: 'https://example.com/webhooks',
+    });
 
     const delivery = await findWebhookDeliveryAttemptWithWebhook(
       deliveryAttempt!.publicId,
@@ -179,10 +182,12 @@ describe('webhook-delivery.repository (database)', () => {
       {
         deliveryAttemptPublicId: staleInSecond,
         organizationPublicId: second.organization.public_id,
+        webhookUrl: 'https://example.com/reclaim-second',
       },
       {
         deliveryAttemptPublicId: staleInFirst,
         organizationPublicId: first.organization.public_id,
+        webhookUrl: 'https://example.com/reclaim-first',
       },
     ]);
 

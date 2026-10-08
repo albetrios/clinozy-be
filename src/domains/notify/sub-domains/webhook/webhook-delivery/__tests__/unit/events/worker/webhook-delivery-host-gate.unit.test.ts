@@ -1,33 +1,17 @@
-import { describe, expect, it, beforeEach } from 'vitest';
-import { WEBHOOK_DELIVERY_PER_HOST_IN_FLIGHT_LIMIT } from '@/infrastructure/outbound/outbound-defaults.js';
-import {
-  acquireWebhookDeliveryHostSlot,
-  releaseWebhookDeliveryHostSlot,
-  resetWebhookDeliveryHostSlots,
-  webhookDeliveryDestinationHost,
-  WebhookDeliveryHostAtCapacity,
-} from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery-host-gate.js';
+import { describe, expect, it } from 'vitest';
+import { webhookDeliveryDestinationHost } from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery-host-gate.js';
 
-describe('webhook delivery host gate', () => {
-  beforeEach(() => {
-    resetWebhookDeliveryHostSlots();
-  });
-
-  it('reads a lowercased hostname and ignores a URL that cannot be parsed', () => {
-    expect(webhookDeliveryDestinationHost('https://Example.COM/hook')).toBe('example.com');
-    expect(webhookDeliveryDestinationHost('not a url')).toBeNull();
-  });
-
-  it('allows another delivery after a slot is released', () => {
-    for (let index = 0; index < WEBHOOK_DELIVERY_PER_HOST_IN_FLIGHT_LIMIT; index++) {
-      acquireWebhookDeliveryHostSlot('slow.example');
-    }
-    expect(() => acquireWebhookDeliveryHostSlot('slow.example')).toThrow(
-      WebhookDeliveryHostAtCapacity,
+describe('webhookDeliveryDestinationHost', () => {
+  it('lowercases the host and includes the port, filling the scheme default when it is omitted', () => {
+    expect(webhookDeliveryDestinationHost('https://Example.COM/hook')).toBe('example.com:443');
+    expect(webhookDeliveryDestinationHost('https://Example.COM:8443/hook')).toBe(
+      'example.com:8443',
     );
-    acquireWebhookDeliveryHostSlot('other.example');
+    expect(webhookDeliveryDestinationHost('http://Example.COM/hook')).toBe('example.com:80');
+    expect(webhookDeliveryDestinationHost('https://[::1]/hook')).toBe('[::1]:443');
+  });
 
-    releaseWebhookDeliveryHostSlot('slow.example');
-    expect(() => acquireWebhookDeliveryHostSlot('slow.example')).not.toThrow();
+  it('returns null when the URL cannot be parsed', () => {
+    expect(webhookDeliveryDestinationHost('not a url')).toBeNull();
   });
 });

@@ -115,6 +115,7 @@ describe('Chaos resilience: webhook delivery dead-letters after retry exhaustion
         {
           deliveryAttemptPublicId: pendingAttemptForDlqExhaustion.publicId,
           organizationPublicId: organizationForDlqExhaustionFixture.public_id,
+          destinationHost: 'example.com:443',
         },
         {
           jobId: exhaustionJobPublicIdentifier,

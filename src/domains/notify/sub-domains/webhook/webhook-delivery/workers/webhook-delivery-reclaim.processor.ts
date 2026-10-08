@@ -1,4 +1,5 @@
 import { enqueueWebhookDelivery } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
+import { resolveWebhookDeliveryDestinationHost } from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery-host-gate.js';
 import { findStalePendingDeliveryAttempts } from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.js';
 import {
   WEBHOOK_DELIVERY_RECLAIM_BATCH_SIZE,
@@ -65,6 +66,7 @@ export async function runWebhookDeliveryReclaimJob(
         await enqueueWebhookDelivery({
           deliveryAttemptPublicId: staleAttempt.deliveryAttemptPublicId,
           organizationPublicId: staleAttempt.organizationPublicId,
+          destinationHost: resolveWebhookDeliveryDestinationHost(staleAttempt.webhookUrl),
           requestId: WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME,
         });
         return true;

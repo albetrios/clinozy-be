@@ -45,7 +45,7 @@ This domain implements the contracts documented in [src/PATTERNS.md](src/PATTERN
 The notify domain subscribes to exactly one other domain's event: `MEMBER_INVITATION_EVENT.ACCEPTED`, registered through `registerNotifyEventHandlers()` (the container path — see [workers-and-events](docs/reference/runtime/workers-and-events.md)). Everything else is driven directly:
 
 - **In-app notifications** — created via `createAndDispatchNotification` (persist the row + enqueue channel dispatch), then delivered asynchronously by the `notification` worker. The invite-accepted handler is the one cross-domain producer: it fans a notification out to the organization's `membership:manage` holders and drops each recipient's cached unread count.
-- **Outbound webhook delivery** — a `webhook_delivery_attempts` row (status `PENDING`) is written inside the originating transaction; the internal `NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED` listener enqueues the BullMQ delivery job on commit.
+- **Outbound webhook delivery** — a `webhook_delivery_attempts` row (status `PENDING`) is written inside the originating transaction; the internal `NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED` listener enqueues the BullMQ delivery job on commit, including the destination host so a busy host can be parked without another database read. The in-flight cap is a Redis lease shared by every worker replica.
 
 For reference, adjacent flows do **not** route through notify today: `signup-flow` / `login-flow` / `organization-invitation-flow` send email **directly via the mail outbox** ([src/infrastructure/mail/](src/infrastructure/mail/)); `subscription-change-flow` / `dunning-flow` persist Stripe state only.
 

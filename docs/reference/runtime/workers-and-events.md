@@ -97,6 +97,7 @@ When **`METRICS_ENABLED=true`**, workers export BullMQ telemetry to the shared P
 | `bullmq_queue_{waiting,active,delayed,failed}{queue}` | `refreshBullMQQueueGauges()` — called from `refreshMetricsBeforeScrape()` before `GET /metrics`                |
 | `bullmq_job_duration_seconds{queue,job_name}`         | `attachBullMQJobMetrics()` on worker `completed` — attached to every worker by `bootstrap.ts`, with the dead-letter hook and the heartbeat |
 | `bullmq_provider_outage_parked_jobs_total{queue,provider,reason}` | `createProviderPausableWorker` — each job parked by a provider outage or throttle ([Provider outage pause](#provider-outage-pause)) |
+| `webhook_delivery_host_busy_parked_total` | Webhook delivery — a job parked because its destination host already held `WEBHOOK_DELIVERY_MAX_IN_FLIGHT_PER_HOST` leases. No host label. |
 
 Queue depth gauges cover every worker queue — `WORKER_QUEUE_NAMES` in [`queue-catalog.ts`](../../../src/infrastructure/queue/queue-catalog.ts), the one list the gauges, the DLQ depth sampler and trim, the heartbeat read-out and Bull Board share, pinned to the registry by `queue-catalog.coverage.unit.test.ts`. See [observability runbook](../../deployment/runbooks/observability.md) for scrape setup and metric names.
 
@@ -185,7 +186,9 @@ minutes until the provider is back; then everything that waited is processed.
   (`getQueuesWaitingJobCount` skips it) — its work waits by design, and a worker restarted for it
   would only pause again. `/readyz` reports `provider_pause_ms` per throughput queue.
 - **Not paused:** scheduled sweeps (a failed run retries on the next tick) and `webhook-delivery` —
-  one customer's endpoint being down is not an outage of every other customer's.
+  one customer's endpoint being down is not an outage of every other customer's. A destination
+  host already at `WEBHOOK_DELIVERY_MAX_IN_FLIGHT_PER_HOST` parks that one job with `moveToDelayed`
+  and `DelayedError` (five seconds plus jitter). That is not the queue-wide pause.
 
 ---
 
@@ -326,8 +329,10 @@ billing/sub-domains/stripe-webhook/workers/stripe-webhook.worker.ts  →  proces
 
 ```text
 emitWebhookDeliveryRequested()  →  notify/sub-domains/webhook/events/
-webhook-delivery.event-handlers.ts  →  enqueueWebhookDelivery()
+webhook-delivery.event-handlers.ts  →  enqueueWebhookDelivery()  (job carries destinationHost)
 ```
+
+The delivery job stores `destinationHost` (lowercased hostname and port) so a worker that finds the host at `WEBHOOK_DELIVERY_MAX_IN_FLIGHT_PER_HOST` can park with `moveToDelayed` before it opens Postgres. The reclaim sweep sets the same field. The cap is a Redis lease (`webhook:host-slots:<host>`) shared by every worker replica; a Redis error fails open and the delivery still runs.
 
 **Outbound webhook SSRF:** `webhook-delivery.worker` uses `createPinnedWebhookFetch()` (`src/shared/utils/security/webhook-outbound-fetch.util.ts`). DNS is resolved once per delivery via `resolveAndPinWebhookUrl()`; the HTTP client connects to the pinned public IP while sending the original `Host` / TLS SNI. `validateWebhookUrl()` at create/update time uses `ipaddr.js` to normalize IPv4-mapped IPv6 literals (e.g. `[::ffff:127.0.0.1]`) before range checks, and rejects private, link-local, CGNAT, loopback, and other non-routable targets. Optional `WEBHOOK_URL_ALLOWLIST` (comma-separated host suffixes) further restricts hostnames in production.
 

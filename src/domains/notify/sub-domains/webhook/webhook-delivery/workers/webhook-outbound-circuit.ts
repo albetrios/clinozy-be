@@ -4,13 +4,12 @@ import { safeWebhookUrlForLogs } from '@/shared/utils/security/safe-webhook-url-
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { webhookDeliveryRetryBaseDelayMs } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
 import { addRetryJitter } from '@/infrastructure/queue/retry-jitter.util.js';
+import { WEBHOOK_DELIVERY_TIMEOUT_MS } from '@/infrastructure/outbound/outbound-defaults.js';
 import {
   FIVE_SECONDS_MS,
   MILLISECONDS_PER_HOUR,
   MILLISECONDS_PER_MINUTE,
 } from '@/shared/constants/ttl.constants.js';
-
-const WEBHOOK_FETCH_TIMEOUT_MS = 30_000;
 
 /** Maximum number of per-webhook circuit breakers kept resident (LRU eviction beyond this). */
 const WEBHOOK_CIRCUIT_CACHE_MAX_ENTRIES = 5_000;
@@ -113,7 +112,7 @@ function getWebhookOutboundCircuit(webhookPublicId: string, webhookUrl: string):
   evictLeastRecentlyUsedIfFull();
 
   const circuit = new CircuitBreaker(executeWebhookFetch, {
-    timeout: WEBHOOK_FETCH_TIMEOUT_MS + WEBHOOK_CIRCUIT_TIMEOUT_BUFFER_MS,
+    timeout: WEBHOOK_DELIVERY_TIMEOUT_MS + WEBHOOK_CIRCUIT_TIMEOUT_BUFFER_MS,
     errorThresholdPercentage: WEBHOOK_CIRCUIT_ERROR_THRESHOLD_PERCENTAGE,
     resetTimeout: WEBHOOK_CIRCUIT_RESET_TIMEOUT_MS,
     volumeThreshold: WEBHOOK_CIRCUIT_VOLUME_THRESHOLD,

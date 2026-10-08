@@ -35,6 +35,7 @@ import {
 } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
 
 const ORGANIZATION_PUBLIC_ID = 'org_abcdefghijklmnopqrstu';
+const DESTINATION_HOST = 'example.com:443';
 const DELIVERY_ATTEMPT_PUBLIC_ID = 'wda_9z3rura5kqvcv8zggriym';
 const SECOND_DELIVERY_ATTEMPT_PUBLIC_ID = 'wda_bchnclznbnkn5db2qocfh';
 
@@ -95,6 +96,7 @@ describe('webhook-delivery queue', () => {
     await enqueueWebhookDelivery({
       deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
       organizationPublicId: ORGANIZATION_PUBLIC_ID,
+      destinationHost: DESTINATION_HOST,
       requestId: 'request-1',
     });
 
@@ -105,6 +107,7 @@ describe('webhook-delivery queue', () => {
     expect(jobData).toEqual({
       deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
       organizationPublicId: ORGANIZATION_PUBLIC_ID,
+      destinationHost: DESTINATION_HOST,
       requestId: 'request-1',
     });
     // Not `wh-attempt-123`: the bigserial restarts at 1 after TRUNCATE ... RESTART IDENTITY or a
@@ -118,6 +121,7 @@ describe('webhook-delivery queue', () => {
     await enqueueWebhookDelivery({
       deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
       organizationPublicId: ORGANIZATION_PUBLIC_ID,
+      destinationHost: DESTINATION_HOST,
     });
 
     const [, jobData, options] = addMock.mock.calls[0] ?? [];
@@ -131,6 +135,7 @@ describe('webhook-delivery queue', () => {
       enqueueWebhookDelivery({
         deliveryAttemptPublicId: '',
         organizationPublicId: ORGANIZATION_PUBLIC_ID,
+        destinationHost: DESTINATION_HOST,
       }),
     ).rejects.toThrow(/bullmq\.invalid_job_payload:webhook-delivery/);
     expect(addMock).not.toHaveBeenCalled();
@@ -140,6 +145,7 @@ describe('webhook-delivery queue', () => {
     await enqueueWebhookDelivery({
       deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
       organizationPublicId: ORGANIZATION_PUBLIC_ID,
+      destinationHost: DESTINATION_HOST,
     });
 
     const [name, options] = queueConstructorMock.mock.calls[0] ?? [];
@@ -158,10 +164,12 @@ describe('webhook-delivery queue', () => {
     await enqueueWebhookDelivery({
       deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
       organizationPublicId: ORGANIZATION_PUBLIC_ID,
+      destinationHost: DESTINATION_HOST,
     });
     await enqueueWebhookDelivery({
       deliveryAttemptPublicId: SECOND_DELIVERY_ATTEMPT_PUBLIC_ID,
       organizationPublicId: ORGANIZATION_PUBLIC_ID,
+      destinationHost: DESTINATION_HOST,
     });
 
     expect(queueConstructorMock).toHaveBeenCalledTimes(1);
@@ -172,6 +180,7 @@ describe('webhook-delivery queue', () => {
     await enqueueWebhookDelivery({
       deliveryAttemptPublicId: DELIVERY_ATTEMPT_PUBLIC_ID,
       organizationPublicId: ORGANIZATION_PUBLIC_ID,
+      destinationHost: DESTINATION_HOST,
     });
     await closeWebhookDeliveryQueue();
 
@@ -182,6 +191,7 @@ describe('webhook-delivery queue', () => {
     await enqueueWebhookDelivery({
       deliveryAttemptPublicId: SECOND_DELIVERY_ATTEMPT_PUBLIC_ID,
       organizationPublicId: ORGANIZATION_PUBLIC_ID,
+      destinationHost: DESTINATION_HOST,
     });
     expect(queueConstructorMock).toHaveBeenCalledTimes(2);
 

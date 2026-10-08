@@ -63,7 +63,7 @@ export interface DeadLetterJobData {
  *
  * Each replayable queue type contributes the identifiers {@link buildReplayJobPayload} needs
  * to reconstruct its job: mail (`mail_outbox_token`), webhook delivery
- * (`delivery_attempt_public_id` + `organization_public_id`), notification
+ * (`delivery_attempt_public_id` + `organization_public_id` + `destination_host`), notification
  * (`notification_public_id` + `organization_public_id` + `user_public_id`), and Stripe webhook
  * (`stripe_event_id`); a data-export job's `export_public_id` + `user_public_id` are kept for the
  * operator. Public handles only — never a bigserial, and full payloads, HTML bodies, signing
@@ -79,6 +79,9 @@ function summarizeJobDataForDeadLetter(data: unknown): Record<string, unknown> {
   if (record.mailOutboxToken !== undefined) summary.mail_outbox_token = record.mailOutboxToken;
   if (record.deliveryAttemptPublicId !== undefined) {
     summary.delivery_attempt_public_id = record.deliveryAttemptPublicId;
+  }
+  if (record.destinationHost !== undefined) {
+    summary.destination_host = record.destinationHost;
   }
   if (record.notificationPublicId !== undefined) {
     summary.notification_public_id = record.notificationPublicId;

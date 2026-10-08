@@ -71,6 +71,7 @@ describe('Integration: webhook-delivery worker concurrency race', () => {
         processWebhookDeliveryAttempt({
           deliveryAttemptPublicId: deliveryAttempt.publicId,
           organizationPublicId: organization.public_id,
+          destinationHost: 'example.com:443',
           jobContext: { id: `job-race-${String(index)}`, attemptsMade: 0 },
           fetchImplementation: fetchMock,
         }),
@@ -97,6 +98,7 @@ describe('Integration: webhook-delivery worker concurrency race', () => {
     await processWebhookDeliveryAttempt({
       deliveryAttemptPublicId: deliveryAttempt.publicId,
       organizationPublicId: organization.public_id,
+      destinationHost: 'example.com:443',
       jobContext: { id: 'job-first', attemptsMade: 0 },
       fetchImplementation: fetchMock,
     });
@@ -106,6 +108,7 @@ describe('Integration: webhook-delivery worker concurrency race', () => {
         processWebhookDeliveryAttempt({
           deliveryAttemptPublicId: deliveryAttempt.publicId,
           organizationPublicId: organization.public_id,
+          destinationHost: 'example.com:443',
           jobContext: { id: `job-late-${String(index)}`, attemptsMade: 0 },
           fetchImplementation: fetchMock,
         }),

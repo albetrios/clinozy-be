@@ -16,6 +16,7 @@ describe('webhookDeliveryJobDataSchema', () => {
   const validPayload = {
     deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
     organizationPublicId: 'org_abcdefghijklmnopqrstu',
+    destinationHost: 'example.com:443',
     requestId: 'request-1',
   };
 
@@ -26,6 +27,7 @@ describe('webhookDeliveryJobDataSchema', () => {
     expect(parsed.success && parsed.data).toMatchObject({
       deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
       organizationPublicId: 'org_abcdefghijklmnopqrstu',
+      destinationHost: 'example.com:443',
       requestId: 'request-1',
     });
   });
@@ -34,6 +36,7 @@ describe('webhookDeliveryJobDataSchema', () => {
     const parsed = webhookDeliveryJobDataSchema.safeParse({
       deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
       organizationPublicId: 'org_abcdefghijklmnopqrstu',
+      destinationHost: 'example.com:443',
     });
 
     expect(parsed.success).toBe(true);
@@ -54,6 +57,15 @@ describe('webhookDeliveryJobDataSchema', () => {
       replayFromDlq: true,
       dlqReplayAttempt: 1,
     });
+  });
+
+  it('rejects a payload with no destinationHost', () => {
+    const parsed = webhookDeliveryJobDataSchema.safeParse({
+      deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
+      organizationPublicId: 'org_abcdefghijklmnopqrstu',
+    });
+
+    expect(parsed.success).toBe(false);
   });
 
   it('rejects a payload with no deliveryAttemptPublicId', () => {
@@ -78,28 +90,42 @@ describe('webhookDeliveryJobDataSchema', () => {
   it.each([
     [
       'a numeric attempt id (a bigserial never travels in a job)',
-      { deliveryAttemptPublicId: 7, organizationPublicId: 'org_abcdefghijklmnopqrstu' },
+      {
+        deliveryAttemptPublicId: 7,
+        organizationPublicId: 'org_abcdefghijklmnopqrstu',
+        destinationHost: 'example.com:443',
+      },
     ],
     [
       'an empty deliveryAttemptPublicId',
-      { deliveryAttemptPublicId: '', organizationPublicId: 'org_abcdefghijklmnopqrstu' },
+      {
+        deliveryAttemptPublicId: '',
+        organizationPublicId: 'org_abcdefghijklmnopqrstu',
+        destinationHost: 'example.com:443',
+      },
     ],
     [
       'an over-long deliveryAttemptPublicId',
       {
         deliveryAttemptPublicId: 'w'.repeat(29),
         organizationPublicId: 'org_abcdefghijklmnopqrstu',
+        destinationHost: 'example.com:443',
       },
     ],
     [
       'an empty organizationPublicId',
-      { deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym', organizationPublicId: '' },
+      {
+        deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
+        organizationPublicId: '',
+        destinationHost: 'example.com:443',
+      },
     ],
     [
       'an over-long organizationPublicId',
       {
         deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
         organizationPublicId: 'o'.repeat(29),
+        destinationHost: 'example.com:443',
       },
     ],
     [
@@ -107,6 +133,7 @@ describe('webhookDeliveryJobDataSchema', () => {
       {
         deliveryAttemptPublicId: 'wda_9z3rura5kqvcv8zggriym',
         organizationPublicId: 'org_abcdefghijklmnopqrstu',
+        destinationHost: 'example.com:443',
         requestId: 'r'.repeat(129),
       },
     ],

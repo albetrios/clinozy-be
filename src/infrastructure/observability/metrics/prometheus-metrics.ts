@@ -35,6 +35,7 @@ let commitDispatchDurabilityFallbacksTotal: Counter | null = null;
 let readCacheRequestsTotal: Counter<'cache' | 'result'> | null = null;
 let databaseUnscopedQueriesTotal: Counter | null = null;
 let bullmqProviderOutageParkedJobsTotal: Counter<'queue' | 'provider' | 'reason'> | null = null;
+let webhookDeliveryHostBusyParkedTotal: Counter<string> | null = null;
 
 /** The BullMQ queue and job metrics — split out of {@link registerOn} to keep each short. */
 function registerQueueMetrics(registry: Registry): void {
@@ -78,6 +79,12 @@ function registerQueueMetrics(registry: Registry): void {
     name: 'bullmq_provider_outage_parked_jobs_total',
     help: "Jobs parked because their third-party provider was down (reason=outage — each one re-arms the queue's five-minute pause) or throttling us (reason=throttle — paused for the provider's Retry-After), by queue and provider (resend | stripe | s3). An outage rate that keeps rising is an outage still in progress: the queue is waiting for the provider, not losing jobs",
     labelNames: ['queue', 'provider', 'reason'],
+    registers: [registry],
+  });
+
+  webhookDeliveryHostBusyParkedTotal = new Counter({
+    name: 'webhook_delivery_host_busy_parked_total',
+    help: 'Webhook deliveries parked because their destination host already held WEBHOOK_DELIVERY_MAX_IN_FLIGHT_PER_HOST leases. No host label: a per-host label would be unbounded.',
     registers: [registry],
   });
 }
@@ -230,6 +237,9 @@ function bindMetricHandlesFromRegistry(registry: Registry): void {
   bullmqProviderOutageParkedJobsTotal = registry.getSingleMetric(
     'bullmq_provider_outage_parked_jobs_total',
   ) as Counter<'queue' | 'provider' | 'reason'>;
+  webhookDeliveryHostBusyParkedTotal = registry.getSingleMetric(
+    'webhook_delivery_host_busy_parked_total',
+  ) as Counter<string>;
   readCacheRequestsTotal = registry.getSingleMetric('read_cache_requests_total') as Counter<
     'cache' | 'result'
   >;
@@ -478,6 +488,19 @@ export function recordReadCacheRequest(cache: string, result: 'hit' | 'miss'): v
   ensurePrometheusMetricsRegistered(getMetricsRegistry());
   if (!readCacheRequestsTotal) return;
   readCacheRequestsTotal.inc({ cache, result });
+}
+
+/**
+ * Increments `webhook_delivery_host_busy_parked_total` once for a delivery parked because its
+ * destination host was already at the in-flight cap.
+ *
+ * @remarks
+ * No labels. A host label would be unbounded cardinality. No-op when metrics are disabled.
+ */
+export function recordWebhookDeliveryHostBusyParked(): void {
+  if (!isMetricsEnabled()) return;
+  ensurePrometheusMetricsRegistered(getMetricsRegistry());
+  webhookDeliveryHostBusyParkedTotal?.inc();
 }
 
 /**

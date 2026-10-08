@@ -72,23 +72,32 @@ export async function findOrganizationPublicIdByWebhookId(
   return rows[0]?.organizationPublicId ?? null;
 }
 
+/** Organization and webhook URL the delivery enqueue needs: tenant scope plus the destination host. */
+export type WebhookDeliveryEnqueueContext = {
+  organizationPublicId: string;
+  webhookUrl: string;
+};
+
 /**
- * Resolve the organization public id for a given delivery attempt by joining attempts →
- * webhooks → organizations. Used by the event handler to scope the BullMQ enqueue to the
- * correct tenant before the worker reads under RLS.
+ * Resolve the organization public id and webhook URL for a delivery attempt by joining attempts →
+ * webhooks → organizations. The event handler scopes the BullMQ job to the tenant and stores the
+ * destination host on the job so a later park does not read Postgres.
  */
 export async function findOrganizationPublicIdByDeliveryAttemptPublicId(
   delivery_attempt_public_id: string,
   databaseHandle?: RequestScopedPostgresDatabase,
-): Promise<string | null> {
+): Promise<WebhookDeliveryEnqueueContext | null> {
   const rows = await resolveDatabase(databaseHandle)
-    .select({ organizationPublicId: organizations.public_id })
+    .select({
+      organizationPublicId: organizations.public_id,
+      webhookUrl: webhooks.url,
+    })
     .from(webhook_delivery_attempts)
     .innerJoin(webhooks, eq(webhook_delivery_attempts.webhook_id, webhooks.id))
     .innerJoin(organizations, eq(webhooks.organization_id, organizations.id))
     .where(eq(webhook_delivery_attempts.public_id, delivery_attempt_public_id))
     .limit(1);
-  return rows[0]?.organizationPublicId ?? null;
+  return rows[0] ?? null;
 }
 
 /**
@@ -109,12 +118,15 @@ export async function findOrganizationPublicIdByDeliveryAttemptPublicId(
 export async function findStalePendingDeliveryAttempts(
   databaseHandle: WorkerDatabaseHandle,
   options: { createdBefore: Date; limit: number },
-): Promise<Array<{ deliveryAttemptPublicId: string; organizationPublicId: string }>> {
+): Promise<
+  Array<{ deliveryAttemptPublicId: string; organizationPublicId: string; webhookUrl: string }>
+> {
   assertWorkerDatabaseContext(['global_retention_cleanup']);
   return databaseHandle
     .select({
       deliveryAttemptPublicId: webhook_delivery_attempts.public_id,
       organizationPublicId: organizations.public_id,
+      webhookUrl: webhooks.url,
     })
     .from(webhook_delivery_attempts)
     .innerJoin(webhooks, eq(webhook_delivery_attempts.webhook_id, webhooks.id))

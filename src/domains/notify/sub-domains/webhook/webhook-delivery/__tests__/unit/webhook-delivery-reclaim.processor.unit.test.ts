@@ -30,8 +30,16 @@ import {
 } from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery-reclaim.constants.js';
 
 const STALE_ATTEMPTS = [
-  { deliveryAttemptPublicId: 'wda_first', organizationPublicId: 'org_first' },
-  { deliveryAttemptPublicId: 'wda_second', organizationPublicId: 'org_second' },
+  {
+    deliveryAttemptPublicId: 'wda_first',
+    organizationPublicId: 'org_first',
+    webhookUrl: 'https://first.example/hook',
+  },
+  {
+    deliveryAttemptPublicId: 'wda_second',
+    organizationPublicId: 'org_second',
+    webhookUrl: 'https://second.example:8443/hook',
+  },
 ];
 
 /**
@@ -70,11 +78,13 @@ describe('runWebhookDeliveryReclaimJob', () => {
     expect(enqueueWebhookDeliveryMock).toHaveBeenCalledWith({
       deliveryAttemptPublicId: 'wda_first',
       organizationPublicId: 'org_first',
+      destinationHost: 'first.example:443',
       requestId: 'webhook-delivery-reclaim',
     });
     expect(enqueueWebhookDeliveryMock).toHaveBeenCalledWith({
       deliveryAttemptPublicId: 'wda_second',
       organizationPublicId: 'org_second',
+      destinationHost: 'second.example:8443',
       requestId: 'webhook-delivery-reclaim',
     });
     expect(result).toEqual({ scannedCount: 2, addedCount: 2 });

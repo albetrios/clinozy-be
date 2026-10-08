@@ -137,6 +137,7 @@ describe('Chaos resilience: webhook delivery circuit breaker isolates misbehavin
       {
         deliveryAttemptPublicId: misbehavingAttempt.publicId,
         organizationPublicId: organization.public_id,
+        destinationHost: 'example.com:443',
       },
       {
         jobId: misbehavingJobId,
@@ -150,6 +151,7 @@ describe('Chaos resilience: webhook delivery circuit breaker isolates misbehavin
       {
         deliveryAttemptPublicId: healthyAttempt.publicId,
         organizationPublicId: organization.public_id,
+        destinationHost: 'example.com:443',
       },
       { jobId: healthyJobId },
     );

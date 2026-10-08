@@ -77,6 +77,7 @@ describe('Integration: webhook delivery reclaim sweep', () => {
     expect(job?.data).toMatchObject({
       deliveryAttemptPublicId: deliveryAttempt.publicId,
       organizationPublicId: organization.public_id,
+      destinationHost: 'example.com:443',
       requestId: 'webhook-delivery-reclaim',
     });
 

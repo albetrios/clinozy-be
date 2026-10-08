@@ -107,6 +107,7 @@ describe('processWebhookDeliveryAttempt — webhook secret rotation overlap (sec
     await processWebhookDeliveryAttempt({
       deliveryAttemptPublicId: baseDeliveryContext.deliveryAttemptPublicId,
       organizationPublicId: 'org_public_1',
+      destinationHost: 'example.com:443',
       jobContext: { id: 'job-no-rotation', attemptsMade: 0 },
       fetchImplementation: fetchMock,
       deliveryAttemptRepository: repository as never,
@@ -126,6 +127,7 @@ describe('processWebhookDeliveryAttempt — webhook secret rotation overlap (sec
     await processWebhookDeliveryAttempt({
       deliveryAttemptPublicId: baseDeliveryContext.deliveryAttemptPublicId,
       organizationPublicId: 'org_public_1',
+      destinationHost: 'example.com:443',
       jobContext: { id: 'job-rotation-in-window', attemptsMade: 0 },
       fetchImplementation: fetchMock,
       deliveryAttemptRepository: repository as never,
@@ -153,6 +155,7 @@ describe('processWebhookDeliveryAttempt — webhook secret rotation overlap (sec
     await processWebhookDeliveryAttempt({
       deliveryAttemptPublicId: baseDeliveryContext.deliveryAttemptPublicId,
       organizationPublicId: 'org_public_1',
+      destinationHost: 'example.com:443',
       jobContext: { id: 'job-rotation-stale', attemptsMade: 0 },
       fetchImplementation: fetchMock,
       deliveryAttemptRepository: repository as never,
@@ -191,6 +194,7 @@ describe('processWebhookDeliveryAttempt — signature value (HMAC-SHA256 contrac
     await processWebhookDeliveryAttempt({
       deliveryAttemptPublicId: baseDeliveryContext.deliveryAttemptPublicId,
       organizationPublicId: 'org_public_1',
+      destinationHost: 'example.com:443',
       jobContext: { id: 'job-signature-value', attemptsMade: 0 },
       fetchImplementation: fetchMock,
       deliveryAttemptRepository: repository as never,
@@ -227,6 +231,7 @@ describe('processWebhookDeliveryAttempt — signature value (HMAC-SHA256 contrac
     await processWebhookDeliveryAttempt({
       deliveryAttemptPublicId: baseDeliveryContext.deliveryAttemptPublicId,
       organizationPublicId: 'org_public_1',
+      destinationHost: 'example.com:443',
       jobContext: { id: 'job-signature-value-prev', attemptsMade: 0 },
       fetchImplementation: fetchMock,
       deliveryAttemptRepository: repository as never,

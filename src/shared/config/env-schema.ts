@@ -528,6 +528,12 @@ const envSchemaBase = z.object({
    */
   WEBHOOK_MAX_PER_ORG: z.coerce.number().int().min(1).max(1000).default(25),
   /**
+   * Cluster-wide cap on webhook POSTs in flight to one destination host (hostname and port),
+   * shared by every worker replica through a Redis lease. A further delivery to that host is
+   * parked for five seconds plus jitter, without spending an attempt and without opening Postgres.
+   */
+  WEBHOOK_DELIVERY_MAX_IN_FLIGHT_PER_HOST: z.coerce.number().int().min(1).max(100).default(2),
+  /**
    * Max number of active (not revoked) API keys allowed per organization
    * (sec-r5-followup-ratelimit-dos-1). Parity with `WEBHOOK_MAX_PER_ORG`. The
    * route already has `ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT` to bound the
