@@ -278,7 +278,7 @@ describe('Auth e2e: organization switch', () => {
           user_id: user.id,
           organization_id: team.organization.id,
           role_id: team.roleId,
-          status: 'SUSPENDED',
+          status: 'suspended',
           joined_at: new Date(),
         });
 

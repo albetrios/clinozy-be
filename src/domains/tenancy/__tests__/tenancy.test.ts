@@ -99,7 +99,7 @@ describe('Tenancy Domain — flows (memberships, leave, roles)', () => {
       expect(response.statusCode).toBe(403);
     });
 
-    it('should return memberships with embedded user + role summaries (REQ-2)', async () => {
+    it('should return memberships with embedded user summaries and role ids (REQ-2)', async () => {
       const { token } = await createAuthorizedUserAndOrganization();
       const response = await injectAuthenticated(app, {
         url: testApiPath('/tenancy/organization/memberships'),
@@ -110,7 +110,7 @@ describe('Tenancy Domain — flows (memberships, leave, roles)', () => {
         data?: Array<{
           status: string;
           user_id: string;
-          role_id: string;
+          role_ids: string[];
           user?: {
             id: string;
             email: string;
@@ -118,7 +118,6 @@ describe('Tenancy Domain — flows (memberships, leave, roles)', () => {
             last_name: string | null;
             avatar_url: string | null;
           };
-          role?: { id: string; name: string };
           invitation?: unknown;
         }>;
       };
@@ -130,12 +129,10 @@ describe('Tenancy Domain — flows (memberships, leave, roles)', () => {
       expect(typeof owner.user!.email).toBe('string');
       expect(owner.user!.id).toBe(owner.user_id); // flat id mirrors the embedded public id
       expect(owner.user).toHaveProperty('avatar_url');
-      // Embedded role summary (id + name).
-      expect(owner.role).toBeDefined();
-      expect(owner.role!.id).toBe(owner.role_id);
-      expect(typeof owner.role!.name).toBe('string');
-      // The owner membership is ACTIVE → no live invitation embedded.
-      expect(owner.status).toBe('ACTIVE');
+      // The roles by public id, the main role first (D5).
+      expect(owner.role_ids[0]).toMatch(/^rol_[a-z0-9]{21}$/);
+      // The owner membership is active → no live invitation embedded.
+      expect(owner.status).toBe('active');
       expect(owner.invitation).toBeNull();
     });
 
