@@ -19,8 +19,13 @@ well-behaved clients succeed once Redis recovers. (Reads, and writes without an 
 unaffected by this gate.)
 
 Rate limiting degrades **gracefully** instead — the limiter falls back to a per-process in-memory
-counter (`rate-limit-fallback-store.ts`), so the cluster-wide cap loosens to `max × instances` but
-the API stays metered. The permission cache degrades to a direct DB lookup.
+counter (`rate-limit-fallback-store.ts`). Each process's hits are multiplied by the API replica
+count (`DEPLOYMENT_API_REPLICA_COUNT`, else `DEPLOYMENT_TOTAL_REPLICA_COUNT`, else 1) before they
+are compared with `max`, so the cluster ceiling stays near `max` instead of `max × replicas`. A
+budget smaller than the replica count cannot be split and stays per process. The same store backs
+the per-organization request budget (ten times `RATE_LIMIT_MAX` over `RATE_LIMIT_WINDOW_MS`), which
+runs after authentication and is skipped when the request has no organization. The permission cache
+degrades to a direct DB lookup.
 
 **Signals.**
 
@@ -61,5 +66,5 @@ degradation; recovery is automatic when Turnstile returns and the circuit breake
 | Dependency down | Affected surface | Mode | Primary alert |
 | --- | --- | --- | --- |
 | Redis | writes that require `X-Idempotency-Key` | fail closed (`503` retryable) | `idempotency.cache.unavailable` (Sentry) |
-| Redis | global + per-route rate limits | graceful (per-process counter) | `rate_limit.redis_failover.local` (log) |
+| Redis | global, per-route, and per-organization rate limits | graceful (per-process counter, divided by replica count) | `rate_limit.redis_failover.local` (log) |
 | Turnstile | captcha-gated auth routes | fail closed (`503`, `Retry-After` while the circuit is open) | `captcha.provider_unavailable` (Sentry) |

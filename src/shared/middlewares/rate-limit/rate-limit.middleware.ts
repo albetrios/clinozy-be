@@ -1,12 +1,23 @@
-import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
+import type { FastifyPluginAsync, FastifyRequest, RouteOptions } from 'fastify';
 import fp from 'fastify-plugin';
 import fastifyRateLimit from '@fastify/rate-limit';
 import type { RateLimitPluginOptions } from '@fastify/rate-limit';
 import { env } from '@/shared/config/env.config.js';
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { Sentry } from '@/infrastructure/observability/sentry/sentry.js';
+import { RateLimitedError } from '@/shared/errors/auth.error.js';
+import { MILLISECONDS_PER_SECOND } from '@/shared/constants/ttl.constants.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
-import { createRedisFallbackRateLimitStore } from '@/shared/middlewares/rate-limit/rate-limit-fallback-store.js';
+import {
+  createRateLimitCounter,
+  createRedisFallbackRateLimitStore,
+} from '@/shared/middlewares/rate-limit/rate-limit-fallback-store.js';
+import {
+  ORGANIZATION_REQUEST_BUDGET_KEY_PREFIX,
+  ORGANIZATION_REQUEST_BUDGET_MAX,
+  ORGANIZATION_REQUEST_BUDGET_WINDOW_MS,
+  organizationRequestBudgetKey,
+} from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
 import { shouldEmitRateLimitTelemetry } from '@/shared/middlewares/rate-limit/rate-limit-telemetry-throttle.js';
 
 /**
@@ -81,12 +92,15 @@ const RATE_LIMIT_ALLOWLISTED_PATHS = new Set(['/livez', '/readyz']);
  * remains set as a last-resort guard (the fallback store does not throw, so a Redis blip can
  * never turn `/livez` / `/readyz` and every other request into a 5xx).
  *
- * The trade-off is **reduced precision over availability**: the local fallback caps throughput
- * per process (not cluster-wide), which is preferable to either a blanket outage or unmetered
- * traffic. Defense in depth is preserved by (1) the per-route auth-gated presets, (2) the Redis
- * client's `error` event handler which logs `redis.connection.error` for alerting, the
- * `rate_limit.redis_failover.local` warning emitted while degraded, and (3) the idempotency
- * middleware which intentionally fail-closes for write safety.
+ * The trade-off is **reduced precision over availability**: the local fallback is process-local,
+ * and each hit is multiplied by {@link resolveApiRateLimitReplicaCount} before it is compared
+ * with `max`, so N replicas do not grant N times the configured budget. That is preferable to
+ * either a blanket outage or unmetered traffic. Defense in depth is preserved by (1) the
+ * per-route auth-gated presets, (2) the per-organization request budget appended on every route
+ * after authentication, (3) the Redis client's `error` event handler which logs
+ * `redis.connection.error` for alerting, the `rate_limit.redis_failover.local` warning emitted
+ * while degraded, and (4) the idempotency middleware which intentionally fail-closes for write
+ * safety.
  *
  * Wrapped with `fastify-plugin` so `@fastify/rate-limit` decorates the root app rather than an
  * encapsulated child context. This is required for two reasons: (1) the `global: true` limiter's
@@ -95,8 +109,53 @@ const RATE_LIMIT_ALLOWLISTED_PATHS = new Set(['/livez', '/readyz']);
  * limiter via `app.rateLimit(...)` (e.g. the per-email throttle in `auth.routes.ts`) need the
  * `rateLimit` decorator visible at the instance where routes register.
  */
+/**
+ * API process count used to divide the in-memory rate-limit budget while Redis is down.
+ * Prefers the API replica count, then the deployment total, then a single process.
+ */
+function resolveApiRateLimitReplicaCount(): number {
+  return env.DEPLOYMENT_API_REPLICA_COUNT ?? env.DEPLOYMENT_TOTAL_REPLICA_COUNT ?? 1;
+}
+
 const rateLimitMiddleware: FastifyPluginAsync = async (app) => {
   const plugin = fastifyRateLimit as unknown as FastifyPluginAsync<RateLimitPluginOptions>;
+  const replicaCount = resolveApiRateLimitReplicaCount();
+  const organizationRequestBudget = createRateLimitCounter({
+    redis: redisConnection,
+    keyPrefix: ORGANIZATION_REQUEST_BUDGET_KEY_PREFIX,
+    replicaCount,
+  });
+
+  /**
+   * Shared ceiling for one organization, after route authentication has attached `request.auth`.
+   * Requests with no organization (public routes, probes) are not counted.
+   */
+  async function enforceOrganizationRequestBudget(request: FastifyRequest): Promise<void> {
+    const organizationPublicId = request.auth?.organizationPublicId;
+    if (typeof organizationPublicId !== 'string' || organizationPublicId.length === 0) {
+      return;
+    }
+    const key = organizationRequestBudgetKey(organizationPublicId);
+    const result = await organizationRequestBudget.increment({
+      key,
+      timeWindowMs: ORGANIZATION_REQUEST_BUDGET_WINDOW_MS,
+      max: ORGANIZATION_REQUEST_BUDGET_MAX,
+    });
+    if (result.current > ORGANIZATION_REQUEST_BUDGET_MAX) {
+      recordGlobalRateLimitExceeded(request, key);
+      const retryAfterSeconds = Math.max(1, Math.ceil(result.ttl / MILLISECONDS_PER_SECOND));
+      throw new RateLimitedError().withRetryAfter(retryAfterSeconds);
+    }
+  }
+
+  app.addHook('onRoute', (routeOptions: RouteOptions) => {
+    const existingPreHandlers = (() => {
+      if (routeOptions.preHandler === undefined) return [];
+      if (Array.isArray(routeOptions.preHandler)) return [...routeOptions.preHandler];
+      return [routeOptions.preHandler];
+    })();
+    routeOptions.preHandler = [...existingPreHandlers, enforceOrganizationRequestBudget];
+  });
 
   const options: RateLimitPluginOptions = {
     global: true,
@@ -122,9 +181,10 @@ const rateLimitMiddleware: FastifyPluginAsync = async (app) => {
   const redisTestsForcedOff =
     env.RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED && process.env.RUN_REDIS_TESTS === '0';
   if (env.REDIS_URL && !redisTestsForcedOff) {
-    options.store = createRedisFallbackRateLimitStore(redisConnection) as unknown as NonNullable<
-      RateLimitPluginOptions['store']
-    >;
+    options.store = createRedisFallbackRateLimitStore({
+      redis: redisConnection,
+      replicaCount,
+    }) as unknown as NonNullable<RateLimitPluginOptions['store']>;
   }
 
   await app.register(plugin, options);

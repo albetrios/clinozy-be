@@ -482,8 +482,10 @@ const envSchemaBase = z.object({
 
   // Rate limiting
   // Upper bound (audit #34) catches a fat-fingered value that would silently disable global
-  // throttling. NOTE: during a Redis failover the fallback store counts PER PROCESS, so the
-  // effective cluster-wide ceiling while degraded is RATE_LIMIT_MAX × instance count.
+  // throttling. During a Redis failover the fallback store counts per process and multiplies
+  // that count by DEPLOYMENT_API_REPLICA_COUNT (else DEPLOYMENT_TOTAL_REPLICA_COUNT, else 1)
+  // before comparing it with RATE_LIMIT_MAX, so N replicas do not grant N times the budget.
+  // A budget smaller than the replica count cannot be split and stays per process.
   RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(100_000).default(100),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1).default(60_000),
   /** Comma-separated hostnames allowed for outbound webhooks (optional; empty = no extra restriction). */

@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Redis } from 'ioredis';
-import { createRedisFallbackRateLimitStore } from '@/shared/middlewares/rate-limit/rate-limit-fallback-store.js';
+import {
+  createRedisFallbackRateLimitStore,
+  scaleProcessLocalRateLimitCount,
+} from '@/shared/middlewares/rate-limit/rate-limit-fallback-store.js';
 
 interface IncrResult {
   current: number;
@@ -41,7 +44,7 @@ describe('createRedisFallbackRateLimitStore', () => {
     const redis = {
       eval: vi.fn().mockResolvedValue([1, 1000]),
     } as unknown as Redis;
-    const StoreCtor = createRedisFallbackRateLimitStore(redis);
+    const StoreCtor = createRedisFallbackRateLimitStore({ redis, replicaCount: 1 });
     const store = new StoreCtor({}) as never;
 
     const result = await incrAsync(store, '1.2.3.4', 1000, 5);
@@ -59,7 +62,7 @@ describe('createRedisFallbackRateLimitStore', () => {
     const redis = {
       eval: vi.fn().mockRejectedValue(new Error('ECONNREFUSED')),
     } as unknown as Redis;
-    const StoreCtor = createRedisFallbackRateLimitStore(redis);
+    const StoreCtor = createRedisFallbackRateLimitStore({ redis, replicaCount: 1 });
     const store = new StoreCtor({}) as never;
 
     const first = await incrAsync(store, '9.9.9.9', 1000, 5);
@@ -73,7 +76,7 @@ describe('createRedisFallbackRateLimitStore', () => {
     const redis = {
       eval: vi.fn().mockRejectedValue(new Error('down')),
     } as unknown as Redis;
-    const StoreCtor = createRedisFallbackRateLimitStore(redis);
+    const StoreCtor = createRedisFallbackRateLimitStore({ redis, replicaCount: 1 });
     const store = new StoreCtor({}) as never as {
       incr: Parameters<typeof incrAsync>[0]['incr'];
       child: (options: { routeInfo: { method: string; url: string } }) => never;
@@ -92,7 +95,7 @@ describe('createRedisFallbackRateLimitStore', () => {
     const redis = {
       eval: vi.fn().mockRejectedValue(new Error('down')),
     } as unknown as Redis;
-    const StoreCtor = createRedisFallbackRateLimitStore(redis);
+    const StoreCtor = createRedisFallbackRateLimitStore({ redis, replicaCount: 1 });
     const store = new StoreCtor({}) as never;
 
     for (let index = 0; index < 10_000; index++) {
@@ -104,5 +107,27 @@ describe('createRedisFallbackRateLimitStore', () => {
     await expect(incrAsync(store, 'ip-0', 60_000, 5)).resolves.toMatchObject({ current: 1 });
     await expect(incrAsync(store, 'ip-9999', 60_000, 5)).resolves.toMatchObject({ current: 2 });
     await expect(incrAsync(store, 'overflow', 60_000, 5)).resolves.toMatchObject({ current: 2 });
+  });
+
+  it('divides the in-memory budget by the replica count so N processes do not grant N times max', async () => {
+    const redis = {
+      eval: vi.fn().mockRejectedValue(new Error('down')),
+    } as unknown as Redis;
+    const StoreCtor = createRedisFallbackRateLimitStore({ redis, replicaCount: 4 });
+    const store = new StoreCtor({}) as never;
+
+    let lastCurrent = 0;
+    for (let index = 0; index < 25; index++) {
+      lastCurrent = (await incrAsync(store, 'shared', 60_000, 100)).current;
+    }
+    expect(lastCurrent).toBe(100);
+
+    const overBudget = await incrAsync(store, 'shared', 60_000, 100);
+    expect(overBudget.current).toBe(104);
+  });
+
+  it('does not scale a budget that is smaller than the replica count', () => {
+    expect(scaleProcessLocalRateLimitCount({ localCount: 1, max: 3, replicaCount: 4 })).toBe(1);
+    expect(scaleProcessLocalRateLimitCount({ localCount: 2, max: 100, replicaCount: 1 })).toBe(2);
   });
 });

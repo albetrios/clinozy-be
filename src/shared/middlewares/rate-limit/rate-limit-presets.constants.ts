@@ -290,6 +290,39 @@ export const ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT = {
   },
 } as const;
 
+/**
+ * How many times `RATE_LIMIT_MAX` one organization may spend in {@link ORGANIZATION_REQUEST_BUDGET_WINDOW_MS}.
+ * The per-IP cap stays in place; this is the shared ceiling across that organization's members and API keys.
+ *
+ * Falls back to the schema default of 100 when a test mocks a partial env object.
+ */
+const ORGANIZATION_REQUEST_BUDGET_TO_GLOBAL_MAX_RATIO = 10;
+
+/**
+ * Shared request ceiling for one organization across every route.
+ * Ten times the global per-IP `RATE_LIMIT_MAX`, over the same window.
+ */
+export const ORGANIZATION_REQUEST_BUDGET_MAX =
+  (env.RATE_LIMIT_MAX ?? 100) * ORGANIZATION_REQUEST_BUDGET_TO_GLOBAL_MAX_RATIO;
+
+/**
+ * Window for {@link ORGANIZATION_REQUEST_BUDGET_MAX}. Matches `RATE_LIMIT_WINDOW_MS`.
+ */
+export const ORGANIZATION_REQUEST_BUDGET_WINDOW_MS = env.RATE_LIMIT_WINDOW_MS ?? 60_000;
+
+/**
+ * Redis key prefix for the per-organization request budget.
+ * Distinct from `fastify-rate-limit-` so it does not share buckets with the per-IP limiter.
+ */
+export const ORGANIZATION_REQUEST_BUDGET_KEY_PREFIX = 'organization-request-budget-';
+
+/**
+ * Bucket key for the shared per-organization request budget.
+ */
+export function organizationRequestBudgetKey(organizationPublicId: string): string {
+  return `organization:${organizationPublicId}`;
+}
+
 /** Expensive operations (5 req / 5 min), keyed by user when possible. */
 export const EXPENSIVE_AUTHED_RATE_LIMIT = {
   config: {

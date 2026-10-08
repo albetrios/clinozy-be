@@ -45,21 +45,42 @@ function logRedisFailover(error: unknown): void {
 }
 
 /**
+ * Maps a process-local hit count onto the shared budget so N API replicas do not grant N times
+ * `max` while Redis is down.
+ *
+ * A budget smaller than the replica count cannot be split without either refusing every process's
+ * first request or exceeding `max`. That case keeps the local count, which is still one process's
+ * `max` rather than a coordinated cluster total.
+ */
+export function scaleProcessLocalRateLimitCount(options: {
+  localCount: number;
+  max: number;
+  replicaCount: number;
+}): number {
+  const { localCount, max, replicaCount } = options;
+  if (replicaCount <= 1) return localCount;
+  if (Math.floor(max / replicaCount) < 1) return localCount;
+  return localCount * replicaCount;
+}
+
+/**
  * `@fastify/rate-limit` store that counts in Redis but transparently falls over to a
  * per-process in-memory fixed-window counter when Redis is unavailable.
  *
  * @remarks
  * - **Algorithm:** `incr` runs an atomic Lua script (`INCR` + conditional `PEXPIRE` + `PTTL`)
  *   in a single Redis round-trip, falling back to a local `Map` counter on any Redis rejection.
- *   `child` returns a new store with a route-scoped key prefix so per-route presets keep isolated
- *   buckets.
+ *   The local count is scaled by the API replica count ({@link scaleProcessLocalRateLimitCount})
+ *   so the plugin's `max` still means the cluster budget. `child` returns a new store with a
+ *   route-scoped key prefix so per-route presets keep isolated buckets.
  * - **Failure modes:** none surfaced to the caller — Redis errors are caught and converted into
  *   local enforcement, so the limiter never throws (and never has to fail fully open).
  * - **Side effects:** writes Redis keys; maintains a bounded in-memory counter map capped at
  *   {@link LOCAL_COUNTER_MAX_KEYS}; emits a rate-limited `rate_limit.redis_failover.local`
  *   warning while degraded.
- * - **Notes:** the local fallback caps throughput per process (not cluster-wide), so a Redis
- *   outage degrades precision but — unlike `skipOnError` alone — does not leave the API unmetered.
+ * - **Notes:** the local fallback is process-local. Scaling by `DEPLOYMENT_API_REPLICA_COUNT`
+ *   (or `DEPLOYMENT_TOTAL_REPLICA_COUNT` when the split count is unset) keeps N replicas from
+ *   granting N times the configured budget. Redis counts are not scaled — they are already shared.
  */
 class RedisFallbackRateLimitStore {
   private readonly localCounters = new Map<string, { count: number; expiresAtMs: number }>();
@@ -67,6 +88,7 @@ class RedisFallbackRateLimitStore {
   constructor(
     private readonly redis: Redis,
     private readonly keyPrefix: string,
+    private readonly replicaCount: number,
   ) {}
 
   incr(key: string, callback: RateLimitIncrCallback, timeWindow: number, _max: number): void {
@@ -75,7 +97,7 @@ class RedisFallbackRateLimitStore {
       .then((result) => callback(null, result))
       .catch((error) => {
         logRedisFailover(error);
-        callback(null, this.incrInMemory(fullKey, timeWindow));
+        callback(null, this.incrInMemory(fullKey, timeWindow, _max));
       });
   }
 
@@ -90,16 +112,30 @@ class RedisFallbackRateLimitStore {
     return { current, ttl };
   }
 
-  private incrInMemory(fullKey: string, timeWindow: number): RateLimitIncrResult {
+  private incrInMemory(fullKey: string, timeWindow: number, max: number): RateLimitIncrResult {
     const now = Date.now();
     const existing = this.localCounters.get(fullKey);
     if (!existing || existing.expiresAtMs <= now) {
       this.ensureLocalCounterCapacity(now);
       this.localCounters.set(fullKey, { count: 1, expiresAtMs: now + timeWindow });
-      return { current: 1, ttl: timeWindow };
+      return {
+        current: scaleProcessLocalRateLimitCount({
+          localCount: 1,
+          max,
+          replicaCount: this.replicaCount,
+        }),
+        ttl: timeWindow,
+      };
     }
     existing.count += 1;
-    return { current: existing.count, ttl: existing.expiresAtMs - now };
+    return {
+      current: scaleProcessLocalRateLimitCount({
+        localCount: existing.count,
+        max,
+        replicaCount: this.replicaCount,
+      }),
+      ttl: existing.expiresAtMs - now,
+    };
   }
 
   private ensureLocalCounterCapacity(now: number): void {
@@ -128,26 +164,72 @@ class RedisFallbackRateLimitStore {
   child(routeOptions: RateLimitChildOptions): RedisFallbackRateLimitStore {
     const routeInfo = routeOptions.routeInfo ?? {};
     const childPrefix = `${this.keyPrefix}${routeInfo.method ?? ''}${routeInfo.url ?? ''}-`;
-    return new RedisFallbackRateLimitStore(this.redis, childPrefix);
+    return new RedisFallbackRateLimitStore(this.redis, childPrefix, this.replicaCount);
   }
 }
 
 /**
  * Builds the `store` constructor `@fastify/rate-limit` instantiates (`new Store(params)`),
  * bound to `redis`. Returns a {@link RedisFallbackRateLimitStore} so Redis blips degrade to
- * per-process limiting instead of skipping enforcement entirely.
+ * per-process limiting, divided by `replicaCount`, instead of skipping enforcement entirely.
  *
  * @remarks
  * - **Algorithm:** returns a class whose constructor ignores the plugin params and closes over
- *   `redis`, delegating all counting to {@link RedisFallbackRateLimitStore}.
+ *   `redis` and `replicaCount`, delegating all counting to {@link RedisFallbackRateLimitStore}.
  * - **Failure modes:** none.
  * - **Side effects:** none at build time; the returned store performs Redis/in-memory writes.
- * - **Notes:** pass as `options.store`; do not also pass `options.redis`.
+ * - **Notes:** pass as `options.store`; do not also pass `options.redis`. `replicaCount` is
+ *   `DEPLOYMENT_API_REPLICA_COUNT`, else `DEPLOYMENT_TOTAL_REPLICA_COUNT`, else 1.
  */
-export function createRedisFallbackRateLimitStore(redis: Redis): new (params: unknown) => unknown {
+export function createRedisFallbackRateLimitStore(options: {
+  redis: Redis;
+  replicaCount: number;
+}): new (
+  params: unknown,
+) => unknown {
   return class BoundRedisFallbackRateLimitStore extends RedisFallbackRateLimitStore {
     constructor(_params: unknown) {
-      super(redis, RATE_LIMIT_KEY_PREFIX);
+      super(options.redis, RATE_LIMIT_KEY_PREFIX, options.replicaCount);
     }
+  };
+}
+
+/**
+ * A counter with the same Redis-then-memory behaviour as {@link createRedisFallbackRateLimitStore},
+ * for a budget that is not a `@fastify/rate-limit` plugin (the per-organization request budget).
+ */
+export function createRateLimitCounter(options: {
+  redis: Redis;
+  keyPrefix: string;
+  replicaCount: number;
+}): {
+  increment(incrementOptions: {
+    key: string;
+    timeWindowMs: number;
+    max: number;
+  }): Promise<RateLimitIncrResult>;
+} {
+  const store = new RedisFallbackRateLimitStore(
+    options.redis,
+    options.keyPrefix,
+    options.replicaCount,
+  );
+  return {
+    increment(incrementOptions) {
+      return new Promise((resolve, reject) => {
+        store.incr(
+          incrementOptions.key,
+          (error, result) => {
+            if (error || !result) {
+              reject(error ?? new Error('rate_limit.increment.empty'));
+              return;
+            }
+            resolve(result);
+          },
+          incrementOptions.timeWindowMs,
+          incrementOptions.max,
+        );
+      });
+    },
   };
 }

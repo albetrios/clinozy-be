@@ -184,9 +184,13 @@ describe('rate-limit-presets', () => {
    */
   it('every preset reports the requests it REJECTED, not the ones it allowed', async () => {
     const presets = await import('@/shared/middlewares/rate-limit/rate-limit-presets.constants.js');
-    const limiterOptions = Object.entries(presets).map(([name, preset]) => {
+    const limiterOptions = Object.entries(presets).flatMap(([name, preset]) => {
       const candidate = preset as { config?: { rateLimit?: RateLimitOptions } } & RateLimitOptions;
-      return [name, candidate.config?.rateLimit ?? candidate] as const;
+      const options = candidate.config?.rateLimit ?? candidate;
+      if (typeof options !== 'object' || options === null || !('max' in options)) {
+        return [];
+      }
+      return [[name, options] as const];
     });
     expect(limiterOptions.length).toBeGreaterThan(0);
 
