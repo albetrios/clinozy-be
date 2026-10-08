@@ -110,6 +110,12 @@ Each driver runs the matching skill chain (schema-change, route-change, worker-c
 
 ## Each ROUTE row — do → verify → record → check impact → stop
 
+Before marking a row in progress, check its dependencies are done, compare existing code with
+the approved module specification, identify unresolved decisions, and select the affected tests.
+Use the [document ownership and row execution guidance](../../../docs/design-workflow/process/README.md#document-ownership--write-once-reference-elsewhere)
+for what each record owns. Keep the approved row order and scope; a preflight finding does not
+authorize changing either.
+
 1. **Do** — mark the row `in progress` in `KICKOFF.md` and build it through its driver.
 2. **Verify** — the row's acceptance, its tests, `pnpm validate` — by the README's Intake mode:
    `full` / `overlay` → the acceptance traced to the PRD; `brief` → the `BRIEF.md` acceptance
@@ -126,7 +132,10 @@ Each driver runs the matching skill chain (schema-change, route-change, worker-c
    | --- | --- | --- | --- | --- | --- | --- |
 
    Every technical decision the row made (table and column design, endpoints, permission codes,
-   queue names) goes here. Where the build now differs from the drop on purpose, add a **Standing
+   queue names) is recorded here or referenced from its approved specification or decision.
+   Do not copy an unchanged module specification. Record verification commands, outcomes and
+   acceptance references once in this row or an adjacent verification section; `plans/acceptance.md`
+   links to that evidence. Where the build now differs from the drop on purpose, add a **Standing
    deviation** (item · design says · built as · since iteration · decision); where this row resolves
    one, remove it.
 
@@ -134,7 +143,9 @@ Each driver runs the matching skill chain (schema-change, route-change, worker-c
    `plans/db-changes.md` — the table's final `domain.table` on its label and its final field names
    (still logical types; the physical types live in the schema code the DB Viewer draws);
    `plans/route-changes.md` and `plans/worker-changes.md` — a `Built` column (added on the first
-   row) with the final method + path, or the final job, and the commit. `KICKOFF.md` stays frozen
+   row) with the final method + path, or the final job, and the commit. Keep these updates concise:
+   link to the AS-BUILT row for evidence and deviation explanations rather than repeating them.
+   `KICKOFF.md` stays frozen
    apart from its ROUTE Status column.
 4. **Check the impact on upcoming rows.**
    - Small and inside the row → record it in `AS-BUILT.md` and continue.
@@ -143,7 +154,8 @@ Each driver runs the matching skill chain (schema-change, route-change, worker-c
      `AS-BUILT.md` › Revisions to upcoming rows (the revised row text), and mark the affected
      `KICKOFF.md` row "revised → AS-BUILT #n". Never rewrite `KICKOFF.md` otherwise — it is frozen.
 5. **Stop** — mark the row `done`, show the user what was built and the AS-BUILT row, and wait for
-   their review before the next row.
+   their review before the next row. Use the review summary from the linked row execution guidance:
+   changes and contracts, verification evidence, deviations or blockers, impact, and the next row.
 
 ## Close
 

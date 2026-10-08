@@ -14,8 +14,9 @@ flowchart TB
   PLAN --> READY["Status: ready-for-approval"]
   READY -->|your go-ahead| APPROVED["Status: approved<br/>KICKOFF.md + intake-files/ freeze"]
   APPROVED --> KICK["be-kickoff-iteration<br/>Step 0 confirm → Status: implementing"]
-  KICK --> ROW["one ROUTE row: do → verify →<br/>AS-BUILT.md row → impact check → your review"]
-  ROW -->|next row| ROW
+  KICK --> PREFLIGHT["row preflight<br/>dependencies · existing code · specification · decisions"]
+  PREFLIGHT --> ROW["one ROUTE row: do → verify →<br/>AS-BUILT.md row → impact check → your review"]
+  ROW -->|review accepted → next row| PREFLIGHT
   ROW --> DONE["gates · acceptance.md · AS-BUILT summary<br/>Status: done"]
   DONE --> FROZEN["Status: frozen<br/>last commit before the merge"]
 ```
@@ -30,6 +31,47 @@ flowchart TB
 | Build | one ROUTE row at a time | code, migrations, tests; one `AS-BUILT.md` row each | your review after every row; any scope change |
 | Close | the gates, `/be-pre-merge-review` (review only) | `plans/acceptance.md` filled, `AS-BUILT.md` summary; `Status: done` | — |
 | Freeze | the last commit before the merge | `Status: frozen`; never edited again | — |
+
+## Document ownership — write once, reference elsewhere
+
+Each document has a distinct purpose. Link to the relevant module, requirement, decision or
+execution row instead of copying its details into several files.
+
+| Document | Owns | Other documents should reference |
+| --- | --- | --- |
+| `intake-files/` | The received requirements snapshot, locked after approval | The source requirement; never rewrite the snapshot to match implementation |
+| `plans/routes-final.md` | The approved module/sub-domain design and API contracts | Its module section; do not repeat contracts in `KICKOFF.md` or `AS-BUILT.md` |
+| `KICKOFF.md` | Work order, dependencies, acceptance references and ROUTE status | The row number; implementation details belong in the specification or execution record |
+| `plans/db-changes.md`, `route-changes.md`, `worker-changes.md` | Focused change views for database, routes and background work | Specification sections for design details; AS-BUILT rows for execution evidence |
+| `plans/decisions.md` | Agreed decisions, including scope changes | The decision identifier; explanations are written here once |
+| `AS-BUILT.md` | What each row actually built, technical decisions, deviations, verification evidence and standing deviations | Its row/section; avoid repeating an unchanged specification |
+| `plans/acceptance.md` | Each criterion's result and evidence reference | The verification evidence in AS-BUILT; do not copy command logs |
+
+During execution, keep the required change views current with concise final names and `Built`
+references to AS-BUILT and the commit. Record a deviation's explanation once, then link to it.
+An unchanged design needs a reference and a verified result, not another full description.
+Approved specification changes still require agreement before implementation; these ownership
+rules do not unfreeze the plan or alter the intake.
+
+## Row execution and review
+
+Before each row, check that its prerequisites are done, compare existing code with its approved
+module specification, and identify unresolved decisions and affected tests. Implement the approved
+row as a complete reviewable unit; do not silently split, combine or reorder ROUTE rows.
+
+Run focused tests while building, then the row's acceptance checks, affected regression tests and
+required validation before review. Include tenant isolation, permission denial, invalid transitions
+and idempotency checks where applicable. Run the full closing gates at completion; focused checks
+do not replace required gates or justify skipping a failed check.
+
+Write the verification commands, outcomes and acceptance references once in the AS-BUILT row or
+an adjacent verification section. Link to durable results when available; summarize logs and keep
+credentials out of records. The user review contains the same concise information each time:
+
+- What changed and which approved contracts it implements.
+- Tests and acceptance outcomes, with a link to the recorded evidence.
+- Deviations, unresolved issues and effects on upcoming rows.
+- The next row after the user's review is accepted.
 
 ## Rules that hold the flow together
 
