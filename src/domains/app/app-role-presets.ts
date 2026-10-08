@@ -88,12 +88,13 @@ const DOCTOR_PRESET: AppRolePreset = {
     ...sectionCodes('appointments', VIEW_CREATE_EDIT),
     ...sectionCodes('patients', VIEW_CREATE_EDIT),
     ...readCodes(['medicine', 'manufacturer']),
-    APP_PERMISSIONS.CLINICAL_RECORD_READ,
-    APP_PERMISSIONS.PRIVATE_ALBUM_READ,
+    APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ,
+    APP_PERMISSIONS.PATIENT_PRIVATE_ALBUM_READ,
     APP_PERMISSIONS.LIST_EXPORT,
     APP_PERMISSIONS.OFFERING_EXPORT,
     APP_PERMISSIONS.LEAD_EXPORT,
     APP_PERMISSIONS.APPOINTMENT_EXPORT,
+    APP_PERMISSIONS.PATIENT_EXPORT,
   ]),
 };
 
@@ -108,9 +109,9 @@ const THERAPIST_PRESET: AppRolePreset = {
     ...sectionCodes('appointments', VIEW_CREATE_EDIT),
     ...resourceCodes('patient', VIEW_CREATE_EDIT),
     ...resourceCodes('treatment', VIEW_CREATE_EDIT),
-    ...readCodes(['prescription', 'review']),
+    ...readCodes(['patient_prescription', 'review']),
     ...sectionCodes('stock', VIEW_CREATE_EDIT),
-    APP_PERMISSIONS.CLINICAL_RECORD_READ,
+    APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ,
   ]),
 };
 
@@ -144,11 +145,11 @@ const COUNSELLOR_PRESET: AppRolePreset = {
     ...sectionCodes('appointments', VIEW_CREATE_EDIT),
     ...resourceCodes('patient', VIEW_CREATE_EDIT),
     ...resourceCodes('review', VIEW_CREATE_EDIT),
-    ...readCodes(['prescription', 'treatment']),
+    ...readCodes(['patient_prescription', 'treatment']),
     ...sectionCodes('payments', ['read', 'create']),
     // Groups, offerings — prices included — and offers (O2, O3)
     ...sectionCodes('offerings', ['create', 'update']),
-    APP_PERMISSIONS.CLINICAL_RECORD_READ,
+    APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ,
   ]),
 };
 
@@ -161,8 +162,9 @@ const PHARMACIST_PRESET: AppRolePreset = {
   permissionCodes: unique([
     ...PERSON_FACING_ROLE_CODES,
     ...sectionCodes('medical', VIEW_CREATE_EDIT),
-    ...readCodes(['patient', 'prescription']),
+    ...readCodes(['patient', 'patient_prescription']),
     APP_PERMISSIONS.LIST_EXPORT,
+    APP_PERMISSIONS.PATIENT_EXPORT,
     APP_PERMISSIONS.OFFERING_EXPORT,
     APP_PERMISSIONS.SALE_VOID,
   ]),
@@ -180,6 +182,7 @@ const ACCOUNTANT_PRESET: AppRolePreset = {
     ...sectionCodes('payments', VIEW_CREATE_EDIT),
     ...sectionCodes('medical', VIEW_CREATE_EDIT),
     ...sectionCodes('stock', ['read']),
+    APP_PERMISSIONS.PATIENT_EXPORT,
     APP_PERMISSIONS.DAY_CLOSE_CLOSE,
     APP_PERMISSIONS.PAYMENT_REVERSE_SETTLED,
     APP_PERMISSIONS.LIST_EXPORT,

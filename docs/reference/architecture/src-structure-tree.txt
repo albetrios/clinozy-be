@@ -187,18 +187,6 @@ src/
     │   │   │   ├── day-closes.service.ts
     │   │   │   ├── day-closes.types.ts
     │   │   │   └── day-closes.validator.ts
-    │   │   ├── diagnoses/
-    │   │   │   ├── diagnoses.constants.ts
-    │   │   │   ├── diagnoses.controller.ts
-    │   │   │   ├── diagnoses.dto.ts
-    │   │   │   ├── diagnoses.overview.md
-    │   │   │   ├── diagnoses.repository.ts
-    │   │   │   ├── diagnoses.routes.ts
-    │   │   │   ├── diagnoses.schema.ts
-    │   │   │   ├── diagnoses.serializer.ts
-    │   │   │   ├── diagnoses.service.ts
-    │   │   │   ├── diagnoses.types.ts
-    │   │   │   └── diagnoses.validator.ts
     │   │   ├── feedback-actions/
     │   │   │   ├── feedback-actions.constants.ts
     │   │   │   ├── feedback-actions.controller.ts
@@ -409,47 +397,6 @@ src/
     │   │   │   ├── offerings.service.ts
     │   │   │   ├── offerings.types.ts
     │   │   │   └── offerings.validator.ts
-    │   │   ├── patient-clinical-notes/
-    │   │   │   ├── patient-clinical-notes.constants.ts
-    │   │   │   ├── patient-clinical-notes.controller.ts
-    │   │   │   ├── patient-clinical-notes.dto.ts
-    │   │   │   ├── patient-clinical-notes.overview.md
-    │   │   │   ├── patient-clinical-notes.repository.ts
-    │   │   │   ├── patient-clinical-notes.routes.ts
-    │   │   │   ├── patient-clinical-notes.schema.ts
-    │   │   │   ├── patient-clinical-notes.serializer.ts
-    │   │   │   ├── patient-clinical-notes.service.ts
-    │   │   │   ├── patient-clinical-notes.types.ts
-    │   │   │   └── patient-clinical-notes.validator.ts
-    │   │   ├── patient-ideas/
-    │   │   │   ├── patient-ideas.constants.ts
-    │   │   │   ├── patient-ideas.repository.ts
-    │   │   │   └── patient-ideas.schema.ts
-    │   │   ├── patient-images/
-    │   │   │   ├── patient-images.constants.ts
-    │   │   │   ├── patient-images.controller.ts
-    │   │   │   ├── patient-images.dto.ts
-    │   │   │   ├── patient-images.overview.md
-    │   │   │   ├── patient-images.repository.ts
-    │   │   │   ├── patient-images.routes.ts
-    │   │   │   ├── patient-images.rules.ts
-    │   │   │   ├── patient-images.schema.ts
-    │   │   │   ├── patient-images.serializer.ts
-    │   │   │   ├── patient-images.service.ts
-    │   │   │   ├── patient-images.types.ts
-    │   │   │   └── patient-images.validator.ts
-    │   │   ├── patient-notes/
-    │   │   │   ├── patient-notes.constants.ts
-    │   │   │   ├── patient-notes.controller.ts
-    │   │   │   ├── patient-notes.dto.ts
-    │   │   │   ├── patient-notes.overview.md
-    │   │   │   ├── patient-notes.repository.ts
-    │   │   │   ├── patient-notes.routes.ts
-    │   │   │   ├── patient-notes.schema.ts
-    │   │   │   ├── patient-notes.serializer.ts
-    │   │   │   ├── patient-notes.service.ts
-    │   │   │   ├── patient-notes.types.ts
-    │   │   │   └── patient-notes.validator.ts
     │   │   ├── patient-packages/
     │   │   │   ├── patient-packages.constants.ts
     │   │   │   ├── patient-packages.controller.ts
@@ -462,19 +409,83 @@ src/
     │   │   │   ├── patient-packages.service.ts
     │   │   │   ├── patient-packages.types.ts
     │   │   │   └── patient-packages.validator.ts
-    │   │   ├── patient-reports/
-    │   │   │   ├── patient-reports.constants.ts
-    │   │   │   ├── patient-reports.controller.ts
-    │   │   │   ├── patient-reports.dto.ts
-    │   │   │   ├── patient-reports.overview.md
-    │   │   │   ├── patient-reports.repository.ts
-    │   │   │   ├── patient-reports.routes.ts
-    │   │   │   ├── patient-reports.schema.ts
-    │   │   │   ├── patient-reports.serializer.ts
-    │   │   │   ├── patient-reports.service.ts
-    │   │   │   ├── patient-reports.types.ts
-    │   │   │   └── patient-reports.validator.ts
     │   │   ├── patients/
+    │   │   │   ├── patient-clinical-notes/
+    │   │   │   │   ├── patient-clinical-notes.constants.ts
+    │   │   │   │   ├── patient-clinical-notes.controller.ts
+    │   │   │   │   ├── patient-clinical-notes.dto.ts
+    │   │   │   │   ├── patient-clinical-notes.overview.md
+    │   │   │   │   ├── patient-clinical-notes.repository.ts
+    │   │   │   │   ├── patient-clinical-notes.routes.ts
+    │   │   │   │   ├── patient-clinical-notes.rules.ts
+    │   │   │   │   ├── patient-clinical-notes.schema.ts
+    │   │   │   │   ├── patient-clinical-notes.serializer.ts
+    │   │   │   │   ├── patient-clinical-notes.service.ts
+    │   │   │   │   ├── patient-clinical-notes.types.ts
+    │   │   │   │   └── patient-clinical-notes.validator.ts
+    │   │   │   ├── patient-diagnoses/
+    │   │   │   │   ├── patient-diagnoses.constants.ts
+    │   │   │   │   ├── patient-diagnoses.controller.ts
+    │   │   │   │   ├── patient-diagnoses.dto.ts
+    │   │   │   │   ├── patient-diagnoses.overview.md
+    │   │   │   │   ├── patient-diagnoses.repository.ts
+    │   │   │   │   ├── patient-diagnoses.routes.ts
+    │   │   │   │   ├── patient-diagnoses.schema.ts
+    │   │   │   │   ├── patient-diagnoses.serializer.ts
+    │   │   │   │   ├── patient-diagnoses.service.ts
+    │   │   │   │   ├── patient-diagnoses.types.ts
+    │   │   │   │   └── patient-diagnoses.validator.ts
+    │   │   │   ├── patient-images/
+    │   │   │   │   ├── patient-images.constants.ts
+    │   │   │   │   ├── patient-images.controller.ts
+    │   │   │   │   ├── patient-images.dto.ts
+    │   │   │   │   ├── patient-images.overview.md
+    │   │   │   │   ├── patient-images.repository.ts
+    │   │   │   │   ├── patient-images.routes.ts
+    │   │   │   │   ├── patient-images.rules.ts
+    │   │   │   │   ├── patient-images.schema.ts
+    │   │   │   │   ├── patient-images.serializer.ts
+    │   │   │   │   ├── patient-images.service.ts
+    │   │   │   │   ├── patient-images.types.ts
+    │   │   │   │   └── patient-images.validator.ts
+    │   │   │   ├── patient-prescriptions/
+    │   │   │   │   ├── patient-prescriptions.constants.ts
+    │   │   │   │   ├── patient-prescriptions.controller.ts
+    │   │   │   │   ├── patient-prescriptions.dto.ts
+    │   │   │   │   ├── patient-prescriptions.overview.md
+    │   │   │   │   ├── patient-prescriptions.repository.ts
+    │   │   │   │   ├── patient-prescriptions.routes.ts
+    │   │   │   │   ├── patient-prescriptions.rules.ts
+    │   │   │   │   ├── patient-prescriptions.schema.ts
+    │   │   │   │   ├── patient-prescriptions.serializer.ts
+    │   │   │   │   ├── patient-prescriptions.service.ts
+    │   │   │   │   ├── patient-prescriptions.types.ts
+    │   │   │   │   └── patient-prescriptions.validator.ts
+    │   │   │   ├── patient-reports/
+    │   │   │   │   ├── patient-reports.constants.ts
+    │   │   │   │   ├── patient-reports.controller.ts
+    │   │   │   │   ├── patient-reports.dto.ts
+    │   │   │   │   ├── patient-reports.overview.md
+    │   │   │   │   ├── patient-reports.repository.ts
+    │   │   │   │   ├── patient-reports.routes.ts
+    │   │   │   │   ├── patient-reports.rules.ts
+    │   │   │   │   ├── patient-reports.schema.ts
+    │   │   │   │   ├── patient-reports.serializer.ts
+    │   │   │   │   ├── patient-reports.service.ts
+    │   │   │   │   ├── patient-reports.types.ts
+    │   │   │   │   └── patient-reports.validator.ts
+    │   │   │   ├── prescription-kits/
+    │   │   │   │   ├── prescription-kits.constants.ts
+    │   │   │   │   ├── prescription-kits.controller.ts
+    │   │   │   │   ├── prescription-kits.dto.ts
+    │   │   │   │   ├── prescription-kits.overview.md
+    │   │   │   │   ├── prescription-kits.repository.ts
+    │   │   │   │   ├── prescription-kits.routes.ts
+    │   │   │   │   ├── prescription-kits.schema.ts
+    │   │   │   │   ├── prescription-kits.serializer.ts
+    │   │   │   │   ├── prescription-kits.service.ts
+    │   │   │   │   ├── prescription-kits.types.ts
+    │   │   │   │   └── prescription-kits.validator.ts
     │   │   │   ├── patients.constants.ts
     │   │   │   ├── patients.controller.ts
     │   │   │   ├── patients.dto.ts
@@ -515,31 +526,6 @@ src/
     │   │   │   ├── pending-credits.service.ts
     │   │   │   ├── pending-credits.types.ts
     │   │   │   └── pending-credits.validator.ts
-    │   │   ├── prescription-kits/
-    │   │   │   ├── prescription-kits.constants.ts
-    │   │   │   ├── prescription-kits.controller.ts
-    │   │   │   ├── prescription-kits.dto.ts
-    │   │   │   ├── prescription-kits.overview.md
-    │   │   │   ├── prescription-kits.repository.ts
-    │   │   │   ├── prescription-kits.routes.ts
-    │   │   │   ├── prescription-kits.schema.ts
-    │   │   │   ├── prescription-kits.serializer.ts
-    │   │   │   ├── prescription-kits.service.ts
-    │   │   │   ├── prescription-kits.types.ts
-    │   │   │   └── prescription-kits.validator.ts
-    │   │   ├── prescriptions/
-    │   │   │   ├── prescriptions.constants.ts
-    │   │   │   ├── prescriptions.controller.ts
-    │   │   │   ├── prescriptions.dto.ts
-    │   │   │   ├── prescriptions.overview.md
-    │   │   │   ├── prescriptions.repository.ts
-    │   │   │   ├── prescriptions.routes.ts
-    │   │   │   ├── prescriptions.rules.ts
-    │   │   │   ├── prescriptions.schema.ts
-    │   │   │   ├── prescriptions.serializer.ts
-    │   │   │   ├── prescriptions.service.ts
-    │   │   │   ├── prescriptions.types.ts
-    │   │   │   └── prescriptions.validator.ts
     │   │   ├── record-counters/
     │   │   │   ├── record-counters.overview.md
     │   │   │   └── record-counters.schema.ts

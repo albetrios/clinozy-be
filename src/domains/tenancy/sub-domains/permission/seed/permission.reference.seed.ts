@@ -116,10 +116,10 @@ export const SYSTEM_PERMISSIONS = [
   { code: 'invoice:update', name: 'Update Invoices', category: 'payments' },
   { code: 'invoice:create', name: 'Create Invoices', category: 'payments' },
   { code: 'invoice:read', name: 'View Invoices', category: 'payments' },
-  { code: 'prescription:delete', name: 'Delete Prescriptions', category: 'patients' },
-  { code: 'prescription:update', name: 'Update Prescriptions', category: 'patients' },
-  { code: 'prescription:create', name: 'Create Prescriptions', category: 'patients' },
-  { code: 'prescription:read', name: 'View Prescriptions', category: 'patients' },
+  { code: 'patient_prescription:delete', name: 'Delete Prescriptions', category: 'patients' },
+  { code: 'patient_prescription:update', name: 'Update Prescriptions', category: 'patients' },
+  { code: 'patient_prescription:create', name: 'Create Prescriptions', category: 'patients' },
+  { code: 'patient_prescription:read', name: 'View Prescriptions', category: 'patients' },
   { code: 'appointment:delete', name: 'Delete Appointments', category: 'appointments' },
   { code: 'appointment:update', name: 'Update Appointments', category: 'appointments' },
   { code: 'appointment:create', name: 'Create Appointments', category: 'appointments' },
@@ -134,6 +134,7 @@ export const SYSTEM_PERMISSIONS = [
   { code: 'patient:update', name: 'Update Patients', category: 'patients' },
   { code: 'patient:create', name: 'Create Patients', category: 'patients' },
   { code: 'patient:read', name: 'View Patients', category: 'patients' },
+  { code: 'patient:export', name: 'Export Patients', category: 'patients' },
   { code: 'contact_activity:delete', name: 'Delete Message Templates', category: 'activity' },
   {
     code: 'contact_activity:update',
@@ -158,10 +159,10 @@ export const SYSTEM_PERMISSIONS = [
   { code: 'payment:reverse_settled', name: 'Reverse Settled Payments', category: 'special' },
   { code: 'refund:create', name: 'Give Refunds And Credit Notes', category: 'special' },
   { code: 'sale:void', name: 'Void Sales And Delete Invoices', category: 'special' },
-  { code: 'clinical_record:read', name: 'Read Clinical Notes', category: 'special' },
+  { code: 'patient:clinical_record:read', name: 'Read The Clinical Record', category: 'patients' },
   { code: 'list:export', name: 'Export Lists', category: 'special' },
   { code: 'task_rule:update', name: 'Change Task Rules', category: 'special' },
-  { code: 'private_album:read', name: 'See The Private Photo Album', category: 'special' },
+  { code: 'patient:private_album:read', name: 'See The Private Photo Album', category: 'patients' },
 ] as const;
 
 /**

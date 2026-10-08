@@ -3,7 +3,7 @@ import type { OrganizationService } from '@/domains/tenancy/sub-domains/organiza
 import type { MembershipService } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
 import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.js';
 import { ValidationError } from '@/shared/errors/index.js';
-import type { BaseRecordPorts } from './base-record.types.js';
+import type { BaseRecordConfirmedUpload, BaseRecordPorts } from './base-record.types.js';
 import { BranchesRepository } from './sub-domains/branches/branches.repository.js';
 import { BranchesService } from './sub-domains/branches/branches.service.js';
 import { BranchMembersRepository } from './sub-domains/branches/branch-members/branch-members.repository.js';
@@ -65,7 +65,7 @@ export function createAppContainer(
       };
     },
     // Late-wired by the composition root (`wireAppUploads`) — the upload domain registers after app.
-    isConfirmedUpload: () => {
+    findConfirmedUpload: () => {
       throw new Error('App uploads are not wired (domain-containers.plugin.ts → wireAppUploads)');
     },
   };
@@ -114,24 +114,26 @@ export interface AppUploadChecker {
   assertKeyConfirmedForOwner(options: {
     fileKey: string;
     organizationInternalId?: number;
-  }): Promise<{ mimeType: string }>;
+  }): Promise<BaseRecordConfirmedUpload>;
 }
 
 /**
- * Wires the app's upload port (`isConfirmedUpload`) to the upload domain — called by the
+ * Wires the app's upload port (`findConfirmedUpload`) to the upload domain — called by the
  * composition root once both containers exist (the upload container registers after the app's).
  *
  * @remarks
- * - **Failure modes:** the port answers false for a key that is missing, unconfirmed or another
+ * - **Failure modes:** the port answers null for a key that is missing, unconfirmed or another
  *   organization's (the upload service's `ValidationError`); any other error propagates.
  */
 export function wireAppUploads(container: AppContainer, uploads: AppUploadChecker): void {
-  container.ports.isConfirmedUpload = async ({ organizationId, fileKey }) => {
+  container.ports.findConfirmedUpload = async ({ organizationId, fileKey }) => {
     try {
-      await uploads.assertKeyConfirmedForOwner({ fileKey, organizationInternalId: organizationId });
-      return true;
+      return await uploads.assertKeyConfirmedForOwner({
+        fileKey,
+        organizationInternalId: organizationId,
+      });
     } catch (error) {
-      if (error instanceof ValidationError) return false;
+      if (error instanceof ValidationError) return null;
       throw error;
     }
   };

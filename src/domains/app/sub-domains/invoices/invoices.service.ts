@@ -4,7 +4,7 @@ import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js'
 import { medical_contacts } from '@/domains/app/sub-domains/medical-contacts/medical-contacts.schema.js';
 import { medical_sales } from '@/domains/app/sub-domains/medical-sales/medical-sales.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
-import { prescriptions } from '@/domains/app/sub-domains/prescriptions/prescriptions.schema.js';
+import { patient_prescriptions } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.schema.js';
 import { INVOICE_TEAM_MEMBERSHIPS_LINK, type InvoicesRepository } from './invoices.repository.js';
 import { serializeInvoice } from './invoices.serializer.js';
 import type { InvoiceOutput } from './invoices.types.js';
@@ -36,7 +36,7 @@ export class InvoicesService extends BaseRecordService<InvoiceOutput> {
       references: [
         { field: 'branch_id', table: branches, label: 'branch' },
         { field: 'patient_id', table: patients, label: 'patient' },
-        { field: 'prescription_id', table: prescriptions, label: 'prescription' },
+        { field: 'prescription_id', table: patient_prescriptions, label: 'prescription' },
         { field: 'medical_contact_id', table: medical_contacts, label: 'medical contact' },
         { field: 'medical_sale_id', table: medical_sales, label: 'medical sale' },
       ],

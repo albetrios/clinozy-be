@@ -4,7 +4,13 @@ import {
   type OrganizationPrincipalDatabaseScope,
   withAppDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
-import { ConflictError, NotFoundError, ValidationError } from '@/shared/errors/index.js';
+import {
+  ConflictError,
+  fieldValidationError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '@/shared/errors/index.js';
 import {
   getPostgresConstraintName,
   isPostgresExclusionViolation,
@@ -19,6 +25,7 @@ import {
   type BaseRecordLinkFilter,
   type BaseRecordPage,
   type BaseRecordRow,
+  findMembershipIdOfUser,
   listChildRows,
   listLinkedPublicIds,
   listVisibleBranchIds,
@@ -29,6 +36,7 @@ import {
 } from './base-record.repository.js';
 import type {
   BaseRecordChildList,
+  BaseRecordConfirmedUpload,
   BaseRecordDescriptor,
   BaseRecordListInput,
   BaseRecordListResult,
@@ -113,8 +121,8 @@ export class BaseRecordService<Output> {
       if (!(await this.resolveReferenceIn(organizationId, options.referenceIn, equals))) {
         return emptyPage(input.limit);
       }
-      if (this.descriptor.ownedByActor) {
-        equals.created_by_user_id = await this.userId(options.actingUserPublicId);
+      if (!(await this.narrowToOwner(organizationId, options.actingUserPublicId, equals))) {
+        return emptyPage(input.limit);
       }
       const { parent } = this.descriptor;
       if (parent && parentPublicId !== undefined) {
@@ -125,19 +133,15 @@ export class BaseRecordService<Output> {
           visibility: options.visibility,
         });
       }
-      const linked = await this.resolveReferenceFilters(organizationId, input, equals);
+      // TRC3: the path's parent wins over the same filter in the query
+      const filters =
+        parent && parentPublicId !== undefined
+          ? { ...input, referenceEquals: { ...input.referenceEquals, [parent.field]: undefined } }
+          : input;
+      const linked = await this.resolveReferenceFilters(organizationId, filters, equals);
       if (!linked) return emptyPage(input.limit);
-      const readScope = await this.readScopeOf(options.visibility);
-      for (const [field, allowed] of Object.entries(readScope ?? {})) {
-        const requested = equals[field];
-        const kept =
-          requested === undefined
-            ? [...allowed]
-            : (Array.isArray(requested) ? requested : [requested]).filter((value) =>
-                allowed.includes(value),
-              );
-        if (kept.length === 0) return emptyPage(input.limit);
-        equals[field] = kept;
+      if (!(await this.narrowToReadScope(options.visibility, equals))) {
+        return emptyPage(input.limit);
       }
       const branchScope = await this.branchScope({
         organizationId,
@@ -270,6 +274,14 @@ export class BaseRecordService<Output> {
       }
       await this.resolveReferences(organizationId, values);
       await this.assertBranchWritable({ organizationId, userId, visibility, values });
+      const ownerColumn = this.descriptor.ownerMembershipColumn;
+      if (ownerColumn !== undefined) {
+        const membershipId = await findMembershipIdOfUser({ organizationId, userId });
+        if (membershipId === null) {
+          throw new ForbiddenError('errors:forbidden').withReason('not_a_member');
+        }
+        values[ownerColumn] = membershipId;
+      }
       const lists = await this.takeReferenceLists(organizationId, values);
       const context = this.writeContext(scope, organizationId, userId, visibility);
       await this.descriptor.prepareCreate?.(values, context);
@@ -746,7 +758,7 @@ export class BaseRecordService<Output> {
   ): Promise<BaseRecordRow> {
     const row = await this.descriptor.repository.findByPublicId(publicId, organizationId);
     if (!row) throw new NotFoundError(this.descriptor.label);
-    if (this.descriptor.ownedByActor && row.created_by_user_id !== userId) {
+    if (!(await this.isOwnersRow({ organizationId, row, userId }))) {
       throw new NotFoundError(this.descriptor.label);
     }
     const visible = await this.visibleBranchIds({ organizationId, userId, visibility });
@@ -767,21 +779,85 @@ export class BaseRecordService<Output> {
     return this.descriptor.readScope(visibility.can);
   }
 
-  /** Whether a (deleted) row is in the caller's branches — the restore check. */
+  /**
+   * Narrows a list to the caller's own rows on a table of each member's own records
+   * ({@link BaseRecordDescriptor.ownerMembershipColumn}) — false when the caller is no member (an
+   * empty page); true, unchanged, on any other table.
+   */
+  private async narrowToOwner(
+    organizationId: number,
+    actingUserPublicId: string | undefined,
+    equals: Record<string, unknown>,
+  ): Promise<boolean> {
+    const ownerColumn = this.descriptor.ownerMembershipColumn;
+    if (ownerColumn === undefined) return true;
+    const membershipId = await findMembershipIdOfUser({
+      organizationId,
+      userId: await this.userId(actingUserPublicId),
+    });
+    if (membershipId === null) return false;
+    equals[ownerColumn] = membershipId;
+    return true;
+  }
+
+  /**
+   * Narrows a list's equality filters to the caller's read scope ({@link BaseRecordRules.readScope})
+   * — false when a requested value is outside it (an empty page).
+   */
+  private async narrowToReadScope(
+    visibility: BaseRecordVisibility | undefined,
+    equals: Record<string, unknown>,
+  ): Promise<boolean> {
+    const readScope = await this.readScopeOf(visibility);
+    for (const [field, allowed] of Object.entries(readScope ?? {})) {
+      const requested = equals[field];
+      const kept =
+        requested === undefined
+          ? [...allowed]
+          : (Array.isArray(requested) ? requested : [requested]).filter((value) =>
+              allowed.includes(value),
+            );
+      if (kept.length === 0) return false;
+      equals[field] = kept;
+    }
+    return true;
+  }
+
+  /**
+   * Whether a row is the caller's own on a table of each member's own records
+   * ({@link BaseRecordDescriptor.ownerMembershipColumn}) — always true on any other table.
+   */
+  private async isOwnersRow(options: {
+    organizationId: number;
+    row: BaseRecordRow;
+    userId: number | null;
+  }): Promise<boolean> {
+    const ownerColumn = this.descriptor.ownerMembershipColumn;
+    if (ownerColumn === undefined) return true;
+    const membershipId = await findMembershipIdOfUser({
+      organizationId: options.organizationId,
+      userId: options.userId,
+    });
+    return membershipId !== null && options.row[ownerColumn] === membershipId;
+  }
+
+  /** Whether a (deleted) row is the caller's to see — its branches, read scope, owner (the restore check). */
   private async isRowVisible(options: {
     organizationId: number;
     row: BaseRecordRow;
     actingUserPublicId: string | undefined;
     visibility: BaseRecordVisibility | undefined;
   }): Promise<boolean> {
+    const userId = await this.userId(options.actingUserPublicId);
     const visible = await this.visibleBranchIds({
       organizationId: options.organizationId,
-      userId: await this.userId(options.actingUserPublicId),
+      userId,
       visibility: options.visibility,
     });
     return (
       branchAllowed(options.row[this.descriptor.branchColumn ?? ''], visible) &&
-      readScopeAllows(options.row, await this.readScopeOf(options.visibility))
+      readScopeAllows(options.row, await this.readScopeOf(options.visibility)) &&
+      (await this.isOwnersRow({ organizationId: options.organizationId, row: options.row, userId }))
     );
   }
 
@@ -1061,10 +1137,42 @@ const UNWIRED_PORTS: BaseRecordPorts = {
   organizationSettings: () => {
     throw new Error('BaseRecordService ports are not wired (app.container.ts → usePorts)');
   },
-  isConfirmedUpload: () => {
+  findConfirmedUpload: () => {
     throw new Error('BaseRecordService ports are not wired (app.container.ts → usePorts)');
   },
 };
+
+/**
+ * Each key's confirmed upload of the organization, in order (an entry's attachments M6, a photo
+ * P25, a report's files P29) — a key that is none is a 400 on `field` naming it.
+ *
+ * @remarks
+ * - **Algorithm:** one upload-port read per key, in the rule's organization context.
+ * - **Failure modes:** `ValidationError` on `field` (`errors:validation.uploadKeyNotConfirmed`)
+ *   for a key that is missing, pending or another organization's.
+ */
+export async function requireConfirmedUploads(options: {
+  fileKeys: readonly string[] | undefined;
+  field: string;
+  context: BaseRecordWriteContext;
+}): Promise<BaseRecordConfirmedUpload[]> {
+  const uploads: BaseRecordConfirmedUpload[] = [];
+  for (const fileKey of options.fileKeys ?? []) {
+    const upload = await options.context.ports.findConfirmedUpload({
+      organizationId: options.context.organizationId,
+      fileKey,
+    });
+    if (!upload) {
+      throw fieldValidationError({
+        field: options.field,
+        messageKey: 'errors:validation.uploadKeyNotConfirmed',
+        messageParams: { key: fileKey },
+      });
+    }
+    uploads.push(upload);
+  }
+  return uploads;
+}
 
 /** Rows per page an export reads (the list maximum). */
 const EXPORT_PAGE_SIZE = 100;

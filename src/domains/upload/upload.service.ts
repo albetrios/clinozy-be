@@ -368,7 +368,7 @@ export class UploadService {
     fileKey: string;
     userInternalId?: number;
     organizationInternalId?: number;
-  }): Promise<{ mimeType: string }> {
+  }): Promise<{ mimeType: string; fileName: string; fileSize: number }> {
     const { fileKey, userInternalId, organizationInternalId } = options;
     if (userInternalId === undefined && organizationInternalId === undefined) {
       throw new ValidationError('errors:validation.uploadNotConfirmed', undefined, {
@@ -387,7 +387,7 @@ export class UploadService {
     if (organizationInternalId !== undefined && row.organization_id !== organizationInternalId) {
       throw notConfirmed();
     }
-    return { mimeType: row.mime_type };
+    return { mimeType: row.mime_type, fileName: row.file_name, fileSize: row.file_size };
   }
 
   private async assertUserCanAccessOrgScopedUpload(

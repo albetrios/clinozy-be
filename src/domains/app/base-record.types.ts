@@ -127,11 +127,21 @@ export interface BaseRecordPorts {
     scope: OrganizationPrincipalDatabaseScope,
   ) => Promise<OrganizationOperatingSettings>;
   /**
-   * Whether `fileKey` is a confirmed upload of the organization (an entry's attachments, M6) —
-   * late-wired from the upload domain; false for a key that is missing, pending or another
-   * organization's.
+   * `fileKey`'s confirmed upload of the organization (an entry's attachments M6, a photo P25, a
+   * report's files P29) — late-wired from the upload domain; null for a key that is missing,
+   * pending or another organization's.
    */
-  isConfirmedUpload: (options: { organizationId: number; fileKey: string }) => Promise<boolean>;
+  findConfirmedUpload: (options: {
+    organizationId: number;
+    fileKey: string;
+  }) => Promise<BaseRecordConfirmedUpload | null>;
+}
+
+/** What a rule reads of a confirmed upload: its type, the client's file name, its size in bytes. */
+export interface BaseRecordConfirmedUpload {
+  mimeType: string;
+  fileName: string;
+  fileSize: number;
 }
 
 /** Where a write runs — the organization, the actor and the scope (for other services). */
@@ -300,8 +310,12 @@ export interface BaseRecordDescriptor<Output> extends BaseRecordRules {
   /** Cross-field rules on the values a write would leave (create values, or row + update). */
   checkValues?: (values: Record<string, unknown>) => void;
   transitions?: Readonly<Record<string, BaseRecordTransition>>;
-  /** Each person's own records (saved views): reads and writes see only the actor's rows. */
-  ownedByActor?: boolean;
+  /**
+   * The column naming the member a record belongs to (a doctor's prescription kits, P17): a create
+   * sets it to the caller's membership (a caller who is not a member is a 403 `not_a_member`);
+   * every list, read, write and restore sees only the caller's own rows (404 otherwise).
+   */
+  ownerMembershipColumn?: string;
   /**
    * The column naming the record's branch — a caller without every branch sees and writes only
    * rows of their branches, or of no branch (D9).
@@ -317,6 +331,8 @@ export interface BaseRecordListResult<Output> {
   limit: number;
   has_more: boolean;
   next_cursor: string | null;
+  /** What the list adds to the response's `meta` beside the paging (a photo list's `album_counts`). */
+  meta?: Readonly<Record<string, unknown>>;
 }
 
 /**

@@ -1,218 +1,131 @@
-import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
-import type { BaseRecordRepository, BaseRecordRow } from '@/domains/app/base-record.repository.js';
-import type { BaseRecordActionInput, BaseRecordRules } from '@/domains/app/base-record.types.js';
+import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import { AppointmentsRepository } from '@/domains/app/sub-domains/appointments/appointments.repository.js';
-import { CheckInsRepository } from '@/domains/app/sub-domains/check-ins/check-ins.repository.js';
-import { InvoicesRepository } from '@/domains/app/sub-domains/invoices/invoices.repository.js';
-import { PatientClinicalNotesRepository } from '@/domains/app/sub-domains/patient-clinical-notes/patient-clinical-notes.repository.js';
-import { patientImagesRules } from '@/domains/app/sub-domains/patient-images/patient-images.rules.js';
-import { PatientImagesRepository } from '@/domains/app/sub-domains/patient-images/patient-images.repository.js';
-import { PatientNotesRepository } from '@/domains/app/sub-domains/patient-notes/patient-notes.repository.js';
-import { PatientPackagesRepository } from '@/domains/app/sub-domains/patient-packages/patient-packages.repository.js';
-import { PatientReportsRepository } from '@/domains/app/sub-domains/patient-reports/patient-reports.repository.js';
-import { PaymentsRepository } from '@/domains/app/sub-domains/payments/payments.repository.js';
-import { PrescriptionsRepository } from '@/domains/app/sub-domains/prescriptions/prescriptions.repository.js';
-import { TreatmentsRepository } from '@/domains/app/sub-domains/treatments/treatments.repository.js';
-import { calendarDateInTimeZone } from '@/shared/utils/validation/record-fields.util.js';
+import { ContactsRepository } from '@/domains/app/sub-domains/contacts/contacts.repository.js';
+import { CONTACT_ACTIVITY_TYPE } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.constants.js';
+import { ContactActivitiesRepository } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.repository.js';
+import { ContactMembersRepository } from '@/domains/app/sub-domains/contacts/contact-members/contact-members.repository.js';
+import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
 import { PatientsRepository } from './patients.repository.js';
 
-/** Appointments that were a visit. */
-const VISITED = ['checked_in', 'completed'];
-/** Appointments still to come. */
-const UPCOMING = ['scheduled', 'confirmed'];
-
 const appointmentsRepository = new AppointmentsRepository();
+const contactsRepository = new ContactsRepository();
+const contactActivitiesRepository = new ContactActivitiesRepository();
+const contactMembersRepository = new ContactMembersRepository();
 const patientsRepository = new PatientsRepository();
 
-/** The timeline's filter groups (the History tabs). */
-type TimelineGroup = 'clinical' | 'money' | 'messages';
-/** Entries a timeline page answers with when the caller names no limit. */
-const DEFAULT_TIMELINE_LIMIT = 30;
-/** The longest a message body runs in a timeline entry. */
-const TIMELINE_BODY_LENGTH = 140;
+/** The appointment statuses of a visit — a photo of the visit needs one (P25). */
+const VISIT_STATUS_VALUES: readonly unknown[] = ['checked_in', 'completed'];
 
-/** One kind of record the timeline merges: where it lives, who may read it, what it shows. */
-interface TimelineSource {
-  kind: string;
-  group: TimelineGroup;
-  repository: BaseRecordRepository;
-  /** The read code a caller needs to see this kind. */
-  permission: string;
-  /** The scalar columns the entry carries (never an internal id). */
-  fields: readonly string[];
-}
-
-/** Every kind the timeline merges, newest first by when it was recorded. */
-const TIMELINE_SOURCES: readonly TimelineSource[] = [
-  {
-    kind: 'treatment',
-    group: 'clinical',
-    repository: new TreatmentsRepository(),
-    permission: APP_PERMISSIONS.TREATMENT_READ,
-    fields: ['name', 'session_number', 'status', 'performed_at'],
-  },
-  {
-    kind: 'prescription',
-    group: 'clinical',
-    repository: new PrescriptionsRepository(),
-    permission: APP_PERMISSIONS.PRESCRIPTION_READ,
-    fields: ['prescription_number', 'status', 'prescription_date'],
-  },
-  {
-    kind: 'check_in',
-    group: 'clinical',
-    repository: new CheckInsRepository(),
-    permission: APP_PERMISSIONS.PATIENT_READ,
-    fields: ['feel', 'score', 'context', 'check_in_date'],
-  },
-  {
-    kind: 'package',
-    group: 'clinical',
-    repository: new PatientPackagesRepository(),
-    permission: APP_PERMISSIONS.PATIENT_READ,
-    fields: ['sessions_total', 'sessions_used', 'valid_until'],
-  },
-  {
-    kind: 'report',
-    group: 'clinical',
-    repository: new PatientReportsRepository(),
-    permission: APP_PERMISSIONS.PATIENT_READ,
-    fields: ['name', 'type', 'report_date'],
-  },
-  {
-    kind: 'image',
-    group: 'clinical',
-    repository: new PatientImagesRepository(),
-    permission: APP_PERMISSIONS.CLINICAL_RECORD_READ,
-    fields: ['album', 'file_name', 'body_part', 'taken_on'],
-  },
-  {
-    kind: 'note',
-    group: 'clinical',
-    repository: new PatientNotesRepository(),
-    permission: APP_PERMISSIONS.PATIENT_READ,
-    fields: ['body'],
-  },
-  {
-    kind: 'clinical_note',
-    group: 'clinical',
-    repository: new PatientClinicalNotesRepository(),
-    permission: APP_PERMISSIONS.CLINICAL_RECORD_READ,
-    fields: ['kind', 'text', 'added_at'],
-  },
-  {
-    kind: 'invoice',
-    group: 'money',
-    repository: new InvoicesRepository(),
-    permission: APP_PERMISSIONS.INVOICE_READ,
-    fields: ['invoice_number', 'type', 'invoice_date'],
-  },
-  {
-    kind: 'payment',
-    group: 'money',
-    repository: new PaymentsRepository(),
-    permission: APP_PERMISSIONS.PAYMENT_READ,
-    fields: ['payment_number', 'direction', 'kind', 'amount', 'paid_at'],
-  },
-];
-
-/** A timeline entry's field value as the API speaks it (instants as ISO, bodies shortened). */
-function timelineValue(field: string, value: unknown): unknown {
-  if (value instanceof Date) return value.toISOString();
-  if (field === 'amount' && value !== null) return Number(value);
-  if (field === 'body' && typeof value === 'string' && value.length > TIMELINE_BODY_LENGTH) {
-    return `${value.slice(0, TIMELINE_BODY_LENGTH - 1)}…`;
-  }
-  return value;
+/** The contact (internal id) of a patient file — its parent was resolved, so the file is there. */
+async function contactOfPatient(patientId: number): Promise<number> {
+  const patient = await patientsRepository.findById(patientId);
+  return patient?.contact_id as number;
 }
 
 /**
- * The patient's merged history, newest first (RC-39; also the activity column, RC-167): one
- * keyset read per kind the caller may see, merged and cut to the page.
+ * The same-patient rule on a visit link (TR3, P25): the appointment is the patient's contact's —
+ * and, for a photo, checked in or completed — else a 400 on `appointment_id`.
  */
-async function timeline({ existing, input, context, visibility }: BaseRecordActionInput) {
-  const can = visibility?.can ?? (async () => true);
-  const group = (input.group as TimelineGroup | 'all' | undefined) ?? 'all';
-  const limit = Number(input.limit ?? DEFAULT_TIMELINE_LIMIT);
-  const before = typeof input.before === 'string' ? new Date(input.before) : undefined;
-  const imageScope = await patientImagesRules.readScope?.(can);
-  const rows: { source: TimelineSource; row: BaseRecordRow }[] = [];
-  for (const source of TIMELINE_SOURCES) {
-    if (group !== 'all' && source.group !== group) continue;
-    if (!(await can(source.permission))) continue;
-    const page = await source.repository.list(context.organizationId, {
-      limit,
-      sort: 'created_at',
-      order: 'desc',
-      equals: { patient_id: existing.id, ...(source.kind === 'image' ? imageScope : {}) },
-      ...(before ? { ranges: { created_at: { to: before } } } : {}),
-      withTotal: false,
+export async function assertAppointmentOfPatient(options: {
+  appointmentId: unknown;
+  patientId: number;
+  requireVisit?: boolean;
+}): Promise<void> {
+  if (typeof options.appointmentId !== 'number') return;
+  const appointment = await appointmentsRepository.findById(options.appointmentId);
+  const contactId = await contactOfPatient(options.patientId);
+  if (appointment?.contact_id !== contactId) {
+    throw fieldValidationError({
+      field: 'appointment_id',
+      messageKey: 'errors:validation.appointmentOtherPatient',
     });
-    for (const row of page.items) rows.push({ source, row });
   }
-  rows.sort((left, right) => {
-    const byTime =
-      (right.row.created_at as Date).getTime() - (left.row.created_at as Date).getTime();
-    return byTime !== 0 ? byTime : right.row.id - left.row.id;
+  if (options.requireVisit && !VISIT_STATUS_VALUES.includes(appointment.status)) {
+    throw fieldValidationError({
+      field: 'appointment_id',
+      messageKey: 'errors:validation.appointmentNotAVisit',
+    });
+  }
+}
+
+/** The record a patient-file `system` entry links to (one column — the stream's one link). */
+export type PatientFileActivityLink =
+  | { patient_prescription_id: number }
+  | { patient_clinical_note_id: number }
+  | { patient_image_id: number }
+  | { patient_report_id: number };
+
+/**
+ * Writes a patient-file event into the contact's activity (7.10, M10): a `system` entry linked to
+ * its record — shown only to callers who can read that record, a private photo's only to the
+ * album's holders (`is_private_photo`, P23) — in the write's transaction.
+ */
+export async function writePatientFileActivity(options: {
+  context: BaseRecordWriteContext;
+  patientId: number;
+  body: string;
+  link: PatientFileActivityLink;
+  isPrivatePhoto?: boolean;
+}): Promise<void> {
+  const { context } = options;
+  await contactActivitiesRepository.insert({
+    organization_id: context.organizationId,
+    contact_id: await contactOfPatient(options.patientId),
+    type: CONTACT_ACTIVITY_TYPE.SYSTEM,
+    body: options.body,
+    ...options.link,
+    is_private_photo: options.isPrivatePhoto ?? false,
+    created_by_user_id: context.userId,
+    updated_by_user_id: context.userId,
   });
-  const items = rows.slice(0, limit).map(({ source, row }) => ({
-    kind: source.kind,
-    group: source.group,
-    id: row.public_id,
-    at: (row.created_at as Date).toISOString(),
-    fields: Object.fromEntries(
-      source.fields.map((field) => [field, timelineValue(field, row[field])]),
-    ),
-  }));
-  return {
-    items,
-    next_before: rows.length > limit ? (items[items.length - 1]?.at ?? null) : null,
-  };
+}
+
+/** The digits a patient number shows with (`PT-0412`). */
+const PATIENT_NUMBER_DIGITS = 4;
+
+/** Refuses a second live patient file for the contact, naming the one it has (P1). */
+async function assertNoPatientFile(contactId: number): Promise<void> {
+  const file = await contactsRepository.findPatientFile(contactId);
+  if (!file) return;
+  const contact = await contactsRepository.findById(contactId);
+  throw new ConflictError('errors:contactIsPatient', {
+    name: [contact?.first_name, contact?.last_name].filter(Boolean).join(' '),
+    patient_number: String(file.patient_number).padStart(PATIENT_NUMBER_DIGITS, '0'),
+    patient_id: file.public_id,
+  }).withReason('contact_is_patient');
 }
 
 /**
- * The patients rules (launch ROUTE #65, patients.1): each patient read carries the last visit
- * and the next booked visit — one GROUP BY per figure for the whole page.
+ * The patients rules (launch ROUTE #133, routes-final 7.A): one live file per contact and the
+ * usual doctor on the contact's team.
  *
  * @remarks
- * - **Algorithm:** `last_visit_on` = the latest checked-in or completed appointment date of the
- *   file's contact; `next_visit_on` = its earliest scheduled or confirmed appointment on or after
- *   the organization's today (D41) — appointments are the contact's since #132 (A1). The
- *   `timeline` view merges every kind of record the caller may read (sessions, prescriptions, check-ins, packages, reports, photos, notes, bills,
- *   payments, messages) newest first, a Private photo only for its holders.
+ * - **Algorithm:** a create and a restore check the contact has no live patient file (P1 — the
+ *   partial unique index backs it up), naming the one it has; a restore also needs the contact
+ *   live. After a create, update or restore the usual doctor handles the contact (7.10, CT11).
+ *   Nothing is decorated: the file carries `contact_id` only (P3) and the visit dates are the
+ *   contact's (PC7).
+ * - **Failure modes:** `ConflictError` `contact_is_patient`, `record_restore_conflict` (the contact
+ *   was removed).
  */
 export const patientsRules: BaseRecordRules = {
-  decorate: async (outputs, context) => {
-    const contactOf = await patientsRepository.findContactIds(
-      outputs.map((output) => String(output.id)),
-    );
-    const groupIds = [...new Set([...contactOf.values()])];
-    const last = await appointmentsRepository.aggregatePerGroup({
-      organizationId: context.organizationId,
-      groupColumn: 'contact_id',
-      groupIds,
-      valueColumn: 'appointment_date',
-      aggregate: 'max',
-      equals: { status: VISITED },
-    });
-    const { timezone } = await context.ports.organizationSettings(context.scope);
-    const today = calendarDateInTimeZone(timezone);
-    const upcoming = await appointmentsRepository.aggregatePerGroup({
-      organizationId: context.organizationId,
-      groupColumn: 'contact_id',
-      groupIds,
-      valueColumn: 'appointment_date',
-      aggregate: 'min',
-      equals: { status: UPCOMING },
-      ranges: { appointment_date: { from: today } },
-    });
-    for (const output of outputs) {
-      const contactId = contactOf.get(String(output.id));
-      const lastVisit = contactId === undefined ? undefined : last.get(contactId);
-      const nextVisit = contactId === undefined ? undefined : upcoming.get(contactId);
-      output.last_visit_on = lastVisit ? String(lastVisit) : null;
-      output.next_visit_on = nextVisit ? String(nextVisit) : null;
-    }
+  prepareCreate: async (values) => {
+    await assertNoPatientFile(values.contact_id as number);
   },
-  views: { timeline },
+  prepareRestore: async (deleted) => {
+    const contact = await contactsRepository.findById(deleted.contact_id as number);
+    if (!contact) {
+      throw new ConflictError('errors:patientContactRemoved').withReason('record_restore_conflict');
+    }
+    await assertNoPatientFile(deleted.contact_id as number);
+  },
+  afterWrite: async (row, change, context) => {
+    if (change.kind === 'delete' || typeof row.doctor_membership_id !== 'number') return;
+    await contactMembersRepository.addForContact({
+      organizationId: context.organizationId,
+      contactId: row.contact_id as number,
+      membershipIds: [row.doctor_membership_id],
+      userId: context.userId,
+    });
+  },
 };

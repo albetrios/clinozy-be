@@ -5,7 +5,7 @@ import { invoices } from '@/domains/app/sub-domains/invoices/invoices.schema.js'
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
 import { medical_contacts } from '@/domains/app/sub-domains/medical-contacts/medical-contacts.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
-import { prescriptions } from '@/domains/app/sub-domains/prescriptions/prescriptions.schema.js';
+import { patient_prescriptions } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.schema.js';
 import type { MedicalSalesRepository } from './medical-sales.repository.js';
 import { serializeMedicalSale } from './medical-sales.serializer.js';
 import type { MedicalSaleOutput } from './medical-sales.types.js';
@@ -38,7 +38,7 @@ export class MedicalSalesService extends BaseRecordService<MedicalSaleOutput> {
         { field: 'invoice_id', table: invoices, label: 'invoice' },
         { field: 'patient_id', table: patients, label: 'patient' },
         { field: 'medical_contact_id', table: medical_contacts, label: 'medical contact' },
-        { field: 'prescription_id', table: prescriptions, label: 'prescription' },
+        { field: 'prescription_id', table: patient_prescriptions, label: 'prescription' },
         { field: 'lead_id', table: leads, label: 'lead' },
       ],
       checkValues: (values) => {

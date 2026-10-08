@@ -26,6 +26,11 @@ as the launch's ROUTE builds them.
 | --- | --- | --- |
 | [branches](sub-domains/branches/branches.overview.md) | `app.branches`; nested `app.branch_members`, `app.branch_rooms`, `app.branch_machines`, `app.branch_holidays` | `/app/branches`, `/app/branches/my`, `/app/branches/{branch_id}`, `/app/branches/{branch_id}/{members,rooms,machines,holidays}…` |
 | [memberships](sub-domains/memberships/memberships.overview.md) | reads `tenancy.memberships` (the team picker and member directory); nested `app.membership_preferences`, `app.membership_preference_branches`, `app.membership_saved_views` | `/app/memberships`, `/app/memberships/me/{preferences,saved-views…}` |
+| [offerings](sub-domains/offerings/offerings.overview.md) | `app.offerings`; nested `app.offering_groups`, `app.offers` | `/app/offerings…`, `/app/offering-groups…`, `/app/offers…` |
+| [contacts](sub-domains/contacts/contacts.overview.md) | `app.contacts`, `app.contact_phones`; nested `app.contact_members`, `app.contact_activities`, `app.contact_message_templates` | `/app/contacts…`, `/app/contacts/{contact_id}/{members,activities…}`, `/app/contact-message-templates…` |
+| [leads](sub-domains/leads/leads.overview.md) | `app.leads`, `app.lead_involved_memberships` | `/app/leads…` |
+| [appointments](sub-domains/appointments/appointments.overview.md) | `app.appointments` (the visit merged in) | `/app/appointments…` |
+| [patients](sub-domains/patients/patients.overview.md) | `app.patients`; nested `app.patient_clinical_notes`, `app.patient_prescriptions`, `app.prescription_kits`, `app.patient_diagnoses`, `app.patient_images`, `app.patient_reports` | `/app/patients…`, `/app/patients/{patient_id}/{clinical-notes,prescriptions,images,reports}…`, `/app/patient-prescriptions`, `/app/prescription-kits…`, `/app/patient-diagnoses…` |
 
 ## Patterns used
 

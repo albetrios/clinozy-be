@@ -4,6 +4,7 @@ import { ContactMembersRepository } from './sub-domains/contacts/contact-members
 import { LeadsRepository } from './sub-domains/leads/leads.repository.js';
 import { MembershipPreferencesRepository } from './sub-domains/memberships/membership-preferences/membership-preferences.repository.js';
 import { MembershipSavedViewsRepository } from './sub-domains/memberships/membership-saved-views/membership-saved-views.repository.js';
+import { PrescriptionKitsRepository } from './sub-domains/patients/prescription-kits/prescription-kits.repository.js';
 
 /** The membership a part of the leave step releases: its organization's and its own internal id. */
 export type EndedMembershipReference = { organizationId: number; membershipId: number };
@@ -42,7 +43,9 @@ export class AppMembershipLeaveStep implements MembershipLeavePort {
  * Sub-domain 2 — their preferences and saved views are theirs alone and are deleted (U1); a restore
  * starts them from the defaults again. Sub-domain 4 — they stop handling every contact (their
  * `app.contact_members` rows are deleted, CT11). Sub-domain 5 — every lead they own returns to the
- * pool (no owner, no hold) and keeps them as involved (L9).
+ * pool (no owner, no hold) and keeps them as involved (L9). Sub-domain 7 — their prescription kits
+ * are theirs alone and are soft-deleted (P17); the patient files naming them as usual doctor keep
+ * them (K2).
  */
 export function createAppMembershipLeaveStep(): AppMembershipLeaveStep {
   const branchesRepository = new BranchesRepository();
@@ -50,6 +53,7 @@ export function createAppMembershipLeaveStep(): AppMembershipLeaveStep {
   const membershipSavedViewsRepository = new MembershipSavedViewsRepository();
   const contactMembersRepository = new ContactMembersRepository();
   const leadsRepository = new LeadsRepository();
+  const prescriptionKitsRepository = new PrescriptionKitsRepository();
   return new AppMembershipLeaveStep([
     ({ organizationId, membershipId }) =>
       branchesRepository.clearDefaultStaffForMembership({
@@ -73,6 +77,11 @@ export function createAppMembershipLeaveStep(): AppMembershipLeaveStep {
       }),
     ({ organizationId, membershipId }) =>
       leadsRepository.releaseForMembership({
+        organization_id: organizationId,
+        membership_id: membershipId,
+      }),
+    ({ organizationId, membershipId }) =>
+      prescriptionKitsRepository.softDeleteForMembership({
         organization_id: organizationId,
         membership_id: membershipId,
       }),

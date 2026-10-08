@@ -8,7 +8,7 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 
 # Build order (routes-final): each ROUTE row adds its sub-domain's file here.
-CHECK_ORDER=(offerings contacts contact-activities leads appointments)
+CHECK_ORDER=(offerings contacts contact-activities leads appointments patients)
 
 reuse_fixture=0
 selected=()

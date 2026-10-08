@@ -278,7 +278,8 @@ async function fillServiceLabel(values: Record<string, unknown>): Promise<void> 
 /**
  * A check-in converts (A14, L8): the contact's open lead moves to `clinic_visited` (with a `system`
  * line in its stream) and a contact without a patient file gets one — home branch and usual doctor
- * from the appointment, `lead_id` the lead — in the check-in's transaction.
+ * from the appointment, `lead_id` the lead (P10), not yet converted (P4) — in the check-in's
+ * transaction.
  */
 async function convertAtCheckIn(
   row: BaseRecordRow,
@@ -297,23 +298,14 @@ async function convertAtCheckIn(
       updated_by_user_id: context.userId,
     });
   }
-  if ((await contactsRepository.findPatientFileId(contactId)) !== null) return;
-  const contact = await contactsRepository.findById(contactId);
-  if (!contact) return;
+  if ((await contactsRepository.findPatientFile(contactId)) !== null) return;
+  // P4: opening the file does not convert it — the first treatment does (7.H)
   await patientsRepository.insert({
     organization_id: context.organizationId,
     contact_id: contactId,
-    first_name: contact.first_name,
-    last_name: contact.last_name,
-    phone: contact.primary_phone,
-    email: contact.email,
-    gender: contact.gender,
-    date_of_birth: contact.date_of_birth,
-    address: contact.address,
     home_branch_id: row.branch_id,
     doctor_membership_id: row.doctor_membership_id,
     lead_id: leadId,
-    conversion: leadId === null ? 'not_converted' : 'converted',
     created_by_user_id: context.userId,
     updated_by_user_id: context.userId,
   });

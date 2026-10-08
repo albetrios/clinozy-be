@@ -61,30 +61,26 @@ import {
   UpdateAppointmentDto as appUpdateAppointmentDto,
 } from '@/domains/app/sub-domains/appointments/appointments.dto.js';
 import {
-  CreateDiagnosisDto as appCreateDiagnosisDto,
-  UpdateDiagnosisDto as appUpdateDiagnosisDto,
-} from '@/domains/app/sub-domains/diagnoses/diagnoses.dto.js';
-import { CreatePatientClinicalNoteDto as appCreatePatientClinicalNoteDto } from '@/domains/app/sub-domains/patient-clinical-notes/patient-clinical-notes.dto.js';
+  CreatePatientDiagnosisDto as appCreateDiagnosisDto,
+  UpdatePatientDiagnosisDto as appUpdateDiagnosisDto,
+} from '@/domains/app/sub-domains/patients/patient-diagnoses/patient-diagnoses.dto.js';
+import { CreatePatientClinicalNoteDto as appCreatePatientClinicalNoteDto } from '@/domains/app/sub-domains/patients/patient-clinical-notes/patient-clinical-notes.dto.js';
 import {
-  CreatePrescriptionDto as appCreatePrescriptionDto,
-  UpdatePrescriptionDto as appUpdatePrescriptionDto,
-} from '@/domains/app/sub-domains/prescriptions/prescriptions.dto.js';
+  CreatePatientPrescriptionDto as appCreatePrescriptionDto,
+  UpdatePatientPrescriptionDto as appUpdatePrescriptionDto,
+} from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.dto.js';
 import {
   CreatePrescriptionKitDto as appCreatePrescriptionKitDto,
   UpdatePrescriptionKitDto as appUpdatePrescriptionKitDto,
-} from '@/domains/app/sub-domains/prescription-kits/prescription-kits.dto.js';
+} from '@/domains/app/sub-domains/patients/prescription-kits/prescription-kits.dto.js';
 import {
   CreatePatientImageDto as appCreatePatientImageDto,
   UpdatePatientImageDto as appUpdatePatientImageDto,
-} from '@/domains/app/sub-domains/patient-images/patient-images.dto.js';
+} from '@/domains/app/sub-domains/patients/patient-images/patient-images.dto.js';
 import {
   CreatePatientReportDto as appCreatePatientReportDto,
   UpdatePatientReportDto as appUpdatePatientReportDto,
-} from '@/domains/app/sub-domains/patient-reports/patient-reports.dto.js';
-import {
-  CreatePatientNoteDto as appCreatePatientNoteDto,
-  UpdatePatientNoteDto as appUpdatePatientNoteDto,
-} from '@/domains/app/sub-domains/patient-notes/patient-notes.dto.js';
+} from '@/domains/app/sub-domains/patients/patient-reports/patient-reports.dto.js';
 import {
   CreateInvoiceDto as appCreateInvoiceDto,
   UpdateInvoiceDto as appUpdateInvoiceDto,
@@ -358,8 +354,8 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'POST /api/v1/app/contacts/{contact_id}/activities/add-note': AddContactNoteDto,
   'POST /api/v1/app/contact-activities/message-batches': ContactMessageBatchDto,
   'PATCH /api/v1/app/patient-packages/{patient_package_id}': appUpdatePatientPackageDto,
-  'PATCH /api/v1/app/patient-reports/{patient_report_id}': appUpdatePatientReportDto,
-  'PATCH /api/v1/app/patient-images/{patient_image_id}': appUpdatePatientImageDto,
+  'PATCH /api/v1/app/patients/{patient_id}/reports/{patient_report_id}': appUpdatePatientReportDto,
+  'PATCH /api/v1/app/patients/{patient_id}/images/{patient_image_id}': appUpdatePatientImageDto,
   'POST /api/v1/app/tasks/{task_id}/snooze': appSnoozeTaskDto,
   'POST /api/v1/app/tasks/{task_id}/resolve': appResolveTaskDto,
   'PATCH /api/v1/app/tasks/{task_id}': appUpdateTaskDto,
@@ -411,17 +407,16 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'POST /api/v1/app/patients/{patient_id}/packages': appCreatePatientPackageDto,
   'PATCH /api/v1/app/invoices/{invoice_id}': appUpdateInvoiceDto,
   'POST /api/v1/app/invoices': appCreateInvoiceDto,
-  'PATCH /api/v1/app/patient-notes/{patient_note_id}': appUpdatePatientNoteDto,
-  'POST /api/v1/app/patients/{patient_id}/notes': appCreatePatientNoteDto,
   'POST /api/v1/app/patients/{patient_id}/reports': appCreatePatientReportDto,
   'POST /api/v1/app/patients/{patient_id}/images': appCreatePatientImageDto,
   'PATCH /api/v1/app/prescription-kits/{prescription_kit_id}': appUpdatePrescriptionKitDto,
   'POST /api/v1/app/prescription-kits': appCreatePrescriptionKitDto,
-  'PATCH /api/v1/app/prescriptions/{prescription_id}': appUpdatePrescriptionDto,
+  'PATCH /api/v1/app/patients/{patient_id}/prescriptions/{patient_prescription_id}':
+    appUpdatePrescriptionDto,
   'POST /api/v1/app/patients/{patient_id}/prescriptions': appCreatePrescriptionDto,
   'POST /api/v1/app/patients/{patient_id}/clinical-notes': appCreatePatientClinicalNoteDto,
-  'PATCH /api/v1/app/diagnoses/{diagnosis_id}': appUpdateDiagnosisDto,
-  'POST /api/v1/app/diagnoses': appCreateDiagnosisDto,
+  'PATCH /api/v1/app/patient-diagnoses/{patient_diagnosis_id}': appUpdateDiagnosisDto,
+  'POST /api/v1/app/patient-diagnoses': appCreateDiagnosisDto,
   'POST /api/v1/app/appointments/{appointment_id}/cancel': appCancelAppointmentDto,
   'POST /api/v1/app/appointments/{appointment_id}/stage': appStageAppointmentDto,
   'PATCH /api/v1/app/appointments/{appointment_id}': appUpdateAppointmentDto,

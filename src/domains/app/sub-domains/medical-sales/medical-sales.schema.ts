@@ -19,7 +19,7 @@ import { invoices } from '@/domains/app/sub-domains/invoices/invoices.schema.js'
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
 import { medical_contacts } from '@/domains/app/sub-domains/medical-contacts/medical-contacts.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
-import { prescriptions } from '@/domains/app/sub-domains/prescriptions/prescriptions.schema.js';
+import { patient_prescriptions } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.schema.js';
 import {
   RECORD_DELETE_REASON,
   RECORD_DELETE_REASON_VALUES,
@@ -64,7 +64,7 @@ export const medical_sales = appSchema
         { onDelete: 'no action' },
       ),
       prescription_id: bigint('prescription_id', { mode: 'number' }).references(
-        (): AnyPgColumn => prescriptions.id,
+        (): AnyPgColumn => patient_prescriptions.id,
         { onDelete: 'set null' },
       ),
       lead_id: bigint('lead_id', { mode: 'number' }).references((): AnyPgColumn => leads.id, {

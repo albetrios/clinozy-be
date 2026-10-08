@@ -18,7 +18,7 @@ export const APP_ACCESS_SECTION_RESOURCES = {
   activity: ['contact_activity'],
   leads: ['lead'],
   appointments: ['appointment'],
-  patients: ['patient', 'prescription', 'treatment', 'review'],
+  patients: ['patient', 'patient_prescription', 'treatment', 'review'],
   medical: [
     'manufacturer',
     'supplier',

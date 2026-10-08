@@ -23,20 +23,18 @@ import { ContactMessageTemplatesRepository } from './sub-domains/contacts/contac
 import { ContactMessageTemplatesService } from './sub-domains/contacts/contact-message-templates/contact-message-templates.service.js';
 import { AppointmentsRepository } from './sub-domains/appointments/appointments.repository.js';
 import { AppointmentsService } from './sub-domains/appointments/appointments.service.js';
-import { DiagnosesRepository } from './sub-domains/diagnoses/diagnoses.repository.js';
-import { DiagnosesService } from './sub-domains/diagnoses/diagnoses.service.js';
-import { PatientClinicalNotesRepository } from './sub-domains/patient-clinical-notes/patient-clinical-notes.repository.js';
-import { PatientClinicalNotesService } from './sub-domains/patient-clinical-notes/patient-clinical-notes.service.js';
-import { PrescriptionsRepository } from './sub-domains/prescriptions/prescriptions.repository.js';
-import { PrescriptionsService } from './sub-domains/prescriptions/prescriptions.service.js';
-import { PrescriptionKitsRepository } from './sub-domains/prescription-kits/prescription-kits.repository.js';
-import { PrescriptionKitsService } from './sub-domains/prescription-kits/prescription-kits.service.js';
-import { PatientImagesRepository } from './sub-domains/patient-images/patient-images.repository.js';
-import { PatientImagesService } from './sub-domains/patient-images/patient-images.service.js';
-import { PatientReportsRepository } from './sub-domains/patient-reports/patient-reports.repository.js';
-import { PatientReportsService } from './sub-domains/patient-reports/patient-reports.service.js';
-import { PatientNotesRepository } from './sub-domains/patient-notes/patient-notes.repository.js';
-import { PatientNotesService } from './sub-domains/patient-notes/patient-notes.service.js';
+import { PatientDiagnosesRepository } from './sub-domains/patients/patient-diagnoses/patient-diagnoses.repository.js';
+import { PatientDiagnosesService } from './sub-domains/patients/patient-diagnoses/patient-diagnoses.service.js';
+import { PatientClinicalNotesRepository } from './sub-domains/patients/patient-clinical-notes/patient-clinical-notes.repository.js';
+import { PatientClinicalNotesService } from './sub-domains/patients/patient-clinical-notes/patient-clinical-notes.service.js';
+import { PatientPrescriptionsRepository } from './sub-domains/patients/patient-prescriptions/patient-prescriptions.repository.js';
+import { PatientPrescriptionsService } from './sub-domains/patients/patient-prescriptions/patient-prescriptions.service.js';
+import { PrescriptionKitsRepository } from './sub-domains/patients/prescription-kits/prescription-kits.repository.js';
+import { PrescriptionKitsService } from './sub-domains/patients/prescription-kits/prescription-kits.service.js';
+import { PatientImagesRepository } from './sub-domains/patients/patient-images/patient-images.repository.js';
+import { PatientImagesService } from './sub-domains/patients/patient-images/patient-images.service.js';
+import { PatientReportsRepository } from './sub-domains/patients/patient-reports/patient-reports.repository.js';
+import { PatientReportsService } from './sub-domains/patients/patient-reports/patient-reports.service.js';
 import { InvoicesRepository } from './sub-domains/invoices/invoices.repository.js';
 import { InvoicesService } from './sub-domains/invoices/invoices.service.js';
 import { PatientPackagesRepository } from './sub-domains/patient-packages/patient-packages.repository.js';
@@ -104,13 +102,12 @@ export type AppRecordServices = {
   patientsService: PatientsService;
   leadsService: LeadsService;
   appointmentsService: AppointmentsService;
-  diagnosesService: DiagnosesService;
+  patientDiagnosesService: PatientDiagnosesService;
   patientClinicalNotesService: PatientClinicalNotesService;
-  prescriptionsService: PrescriptionsService;
+  patientPrescriptionsService: PatientPrescriptionsService;
   prescriptionKitsService: PrescriptionKitsService;
   patientImagesService: PatientImagesService;
   patientReportsService: PatientReportsService;
-  patientNotesService: PatientNotesService;
   invoicesService: InvoicesService;
   patientPackagesService: PatientPackagesService;
   offeringSuggestionsService: OfferingSuggestionsService;
@@ -180,21 +177,28 @@ export function createAppRecordServices(
   const placeOfferingContactServices = createPlaceOfferingContactServices(organizationService);
   return {
     ...placeOfferingContactServices,
-    patientsService: new PatientsService(organizationService, new PatientsRepository()),
+    patientsService: new PatientsService(
+      organizationService,
+      new PatientsRepository(),
+      placeOfferingContactServices.contactsService,
+    ),
     leadsService: new LeadsService(
       organizationService,
       new LeadsRepository(),
       placeOfferingContactServices.contactsService,
     ),
     appointmentsService: new AppointmentsService(organizationService, new AppointmentsRepository()),
-    diagnosesService: new DiagnosesService(organizationService, new DiagnosesRepository()),
+    patientDiagnosesService: new PatientDiagnosesService(
+      organizationService,
+      new PatientDiagnosesRepository(),
+    ),
     patientClinicalNotesService: new PatientClinicalNotesService(
       organizationService,
       new PatientClinicalNotesRepository(),
     ),
-    prescriptionsService: new PrescriptionsService(
+    patientPrescriptionsService: new PatientPrescriptionsService(
       organizationService,
-      new PrescriptionsRepository(),
+      new PatientPrescriptionsRepository(),
     ),
     prescriptionKitsService: new PrescriptionKitsService(
       organizationService,
@@ -208,7 +212,6 @@ export function createAppRecordServices(
       organizationService,
       new PatientReportsRepository(),
     ),
-    patientNotesService: new PatientNotesService(organizationService, new PatientNotesRepository()),
     invoicesService: new InvoicesService(organizationService, new InvoicesRepository()),
     patientPackagesService: new PatientPackagesService(
       organizationService,

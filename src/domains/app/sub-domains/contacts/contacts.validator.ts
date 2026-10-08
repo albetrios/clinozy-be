@@ -70,14 +70,21 @@ export interface ContactLinkedSearch {
 }
 
 /**
- * Reads a `q` of a list about a contact (L7, 6.8): `#2371` is the record's number, `C-12345` the
- * contact number; a typed number is the contact's digits (4 or more) and — when it could be one —
- * the record number too; anything else is the contact's text, 3 or more characters (400 `q`
- * otherwise).
+ * Reads a `q` of a list about a contact (L7, 6.8, P9): `#2371` is the record's number — and so is
+ * `PT-0412` when the record shows one with a `recordPrefix` (`PT`); `C-12345` the contact number; a
+ * typed number is the contact's digits (4 or more) and — when it could be one — the record number
+ * too; anything else is the contact's text, 3 or more characters (400 `q` otherwise).
  */
-export function readContactLinkedSearch(q: string | undefined): ContactLinkedSearch | undefined {
+export function readContactLinkedSearch(
+  q: string | undefined,
+  options: { recordPrefix?: string } = {},
+): ContactLinkedSearch | undefined {
   if (q === undefined) return undefined;
-  const recordNumber = q.match(RECORD_NUMBER_QUERY)?.[1];
+  const prefixed =
+    options.recordPrefix === undefined
+      ? undefined
+      : q.match(new RegExp(`^${options.recordPrefix}-?\\s*0*(\\d{1,9})$`, 'i'))?.[1];
+  const recordNumber = prefixed ?? q.match(RECORD_NUMBER_QUERY)?.[1];
   if (recordNumber !== undefined) return { recordNumber: Number(recordNumber) };
   const contactNumber = q.match(LINKED_CONTACT_NUMBER_QUERY)?.[1];
   if (contactNumber !== undefined) return { contactNumber: Number(contactNumber) };

@@ -3,6 +3,7 @@ import {
   findMembershipIdOfUser,
   resolveRecordIds,
 } from '@/domains/app/base-record.repository.js';
+import { requireConfirmedUploads } from '@/domains/app/base-record.service.js';
 import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
 import { ContactsRepository } from '@/domains/app/sub-domains/contacts/contacts.repository.js';
@@ -28,15 +29,15 @@ const LINK_READ_PERMISSIONS: Readonly<Record<ContactActivityLinkColumn, string>>
   appointment_id: APP_PERMISSIONS.APPOINTMENT_READ,
   invoice_id: APP_PERMISSIONS.INVOICE_READ,
   payment_id: APP_PERMISSIONS.PAYMENT_READ,
-  patient_prescription_id: APP_PERMISSIONS.PRESCRIPTION_READ,
+  patient_prescription_id: APP_PERMISSIONS.PATIENT_PRESCRIPTION_READ,
   patient_offering_id: APP_PERMISSIONS.PATIENT_READ,
   patient_review_id: APP_PERMISSIONS.REVIEW_READ,
   patient_check_in_id: APP_PERMISSIONS.PATIENT_READ,
   task_id: APP_PERMISSIONS.TASK_READ,
   patient_treatment_id: APP_PERMISSIONS.PATIENT_READ,
-  patient_clinical_note_id: APP_PERMISSIONS.CLINICAL_RECORD_READ,
-  patient_image_id: APP_PERMISSIONS.CLINICAL_RECORD_READ,
-  patient_report_id: APP_PERMISSIONS.PATIENT_READ,
+  patient_clinical_note_id: APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ,
+  patient_image_id: APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ,
+  patient_report_id: APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ,
 };
 
 /** The channel a sent entry leaves on its contact (CT4, D65): its own type, or `call` for a call. */
@@ -69,26 +70,6 @@ function fillPlaceholders(
     });
   }
   return filled;
-}
-
-/** Every attachment is a confirmed upload of the organization (the upload port, M6) — else 400. */
-async function assertAttachmentsConfirmed(
-  fileKeys: readonly string[] | undefined,
-  context: BaseRecordWriteContext,
-): Promise<void> {
-  for (const fileKey of fileKeys ?? []) {
-    const confirmed = await context.ports.isConfirmedUpload({
-      organizationId: context.organizationId,
-      fileKey,
-    });
-    if (!confirmed) {
-      throw fieldValidationError({
-        field: 'attachment_keys',
-        messageKey: 'errors:validation.contactActivityAttachmentNotConfirmed',
-        messageParams: { key: fileKey },
-      });
-    }
-  }
 }
 
 /**
@@ -138,7 +119,11 @@ export function createContactActivitiesRules(
         });
       }
     }
-    await assertAttachmentsConfirmed(values.attachment_keys as string[] | undefined, context);
+    await requireConfirmedUploads({
+      fileKeys: values.attachment_keys as string[] | undefined,
+      field: 'attachment_keys',
+      context,
+    });
     if (typeof values.reply_to_contact_activity_id === 'number') {
       const answered = await repository.findById(values.reply_to_contact_activity_id);
       if (answered?.contact_id !== values.contact_id) {
@@ -182,6 +167,9 @@ export function createContactActivitiesRules(
       for (const [column, code] of Object.entries(LINK_READ_PERMISSIONS)) {
         if (!(await can(code))) scope[column] = [null];
       }
+      // A private-album photo's entry (P23, PC16)
+      if (!(await can(APP_PERMISSIONS.PATIENT_PRIVATE_ALBUM_READ)))
+        scope.is_private_photo = [false];
       return scope;
     },
     prepareCreate: prepareEntry,

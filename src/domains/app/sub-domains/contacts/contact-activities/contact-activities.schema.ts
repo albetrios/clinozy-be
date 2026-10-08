@@ -3,6 +3,7 @@ import {
   type AnyPgColumn,
   bigint,
   bigserial,
+  boolean,
   check,
   foreignKey,
   index,
@@ -21,15 +22,15 @@ import { contact_message_templates } from '@/domains/app/sub-domains/contacts/co
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import { invoices } from '@/domains/app/sub-domains/invoices/invoices.schema.js';
 import { payments } from '@/domains/app/sub-domains/payments/payments.schema.js';
-import { prescriptions } from '@/domains/app/sub-domains/prescriptions/prescriptions.schema.js';
+import { patient_prescriptions } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.schema.js';
 import { patient_packages } from '@/domains/app/sub-domains/patient-packages/patient-packages.schema.js';
 import { reviews } from '@/domains/app/sub-domains/reviews/reviews.schema.js';
 import { check_ins } from '@/domains/app/sub-domains/check-ins/check-ins.schema.js';
 import { tasks } from '@/domains/app/sub-domains/tasks/tasks.schema.js';
 import { treatments } from '@/domains/app/sub-domains/treatments/treatments.schema.js';
-import { patient_clinical_notes } from '@/domains/app/sub-domains/patient-clinical-notes/patient-clinical-notes.schema.js';
-import { patient_images } from '@/domains/app/sub-domains/patient-images/patient-images.schema.js';
-import { patient_reports } from '@/domains/app/sub-domains/patient-reports/patient-reports.schema.js';
+import { patient_clinical_notes } from '@/domains/app/sub-domains/patients/patient-clinical-notes/patient-clinical-notes.schema.js';
+import { patient_images } from '@/domains/app/sub-domains/patients/patient-images/patient-images.schema.js';
+import { patient_reports } from '@/domains/app/sub-domains/patients/patient-reports/patient-reports.schema.js';
 import {
   CONTACT_ACTIVITY_ATTACHMENTS_MAX,
   CONTACT_ACTIVITY_DELIVERY_STATUS_VALUES,
@@ -112,7 +113,7 @@ export const contact_activities = appSchema
         },
       ),
       patient_prescription_id: bigint('patient_prescription_id', { mode: 'number' }).references(
-        (): AnyPgColumn => prescriptions.id,
+        (): AnyPgColumn => patient_prescriptions.id,
         {
           onDelete: 'set null',
         },
@@ -162,6 +163,8 @@ export const contact_activities = appSchema
           onDelete: 'set null',
         },
       ),
+      // An entry about a private-album photo (P23, M10) — shown only to the album's holders
+      is_private_photo: boolean('is_private_photo').notNull().default(false),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(

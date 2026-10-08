@@ -414,202 +414,68 @@ export const offersRecordExample = {
   updated_at: '2026-10-07T10:30:00.000Z',
 };
 
-/** `PatientOutput`. */
+/** `PatientOutput` — the clinical side of a contact (launch #133, routes-final 7.A.6). */
 export const patientsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
+    id: { type: 'string', example: 'pat_k7x9m2pqr4w8n1v3a1b2c' },
+    patient_number: { type: 'integer', description: 'Shown as "PT-0412"' },
+    contact_id: {
       type: 'string',
-      example: 'pat_k7x9m2pqr4w8n1v3a1b2c',
+      example: 'con_k7x9m2pqr4w8n1v3a1b2c',
+      description: 'The person (P1) — no embedded contact (P3)',
     },
-    patient_number: {
-      type: 'integer',
-    },
-    first_name: {
-      type: 'string',
-    },
-    last_name: {
-      type: 'string',
-      nullable: true,
-    },
-    phone: {
-      type: 'string',
-      example: '+919825044120',
-    },
-    phones: {
-      type: 'array',
-      items: {
-        type: 'string',
-      },
-    },
-    email: {
-      type: 'string',
-      format: 'email',
-      nullable: true,
-    },
-    gender: {
-      type: 'string',
-      enum: ['female', 'male', 'other'],
-      nullable: true,
-    },
-    date_of_birth: {
-      type: 'string',
-      format: 'date',
-      nullable: true,
-    },
-    address: {
-      type: 'string',
-      nullable: true,
-    },
-    home_branch_id: {
-      type: 'string',
-    },
+    home_branch_id: { type: 'string', example: 'brn_k7x9m2pqr4w8n1v3a1b2c' },
     types: {
       type: 'array',
+      maxItems: 6,
       items: {
         type: 'string',
         enum: ['aesthetic', 'clinical', 'lhr', 'dental', 'physio', 'gynac'],
       },
     },
-    status: {
-      type: 'string',
-      enum: ['new', 'regular', 'vip', 'inactive'],
-    },
+    status: { type: 'string', enum: ['new', 'regular', 'vip', 'inactive'] },
     conversion: {
       type: 'string',
-      enum: ['converted', 'not_converted'],
+      enum: ['not_converted', 'converted'],
+      description: 'Took a treatment (P4)',
     },
-    referral_source: {
-      type: 'string',
-      enum: ['patient', 'doctor', 'instagram', 'google', 'walk_in', 'other'],
-      nullable: true,
-    },
-    referred_by_patient_id: {
-      type: 'string',
-      nullable: true,
-    },
-    referred_by_name: {
-      type: 'string',
-      nullable: true,
-    },
-    doctor_membership_id: {
-      type: 'string',
-      nullable: true,
-    },
-    follow_up_at: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
-    },
-    notes: {
-      type: 'string',
-      nullable: true,
-    },
+    doctor_membership_id: { type: 'string', nullable: true, description: 'The usual doctor' },
+    follow_up_at: { type: 'string', format: 'date-time', nullable: true },
+    notes: { type: 'string', maxLength: 2000, nullable: true },
     lead_id: {
       type: 'string',
       nullable: true,
+      description: 'The lead the check-in that opened the file came from (P10) — read-only',
     },
-    has_data_consent: {
-      type: 'boolean',
-    },
-    has_photo_consent: {
-      type: 'boolean',
-    },
-    has_marketing_consent: {
-      type: 'boolean',
-    },
-    language: {
-      type: 'string',
-      nullable: true,
-    },
-    instagram_handles: {
-      type: 'array',
-      items: {
-        type: 'string',
-      },
-    },
-    default_channel: {
-      type: 'string',
-      enum: ['whatsapp', 'call', 'sms', 'instagram', 'email', 'note'],
-      nullable: true,
-    },
-    preferences: {},
-    household: {
-      type: 'string',
-      nullable: true,
-    },
-    allergies: {
-      type: 'array',
-      items: {
-        type: 'string',
-      },
-    },
-    contraindications: {
-      type: 'array',
-      items: {
-        type: 'string',
-      },
-    },
-    last_visit_on: {
-      type: 'string',
-      nullable: true,
-      description:
-        'The date of the latest checked-in or completed appointment (YYYY-MM-DD) (per viewer, computed on read)',
-    },
-    next_visit_on: {
-      type: 'string',
-      nullable: true,
-      description:
-        'The date of the next scheduled or confirmed appointment (YYYY-MM-DD) (per viewer, computed on read)',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    has_data_consent: { type: 'boolean' },
+    has_photo_consent: { type: 'boolean' },
+    allergies: { type: 'array', maxItems: 30, items: { type: 'string', maxLength: 120 } },
+    contraindications: { type: 'array', maxItems: 30, items: { type: 'string', maxLength: 120 } },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
 /** Example `PatientOutput`. */
 export const patientsRecordExample = {
   id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
-  patient_number: 12,
-  first_name: 'Sample first name',
-  last_name: 'Sample last name',
-  phone: '+919800000001',
-  phones: ['sample'],
-  email: 'sample@example.com',
-  gender: 'female',
-  date_of_birth: '2026-10-08',
-  address: 'Sample address',
-  home_branch_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  types: ['aesthetic'],
-  status: 'new',
-  conversion: 'not_converted',
-  referral_source: 'patient',
-  referred_by_patient_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  referred_by_name: 'Sample referred by name',
-  doctor_membership_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  follow_up_at: '2026-10-08T10:00:00+05:30',
-  notes: 'Sample notes',
-  lead_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
+  patient_number: 412,
+  contact_id: 'con_k7x9m2pqr4w8n1v3a1b2c',
+  home_branch_id: 'brn_k7x9m2pqr4w8n1v3a1b2c',
+  types: ['aesthetic', 'lhr'],
+  status: 'regular',
+  conversion: 'converted',
+  doctor_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
+  follow_up_at: null,
+  notes: null,
+  lead_id: 'lead_k7x9m2pqr4w8n1v3a1b2c',
   has_data_consent: true,
   has_photo_consent: true,
-  has_marketing_consent: true,
-  language: 'Sample language',
-  instagram_handles: ['sample'],
-  default_channel: 'whatsapp',
-  preferences: {},
-  household: 'Sample household',
-  allergies: ['sample'],
-  contraindications: ['sample'],
-  last_visit_on: null,
-  next_visit_on: null,
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  allergies: ['Penicillin'],
+  contraindications: [],
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
 };
 
 /** `LeadOutput` — one enquiry for a contact (launch #131, routes-final 5.6). */
@@ -860,66 +726,52 @@ export const appointmentsRecordExample = {
   updated_at: '2026-10-07T10:30:00.000Z',
 };
 
-/** `DiagnosisOutput`. */
-export const diagnosesRecordSchema = {
+/** `PatientDiagnosisOutput` — the organization's diagnosis catalogue (launch #133, routes-final 7.E.6). */
+export const patientDiagnosesRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'dgn_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    name: {
-      type: 'string',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    id: { type: 'string', example: 'dgn_k7x9m2pqr4w8n1v3a1b2c' },
+    name: { type: 'string', maxLength: 120 },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
-/** Example `DiagnosisOutput`. */
-export const diagnosesRecordExample = {
+/** Example `PatientDiagnosisOutput`. */
+export const patientDiagnosesRecordExample = {
   id: 'dgn_k7x9m2pqr4w8n1v3a1b2c',
-  name: 'Sample name',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  name: 'Acne vulgaris',
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
 };
 
-/** `PatientClinicalNoteOutput`. */
+/** `PatientClinicalNoteOutput` — one clinical note on a patient file (launch #133, routes-final 7.B.6). */
 export const patientClinicalNotesRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'pcn_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    patient_id: {
-      type: 'string',
-    },
+    id: { type: 'string', example: 'pcn_k7x9m2pqr4w8n1v3a1b2c' },
+    patient_id: { type: 'string' },
     kind: {
       type: 'string',
-      enum: ['complaint', 'diagnosis', 'treatment_suggestion', 'future_suggestion'],
+      enum: [
+        'complaint',
+        'finding',
+        'diagnosis',
+        'treatment_suggestion',
+        'future_suggestion',
+        'safety_check',
+      ],
     },
-    text: {
+    text: { type: 'string', maxLength: 500 },
+    appointment_id: { type: 'string', nullable: true, description: 'The visit (A10)' },
+    patient_diagnosis_id: {
       type: 'string',
+      nullable: true,
+      description: "A `diagnosis` note's catalogue entry (P12)",
     },
-    added_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    added_at: { type: 'string', format: 'date-time' },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
@@ -927,182 +779,190 @@ export const patientClinicalNotesRecordSchema = {
 export const patientClinicalNotesRecordExample = {
   id: 'pcn_k7x9m2pqr4w8n1v3a1b2c',
   patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
-  kind: 'complaint',
-  text: 'Sample text',
-  added_at: '2026-10-08T10:00:00+05:30',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  kind: 'diagnosis',
+  text: 'Grade 2 acne on both cheeks',
+  appointment_id: 'appt_k7x9m2pqr4w8n1v3a1b2c',
+  patient_diagnosis_id: 'dgn_k7x9m2pqr4w8n1v3a1b2c',
+  added_at: '2026-10-08T10:30:00.000Z',
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
 };
 
-/** `PrescriptionOutput`. */
-export const prescriptionsRecordSchema = {
+/** `PatientPrescriptionOutput` — a draft until approved, then final (launch #133, routes-final 7.C.6). */
+export const patientPrescriptionsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'rx_k7x9m2pqr4w8n1v3a1b2c',
+    id: { type: 'string', example: 'rx_k7x9m2pqr4w8n1v3a1b2c' },
+    prescription_number: { type: 'integer', description: 'Shown as "RX-500"' },
+    patient_id: { type: 'string' },
+    appointment_id: { type: 'string', nullable: true },
+    doctor_membership_id: { type: 'string' },
+    prescription_date: { type: 'string', format: 'date' },
+    items: {
+      type: 'array',
+      maxItems: 30,
+      items: {
+        type: 'object',
+        properties: {
+          medicine_name: { type: 'string', maxLength: 120 },
+          medicine_id: { type: 'string', nullable: true, description: 'A live medicine (P15)' },
+          dose_morning: { type: 'integer', minimum: 0, maximum: 2 },
+          dose_afternoon: { type: 'integer', minimum: 0, maximum: 2 },
+          dose_night: { type: 'integer', minimum: 0, maximum: 2 },
+          is_sos: { type: 'boolean' },
+          meal: { type: 'string', enum: ['before', 'after'], nullable: true },
+          timing: { type: 'string', nullable: true },
+          timing_text: { type: 'string', maxLength: 40, nullable: true },
+          body_part: { type: 'string', nullable: true },
+          body_part_text: { type: 'string', maxLength: 40, nullable: true },
+          quantity: { type: 'integer', minimum: 1, maximum: 999 },
+          remarks: { type: 'string', maxLength: 200, nullable: true },
+        },
+      },
     },
-    patient_id: {
-      type: 'string',
-    },
-    prescription_number: {
-      type: 'integer',
-    },
-    appointment_id: {
+    advice: { type: 'string', maxLength: 2000, nullable: true },
+    lab_report: { type: 'string', maxLength: 2000, nullable: true },
+    procedure_today: { type: 'string', maxLength: 2000, nullable: true },
+    follow_up_date: { type: 'string', format: 'date', nullable: true },
+    print_language: { type: 'string', enum: ['english', 'gujarati', 'hindi'] },
+    status: { type: 'string', enum: ['draft', 'approved'] },
+    approved_at: { type: 'string', format: 'date-time', nullable: true },
+    approved_by_membership_id: {
       type: 'string',
       nullable: true,
+      description: 'Who approved it (P15)',
     },
-    doctor_membership_id: {
-      type: 'string',
-    },
-    prescription_date: {
-      type: 'string',
-      format: 'date',
-    },
-    items: {},
-    advice: {
-      type: 'string',
-      nullable: true,
-    },
-    lab_report: {
-      type: 'string',
-      nullable: true,
-    },
-    procedure_today: {
-      type: 'string',
-      nullable: true,
-    },
-    follow_up_date: {
-      type: 'string',
-      format: 'date',
-      nullable: true,
-    },
-    status: {
-      type: 'string',
-      enum: ['draft', 'approved'],
-    },
-    approved_at: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
-    },
-    print_language: {
-      type: 'string',
-      enum: ['english', 'gujarati', 'hindi'],
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
-/** Example `PrescriptionOutput`. */
-export const prescriptionsRecordExample = {
+/** Example `PatientPrescriptionOutput`. */
+export const patientPrescriptionsRecordExample = {
   id: 'rx_k7x9m2pqr4w8n1v3a1b2c',
+  prescription_number: 500,
   patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
-  prescription_number: 12,
-  appointment_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  doctor_membership_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
+  appointment_id: null,
+  doctor_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
   prescription_date: '2026-10-08',
-  items: [],
-  advice: 'Sample advice',
-  lab_report: 'Sample lab report',
-  procedure_today: 'Sample procedure today',
-  follow_up_date: '2026-10-08',
-  status: 'draft',
-  approved_at: '2026-10-08T10:00:00+05:30',
+  items: [
+    {
+      medicine_name: 'Tretinoin 0.025% cream',
+      medicine_id: null,
+      dose_night: 1,
+      meal: 'after',
+      body_part: 'face',
+      quantity: 1,
+    },
+  ],
+  advice: null,
+  lab_report: null,
+  procedure_today: null,
+  follow_up_date: '2026-11-08',
   print_language: 'english',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  status: 'approved',
+  approved_at: '2026-10-08T10:30:00.000Z',
+  approved_by_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
 };
 
-/** `PrescriptionKitOutput`. */
+/** `PrescriptionKitOutput` — a doctor's own reusable lines (launch #133, routes-final 7.D.6). */
 export const prescriptionKitsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'rxk_k7x9m2pqr4w8n1v3a1b2c',
+    id: { type: 'string', example: 'rxk_k7x9m2pqr4w8n1v3a1b2c' },
+    owner_membership_id: { type: 'string', description: 'The doctor whose kit it is (P17)' },
+    name: { type: 'string', maxLength: 80 },
+    items: {
+      type: 'array',
+      maxItems: 30,
+      items: {
+        type: 'object',
+        properties: {
+          medicine_name: { type: 'string', maxLength: 120 },
+          medicine_id: { type: 'string', nullable: true, description: 'A live medicine (P15)' },
+          dose_morning: { type: 'integer', minimum: 0, maximum: 2 },
+          dose_afternoon: { type: 'integer', minimum: 0, maximum: 2 },
+          dose_night: { type: 'integer', minimum: 0, maximum: 2 },
+          is_sos: { type: 'boolean' },
+          meal: { type: 'string', enum: ['before', 'after'], nullable: true },
+          timing: { type: 'string', nullable: true },
+          timing_text: { type: 'string', maxLength: 40, nullable: true },
+          body_part: { type: 'string', nullable: true },
+          body_part_text: { type: 'string', maxLength: 40, nullable: true },
+          quantity: { type: 'integer', minimum: 1, maximum: 999 },
+          remarks: { type: 'string', maxLength: 200, nullable: true },
+        },
+      },
     },
-    name: {
-      type: 'string',
-    },
-    items: {},
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
 /** Example `PrescriptionKitOutput`. */
 export const prescriptionKitsRecordExample = {
   id: 'rxk_k7x9m2pqr4w8n1v3a1b2c',
-  name: 'Sample name',
-  items: [],
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  owner_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
+  name: 'Acne starter',
+  items: [
+    {
+      medicine_name: 'Tretinoin 0.025% cream',
+      medicine_id: null,
+      dose_night: 1,
+      meal: 'after',
+      body_part: 'face',
+      quantity: 1,
+    },
+  ],
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
 };
 
-/** `PatientImageOutput`. */
+/** `PatientImageOutput` — a photo in one of three albums (launch #133, routes-final 7.F.6). */
 export const patientImagesRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'pimg_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    patient_id: {
-      type: 'string',
-    },
-    appointment_id: {
-      type: 'string',
-      nullable: true,
-    },
-    album: {
-      type: 'string',
-      enum: ['general', 'private', 'lhr'],
-    },
-    file_key: {
-      type: 'string',
-    },
-    file_name: {
-      type: 'string',
-    },
+    id: { type: 'string', example: 'pimg_k7x9m2pqr4w8n1v3a1b2c' },
+    patient_id: { type: 'string' },
+    appointment_id: { type: 'string', nullable: true },
+    patient_treatment_id: { type: 'string', nullable: true, description: 'Its session (P24)' },
+    album: { type: 'string', enum: ['general', 'private', 'lhr'] },
+    stage: { type: 'string', enum: ['before', 'after'], nullable: true },
+    file_key: { type: 'string' },
+    file_name: { type: 'string', description: "The upload's (P25)" },
+    display_name: { type: 'string', maxLength: 60, nullable: true },
+    caption: { type: 'string', maxLength: 200, nullable: true },
     body_part: {
       type: 'string',
-      enum: ['face', 'scalp', 'hair', 'body', 'chest', 'back', 'underarm', 'legs', 'arms', 'other'],
       nullable: true,
+      enum: [
+        'face',
+        'upper_lip',
+        'chin',
+        'neck',
+        'scalp',
+        'hair',
+        'chest',
+        'back',
+        'underarm',
+        'arms',
+        'hands',
+        'legs',
+        'body',
+        'full_body',
+        'other',
+      ],
     },
-    taken_on: {
-      type: 'string',
-      format: 'date',
-    },
-    caption: {
+    taken_on: { type: 'string', format: 'date' },
+    service_label: {
       type: 'string',
       nullable: true,
+      description: "Its visit's service (P26)",
     },
-    display_name: {
-      type: 'string',
-      nullable: true,
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
@@ -1110,58 +970,49 @@ export const patientImagesRecordSchema = {
 export const patientImagesRecordExample = {
   id: 'pimg_k7x9m2pqr4w8n1v3a1b2c',
   patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
-  appointment_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
+  appointment_id: 'appt_k7x9m2pqr4w8n1v3a1b2c',
+  patient_treatment_id: null,
   album: 'general',
-  file_key: 'Sample file key',
-  file_name: 'Sample file name',
+  stage: 'before',
+  file_key: 'uploads/org_k7x9m2pqr4w8n1v3a1b2c/3f1c2b7e.jpg',
+  file_name: 'cheek-left.jpg',
+  display_name: 'Left cheek',
+  caption: null,
   body_part: 'face',
   taken_on: '2026-10-08',
-  caption: 'Sample caption',
-  display_name: 'Sample display name',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  service_label: 'Hydrafacial',
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
 };
 
-/** `PatientReportOutput`. */
+/** A photo list's `meta.album_counts` — the live photos per album you can see (P26). */
+export const patientImageAlbumCountsSchema = {
+  type: 'object',
+  properties: {
+    general: { type: 'integer' },
+    lhr: { type: 'integer' },
+    private: { type: 'integer', description: 'Only with patient:private_album:read' },
+  },
+};
+
+/** `PatientReportOutput` — a lab, scan or consent document (launch #133, routes-final 7.G.6). */
 export const patientReportsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'prep_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    patient_id: {
-      type: 'string',
-    },
-    type: {
-      type: 'string',
-      enum: ['lab', 'scan', 'consent', 'other'],
-    },
-    name: {
-      type: 'string',
-    },
-    report_date: {
-      type: 'string',
-      format: 'date',
-    },
+    id: { type: 'string', example: 'prep_k7x9m2pqr4w8n1v3a1b2c' },
+    patient_id: { type: 'string' },
+    type: { type: 'string', enum: ['lab', 'scan', 'consent', 'other'] },
+    name: { type: 'string', maxLength: 120 },
+    report_date: { type: 'string', format: 'date' },
     file_keys: {
       type: 'array',
-      items: {
-        type: 'string',
-      },
+      maxItems: 10,
+      items: { type: 'string' },
+      description: 'Confirmed uploads of the organization (P29)',
     },
-    notes: {
-      type: 'string',
-      nullable: true,
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    notes: { type: 'string', maxLength: 1000, nullable: true },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
@@ -1170,46 +1021,12 @@ export const patientReportsRecordExample = {
   id: 'prep_k7x9m2pqr4w8n1v3a1b2c',
   patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
   type: 'lab',
-  name: 'Sample name',
+  name: 'CBC',
   report_date: '2026-10-08',
-  file_keys: ['sample'],
-  notes: 'Sample notes',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
-};
-
-/** `PatientNoteOutput`. */
-export const patientNotesRecordSchema = {
-  type: 'object',
-  properties: {
-    id: {
-      type: 'string',
-      example: 'pnote_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    patient_id: {
-      type: 'string',
-    },
-    body: {
-      type: 'string',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-  },
-};
-
-/** Example `PatientNoteOutput`. */
-export const patientNotesRecordExample = {
-  id: 'pnote_k7x9m2pqr4w8n1v3a1b2c',
-  patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
-  body: 'Sample body',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  file_keys: ['uploads/org_k7x9m2pqr4w8n1v3a1b2c/9a2d4c1f.pdf'],
+  notes: null,
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
 };
 
 /** `InvoiceOutput`. */

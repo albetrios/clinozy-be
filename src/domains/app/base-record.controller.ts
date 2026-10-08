@@ -160,6 +160,7 @@ export class BaseRecordController<Output extends { id: string }> {
         has_more: page.has_more,
         ...(page.total === null ? {} : { estimated_total: page.total }),
       },
+      page.meta,
     );
   };
 

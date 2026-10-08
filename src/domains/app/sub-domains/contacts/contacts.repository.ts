@@ -294,13 +294,22 @@ export class ContactsRepository extends BaseRecordRepository {
     return new Map(rows.map(({ contact_public_id, ...file }) => [contact_public_id, file]));
   }
 
-  /** The internal id of the contact's live patient file, or null (A14 — does the check-in open one?). */
-  async findPatientFileId(contactId: number): Promise<number | null> {
+  /**
+   * The contact's live patient file (P1 — at most one), or null: whether the check-in opens one
+   * (A14), whether another may be added or restored (`contact_is_patient`).
+   */
+  async findPatientFile(
+    contactId: number,
+  ): Promise<{ id: number; public_id: string; patient_number: number } | null> {
     const rows = await getRequestDatabase()
-      .select({ id: patients.id })
+      .select({
+        id: patients.id,
+        public_id: patients.public_id,
+        patient_number: patients.patient_number,
+      })
       .from(patients)
       .where(and(eq(patients.contact_id, contactId), isNull(patients.deleted_at)))
       .limit(1);
-    return rows[0]?.id ?? null;
+    return rows[0] ?? null;
   }
 }

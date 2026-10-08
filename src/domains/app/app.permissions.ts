@@ -33,6 +33,8 @@ export const APP_PERMISSIONS = {
   PATIENT_CREATE: 'patient:create',
   PATIENT_UPDATE: 'patient:update',
   PATIENT_DELETE: 'patient:delete',
+  /** Download the patients CSV (launch #133, P5). */
+  PATIENT_EXPORT: 'patient:export',
   LEAD_READ: 'lead:read',
   LEAD_CREATE: 'lead:create',
   LEAD_UPDATE: 'lead:update',
@@ -45,10 +47,11 @@ export const APP_PERMISSIONS = {
   APPOINTMENT_DELETE: 'appointment:delete',
   /** Download the appointments CSV (launch #132, A9). */
   APPOINTMENT_EXPORT: 'appointment:export',
-  PRESCRIPTION_READ: 'prescription:read',
-  PRESCRIPTION_CREATE: 'prescription:create',
-  PRESCRIPTION_UPDATE: 'prescription:update',
-  PRESCRIPTION_DELETE: 'prescription:delete',
+  // Prescriptions (launch #133, P5, P27): the doctors' own code set in the Patients row.
+  PATIENT_PRESCRIPTION_READ: 'patient_prescription:read',
+  PATIENT_PRESCRIPTION_CREATE: 'patient_prescription:create',
+  PATIENT_PRESCRIPTION_UPDATE: 'patient_prescription:update',
+  PATIENT_PRESCRIPTION_DELETE: 'patient_prescription:delete',
   INVOICE_READ: 'invoice:read',
   INVOICE_CREATE: 'invoice:create',
   INVOICE_UPDATE: 'invoice:update',
@@ -114,8 +117,8 @@ export const APP_PERMISSIONS = {
   PAYMENT_REVERSE_SETTLED: 'payment:reverse_settled',
   REFUND_CREATE: 'refund:create',
   SALE_VOID: 'sale:void',
-  CLINICAL_RECORD_READ: 'clinical_record:read',
+  PATIENT_CLINICAL_RECORD_READ: 'patient:clinical_record:read',
   LIST_EXPORT: 'list:export',
   TASK_RULE_UPDATE: 'task_rule:update',
-  PRIVATE_ALBUM_READ: 'private_album:read',
+  PATIENT_PRIVATE_ALBUM_READ: 'patient:private_album:read',
 } as const;

@@ -1,0 +1,182 @@
+import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
+import { requireConfirmedUploads } from '@/domains/app/base-record.service.js';
+import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
+import { ContactActivitiesRepository } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.repository.js';
+import { patientFileValueLabel } from '@/domains/app/sub-domains/patients/patients.constants.js';
+import {
+  assertAppointmentOfPatient,
+  writePatientFileActivity,
+} from '@/domains/app/sub-domains/patients/patients.rules.js';
+import { TreatmentsRepository } from '@/domains/app/sub-domains/treatments/treatments.repository.js';
+import { fieldValidationError, ForbiddenError } from '@/shared/errors/index.js';
+import { calendarDateInTimeZone } from '@/shared/utils/validation/record-fields.util.js';
+import {
+  PATIENT_IMAGE_ALBUM,
+  PATIENT_IMAGE_ALBUM_VALUES,
+  PATIENT_IMAGE_FILE_NAME_MAX,
+  PATIENT_IMAGE_MAX_BYTES,
+  PATIENT_IMAGE_MIME_TYPES,
+} from './patient-images.constants.js';
+import type { PatientImagesRepository } from './patient-images.repository.js';
+
+const contactActivitiesRepository = new ContactActivitiesRepository();
+const treatmentsRepository = new TreatmentsRepository();
+
+/** The albums every holder of the clinical code sees (P23). */
+const SHARED_ALBUMS = PATIENT_IMAGE_ALBUM_VALUES.filter(
+  (album) => album !== PATIENT_IMAGE_ALBUM.PRIVATE,
+);
+
+/** Refuses a photo into the private album from a caller without the album code (P23). */
+async function assertAlbumAllowed(album: unknown, context: BaseRecordWriteContext): Promise<void> {
+  if (album !== PATIENT_IMAGE_ALBUM.PRIVATE) return;
+  if (!(await context.can(APP_PERMISSIONS.PATIENT_PRIVATE_ALBUM_READ))) {
+    throw new ForbiddenError('errors:fieldNeedsPermission', {
+      field: 'album',
+      permission: APP_PERMISSIONS.PATIENT_PRIVATE_ALBUM_READ,
+    }).withReason('field_permission_required');
+  }
+}
+
+/** The organization's today — `taken_on`'s default and its latest day (P25). */
+async function organizationToday(context: BaseRecordWriteContext): Promise<string> {
+  const { timezone } = await context.ports.organizationSettings(context.scope);
+  return calendarDateInTimeZone(timezone);
+}
+
+/** `taken_on` is not in the future (P25) — else a 400. */
+async function assertTakenOnNotFuture(
+  takenOn: unknown,
+  context: BaseRecordWriteContext,
+): Promise<void> {
+  if (typeof takenOn === 'string' && takenOn > (await organizationToday(context))) {
+    throw fieldValidationError({
+      field: 'taken_on',
+      messageKey: 'errors:validation.patientImageTakenOnFuture',
+    });
+  }
+}
+
+/** The session is the patient's (P24, TR3) — else a 400 on `patient_treatment_id`. */
+async function assertTreatmentOfPatient(treatmentId: unknown, patientId: number): Promise<void> {
+  if (typeof treatmentId !== 'number') return;
+  const treatment = await treatmentsRepository.findById(treatmentId);
+  if (treatment?.patient_id !== patientId) {
+    throw fieldValidationError({
+      field: 'patient_treatment_id',
+      messageKey: 'errors:validation.patientTreatmentOtherPatient',
+    });
+  }
+}
+
+/**
+ * The upload is a confirmed JPG or PNG of the organization, up to 15 MB (P19, P25) — else a 400 on
+ * `file_key`; returns its file name, cut to the column.
+ */
+async function requirePhotoUpload(
+  fileKey: string,
+  context: BaseRecordWriteContext,
+): Promise<string> {
+  const [upload] = await requireConfirmedUploads({
+    fileKeys: [fileKey],
+    field: 'file_key',
+    context,
+  });
+  if (!(upload && PATIENT_IMAGE_MIME_TYPES.includes(upload.mimeType))) {
+    throw fieldValidationError({
+      field: 'file_key',
+      messageKey: 'errors:validation.patientImageUploadType',
+    });
+  }
+  if (upload.fileSize > PATIENT_IMAGE_MAX_BYTES) {
+    throw fieldValidationError({
+      field: 'file_key',
+      messageKey: 'errors:validation.patientImageUploadTooLarge',
+    });
+  }
+  return upload.fileName.slice(0, PATIENT_IMAGE_FILE_NAME_MAX);
+}
+
+/** The links a photo's write checks: its visit (checked in or completed) and its session. */
+async function assertLinks(values: Record<string, unknown>, patientId: number): Promise<void> {
+  if ('appointment_id' in values) {
+    await assertAppointmentOfPatient({
+      appointmentId: values.appointment_id,
+      patientId,
+      requireVisit: true,
+    });
+  }
+  if ('patient_treatment_id' in values) {
+    await assertTreatmentOfPatient(values.patient_treatment_id, patientId);
+  }
+}
+
+/**
+ * The patient image rules (launch ROUTE #133, routes-final 7.F): the private album is its holders'
+ * alone, the upload is a confirmed photo filed once, the links are the patient's, and a new photo
+ * shows in the contact's activity.
+ *
+ * @remarks
+ * - **Algorithm:** the read scope keeps callers without `patient:private_album:read` to the shared
+ *   albums on every list, read, write and restore (a private photo is a 404 to them, P23); a create
+ *   or move into the private album needs the code. A create checks the upload (P19, P25 — its
+ *   file name is the upload's), defaults `taken_on` to the organization's today; a create or change
+ *   refuses a future `taken_on`, another contact's or an unvisited appointment, another patient's
+ *   session. After a create a `system` entry links the photo in the contact's activity — a private
+ *   one marked so only the album's holders see it; a move in or out of the album re-marks its
+ *   entries (M10, PC16). `decorate` adds each visit's `service_label` (one read per page).
+ * - **Failure modes:** `ForbiddenError('field_permission_required')`; `ValidationError` on
+ *   `file_key`, `taken_on`, `appointment_id` or `patient_treatment_id`.
+ */
+export function createPatientImagesRules(repository: PatientImagesRepository): BaseRecordRules {
+  return {
+    readScope: async (can) =>
+      (await can(APP_PERMISSIONS.PATIENT_PRIVATE_ALBUM_READ))
+        ? undefined
+        : { album: SHARED_ALBUMS },
+    prepareCreate: async (values, context) => {
+      await assertAlbumAllowed(values.album, context);
+      values.file_name = await requirePhotoUpload(String(values.file_key), context);
+      values.taken_on ??= await organizationToday(context);
+      await assertTakenOnNotFuture(values.taken_on, context);
+      await assertLinks(values, values.patient_id as number);
+    },
+    prepareUpdate: async (values, existing, context) => {
+      await assertAlbumAllowed(values.album, context);
+      await assertTakenOnNotFuture(values.taken_on, context);
+      await assertLinks(values, existing.patient_id as number);
+    },
+    afterWrite: async (row, change, context) => {
+      const isPrivate = row.album === PATIENT_IMAGE_ALBUM.PRIVATE;
+      if (change.kind === 'create') {
+        await writePatientFileActivity({
+          context,
+          patientId: row.patient_id as number,
+          body: `Photo added: ${patientFileValueLabel(String(row.album))} album`,
+          link: { patient_image_id: row.id },
+          isPrivatePhoto: isPrivate,
+        });
+      } else if (change.kind === 'update' && change.before?.album !== row.album) {
+        await contactActivitiesRepository.setPrivatePhoto({
+          patientImageId: row.id,
+          isPrivate,
+        });
+      }
+    },
+    decorate: async (outputs) => {
+      const appointmentIds = [
+        ...new Set(
+          outputs.flatMap((output) =>
+            output.appointment_id ? [String(output.appointment_id)] : [],
+          ),
+        ),
+      ];
+      const labels = await repository.findServiceLabels(appointmentIds);
+      for (const output of outputs) {
+        output.service_label = output.appointment_id
+          ? (labels.get(String(output.appointment_id)) ?? null)
+          : null;
+      }
+    },
+  };
+}

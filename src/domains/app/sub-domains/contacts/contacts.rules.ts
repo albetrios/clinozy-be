@@ -97,7 +97,7 @@ async function organizationToday(context: BaseRecordWriteContext): Promise<strin
 async function isInUse(repository: ContactsRepository, contactId: number): Promise<boolean> {
   return (
     (await leadsRepository.hasLiveLeadForContact(contactId)) ||
-    (await repository.findPatientFileId(contactId)) !== null ||
+    (await repository.findPatientFile(contactId)) !== null ||
     (await appointmentsRepository.hasLiveAppointmentForContact(contactId))
   );
 }

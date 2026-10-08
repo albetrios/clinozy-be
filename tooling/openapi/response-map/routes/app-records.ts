@@ -210,11 +210,6 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.patientsRecordSchema, schemas.patientsRecordExample),
     example: null,
   },
-  'GET /api/v1/app/patients/{patient_id}/timeline': {
-    statusCode: 200,
-    schema: wrapSuccess({ type: 'object', additionalProperties: true }, {}),
-    example: null,
-  },
   'DELETE /api/v1/app/patients/{patient_id}': { statusCode: 204, schema: null, example: null },
   'POST /api/v1/app/patients/{patient_id}/restore': {
     statusCode: 200,
@@ -362,32 +357,6 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.appointmentsRecordSchema, schemas.appointmentsRecordExample),
     example: null,
   },
-  'GET /api/v1/app/diagnoses': {
-    statusCode: 200,
-    schema: wrapPaginated(schemas.diagnosesRecordSchema, [schemas.diagnosesRecordExample]),
-    example: null,
-  },
-  'POST /api/v1/app/diagnoses': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.diagnosesRecordSchema, schemas.diagnosesRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/diagnoses/{diagnosis_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.diagnosesRecordSchema, schemas.diagnosesRecordExample),
-    example: null,
-  },
-  'PATCH /api/v1/app/diagnoses/{diagnosis_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.diagnosesRecordSchema, schemas.diagnosesRecordExample),
-    example: null,
-  },
-  'DELETE /api/v1/app/diagnoses/{diagnosis_id}': { statusCode: 204, schema: null, example: null },
-  'POST /api/v1/app/diagnoses/{diagnosis_id}/restore': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.diagnosesRecordSchema, schemas.diagnosesRecordExample),
-    example: null,
-  },
   'GET /api/v1/app/patients/{patient_id}/clinical-notes': {
     statusCode: 200,
     schema: wrapPaginated(schemas.patientClinicalNotesRecordSchema, [
@@ -403,7 +372,7 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     ),
     example: null,
   },
-  'GET /api/v1/app/patient-clinical-notes/{patient_clinical_note_id}': {
+  'GET /api/v1/app/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}': {
     statusCode: 200,
     schema: wrapSuccess(
       schemas.patientClinicalNotesRecordSchema,
@@ -411,57 +380,76 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     ),
     example: null,
   },
-  'DELETE /api/v1/app/patient-clinical-notes/{patient_clinical_note_id}': {
+  'DELETE /api/v1/app/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}': {
     statusCode: 204,
     schema: null,
     example: null,
   },
-  'POST /api/v1/app/patient-clinical-notes/{patient_clinical_note_id}/restore': {
+  'POST /api/v1/app/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}/restore': {
     statusCode: 200,
     schema: wrapSuccess(
       schemas.patientClinicalNotesRecordSchema,
       schemas.patientClinicalNotesRecordExample,
     ),
+    example: null,
+  },
+  'GET /api/v1/app/patient-prescriptions': {
+    statusCode: 200,
+    schema: wrapPaginated(schemas.patientPrescriptionsRecordSchema, [
+      schemas.patientPrescriptionsRecordExample,
+    ]),
     example: null,
   },
   'GET /api/v1/app/patients/{patient_id}/prescriptions': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.prescriptionsRecordSchema, [schemas.prescriptionsRecordExample]),
+    schema: wrapPaginated(schemas.patientPrescriptionsRecordSchema, [
+      schemas.patientPrescriptionsRecordExample,
+    ]),
     example: null,
   },
   'POST /api/v1/app/patients/{patient_id}/prescriptions': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.prescriptionsRecordSchema, schemas.prescriptionsRecordExample),
+    schema: wrapSuccess(
+      schemas.patientPrescriptionsRecordSchema,
+      schemas.patientPrescriptionsRecordExample,
+    ),
     example: null,
   },
-  'GET /api/v1/app/prescriptions': {
+  'GET /api/v1/app/patients/{patient_id}/prescriptions/{patient_prescription_id}': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.prescriptionsRecordSchema, [schemas.prescriptionsRecordExample]),
+    schema: wrapSuccess(
+      schemas.patientPrescriptionsRecordSchema,
+      schemas.patientPrescriptionsRecordExample,
+    ),
     example: null,
   },
-  'GET /api/v1/app/prescriptions/{prescription_id}': {
+  'PATCH /api/v1/app/patients/{patient_id}/prescriptions/{patient_prescription_id}': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.prescriptionsRecordSchema, schemas.prescriptionsRecordExample),
+    schema: wrapSuccess(
+      schemas.patientPrescriptionsRecordSchema,
+      schemas.patientPrescriptionsRecordExample,
+    ),
     example: null,
   },
-  'PATCH /api/v1/app/prescriptions/{prescription_id}': {
+  'POST /api/v1/app/patients/{patient_id}/prescriptions/{patient_prescription_id}/approve': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.prescriptionsRecordSchema, schemas.prescriptionsRecordExample),
+    schema: wrapSuccess(
+      schemas.patientPrescriptionsRecordSchema,
+      schemas.patientPrescriptionsRecordExample,
+    ),
     example: null,
   },
-  'POST /api/v1/app/prescriptions/{prescription_id}/approve': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.prescriptionsRecordSchema, schemas.prescriptionsRecordExample),
-    example: null,
-  },
-  'DELETE /api/v1/app/prescriptions/{prescription_id}': {
+  'DELETE /api/v1/app/patients/{patient_id}/prescriptions/{patient_prescription_id}': {
     statusCode: 204,
     schema: null,
     example: null,
   },
-  'POST /api/v1/app/prescriptions/{prescription_id}/restore': {
+  'POST /api/v1/app/patients/{patient_id}/prescriptions/{patient_prescription_id}/restore': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.prescriptionsRecordSchema, schemas.prescriptionsRecordExample),
+    schema: wrapSuccess(
+      schemas.patientPrescriptionsRecordSchema,
+      schemas.patientPrescriptionsRecordExample,
+    ),
     example: null,
   },
   'GET /api/v1/app/prescription-kits': {
@@ -508,9 +496,55 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     ),
     example: null,
   },
+  'GET /api/v1/app/patient-diagnoses': {
+    statusCode: 200,
+    schema: wrapPaginated(schemas.patientDiagnosesRecordSchema, [
+      schemas.patientDiagnosesRecordExample,
+    ]),
+    example: null,
+  },
+  'POST /api/v1/app/patient-diagnoses': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      schemas.patientDiagnosesRecordSchema,
+      schemas.patientDiagnosesRecordExample,
+    ),
+    example: null,
+  },
+  'GET /api/v1/app/patient-diagnoses/{patient_diagnosis_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      schemas.patientDiagnosesRecordSchema,
+      schemas.patientDiagnosesRecordExample,
+    ),
+    example: null,
+  },
+  'PATCH /api/v1/app/patient-diagnoses/{patient_diagnosis_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      schemas.patientDiagnosesRecordSchema,
+      schemas.patientDiagnosesRecordExample,
+    ),
+    example: null,
+  },
+  'DELETE /api/v1/app/patient-diagnoses/{patient_diagnosis_id}': {
+    statusCode: 204,
+    schema: null,
+    example: null,
+  },
+  'POST /api/v1/app/patient-diagnoses/{patient_diagnosis_id}/restore': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      schemas.patientDiagnosesRecordSchema,
+      schemas.patientDiagnosesRecordExample,
+    ),
+    example: null,
+  },
   'GET /api/v1/app/patients/{patient_id}/images': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.patientImagesRecordSchema, [schemas.patientImagesRecordExample]),
+    schema: wrapPaginated(schemas.patientImagesRecordSchema, [schemas.patientImagesRecordExample], {
+      album_counts: schemas.patientImageAlbumCountsSchema,
+    }),
     example: null,
   },
   'POST /api/v1/app/patients/{patient_id}/images': {
@@ -518,22 +552,22 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.patientImagesRecordSchema, schemas.patientImagesRecordExample),
     example: null,
   },
-  'GET /api/v1/app/patient-images/{patient_image_id}': {
+  'GET /api/v1/app/patients/{patient_id}/images/{patient_image_id}': {
     statusCode: 200,
     schema: wrapSuccess(schemas.patientImagesRecordSchema, schemas.patientImagesRecordExample),
     example: null,
   },
-  'PATCH /api/v1/app/patient-images/{patient_image_id}': {
+  'PATCH /api/v1/app/patients/{patient_id}/images/{patient_image_id}': {
     statusCode: 200,
     schema: wrapSuccess(schemas.patientImagesRecordSchema, schemas.patientImagesRecordExample),
     example: null,
   },
-  'DELETE /api/v1/app/patient-images/{patient_image_id}': {
+  'DELETE /api/v1/app/patients/{patient_id}/images/{patient_image_id}': {
     statusCode: 204,
     schema: null,
     example: null,
   },
-  'POST /api/v1/app/patient-images/{patient_image_id}/restore': {
+  'POST /api/v1/app/patients/{patient_id}/images/{patient_image_id}/restore': {
     statusCode: 200,
     schema: wrapSuccess(schemas.patientImagesRecordSchema, schemas.patientImagesRecordExample),
     example: null,
@@ -550,54 +584,24 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.patientReportsRecordSchema, schemas.patientReportsRecordExample),
     example: null,
   },
-  'GET /api/v1/app/patient-reports/{patient_report_id}': {
+  'GET /api/v1/app/patients/{patient_id}/reports/{patient_report_id}': {
     statusCode: 200,
     schema: wrapSuccess(schemas.patientReportsRecordSchema, schemas.patientReportsRecordExample),
     example: null,
   },
-  'PATCH /api/v1/app/patient-reports/{patient_report_id}': {
+  'PATCH /api/v1/app/patients/{patient_id}/reports/{patient_report_id}': {
     statusCode: 200,
     schema: wrapSuccess(schemas.patientReportsRecordSchema, schemas.patientReportsRecordExample),
     example: null,
   },
-  'DELETE /api/v1/app/patient-reports/{patient_report_id}': {
+  'DELETE /api/v1/app/patients/{patient_id}/reports/{patient_report_id}': {
     statusCode: 204,
     schema: null,
     example: null,
   },
-  'POST /api/v1/app/patient-reports/{patient_report_id}/restore': {
+  'POST /api/v1/app/patients/{patient_id}/reports/{patient_report_id}/restore': {
     statusCode: 200,
     schema: wrapSuccess(schemas.patientReportsRecordSchema, schemas.patientReportsRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/patients/{patient_id}/notes': {
-    statusCode: 200,
-    schema: wrapPaginated(schemas.patientNotesRecordSchema, [schemas.patientNotesRecordExample]),
-    example: null,
-  },
-  'POST /api/v1/app/patients/{patient_id}/notes': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.patientNotesRecordSchema, schemas.patientNotesRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/patient-notes/{patient_note_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.patientNotesRecordSchema, schemas.patientNotesRecordExample),
-    example: null,
-  },
-  'PATCH /api/v1/app/patient-notes/{patient_note_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.patientNotesRecordSchema, schemas.patientNotesRecordExample),
-    example: null,
-  },
-  'DELETE /api/v1/app/patient-notes/{patient_note_id}': {
-    statusCode: 204,
-    schema: null,
-    example: null,
-  },
-  'POST /api/v1/app/patient-notes/{patient_note_id}/restore': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.patientNotesRecordSchema, schemas.patientNotesRecordExample),
     example: null,
   },
   'GET /api/v1/app/invoices': {

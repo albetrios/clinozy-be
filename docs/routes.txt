@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 449
+  Total routes: 442
 ================================================================================
 
 Legend:
@@ -13,7 +13,7 @@ Legend:
 
 ================================================================================
   DOMAIN: APP (/api/v1/app)
-  Routes: 315
+  Routes: 308
 ================================================================================
 
   — Sub Domains —
@@ -95,12 +95,6 @@ Legend:
   GET    /api/v1/app/day-closes/:day_close_id                     200  -    both  PERM: day_close:read
   POST   /api/v1/app/day-closes/:day_close_id/close               200  req  both  PERM: day_close:close
   POST   /api/v1/app/day-closes/:day_close_id/reopen              200  req  both  PERM: day_close:close
-  GET    /api/v1/app/diagnoses                                    200  -    both  PERM: patient:read
-  POST   /api/v1/app/diagnoses                                    200  req  both  PERM: prescription:create
-  GET    /api/v1/app/diagnoses/:diagnosis_id                      200  -    both  PERM: patient:read
-  PATCH  /api/v1/app/diagnoses/:diagnosis_id                      200  -    both  PERM: prescription:update
-  DELETE /api/v1/app/diagnoses/:diagnosis_id                      204  -    both  PERM: prescription:delete
-  POST   /api/v1/app/diagnoses/:diagnosis_id/restore              200  req  both  PERM: prescription:delete
   GET    /api/v1/app/feedback-actions                             200  -    both  PERM: patient:read
   POST   /api/v1/app/feedback-actions                             200  req  both  PERM: patient:update
   GET    /api/v1/app/feedback-actions/:feedback_action_id         200  -    both  PERM: patient:read
@@ -201,25 +195,17 @@ Legend:
   PATCH  /api/v1/app/offers/:offer_id                             200  -    both  PERM: offering:update
   DELETE /api/v1/app/offers/:offer_id                             204  -    both  PERM: offering:delete
   POST   /api/v1/app/offers/:offer_id/restore                     200  req  both  PERM: offering:delete
-  GET    /api/v1/app/patient-clinical-notes/:patient_clinical_note_id  200  -    both  PERM: clinical_record:read
-  DELETE /api/v1/app/patient-clinical-notes/:patient_clinical_note_id  204  -    both  PERM: patient:update
-  POST   /api/v1/app/patient-clinical-notes/:patient_clinical_note_id/restore  200  req  both  PERM: patient:update
-  GET    /api/v1/app/patient-images/:patient_image_id             200  -    both  PERM: clinical_record:read
-  PATCH  /api/v1/app/patient-images/:patient_image_id             200  -    both  PERM: patient:update
-  DELETE /api/v1/app/patient-images/:patient_image_id             204  -    both  PERM: patient:update
-  POST   /api/v1/app/patient-images/:patient_image_id/restore     200  req  both  PERM: patient:update
-  GET    /api/v1/app/patient-notes/:patient_note_id               200  -    both  PERM: patient:read
-  PATCH  /api/v1/app/patient-notes/:patient_note_id               200  -    both  PERM: patient:update
-  DELETE /api/v1/app/patient-notes/:patient_note_id               204  -    both  PERM: patient:update
-  POST   /api/v1/app/patient-notes/:patient_note_id/restore       200  req  both  PERM: patient:update
+  GET    /api/v1/app/patient-diagnoses                            200  -    both  PERM: organization:read
+  POST   /api/v1/app/patient-diagnoses                            200  req  both  PERM: patient_prescription:create
+  GET    /api/v1/app/patient-diagnoses/:patient_diagnosis_id      200  -    both  PERM: organization:read
+  PATCH  /api/v1/app/patient-diagnoses/:patient_diagnosis_id      200  -    both  PERM: patient_prescription:update
+  DELETE /api/v1/app/patient-diagnoses/:patient_diagnosis_id      204  -    both  PERM: patient_prescription:delete
+  POST   /api/v1/app/patient-diagnoses/:patient_diagnosis_id/restore  200  req  both  PERM: patient_prescription:delete
   GET    /api/v1/app/patient-packages/:patient_package_id         200  -    both  PERM: patient:read
   PATCH  /api/v1/app/patient-packages/:patient_package_id         200  -    both  PERM: patient:update
   DELETE /api/v1/app/patient-packages/:patient_package_id         204  -    both  PERM: payment:delete
   POST   /api/v1/app/patient-packages/:patient_package_id/restore  200  req  both  PERM: payment:delete
-  GET    /api/v1/app/patient-reports/:patient_report_id           200  -    both  PERM: patient:read
-  PATCH  /api/v1/app/patient-reports/:patient_report_id           200  -    both  PERM: patient:update
-  DELETE /api/v1/app/patient-reports/:patient_report_id           204  -    both  PERM: patient:update
-  POST   /api/v1/app/patient-reports/:patient_report_id/restore   200  req  both  PERM: patient:update
+  GET    /api/v1/app/patient-prescriptions                        200  -    both  PERM: patient_prescription:read
   GET    /api/v1/app/patients                                     200  -    both  PERM: patient:read
   POST   /api/v1/app/patients                                     200  req  both  PERM: patient:create
   GET    /api/v1/app/patients/:patient_id                         200  -    both  PERM: patient:read
@@ -227,27 +213,40 @@ Legend:
   DELETE /api/v1/app/patients/:patient_id                         204  -    both  PERM: patient:delete
   GET    /api/v1/app/patients/:patient_id/check-ins               200  -    both  PERM: patient:read
   POST   /api/v1/app/patients/:patient_id/check-ins               200  req  both  PERM: patient:update
-  GET    /api/v1/app/patients/:patient_id/clinical-notes          200  -    both  PERM: clinical_record:read
-  POST   /api/v1/app/patients/:patient_id/clinical-notes          200  req  both  PERM: patient:update
-  GET    /api/v1/app/patients/:patient_id/images                  200  -    both  PERM: clinical_record:read
-  POST   /api/v1/app/patients/:patient_id/images                  200  req  both  PERM: patient:update
-  GET    /api/v1/app/patients/:patient_id/notes                   200  -    both  PERM: patient:read
-  POST   /api/v1/app/patients/:patient_id/notes                   200  req  both  PERM: patient:update
+  GET    /api/v1/app/patients/:patient_id/clinical-notes          200  -    both  AUTH
+  POST   /api/v1/app/patients/:patient_id/clinical-notes          200  req  both  AUTH
+  GET    /api/v1/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id  200  -    both  AUTH
+  DELETE /api/v1/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id  204  -    both  AUTH
+  POST   /api/v1/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id/restore  200  req  both  AUTH
+  GET    /api/v1/app/patients/:patient_id/images                  200  -    both  AUTH
+  POST   /api/v1/app/patients/:patient_id/images                  200  req  both  AUTH
+  GET    /api/v1/app/patients/:patient_id/images/:patient_image_id  200  -    both  AUTH
+  PATCH  /api/v1/app/patients/:patient_id/images/:patient_image_id  200  -    both  AUTH
+  DELETE /api/v1/app/patients/:patient_id/images/:patient_image_id  204  -    both  AUTH
+  POST   /api/v1/app/patients/:patient_id/images/:patient_image_id/restore  200  req  both  AUTH
   GET    /api/v1/app/patients/:patient_id/offering-suggestions    200  -    both  PERM: patient:read
   POST   /api/v1/app/patients/:patient_id/offering-suggestions    200  req  both  PERM: patient:update
   GET    /api/v1/app/patients/:patient_id/packages                200  -    both  PERM: patient:read
   POST   /api/v1/app/patients/:patient_id/packages                200  req  both  PERM: payment:create
-  GET    /api/v1/app/patients/:patient_id/prescriptions           200  -    both  PERM: prescription:read
-  POST   /api/v1/app/patients/:patient_id/prescriptions           200  req  both  PERM: prescription:create
-  GET    /api/v1/app/patients/:patient_id/reports                 200  -    both  PERM: patient:read
-  POST   /api/v1/app/patients/:patient_id/reports                 200  req  both  PERM: patient:update
+  GET    /api/v1/app/patients/:patient_id/prescriptions           200  -    both  PERM: patient_prescription:read
+  POST   /api/v1/app/patients/:patient_id/prescriptions           200  req  both  PERM: patient_prescription:create
+  GET    /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id  200  -    both  PERM: patient_prescription:read
+  PATCH  /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id  200  -    both  PERM: patient_prescription:update
+  DELETE /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id  204  -    both  PERM: patient_prescription:delete
+  POST   /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id/approve  200  req  both  PERM: patient_prescription:update
+  POST   /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id/restore  200  req  both  PERM: patient_prescription:delete
+  GET    /api/v1/app/patients/:patient_id/reports                 200  -    both  AUTH
+  POST   /api/v1/app/patients/:patient_id/reports                 200  req  both  AUTH
+  GET    /api/v1/app/patients/:patient_id/reports/:patient_report_id  200  -    both  AUTH
+  PATCH  /api/v1/app/patients/:patient_id/reports/:patient_report_id  200  -    both  AUTH
+  DELETE /api/v1/app/patients/:patient_id/reports/:patient_report_id  204  -    both  AUTH
+  POST   /api/v1/app/patients/:patient_id/reports/:patient_report_id/restore  200  req  both  AUTH
   POST   /api/v1/app/patients/:patient_id/restore                 200  req  both  PERM: patient:delete
   GET    /api/v1/app/patients/:patient_id/reviews                 200  -    both  PERM: review:read
   POST   /api/v1/app/patients/:patient_id/reviews                 200  req  both  PERM: review:create
-  GET    /api/v1/app/patients/:patient_id/timeline                200  -    both  PERM: patient:read
   GET    /api/v1/app/patients/:patient_id/treatments              200  -    both  PERM: patient:read
   POST   /api/v1/app/patients/:patient_id/treatments              200  req  both  PERM: treatment:create
-  GET    /api/v1/app/patients/exports                             200  -    both  PERM: list:export
+  GET    /api/v1/app/patients/exports                             200  -    both  PERM: patient:export
   GET    /api/v1/app/payments                                     200  -    both  PERM: payment:read
   POST   /api/v1/app/payments                                     200  req  both  PERM: payment:create
   GET    /api/v1/app/payments/:payment_id                         200  -    both  PERM: payment:read
@@ -262,18 +261,12 @@ Legend:
   PATCH  /api/v1/app/pending-credits/:pending_credit_id           200  -    both  PERM: payment:update
   DELETE /api/v1/app/pending-credits/:pending_credit_id           204  -    both  PERM: payment:delete
   POST   /api/v1/app/pending-credits/:pending_credit_id/restore   200  req  both  PERM: payment:delete
-  GET    /api/v1/app/prescription-kits                            200  -    both  PERM: prescription:create
-  POST   /api/v1/app/prescription-kits                            200  req  both  PERM: prescription:create
-  GET    /api/v1/app/prescription-kits/:prescription_kit_id       200  -    both  PERM: prescription:create
-  PATCH  /api/v1/app/prescription-kits/:prescription_kit_id       200  -    both  PERM: prescription:create
-  DELETE /api/v1/app/prescription-kits/:prescription_kit_id       204  -    both  PERM: prescription:create
-  POST   /api/v1/app/prescription-kits/:prescription_kit_id/restore  200  req  both  PERM: prescription:create
-  GET    /api/v1/app/prescriptions                                200  -    both  PERM: prescription:read
-  GET    /api/v1/app/prescriptions/:prescription_id               200  -    both  PERM: prescription:read
-  PATCH  /api/v1/app/prescriptions/:prescription_id               200  -    both  PERM: prescription:update
-  DELETE /api/v1/app/prescriptions/:prescription_id               204  -    both  PERM: prescription:delete
-  POST   /api/v1/app/prescriptions/:prescription_id/approve       200  req  both  PERM: prescription:update
-  POST   /api/v1/app/prescriptions/:prescription_id/restore       200  req  both  PERM: prescription:delete
+  GET    /api/v1/app/prescription-kits                            200  -    both  PERM: patient_prescription:create
+  POST   /api/v1/app/prescription-kits                            200  req  both  PERM: patient_prescription:create
+  GET    /api/v1/app/prescription-kits/:prescription_kit_id       200  -    both  PERM: patient_prescription:create
+  PATCH  /api/v1/app/prescription-kits/:prescription_kit_id       200  -    both  PERM: patient_prescription:create
+  DELETE /api/v1/app/prescription-kits/:prescription_kit_id       204  -    both  PERM: patient_prescription:create
+  POST   /api/v1/app/prescription-kits/:prescription_kit_id/restore  200  req  both  PERM: patient_prescription:create
   GET    /api/v1/app/reviews/:review_id                           200  -    both  PERM: review:read
   PATCH  /api/v1/app/reviews/:review_id                           200  -    both  PERM: review:update
   DELETE /api/v1/app/reviews/:review_id                           204  -    both  PERM: review:delete
@@ -540,16 +533,16 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 449
+  Total routes    : 442
   Public          : 16
-  Authenticated   : 51
+  Authenticated   : 68
   Role-guarded    : 9
-  Perm-guarded    : 368
+  Perm-guarded    : 344
   Token-guarded   : 5
   Team-only (O)   : 10
 
 ================================================================================
-  IDEMPOTENCY-REQUIRED WRITES (125) — X-Idempotency-Key required
+  IDEMPOTENCY-REQUIRED WRITES (123) — X-Idempotency-Key required
 ================================================================================
 
   Routes flagged I = req reject a missing or reused key (422); every other write
@@ -583,8 +576,6 @@ Legend:
     POST /api/v1/app/day-closes
     POST /api/v1/app/day-closes/:day_close_id/close
     POST /api/v1/app/day-closes/:day_close_id/reopen
-    POST /api/v1/app/diagnoses
-    POST /api/v1/app/diagnoses/:diagnosis_id/restore
     POST /api/v1/app/feedback-actions
     POST /api/v1/app/feedback-actions/:feedback_action_id/restore
     POST /api/v1/app/invoices
@@ -618,20 +609,22 @@ Legend:
     POST /api/v1/app/offerings/:offering_id/restore
     POST /api/v1/app/offers
     POST /api/v1/app/offers/:offer_id/restore
-    POST /api/v1/app/patient-clinical-notes/:patient_clinical_note_id/restore
-    POST /api/v1/app/patient-images/:patient_image_id/restore
-    POST /api/v1/app/patient-notes/:patient_note_id/restore
+    POST /api/v1/app/patient-diagnoses
+    POST /api/v1/app/patient-diagnoses/:patient_diagnosis_id/restore
     POST /api/v1/app/patient-packages/:patient_package_id/restore
-    POST /api/v1/app/patient-reports/:patient_report_id/restore
     POST /api/v1/app/patients
     POST /api/v1/app/patients/:patient_id/check-ins
     POST /api/v1/app/patients/:patient_id/clinical-notes
+    POST /api/v1/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id/restore
     POST /api/v1/app/patients/:patient_id/images
-    POST /api/v1/app/patients/:patient_id/notes
+    POST /api/v1/app/patients/:patient_id/images/:patient_image_id/restore
     POST /api/v1/app/patients/:patient_id/offering-suggestions
     POST /api/v1/app/patients/:patient_id/packages
     POST /api/v1/app/patients/:patient_id/prescriptions
+    POST /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id/approve
+    POST /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id/restore
     POST /api/v1/app/patients/:patient_id/reports
+    POST /api/v1/app/patients/:patient_id/reports/:patient_report_id/restore
     POST /api/v1/app/patients/:patient_id/restore
     POST /api/v1/app/patients/:patient_id/reviews
     POST /api/v1/app/patients/:patient_id/treatments
@@ -642,8 +635,6 @@ Legend:
     POST /api/v1/app/pending-credits/:pending_credit_id/restore
     POST /api/v1/app/prescription-kits
     POST /api/v1/app/prescription-kits/:prescription_kit_id/restore
-    POST /api/v1/app/prescriptions/:prescription_id/approve
-    POST /api/v1/app/prescriptions/:prescription_id/restore
     POST /api/v1/app/reviews/:review_id/restore
     POST /api/v1/app/stock-counts
     POST /api/v1/app/stock-counts/:stock_count_id/restore
@@ -710,38 +701,38 @@ Legend:
     appointment:create            appointment:delete            appointment:export
     appointment:read              appointment:update            branch:create
     branch:delete                 branch:read                   branch:update
-    clinical_record:read          contact:create                contact:delete
-    contact:read                  contact:update                contact_activity:create
-    contact_activity:delete       contact_activity:read         contact_activity:update
-    day_close:close               day_close:create              day_close:delete
-    day_close:read                day_close:update              invoice:create
-    invoice:delete                invoice:read                  invoice:update
-    lead:create                   lead:delete                   lead:export
-    lead:read                     lead:update                   list:export
-    manufacturer:create           manufacturer:delete           manufacturer:read
-    manufacturer:update           medical_purchase_order:create medical_purchase_order:delete
-    medical_purchase_order:read   medical_purchase_order:update medical_rep:create
-    medical_rep:delete            medical_rep:read              medical_rep:update
-    medical_sale:create           medical_sale:delete           medical_sale:read
-    medical_sale:update           medicine:create               medicine:delete
-    medicine:read                 medicine:update               offering:create
-    offering:delete               offering:export               offering:lower_price:read
-    offering:update               patient:create                patient:delete
-    patient:read                  patient:update                payment:create
+    contact:create                contact:delete                contact:read
+    contact:update                contact_activity:create       contact_activity:delete
+    contact_activity:read         contact_activity:update       day_close:close
+    day_close:create              day_close:delete              day_close:read
+    day_close:update              invoice:create                invoice:delete
+    invoice:read                  invoice:update                lead:create
+    lead:delete                   lead:export                   lead:read
+    lead:update                   list:export                   manufacturer:create
+    manufacturer:delete           manufacturer:read             manufacturer:update
+    medical_purchase_order:create medical_purchase_order:delete medical_purchase_order:read
+    medical_purchase_order:update medical_rep:create            medical_rep:delete
+    medical_rep:read              medical_rep:update            medical_sale:create
+    medical_sale:delete           medical_sale:read             medical_sale:update
+    medicine:create               medicine:delete               medicine:read
+    medicine:update               offering:create               offering:delete
+    offering:export               offering:lower_price:read     offering:update
+    patient:clinical_record:read  patient:create                patient:delete
+    patient:export                patient:private_album:read    patient:read
+    patient:update                patient_prescription:create   patient_prescription:delete
+    patient_prescription:read     patient_prescription:update   payment:create
     payment:delete                payment:read                  payment:reverse_settled
-    payment:update                prescription:create           prescription:delete
-    prescription:read             prescription:update           private_album:read
-    refund:create                 review:create                 review:delete
-    review:read                   review:update                 sale:void
-    stock_item:create             stock_item:delete             stock_item:read
-    stock_item:update             stock_purchase:create         stock_purchase:delete
-    stock_purchase:read           stock_purchase:update         stock_vendor:create
-    stock_vendor:delete           stock_vendor:read             stock_vendor:update
-    supplier:create               supplier:delete               supplier:read
-    supplier:update               task:create                   task:delete
-    task:read                     task:update                   task_rule:update
-    treatment:create              treatment:delete              treatment:read
-    treatment:update
+    payment:update                refund:create                 review:create
+    review:delete                 review:read                   review:update
+    sale:void                     stock_item:create             stock_item:delete
+    stock_item:read               stock_item:update             stock_purchase:create
+    stock_purchase:delete         stock_purchase:read           stock_purchase:update
+    stock_vendor:create           stock_vendor:delete           stock_vendor:read
+    stock_vendor:update           supplier:create               supplier:delete
+    supplier:read                 supplier:update               task:create
+    task:delete                   task:read                     task:update
+    task_rule:update              treatment:create              treatment:delete
+    treatment:read                treatment:update
 
   Global Roles:
     super_admin                   user

@@ -6,34 +6,48 @@ Parent: [app](../../app.overview.md)
 
 ## Purpose
 
-A registered patient (launch ROUTE #13). Table `app.patients`.
+The patient file — the clinical side of a contact (launch ROUTE #133 — routes-final §7): consents,
+allergies, usual doctor, home branch, status, and everything the clinic records about the person's
+care, in the nested sub-domains below. **The person lives on the contact** (P1, P2): the file carries
+`contact_id` only (P3); the timeline is the contact's activity (P8, M10).
 
 ## Layout
 
-| File | Role |
+| File / folder | Role |
 | --- | --- |
-| `patients.schema.ts` | the table, its CHECKs, indexes and RLS policy |
-| `patients.constants.ts` | value lists the CHECKs and validators share |
-| `patients.{dto,validator,serializer,types}.ts` | request shapes, parsing, the response |
-| `patients.repository.ts` / `.service.ts` / `.controller.ts` | the shared app record layers on this table |
-| `patients.routes.ts` | the routes below |
+| `patients.schema.ts` | `app.patients` — one live file per contact (`idx_patients_organization_contact_unique`), the counter, the K8 usual doctor, RLS without a retention arm (never purged, P7) |
+| `patients.constants.ts` | types, statuses, conversion, the clinical-list limits, the patient file's one body-part list (TR8), `PT` |
+| `patients.{dto,validator,serializer,types}.ts` | request shapes (a contact or an inline new one), the list's `q` (`PT-0412`, `#412`, the contact's text), the response, the export row |
+| `patients.rules.ts` | one file per contact, the usual doctor on the contact's team; the shared patient-file helpers — the same-patient visit check (TR3), the `system` entry in the contact's activity (M10) |
+| `patients.repository.ts` / `.service.ts` / `.controller.ts` / `.routes.ts` | routes 1–7: the inline contact through the contacts service, the export with the contact's name and number |
+| `patient-clinical-notes/` | 7.B — clinical notes, never edited (routes 8–12) |
+| `patient-prescriptions/` | 7.C — prescriptions, the pharmacy queue, approval (routes 13–20) |
+| `prescription-kits/` | 7.D — a doctor's own reusable lines (routes 21–26) |
+| `patient-diagnoses/` | 7.E — the diagnosis catalogue (routes 27–32) |
+| `patient-images/` | 7.F — photos in three albums (routes 33–38) |
+| `patient-reports/` | 7.G — lab, scan, consent reports (routes 39–44) |
 
 ## Routes
 
 | Route | Gate |
 | --- | --- |
 | `GET /app/patients` | `patient:read` |
-| `GET /app/patients/exports` | `list:export` |
-| `POST /app/patients` | `patient:create` |
+| `GET /app/patients/exports` | `patient:export` (+ `patient:read`) |
+| `POST /app/patients` (for a contact, or with a new one — `contact` needs `contact:create`) | `patient:create` |
 | `GET /app/patients/{patient_id}` | `patient:read` |
 | `PATCH /app/patients/{patient_id}` | `patient:update` |
-| `GET /app/patients/{patient_id}/timeline` | `patient:read` |
 | `DELETE /app/patients/{patient_id}` | `patient:delete` |
 | `POST /app/patients/{patient_id}/restore` | `patient:delete` |
 
 ## Key invariants
 
-- **Tenant isolation:** ENABLE + FORCE RLS on the organization GUC; the retention-cleanup arm (USING only) lets the deleted-record purge (D38) erase rows.
-- **Soft delete carries its reason:** `delete_reason` set exactly when `deleted_at` is; `other` needs a `delete_note`.
-- **References are public ids:** a referenced id that is no live record of the organization is a 400 naming the field.
-- **Stale saves refused (D43):** a `PATCH` with an older `expected_updated_at` is a 409 naming who changed it and when.
+- **One live file per contact (P1):** a second is a 409 `contact_is_patient` naming the one there —
+  on create and restore; the partial unique index backs it up.
+- **Opened at check-in (P10, A14):** a check-in of a contact without a file opens one (home branch
+  and doctor from the visit, `lead_id` the lead), not converted — the first treatment converts (P4).
+- **Never purged (P7):** soft delete only; out of `APP_RECORD_TABLES`; every table pointing at a
+  patient does so `ON DELETE RESTRICT`.
+- **The clinical gates (P14):** clinical notes, photos and reports are read with
+  `patient:clinical_record:read` and written with `patient:update` and it; a private photo also
+  needs `patient:private_album:read` (P23).
+- **Tenant isolation:** ENABLE + FORCE RLS on the organization GUC; not branch-scoped (P6).

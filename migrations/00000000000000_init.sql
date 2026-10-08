@@ -1644,43 +1644,25 @@ CREATE POLICY "contact_members_tenant_isolation" ON "app"."contact_members" AS P
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
 ALTER TABLE "app"."contact_members" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.patients — A registered patient (launch ROUTE #13).
+-- app.patients — the clinical side of a contact (launch ROUTE #133)
 CREATE TABLE IF NOT EXISTS "app"."patients" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
 	"organization_id" bigint NOT NULL,
-	"contact_id" bigint,
 	"patient_number" integer DEFAULT 0 NOT NULL,
-	"first_name" varchar(60) NOT NULL,
-	"last_name" varchar(60),
-	"phone" varchar(16) NOT NULL,
-	"phones" text[] DEFAULT '{}' NOT NULL,
-	"email" varchar(254),
-	"gender" varchar(6),
-	"date_of_birth" date,
-	"address" varchar(240),
+	"contact_id" bigint NOT NULL,
 	"home_branch_id" bigint NOT NULL,
 	"types" text[] DEFAULT '{}' NOT NULL,
 	"status" varchar(8) DEFAULT 'new' NOT NULL,
 	"conversion" varchar(13) DEFAULT 'not_converted' NOT NULL,
-	"referral_source" varchar(9),
-	"referred_by_patient_id" bigint,
-	"referred_by_name" varchar(120),
 	"doctor_membership_id" bigint,
 	"follow_up_at" timestamp with time zone,
 	"notes" text,
 	"lead_id" bigint,
 	"has_data_consent" boolean DEFAULT false NOT NULL,
 	"has_photo_consent" boolean DEFAULT false NOT NULL,
-	"has_marketing_consent" boolean DEFAULT false NOT NULL,
-	"language" varchar(20),
-	"instagram_handles" text[] DEFAULT '{}' NOT NULL,
-	"default_channel" varchar(9),
-	"preferences" jsonb DEFAULT '{}'::jsonb NOT NULL,
-	"household" varchar(240),
 	"allergies" text[] DEFAULT '{}' NOT NULL,
 	"contraindications" text[] DEFAULT '{}' NOT NULL,
-	"search_text" text GENERATED ALWAYS AS ("first_name" || ' ' || coalesce("last_name", '') || ' ' || "phone" || ' ' || coalesce("email", '')) STORED,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
@@ -1689,21 +1671,17 @@ CREATE TABLE IF NOT EXISTS "app"."patients" (
 	"delete_reason" varchar(20),
 	"delete_note" varchar(280),
 	CONSTRAINT "chk_patients_patient_number" CHECK ("app"."patients"."patient_number" > 0),
-	CONSTRAINT "chk_patients_phone" CHECK ("app"."patients"."phone" ~ '^\+91\d{10}$'),
-	CONSTRAINT "chk_patients_gender" CHECK ("app"."patients"."gender" IN ('female', 'male', 'other')),
-	CONSTRAINT "chk_patients_types" CHECK ("app"."patients"."types" <@ ARRAY['aesthetic', 'clinical', 'lhr', 'dental', 'physio', 'gynac']::text[]),
+	CONSTRAINT "chk_patients_types" CHECK ("app"."patients"."types" <@ ARRAY['aesthetic', 'clinical', 'lhr', 'dental', 'physio', 'gynac']::text[] AND cardinality("app"."patients"."types") <= 6),
 	CONSTRAINT "chk_patients_status" CHECK ("app"."patients"."status" IN ('new', 'regular', 'vip', 'inactive')),
 	CONSTRAINT "chk_patients_conversion" CHECK ("app"."patients"."conversion" IN ('converted', 'not_converted')),
-	CONSTRAINT "chk_patients_referral_source" CHECK ("app"."patients"."referral_source" IN ('patient', 'doctor', 'instagram', 'google', 'walk_in', 'other')),
-	CONSTRAINT "chk_patients_default_channel" CHECK ("app"."patients"."default_channel" IN ('whatsapp', 'call', 'sms', 'instagram', 'email', 'note')),
-	CONSTRAINT "chk_patients_referred_by_patient" CHECK ("app"."patients"."referred_by_patient_id" IS NULL OR "app"."patients"."referral_source" = 'patient'),
-	CONSTRAINT "chk_patients_date_of_birth_past" CHECK ("app"."patients"."date_of_birth" IS NULL OR "app"."patients"."date_of_birth" <= CURRENT_DATE),
+	CONSTRAINT "chk_patients_notes" CHECK (char_length("app"."patients"."notes") <= 2000),
+	CONSTRAINT "chk_patients_allergies" CHECK (cardinality("app"."patients"."allergies") <= 30),
+	CONSTRAINT "chk_patients_contraindications" CHECK (cardinality("app"."patients"."contraindications") <= 30),
 	CONSTRAINT "chk_patients_updated" CHECK ("app"."patients"."updated_at" >= "app"."patients"."created_at"),
 	CONSTRAINT "chk_patients_delete_reason" CHECK ("app"."patients"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
 	CONSTRAINT "chk_patients_delete_reason_when_deleted" CHECK (("app"."patients"."deleted_at" IS NULL) = ("app"."patients"."delete_reason" IS NULL)),
 	CONSTRAINT "chk_patients_delete_note_when_other" CHECK ("app"."patients"."delete_reason" IS DISTINCT FROM 'other' OR "app"."patients"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
+);--> statement-breakpoint
 ALTER TABLE "app"."patients" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 -- app.leads — one enquiry and its working state (status, source, interests, owner and hold, follow-up) for a contact; the person lives on the contact (launch ROUTE #131, routes-final §5).
 CREATE TABLE IF NOT EXISTS "app"."leads" (
@@ -1822,8 +1800,8 @@ CREATE TABLE IF NOT EXISTS "app"."appointments" (
 );
 --> statement-breakpoint
 ALTER TABLE "app"."appointments" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.diagnoses — The diagnosis catalogue the consult note picks from (launch ROUTE #23).
-CREATE TABLE IF NOT EXISTS "app"."diagnoses" (
+-- app.patient_diagnoses — the diagnosis catalogue (launch ROUTE #133)
+CREATE TABLE IF NOT EXISTS "app"."patient_diagnoses" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
 	"organization_id" bigint NOT NULL,
@@ -1835,14 +1813,14 @@ CREATE TABLE IF NOT EXISTS "app"."diagnoses" (
 	"deleted_at" timestamp with time zone,
 	"delete_reason" varchar(20),
 	"delete_note" varchar(280),
-	CONSTRAINT "chk_diagnoses_updated" CHECK ("app"."diagnoses"."updated_at" >= "app"."diagnoses"."created_at"),
-	CONSTRAINT "chk_diagnoses_delete_reason" CHECK ("app"."diagnoses"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
-	CONSTRAINT "chk_diagnoses_delete_reason_when_deleted" CHECK (("app"."diagnoses"."deleted_at" IS NULL) = ("app"."diagnoses"."delete_reason" IS NULL)),
-	CONSTRAINT "chk_diagnoses_delete_note_when_other" CHECK ("app"."diagnoses"."delete_reason" IS DISTINCT FROM 'other' OR "app"."diagnoses"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
-ALTER TABLE "app"."diagnoses" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.patient_clinical_notes — One short clinical note item — a complaint, diagnosis, treatment or future suggestion — with who added it and when (launch ROUTE #24).
+	CONSTRAINT "chk_patient_diagnoses_name" CHECK (char_length("app"."patient_diagnoses"."name") > 0),
+	CONSTRAINT "chk_patient_diagnoses_updated" CHECK ("app"."patient_diagnoses"."updated_at" >= "app"."patient_diagnoses"."created_at"),
+	CONSTRAINT "chk_patient_diagnoses_delete_reason" CHECK ("app"."patient_diagnoses"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
+	CONSTRAINT "chk_patient_diagnoses_delete_reason_when_deleted" CHECK (("app"."patient_diagnoses"."deleted_at" IS NULL) = ("app"."patient_diagnoses"."delete_reason" IS NULL)),
+	CONSTRAINT "chk_patient_diagnoses_delete_note_when_other" CHECK ("app"."patient_diagnoses"."delete_reason" IS DISTINCT FROM 'other' OR "app"."patient_diagnoses"."delete_note" IS NOT NULL)
+);--> statement-breakpoint
+ALTER TABLE "app"."patient_diagnoses" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.patient_clinical_notes — one clinical note on a patient file (launch ROUTE #133)
 CREATE TABLE IF NOT EXISTS "app"."patient_clinical_notes" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
@@ -1850,6 +1828,8 @@ CREATE TABLE IF NOT EXISTS "app"."patient_clinical_notes" (
 	"patient_id" bigint NOT NULL,
 	"kind" varchar(20) NOT NULL,
 	"text" varchar(500) NOT NULL,
+	"appointment_id" bigint,
+	"patient_diagnosis_id" bigint,
 	"added_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -1858,16 +1838,17 @@ CREATE TABLE IF NOT EXISTS "app"."patient_clinical_notes" (
 	"deleted_at" timestamp with time zone,
 	"delete_reason" varchar(20),
 	"delete_note" varchar(280),
-	CONSTRAINT "chk_patient_clinical_notes_kind" CHECK ("app"."patient_clinical_notes"."kind" IN ('complaint', 'diagnosis', 'treatment_suggestion', 'future_suggestion')),
+	CONSTRAINT "chk_patient_clinical_notes_kind" CHECK ("app"."patient_clinical_notes"."kind" IN ('complaint', 'finding', 'diagnosis', 'treatment_suggestion', 'future_suggestion', 'safety_check')),
+	CONSTRAINT "chk_patient_clinical_notes_text" CHECK (char_length("app"."patient_clinical_notes"."text") > 0),
+	CONSTRAINT "chk_patient_clinical_notes_patient_diagnosis" CHECK ("app"."patient_clinical_notes"."patient_diagnosis_id" IS NULL OR "app"."patient_clinical_notes"."kind" = 'diagnosis'),
 	CONSTRAINT "chk_patient_clinical_notes_updated" CHECK ("app"."patient_clinical_notes"."updated_at" >= "app"."patient_clinical_notes"."created_at"),
 	CONSTRAINT "chk_patient_clinical_notes_delete_reason" CHECK ("app"."patient_clinical_notes"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
 	CONSTRAINT "chk_patient_clinical_notes_delete_reason_when_deleted" CHECK (("app"."patient_clinical_notes"."deleted_at" IS NULL) = ("app"."patient_clinical_notes"."delete_reason" IS NULL)),
 	CONSTRAINT "chk_patient_clinical_notes_delete_note_when_other" CHECK ("app"."patient_clinical_notes"."delete_reason" IS DISTINCT FROM 'other' OR "app"."patient_clinical_notes"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
+);--> statement-breakpoint
 ALTER TABLE "app"."patient_clinical_notes" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.prescriptions — A doctor's prescription for a patient — a draft until a prescriber approves it (D31) (launch ROUTE #25).
-CREATE TABLE IF NOT EXISTS "app"."prescriptions" (
+-- app.patient_prescriptions — a doctor's prescription, draft until approved (launch ROUTE #133)
+CREATE TABLE IF NOT EXISTS "app"."patient_prescriptions" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
 	"organization_id" bigint NOT NULL,
@@ -1881,9 +1862,10 @@ CREATE TABLE IF NOT EXISTS "app"."prescriptions" (
 	"lab_report" text,
 	"procedure_today" text,
 	"follow_up_date" date,
+	"print_language" varchar(8) DEFAULT 'english' NOT NULL,
 	"status" varchar(8) DEFAULT 'draft' NOT NULL,
 	"approved_at" timestamp with time zone,
-	"print_language" varchar(8) DEFAULT 'english' NOT NULL,
+	"approved_by_membership_id" bigint,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
@@ -1891,21 +1873,26 @@ CREATE TABLE IF NOT EXISTS "app"."prescriptions" (
 	"deleted_at" timestamp with time zone,
 	"delete_reason" varchar(20),
 	"delete_note" varchar(280),
-	CONSTRAINT "chk_prescriptions_prescription_number" CHECK ("app"."prescriptions"."prescription_number" > 0),
-	CONSTRAINT "chk_prescriptions_status" CHECK ("app"."prescriptions"."status" IN ('draft', 'approved')),
-	CONSTRAINT "chk_prescriptions_print_language" CHECK ("app"."prescriptions"."print_language" IN ('english', 'gujarati', 'hindi')),
-	CONSTRAINT "chk_prescriptions_updated" CHECK ("app"."prescriptions"."updated_at" >= "app"."prescriptions"."created_at"),
-	CONSTRAINT "chk_prescriptions_delete_reason" CHECK ("app"."prescriptions"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
-	CONSTRAINT "chk_prescriptions_delete_reason_when_deleted" CHECK (("app"."prescriptions"."deleted_at" IS NULL) = ("app"."prescriptions"."delete_reason" IS NULL)),
-	CONSTRAINT "chk_prescriptions_delete_note_when_other" CHECK ("app"."prescriptions"."delete_reason" IS DISTINCT FROM 'other' OR "app"."prescriptions"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
-ALTER TABLE "app"."prescriptions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.prescription_kits — A doctor's one-tap prescription — a named set of medicine lines (the doctor's own) (launch ROUTE #26).
+	CONSTRAINT "chk_patient_prescriptions_prescription_number" CHECK ("app"."patient_prescriptions"."prescription_number" > 0),
+	CONSTRAINT "chk_patient_prescriptions_items" CHECK (jsonb_typeof("app"."patient_prescriptions"."items") = 'array' AND jsonb_array_length("app"."patient_prescriptions"."items") <= 30),
+	CONSTRAINT "chk_patient_prescriptions_advice" CHECK (char_length("app"."patient_prescriptions"."advice") <= 2000),
+	CONSTRAINT "chk_patient_prescriptions_lab_report" CHECK (char_length("app"."patient_prescriptions"."lab_report") <= 2000),
+	CONSTRAINT "chk_patient_prescriptions_procedure_today" CHECK (char_length("app"."patient_prescriptions"."procedure_today") <= 2000),
+	CONSTRAINT "chk_patient_prescriptions_print_language" CHECK ("app"."patient_prescriptions"."print_language" IN ('english', 'gujarati', 'hindi')),
+	CONSTRAINT "chk_patient_prescriptions_status" CHECK ("app"."patient_prescriptions"."status" IN ('draft', 'approved')),
+	CONSTRAINT "chk_patient_prescriptions_approved" CHECK (("app"."patient_prescriptions"."status" = 'approved') = ("app"."patient_prescriptions"."approved_at" IS NOT NULL AND "app"."patient_prescriptions"."approved_by_membership_id" IS NOT NULL)),
+	CONSTRAINT "chk_patient_prescriptions_updated" CHECK ("app"."patient_prescriptions"."updated_at" >= "app"."patient_prescriptions"."created_at"),
+	CONSTRAINT "chk_patient_prescriptions_delete_reason" CHECK ("app"."patient_prescriptions"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
+	CONSTRAINT "chk_patient_prescriptions_delete_reason_when_deleted" CHECK (("app"."patient_prescriptions"."deleted_at" IS NULL) = ("app"."patient_prescriptions"."delete_reason" IS NULL)),
+	CONSTRAINT "chk_patient_prescriptions_delete_note_when_other" CHECK ("app"."patient_prescriptions"."delete_reason" IS DISTINCT FROM 'other' OR "app"."patient_prescriptions"."delete_note" IS NOT NULL)
+);--> statement-breakpoint
+ALTER TABLE "app"."patient_prescriptions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.prescription_kits — a doctor's own reusable prescription lines (launch ROUTE #133)
 CREATE TABLE IF NOT EXISTS "app"."prescription_kits" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
 	"organization_id" bigint NOT NULL,
+	"owner_membership_id" bigint NOT NULL,
 	"name" varchar(80) NOT NULL,
 	"items" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -1915,27 +1902,30 @@ CREATE TABLE IF NOT EXISTS "app"."prescription_kits" (
 	"deleted_at" timestamp with time zone,
 	"delete_reason" varchar(20),
 	"delete_note" varchar(280),
+	CONSTRAINT "chk_prescription_kits_items" CHECK (jsonb_typeof("app"."prescription_kits"."items") = 'array' AND jsonb_array_length("app"."prescription_kits"."items") <= 30),
+	CONSTRAINT "chk_prescription_kits_name" CHECK (char_length("app"."prescription_kits"."name") > 0),
 	CONSTRAINT "chk_prescription_kits_updated" CHECK ("app"."prescription_kits"."updated_at" >= "app"."prescription_kits"."created_at"),
 	CONSTRAINT "chk_prescription_kits_delete_reason" CHECK ("app"."prescription_kits"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
 	CONSTRAINT "chk_prescription_kits_delete_reason_when_deleted" CHECK (("app"."prescription_kits"."deleted_at" IS NULL) = ("app"."prescription_kits"."delete_reason" IS NULL)),
 	CONSTRAINT "chk_prescription_kits_delete_note_when_other" CHECK ("app"."prescription_kits"."delete_reason" IS DISTINCT FROM 'other' OR "app"."prescription_kits"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
+);--> statement-breakpoint
 ALTER TABLE "app"."prescription_kits" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.patient_images — A clinical photo of a patient (the Private album is Doctor and Admin only) (launch ROUTE #27).
+-- app.patient_images — a photo of a patient in one of three albums (launch ROUTE #133)
 CREATE TABLE IF NOT EXISTS "app"."patient_images" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
 	"organization_id" bigint NOT NULL,
 	"patient_id" bigint NOT NULL,
 	"appointment_id" bigint,
+	"patient_treatment_id" bigint,
 	"album" varchar(7) DEFAULT 'general' NOT NULL,
+	"stage" varchar(6),
 	"file_key" varchar(512) NOT NULL,
 	"file_name" varchar(120) NOT NULL,
-	"body_part" varchar(8),
-	"taken_on" date NOT NULL,
-	"caption" varchar(200),
 	"display_name" varchar(60),
+	"caption" varchar(200),
+	"body_part" varchar(9),
+	"taken_on" date NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
@@ -1944,15 +1934,15 @@ CREATE TABLE IF NOT EXISTS "app"."patient_images" (
 	"delete_reason" varchar(20),
 	"delete_note" varchar(280),
 	CONSTRAINT "chk_patient_images_album" CHECK ("app"."patient_images"."album" IN ('general', 'private', 'lhr')),
-	CONSTRAINT "chk_patient_images_body_part" CHECK ("app"."patient_images"."body_part" IN ('face', 'scalp', 'hair', 'body', 'chest', 'back', 'underarm', 'legs', 'arms', 'other')),
+	CONSTRAINT "chk_patient_images_stage" CHECK ("app"."patient_images"."stage" IN ('before', 'after')),
+	CONSTRAINT "chk_patient_images_body_part" CHECK ("app"."patient_images"."body_part" IN ('face', 'upper_lip', 'chin', 'neck', 'scalp', 'hair', 'chest', 'back', 'underarm', 'arms', 'hands', 'legs', 'body', 'full_body', 'other')),
 	CONSTRAINT "chk_patient_images_updated" CHECK ("app"."patient_images"."updated_at" >= "app"."patient_images"."created_at"),
 	CONSTRAINT "chk_patient_images_delete_reason" CHECK ("app"."patient_images"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
 	CONSTRAINT "chk_patient_images_delete_reason_when_deleted" CHECK (("app"."patient_images"."deleted_at" IS NULL) = ("app"."patient_images"."delete_reason" IS NULL)),
 	CONSTRAINT "chk_patient_images_delete_note_when_other" CHECK ("app"."patient_images"."delete_reason" IS DISTINCT FROM 'other' OR "app"."patient_images"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
+);--> statement-breakpoint
 ALTER TABLE "app"."patient_images" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.patient_reports — A lab, scan or consent document of a patient (launch ROUTE #28).
+-- app.patient_reports — a lab, scan or consent document (launch ROUTE #133)
 CREATE TABLE IF NOT EXISTS "app"."patient_reports" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
@@ -1971,34 +1961,15 @@ CREATE TABLE IF NOT EXISTS "app"."patient_reports" (
 	"delete_reason" varchar(20),
 	"delete_note" varchar(280),
 	CONSTRAINT "chk_patient_reports_type" CHECK ("app"."patient_reports"."type" IN ('lab', 'scan', 'consent', 'other')),
+	CONSTRAINT "chk_patient_reports_name" CHECK (char_length("app"."patient_reports"."name") > 0),
+	CONSTRAINT "chk_patient_reports_file_keys" CHECK (cardinality("app"."patient_reports"."file_keys") <= 10),
+	CONSTRAINT "chk_patient_reports_notes" CHECK (char_length("app"."patient_reports"."notes") <= 1000),
 	CONSTRAINT "chk_patient_reports_updated" CHECK ("app"."patient_reports"."updated_at" >= "app"."patient_reports"."created_at"),
 	CONSTRAINT "chk_patient_reports_delete_reason" CHECK ("app"."patient_reports"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
 	CONSTRAINT "chk_patient_reports_delete_reason_when_deleted" CHECK (("app"."patient_reports"."deleted_at" IS NULL) = ("app"."patient_reports"."delete_reason" IS NULL)),
 	CONSTRAINT "chk_patient_reports_delete_note_when_other" CHECK ("app"."patient_reports"."delete_reason" IS DISTINCT FROM 'other' OR "app"."patient_reports"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
+);--> statement-breakpoint
 ALTER TABLE "app"."patient_reports" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.patient_notes — A timeline note on a patient (launch ROUTE #29).
-CREATE TABLE IF NOT EXISTS "app"."patient_notes" (
-	"id" bigserial PRIMARY KEY NOT NULL,
-	"public_id" varchar(28) NOT NULL,
-	"organization_id" bigint NOT NULL,
-	"patient_id" bigint NOT NULL,
-	"body" text NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"created_by_user_id" bigint,
-	"updated_by_user_id" bigint,
-	"deleted_at" timestamp with time zone,
-	"delete_reason" varchar(20),
-	"delete_note" varchar(280),
-	CONSTRAINT "chk_patient_notes_updated" CHECK ("app"."patient_notes"."updated_at" >= "app"."patient_notes"."created_at"),
-	CONSTRAINT "chk_patient_notes_delete_reason" CHECK ("app"."patient_notes"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
-	CONSTRAINT "chk_patient_notes_delete_reason_when_deleted" CHECK (("app"."patient_notes"."deleted_at" IS NULL) = ("app"."patient_notes"."delete_reason" IS NULL)),
-	CONSTRAINT "chk_patient_notes_delete_note_when_other" CHECK ("app"."patient_notes"."delete_reason" IS DISTINCT FROM 'other' OR "app"."patient_notes"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
-ALTER TABLE "app"."patient_notes" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 -- app.invoices — A bill — clinic, consultation or medical — numbered per branch GSTIN and financial year (D23) (launch ROUTE #30).
 CREATE TABLE IF NOT EXISTS "app"."invoices" (
 	"id" bigserial PRIMARY KEY NOT NULL,
@@ -2106,30 +2077,6 @@ CREATE TABLE IF NOT EXISTS "app"."offering_suggestions" (
 );
 --> statement-breakpoint
 ALTER TABLE "app"."offering_suggestions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.patient_ideas — A patient's suggested next steps — the AI's on a de-identified summary, rules as the fallback (D39) (launch ROUTE #33).
-CREATE TABLE IF NOT EXISTS "app"."patient_ideas" (
-	"id" bigserial PRIMARY KEY NOT NULL,
-	"public_id" varchar(28) NOT NULL,
-	"organization_id" bigint NOT NULL,
-	"patient_id" bigint NOT NULL,
-	"ideas" jsonb DEFAULT '[]'::jsonb NOT NULL,
-	"source" varchar(5) DEFAULT 'rules' NOT NULL,
-	"generated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"created_by_user_id" bigint,
-	"updated_by_user_id" bigint,
-	"deleted_at" timestamp with time zone,
-	"delete_reason" varchar(20),
-	"delete_note" varchar(280),
-	CONSTRAINT "chk_patient_ideas_source" CHECK ("app"."patient_ideas"."source" IN ('ai', 'rules')),
-	CONSTRAINT "chk_patient_ideas_updated" CHECK ("app"."patient_ideas"."updated_at" >= "app"."patient_ideas"."created_at"),
-	CONSTRAINT "chk_patient_ideas_delete_reason" CHECK ("app"."patient_ideas"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
-	CONSTRAINT "chk_patient_ideas_delete_reason_when_deleted" CHECK (("app"."patient_ideas"."deleted_at" IS NULL) = ("app"."patient_ideas"."delete_reason" IS NULL)),
-	CONSTRAINT "chk_patient_ideas_delete_note_when_other" CHECK ("app"."patient_ideas"."delete_reason" IS DISTINCT FROM 'other' OR "app"."patient_ideas"."delete_note" IS NOT NULL)
-);
---> statement-breakpoint
-ALTER TABLE "app"."patient_ideas" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 -- app.payments — Money in or out — a receipt, refund, expense, supplier bill, money back or reversal (launch ROUTE #34).
 CREATE TABLE IF NOT EXISTS "app"."payments" (
 	"id" bigserial PRIMARY KEY NOT NULL,
@@ -3011,42 +2958,6 @@ ALTER TABLE "app"."offer_branches" ADD CONSTRAINT "offer_branches_offer_id_offer
 ALTER TABLE "app"."offer_branches" ADD CONSTRAINT "offer_branches_branch_id_branches_id_fk" FOREIGN KEY ("branch_id") REFERENCES "app"."branches"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offer_branches" ADD CONSTRAINT "offer_branches_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offer_branches" ADD CONSTRAINT "offer_branches_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_home_branch_id_branches_id_fk" FOREIGN KEY ("home_branch_id") REFERENCES "app"."branches"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_referred_by_patient_id_patients_id_fk" FOREIGN KEY ("referred_by_patient_id") REFERENCES "app"."patients"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_doctor_membership_id_memberships_id_fk" FOREIGN KEY ("doctor_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "app"."leads"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."diagnoses" ADD CONSTRAINT "diagnoses_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."diagnoses" ADD CONSTRAINT "diagnoses_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."diagnoses" ADD CONSTRAINT "diagnoses_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_clinical_notes" ADD CONSTRAINT "patient_clinical_notes_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_clinical_notes" ADD CONSTRAINT "patient_clinical_notes_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_clinical_notes" ADD CONSTRAINT "patient_clinical_notes_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_clinical_notes" ADD CONSTRAINT "patient_clinical_notes_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."prescriptions" ADD CONSTRAINT "prescriptions_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."prescriptions" ADD CONSTRAINT "prescriptions_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."prescriptions" ADD CONSTRAINT "prescriptions_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."prescriptions" ADD CONSTRAINT "prescriptions_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."prescriptions" ADD CONSTRAINT "prescriptions_appointment_id_appointments_id_fk" FOREIGN KEY ("appointment_id") REFERENCES "app"."appointments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."prescriptions" ADD CONSTRAINT "prescriptions_doctor_membership_id_memberships_id_fk" FOREIGN KEY ("doctor_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."prescription_kits" ADD CONSTRAINT "prescription_kits_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."prescription_kits" ADD CONSTRAINT "prescription_kits_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."prescription_kits" ADD CONSTRAINT "prescription_kits_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_appointment_id_appointments_id_fk" FOREIGN KEY ("appointment_id") REFERENCES "app"."appointments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_reports" ADD CONSTRAINT "patient_reports_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_reports" ADD CONSTRAINT "patient_reports_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_reports" ADD CONSTRAINT "patient_reports_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_reports" ADD CONSTRAINT "patient_reports_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_notes" ADD CONSTRAINT "patient_notes_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_notes" ADD CONSTRAINT "patient_notes_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_notes" ADD CONSTRAINT "patient_notes_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_notes" ADD CONSTRAINT "patient_notes_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."invoices" ADD CONSTRAINT "invoices_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."invoices" ADD CONSTRAINT "invoices_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."invoices" ADD CONSTRAINT "invoices_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -3056,7 +2967,7 @@ ALTER TABLE "app"."invoice_team_memberships" ADD CONSTRAINT "invoice_team_member
 ALTER TABLE "app"."invoice_team_memberships" ADD CONSTRAINT "invoice_team_memberships_team_membership_id_memberships_id_fk" FOREIGN KEY ("team_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."invoice_team_memberships" ADD CONSTRAINT "invoice_team_memberships_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."invoice_team_memberships" ADD CONSTRAINT "invoice_team_memberships_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."invoices" ADD CONSTRAINT "invoices_prescription_id_prescriptions_id_fk" FOREIGN KEY ("prescription_id") REFERENCES "app"."prescriptions"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."invoices" ADD CONSTRAINT "invoices_prescription_id_patient_prescriptions_id_fk" FOREIGN KEY ("prescription_id") REFERENCES "app"."patient_prescriptions"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."invoices" ADD CONSTRAINT "invoices_medical_contact_id_medical_contacts_id_fk" FOREIGN KEY ("medical_contact_id") REFERENCES "app"."medical_contacts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."invoices" ADD CONSTRAINT "invoices_medical_sale_id_medical_sales_id_fk" FOREIGN KEY ("medical_sale_id") REFERENCES "app"."medical_sales"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patient_packages" ADD CONSTRAINT "patient_packages_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -3071,10 +2982,6 @@ ALTER TABLE "app"."offering_suggestions" ADD CONSTRAINT "offering_suggestions_up
 ALTER TABLE "app"."offering_suggestions" ADD CONSTRAINT "offering_suggestions_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offering_suggestions" ADD CONSTRAINT "offering_suggestions_offering_id_offerings_id_fk" FOREIGN KEY ("offering_id") REFERENCES "app"."offerings"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."offering_suggestions" ADD CONSTRAINT "offering_suggestions_appointment_id_appointments_id_fk" FOREIGN KEY ("appointment_id") REFERENCES "app"."appointments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_ideas" ADD CONSTRAINT "patient_ideas_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_ideas" ADD CONSTRAINT "patient_ideas_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_ideas" ADD CONSTRAINT "patient_ideas_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_ideas" ADD CONSTRAINT "patient_ideas_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -3174,7 +3081,7 @@ ALTER TABLE "app"."medical_sales" ADD CONSTRAINT "medical_sales_updated_by_user_
 ALTER TABLE "app"."medical_sales" ADD CONSTRAINT "medical_sales_invoice_id_invoices_id_fk" FOREIGN KEY ("invoice_id") REFERENCES "app"."invoices"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."medical_sales" ADD CONSTRAINT "medical_sales_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."medical_sales" ADD CONSTRAINT "medical_sales_medical_contact_id_medical_contacts_id_fk" FOREIGN KEY ("medical_contact_id") REFERENCES "app"."medical_contacts"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."medical_sales" ADD CONSTRAINT "medical_sales_prescription_id_prescriptions_id_fk" FOREIGN KEY ("prescription_id") REFERENCES "app"."prescriptions"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."medical_sales" ADD CONSTRAINT "medical_sales_prescription_id_patient_prescriptions_id_fk" FOREIGN KEY ("prescription_id") REFERENCES "app"."patient_prescriptions"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."medical_sales" ADD CONSTRAINT "medical_sales_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "app"."leads"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."supplier_credits" ADD CONSTRAINT "supplier_credits_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."supplier_credits" ADD CONSTRAINT "supplier_credits_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -3356,143 +3263,6 @@ CREATE POLICY "offer_branches_tenant_isolation" ON "app"."offer_branches" AS PER
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
 ALTER TABLE "app"."offer_branches" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_patients_public_id" ON "app"."patients" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patients_organization_created" ON "app"."patients" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patients_deleted_at" ON "app"."patients" USING btree ("deleted_at") WHERE "app"."patients"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patients_created_by_user_id" ON "app"."patients" USING btree ("created_by_user_id") WHERE "app"."patients"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patients_updated_by_user_id" ON "app"."patients" USING btree ("updated_by_user_id") WHERE "app"."patients"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patients_organization_first_name" ON "app"."patients" USING btree ("organization_id","first_name","id") WHERE "app"."patients"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patients_home_branch_id" ON "app"."patients" USING btree ("home_branch_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patients_referred_by_patient_id" ON "app"."patients" USING btree ("referred_by_patient_id") WHERE "app"."patients"."referred_by_patient_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patients_doctor_membership_id" ON "app"."patients" USING btree ("doctor_membership_id") WHERE "app"."patients"."doctor_membership_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patients_organization_follow_up_at" ON "app"."patients" USING btree ("organization_id","follow_up_at","id") WHERE "app"."patients"."deleted_at" IS NULL AND "app"."patients"."follow_up_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patients_lead_id" ON "app"."patients" USING btree ("lead_id") WHERE "app"."patients"."lead_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patients_search_text_trgm" ON "app"."patients" USING gin ("search_text" gin_trgm_ops) WHERE "app"."patients"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_patients_organization_patient_number" ON "app"."patients" USING btree ("organization_id","patient_number");--> statement-breakpoint
-CREATE POLICY "patients_tenant_isolation" ON "app"."patients" AS PERMISSIVE FOR ALL TO public USING ("app"."patients"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patients"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."patients" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE TRIGGER trg_patients_patient_number BEFORE INSERT ON "app"."patients" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('patient_number');--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_diagnoses_public_id" ON "app"."diagnoses" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_diagnoses_organization_created" ON "app"."diagnoses" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_diagnoses_deleted_at" ON "app"."diagnoses" USING btree ("deleted_at") WHERE "app"."diagnoses"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_diagnoses_created_by_user_id" ON "app"."diagnoses" USING btree ("created_by_user_id") WHERE "app"."diagnoses"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_diagnoses_updated_by_user_id" ON "app"."diagnoses" USING btree ("updated_by_user_id") WHERE "app"."diagnoses"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_diagnoses_organization_name" ON "app"."diagnoses" USING btree ("organization_id","name","id") WHERE "app"."diagnoses"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_diagnoses_organization_name_unique" ON "app"."diagnoses" USING btree ("organization_id",lower("name")) WHERE "app"."diagnoses"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE POLICY "diagnoses_tenant_isolation" ON "app"."diagnoses" AS PERMISSIVE FOR ALL TO public USING ("app"."diagnoses"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."diagnoses"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."diagnoses" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_clinical_notes_public_id" ON "app"."patient_clinical_notes" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_organization_created" ON "app"."patient_clinical_notes" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_deleted_at" ON "app"."patient_clinical_notes" USING btree ("deleted_at") WHERE "app"."patient_clinical_notes"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_created_by_user_id" ON "app"."patient_clinical_notes" USING btree ("created_by_user_id") WHERE "app"."patient_clinical_notes"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_updated_by_user_id" ON "app"."patient_clinical_notes" USING btree ("updated_by_user_id") WHERE "app"."patient_clinical_notes"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_patient_created" ON "app"."patient_clinical_notes" USING btree ("patient_id","created_at","id");--> statement-breakpoint
-CREATE POLICY "patient_clinical_notes_tenant_isolation" ON "app"."patient_clinical_notes" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_clinical_notes"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_clinical_notes"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."patient_clinical_notes" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_prescriptions_public_id" ON "app"."prescriptions" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_prescriptions_organization_created" ON "app"."prescriptions" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_prescriptions_deleted_at" ON "app"."prescriptions" USING btree ("deleted_at") WHERE "app"."prescriptions"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_prescriptions_created_by_user_id" ON "app"."prescriptions" USING btree ("created_by_user_id") WHERE "app"."prescriptions"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_prescriptions_updated_by_user_id" ON "app"."prescriptions" USING btree ("updated_by_user_id") WHERE "app"."prescriptions"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_prescriptions_patient_created" ON "app"."prescriptions" USING btree ("patient_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_prescriptions_appointment_id" ON "app"."prescriptions" USING btree ("appointment_id") WHERE "app"."prescriptions"."appointment_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_prescriptions_doctor_membership_id" ON "app"."prescriptions" USING btree ("doctor_membership_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_prescriptions_organization_prescription_date" ON "app"."prescriptions" USING btree ("organization_id","prescription_date","id") WHERE "app"."prescriptions"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_prescriptions_organization_prescription_number" ON "app"."prescriptions" USING btree ("organization_id","prescription_number");--> statement-breakpoint
-CREATE POLICY "prescriptions_tenant_isolation" ON "app"."prescriptions" AS PERMISSIVE FOR ALL TO public USING ("app"."prescriptions"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."prescriptions"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."prescriptions" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE TRIGGER trg_prescriptions_prescription_number BEFORE INSERT ON "app"."prescriptions" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('prescription_number');--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_prescription_kits_public_id" ON "app"."prescription_kits" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_prescription_kits_organization_created" ON "app"."prescription_kits" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_prescription_kits_deleted_at" ON "app"."prescription_kits" USING btree ("deleted_at") WHERE "app"."prescription_kits"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_prescription_kits_created_by_user_id" ON "app"."prescription_kits" USING btree ("created_by_user_id") WHERE "app"."prescription_kits"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_prescription_kits_updated_by_user_id" ON "app"."prescription_kits" USING btree ("updated_by_user_id") WHERE "app"."prescription_kits"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_prescription_kits_organization_name" ON "app"."prescription_kits" USING btree ("organization_id","name","id") WHERE "app"."prescription_kits"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE POLICY "prescription_kits_tenant_isolation" ON "app"."prescription_kits" AS PERMISSIVE FOR ALL TO public USING ("app"."prescription_kits"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."prescription_kits"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."prescription_kits" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_images_public_id" ON "app"."patient_images" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_images_organization_created" ON "app"."patient_images" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_images_deleted_at" ON "app"."patient_images" USING btree ("deleted_at") WHERE "app"."patient_images"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_images_created_by_user_id" ON "app"."patient_images" USING btree ("created_by_user_id") WHERE "app"."patient_images"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_images_updated_by_user_id" ON "app"."patient_images" USING btree ("updated_by_user_id") WHERE "app"."patient_images"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_images_patient_created" ON "app"."patient_images" USING btree ("patient_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_images_appointment_id" ON "app"."patient_images" USING btree ("appointment_id") WHERE "app"."patient_images"."appointment_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_images_organization_taken_on" ON "app"."patient_images" USING btree ("organization_id","taken_on","id") WHERE "app"."patient_images"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE POLICY "patient_images_tenant_isolation" ON "app"."patient_images" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_images"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_images"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."patient_images" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_reports_public_id" ON "app"."patient_reports" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_reports_organization_created" ON "app"."patient_reports" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_reports_deleted_at" ON "app"."patient_reports" USING btree ("deleted_at") WHERE "app"."patient_reports"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_reports_created_by_user_id" ON "app"."patient_reports" USING btree ("created_by_user_id") WHERE "app"."patient_reports"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_reports_updated_by_user_id" ON "app"."patient_reports" USING btree ("updated_by_user_id") WHERE "app"."patient_reports"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_reports_patient_created" ON "app"."patient_reports" USING btree ("patient_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_reports_organization_report_date" ON "app"."patient_reports" USING btree ("organization_id","report_date","id") WHERE "app"."patient_reports"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE POLICY "patient_reports_tenant_isolation" ON "app"."patient_reports" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_reports"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_reports"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."patient_reports" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_notes_public_id" ON "app"."patient_notes" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_notes_organization_created" ON "app"."patient_notes" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_notes_deleted_at" ON "app"."patient_notes" USING btree ("deleted_at") WHERE "app"."patient_notes"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_notes_created_by_user_id" ON "app"."patient_notes" USING btree ("created_by_user_id") WHERE "app"."patient_notes"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_notes_updated_by_user_id" ON "app"."patient_notes" USING btree ("updated_by_user_id") WHERE "app"."patient_notes"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_notes_patient_created" ON "app"."patient_notes" USING btree ("patient_id","created_at","id");--> statement-breakpoint
-CREATE POLICY "patient_notes_tenant_isolation" ON "app"."patient_notes" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_notes"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_notes"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."patient_notes" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_invoices_public_id" ON "app"."invoices" USING btree ("public_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoices_organization_created" ON "app"."invoices" USING btree ("organization_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoices_deleted_at" ON "app"."invoices" USING btree ("deleted_at") WHERE "app"."invoices"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -3562,22 +3332,6 @@ CREATE POLICY "offering_suggestions_tenant_isolation" ON "app"."offering_suggest
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
 ALTER TABLE "app"."offering_suggestions" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_ideas_public_id" ON "app"."patient_ideas" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_ideas_organization_created" ON "app"."patient_ideas" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_ideas_deleted_at" ON "app"."patient_ideas" USING btree ("deleted_at") WHERE "app"."patient_ideas"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_ideas_created_by_user_id" ON "app"."patient_ideas" USING btree ("created_by_user_id") WHERE "app"."patient_ideas"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_ideas_updated_by_user_id" ON "app"."patient_ideas" USING btree ("updated_by_user_id") WHERE "app"."patient_ideas"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_ideas_patient_id" ON "app"."patient_ideas" USING btree ("patient_id");--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_ideas_patient_unique" ON "app"."patient_ideas" USING btree ("organization_id","patient_id") WHERE "app"."patient_ideas"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE POLICY "patient_ideas_tenant_isolation" ON "app"."patient_ideas" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_ideas"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_ideas"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."patient_ideas" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_payments_public_id" ON "app"."payments" USING btree ("public_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payments_organization_created" ON "app"."payments" USING btree ("organization_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payments_deleted_at" ON "app"."payments" USING btree ("deleted_at") WHERE "app"."payments"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -4156,6 +3910,7 @@ CREATE TABLE IF NOT EXISTS "app"."contact_activities" (
 	"patient_clinical_note_id" bigint,
 	"patient_image_id" bigint,
 	"patient_report_id" bigint,
+	"is_private_photo" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
@@ -4184,7 +3939,7 @@ ALTER TABLE "app"."contact_activities" ADD CONSTRAINT "contact_activities_author
 ALTER TABLE "app"."contact_activities" ADD CONSTRAINT "contact_activities_appointment_id_appointments_id_fk" FOREIGN KEY ("appointment_id") REFERENCES "app"."appointments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."contact_activities" ADD CONSTRAINT "contact_activities_invoice_id_invoices_id_fk" FOREIGN KEY ("invoice_id") REFERENCES "app"."invoices"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."contact_activities" ADD CONSTRAINT "contact_activities_payment_id_payments_id_fk" FOREIGN KEY ("payment_id") REFERENCES "app"."payments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."contact_activities" ADD CONSTRAINT "contact_activities_patient_prescription_id_prescriptions_id_fk" FOREIGN KEY ("patient_prescription_id") REFERENCES "app"."prescriptions"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."contact_activities" ADD CONSTRAINT "contact_activities_patient_prescription_id_patient_prescriptions_id_fk" FOREIGN KEY ("patient_prescription_id") REFERENCES "app"."patient_prescriptions"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."contact_activities" ADD CONSTRAINT "contact_activities_patient_offering_id_patient_packages_id_fk" FOREIGN KEY ("patient_offering_id") REFERENCES "app"."patient_packages"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."contact_activities" ADD CONSTRAINT "contact_activities_patient_review_id_reviews_id_fk" FOREIGN KEY ("patient_review_id") REFERENCES "app"."reviews"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."contact_activities" ADD CONSTRAINT "contact_activities_patient_check_in_id_check_ins_id_fk" FOREIGN KEY ("patient_check_in_id") REFERENCES "app"."check_ins"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -4309,9 +4064,171 @@ CREATE POLICY "appointments_tenant_isolation" ON "app"."appointments" AS PERMISS
 ALTER TABLE "app"."appointments" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TRIGGER trg_appointments_appointment_number BEFORE INSERT ON "app"."appointments" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('appointment_number');--> statement-breakpoint
 -- app.patients.contact_id (launch ROUTE #132, D68): the file a check-in opens points at its contact — one live file per contact (P1); NOT NULL once #133 rebuilds the patient file.
+-- app.patients (folded from the Drizzle schema): keys, indexes, RLS, counters.
+ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "app"."contacts"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_patients_organization_contact_unique" ON "app"."patients" USING btree ("organization_id","contact_id") WHERE "app"."patients"."deleted_at" IS NULL AND "app"."patients"."contact_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patients_contact_id" ON "app"."patients" USING btree ("contact_id") WHERE "app"."patients"."contact_id" IS NOT NULL;--> statement-breakpoint
+ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_home_branch_id_branches_id_fk" FOREIGN KEY ("home_branch_id") REFERENCES "app"."branches"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "app"."leads"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_doctor_membership_fk" FOREIGN KEY ("organization_id","doctor_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_patients_public_id" ON "app"."patients" USING btree ("public_id");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_patients_organization_patient_number" ON "app"."patients" USING btree ("organization_id","patient_number");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_patients_organization_contact_unique" ON "app"."patients" USING btree ("organization_id","contact_id") WHERE "app"."patients"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patients_organization_created" ON "app"."patients" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."patients"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patients_organization_follow_up_at" ON "app"."patients" USING btree ("organization_id","follow_up_at","id") WHERE "app"."patients"."deleted_at" IS NULL AND "app"."patients"."follow_up_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patients_types_gin" ON "app"."patients" USING gin ("types") WHERE "app"."patients"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patients_home_branch_id" ON "app"."patients" USING btree ("home_branch_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patients_doctor_membership_id" ON "app"."patients" USING btree ("organization_id","doctor_membership_id") WHERE "app"."patients"."doctor_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patients_lead_id" ON "app"."patients" USING btree ("lead_id") WHERE "app"."patients"."lead_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patients_contact_id" ON "app"."patients" USING btree ("contact_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patients_deleted_at" ON "app"."patients" USING btree ("deleted_at") WHERE "app"."patients"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patients_created_by_user_id" ON "app"."patients" USING btree ("created_by_user_id") WHERE "app"."patients"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patients_updated_by_user_id" ON "app"."patients" USING btree ("updated_by_user_id") WHERE "app"."patients"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "patients_tenant_isolation" ON "app"."patients" AS PERMISSIVE FOR ALL TO public USING ("app"."patients"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )) WITH CHECK ("app"."patients"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."patients" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TRIGGER trg_patients_patient_number BEFORE INSERT ON "app"."patients" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('patient_number');--> statement-breakpoint
+-- app.patient_diagnoses (folded from the Drizzle schema): keys, indexes, RLS.
+ALTER TABLE "app"."patient_diagnoses" ADD CONSTRAINT "patient_diagnoses_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_diagnoses" ADD CONSTRAINT "patient_diagnoses_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_diagnoses" ADD CONSTRAINT "patient_diagnoses_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_diagnoses_public_id" ON "app"."patient_diagnoses" USING btree ("public_id");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_diagnoses_organization_name_unique" ON "app"."patient_diagnoses" USING btree ("organization_id",lower("name")) WHERE "app"."patient_diagnoses"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_diagnoses_organization_name" ON "app"."patient_diagnoses" USING btree ("organization_id","name","id") WHERE "app"."patient_diagnoses"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_diagnoses_deleted_at" ON "app"."patient_diagnoses" USING btree ("deleted_at") WHERE "app"."patient_diagnoses"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_diagnoses_created_by_user_id" ON "app"."patient_diagnoses" USING btree ("created_by_user_id") WHERE "app"."patient_diagnoses"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_diagnoses_updated_by_user_id" ON "app"."patient_diagnoses" USING btree ("updated_by_user_id") WHERE "app"."patient_diagnoses"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "patient_diagnoses_tenant_isolation" ON "app"."patient_diagnoses" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_diagnoses"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )
+          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_diagnoses"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."patient_diagnoses" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.patient_prescriptions (folded from the Drizzle schema): keys, indexes, RLS, counters.
+ALTER TABLE "app"."patient_prescriptions" ADD CONSTRAINT "patient_prescriptions_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_prescriptions" ADD CONSTRAINT "patient_prescriptions_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_prescriptions" ADD CONSTRAINT "patient_prescriptions_appointment_id_appointments_id_fk" FOREIGN KEY ("appointment_id") REFERENCES "app"."appointments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_prescriptions" ADD CONSTRAINT "patient_prescriptions_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_prescriptions" ADD CONSTRAINT "patient_prescriptions_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_prescriptions" ADD CONSTRAINT "patient_prescriptions_doctor_membership_fk" FOREIGN KEY ("organization_id","doctor_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_prescriptions" ADD CONSTRAINT "patient_prescriptions_approved_by_membership_fk" FOREIGN KEY ("organization_id","approved_by_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_prescriptions_public_id" ON "app"."patient_prescriptions" USING btree ("public_id");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_prescriptions_organization_prescription_number" ON "app"."patient_prescriptions" USING btree ("organization_id","prescription_number");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_prescriptions_organization_status_date" ON "app"."patient_prescriptions" USING btree ("organization_id","status","prescription_date","id") WHERE "app"."patient_prescriptions"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_prescriptions_organization_created" ON "app"."patient_prescriptions" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."patient_prescriptions"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_prescriptions_patient_created" ON "app"."patient_prescriptions" USING btree ("patient_id","created_at","id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_prescriptions_appointment_id" ON "app"."patient_prescriptions" USING btree ("appointment_id") WHERE "app"."patient_prescriptions"."appointment_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_prescriptions_doctor_membership_id" ON "app"."patient_prescriptions" USING btree ("organization_id","doctor_membership_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_prescriptions_approved_by_membership_id" ON "app"."patient_prescriptions" USING btree ("organization_id","approved_by_membership_id") WHERE "app"."patient_prescriptions"."approved_by_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_prescriptions_deleted_at" ON "app"."patient_prescriptions" USING btree ("deleted_at") WHERE "app"."patient_prescriptions"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_prescriptions_created_by_user_id" ON "app"."patient_prescriptions" USING btree ("created_by_user_id") WHERE "app"."patient_prescriptions"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_prescriptions_updated_by_user_id" ON "app"."patient_prescriptions" USING btree ("updated_by_user_id") WHERE "app"."patient_prescriptions"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "patient_prescriptions_tenant_isolation" ON "app"."patient_prescriptions" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_prescriptions"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )
+          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_prescriptions"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."patient_prescriptions" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TRIGGER trg_patient_prescriptions_prescription_number BEFORE INSERT ON "app"."patient_prescriptions" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('prescription_number');--> statement-breakpoint
+-- app.prescription_kits (folded from the Drizzle schema): keys, indexes, RLS.
+ALTER TABLE "app"."prescription_kits" ADD CONSTRAINT "prescription_kits_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."prescription_kits" ADD CONSTRAINT "prescription_kits_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."prescription_kits" ADD CONSTRAINT "prescription_kits_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."prescription_kits" ADD CONSTRAINT "prescription_kits_owner_membership_fk" FOREIGN KEY ("organization_id","owner_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_prescription_kits_public_id" ON "app"."prescription_kits" USING btree ("public_id");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_prescription_kits_owner_name_unique" ON "app"."prescription_kits" USING btree ("organization_id","owner_membership_id",lower("name")) WHERE "app"."prescription_kits"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_prescription_kits_owner_created" ON "app"."prescription_kits" USING btree ("owner_membership_id","created_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_prescription_kits_deleted_at" ON "app"."prescription_kits" USING btree ("deleted_at") WHERE "app"."prescription_kits"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_prescription_kits_created_by_user_id" ON "app"."prescription_kits" USING btree ("created_by_user_id") WHERE "app"."prescription_kits"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_prescription_kits_updated_by_user_id" ON "app"."prescription_kits" USING btree ("updated_by_user_id") WHERE "app"."prescription_kits"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "prescription_kits_tenant_isolation" ON "app"."prescription_kits" AS PERMISSIVE FOR ALL TO public USING ("app"."prescription_kits"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )
+          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."prescription_kits"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."prescription_kits" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.patient_clinical_notes (folded from the Drizzle schema): keys, indexes, RLS.
+ALTER TABLE "app"."patient_clinical_notes" ADD CONSTRAINT "patient_clinical_notes_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_clinical_notes" ADD CONSTRAINT "patient_clinical_notes_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_clinical_notes" ADD CONSTRAINT "patient_clinical_notes_appointment_id_appointments_id_fk" FOREIGN KEY ("appointment_id") REFERENCES "app"."appointments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_clinical_notes" ADD CONSTRAINT "patient_clinical_notes_patient_diagnosis_id_patient_diagnoses_id_fk" FOREIGN KEY ("patient_diagnosis_id") REFERENCES "app"."patient_diagnoses"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_clinical_notes" ADD CONSTRAINT "patient_clinical_notes_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_clinical_notes" ADD CONSTRAINT "patient_clinical_notes_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_clinical_notes_public_id" ON "app"."patient_clinical_notes" USING btree ("public_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_patient_kind_created" ON "app"."patient_clinical_notes" USING btree ("patient_id","kind","created_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_patient_created" ON "app"."patient_clinical_notes" USING btree ("patient_id","created_at" DESC NULLS LAST,"id") WHERE "app"."patient_clinical_notes"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_appointment_id" ON "app"."patient_clinical_notes" USING btree ("appointment_id") WHERE "app"."patient_clinical_notes"."appointment_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_patient_diagnosis_id" ON "app"."patient_clinical_notes" USING btree ("patient_diagnosis_id") WHERE "app"."patient_clinical_notes"."patient_diagnosis_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_deleted_at" ON "app"."patient_clinical_notes" USING btree ("deleted_at") WHERE "app"."patient_clinical_notes"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_created_by_user_id" ON "app"."patient_clinical_notes" USING btree ("created_by_user_id") WHERE "app"."patient_clinical_notes"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_updated_by_user_id" ON "app"."patient_clinical_notes" USING btree ("updated_by_user_id") WHERE "app"."patient_clinical_notes"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "patient_clinical_notes_tenant_isolation" ON "app"."patient_clinical_notes" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_clinical_notes"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )
+          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_clinical_notes"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."patient_clinical_notes" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.patient_images (folded from the Drizzle schema): keys, indexes, RLS.
+ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_appointment_id_appointments_id_fk" FOREIGN KEY ("appointment_id") REFERENCES "app"."appointments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_patient_treatment_id_treatments_id_fk" FOREIGN KEY ("patient_treatment_id") REFERENCES "app"."treatments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_images_public_id" ON "app"."patient_images" USING btree ("public_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_images_patient_album_taken_on" ON "app"."patient_images" USING btree ("patient_id","album","taken_on" DESC NULLS LAST,"id") WHERE "app"."patient_images"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_images_organization_file_key" ON "app"."patient_images" USING btree ("organization_id","file_key");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_images_appointment_id" ON "app"."patient_images" USING btree ("appointment_id") WHERE "app"."patient_images"."appointment_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_images_patient_treatment_id" ON "app"."patient_images" USING btree ("patient_treatment_id") WHERE "app"."patient_images"."patient_treatment_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_images_deleted_at" ON "app"."patient_images" USING btree ("deleted_at") WHERE "app"."patient_images"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_images_created_by_user_id" ON "app"."patient_images" USING btree ("created_by_user_id") WHERE "app"."patient_images"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_images_updated_by_user_id" ON "app"."patient_images" USING btree ("updated_by_user_id") WHERE "app"."patient_images"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "patient_images_tenant_isolation" ON "app"."patient_images" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_images"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )
+          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_images"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."patient_images" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.patient_reports (folded from the Drizzle schema): keys, indexes, RLS.
+ALTER TABLE "app"."patient_reports" ADD CONSTRAINT "patient_reports_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_reports" ADD CONSTRAINT "patient_reports_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_reports" ADD CONSTRAINT "patient_reports_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_reports" ADD CONSTRAINT "patient_reports_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_reports_public_id" ON "app"."patient_reports" USING btree ("public_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_reports_patient_report_date" ON "app"."patient_reports" USING btree ("patient_id","report_date" DESC NULLS LAST,"id") WHERE "app"."patient_reports"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_reports_deleted_at" ON "app"."patient_reports" USING btree ("deleted_at") WHERE "app"."patient_reports"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_reports_created_by_user_id" ON "app"."patient_reports" USING btree ("created_by_user_id") WHERE "app"."patient_reports"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_reports_updated_by_user_id" ON "app"."patient_reports" USING btree ("updated_by_user_id") WHERE "app"."patient_reports"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "patient_reports_tenant_isolation" ON "app"."patient_reports" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_reports"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )
+          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_reports"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."patient_reports" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 -- ── end of app records ──
 GRANT USAGE ON SCHEMA auth, tenancy, billing, notify, audit, upload, app TO clinozy_be_app;
 --> statement-breakpoint

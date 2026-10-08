@@ -1,24 +1,47 @@
 import { z } from 'zod';
 import { listSearchSortSchema } from '@/shared/utils/http/list-query.util.js';
-import { trimmedString, trimmedStringMinMax } from '@/shared/utils/validation/validation.util.js';
+import { trimmedStringMinMax } from '@/shared/utils/validation/validation.util.js';
 import {
-  calendarDateSchema,
   expectedUpdatedAtSchema,
   instantSchema,
-  phoneNumberSchema,
   recordIdSchema,
+  valueListSchema,
 } from '@/shared/utils/validation/record-fields.util.js';
+import { CreateContactDto } from '@/domains/app/sub-domains/contacts/contacts.dto.js';
 import {
-  PATIENT_GENDER_VALUES,
-  PATIENT_TYPES_VALUES,
-  PATIENT_STATUS_VALUES,
+  PATIENT_CLINICAL_ITEM_MAX,
+  PATIENT_CLINICAL_LIST_MAX,
   PATIENT_CONVERSION_VALUES,
-  PATIENT_REFERRAL_SOURCE_VALUES,
-  PATIENT_DEFAULT_CHANNEL_VALUES,
+  PATIENT_NOTES_MAX,
+  PATIENT_STATUS_VALUES,
+  PATIENT_TYPES_VALUES,
 } from './patients.constants.js';
 
 /** True when every entry of a list is different. */
 const distinct = (values: readonly unknown[]) => new Set(values).size === values.length;
+
+/** An allergy or contraindication list — up to 30 items, each 1–120. */
+const clinicalList = z
+  .array(trimmedStringMinMax(1, PATIENT_CLINICAL_ITEM_MAX))
+  .max(PATIENT_CLINICAL_LIST_MAX);
+
+/** The fields a patient file is written with (7.A.8 #3, #5) — each optional; create and update narrow them. */
+const patientFields = {
+  home_branch_id: recordIdSchema,
+  types: z
+    .array(z.enum(PATIENT_TYPES_VALUES))
+    .max(PATIENT_TYPES_VALUES.length)
+    .refine(distinct, { message: 'Each type once' }),
+  status: z.enum(PATIENT_STATUS_VALUES),
+  conversion: z.enum(PATIENT_CONVERSION_VALUES),
+  doctor_membership_id: recordIdSchema.nullable(),
+  follow_up_at: instantSchema.nullable(),
+  notes: trimmedStringMinMax(1, PATIENT_NOTES_MAX).nullable(),
+  has_data_consent: z.boolean(),
+  has_photo_consent: z.boolean(),
+  allergies: clinicalList,
+  contraindications: clinicalList,
+};
 
 /** Path params of the by-id `patients` routes. */
 export const patientsIdParamsDto = z
@@ -27,81 +50,50 @@ export const patientsIdParamsDto = z
   })
   .strict();
 
-/** Body of the create route — a new patient. */
+/**
+ * Body of `POST /app/patients` (routes-final 7.A.8 #3): a patient file for a contact — `contact_id`,
+ * **or** a new `contact` (the Contact create body, 4.A route 2) written in the same transaction
+ * (P1); `home_branch_id` required.
+ */
 export const CreatePatientDto = z
   .object({
-    first_name: trimmedStringMinMax(1, 60),
-    last_name: trimmedStringMinMax(1, 60).nullable().optional(),
-    phone: phoneNumberSchema,
-    phones: z.array(trimmedStringMinMax(1, 16)).max(5).optional(),
-    email: trimmedStringMinMax(3, 254).pipe(z.email()).nullable().optional(),
-    gender: z.enum(PATIENT_GENDER_VALUES).nullable().optional(),
-    date_of_birth: calendarDateSchema.nullable().optional(),
-    address: trimmedStringMinMax(1, 240).nullable().optional(),
-    home_branch_id: recordIdSchema,
-    types: z
-      .array(z.enum(PATIENT_TYPES_VALUES))
-      .max(6)
-      .refine(distinct, { message: 'Each value once' })
-      .optional(),
-    status: z.enum(PATIENT_STATUS_VALUES).optional(),
-    conversion: z.enum(PATIENT_CONVERSION_VALUES).optional(),
-    referral_source: z.enum(PATIENT_REFERRAL_SOURCE_VALUES).nullable().optional(),
-    referred_by_patient_id: recordIdSchema.nullable().optional(),
-    referred_by_name: trimmedStringMinMax(1, 120).nullable().optional(),
-    doctor_membership_id: recordIdSchema.nullable().optional(),
-    follow_up_at: instantSchema.nullable().optional(),
-    notes: trimmedString().max(2000).nullable().optional(),
-    lead_id: recordIdSchema.nullable().optional(),
-    has_data_consent: z.boolean().optional(),
-    has_photo_consent: z.boolean().optional(),
-    has_marketing_consent: z.boolean().optional(),
-    language: trimmedStringMinMax(1, 20).nullable().optional(),
-    instagram_handles: z.array(trimmedStringMinMax(1, 60)).max(5).optional(),
-    default_channel: z.enum(PATIENT_DEFAULT_CHANNEL_VALUES).nullable().optional(),
-    preferences: z.record(z.string(), z.unknown()).optional(),
-    household: trimmedStringMinMax(1, 240).nullable().optional(),
-    allergies: z.array(trimmedStringMinMax(1, 120)).max(30).optional(),
-    contraindications: z.array(trimmedStringMinMax(1, 120)).max(30).optional(),
+    contact_id: recordIdSchema.optional(),
+    contact: CreateContactDto.optional(),
+    home_branch_id: patientFields.home_branch_id,
+    types: patientFields.types.optional(),
+    status: patientFields.status.optional(),
+    conversion: patientFields.conversion.optional(),
+    doctor_membership_id: patientFields.doctor_membership_id.optional(),
+    follow_up_at: patientFields.follow_up_at.optional(),
+    notes: patientFields.notes.optional(),
+    has_data_consent: patientFields.has_data_consent.optional(),
+    has_photo_consent: patientFields.has_photo_consent.optional(),
+    allergies: patientFields.allergies.optional(),
+    contraindications: patientFields.contraindications.optional(),
   })
-  .strict();
+  .strict()
+  .refine((value) => (value.contact_id === undefined) !== (value.contact === undefined), {
+    path: ['contact_id'],
+    message: 'Send contact_id or contact, not both',
+  });
 
-/** Body of `PATCH /app/patients/{patient_id}` — any field (null clears an optional one); `expected_updated_at` refuses a stale save (D43). */
+/**
+ * Body of `PATCH /app/patients/{patient_id}` (7.A.8 #5): any field of the create but the contact
+ * (at least one; null clears an optional one); `expected_updated_at` refuses a stale save (D43).
+ */
 export const UpdatePatientDto = z
   .object({
-    first_name: trimmedStringMinMax(1, 60).optional(),
-    last_name: trimmedStringMinMax(1, 60).nullable().optional(),
-    phone: phoneNumberSchema.optional(),
-    phones: z.array(trimmedStringMinMax(1, 16)).max(5).optional(),
-    email: trimmedStringMinMax(3, 254).pipe(z.email()).nullable().optional(),
-    gender: z.enum(PATIENT_GENDER_VALUES).nullable().optional(),
-    date_of_birth: calendarDateSchema.nullable().optional(),
-    address: trimmedStringMinMax(1, 240).nullable().optional(),
-    home_branch_id: recordIdSchema.optional(),
-    types: z
-      .array(z.enum(PATIENT_TYPES_VALUES))
-      .max(6)
-      .refine(distinct, { message: 'Each value once' })
-      .optional(),
-    status: z.enum(PATIENT_STATUS_VALUES).optional(),
-    conversion: z.enum(PATIENT_CONVERSION_VALUES).optional(),
-    referral_source: z.enum(PATIENT_REFERRAL_SOURCE_VALUES).nullable().optional(),
-    referred_by_patient_id: recordIdSchema.nullable().optional(),
-    referred_by_name: trimmedStringMinMax(1, 120).nullable().optional(),
-    doctor_membership_id: recordIdSchema.nullable().optional(),
-    follow_up_at: instantSchema.nullable().optional(),
-    notes: trimmedString().max(2000).nullable().optional(),
-    lead_id: recordIdSchema.nullable().optional(),
-    has_data_consent: z.boolean().optional(),
-    has_photo_consent: z.boolean().optional(),
-    has_marketing_consent: z.boolean().optional(),
-    language: trimmedStringMinMax(1, 20).nullable().optional(),
-    instagram_handles: z.array(trimmedStringMinMax(1, 60)).max(5).optional(),
-    default_channel: z.enum(PATIENT_DEFAULT_CHANNEL_VALUES).nullable().optional(),
-    preferences: z.record(z.string(), z.unknown()).optional(),
-    household: trimmedStringMinMax(1, 240).nullable().optional(),
-    allergies: z.array(trimmedStringMinMax(1, 120)).max(30).optional(),
-    contraindications: z.array(trimmedStringMinMax(1, 120)).max(30).optional(),
+    home_branch_id: patientFields.home_branch_id.optional(),
+    types: patientFields.types.optional(),
+    status: patientFields.status.optional(),
+    conversion: patientFields.conversion.optional(),
+    doctor_membership_id: patientFields.doctor_membership_id.optional(),
+    follow_up_at: patientFields.follow_up_at.optional(),
+    notes: patientFields.notes.optional(),
+    has_data_consent: patientFields.has_data_consent.optional(),
+    has_photo_consent: patientFields.has_photo_consent.optional(),
+    allergies: patientFields.allergies.optional(),
+    contraindications: patientFields.contraindications.optional(),
     expected_updated_at: expectedUpdatedAtSchema,
   })
   .strict()
@@ -109,32 +101,30 @@ export const UpdatePatientDto = z
     message: 'Send at least one field',
   });
 
-/** Query of the `patients` list — keyset paging, `q` search, sort and filters. */
+/**
+ * Query of the patients list and export (routes-final 7.A.8 #1, #2, P9) — `q` (the patient number
+ * `PT-0412` / `#412`; through the contact: names, numbers, contact number), `status`, `conversion`,
+ * `types` (several, comma-separated — any of them), `home_branch_id`, `doctor_membership_id`,
+ * `contact_id`, the follow-up and created ranges; sort `created_at` (default, newest first) |
+ * `patient_number` | `follow_up_at` (a file without one last). The saved-view registry checks a
+ * view's `filters` against it.
+ */
 export const listPatientsQueryDto = listSearchSortSchema([
   'created_at',
-  'first_name',
+  'patient_number',
   'follow_up_at',
 ] as const)
   .extend({
-    gender: z.enum(PATIENT_GENDER_VALUES).optional(),
-    home_branch_id: recordIdSchema.optional(),
     status: z.enum(PATIENT_STATUS_VALUES).optional(),
     conversion: z.enum(PATIENT_CONVERSION_VALUES).optional(),
-    referral_source: z.enum(PATIENT_REFERRAL_SOURCE_VALUES).optional(),
+    types: valueListSchema(PATIENT_TYPES_VALUES).optional(),
+    home_branch_id: recordIdSchema.optional(),
     doctor_membership_id: recordIdSchema.optional(),
-    follow_up_at_from: z.iso.datetime({ offset: true }).optional(),
-    follow_up_at_to: z.iso.datetime({ offset: true }).optional(),
-    created_from: z.iso.datetime({ offset: true }).optional(),
-    created_to: z.iso.datetime({ offset: true }).optional(),
-  })
-  .strict();
-
-/** Query of `GET /app/patients/{patient_id}/timeline`. */
-export const timelinePatientQueryDto = z
-  .object({
-    group: z.enum(['all', 'clinical', 'money', 'messages']).optional(),
-    before: instantSchema.optional(),
-    limit: z.coerce.number().int().min(1).max(100).optional(),
+    contact_id: recordIdSchema.optional(),
+    follow_up_at_from: instantSchema.optional(),
+    follow_up_at_to: instantSchema.optional(),
+    created_from: instantSchema.optional(),
+    created_to: instantSchema.optional(),
   })
   .strict();
 

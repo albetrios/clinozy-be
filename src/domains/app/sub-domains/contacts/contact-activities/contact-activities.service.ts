@@ -7,15 +7,15 @@ import { contact_message_templates } from '@/domains/app/sub-domains/contacts/co
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import { invoices } from '@/domains/app/sub-domains/invoices/invoices.schema.js';
 import { payments } from '@/domains/app/sub-domains/payments/payments.schema.js';
-import { prescriptions } from '@/domains/app/sub-domains/prescriptions/prescriptions.schema.js';
+import { patient_prescriptions } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.schema.js';
 import { patient_packages } from '@/domains/app/sub-domains/patient-packages/patient-packages.schema.js';
 import { reviews } from '@/domains/app/sub-domains/reviews/reviews.schema.js';
 import { check_ins } from '@/domains/app/sub-domains/check-ins/check-ins.schema.js';
 import { tasks } from '@/domains/app/sub-domains/tasks/tasks.schema.js';
 import { treatments } from '@/domains/app/sub-domains/treatments/treatments.schema.js';
-import { patient_clinical_notes } from '@/domains/app/sub-domains/patient-clinical-notes/patient-clinical-notes.schema.js';
-import { patient_images } from '@/domains/app/sub-domains/patient-images/patient-images.schema.js';
-import { patient_reports } from '@/domains/app/sub-domains/patient-reports/patient-reports.schema.js';
+import { patient_clinical_notes } from '@/domains/app/sub-domains/patients/patient-clinical-notes/patient-clinical-notes.schema.js';
+import { patient_images } from '@/domains/app/sub-domains/patients/patient-images/patient-images.schema.js';
+import { patient_reports } from '@/domains/app/sub-domains/patients/patient-reports/patient-reports.schema.js';
 import {
   CONTACT_ACTIVITY_DELIVERY_STATUS,
   type ContactActivityLinkColumn,
@@ -39,7 +39,7 @@ const LINK_REFERENCES: readonly (BaseRecordReference & { field: ContactActivityL
   { field: 'appointment_id', table: appointments, label: 'appointment' },
   { field: 'invoice_id', table: invoices, label: 'invoice' },
   { field: 'payment_id', table: payments, label: 'payment' },
-  { field: 'patient_prescription_id', table: prescriptions, label: 'prescription' },
+  { field: 'patient_prescription_id', table: patient_prescriptions, label: 'prescription' },
   { field: 'patient_offering_id', table: patient_packages, label: 'patient offering' },
   { field: 'patient_review_id', table: reviews, label: 'review' },
   { field: 'patient_check_in_id', table: check_ins, label: 'check-in' },

@@ -6,21 +6,18 @@ import { branch_machines } from '@/domains/app/sub-domains/branches/branch-machi
 import { branch_holidays } from '@/domains/app/sub-domains/branches/branch-holidays/branch-holidays.schema.js';
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
 import { offers } from '@/domains/app/sub-domains/offerings/offers/offers.schema.js';
-import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
 import { contact_message_templates } from '@/domains/app/sub-domains/contacts/contact-message-templates/contact-message-templates.schema.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
-import { diagnoses } from '@/domains/app/sub-domains/diagnoses/diagnoses.schema.js';
-import { patient_clinical_notes } from '@/domains/app/sub-domains/patient-clinical-notes/patient-clinical-notes.schema.js';
-import { prescriptions } from '@/domains/app/sub-domains/prescriptions/prescriptions.schema.js';
-import { prescription_kits } from '@/domains/app/sub-domains/prescription-kits/prescription-kits.schema.js';
-import { patient_images } from '@/domains/app/sub-domains/patient-images/patient-images.schema.js';
-import { patient_reports } from '@/domains/app/sub-domains/patient-reports/patient-reports.schema.js';
-import { patient_notes } from '@/domains/app/sub-domains/patient-notes/patient-notes.schema.js';
+import { patient_diagnoses } from '@/domains/app/sub-domains/patients/patient-diagnoses/patient-diagnoses.schema.js';
+import { patient_clinical_notes } from '@/domains/app/sub-domains/patients/patient-clinical-notes/patient-clinical-notes.schema.js';
+import { patient_prescriptions } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.schema.js';
+import { prescription_kits } from '@/domains/app/sub-domains/patients/prescription-kits/prescription-kits.schema.js';
+import { patient_images } from '@/domains/app/sub-domains/patients/patient-images/patient-images.schema.js';
+import { patient_reports } from '@/domains/app/sub-domains/patients/patient-reports/patient-reports.schema.js';
 import { invoices } from '@/domains/app/sub-domains/invoices/invoices.schema.js';
 import { patient_packages } from '@/domains/app/sub-domains/patient-packages/patient-packages.schema.js';
 import { offering_suggestions } from '@/domains/app/sub-domains/offering-suggestions/offering-suggestions.schema.js';
-import { patient_ideas } from '@/domains/app/sub-domains/patient-ideas/patient-ideas.schema.js';
 import { payments } from '@/domains/app/sub-domains/payments/payments.schema.js';
 import { payment_edits } from '@/domains/app/sub-domains/payment-edits/payment-edits.schema.js';
 import { credit_notes } from '@/domains/app/sub-domains/credit-notes/credit-notes.schema.js';
@@ -55,7 +52,7 @@ import { task_rule_settings } from '@/domains/app/sub-domains/task-rule-settings
  *
  * @remarks
  * - **Notes:** generated with the app tables. `app.branches` is not here — a branch is never
- *   deleted (D3, D16).
+ *   deleted (D3, D16) — nor `app.patients`: a patient file is never purged (P7).
  */
 export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   { table: task_rule_settings, label: 'app.task_rule_settings' },
@@ -85,22 +82,21 @@ export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   { table: credit_notes, label: 'app.credit_notes' },
   { table: payment_edits, label: 'app.payment_edits' },
   { table: payments, label: 'app.payments' },
-  { table: patient_ideas, label: 'app.patient_ideas' },
   { table: offering_suggestions, label: 'app.offering_suggestions' },
   { table: patient_packages, label: 'app.patient_packages' },
   { table: invoices, label: 'app.invoices' },
-  { table: patient_notes, label: 'app.patient_notes' },
   { table: patient_reports, label: 'app.patient_reports' },
   { table: patient_images, label: 'app.patient_images' },
   { table: prescription_kits, label: 'app.prescription_kits' },
-  { table: prescriptions, label: 'app.prescriptions' },
+  { table: patient_prescriptions, label: 'app.patient_prescriptions' },
   { table: patient_clinical_notes, label: 'app.patient_clinical_notes' },
-  { table: diagnoses, label: 'app.diagnoses' },
+  { table: patient_diagnoses, label: 'app.patient_diagnoses' },
   { table: appointments, label: 'app.appointments' },
   { table: contact_message_templates, label: 'app.contact_message_templates' },
   { table: leads, label: 'app.leads' },
-  { table: patients, label: 'app.patients' },
-  // A contact goes after the leads, patients and appointments that name it (and its numbers with it)
+  // Never `app.patients` (P7 — a patient file is only ever soft-deleted). A contact goes after the
+  // leads and appointments that name it (and its numbers with it); one with a patient file stays
+  // blocked (`ON DELETE RESTRICT`).
   { table: contacts, label: 'app.contacts' },
   { table: offers, label: 'app.offers' },
   { table: offerings, label: 'app.offerings' },

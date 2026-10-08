@@ -1,43 +1,36 @@
-/** A patient as the API returns it (launch ROUTE #13). */
+/**
+ * A patient file as the API returns it (launch ROUTE #133, routes-final 7.A.6): the clinical side
+ * of a contact.
+ *
+ * @remarks
+ * - **Notes:** the person lives on the contact — only `contact_id` here, no embedded contact (P3; a
+ *   list reads names with `GET /contacts?ids=…`); `conversion` = took a treatment (P4); `lead_id`
+ *   is the lead the check-in that opened the file came from (P10), read-only.
+ */
 export interface PatientOutput {
   id: string;
-  /** The "#3508" of the patient list — per organization, never reused */
+  /** The "PT-0412" of the patient list — per organization, never reused */
   patient_number: number;
-  first_name: string;
-  last_name: string | null;
-  phone: string;
-  /** More mobiles (`+91…`) */
-  phones: string[];
-  email: string | null;
-  gender: string | null;
-  date_of_birth: string | null;
-  address: string | null;
+  contact_id: string;
   home_branch_id: string;
   types: string[];
   status: string;
   conversion: string;
-  referral_source: string | null;
-  referred_by_patient_id: string | null;
-  referred_by_name: string | null;
+  /** The usual doctor */
   doctor_membership_id: string | null;
   follow_up_at: string | null;
   notes: string | null;
   lead_id: string | null;
-  /** Data consent (D39: AI ideas only with it) */
   has_data_consent: boolean;
   has_photo_consent: boolean;
-  has_marketing_consent: boolean;
-  language: string | null;
-  instagram_handles: string[];
-  default_channel: string | null;
-  preferences: unknown;
-  household: string | null;
   allergies: string[];
   contraindications: string[];
-  /** The date of the latest checked-in or completed appointment (YYYY-MM-DD) (per viewer, computed on read) */
-  last_visit_on: string | null;
-  /** The date of the next scheduled or confirmed appointment (YYYY-MM-DD) (per viewer, computed on read) */
-  next_visit_on: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** One row of the patients export (7.A.6): the file, with its contact's name and primary number. */
+export interface PatientExportRow extends PatientOutput {
+  contact_name: string | null;
+  contact_primary_phone: string | null;
 }

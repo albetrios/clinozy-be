@@ -162,104 +162,104 @@ that drops them is built. The medical store's routes wait for its own review ([D
 
 | # | Change | Method | Path | Access | Operation | Source | Built |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 6.1 | KEPT | GET | `/appointments` | `appointment:read` | List appointments — and the clinic floor (`status=checked_in`) | routes-final §6.7 | `GET /api/v1/app/appointments` · #132 |
-| 6.2 | KEPT | GET | `/appointments/exports` | `appointment:export` | Download the list as CSV | routes-final §6.7 | `GET /api/v1/app/appointments/exports` · #132 |
-| 6.3 | KEPT | GET | `/appointments/slots` | `appointment:read` | Free slots for a day | routes-final §6.7 | `GET /api/v1/app/appointments/slots` · #132 |
-| 6.4 | KEPT | GET | `/appointments/daily-counts` | `appointment:read` | Counts per day and status | routes-final §6.7 | `GET /api/v1/app/appointments/daily-counts` · #132 |
-| 6.5 | KEPT | POST | `/appointments` | `appointment:create` | Book, or record a walk-in | routes-final §6.7 | `POST /api/v1/app/appointments` · #132 |
-| 6.6 | KEPT | GET | `/appointments/{appointment_id}` | `appointment:read` | Get an appointment | routes-final §6.7 | `GET /api/v1/app/appointments/:appointment_id` · #132 |
-| 6.7 | KEPT | PATCH | `/appointments/{appointment_id}` | `appointment:update` | Change or move a booking | routes-final §6.7 | `PATCH /api/v1/app/appointments/:appointment_id` · #132 |
-| 6.8 | KEPT | DELETE | `/appointments/{appointment_id}` | `appointment:delete` | Delete a booking | routes-final §6.7 | `DELETE /api/v1/app/appointments/:appointment_id` · #132 |
-| 6.9 | KEPT | POST | `/appointments/{appointment_id}/restore` | `appointment:delete` | Undo a delete | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/restore` · #132 |
-| 6.10 | NEW | POST | `/appointments/{appointment_id}/confirm` | `appointment:update` | They said yes | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/confirm` · #132 |
-| 6.11 | NEW | POST | `/appointments/{appointment_id}/check-in` | `appointment:update` | They arrived — stage `waiting` | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/check-in` · #132 |
-| 6.12 | NEW | POST | `/appointments/{appointment_id}/complete` | `appointment:update` | The visit is done | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/complete` · #132 |
-| 6.13 | NEW | POST | `/appointments/{appointment_id}/no-show` | `appointment:update` | They did not come | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/no-show` · #132 |
-| 6.14 | KEPT | POST | `/appointments/{appointment_id}/cancel` | `appointment:update` | Cancel with a reason | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/cancel` · #132 |
-| 6.15 | KEPT | POST | `/appointments/{appointment_id}/reinstate` | `appointment:update` | Undo a cancel | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/reinstate` · #132 |
-| 6.16 | KEPT | POST | `/appointments/{appointment_id}/undo-check-in` | `appointment:update` | Undo a mistaken check-in | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/undo-check-in` · #132 |
-| 6.17 | KEPT | POST | `/appointments/{appointment_id}/copy` | `appointment:create` | Book again on another day | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/copy` · #132 |
-| 6.18 | CHANGED | POST | `/appointments/{appointment_id}/stage` | `appointment:update` | Move to a later floor stage | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/stage` · #132 |
-| 6.19 | CHANGED | POST | `/appointments/{appointment_id}/pause` | `appointment:update` | Pause the visit | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/pause` · #132 |
-| 6.20 | CHANGED | POST | `/appointments/{appointment_id}/resume` | `appointment:update` | Resume it | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/resume` · #132 |
+| 6.1 | KEPT | GET | `/appointments` | `appointment:read` | List appointments — and the clinic floor (`status=checked_in`) | routes-final §6.7 | `GET /api/v1/app/appointments` · #132 · c8df7dd |
+| 6.2 | KEPT | GET | `/appointments/exports` | `appointment:export` | Download the list as CSV | routes-final §6.7 | `GET /api/v1/app/appointments/exports` · #132 · c8df7dd |
+| 6.3 | KEPT | GET | `/appointments/slots` | `appointment:read` | Free slots for a day | routes-final §6.7 | `GET /api/v1/app/appointments/slots` · #132 · c8df7dd |
+| 6.4 | KEPT | GET | `/appointments/daily-counts` | `appointment:read` | Counts per day and status | routes-final §6.7 | `GET /api/v1/app/appointments/daily-counts` · #132 · c8df7dd |
+| 6.5 | KEPT | POST | `/appointments` | `appointment:create` | Book, or record a walk-in | routes-final §6.7 | `POST /api/v1/app/appointments` · #132 · c8df7dd |
+| 6.6 | KEPT | GET | `/appointments/{appointment_id}` | `appointment:read` | Get an appointment | routes-final §6.7 | `GET /api/v1/app/appointments/:appointment_id` · #132 · c8df7dd |
+| 6.7 | KEPT | PATCH | `/appointments/{appointment_id}` | `appointment:update` | Change or move a booking | routes-final §6.7 | `PATCH /api/v1/app/appointments/:appointment_id` · #132 · c8df7dd |
+| 6.8 | KEPT | DELETE | `/appointments/{appointment_id}` | `appointment:delete` | Delete a booking | routes-final §6.7 | `DELETE /api/v1/app/appointments/:appointment_id` · #132 · c8df7dd |
+| 6.9 | KEPT | POST | `/appointments/{appointment_id}/restore` | `appointment:delete` | Undo a delete | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/restore` · #132 · c8df7dd |
+| 6.10 | NEW | POST | `/appointments/{appointment_id}/confirm` | `appointment:update` | They said yes | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/confirm` · #132 · c8df7dd |
+| 6.11 | NEW | POST | `/appointments/{appointment_id}/check-in` | `appointment:update` | They arrived — stage `waiting` | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/check-in` · #132 · c8df7dd |
+| 6.12 | NEW | POST | `/appointments/{appointment_id}/complete` | `appointment:update` | The visit is done | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/complete` · #132 · c8df7dd |
+| 6.13 | NEW | POST | `/appointments/{appointment_id}/no-show` | `appointment:update` | They did not come | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/no-show` · #132 · c8df7dd |
+| 6.14 | KEPT | POST | `/appointments/{appointment_id}/cancel` | `appointment:update` | Cancel with a reason | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/cancel` · #132 · c8df7dd |
+| 6.15 | KEPT | POST | `/appointments/{appointment_id}/reinstate` | `appointment:update` | Undo a cancel | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/reinstate` · #132 · c8df7dd |
+| 6.16 | KEPT | POST | `/appointments/{appointment_id}/undo-check-in` | `appointment:update` | Undo a mistaken check-in | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/undo-check-in` · #132 · c8df7dd |
+| 6.17 | KEPT | POST | `/appointments/{appointment_id}/copy` | `appointment:create` | Book again on another day | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/copy` · #132 · c8df7dd |
+| 6.18 | CHANGED | POST | `/appointments/{appointment_id}/stage` | `appointment:update` | Move to a later floor stage | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/stage` · #132 · c8df7dd |
+| 6.19 | CHANGED | POST | `/appointments/{appointment_id}/pause` | `appointment:update` | Pause the visit | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/pause` · #132 · c8df7dd |
+| 6.20 | CHANGED | POST | `/appointments/{appointment_id}/resume` | `appointment:update` | Resume it | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/resume` · #132 · c8df7dd |
 
 ## 7. Patients
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| 7.1 | KEPT | GET | `/patients` | `patient:read` | List patient files | routes-final §7.A.7 |
-| 7.2 | KEPT | GET | `/patients/exports` | `patient:export` | Download the list as CSV | routes-final §7.A.7 |
-| 7.3 | KEPT | POST | `/patients` | `patient:create` | Add a patient file (for a contact, or with a new one) | routes-final §7.A.7 |
-| 7.4 | KEPT | GET | `/patients/{patient_id}` | `patient:read` | Get a patient file | routes-final §7.A.7 |
-| 7.5 | KEPT | PATCH | `/patients/{patient_id}` | `patient:update` | Change a patient file | routes-final §7.A.7 |
-| 7.6 | KEPT | DELETE | `/patients/{patient_id}` | `patient:delete` | Remove a patient file | routes-final §7.A.7 |
-| 7.7 | KEPT | POST | `/patients/{patient_id}/restore` | `patient:delete` | Undo a removal | routes-final §7.A.7 |
-| 7.8 | KEPT | GET | `/patients/{patient_id}/clinical-notes` | `patient:clinical_record:read` | The clinical notes | routes-final §7.B.7 |
-| 7.9 | KEPT | POST | `/patients/{patient_id}/clinical-notes` | `patient:update` + clinical | Add a clinical note | routes-final §7.B.7 |
-| 7.10 | CHANGED | GET | `/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}` | `patient:clinical_record:read` | Get one | routes-final §7.B.7 |
-| 7.11 | CHANGED | DELETE | `/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}` | `patient:update` + clinical | Delete a wrong note | routes-final §7.B.7 |
-| 7.12 | CHANGED | POST | `/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}/restore` | `patient:update` + clinical | Undo | routes-final §7.B.7 |
-| 7.13 | KEPT | GET | `/patient-prescriptions` | `patient_prescription:read` | All prescriptions — the pharmacy queue | routes-final §7.C.7 |
-| 7.14 | KEPT | GET | `/patients/{patient_id}/prescriptions` | `patient_prescription:read` | A patient's prescriptions | routes-final §7.C.7 |
-| 7.15 | KEPT | POST | `/patients/{patient_id}/prescriptions` | `patient_prescription:create` | Write a prescription | routes-final §7.C.7 |
-| 7.16 | CHANGED | GET | `/patients/{patient_id}/prescriptions/{patient_prescription_id}` | `patient_prescription:read` | Get one | routes-final §7.C.7 |
-| 7.17 | CHANGED | PATCH | `/patients/{patient_id}/prescriptions/{patient_prescription_id}` | `patient_prescription:update` | Change a draft | routes-final §7.C.7 |
-| 7.18 | CHANGED | POST | `/patients/{patient_id}/prescriptions/{patient_prescription_id}/approve` | `patient_prescription:update` | Approve — final | routes-final §7.C.7 |
-| 7.19 | CHANGED | DELETE | `/patients/{patient_id}/prescriptions/{patient_prescription_id}` | `patient_prescription:delete` | Delete a draft | routes-final §7.C.7 |
-| 7.20 | CHANGED | POST | `/patients/{patient_id}/prescriptions/{patient_prescription_id}/restore` | `patient_prescription:delete` | Undo | routes-final §7.C.7 |
-| 7.21 | KEPT | GET | `/prescription-kits` | `patient_prescription:create` | My kits | routes-final §7.D.7 |
-| 7.22 | KEPT | POST | `/prescription-kits` | `patient_prescription:create` | Save a kit | routes-final §7.D.7 |
-| 7.23 | KEPT | GET | `/prescription-kits/{prescription_kit_id}` | `patient_prescription:create` | Get a kit | routes-final §7.D.7 |
-| 7.24 | KEPT | PATCH | `/prescription-kits/{prescription_kit_id}` | `patient_prescription:create` | Change a kit | routes-final §7.D.7 |
-| 7.25 | KEPT | DELETE | `/prescription-kits/{prescription_kit_id}` | `patient_prescription:create` | Delete a kit | routes-final §7.D.7 |
-| 7.26 | KEPT | POST | `/prescription-kits/{prescription_kit_id}/restore` | `patient_prescription:create` | Undo | routes-final §7.D.7 |
-| 7.27 | CHANGED | GET | `/patient-diagnoses` | any member | The diagnosis catalogue | routes-final §7.E.7 |
-| 7.28 | CHANGED | POST | `/patient-diagnoses` | `patient_prescription:create` | Add a diagnosis | routes-final §7.E.7 |
-| 7.29 | CHANGED | GET | `/patient-diagnoses/{patient_diagnosis_id}` | any member | Get one | routes-final §7.E.7 |
-| 7.30 | CHANGED | PATCH | `/patient-diagnoses/{patient_diagnosis_id}` | `patient_prescription:update` | Rename one | routes-final §7.E.7 |
-| 7.31 | CHANGED | DELETE | `/patient-diagnoses/{patient_diagnosis_id}` | `patient_prescription:delete` | Delete one | routes-final §7.E.7 |
-| 7.32 | CHANGED | POST | `/patient-diagnoses/{patient_diagnosis_id}/restore` | `patient_prescription:delete` | Undo | routes-final §7.E.7 |
-| 7.33 | KEPT | GET | `/patients/{patient_id}/images` | `patient:clinical_record:read` | The photos — one album tab, or all you can see | routes-final §7.F.7 |
-| 7.34 | KEPT | POST | `/patients/{patient_id}/images` | `patient:update` + clinical | Add a photo to an album | routes-final §7.F.7 |
-| 7.35 | CHANGED | GET | `/patients/{patient_id}/images/{patient_image_id}` | `patient:clinical_record:read` | Get one | routes-final §7.F.7 |
-| 7.36 | CHANGED | PATCH | `/patients/{patient_id}/images/{patient_image_id}` | `patient:update` + clinical | Change its details or move it to another album | routes-final §7.F.7 |
-| 7.37 | CHANGED | DELETE | `/patients/{patient_id}/images/{patient_image_id}` | `patient:update` + clinical | Delete one | routes-final §7.F.7 |
-| 7.38 | CHANGED | POST | `/patients/{patient_id}/images/{patient_image_id}/restore` | `patient:update` + clinical | Undo | routes-final §7.F.7 |
-| 7.39 | KEPT | GET | `/patients/{patient_id}/reports` | `patient:clinical_record:read` | The reports | routes-final §7.G.7 |
-| 7.40 | KEPT | POST | `/patients/{patient_id}/reports` | `patient:update` + clinical | Add a report | routes-final §7.G.7 |
-| 7.41 | CHANGED | GET | `/patients/{patient_id}/reports/{patient_report_id}` | `patient:clinical_record:read` | Get one | routes-final §7.G.7 |
-| 7.42 | CHANGED | PATCH | `/patients/{patient_id}/reports/{patient_report_id}` | `patient:update` + clinical | Change one | routes-final §7.G.7 |
-| 7.43 | CHANGED | DELETE | `/patients/{patient_id}/reports/{patient_report_id}` | `patient:update` + clinical | Delete one | routes-final §7.G.7 |
-| 7.44 | CHANGED | POST | `/patients/{patient_id}/reports/{patient_report_id}/restore` | `patient:update` + clinical | Undo | routes-final §7.G.7 |
-| 7.45 | CHANGED | GET | `/patient-treatments` | `patient_treatment:read` | Every patient's treatments — a doctor's or therapist's sessions | routes-final §7.H.7 |
-| 7.46 | KEPT | GET | `/patients/{patient_id}/treatments` | `patient_treatment:read` | The patient's treatments | routes-final §7.H.7 |
-| 7.47 | KEPT | POST | `/patients/{patient_id}/treatments` | `patient_treatment:create` | Record a session (may spend a bought session) | routes-final §7.H.7 |
-| 7.48 | CHANGED | GET | `/patients/{patient_id}/treatments/{patient_treatment_id}` | `patient_treatment:read` | Get one | routes-final §7.H.7 |
-| 7.49 | CHANGED | PATCH | `/patients/{patient_id}/treatments/{patient_treatment_id}` | `patient_treatment:update` | Change a session | routes-final §7.H.7 |
-| 7.50 | CHANGED | POST | `/patients/{patient_id}/treatments/{patient_treatment_id}/reverse` | `patient_treatment:update` | Reverse it with a reason | routes-final §7.H.7 |
-| 7.51 | KEPT | GET | `/patients/{patient_id}/check-ins` | `patient:read` | The patient's check-ins | routes-final §7.I.7 |
-| 7.52 | KEPT | POST | `/patients/{patient_id}/check-ins` | `patient:update` | Log a check-in | routes-final §7.I.7 |
-| 7.53 | CHANGED | GET | `/patients/{patient_id}/check-ins/{patient_check_in_id}` | `patient:read` | Get one | routes-final §7.I.7 |
-| 7.54 | CHANGED | PATCH | `/patients/{patient_id}/check-ins/{patient_check_in_id}` | `patient:update` | Change it | routes-final §7.I.7 |
-| 7.55 | CHANGED | DELETE | `/patients/{patient_id}/check-ins/{patient_check_in_id}` | `patient:update` | Remove it | routes-final §7.I.7 |
-| 7.56 | CHANGED | POST | `/patients/{patient_id}/check-ins/{patient_check_in_id}/restore` | `patient:update` | Undo | routes-final §7.I.7 |
-| 7.57 | KEPT | GET | `/patients/{patient_id}/reviews` | `patient:read` | The patient's reviews | routes-final §7.J.7 |
-| 7.58 | KEPT | POST | `/patients/{patient_id}/reviews` | `patient:update` | Log a review | routes-final §7.J.7 |
-| 7.59 | CHANGED | GET | `/patients/{patient_id}/reviews/{patient_review_id}` | `patient:read` | Get one | routes-final §7.J.7 |
-| 7.60 | CHANGED | PATCH | `/patients/{patient_id}/reviews/{patient_review_id}` | `patient:update` | Change it | routes-final §7.J.7 |
-| 7.61 | CHANGED | DELETE | `/patients/{patient_id}/reviews/{patient_review_id}` | `patient:update` | Remove it | routes-final §7.J.7 |
-| 7.62 | CHANGED | POST | `/patients/{patient_id}/reviews/{patient_review_id}/restore` | `patient:update` | Undo | routes-final §7.J.7 |
-| 7.63 | CHANGED | POST | `/patients/{patient_id}/check-ins/{patient_check_in_id}/actions` | `patient:update` | Log what was done about a check-in | routes-final §7.K.7 |
-| 7.64 | CHANGED | POST | `/patients/{patient_id}/reviews/{patient_review_id}/actions` | `patient:update` | Log what was done about a review | routes-final §7.K.7 |
-| 7.65 | CHANGED | GET | `/patients/{patient_id}/offerings` | `patient:read` | What the patient bought — the Packages tab with `is_package=true` | routes-final §7.L.7 |
-| 7.66 | CHANGED | GET | `/patients/{patient_id}/offerings/{patient_offering_id}` | `patient:read` | Get one | routes-final §7.L.7 |
-| 7.67 | CHANGED | PATCH | `/patients/{patient_id}/offerings/{patient_offering_id}` | `payment:update` | Change its sessions or validity | routes-final §7.L.7 |
-| 7.68 | KEPT | GET | `/patients/{patient_id}/offering-suggestions` | `patient:read` | The patient's plan | routes-final §7.M.7 |
-| 7.69 | KEPT | POST | `/patients/{patient_id}/offering-suggestions` | `patient:update` | Add to the plan | routes-final §7.M.7 |
-| 7.70 | CHANGED | GET | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:read` | Get one | routes-final §7.M.7 |
-| 7.71 | CHANGED | PATCH | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:update` | Change quantity, price, status, reason | routes-final §7.M.7 |
-| 7.72 | CHANGED | DELETE | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:update` | Remove from the plan | routes-final §7.M.7 |
-| 7.73 | CHANGED | POST | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}/restore` | `patient:update` | Undo | routes-final §7.M.7 |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 7.1 | KEPT | GET | `/patients` | `patient:read` | List patient files | routes-final §7.A.7 | `GET /api/v1/app/patients` · #133 |
+| 7.2 | KEPT | GET | `/patients/exports` | `patient:export` | Download the list as CSV | routes-final §7.A.7 | `GET /api/v1/app/patients/exports` · #133 |
+| 7.3 | KEPT | POST | `/patients` | `patient:create` | Add a patient file (for a contact, or with a new one) | routes-final §7.A.7 | `POST /api/v1/app/patients` · #133 |
+| 7.4 | KEPT | GET | `/patients/{patient_id}` | `patient:read` | Get a patient file | routes-final §7.A.7 | `GET /api/v1/app/patients/{patient_id}` · #133 |
+| 7.5 | KEPT | PATCH | `/patients/{patient_id}` | `patient:update` | Change a patient file | routes-final §7.A.7 | `PATCH /api/v1/app/patients/{patient_id}` · #133 |
+| 7.6 | KEPT | DELETE | `/patients/{patient_id}` | `patient:delete` | Remove a patient file | routes-final §7.A.7 | `DELETE /api/v1/app/patients/{patient_id}` · #133 |
+| 7.7 | KEPT | POST | `/patients/{patient_id}/restore` | `patient:delete` | Undo a removal | routes-final §7.A.7 | `POST /api/v1/app/patients/{patient_id}/restore` · #133 |
+| 7.8 | KEPT | GET | `/patients/{patient_id}/clinical-notes` | `patient:clinical_record:read` | The clinical notes | routes-final §7.B.7 | `GET /api/v1/app/patients/{patient_id}/clinical-notes` · #133 |
+| 7.9 | KEPT | POST | `/patients/{patient_id}/clinical-notes` | `patient:update` + clinical | Add a clinical note | routes-final §7.B.7 | `POST /api/v1/app/patients/{patient_id}/clinical-notes` · #133 |
+| 7.10 | CHANGED | GET | `/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}` | `patient:clinical_record:read` | Get one | routes-final §7.B.7 | `GET /api/v1/app/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}` · #133 |
+| 7.11 | CHANGED | DELETE | `/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}` | `patient:update` + clinical | Delete a wrong note | routes-final §7.B.7 | `DELETE /api/v1/app/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}` · #133 |
+| 7.12 | CHANGED | POST | `/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}/restore` | `patient:update` + clinical | Undo | routes-final §7.B.7 | `POST /api/v1/app/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}/restore` · #133 |
+| 7.13 | KEPT | GET | `/patient-prescriptions` | `patient_prescription:read` | All prescriptions — the pharmacy queue | routes-final §7.C.7 | `GET /api/v1/app/patient-prescriptions` · #133 |
+| 7.14 | KEPT | GET | `/patients/{patient_id}/prescriptions` | `patient_prescription:read` | A patient's prescriptions | routes-final §7.C.7 | `GET /api/v1/app/patients/{patient_id}/prescriptions` · #133 |
+| 7.15 | KEPT | POST | `/patients/{patient_id}/prescriptions` | `patient_prescription:create` | Write a prescription | routes-final §7.C.7 | `POST /api/v1/app/patients/{patient_id}/prescriptions` · #133 |
+| 7.16 | CHANGED | GET | `/patients/{patient_id}/prescriptions/{patient_prescription_id}` | `patient_prescription:read` | Get one | routes-final §7.C.7 | `GET /api/v1/app/patients/{patient_id}/prescriptions/{patient_prescription_id}` · #133 |
+| 7.17 | CHANGED | PATCH | `/patients/{patient_id}/prescriptions/{patient_prescription_id}` | `patient_prescription:update` | Change a draft | routes-final §7.C.7 | `PATCH /api/v1/app/patients/{patient_id}/prescriptions/{patient_prescription_id}` · #133 |
+| 7.18 | CHANGED | POST | `/patients/{patient_id}/prescriptions/{patient_prescription_id}/approve` | `patient_prescription:update` | Approve — final | routes-final §7.C.7 | `POST /api/v1/app/patients/{patient_id}/prescriptions/{patient_prescription_id}/approve` · #133 |
+| 7.19 | CHANGED | DELETE | `/patients/{patient_id}/prescriptions/{patient_prescription_id}` | `patient_prescription:delete` | Delete a draft | routes-final §7.C.7 | `DELETE /api/v1/app/patients/{patient_id}/prescriptions/{patient_prescription_id}` · #133 |
+| 7.20 | CHANGED | POST | `/patients/{patient_id}/prescriptions/{patient_prescription_id}/restore` | `patient_prescription:delete` | Undo | routes-final §7.C.7 | `POST /api/v1/app/patients/{patient_id}/prescriptions/{patient_prescription_id}/restore` · #133 |
+| 7.21 | KEPT | GET | `/prescription-kits` | `patient_prescription:create` | My kits | routes-final §7.D.7 | `GET /api/v1/app/prescription-kits` · #133 |
+| 7.22 | KEPT | POST | `/prescription-kits` | `patient_prescription:create` | Save a kit | routes-final §7.D.7 | `POST /api/v1/app/prescription-kits` · #133 |
+| 7.23 | KEPT | GET | `/prescription-kits/{prescription_kit_id}` | `patient_prescription:create` | Get a kit | routes-final §7.D.7 | `GET /api/v1/app/prescription-kits/{prescription_kit_id}` · #133 |
+| 7.24 | KEPT | PATCH | `/prescription-kits/{prescription_kit_id}` | `patient_prescription:create` | Change a kit | routes-final §7.D.7 | `PATCH /api/v1/app/prescription-kits/{prescription_kit_id}` · #133 |
+| 7.25 | KEPT | DELETE | `/prescription-kits/{prescription_kit_id}` | `patient_prescription:create` | Delete a kit | routes-final §7.D.7 | `DELETE /api/v1/app/prescription-kits/{prescription_kit_id}` · #133 |
+| 7.26 | KEPT | POST | `/prescription-kits/{prescription_kit_id}/restore` | `patient_prescription:create` | Undo | routes-final §7.D.7 | `POST /api/v1/app/prescription-kits/{prescription_kit_id}/restore` · #133 |
+| 7.27 | CHANGED | GET | `/patient-diagnoses` | any member | The diagnosis catalogue | routes-final §7.E.7 | `GET /api/v1/app/patient-diagnoses` · #133 |
+| 7.28 | CHANGED | POST | `/patient-diagnoses` | `patient_prescription:create` | Add a diagnosis | routes-final §7.E.7 | `POST /api/v1/app/patient-diagnoses` · #133 |
+| 7.29 | CHANGED | GET | `/patient-diagnoses/{patient_diagnosis_id}` | any member | Get one | routes-final §7.E.7 | `GET /api/v1/app/patient-diagnoses/{patient_diagnosis_id}` · #133 |
+| 7.30 | CHANGED | PATCH | `/patient-diagnoses/{patient_diagnosis_id}` | `patient_prescription:update` | Rename one | routes-final §7.E.7 | `PATCH /api/v1/app/patient-diagnoses/{patient_diagnosis_id}` · #133 |
+| 7.31 | CHANGED | DELETE | `/patient-diagnoses/{patient_diagnosis_id}` | `patient_prescription:delete` | Delete one | routes-final §7.E.7 | `DELETE /api/v1/app/patient-diagnoses/{patient_diagnosis_id}` · #133 |
+| 7.32 | CHANGED | POST | `/patient-diagnoses/{patient_diagnosis_id}/restore` | `patient_prescription:delete` | Undo | routes-final §7.E.7 | `POST /api/v1/app/patient-diagnoses/{patient_diagnosis_id}/restore` · #133 |
+| 7.33 | KEPT | GET | `/patients/{patient_id}/images` | `patient:clinical_record:read` | The photos — one album tab, or all you can see | routes-final §7.F.7 | `GET /api/v1/app/patients/{patient_id}/images` · #133 |
+| 7.34 | KEPT | POST | `/patients/{patient_id}/images` | `patient:update` + clinical | Add a photo to an album | routes-final §7.F.7 | `POST /api/v1/app/patients/{patient_id}/images` · #133 |
+| 7.35 | CHANGED | GET | `/patients/{patient_id}/images/{patient_image_id}` | `patient:clinical_record:read` | Get one | routes-final §7.F.7 | `GET /api/v1/app/patients/{patient_id}/images/{patient_image_id}` · #133 |
+| 7.36 | CHANGED | PATCH | `/patients/{patient_id}/images/{patient_image_id}` | `patient:update` + clinical | Change its details or move it to another album | routes-final §7.F.7 | `PATCH /api/v1/app/patients/{patient_id}/images/{patient_image_id}` · #133 |
+| 7.37 | CHANGED | DELETE | `/patients/{patient_id}/images/{patient_image_id}` | `patient:update` + clinical | Delete one | routes-final §7.F.7 | `DELETE /api/v1/app/patients/{patient_id}/images/{patient_image_id}` · #133 |
+| 7.38 | CHANGED | POST | `/patients/{patient_id}/images/{patient_image_id}/restore` | `patient:update` + clinical | Undo | routes-final §7.F.7 | `POST /api/v1/app/patients/{patient_id}/images/{patient_image_id}/restore` · #133 |
+| 7.39 | KEPT | GET | `/patients/{patient_id}/reports` | `patient:clinical_record:read` | The reports | routes-final §7.G.7 | `GET /api/v1/app/patients/{patient_id}/reports` · #133 |
+| 7.40 | KEPT | POST | `/patients/{patient_id}/reports` | `patient:update` + clinical | Add a report | routes-final §7.G.7 | `POST /api/v1/app/patients/{patient_id}/reports` · #133 |
+| 7.41 | CHANGED | GET | `/patients/{patient_id}/reports/{patient_report_id}` | `patient:clinical_record:read` | Get one | routes-final §7.G.7 | `GET /api/v1/app/patients/{patient_id}/reports/{patient_report_id}` · #133 |
+| 7.42 | CHANGED | PATCH | `/patients/{patient_id}/reports/{patient_report_id}` | `patient:update` + clinical | Change one | routes-final §7.G.7 | `PATCH /api/v1/app/patients/{patient_id}/reports/{patient_report_id}` · #133 |
+| 7.43 | CHANGED | DELETE | `/patients/{patient_id}/reports/{patient_report_id}` | `patient:update` + clinical | Delete one | routes-final §7.G.7 | `DELETE /api/v1/app/patients/{patient_id}/reports/{patient_report_id}` · #133 |
+| 7.44 | CHANGED | POST | `/patients/{patient_id}/reports/{patient_report_id}/restore` | `patient:update` + clinical | Undo | routes-final §7.G.7 | `POST /api/v1/app/patients/{patient_id}/reports/{patient_report_id}/restore` · #133 |
+| 7.45 | CHANGED | GET | `/patient-treatments` | `patient_treatment:read` | Every patient's treatments — a doctor's or therapist's sessions | routes-final §7.H.7 | |
+| 7.46 | KEPT | GET | `/patients/{patient_id}/treatments` | `patient_treatment:read` | The patient's treatments | routes-final §7.H.7 | |
+| 7.47 | KEPT | POST | `/patients/{patient_id}/treatments` | `patient_treatment:create` | Record a session (may spend a bought session) | routes-final §7.H.7 | |
+| 7.48 | CHANGED | GET | `/patients/{patient_id}/treatments/{patient_treatment_id}` | `patient_treatment:read` | Get one | routes-final §7.H.7 | |
+| 7.49 | CHANGED | PATCH | `/patients/{patient_id}/treatments/{patient_treatment_id}` | `patient_treatment:update` | Change a session | routes-final §7.H.7 | |
+| 7.50 | CHANGED | POST | `/patients/{patient_id}/treatments/{patient_treatment_id}/reverse` | `patient_treatment:update` | Reverse it with a reason | routes-final §7.H.7 | |
+| 7.51 | KEPT | GET | `/patients/{patient_id}/check-ins` | `patient:read` | The patient's check-ins | routes-final §7.I.7 | |
+| 7.52 | KEPT | POST | `/patients/{patient_id}/check-ins` | `patient:update` | Log a check-in | routes-final §7.I.7 | |
+| 7.53 | CHANGED | GET | `/patients/{patient_id}/check-ins/{patient_check_in_id}` | `patient:read` | Get one | routes-final §7.I.7 | |
+| 7.54 | CHANGED | PATCH | `/patients/{patient_id}/check-ins/{patient_check_in_id}` | `patient:update` | Change it | routes-final §7.I.7 | |
+| 7.55 | CHANGED | DELETE | `/patients/{patient_id}/check-ins/{patient_check_in_id}` | `patient:update` | Remove it | routes-final §7.I.7 | |
+| 7.56 | CHANGED | POST | `/patients/{patient_id}/check-ins/{patient_check_in_id}/restore` | `patient:update` | Undo | routes-final §7.I.7 | |
+| 7.57 | KEPT | GET | `/patients/{patient_id}/reviews` | `patient:read` | The patient's reviews | routes-final §7.J.7 | |
+| 7.58 | KEPT | POST | `/patients/{patient_id}/reviews` | `patient:update` | Log a review | routes-final §7.J.7 | |
+| 7.59 | CHANGED | GET | `/patients/{patient_id}/reviews/{patient_review_id}` | `patient:read` | Get one | routes-final §7.J.7 | |
+| 7.60 | CHANGED | PATCH | `/patients/{patient_id}/reviews/{patient_review_id}` | `patient:update` | Change it | routes-final §7.J.7 | |
+| 7.61 | CHANGED | DELETE | `/patients/{patient_id}/reviews/{patient_review_id}` | `patient:update` | Remove it | routes-final §7.J.7 | |
+| 7.62 | CHANGED | POST | `/patients/{patient_id}/reviews/{patient_review_id}/restore` | `patient:update` | Undo | routes-final §7.J.7 | |
+| 7.63 | CHANGED | POST | `/patients/{patient_id}/check-ins/{patient_check_in_id}/actions` | `patient:update` | Log what was done about a check-in | routes-final §7.K.7 | |
+| 7.64 | CHANGED | POST | `/patients/{patient_id}/reviews/{patient_review_id}/actions` | `patient:update` | Log what was done about a review | routes-final §7.K.7 | |
+| 7.65 | CHANGED | GET | `/patients/{patient_id}/offerings` | `patient:read` | What the patient bought — the Packages tab with `is_package=true` | routes-final §7.L.7 | |
+| 7.66 | CHANGED | GET | `/patients/{patient_id}/offerings/{patient_offering_id}` | `patient:read` | Get one | routes-final §7.L.7 | |
+| 7.67 | CHANGED | PATCH | `/patients/{patient_id}/offerings/{patient_offering_id}` | `payment:update` | Change its sessions or validity | routes-final §7.L.7 | |
+| 7.68 | KEPT | GET | `/patients/{patient_id}/offering-suggestions` | `patient:read` | The patient's plan | routes-final §7.M.7 | |
+| 7.69 | KEPT | POST | `/patients/{patient_id}/offering-suggestions` | `patient:update` | Add to the plan | routes-final §7.M.7 | |
+| 7.70 | CHANGED | GET | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:read` | Get one | routes-final §7.M.7 | |
+| 7.71 | CHANGED | PATCH | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:update` | Change quantity, price, status, reason | routes-final §7.M.7 | |
+| 7.72 | CHANGED | DELETE | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:update` | Remove from the plan | routes-final §7.M.7 | |
+| 7.73 | CHANGED | POST | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}/restore` | `patient:update` | Undo | routes-final §7.M.7 | |
 
 ## 8. Billing
 

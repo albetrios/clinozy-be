@@ -1,4 +1,5 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { eq, sql, type SQL } from 'drizzle-orm';
+import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { BaseRecordRepository, columnOf } from '@/domains/app/base-record.repository.js';
 import { contact_activities } from './contact-activities.schema.js';
 import {
@@ -86,5 +87,16 @@ export class ContactActivitiesRepository extends BaseRecordRepository {
       defaultSort: 'occurred_at',
       defaultOrder: 'asc',
     });
+  }
+
+  /**
+   * A photo moved into or out of the private album (P23, M10): its entries follow, so they show
+   * only to the album's holders while it is private.
+   */
+  async setPrivatePhoto(options: { patientImageId: number; isPrivate: boolean }): Promise<void> {
+    await getRequestDatabase()
+      .update(contact_activities)
+      .set({ is_private_photo: options.isPrivate })
+      .where(eq(contact_activities.patient_image_id, options.patientImageId));
   }
 }

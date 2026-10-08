@@ -43,7 +43,7 @@ its table designs name them (60 tables; the medical store's wait for its own rev
 | 4. Contacts | `app.contacts`, `app.contact_phones`, `app.contact_members`, `app.contact_activities`, `app.contact_message_templates` | §4 | #129 (contacts, phones, members) · #130 (activities, templates) |
 | 5. Leads | `app.leads`, `app.lead_involved_memberships` | §5 | #131 |
 | 6. Appointments | `app.appointments` | §6 | #132 |
-| 7. Patients | `app.patients`, `app.patient_clinical_notes`, `app.patient_prescriptions`, `app.prescription_kits`, `app.patient_diagnoses`, `app.patient_images`, `app.patient_reports`, `app.patient_treatments`, `app.patient_check_ins`, `app.patient_reviews`, `app.patient_feedback_actions`, `app.patient_offerings`, `app.patient_offering_suggestions` | §7 | #133–#135 |
+| 7. Patients | `app.patients`, `app.patient_clinical_notes`, `app.patient_prescriptions`, `app.prescription_kits`, `app.patient_diagnoses`, `app.patient_images`, `app.patient_reports`, `app.patient_treatments`, `app.patient_check_ins`, `app.patient_reviews`, `app.patient_feedback_actions`, `app.patient_offerings`, `app.patient_offering_suggestions` | §7 | #133 (the file and 7.B–7.G) · #134–#135 |
 | 8. Billing | `app.invoices`, `app.invoice_items`, `app.invoice_members`, `app.invoice_credit_notes`, `app.payments`, `app.payment_edits`, `app.pending_credits`, `app.day_closes`, `app.day_close_events` | §8 | #136 |
 | 9. Stock | `app.stock_items`, `app.stock_item_movements`, `app.stock_counts`, `app.stock_count_lines`, `app.stock_purchases`, `app.stock_purchase_items`, `app.stock_vendors` | §9 | #137 |
 | 10. Tasks & rules | `app.tasks`, `app.task_owner_changes`, `app.task_rule_settings` | §10 | #138 |
@@ -637,6 +637,7 @@ erDiagram
 ```
 
 - **Built (ROUTE #130, sub-domain 4 — 4.C–4.D):** `app.messages` → `app.contact_activities` — append-only (no soft-delete columns, not in the purge list; goes with its contact `ON DELETE CASCADE`), `contact_id`, `type` `varchar(9)` (D62) `whatsapp` · `instagram` · `call_log` · `note` · `system`, `direction`, `body varchar(1000)`, `contact_message_template_id`, `attachment_keys`, `reply_to_contact_activity_id`, `delivery_status` (exactly on a sent message), `provider_message_id` (unique per organization), `failure_reason`, `occurred_at`, `delivered_at` / `read_at` / `failed_at`, `author_membership_id` (composite key to memberships, `RESTRICT` — K2, K8), the twelve record links (`num_nonnulls ≤ 1`, each `SET NULL` to today's table — D63); indexes `(contact_id, occurred_at, id)`, `(contact_id, created_at, id)`, the worker queue `(organization_id, occurred_at) WHERE delivery_status IN ('queued','failed')`, one per link. `app.message_templates` → `app.contact_message_templates` — `type` `whatsapp` · `instagram` (was `channel` with six values), `body varchar(1000)`, the list index `(organization_id, created_at DESC, id)` on live rows. `app.lead_reads` dropped (M3). Code `app/sub-domains/contacts/contact-activities/`, `contact-message-templates/`.
+- **Built (ROUTE #133, D69):** `is_private_photo` boolean (default false) — an entry about a private-album photo, hidden from callers without `patient:private_album:read` (M10, PC16); re-set when the photo moves albums
 ```mermaid
 erDiagram
   contact_activities["app.contact_activities · NEW"] {
@@ -675,6 +676,7 @@ erDiagram
 - **Open:** none — access per D12, D15, D16
 
 - **Built:** `app.patients` · ROUTE #13 (2026-10-07)
+- **Built (ROUTE #133, sub-domain 7 — routes-final 7.A, the clinical side of a contact):** `app.patients` — `contact_id` `NOT NULL` → contacts `ON DELETE RESTRICT` with `idx_patients_organization_contact_unique` (one live file per contact, P1); every person column (names, phones, email, gender, date of birth, address, referral, Instagram, channel, preferences, household, marketing consent, language) and `search_text` gone (P2); `home_branch_id` `RESTRICT`; `types` ≤ 6 of the six; `status`; `conversion` (P4); `doctor_membership_id` a K8 composite key `RESTRICT` (K2); `follow_up_at`; `notes` ≤ 2000; `lead_id` `SET NULL` (P10); the two consents; `allergies`, `contraindications` ≤ 30 each; the 7.A.3 indexes; FORCE RLS without the retention arm and out of the purge list (P7); every table pointing at a patient `ON DELETE RESTRICT` as each is rebuilt (the patient file's six at #133)
 ```mermaid
 erDiagram
   patient["patient · NEW"] {
@@ -1014,6 +1016,7 @@ erDiagram
 - **Open:** none — prescribers add entries (D14, D40)
 
 - **Built:** `app.diagnoses` · ROUTE #23 (2026-10-07)
+- **Built (ROUTE #133, routes-final 7.E):** renamed **`app.patient_diagnoses`** (P28) — `name` ≤ 120, non-empty, unique per organization in any case among live entries; the name list index; FORCE RLS with the purge arm; pointed at by `patient_clinical_notes.patient_diagnosis_id` `SET NULL`
 ```mermaid
 erDiagram
   diagnosis["diagnosis · NEW"] {
@@ -1030,6 +1033,7 @@ erDiagram
 - **Open:** none — replaces Patient.complaints / diagnosis / treatment_suggestions / future_suggestions (D3)
 
 - **Built:** `app.patient_clinical_notes` · ROUTE #24 (2026-10-07)
+- **Built (ROUTE #133, routes-final 7.B):** six kinds (`finding`, `safety_check` added — P12); `appointment_id` `SET NULL`; `patient_diagnosis_id` `SET NULL` with `chk_patient_clinical_notes_patient_diagnosis` (a `diagnosis` note only); text 1–500; `patient_id` `RESTRICT` (P7); indexes `(patient_id, kind, created_at)`, the newest-first list, the visit and catalogue keys
 ```mermaid
 erDiagram
   patient_clinical_note["patient_clinical_note · NEW"] {
@@ -1051,6 +1055,7 @@ erDiagram
 - **Open:** none — draft, then approved by a prescriber (D31); print language stored per prescription (D40); the prescribe code on Doctor and Admin (D13, D14)
 
 - **Built:** `app.prescriptions` · ROUTE #25 (2026-10-07)
+- **Built (ROUTE #133, routes-final 7.C):** renamed **`app.patient_prescriptions`** (P27) — `prescription_number` (counter `trg_patient_prescriptions_prescription_number`); `items` `jsonb` array ≤ 30 (P16); `advice`, `lab_report`, `procedure_today` ≤ 2000; the doctor and the new `approved_by_membership_id` K8 composite keys `RESTRICT` with `chk_patient_prescriptions_approved` (P15); the pharmacy-queue index `(organization_id, status, prescription_date, id)`; `patient_id` `RESTRICT`; invoices, medical sales and the activity stream repointed
 ```mermaid
 erDiagram
   prescription["prescription · NEW"] {
@@ -1080,6 +1085,7 @@ erDiagram
 - **Open:** none
 
 - **Built:** `app.prescription_kits` · ROUTE #26 (2026-10-07)
+- **Built (ROUTE #133, routes-final 7.D):** `owner_membership_id` — a K8 composite key `ON DELETE CASCADE` (P17; was the audit column); the name ≤ 80, non-empty, unique per owner in any case among live kits; `items` with the prescription's checks; index `(owner_membership_id, created_at DESC)`; a leaver's kits soft-deleted by the leave step (K4)
 ```mermaid
 erDiagram
   prescription_kit["prescription_kit · NEW"] {
@@ -1099,6 +1105,7 @@ erDiagram
 - **Open:** none — an editable display name (P45, D40); Private album per schema-routes (P46)
 
 - **Built:** `app.patient_images` · ROUTE #27 (2026-10-07)
+- **Built (ROUTE #133, routes-final 7.F):** `patient_treatment_id` → treatments `SET NULL` and `stage` (`before` · `after`) — P24; `body_part` `varchar(9)` on the patient file's one 15-part list (TR8); `file_name` from the upload; unique `(organization_id, file_key)` (P25); the tab index `(patient_id, album, taken_on DESC, id)`; `patient_id` `RESTRICT`
 ```mermaid
 erDiagram
   patient_image["patient_image · NEW"] {
@@ -1123,6 +1130,7 @@ erDiagram
 - **Open:** none
 
 - **Built:** `app.patient_reports` · ROUTE #28 (2026-10-07)
+- **Built (ROUTE #133, routes-final 7.G):** `file_keys` ≤ 10 (confirmed uploads, P29), `notes` ≤ 1000, the name non-empty; index `(patient_id, report_date DESC, id)`; `patient_id` `RESTRICT`
 ```mermaid
 erDiagram
   patient_report["patient_report · NEW"] {
@@ -1144,6 +1152,7 @@ erDiagram
 - **Open:** none
 
 - **Built:** `app.patient_notes` · ROUTE #29 (2026-10-07)
+- **Dropped (ROUTE #133, P20):** `app.patient_notes` and its routes — a team note is an activity `note` on the contact
 ```mermaid
 erDiagram
   patient_note["patient_note · NEW"] {
@@ -1239,6 +1248,7 @@ erDiagram
 - **Open:** none — the AI provider is chosen at kickoff (D39); only patients with Data consent; never name, phone, photos or note text
 
 - **Built:** `app.patient_ideas` · ROUTE #33 (2026-10-07)
+- **Dropped (ROUTE #133, P20):** `app.patient_ideas` (no routes) until its feature is built
 ```mermaid
 erDiagram
   patient_idea["patient_idea · NEW"] {

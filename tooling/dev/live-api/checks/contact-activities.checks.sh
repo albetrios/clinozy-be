@@ -188,7 +188,8 @@ expect 200 "Chirag after the batch" GET "/app/contacts/${CHIRAG}"
 expect_value "batch moves the last sent time" '.data.last_sent_at != null' true
 
 # ---- M10: an entry linked to a record the caller cannot read is hidden --------------------------
-PATIENT="$(api POST /app/patients "{\"first_name\":\"Clin ${T}\",\"phone\":\"+91${N}09\",\"home_branch_id\":\"$(fixture '.branches.vesu')\"}" >/dev/null; last '.data.id')"
+PATIENT="$(api POST /app/patients "$(jq -nc --arg last "${T}" --arg phone "+91${N}09" --arg branch "$(fixture '.branches.vesu')" \
+  '{contact: {first_name: "Clin", last_name: $last, phones: [{phone: $phone, is_primary: true}]}, home_branch_id: $branch}')" >/dev/null; last '.data.id')"
 CLINICAL_NOTE="$(api POST "/app/patients/${PATIENT}/clinical-notes" '{"kind":"complaint","text":"Acne flare"}' >/dev/null; last '.data.id')"
 expect 200 "note linked to a clinical note" POST "/app/contacts/${CHIRAG}/activities/add-note" "{\"body\":\"See the complaint\",\"patient_clinical_note_id\":\"${CLINICAL_NOTE}\"}"
 LINKED_NOTE="$(last '.data.id')"

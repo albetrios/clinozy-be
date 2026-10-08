@@ -16,10 +16,12 @@ export function paginatedResponse<T>(
     has_more: boolean;
     estimated_total?: number;
   },
+  extraMeta: Readonly<Record<string, unknown>> = {},
 ) {
   return {
     data,
     meta: {
+      ...extraMeta,
       request_id,
       pagination,
     },

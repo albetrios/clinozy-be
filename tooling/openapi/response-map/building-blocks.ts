@@ -50,12 +50,19 @@ export function wrapSuccess(dataSchema: object, dataExample: unknown): object {
   };
 }
 
-export function wrapPaginated(itemSchema: object, itemExamples: unknown[]): object {
+export function wrapPaginated(
+  itemSchema: object,
+  itemExamples: unknown[],
+  extraMetaProperties: Readonly<Record<string, object>> = {},
+): object {
   return {
     type: 'object',
     properties: {
       data: { type: 'array', items: itemSchema },
-      meta: paginationMetaSchema,
+      meta: {
+        ...paginationMetaSchema,
+        properties: { ...extraMetaProperties, ...paginationMetaSchema.properties },
+      },
     },
     example: {
       data: itemExamples,

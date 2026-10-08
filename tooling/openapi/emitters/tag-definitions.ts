@@ -47,7 +47,8 @@ export function buildTagDefinitions(
     Payment: 'Payments, pending credits, credit notes and the day close',
     Invoice:
       'Invoices, packages and offering suggestions — numbered per branch GSTIN and financial year (D23)',
-    'Patient file': "A patient's file — clinical notes, prescriptions, images, reports and notes",
+    'Patient file':
+      "A patient's file — clinical notes, prescriptions and kits, the diagnosis catalogue, photos and reports",
     Visit: 'Visits in progress — the floor stage, the consult note and the safety checks',
     Appointment: 'Appointments — booking, confirming, check-in, cancel and the slots',
     Lead: 'Leads, their conversations and message templates',

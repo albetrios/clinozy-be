@@ -23,10 +23,7 @@ import { listBranchHolidaysQueryDto as appBranchHolidaysListQueryDto } from '@/d
 import { listBranchesQueryDto as appBranchesListQueryDto } from '@/domains/app/sub-domains/branches/branches.dto.js';
 import { listOfferingsQueryDto as appOfferingsListQueryDto } from '@/domains/app/sub-domains/offerings/offerings.dto.js';
 import { listOffersQueryDto as appOffersListQueryDto } from '@/domains/app/sub-domains/offerings/offers/offers.dto.js';
-import {
-  listPatientsQueryDto as appPatientsListQueryDto,
-  timelinePatientQueryDto as appTimelinePatientQueryDto,
-} from '@/domains/app/sub-domains/patients/patients.dto.js';
+import { listPatientsQueryDto as appPatientsListQueryDto } from '@/domains/app/sub-domains/patients/patients.dto.js';
 import { listLeadsQueryDto as appLeadsListQueryDto } from '@/domains/app/sub-domains/leads/leads.dto.js';
 import { listContactMessageTemplatesQueryDto } from '@/domains/app/sub-domains/contacts/contact-message-templates/contact-message-templates.dto.js';
 import { listContactActivitiesQueryDto } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.dto.js';
@@ -35,13 +32,12 @@ import {
   listAppointmentsQueryDto as appAppointmentsListQueryDto,
   slotsAppointmentsQueryDto as appSlotsAppointmentsQueryDto,
 } from '@/domains/app/sub-domains/appointments/appointments.dto.js';
-import { listDiagnosesQueryDto as appDiagnosesListQueryDto } from '@/domains/app/sub-domains/diagnoses/diagnoses.dto.js';
-import { listPatientClinicalNotesQueryDto as appPatientClinicalNotesListQueryDto } from '@/domains/app/sub-domains/patient-clinical-notes/patient-clinical-notes.dto.js';
-import { listPrescriptionsQueryDto as appPrescriptionsListQueryDto } from '@/domains/app/sub-domains/prescriptions/prescriptions.dto.js';
-import { listPrescriptionKitsQueryDto as appPrescriptionKitsListQueryDto } from '@/domains/app/sub-domains/prescription-kits/prescription-kits.dto.js';
-import { listPatientImagesQueryDto as appPatientImagesListQueryDto } from '@/domains/app/sub-domains/patient-images/patient-images.dto.js';
-import { listPatientReportsQueryDto as appPatientReportsListQueryDto } from '@/domains/app/sub-domains/patient-reports/patient-reports.dto.js';
-import { listPatientNotesQueryDto as appPatientNotesListQueryDto } from '@/domains/app/sub-domains/patient-notes/patient-notes.dto.js';
+import { listPatientDiagnosesQueryDto as appDiagnosesListQueryDto } from '@/domains/app/sub-domains/patients/patient-diagnoses/patient-diagnoses.dto.js';
+import { listPatientClinicalNotesQueryDto as appPatientClinicalNotesListQueryDto } from '@/domains/app/sub-domains/patients/patient-clinical-notes/patient-clinical-notes.dto.js';
+import { listPatientPrescriptionsQueryDto as appPrescriptionsListQueryDto } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.dto.js';
+import { listPrescriptionKitsQueryDto as appPrescriptionKitsListQueryDto } from '@/domains/app/sub-domains/patients/prescription-kits/prescription-kits.dto.js';
+import { listPatientImagesQueryDto as appPatientImagesListQueryDto } from '@/domains/app/sub-domains/patients/patient-images/patient-images.dto.js';
+import { listPatientReportsQueryDto as appPatientReportsListQueryDto } from '@/domains/app/sub-domains/patients/patient-reports/patient-reports.dto.js';
 import { listInvoicesQueryDto as appInvoicesListQueryDto } from '@/domains/app/sub-domains/invoices/invoices.dto.js';
 import { listPatientPackagesQueryDto as appPatientPackagesListQueryDto } from '@/domains/app/sub-domains/patient-packages/patient-packages.dto.js';
 import { listOfferingSuggestionsQueryDto as appOfferingSuggestionsListQueryDto } from '@/domains/app/sub-domains/offering-suggestions/offering-suggestions.dto.js';
@@ -97,14 +93,13 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/app/leads': appLeadsListQueryDto,
   'GET /api/v1/app/contact-message-templates': listContactMessageTemplatesQueryDto,
   'GET /api/v1/app/appointments': appAppointmentsListQueryDto,
-  'GET /api/v1/app/diagnoses': appDiagnosesListQueryDto,
+  'GET /api/v1/app/patient-diagnoses': appDiagnosesListQueryDto,
   'GET /api/v1/app/patients/{patient_id}/clinical-notes': appPatientClinicalNotesListQueryDto,
   'GET /api/v1/app/patients/{patient_id}/prescriptions': appPrescriptionsListQueryDto,
-  'GET /api/v1/app/prescriptions': appPrescriptionsListQueryDto,
+  'GET /api/v1/app/patient-prescriptions': appPrescriptionsListQueryDto,
   'GET /api/v1/app/prescription-kits': appPrescriptionKitsListQueryDto,
   'GET /api/v1/app/patients/{patient_id}/images': appPatientImagesListQueryDto,
   'GET /api/v1/app/patients/{patient_id}/reports': appPatientReportsListQueryDto,
-  'GET /api/v1/app/patients/{patient_id}/notes': appPatientNotesListQueryDto,
   'GET /api/v1/app/invoices': appInvoicesListQueryDto,
   'GET /api/v1/app/patients/{patient_id}/packages': appPatientPackagesListQueryDto,
   'GET /api/v1/app/patients/{patient_id}/offering-suggestions': appOfferingSuggestionsListQueryDto,
@@ -148,7 +143,6 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/app/contacts/{contact_id}/activities': listContactActivitiesQueryDto,
   'GET /api/v1/app/appointments/slots': appSlotsAppointmentsQueryDto,
   'GET /api/v1/app/appointments/daily-counts': appDailyCountsAppointmentsQueryDto,
-  'GET /api/v1/app/patients/{patient_id}/timeline': appTimelinePatientQueryDto,
 };
 
 /** Routes that must document `after` and `limit` query parameters in OpenAPI. */
