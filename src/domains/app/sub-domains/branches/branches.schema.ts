@@ -49,8 +49,8 @@ function pattern(value: string): SQL {
 /**
  * Drizzle table for `app.branches` — a location of an organization (launch ROUTE #2, domain `app`).
  * Holds the address, contact, GSTIN, opening hours and working days, the default staff per role
- * (memberships), the maps and review links, and a soft delete with its reason. One live main branch
- * per organization and live names unique per organization (case-insensitive). RLS is the
+ * (memberships), the maps and review links, and `is_active` — a branch is never deleted (D3, D16).
+ * One main branch per organization and names unique per organization (case-insensitive). RLS is the
  * `branches_tenant_isolation` policy on the organization GUC, with the retention-cleanup arm for the
  * deleted-record purge.
  */

@@ -6,7 +6,7 @@ import {
   type CreateMedicalSaleInput,
   listMedicalSalesQueryDto,
 } from './medical-sales.dto.js';
-import { deletedRowsForStatuses } from './medical-sales.repository.js';
+import { deletedRowsForStatuses } from './medical-sales.constants.js';
 
 /** Parses a sale body; throws `ValidationError` naming each bad field. */
 export function validateCreateMedicalSale(data: unknown): CreateMedicalSaleInput {

@@ -141,7 +141,7 @@ describe('OrganizationRepository (database)', () => {
       userId: activeMember.id,
       organizationId: organization.id,
       roleId: role.id,
-      status: 'ACTIVE',
+      status: 'active',
     });
     const transferred = await repository.updateOwner(organization.public_id, activeMember.id);
     expect(transferred?.owner_user_id).toBe(activeMember.id);
@@ -153,7 +153,7 @@ describe('OrganizationRepository (database)', () => {
       userId: suspendedMember.id,
       organizationId: organization.id,
       roleId: role.id,
-      status: 'SUSPENDED',
+      status: 'suspended',
     });
     expect(await repository.updateOwner(organization.public_id, suspendedMember.id)).toBeNull();
 

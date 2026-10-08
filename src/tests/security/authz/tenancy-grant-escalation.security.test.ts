@@ -11,6 +11,7 @@ import {
   seedAllPermissions,
   createRoleWithPermissions,
   createMembership,
+  MEMBERSHIP_WRITE_PERMISSION_CODES,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
@@ -119,7 +120,7 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
         token,
         payload: {
           name: 'partial-escalation',
-          scopes: [TENANCY_PERMISSIONS.ORGANIZATION_READ, TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE],
+          scopes: [TENANCY_PERMISSIONS.ORGANIZATION_READ, TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE],
         },
       });
 
@@ -194,14 +195,14 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
       const broad = await createMemberHolding([
         TENANCY_PERMISSIONS.API_KEY_MANAGE,
         TENANCY_PERMISSIONS.API_KEY_READ,
-        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        ...MEMBERSHIP_WRITE_PERMISSION_CODES,
         TENANCY_PERMISSIONS.MEMBERSHIP_READ,
       ]);
       const created = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/api-keys'),
         token: broad.token,
-        payload: { name: 'broad-key', scopes: [TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE] },
+        payload: { name: 'broad-key', scopes: [TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE] },
       });
       expect(created.statusCode).toBe(200);
       const broadKeyId = (created.json() as { data: { api_key: { id: string } } }).data.api_key.id;
@@ -287,7 +288,7 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
       // above your own — otherwise any member-manager can create an accomplice with more power
       // than themselves, then act through that account.
       const context = await createMemberHolding([
-        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        ...MEMBERSHIP_WRITE_PERMISSION_CODES,
         TENANCY_PERMISSIONS.MEMBERSHIP_READ,
         TENANCY_PERMISSIONS.ROLE_READ,
       ]);
@@ -312,7 +313,7 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
 
     it('permits inviting into a role whose permissions the caller holds', async () => {
       const context = await createMemberHolding([
-        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        ...MEMBERSHIP_WRITE_PERMISSION_CODES,
         TENANCY_PERMISSIONS.MEMBERSHIP_READ,
         TENANCY_PERMISSIONS.ORGANIZATION_READ,
       ]);

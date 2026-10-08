@@ -12,6 +12,8 @@ import {
   seedPermissions,
   createRoleWithPermissions,
   createMembership,
+  MEMBERSHIP_WRITE_PERMISSION_CODES,
+  ROLE_WRITE_PERMISSION_CODES,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
@@ -44,8 +46,8 @@ describe('Security: privilege-boundary matrix (tier:owner + grant)', () => {
   });
 
   const OWNER_PERMISSION_CODES = [
-    TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
-    TENANCY_PERMISSIONS.ROLE_MANAGE,
+    ...MEMBERSHIP_WRITE_PERMISSION_CODES,
+    ...ROLE_WRITE_PERMISSION_CODES,
     TENANCY_PERMISSIONS.ROLE_READ,
     TENANCY_PERMISSIONS.MEMBERSHIP_READ,
     TENANCY_PERMISSIONS.ORGANIZATION_READ,
@@ -105,7 +107,7 @@ describe('Security: privilege-boundary matrix (tier:owner + grant)', () => {
     it('non-owner member POST transfer-ownership → 403 and ownership unchanged', async () => {
       // A member with even the highest organization permission is still not the owner.
       const { owner, member, organization, memberToken } = await setupOrgWithMember([
-        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        ...MEMBERSHIP_WRITE_PERMISSION_CODES,
       ]);
       const res = await injectAuthenticated(app, {
         method: 'POST',
@@ -187,7 +189,7 @@ describe('Security: privilege-boundary matrix (tier:owner + grant)', () => {
     it('member with role:manage cannot grant a permission they do not hold → 403 (no escalation)', async () => {
       // Holds role:manage (passes the route guard) but NOT membership:manage.
       const { organization, member, memberToken } = await setupOrgWithMember([
-        TENANCY_PERMISSIONS.ROLE_MANAGE,
+        ...ROLE_WRITE_PERMISSION_CODES,
       ]);
       const targetRole = await createRoleWithPermissions({
         organizationId: organization.id,
@@ -198,14 +200,14 @@ describe('Security: privilege-boundary matrix (tier:owner + grant)', () => {
         method: 'PUT',
         url: testApiPath(`/tenancy/organization/roles/${targetRole.public_id}/permissions`),
         token: memberToken,
-        payload: { permission_codes: [TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE] },
+        payload: { permission_codes: [TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE] },
       });
       expect(res.statusCode).toBe(403);
     });
 
     it('baseline: member with role:manage grants a permission they hold → 200', async () => {
       const { organization, member, memberToken } = await setupOrgWithMember([
-        TENANCY_PERMISSIONS.ROLE_MANAGE,
+        ...ROLE_WRITE_PERMISSION_CODES,
         TENANCY_PERMISSIONS.ROLE_READ,
       ]);
       const targetRole = await createRoleWithPermissions({
@@ -223,8 +225,8 @@ describe('Security: privilege-boundary matrix (tier:owner + grant)', () => {
     });
 
     it('member of organization A PUT organization B role permissions → 404 (cross-organization isolation)', async () => {
-      const organizationA = await setupOrgWithMember([TENANCY_PERMISSIONS.ROLE_MANAGE]);
-      const organizationB = await setupOrgWithMember([TENANCY_PERMISSIONS.ROLE_MANAGE]);
+      const organizationA = await setupOrgWithMember([...ROLE_WRITE_PERMISSION_CODES]);
+      const organizationB = await setupOrgWithMember([...ROLE_WRITE_PERMISSION_CODES]);
       const res = await injectAuthenticated(app, {
         method: 'PUT',
         url: testApiPath(
@@ -243,7 +245,7 @@ describe('Security: privilege-boundary matrix (tier:owner + grant)', () => {
       // owner (which would strip the organization of its only owner). The scoped lookup
       // succeeds, then the owner-guard rejects: `errors:ownerMembershipCannotBeModified`.
       const { ownerMembership, memberToken } = await setupOrgWithMember([
-        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        ...MEMBERSHIP_WRITE_PERMISSION_CODES,
       ]);
       const res = await injectAuthenticated(app, {
         method: 'PATCH',
@@ -258,7 +260,7 @@ describe('Security: privilege-boundary matrix (tier:owner + grant)', () => {
       // Removing the owner is likewise blocked (`errors:ownerCannotBeRemoved`):
       // ownership must be transferred first, never deleted out from under the organization.
       const { ownerMembership, memberToken } = await setupOrgWithMember([
-        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        ...MEMBERSHIP_WRITE_PERMISSION_CODES,
       ]);
       const res = await injectAuthenticated(app, {
         method: 'DELETE',

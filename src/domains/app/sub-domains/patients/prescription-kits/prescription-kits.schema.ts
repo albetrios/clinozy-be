@@ -59,6 +59,10 @@ export const prescription_kits = appSchema
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
+      index('idx_prescription_kits_organization_owner').on(
+        table.organization_id,
+        table.owner_membership_id,
+      ),
       uniqueIndex('idx_prescription_kits_public_id').on(table.public_id),
       // P17: one live kit of a name per owner, in any case
       uniqueIndex('idx_prescription_kits_owner_name_unique')

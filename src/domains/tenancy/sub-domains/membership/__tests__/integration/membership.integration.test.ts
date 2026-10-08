@@ -26,6 +26,7 @@ import {
   seedAllPermissions,
   createRoleWithPermissions,
   createMembership,
+  MEMBERSHIP_WRITE_PERMISSION_CODES,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { MembershipInvitationRepository } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.repository.js';
@@ -44,8 +45,7 @@ import type { FastifyInstance } from 'fastify';
 
 const MEMBERSHIP_PERMISSIONS = [
   TENANCY_PERMISSIONS.MEMBERSHIP_READ,
-  TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
-  TENANCY_PERMISSIONS.INVITATION_MANAGE,
+  ...MEMBERSHIP_WRITE_PERMISSION_CODES,
   TENANCY_PERMISSIONS.ORGANIZATION_READ,
   TENANCY_PERMISSIONS.ORGANIZATION_UPDATE,
 ];
@@ -106,16 +106,16 @@ describe('Membership Sub-Domain — Integration', () => {
       expect(response.statusCode).toBe(200);
 
       const body = response.json() as {
-        data?: { user_id: string; role_id: string }[];
+        data?: { user_id: string; role_ids: string[] }[];
       };
       const items = body.data ?? [];
       expect(items.length).toBeGreaterThan(0);
       const member = items[0]!;
       // Prefixed public ids, never the internal bigserial ids ("1", "42", ...).
       expect(member.user_id).toMatch(/^usr_[a-z0-9]{21}$/);
-      expect(member.role_id).toMatch(/^rol_[a-z0-9]{21}$/);
+      expect(member.role_ids[0]).toMatch(/^rol_[a-z0-9]{21}$/);
       expect(member.user_id).not.toMatch(/^\d+$/);
-      expect(member.role_id).not.toMatch(/^\d+$/);
+      expect(member.role_ids[0]).not.toMatch(/^\d+$/);
     });
   });
 
@@ -159,7 +159,7 @@ describe('Membership Sub-Domain — Integration', () => {
         headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
         payload: {
           email: newMember.email,
-          role_id: memberRole.public_id,
+          role_ids: [memberRole.public_id],
         },
       });
       expect(createMembershipResponse.statusCode).toBe(200);
@@ -209,18 +209,18 @@ describe('Membership Sub-Domain — Integration', () => {
         headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
         payload: {
           email: `invited-only-${randomUUID()}@test.com`,
-          role_id: memberRole.public_id,
+          role_ids: [memberRole.public_id],
         },
       });
       expect(response.statusCode).toBe(200);
       const created = (response.json() as { data: { id: string; status: string } }).data;
-      expect(created.status).toBe('INVITED');
+      expect(created.status).toBe('invited');
 
       const [row] = await getOperatorDatabase()
         .select()
         .from(memberships)
         .where(eq(memberships.public_id, created.id));
-      expect(row!.status).toBe('INVITED');
+      expect(row!.status).toBe('invited');
       expect(row!.joined_at).toBeNull();
     });
   });
@@ -272,7 +272,7 @@ describe('Membership Sub-Domain — Integration', () => {
         url: testApiPath('/tenancy/organization/memberships'),
         token: adminToken,
         headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
-        payload: { email: `seat-${randomUUID()}@test.com`, role_id: memberRolePublicId },
+        payload: { email: `seat-${randomUUID()}@test.com`, role_ids: [memberRolePublicId] },
       });
     }
 
@@ -337,14 +337,14 @@ describe('Membership Sub-Domain — Integration', () => {
         userId: member.id,
         organizationId,
         roleId: memberRoleId,
-        status: 'SUSPENDED',
+        status: 'suspended',
       });
       return injectAuthenticated(app, {
         method: 'PATCH',
         url: testApiPath(`/tenancy/organization/memberships/${suspended.public_id}`),
         token: adminToken,
         headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
-        payload: { status: 'ACTIVE' },
+        payload: { status: 'active' },
       });
     }
 
@@ -367,7 +367,7 @@ describe('Membership Sub-Domain — Integration', () => {
     });
   });
 
-  describe('POST /api/v1/invitations/:invitation_id/accept (membership activation)', () => {
+  describe('POST /api/v1/tenancy/membership-invitations/:membership_invitation_id/accept (membership activation)', () => {
     async function createPendingInvitation() {
       const { organization, token, user: admin } = await createAuthorizedContext();
       // The invitee must have a verified email to accept (they onboard via email code / OAuth /
@@ -387,7 +387,7 @@ describe('Membership Sub-Domain — Integration', () => {
           user_id: invitee.id,
           organization_id: organization.id,
           role_id: memberRole.id,
-          status: 'INVITED',
+          status: 'invited',
         })
         .returning();
       const rawToken = `accept-token-${randomUUID()}`;
@@ -425,8 +425,9 @@ describe('Membership Sub-Domain — Integration', () => {
 
       const acceptResponse = await injectAuthenticated(app, {
         method: 'POST',
-        url: testApiPath(`/tenancy/invitations/${invitation.public_id}/accept`),
+        url: testApiPath(`/tenancy/membership-invitations/${invitation.public_id}/accept`),
         token: inviteeToken,
+        headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
         payload: { token: rawToken },
       });
       expect(acceptResponse.statusCode).toBe(200);
@@ -440,7 +441,7 @@ describe('Membership Sub-Domain — Integration', () => {
         .select()
         .from(memberships)
         .where(eq(memberships.id, inviteeMembership.id));
-      expect(updated!.status).toBe('ACTIVE');
+      expect(updated!.status).toBe('active');
       expect(updated!.joined_at).not.toBeNull();
     });
 
@@ -450,8 +451,9 @@ describe('Membership Sub-Domain — Integration', () => {
 
       const acceptResponse = await injectAuthenticated(app, {
         method: 'POST',
-        url: testApiPath(`/tenancy/invitations/${invitation.public_id}/accept`),
+        url: testApiPath(`/tenancy/membership-invitations/${invitation.public_id}/accept`),
         token: inviteeToken,
+        headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
         payload: { token: rawToken },
       });
       expect(acceptResponse.statusCode).toBe(200);
@@ -479,15 +481,16 @@ describe('Membership Sub-Domain — Integration', () => {
         method: 'PATCH',
         url: testApiPath(`/tenancy/organization/memberships/${inviteeMembership.public_id}`),
         token,
-        payload: { status: 'ACTIVE' },
+        payload: { status: 'active' },
       });
-      expect(patchResponse.statusCode).toBe(403);
+      // T10: an invited member becomes active only by accepting the invite.
+      expect(patchResponse.statusCode).toBe(400);
 
       const [stillInvited] = await getOperatorDatabase()
         .select()
         .from(memberships)
         .where(eq(memberships.id, inviteeMembership.id));
-      expect(stillInvited!.status).toBe('INVITED');
+      expect(stillInvited!.status).toBe('invited');
       expect(stillInvited!.joined_at).toBeNull();
     });
   });
@@ -513,7 +516,7 @@ describe('Membership Sub-Domain — Integration', () => {
           user_id: member.id,
           organization_id: organization.id,
           role_id: fromRole.id,
-          status: 'ACTIVE',
+          status: 'active',
           joined_at: new Date(),
         })
         .returning();
@@ -522,15 +525,12 @@ describe('Membership Sub-Domain — Integration', () => {
         method: 'PATCH',
         url: testApiPath(`/tenancy/organization/memberships/${membership!.public_id}`),
         token,
-        payload: { role_id: toRole.public_id },
+        payload: { role_ids: [toRole.public_id] },
       });
       expect(response.statusCode).toBe(200);
-      const body = response.json() as {
-        data: { role_id: string; role: { id: string } };
-      };
-      // Flat + embedded role public id both reflect the new role (REQ-2 embed).
-      expect(body.data.role_id).toBe(toRole.public_id);
-      expect(body.data.role.id).toBe(toRole.public_id);
+      const body = response.json() as { data: { role_ids: string[] } };
+      // The main role is the first of `role_ids` (D5).
+      expect(body.data.role_ids).toEqual([toRole.public_id]);
 
       const [row] = await getOperatorDatabase()
         .select()
@@ -540,7 +540,7 @@ describe('Membership Sub-Domain — Integration', () => {
     });
   });
 
-  describe('DELETE /api/v1/tenancy/organization/invitations/:invitation_id (route-coverage gap-fill)', () => {
+  describe('DELETE /api/v1/tenancy/organization/memberships/:membership_id/invitation (route-coverage gap-fill)', () => {
     async function createPendingInvitationForAdminRevoke() {
       const { organization, token: adminToken, user: admin } = await createAuthorizedContext();
       const invitee = await createTestUser({ email: `admin-revoke-${randomUUID()}@test.com` });
@@ -555,7 +555,7 @@ describe('Membership Sub-Domain — Integration', () => {
           user_id: invitee.id,
           organization_id: organization.id,
           role_id: memberRole.id,
-          status: 'INVITED',
+          status: 'invited',
         })
         .returning();
       const invitationRepository = new MembershipInvitationRepository();
@@ -583,7 +583,9 @@ describe('Membership Sub-Domain — Integration', () => {
         await createPendingInvitationForAdminRevoke();
       const response = await injectAuthenticated(app, {
         method: 'DELETE',
-        url: testApiPath(`/tenancy/organization/invitations/${invitation.public_id}`),
+        url: testApiPath(
+          `/tenancy/organization/memberships/${inviteeMembership.public_id}/invitation`,
+        ),
         token: adminToken,
       });
       expect(response.statusCode).toBe(204);
@@ -605,15 +607,20 @@ describe('Membership Sub-Domain — Integration', () => {
     });
 
     it('refuses cross-organization revoke attempts with 404 (tenant isolation)', async () => {
-      const { organization: organizationA, invitation } =
-        await createPendingInvitationForAdminRevoke();
+      const {
+        organization: organizationA,
+        invitation,
+        inviteeMembership,
+      } = await createPendingInvitationForAdminRevoke();
       const { organization: organizationB, token: organizationBAdminToken } =
         await createAuthorizedContext();
       expect(organizationA.id).not.toBe(organizationB.id);
 
       const response = await injectAuthenticated(app, {
         method: 'DELETE',
-        url: testApiPath(`/tenancy/organization/invitations/${invitation.public_id}`),
+        url: testApiPath(
+          `/tenancy/organization/memberships/${inviteeMembership.public_id}/invitation`,
+        ),
         token: organizationBAdminToken,
       });
       expect(response.statusCode).toBe(404);
@@ -625,8 +632,9 @@ describe('Membership Sub-Domain — Integration', () => {
       expect(untouched!.revoked_at).toBeNull();
     });
 
-    it('rejects non-admin (no invitation:manage permission) with 403', async () => {
-      const { organization, invitation } = await createPendingInvitationForAdminRevoke();
+    it('rejects a member without membership:delete with 403', async () => {
+      const { organization, invitation, inviteeMembership } =
+        await createPendingInvitationForAdminRevoke();
       const readOnlyUser = await createTestUser({ email: `read-only-${randomUUID()}@test.com` });
       const readOnlyRole = await createRoleWithPermissions({
         organizationId: organization.id,
@@ -644,7 +652,9 @@ describe('Membership Sub-Domain — Integration', () => {
 
       const response = await injectAuthenticated(app, {
         method: 'DELETE',
-        url: testApiPath(`/tenancy/organization/invitations/${invitation.public_id}`),
+        url: testApiPath(
+          `/tenancy/organization/memberships/${inviteeMembership.public_id}/invitation`,
+        ),
         token: readOnlyToken,
       });
       expect(response.statusCode).toBe(403);
@@ -657,7 +667,7 @@ describe('Membership Sub-Domain — Integration', () => {
     });
   });
 
-  describe('POST /api/v1/tenancy/organization/invitations/:invitation_id/resend (route-coverage gap-fill)', () => {
+  describe('POST /api/v1/tenancy/organization/memberships/:membership_id/invitation/resend (route-coverage gap-fill)', () => {
     async function createPendingInvitationForResend() {
       const { organization, token: adminToken, user: admin } = await createAuthorizedContext();
       const invitee = await createTestUser({ email: `resend-${randomUUID()}@test.com` });
@@ -672,7 +682,7 @@ describe('Membership Sub-Domain — Integration', () => {
           user_id: invitee.id,
           organization_id: organization.id,
           role_id: memberRole.id,
-          status: 'INVITED',
+          status: 'invited',
         })
         .returning();
       const invitationRepository = new MembershipInvitationRepository();
@@ -693,17 +703,25 @@ describe('Membership Sub-Domain — Integration', () => {
             created_by_user_id: admin.id,
           }),
       );
-      return { organization, adminToken, invitation, originalTokenHash };
+      return {
+        organization,
+        adminToken,
+        invitation,
+        inviteeMembership: inviteeMembership!,
+        originalTokenHash,
+      };
     }
 
     it('rotates the token_hash and extends expires_at on resend (200)', async () => {
-      const { adminToken, invitation, originalTokenHash } =
+      const { adminToken, invitation, inviteeMembership, originalTokenHash } =
         await createPendingInvitationForResend();
       const originalExpiresAt = invitation.expires_at.getTime();
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
-        url: testApiPath(`/tenancy/organization/invitations/${invitation.public_id}/resend`),
+        url: testApiPath(
+          `/tenancy/organization/memberships/${inviteeMembership.public_id}/invitation/resend`,
+        ),
         token: adminToken,
         headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
         payload: { expires_in_days: 10 },
@@ -721,7 +739,8 @@ describe('Membership Sub-Domain — Integration', () => {
     });
 
     it('rejects resend on a revoked invitation (400)', async () => {
-      const { adminToken, invitation } = await createPendingInvitationForResend();
+      const { adminToken, invitation, inviteeMembership } =
+        await createPendingInvitationForResend();
       await getOperatorDatabase()
         .update(membership_invitations)
         .set({ revoked_at: new Date() })
@@ -729,7 +748,9 @@ describe('Membership Sub-Domain — Integration', () => {
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
-        url: testApiPath(`/tenancy/organization/invitations/${invitation.public_id}/resend`),
+        url: testApiPath(
+          `/tenancy/organization/memberships/${inviteeMembership.public_id}/invitation/resend`,
+        ),
         token: adminToken,
         headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
         payload: { expires_in_days: 10 },
@@ -738,12 +759,14 @@ describe('Membership Sub-Domain — Integration', () => {
     });
 
     it('refuses cross-tenant resend with 404 (tenant isolation)', async () => {
-      const { invitation } = await createPendingInvitationForResend();
+      const { inviteeMembership } = await createPendingInvitationForResend();
       const { token: organizationBAdminToken } = await createAuthorizedContext();
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
-        url: testApiPath(`/tenancy/organization/invitations/${invitation.public_id}/resend`),
+        url: testApiPath(
+          `/tenancy/organization/memberships/${inviteeMembership.public_id}/invitation/resend`,
+        ),
         token: organizationBAdminToken,
         headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
         payload: { expires_in_days: 10 },
@@ -913,8 +936,8 @@ describe('Membership Sub-Domain — Integration', () => {
       });
       expect(response.statusCode).toBe(200);
 
-      const body = response.json() as { data?: { permissions?: string[] } };
-      const permissions = body.data?.permissions ?? [];
+      const body = response.json() as { data?: { permission_codes?: string[] } };
+      const permissions = body.data?.permission_codes ?? [];
       expect(permissions).toEqual(expect.arrayContaining(MEMBERSHIP_PERMISSIONS));
     });
 
@@ -1120,7 +1143,9 @@ describe('Membership Sub-Domain — Integration', () => {
       // transferred first, or the organization would be left without an owner.
       const response = await injectAuthenticated(app, {
         method: 'DELETE',
-        url: testApiPath(`/tenancy/organization/memberships/${ownerMembership.public_id}`),
+        url: testApiPath(
+          `/tenancy/organization/memberships/${ownerMembership.public_id}?reason=not_needed`,
+        ),
         token,
       });
       expect(response.statusCode).toBe(403);
@@ -1138,7 +1163,7 @@ describe('Membership Sub-Domain — Integration', () => {
   // membership.service.unit.test.ts; these tests prove the rejection survives over real HTTP —
   // i.e. the guard is reached (not short-circuited by a route-level 400/403) and the wire
   // payload carries the documented conflict. The owner provisioned below holds the full tenancy
-  // permission set (MEMBERSHIP_MANAGE + INVITATION_MANAGE included), so the request passes RBAC
+  // permission set (the membership write codes included), so the request passes RBAC
   // and lands squarely on the single-member guard rather than a 403.
   describe('PERSONAL organization single-member guard (HTTP-level coverage)', () => {
     // provisionPersonalOrganization / provisionOrganizationWithOwner insert a role_permissions
@@ -1221,7 +1246,7 @@ describe('Membership Sub-Domain — Integration', () => {
         headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
         payload: {
           email: newMemberEmail,
-          role_id: ownerRolePublicId,
+          role_ids: [ownerRolePublicId],
         },
       });
 
@@ -1258,13 +1283,13 @@ describe('Membership Sub-Domain — Integration', () => {
         headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
         payload: {
           email: newMemberEmail,
-          role_id: ownerRolePublicId,
+          role_ids: [ownerRolePublicId],
         },
       });
 
       expect(response.statusCode).toBe(200);
       const membershipsAfter = await countMemberships(team.organization.id);
-      expect(membershipsAfter).toBe(2); // owner + the newly-invited (INVITED) member
+      expect(membershipsAfter).toBe(2); // owner + the newly-invited (invited) member
     });
   });
 });

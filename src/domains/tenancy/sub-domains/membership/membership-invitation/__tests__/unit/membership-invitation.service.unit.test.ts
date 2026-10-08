@@ -87,6 +87,7 @@ describe('MembershipInvitationService', () => {
 
   const membershipRepository = {
     findById: vi.fn().mockResolvedValue(membership),
+    findByPublicId: vi.fn().mockResolvedValue(membership),
     activateForInvitationAccept: vi.fn().mockResolvedValue(membership),
     softDelete: vi.fn().mockResolvedValue(membership),
     // item #10: accept() resolves membership:manage holders for the invite-accepted notification;
@@ -109,6 +110,7 @@ describe('MembershipInvitationService', () => {
     accept: vi.fn().mockResolvedValue(makeInvitationRow({ accepted_at: now })),
     revoke: vi.fn().mockResolvedValue(makeInvitationRow({ revoked_at: now })),
     resend: vi.fn().mockResolvedValue(makeInvitationRow()),
+    findLatestByMembershipId: vi.fn().mockResolvedValue(makeInvitationRow()),
   } as unknown as MembershipInvitationRepository;
 
   const userService = {
@@ -157,6 +159,10 @@ describe('MembershipInvitationService', () => {
       makeInvitationRow({ revoked_at: now }) as never,
     );
     vi.mocked(invitationRepository.resend).mockResolvedValue(makeInvitationRow() as never);
+    vi.mocked(invitationRepository.findLatestByMembershipId).mockResolvedValue(
+      makeInvitationRow() as never,
+    );
+    vi.mocked(membershipRepository.findByPublicId).mockResolvedValue(membership as never);
     vi.mocked(userService.requireUserRecordByPublicId).mockResolvedValue({
       id: 5,
       public_id: 'user_public_id',
@@ -291,81 +297,35 @@ describe('MembershipInvitationService', () => {
     });
   });
 
-  describe('revoke', () => {
-    it('revokes the invitation', async () => {
-      await service.revoke(asScope('org_public_abc'), 'inv_public_123');
+  describe('revokePendingForMembership', () => {
+    it("revokes the membership's latest pending invitation", async () => {
+      const revoked = await service.revokePendingForMembership(membership.id);
+      expect(invitationRepository.findLatestByMembershipId).toHaveBeenCalledWith(membership.id);
       expect(invitationRepository.revoke).toHaveBeenCalledWith('inv_public_123');
+      expect(revoked).toMatchObject({ public_id: 'inv_public_123' });
     });
 
-    it('soft-deletes the auto-created INVITED membership so no ghost invitee remains (REQ-1)', async () => {
-      await service.revoke(asScope('org_public_abc'), 'inv_public_123');
-      expect(membershipRepository.softDelete).toHaveBeenCalledWith('mem_public_xyz', 1);
-    });
-
-    // An INVITED membership holds a billable seat (it is counted so a burst of invites cannot
-    // overshoot the plan once everyone accepts). Dropping it frees that seat, so billing has to
-    // hear about it — without this the revoked invitation stayed billed until some unrelated
-    // member change happened to reconcile the quantity (REQ-4).
-    it('reconciles the Stripe seat quantity, because the invitation was holding a seat', async () => {
-      const enqueueSeatQuantitySync = vi.fn();
-      const seatSyncedService = new MembershipInvitationService(
-        organizationRepository,
-        membershipRepository,
-        invitationRepository,
-        userService,
-      );
-      seatSyncedService.wireSeatQuantitySync({ enqueueSeatQuantitySync });
-
-      await seatSyncedService.revoke(asScope('org_public_abc'), 'inv_public_123');
-
-      expect(enqueueSeatQuantitySync).toHaveBeenCalledWith('org_public_abc');
-    });
-
-    it('does not reconcile when the revoke failed — the seat was never freed', async () => {
-      const enqueueSeatQuantitySync = vi.fn();
-      const seatSyncedService = new MembershipInvitationService(
-        organizationRepository,
-        membershipRepository,
-        invitationRepository,
-        userService,
-      );
-      seatSyncedService.wireSeatQuantitySync({ enqueueSeatQuantitySync });
-      vi.mocked(invitationRepository.revoke).mockResolvedValue(null as never);
-
-      await expect(
-        seatSyncedService.revoke(asScope('org_public_abc'), 'inv_public_123'),
-      ).rejects.toBeInstanceOf(NotFoundError);
-
-      expect(enqueueSeatQuantitySync).not.toHaveBeenCalled();
-    });
-
-    it('throws NotFoundError when organization is missing', async () => {
-      vi.mocked(organizationRepository.findByPublicId).mockResolvedValue(null);
-      await expect(
-        service.revoke(asScope('org_public_abc'), 'inv_public_123'),
-      ).rejects.toBeInstanceOf(NotFoundError);
-    });
-
-    it('throws NotFoundError when invitation is missing', async () => {
-      vi.mocked(invitationRepository.findByPublicId).mockResolvedValue(null);
-      await expect(
-        service.revoke(asScope('org_public_abc'), 'inv_public_123'),
-      ).rejects.toBeInstanceOf(NotFoundError);
-    });
-
-    it('throws NotFoundError when revoke returns null', async () => {
-      vi.mocked(invitationRepository.revoke).mockResolvedValue(null);
-      await expect(
-        service.revoke(asScope('org_public_abc'), 'inv_public_123'),
-      ).rejects.toBeInstanceOf(NotFoundError);
+    it.each([
+      ['no invitation at all', null],
+      ['an accepted invitation', makeInvitationRow({ accepted_at: now })],
+      ['an already revoked invitation', makeInvitationRow({ revoked_at: now })],
+    ])('answers null and revokes nothing for %s', async (_label, latest) => {
+      vi.mocked(invitationRepository.findLatestByMembershipId).mockResolvedValue(latest as never);
+      await expect(service.revokePendingForMembership(membership.id)).resolves.toBeNull();
+      expect(invitationRepository.revoke).not.toHaveBeenCalled();
     });
   });
 
-  describe('resend', () => {
+  describe('resendForMembership', () => {
     const body = { expires_in_days: 7 };
 
     it('resends invitation with a new token via strict event, without returning it (R1/R2)', async () => {
-      const result = await service.resend(asScope('org_public_abc'), 'inv_public_123', body);
+      const result = await service.resendForMembership(
+        asScope('org_public_abc'),
+        'mem_public_xyz',
+        body,
+      );
+      expect(membershipRepository.findByPublicId).toHaveBeenCalledWith('mem_public_xyz', 1);
       expect(invitationRepository.resend).toHaveBeenCalled();
       expect(eventBus.emitStrict).toHaveBeenCalledOnce();
       expect(eventBus.emit).not.toHaveBeenCalled();
@@ -373,43 +333,49 @@ describe('MembershipInvitationService', () => {
       expect((result as unknown as Record<string, unknown>).token).toBeUndefined();
     });
 
-    it('throws NotFoundError when invitation is missing', async () => {
-      vi.mocked(invitationRepository.findByPublicId).mockResolvedValue(null);
+    it('throws NotFoundError when the member is unknown or ended', async () => {
+      vi.mocked(membershipRepository.findByPublicId).mockResolvedValue(null);
       await expect(
-        service.resend(asScope('org_public_abc'), 'inv_public_123', body),
+        service.resendForMembership(asScope('org_public_abc'), 'mem_public_xyz', body),
+      ).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it('throws NotFoundError when the member has no invitation', async () => {
+      vi.mocked(invitationRepository.findLatestByMembershipId).mockResolvedValue(null);
+      await expect(
+        service.resendForMembership(asScope('org_public_abc'), 'mem_public_xyz', body),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
 
     it('throws ValidationError when invitation is already accepted', async () => {
-      vi.mocked(invitationRepository.findByPublicId).mockResolvedValue(
+      vi.mocked(invitationRepository.findLatestByMembershipId).mockResolvedValue(
         makeInvitationRow({ accepted_at: now }) as never,
       );
       await expect(
-        service.resend(asScope('org_public_abc'), 'inv_public_123', body),
+        service.resendForMembership(asScope('org_public_abc'), 'mem_public_xyz', body),
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
     it('throws ValidationError when invitation is revoked', async () => {
-      vi.mocked(invitationRepository.findByPublicId).mockResolvedValue(
+      vi.mocked(invitationRepository.findLatestByMembershipId).mockResolvedValue(
         makeInvitationRow({ revoked_at: now }) as never,
       );
       await expect(
-        service.resend(asScope('org_public_abc'), 'inv_public_123', body),
+        service.resendForMembership(asScope('org_public_abc'), 'mem_public_xyz', body),
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
-    it('throws ValidationError and neither rotates the token nor emits when the invitation is expired', async () => {
-      vi.mocked(invitationRepository.findByPublicId).mockResolvedValue(
+    it('rotates the token and expiry of an expired invite too (T11)', async () => {
+      vi.mocked(invitationRepository.findLatestByMembershipId).mockResolvedValue(
         makeInvitationRow({ expires_at: new Date('2020-01-01T00:00:00.000Z') }) as never,
       );
-      await expect(
-        service.resend(asScope('org_public_abc'), 'inv_public_123', body),
-      ).rejects.toBeInstanceOf(ValidationError);
-      // The expiry guard must fire BEFORE the destructive token rotation: `resend` overwrites the
-      // token_hash in place, so rotating for an already-expired invite would invalidate the
-      // invitee's link while still refusing the operation. No rotation, no outbox event.
-      expect(invitationRepository.resend).not.toHaveBeenCalled();
-      expect(eventBus.emitStrict).not.toHaveBeenCalled();
+      await service.resendForMembership(asScope('org_public_abc'), 'mem_public_xyz', body);
+      expect(invitationRepository.resend).toHaveBeenCalledWith(
+        'inv_public_123',
+        'hashed-token-abc123',
+        expect.any(Date),
+      );
+      expect(eventBus.emitStrict).toHaveBeenCalledOnce();
     });
   });
 });

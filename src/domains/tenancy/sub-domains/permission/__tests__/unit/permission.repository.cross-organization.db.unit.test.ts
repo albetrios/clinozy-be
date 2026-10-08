@@ -47,7 +47,7 @@ describe('PermissionRepository cross-organization isolation (database)', () => {
       userId: member.id,
       organizationId: organization.id,
       roleId: role.id,
-      status: 'ACTIVE',
+      status: 'active',
     });
 
     const beforeDelete = await repository.findPermissionCodesForUserInOrganization(
@@ -83,13 +83,13 @@ describe('PermissionRepository cross-organization isolation (database)', () => {
       INSERT INTO tenancy.memberships
         (public_id, user_id, organization_id, role_id, status, created_at, updated_at)
       VALUES
-        (${'mem_invited_test_id'}, ${invited.id}, ${organization.id}, ${role.id}, 'INVITED', now(), now())
+        (${'mem_invited_test_id'}, ${invited.id}, ${organization.id}, ${role.id}, 'invited', now(), now())
     `;
     await sql`
       INSERT INTO tenancy.memberships
         (public_id, user_id, organization_id, role_id, status, joined_at, created_at, updated_at)
       VALUES
-        (${'mem_suspended_t_id'}, ${suspended.id}, ${organization.id}, ${role.id}, 'SUSPENDED', now(), now(), now())
+        (${'mem_suspended_t_id'}, ${suspended.id}, ${organization.id}, ${role.id}, 'suspended', now(), now(), now())
     `;
 
     const invitedCodes = await repository.findPermissionCodesForUserInOrganization(
@@ -131,7 +131,7 @@ describe('PermissionRepository cross-organization isolation (database)', () => {
       userId: member.id,
       organizationId: organizationA.id,
       roleId: roleA.id,
-      status: 'ACTIVE',
+      status: 'active',
     });
 
     const codesInA = await repository.findPermissionCodesForUserInOrganization(
@@ -159,7 +159,7 @@ describe('PermissionRepository cross-organization isolation (database)', () => {
       userId: member.id,
       organizationId: organization.id,
       roleId: role.id,
-      status: 'ACTIVE',
+      status: 'active',
     });
 
     await sql`
@@ -185,7 +185,7 @@ describe('PermissionRepository cross-organization isolation (database)', () => {
       userId: member.id,
       organizationId: organization.id,
       roleId: role.id,
-      status: 'ACTIVE',
+      status: 'active',
     });
 
     await sql`
@@ -211,7 +211,7 @@ describe('PermissionRepository cross-organization isolation (database)', () => {
       userId: member.id,
       organizationId: organization.id,
       roleId: role.id,
-      status: 'ACTIVE',
+      status: 'active',
     });
 
     await sql`

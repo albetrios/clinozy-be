@@ -56,6 +56,8 @@ const asScope = (organizationPublicId: string) =>
     organizationPublicId,
   }) as OrganizationPrincipalDatabaseScope;
 
+/** A valid removal reason — every delete carries one (the record-delete query). */
+const DELETE_QUERY = { reason: 'not_needed' };
 describe('MemberRoleService', () => {
   const organizationService = {
     requireOrganizationRecordByPublicId: vi.fn().mockResolvedValue(organization),
@@ -298,13 +300,23 @@ describe('MemberRoleService', () => {
       { name: 'Updated' },
       'updater_public',
     );
-    await service.delete(asScope(organization.public_id), roleRow.public_id);
+    await service.delete(
+      asScope(organization.public_id),
+      roleRow.public_id,
+      DELETE_QUERY,
+      undefined,
+    );
     expect(memberRoleRepository.update).toHaveBeenCalled();
     expect(memberRoleRepository.softDeleteIfNoActiveMembers).toHaveBeenCalled();
   });
 
   it('delete invalidates the entire organization permission namespace', async () => {
-    await service.delete(asScope(organization.public_id), roleRow.public_id);
+    await service.delete(
+      asScope(organization.public_id),
+      roleRow.public_id,
+      DELETE_QUERY,
+      undefined,
+    );
     expect(invalidateOrganizationPermissions).toHaveBeenCalledWith(organization.public_id);
   });
 
@@ -369,7 +381,7 @@ describe('MemberRoleService', () => {
     // concurrent delete), which the service surfaces as the actionable roleHasActiveMembers conflict.
     vi.mocked(memberRoleRepository.softDeleteIfNoActiveMembers).mockResolvedValue(null);
     await expect(
-      service.delete(asScope(organization.public_id), roleRow.public_id),
+      service.delete(asScope(organization.public_id), roleRow.public_id, DELETE_QUERY, undefined),
     ).rejects.toBeInstanceOf(ConflictError);
   });
 
@@ -425,7 +437,7 @@ describe('MemberRoleService', () => {
       new NotFoundError('Organization'),
     );
     await expect(
-      service.delete(asScope(organization.public_id), roleRow.public_id),
+      service.delete(asScope(organization.public_id), roleRow.public_id, DELETE_QUERY, undefined),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 });

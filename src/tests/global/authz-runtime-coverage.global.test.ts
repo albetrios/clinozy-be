@@ -31,6 +31,12 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
   'DELETE /api/v1/uploads/:upload_id': 'object-ownership: uploads',
   'POST /api/v1/uploads/:upload_id/confirm': 'object-ownership: uploads',
   'GET /api/v1/users/me/data-export/:data_export_id': 'object-ownership: data exports',
+  'GET /api/v1/app/memberships/me/saved-views/:membership_saved_view_id':
+    "object-ownership: saved views (the member's own)",
+  'PATCH /api/v1/app/memberships/me/saved-views/:membership_saved_view_id':
+    "object-ownership: saved views (the member's own)",
+  'DELETE /api/v1/app/memberships/me/saved-views/:membership_saved_view_id':
+    "object-ownership: saved views (the member's own)",
 
   // ── model: organization — cross-organization reads (cross-organization-resource.security.test.ts) ─────
   'GET /api/v1/billing/subscriptions/:subscription_id':
@@ -38,300 +44,6 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
   'GET /api/v1/billing/subscriptions/:subscription_id/payment-setup':
     'object-ownership: subscription payment-setup (cross-organization)',
   'GET /api/v1/notify/webhooks/:webhook_id': 'cross-organization-resource: webhook',
-  'GET /api/v1/app/branches/:branch_id': 'cross-organization-resource: branch',
-  'GET /api/v1/app/patients/:patient_id/timeline': 'cross-organization-resource: patient',
-  'POST /api/v1/app/appointments/:appointment_id/copy': 'cross-organization-resource: appointment',
-  'POST /api/v1/app/leads/:lead_id/convert': 'cross-organization-resource: lead',
-  'GET /api/v1/app/messages/:message_id': 'cross-organization-resource: message',
-  'POST /api/v1/app/messages/:message_id/resend': 'cross-organization-resource: message',
-  'POST /api/v1/app/leads/:lead_id/claim': 'cross-organization-resource: lead',
-  'POST /api/v1/app/leads/:lead_id/release': 'cross-organization-resource: lead',
-  'POST /api/v1/app/leads/:lead_id/reads': 'cross-organization-resource: lead',
-  'GET /api/v1/app/patient-clinical-notes/:patient_clinical_note_id':
-    'cross-organization-resource: clinical note',
-  'DELETE /api/v1/app/patient-clinical-notes/:patient_clinical_note_id':
-    'cross-organization-resource: clinical note',
-  'POST /api/v1/app/patient-clinical-notes/:patient_clinical_note_id/restore':
-    'cross-organization-resource: clinical note',
-  'GET /api/v1/app/patient-images/:patient_image_id': 'cross-organization-resource: patient image',
-  'PATCH /api/v1/app/patient-images/:patient_image_id':
-    'cross-organization-resource: patient image',
-  'DELETE /api/v1/app/patient-images/:patient_image_id':
-    'cross-organization-resource: patient image',
-  'POST /api/v1/app/patient-images/:patient_image_id/restore':
-    'cross-organization-resource: patient image',
-  'GET /api/v1/app/patient-reports/:patient_report_id':
-    'cross-organization-resource: patient report',
-  'PATCH /api/v1/app/patient-reports/:patient_report_id':
-    'cross-organization-resource: patient report',
-  'DELETE /api/v1/app/patient-reports/:patient_report_id':
-    'cross-organization-resource: patient report',
-  'POST /api/v1/app/patient-reports/:patient_report_id/restore':
-    'cross-organization-resource: patient report',
-  'GET /api/v1/app/patient-packages/:patient_package_id':
-    'cross-organization-resource: patient package',
-  'PATCH /api/v1/app/patient-packages/:patient_package_id':
-    'cross-organization-resource: patient package',
-  'DELETE /api/v1/app/patient-packages/:patient_package_id':
-    'cross-organization-resource: patient package',
-  'POST /api/v1/app/patient-packages/:patient_package_id/restore':
-    'cross-organization-resource: patient package',
-  'GET /api/v1/app/stock-vendors/:stock_vendor_id': 'cross-organization-resource: stock vendor',
-  'PATCH /api/v1/app/stock-vendors/:stock_vendor_id': 'cross-organization-resource: stock vendor',
-  'DELETE /api/v1/app/stock-vendors/:stock_vendor_id': 'cross-organization-resource: stock vendor',
-  'POST /api/v1/app/stock-vendors/:stock_vendor_id/restore':
-    'cross-organization-resource: stock vendor',
-  'GET /api/v1/app/stock-items/:stock_item_id': 'cross-organization-resource: stock item',
-  'PATCH /api/v1/app/stock-items/:stock_item_id': 'cross-organization-resource: stock item',
-  'DELETE /api/v1/app/stock-items/:stock_item_id': 'cross-organization-resource: stock item',
-  'POST /api/v1/app/stock-items/:stock_item_id/restore': 'cross-organization-resource: stock item',
-  'GET /api/v1/app/stock-purchases/:stock_purchase_id':
-    'cross-organization-resource: stock purchase',
-  'PATCH /api/v1/app/stock-purchases/:stock_purchase_id':
-    'cross-organization-resource: stock purchase',
-  'DELETE /api/v1/app/stock-purchases/:stock_purchase_id':
-    'cross-organization-resource: stock purchase',
-  'POST /api/v1/app/stock-purchases/:stock_purchase_id/restore':
-    'cross-organization-resource: stock purchase',
-  'GET /api/v1/app/stock-counts/:stock_count_id': 'cross-organization-resource: stock count',
-  'GET /api/v1/app/stock-items/:stock_item_id/movements': 'cross-organization-resource: stock item',
-  'POST /api/v1/app/stock-items/:stock_item_id/movements':
-    'cross-organization-resource: stock item',
-  'GET /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id':
-    'cross-organization-resource: stock item movement',
-  'POST /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id/revert':
-    'cross-organization-resource: stock item movement',
-  'GET /api/v1/app/tasks/:task_id': 'cross-organization-resource: task',
-  'PATCH /api/v1/app/tasks/:task_id': 'cross-organization-resource: task',
-  'POST /api/v1/app/tasks/:task_id/resolve': 'cross-organization-resource: task',
-  'POST /api/v1/app/tasks/:task_id/snooze': 'cross-organization-resource: task',
-  'POST /api/v1/app/tasks/:task_id/reassign': 'cross-organization-resource: task',
-  'DELETE /api/v1/app/tasks/:task_id': 'cross-organization-resource: task',
-  'POST /api/v1/app/tasks/:task_id/restore': 'cross-organization-resource: task',
-  'GET /api/v1/app/manufacturers/:manufacturer_id': 'cross-organization-resource: manufacturer',
-  'PATCH /api/v1/app/manufacturers/:manufacturer_id': 'cross-organization-resource: manufacturer',
-  'DELETE /api/v1/app/manufacturers/:manufacturer_id': 'cross-organization-resource: manufacturer',
-  'POST /api/v1/app/manufacturers/:manufacturer_id/restore':
-    'cross-organization-resource: manufacturer',
-  'GET /api/v1/app/suppliers/:supplier_id': 'cross-organization-resource: supplier',
-  'PATCH /api/v1/app/suppliers/:supplier_id': 'cross-organization-resource: supplier',
-  'DELETE /api/v1/app/suppliers/:supplier_id': 'cross-organization-resource: supplier',
-  'POST /api/v1/app/suppliers/:supplier_id/restore': 'cross-organization-resource: supplier',
-  'POST /api/v1/app/suppliers/:supplier_id/payments': 'cross-organization-resource: supplier',
-  'GET /api/v1/app/medical-reps/:medical_rep_id': 'cross-organization-resource: medical rep',
-  'PATCH /api/v1/app/medical-reps/:medical_rep_id': 'cross-organization-resource: medical rep',
-  'DELETE /api/v1/app/medical-reps/:medical_rep_id': 'cross-organization-resource: medical rep',
-  'POST /api/v1/app/medical-reps/:medical_rep_id/restore':
-    'cross-organization-resource: medical rep',
-  'GET /api/v1/app/medical-reps/:medical_rep_id/visits':
-    'cross-organization-resource: medical rep visit',
-  'POST /api/v1/app/medical-reps/:medical_rep_id/visits':
-    'cross-organization-resource: medical rep visit',
-  'GET /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id':
-    'cross-organization-resource: medical rep visit',
-  'DELETE /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id':
-    'cross-organization-resource: medical rep visit',
-  'POST /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id/restore':
-    'cross-organization-resource: medical rep visit',
-  'GET /api/v1/app/medicines/:medicine_id': 'cross-organization-resource: medicine',
-  'PATCH /api/v1/app/medicines/:medicine_id': 'cross-organization-resource: medicine',
-  'DELETE /api/v1/app/medicines/:medicine_id': 'cross-organization-resource: medicine',
-  'POST /api/v1/app/medicines/:medicine_id/restore': 'cross-organization-resource: medicine',
-  'GET /api/v1/app/medical-purchase-orders/:medical_purchase_order_id':
-    'cross-organization-resource: purchase order',
-  'PATCH /api/v1/app/medical-purchase-orders/:medical_purchase_order_id':
-    'cross-organization-resource: purchase order',
-  'POST /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/receive':
-    'cross-organization-resource: purchase order',
-  'DELETE /api/v1/app/medical-purchase-orders/:medical_purchase_order_id':
-    'cross-organization-resource: purchase order',
-  'POST /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/restore':
-    'cross-organization-resource: purchase order',
-  'GET /api/v1/app/medical-sales/:medical_sale_id': 'cross-organization-resource: medical sale',
-  'POST /api/v1/app/medical-sales/:medical_sale_id/returns':
-    'cross-organization-resource: medical sale',
-  'DELETE /api/v1/app/medical-sales/:medical_sale_id': 'cross-organization-resource: medical sale',
-  'POST /api/v1/app/medical-sales/:medical_sale_id/restore':
-    'cross-organization-resource: medical sale',
-  'GET /api/v1/app/supplier-credits/:supplier_credit_id':
-    'cross-organization-resource: supplier credit',
-  'GET /api/v1/app/patients/:patient_id/treatments': 'cross-organization-resource: treatment',
-  'POST /api/v1/app/patients/:patient_id/treatments': 'cross-organization-resource: treatment',
-  'GET /api/v1/app/treatments/:treatment_id': 'cross-organization-resource: treatment',
-  'PATCH /api/v1/app/treatments/:treatment_id': 'cross-organization-resource: treatment',
-  'POST /api/v1/app/treatments/:treatment_id/reverse': 'cross-organization-resource: treatment',
-  'GET /api/v1/app/patients/:patient_id/check-ins': 'cross-organization-resource: check-in',
-  'POST /api/v1/app/patients/:patient_id/check-ins': 'cross-organization-resource: check-in',
-  'GET /api/v1/app/check-ins/:check_in_id': 'cross-organization-resource: check-in',
-  'PATCH /api/v1/app/check-ins/:check_in_id': 'cross-organization-resource: check-in',
-  'DELETE /api/v1/app/check-ins/:check_in_id': 'cross-organization-resource: check-in',
-  'POST /api/v1/app/check-ins/:check_in_id/restore': 'cross-organization-resource: check-in',
-  'GET /api/v1/app/patients/:patient_id/reviews': 'cross-organization-resource: review',
-  'POST /api/v1/app/patients/:patient_id/reviews': 'cross-organization-resource: review',
-  'GET /api/v1/app/reviews/:review_id': 'cross-organization-resource: review',
-  'PATCH /api/v1/app/reviews/:review_id': 'cross-organization-resource: review',
-  'DELETE /api/v1/app/reviews/:review_id': 'cross-organization-resource: review',
-  'POST /api/v1/app/reviews/:review_id/restore': 'cross-organization-resource: review',
-  'GET /api/v1/app/feedback-actions/:feedback_action_id':
-    'cross-organization-resource: feedback action',
-  'PATCH /api/v1/app/feedback-actions/:feedback_action_id':
-    'cross-organization-resource: feedback action',
-  'DELETE /api/v1/app/feedback-actions/:feedback_action_id':
-    'cross-organization-resource: feedback action',
-  'POST /api/v1/app/feedback-actions/:feedback_action_id/restore':
-    'cross-organization-resource: feedback action',
-  'GET /api/v1/app/invoices/:invoice_id': 'cross-organization-resource: invoice',
-  'PATCH /api/v1/app/invoices/:invoice_id': 'cross-organization-resource: invoice',
-  'DELETE /api/v1/app/invoices/:invoice_id': 'cross-organization-resource: invoice',
-  'POST /api/v1/app/invoices/:invoice_id/restore': 'cross-organization-resource: invoice',
-  'GET /api/v1/app/patients/:patient_id/packages': 'cross-organization-resource: patient package',
-  'POST /api/v1/app/patients/:patient_id/packages': 'cross-organization-resource: patient package',
-  'GET /api/v1/app/patients/:patient_id/offering-suggestions':
-    'cross-organization-resource: offering suggestion',
-  'POST /api/v1/app/patients/:patient_id/offering-suggestions':
-    'cross-organization-resource: offering suggestion',
-  'GET /api/v1/app/offering-suggestions/:offering_suggestion_id':
-    'cross-organization-resource: offering suggestion',
-  'PATCH /api/v1/app/offering-suggestions/:offering_suggestion_id':
-    'cross-organization-resource: offering suggestion',
-  'DELETE /api/v1/app/offering-suggestions/:offering_suggestion_id':
-    'cross-organization-resource: offering suggestion',
-  'POST /api/v1/app/offering-suggestions/:offering_suggestion_id/restore':
-    'cross-organization-resource: offering suggestion',
-  'GET /api/v1/app/payments/:payment_id': 'cross-organization-resource: payment',
-  'PATCH /api/v1/app/payments/:payment_id': 'cross-organization-resource: payment',
-  'POST /api/v1/app/payments/:payment_id/checked': 'cross-organization-resource: payment',
-  'DELETE /api/v1/app/payments/:payment_id': 'cross-organization-resource: payment',
-  'POST /api/v1/app/payments/:payment_id/restore': 'cross-organization-resource: payment',
-  'GET /api/v1/app/credit-notes/:credit_note_id': 'cross-organization-resource: credit note',
-  'GET /api/v1/app/pending-credits/:pending_credit_id':
-    'cross-organization-resource: pending credit',
-  'PATCH /api/v1/app/pending-credits/:pending_credit_id':
-    'cross-organization-resource: pending credit',
-  'DELETE /api/v1/app/pending-credits/:pending_credit_id':
-    'cross-organization-resource: pending credit',
-  'POST /api/v1/app/pending-credits/:pending_credit_id/restore':
-    'cross-organization-resource: pending credit',
-  'GET /api/v1/app/day-closes/:day_close_id': 'cross-organization-resource: day close',
-  'POST /api/v1/app/day-closes/:day_close_id/close': 'cross-organization-resource: day close',
-  'POST /api/v1/app/day-closes/:day_close_id/reopen': 'cross-organization-resource: day close',
-  'GET /api/v1/app/diagnoses/:diagnosis_id': 'cross-organization-resource: diagnosis',
-  'PATCH /api/v1/app/diagnoses/:diagnosis_id': 'cross-organization-resource: diagnosis',
-  'DELETE /api/v1/app/diagnoses/:diagnosis_id': 'cross-organization-resource: diagnosis',
-  'POST /api/v1/app/diagnoses/:diagnosis_id/restore': 'cross-organization-resource: diagnosis',
-  'GET /api/v1/app/patients/:patient_id/clinical-notes':
-    'cross-organization-resource: clinical note',
-  'POST /api/v1/app/patients/:patient_id/clinical-notes':
-    'cross-organization-resource: clinical note',
-  'GET /api/v1/app/patients/:patient_id/prescriptions': 'cross-organization-resource: prescription',
-  'POST /api/v1/app/patients/:patient_id/prescriptions':
-    'cross-organization-resource: prescription',
-  'GET /api/v1/app/prescriptions/:prescription_id': 'cross-organization-resource: prescription',
-  'PATCH /api/v1/app/prescriptions/:prescription_id': 'cross-organization-resource: prescription',
-  'POST /api/v1/app/prescriptions/:prescription_id/approve':
-    'cross-organization-resource: prescription',
-  'DELETE /api/v1/app/prescriptions/:prescription_id': 'cross-organization-resource: prescription',
-  'POST /api/v1/app/prescriptions/:prescription_id/restore':
-    'cross-organization-resource: prescription',
-  'GET /api/v1/app/prescription-kits/:prescription_kit_id':
-    'cross-organization-resource: prescription kit',
-  'PATCH /api/v1/app/prescription-kits/:prescription_kit_id':
-    'cross-organization-resource: prescription kit',
-  'DELETE /api/v1/app/prescription-kits/:prescription_kit_id':
-    'cross-organization-resource: prescription kit',
-  'POST /api/v1/app/prescription-kits/:prescription_kit_id/restore':
-    'cross-organization-resource: prescription kit',
-  'GET /api/v1/app/patients/:patient_id/images': 'cross-organization-resource: patient image',
-  'POST /api/v1/app/patients/:patient_id/images': 'cross-organization-resource: patient image',
-  'GET /api/v1/app/patients/:patient_id/reports': 'cross-organization-resource: patient report',
-  'POST /api/v1/app/patients/:patient_id/reports': 'cross-organization-resource: patient report',
-  'GET /api/v1/app/patients/:patient_id/notes': 'cross-organization-resource: patient note',
-  'POST /api/v1/app/patients/:patient_id/notes': 'cross-organization-resource: patient note',
-  'GET /api/v1/app/patient-notes/:patient_note_id': 'cross-organization-resource: patient note',
-  'PATCH /api/v1/app/patient-notes/:patient_note_id': 'cross-organization-resource: patient note',
-  'DELETE /api/v1/app/patient-notes/:patient_note_id': 'cross-organization-resource: patient note',
-  'POST /api/v1/app/patient-notes/:patient_note_id/restore':
-    'cross-organization-resource: patient note',
-  'GET /api/v1/app/appointments/:appointment_id': 'cross-organization-resource: appointment',
-  'PATCH /api/v1/app/appointments/:appointment_id': 'cross-organization-resource: appointment',
-  'POST /api/v1/app/appointments/:appointment_id/status':
-    'cross-organization-resource: appointment',
-  'POST /api/v1/app/appointments/:appointment_id/cancel':
-    'cross-organization-resource: appointment',
-  'POST /api/v1/app/appointments/:appointment_id/reinstate':
-    'cross-organization-resource: appointment',
-  'POST /api/v1/app/appointments/:appointment_id/undo-check-in':
-    'cross-organization-resource: appointment',
-  'DELETE /api/v1/app/appointments/:appointment_id': 'cross-organization-resource: appointment',
-  'POST /api/v1/app/appointments/:appointment_id/restore':
-    'cross-organization-resource: appointment',
-  'GET /api/v1/app/visits/:visit_id': 'cross-organization-resource: visit',
-  'PATCH /api/v1/app/visits/:visit_id': 'cross-organization-resource: visit',
-  'POST /api/v1/app/visits/:visit_id/stage': 'cross-organization-resource: visit',
-  'POST /api/v1/app/visits/:visit_id/pause': 'cross-organization-resource: visit',
-  'POST /api/v1/app/visits/:visit_id/resume': 'cross-organization-resource: visit',
-  'GET /api/v1/app/patients/:patient_id': 'cross-organization-resource: patient',
-  'PATCH /api/v1/app/patients/:patient_id': 'cross-organization-resource: patient',
-  'DELETE /api/v1/app/patients/:patient_id': 'cross-organization-resource: patient',
-  'POST /api/v1/app/patients/:patient_id/restore': 'cross-organization-resource: patient',
-  'GET /api/v1/app/leads/:lead_id': 'cross-organization-resource: lead',
-  'PATCH /api/v1/app/leads/:lead_id': 'cross-organization-resource: lead',
-  'DELETE /api/v1/app/leads/:lead_id': 'cross-organization-resource: lead',
-  'POST /api/v1/app/leads/:lead_id/restore': 'cross-organization-resource: lead',
-  'GET /api/v1/app/message-templates/:message_template_id':
-    'cross-organization-resource: message template',
-  'PATCH /api/v1/app/message-templates/:message_template_id':
-    'cross-organization-resource: message template',
-  'DELETE /api/v1/app/message-templates/:message_template_id':
-    'cross-organization-resource: message template',
-  'POST /api/v1/app/message-templates/:message_template_id/restore':
-    'cross-organization-resource: message template',
-  'GET /api/v1/app/branches/:branch_id/holidays': 'cross-organization-resource: branch holiday',
-  'POST /api/v1/app/branches/:branch_id/holidays': 'cross-organization-resource: branch holiday',
-  'GET /api/v1/app/memberships/me/saved-views/:membership_saved_view_id':
-    "object-ownership: saved views (the member's own)",
-  'PATCH /api/v1/app/memberships/me/saved-views/:membership_saved_view_id':
-    "object-ownership: saved views (the member's own)",
-  'DELETE /api/v1/app/memberships/me/saved-views/:membership_saved_view_id':
-    "object-ownership: saved views (the member's own)",
-  'GET /api/v1/app/offering-groups/:offering_group_id':
-    'cross-organization-resource: offering group',
-  'PATCH /api/v1/app/offering-groups/:offering_group_id':
-    'cross-organization-resource: offering group',
-  'DELETE /api/v1/app/offering-groups/:offering_group_id':
-    'cross-organization-resource: offering group',
-  'POST /api/v1/app/offering-groups/:offering_group_id/restore':
-    'cross-organization-resource: offering group',
-  'GET /api/v1/app/branches/:branch_id/rooms': 'cross-organization-resource: room',
-  'POST /api/v1/app/branches/:branch_id/rooms': 'cross-organization-resource: room',
-  'GET /api/v1/app/rooms/:room_id': 'cross-organization-resource: room',
-  'PATCH /api/v1/app/rooms/:room_id': 'cross-organization-resource: room',
-  'DELETE /api/v1/app/rooms/:room_id': 'cross-organization-resource: room',
-  'POST /api/v1/app/rooms/:room_id/restore': 'cross-organization-resource: room',
-  'GET /api/v1/app/branches/:branch_id/machines': 'cross-organization-resource: machine',
-  'POST /api/v1/app/branches/:branch_id/machines': 'cross-organization-resource: machine',
-  'GET /api/v1/app/machines/:machine_id': 'cross-organization-resource: machine',
-  'PATCH /api/v1/app/machines/:machine_id': 'cross-organization-resource: machine',
-  'DELETE /api/v1/app/machines/:machine_id': 'cross-organization-resource: machine',
-  'POST /api/v1/app/machines/:machine_id/restore': 'cross-organization-resource: machine',
-  'GET /api/v1/app/branch-holidays/:branch_holiday_id':
-    'cross-organization-resource: branch holiday',
-  'PATCH /api/v1/app/branch-holidays/:branch_holiday_id':
-    'cross-organization-resource: branch holiday',
-  'DELETE /api/v1/app/branch-holidays/:branch_holiday_id':
-    'cross-organization-resource: branch holiday',
-  'POST /api/v1/app/branch-holidays/:branch_holiday_id/restore':
-    'cross-organization-resource: branch holiday',
-  'GET /api/v1/app/offerings/:offering_id': 'cross-organization-resource: offering',
-  'PATCH /api/v1/app/offerings/:offering_id': 'cross-organization-resource: offering',
-  'DELETE /api/v1/app/offerings/:offering_id': 'cross-organization-resource: offering',
-  'POST /api/v1/app/offerings/:offering_id/restore': 'cross-organization-resource: offering',
-  'GET /api/v1/app/offers/:offer_id': 'cross-organization-resource: offer',
-  'PATCH /api/v1/app/offers/:offer_id': 'cross-organization-resource: offer',
-  'DELETE /api/v1/app/offers/:offer_id': 'cross-organization-resource: offer',
-  'POST /api/v1/app/offers/:offer_id/restore': 'cross-organization-resource: offer',
-  'GET /api/v1/app/branches/:branch_id/user-accesses':
-    'cross-organization-resource: branch user-accesses',
   'GET /api/v1/notify/webhooks/:webhook_id/delivery-attempts':
     'cross-organization-resource: webhook delivery-attempts',
   'GET /api/v1/tenancy/organization/api-keys/:api_key_id': 'cross-organization-resource: API key',
@@ -355,9 +67,6 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
   'POST /api/v1/billing/subscriptions/:subscription_id/resume':
     'cross-organization-mutation: subscription resume',
   'PATCH /api/v1/notify/webhooks/:webhook_id': 'cross-organization-mutation: webhook PATCH',
-  'PATCH /api/v1/app/branches/:branch_id': 'cross-organization-mutation: branch PATCH',
-  'PUT /api/v1/app/branches/:branch_id/user-accesses':
-    'cross-organization-mutation: branch user-accesses PUT',
   'POST /api/v1/notify/webhooks/:webhook_id/test': 'cross-organization-mutation: webhook test',
   'PATCH /api/v1/tenancy/organization/api-keys/:api_key_id':
     'cross-organization-mutation: API key PATCH',
@@ -372,9 +81,11 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
     'cross-organization-mutation: notification policy DELETE',
   'PATCH /api/v1/tenancy/organization/roles/:role_id': 'cross-organization-mutation: role PATCH',
   'DELETE /api/v1/tenancy/organization/roles/:role_id': 'cross-organization-mutation: role DELETE',
-  'DELETE /api/v1/tenancy/organization/invitations/:invitation_id':
+  'POST /api/v1/tenancy/organization/roles/:role_id/restore':
+    'cross-organization-mutation: role restore',
+  'DELETE /api/v1/tenancy/organization/memberships/:membership_id/invitation':
     'cross-organization-mutation: invitation DELETE',
-  'POST /api/v1/tenancy/organization/invitations/:invitation_id/resend':
+  'POST /api/v1/tenancy/organization/memberships/:membership_id/invitation/resend':
     'cross-organization-mutation: invitation resend',
 
   // ── model: tier:owner (tier-and-grant.security.test.ts) ────────────────────
@@ -393,7 +104,7 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
     'tier-and-grant: cannot grant un-held permission → 403',
 
   // ── model: email (invitation-email.security.test.ts) ───────────────────────
-  'POST /api/v1/tenancy/invitations/:invitation_id/accept':
+  'POST /api/v1/tenancy/membership-invitations/:membership_invitation_id/accept':
     'invitation-email: email-mismatch accept → 403',
 
   // ── model: global-role (admin-only.security.test.ts) ───────────────────────
@@ -402,6 +113,306 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
   'DELETE /api/v1/users/:user_id': 'admin-only: regular user denied',
   'POST /api/v1/users/:user_id/suspend': 'admin-only: regular user denied',
   'POST /api/v1/users/:user_id/unsuspend': 'admin-only: regular user denied',
+
+  // ── model: organization — app records, cross-organization reads and writes
+  //    (app-cross-organization.security.test.ts) ─────────────────────────────
+  'GET /api/v1/app/branches/:branch_id': 'app-cross-organization: branches',
+  'PATCH /api/v1/app/branches/:branch_id': 'app-cross-organization: branches',
+  'GET /api/v1/app/branches/:branch_id/members': 'app-cross-organization: branches',
+  'PUT /api/v1/app/branches/:branch_id/members': 'app-cross-organization: branches',
+  'GET /api/v1/app/offering-groups/:offering_group_id': 'app-cross-organization: offering-groups',
+  'PATCH /api/v1/app/offering-groups/:offering_group_id': 'app-cross-organization: offering-groups',
+  'DELETE /api/v1/app/offering-groups/:offering_group_id':
+    'app-cross-organization: offering-groups',
+  'POST /api/v1/app/offering-groups/:offering_group_id/restore':
+    'app-cross-organization: offering-groups',
+  'GET /api/v1/app/branches/:branch_id/rooms': 'app-cross-organization: branches',
+  'POST /api/v1/app/branches/:branch_id/rooms': 'app-cross-organization: branches',
+  'GET /api/v1/app/branches/:branch_id/rooms/:branch_room_id': 'app-cross-organization: branches',
+  'PATCH /api/v1/app/branches/:branch_id/rooms/:branch_room_id': 'app-cross-organization: branches',
+  'DELETE /api/v1/app/branches/:branch_id/rooms/:branch_room_id':
+    'app-cross-organization: branches',
+  'POST /api/v1/app/branches/:branch_id/rooms/:branch_room_id/restore':
+    'app-cross-organization: branches',
+  'GET /api/v1/app/branches/:branch_id/machines': 'app-cross-organization: branches',
+  'POST /api/v1/app/branches/:branch_id/machines': 'app-cross-organization: branches',
+  'GET /api/v1/app/branches/:branch_id/machines/:branch_machine_id':
+    'app-cross-organization: branches',
+  'PATCH /api/v1/app/branches/:branch_id/machines/:branch_machine_id':
+    'app-cross-organization: branches',
+  'DELETE /api/v1/app/branches/:branch_id/machines/:branch_machine_id':
+    'app-cross-organization: branches',
+  'POST /api/v1/app/branches/:branch_id/machines/:branch_machine_id/restore':
+    'app-cross-organization: branches',
+  'GET /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id':
+    'app-cross-organization: branches',
+  'PATCH /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id':
+    'app-cross-organization: branches',
+  'DELETE /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id':
+    'app-cross-organization: branches',
+  'POST /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id/restore':
+    'app-cross-organization: branches',
+  'GET /api/v1/app/offerings/:offering_id': 'app-cross-organization: offerings',
+  'PATCH /api/v1/app/offerings/:offering_id': 'app-cross-organization: offerings',
+  'DELETE /api/v1/app/offerings/:offering_id': 'app-cross-organization: offerings',
+  'POST /api/v1/app/offerings/:offering_id/restore': 'app-cross-organization: offerings',
+  'GET /api/v1/app/offers/:offer_id': 'app-cross-organization: offers',
+  'PATCH /api/v1/app/offers/:offer_id': 'app-cross-organization: offers',
+  'DELETE /api/v1/app/offers/:offer_id': 'app-cross-organization: offers',
+  'POST /api/v1/app/offers/:offer_id/restore': 'app-cross-organization: offers',
+  'GET /api/v1/app/branches/:branch_id/holidays': 'app-cross-organization: branches',
+  'POST /api/v1/app/branches/:branch_id/holidays': 'app-cross-organization: branches',
+  'GET /api/v1/app/patients/:patient_id': 'app-cross-organization: patients',
+  'PATCH /api/v1/app/patients/:patient_id': 'app-cross-organization: patients',
+  'DELETE /api/v1/app/patients/:patient_id': 'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/restore': 'app-cross-organization: patients',
+  'GET /api/v1/app/leads/:lead_id': 'app-cross-organization: leads',
+  'PATCH /api/v1/app/leads/:lead_id': 'app-cross-organization: leads',
+  'DELETE /api/v1/app/leads/:lead_id': 'app-cross-organization: leads',
+  'POST /api/v1/app/leads/:lead_id/restore': 'app-cross-organization: leads',
+  'GET /api/v1/app/appointments/:appointment_id': 'app-cross-organization: appointments',
+  'PATCH /api/v1/app/appointments/:appointment_id': 'app-cross-organization: appointments',
+  'POST /api/v1/app/appointments/:appointment_id/cancel': 'app-cross-organization: appointments',
+  'POST /api/v1/app/appointments/:appointment_id/reinstate': 'app-cross-organization: appointments',
+  'POST /api/v1/app/appointments/:appointment_id/undo-check-in':
+    'app-cross-organization: appointments',
+  'DELETE /api/v1/app/appointments/:appointment_id': 'app-cross-organization: appointments',
+  'POST /api/v1/app/appointments/:appointment_id/restore': 'app-cross-organization: appointments',
+  'GET /api/v1/app/patients/:patient_id/clinical-notes': 'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/clinical-notes': 'app-cross-organization: patients',
+  'GET /api/v1/app/patients/:patient_id/prescriptions': 'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/prescriptions': 'app-cross-organization: patients',
+  'GET /api/v1/app/prescription-kits/:prescription_kit_id':
+    'app-cross-organization: prescription-kits',
+  'PATCH /api/v1/app/prescription-kits/:prescription_kit_id':
+    'app-cross-organization: prescription-kits',
+  'DELETE /api/v1/app/prescription-kits/:prescription_kit_id':
+    'app-cross-organization: prescription-kits',
+  'POST /api/v1/app/prescription-kits/:prescription_kit_id/restore':
+    'app-cross-organization: prescription-kits',
+  'GET /api/v1/app/patients/:patient_id/images': 'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/images': 'app-cross-organization: patients',
+  'GET /api/v1/app/patients/:patient_id/reports': 'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/reports': 'app-cross-organization: patients',
+  'GET /api/v1/app/invoices/:invoice_id': 'app-cross-organization: invoices',
+  'PATCH /api/v1/app/invoices/:invoice_id': 'app-cross-organization: invoices',
+  'DELETE /api/v1/app/invoices/:invoice_id': 'app-cross-organization: invoices',
+  'POST /api/v1/app/invoices/:invoice_id/restore': 'app-cross-organization: invoices',
+  'GET /api/v1/app/patients/:patient_id/offering-suggestions': 'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/offering-suggestions': 'app-cross-organization: patients',
+  'GET /api/v1/app/payments/:payment_id': 'app-cross-organization: payments',
+  'PATCH /api/v1/app/payments/:payment_id': 'app-cross-organization: payments',
+  'DELETE /api/v1/app/payments/:payment_id': 'app-cross-organization: payments',
+  'POST /api/v1/app/payments/:payment_id/restore': 'app-cross-organization: payments',
+  'GET /api/v1/app/pending-credits/:pending_credit_id': 'app-cross-organization: pending-credits',
+  'PATCH /api/v1/app/pending-credits/:pending_credit_id': 'app-cross-organization: pending-credits',
+  'DELETE /api/v1/app/pending-credits/:pending_credit_id':
+    'app-cross-organization: pending-credits',
+  'POST /api/v1/app/pending-credits/:pending_credit_id/restore':
+    'app-cross-organization: pending-credits',
+  'GET /api/v1/app/day-closes/:day_close_id': 'app-cross-organization: day-closes',
+  'POST /api/v1/app/day-closes/:day_close_id/close': 'app-cross-organization: day-closes',
+  'POST /api/v1/app/day-closes/:day_close_id/reopen': 'app-cross-organization: day-closes',
+  'GET /api/v1/app/patients/:patient_id/treatments': 'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/treatments': 'app-cross-organization: patients',
+  'GET /api/v1/app/patients/:patient_id/check-ins': 'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/check-ins': 'app-cross-organization: patients',
+  'GET /api/v1/app/patients/:patient_id/reviews': 'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/reviews': 'app-cross-organization: patients',
+  'GET /api/v1/app/manufacturers/:manufacturer_id': 'app-cross-organization: manufacturers',
+  'PATCH /api/v1/app/manufacturers/:manufacturer_id': 'app-cross-organization: manufacturers',
+  'DELETE /api/v1/app/manufacturers/:manufacturer_id': 'app-cross-organization: manufacturers',
+  'POST /api/v1/app/manufacturers/:manufacturer_id/restore':
+    'app-cross-organization: manufacturers',
+  'GET /api/v1/app/suppliers/:supplier_id': 'app-cross-organization: suppliers',
+  'PATCH /api/v1/app/suppliers/:supplier_id': 'app-cross-organization: suppliers',
+  'DELETE /api/v1/app/suppliers/:supplier_id': 'app-cross-organization: suppliers',
+  'POST /api/v1/app/suppliers/:supplier_id/restore': 'app-cross-organization: suppliers',
+  'GET /api/v1/app/medical-reps/:medical_rep_id': 'app-cross-organization: medical-reps',
+  'PATCH /api/v1/app/medical-reps/:medical_rep_id': 'app-cross-organization: medical-reps',
+  'DELETE /api/v1/app/medical-reps/:medical_rep_id': 'app-cross-organization: medical-reps',
+  'POST /api/v1/app/medical-reps/:medical_rep_id/restore': 'app-cross-organization: medical-reps',
+  'GET /api/v1/app/medical-reps/:medical_rep_id/visits': 'app-cross-organization: medical-reps',
+  'POST /api/v1/app/medical-reps/:medical_rep_id/visits': 'app-cross-organization: medical-reps',
+  'GET /api/v1/app/medicines/:medicine_id': 'app-cross-organization: medicines',
+  'PATCH /api/v1/app/medicines/:medicine_id': 'app-cross-organization: medicines',
+  'DELETE /api/v1/app/medicines/:medicine_id': 'app-cross-organization: medicines',
+  'POST /api/v1/app/medicines/:medicine_id/restore': 'app-cross-organization: medicines',
+  'GET /api/v1/app/medical-purchase-orders/:medical_purchase_order_id':
+    'app-cross-organization: medical-purchase-orders',
+  'PATCH /api/v1/app/medical-purchase-orders/:medical_purchase_order_id':
+    'app-cross-organization: medical-purchase-orders',
+  'POST /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/receive':
+    'app-cross-organization: medical-purchase-orders',
+  'DELETE /api/v1/app/medical-purchase-orders/:medical_purchase_order_id':
+    'app-cross-organization: medical-purchase-orders',
+  'POST /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/restore':
+    'app-cross-organization: medical-purchase-orders',
+  'GET /api/v1/app/medical-sales/:medical_sale_id': 'app-cross-organization: medical-sales',
+  'DELETE /api/v1/app/medical-sales/:medical_sale_id': 'app-cross-organization: medical-sales',
+  'POST /api/v1/app/medical-sales/:medical_sale_id/restore':
+    'app-cross-organization: medical-sales',
+  'GET /api/v1/app/supplier-credits/:supplier_credit_id':
+    'app-cross-organization: supplier-credits',
+  'GET /api/v1/app/stock-vendors/:stock_vendor_id': 'app-cross-organization: stock-vendors',
+  'PATCH /api/v1/app/stock-vendors/:stock_vendor_id': 'app-cross-organization: stock-vendors',
+  'DELETE /api/v1/app/stock-vendors/:stock_vendor_id': 'app-cross-organization: stock-vendors',
+  'POST /api/v1/app/stock-vendors/:stock_vendor_id/restore':
+    'app-cross-organization: stock-vendors',
+  'GET /api/v1/app/stock-items/:stock_item_id': 'app-cross-organization: stock-items',
+  'PATCH /api/v1/app/stock-items/:stock_item_id': 'app-cross-organization: stock-items',
+  'DELETE /api/v1/app/stock-items/:stock_item_id': 'app-cross-organization: stock-items',
+  'POST /api/v1/app/stock-items/:stock_item_id/restore': 'app-cross-organization: stock-items',
+  'GET /api/v1/app/stock-purchases/:stock_purchase_id': 'app-cross-organization: stock-purchases',
+  'PATCH /api/v1/app/stock-purchases/:stock_purchase_id': 'app-cross-organization: stock-purchases',
+  'DELETE /api/v1/app/stock-purchases/:stock_purchase_id':
+    'app-cross-organization: stock-purchases',
+  'POST /api/v1/app/stock-purchases/:stock_purchase_id/restore':
+    'app-cross-organization: stock-purchases',
+  'GET /api/v1/app/stock-counts/:stock_count_id': 'app-cross-organization: stock-counts',
+  'GET /api/v1/app/tasks/:task_id': 'app-cross-organization: tasks',
+  'PATCH /api/v1/app/tasks/:task_id': 'app-cross-organization: tasks',
+  'POST /api/v1/app/tasks/:task_id/resolve': 'app-cross-organization: tasks',
+  'POST /api/v1/app/tasks/:task_id/snooze': 'app-cross-organization: tasks',
+  'DELETE /api/v1/app/tasks/:task_id': 'app-cross-organization: tasks',
+  'POST /api/v1/app/tasks/:task_id/restore': 'app-cross-organization: tasks',
+  'POST /api/v1/app/leads/:lead_id/claim': 'app-cross-organization: leads',
+  'POST /api/v1/app/leads/:lead_id/release': 'app-cross-organization: leads',
+  'POST /api/v1/app/appointments/:appointment_id/copy': 'app-cross-organization: appointments',
+  'GET /api/v1/app/contact-message-templates/:contact_message_template_id':
+    'app-cross-organization: contact-message-templates',
+  'PATCH /api/v1/app/contact-message-templates/:contact_message_template_id':
+    'app-cross-organization: contact-message-templates',
+  'DELETE /api/v1/app/contact-message-templates/:contact_message_template_id':
+    'app-cross-organization: contact-message-templates',
+  'POST /api/v1/app/contact-message-templates/:contact_message_template_id/restore':
+    'app-cross-organization: contact-message-templates',
+  'GET /api/v1/app/contacts/:contact_id': 'app-cross-organization: contacts',
+  'PATCH /api/v1/app/contacts/:contact_id': 'app-cross-organization: contacts',
+  'DELETE /api/v1/app/contacts/:contact_id': 'app-cross-organization: contacts',
+  'GET /api/v1/app/contacts/:contact_id/activities': 'app-cross-organization: contacts',
+  'GET /api/v1/app/contacts/:contact_id/activities/:contact_activity_id':
+    'app-cross-organization: contacts',
+  'POST /api/v1/app/contacts/:contact_id/activities/:contact_activity_id/resend':
+    'app-cross-organization: contacts',
+  'POST /api/v1/app/contacts/:contact_id/activities/add-note': 'app-cross-organization: contacts',
+  'POST /api/v1/app/contacts/:contact_id/activities/log-call': 'app-cross-organization: contacts',
+  'POST /api/v1/app/contacts/:contact_id/activities/send-message':
+    'app-cross-organization: contacts',
+  'GET /api/v1/app/contacts/:contact_id/members': 'app-cross-organization: contacts',
+  'PUT /api/v1/app/contacts/:contact_id/members': 'app-cross-organization: contacts',
+  'GET /api/v1/app/contacts/:contact_id/preview': 'app-cross-organization: contacts',
+  'POST /api/v1/app/contacts/:contact_id/restore': 'app-cross-organization: contacts',
+  'POST /api/v1/app/appointments/:appointment_id/check-in': 'app-cross-organization: appointments',
+  'POST /api/v1/app/appointments/:appointment_id/complete': 'app-cross-organization: appointments',
+  'POST /api/v1/app/appointments/:appointment_id/confirm': 'app-cross-organization: appointments',
+  'POST /api/v1/app/appointments/:appointment_id/no-show': 'app-cross-organization: appointments',
+  'POST /api/v1/app/appointments/:appointment_id/pause': 'app-cross-organization: appointments',
+  'POST /api/v1/app/appointments/:appointment_id/resume': 'app-cross-organization: appointments',
+  'POST /api/v1/app/appointments/:appointment_id/stage': 'app-cross-organization: appointments',
+  'GET /api/v1/app/patient-diagnoses/:patient_diagnosis_id':
+    'app-cross-organization: patient-diagnoses',
+  'PATCH /api/v1/app/patient-diagnoses/:patient_diagnosis_id':
+    'app-cross-organization: patient-diagnoses',
+  'DELETE /api/v1/app/patient-diagnoses/:patient_diagnosis_id':
+    'app-cross-organization: patient-diagnoses',
+  'POST /api/v1/app/patient-diagnoses/:patient_diagnosis_id/restore':
+    'app-cross-organization: patient-diagnoses',
+  'GET /api/v1/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id':
+    'app-cross-organization: patients',
+  'DELETE /api/v1/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id':
+    'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id/restore':
+    'app-cross-organization: patients',
+  'GET /api/v1/app/patients/:patient_id/images/:patient_image_id':
+    'app-cross-organization: patients',
+  'PATCH /api/v1/app/patients/:patient_id/images/:patient_image_id':
+    'app-cross-organization: patients',
+  'DELETE /api/v1/app/patients/:patient_id/images/:patient_image_id':
+    'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/images/:patient_image_id/restore':
+    'app-cross-organization: patients',
+  'GET /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id':
+    'app-cross-organization: patients',
+  'PATCH /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id':
+    'app-cross-organization: patients',
+  'DELETE /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id':
+    'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id/approve':
+    'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id/restore':
+    'app-cross-organization: patients',
+  'GET /api/v1/app/patients/:patient_id/reports/:patient_report_id':
+    'app-cross-organization: patients',
+  'PATCH /api/v1/app/patients/:patient_id/reports/:patient_report_id':
+    'app-cross-organization: patients',
+  'DELETE /api/v1/app/patients/:patient_id/reports/:patient_report_id':
+    'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/reports/:patient_report_id/restore':
+    'app-cross-organization: patients',
+  'GET /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id':
+    'app-cross-organization: patients',
+  'PATCH /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id':
+    'app-cross-organization: patients',
+  'DELETE /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id':
+    'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id/actions':
+    'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id/restore':
+    'app-cross-organization: patients',
+  'GET /api/v1/app/patients/:patient_id/reviews/:patient_review_id':
+    'app-cross-organization: patients',
+  'PATCH /api/v1/app/patients/:patient_id/reviews/:patient_review_id':
+    'app-cross-organization: patients',
+  'DELETE /api/v1/app/patients/:patient_id/reviews/:patient_review_id':
+    'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/reviews/:patient_review_id/actions':
+    'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/reviews/:patient_review_id/restore':
+    'app-cross-organization: patients',
+  'GET /api/v1/app/patients/:patient_id/treatments/:patient_treatment_id':
+    'app-cross-organization: patients',
+  'PATCH /api/v1/app/patients/:patient_id/treatments/:patient_treatment_id':
+    'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/treatments/:patient_treatment_id/reverse':
+    'app-cross-organization: patients',
+  'GET /api/v1/app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id':
+    'app-cross-organization: patients',
+  'PATCH /api/v1/app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id':
+    'app-cross-organization: patients',
+  'DELETE /api/v1/app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id':
+    'app-cross-organization: patients',
+  'POST /api/v1/app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id/restore':
+    'app-cross-organization: patients',
+  'GET /api/v1/app/patients/:patient_id/offerings': 'app-cross-organization: patients',
+  'GET /api/v1/app/patients/:patient_id/offerings/:patient_offering_id':
+    'app-cross-organization: patients',
+  'PATCH /api/v1/app/patients/:patient_id/offerings/:patient_offering_id':
+    'app-cross-organization: patients',
+  'GET /api/v1/app/invoices/:invoice_id/credit-notes': 'app-cross-organization: invoices',
+  'POST /api/v1/app/invoices/:invoice_id/credit-notes': 'app-cross-organization: invoices',
+  'GET /api/v1/app/invoices/:invoice_id/credit-notes/:invoice_credit_note_id':
+    'app-cross-organization: invoices',
+  'GET /api/v1/app/payments/:payment_id/edits': 'app-cross-organization: payments',
+  'POST /api/v1/app/payments/:payment_id/reverse': 'app-cross-organization: payments',
+  'POST /api/v1/app/pending-credits/:pending_credit_id/settle':
+    'app-cross-organization: pending-credits',
+  'GET /api/v1/app/stock-items/:stock_item_id/movements': 'app-cross-organization: stock-items',
+  'POST /api/v1/app/stock-items/:stock_item_id/movements': 'app-cross-organization: stock-items',
+  'GET /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id':
+    'app-cross-organization: stock-items',
+  'POST /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id/revert':
+    'app-cross-organization: stock-items',
+  'POST /api/v1/app/tasks/:task_id/reassign': 'app-cross-organization: tasks',
+  'GET /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id':
+    'app-cross-organization: medical-reps',
+  'DELETE /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id':
+    'app-cross-organization: medical-reps',
+  'POST /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id/restore':
+    'app-cross-organization: medical-reps',
+  'POST /api/v1/app/medical-sales/:medical_sale_id/returns':
+    'app-cross-organization: medical-sales',
+  'POST /api/v1/app/suppliers/:supplier_id/payments': 'app-cross-organization: suppliers',
 };
 
 describe('Global: authorization-model runtime coverage', () => {

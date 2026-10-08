@@ -11,12 +11,18 @@ src/
 ├── domains/
     ├── app/
     │   ├── __tests__/
+    │   │   ├── factories/
+    │   │   │   ├── app-fixture.factory.ts
+    │   │   │   └── app-flow.factory.ts
     │   │   └── integration/
     │   │   │   └── app-route-smoke.integration.test.ts
     │   ├── seed/
     │   │   └── index.ts
     │   ├── sub-domains/
     │   │   ├── appointments/
+    │   │   │   ├── __tests__/
+    │   │   │   │   └── integration/
+    │   │   │   │   │   └── appointments.integration.test.ts
     │   │   │   ├── appointments.constants.ts
     │   │   │   ├── appointments.controller.ts
     │   │   │   ├── appointments.dto.ts
@@ -30,6 +36,9 @@ src/
     │   │   │   ├── appointments.types.ts
     │   │   │   └── appointments.validator.ts
     │   │   ├── billing/
+    │   │   │   ├── __tests__/
+    │   │   │   │   └── integration/
+    │   │   │   │   │   └── billing.integration.test.ts
     │   │   │   ├── day-closes/
     │   │   │   │   ├── queues/
     │   │   │   │   │   ├── day-close-auto-close.job.schema.ts
@@ -177,6 +186,10 @@ src/
     │   │   │   ├── branches.types.ts
     │   │   │   └── branches.validator.ts
     │   │   ├── contacts/
+    │   │   │   ├── __tests__/
+    │   │   │   │   └── integration/
+    │   │   │   │   │   ├── contact-activities.integration.test.ts
+    │   │   │   │   │   └── contacts.integration.test.ts
     │   │   │   ├── contact-activities/
     │   │   │   │   ├── contact-activities.constants.ts
     │   │   │   │   ├── contact-activities.controller.ts
@@ -229,6 +242,9 @@ src/
     │   │   │   ├── contacts.types.ts
     │   │   │   └── contacts.validator.ts
     │   │   ├── leads/
+    │   │   │   ├── __tests__/
+    │   │   │   │   └── integration/
+    │   │   │   │   │   └── leads.integration.test.ts
     │   │   │   ├── seed/
     │   │   │   │   ├── index.ts
     │   │   │   │   ├── leads.bulk.seed.ts
@@ -246,6 +262,9 @@ src/
     │   │   │   ├── leads.types.ts
     │   │   │   └── leads.validator.ts
     │   │   ├── medical/
+    │   │   │   ├── __tests__/
+    │   │   │   │   └── integration/
+    │   │   │   │   │   └── medical.integration.test.ts
     │   │   │   ├── manufacturers/
     │   │   │   │   ├── manufacturers.constants.ts
     │   │   │   │   ├── manufacturers.controller.ts
@@ -356,6 +375,9 @@ src/
     │   │   │   ├── medical.overview.md
     │   │   │   └── medical.routes.ts
     │   │   ├── memberships/
+    │   │   │   ├── __tests__/
+    │   │   │   │   └── integration/
+    │   │   │   │   │   └── memberships.integration.test.ts
     │   │   │   ├── membership-preferences/
     │   │   │   │   ├── membership-preferences.constants.ts
     │   │   │   │   ├── membership-preferences.controller.ts
@@ -391,6 +413,9 @@ src/
     │   │   │   ├── memberships.types.ts
     │   │   │   └── memberships.validator.ts
     │   │   ├── offerings/
+    │   │   │   ├── __tests__/
+    │   │   │   │   └── integration/
+    │   │   │   │   │   └── offerings.integration.test.ts
     │   │   │   ├── offering-groups/
     │   │   │   │   ├── offering-groups.controller.ts
     │   │   │   │   ├── offering-groups.dto.ts
@@ -429,6 +454,9 @@ src/
     │   │   │   ├── offerings.types.ts
     │   │   │   └── offerings.validator.ts
     │   │   ├── patients/
+    │   │   │   ├── __tests__/
+    │   │   │   │   └── integration/
+    │   │   │   │   │   └── patients.integration.test.ts
     │   │   │   ├── patient-check-ins/
     │   │   │   │   ├── patient-check-ins.constants.ts
     │   │   │   │   ├── patient-check-ins.controller.ts
@@ -596,6 +624,9 @@ src/
     │   │   │   ├── record-counters.overview.md
     │   │   │   └── record-counters.schema.ts
     │   │   ├── stock/
+    │   │   │   ├── __tests__/
+    │   │   │   │   └── integration/
+    │   │   │   │   │   └── stock.integration.test.ts
     │   │   │   ├── stock-counts/
     │   │   │   │   ├── stock-counts.constants.ts
     │   │   │   │   ├── stock-counts.controller.ts
@@ -665,6 +696,9 @@ src/
     │   │   │   ├── stock.overview.md
     │   │   │   └── stock.routes.ts
     │   │   └── tasks/
+    │   │   │   ├── __tests__/
+    │   │   │       └── integration/
+    │   │   │       │   └── tasks.integration.test.ts
     │   │   │   ├── queues/
     │   │   │       ├── task-rules.job.schema.ts
     │   │   │       └── task-rules.queue.ts
@@ -1346,6 +1380,7 @@ src/
     │   │   │   ├── member-role-permission.e2e.test.ts
     │   │   │   └── organization-onboarding.e2e.test.ts
     │   │   ├── factories/
+    │   │   │   ├── membership-row.factory.ts
     │   │   │   └── permission.factory.ts
     │   │   ├── integration/
     │   │   │   ├── tenancy-audit-trail.integration.test.ts
@@ -2545,6 +2580,7 @@ src/
     │   ├── harness-provider-env.ts
     │   ├── idempotency-entry.helper.ts
     │   ├── iteration-repository.helper.ts
+    │   ├── json-query.helper.ts
     │   ├── local-test-database.ts
     │   ├── object-storage-mock.helper.ts
     │   ├── operator-database.ts
@@ -2714,6 +2750,7 @@ src/
     │   │   └── session-invalidation.security.test.ts
     │   ├── authz/
     │   │   ├── admin-only.security.test.ts
+    │   │   ├── app-cross-organization.security.test.ts
     │   │   ├── auth-token-flow.security.test.ts
     │   │   ├── billing-privilege.security.test.ts
     │   │   ├── cross-organization-mutation.security.test.ts
@@ -2877,6 +2914,8 @@ src/
     │   │   ├── app.error.unit.test.ts
     │   │   ├── auth.error.unit.test.ts
     │   │   └── validation.error.unit.test.ts
+    │   ├── helpers/
+    │   │   └── json-query.helper.unit.test.ts
     │   ├── infrastructure/
     │   │   ├── cache/
     │   │   │   ├── redis-client.lifecycle.unit.test.ts

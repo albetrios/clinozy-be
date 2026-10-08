@@ -12,6 +12,7 @@ import {
   seedAllPermissions,
   createRoleWithPermissions,
   createMembership,
+  MEMBERSHIP_WRITE_PERMISSION_CODES,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
@@ -56,9 +57,8 @@ describe('Security: invitation lifecycle flow abuse', () => {
   });
 
   const ADMIN_PERMISSIONS = [
-    TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+    ...MEMBERSHIP_WRITE_PERMISSION_CODES,
     TENANCY_PERMISSIONS.MEMBERSHIP_READ,
-    TENANCY_PERMISSIONS.INVITATION_MANAGE,
     TENANCY_PERMISSIONS.ROLE_READ,
     TENANCY_PERMISSIONS.ORGANIZATION_READ,
   ];

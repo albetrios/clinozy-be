@@ -88,9 +88,10 @@ export const stock_purchases = appSchema
       index('idx_stock_purchases_organization_purchase_date')
         .on(table.organization_id, table.purchase_date.desc(), table.id)
         .where(sql`${table.deleted_at} IS NULL`),
-      index('idx_stock_purchases_stock_vendor_purchase_date')
-        .on(table.stock_vendor_id, table.purchase_date)
-        .where(sql`${table.deleted_at} IS NULL`),
+      index('idx_stock_purchases_stock_vendor_purchase_date').on(
+        table.stock_vendor_id,
+        table.purchase_date,
+      ),
       // What is owed — the footer and the vendors' payable
       index('idx_stock_purchases_organization_due')
         .on(table.organization_id, table.purchase_date)
@@ -172,6 +173,7 @@ export const stock_purchase_items = appSchema
       amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
     },
     (table) => [
+      index('idx_stock_purchase_items_organization_id').on(table.organization_id),
       primaryKey({
         name: 'stock_purchase_items_pkey',
         columns: [table.stock_purchase_id, table.line_number],

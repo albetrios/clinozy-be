@@ -28,7 +28,7 @@ describe('PermissionRepository (database)', () => {
       userId: owner.id,
       organizationId: organization.id,
       roleId: role.id,
-      status: 'ACTIVE',
+      status: 'active',
     });
 
     const allPermissions = await repository.findAll();

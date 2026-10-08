@@ -20,8 +20,9 @@ const CHECK_VIOLATION = '23514';
 const UNIQUE_VIOLATION = '23505';
 
 /**
- * `app.branches` (launch ROUTE #2): the defaults, every CHECK, the one-main and live-name unique
- * indexes, and the default-staff foreign keys clearing on a membership delete. Runs on the operator
+ * `app.branches` (launch ROUTE #2, rebuilt in #125): the defaults, every CHECK, the one-main and
+ * name unique indexes (a branch is never deleted, only made inactive — D3, D16), and the
+ * default-staff foreign keys clearing on a membership delete. Runs on the operator
  * connection, so it holds in the RLS-role lane too.
  */
 describe('Integration: app.branches schema', () => {
@@ -88,38 +89,21 @@ describe('Integration: app.branches schema', () => {
     ['an unknown weekday', { working_days: ['mon', 'funday'] }],
     ['no working day', { working_days: [] }],
     ['a non-https maps link', { maps_link: 'http://maps.example.com' }],
-    ['an unknown delete reason', { deleted_at: new Date().toISOString(), delete_reason: 'oops' }],
-    ['a delete without a reason', { deleted_at: new Date().toISOString() }],
-    ['a reason without a delete', { delete_reason: 'mistake' }],
-    [
-      'reason other without a note',
-      { deleted_at: new Date().toISOString(), delete_reason: 'other' },
-    ],
+    ['a non-https review link', { review_link: 'http://reviews.example.com' }],
   ])('rejects %s', async (_case, overrides) => {
     await expect(insertBranch(overrides)).rejects.toMatchObject({ code: CHECK_VIOLATION });
   });
 
-  it('accepts a valid GSTIN and an other-reason delete with a note', async () => {
-    await expect(
-      insertBranch({
-        gst_number: '24ABCDE1234F1Z5',
-        deleted_at: new Date().toISOString(),
-        delete_reason: 'other',
-        delete_note: 'Moved to the new building',
-      }),
-    ).resolves.toBeGreaterThan(0);
+  it('accepts a valid GSTIN', async () => {
+    await expect(insertBranch({ gst_number: '24ABCDE1234F1Z5' })).resolves.toBeGreaterThan(0);
   });
 
-  it('keeps live names unique per organization, ignoring case, and frees a deleted name', async () => {
-    await insertBranch({ name: 'Adajan' });
+  it('keeps names unique per organization, ignoring case — an inactive branch keeps its name (D3, D16)', async () => {
+    await insertBranch({ name: 'Adajan', is_active: false });
     await expect(insertBranch({ name: 'ADAJAN' })).rejects.toMatchObject({
       code: UNIQUE_VIOLATION,
     });
-    await getOperatorSql()`
-      UPDATE app.branches SET deleted_at = now(), delete_reason = 'duplicate'
-      WHERE organization_id = ${organizationId}
-    `;
-    await expect(insertBranch({ name: 'Adajan' })).resolves.toBeGreaterThan(0);
+    await expect(insertBranch({ name: 'Vesu' })).resolves.toBeGreaterThan(0);
   });
 
   it('allows one live main branch per organization', async () => {

@@ -56,7 +56,7 @@ describe('createMemberRolePermissionController', () => {
       rolePublicId,
     );
     expect(response).toMatchObject({
-      data: [{ role_id: rolePublicId, permission_code: 'tenancy:read' }],
+      data: [{ permission_code: 'tenancy:read' }],
       meta: { pagination: { has_more: false, next: null, estimated_total: 1 } },
     });
   });
@@ -111,7 +111,7 @@ describe('createMemberRolePermissionController', () => {
       userId,
     );
     expect(response).toMatchObject({
-      data: [{ role_id: rolePublicId, permission_code: 'tenancy:read' }],
+      data: [{ permission_code: 'tenancy:read' }],
     });
   });
 

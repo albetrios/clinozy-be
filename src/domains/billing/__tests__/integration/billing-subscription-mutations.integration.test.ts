@@ -234,7 +234,7 @@ describe('Billing Subscription Mutations — Integration', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      // The two non-owner members are now SUSPENDED; the owner stays ACTIVE.
+      // The two non-owner members are now suspended; the owner stays active.
       const statusOf = async (userId: number) =>
         (
           await getOperatorDatabase()
@@ -247,9 +247,9 @@ describe('Billing Subscription Mutations — Integration', () => {
               ),
             )
         )[0]?.status;
-      expect(await statusOf(memberA.id)).toBe('SUSPENDED');
-      expect(await statusOf(memberB.id)).toBe('SUSPENDED');
-      expect(await statusOf(owner.id)).toBe('ACTIVE');
+      expect(await statusOf(memberA.id)).toBe('suspended');
+      expect(await statusOf(memberB.id)).toBe('suspended');
+      expect(await statusOf(owner.id)).toBe('active');
     });
 
     it('downgrade of an owner-only organization to a 0-seat plan succeeds without suspending the owner (F2)', async () => {
@@ -283,7 +283,7 @@ describe('Billing Subscription Mutations — Integration', () => {
             ),
           )
       )[0]?.status;
-      expect(ownerStatus).toBe('ACTIVE');
+      expect(ownerStatus).toBe('active');
     });
 
     it('allows the downgrade when the new plan still has enough seats for the active members (F2)', async () => {

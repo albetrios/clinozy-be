@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { MembershipService } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
+import {
+  emptyMembershipAdditionalRolesRepository,
+  membershipRowFixture,
+} from '@/domains/tenancy/__tests__/factories/membership-row.factory.js';
 
 vi.mock('@/domains/tenancy/sub-domains/permission/permission-cache.service.js', () => ({
   invalidatePermissions: vi.fn().mockResolvedValue(undefined),
@@ -50,7 +54,9 @@ describe('MembershipService — permission cache invalidation', () => {
   };
 
   const memberRoleService = {
-    requireRoleRecordByPublicId: vi.fn().mockResolvedValue({ id: 2, public_id: 'role_public' }),
+    requireRoleRecordForOrganization: vi
+      .fn()
+      .mockResolvedValue({ id: 2, public_id: 'role_public' }),
   };
 
   const memberRolePermissionService = {
@@ -58,30 +64,27 @@ describe('MembershipService — permission cache invalidation', () => {
   };
 
   const membershipRepository = {
-    create: vi.fn().mockResolvedValue({
-      public_id: 'membership_public',
-      user_id: 5,
-      role_id: 2,
-      status: 'ACTIVE',
-      created_at: new Date(),
-      updated_at: new Date(),
-    }),
-    findByPublicId: vi.fn().mockResolvedValue({
-      public_id: 'membership_public',
-      user_id: 5,
-      role_id: 2,
-      status: 'ACTIVE',
-      created_at: new Date(),
-      updated_at: new Date(),
-    }),
-    update: vi.fn().mockResolvedValue({
-      public_id: 'membership_public',
-      user_id: 5,
-      role_id: 3,
-      status: 'ACTIVE',
-      created_at: new Date(),
-      updated_at: new Date(),
-    }),
+    create: vi
+      .fn()
+      .mockResolvedValue(
+        membershipRowFixture({ public_id: 'membership_public', user_id: 5, role_id: 2 }),
+      ),
+    findByPublicId: vi
+      .fn()
+      .mockResolvedValue(
+        membershipRowFixture({ public_id: 'membership_public', user_id: 5, role_id: 2 }),
+      ),
+    findAnyByPublicId: vi
+      .fn()
+      .mockResolvedValue(
+        membershipRowFixture({ public_id: 'membership_public', user_id: 5, role_id: 2 }),
+      ),
+    findLatestEndedForUser: vi.fn().mockResolvedValue(null),
+    update: vi
+      .fn()
+      .mockResolvedValue(
+        membershipRowFixture({ public_id: 'membership_public', user_id: 5, role_id: 3 }),
+      ),
     softDelete: vi.fn().mockResolvedValue({ public_id: 'membership_public' }),
     resolveUserSummariesByInternalIds: vi.fn(
       async (ids: readonly number[]) =>
@@ -103,14 +106,11 @@ describe('MembershipService — permission cache invalidation', () => {
         new Map(ids.map((id) => [id, { public_id: `role_public_${id}`, name: 'Admin' }])),
     ),
     resolveLiveInvitationsByMembershipIds: vi.fn(async () => new Map()),
-    findByUserAndOrganization: vi.fn().mockResolvedValue({
-      public_id: 'membership_public',
-      user_id: 20,
-      role_id: 2,
-      status: 'ACTIVE',
-      created_at: new Date(),
-      updated_at: new Date(),
-    }),
+    findByUserAndOrganization: vi
+      .fn()
+      .mockResolvedValue(
+        membershipRowFixture({ public_id: 'membership_public', user_id: 20, role_id: 2 }),
+      ),
   };
 
   const authorizationService = {
@@ -145,6 +145,7 @@ describe('MembershipService — permission cache invalidation', () => {
     undefined,
     userService as never,
     membershipInvitationService as never,
+    emptyMembershipAdditionalRolesRepository(),
   );
 
   beforeEach(() => {
@@ -154,7 +155,7 @@ describe('MembershipService — permission cache invalidation', () => {
   it('create invalidates user permission cache after membership is created', async () => {
     await service.create(
       asScope('org_public_abc'),
-      { email: 'invitee@example.com', role_id: 'role_public' },
+      { email: 'invitee@example.com', role_ids: ['role_public'] },
       'inviter_public',
     );
 
@@ -165,7 +166,7 @@ describe('MembershipService — permission cache invalidation', () => {
     await service.update(
       asScope('org_public_abc'),
       'membership_public',
-      { status: 'SUSPENDED' },
+      { status: 'suspended' },
       'admin',
     );
 

@@ -108,9 +108,12 @@ export const leads = appSchema
         .on(table.organization_id, table.created_at.desc(), table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       // "Mine"
-      index('idx_leads_organization_owner_created')
-        .on(table.organization_id, table.owner_membership_id, table.created_at.desc(), table.id)
-        .where(sql`${table.deleted_at} IS NULL`),
+      index('idx_leads_organization_owner_created').on(
+        table.organization_id,
+        table.owner_membership_id,
+        table.created_at.desc(),
+        table.id,
+      ),
       index('idx_leads_organization_follow_up_at')
         .on(table.organization_id, table.follow_up_at, table.id)
         .where(sql`${table.deleted_at} IS NULL AND ${table.follow_up_at} IS NOT NULL`),
@@ -118,7 +121,7 @@ export const leads = appSchema
       index('idx_leads_organization_held_until')
         .on(table.organization_id, table.held_until)
         .where(sql`${table.deleted_at} IS NULL AND ${table.held_until} IS NOT NULL`),
-      index('idx_leads_branch_id').on(table.branch_id).where(sql`${table.deleted_at} IS NULL`),
+      index('idx_leads_branch_id').on(table.branch_id),
       index('idx_leads_interests_gin')
         .using('gin', table.interests)
         .where(sql`${table.deleted_at} IS NULL`),

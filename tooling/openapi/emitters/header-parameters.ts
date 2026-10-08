@@ -1,7 +1,9 @@
+import { collectAllParsedRoutes } from '@tooling/openapi/route-catalog/route-parser.js';
+
 /**
  * Per-operation request-header documentation. Mirrors the runtime middleware
- * truth: idempotency (`X-Idempotency-Key`, required on the 13 writes that
- * register `idempotencyRequired: true`), captcha on the public auth surface
+ * truth: idempotency (`X-Idempotency-Key`, required on every write that
+ * registers `idempotencyRequired: true`), captcha on the public auth surface
  * (`X-Captcha-Token`), CSRF on the cookie refresh flow (`X-CSRF-Token`), and
  * Stripe's own `Stripe-Signature` on webhook ingestion.
  *
@@ -12,21 +14,21 @@
  * scheme, not a literal parameter.
  */
 
-const IDEMPOTENCY_REQUIRED_ROUTE_KEYS = new Set([
-  'POST /api/v1/tenancy/organizations',
-  'POST /api/v1/tenancy/organization/memberships',
-  'POST /api/v1/tenancy/organization/transfer-ownership',
-  'POST /api/v1/tenancy/organization/roles',
-  'POST /api/v1/tenancy/organization/api-keys',
-  'POST /api/v1/tenancy/organization/notification-policies',
-  'POST /api/v1/billing/subscriptions',
-  'POST /api/v1/billing/subscriptions/{subscription_id}/change-plan',
-  'POST /api/v1/billing/subscriptions/{subscription_id}/cancel',
-  'POST /api/v1/billing/subscriptions/{subscription_id}/resume',
-  'POST /api/v1/billing/payment-methods/setup',
-  'POST /api/v1/notify/webhooks',
-  'POST /api/v1/uploads',
-]);
+/**
+ * The writes registered with `config.idempotencyRequired: true`, as `METHOD /path/{param}` keys —
+ * read off the route registrations by the same parser that writes the catalog's `I` column, so the
+ * documented header can never drift from what the idempotency middleware enforces.
+ */
+let idempotencyRequiredRouteKeys: ReadonlySet<string> | undefined;
+
+function isIdempotencyRequired(routeKey: string): boolean {
+  idempotencyRequiredRouteKeys ??= new Set(
+    collectAllParsedRoutes()
+      .filter((route) => route.idempotencyRequired)
+      .map((route) => `${route.method} ${route.fullPath.replace(/:([A-Za-z0-9_]+)/g, '{$1}')}`),
+  );
+  return idempotencyRequiredRouteKeys.has(routeKey);
+}
 
 const CAPTCHA_ROUTE_KEYS = new Set([
   'POST /api/v1/auth/login',
@@ -52,7 +54,7 @@ export function buildHeaderParameters(method: string, routeKey: string): object[
     !WEBHOOK_ROUTE_KEYS.has(routeKey) &&
     !routeKey.includes('/api/v1/mcp')
   ) {
-    const required = IDEMPOTENCY_REQUIRED_ROUTE_KEYS.has(routeKey);
+    const required = isIdempotencyRequired(routeKey);
     headers.push({
       name: 'X-Idempotency-Key',
       in: 'header',

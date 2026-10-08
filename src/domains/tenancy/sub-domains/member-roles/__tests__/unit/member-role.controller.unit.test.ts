@@ -125,6 +125,8 @@ describe('createMemberRoleController', () => {
     expect(service.delete).toHaveBeenCalledWith(
       expect.objectContaining({ organizationPublicId: organizationPublicId }),
       rolePublicId,
+      {},
+      expect.any(String),
     );
     expect(reply.code).toHaveBeenCalledWith(204);
   });

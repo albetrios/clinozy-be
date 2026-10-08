@@ -107,6 +107,7 @@ export const stock_count_lines = appSchema
       counted_quantity: numeric('counted_quantity', { precision: 12, scale: 3 }).notNull(),
     },
     (table) => [
+      index('idx_stock_count_lines_organization_id').on(table.organization_id),
       primaryKey({
         name: 'stock_count_lines_pkey',
         columns: [table.stock_count_id, table.stock_item_id],

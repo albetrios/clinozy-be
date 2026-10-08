@@ -143,12 +143,12 @@ export const invoices = appSchema
         .on(table.organization_id, table.invoice_date.desc(), table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       // The patient file's Invoices tab
-      index('idx_invoices_contact_invoice_date')
-        .on(table.contact_id, table.invoice_date.desc(), table.id)
-        .where(sql`${table.deleted_at} IS NULL`),
-      index('idx_invoices_branch_invoice_date')
-        .on(table.branch_id, table.invoice_date)
-        .where(sql`${table.deleted_at} IS NULL`),
+      index('idx_invoices_contact_invoice_date').on(
+        table.contact_id,
+        table.invoice_date.desc(),
+        table.id,
+      ),
+      index('idx_invoices_branch_invoice_date').on(table.branch_id, table.invoice_date),
       // Dues, and sub-domain 10's reminder
       index('idx_invoices_organization_due')
         .on(table.organization_id, table.invoice_date)
@@ -287,6 +287,7 @@ export const invoice_items = appSchema
       ),
     },
     (table) => [
+      index('idx_invoice_items_organization_id').on(table.organization_id),
       uniqueIndex('idx_invoice_items_public_id').on(table.public_id),
       // Deferrable in the init migration — a save renumbers kept lines (B12)
       unique('uq_invoice_items_invoice_line').on(table.invoice_id, table.line_number),

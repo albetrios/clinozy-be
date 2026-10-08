@@ -190,15 +190,16 @@ function taskIndexes(table: TaskTable) {
       .where(
         sql`${table.kind} = ${literal(TASK_KIND.RULE)} AND ${table.status} <> ${literal(TASK_STATUS.DONE)} AND ${live}`,
       ),
-    index('idx_tasks_owner_status_due')
-      .on(table.owner_membership_id, table.status, table.due_at)
-      .where(live),
+    index('idx_tasks_owner_status_due').on(table.owner_membership_id, table.status, table.due_at),
     index('idx_tasks_organization_queue')
       .on(table.organization_id, table.owner_role, table.status, table.due_at)
       .where(sql`${live} AND ${table.owner_membership_id} IS NULL`),
-    index('idx_tasks_organization_status_due')
-      .on(table.organization_id, table.status, table.due_at, table.id)
-      .where(live),
+    index('idx_tasks_organization_status_due').on(
+      table.organization_id,
+      table.status,
+      table.due_at,
+      table.id,
+    ),
     index('idx_tasks_snoozed_until')
       .on(table.snoozed_until)
       .where(sql`${table.status} = ${literal(TASK_STATUS.SNOOZED)} AND ${live}`),
@@ -332,6 +333,7 @@ export const task_owner_changes = appSchema
       ),
     },
     (table) => [
+      index('idx_task_owner_changes_organization_id').on(table.organization_id),
       uniqueIndex('idx_task_owner_changes_public_id').on(table.public_id),
       index('idx_task_owner_changes_task_created').on(table.task_id, table.created_at),
       index('idx_task_owner_changes_created_by_user_id')

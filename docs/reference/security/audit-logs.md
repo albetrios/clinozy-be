@@ -62,6 +62,7 @@ through a resolver that sees deleted organizations.
 | `tenancy.membership.update` | `membership` | Member's role or status changed (the member in `target_user_id`) |
 | `tenancy.membership.delete` | `membership` | Member removed |
 | `tenancy.membership.leave` | `membership` | Member left the organization |
+| `tenancy.membership.restore` | `membership` | Removed member restored |
 | `tenancy.membership.transfer_ownership` | `organization` | Ownership transferred — the new owner in `target_user_id` (`WARNING`) |
 | `tenancy.membership_invitation.accept` | `membership_invitation` | Invitation accepted — recorded in the joined organization's log |
 | `tenancy.membership_invitation.resend` | `membership_invitation` | Invitation resent |
@@ -69,6 +70,7 @@ through a resolver that sees deleted organizations.
 | `tenancy.role.create` | `role` | Role created |
 | `tenancy.role.update` | `role` | Role renamed or redescribed |
 | `tenancy.role.delete` | `role` | Role deleted |
+| `tenancy.role.restore` | `role` | Deleted role restored |
 | `tenancy.role_permissions.put` | `role` | Role's permission set replaced (`metadata.permission_codes`) |
 | `tenancy.notification_policy.create` | `notification_policy` | Notification policy created |
 | `tenancy.notification_policy.update` | `notification_policy` | Notification policy changed |
@@ -96,6 +98,15 @@ through a resolver that sees deleted organizations.
 | `notify.webhook.delete` | `webhook` | Webhook deleted |
 
 A webhook URL is recorded as its origin only — the path and query can carry the receiver's secret.
+
+### App
+
+| Action | Resource type | When |
+| ------ | ------------- | ---- |
+| `app.branch.create` | `branch` | Branch created (`metadata.branch_public_id`) |
+| `app.branch.update` | `branch` | Branch changed (`metadata.changed_fields`) |
+| `app.branch.members.replace` | `branch` | The members who work at a branch replaced (`metadata.membership_count`) |
+| `app.contact.members.replace` | `contact` | The members involved with a contact replaced (`metadata.membership_count`) |
 
 ### User
 

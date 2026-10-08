@@ -68,10 +68,13 @@ export const patient_reports = appSchema
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
+      index('idx_patient_reports_organization_id').on(table.organization_id),
       uniqueIndex('idx_patient_reports_public_id').on(table.public_id),
-      index('idx_patient_reports_patient_report_date')
-        .on(table.patient_id, table.report_date.desc(), table.id)
-        .where(sql`${table.deleted_at} IS NULL`),
+      index('idx_patient_reports_patient_report_date').on(
+        table.patient_id,
+        table.report_date.desc(),
+        table.id,
+      ),
       index('idx_patient_reports_deleted_at')
         .on(table.deleted_at)
         .where(sql`${table.deleted_at} IS NOT NULL`),

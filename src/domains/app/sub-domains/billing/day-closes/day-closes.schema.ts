@@ -202,6 +202,7 @@ export const day_close_events = appSchema
       ),
     },
     (table) => [
+      index('idx_day_close_events_organization_id').on(table.organization_id),
       uniqueIndex('idx_day_close_events_public_id').on(table.public_id),
       index('idx_day_close_events_day_close_occurred').on(table.day_close_id, table.occurred_at),
       index('idx_day_close_events_membership_id')

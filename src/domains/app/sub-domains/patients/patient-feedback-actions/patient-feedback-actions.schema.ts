@@ -64,6 +64,7 @@ export const patient_feedback_actions = appSchema
       ),
     },
     (table) => [
+      index('idx_patient_feedback_actions_organization_id').on(table.organization_id),
       uniqueIndex('idx_patient_feedback_actions_public_id').on(table.public_id),
       index('idx_patient_feedback_actions_patient_check_in')
         .on(table.patient_check_in_id, table.created_at)

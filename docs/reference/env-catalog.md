@@ -5,13 +5,14 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**13 / 238** variables migrated to an explicit `{ allowed, description }` entry.
+**13 / 239** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
 | `ALLOWED_ORIGINS` | — | — *(required)* |  | — |
 | `API_DOCS_BASE_URL` | — | — *(optional)* |  | — |
 | `API_REFERENCE_ALLOW_PRODUCTION` | — | `false` |  | — |
+| `APP_RECORD_PURGE_CRON` | — | — *(optional)* |  | — |
 | `AUDIT_EXPORT_BATCH_SIZE` | — | `5000` |  | — |
 | `AUDIT_EXPORT_CRON` | — | — *(optional)* |  | — |
 | `AUDIT_EXPORT_ENABLED` | — | `false` |  | — |
@@ -115,7 +116,6 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `MEMBER_ROLE_MAX_PER_ORG` | — | `50` |  | — |
 | `MEMBER_ROLE_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
 | `MEMBERSHIP_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
-| `APP_RECORD_PURGE_CRON` | — | — *(optional)* |  | — |
 | `METRICS_AUTH_REQUIRED` | — | `true` |  | — |
 | `METRICS_ENABLED` | — | `true` |  | — |
 | `METRICS_SCRAPE_TOKEN` | — | — *(optional)* |  | — |

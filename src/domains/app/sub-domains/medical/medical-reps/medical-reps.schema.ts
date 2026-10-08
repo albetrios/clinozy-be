@@ -70,9 +70,11 @@ export const medical_reps = appSchema
       index('idx_medical_reps_organization_name')
         .on(table.organization_id, table.name, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
-      index('idx_medical_reps_organization_created')
-        .on(table.organization_id, table.created_at.desc(), table.id)
-        .where(sql`${table.deleted_at} IS NULL`),
+      index('idx_medical_reps_organization_created').on(
+        table.organization_id,
+        table.created_at.desc(),
+        table.id,
+      ),
       // The MR visit reminder (MD8)
       index('idx_medical_reps_organization_next_visit')
         .on(table.organization_id, table.next_visit_on)

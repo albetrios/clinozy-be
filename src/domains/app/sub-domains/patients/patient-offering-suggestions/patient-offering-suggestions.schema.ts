@@ -89,11 +89,14 @@ export const patient_offering_suggestions = appSchema
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
+      index('idx_patient_offering_suggestions_organization_id').on(table.organization_id),
       uniqueIndex('idx_patient_offering_suggestions_public_id').on(table.public_id),
       // The plan, newest first
-      index('idx_patient_offering_suggestions_patient_created')
-        .on(table.patient_id, table.created_at.desc(), table.id)
-        .where(sql`${table.deleted_at} IS NULL`),
+      index('idx_patient_offering_suggestions_patient_created').on(
+        table.patient_id,
+        table.created_at.desc(),
+        table.id,
+      ),
       // PK9: the duplicate check
       index('idx_patient_offering_suggestions_patient_offering')
         .on(table.patient_id, table.offering_id)
@@ -103,10 +106,10 @@ export const patient_offering_suggestions = appSchema
       // "Plan ready" at a visit
       index('idx_patient_offering_suggestions_appointment_id')
         .on(table.appointment_id)
-        .where(sql`${table.deleted_at} IS NULL AND ${table.appointment_id} IS NOT NULL`),
+        .where(sql`${table.appointment_id} IS NOT NULL`),
       index('idx_patient_offering_suggestions_patient_check_in_id')
         .on(table.patient_check_in_id)
-        .where(sql`${table.deleted_at} IS NULL AND ${table.patient_check_in_id} IS NOT NULL`),
+        .where(sql`${table.patient_check_in_id} IS NOT NULL`),
       index('idx_patient_offering_suggestions_offering_id').on(table.offering_id),
       index('idx_patient_offering_suggestions_suggested_by')
         .on(table.organization_id, table.suggested_by_membership_id)

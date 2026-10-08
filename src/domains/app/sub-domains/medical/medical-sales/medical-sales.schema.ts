@@ -91,6 +91,9 @@ export const medical_sales = appSchema
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
+      index('idx_medical_sales_patient_prescription_id')
+        .on(table.patient_prescription_id)
+        .where(sql`${table.patient_prescription_id} IS NOT NULL`),
       uniqueIndex('idx_medical_sales_public_id').on(table.public_id),
       uniqueIndex('idx_medical_sales_organization_sale_number').on(
         table.organization_id,
@@ -188,7 +191,10 @@ export const medical_sale_returns = appSchema
         table.created_at,
         table.id,
       ),
-      index('idx_medical_sale_returns_organization_id').on(table.organization_id),
+      index('idx_medical_sale_returns_organization_returned_by').on(
+        table.organization_id,
+        table.returned_by_membership_id,
+      ),
       index('idx_medical_sale_returns_returned_by_membership_id')
         .on(table.returned_by_membership_id)
         .where(sql`${table.returned_by_membership_id} IS NOT NULL`),

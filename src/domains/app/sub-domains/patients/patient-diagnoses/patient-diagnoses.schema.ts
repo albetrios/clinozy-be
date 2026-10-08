@@ -56,9 +56,11 @@ export const patient_diagnoses = appSchema
       uniqueIndex('idx_patient_diagnoses_organization_name_unique')
         .on(table.organization_id, sql`lower(${table.name})`)
         .where(sql`${table.deleted_at} IS NULL`),
-      index('idx_patient_diagnoses_organization_name')
-        .on(table.organization_id, table.name, table.id)
-        .where(sql`${table.deleted_at} IS NULL`),
+      index('idx_patient_diagnoses_organization_name').on(
+        table.organization_id,
+        table.name,
+        table.id,
+      ),
       index('idx_patient_diagnoses_deleted_at')
         .on(table.deleted_at)
         .where(sql`${table.deleted_at} IS NOT NULL`),

@@ -12,6 +12,7 @@ import {
   seedPermissions,
   createRoleWithPermissions,
   createMembership,
+  MEMBERSHIP_WRITE_PERMISSION_CODES,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { NOTIFY_PERMISSIONS } from '@/domains/notify/notify.permissions.js';
@@ -214,7 +215,7 @@ describe('Security: Organization API key authentication', () => {
       const adminRole = await createRoleWithPermissions({
         organizationId: organization.id,
         permissionCodes: [
-          TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+          ...MEMBERSHIP_WRITE_PERMISSION_CODES,
           TENANCY_PERMISSIONS.MEMBERSHIP_READ,
         ],
       });
@@ -232,7 +233,7 @@ describe('Security: Organization API key authentication', () => {
       const memberScopes = [
         TENANCY_PERMISSIONS.API_KEY_MANAGE,
         TENANCY_PERMISSIONS.API_KEY_READ,
-        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        ...MEMBERSHIP_WRITE_PERMISSION_CODES,
         TENANCY_PERMISSIONS.MEMBERSHIP_READ,
       ];
       const memberRole = await createRoleWithPermissions({
@@ -254,7 +255,7 @@ describe('Security: Organization API key authentication', () => {
         token: memberToken,
         payload: {
           name: 'member automation key',
-          scopes: [TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE, TENANCY_PERMISSIONS.MEMBERSHIP_READ],
+          scopes: [TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE, TENANCY_PERMISSIONS.MEMBERSHIP_READ],
         },
       });
       expect(created.statusCode).toBe(200);

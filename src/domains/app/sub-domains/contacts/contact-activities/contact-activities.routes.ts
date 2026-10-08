@@ -22,9 +22,6 @@ const LINK_RULE =
 /** Registers a contact's stream routes (prefix `/api/v1/app`) — routes-final 4.C, routes 10–16. */
 export function contactActivitiesRoutes(service: ContactActivitiesService): FastifyPluginAsync {
   const controller = createContactActivitiesController(service);
-  const writeConfig = {
-    config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
-  };
 
   return async (app) => {
     const zodApplication = app.withTypeProvider<ZodTypeProvider>();
@@ -50,7 +47,7 @@ export function contactActivitiesRoutes(service: ContactActivitiesService): Fast
       {
         onRequest: [app.authenticate],
         preHandler: [requireOrganizationPermission(APP_PERMISSIONS.CONTACT_ACTIVITY_CREATE)],
-        ...writeConfig,
+        config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Send contact message',
           description: `Writes a WhatsApp or Instagram message to the contact (\`type\`, \`body\` 1–1000): sent by the caller, \`delivery_status\` \`queued\` until the messaging worker sends it (M8). \`<first>\` and \`<interest>\` in the body are filled for the contact; \`contact_message_template_id\` must be a template of the same type, \`attachment_keys\` up to 5 confirmed uploads of the organization, \`reply_to_contact_activity_id\` an entry of this contact. ${LINK_RULE} The contact's last activity, last sent time and default channel move with it. Requires contact_activity:create.`,
@@ -66,7 +63,7 @@ export function contactActivitiesRoutes(service: ContactActivitiesService): Fast
       {
         onRequest: [app.authenticate],
         preHandler: [requireOrganizationPermission(APP_PERMISSIONS.CONTACT_ACTIVITY_CREATE)],
-        ...writeConfig,
+        config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Log contact call',
           description: `Records a call that happened (\`type\` \`call_log\`): \`direction\` \`sent\` (the team called) or \`received\` (the person called), \`body\` 1–1000 — what happened. An outgoing call is the caller's and sets the contact's default channel to \`call\`; an incoming one has no author and marks the contact as awaiting a reply. \`reply_to_contact_activity_id\` must be an entry of this contact. ${LINK_RULE} Requires contact_activity:create.`,
@@ -82,7 +79,7 @@ export function contactActivitiesRoutes(service: ContactActivitiesService): Fast
       {
         onRequest: [app.authenticate],
         preHandler: [requireOrganizationPermission(APP_PERMISSIONS.CONTACT_ACTIVITY_CREATE)],
-        ...writeConfig,
+        config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Add contact note',
           description: `Adds an internal note for the team (\`type\` \`note\`, never sent): \`body\` 1–1000, \`attachment_keys\` up to 5 confirmed uploads of the organization. ${LINK_RULE} Requires contact_activity:create.`,
@@ -114,7 +111,7 @@ export function contactActivitiesRoutes(service: ContactActivitiesService): Fast
       {
         onRequest: [app.authenticate],
         preHandler: [requireOrganizationPermission(APP_PERMISSIONS.CONTACT_ACTIVITY_UPDATE)],
-        ...writeConfig,
+        config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Resend contact message',
           description:
@@ -130,7 +127,7 @@ export function contactActivitiesRoutes(service: ContactActivitiesService): Fast
       {
         onRequest: [app.authenticate],
         preHandler: [requireOrganizationPermission(APP_PERMISSIONS.CONTACT_ACTIVITY_CREATE)],
-        ...writeConfig,
+        config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Send contact message batch',
           description:

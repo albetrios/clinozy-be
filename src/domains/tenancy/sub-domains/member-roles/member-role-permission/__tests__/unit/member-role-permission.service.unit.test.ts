@@ -210,7 +210,7 @@ describe('MemberRolePermissionService', () => {
       );
     });
 
-    // sec-T2 — held-permissions-on-remove. A `ROLE_MANAGE` holder must not be
+    // sec-T2 — held-permissions-on-remove. A `role:update` holder must not be
     // able to strip permissions from a role they themselves do not hold; that
     // would let a delegated role-manager downgrade a higher-privileged role
     // (e.g. wiping every Admin perm via empty-array PUT, or selectively pulling

@@ -60,6 +60,8 @@ const asScope = (organizationPublicId: string) =>
     organizationPublicId,
   }) as OrganizationPrincipalDatabaseScope;
 
+/** A valid removal reason — every delete carries one (the record-delete query). */
+const DELETE_QUERY = { reason: 'not_needed' };
 describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', () => {
   const organization = { id: 1, public_id: 'org_public', owner_user_id: 99 };
 
@@ -92,6 +94,7 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
 
   const organizationService = {
     requireOrganizationRecordByPublicId: vi.fn().mockResolvedValue(organization),
+    resolveUserInternalIdByPublicId: vi.fn().mockResolvedValue(undefined),
   } as unknown as OrganizationService;
 
   const memberRoleRepository = {
@@ -122,7 +125,7 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
     vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValue(systemRole as never);
 
     await expect(
-      service.delete(asScope('org_public'), systemRole.public_id),
+      service.delete(asScope('org_public'), systemRole.public_id, DELETE_QUERY, undefined),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
     expect(memberRoleRepository.softDeleteIfNoActiveMembers).not.toHaveBeenCalled();
@@ -135,7 +138,7 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
     vi.mocked(memberRoleRepository.softDeleteIfNoActiveMembers).mockResolvedValue(null as never);
 
     await expect(
-      service.delete(asScope('org_public'), customRoleAssigned.public_id),
+      service.delete(asScope('org_public'), customRoleAssigned.public_id, DELETE_QUERY, undefined),
     ).rejects.toBeInstanceOf(ConflictError);
 
     expect(invalidateOrganizationPermissions).not.toHaveBeenCalled();
@@ -145,12 +148,13 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
     vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValue(customRoleEmpty as never);
 
     await expect(
-      service.delete(asScope('org_public'), customRoleEmpty.public_id),
+      service.delete(asScope('org_public'), customRoleEmpty.public_id, DELETE_QUERY, undefined),
     ).resolves.toBeUndefined();
 
     expect(memberRoleRepository.softDeleteIfNoActiveMembers).toHaveBeenCalledWith(
       customRoleEmpty.public_id,
       organization.id,
+      { delete_reason: 'not_needed', delete_note: null, updated_by_user_id: null },
     );
     expect(invalidateOrganizationPermissions).toHaveBeenCalledWith('org_public');
   });
@@ -158,9 +162,9 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
   it('throws NotFoundError when the role does not exist (guarded delete is skipped)', async () => {
     vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValue(null);
 
-    await expect(service.delete(asScope('org_public'), 'role_missing')).rejects.toBeInstanceOf(
-      NotFoundError,
-    );
+    await expect(
+      service.delete(asScope('org_public'), 'role_missing', DELETE_QUERY, undefined),
+    ).rejects.toBeInstanceOf(NotFoundError);
 
     expect(memberRoleRepository.softDeleteIfNoActiveMembers).not.toHaveBeenCalled();
   });

@@ -37,7 +37,7 @@ import {
 } from '@/infrastructure/database/contexts/database-context.js';
 
 /**
- * Regression for sec-T2 (High): a holder of `ROLE_MANAGE` must NOT be able to wipe (or modify)
+ * Regression for sec-T2 (High): a holder of `role:update` must NOT be able to wipe (or modify)
  * the permission set on the role currently assigned to the organization's owner. Such a write
  * would strip every permission for everyone holding that role — including the owner —
  * locking them out of every PERM-gated route until `/transfer-ownership` is invoked.

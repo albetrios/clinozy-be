@@ -84,15 +84,18 @@ export const patient_check_ins = appSchema
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
+      index('idx_patient_check_ins_organization_id').on(table.organization_id),
       uniqueIndex('idx_patient_check_ins_public_id').on(table.public_id),
       // The card, and the previous score
-      index('idx_patient_check_ins_patient_date')
-        .on(table.patient_id, table.check_in_date.desc(), table.id)
-        .where(sql`${table.deleted_at} IS NULL`),
+      index('idx_patient_check_ins_patient_date').on(
+        table.patient_id,
+        table.check_in_date.desc(),
+        table.id,
+      ),
       // A treatment's latest check-in
       index('idx_patient_check_ins_patient_treatment_date')
         .on(table.patient_treatment_id, table.check_in_date.desc())
-        .where(sql`${table.deleted_at} IS NULL AND ${table.patient_treatment_id} IS NOT NULL`),
+        .where(sql`${table.patient_treatment_id} IS NOT NULL`),
       // Sub-domain 10's call-back rule
       index('idx_patient_check_ins_organization_needs_call')
         .on(table.organization_id, table.created_at)

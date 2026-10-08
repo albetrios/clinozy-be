@@ -923,7 +923,7 @@ CREATE POLICY "branches_tenant_isolation" ON "app"."branches" AS PERMISSIVE FOR 
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."branches"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."branches"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -1534,7 +1534,7 @@ CREATE POLICY "contacts_tenant_isolation" ON "app"."contacts" AS PERMISSIVE FOR 
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."contacts"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."contacts"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -1560,8 +1560,9 @@ ALTER TABLE "app"."contact_phones" ADD CONSTRAINT "contact_phones_organization_i
 -- composite key cascades the new household onto them).
 ALTER TABLE "app"."contact_phones" ADD CONSTRAINT "excl_contact_phones_phone_household" EXCLUDE USING gist ("organization_id" WITH =, "phone" WITH =, "household_contact_id" WITH <>) WHERE ("deleted_at" IS NULL);--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_contact_phones_contact_id_primary" ON "app"."contact_phones" USING btree ("contact_id") WHERE "app"."contact_phones"."is_primary";--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_contact_phones_organization_id_phone" ON "app"."contact_phones" USING btree ("organization_id","phone") WHERE "app"."contact_phones"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contact_phones_organization_id_phone" ON "app"."contact_phones" USING btree ("organization_id","phone");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_contact_phones_household_contact_id" ON "app"."contact_phones" USING btree ("household_contact_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contact_phones_contact_household" ON "app"."contact_phones" USING btree ("contact_id","household_contact_id");--> statement-breakpoint
 CREATE POLICY "contact_phones_tenant_isolation" ON "app"."contact_phones" AS PERMISSIVE FOR ALL TO public USING ("app"."contact_phones"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
@@ -2900,7 +2901,7 @@ CREATE POLICY "offering_groups_tenant_isolation" ON "app"."offering_groups" AS P
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."offering_groups"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."offering_groups"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -2917,7 +2918,7 @@ CREATE POLICY "branch_rooms_tenant_isolation" ON "app"."branch_rooms" AS PERMISS
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."branch_rooms"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."branch_rooms"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -2934,7 +2935,7 @@ CREATE POLICY "branch_machines_tenant_isolation" ON "app"."branch_machines" AS P
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."branch_machines"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."branch_machines"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -2951,7 +2952,7 @@ CREATE POLICY "branch_holidays_tenant_isolation" ON "app"."branch_holidays" AS P
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."branch_holidays"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."branch_holidays"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -2972,7 +2973,7 @@ CREATE POLICY "offerings_tenant_isolation" ON "app"."offerings" AS PERMISSIVE FO
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."offerings"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."offerings"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3004,7 +3005,7 @@ CREATE POLICY "offers_tenant_isolation" ON "app"."offers" AS PERMISSIVE FOR ALL 
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."offers"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."offers"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3054,7 +3055,7 @@ ALTER TABLE "app"."contact_message_templates" ADD CONSTRAINT "contact_message_te
 ALTER TABLE "app"."contact_message_templates" ADD CONSTRAINT "contact_message_templates_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."contact_message_templates" ADD CONSTRAINT "contact_message_templates_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_contact_message_templates_public_id" ON "app"."contact_message_templates" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_contact_message_templates_organization_created" ON "app"."contact_message_templates" USING btree ("organization_id","created_at" DESC,"id") WHERE "app"."contact_message_templates"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contact_message_templates_organization_created" ON "app"."contact_message_templates" USING btree ("organization_id","created_at" DESC,"id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_contact_message_templates_organization_name" ON "app"."contact_message_templates" USING btree ("organization_id","name","id") WHERE "app"."contact_message_templates"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_contact_message_templates_organization_name_unique" ON "app"."contact_message_templates" USING btree ("organization_id",lower("name")) WHERE "app"."contact_message_templates"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_contact_message_templates_deleted_at" ON "app"."contact_message_templates" USING btree ("deleted_at") WHERE "app"."contact_message_templates"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -3064,7 +3065,7 @@ CREATE POLICY "contact_message_templates_tenant_isolation" ON "app"."contact_mes
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."contact_message_templates"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."contact_message_templates"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3161,6 +3162,7 @@ CREATE INDEX IF NOT EXISTS "idx_contact_activities_patient_image_id" ON "app"."c
 CREATE INDEX IF NOT EXISTS "idx_contact_activities_patient_report_id" ON "app"."contact_activities" USING btree ("patient_report_id") WHERE "app"."contact_activities"."patient_report_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_contact_activities_created_by_user_id" ON "app"."contact_activities" USING btree ("created_by_user_id") WHERE "app"."contact_activities"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_contact_activities_updated_by_user_id" ON "app"."contact_activities" USING btree ("updated_by_user_id") WHERE "app"."contact_activities"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contact_activities_organization_id" ON "app"."contact_activities" USING btree ("organization_id");--> statement-breakpoint
 CREATE POLICY "contact_activities_tenant_isolation" ON "app"."contact_activities" AS PERMISSIVE FOR ALL TO public USING ("app"."contact_activities"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
@@ -3183,10 +3185,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS "idx_leads_public_id" ON "app"."leads" USING b
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_leads_organization_lead_number" ON "app"."leads" USING btree ("organization_id","lead_number");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_leads_organization_contact_open_unique" ON "app"."leads" USING btree ("organization_id","contact_id") WHERE "app"."leads"."deleted_at" IS NULL AND "app"."leads"."status" IN ('new', 'contacted', 'follow_up', 'no_response');--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_leads_organization_created" ON "app"."leads" USING btree ("organization_id","created_at" DESC,"id") WHERE "app"."leads"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_organization_owner_created" ON "app"."leads" USING btree ("organization_id","owner_membership_id","created_at" DESC,"id") WHERE "app"."leads"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_leads_organization_owner_created" ON "app"."leads" USING btree ("organization_id","owner_membership_id","created_at" DESC,"id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_leads_organization_follow_up_at" ON "app"."leads" USING btree ("organization_id","follow_up_at","id") WHERE "app"."leads"."deleted_at" IS NULL AND "app"."leads"."follow_up_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_leads_organization_held_until" ON "app"."leads" USING btree ("organization_id","held_until") WHERE "app"."leads"."deleted_at" IS NULL AND "app"."leads"."held_until" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_branch_id" ON "app"."leads" USING btree ("branch_id") WHERE "app"."leads"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_leads_branch_id" ON "app"."leads" USING btree ("branch_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_leads_interests_gin" ON "app"."leads" USING gin ("interests") WHERE "app"."leads"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_leads_contact_id" ON "app"."leads" USING btree ("contact_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_leads_deleted_at" ON "app"."leads" USING btree ("deleted_at") WHERE "app"."leads"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -3198,7 +3200,7 @@ CREATE POLICY "leads_tenant_isolation" ON "app"."leads" AS PERMISSIVE FOR ALL TO
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."leads"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."leads"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3231,7 +3233,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "idx_appointments_public_id" ON "app"."appoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_appointments_organization_appointment_number" ON "app"."appointments" USING btree ("organization_id","appointment_number");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_organization_day" ON "app"."appointments" USING btree ("organization_id","appointment_date","start_time","id") WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_organization_created" ON "app"."appointments" USING btree ("organization_id","created_at" DESC,"id") WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_appointments_branch_day" ON "app"."appointments" USING btree ("branch_id","appointment_date","start_time") WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_appointments_branch_day" ON "app"."appointments" USING btree ("branch_id","appointment_date","start_time");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_doctor_date" ON "app"."appointments" USING btree ("doctor_membership_id","appointment_date") WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_contact_date" ON "app"."appointments" USING btree ("contact_id","appointment_date" DESC) WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_floor" ON "app"."appointments" USING btree ("organization_id","branch_id","visit_stage") WHERE "app"."appointments"."deleted_at" IS NULL AND "app"."appointments"."status" = 'checked_in';--> statement-breakpoint
@@ -3244,11 +3246,12 @@ CREATE INDEX IF NOT EXISTS "idx_appointments_copied_from_appointment_id" ON "app
 CREATE INDEX IF NOT EXISTS "idx_appointments_deleted_at" ON "app"."appointments" USING btree ("deleted_at") WHERE "app"."appointments"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_created_by_user_id" ON "app"."appointments" USING btree ("created_by_user_id") WHERE "app"."appointments"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_updated_by_user_id" ON "app"."appointments" USING btree ("updated_by_user_id") WHERE "app"."appointments"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_appointments_organization_doctor" ON "app"."appointments" USING btree ("organization_id","doctor_membership_id");--> statement-breakpoint
 CREATE POLICY "appointments_tenant_isolation" ON "app"."appointments" AS PERMISSIVE FOR ALL TO public USING ("app"."appointments"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."appointments"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."appointments"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3291,7 +3294,7 @@ ALTER TABLE "app"."patient_diagnoses" ADD CONSTRAINT "patient_diagnoses_created_
 ALTER TABLE "app"."patient_diagnoses" ADD CONSTRAINT "patient_diagnoses_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_diagnoses_public_id" ON "app"."patient_diagnoses" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_diagnoses_organization_name_unique" ON "app"."patient_diagnoses" USING btree ("organization_id",lower("name")) WHERE "app"."patient_diagnoses"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_diagnoses_organization_name" ON "app"."patient_diagnoses" USING btree ("organization_id","name","id") WHERE "app"."patient_diagnoses"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_diagnoses_organization_name" ON "app"."patient_diagnoses" USING btree ("organization_id","name","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_diagnoses_deleted_at" ON "app"."patient_diagnoses" USING btree ("deleted_at") WHERE "app"."patient_diagnoses"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_diagnoses_created_by_user_id" ON "app"."patient_diagnoses" USING btree ("created_by_user_id") WHERE "app"."patient_diagnoses"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_diagnoses_updated_by_user_id" ON "app"."patient_diagnoses" USING btree ("updated_by_user_id") WHERE "app"."patient_diagnoses"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -3299,7 +3302,7 @@ CREATE POLICY "patient_diagnoses_tenant_isolation" ON "app"."patient_diagnoses" 
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_diagnoses"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_diagnoses"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3327,7 +3330,7 @@ CREATE POLICY "patient_prescriptions_tenant_isolation" ON "app"."patient_prescri
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_prescriptions"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_prescriptions"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3344,11 +3347,12 @@ CREATE INDEX IF NOT EXISTS "idx_prescription_kits_owner_created" ON "app"."presc
 CREATE INDEX IF NOT EXISTS "idx_prescription_kits_deleted_at" ON "app"."prescription_kits" USING btree ("deleted_at") WHERE "app"."prescription_kits"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_prescription_kits_created_by_user_id" ON "app"."prescription_kits" USING btree ("created_by_user_id") WHERE "app"."prescription_kits"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_prescription_kits_updated_by_user_id" ON "app"."prescription_kits" USING btree ("updated_by_user_id") WHERE "app"."prescription_kits"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_prescription_kits_organization_owner" ON "app"."prescription_kits" USING btree ("organization_id","owner_membership_id");--> statement-breakpoint
 CREATE POLICY "prescription_kits_tenant_isolation" ON "app"."prescription_kits" AS PERMISSIVE FOR ALL TO public USING ("app"."prescription_kits"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."prescription_kits"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."prescription_kits"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3368,11 +3372,12 @@ CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_patient_diagnosis_id" ON 
 CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_deleted_at" ON "app"."patient_clinical_notes" USING btree ("deleted_at") WHERE "app"."patient_clinical_notes"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_created_by_user_id" ON "app"."patient_clinical_notes" USING btree ("created_by_user_id") WHERE "app"."patient_clinical_notes"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_updated_by_user_id" ON "app"."patient_clinical_notes" USING btree ("updated_by_user_id") WHERE "app"."patient_clinical_notes"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_organization_id" ON "app"."patient_clinical_notes" USING btree ("organization_id");--> statement-breakpoint
 CREATE POLICY "patient_clinical_notes_tenant_isolation" ON "app"."patient_clinical_notes" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_clinical_notes"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_clinical_notes"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_clinical_notes"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3385,7 +3390,7 @@ ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_patient_treatm
 ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_images_public_id" ON "app"."patient_images" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_images_patient_album_taken_on" ON "app"."patient_images" USING btree ("patient_id","album","taken_on" DESC NULLS LAST,"id") WHERE "app"."patient_images"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_images_patient_album_taken_on" ON "app"."patient_images" USING btree ("patient_id","album","taken_on" DESC NULLS LAST,"id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_images_organization_file_key" ON "app"."patient_images" USING btree ("organization_id","file_key");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_images_appointment_id" ON "app"."patient_images" USING btree ("appointment_id") WHERE "app"."patient_images"."appointment_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_images_patient_treatment_id" ON "app"."patient_images" USING btree ("patient_treatment_id") WHERE "app"."patient_images"."patient_treatment_id" IS NOT NULL;--> statement-breakpoint
@@ -3396,7 +3401,7 @@ CREATE POLICY "patient_images_tenant_isolation" ON "app"."patient_images" AS PER
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_images"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_images"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3407,15 +3412,16 @@ ALTER TABLE "app"."patient_reports" ADD CONSTRAINT "patient_reports_patient_id_p
 ALTER TABLE "app"."patient_reports" ADD CONSTRAINT "patient_reports_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patient_reports" ADD CONSTRAINT "patient_reports_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_reports_public_id" ON "app"."patient_reports" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_reports_patient_report_date" ON "app"."patient_reports" USING btree ("patient_id","report_date" DESC NULLS LAST,"id") WHERE "app"."patient_reports"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_reports_patient_report_date" ON "app"."patient_reports" USING btree ("patient_id","report_date" DESC NULLS LAST,"id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_reports_deleted_at" ON "app"."patient_reports" USING btree ("deleted_at") WHERE "app"."patient_reports"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_reports_created_by_user_id" ON "app"."patient_reports" USING btree ("created_by_user_id") WHERE "app"."patient_reports"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_reports_updated_by_user_id" ON "app"."patient_reports" USING btree ("updated_by_user_id") WHERE "app"."patient_reports"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_reports_organization_id" ON "app"."patient_reports" USING btree ("organization_id");--> statement-breakpoint
 CREATE POLICY "patient_reports_tenant_isolation" ON "app"."patient_reports" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_reports"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_reports"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_reports"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3457,18 +3463,19 @@ ALTER TABLE "app"."patient_check_ins" ADD CONSTRAINT "patient_check_ins_patient_
 ALTER TABLE "app"."patient_check_ins" ADD CONSTRAINT "patient_check_ins_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patient_check_ins" ADD CONSTRAINT "patient_check_ins_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_check_ins_public_id" ON "app"."patient_check_ins" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_patient_date" ON "app"."patient_check_ins" USING btree ("patient_id","check_in_date" DESC NULLS LAST,"id") WHERE "app"."patient_check_ins"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_patient_treatment_date" ON "app"."patient_check_ins" USING btree ("patient_treatment_id","check_in_date" DESC NULLS LAST) WHERE "app"."patient_check_ins"."deleted_at" IS NULL AND "app"."patient_check_ins"."patient_treatment_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_patient_date" ON "app"."patient_check_ins" USING btree ("patient_id","check_in_date" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_patient_treatment_date" ON "app"."patient_check_ins" USING btree ("patient_treatment_id","check_in_date" DESC NULLS LAST) WHERE "app"."patient_check_ins"."patient_treatment_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_organization_needs_call" ON "app"."patient_check_ins" USING btree ("organization_id","created_at") WHERE "app"."patient_check_ins"."deleted_at" IS NULL AND ("app"."patient_check_ins"."feel" = 'worse' OR "app"."patient_check_ins"."score" <= 4);--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_appointment_id" ON "app"."patient_check_ins" USING btree ("appointment_id") WHERE "app"."patient_check_ins"."appointment_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_deleted_at" ON "app"."patient_check_ins" USING btree ("deleted_at") WHERE "app"."patient_check_ins"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_created_by_user_id" ON "app"."patient_check_ins" USING btree ("created_by_user_id") WHERE "app"."patient_check_ins"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_updated_by_user_id" ON "app"."patient_check_ins" USING btree ("updated_by_user_id") WHERE "app"."patient_check_ins"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_organization_id" ON "app"."patient_check_ins" USING btree ("organization_id");--> statement-breakpoint
 CREATE POLICY "patient_check_ins_tenant_isolation" ON "app"."patient_check_ins" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_check_ins"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_check_ins"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_check_ins"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3480,17 +3487,18 @@ ALTER TABLE "app"."patient_reviews" ADD CONSTRAINT "patient_reviews_appointment_
 ALTER TABLE "app"."patient_reviews" ADD CONSTRAINT "patient_reviews_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patient_reviews" ADD CONSTRAINT "patient_reviews_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_reviews_public_id" ON "app"."patient_reviews" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_reviews_patient_date" ON "app"."patient_reviews" USING btree ("patient_id","review_date" DESC NULLS LAST,"id") WHERE "app"."patient_reviews"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_reviews_patient_date" ON "app"."patient_reviews" USING btree ("patient_id","review_date" DESC NULLS LAST,"id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_reviews_organization_needs_call" ON "app"."patient_reviews" USING btree ("organization_id","created_at") WHERE "app"."patient_reviews"."deleted_at" IS NULL AND "app"."patient_reviews"."rating" <= 3;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_reviews_appointment_id" ON "app"."patient_reviews" USING btree ("appointment_id") WHERE "app"."patient_reviews"."appointment_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_reviews_deleted_at" ON "app"."patient_reviews" USING btree ("deleted_at") WHERE "app"."patient_reviews"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_reviews_created_by_user_id" ON "app"."patient_reviews" USING btree ("created_by_user_id") WHERE "app"."patient_reviews"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_reviews_updated_by_user_id" ON "app"."patient_reviews" USING btree ("updated_by_user_id") WHERE "app"."patient_reviews"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_reviews_organization_id" ON "app"."patient_reviews" USING btree ("organization_id");--> statement-breakpoint
 CREATE POLICY "patient_reviews_tenant_isolation" ON "app"."patient_reviews" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_reviews"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_reviews"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_reviews"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3506,6 +3514,7 @@ CREATE INDEX IF NOT EXISTS "idx_patient_feedback_actions_patient_check_in" ON "a
 CREATE INDEX IF NOT EXISTS "idx_patient_feedback_actions_patient_review" ON "app"."patient_feedback_actions" USING btree ("patient_review_id","created_at") WHERE "app"."patient_feedback_actions"."patient_review_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_feedback_actions_author_membership_id" ON "app"."patient_feedback_actions" USING btree ("organization_id","author_membership_id") WHERE "app"."patient_feedback_actions"."author_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_feedback_actions_created_by_user_id" ON "app"."patient_feedback_actions" USING btree ("created_by_user_id") WHERE "app"."patient_feedback_actions"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_feedback_actions_organization_id" ON "app"."patient_feedback_actions" USING btree ("organization_id");--> statement-breakpoint
 CREATE POLICY "patient_feedback_actions_tenant_isolation" ON "app"."patient_feedback_actions" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_feedback_actions"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
@@ -3525,20 +3534,21 @@ ALTER TABLE "app"."patient_offering_suggestions" ADD CONSTRAINT "patient_offerin
 ALTER TABLE "app"."patient_offering_suggestions" ADD CONSTRAINT "patient_offering_suggestions_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patient_offering_suggestions" ADD CONSTRAINT "patient_offering_suggestions_suggested_by_membership_fk" FOREIGN KEY ("organization_id","suggested_by_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_public_id" ON "app"."patient_offering_suggestions" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_patient_created" ON "app"."patient_offering_suggestions" USING btree ("patient_id","created_at" DESC NULLS LAST,"id") WHERE "app"."patient_offering_suggestions"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_patient_created" ON "app"."patient_offering_suggestions" USING btree ("patient_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_patient_offering" ON "app"."patient_offering_suggestions" USING btree ("patient_id","offering_id") WHERE "app"."patient_offering_suggestions"."deleted_at" IS NULL AND "app"."patient_offering_suggestions"."status" <> 'declined';--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_appointment_id" ON "app"."patient_offering_suggestions" USING btree ("appointment_id") WHERE "app"."patient_offering_suggestions"."deleted_at" IS NULL AND "app"."patient_offering_suggestions"."appointment_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_patient_check_in_id" ON "app"."patient_offering_suggestions" USING btree ("patient_check_in_id") WHERE "app"."patient_offering_suggestions"."deleted_at" IS NULL AND "app"."patient_offering_suggestions"."patient_check_in_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_appointment_id" ON "app"."patient_offering_suggestions" USING btree ("appointment_id") WHERE "app"."patient_offering_suggestions"."appointment_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_patient_check_in_id" ON "app"."patient_offering_suggestions" USING btree ("patient_check_in_id") WHERE "app"."patient_offering_suggestions"."patient_check_in_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_offering_id" ON "app"."patient_offering_suggestions" USING btree ("offering_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_suggested_by" ON "app"."patient_offering_suggestions" USING btree ("organization_id","suggested_by_membership_id") WHERE "app"."patient_offering_suggestions"."suggested_by_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_deleted_at" ON "app"."patient_offering_suggestions" USING btree ("deleted_at") WHERE "app"."patient_offering_suggestions"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_created_by_user_id" ON "app"."patient_offering_suggestions" USING btree ("created_by_user_id") WHERE "app"."patient_offering_suggestions"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_updated_by_user_id" ON "app"."patient_offering_suggestions" USING btree ("updated_by_user_id") WHERE "app"."patient_offering_suggestions"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_organization_id" ON "app"."patient_offering_suggestions" USING btree ("organization_id");--> statement-breakpoint
 CREATE POLICY "patient_offering_suggestions_tenant_isolation" ON "app"."patient_offering_suggestions" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_offering_suggestions"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_offering_suggestions"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_offering_suggestions"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3600,8 +3610,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS "idx_invoices_public_id" ON "app"."invoices" U
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_invoices_organization_invoice_sequence" ON "app"."invoices" USING btree ("organization_id","invoice_sequence");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_invoices_branch_financial_year_number" ON "app"."invoices" USING btree ("organization_id","branch_id","financial_year","invoice_number");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoices_organization_invoice_date" ON "app"."invoices" USING btree ("organization_id","invoice_date" DESC NULLS LAST,"id") WHERE "app"."invoices"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_invoices_contact_invoice_date" ON "app"."invoices" USING btree ("contact_id","invoice_date" DESC NULLS LAST,"id") WHERE "app"."invoices"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_invoices_branch_invoice_date" ON "app"."invoices" USING btree ("branch_id","invoice_date") WHERE "app"."invoices"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_invoices_contact_invoice_date" ON "app"."invoices" USING btree ("contact_id","invoice_date" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_invoices_branch_invoice_date" ON "app"."invoices" USING btree ("branch_id","invoice_date");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoices_organization_due" ON "app"."invoices" USING btree ("organization_id","invoice_date") WHERE "app"."invoices"."deleted_at" IS NULL AND "app"."invoices"."due_amount" > 0;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoices_patient_prescription_id" ON "app"."invoices" USING btree ("patient_prescription_id") WHERE "app"."invoices"."patient_prescription_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoices_deleted_at" ON "app"."invoices" USING btree ("deleted_at") WHERE "app"."invoices"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -3618,7 +3628,7 @@ CREATE POLICY "invoices_tenant_isolation" ON "app"."invoices" AS PERMISSIVE FOR 
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."invoices"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."invoices"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3633,7 +3643,7 @@ ALTER TABLE "app"."invoice_credit_notes" ADD CONSTRAINT "invoice_credit_notes_cr
 ALTER TABLE "app"."invoice_credit_notes" ADD CONSTRAINT "invoice_credit_notes_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_invoice_credit_notes_public_id" ON "app"."invoice_credit_notes" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_invoice_credit_notes_organization_number" ON "app"."invoice_credit_notes" USING btree ("organization_id","credit_note_number");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_invoice_credit_notes_invoice_id" ON "app"."invoice_credit_notes" USING btree ("invoice_id") WHERE "app"."invoice_credit_notes"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_invoice_credit_notes_invoice_id" ON "app"."invoice_credit_notes" USING btree ("invoice_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoice_credit_notes_organization_created" ON "app"."invoice_credit_notes" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."invoice_credit_notes"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoice_credit_notes_deleted_at" ON "app"."invoice_credit_notes" USING btree ("deleted_at") WHERE "app"."invoice_credit_notes"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoice_credit_notes_created_by_user_id" ON "app"."invoice_credit_notes" USING btree ("created_by_user_id") WHERE "app"."invoice_credit_notes"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -3642,7 +3652,7 @@ CREATE POLICY "invoice_credit_notes_tenant_isolation" ON "app"."invoice_credit_n
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."invoice_credit_notes"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."invoice_credit_notes"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3657,6 +3667,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "idx_payment_edits_public_id" ON "app"."paymen
 CREATE INDEX IF NOT EXISTS "idx_payment_edits_payment_created" ON "app"."payment_edits" USING btree ("payment_id","created_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payment_edits_author_membership_id" ON "app"."payment_edits" USING btree ("organization_id","author_membership_id") WHERE "app"."payment_edits"."author_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payment_edits_created_by_user_id" ON "app"."payment_edits" USING btree ("created_by_user_id") WHERE "app"."payment_edits"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_payment_edits_organization_id" ON "app"."payment_edits" USING btree ("organization_id");--> statement-breakpoint
 CREATE POLICY "payment_edits_tenant_isolation" ON "app"."payment_edits" AS PERMISSIVE FOR ALL TO public USING ("app"."payment_edits"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
@@ -3686,7 +3697,7 @@ CREATE POLICY "pending_credits_tenant_isolation" ON "app"."pending_credits" AS P
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."pending_credits"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."pending_credits"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3707,6 +3718,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "idx_day_close_events_public_id" ON "app"."day
 CREATE INDEX IF NOT EXISTS "idx_day_close_events_day_close_occurred" ON "app"."day_close_events" USING btree ("day_close_id","occurred_at");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_day_close_events_membership_id" ON "app"."day_close_events" USING btree ("organization_id","membership_id") WHERE "app"."day_close_events"."membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_day_close_events_created_by_user_id" ON "app"."day_close_events" USING btree ("created_by_user_id") WHERE "app"."day_close_events"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_day_close_events_organization_id" ON "app"."day_close_events" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_day_closes_public_id" ON "app"."day_closes" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_day_closes_organization_branch_date" ON "app"."day_closes" USING btree ("organization_id","branch_id","close_date");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_day_closes_organization_close_date" ON "app"."day_closes" USING btree ("organization_id","close_date" DESC NULLS LAST,"id");--> statement-breakpoint
@@ -3727,7 +3739,7 @@ CREATE POLICY "day_closes_tenant_isolation" ON "app"."day_closes" AS PERMISSIVE 
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."day_closes"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."day_closes"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3741,18 +3753,19 @@ ALTER TABLE "app"."patient_offerings" ADD CONSTRAINT "patient_offerings_invoice_
 ALTER TABLE "app"."patient_offerings" ADD CONSTRAINT "patient_offerings_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patient_offerings" ADD CONSTRAINT "patient_offerings_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_offerings_public_id" ON "app"."patient_offerings" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_offerings_patient_created" ON "app"."patient_offerings" USING btree ("patient_id","created_at" DESC NULLS LAST,"id") WHERE "app"."patient_offerings"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_offerings_patient_created" ON "app"."patient_offerings" USING btree ("patient_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_offerings_patient_offering_left" ON "app"."patient_offerings" USING btree ("patient_id","offering_id") WHERE "app"."patient_offerings"."deleted_at" IS NULL AND "app"."patient_offerings"."sessions_used" < "app"."patient_offerings"."sessions_total";--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_offerings_offering_id" ON "app"."patient_offerings" USING btree ("offering_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_offerings_invoice_item_id" ON "app"."patient_offerings" USING btree ("invoice_item_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_offerings_deleted_at" ON "app"."patient_offerings" USING btree ("deleted_at") WHERE "app"."patient_offerings"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_offerings_created_by_user_id" ON "app"."patient_offerings" USING btree ("created_by_user_id") WHERE "app"."patient_offerings"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_offerings_updated_by_user_id" ON "app"."patient_offerings" USING btree ("updated_by_user_id") WHERE "app"."patient_offerings"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_offerings_organization_id" ON "app"."patient_offerings" USING btree ("organization_id");--> statement-breakpoint
 CREATE POLICY "patient_offerings_tenant_isolation" ON "app"."patient_offerings" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_offerings"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_offerings"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."patient_offerings"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3764,7 +3777,7 @@ ALTER TABLE "app"."stock_vendors" ADD CONSTRAINT "stock_vendors_updated_by_user_
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_vendors_public_id" ON "app"."stock_vendors" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_vendors_organization_name_unique" ON "app"."stock_vendors" USING btree ("organization_id",lower("name")) WHERE "app"."stock_vendors"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_vendors_organization_name" ON "app"."stock_vendors" USING btree ("organization_id","name","id") WHERE "app"."stock_vendors"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_vendors_organization_created" ON "app"."stock_vendors" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."stock_vendors"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_vendors_organization_created" ON "app"."stock_vendors" USING btree ("organization_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_vendors_deleted_at" ON "app"."stock_vendors" USING btree ("deleted_at") WHERE "app"."stock_vendors"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_vendors_created_by_user_id" ON "app"."stock_vendors" USING btree ("created_by_user_id") WHERE "app"."stock_vendors"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_vendors_updated_by_user_id" ON "app"."stock_vendors" USING btree ("updated_by_user_id") WHERE "app"."stock_vendors"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -3772,7 +3785,7 @@ CREATE POLICY "stock_vendors_tenant_isolation" ON "app"."stock_vendors" AS PERMI
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."stock_vendors"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."stock_vendors"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3797,7 +3810,7 @@ CREATE POLICY "stock_items_tenant_isolation" ON "app"."stock_items" AS PERMISSIV
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."stock_items"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."stock_items"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3828,10 +3841,11 @@ ALTER TABLE "app"."stock_purchases" ADD CONSTRAINT "stock_purchases_stock_vendor
 ALTER TABLE "app"."stock_purchases" ADD CONSTRAINT "stock_purchases_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."stock_purchases" ADD CONSTRAINT "stock_purchases_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_purchase_items_stock_item_id" ON "app"."stock_purchase_items" USING btree ("stock_item_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_purchase_items_organization_id" ON "app"."stock_purchase_items" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_purchases_public_id" ON "app"."stock_purchases" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_purchases_organization_number" ON "app"."stock_purchases" USING btree ("organization_id","stock_purchase_number");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_purchases_organization_purchase_date" ON "app"."stock_purchases" USING btree ("organization_id","purchase_date" DESC NULLS LAST,"id") WHERE "app"."stock_purchases"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_purchases_stock_vendor_purchase_date" ON "app"."stock_purchases" USING btree ("stock_vendor_id","purchase_date") WHERE "app"."stock_purchases"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_purchases_stock_vendor_purchase_date" ON "app"."stock_purchases" USING btree ("stock_vendor_id","purchase_date");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_purchases_organization_due" ON "app"."stock_purchases" USING btree ("organization_id","purchase_date") WHERE "app"."stock_purchases"."deleted_at" IS NULL AND "app"."stock_purchases"."due_amount" > 0;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_purchases_organization_created" ON "app"."stock_purchases" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."stock_purchases"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_purchases_deleted_at" ON "app"."stock_purchases" USING btree ("deleted_at") WHERE "app"."stock_purchases"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -3848,7 +3862,7 @@ CREATE POLICY "stock_purchases_tenant_isolation" ON "app"."stock_purchases" AS P
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."stock_purchases"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."stock_purchases"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3875,6 +3889,7 @@ ALTER TABLE "app"."stock_counts" ADD CONSTRAINT "stock_counts_organization_id_or
 ALTER TABLE "app"."stock_counts" ADD CONSTRAINT "stock_counts_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."stock_counts" ADD CONSTRAINT "stock_counts_author_membership_fk" FOREIGN KEY ("organization_id","author_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_count_lines_stock_item_id" ON "app"."stock_count_lines" USING btree ("stock_item_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_count_lines_organization_id" ON "app"."stock_count_lines" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_counts_public_id" ON "app"."stock_counts" USING btree ("public_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_counts_organization_counted_at" ON "app"."stock_counts" USING btree ("organization_id","counted_at" DESC NULLS LAST,"id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_counts_author_membership_id" ON "app"."stock_counts" USING btree ("organization_id","author_membership_id") WHERE "app"."stock_counts"."author_membership_id" IS NOT NULL;--> statement-breakpoint
@@ -3935,6 +3950,7 @@ CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_created_by_user_id" ON "app".
 CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_from_membership_id" ON "app"."task_owner_changes" USING btree ("organization_id","from_membership_id") WHERE "app"."task_owner_changes"."from_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_to_membership_id" ON "app"."task_owner_changes" USING btree ("organization_id","to_membership_id") WHERE "app"."task_owner_changes"."to_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_changed_by_membership_id" ON "app"."task_owner_changes" USING btree ("organization_id","changed_by_membership_id") WHERE "app"."task_owner_changes"."changed_by_membership_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_task_owner_changes_organization_id" ON "app"."task_owner_changes" USING btree ("organization_id");--> statement-breakpoint
 CREATE POLICY "task_owner_changes_tenant_isolation" ON "app"."task_owner_changes" AS PERMISSIVE FOR ALL TO public USING ("app"."task_owner_changes"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
@@ -3951,7 +3967,7 @@ ALTER TABLE "app"."manufacturers" ADD CONSTRAINT "manufacturers_updated_by_user_
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_manufacturers_public_id" ON "app"."manufacturers" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_manufacturers_organization_name_unique" ON "app"."manufacturers" USING btree ("organization_id",lower("name")) WHERE "app"."manufacturers"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_manufacturers_organization_name" ON "app"."manufacturers" USING btree ("organization_id","name","id") WHERE "app"."manufacturers"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_manufacturers_organization_created" ON "app"."manufacturers" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."manufacturers"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_manufacturers_organization_created" ON "app"."manufacturers" USING btree ("organization_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_manufacturers_deleted_at" ON "app"."manufacturers" USING btree ("deleted_at") WHERE "app"."manufacturers"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_manufacturers_created_by_user_id" ON "app"."manufacturers" USING btree ("created_by_user_id") WHERE "app"."manufacturers"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_manufacturers_updated_by_user_id" ON "app"."manufacturers" USING btree ("updated_by_user_id") WHERE "app"."manufacturers"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -3959,7 +3975,7 @@ CREATE POLICY "manufacturers_tenant_isolation" ON "app"."manufacturers" AS PERMI
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."manufacturers"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."manufacturers"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3978,7 +3994,7 @@ CREATE INDEX IF NOT EXISTS "idx_supplier_manufacturers_created_by_user_id" ON "a
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_suppliers_public_id" ON "app"."suppliers" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_suppliers_organization_name_unique" ON "app"."suppliers" USING btree ("organization_id",lower("name")) WHERE "app"."suppliers"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_suppliers_organization_name" ON "app"."suppliers" USING btree ("organization_id","name","id") WHERE "app"."suppliers"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_suppliers_organization_created" ON "app"."suppliers" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."suppliers"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_suppliers_organization_created" ON "app"."suppliers" USING btree ("organization_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_suppliers_deleted_at" ON "app"."suppliers" USING btree ("deleted_at") WHERE "app"."suppliers"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_suppliers_created_by_user_id" ON "app"."suppliers" USING btree ("created_by_user_id") WHERE "app"."suppliers"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_suppliers_updated_by_user_id" ON "app"."suppliers" USING btree ("updated_by_user_id") WHERE "app"."suppliers"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -3993,7 +4009,7 @@ CREATE POLICY "suppliers_tenant_isolation" ON "app"."suppliers" AS PERMISSIVE FO
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."suppliers"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."suppliers"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -4091,7 +4107,7 @@ CREATE POLICY "medicines_tenant_isolation" ON "app"."medicines" AS PERMISSIVE FO
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."medicines"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."medicines"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -4161,7 +4177,7 @@ CREATE POLICY "medical_purchase_orders_tenant_isolation" ON "app"."medical_purch
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."medical_purchase_orders"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."medical_purchase_orders"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -4184,6 +4200,8 @@ CREATE INDEX IF NOT EXISTS "idx_supplier_credits_medicine_batch_id" ON "app"."su
 CREATE INDEX IF NOT EXISTS "idx_supplier_credits_created_by_membership_id" ON "app"."supplier_credits" USING btree ("created_by_membership_id") WHERE "app"."supplier_credits"."created_by_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_supplier_credits_created_by_user_id" ON "app"."supplier_credits" USING btree ("created_by_user_id") WHERE "app"."supplier_credits"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_supplier_credits_updated_by_user_id" ON "app"."supplier_credits" USING btree ("updated_by_user_id") WHERE "app"."supplier_credits"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_supplier_credits_organization_created_by" ON "app"."supplier_credits" USING btree ("organization_id","created_by_membership_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_supplier_credits_supplier_id" ON "app"."supplier_credits" USING btree ("supplier_id");--> statement-breakpoint
 CREATE POLICY "supplier_credits_tenant_isolation" ON "app"."supplier_credits" AS PERMISSIVE FOR ALL TO public USING ("app"."supplier_credits"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
@@ -4205,7 +4223,7 @@ CREATE INDEX IF NOT EXISTS "idx_medical_rep_manufacturers_organization_id" ON "a
 CREATE INDEX IF NOT EXISTS "idx_medical_rep_manufacturers_created_by_user_id" ON "app"."medical_rep_manufacturers" USING btree ("created_by_user_id") WHERE "app"."medical_rep_manufacturers"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_medical_reps_public_id" ON "app"."medical_reps" USING btree ("public_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_reps_organization_name" ON "app"."medical_reps" USING btree ("organization_id","name","id") WHERE "app"."medical_reps"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_medical_reps_organization_created" ON "app"."medical_reps" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."medical_reps"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_medical_reps_organization_created" ON "app"."medical_reps" USING btree ("organization_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_reps_organization_next_visit" ON "app"."medical_reps" USING btree ("organization_id","next_visit_on") WHERE "app"."medical_reps"."deleted_at" IS NULL AND "app"."medical_reps"."next_visit_on" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_reps_deleted_at" ON "app"."medical_reps" USING btree ("deleted_at") WHERE "app"."medical_reps"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_reps_created_by_user_id" ON "app"."medical_reps" USING btree ("created_by_user_id") WHERE "app"."medical_reps"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -4221,7 +4239,7 @@ CREATE POLICY "medical_reps_tenant_isolation" ON "app"."medical_reps" AS PERMISS
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."medical_reps"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."medical_reps"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -4234,8 +4252,8 @@ ALTER TABLE "app"."medical_rep_visits" ADD CONSTRAINT "medical_rep_visits_create
 ALTER TABLE "app"."medical_rep_visits" ADD CONSTRAINT "medical_rep_visits_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."medical_rep_visits" ADD CONSTRAINT "medical_rep_visits_logged_by_membership_fk" FOREIGN KEY ("organization_id","logged_by_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_medical_rep_visits_public_id" ON "app"."medical_rep_visits" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_medical_rep_visits_rep_visit_date" ON "app"."medical_rep_visits" USING btree ("medical_rep_id","visit_date" DESC NULLS LAST,"id") WHERE "app"."medical_rep_visits"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_medical_rep_visits_organization_id" ON "app"."medical_rep_visits" USING btree ("organization_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_medical_rep_visits_rep_visit_date" ON "app"."medical_rep_visits" USING btree ("medical_rep_id","visit_date" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_medical_rep_visits_organization_logged_by" ON "app"."medical_rep_visits" USING btree ("organization_id","logged_by_membership_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_rep_visits_logged_by_membership_id" ON "app"."medical_rep_visits" USING btree ("logged_by_membership_id") WHERE "app"."medical_rep_visits"."logged_by_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_rep_visits_deleted_at" ON "app"."medical_rep_visits" USING btree ("deleted_at") WHERE "app"."medical_rep_visits"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_rep_visits_created_by_user_id" ON "app"."medical_rep_visits" USING btree ("created_by_user_id") WHERE "app"."medical_rep_visits"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -4244,7 +4262,7 @@ CREATE POLICY "medical_rep_visits_tenant_isolation" ON "app"."medical_rep_visits
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."medical_rep_visits"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."medical_rep_visits"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -4302,7 +4320,7 @@ CREATE INDEX IF NOT EXISTS "idx_medical_sale_return_items_organization_id" ON "a
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_medical_sale_returns_public_id" ON "app"."medical_sale_returns" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_medical_sale_returns_invoice_credit_note_id" ON "app"."medical_sale_returns" USING btree ("invoice_credit_note_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_sale_returns_sale_created" ON "app"."medical_sale_returns" USING btree ("medical_sale_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_medical_sale_returns_organization_id" ON "app"."medical_sale_returns" USING btree ("organization_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_medical_sale_returns_organization_returned_by" ON "app"."medical_sale_returns" USING btree ("organization_id","returned_by_membership_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_sale_returns_returned_by_membership_id" ON "app"."medical_sale_returns" USING btree ("returned_by_membership_id") WHERE "app"."medical_sale_returns"."returned_by_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_sale_returns_created_by_user_id" ON "app"."medical_sale_returns" USING btree ("created_by_user_id") WHERE "app"."medical_sale_returns"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_medical_sales_public_id" ON "app"."medical_sales" USING btree ("public_id");--> statement-breakpoint
@@ -4316,6 +4334,7 @@ CREATE INDEX IF NOT EXISTS "idx_medical_sales_branch_id" ON "app"."medical_sales
 CREATE INDEX IF NOT EXISTS "idx_medical_sales_deleted_at" ON "app"."medical_sales" USING btree ("deleted_at") WHERE "app"."medical_sales"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_sales_created_by_user_id" ON "app"."medical_sales" USING btree ("created_by_user_id") WHERE "app"."medical_sales"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_sales_updated_by_user_id" ON "app"."medical_sales" USING btree ("updated_by_user_id") WHERE "app"."medical_sales"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_medical_sales_patient_prescription_id" ON "app"."medical_sales" USING btree ("patient_prescription_id") WHERE "app"."medical_sales"."patient_prescription_id" IS NOT NULL;--> statement-breakpoint
 CREATE POLICY "medical_sale_return_items_tenant_isolation" ON "app"."medical_sale_return_items" AS PERMISSIVE FOR ALL TO public USING ("app"."medical_sale_return_items"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
@@ -4334,7 +4353,7 @@ CREATE POLICY "medical_sales_tenant_isolation" ON "app"."medical_sales" AS PERMI
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."medical_sales"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."medical_sales"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -4357,8 +4376,8 @@ ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_updated_by_user_id_users_i
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_payments_public_id" ON "app"."payments" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_payments_organization_payment_number" ON "app"."payments" USING btree ("organization_id","payment_number");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payments_organization_paid_at" ON "app"."payments" USING btree ("organization_id","paid_at" DESC NULLS LAST,"id") WHERE "app"."payments"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_payments_branch_paid_at" ON "app"."payments" USING btree ("branch_id","paid_at") WHERE "app"."payments"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_payments_contact_paid_at" ON "app"."payments" USING btree ("contact_id","paid_at" DESC NULLS LAST) WHERE "app"."payments"."deleted_at" IS NULL AND "app"."payments"."contact_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_payments_branch_paid_at" ON "app"."payments" USING btree ("branch_id","paid_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_payments_contact_paid_at" ON "app"."payments" USING btree ("contact_id","paid_at" DESC NULLS LAST) WHERE "app"."payments"."contact_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payments_invoice_id" ON "app"."payments" USING btree ("invoice_id") WHERE "app"."payments"."invoice_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payments_pending_credit_id" ON "app"."payments" USING btree ("pending_credit_id") WHERE "app"."payments"."pending_credit_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payments_stock_purchase_id" ON "app"."payments" USING btree ("stock_purchase_id") WHERE "app"."payments"."stock_purchase_id" IS NOT NULL;--> statement-breakpoint
@@ -4372,7 +4391,7 @@ CREATE POLICY "payments_tenant_isolation" ON "app"."payments" AS PERMISSIVE FOR 
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."payments"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."payments"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -4394,6 +4413,7 @@ CREATE INDEX IF NOT EXISTS "idx_invoice_items_medicine_batch_id" ON "app"."invoi
 CREATE INDEX IF NOT EXISTS "idx_invoice_items_patient_offering_suggestion_id" ON "app"."invoice_items" USING btree ("patient_offering_suggestion_id") WHERE "app"."invoice_items"."patient_offering_suggestion_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoice_items_created_by_user_id" ON "app"."invoice_items" USING btree ("created_by_user_id") WHERE "app"."invoice_items"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoice_items_updated_by_user_id" ON "app"."invoice_items" USING btree ("updated_by_user_id") WHERE "app"."invoice_items"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_invoice_items_organization_id" ON "app"."invoice_items" USING btree ("organization_id");--> statement-breakpoint
 CREATE POLICY "invoice_items_tenant_isolation" ON "app"."invoice_items" AS PERMISSIVE FOR ALL TO public USING ("app"."invoice_items"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
@@ -4420,9 +4440,9 @@ ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_updated_by_user_id_users_id_fk" 
 ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_resolved_by_membership_fk" FOREIGN KEY ("organization_id","resolved_by_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_tasks_public_id" ON "app"."tasks" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_tasks_open_rule_source" ON "app"."tasks" USING btree ("organization_id","rule_key","source_key") WHERE "app"."tasks"."kind" = 'rule' AND "app"."tasks"."status" <> 'done' AND "app"."tasks"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_tasks_owner_status_due" ON "app"."tasks" USING btree ("owner_membership_id","status","due_at") WHERE "app"."tasks"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_owner_status_due" ON "app"."tasks" USING btree ("owner_membership_id","status","due_at");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_tasks_organization_queue" ON "app"."tasks" USING btree ("organization_id","owner_role","status","due_at") WHERE "app"."tasks"."deleted_at" IS NULL AND "app"."tasks"."owner_membership_id" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_tasks_organization_status_due" ON "app"."tasks" USING btree ("organization_id","status","due_at","id") WHERE "app"."tasks"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_organization_status_due" ON "app"."tasks" USING btree ("organization_id","status","due_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_tasks_snoozed_until" ON "app"."tasks" USING btree ("snoozed_until") WHERE "app"."tasks"."status" = 'snoozed' AND "app"."tasks"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_tasks_contact_id" ON "app"."tasks" USING btree ("contact_id") WHERE "app"."tasks"."contact_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_tasks_lead_id" ON "app"."tasks" USING btree ("lead_id") WHERE "app"."tasks"."lead_id" IS NOT NULL;--> statement-breakpoint
@@ -4442,7 +4462,7 @@ CREATE POLICY "tasks_tenant_isolation" ON "app"."tasks" AS PERMISSIVE FOR ALL TO
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."tasks"."organization_id" = (
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."tasks"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint

@@ -126,13 +126,11 @@ function paymentIndexes(table: PaymentTable) {
       .on(table.organization_id, table.paid_at.desc(), table.id)
       .where(sql`${table.deleted_at} IS NULL`),
     // The day close's sums
-    index('idx_payments_branch_paid_at')
-      .on(table.branch_id, table.paid_at)
-      .where(sql`${table.deleted_at} IS NULL`),
+    index('idx_payments_branch_paid_at').on(table.branch_id, table.paid_at),
     // The patient file's Payments tab
     index('idx_payments_contact_paid_at')
       .on(table.contact_id, table.paid_at.desc())
-      .where(sql`${table.deleted_at} IS NULL AND ${table.contact_id} IS NOT NULL`),
+      .where(sql`${table.contact_id} IS NOT NULL`),
     index('idx_payments_invoice_id')
       .on(table.invoice_id)
       .where(sql`${table.invoice_id} IS NOT NULL`),
@@ -292,6 +290,7 @@ export const payment_edits = appSchema
       ),
     },
     (table) => [
+      index('idx_payment_edits_organization_id').on(table.organization_id),
       uniqueIndex('idx_payment_edits_public_id').on(table.public_id),
       index('idx_payment_edits_payment_created').on(table.payment_id, table.created_at.desc()),
       index('idx_payment_edits_author_membership_id')

@@ -4,7 +4,23 @@ import { SYSTEM_PERMISSIONS } from '@/domains/tenancy/sub-domains/permission/see
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
 import { role_permissions } from '@/domains/tenancy/sub-domains/member-roles/member-role-permission/member-role-permission.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
+import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+
+/** Every membership write code (add, change, remove) — the old single `membership:manage`. */
+export const MEMBERSHIP_WRITE_PERMISSION_CODES = [
+  TENANCY_PERMISSIONS.MEMBERSHIP_CREATE,
+  TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE,
+  TENANCY_PERMISSIONS.MEMBERSHIP_DELETE,
+] as const;
+
+/** Every role write code (create, change, delete) — the old single `role:manage`. */
+export const ROLE_WRITE_PERMISSION_CODES = [
+  TENANCY_PERMISSIONS.ROLE_CREATE,
+  TENANCY_PERMISSIONS.ROLE_UPDATE,
+  TENANCY_PERMISSIONS.ROLE_DELETE,
+] as const;
 
 /**
  * Seed the default permission set into the permissions table.
@@ -89,7 +105,7 @@ export interface CreateMembershipOptions {
  * Create a membership linking a user to an organization with a specific role.
  */
 export async function createMembership(options: CreateMembershipOptions) {
-  const publicId = generatePublicId('memberRole');
+  const publicId = generatePublicId('membership');
 
   const [membership] = await getOperatorDatabase()
     .insert(memberships)
@@ -98,7 +114,7 @@ export async function createMembership(options: CreateMembershipOptions) {
       user_id: options.userId,
       organization_id: options.organizationId,
       role_id: options.roleId,
-      status: options.status ?? 'ACTIVE',
+      status: options.status ?? MEMBERSHIP_STATUS.ACTIVE,
       joined_at: new Date(),
     })
     .returning();

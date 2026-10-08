@@ -148,9 +148,11 @@ function appointmentIndexes(table: AppointmentTable) {
     index('idx_appointments_organization_created')
       .on(table.organization_id, table.created_at.desc(), table.id)
       .where(live),
-    index('idx_appointments_branch_day')
-      .on(table.branch_id, table.appointment_date, table.start_time)
-      .where(live),
+    index('idx_appointments_branch_day').on(
+      table.branch_id,
+      table.appointment_date,
+      table.start_time,
+    ),
     index('idx_appointments_doctor_date')
       .on(table.doctor_membership_id, table.appointment_date)
       .where(live),
@@ -283,6 +285,10 @@ function appointmentChecks(table: AppointmentTable) {
  */
 export const appointments = appSchema
   .table('appointments', appointmentColumns, (table) => [
+    index('idx_appointments_organization_doctor').on(
+      table.organization_id,
+      table.doctor_membership_id,
+    ),
     ...appointmentIndexes(table),
     // K8: members of this organization, kept when they leave (K2)
     foreignKey({

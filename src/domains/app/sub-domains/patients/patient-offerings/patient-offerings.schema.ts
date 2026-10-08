@@ -75,11 +75,14 @@ export const patient_offerings = appSchema
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
+      index('idx_patient_offerings_organization_id').on(table.organization_id),
       uniqueIndex('idx_patient_offerings_public_id').on(table.public_id),
       // The patient's tab, newest first
-      index('idx_patient_offerings_patient_created')
-        .on(table.patient_id, table.created_at.desc(), table.id)
-        .where(sql`${table.deleted_at} IS NULL`),
+      index('idx_patient_offerings_patient_created').on(
+        table.patient_id,
+        table.created_at.desc(),
+        table.id,
+      ),
       // What a treatment can spend (PK11)
       index('idx_patient_offerings_patient_offering_left')
         .on(table.patient_id, table.offering_id)

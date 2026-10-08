@@ -50,6 +50,10 @@ import type { MemberRolePermissionService } from '@/domains/tenancy/sub-domains/
 import type { MembershipRepository } from '@/domains/tenancy/sub-domains/membership/membership.repository.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import type { MembershipInvitationService } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.service.js';
+import {
+  emptyMembershipAdditionalRolesRepository,
+  membershipRowFixture,
+} from '@/domains/tenancy/__tests__/factories/membership-row.factory.js';
 import { invalidatePermissions } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
 import { isDisposableEmailBlocked } from '@/shared/utils/text/email.util.js';
 import {
@@ -59,17 +63,7 @@ import {
 
 const organization = { id: 1, public_id: 'org_public', owner_user_id: 99 };
 const role = { id: 2, public_id: 'role_public', name: 'Admin' };
-const membershipRow = {
-  id: 3,
-  public_id: 'mem_public',
-  organization_id: 1,
-  user_id: 10,
-  role_id: 2,
-  status: 'ACTIVE',
-  joined_at: new Date(),
-  created_at: new Date(),
-  updated_at: new Date(),
-};
+const membershipRow = membershipRowFixture({ joined_at: new Date() });
 
 const asScope = (organizationPublicId: string) =>
   PRINCIPAL_SCOPE.REQUEST({
@@ -95,7 +89,7 @@ describe('MembershipService', () => {
   } as unknown as MemberRolePermissionService;
 
   const membershipRepository = {
-    findByOrganizationId: vi.fn().mockResolvedValue({
+    list: vi.fn().mockResolvedValue({
       items: [membershipRow],
       total: null,
       limit: 20,
@@ -103,6 +97,9 @@ describe('MembershipService', () => {
       next_cursor: null,
     }),
     findByPublicId: vi.fn().mockResolvedValue(membershipRow),
+    findAnyByPublicId: vi.fn().mockResolvedValue(membershipRow),
+    // K7: no ended membership to revive — every add is a new row.
+    findLatestEndedForUser: vi.fn().mockResolvedValue(null),
     create: vi.fn().mockResolvedValue(membershipRow),
     update: vi.fn().mockResolvedValue(membershipRow),
     softDelete: vi.fn().mockResolvedValue(membershipRow),
@@ -148,7 +145,11 @@ describe('MembershipService', () => {
 
   const membershipInvitationService = {
     createForMembership: vi.fn().mockResolvedValue({ id: 'inv_public' }),
+    revokePendingForMembership: vi.fn().mockResolvedValue({ public_id: 'inv_public' }),
   } as unknown as MembershipInvitationService;
+
+  // D5: the roles a member holds besides the main one — none here.
+  const membershipAdditionalRolesRepository = emptyMembershipAdditionalRolesRepository();
 
   const service = new MembershipService(
     organizationService,
@@ -163,6 +164,7 @@ describe('MembershipService', () => {
     undefined,
     userService,
     membershipInvitationService,
+    membershipAdditionalRolesRepository,
   );
 
   beforeEach(() => {
@@ -176,6 +178,7 @@ describe('MembershipService', () => {
     vi.mocked(organizationService.resolveUserInternalIdByPublicId).mockReset();
     vi.mocked(organizationService.resolveUserInternalIdByPublicId).mockResolvedValue(10);
     vi.mocked(membershipRepository.findByPublicId).mockResolvedValue(membershipRow as never);
+    vi.mocked(membershipRepository.findAnyByPublicId).mockResolvedValue(membershipRow as never);
     vi.mocked(membershipRepository.findByUserAndOrganization).mockResolvedValue(
       membershipRow as never,
     );
@@ -187,9 +190,10 @@ describe('MembershipService', () => {
     const result = await service.list(asScope('org_public'), { limit: 20 });
     expect(result.items).toHaveLength(1);
     expect(result.total).toBeNull();
-    expect(membershipRepository.findByOrganizationId).toHaveBeenCalledWith(1, {
-      limit: 20,
-    });
+    expect(membershipRepository.list).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ limit: 20, includeEnded: false, withTotal: true }),
+    );
   });
 
   it('getByPublicId returns membership', async () => {
@@ -198,7 +202,7 @@ describe('MembershipService', () => {
   });
 
   it('getByPublicId throws when missing', async () => {
-    vi.mocked(membershipRepository.findByPublicId).mockResolvedValue(null);
+    vi.mocked(membershipRepository.findAnyByPublicId).mockResolvedValue(null);
     await expect(service.getByPublicId(asScope('org_public'), 'missing')).rejects.toBeInstanceOf(
       NotFoundError,
     );
@@ -207,18 +211,18 @@ describe('MembershipService', () => {
   it('create adds an INVITED membership by email and issues the invitation', async () => {
     const result = await service.create(
       asScope('org_public'),
-      { email: 'invitee@example.com', role_id: 'role_public' },
+      { email: 'invitee@example.com', role_ids: ['role_public'] },
       'inviter_public',
     );
     expect(userService.findOrCreateInvitedByEmail).toHaveBeenCalledWith({
       email: 'invitee@example.com',
     });
-    expect(memberRoleService.requireRoleRecordByPublicId).toHaveBeenCalledWith(
-      'org_public',
+    expect(memberRoleService.requireRoleRecordForOrganization).toHaveBeenCalledWith(
+      organization.id,
       'role_public',
     );
     expect(membershipRepository.create).toHaveBeenCalledWith(
-      expect.objectContaining({ user_id: 10, role_id: 2, status: 'INVITED' }),
+      expect.objectContaining({ user_id: 10, role_id: 2, status: 'invited' }),
     );
     expect(membershipInvitationService.createForMembership).toHaveBeenCalledWith(
       expect.objectContaining({ membership_id: 3, email: 'invitee@example.com' }),
@@ -232,7 +236,7 @@ describe('MembershipService', () => {
     await expect(
       service.create(
         asScope('org_public'),
-        { email: 'throwaway@mailinator.com', role_id: 'role_public' },
+        { email: 'throwaway@mailinator.com', role_ids: ['role_public'] },
         'inviter_public',
       ),
     ).rejects.toBeInstanceOf(ValidationError);
@@ -248,7 +252,7 @@ describe('MembershipService', () => {
     await expect(
       service.create(
         asScope('org_public'),
-        { email: 'invitee@example.com', role_id: 'role_public' },
+        { email: 'invitee@example.com', role_ids: ['role_public'] },
         'inviter_public',
       ),
     ).rejects.toMatchObject({ messageKey: 'errors:personalOrganizationNoMembers' });
@@ -266,14 +270,14 @@ describe('MembershipService', () => {
 
   it('getPermissions returns role permission codes', async () => {
     const result = await service.getPermissions(asScope('org_public'), 'mem_public');
-    expect(result.permissions).toEqual(['organization:read']);
+    expect(result.permission_codes).toEqual(['organization:read']);
   });
 
   it('update changes membership status', async () => {
     await service.update(
       asScope('org_public'),
       'mem_public',
-      { status: 'SUSPENDED' },
+      { status: 'suspended' },
       'updater_public',
     );
     expect(membershipRepository.update).toHaveBeenCalled();
@@ -283,11 +287,11 @@ describe('MembershipService', () => {
     await service.update(
       asScope('org_public'),
       'mem_public',
-      { role_id: 'role_public' },
+      { role_ids: ['role_public'] },
       'updater_public',
     );
-    expect(memberRoleService.requireRoleRecordByPublicId).toHaveBeenCalledWith(
-      'org_public',
+    expect(memberRoleService.requireRoleRecordForOrganization).toHaveBeenCalledWith(
+      organization.id,
       'role_public',
     );
     // The privilege-escalation guard runs for the new role's permission codes before persisting.
@@ -303,12 +307,12 @@ describe('MembershipService', () => {
   // sec-new-T1: owner membership cannot be modified (would enable Admin lockout of owner)
   it('update rejects any status change targeting the organization owner membership (sec-new-T1)', async () => {
     // membership.user_id matches organization.owner_user_id (99)
-    vi.mocked(membershipRepository.findByPublicId).mockResolvedValue({
+    vi.mocked(membershipRepository.findAnyByPublicId).mockResolvedValue({
       ...membershipRow,
       user_id: 99,
     } as never);
     await expect(
-      service.update(asScope('org_public'), 'owner_mem', { status: 'SUSPENDED' }, 'admin_public'),
+      service.update(asScope('org_public'), 'owner_mem', { status: 'suspended' }, 'admin_public'),
     ).rejects.toBeInstanceOf(ForbiddenError);
     // Guard fires before any write
     expect(membershipRepository.update).not.toHaveBeenCalled();
@@ -316,14 +320,14 @@ describe('MembershipService', () => {
 
   it('update rejects ACTIVE status targeting the organization owner membership (sec-new-T1)', async () => {
     // Even a benign reactivation attempt on the owner is blocked — use transferOwnership.
-    vi.mocked(membershipRepository.findByPublicId).mockResolvedValue({
+    vi.mocked(membershipRepository.findAnyByPublicId).mockResolvedValue({
       ...membershipRow,
       user_id: 99,
-      status: 'SUSPENDED',
+      status: 'suspended',
       joined_at: new Date(),
     } as never);
     await expect(
-      service.update(asScope('org_public'), 'owner_mem', { status: 'ACTIVE' }, 'admin_public'),
+      service.update(asScope('org_public'), 'owner_mem', { status: 'active' }, 'admin_public'),
     ).rejects.toBeInstanceOf(ForbiddenError);
     expect(membershipRepository.update).not.toHaveBeenCalled();
   });
@@ -333,34 +337,34 @@ describe('MembershipService', () => {
     await service.update(
       asScope('org_public'),
       'mem_public',
-      { status: 'SUSPENDED' },
+      { status: 'suspended' },
       'admin_public',
     );
     expect(membershipRepository.update).toHaveBeenCalled();
   });
 
-  it('update rejects activating a never-joined (INVITED) membership via PATCH', async () => {
-    vi.mocked(membershipRepository.findByPublicId).mockResolvedValue({
+  it('update rejects activating a never-joined (invited) membership via PATCH (T10)', async () => {
+    vi.mocked(membershipRepository.findAnyByPublicId).mockResolvedValue({
       ...membershipRow,
-      status: 'INVITED',
+      status: 'invited',
       joined_at: null,
     } as never);
     await expect(
-      service.update(asScope('org_public'), 'mem_public', { status: 'ACTIVE' }, 'updater_public'),
-    ).rejects.toBeInstanceOf(ForbiddenError);
+      service.update(asScope('org_public'), 'mem_public', { status: 'active' }, 'updater_public'),
+    ).rejects.toBeInstanceOf(ValidationError);
     expect(membershipRepository.update).not.toHaveBeenCalled();
   });
 
   it('update allows reactivating a previously-joined membership (SUSPENDED -> ACTIVE)', async () => {
-    vi.mocked(membershipRepository.findByPublicId).mockResolvedValue({
+    vi.mocked(membershipRepository.findAnyByPublicId).mockResolvedValue({
       ...membershipRow,
-      status: 'SUSPENDED',
+      status: 'suspended',
       joined_at: new Date(),
     } as never);
     await service.update(
       asScope('org_public'),
       'mem_public',
-      { status: 'ACTIVE' },
+      { status: 'active' },
       'updater_public',
     );
     expect(membershipRepository.update).toHaveBeenCalled();
@@ -398,7 +402,7 @@ describe('MembershipService', () => {
       await expect(
         seatEnforcedService.create(
           asScope('org_public'),
-          { email: 'invitee@example.com', role_id: 'role_public' },
+          { email: 'invitee@example.com', role_ids: ['role_public'] },
           'inviter_public',
         ),
       ).rejects.toBeInstanceOf(ConflictError);
@@ -411,7 +415,7 @@ describe('MembershipService', () => {
 
       await seatEnforcedService.create(
         asScope('org_public'),
-        { email: 'invitee@example.com', role_id: 'role_public' },
+        { email: 'invitee@example.com', role_ids: ['role_public'] },
         'inviter_public',
       );
 
@@ -423,9 +427,9 @@ describe('MembershipService', () => {
       // The documented exploit: suspend a member (frees a seat) → add a new member into the slot →
       // reactivate the suspended one, overshooting the plan ceiling unbounded. SUSPENDED members are
       // not counted, so a SUSPENDED→ACTIVE transition MUST re-run the same seat availability check.
-      vi.mocked(membershipRepository.findByPublicId).mockResolvedValue({
+      vi.mocked(membershipRepository.findAnyByPublicId).mockResolvedValue({
         ...membershipRow,
-        status: 'SUSPENDED',
+        status: 'suspended',
         joined_at: new Date(),
       } as never);
       reserveSeatCeilingForMemberAdd.mockResolvedValue(3);
@@ -435,7 +439,7 @@ describe('MembershipService', () => {
         seatEnforcedService.update(
           asScope('org_public'),
           'mem_public',
-          { status: 'ACTIVE' },
+          { status: 'active' },
           'updater_public',
         ),
       ).rejects.toBeInstanceOf(ConflictError);
@@ -448,7 +452,7 @@ describe('MembershipService', () => {
     describe('REQ-4 seat-quantity sync on a status change', () => {
       /** Drives `update` with a starting status and the row the write returns. */
       const updateStatus = async (previousStatus: string, nextStatus: string) => {
-        vi.mocked(membershipRepository.findByPublicId).mockResolvedValue({
+        vi.mocked(membershipRepository.findAnyByPublicId).mockResolvedValue({
           ...membershipRow,
           status: previousStatus,
           joined_at: new Date(),
@@ -469,34 +473,88 @@ describe('MembershipService', () => {
       };
 
       it('reconciles the Stripe quantity when a member is suspended (the seat is freed)', async () => {
-        await updateStatus('ACTIVE', 'SUSPENDED');
+        await updateStatus('active', 'suspended');
         expect(enqueueSeatQuantitySync).toHaveBeenCalledWith('org_public');
       });
 
       it('reconciles the Stripe quantity when a suspended member is reactivated', async () => {
-        await updateStatus('SUSPENDED', 'ACTIVE');
+        await updateStatus('suspended', 'active');
         expect(enqueueSeatQuantitySync).toHaveBeenCalledWith('org_public');
       });
 
       it('leaves billing alone when the seat count did not move', async () => {
-        // INVITED and ACTIVE both occupy a seat, so crossing between them changes nothing to bill.
-        await updateStatus('INVITED', 'ACTIVE');
+        // An active member saved as active again occupies the same seat — nothing to bill.
+        await updateStatus('active', 'active');
         expect(enqueueSeatQuantitySync).not.toHaveBeenCalled();
       });
 
       it('leaves billing alone on a role-only change', async () => {
-        vi.mocked(membershipRepository.findByPublicId).mockResolvedValue(membershipRow as never);
+        vi.mocked(membershipRepository.findAnyByPublicId).mockResolvedValue(membershipRow as never);
         vi.mocked(membershipRepository.update).mockResolvedValue(membershipRow as never);
 
         await seatEnforcedService.update(
           asScope('org_public'),
           'mem_public',
-          { role_id: 'role_public' },
+          { role_ids: ['role_public'] },
           'updater_public',
         );
 
         expect(enqueueSeatQuantitySync).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('revokeInvitation (launch §2.C route 9)', () => {
+    const enqueueSeatQuantitySync = vi.fn();
+    const seatSyncedService = new MembershipService(
+      organizationService,
+      memberRoleService,
+      memberRolePermissionService,
+      membershipRepository,
+      authorizationService,
+      permissionRepository,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      userService,
+      membershipInvitationService,
+      membershipAdditionalRolesRepository,
+    );
+    seatSyncedService.wireSeatEnforcement({
+      reserveSeatCeilingForMemberAdd: vi.fn().mockResolvedValue(null),
+      enqueueSeatQuantitySync,
+    });
+    const invitedRow = { ...membershipRow, status: 'invited', joined_at: null };
+
+    it('revokes the pending invite, ends the invited membership (not_needed) and frees its seat', async () => {
+      vi.mocked(membershipRepository.findByPublicId).mockResolvedValue(invitedRow as never);
+      await seatSyncedService.revokeInvitation(asScope('org_public'), 'mem_public');
+      expect(membershipInvitationService.revokePendingForMembership).toHaveBeenCalledWith(
+        membershipRow.id,
+      );
+      expect(membershipRepository.softDelete).toHaveBeenCalledWith('mem_public', organization.id, {
+        delete_reason: 'not_needed',
+        delete_note: null,
+      });
+      expect(enqueueSeatQuantitySync).toHaveBeenCalledWith('org_public');
+    });
+
+    it('is a 404 with nothing ended or billed when the member has no pending invite', async () => {
+      vi.mocked(membershipRepository.findByPublicId).mockResolvedValue(invitedRow as never);
+      vi.mocked(membershipInvitationService.revokePendingForMembership).mockResolvedValueOnce(null);
+      await expect(
+        seatSyncedService.revokeInvitation(asScope('org_public'), 'mem_public'),
+      ).rejects.toBeInstanceOf(NotFoundError);
+      expect(membershipRepository.softDelete).not.toHaveBeenCalled();
+      expect(enqueueSeatQuantitySync).not.toHaveBeenCalled();
+    });
+
+    it('is a 404 for a member who is not invited (already joined)', async () => {
+      await expect(
+        seatSyncedService.revokeInvitation(asScope('org_public'), 'mem_public'),
+      ).rejects.toBeInstanceOf(NotFoundError);
+      expect(membershipInvitationService.revokePendingForMembership).not.toHaveBeenCalled();
     });
   });
 
@@ -513,9 +571,9 @@ describe('MembershipService', () => {
   });
 
   it('update throws when membership is missing', async () => {
-    vi.mocked(membershipRepository.findByPublicId).mockResolvedValue(null);
+    vi.mocked(membershipRepository.findAnyByPublicId).mockResolvedValue(null);
     await expect(
-      service.update(asScope('org_public'), 'missing', { status: 'ACTIVE' }, 'updater_public'),
+      service.update(asScope('org_public'), 'missing', { status: 'active' }, 'updater_public'),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -585,13 +643,13 @@ describe('MembershipService', () => {
     await service.update(
       asScope('org_public'),
       'mem_public',
-      { status: 'SUSPENDED' },
+      { status: 'suspended' },
       'missing_updater',
     );
     expect(membershipRepository.update).toHaveBeenCalledWith(
       'mem_public',
       organization.id,
-      { status: 'SUSPENDED' },
+      { status: 'suspended', profile: {} },
       null,
     );
   });
@@ -599,7 +657,7 @@ describe('MembershipService', () => {
   it('update throws when repository update returns null', async () => {
     vi.mocked(membershipRepository.update).mockResolvedValue(null);
     await expect(
-      service.update(asScope('org_public'), 'mem_public', { status: 'ACTIVE' }, 'updater_public'),
+      service.update(asScope('org_public'), 'mem_public', { status: 'active' }, 'updater_public'),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -623,7 +681,7 @@ describe('MembershipService', () => {
     await expect(
       service.create(
         asScope('org_public'),
-        { email: 'invitee@example.com', role_id: 'role_public' },
+        { email: 'invitee@example.com', role_ids: ['role_public'] },
         'inviter_public',
       ),
     ).rejects.toBeInstanceOf(NotFoundError);

@@ -13,6 +13,7 @@ import {
   seedAllPermissions,
   createRoleWithPermissions,
   createMembership,
+  ROLE_WRITE_PERMISSION_CODES,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import {
@@ -28,7 +29,7 @@ import type { FastifyInstance } from 'fastify';
 
 const ROLE_PERMISSIONS = [
   TENANCY_PERMISSIONS.ROLE_READ,
-  TENANCY_PERMISSIONS.ROLE_MANAGE,
+  ...ROLE_WRITE_PERMISSION_CODES,
   TENANCY_PERMISSIONS.ORGANIZATION_READ,
 ];
 
@@ -109,8 +110,8 @@ describe('Member Roles Sub-Domain — Integration', () => {
         ownerUserId: owner.id,
       });
 
-      // Provisioning seeds: Owner (with the owner's ACTIVE membership) + Admin/Member/Viewer
-      // (no members). Assign a second ACTIVE member to Admin so it also counts 1.
+      // Provisioning seeds: Owner (with the owner's active membership) + the clinic roles (Admin,
+      // Doctor, Therapist, …, no members). Assign a second active member to Admin so it also counts 1.
       const [adminRole] = await getOperatorDatabase()
         .select({ id: roles.id })
         .from(roles)
@@ -120,7 +121,6 @@ describe('Member Roles Sub-Domain — Integration', () => {
         userId: member.id,
         organizationId: team.organization.id,
         roleId: adminRole!.id,
-        status: 'ACTIVE',
       });
 
       const token = await generateTestToken({
@@ -136,10 +136,10 @@ describe('Member Roles Sub-Domain — Integration', () => {
       expect(response.statusCode).toBe(200);
       const body = response.json() as { data: Array<{ name: string; member_count: number }> };
       const countByRole = new Map(body.data.map((role) => [role.name, role.member_count]));
-      expect(countByRole.get('Owner')).toBe(1); // the organization owner's ACTIVE membership
+      expect(countByRole.get('Owner')).toBe(1); // the organization owner's active membership
       expect(countByRole.get('Admin')).toBe(1); // the member assigned above
-      expect(countByRole.get('Member')).toBe(0); // unassigned system role
-      expect(countByRole.get('Viewer')).toBe(0); // unassigned system role
+      expect(countByRole.get('Doctor')).toBe(0); // unassigned system role
+      expect(countByRole.get('Therapist')).toBe(0); // unassigned system role
       // Additive + always present: every role object carries a numeric member_count.
       for (const role of body.data) {
         expect(typeof role.member_count).toBe('number');
@@ -242,14 +242,14 @@ describe('Member Roles Sub-Domain — Integration', () => {
     it('rejects create with a permission the caller does not hold and writes no role (atomic rollback)', async () => {
       const { organization, token } = await createAuthorizedContext();
       // A real, seeded code the caller's role does NOT include — the grant-guard must refuse it.
-      await seedPermissions([TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE]);
+      await seedPermissions([TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE]);
       const roleName = `Escalation Role ${randomUUID()}`;
 
       const response = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/roles'),
         token,
-        payload: { name: roleName, permission_codes: [TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE] },
+        payload: { name: roleName, permission_codes: [TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE] },
       });
 
       expect(response.statusCode).toBe(403);
@@ -266,7 +266,7 @@ describe('Member Roles Sub-Domain — Integration', () => {
   // A PERSONAL organization is single-member by definition, so custom roles (which exist to
   // grant scoped permissions to OTHER members) are meaningless there. The service rejects role
   // creation with a 409 ConflictError. This is unit-tested in member-role.service.unit.test.ts;
-  // these tests prove the rejection survives over real HTTP — the owner holds ROLE_MANAGE (the
+  // these tests prove the rejection survives over real HTTP — the owner holds role:update (the
   // full tenancy set, via provisioning), so the request passes RBAC and lands on the no-roles
   // guard rather than a 403.
   describe('PERSONAL organization no-custom-roles guard (HTTP-level coverage)', () => {

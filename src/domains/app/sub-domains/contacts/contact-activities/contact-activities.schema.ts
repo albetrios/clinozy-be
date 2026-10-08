@@ -175,6 +175,7 @@ export const contact_activities = appSchema
       ),
     },
     (table) => [
+      index('idx_contact_activities_organization_id').on(table.organization_id),
       uniqueIndex('idx_contact_activities_public_id').on(table.public_id),
       // The stream, oldest first — and the newest page by a backward scan
       index('idx_contact_activities_contact_id_occurred_at').on(

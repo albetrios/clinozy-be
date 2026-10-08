@@ -66,9 +66,7 @@ export const invoice_credit_notes = appSchema
         table.organization_id,
         table.credit_note_number,
       ),
-      index('idx_invoice_credit_notes_invoice_id')
-        .on(table.invoice_id)
-        .where(sql`${table.deleted_at} IS NULL`),
+      index('idx_invoice_credit_notes_invoice_id').on(table.invoice_id),
       // Every credit note, newest first
       index('idx_invoice_credit_notes_organization_created')
         .on(table.organization_id, table.created_at.desc(), table.id)

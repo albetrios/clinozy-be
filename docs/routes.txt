@@ -62,7 +62,7 @@ Legend:
   DELETE /api/v1/app/branches/:branch_id/rooms/:branch_room_id    204  -    both  PERM: branch:delete
   POST   /api/v1/app/branches/:branch_id/rooms/:branch_room_id/restore  200  req  both  PERM: branch:delete
   GET    /api/v1/app/branches/my                                  200  -    both  PERM: organization:read
-  POST   /api/v1/app/contact-activities/message-batches           200  -    both  PERM: contact_activity:create
+  POST   /api/v1/app/contact-activities/message-batches           200  req  both  PERM: contact_activity:create
   GET    /api/v1/app/contact-message-templates                    200  -    both  PERM: organization:read
   POST   /api/v1/app/contact-message-templates                    200  req  both  PERM: contact_activity:create
   GET    /api/v1/app/contact-message-templates/:contact_message_template_id  200  -    both  PERM: organization:read
@@ -76,10 +76,10 @@ Legend:
   DELETE /api/v1/app/contacts/:contact_id                         204  -    both  PERM: contact:delete
   GET    /api/v1/app/contacts/:contact_id/activities              200  -    both  PERM: contact_activity:read
   GET    /api/v1/app/contacts/:contact_id/activities/:contact_activity_id  200  -    both  PERM: contact_activity:read
-  POST   /api/v1/app/contacts/:contact_id/activities/:contact_activity_id/resend  200  -    both  PERM: contact_activity:update
-  POST   /api/v1/app/contacts/:contact_id/activities/add-note     200  -    both  PERM: contact_activity:create
-  POST   /api/v1/app/contacts/:contact_id/activities/log-call     200  -    both  PERM: contact_activity:create
-  POST   /api/v1/app/contacts/:contact_id/activities/send-message  200  -    both  PERM: contact_activity:create
+  POST   /api/v1/app/contacts/:contact_id/activities/:contact_activity_id/resend  200  req  both  PERM: contact_activity:update
+  POST   /api/v1/app/contacts/:contact_id/activities/add-note     200  req  both  PERM: contact_activity:create
+  POST   /api/v1/app/contacts/:contact_id/activities/log-call     200  req  both  PERM: contact_activity:create
+  POST   /api/v1/app/contacts/:contact_id/activities/send-message  200  req  both  PERM: contact_activity:create
   GET    /api/v1/app/contacts/:contact_id/members                 200  -    both  PERM: contact:read
   PUT    /api/v1/app/contacts/:contact_id/members                 200  -    both  PERM: contact:update
   GET    /api/v1/app/contacts/:contact_id/preview                 200  -    both  PERM: contact:read
@@ -533,7 +533,7 @@ Legend:
   Team-only (O)   : 10
 
 ================================================================================
-  IDEMPOTENCY-REQUIRED WRITES (122) — X-Idempotency-Key required
+  IDEMPOTENCY-REQUIRED WRITES (127) — X-Idempotency-Key required
 ================================================================================
 
   Routes flagged I = req reject a missing or reused key (422); every other write
@@ -559,9 +559,14 @@ Legend:
     POST /api/v1/app/branches/:branch_id/machines/:branch_machine_id/restore
     POST /api/v1/app/branches/:branch_id/rooms
     POST /api/v1/app/branches/:branch_id/rooms/:branch_room_id/restore
+    POST /api/v1/app/contact-activities/message-batches
     POST /api/v1/app/contact-message-templates
     POST /api/v1/app/contact-message-templates/:contact_message_template_id/restore
     POST /api/v1/app/contacts
+    POST /api/v1/app/contacts/:contact_id/activities/:contact_activity_id/resend
+    POST /api/v1/app/contacts/:contact_id/activities/add-note
+    POST /api/v1/app/contacts/:contact_id/activities/log-call
+    POST /api/v1/app/contacts/:contact_id/activities/send-message
     POST /api/v1/app/contacts/:contact_id/restore
     POST /api/v1/app/day-closes
     POST /api/v1/app/day-closes/:day_close_id/close

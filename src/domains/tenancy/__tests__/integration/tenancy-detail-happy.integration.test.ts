@@ -10,10 +10,17 @@ import {
   seedPermissions,
   createRoleWithPermissions,
   createMembership,
+  MEMBERSHIP_WRITE_PERMISSION_CODES,
+  ROLE_WRITE_PERMISSION_CODES,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import type { FastifyInstance } from 'fastify';
 
-const CALLER_PERMISSIONS = ['role:read', 'role:manage', 'membership:read', 'membership:manage'];
+const CALLER_PERMISSIONS = [
+  'role:read',
+  ...ROLE_WRITE_PERMISSION_CODES,
+  'membership:read',
+  ...MEMBERSHIP_WRITE_PERMISSION_CODES,
+];
 
 /**
  * Happy paths for the tenancy role / membership detail routes — the declared
@@ -85,7 +92,7 @@ describe('Tenancy role and membership detail — happy paths', () => {
 
     const remove = await injectAuthenticated(app, {
       method: 'DELETE',
-      url: testApiPath(basePath),
+      url: testApiPath(`${basePath}?reason=not_needed`),
       token,
     });
     expect(remove.statusCode, remove.body).toBe(204);
@@ -118,13 +125,13 @@ describe('Tenancy role and membership detail — happy paths', () => {
       method: 'PATCH',
       url: testApiPath(basePath),
       token,
-      payload: { status: 'ACTIVE' },
+      payload: { status: 'active' },
     });
     expect(patch.statusCode, patch.body).toBe(200);
 
     const remove = await injectAuthenticated(app, {
       method: 'DELETE',
-      url: testApiPath(basePath),
+      url: testApiPath(`${basePath}?reason=not_needed`),
       token,
     });
     expect(remove.statusCode, remove.body).toBe(204);

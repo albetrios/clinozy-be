@@ -61,9 +61,11 @@ export const contact_message_templates = appSchema
     (table) => [
       uniqueIndex('idx_contact_message_templates_public_id').on(table.public_id),
       // The default list order — newest first among live templates
-      index('idx_contact_message_templates_organization_created')
-        .on(table.organization_id, table.created_at.desc(), table.id)
-        .where(sql`${table.deleted_at} IS NULL`),
+      index('idx_contact_message_templates_organization_created').on(
+        table.organization_id,
+        table.created_at.desc(),
+        table.id,
+      ),
       index('idx_contact_message_templates_deleted_at')
         .on(table.deleted_at)
         .where(sql`${table.deleted_at} IS NOT NULL`),

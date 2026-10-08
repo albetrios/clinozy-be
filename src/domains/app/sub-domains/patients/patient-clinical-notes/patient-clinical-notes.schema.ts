@@ -75,6 +75,7 @@ export const patient_clinical_notes = appSchema
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
+      index('idx_patient_clinical_notes_organization_id').on(table.organization_id),
       uniqueIndex('idx_patient_clinical_notes_public_id').on(table.public_id),
       index('idx_patient_clinical_notes_patient_kind_created').on(
         table.patient_id,

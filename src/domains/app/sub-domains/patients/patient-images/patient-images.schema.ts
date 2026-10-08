@@ -86,9 +86,12 @@ export const patient_images = appSchema
     (table) => [
       uniqueIndex('idx_patient_images_public_id').on(table.public_id),
       // Each album tab, newest first, and its count
-      index('idx_patient_images_patient_album_taken_on')
-        .on(table.patient_id, table.album, table.taken_on.desc(), table.id)
-        .where(sql`${table.deleted_at} IS NULL`),
+      index('idx_patient_images_patient_album_taken_on').on(
+        table.patient_id,
+        table.album,
+        table.taken_on.desc(),
+        table.id,
+      ),
       // P25: an upload is filed once
       uniqueIndex('idx_patient_images_organization_file_key').on(
         table.organization_id,

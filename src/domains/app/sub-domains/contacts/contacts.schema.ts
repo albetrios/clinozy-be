@@ -244,6 +244,10 @@ export const contact_phones = appSchema
       deleted_at: timestamp('deleted_at', { withTimezone: true }),
     },
     (table) => [
+      index('idx_contact_phones_contact_household').on(
+        table.contact_id,
+        table.household_contact_id,
+      ),
       primaryKey({ name: 'contact_phones_pkey', columns: [table.contact_id, table.phone] }),
       foreignKey({
         name: 'contact_phones_contact_household_fk',
@@ -255,9 +259,7 @@ export const contact_phones = appSchema
       uniqueIndex('idx_contact_phones_contact_id_primary')
         .on(table.contact_id)
         .where(sql`${table.is_primary}`),
-      index('idx_contact_phones_organization_id_phone')
-        .on(table.organization_id, table.phone)
-        .where(sql`${table.deleted_at} IS NULL`),
+      index('idx_contact_phones_organization_id_phone').on(table.organization_id, table.phone),
       index('idx_contact_phones_household_contact_id').on(table.household_contact_id),
       check(
         'chk_contact_phones_phone',

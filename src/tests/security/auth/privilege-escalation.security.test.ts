@@ -10,6 +10,7 @@ import {
   seedPermissions,
   createRoleWithPermissions,
   createMembership,
+  ROLE_WRITE_PERMISSION_CODES,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { invalidatePermissions } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
@@ -89,11 +90,11 @@ describe('Security: Privilege escalation', () => {
     expect([200, 404]).toContain(response.statusCode);
   });
 
-  // NEGATIVE — member without ROLE_MANAGE cannot grant admin role to anyone
-  it('should return 403 when member without ROLE_MANAGE tries to replace role permissions', async () => {
+  // NEGATIVE — member without role:update cannot grant admin role to anyone
+  it('should return 403 when member without role:update tries to replace role permissions', async () => {
     const { token, role } = await createMemberWithPermissions([
       TENANCY_PERMISSIONS.ROLE_READ,
-      // Intentionally missing ROLE_MANAGE
+      // Intentionally missing the role write codes
     ]);
 
     const response = await injectAuthenticated(app, {
@@ -106,11 +107,11 @@ describe('Security: Privilege escalation', () => {
     expect(response.statusCode).toBe(403);
   });
 
-  // NEGATIVE — member without ROLE_MANAGE cannot create a role with elevated permissions
-  it('should return 403 when member without ROLE_MANAGE tries to create a new role', async () => {
+  // NEGATIVE — member without role:create cannot create a role with elevated permissions
+  it('should return 403 when member without role:create tries to create a new role', async () => {
     const { token } = await createMemberWithPermissions([
       TENANCY_PERMISSIONS.ROLE_READ,
-      // Intentionally missing ROLE_MANAGE
+      // Intentionally missing the role write codes
     ]);
 
     const response = await injectAuthenticated(app, {
@@ -147,12 +148,12 @@ describe('Security: Privilege escalation', () => {
   });
 
   // NEGATIVE — user in organization A cannot update a role in organization B.
-  // Member A holds ROLE_MANAGE in A, but a token scoped to organization B's claim grants
+  // Member A holds the role write codes in A, but a token scoped to organization B's claim grants
   // nothing in B; even addressing B's role id, the permission preHandler denies
   // before any organization-scoped lookup.
   it("should return 403 when an organization-A member claims organization-B and updates B's role", async () => {
-    const memberA = await createMemberWithPermissions([TENANCY_PERMISSIONS.ROLE_MANAGE]);
-    const memberB = await createMemberWithPermissions([TENANCY_PERMISSIONS.ROLE_MANAGE]);
+    const memberA = await createMemberWithPermissions([...ROLE_WRITE_PERMISSION_CODES]);
+    const memberB = await createMemberWithPermissions([...ROLE_WRITE_PERMISSION_CODES]);
 
     const memberATokenScopedToB = await generateTestToken({
       userId: memberA.user.public_id,
@@ -184,16 +185,16 @@ describe('Security: Privilege escalation', () => {
     expect(response.statusCode).toBe(403);
   });
 
-  // NEGATIVE — member tries to update their own membership but lacks MEMBERSHIP_MANAGE
-  it('should return 403 when member without MEMBERSHIP_MANAGE tries to update a membership', async () => {
+  // NEGATIVE — member tries to update their own membership but lacks membership:update
+  it('should return 403 when member without membership:update tries to update a membership', async () => {
     const { token, user } = await createMemberWithPermissions([
       TENANCY_PERMISSIONS.MEMBERSHIP_READ,
-      // Intentionally missing MEMBERSHIP_MANAGE
+      // Intentionally missing the membership write codes
     ]);
 
     // Fetch a real membership id from the (flat, organization-from-claim) list — the
     // paginated payload is `data: [{ id, user_id, ... }]`. Using a real row
-    // makes the 403 meaningful: the request reaches the MEMBERSHIP_MANAGE
+    // makes the 403 meaningful: the request reaches the membership:update
     // preHandler and is denied, rather than failing earlier on a bad id.
     const listResponse = await injectAuthenticated(app, {
       method: 'GET',
@@ -220,8 +221,8 @@ describe('Security: Privilege escalation', () => {
     expect(upgradeRoleResponse.statusCode).toBe(403);
   });
 
-  // NEGATIVE — member without MEMBERSHIP_MANAGE cannot add another user as a member
-  it('should return 403 when member without MEMBERSHIP_MANAGE tries to add a new member', async () => {
+  // NEGATIVE — member without membership:create cannot add another user as a member
+  it('should return 403 when member without membership:create tries to add a new member', async () => {
     const { token } = await createMemberWithPermissions([TENANCY_PERMISSIONS.MEMBERSHIP_READ]);
 
     const response = await injectAuthenticated(app, {
@@ -230,7 +231,7 @@ describe('Security: Privilege escalation', () => {
       token,
       headers: { 'x-idempotency-key': randomUUID() },
       // REQ-1: "Add member" is now invite-by-email. A valid body that passes the strict DTO so the
-      // request reaches the MEMBERSHIP_MANAGE permission preHandler (the role/email need not exist —
+      // request reaches the membership:update permission preHandler (the role/email need not exist —
       // authorization runs before any lookup).
       payload: {
         email: 'escalation-attempt@example.test',

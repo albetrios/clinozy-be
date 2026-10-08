@@ -146,7 +146,7 @@ describe('UploadService — assertKeyConfirmed / assertKeyConfirmedForOwner', ()
           fileKey: FILE_KEY,
           userInternalId: USER_INTERNAL_ID,
         }),
-      ).resolves.toEqual({ mimeType: 'image/png' });
+      ).resolves.toEqual({ mimeType: 'image/png', fileName: 'avatar.png', fileSize: 1024 });
     });
 
     it('resolves for an UPLOADED row whose organization_id matches', async () => {
@@ -157,7 +157,7 @@ describe('UploadService — assertKeyConfirmed / assertKeyConfirmedForOwner', ()
           fileKey: FILE_KEY,
           organizationInternalId: ORGANIZATION_INTERNAL_ID,
         }),
-      ).resolves.toEqual({ mimeType: 'image/png' });
+      ).resolves.toEqual({ mimeType: 'image/png', fileName: 'avatar.png', fileSize: 1024 });
     });
 
     /**

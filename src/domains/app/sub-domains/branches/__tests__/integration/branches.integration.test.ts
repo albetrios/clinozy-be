@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
@@ -234,6 +235,7 @@ describe('Branches — Integration', () => {
         method: 'POST',
         url: testApiPath('/app/branches'),
         token,
+        headers: { 'x-idempotency-key': `branch-${randomUUID()}` },
         payload: {
           ...VALID_BRANCH,
           default_doctor_membership_id: creator.membership.public_id,
@@ -272,9 +274,21 @@ describe('Branches — Integration', () => {
         method: 'POST',
         url: testApiPath('/app/branches'),
         token,
+        headers: { 'x-idempotency-key': `branch-${randomUUID()}` },
         payload: { ...VALID_BRANCH, ...change },
       });
       expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 422 without X-Idempotency-Key', async () => {
+      const { token } = await adminContext();
+      const response = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/app/branches'),
+        token,
+        payload: VALID_BRANCH,
+      });
+      expect(response.statusCode).toBe(422);
     });
 
     it('returns 400 for a default staff id that is no member here', async () => {
@@ -283,6 +297,7 @@ describe('Branches — Integration', () => {
         method: 'POST',
         url: testApiPath('/app/branches'),
         token,
+        headers: { 'x-idempotency-key': `branch-${randomUUID()}` },
         payload: { ...VALID_BRANCH, default_doctor_membership_id: 'mem_aaaaaaaaaaaaaaaaaaaaa' },
       });
       expect(response.statusCode).toBe(400);
@@ -295,6 +310,7 @@ describe('Branches — Integration', () => {
         method: 'POST',
         url: testApiPath('/app/branches'),
         token,
+        headers: { 'x-idempotency-key': `branch-${randomUUID()}` },
         payload: VALID_BRANCH,
       });
       expect(response.statusCode).toBe(409);
@@ -307,6 +323,7 @@ describe('Branches — Integration', () => {
         method: 'POST',
         url: testApiPath('/app/branches'),
         token,
+        headers: { 'x-idempotency-key': `branch-${randomUUID()}` },
         payload: { ...VALID_BRANCH, is_main: true },
       });
       expect(response.statusCode).toBe(409);

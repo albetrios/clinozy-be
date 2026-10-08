@@ -99,3 +99,36 @@ export const CONTACT_ACTIVITY_PLACEHOLDER = {
   FIRST_NAME: '<first>',
   INTEREST: '<interest>',
 } as const;
+
+/** The links a system entry's group follows (D63) — the rest of the twelve are `clinical`. */
+export const CONTACT_ACTIVITY_MONEY_LINKS: readonly ContactActivityLinkColumn[] = [
+  'invoice_id',
+  'payment_id',
+  'patient_offering_id',
+];
+/** The link that makes a system entry a `tasks` one. */
+export const CONTACT_ACTIVITY_TASK_LINK: ContactActivityLinkColumn = 'task_id';
+/** The links that make a system entry `clinical`. */
+export const CONTACT_ACTIVITY_CLINICAL_LINKS: readonly ContactActivityLinkColumn[] = [
+  'appointment_id',
+  'patient_prescription_id',
+  'patient_review_id',
+  'patient_check_in_id',
+  'patient_treatment_id',
+  'patient_clinical_note_id',
+  'patient_image_id',
+  'patient_report_id',
+];
+
+/**
+ * An entry's group (M10, D63) from its row — the serializer's twin of the list's `group` filter.
+ */
+export function contactActivityGroupOf(row: Record<string, unknown>): string {
+  if (row.type !== CONTACT_ACTIVITY_TYPE.SYSTEM) return CONTACT_ACTIVITY_GROUP.MESSAGES;
+  const has = (columns: readonly ContactActivityLinkColumn[]) =>
+    columns.some((column) => row[column] !== null && row[column] !== undefined);
+  if (has(CONTACT_ACTIVITY_CLINICAL_LINKS)) return CONTACT_ACTIVITY_GROUP.CLINICAL;
+  if (has(CONTACT_ACTIVITY_MONEY_LINKS)) return CONTACT_ACTIVITY_GROUP.MONEY;
+  if (has([CONTACT_ACTIVITY_TASK_LINK])) return CONTACT_ACTIVITY_GROUP.TASKS;
+  return CONTACT_ACTIVITY_GROUP.MESSAGES;
+}

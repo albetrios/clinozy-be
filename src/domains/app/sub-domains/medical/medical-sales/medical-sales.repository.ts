@@ -332,11 +332,3 @@ export class MedicalSalesRepository extends BaseRecordRepository {
     );
   }
 }
-
-/** A list query's `status` (MD20): whether voided sales are read too, or only them. */
-export function deletedRowsForStatuses(
-  statuses: readonly string[] | undefined,
-): 'include' | 'only' | undefined {
-  if (!statuses?.includes(MEDICAL_SALE_STATUS.VOIDED)) return undefined;
-  return statuses.length === 1 ? 'only' : 'include';
-}

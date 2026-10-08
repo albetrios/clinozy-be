@@ -69,6 +69,11 @@ export const supplier_credits = appSchema
       ),
     },
     (table) => [
+      index('idx_supplier_credits_supplier_id').on(table.supplier_id),
+      index('idx_supplier_credits_organization_created_by').on(
+        table.organization_id,
+        table.created_by_membership_id,
+      ),
       uniqueIndex('idx_supplier_credits_public_id').on(table.public_id),
       index('idx_supplier_credits_organization_created').on(
         table.organization_id,

@@ -26,6 +26,10 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
 });
 
 import { ForbiddenError } from '@/shared/errors/index.js';
+import {
+  emptyMembershipAdditionalRolesRepository,
+  membershipRowFixture,
+} from '@/domains/tenancy/__tests__/factories/membership-row.factory.js';
 import { MembershipService } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
 import { assertCallerCanGrantPermissionCodes } from '@/domains/tenancy/sub-domains/permission/assert-grantable-permissions.util.js';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
@@ -44,7 +48,7 @@ import {
 /**
  * Regression for the Critical organization-takeover finding (T1).
  *
- * A `MEMBERSHIP_MANAGE` + `INVITATION_MANAGE` holder must not be able to mint an Admin (or
+ * A `membership:create` holder must not be able to mint an Admin (or
  * any other privileged-role) membership for a throwaway account that the caller does not
  * themselves have the right to grant. `MembershipService.create` must invoke
  * `assertCallerCanGrantPermissionCodes` against the resolved role's permission codes
@@ -60,17 +64,7 @@ describe('MembershipService.create — grantable-permissions guard (sec-T1)', ()
   const adminRole = { id: 2, public_id: 'role_public_admin', name: 'Admin' };
   const adminPermissionCodes = ['organization:delete', 'role:manage', 'subscription:manage'];
 
-  const membershipRow = {
-    id: 3,
-    public_id: 'mem_public',
-    organization_id: 1,
-    user_id: 10,
-    role_id: 2,
-    status: 'INVITED' as const,
-    joined_at: null,
-    created_at: new Date(),
-    updated_at: new Date(),
-  };
+  const membershipRow = membershipRowFixture({ status: 'invited', joined_at: null });
 
   const organizationService = {
     requireOrganizationRecordByPublicId: vi.fn().mockResolvedValue(organization),
@@ -79,7 +73,7 @@ describe('MembershipService.create — grantable-permissions guard (sec-T1)', ()
   } as unknown as OrganizationService;
 
   const memberRoleService = {
-    requireRoleRecordByPublicId: vi.fn().mockResolvedValue(adminRole),
+    requireRoleRecordForOrganization: vi.fn().mockResolvedValue(adminRole),
     resolveRolePublicIdByInternalId: vi.fn().mockResolvedValue('role_public_admin'),
   } as unknown as MemberRoleService;
 
@@ -89,6 +83,8 @@ describe('MembershipService.create — grantable-permissions guard (sec-T1)', ()
 
   const membershipRepository = {
     create: vi.fn().mockResolvedValue(membershipRow),
+    // K7: no ended membership to revive — every add is a new row.
+    findLatestEndedForUser: vi.fn().mockResolvedValue(null),
     resolveUserSummariesByInternalIds: vi.fn(
       async (ids: readonly number[]) =>
         new Map(
@@ -144,6 +140,7 @@ describe('MembershipService.create — grantable-permissions guard (sec-T1)', ()
     undefined,
     userService,
     membershipInvitationService,
+    emptyMembershipAdditionalRolesRepository(),
   );
 
   beforeEach(() => {
@@ -152,7 +149,9 @@ describe('MembershipService.create — grantable-permissions guard (sec-T1)', ()
       organization as never,
     );
     vi.mocked(organizationService.resolveUserInternalIdByPublicId).mockResolvedValue(10);
-    vi.mocked(memberRoleService.requireRoleRecordByPublicId).mockResolvedValue(adminRole as never);
+    vi.mocked(memberRoleService.requireRoleRecordForOrganization).mockResolvedValue(
+      adminRole as never,
+    );
     vi.mocked(memberRolePermissionService.listPermissionCodesForRole).mockResolvedValue(
       adminPermissionCodes,
     );
@@ -172,7 +171,7 @@ describe('MembershipService.create — grantable-permissions guard (sec-T1)', ()
 
     await service.create(
       asScope('org_public'),
-      { email: 'invitee@example.com', role_id: 'role_public_admin' },
+      { email: 'invitee@example.com', role_ids: ['role_public_admin'] },
       'inviter_public',
     );
 
@@ -197,7 +196,7 @@ describe('MembershipService.create — grantable-permissions guard (sec-T1)', ()
     await expect(
       service.create(
         asScope('org_public'),
-        { email: 'invitee@example.com', role_id: 'role_public_admin' },
+        { email: 'invitee@example.com', role_ids: ['role_public_admin'] },
         'inviter_public',
       ),
     ).rejects.toBeInstanceOf(ForbiddenError);
@@ -213,7 +212,7 @@ describe('MembershipService.create — grantable-permissions guard (sec-T1)', ()
     await expect(
       service.create(
         asScope('org_public'),
-        { email: 'invitee@example.com', role_id: 'role_public_admin' },
+        { email: 'invitee@example.com', role_ids: ['role_public_admin'] },
         undefined,
       ),
     ).rejects.toBeInstanceOf(ForbiddenError);

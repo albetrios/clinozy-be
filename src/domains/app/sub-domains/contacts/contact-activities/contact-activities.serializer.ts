@@ -1,8 +1,10 @@
 import type { BaseRecordRow } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordReferenceLookup } from '@/domains/app/base-record.types.js';
 import { toInstant } from '@/shared/utils/validation/record-fields.util.js';
-import { CONTACT_ACTIVITY_LINK_COLUMNS } from './contact-activities.constants.js';
-import { contactActivityGroupOf } from './contact-activities.repository.js';
+import {
+  CONTACT_ACTIVITY_LINK_COLUMNS,
+  contactActivityGroupOf,
+} from './contact-activities.constants.js';
 import type { ContactActivityOutput } from './contact-activities.types.js';
 
 /**
