@@ -319,6 +319,7 @@ src/
     │   │   │   │   ├── integration/
     │   │   │   │   │   └── plan.integration.test.ts
     │   │   │   │   └── unit/
+    │   │   │   │   │   ├── plan-catalog-memo.unit.test.ts
     │   │   │   │   │   ├── plan-routes-rate-limit.policy.unit.test.ts
     │   │   │   │   │   ├── plan.controller.unit.test.ts
     │   │   │   │   │   ├── plan.repository.db.unit.test.ts

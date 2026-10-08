@@ -53,4 +53,21 @@ describe('createSingleflight', () => {
     await expect(singleflight.run({ key: 'fail', load })).resolves.toBe('recovered');
     expect(load).toHaveBeenCalledTimes(2);
   });
+
+  it('reset forgets an in-flight key so the next call loads again', async () => {
+    const singleflight = createSingleflight<string>();
+    let release: (value: string) => void = () => undefined;
+    const gate = new Promise<string>((resolve) => {
+      release = resolve;
+    });
+    const firstLoad = vi.fn(() => gate);
+    const first = singleflight.run({ key: 'catalog', load: firstLoad });
+    singleflight.reset();
+    const secondLoad = vi.fn(async () => 'fresh');
+
+    await expect(singleflight.run({ key: 'catalog', load: secondLoad })).resolves.toBe('fresh');
+    expect(secondLoad).toHaveBeenCalledTimes(1);
+    release('stale');
+    await expect(first).resolves.toBe('stale');
+  });
 });

@@ -55,6 +55,7 @@ Do **not** add a generic cache abstraction — `cache.overview.md` rules one out
 | 14 | Stored shape is JSON-safe — no `Date`, no class instances | `"2026-09-21T…"` read back where a `Date` was expected |
 | 15 | Module records `read_cache_requests_total{cache,result}` with the cache **name** as the label, not the key | An unfalsifiable cache; or unbounded metric cardinality |
 | 16 | No environment kill switch | One more untested branch on a hot path; a ≤ 60 s TTL self-heals and the revert is the switch |
+| 17 | An in-process coalescer (`createSingleflight`) makes joiners re-read the cache after the shared load, and never stores a leader rejection. A populate TTL that would stampede subtracts downward jitter (`min(remaining, 60 - random(0..10))` on the session-token cache) | Joiners serving a value revoked while the leader was in Postgres; a cached error that 401s every later request; every session expiring on the same second |
 
 ## The five tests every cache owes
 

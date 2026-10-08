@@ -302,7 +302,8 @@ sequenceDiagram
 ### How to apply
 
 - **Key**: `<domain>:<thing>:<scope public id>`, logical (no deployment prefix), from the verified scope.
-- **TTL**: ≤ 60 s, declared in [ttl.constants.ts](src/shared/constants/ttl.constants.ts) with its own literal — not aliased to an unrelated cache's constant — and documented in [POLICIES.md](src/POLICIES.md). The tombstone TTL is a **separate** number: `CACHE_INVALIDATION_TOMBSTONE_TTL_SECONDS` for freshness, the cache's own TTL only for revocation.
+- **TTL**: ≤ 60 s, declared in [ttl.constants.ts](src/shared/constants/ttl.constants.ts) with its own literal — not aliased to an unrelated cache's constant — and documented in [POLICIES.md](src/POLICIES.md). The tombstone TTL is a **separate** number: `CACHE_INVALIDATION_TOMBSTONE_TTL_SECONDS` for freshness, the cache's own TTL only for revocation. A populate that would otherwise expire a herd of keys together subtracts a small downward jitter (`min(remaining, 60 - random(0..10))` on the session-token cache).
+- **In-process coalescing**: concurrent misses for one key share one load via `createSingleflight`. Joiners re-read the cache after that load settles, so a revocation that landed during the load wins. A leader rejection is forgotten when the promise settles and is never stored. The plan catalog memo uses the same helper; a rejected catalog load is not memoized.
 - **Stored shape**: JSON-safe only. No `Date` objects, no class instances; serialize first.
 - **Where the Redis call goes**: **outside** the Postgres context, deferred with
   `runEnqueueAfterCommit`. This is the rule, not a preference — the reasoning is two paragraphs

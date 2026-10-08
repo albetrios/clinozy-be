@@ -1,5 +1,7 @@
+import { randomInt } from 'node:crypto';
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { SESSION_TOKEN_CACHE_TTL_SECONDS } from '@/shared/constants/index.js';
+import { UnauthorizedError } from '@/shared/errors/index.js';
 import { createSingleflight } from '@/shared/utils/infrastructure/singleflight.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
@@ -16,8 +18,38 @@ const sessionTokenMissLoads = createSingleflight<{ sessionPublicId: string }>();
  */
 const SESSION_TOKEN_REVOKED_TOMBSTONE = '__revoked__';
 
+/** Inclusive downward spread subtracted from the 60 second populate cap, so expiries do not align. */
+const SESSION_TOKEN_POPULATE_TTL_JITTER_SPAN_SECONDS = 10;
+
+type SessionTokenCacheRead =
+  | { status: 'hit'; sessionPublicId: string }
+  | { status: 'miss' }
+  | { status: 'revoked' };
+
 function buildSessionTokenCacheKey(sessionTokenHash: string): string {
   return `${SESSION_TOKEN_CACHE_PREFIX}:${sessionTokenHash}`;
+}
+
+/** Reads the raw cache entry, distinguishing a miss from a revocation tombstone. */
+async function readSessionTokenCache(sessionTokenHash: string): Promise<SessionTokenCacheRead> {
+  try {
+    const cached = await redisConnection.get(buildSessionTokenCacheKey(sessionTokenHash));
+    if (cached === null || cached.length === 0) return { status: 'miss' };
+    if (cached === SESSION_TOKEN_REVOKED_TOMBSTONE) return { status: 'revoked' };
+    return { status: 'hit', sessionPublicId: cached };
+  } catch (error) {
+    logger.warn({ error }, 'session-token-cache.get.failed');
+    return { status: 'miss' };
+  }
+}
+
+/** A hit returns the cached id. A revocation tombstone is a denial, not a miss. */
+function sessionFromCacheRead(read: SessionTokenCacheRead): { sessionPublicId: string } | null {
+  if (read.status === 'revoked') {
+    throw new UnauthorizedError('errors:invalidOrExpiredSession');
+  }
+  if (read.status === 'hit') return { sessionPublicId: read.sessionPublicId };
+  return null;
 }
 
 /**
@@ -28,7 +60,7 @@ function buildSessionTokenCacheKey(sessionTokenHash: string): string {
  * - **Algorithm:** Redis `GET session:tok:<hash>`; the stored value is the session's
  *   `public_id`, allowing callers to recover the session identity from cache without
  *   a Postgres round-trip. A cache hit means the bearer was confirmed active within
- *   {@link SESSION_TOKEN_CACHE_TTL_SECONDS}.
+ *   {@link SESSION_TOKEN_CACHE_TTL_SECONDS}. A revocation tombstone reads as a miss.
  * - **Failure modes:** Redis failures are logged and swallowed — the function returns
  *   `null` so the caller falls back to the database (fail-open on availability,
  *   fail-closed on staleness because the DB is the source of truth).
@@ -39,17 +71,8 @@ function buildSessionTokenCacheKey(sessionTokenHash: string): string {
  *   re-reading the row.
  */
 export async function getCachedSessionTokenValid(sessionTokenHash: string): Promise<string | null> {
-  try {
-    const cached = await redisConnection.get(buildSessionTokenCacheKey(sessionTokenHash));
-    if (cached === null || cached.length === 0) return null;
-    // A revocation tombstone reads as a MISS so the caller re-checks Postgres (which denies the
-    // revoked session) instead of trusting a value that a racing populate might otherwise have set.
-    if (cached === SESSION_TOKEN_REVOKED_TOMBSTONE) return null;
-    return cached;
-  } catch (error) {
-    logger.warn({ error }, 'session-token-cache.get.failed');
-    return null;
-  }
+  const read = await readSessionTokenCache(sessionTokenHash);
+  return read.status === 'hit' ? read.sessionPublicId : null;
 }
 
 /**
@@ -76,13 +99,11 @@ export interface SetCachedSessionTokenValidInput {
  * Marks a token hash as a recently validated active session in Redis, capped to the session lifetime.
  *
  * @remarks
- * - **Algorithm:** `SETEX session:tok:<hash> 1 <ttl>` where `ttl =
- *   min(SESSION_TOKEN_CACHE_TTL_SECONDS, floor((sessionExpiresAt - now) / 1000))`.
- *   Bounding by the remaining session lifetime ensures the cached "valid" sentinel
- *   can never outlive the session itself — a token validated just before expiry is
- *   no longer accepted once the session actually expires. When the bounded TTL is
- *   `<= 0` (session already expired or expiring within the current second) nothing
- *   is cached and the next check falls back to Postgres.
+ * - **Algorithm:** `SET session:tok:<hash> <id> EX <ttl> NX` where `ttl =
+ *   min(remaining session seconds, SESSION_TOKEN_CACHE_TTL_SECONDS - random(0..10))`.
+ *   The downward jitter keeps a herd of sessions from expiring on the same second.
+ *   Bounding by the remaining session lifetime ensures the cached entry can never
+ *   outlive the session itself. When the bounded TTL is `<= 0` nothing is cached.
  * - **Failure modes:** Redis errors are logged and swallowed; the caller's request
  *   succeeds even when caching is unavailable.
  * - **Side effects:** writes a single short-lived Redis entry (or none when the
@@ -96,7 +117,8 @@ export async function setCachedSessionTokenValid({
   sessionExpiresAt,
 }: SetCachedSessionTokenValidInput): Promise<void> {
   const remainingSeconds = Math.floor((sessionExpiresAt.getTime() - Date.now()) / 1000);
-  const ttlSeconds = Math.min(SESSION_TOKEN_CACHE_TTL_SECONDS, remainingSeconds);
+  const jitterSeconds = randomInt(0, SESSION_TOKEN_POPULATE_TTL_JITTER_SPAN_SECONDS + 1);
+  const ttlSeconds = Math.min(remainingSeconds, SESSION_TOKEN_CACHE_TTL_SECONDS - jitterSeconds);
   if (ttlSeconds <= 0) {
     return;
   }
@@ -122,28 +144,39 @@ export async function setCachedSessionTokenValid({
  *
  * @remarks
  * - **Algorithm:** re-reads the cache, then runs `load` only on a miss. Concurrent callers for the
- *   same hash await that one promise ({@link createSingleflight}). The cache key and TTL are unchanged.
+ *   same hash await that one promise ({@link createSingleflight}). Each caller re-reads the cache
+ *   after that promise settles, so a revocation tombstone written while the leader was in Postgres
+ *   denies every waiter. A leader rejection is shared, then forgotten — it is never written to Redis.
  * - **Failure modes:** a rejection (invalid session, database error) is shared with every waiter and
- *   then forgotten, so the next request loads again. Redis read failures inside the cache lookup
- *   still count as a miss and fall through to `load`.
+ *   then forgotten, so the next request loads again. A revocation tombstone throws
+ *   `errors:invalidOrExpiredSession`. Redis read failures count as a miss and fall through to `load`.
  * - **Side effects:** none of its own — `load` performs the database read and the cache populate.
  * - **Notes:** process-local. Two API replicas can still both miss. Callers keep the fast cache-hit
  *   path outside this helper so a warm token does not join an in-flight load.
  */
-export function coalesceSessionTokenMiss(options: {
+export async function coalesceSessionTokenMiss(options: {
   sessionTokenHash: string;
   load: () => Promise<{ sessionPublicId: string }>;
 }): Promise<{ sessionPublicId: string }> {
-  return sessionTokenMissLoads.run({
-    key: options.sessionTokenHash,
-    load: async () => {
-      const cachedSessionPublicId = await getCachedSessionTokenValid(options.sessionTokenHash);
-      if (cachedSessionPublicId !== null) {
-        return { sessionPublicId: cachedSessionPublicId };
-      }
-      return options.load();
-    },
-  });
+  try {
+    const loaded = await sessionTokenMissLoads.run({
+      key: options.sessionTokenHash,
+      load: async () => {
+        const cached = sessionFromCacheRead(await readSessionTokenCache(options.sessionTokenHash));
+        if (cached !== null) return cached;
+        return options.load();
+      },
+    });
+    const cachedAfter = sessionFromCacheRead(await readSessionTokenCache(options.sessionTokenHash));
+    return cachedAfter ?? loaded;
+  } catch (error) {
+    const cachedAfter = await readSessionTokenCache(options.sessionTokenHash);
+    if (cachedAfter.status === 'hit') return { sessionPublicId: cachedAfter.sessionPublicId };
+    if (cachedAfter.status === 'revoked') {
+      throw new UnauthorizedError('errors:invalidOrExpiredSession');
+    }
+    throw error;
+  }
 }
 
 /**

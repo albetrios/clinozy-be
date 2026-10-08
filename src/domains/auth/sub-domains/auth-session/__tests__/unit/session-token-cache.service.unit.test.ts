@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SESSION_TOKEN_CACHE_TTL_SECONDS } from '@/shared/constants/index.js';
 
+const randomIntMock = vi.hoisted(() => vi.fn(() => 0));
+
+vi.mock('node:crypto', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:crypto')>();
+  return { ...actual, randomInt: randomIntMock };
+});
+
 const redisSet = vi.fn().mockResolvedValue('OK');
 const redisGet = vi.fn().mockResolvedValue(null);
 const redisDel = vi.fn().mockResolvedValue(1);
@@ -18,11 +25,13 @@ const NOW = new Date('2026-05-29T12:00:00.000Z').getTime();
 describe('setCachedSessionTokenValid (bounded TTL)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    randomIntMock.mockReturnValue(0);
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -54,6 +63,25 @@ describe('setCachedSessionTokenValid (bounded TTL)', () => {
       sessionExpiresAt: new Date(NOW + 10_000),
     });
     expect(redisSet).toHaveBeenCalledWith('session:tok:hash-short', 'sess_short', 'EX', 10, 'NX');
+  });
+
+  it('subtracts up to ten seconds of jitter from the populate TTL', async () => {
+    randomIntMock.mockReturnValue(10);
+    const { setCachedSessionTokenValid } = await import(
+      '@/domains/auth/sub-domains/auth-session/session-token-cache.service.js'
+    );
+    await setCachedSessionTokenValid({
+      sessionTokenHash: 'hash-jitter',
+      sessionPublicId: 'sess_jitter',
+      sessionExpiresAt: new Date(NOW + 60 * 60 * 1000),
+    });
+    expect(redisSet).toHaveBeenCalledWith(
+      'session:tok:hash-jitter',
+      'sess_jitter',
+      'EX',
+      SESSION_TOKEN_CACHE_TTL_SECONDS - 10,
+      'NX',
+    );
   });
 
   it('does not cache when the session has already expired', async () => {
@@ -156,5 +184,59 @@ describe('coalesceSessionTokenMiss', () => {
       { sessionPublicId: 'sess_shared' },
     ]);
     expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-reads the cache after the shared load so a joiner does not keep a stale id', async () => {
+    redisGet.mockResolvedValueOnce(null).mockResolvedValue('sess_after');
+    const { coalesceSessionTokenMiss } = await import(
+      '@/domains/auth/sub-domains/auth-session/session-token-cache.service.js'
+    );
+    let release: (value: { sessionPublicId: string }) => void = () => undefined;
+    const gate = new Promise<{ sessionPublicId: string }>((resolve) => {
+      release = resolve;
+    });
+    const load = vi.fn(() => gate);
+    const first = coalesceSessionTokenMiss({ sessionTokenHash: 'hash-reread', load });
+    const second = coalesceSessionTokenMiss({ sessionTokenHash: 'hash-reread', load });
+    release({ sessionPublicId: 'sess_leader' });
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { sessionPublicId: 'sess_after' },
+      { sessionPublicId: 'sess_after' },
+    ]);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(redisSet).not.toHaveBeenCalled();
+  });
+
+  it('denies every waiter when a revocation tombstone lands during the load', async () => {
+    redisGet.mockResolvedValueOnce(null).mockResolvedValue('__revoked__');
+    const { coalesceSessionTokenMiss } = await import(
+      '@/domains/auth/sub-domains/auth-session/session-token-cache.service.js'
+    );
+    const load = vi.fn(async () => ({ sessionPublicId: 'sess_live' }));
+
+    await expect(
+      coalesceSessionTokenMiss({ sessionTokenHash: 'hash-revoked-flight', load }),
+    ).rejects.toMatchObject({ messageKey: 'errors:invalidOrExpiredSession' });
+    expect(redisSet).not.toHaveBeenCalled();
+  });
+
+  it('does not cache a leader rejection and loads again on the next miss', async () => {
+    const { coalesceSessionTokenMiss } = await import(
+      '@/domains/auth/sub-domains/auth-session/session-token-cache.service.js'
+    );
+    const load = vi
+      .fn<() => Promise<{ sessionPublicId: string }>>()
+      .mockRejectedValueOnce(new Error('database down'))
+      .mockResolvedValueOnce({ sessionPublicId: 'sess_retry' });
+
+    await expect(
+      coalesceSessionTokenMiss({ sessionTokenHash: 'hash-reject', load }),
+    ).rejects.toThrow('database down');
+    await expect(
+      coalesceSessionTokenMiss({ sessionTokenHash: 'hash-reject', load }),
+    ).resolves.toEqual({ sessionPublicId: 'sess_retry' });
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(redisSet).not.toHaveBeenCalled();
   });
 });

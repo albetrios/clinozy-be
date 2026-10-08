@@ -1,16 +1,21 @@
 import { CATALOG_MEMO_TTL_MILLISECONDS } from '@/shared/constants/ttl.constants.js';
 import type { PlanOutput } from '@/domains/billing/sub-domains/plan/plan.types.js';
+import { createSingleflight } from '@/shared/utils/infrastructure/singleflight.util.js';
+
+const PLAN_CATALOG_LOAD_KEY = 'plan-catalog';
 
 let memoizedPlanCatalog: { value: PlanOutput[]; expiresAt: number } | null = null;
-let planCatalogLoadInFlight: Promise<PlanOutput[]> | null = null;
+let planCatalogGeneration = 0;
+const planCatalogLoads = createSingleflight<PlanOutput[]>();
 
 /**
  * Serves the public plan catalog from process memory for {@link CATALOG_MEMO_TTL_MILLISECONDS}.
  *
  * @remarks
  * - **Algorithm:** return the unexpired memo; otherwise run `load` once — concurrent callers join
- *   the same in-flight promise rather than each issuing their own query — and memoize the result.
- *   A rejected load is never memoized and clears the in-flight slot, so the next caller retries.
+ *   the same in-flight promise ({@link createSingleflight}) rather than each issuing their own
+ *   query — and memoize the result. A rejected load is never memoized. The in-flight slot is
+ *   forgotten when the promise settles, so the next caller retries.
  * - **Failure modes:** none of its own; a `load` rejection propagates to every joined caller.
  * - **Side effects:** module-level state, per process.
  * - **Notes:** this is **not** the Redis read-cache pattern and deliberately does not follow it.
@@ -34,17 +39,17 @@ export async function memoizePlanCatalog(load: () => Promise<PlanOutput[]>): Pro
   if (memoizedPlanCatalog && memoizedPlanCatalog.expiresAt > now) {
     return memoizedPlanCatalog.value;
   }
-  if (planCatalogLoadInFlight) return planCatalogLoadInFlight;
-
-  planCatalogLoadInFlight = load()
-    .then((value) => {
-      memoizedPlanCatalog = { value, expiresAt: Date.now() + CATALOG_MEMO_TTL_MILLISECONDS };
+  const generation = planCatalogGeneration;
+  return planCatalogLoads.run({
+    key: PLAN_CATALOG_LOAD_KEY,
+    load: async () => {
+      const value = await load();
+      if (generation === planCatalogGeneration) {
+        memoizedPlanCatalog = { value, expiresAt: Date.now() + CATALOG_MEMO_TTL_MILLISECONDS };
+      }
       return value;
-    })
-    .finally(() => {
-      planCatalogLoadInFlight = null;
-    });
-  return planCatalogLoadInFlight;
+    },
+  });
 }
 
 /**
@@ -58,5 +63,6 @@ export async function memoizePlanCatalog(load: () => Promise<PlanOutput[]>): Pro
  */
 export function resetPlanCatalogMemoForTests(): void {
   memoizedPlanCatalog = null;
-  planCatalogLoadInFlight = null;
+  planCatalogGeneration += 1;
+  planCatalogLoads.reset();
 }
