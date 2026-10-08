@@ -24,7 +24,7 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
  * Privilege-boundary attack matrix — models `tier:owner` and `grant` in
  * route-authorization-model.json. Owner-only organization operations (transfer
  * ownership, leave) reject non-owners / block the owner, permission-gated
- * membership management rejects members lacking `membership:manage`, and
+ * membership management rejects members lacking `membership:update or membership:delete`, and
  * role-permission grants cannot be used to escalate: a member may only grant
  * permissions they themselves hold, and never reach across organizations.
  * e2e — runs in CI (Postgres + Redis required).
@@ -148,7 +148,7 @@ describe('Security: privilege-boundary matrix (tier:owner + grant)', () => {
   });
 
   describe('model: organization permission gate — membership management (BFLA)', () => {
-    it('member without membership:manage PATCH a membership → 403', async () => {
+    it('member without membership:update PATCH a membership → 403', async () => {
       const { membership, memberToken } = await setupOrgWithMember([
         TENANCY_PERMISSIONS.MEMBERSHIP_READ,
       ]);
@@ -156,18 +156,20 @@ describe('Security: privilege-boundary matrix (tier:owner + grant)', () => {
         method: 'PATCH',
         url: testApiPath(`/tenancy/organization/memberships/${membership.public_id}`),
         token: memberToken,
-        payload: { status: 'SUSPENDED' },
+        payload: { status: 'suspended' },
       });
       expect(res.statusCode).toBe(403);
     });
 
-    it('member without membership:manage DELETE a membership → 403', async () => {
+    it('member without membership:delete DELETE a membership → 403', async () => {
       const { membership, memberToken } = await setupOrgWithMember([
         TENANCY_PERMISSIONS.MEMBERSHIP_READ,
       ]);
       const res = await injectAuthenticated(app, {
         method: 'DELETE',
-        url: testApiPath(`/tenancy/organization/memberships/${membership.public_id}`),
+        url: testApiPath(
+          `/tenancy/organization/memberships/${membership.public_id}?reason=mistake`,
+        ),
         token: memberToken,
       });
       expect(res.statusCode).toBe(403);
@@ -175,7 +177,7 @@ describe('Security: privilege-boundary matrix (tier:owner + grant)', () => {
   });
 
   describe('model: grant — role-permission escalation (privilege boundary)', () => {
-    it('member without role:manage PUT role permissions → 403', async () => {
+    it('member without role:update PUT role permissions → 403', async () => {
       const { memberRole, memberToken } = await setupOrgWithMember([TENANCY_PERMISSIONS.ROLE_READ]);
       const res = await injectAuthenticated(app, {
         method: 'PUT',
@@ -186,8 +188,8 @@ describe('Security: privilege-boundary matrix (tier:owner + grant)', () => {
       expect(res.statusCode).toBe(403);
     });
 
-    it('member with role:manage cannot grant a permission they do not hold → 403 (no escalation)', async () => {
-      // Holds role:manage (passes the route guard) but NOT membership:manage.
+    it('member with role:update cannot grant a permission they do not hold → 403 (no escalation)', async () => {
+      // Holds the role write codes (passes the route guard) but none of the membership ones.
       const { organization, member, memberToken } = await setupOrgWithMember([
         ...ROLE_WRITE_PERMISSION_CODES,
       ]);
@@ -205,7 +207,7 @@ describe('Security: privilege-boundary matrix (tier:owner + grant)', () => {
       expect(res.statusCode).toBe(403);
     });
 
-    it('baseline: member with role:manage grants a permission they hold → 200', async () => {
+    it('baseline: member with role:update grants a permission they hold → 200', async () => {
       const { organization, member, memberToken } = await setupOrgWithMember([
         ...ROLE_WRITE_PERMISSION_CODES,
         TENANCY_PERMISSIONS.ROLE_READ,
@@ -240,8 +242,8 @@ describe('Security: privilege-boundary matrix (tier:owner + grant)', () => {
   });
 
   describe('model: tier:owner — the owner membership is protected (lock-out prevention)', () => {
-    it("member with membership:manage PATCH the owner's membership → 403", async () => {
-      // Even a full membership:manage grant must not let a member suspend the
+    it("member with membership:update PATCH the owner's membership → 403", async () => {
+      // Even every membership write code must not let a member suspend the
       // owner (which would strip the organization of its only owner). The scoped lookup
       // succeeds, then the owner-guard rejects: `errors:ownerMembershipCannotBeModified`.
       const { ownerMembership, memberToken } = await setupOrgWithMember([
@@ -251,12 +253,12 @@ describe('Security: privilege-boundary matrix (tier:owner + grant)', () => {
         method: 'PATCH',
         url: testApiPath(`/tenancy/organization/memberships/${ownerMembership.public_id}`),
         token: memberToken,
-        payload: { status: 'SUSPENDED' },
+        payload: { status: 'suspended' },
       });
       expect(res.statusCode).toBe(403);
     });
 
-    it("member with membership:manage DELETE the owner's membership → 403", async () => {
+    it("member with membership:delete DELETE the owner's membership → 403", async () => {
       // Removing the owner is likewise blocked (`errors:ownerCannotBeRemoved`):
       // ownership must be transferred first, never deleted out from under the organization.
       const { ownerMembership, memberToken } = await setupOrgWithMember([
@@ -264,7 +266,9 @@ describe('Security: privilege-boundary matrix (tier:owner + grant)', () => {
       ]);
       const res = await injectAuthenticated(app, {
         method: 'DELETE',
-        url: testApiPath(`/tenancy/organization/memberships/${ownerMembership.public_id}`),
+        url: testApiPath(
+          `/tenancy/organization/memberships/${ownerMembership.public_id}?reason=mistake`,
+        ),
         token: memberToken,
       });
       expect(res.statusCode).toBe(403);

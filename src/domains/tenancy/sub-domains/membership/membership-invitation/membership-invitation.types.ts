@@ -32,7 +32,7 @@ export interface MembershipInvitationOutput {
 }
 
 /**
- * Response shape for `POST /tenancy/invitations/{invitation_id}/accept`: the
+ * Response shape for `POST /tenancy/membership-invitations/{membership_invitation_id}/accept`: the
  * accepted invitation plus the public id of the organization the caller just
  * joined, so the client can `POST /auth/switch-to-organization` into it without
  * a separate lookup (the accept response is the only place that id surfaces).

@@ -77,7 +77,7 @@ The active organization is implicit (from the token), so routes are flat:
 - **Account-level (NOT organization-scoped, stay plural):**
   \`POST /api/v1/tenancy/organizations\` (create a team organization),
   \`GET /api/v1/tenancy/organizations/by-slug/{slug}\`, and the cross-organization
-  invitation actions \`POST /api/v1/tenancy/invitations/{invitation_id}/accept|decline\`.
+  invitation accept \`POST /api/v1/tenancy/membership-invitations/{membership_invitation_id}/accept\` (revoke and resend live under the membership: \`/tenancy/organization/memberships/{membership_id}/invitation\`).
 - A **personal** organization supports every feature EXCEPT people-sharing
   (memberships, roles, invitations, transfer-ownership) — those return a 4xx on a
   personal organization. Switch to (or create) a team organization to collaborate.

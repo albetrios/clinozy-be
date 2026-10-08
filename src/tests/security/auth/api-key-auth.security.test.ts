@@ -295,7 +295,7 @@ describe('Security: Organization API key authentication', () => {
       const suspended = await setMembershipStatus({
         token: context.adminToken,
         membershipPublicId: context.membershipPublicId,
-        status: 'SUSPENDED',
+        status: 'suspended',
       });
       expect(suspended.statusCode).toBe(200);
 
@@ -304,7 +304,7 @@ describe('Security: Organization API key authentication', () => {
         method: 'PATCH',
         url: testApiPath(`/tenancy/organization/memberships/${context.membershipPublicId}`),
         headers: { authorization: `ApiKey ${context.rawKey}` },
-        payload: { status: 'ACTIVE' },
+        payload: { status: 'active' },
       });
       expect(selfReactivation.statusCode).toBe(401);
 
@@ -312,7 +312,7 @@ describe('Security: Organization API key authentication', () => {
       const reactivated = await setMembershipStatus({
         token: context.adminToken,
         membershipPublicId: context.membershipPublicId,
-        status: 'ACTIVE',
+        status: 'active',
       });
       expect(reactivated.statusCode).toBe(200);
       expect((await listMembersWithKey(context.rawKey)).statusCode).toBe(200);

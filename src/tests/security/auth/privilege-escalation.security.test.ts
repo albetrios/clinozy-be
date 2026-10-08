@@ -215,7 +215,7 @@ describe('Security: Privilege escalation', () => {
       method: 'PATCH',
       url: testApiPath(`/tenancy/organization/memberships/${membershipId}`),
       token,
-      payload: { status: 'SUSPENDED' },
+      payload: { status: 'suspended' },
     });
 
     expect(upgradeRoleResponse.statusCode).toBe(403);
@@ -231,11 +231,11 @@ describe('Security: Privilege escalation', () => {
       token,
       headers: { 'x-idempotency-key': randomUUID() },
       // REQ-1: "Add member" is now invite-by-email. A valid body that passes the strict DTO so the
-      // request reaches the membership:update permission preHandler (the role/email need not exist —
+      // request reaches the membership:create permission preHandler (the role/email need not exist —
       // authorization runs before any lookup).
       payload: {
         email: 'escalation-attempt@example.test',
-        role_id: 'rol_000000000000000000000',
+        role_ids: ['rol_000000000000000000000'],
       },
     });
 

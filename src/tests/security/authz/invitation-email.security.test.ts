@@ -47,7 +47,7 @@ describe('Security: invitation email-binding matrix (model: email)', () => {
   });
 
   // Creates an organization with a pending invitation addressed to `inviteeEmail`
-  // (tied to that user's INVITED membership), plus the invitee user record.
+  // (tied to that user's invited membership), plus the invitee user record.
   async function pendingInvitationFor(inviteeEmail: string) {
     const owner = await createTestUser();
     const organization = await createTestOrganization({ ownerUserId: owner.id });
@@ -61,7 +61,7 @@ describe('Security: invitation email-binding matrix (model: email)', () => {
       userId: invitee.id,
       organizationId: organization.id,
       roleId: role.id,
-      status: 'INVITED',
+      status: 'invited',
     });
     const [invitation] = await database
       .insert(membership_invitations)
@@ -88,7 +88,8 @@ describe('Security: invitation email-binding matrix (model: email)', () => {
     const attackerToken = await generateTestToken({ userId: attacker.public_id });
     const res = await injectAuthenticated(app, {
       method: 'POST',
-      url: testApiPath(`/tenancy/invitations/${invitation.public_id}/accept`),
+      url: testApiPath(`/tenancy/membership-invitations/${invitation.public_id}/accept`),
+      headers: { 'x-idempotency-key': `email-${randomUUID()}` },
       token: attackerToken,
       payload: { token: RAW_INVITATION_TOKEN },
     });

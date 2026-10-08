@@ -304,7 +304,7 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
         headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
         payload: {
           email: `accomplice-${randomUUID()}@example.com`,
-          role_id: privilegedRole.public_id,
+          role_ids: [privilegedRole.public_id],
         },
       });
 
@@ -329,7 +329,7 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
         headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
         payload: {
           email: `peer-${randomUUID()}@example.com`,
-          role_id: peerRole.public_id,
+          role_ids: [peerRole.public_id],
         },
       });
 

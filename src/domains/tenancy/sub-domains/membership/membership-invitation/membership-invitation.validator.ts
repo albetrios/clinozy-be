@@ -16,7 +16,7 @@ export function validateAcceptMembershipInvitation(data: unknown): AcceptMembers
 }
 
 /**
- * Validates a `POST /organization/invitations/:invitation_id/resend` body
+ * Validates a `POST /organization/memberships/:membership_id/invitation/resend` body
  * against {@link resendMembershipInvitationDto}.
  */
 export function validateResendMembershipInvitation(data: unknown): ResendMembershipInvitationInput {

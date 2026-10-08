@@ -90,7 +90,7 @@ describe('Security: cross-organization mutation isolation (model: organization â
       organizationId: organization.id,
       createdByUserId: owner.id,
     });
-    // A pending invitation (tied to an INVITED membership) so the invitation
+    // A pending invitation (tied to an invited membership) so the invitation
     // DELETE / resend routes have a real organization-scoped target to attack.
     const branch = await createTestBranch({ organizationId: organization.id });
     const invitee = await createTestUser();
@@ -98,7 +98,7 @@ describe('Security: cross-organization mutation isolation (model: organization â
       userId: invitee.id,
       organizationId: organization.id,
       roleId: role.id,
-      status: 'INVITED',
+      status: 'invited',
     });
     const [invitation] = await database
       .insert(membership_invitations)
@@ -126,6 +126,7 @@ describe('Security: cross-organization mutation isolation (model: organization â
       policy,
       webhook,
       branch,
+      inviteeMembership,
       invitation: invitation!,
     };
   }
@@ -151,9 +152,9 @@ describe('Security: cross-organization mutation isolation (model: organization â
       body: { name: 'Renamed across organizations' },
     },
     {
-      label: 'branch user-accesses PUT',
+      label: 'branch members PUT',
       method: 'PUT',
-      target: (organization) => `/app/branches/${organization.branch.public_id}/user-accesses`,
+      target: (organization) => `/app/branches/${organization.branch.public_id}/members`,
       body: { membership_ids: [] },
     },
     {
@@ -192,7 +193,8 @@ describe('Security: cross-organization mutation isolation (model: organization â
     {
       label: 'role DELETE',
       method: 'DELETE',
-      target: (organization) => `/tenancy/organization/roles/${organization.role.public_id}`,
+      target: (organization) =>
+        `/tenancy/organization/roles/${organization.role.public_id}?reason=mistake`,
     },
     {
       label: 'notification policy PATCH',
@@ -212,28 +214,28 @@ describe('Security: cross-organization mutation isolation (model: organization â
       method: 'PATCH',
       target: (organization) =>
         `/tenancy/organization/memberships/${organization.membership.public_id}`,
-      // membership update requires at least one mutable field (status/role_id);
+      // membership update requires at least one mutable field (status/role_ids);
       // an empty body 400s at validation before the cross-organization 404 check, so send
       // a valid body to exercise tenant isolation rather than body validation.
-      body: { status: 'ACTIVE' },
+      body: { status: 'active' },
     },
     {
       label: 'membership DELETE',
       method: 'DELETE',
       target: (organization) =>
-        `/tenancy/organization/memberships/${organization.membership.public_id}`,
+        `/tenancy/organization/memberships/${organization.membership.public_id}?reason=mistake`,
     },
     {
       label: 'invitation DELETE',
       method: 'DELETE',
       target: (organization) =>
-        `/tenancy/organization/invitations/${organization.invitation.public_id}`,
+        `/tenancy/organization/memberships/${organization.inviteeMembership.public_id}/invitation`,
     },
     {
       label: 'invitation resend',
       method: 'POST',
       target: (organization) =>
-        `/tenancy/organization/invitations/${organization.invitation.public_id}/resend`,
+        `/tenancy/organization/memberships/${organization.inviteeMembership.public_id}/invitation/resend`,
       body: {},
     },
   ];
