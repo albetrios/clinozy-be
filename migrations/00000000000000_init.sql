@@ -1704,34 +1704,23 @@ CREATE TABLE IF NOT EXISTS "app"."patients" (
 );
 --> statement-breakpoint
 ALTER TABLE "app"."patients" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.leads — An enquiry and its conversation until the person becomes a patient (launch ROUTE #14).
+-- app.leads — one enquiry and its working state (status, source, interests, owner and hold, follow-up) for a contact; the person lives on the contact (launch ROUTE #131, routes-final §5).
 CREATE TABLE IF NOT EXISTS "app"."leads" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
 	"organization_id" bigint NOT NULL,
 	"lead_number" integer DEFAULT 0 NOT NULL,
-	"name" varchar(120) NOT NULL,
-	"phone" varchar(16) NOT NULL,
-	"email" varchar(254),
-	"status" varchar(14) DEFAULT 'new',
+	"contact_id" bigint NOT NULL,
+	"status" varchar(14) DEFAULT 'new' NOT NULL,
 	"source" varchar(9),
 	"interests" text[] DEFAULT '{}' NOT NULL,
+	"kind" varchar(8) DEFAULT 'enquiry' NOT NULL,
+	"retarget_reason" varchar(160),
 	"owner_membership_id" bigint,
+	"held_until" timestamp with time zone,
 	"follow_up_at" timestamp with time zone,
 	"branch_id" bigint,
-	"patient_id" bigint,
-	"is_contact_thread" boolean DEFAULT false NOT NULL,
-	"kind" varchar(14) DEFAULT 'enquiry' NOT NULL,
-	"retarget_reason" varchar(160),
 	"notes" text,
-	"last_touch_at" timestamp with time zone,
-	"phones" text[] DEFAULT '{}' NOT NULL,
-	"instagram_handles" text[] DEFAULT '{}' NOT NULL,
-	"default_channel" varchar(9),
-	"preferences" jsonb DEFAULT '{}'::jsonb NOT NULL,
-	"household" varchar(240),
-	"held_until" timestamp with time zone,
-	"search_text" text GENERATED ALWAYS AS ("name" || ' ' || "phone" || ' ' || coalesce("email", '')) STORED,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
@@ -1740,12 +1729,13 @@ CREATE TABLE IF NOT EXISTS "app"."leads" (
 	"delete_reason" varchar(20),
 	"delete_note" varchar(280),
 	CONSTRAINT "chk_leads_lead_number" CHECK ("app"."leads"."lead_number" > 0),
-	CONSTRAINT "chk_leads_phone" CHECK ("app"."leads"."phone" ~ '^\+91\d{10}$'),
-	CONSTRAINT "chk_leads_status" CHECK ("app"."leads"."status" IN ('new', 'contacted', 'follow_up', 'clinic_visited', 'no_response', 'not_interested', 'invalid', 'lost')),
+	CONSTRAINT "chk_leads_status" CHECK ("app"."leads"."status" IN ('new', 'contacted', 'follow_up', 'no_response', 'not_interested', 'invalid', 'lost', 'clinic_visited')),
 	CONSTRAINT "chk_leads_source" CHECK ("app"."leads"."source" IN ('instagram', 'google', 'whatsapp', 'facebook', 'walk_in', 'referral', 'retarget')),
-	CONSTRAINT "chk_leads_interests" CHECK ("app"."leads"."interests" <@ ARRAY['others', 'clinical', 'peel', 'lhr', 'hydrafacial', 'prp']::text[]),
-	CONSTRAINT "chk_leads_kind" CHECK ("app"."leads"."kind" IN ('enquiry', 'retarget', 'contact_thread')),
-	CONSTRAINT "chk_leads_default_channel" CHECK ("app"."leads"."default_channel" IN ('whatsapp', 'call', 'sms', 'instagram', 'email', 'note')),
+	CONSTRAINT "chk_leads_interests" CHECK ("app"."leads"."interests" <@ ARRAY['clinical', 'peel', 'lhr', 'hydrafacial', 'prp', 'others']::text[] AND cardinality("app"."leads"."interests") <= 6),
+	CONSTRAINT "chk_leads_kind" CHECK ("app"."leads"."kind" IN ('enquiry', 'retarget')),
+	CONSTRAINT "chk_leads_retarget_reason" CHECK ("app"."leads"."kind" = 'retarget' OR "app"."leads"."retarget_reason" IS NULL),
+	CONSTRAINT "chk_leads_held_until_owner" CHECK ("app"."leads"."held_until" IS NULL OR "app"."leads"."owner_membership_id" IS NOT NULL),
+	CONSTRAINT "chk_leads_notes" CHECK (char_length("app"."leads"."notes") <= 2000),
 	CONSTRAINT "chk_leads_updated" CHECK ("app"."leads"."updated_at" >= "app"."leads"."created_at"),
 	CONSTRAINT "chk_leads_delete_reason" CHECK ("app"."leads"."delete_reason" IN ('mistake', 'duplicate', 'not_needed', 'other')),
 	CONSTRAINT "chk_leads_delete_reason_when_deleted" CHECK (("app"."leads"."deleted_at" IS NULL) = ("app"."leads"."delete_reason" IS NULL)),
@@ -1753,14 +1743,14 @@ CREATE TABLE IF NOT EXISTS "app"."leads" (
 );
 --> statement-breakpoint
 ALTER TABLE "app"."leads" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.lead_involved_memberships — the involved_membership_ids of an lead (launch ROUTE #14).
+-- app.lead_involved_memberships — who else works a lead (up to 10); kept when they leave (K2) (launch ROUTE #131, routes-final §5).
 CREATE TABLE IF NOT EXISTS "app"."lead_involved_memberships" (
 	"lead_id" bigint NOT NULL,
-	"involved_membership_id" bigint NOT NULL,
+	"membership_id" bigint NOT NULL,
 	"organization_id" bigint NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
-	CONSTRAINT "lead_involved_memberships_pkey" PRIMARY KEY ("lead_id", "involved_membership_id")
+	CONSTRAINT "lead_involved_memberships_pkey" PRIMARY KEY ("lead_id", "membership_id")
 );
 --> statement-breakpoint
 ALTER TABLE "app"."lead_involved_memberships" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
@@ -3053,16 +3043,6 @@ ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_home_branch_id_branches_id
 ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_referred_by_patient_id_patients_id_fk" FOREIGN KEY ("referred_by_patient_id") REFERENCES "app"."patients"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_doctor_membership_id_memberships_id_fk" FOREIGN KEY ("doctor_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "app"."leads"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."leads" ADD CONSTRAINT "leads_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."leads" ADD CONSTRAINT "leads_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."leads" ADD CONSTRAINT "leads_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."leads" ADD CONSTRAINT "leads_owner_membership_id_memberships_id_fk" FOREIGN KEY ("owner_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."lead_involved_memberships" ADD CONSTRAINT "lead_involved_memberships_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "app"."leads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."lead_involved_memberships" ADD CONSTRAINT "lead_involved_memberships_involved_membership_id_memberships_id_fk" FOREIGN KEY ("involved_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."lead_involved_memberships" ADD CONSTRAINT "lead_involved_memberships_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."lead_involved_memberships" ADD CONSTRAINT "lead_involved_memberships_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."leads" ADD CONSTRAINT "leads_branch_id_branches_id_fk" FOREIGN KEY ("branch_id") REFERENCES "app"."branches"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."leads" ADD CONSTRAINT "leads_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."appointments" ADD CONSTRAINT "appointments_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."appointments" ADD CONSTRAINT "appointments_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."appointments" ADD CONSTRAINT "appointments_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -3442,40 +3422,6 @@ CREATE POLICY "patients_tenant_isolation" ON "app"."patients" AS PERMISSIVE FOR 
           ));--> statement-breakpoint
 ALTER TABLE "app"."patients" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TRIGGER trg_patients_patient_number BEFORE INSERT ON "app"."patients" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('patient_number');--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_leads_public_id" ON "app"."leads" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_organization_created" ON "app"."leads" USING btree ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_deleted_at" ON "app"."leads" USING btree ("deleted_at") WHERE "app"."leads"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_created_by_user_id" ON "app"."leads" USING btree ("created_by_user_id") WHERE "app"."leads"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_updated_by_user_id" ON "app"."leads" USING btree ("updated_by_user_id") WHERE "app"."leads"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_organization_name" ON "app"."leads" USING btree ("organization_id","name","id") WHERE "app"."leads"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_owner_membership_id" ON "app"."leads" USING btree ("owner_membership_id") WHERE "app"."leads"."owner_membership_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_organization_follow_up_at" ON "app"."leads" USING btree ("organization_id","follow_up_at","id") WHERE "app"."leads"."deleted_at" IS NULL AND "app"."leads"."follow_up_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_branch_id" ON "app"."leads" USING btree ("branch_id") WHERE "app"."leads"."branch_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_patient_id" ON "app"."leads" USING btree ("patient_id") WHERE "app"."leads"."patient_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_organization_last_touch_at" ON "app"."leads" USING btree ("organization_id","last_touch_at","id") WHERE "app"."leads"."deleted_at" IS NULL AND "app"."leads"."last_touch_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_search_text_trgm" ON "app"."leads" USING gin ("search_text" gin_trgm_ops) WHERE "app"."leads"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_leads_organization_lead_number" ON "app"."leads" USING btree ("organization_id","lead_number");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_lead_involved_memberships_involved_membership_id" ON "app"."lead_involved_memberships" USING btree ("involved_membership_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_lead_involved_memberships_organization_id" ON "app"."lead_involved_memberships" USING btree ("organization_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_lead_involved_memberships_created_by_user_id" ON "app"."lead_involved_memberships" USING btree ("created_by_user_id") WHERE "app"."lead_involved_memberships"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
-CREATE POLICY "leads_tenant_isolation" ON "app"."leads" AS PERMISSIVE FOR ALL TO public USING ("app"."leads"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."leads"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."leads" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE TRIGGER trg_leads_lead_number BEFORE INSERT ON "app"."leads" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('lead_number');--> statement-breakpoint
-CREATE POLICY "lead_involved_memberships_tenant_isolation" ON "app"."lead_involved_memberships" AS PERMISSIVE FOR ALL TO public USING ("app"."lead_involved_memberships"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )) WITH CHECK ("app"."lead_involved_memberships"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."lead_involved_memberships" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_appointments_public_id" ON "app"."appointments" USING btree ("public_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_organization_created" ON "app"."appointments" USING btree ("organization_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_deleted_at" ON "app"."appointments" USING btree ("deleted_at") WHERE "app"."appointments"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -4364,6 +4310,49 @@ CREATE POLICY "contact_activities_tenant_isolation" ON "app"."contact_activities
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
 ALTER TABLE "app"."contact_activities" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "app"."leads" ADD CONSTRAINT "leads_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."leads" ADD CONSTRAINT "leads_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."leads" ADD CONSTRAINT "leads_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."leads" ADD CONSTRAINT "leads_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "app"."contacts"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."leads" ADD CONSTRAINT "leads_owner_membership_fk" FOREIGN KEY ("organization_id","owner_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE SET NULL ("owner_membership_id") ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."leads" ADD CONSTRAINT "leads_branch_id_branches_id_fk" FOREIGN KEY ("branch_id") REFERENCES "app"."branches"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."lead_involved_memberships" ADD CONSTRAINT "lead_involved_memberships_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "app"."leads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."lead_involved_memberships" ADD CONSTRAINT "lead_involved_memberships_membership_fk" FOREIGN KEY ("organization_id","membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."lead_involved_memberships" ADD CONSTRAINT "lead_involved_memberships_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."lead_involved_memberships" ADD CONSTRAINT "lead_involved_memberships_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_leads_public_id" ON "app"."leads" USING btree ("public_id");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_leads_organization_lead_number" ON "app"."leads" USING btree ("organization_id","lead_number");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_leads_organization_contact_open_unique" ON "app"."leads" USING btree ("organization_id","contact_id") WHERE "app"."leads"."deleted_at" IS NULL AND "app"."leads"."status" IN ('new', 'contacted', 'follow_up', 'no_response');--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_leads_organization_created" ON "app"."leads" USING btree ("organization_id","created_at" DESC,"id") WHERE "app"."leads"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_leads_organization_owner_created" ON "app"."leads" USING btree ("organization_id","owner_membership_id","created_at" DESC,"id") WHERE "app"."leads"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_leads_organization_follow_up_at" ON "app"."leads" USING btree ("organization_id","follow_up_at","id") WHERE "app"."leads"."deleted_at" IS NULL AND "app"."leads"."follow_up_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_leads_organization_held_until" ON "app"."leads" USING btree ("organization_id","held_until") WHERE "app"."leads"."deleted_at" IS NULL AND "app"."leads"."held_until" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_leads_branch_id" ON "app"."leads" USING btree ("branch_id") WHERE "app"."leads"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_leads_interests_gin" ON "app"."leads" USING gin ("interests") WHERE "app"."leads"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_leads_contact_id" ON "app"."leads" USING btree ("contact_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_leads_deleted_at" ON "app"."leads" USING btree ("deleted_at") WHERE "app"."leads"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_leads_created_by_user_id" ON "app"."leads" USING btree ("created_by_user_id") WHERE "app"."leads"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_leads_updated_by_user_id" ON "app"."leads" USING btree ("updated_by_user_id") WHERE "app"."leads"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_lead_involved_memberships_organization_id_membership_id" ON "app"."lead_involved_memberships" USING btree ("organization_id","membership_id","lead_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_lead_involved_memberships_created_by_user_id" ON "app"."lead_involved_memberships" USING btree ("created_by_user_id") WHERE "app"."lead_involved_memberships"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE POLICY "leads_tenant_isolation" ON "app"."leads" AS PERMISSIVE FOR ALL TO public USING ("app"."leads"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )
+          OR (current_setting('app.global_retention_cleanup', true) = 'true' AND current_user = 'clinozy_be_maintenance')) WITH CHECK ("app"."leads"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."leads" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TRIGGER trg_leads_lead_number BEFORE INSERT ON "app"."leads" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('lead_number');--> statement-breakpoint
+CREATE POLICY "lead_involved_memberships_tenant_isolation" ON "app"."lead_involved_memberships" AS PERMISSIVE FOR ALL TO public USING ("app"."lead_involved_memberships"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )) WITH CHECK ("app"."lead_involved_memberships"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."lead_involved_memberships" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 -- ── end of app records ──
 GRANT USAGE ON SCHEMA auth, tenancy, billing, notify, audit, upload, app TO clinozy_be_app;
 --> statement-breakpoint

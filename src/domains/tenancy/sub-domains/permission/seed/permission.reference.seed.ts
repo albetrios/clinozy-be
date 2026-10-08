@@ -128,6 +128,7 @@ export const SYSTEM_PERMISSIONS = [
   { code: 'lead:update', name: 'Update Leads', category: 'leads' },
   { code: 'lead:create', name: 'Create Leads', category: 'leads' },
   { code: 'lead:read', name: 'View Leads', category: 'leads' },
+  { code: 'lead:export', name: 'Export Leads', category: 'leads' },
   { code: 'patient:delete', name: 'Delete Patients', category: 'patients' },
   { code: 'patient:update', name: 'Update Patients', category: 'patients' },
   { code: 'patient:create', name: 'Create Patients', category: 'patients' },

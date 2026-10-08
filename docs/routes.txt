@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 450
+  Total routes: 449
 ================================================================================
 
 Legend:
@@ -13,7 +13,7 @@ Legend:
 
 ================================================================================
   DOMAIN: APP (/api/v1/app)
-  Routes: 316
+  Routes: 315
 ================================================================================
 
   — Sub Domains —
@@ -114,10 +114,9 @@ Legend:
   PATCH  /api/v1/app/leads/:lead_id                               200  -    both  PERM: lead:update
   DELETE /api/v1/app/leads/:lead_id                               204  -    both  PERM: lead:delete
   POST   /api/v1/app/leads/:lead_id/claim                         200  req  both  PERM: lead:update
-  POST   /api/v1/app/leads/:lead_id/convert                       200  req  both  PERM: patient:create
   POST   /api/v1/app/leads/:lead_id/release                       200  req  both  PERM: lead:update
   POST   /api/v1/app/leads/:lead_id/restore                       200  req  both  PERM: lead:delete
-  GET    /api/v1/app/leads/exports                                200  -    both  PERM: list:export
+  GET    /api/v1/app/leads/exports                                200  -    both  PERM: lead:export
   GET    /api/v1/app/manufacturers                                200  -    both  PERM: manufacturer:read
   POST   /api/v1/app/manufacturers                                200  req  both  PERM: manufacturer:create
   GET    /api/v1/app/manufacturers/:manufacturer_id               200  -    both  PERM: manufacturer:read
@@ -541,16 +540,16 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 450
+  Total routes    : 449
   Public          : 16
   Authenticated   : 51
   Role-guarded    : 9
-  Perm-guarded    : 369
+  Perm-guarded    : 368
   Token-guarded   : 5
   Team-only (O)   : 10
 
 ================================================================================
-  IDEMPOTENCY-REQUIRED WRITES (123) — X-Idempotency-Key required
+  IDEMPOTENCY-REQUIRED WRITES (122) — X-Idempotency-Key required
 ================================================================================
 
   Routes flagged I = req reject a missing or reused key (422); every other write
@@ -586,7 +585,6 @@ Legend:
     POST /api/v1/app/invoices/:invoice_id/restore
     POST /api/v1/app/leads
     POST /api/v1/app/leads/:lead_id/claim
-    POST /api/v1/app/leads/:lead_id/convert
     POST /api/v1/app/leads/:lead_id/release
     POST /api/v1/app/leads/:lead_id/restore
     POST /api/v1/app/manufacturers
@@ -715,31 +713,31 @@ Legend:
     day_close:create              day_close:delete              day_close:read
     day_close:update              invoice:create                invoice:delete
     invoice:read                  invoice:update                lead:create
-    lead:delete                   lead:read                     lead:update
-    list:export                   manufacturer:create           manufacturer:delete
-    manufacturer:read             manufacturer:update           medical_purchase_order:create
-    medical_purchase_order:delete medical_purchase_order:read   medical_purchase_order:update
-    medical_rep:create            medical_rep:delete            medical_rep:read
-    medical_rep:update            medical_sale:create           medical_sale:delete
-    medical_sale:read             medical_sale:update           medicine:create
-    medicine:delete               medicine:read                 medicine:update
-    offering:create               offering:delete               offering:export
-    offering:lower_price:read     offering:update               patient:create
-    patient:delete                patient:read                  patient:update
-    payment:create                payment:delete                payment:read
-    payment:reverse_settled       payment:update                prescription:create
-    prescription:delete           prescription:read             prescription:update
-    private_album:read            refund:create                 review:create
-    review:delete                 review:read                   review:update
-    sale:void                     stock_item:create             stock_item:delete
-    stock_item:read               stock_item:update             stock_purchase:create
-    stock_purchase:delete         stock_purchase:read           stock_purchase:update
-    stock_vendor:create           stock_vendor:delete           stock_vendor:read
-    stock_vendor:update           supplier:create               supplier:delete
-    supplier:read                 supplier:update               task:create
-    task:delete                   task:read                     task:update
-    task_rule:update              treatment:create              treatment:delete
-    treatment:read                treatment:update
+    lead:delete                   lead:export                   lead:read
+    lead:update                   list:export                   manufacturer:create
+    manufacturer:delete           manufacturer:read             manufacturer:update
+    medical_purchase_order:create medical_purchase_order:delete medical_purchase_order:read
+    medical_purchase_order:update medical_rep:create            medical_rep:delete
+    medical_rep:read              medical_rep:update            medical_sale:create
+    medical_sale:delete           medical_sale:read             medical_sale:update
+    medicine:create               medicine:delete               medicine:read
+    medicine:update               offering:create               offering:delete
+    offering:export               offering:lower_price:read     offering:update
+    patient:create                patient:delete                patient:read
+    patient:update                payment:create                payment:delete
+    payment:read                  payment:reverse_settled       payment:update
+    prescription:create           prescription:delete           prescription:read
+    prescription:update           private_album:read            refund:create
+    review:create                 review:delete                 review:read
+    review:update                 sale:void                     stock_item:create
+    stock_item:delete             stock_item:read               stock_item:update
+    stock_purchase:create         stock_purchase:delete         stock_purchase:read
+    stock_purchase:update         stock_vendor:create           stock_vendor:delete
+    stock_vendor:read             stock_vendor:update           supplier:create
+    supplier:delete               supplier:read                 supplier:update
+    task:create                   task:delete                   task:read
+    task:update                   task_rule:update              treatment:create
+    treatment:delete              treatment:read                treatment:update
 
   Global Roles:
     super_admin                   user

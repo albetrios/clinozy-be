@@ -130,33 +130,33 @@ that drops them is built. The medical store's routes wait for its own review ([D
 | 4.7 | KEPT | GET | `/contacts/{contact_id}/preview` | `contact:read` | The hover card | routes-final §4.A.7 | `GET /api/v1/app/contacts/:contact_id/preview` · #129 · df064f3 |
 | 4.8 | NEW | GET | `/contacts/{contact_id}/members` | `contact:read` | Who handles this person | routes-final §4.B.7 | `GET /api/v1/app/contacts/:contact_id/members` · #129 · df064f3 |
 | 4.9 | NEW | PUT | `/contacts/{contact_id}/members` | `contact:update` | Replace who handles them | routes-final §4.B.7 | `PUT /api/v1/app/contacts/:contact_id/members` · #129 · df064f3 |
-| 4.10 | CHANGED | GET | `/contacts/{contact_id}/activities` | `contact_activity:read` | The contact's stream | routes-final §4.C.7 | `GET /api/v1/app/contacts/:contact_id/activities` · #130 |
-| 4.11 | NEW | POST | `/contacts/{contact_id}/activities/send-message` | `contact_activity:create` | Send a WhatsApp or Instagram message | routes-final §4.C.7 | `POST /api/v1/app/contacts/:contact_id/activities/send-message` · #130 |
-| 4.12 | NEW | POST | `/contacts/{contact_id}/activities/log-call` | `contact_activity:create` | Log a call that happened | routes-final §4.C.7 | `POST /api/v1/app/contacts/:contact_id/activities/log-call` · #130 |
-| 4.13 | NEW | POST | `/contacts/{contact_id}/activities/add-note` | `contact_activity:create` | Add an internal note | routes-final §4.C.7 | `POST /api/v1/app/contacts/:contact_id/activities/add-note` · #130 |
-| 4.14 | KEPT | GET | `/contacts/{contact_id}/activities/{contact_activity_id}` | `contact_activity:read` | Get an entry | routes-final §4.C.7 | `GET /api/v1/app/contacts/:contact_id/activities/:contact_activity_id` · #130 |
-| 4.15 | KEPT | POST | `/contacts/{contact_id}/activities/{contact_activity_id}/resend` | `contact_activity:update` | Re-queue a failed message | routes-final §4.C.7 | `POST /api/v1/app/contacts/:contact_id/activities/:contact_activity_id/resend` · #130 |
-| 4.16 | CHANGED | POST | `/contact-activities/message-batches` | `contact_activity:create` | One message to many contacts | routes-final §4.C.7 | `POST /api/v1/app/contact-activities/message-batches` · #130 |
-| 4.17 | KEPT | GET | `/contact-message-templates` | any member | List templates | routes-final §4.D.7 | `GET /api/v1/app/contact-message-templates` · #130 |
-| 4.18 | KEPT | POST | `/contact-message-templates` | `contact_activity:create` | Add a template | routes-final §4.D.7 | `POST /api/v1/app/contact-message-templates` · #130 |
-| 4.19 | KEPT | GET | `/contact-message-templates/{contact_message_template_id}` | any member | Get a template | routes-final §4.D.7 | `GET /api/v1/app/contact-message-templates/:contact_message_template_id` · #130 |
-| 4.20 | KEPT | PATCH | `/contact-message-templates/{contact_message_template_id}` | `contact_activity:update` | Change a template | routes-final §4.D.7 | `PATCH /api/v1/app/contact-message-templates/:contact_message_template_id` · #130 |
-| 4.21 | KEPT | DELETE | `/contact-message-templates/{contact_message_template_id}` | `contact_activity:delete` | Delete a template | routes-final §4.D.7 | `DELETE /api/v1/app/contact-message-templates/:contact_message_template_id` · #130 |
-| 4.22 | KEPT | POST | `/contact-message-templates/{contact_message_template_id}/restore` | `contact_activity:delete` | Undo a delete | routes-final §4.D.7 | `POST /api/v1/app/contact-message-templates/:contact_message_template_id/restore` · #130 |
+| 4.10 | CHANGED | GET | `/contacts/{contact_id}/activities` | `contact_activity:read` | The contact's stream | routes-final §4.C.7 | `GET /api/v1/app/contacts/:contact_id/activities` · #130 · 8901ac9 |
+| 4.11 | NEW | POST | `/contacts/{contact_id}/activities/send-message` | `contact_activity:create` | Send a WhatsApp or Instagram message | routes-final §4.C.7 | `POST /api/v1/app/contacts/:contact_id/activities/send-message` · #130 · 8901ac9 |
+| 4.12 | NEW | POST | `/contacts/{contact_id}/activities/log-call` | `contact_activity:create` | Log a call that happened | routes-final §4.C.7 | `POST /api/v1/app/contacts/:contact_id/activities/log-call` · #130 · 8901ac9 |
+| 4.13 | NEW | POST | `/contacts/{contact_id}/activities/add-note` | `contact_activity:create` | Add an internal note | routes-final §4.C.7 | `POST /api/v1/app/contacts/:contact_id/activities/add-note` · #130 · 8901ac9 |
+| 4.14 | KEPT | GET | `/contacts/{contact_id}/activities/{contact_activity_id}` | `contact_activity:read` | Get an entry | routes-final §4.C.7 | `GET /api/v1/app/contacts/:contact_id/activities/:contact_activity_id` · #130 · 8901ac9 |
+| 4.15 | KEPT | POST | `/contacts/{contact_id}/activities/{contact_activity_id}/resend` | `contact_activity:update` | Re-queue a failed message | routes-final §4.C.7 | `POST /api/v1/app/contacts/:contact_id/activities/:contact_activity_id/resend` · #130 · 8901ac9 |
+| 4.16 | CHANGED | POST | `/contact-activities/message-batches` | `contact_activity:create` | One message to many contacts | routes-final §4.C.7 | `POST /api/v1/app/contact-activities/message-batches` · #130 · 8901ac9 |
+| 4.17 | KEPT | GET | `/contact-message-templates` | any member | List templates | routes-final §4.D.7 | `GET /api/v1/app/contact-message-templates` · #130 · 8901ac9 |
+| 4.18 | KEPT | POST | `/contact-message-templates` | `contact_activity:create` | Add a template | routes-final §4.D.7 | `POST /api/v1/app/contact-message-templates` · #130 · 8901ac9 |
+| 4.19 | KEPT | GET | `/contact-message-templates/{contact_message_template_id}` | any member | Get a template | routes-final §4.D.7 | `GET /api/v1/app/contact-message-templates/:contact_message_template_id` · #130 · 8901ac9 |
+| 4.20 | KEPT | PATCH | `/contact-message-templates/{contact_message_template_id}` | `contact_activity:update` | Change a template | routes-final §4.D.7 | `PATCH /api/v1/app/contact-message-templates/:contact_message_template_id` · #130 · 8901ac9 |
+| 4.21 | KEPT | DELETE | `/contact-message-templates/{contact_message_template_id}` | `contact_activity:delete` | Delete a template | routes-final §4.D.7 | `DELETE /api/v1/app/contact-message-templates/:contact_message_template_id` · #130 · 8901ac9 |
+| 4.22 | KEPT | POST | `/contact-message-templates/{contact_message_template_id}/restore` | `contact_activity:delete` | Undo a delete | routes-final §4.D.7 | `POST /api/v1/app/contact-message-templates/:contact_message_template_id/restore` · #130 · 8901ac9 |
 
 ## 5. Leads
 
 | # | Change | Method | Path | Access | Operation | Source | Built |
-| --- | --- | --- | --- | --- | --- | --- |
-| 5.1 | KEPT | GET | `/leads` | `lead:read` | List leads (Mine · Unreplied · All are filters) | routes-final §5.7 |
-| 5.2 | KEPT | GET | `/leads/exports` | `lead:export` | Download the list as CSV | routes-final §5.7 |
-| 5.3 | KEPT | POST | `/leads` | `lead:create` | Add a lead (for a contact, or with a new one) | routes-final §5.7 |
-| 5.4 | KEPT | GET | `/leads/{lead_id}` | `lead:read` | Get a lead | routes-final §5.7 |
-| 5.5 | KEPT | PATCH | `/leads/{lead_id}` | `lead:update` | Change a lead | routes-final §5.7 |
-| 5.6 | KEPT | DELETE | `/leads/{lead_id}` | `lead:delete` | Remove a lead | routes-final §5.7 |
-| 5.7 | KEPT | POST | `/leads/{lead_id}/restore` | `lead:delete` | Undo a removal | routes-final §5.7 |
-| 5.8 | KEPT | POST | `/leads/{lead_id}/claim` | `lead:update` | Take the lead (and hold it) | routes-final §5.7 |
-| 5.9 | KEPT | POST | `/leads/{lead_id}/release` | `lead:update` | Give it back to the team | routes-final §5.7 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 5.1 | KEPT | GET | `/leads` | `lead:read` | List leads (Mine · Unreplied · All are filters) | routes-final §5.7 | `GET /api/v1/app/leads` · #131 |
+| 5.2 | KEPT | GET | `/leads/exports` | `lead:export` | Download the list as CSV | routes-final §5.7 | `GET /api/v1/app/leads/exports` · #131 |
+| 5.3 | KEPT | POST | `/leads` | `lead:create` | Add a lead (for a contact, or with a new one) | routes-final §5.7 | `POST /api/v1/app/leads` · #131 |
+| 5.4 | KEPT | GET | `/leads/{lead_id}` | `lead:read` | Get a lead | routes-final §5.7 | `GET /api/v1/app/leads/:lead_id` · #131 |
+| 5.5 | KEPT | PATCH | `/leads/{lead_id}` | `lead:update` | Change a lead | routes-final §5.7 | `PATCH /api/v1/app/leads/:lead_id` · #131 |
+| 5.6 | KEPT | DELETE | `/leads/{lead_id}` | `lead:delete` | Remove a lead | routes-final §5.7 | `DELETE /api/v1/app/leads/:lead_id` · #131 |
+| 5.7 | KEPT | POST | `/leads/{lead_id}/restore` | `lead:delete` | Undo a removal | routes-final §5.7 | `POST /api/v1/app/leads/:lead_id/restore` · #131 |
+| 5.8 | KEPT | POST | `/leads/{lead_id}/claim` | `lead:update` | Take the lead (and hold it) | routes-final §5.7 | `POST /api/v1/app/leads/:lead_id/claim` · #131 |
+| 5.9 | KEPT | POST | `/leads/{lead_id}/release` | `lead:update` | Give it back to the team | routes-final §5.7 | `POST /api/v1/app/leads/:lead_id/release` · #131 |
 
 ## 6. Appointments
 

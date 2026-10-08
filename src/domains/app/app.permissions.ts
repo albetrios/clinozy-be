@@ -37,6 +37,8 @@ export const APP_PERMISSIONS = {
   LEAD_CREATE: 'lead:create',
   LEAD_UPDATE: 'lead:update',
   LEAD_DELETE: 'lead:delete',
+  /** Download the leads CSV (launch #131, L4). */
+  LEAD_EXPORT: 'lead:export',
   APPOINTMENT_READ: 'appointment:read',
   APPOINTMENT_CREATE: 'appointment:create',
   APPOINTMENT_UPDATE: 'appointment:update',

@@ -592,6 +592,10 @@ export class BaseRecordService<Output> {
         throw new NotFoundError(this.descriptor.label);
       }
       const userId = await this.userId(actingUserPublicId);
+      await this.descriptor.prepareRestore?.(
+        deleted,
+        this.writeContext(scope, organizationId, userId, visibility),
+      );
       let restored: BaseRecordRow | null;
       try {
         restored = await repository.restore(deleted.id, userId);

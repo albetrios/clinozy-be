@@ -180,10 +180,15 @@ function createPlaceOfferingContactServices(organizationService: OrganizationSer
 export function createAppRecordServices(
   organizationService: OrganizationService,
 ): AppRecordServices {
+  const placeOfferingContactServices = createPlaceOfferingContactServices(organizationService);
   return {
-    ...createPlaceOfferingContactServices(organizationService),
+    ...placeOfferingContactServices,
     patientsService: new PatientsService(organizationService, new PatientsRepository()),
-    leadsService: new LeadsService(organizationService, new LeadsRepository()),
+    leadsService: new LeadsService(
+      organizationService,
+      new LeadsRepository(),
+      placeOfferingContactServices.contactsService,
+    ),
     appointmentsService: new AppointmentsService(organizationService, new AppointmentsRepository()),
     visitsService: new VisitsService(organizationService, new VisitsRepository()),
     diagnosesService: new DiagnosesService(organizationService, new DiagnosesRepository()),

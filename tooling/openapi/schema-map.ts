@@ -46,7 +46,6 @@ import {
   UpdatePatientDto as appUpdatePatientDto,
 } from '@/domains/app/sub-domains/patients/patients.dto.js';
 import {
-  convertLeadDto as appConvertLeadDto,
   CreateLeadDto as appCreateLeadDto,
   UpdateLeadDto as appUpdateLeadDto,
 } from '@/domains/app/sub-domains/leads/leads.dto.js';
@@ -358,7 +357,6 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   // ── App: Branches ──
   'POST /api/v1/app/branches': CreateBranchDto,
   'POST /api/v1/app/appointments/{appointment_id}/copy': appCopyAppointmentDto,
-  'POST /api/v1/app/leads/{lead_id}/convert': appConvertLeadDto,
   'POST /api/v1/app/contacts/{contact_id}/activities/send-message': SendContactMessageDto,
   'POST /api/v1/app/contacts/{contact_id}/activities/log-call': LogContactCallDto,
   'POST /api/v1/app/contacts/{contact_id}/activities/add-note': AddContactNoteDto,

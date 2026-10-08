@@ -13,8 +13,8 @@ export interface ContactPhoneOutput {
  *
  * @remarks
  * - **Notes:** `phones` is on single-contact responses only (routes 2–6); the list and the preview
- *   carry `primary_phone`. The patient, open-lead and visit fields are read-only and null until the
- *   rows that build them (#131 leads, #132 appointments, #133 patients — D61).
+ *   carry `primary_phone`. The patient, open-lead and visit fields are read-only: the open lead's
+ *   from #131; the patient and visit fields null until #132 appointments, #133 patients (D61).
  */
 export interface ContactOutput {
   id: string;
@@ -70,8 +70,8 @@ export interface ContactPreviewAppointment {
 }
 
 /**
- * The hover card (route 7): the Contact (without `phones`) plus the open lead, the patient file and
- * the next and last appointment — each null until its row is built (D61).
+ * The hover card (route 7): the Contact (without `phones`) plus the open lead (#131), the patient
+ * file and the next and last appointment — those null until their rows are built (D61).
  */
 export interface ContactPreviewOutput extends ContactOutput {
   open_lead: { id: string; status: string; owner_membership_id: string | null } | null;

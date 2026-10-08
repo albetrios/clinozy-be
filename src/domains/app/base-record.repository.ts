@@ -208,6 +208,43 @@ export interface BaseRecordLinkTable {
   targetTable: PgTable;
 }
 
+/**
+ * The two keys of a sort on a value that can be empty, keeping the rows without one — last, in
+ * either order (L7): first whether the value is there, then the value (`empty` stands in for a
+ * missing one, so neither key is ever null).
+ *
+ * @remarks
+ * - **Algorithm:** the presence flag runs with the list's order — `(v IS NULL)::int` when it is
+ *   ascending, `(v IS NOT NULL)::int` when descending — so the empty rows always come after.
+ */
+export function nullsLastSortKeys(options: {
+  /** The value, for the organization and the query (a column or a subselect). */
+  value: (organizationId: number, query: BaseRecordListQuery) => SQL;
+  /** Its SQL type (the cursor casts back to it). */
+  sqlType: string;
+  /** What a missing value sorts as, inside the empty rows (any value of the type). */
+  empty: SQL;
+  /** The sort's order when the query names none. */
+  defaultOrder: 'asc' | 'desc';
+}): readonly BaseRecordSortKey[] {
+  return [
+    {
+      value: (organizationId, query) => {
+        const value = options.value(organizationId, query);
+        return (query.order ?? options.defaultOrder) === 'desc'
+          ? sql`(${value} IS NOT NULL)::int`
+          : sql`(${value} IS NULL)::int`;
+      },
+      sqlType: 'integer',
+    },
+    {
+      value: (organizationId, query) =>
+        sql`coalesce(${options.value(organizationId, query)}, ${options.empty})`,
+      sqlType: options.sqlType,
+    },
+  ];
+}
+
 /** A named column of `table` (throws on a typo — the generator names them). */
 export function columnOf(table: PgTable, name: string): AnyPgColumn {
   const column = (getTableColumns(table) as Record<string, AnyPgColumn>)[name];

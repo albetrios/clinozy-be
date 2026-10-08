@@ -1,13 +1,33 @@
-/** Allowed values of `leads.status` — null only on a contact thread. */
+/** A lead's statuses (L8): four open, four closed — `clinic_visited` set by check-in only, final. */
+export const LEAD_STATUS = {
+  NEW: 'new',
+  CONTACTED: 'contacted',
+  FOLLOW_UP: 'follow_up',
+  NO_RESPONSE: 'no_response',
+  NOT_INTERESTED: 'not_interested',
+  INVALID: 'invalid',
+  LOST: 'lost',
+  CLINIC_VISITED: 'clinic_visited',
+} as const;
+
+/** Allowed values of `leads.status`. */
 export const LEAD_STATUS_VALUES = [
-  'new',
-  'contacted',
-  'follow_up',
-  'clinic_visited',
-  'no_response',
-  'not_interested',
-  'invalid',
-  'lost',
+  LEAD_STATUS.NEW,
+  LEAD_STATUS.CONTACTED,
+  LEAD_STATUS.FOLLOW_UP,
+  LEAD_STATUS.NO_RESPONSE,
+  LEAD_STATUS.NOT_INTERESTED,
+  LEAD_STATUS.INVALID,
+  LEAD_STATUS.LOST,
+  LEAD_STATUS.CLINIC_VISITED,
+] as const;
+
+/** The open statuses — one open lead per contact (L6); claim and release work on these only (L9). */
+export const LEAD_OPEN_STATUS_VALUES = [
+  LEAD_STATUS.NEW,
+  LEAD_STATUS.CONTACTED,
+  LEAD_STATUS.FOLLOW_UP,
+  LEAD_STATUS.NO_RESPONSE,
 ] as const;
 
 /** Allowed values of `leads.source`. */
@@ -21,25 +41,46 @@ export const LEAD_SOURCE_VALUES = [
   'retarget',
 ] as const;
 
-/** Allowed values of `leads.interests`. */
+/** Allowed values of `leads.interests` (up to all six). */
 export const LEAD_INTERESTS_VALUES = [
-  'others',
   'clinical',
   'peel',
   'lhr',
   'hydrafacial',
   'prp',
+  'others',
 ] as const;
 
-/** Allowed values of `leads.kind`. */
-export const LEAD_KIND_VALUES = ['enquiry', 'retarget', 'contact_thread'] as const;
+/** Allowed values of `leads.kind` — server-set (L5). */
+export const LEAD_KIND_VALUES = ['enquiry', 'retarget'] as const;
 
-/** Allowed values of `leads.default_channel`. */
-export const LEAD_DEFAULT_CHANNEL_VALUES = [
-  'whatsapp',
-  'call',
-  'sms',
-  'instagram',
-  'email',
-  'note',
+/** The list's `ownership` filter (L7): not held (open to claim), held, held until a time today. */
+export const LEAD_OWNERSHIP = {
+  OPEN: 'open',
+  HELD: 'held',
+  RELEASING_TODAY: 'releasing_today',
+} as const;
+
+/** Allowed values of the list's `ownership` filter. */
+export const LEAD_OWNERSHIP_VALUES = [
+  LEAD_OWNERSHIP.OPEN,
+  LEAD_OWNERSHIP.HELD,
+  LEAD_OWNERSHIP.RELEASING_TODAY,
 ] as const;
+
+/** Most team members involved in one lead. */
+export const LEAD_INVOLVED_MEMBERSHIPS_MAX = 10;
+/** The longest lead notes. */
+export const LEAD_NOTES_MAX = 2000;
+
+/** The design's label of each interest (`schema-routes.md` › lead_interest) — a message's `<interest>` (M9). */
+export const LEAD_INTEREST_LABELS: Readonly<
+  Record<(typeof LEAD_INTERESTS_VALUES)[number], string>
+> = {
+  clinical: 'Clinical',
+  peel: 'Peel',
+  lhr: 'LHR',
+  hydrafacial: 'Hydrafacial',
+  prp: 'PRP',
+  others: 'Others',
+};

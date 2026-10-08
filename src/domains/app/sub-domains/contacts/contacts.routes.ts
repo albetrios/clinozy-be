@@ -93,7 +93,7 @@ export function contactsRoutes(service: ContactsService): FastifyPluginAsync {
         schema: {
           summary: 'Delete contact',
           description:
-            "Soft-deletes a contact with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Its numbers leave with it, free for another household. Restorable until the organization's purge window ends (D38). Requires contact:delete.",
+            "Soft-deletes a contact with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Its numbers leave with it, free for another household. A contact a live lead points at cannot be removed — a 409 `contact_in_use` (CT7). Restorable until the organization's purge window ends (D38). Requires contact:delete.",
           tags: ['Contact'],
           params: contactsIdParamsDto,
           querystring: recordDeleteQuerySchema,
@@ -126,7 +126,7 @@ export function contactsRoutes(service: ContactsService): FastifyPluginAsync {
         schema: {
           summary: 'Preview contact',
           description:
-            'The hover card: the contact (with `primary_phone`, not `phones`) plus `open_lead`, `patient`, `next_appointment` and `last_appointment` — each null until leads, patient files and appointments point at contacts (D61). Requires contact:read.',
+            'The hover card: the contact (with `primary_phone`, not `phones`) plus `open_lead` (`id`, `status`, `owner_membership_id`, or null), `patient`, `next_appointment` and `last_appointment` — the last three null until patient files and appointments point at contacts (D61). Requires contact:read.',
           tags: ['Contact'],
           params: contactsIdParamsDto,
         },

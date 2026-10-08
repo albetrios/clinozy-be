@@ -15,9 +15,9 @@ const CONTACT_NUMBER_QUERY = /^(?:c-?|#)\s*0*(\d{1,9})$/i;
 /** A typed number: digits with the separators people type (`+91 98765-43210`). */
 const PHONE_QUERY = /^[\d\s+().-]+$/;
 /** The fewest letters a name search takes — the trigram index needs three (CT9). */
-const NAME_QUERY_MIN_LENGTH = 3;
+export const NAME_QUERY_MIN_LENGTH = 3;
 /** The fewest digits a number search takes (CT9). */
-const PHONE_QUERY_MIN_DIGITS = 4;
+export const PHONE_QUERY_MIN_DIGITS = 4;
 /** The digits of a full Indian number after its `91` country code or `0` trunk prefix. */
 const LOCAL_NUMBER_LENGTH = 10;
 
@@ -27,12 +27,27 @@ type ContactSearch =
   | { kind: 'text'; q: string }
   | { kind: 'none' };
 
-/** The 400 for a `q` too short to search (CT9). */
-function searchTooShortError(): ValidationError {
+/** The 400 for a `q` too short to search (CT9) — the contact search and the lead search (L7). */
+export function searchTooShortError(): ValidationError {
   return fieldValidationError({
     field: 'q',
     messageKey: 'errors:validation.contactSearchTooShort',
   });
+}
+
+/**
+ * The digits of a typed number (CT9) — `+91 98765-43210` → `9876543210`: a typed country code
+ * (`+91`, even on part of a number) or a full number's `91` / `0` dropped; undefined when `q` is not
+ * a typed number. Shared by the contact search and the lead search (L7).
+ */
+export function phoneQueryDigits(q: string): string | undefined {
+  if (!(PHONE_QUERY.test(q) && /\d/.test(q))) return undefined;
+  const digits = q.replace(/\D/g, '');
+  if (q.startsWith('+91')) return digits.slice(2);
+  if (digits.length > LOCAL_NUMBER_LENGTH && (digits.startsWith('91') || digits.startsWith('0'))) {
+    return digits.slice(digits.length - LOCAL_NUMBER_LENGTH);
+  }
+  return digits;
 }
 
 /**
@@ -45,16 +60,8 @@ function readContactSearch(q: string | undefined): ContactSearch {
   const contactNumber = q.match(CONTACT_NUMBER_QUERY)?.[1];
   if (contactNumber !== undefined)
     return { kind: 'contact_number', contactNumber: Number(contactNumber) };
-  if (PHONE_QUERY.test(q) && /\d/.test(q)) {
-    let digits = q.replace(/\D/g, '');
-    // A typed country code (`+91 98250…`, even part of a number) or a full number's `91` / `0`
-    if (q.startsWith('+91')) digits = digits.slice(2);
-    else if (
-      digits.length > LOCAL_NUMBER_LENGTH &&
-      (digits.startsWith('91') || digits.startsWith('0'))
-    ) {
-      digits = digits.slice(digits.length - LOCAL_NUMBER_LENGTH);
-    }
+  const digits = phoneQueryDigits(q);
+  if (digits !== undefined) {
     if (digits.length < PHONE_QUERY_MIN_DIGITS) throw searchTooShortError();
     return { kind: 'text', q: digits };
   }

@@ -5,7 +5,7 @@
  * gate them (D12). A member's own preferences and saved views carry none either: every member reaches
  * their own with `organization:read` (launch U2). Offerings have no View code — every member reads
  * them (launch O2); their row adds Lowest price (`offering:lower_price:read`) and Export
- * (`offering:export`).
+ * (`offering:export`). The Leads row adds Export (`lead:export`, launch #131 L4).
  *
  * @remarks
  * - **Notes:** generated with the app tables; the catalog seed carries the same categories.

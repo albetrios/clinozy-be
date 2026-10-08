@@ -129,6 +129,20 @@ export function recordIdListSchemaOf(maximum: number): z.ZodString {
  */
 export const recordIdListSchema = recordIdListSchemaOf(20);
 
+/**
+ * A query list of allowed values, comma-separated and each once (`?status=new,contacted`) — split
+ * it with `value.split(',')`.
+ */
+export function valueListSchema(values: readonly string[]): z.ZodType<string> {
+  const body = values.join('|');
+  return z
+    .string()
+    .regex(new RegExp(`^(${body})(,(${body}))*$`), `Comma-separated: ${values.join(', ')}`)
+    .refine((value) => new Set(value.split(',')).size === value.split(',').length, {
+      message: 'Each value once',
+    });
+}
+
 /** The ids of a {@link recordIdListSchema} value (none when absent). */
 export function splitRecordIds(value: string | undefined): string[] {
   return value === undefined ? [] : value.split(',');

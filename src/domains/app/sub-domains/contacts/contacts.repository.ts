@@ -8,6 +8,8 @@ import {
 } from '@/domains/app/base-record.repository.js';
 import { buildContainsLikePattern, escapeLikeTerm } from '@/shared/utils/http/list-query.util.js';
 import { contacts, contact_phones } from './contacts.schema.js';
+import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
+import { LEAD_OPEN_STATUS_VALUES } from '@/domains/app/sub-domains/leads/leads.constants.js';
 
 /** The `phones` of a contact (`app.contact_phones`) — the primary first, then by number (CT2). */
 export const CONTACT_PHONES_CHILD: BaseRecordChildTable = {
@@ -56,7 +58,8 @@ function matchRank(_organizationId: number, query: BaseRecordListQuery): SQL {
  *   (first, then last name — the name index), `match` (the best match for `q` first, then the name),
  *   `created_at` and `last_activity_at` (newest first; a contact with no activity last). The
  *   derived filters read the numbers (`phone`), the reply state, the tags (`&&`, the GIN index) —
- *   and `is_patient` / `has_open_lead`, which no contact can be until #133 / #131 (D61).
+ *   `has_open_lead` (a live lead in an open status, L6) and `is_patient`, which no contact can be
+ *   until #133 (D61).
  * - **Failure modes:** a unique or exclusion violation propagates (the service maps it).
  */
 export class ContactsRepository extends BaseRecordRepository {
@@ -103,9 +106,15 @@ export class ContactsRepository extends BaseRecordRepository {
             (value as string[]).map((tag) => sql`${tag}`),
             sql`, `,
           )}]::text[]`,
-        // No contact is a patient (#133) or has an open lead (#131) yet (D61).
+        // No contact is a patient until patient files point at contacts (#133, D61).
         is_patient: (value) => (value === true ? sql`false` : sql`true`),
-        has_open_lead: (value) => (value === true ? sql`false` : sql`true`),
+        has_open_lead: (value) => {
+          const open = sql`exists (select 1 from ${leads} where ${leads.contact_id} = ${contacts.id} and ${leads.deleted_at} is null and ${leads.status} in (${sql.join(
+            LEAD_OPEN_STATUS_VALUES.map((status) => sql`${status}`),
+            sql`, `,
+          )}))`;
+          return value === true ? open : sql`not ${open}`;
+        },
       },
       defaultSort: 'name',
       defaultOrder: 'asc',

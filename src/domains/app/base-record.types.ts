@@ -186,6 +186,14 @@ export interface BaseRecordRules {
     existing: BaseRecordRow,
     context: BaseRecordWriteContext,
   ) => Promise<void> | void;
+  /**
+   * Checks a restore before it is written — `deleted` is the soft-deleted row (a contact that
+   * already has another open lead — L6).
+   */
+  prepareRestore?: (
+    deleted: BaseRecordRow,
+    context: BaseRecordWriteContext,
+  ) => Promise<void> | void;
   /** Fills or checks an update's values before the write; `existing` is the row as it was. */
   prepareUpdate?: (
     values: Record<string, unknown>,

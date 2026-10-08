@@ -224,6 +224,10 @@ src/
     │   │   │   ├── invoices.types.ts
     │   │   │   └── invoices.validator.ts
     │   │   ├── leads/
+    │   │   │   ├── seed/
+    │   │   │   │   ├── index.ts
+    │   │   │   │   ├── leads.bulk.seed.ts
+    │   │   │   │   └── leads.seed.ts
     │   │   │   ├── leads.constants.ts
     │   │   │   ├── leads.controller.ts
     │   │   │   ├── leads.dto.ts

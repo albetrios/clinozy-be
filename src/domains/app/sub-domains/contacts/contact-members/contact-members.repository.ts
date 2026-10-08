@@ -34,6 +34,30 @@ export class ContactMembersRepository {
   }
 
   /**
+   * Adds members to the ones handling a contact — a member already on it stays once (CT11: a
+   * lead's owner and involved members handle its contact).
+   */
+  async addForContact(options: {
+    organizationId: number;
+    contactId: number;
+    membershipIds: readonly number[];
+    userId: number | null;
+  }): Promise<void> {
+    if (options.membershipIds.length === 0) return;
+    await getRequestDatabase()
+      .insert(contact_members)
+      .values(
+        [...new Set(options.membershipIds)].map((membershipId) => ({
+          contact_id: options.contactId,
+          membership_id: membershipId,
+          organization_id: options.organizationId,
+          created_by_user_id: options.userId,
+        })),
+      )
+      .onConflictDoNothing();
+  }
+
+  /**
    * Removes an ended membership from every contact it handled (launch K4 — "who handles the person
    * now" is cleared when they leave); a restore starts them with none.
    */

@@ -750,6 +750,32 @@ erDiagram
   }
 ```
 
+- **Built (ROUTE #131, sub-domain 5 — routes-final §5, rebuilt on the contact):** `app.leads` — `lead_number` (the record counter, `trg_leads_lead_number`), `contact_id` → contacts `ON DELETE RESTRICT` (L1; the person columns, `search_text`, `is_contact_thread`, `patient_id`, `last_touch_at` gone), `status` `varchar(14)` default `new` (the 8 statuses), `source` `varchar(9)`, `interests text[]` (`<@` the 6, ≤ 6), `kind` `enquiry` · `retarget` (L5) with `retarget_reason` only on a re-target lead, `owner_membership_id` (K8 composite key, `ON DELETE SET NULL ("owner_membership_id")`), `held_until` (needs an owner — `chk_leads_held_until_owner`), `follow_up_at`, `branch_id`, `notes` ≤ 2000; the one-open-lead-per-contact partial unique index `idx_leads_organization_contact_open_unique` (L6) and the list indexes of 5.3; RLS with the purge arm. `app.lead_involved_memberships` — `membership_id` (L2, K8 composite key `ON DELETE RESTRICT`, K2), key `(lead_id, membership_id)`, index `(organization_id, membership_id, lead_id)`. `app.lead_reads` dropped (L10, with #130). Leads read their contact's summary and activity, and `patient_id` through `patients.lead_id` until patient files point at contacts (#133).
+```mermaid
+erDiagram
+  leads["app.leads · REBUILT"] {
+    id id PK
+    number lead_number
+    id contact_id FK "→ contact (RESTRICT)"
+    choice status
+    choice source
+    json interests
+    choice kind
+    text retarget_reason
+    id owner_membership_id FK "→ membership"
+    datetime held_until
+    datetime follow_up_at
+    id branch_id FK "→ branch"
+    text notes
+  }
+  lead_involved_memberships["app.lead_involved_memberships · CHANGED"] {
+    id lead_id FK "→ lead"
+    id membership_id FK "→ membership"
+  }
+  contacts ||--o{ leads : "has (one open at a time)"
+  leads ||--o{ lead_involved_memberships : "is worked by"
+```
+
 ### lead_message · NEW
 
 - **Holds:** One chat line in a lead / contact thread. Read by lead drawer chat, appointment form chat, Offering suggestions › Contact activity; written by lead drawer composer and system events.

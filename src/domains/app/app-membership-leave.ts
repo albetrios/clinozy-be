@@ -1,6 +1,7 @@
 import type { MembershipLeavePort } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
 import { BranchesRepository } from './sub-domains/branches/branches.repository.js';
 import { ContactMembersRepository } from './sub-domains/contacts/contact-members/contact-members.repository.js';
+import { LeadsRepository } from './sub-domains/leads/leads.repository.js';
 import { MembershipPreferencesRepository } from './sub-domains/memberships/membership-preferences/membership-preferences.repository.js';
 import { MembershipSavedViewsRepository } from './sub-domains/memberships/membership-saved-views/membership-saved-views.repository.js';
 
@@ -40,13 +41,15 @@ export class AppMembershipLeaveStep implements MembershipLeavePort {
  * branch access rows stay, hidden while the membership is ended and back with a restore (D57).
  * Sub-domain 2 — their preferences and saved views are theirs alone and are deleted (U1); a restore
  * starts them from the defaults again. Sub-domain 4 — they stop handling every contact (their
- * `app.contact_members` rows are deleted, CT11).
+ * `app.contact_members` rows are deleted, CT11). Sub-domain 5 — every lead they own returns to the
+ * pool (no owner, no hold) and keeps them as involved (L9).
  */
 export function createAppMembershipLeaveStep(): AppMembershipLeaveStep {
   const branchesRepository = new BranchesRepository();
   const membershipPreferencesRepository = new MembershipPreferencesRepository();
   const membershipSavedViewsRepository = new MembershipSavedViewsRepository();
   const contactMembersRepository = new ContactMembersRepository();
+  const leadsRepository = new LeadsRepository();
   return new AppMembershipLeaveStep([
     ({ organizationId, membershipId }) =>
       branchesRepository.clearDefaultStaffForMembership({
@@ -65,6 +68,11 @@ export function createAppMembershipLeaveStep(): AppMembershipLeaveStep {
       }),
     ({ organizationId, membershipId }) =>
       contactMembersRepository.deleteForMembership({
+        organization_id: organizationId,
+        membership_id: membershipId,
+      }),
+    ({ organizationId, membershipId }) =>
+      leadsRepository.releaseForMembership({
         organization_id: organizationId,
         membership_id: membershipId,
       }),

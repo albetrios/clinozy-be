@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { listSearchSortSchema } from '@/shared/utils/http/list-query.util.js';
 import { trimmedStringMinMax } from '@/shared/utils/validation/validation.util.js';
-import { recordIdSchema } from '@/shared/utils/validation/record-fields.util.js';
+import { recordIdSchema, valueListSchema } from '@/shared/utils/validation/record-fields.util.js';
 import {
   CONTACT_ACTIVITY_ATTACHMENTS_MAX,
   CONTACT_ACTIVITY_BATCH_CONTACTS_MAX,
@@ -37,15 +37,6 @@ function atMostOneLink(value: Record<string, unknown>, context: z.RefinementCtx)
   for (const column of named.slice(1)) {
     context.addIssue({ code: 'custom', path: [column], message: 'Link one record at most' });
   }
-}
-
-/** A comma-separated list of allowed values (`?type=whatsapp,note`), each once. */
-function valueListSchema(values: readonly string[]) {
-  const body = values.join('|');
-  return z
-    .string()
-    .regex(new RegExp(`^(${body})(,(${body}))*$`), `Comma-separated: ${values.join(', ')}`)
-    .refine((value) => distinct(value.split(',')), { message: 'Each value once' });
 }
 
 /** Path params of the stream routes (`/contacts/{contact_id}/activities`). */

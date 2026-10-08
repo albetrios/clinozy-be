@@ -430,7 +430,6 @@
   "POST /api/v1/app/patient-packages/:patient_package_id/restore": "both",
   "POST /api/v1/app/leads/:lead_id/claim": "both",
   "POST /api/v1/app/leads/:lead_id/release": "both",
-  "POST /api/v1/app/leads/:lead_id/convert": "both",
   "POST /api/v1/app/appointments/:appointment_id/copy": "both",
   "GET /api/v1/app/appointments/slots": "both",
   "GET /api/v1/app/appointments/daily-counts": "both",

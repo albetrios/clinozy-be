@@ -13,7 +13,8 @@ function isAwaitingReply(row: BaseRecordRow): boolean {
 /**
  * Shapes an `app.contacts` row as the API returns it (routes-final 4.A.6): public ids, ISO times,
  * `phones` only on a single-contact response (the lookup has them), the reply state from the
- * activity times. The patient, open-lead and visit fields are null until #131–#133 (D61).
+ * activity times. `open_lead_id` / `open_lead_status` are the rules' `decorate` (one read per page,
+ * #131); the patient and visit fields are null until #132–#133 (D61).
  */
 export function serializeContact(
   row: BaseRecordRow,

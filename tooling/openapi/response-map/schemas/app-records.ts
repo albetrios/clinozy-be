@@ -612,28 +612,30 @@ export const patientsRecordExample = {
   updated_at: '2026-10-07T10:30:00.000Z',
 };
 
-/** `LeadOutput`. */
+/** `LeadOutput` — one enquiry for a contact (launch #131, routes-final 5.6). */
 export const leadsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'lead_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    lead_number: {
-      type: 'integer',
-    },
-    name: {
-      type: 'string',
-    },
-    phone: {
-      type: 'string',
-      example: '+919825044120',
-    },
-    email: {
-      type: 'string',
-      format: 'email',
+    id: { type: 'string', example: 'lead_k7x9m2pqr4w8n1v3a1b2c' },
+    lead_number: { type: 'integer', description: 'Shown as "#2371"' },
+    contact_id: { type: 'string', example: 'con_k7x9m2pqr4w8n1v3a1b2c' },
+    contact: {
+      type: 'object',
       nullable: true,
+      description: "The contact's summary, for lists (L1)",
+      properties: {
+        id: { type: 'string' },
+        contact_number: { type: 'integer' },
+        first_name: { type: 'string' },
+        last_name: { type: 'string', nullable: true },
+        primary_phone: { type: 'string', example: '+919825044120' },
+        default_channel: { type: 'string', enum: ['whatsapp', 'call', 'instagram'] },
+      },
+    },
+    patient_id: {
+      type: 'string',
+      nullable: true,
+      description: 'The patient file check-in opened (L8) — read-only',
     },
     status: {
       type: 'string',
@@ -641,13 +643,14 @@ export const leadsRecordSchema = {
         'new',
         'contacted',
         'follow_up',
-        'clinic_visited',
         'no_response',
         'not_interested',
         'invalid',
         'lost',
+        'clinic_visited',
       ],
-      nullable: true,
+      description:
+        'Open: new, contacted, follow_up, no_response; `clinic_visited` is set by check-in only (L8)',
     },
     source: {
       type: 'string',
@@ -656,124 +659,61 @@ export const leadsRecordSchema = {
     },
     interests: {
       type: 'array',
-      items: {
-        type: 'string',
-        enum: ['others', 'clinical', 'peel', 'lhr', 'hydrafacial', 'prp'],
-      },
+      maxItems: 6,
+      items: { type: 'string', enum: ['clinical', 'peel', 'lhr', 'hydrafacial', 'prp', 'others'] },
     },
-    owner_membership_id: {
-      type: 'string',
-      nullable: true,
-    },
-    involved_membership_ids: {
-      type: 'array',
-      items: {
-        type: 'string',
-      },
-    },
-    follow_up_at: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
-    },
-    branch_id: {
-      type: 'string',
-      nullable: true,
-    },
-    patient_id: {
-      type: 'string',
-      nullable: true,
-    },
-    is_contact_thread: {
-      type: 'boolean',
-    },
-    kind: {
-      type: 'string',
-      enum: ['enquiry', 'retarget', 'contact_thread'],
-    },
-    retarget_reason: {
-      type: 'string',
-      nullable: true,
-    },
-    notes: {
-      type: 'string',
-      nullable: true,
-    },
-    last_touch_at: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
-    },
-    phones: {
-      type: 'array',
-      items: {
-        type: 'string',
-      },
-    },
-    instagram_handles: {
-      type: 'array',
-      items: {
-        type: 'string',
-      },
-    },
-    default_channel: {
-      type: 'string',
-      enum: ['whatsapp', 'call', 'sms', 'instagram', 'email', 'note'],
-      nullable: true,
-    },
-    preferences: {},
-    household: {
-      type: 'string',
-      nullable: true,
-    },
+    kind: { type: 'string', enum: ['enquiry', 'retarget'], description: 'Server-set (L5)' },
+    retarget_reason: { type: 'string', nullable: true, description: 'Server-set (L5)' },
+    owner_membership_id: { type: 'string', nullable: true, description: 'Assigned' },
+    involved_membership_ids: { type: 'array', maxItems: 10, items: { type: 'string' } },
     held_until: {
       type: 'string',
       format: 'date-time',
       nullable: true,
+      description: "The owner's hold (`lead_hold_days`, D40)",
     },
-    is_unread: {
-      type: 'boolean',
-      description:
-        'The conversation has lines the caller has not read (per viewer, computed on read)',
-    },
-    created_at: {
+    follow_up_at: { type: 'string', format: 'date-time', nullable: true },
+    branch_id: { type: 'string', nullable: true, description: 'None = every branch' },
+    notes: { type: 'string', maxLength: 2000, nullable: true },
+    last_activity_at: {
       type: 'string',
       format: 'date-time',
+      nullable: true,
+      description: "The contact's",
     },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    is_awaiting_reply: { type: 'boolean', description: "The contact's (M3)" },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
 /** Example `LeadOutput`. */
 export const leadsRecordExample = {
   id: 'lead_k7x9m2pqr4w8n1v3a1b2c',
-  lead_number: 12,
-  name: 'Sample name',
-  phone: '+919800000001',
-  email: 'sample@example.com',
+  lead_number: 2371,
+  contact_id: 'con_k7x9m2pqr4w8n1v3a1b2c',
+  contact: {
+    id: 'con_k7x9m2pqr4w8n1v3a1b2c',
+    contact_number: 12345,
+    first_name: 'Riya',
+    last_name: 'Shah',
+    primary_phone: '+919825044120',
+    default_channel: 'whatsapp',
+  },
+  patient_id: null,
   status: 'new',
   source: 'instagram',
-  interests: ['others'],
-  owner_membership_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  involved_membership_ids: ['ref_k7x9m2pqr4w8n1v3a1b2c'],
-  follow_up_at: '2026-10-08T10:00:00+05:30',
-  branch_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  patient_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  is_contact_thread: true,
+  interests: ['lhr'],
   kind: 'enquiry',
-  retarget_reason: 'Sample retarget reason',
-  notes: 'Sample notes',
-  last_touch_at: '2026-10-08T10:00:00+05:30',
-  phones: ['sample'],
-  instagram_handles: ['sample'],
-  default_channel: 'whatsapp',
-  preferences: {},
-  household: 'Sample household',
-  held_until: '2026-10-08T10:00:00+05:30',
-  is_unread: false,
+  retarget_reason: null,
+  owner_membership_id: 'mem_a1s2d3f4g5h6j7k8l9z0x',
+  involved_membership_ids: [],
+  held_until: '2026-10-10T10:30:00.000Z',
+  follow_up_at: null,
+  branch_id: null,
+  notes: null,
+  last_activity_at: '2026-10-07T10:30:00.000Z',
+  is_awaiting_reply: true,
   created_at: '2026-10-07T10:30:00.000Z',
   updated_at: '2026-10-07T10:30:00.000Z',
 };

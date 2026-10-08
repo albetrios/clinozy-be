@@ -13,6 +13,7 @@ import {
   type ContactsRepository,
 } from './contacts.repository.js';
 import type { ContactPreviewOutput } from './contacts.types.js';
+import { LeadsRepository } from '@/domains/app/sub-domains/leads/leads.repository.js';
 
 /** One number of a write's `phones` (the DTO's defaults applied). */
 interface ContactPhoneInput {
@@ -87,10 +88,14 @@ function primaryPhoneOf(phones: readonly ContactPhoneInput[]): string {
  * - **Failure modes:** `ConflictError` (409 `contact_phone_exists`) for a number on another
  *   household; `ValidationError` (400 `household_contact_id`) for moving the first contact of a
  *   household that holds others (they would point at a contact of another household).
- * - **Notes:** the in-use guard (`contact_in_use`, CT7) and the patient, lead and visit fields come
- *   with the rows that point at a contact — #131, #132, #133 (D61).
+ *   A contact a live lead points at cannot be removed (`contact_in_use`, CT7); `open_lead_id` /
+ *   `open_lead_status` and the preview's `open_lead` are its open lead (#131).
+ * - **Notes:** the in-use guard's patient files and appointments, and the patient and visit fields,
+ *   come with the rows that point at a contact — #132, #133 (D61).
  */
 export function createContactsRules(repository: ContactsRepository): BaseRecordRules {
+  const leadsRepository = new LeadsRepository();
+
   /** The household a named contact belongs to — its first contact. */
   const householdOf = async (contactId: number): Promise<number> => {
     const named = await repository.findById(contactId);
@@ -166,6 +171,21 @@ export function createContactsRules(repository: ContactsRepository): BaseRecordR
         await replaceChildRows({ child: CONTACT_PHONES_CHILD, owner: existing, rows: [] });
       }
     },
+    prepareRemove: async (existing) => {
+      if (await leadsRepository.hasLiveLeadForContact(existing.id)) {
+        throw new ConflictError('errors:contactInUse').withReason('contact_in_use');
+      }
+    },
+    decorate: async (outputs) => {
+      const openLeads = await leadsRepository.findOpenLeadsOfContacts(
+        outputs.map((output) => String(output.id)),
+      );
+      for (const output of outputs) {
+        const lead = openLeads.get(String(output.id));
+        output.open_lead_id = lead?.id ?? null;
+        output.open_lead_status = lead?.status ?? null;
+      }
+    },
     afterWrite: async (row, change, context) => {
       if (change.kind === 'delete') {
         await repository.setPhonesDeletedAt(row.id, row.deleted_at);
@@ -182,12 +202,15 @@ export function createContactsRules(repository: ContactsRepository): BaseRecordR
     },
     views: {
       // The hover card: the contact (no `phones`) plus its open lead, patient file and the next and
-      // last appointment — each null until #131, #133 and #132 build them (D61).
+      // last appointment — the patient file and the appointments null until #133 and #132 (D61).
       preview: async ({ existing, present }) => {
         const [contact] = (await present([existing])) as ContactPreviewOutput[];
+        const openLead = (await leadsRepository.findOpenLeadsOfContacts([existing.public_id])).get(
+          existing.public_id,
+        );
         return {
           ...contact!,
-          open_lead: null,
+          open_lead: openLead ?? null,
           patient: null,
           next_appointment: null,
           last_appointment: null,
