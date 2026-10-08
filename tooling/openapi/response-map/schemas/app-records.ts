@@ -1029,94 +1029,122 @@ export const patientReportsRecordExample = {
   updated_at: '2026-10-08T10:30:00.000Z',
 };
 
-/** `InvoiceOutput`. */
+/** `InvoiceOutput` — a bill with its lines and the server's amounts (launch #136, routes-final 8.A.6). */
 export const invoicesRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'invc_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    invoice_sequence: {
-      type: 'integer',
-    },
-    invoice_number: {
-      type: 'string',
-    },
-    financial_year: {
-      type: 'string',
-    },
-    type: {
-      type: 'string',
-      enum: ['clinic', 'medical', 'consultation'],
-    },
-    branch_id: {
-      type: 'string',
-    },
-    patient_id: {
-      type: 'string',
+    id: { type: 'string', example: 'invc_k7x9m2pqr4w8n1v3a1b2c' },
+    invoice_sequence: { type: 'integer', description: 'The running number (#1042)' },
+    invoice_number: { type: 'string', description: 'The statutory number (2026-27/0412)' },
+    financial_year: { type: 'string', example: '2026-27' },
+    type: { type: 'string', enum: ['clinic', 'consultation', 'medical'] },
+    branch_id: { type: 'string' },
+    contact: {
+      type: 'object',
       nullable: true,
-    },
-    team_membership_ids: {
-      type: 'array',
-      items: {
-        type: 'string',
+      description: 'The billed contact (B3)',
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        primary_phone: { type: 'string' },
       },
     },
-    items: {},
-    overall_discount: {
-      type: 'number',
+    patient_id: { type: 'string', nullable: true, description: "The contact's patient file" },
+    member_ids: { type: 'array', items: { type: 'string' }, description: 'Who is credited' },
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          line_number: { type: 'integer' },
+          offering_id: { type: 'string', nullable: true },
+          medicine_id: { type: 'string', nullable: true },
+          name: { type: 'string' },
+          pack_size: { type: 'string', nullable: true },
+          quantity: { type: 'integer' },
+          rate: { type: 'number' },
+          discount_percent: { type: 'number' },
+          discount_amount: { type: 'number' },
+          gst_percent: { type: 'integer', enum: [0, 5, 12, 18, 28] },
+          is_gst_inclusive: { type: 'boolean' },
+          taxable_amount: { type: 'number' },
+          gst_amount: { type: 'number' },
+          amount: { type: 'number' },
+          patient_offering_suggestion_id: { type: 'string', nullable: true },
+          patient_offering_id: { type: 'string', nullable: true },
+          patient_treatment_ids: { type: 'array', items: { type: 'string' } },
+          batch_number: { type: 'string', nullable: true },
+        },
+      },
     },
-    invoice_date: {
-      type: 'string',
-      format: 'date',
-    },
-    remark: {
-      type: 'string',
-      nullable: true,
-    },
-    prescription_id: {
-      type: 'string',
-      nullable: true,
-    },
-    medical_contact_id: {
-      type: 'string',
-      nullable: true,
-    },
-    medical_sale_id: {
-      type: 'string',
-      nullable: true,
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    overall_discount: { type: 'number' },
+    subtotal: { type: 'number' },
+    discount_total: { type: 'number' },
+    taxable_total: { type: 'number' },
+    gst_total: { type: 'number' },
+    total: { type: 'number' },
+    paid_amount: { type: 'number' },
+    due_amount: { type: 'number' },
+    payment_status: { type: 'string', enum: ['paid', 'partial', 'unpaid'] },
+    is_settled: { type: 'boolean', description: 'A payment on a closed day (B12)' },
+    invoice_date: { type: 'string', format: 'date' },
+    remark: { type: 'string', nullable: true },
+    patient_prescription_id: { type: 'string', nullable: true },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
 /** Example `InvoiceOutput`. */
 export const invoicesRecordExample = {
   id: 'invc_k7x9m2pqr4w8n1v3a1b2c',
-  invoice_sequence: 12,
-  invoice_number: 'Sample invoice number',
-  financial_year: 'Sample fi',
+  invoice_sequence: 1042,
+  invoice_number: '2026-27/0412',
+  financial_year: '2026-27',
   type: 'clinic',
-  branch_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  patient_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  team_membership_ids: ['ref_k7x9m2pqr4w8n1v3a1b2c'],
-  items: [],
-  overall_discount: 100,
+  branch_id: 'brn_k7x9m2pqr4w8n1v3a1b2c',
+  contact: { id: 'con_k7x9m2pqr4w8n1v3a1b2c', name: 'Asha Mehta', primary_phone: '+919876543210' },
+  patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
+  member_ids: ['mem_k7x9m2pqr4w8n1v3a1b2c'],
+  items: [
+    {
+      id: 'iitm_k7x9m2pqr4w8n1v3a1b2c',
+      line_number: 1,
+      offering_id: 'off_k7x9m2pqr4w8n1v3a1b2c',
+      medicine_id: null,
+      name: 'Hydrafacial',
+      pack_size: null,
+      quantity: 1,
+      rate: 1000,
+      discount_percent: 0,
+      discount_amount: 0,
+      gst_percent: 18,
+      is_gst_inclusive: false,
+      taxable_amount: 1000,
+      gst_amount: 180,
+      amount: 1180,
+      patient_offering_suggestion_id: null,
+      patient_offering_id: 'poff_k7x9m2pqr4w8n1v3a1b2c',
+      patient_treatment_ids: [],
+      batch_number: null,
+    },
+  ],
+  overall_discount: 0,
+  subtotal: 1000,
+  discount_total: 0,
+  taxable_total: 1000,
+  gst_total: 180,
+  total: 1180,
+  paid_amount: 500,
+  due_amount: 680,
+  payment_status: 'partial',
+  is_settled: false,
   invoice_date: '2026-10-08',
-  remark: 'Sample remark',
-  prescription_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  medical_contact_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  medical_sale_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  remark: null,
+  patient_prescription_id: null,
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
 };
 
 /** `PatientOfferingOutput` — what a patient bought (launch #135, routes-final 7.L.6). */
@@ -1222,101 +1250,81 @@ export const patientOfferingSuggestionsRecordExample = {
   updated_at: '2026-10-08T10:30:00.000Z',
 };
 
-/** `PaymentOutput`. */
+/** `PaymentEditOutput` — what one change to a payment changed (launch #136, routes-final 8.C.6). */
+export const paymentEditsRecordSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', example: 'pedit_k7x9m2pqr4w8n1v3a1b2c' },
+    changes: {
+      type: 'object',
+      description: '`{ field: { from, to } }` — the changed fields only',
+      additionalProperties: { type: 'object', properties: { from: {}, to: {} } },
+    },
+    author_membership_id: { type: 'string', nullable: true },
+    created_at: { type: 'string', format: 'date-time' },
+  },
+};
+
+/** Example `PaymentEditOutput`. */
+export const paymentEditsRecordExample = {
+  id: 'pedit_k7x9m2pqr4w8n1v3a1b2c',
+  changes: {
+    splits: { from: [{ mode: 'upi', amount: 600 }], to: [{ mode: 'upi', amount: 700 }] },
+  },
+  author_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
+  created_at: '2026-10-08T11:00:00.000Z',
+};
+
+/** `PaymentOutput` — one entry of money in or out (launch #136, routes-final 8.C.6). */
 export const paymentsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'pay_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    payment_number: {
-      type: 'integer',
-    },
-    direction: {
-      type: 'string',
-      enum: ['received', 'paid'],
-    },
+    id: { type: 'string', example: 'pay_k7x9m2pqr4w8n1v3a1b2c' },
+    payment_number: { type: 'integer', description: 'PAY-12' },
+    direction: { type: 'string', enum: ['received', 'paid'] },
     kind: {
       type: 'string',
-      enum: ['receipt', 'refund', 'expense', 'supplier_bill', 'money_back', 'reversal'],
+      enum: ['receipt', 'money_back', 'expense', 'supplier_bill', 'refund', 'reversal'],
     },
-    branch_id: {
-      type: 'string',
-    },
-    amount: {
-      type: 'number',
-    },
-    splits: {},
-    patient_id: {
-      type: 'string',
-      nullable: true,
-    },
-    invoice_id: {
-      type: 'string',
-      nullable: true,
-    },
-    payee_name: {
-      type: 'string',
-      nullable: true,
-    },
-    expense_category: {
-      type: 'string',
-      enum: [
-        'medicines',
-        'consumables',
-        'salary',
-        'rent',
-        'marketing',
-        'utilities',
-        'maintenance',
-        'misc',
-      ],
-      nullable: true,
-    },
-    bill_ref: {},
-    credit_note_id: {
-      type: 'string',
-      nullable: true,
-    },
-    pending_credit_id: {
-      type: 'string',
-      nullable: true,
-    },
-    note: {
-      type: 'string',
-      nullable: true,
-    },
-    paid_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    day_close_id: {
-      type: 'string',
-      nullable: true,
-    },
-    bill_allocations: {},
-    reference: {
-      type: 'string',
-      nullable: true,
-    },
-    attachment_keys: {
+    branch_id: { type: 'string' },
+    amount: { type: 'number' },
+    splits: {
       type: 'array',
       items: {
-        type: 'string',
+        type: 'object',
+        properties: {
+          mode: { type: 'string', enum: ['cash', 'upi', 'card', 'credit'] },
+          amount: { type: 'number' },
+        },
       },
     },
-    is_checked_at_close: {
-      type: 'boolean',
+    paid_at: { type: 'string', format: 'date-time' },
+    contact: {
+      type: 'object',
+      nullable: true,
+      description: 'The billed contact (B3)',
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        primary_phone: { type: 'string' },
+      },
     },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    patient_id: { type: 'string', nullable: true, description: "The contact's patient file" },
+    invoice_id: { type: 'string', nullable: true },
+    invoice_credit_note_id: { type: 'string', nullable: true },
+    pending_credit_id: { type: 'string', nullable: true },
+    reverses_payment_id: { type: 'string', nullable: true },
+    reversed_by_payment_id: { type: 'string', nullable: true },
+    payee_name: { type: 'string', nullable: true },
+    expense_category: { type: 'string', nullable: true },
+    reference: { type: 'string', nullable: true },
+    note: { type: 'string', nullable: true },
+    attachment_keys: { type: 'array', items: { type: 'string' } },
+    is_settled: { type: 'boolean', description: 'Its day is closed (B6)' },
+    edit_count: { type: 'integer' },
+    last_edit: { ...paymentEditsRecordSchema, nullable: true },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
@@ -1326,239 +1334,208 @@ export const paymentsRecordExample = {
   payment_number: 12,
   direction: 'received',
   kind: 'receipt',
-  branch_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  amount: 100,
-  splits: [],
-  patient_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  invoice_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  payee_name: 'Sample payee name',
-  expense_category: 'medicines',
-  bill_ref: {},
-  credit_note_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  pending_credit_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  note: 'Sample note',
-  paid_at: '2026-10-08T10:00:00+05:30',
-  day_close_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  bill_allocations: [],
-  reference: 'Sample reference',
-  attachment_keys: ['sample'],
-  is_checked_at_close: true,
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  branch_id: 'brn_k7x9m2pqr4w8n1v3a1b2c',
+  amount: 700,
+  splits: [{ mode: 'upi', amount: 700 }],
+  paid_at: '2026-10-08T10:30:00.000Z',
+  contact: { id: 'con_k7x9m2pqr4w8n1v3a1b2c', name: 'Asha Mehta', primary_phone: '+919876543210' },
+  patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
+  invoice_id: 'invc_k7x9m2pqr4w8n1v3a1b2c',
+  invoice_credit_note_id: null,
+  pending_credit_id: null,
+  reverses_payment_id: null,
+  reversed_by_payment_id: null,
+  payee_name: null,
+  expense_category: null,
+  reference: 'UPI 4412',
+  note: null,
+  attachment_keys: [],
+  is_settled: false,
+  edit_count: 1,
+  last_edit: paymentEditsRecordExample,
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T11:00:00.000Z',
 };
 
-/** `CreditNoteOutput`. */
-export const creditNotesRecordSchema = {
+/** `InvoiceCreditNoteOutput` — an invoice's refund (launch #136, routes-final 8.B.6). */
+export const invoiceCreditNotesRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'cn_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    credit_note_number: {
-      type: 'integer',
-    },
-    invoice_id: {
-      type: 'string',
-    },
-    amount: {
-      type: 'number',
-    },
-    reason: {
-      type: 'string',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    id: { type: 'string', example: 'cn_k7x9m2pqr4w8n1v3a1b2c' },
+    credit_note_number: { type: 'integer', description: 'CN-001' },
+    invoice_id: { type: 'string' },
+    amount: { type: 'number' },
+    reason: { type: 'string' },
+    payment_id: { type: 'string', nullable: true, description: 'Its refund payment' },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
-/** Example `CreditNoteOutput`. */
-export const creditNotesRecordExample = {
+/** Example `InvoiceCreditNoteOutput`. */
+export const invoiceCreditNotesRecordExample = {
   id: 'cn_k7x9m2pqr4w8n1v3a1b2c',
-  credit_note_number: 12,
-  invoice_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  amount: 100,
-  reason: 'Sample reason',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  credit_note_number: 1,
+  invoice_id: 'invc_k7x9m2pqr4w8n1v3a1b2c',
+  amount: 200,
+  reason: 'Unhappy with the result',
+  payment_id: 'pay_k7x9m2pqr4w8n1v3a1b2c',
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
 };
 
-/** `PendingCreditOutput`. */
+/** `PendingCreditOutput` — money owed to or by someone (launch #136, routes-final 8.D.6). */
 export const pendingCreditsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'pcr_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    pending_credit_number: {
-      type: 'integer',
-    },
-    direction: {
-      type: 'string',
-      enum: ['give', 'take'],
-    },
-    party_kind: {
-      type: 'string',
-      enum: ['patient', 'supplier', 'staff', 'other'],
-    },
-    party_name: {
-      type: 'string',
-    },
-    patient_id: {
-      type: 'string',
+    id: { type: 'string', example: 'pcr_k7x9m2pqr4w8n1v3a1b2c' },
+    pending_credit_number: { type: 'integer', description: 'CR-2' },
+    direction: { type: 'string', enum: ['give', 'take'] },
+    contact: {
+      type: 'object',
       nullable: true,
+      description: 'The billed contact (B3)',
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        primary_phone: { type: 'string' },
+      },
     },
-    amount: {
-      type: 'number',
-    },
-    reason: {
-      type: 'string',
-    },
-    source_payment_id: {
-      type: 'string',
-      nullable: true,
-    },
-    status: {
-      type: 'string',
-      enum: ['open', 'given_back', 'got_back', 'used'],
-    },
-    settled_payment_id: {
-      type: 'string',
-      nullable: true,
-    },
-    invoice_id: {
-      type: 'string',
-      nullable: true,
-    },
-    settle_by: {
-      type: 'string',
-      format: 'date',
-      nullable: true,
-    },
-    settled_amount: {
-      type: 'number',
-    },
-    note: {
-      type: 'string',
-      nullable: true,
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    patient_id: { type: 'string', nullable: true, description: "The contact's patient file" },
+    party_name: { type: 'string', nullable: true },
+    amount: { type: 'number' },
+    settled_amount: { type: 'number' },
+    left_amount: { type: 'number' },
+    status: { type: 'string', enum: ['open', 'given_back', 'got_back', 'used'] },
+    reason: { type: 'string' },
+    note: { type: 'string', nullable: true },
+    invoice_id: { type: 'string', nullable: true },
+    source_payment_id: { type: 'string', nullable: true },
+    settle_by: { type: 'string', format: 'date', nullable: true },
+    payment_ids: { type: 'array', items: { type: 'string' }, description: 'Its settlements' },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
 /** Example `PendingCreditOutput`. */
 export const pendingCreditsRecordExample = {
   id: 'pcr_k7x9m2pqr4w8n1v3a1b2c',
-  pending_credit_number: 12,
+  pending_credit_number: 2,
   direction: 'give',
-  party_kind: 'patient',
-  party_name: 'Sample party name',
-  patient_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  amount: 100,
-  reason: 'Sample reason',
-  source_payment_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
+  contact: { id: 'con_k7x9m2pqr4w8n1v3a1b2c', name: 'Asha Mehta', primary_phone: '+919876543210' },
+  patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
+  party_name: null,
+  amount: 500,
+  settled_amount: 200,
+  left_amount: 300,
   status: 'open',
-  settled_payment_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  invoice_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  settle_by: '2026-10-08',
-  settled_amount: 100,
-  note: 'Sample note',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  reason: 'Advance to return',
+  note: null,
+  invoice_id: null,
+  source_payment_id: null,
+  settle_by: '2026-10-15',
+  payment_ids: ['pay_k7x9m2pqr4w8n1v3a1b2c'],
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T11:00:00.000Z',
 };
 
-/** `DayCloseOutput`. */
+/** `DayCloseOutput` — a branch's day of cash (launch #136, routes-final 8.E.6). */
 export const dayClosesRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'dcl_k7x9m2pqr4w8n1v3a1b2c',
+    id: { type: 'string', example: 'dcl_k7x9m2pqr4w8n1v3a1b2c' },
+    branch_id: { type: 'string' },
+    close_date: { type: 'string', format: 'date' },
+    status: { type: 'string', enum: ['open', 'closed'] },
+    opening_cash: { type: 'number' },
+    opening_source: { type: 'string', enum: ['carried', 'recounted'] },
+    opening_accepted_at: { type: 'string', format: 'date-time' },
+    opening_accepted_by_membership_id: { type: 'string', nullable: true },
+    cash_in: { type: 'number' },
+    cash_out: { type: 'number' },
+    expected_cash: { type: 'number', nullable: true, description: 'Live while open' },
+    counted_cash: { type: 'number', nullable: true },
+    difference: { type: 'number', nullable: true },
+    difference_reason: { type: 'string', nullable: true },
+    close_kind: { type: 'string', enum: ['manual', 'auto'], nullable: true },
+    closed_at: { type: 'string', format: 'date-time', nullable: true },
+    closed_by_membership_id: { type: 'string', nullable: true },
+    net_by_mode: {
+      type: 'object',
+      properties: {
+        cash: { type: 'number' },
+        upi: { type: 'number' },
+        card: { type: 'number' },
+        credit: { type: 'number' },
+      },
     },
-    branch_id: {
-      type: 'string',
+    by_member: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          membership_id: { type: 'string', nullable: true },
+          count: { type: 'integer' },
+          amount: { type: 'number' },
+        },
+      },
     },
-    close_date: {
-      type: 'string',
-      format: 'date',
+    entry_count: { type: 'integer' },
+    events: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          kind: {
+            type: 'string',
+            enum: ['opened', 'recounted', 'closed', 'auto_closed', 'reopened'],
+          },
+          text: { type: 'string', nullable: true },
+          membership_id: { type: 'string', nullable: true },
+          occurred_at: { type: 'string', format: 'date-time' },
+        },
+      },
     },
-    status: {
-      type: 'string',
-      enum: ['open', 'closed'],
-    },
-    opening_cash: {
-      type: 'number',
-    },
-    opening_source: {
-      type: 'string',
-      enum: ['carried', 'default_float'],
-    },
-    opening_accepted_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    counted_cash: {
-      type: 'number',
-      nullable: true,
-    },
-    closed_at: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
-    },
-    difference_reason: {
-      type: 'string',
-      nullable: true,
-    },
-    reopened_at: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
-    },
-    is_auto_closed: {
-      type: 'boolean',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
 /** Example `DayCloseOutput`. */
 export const dayClosesRecordExample = {
   id: 'dcl_k7x9m2pqr4w8n1v3a1b2c',
-  branch_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
+  branch_id: 'brn_k7x9m2pqr4w8n1v3a1b2c',
   close_date: '2026-10-08',
-  status: 'open',
-  opening_cash: 100,
+  status: 'closed',
+  opening_cash: 2000,
   opening_source: 'carried',
-  opening_accepted_at: '2026-10-08T10:00:00+05:30',
-  counted_cash: 100,
-  closed_at: '2026-10-08T10:00:00+05:30',
-  difference_reason: 'Sample difference reason',
-  reopened_at: '2026-10-08T10:00:00+05:30',
-  is_auto_closed: true,
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  opening_accepted_at: '2026-10-08T03:30:00.000Z',
+  opening_accepted_by_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
+  cash_in: 4500,
+  cash_out: 500,
+  expected_cash: 6000,
+  counted_cash: 5950,
+  difference: -50,
+  difference_reason: 'Short by 50',
+  close_kind: 'manual',
+  closed_at: '2026-10-08T14:30:00.000Z',
+  closed_by_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
+  net_by_mode: { cash: 4000, upi: 3200, card: 0, credit: 0 },
+  by_member: [{ membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c', count: 6, amount: 7200 }],
+  entry_count: 6,
+  events: [
+    {
+      id: 'dce_k7x9m2pqr4w8n1v3a1b2c',
+      kind: 'opened',
+      text: 'Opening cash ₹2,000.00',
+      membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
+      occurred_at: '2026-10-08T03:30:00.000Z',
+    },
+  ],
+  created_at: '2026-10-08T03:30:00.000Z',
+  updated_at: '2026-10-08T14:30:00.000Z',
 };
 
 /** `PatientFeedbackActionOutput` — what was done about a check-in or a review (routes-final 7.K.6). */

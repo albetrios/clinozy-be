@@ -733,7 +733,12 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.paymentsRecordSchema, schemas.paymentsRecordExample),
     example: null,
   },
-  'POST /api/v1/app/payments/{payment_id}/checked': {
+  'GET /api/v1/app/payments/{payment_id}/edits': {
+    statusCode: 200,
+    schema: wrapPaginated(schemas.paymentEditsRecordSchema, [schemas.paymentEditsRecordExample]),
+    example: null,
+  },
+  'POST /api/v1/app/payments/{payment_id}/reverse': {
     statusCode: 200,
     schema: wrapSuccess(schemas.paymentsRecordSchema, schemas.paymentsRecordExample),
     example: null,
@@ -744,14 +749,34 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.paymentsRecordSchema, schemas.paymentsRecordExample),
     example: null,
   },
-  'GET /api/v1/app/credit-notes': {
+  'GET /api/v1/app/invoice-credit-notes': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.creditNotesRecordSchema, [schemas.creditNotesRecordExample]),
+    schema: wrapPaginated(schemas.invoiceCreditNotesRecordSchema, [
+      schemas.invoiceCreditNotesRecordExample,
+    ]),
     example: null,
   },
-  'GET /api/v1/app/credit-notes/{credit_note_id}': {
+  'GET /api/v1/app/invoices/{invoice_id}/credit-notes': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.creditNotesRecordSchema, schemas.creditNotesRecordExample),
+    schema: wrapPaginated(schemas.invoiceCreditNotesRecordSchema, [
+      schemas.invoiceCreditNotesRecordExample,
+    ]),
+    example: null,
+  },
+  'POST /api/v1/app/invoices/{invoice_id}/credit-notes': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      schemas.invoiceCreditNotesRecordSchema,
+      schemas.invoiceCreditNotesRecordExample,
+    ),
+    example: null,
+  },
+  'GET /api/v1/app/invoices/{invoice_id}/credit-notes/{invoice_credit_note_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      schemas.invoiceCreditNotesRecordSchema,
+      schemas.invoiceCreditNotesRecordExample,
+    ),
     example: null,
   },
   'GET /api/v1/app/pending-credits': {
@@ -782,6 +807,11 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     example: null,
   },
   'POST /api/v1/app/pending-credits/{pending_credit_id}/restore': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.pendingCreditsRecordSchema, schemas.pendingCreditsRecordExample),
+    example: null,
+  },
+  'POST /api/v1/app/pending-credits/{pending_credit_id}/settle': {
     statusCode: 200,
     schema: wrapSuccess(schemas.pendingCreditsRecordSchema, schemas.pendingCreditsRecordExample),
     example: null,
