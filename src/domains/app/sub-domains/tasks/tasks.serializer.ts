@@ -32,6 +32,7 @@ export function serializeTask(
     patient_review_id: references.publicIdOf('patient_review_id', row),
     invoice_id: references.publicIdOf('invoice_id', row),
     pending_credit_id: references.publicIdOf('pending_credit_id', row),
+    medical_rep_id: references.publicIdOf('medical_rep_id', row),
     branch_id: references.publicIdOf('branch_id', row),
     due_at: toInstant(row.due_at) as string,
     status: row.status as string,

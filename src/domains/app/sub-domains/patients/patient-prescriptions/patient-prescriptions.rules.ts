@@ -1,6 +1,6 @@
 import { findMembershipIdOfUser, resolveRecordIds } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
-import { medicines } from '@/domains/app/sub-domains/medicines/medicines.schema.js';
+import { medicines } from '@/domains/app/sub-domains/medical/medicines/medicines.schema.js';
 import {
   assertAppointmentOfPatient,
   writePatientFileActivity,

@@ -60,30 +60,14 @@ export const APP_PERMISSIONS = {
   PAYMENT_UPDATE: 'payment:update',
   PAYMENT_DELETE: 'payment:delete',
   PAYMENT_EXPORT: 'payment:export',
-  MANUFACTURER_READ: 'manufacturer:read',
-  MANUFACTURER_CREATE: 'manufacturer:create',
-  MANUFACTURER_UPDATE: 'manufacturer:update',
-  MANUFACTURER_DELETE: 'manufacturer:delete',
-  SUPPLIER_READ: 'supplier:read',
-  SUPPLIER_CREATE: 'supplier:create',
-  SUPPLIER_UPDATE: 'supplier:update',
-  SUPPLIER_DELETE: 'supplier:delete',
-  MEDICAL_REP_READ: 'medical_rep:read',
-  MEDICAL_REP_CREATE: 'medical_rep:create',
-  MEDICAL_REP_UPDATE: 'medical_rep:update',
-  MEDICAL_REP_DELETE: 'medical_rep:delete',
+  // The medical store (launch #153, MD2): one code set for medicines, sales, orders, suppliers,
+  // manufacturers, MRs and their visits; voiding a sale and cancelling an order are `medicine:delete`.
   MEDICINE_READ: 'medicine:read',
   MEDICINE_CREATE: 'medicine:create',
   MEDICINE_UPDATE: 'medicine:update',
   MEDICINE_DELETE: 'medicine:delete',
-  MEDICAL_PURCHASE_ORDER_READ: 'medical_purchase_order:read',
-  MEDICAL_PURCHASE_ORDER_CREATE: 'medical_purchase_order:create',
-  MEDICAL_PURCHASE_ORDER_UPDATE: 'medical_purchase_order:update',
-  MEDICAL_PURCHASE_ORDER_DELETE: 'medical_purchase_order:delete',
-  MEDICAL_SALE_READ: 'medical_sale:read',
-  MEDICAL_SALE_CREATE: 'medical_sale:create',
-  MEDICAL_SALE_UPDATE: 'medical_sale:update',
-  MEDICAL_SALE_DELETE: 'medical_sale:delete',
+  /** Download the medicines, orders and sales CSVs (launch #153, MD2). */
+  MEDICINE_EXPORT: 'medicine:export',
   // Clinic stock (launch #137, S2): one code set for items, movements, counts, purchases and
   // vendors; using, receiving, adjusting, reverting and counting are `stock_item:update`.
   STOCK_ITEM_READ: 'stock_item:read',
@@ -100,8 +84,6 @@ export const APP_PERMISSIONS = {
   /** Download the tasks CSV (launch #138, TK2). */
   TASK_EXPORT: 'task:export',
   // ── Special permissions (D18) — not a table's own actions ──
-  SALE_VOID: 'sale:void',
   PATIENT_CLINICAL_RECORD_READ: 'patient:clinical_record:read',
-  LIST_EXPORT: 'list:export',
   PATIENT_PRIVATE_ALBUM_READ: 'patient:private_album:read',
 } as const;

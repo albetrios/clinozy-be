@@ -117,6 +117,7 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
   'PATCH /api/v1/app/suppliers/:supplier_id': 'cross-organization-resource: supplier',
   'DELETE /api/v1/app/suppliers/:supplier_id': 'cross-organization-resource: supplier',
   'POST /api/v1/app/suppliers/:supplier_id/restore': 'cross-organization-resource: supplier',
+  'POST /api/v1/app/suppliers/:supplier_id/payments': 'cross-organization-resource: supplier',
   'GET /api/v1/app/medical-reps/:medical_rep_id': 'cross-organization-resource: medical rep',
   'PATCH /api/v1/app/medical-reps/:medical_rep_id': 'cross-organization-resource: medical rep',
   'DELETE /api/v1/app/medical-reps/:medical_rep_id': 'cross-organization-resource: medical rep',
@@ -126,13 +127,11 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
     'cross-organization-resource: medical rep visit',
   'POST /api/v1/app/medical-reps/:medical_rep_id/visits':
     'cross-organization-resource: medical rep visit',
-  'GET /api/v1/app/medical-rep-visits/:medical_rep_visit_id':
+  'GET /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id':
     'cross-organization-resource: medical rep visit',
-  'PATCH /api/v1/app/medical-rep-visits/:medical_rep_visit_id':
+  'DELETE /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id':
     'cross-organization-resource: medical rep visit',
-  'DELETE /api/v1/app/medical-rep-visits/:medical_rep_visit_id':
-    'cross-organization-resource: medical rep visit',
-  'POST /api/v1/app/medical-rep-visits/:medical_rep_visit_id/restore':
+  'POST /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id/restore':
     'cross-organization-resource: medical rep visit',
   'GET /api/v1/app/medicines/:medicine_id': 'cross-organization-resource: medicine',
   'PATCH /api/v1/app/medicines/:medicine_id': 'cross-organization-resource: medicine',
@@ -144,31 +143,17 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
     'cross-organization-resource: purchase order',
   'POST /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/receive':
     'cross-organization-resource: purchase order',
-  'POST /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/cancel':
-    'cross-organization-resource: purchase order',
   'DELETE /api/v1/app/medical-purchase-orders/:medical_purchase_order_id':
     'cross-organization-resource: purchase order',
   'POST /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/restore':
     'cross-organization-resource: purchase order',
-  'GET /api/v1/app/medical-contacts/:medical_contact_id':
-    'cross-organization-resource: medical contact',
-  'PATCH /api/v1/app/medical-contacts/:medical_contact_id':
-    'cross-organization-resource: medical contact',
-  'DELETE /api/v1/app/medical-contacts/:medical_contact_id':
-    'cross-organization-resource: medical contact',
-  'POST /api/v1/app/medical-contacts/:medical_contact_id/restore':
-    'cross-organization-resource: medical contact',
   'GET /api/v1/app/medical-sales/:medical_sale_id': 'cross-organization-resource: medical sale',
-  'POST /api/v1/app/medical-sales/:medical_sale_id/void':
+  'POST /api/v1/app/medical-sales/:medical_sale_id/returns':
     'cross-organization-resource: medical sale',
   'DELETE /api/v1/app/medical-sales/:medical_sale_id': 'cross-organization-resource: medical sale',
   'POST /api/v1/app/medical-sales/:medical_sale_id/restore':
     'cross-organization-resource: medical sale',
   'GET /api/v1/app/supplier-credits/:supplier_credit_id':
-    'cross-organization-resource: supplier credit',
-  'DELETE /api/v1/app/supplier-credits/:supplier_credit_id':
-    'cross-organization-resource: supplier credit',
-  'POST /api/v1/app/supplier-credits/:supplier_credit_id/restore':
     'cross-organization-resource: supplier credit',
   'GET /api/v1/app/patients/:patient_id/treatments': 'cross-organization-resource: treatment',
   'POST /api/v1/app/patients/:patient_id/treatments': 'cross-organization-resource: treatment',

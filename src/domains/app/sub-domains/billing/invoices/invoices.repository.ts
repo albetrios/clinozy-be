@@ -6,13 +6,14 @@ import {
   type BaseRecordLinkTable,
 } from '@/domains/app/base-record.repository.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
-import { medicines } from '@/domains/app/sub-domains/medicines/medicines.schema.js';
+import { medicines } from '@/domains/app/sub-domains/medical/medicines/medicines.schema.js';
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
 import { patient_offerings } from '@/domains/app/sub-domains/patients/patient-offerings/patient-offerings.schema.js';
 import { patient_offering_suggestions } from '@/domains/app/sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.schema.js';
 import { patient_treatments } from '@/domains/app/sub-domains/patients/patient-treatments/patient-treatments.schema.js';
 import { invoice_credit_notes } from '@/domains/app/sub-domains/billing/invoice-credit-notes/invoice-credit-notes.schema.js';
+import { medical_sales } from '@/domains/app/sub-domains/medical/medical-sales/medical-sales.schema.js';
 import { invoice_items, invoice_members, invoices } from './invoices.schema.js';
 
 /** The `member_ids` link of an invoice (`app.invoice_members`, B15). */
@@ -285,6 +286,20 @@ export class InvoicesRepository extends BaseRecordRepository {
       )
       .groupBy(invoice_items.patient_offering_suggestion_id);
     return new Map(rows.map((row) => [row.suggestion_id as number, row.quantity]));
+  }
+
+  /**
+   * MD20: whether a medical sale wrote this invoice — `live` while the sale stands (the invoice is
+   * then the sale's to change, MDC18), `voided` once it is voided; null for any other invoice.
+   */
+  async findSaleState(invoiceId: number): Promise<'live' | 'voided' | null> {
+    const rows = await getRequestDatabase()
+      .select({ deleted_at: medical_sales.deleted_at })
+      .from(medical_sales)
+      .where(eq(medical_sales.invoice_id, invoiceId))
+      .limit(1);
+    if (rows.length === 0) return null;
+    return rows[0]?.deleted_at === null ? 'live' : 'voided';
   }
 
   /** Whether an invoice has a live credit note (B14 — then it can't be deleted). */

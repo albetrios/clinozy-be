@@ -94,10 +94,10 @@ const DOCTOR_PRESET: AppRolePreset = {
     ...sectionCodes('leads', VIEW_CREATE_EDIT),
     ...sectionCodes('appointments', VIEW_CREATE_EDIT),
     ...sectionCodes('patients', VIEW_CREATE_EDIT),
-    ...readCodes(['medicine', 'manufacturer']),
+    // Picks medicines on prescriptions (launch #153, MD2)
+    ...readCodes(['medicine']),
     APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ,
     APP_PERMISSIONS.PATIENT_PRIVATE_ALBUM_READ,
-    APP_PERMISSIONS.LIST_EXPORT,
     APP_PERMISSIONS.OFFERING_EXPORT,
     APP_PERMISSIONS.LEAD_EXPORT,
     APP_PERMISSIONS.APPOINTMENT_EXPORT,
@@ -173,10 +173,10 @@ const PHARMACIST_PRESET: AppRolePreset = {
     ...readCodes(['patient', 'patient_prescription']),
     // Uses clinic stock in procedures (launch #137, S2)
     ...sectionCodes('stock', VIEW_CREATE_EDIT),
-    APP_PERMISSIONS.LIST_EXPORT,
+    // Sells and collects, refunds returns, pays suppliers (launch #153, MD2)
+    APP_PERMISSIONS.PAYMENT_CREATE,
     APP_PERMISSIONS.PATIENT_EXPORT,
     APP_PERMISSIONS.OFFERING_EXPORT,
-    APP_PERMISSIONS.SALE_VOID,
   ]),
 };
 
@@ -190,12 +190,13 @@ const ACCOUNTANT_PRESET: AppRolePreset = {
     ...EVERY_ROLE_CODES,
     ...readCodes(['patient']),
     ...sectionCodes('payments', VIEW_CREATE_EDIT),
-    ...sectionCodes('medical', VIEW_CREATE_EDIT),
+    // The medical store: view and export only, as the design's access line (launch #153, MD2)
+    ...sectionCodes('medical', ['read']),
+    APP_PERMISSIONS.MEDICINE_EXPORT,
     ...sectionCodes('stock', ['read']),
     APP_PERMISSIONS.STOCK_ITEM_EXPORT,
     APP_PERMISSIONS.PATIENT_EXPORT,
     APP_PERMISSIONS.PAYMENT_EXPORT,
-    APP_PERMISSIONS.LIST_EXPORT,
     APP_PERMISSIONS.OFFERING_EXPORT,
     APP_PERMISSIONS.OFFERING_LOWER_PRICE_READ,
   ]),

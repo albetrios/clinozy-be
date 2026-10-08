@@ -22,6 +22,7 @@ import {
   PHONE_NUMBER_PATTERN,
   CHIP_TONE_VALUES,
   WEEKDAY_VALUES,
+  GST_NUMBER_PATTERN,
 } from '@/shared/constants/record-fields.constants.js';
 import {
   BRANCH_DEFAULT_CLOSES_AT,
@@ -29,7 +30,6 @@ import {
   BRANCH_DEFAULT_STATE,
   BRANCH_DEFAULT_TONE,
   BRANCH_DEFAULT_WORKING_DAYS,
-  BRANCH_GST_NUMBER_PATTERN,
   BRANCH_POSTAL_CODE_PATTERN,
 } from './branches.constants.js';
 
@@ -171,10 +171,7 @@ export const branches = appSchema
         sql`${table.postal_code} ~ ${pattern(BRANCH_POSTAL_CODE_PATTERN)}`,
       ),
       check('chk_branches_phone', sql`${table.phone} ~ ${pattern(PHONE_NUMBER_PATTERN)}`),
-      check(
-        'chk_branches_gst_number',
-        sql`${table.gst_number} ~ ${pattern(BRANCH_GST_NUMBER_PATTERN)}`,
-      ),
+      check('chk_branches_gst_number', sql`${table.gst_number} ~ ${pattern(GST_NUMBER_PATTERN)}`),
       check('chk_branches_hours', sql`${table.closes_at} > ${table.opens_at}`),
       check(
         'chk_branches_working_days_allowed',

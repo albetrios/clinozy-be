@@ -18,7 +18,7 @@ FRONT_DESK="$(fixture '.members.front_desk.membership_id')"
 COUNSELLOR="$(fixture '.members.counsellor.membership_id')"
 MARKETING="$(fixture '.members.marketing.membership_id')"
 ORGANIZATION="$(fixture '.organization_id')"
-RULES='reply,failed_message,follow_up,claim,confirm,arrive,rebook,feedback,aftercare,call_back,next_visit,gone_quiet,payment_due,settle_by'
+RULES='reply,failed_message,follow_up,claim,confirm,arrive,rebook,feedback,aftercare,call_back,next_visit,gone_quiet,payment_due,settle_by,medical_rep_visit'
 
 # instant OFFSET — now plus OFFSET (a `date -d` phrase such as "+1 hour"), as an ISO instant.
 instant() { date -u -d "$1" +%Y-%m-%dT%H:%M:%SZ; }
@@ -60,7 +60,7 @@ person() {
 # ==== 10.B Task rule settings (routes 11–12) ======================================================
 as_role owner
 expect 200 "every rule on, by hand (TK10)" PUT /app/task-rule-settings "$(rules '.')"
-expect_value "the 14 rules, in the popover's order" '[.data[].rule_key] | join(",")' "${RULES}"
+expect_value "the 15 rules, in the popover's order" '[.data[].rule_key] | join(",")' "${RULES}"
 expect_value "saved: ids, on, by hand" '[.data[] | ((.id | startswith("trs_")) and .is_on and (.is_automatic | not))] | all' true
 expect_value "Clinozy can handle four" '[.data[] | select(.can_be_automatic) | .rule_key] | join(",")' confirm,feedback,gone_quiet,payment_due
 expect 400 "Clinozy can't handle reply" PUT /app/task-rule-settings '{"rules":[{"rule_key":"reply","is_on":true,"is_automatic":true}]}'
@@ -68,7 +68,7 @@ expect_value "reply: field" "${FIELDS}" rules/0/is_automatic
 expect 400 "a rule that went (onboarding)" PUT /app/task-rule-settings '{"rules":[{"rule_key":"onboarding","is_on":true,"is_automatic":false}]}'
 expect 400 "no rules" PUT /app/task-rule-settings '{"rules":[]}'
 expect 200 "read them back" GET /app/task-rule-settings
-expect_value "still 14, all on" '[.data[] | select(.is_on)] | length' 14
+expect_value "still 15, all on" '[.data[] | select(.is_on)] | length' 15
 as_role front_desk
 expect 200 "the front desk sees the rules" GET /app/task-rule-settings
 expect 403 "the front desk can't change them (organization:update)" PUT /app/task-rule-settings "$(rules '.')"

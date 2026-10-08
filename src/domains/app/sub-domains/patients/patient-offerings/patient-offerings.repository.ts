@@ -1,20 +1,17 @@
 import { eq, sql, type SQL } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
-import { BaseRecordRepository, nullsLastSortKeys } from '@/domains/app/base-record.repository.js';
-import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
+import {
+  BaseRecordRepository,
+  nullsLastSortKeys,
+  organizationTodaySql,
+} from '@/domains/app/base-record.repository.js';
 import { PATIENT_OFFERING_STATUS } from './patient-offerings.constants.js';
 import { patient_offerings } from './patient-offerings.schema.js';
-
-/** The organization's today (its time zone) in SQL. */
-function organizationToday(organizationId: number): SQL {
-  const timezone = sql`(select ${organizations.timezone} from ${organizations} where ${organizations.id} = ${organizationId})`;
-  return sql`(now() at time zone ${timezone})::date`;
-}
 
 /** Each derived status as a condition (PK5) — used up first, then expired, else active. */
 function statusCondition(status: string, organizationId: number): SQL {
   const usedUp = sql`${patient_offerings.sessions_used} >= ${patient_offerings.sessions_total}`;
-  const expired = sql`${patient_offerings.valid_until} < ${organizationToday(organizationId)}`;
+  const expired = sql`${patient_offerings.valid_until} < ${organizationTodaySql(organizationId)}`;
   if (status === PATIENT_OFFERING_STATUS.USED_UP) return usedUp;
   if (status === PATIENT_OFFERING_STATUS.EXPIRED) return sql`(not (${usedUp}) and ${expired})`;
   return sql`(not (${usedUp}) and not coalesce(${expired}, false))`;

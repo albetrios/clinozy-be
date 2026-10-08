@@ -11,7 +11,7 @@ export const TASK_KIND_VALUES = [TASK_KIND.RULE, TASK_KIND.FOLLOW_UP, TASK_KIND.
 /** The kinds people make — the only ones changed or deleted by hand (TK7, TK9). */
 export const TASK_HAND_KIND_VALUES = [TASK_KIND.FOLLOW_UP, TASK_KIND.MANUAL] as const;
 
-/** The task rules (routes-final 10.A.10) — each opens one task per record while its condition holds. */
+/** The task rules (routes-final 10.A.10, + `medical_rep_visit` from 11, MD8) — each opens one task per record while its condition holds. */
 export const TASK_RULE = {
   REPLY: 'reply',
   FAILED_MESSAGE: 'failed_message',
@@ -27,6 +27,7 @@ export const TASK_RULE = {
   GONE_QUIET: 'gone_quiet',
   PAYMENT_DUE: 'payment_due',
   SETTLE_BY: 'settle_by',
+  MEDICAL_REP_VISIT: 'medical_rep_visit',
 } as const;
 
 /** Allowed values of `tasks.rule_key` and `task_rule_settings.rule_key`, in the Rules popover's order. */
@@ -45,6 +46,7 @@ export const TASK_RULE_VALUES = [
   TASK_RULE.GONE_QUIET,
   TASK_RULE.PAYMENT_DUE,
   TASK_RULE.SETTLE_BY,
+  TASK_RULE.MEDICAL_REP_VISIT,
 ] as const;
 
 /** A task rule key. */

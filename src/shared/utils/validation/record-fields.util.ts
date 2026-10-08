@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  GST_NUMBER_PATTERN,
   PHONE_NUMBER_PATTERN,
   CHIP_TONE_VALUES,
   type ChipTone,
@@ -35,6 +36,12 @@ export const phoneNumberSchema = trimmedString().regex(
   'Use +91 and ten digits',
 );
 
+/** A GSTIN ({@link GST_NUMBER_PATTERN}) — a branch's, a supplier's. */
+export const gstNumberSchema = trimmedString().regex(
+  new RegExp(GST_NUMBER_PATTERN),
+  'Not a valid GSTIN',
+);
+
 /**
  * The reason and note an app record's soft delete carries — the query string of a
  * `DELETE` route (a `DELETE` has no body).
@@ -44,16 +51,32 @@ export const phoneNumberSchema = trimmedString().regex(
  *   most {@link RECORD_DELETE_NOTE_MAX_LENGTH} characters, and required when the reason is `other`.
  * - **Failure modes:** a missing reason, an unknown one, or `other` without a note fails the parse.
  */
-export const recordDeleteQuerySchema = z
-  .object({
-    reason: z.enum(RECORD_DELETE_REASON_VALUES as [RecordDeleteReason, ...RecordDeleteReason[]]),
-    note: trimmedString().min(1).max(RECORD_DELETE_NOTE_MAX_LENGTH).optional(),
-  })
-  .strict()
-  .refine((value) => value.reason !== RECORD_DELETE_REASON.OTHER || value.note !== undefined, {
-    path: ['note'],
-    message: 'Add a note when the reason is other',
-  });
+export const recordDeleteQuerySchema = recordDeleteQuerySchemaOf(
+  RECORD_DELETE_REASON_VALUES as [RecordDeleteReason, ...RecordDeleteReason[]],
+);
+
+/**
+ * The `DELETE` query for a record with its own reasons — an order's cancel, a sale's void (launch
+ * #153, MD15, MD20): `reason` one of `reasons`, `note` required for `other`.
+ *
+ * @remarks
+ * - **Algorithm:** as {@link recordDeleteQuerySchema}, on the given reason list.
+ * - **Failure modes:** a missing reason, an unknown one, or `other` without a note fails the parse.
+ */
+export function recordDeleteQuerySchemaOf<const Reasons extends readonly [string, ...string[]]>(
+  reasons: Reasons,
+) {
+  return z
+    .object({
+      reason: z.enum(reasons),
+      note: trimmedString().min(1).max(RECORD_DELETE_NOTE_MAX_LENGTH).optional(),
+    })
+    .strict()
+    .refine((value) => value.reason !== RECORD_DELETE_REASON.OTHER || value.note !== undefined, {
+      path: ['note'],
+      message: 'Add a note when the reason is other',
+    });
+}
 
 /** Parsed {@link recordDeleteQuerySchema}. */
 export type RecordDeleteQuery = z.infer<typeof recordDeleteQuerySchema>;

@@ -19,6 +19,7 @@ import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import { BaseRepository } from '@/infrastructure/database/base-repository.js';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import { branch_members } from '@/domains/app/sub-domains/branches/branch-members/branch-members.schema.js';
 import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
@@ -64,6 +65,11 @@ export interface BaseRecordListQuery {
   derived?: Record<string, unknown> | undefined;
   /** `false` skips the COUNT (internal readers that never show a total). */
   withTotal?: boolean | undefined;
+  /**
+   * Soft-deleted rows too (`include`) or only them (`only`) — a voided sale under the sales list's
+   * `status=voided` (MD20); live rows only when absent.
+   */
+  deletedRows?: 'include' | 'only' | undefined;
 }
 
 /** A list filter through a link table: the rows linked to one record. */
@@ -111,6 +117,11 @@ export interface BaseRecordTableConfig {
   entity: PublicIdEntity;
   /** Columns `q` searches (`ILIKE '%q%'`, OR-combined); a text array is searched as one string of its entries. */
   searchColumns: readonly string[];
+  /**
+   * Text expressions `q` also searches — another table's text by a correlated subselect (an
+   * order's supplier name, a sale's buyer and medicines).
+   */
+  searchExpressions?: readonly SQL[];
   /** The running-number column a numeric `q` (`2841`, `#2841`, `PT-0412`) also matches. */
   numberColumn?: string;
   /** Sortable fields → `text` or `created_at` keyset (a `created_at` entry is always present). */
@@ -206,6 +217,15 @@ export interface BaseRecordLinkTable {
   targetColumn: string;
   /** The referenced table (has `id`, `public_id`, and `deleted_at` when it is soft-deleted). */
   targetTable: PgTable;
+}
+
+/**
+ * The organization's today in its time zone, as SQL — for a list's date-relative filters and
+ * sorts (a bought offering's expiry, a medicine's nearest expiry).
+ */
+export function organizationTodaySql(organizationId: number): SQL {
+  const timezone = sql`(select ${organizations.timezone} from ${organizations} where ${organizations.id} = ${organizationId})`;
+  return sql`(now() at time zone ${timezone})::date`;
 }
 
 /**
@@ -620,6 +640,19 @@ export class BaseRecordRepository extends BaseRepository {
     ) as SQL;
   }
 
+  /** A list's rows of one organization — live ones, or the deleted ones too or only (MD20). */
+  private rowsInOrganization(
+    organizationId: number,
+    deletedRows: BaseRecordListQuery['deletedRows'],
+  ): SQL {
+    if (deletedRows === undefined || !this.softDeletes)
+      return this.liveInOrganization(organizationId);
+    const ofOrganization = eq(this.column('organization_id'), organizationId);
+    return deletedRows === 'include'
+      ? ofOrganization
+      : (and(ofOrganization, isNotNull(this.column('deleted_at'))) as SQL);
+  }
+
   /** Whether the table soft-deletes (has `deleted_at`) — an append-only log does not. */
   protected get softDeletes(): boolean {
     return liveRowFilter(this.config.table) !== undefined;
@@ -628,11 +661,14 @@ export class BaseRecordRepository extends BaseRepository {
   /** `q` over the search columns, or the running number when `q` reads as one. */
   private searchCondition(q: string | undefined): SQL | undefined {
     const text = buildSearchCondition(
-      this.config.searchColumns.map((name) => {
-        const column = this.column(name);
-        // A text array (an offering's search terms, O9) is searched as one string of its entries.
-        return column.columnType === 'PgArray' ? sql`array_to_string(${column}, ' ')` : column;
-      }),
+      [
+        ...this.config.searchColumns.map((name) => {
+          const column = this.column(name);
+          // A text array (an offering's search terms, O9) is searched as one string of its entries.
+          return column.columnType === 'PgArray' ? sql`array_to_string(${column}, ' ')` : column;
+        }),
+        ...(this.config.searchExpressions ?? []),
+      ],
       q,
     );
     const digits = q?.match(/^\s*(?:#|[a-z]{1,4}-)?0*(\d{1,9})\s*$/i)?.[1];
@@ -774,6 +810,7 @@ export class BaseRecordRepository extends BaseRepository {
               }
             : {}),
           ...(query.derived ? { derived: query.derived } : {}),
+          ...(query.deletedRows ? { deleted_rows: query.deletedRows } : {}),
         }),
       )
       .digest('hex');
@@ -839,7 +876,7 @@ export class BaseRecordRepository extends BaseRepository {
   /** A list query's conditions — the organization's live rows, the search and the filters. */
   private listWhere(query: BaseRecordListQuery, organizationId: number): SQL | undefined {
     return and(
-      this.liveInOrganization(organizationId),
+      this.rowsInOrganization(organizationId, query.deletedRows),
       this.searchCondition(query.q),
       ...this.filterConditions(query, organizationId),
     );

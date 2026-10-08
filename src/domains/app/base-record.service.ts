@@ -419,7 +419,10 @@ export class BaseRecordService<Output> {
     visibility?: BaseRecordVisibility,
     parentPublicId?: string,
   ): Promise<void> {
-    const removal = parseWithSchema(recordDeleteQuerySchema, query);
+    const removal = parseWithSchema<{ reason: string; note?: string | undefined }>(
+      this.descriptor.deleteQuery ?? recordDeleteQuerySchema,
+      query,
+    );
     await withAppDatabaseContext(scope, async () => {
       const organizationId = await this.organizationId(scope);
       const userId = await this.userId(actingUserPublicId);

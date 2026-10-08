@@ -5,6 +5,9 @@ import { listLeadsQueryDto } from '@/domains/app/sub-domains/leads/leads.dto.js'
 import { listOfferingsQueryDto } from '@/domains/app/sub-domains/offerings/offerings.dto.js';
 import { listPatientsQueryDto } from '@/domains/app/sub-domains/patients/patients.dto.js';
 import { listPaymentsQueryDto } from '@/domains/app/sub-domains/billing/payments/payments.dto.js';
+import { listMedicalPurchaseOrdersQueryDto } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.dto.js';
+import { listMedicalSalesQueryDto } from '@/domains/app/sub-domains/medical/medical-sales/medical-sales.dto.js';
+import { listMedicinesQueryDto } from '@/domains/app/sub-domains/medical/medicines/medicines.dto.js';
 import { listMembershipsQueryDto } from '@/domains/tenancy/sub-domains/membership/membership.dto.js';
 
 /** The query parameters that page or sort a list — never part of a saved view (the sort stays in the URL). */
@@ -12,8 +15,8 @@ const PAGING_AND_SORT = { after: true, limit: true, sort: true, order: true } as
 
 /**
  * The lists a member can save views on (launch U5), each with the filters it takes: its own list
- * query without paging and sort. The medical and stock lists join when the medical store and stock
- * sub-domains are built.
+ * query without paging and sort — the medical store's medicines, sales and orders among them
+ * (launch #153, MDC5).
  */
 export const MEMBERSHIP_SAVED_VIEW_LIST_KEYS = [
   'patients',
@@ -23,6 +26,9 @@ export const MEMBERSHIP_SAVED_VIEW_LIST_KEYS = [
   'payments',
   'offerings',
   'memberships',
+  'medicines',
+  'medical_sales',
+  'medical_purchase_orders',
 ] as const;
 
 /** A key of {@link MEMBERSHIP_SAVED_VIEW_LIST_KEYS}. */
@@ -44,4 +50,7 @@ export const MEMBERSHIP_SAVED_VIEW_LIST_FILTERS: Record<MembershipSavedViewListK
   payments: listPaymentsQueryDto.omit(PAGING_AND_SORT),
   offerings: listOfferingsQueryDto.omit(PAGING_AND_SORT),
   memberships: listMembershipsQueryDto.omit(PAGING_AND_SORT),
+  medicines: listMedicinesQueryDto.omit(PAGING_AND_SORT),
+  medical_sales: listMedicalSalesQueryDto.omit(PAGING_AND_SORT),
+  medical_purchase_orders: listMedicalPurchaseOrdersQueryDto.omit(PAGING_AND_SORT),
 };

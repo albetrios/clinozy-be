@@ -7,7 +7,8 @@
  * them (launch O2); their row adds Lowest price (`offering:lower_price:read`) and Export
  * (`offering:export`). The Leads and Appointments rows add Export (`lead:export`, `appointment:export` — launch #131
  * L4, #132 A9); the Payments row adds Export (`payment:export` — launch #136, B2), the Clinic stock row Export
- * (`stock_item:export` — launch #137, S2), the Tasks row Export (`task:export` — launch #138, TK2).
+ * (`stock_item:export` — launch #137, S2), the Tasks row Export (`task:export` — launch #138, TK2),
+ * the Medical row Export (`medicine:export` — launch #153, MD2).
  *
  * @remarks
  * - **Notes:** generated with the app tables; the catalog seed carries the same categories.
@@ -20,14 +21,8 @@ export const APP_ACCESS_SECTION_RESOURCES = {
   leads: ['lead'],
   appointments: ['appointment'],
   patients: ['patient', 'patient_prescription', 'patient_treatment'],
-  medical: [
-    'manufacturer',
-    'supplier',
-    'medical_rep',
-    'medicine',
-    'medical_purchase_order',
-    'medical_sale',
-  ],
+  // One code set for the medical store (launch #153, MD2); the row adds Export (`medicine:export`).
+  medical: ['medicine'],
   // One code set for items, movements, counts, purchases and vendors (launch #137, S2); the row
   // adds Export (`stock_item:export`).
   stock: ['stock_item'],

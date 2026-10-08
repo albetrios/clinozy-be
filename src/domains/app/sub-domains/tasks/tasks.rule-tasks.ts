@@ -14,7 +14,8 @@ export type TaskRecordLink =
   | 'patient_check_in_id'
   | 'patient_review_id'
   | 'invoice_id'
-  | 'pending_credit_id';
+  | 'pending_credit_id'
+  | 'medical_rep_id';
 
 /** Every record link, in the order `source_key` reads them. */
 export const TASK_RECORD_LINK_VALUES: readonly TaskRecordLink[] = [
@@ -25,6 +26,7 @@ export const TASK_RECORD_LINK_VALUES: readonly TaskRecordLink[] = [
   'patient_review_id',
   'invoice_id',
   'pending_credit_id',
+  'medical_rep_id',
 ];
 
 /** What one rule task says (routes-final 10.A.10). */

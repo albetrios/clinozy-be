@@ -352,9 +352,12 @@ as_role pharmacist
 expect 200 "a pharmacist adds an item" POST /app/stock-items "$(jq -nc --arg name "Pharmacist item ${S}" '{name: $name}')"
 expect 200 "a pharmacist records a purchase" POST /app/stock-purchases \
   "$(jq -nc --arg vendor "${VENDOR}" --arg gauze "${GAUZE}" '{stock_vendor_id: $vendor, items: [{stock_item_id: $gauze, quantity: 1, rate: 10}]}')"
-expect 403 "but not its Paid — that is payment:create" POST /app/stock-purchases \
+# The pharmacist holds payment:create since #153 (MD2); the therapist records purchases without it.
+as_role therapist
+expect 403 "a therapist's purchase, but not its Paid — that is payment:create" POST /app/stock-purchases \
   "$(jq -nc --arg vendor "${VENDOR}" --arg gauze "${GAUZE}" --arg branch "${VESU}" '{stock_vendor_id: $vendor, items: [{stock_item_id: $gauze, quantity: 1, rate: 10}], payment: {branch_id: $branch, splits: [{mode: "cash", amount: 5}]}}')"
 expect_value "Paid: why" "${REASON}" field_permission_required
+as_role pharmacist
 expect 200 "a pharmacist counts" POST /app/stock-counts "$(jq -nc --arg gauze "${GAUZE}" '{lines: [{stock_item_id: $gauze, counted_quantity: 20}]}')"
 as_role accountant
 expect 200 "an accountant reads purchases" GET "/app/stock-purchases?stock_vendor_id=${VENDOR}"

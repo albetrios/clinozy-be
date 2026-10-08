@@ -19,7 +19,7 @@ type PrescriptionParams = { Params: { patient_id: string; patient_prescription_i
 
 /** What the lists say about their filters. */
 const LIST_FILTERS =
-  '`q` is a prescription number only (`RX-500`, `#500` — a 400 otherwise); filters `status`, `doctor_membership_id`, `appointment_id`, `prescription_date_from` / `prescription_date_to` (inclusive), the created range; sort `created_at` (default, newest first) or `prescription_date`.';
+  '`q` is a prescription number only (`RX-500`, `#500` — a 400 otherwise); filters `status`, `is_filled` (a live medical sale fills it — prescriptions to fill are `status=approved&is_filled=false`), `doctor_membership_id`, `appointment_id`, `prescription_date_from` / `prescription_date_to` (inclusive), the created range; sort `created_at` (default, newest first) or `prescription_date`.';
 
 /**
  * Registers the `patient-prescriptions` routes (prefix `/api/v1/app`) — routes-final 7.C, routes

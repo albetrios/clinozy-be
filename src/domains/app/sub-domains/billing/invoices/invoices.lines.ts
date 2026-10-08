@@ -1,8 +1,8 @@
 import { resolveRecordIds, type BaseRecordRow } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
-import { medicines } from '@/domains/app/sub-domains/medicines/medicines.schema.js';
-import { MedicinesRepository } from '@/domains/app/sub-domains/medicines/medicines.repository.js';
+import { medicines } from '@/domains/app/sub-domains/medical/medicines/medicines.schema.js';
+import { MedicinesRepository } from '@/domains/app/sub-domains/medical/medicines/medicines.repository.js';
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
 import { OfferingsRepository } from '@/domains/app/sub-domains/offerings/offerings.repository.js';
 import { PATIENT_OFFERING_SUGGESTION_STATUS } from '@/domains/app/sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.constants.js';
@@ -27,6 +27,12 @@ const treatmentsRepository = new PatientTreatmentsRepository();
 
 /** The offering category of a consultation invoice's lines (B8). */
 const CONSULTATION_CATEGORY = 'consultation';
+
+/**
+ * One line as a save plans it — as sent, or as another write sends it: a medical sale names the
+ * batch each line draws from (`medicine_batch_id`, MD19), which no API body carries.
+ */
+export type InvoiceLineInput = InvoiceItemInput & { medicine_batch_id?: number };
 
 /** The header a plan reads: where, what kind, for whom, when, and its overall discount. */
 export interface InvoiceLineHeader {
@@ -318,7 +324,7 @@ interface LinePlanContext {
  * sessions and validity it sells, the treatments it bills and the plan row it invoices.
  */
 async function planLine(options: {
-  item: InvoiceItemInput;
+  item: InvoiceLineInput;
   index: number;
   kept: InvoiceItemWriteRow | undefined;
   plan: LinePlanContext;
@@ -369,6 +375,9 @@ async function planLine(options: {
       discount_percent: item.discount_percent ?? toAmount(kept?.discount_percent) ?? 0,
       batch_number:
         item.batch_number === undefined ? (kept?.batch_number ?? null) : item.batch_number,
+      ...(item.medicine_batch_id === undefined
+        ? {}
+        : { medicine_batch_id: item.medicine_batch_id }),
       patient_offering_suggestion_id: await resolveSuggestion({
         item,
         existing: changesItem ? undefined : kept,
@@ -431,7 +440,7 @@ function withAmounts(
 export async function planInvoiceLines(options: {
   context: BaseRecordWriteContext;
   header: InvoiceLineHeader;
-  items: readonly InvoiceItemInput[];
+  items: readonly InvoiceLineInput[];
   existing: readonly InvoiceItemWriteRow[];
 }): Promise<InvoiceLinePlan> {
   const { context, header, items, existing } = options;

@@ -1017,6 +1017,124 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.suppliersRecordSchema, schemas.suppliersRecordExample),
     example: null,
   },
+  'POST /api/v1/app/suppliers/{supplier_id}/payments': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.suppliersRecordSchema, schemas.suppliersRecordExample),
+    example: null,
+  },
+  'GET /api/v1/app/supplier-credits': {
+    statusCode: 200,
+    schema: wrapPaginated(schemas.supplierCreditsRecordSchema, [
+      schemas.supplierCreditsRecordExample,
+    ]),
+    example: null,
+  },
+  'POST /api/v1/app/supplier-credits': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.supplierCreditsRecordSchema, schemas.supplierCreditsRecordExample),
+    example: null,
+  },
+  'GET /api/v1/app/supplier-credits/{supplier_credit_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.supplierCreditsRecordSchema, schemas.supplierCreditsRecordExample),
+    example: null,
+  },
+  'GET /api/v1/app/medicines': {
+    statusCode: 200,
+    schema: wrapPaginated(schemas.medicinesRecordSchema, [schemas.medicinesRecordExample]),
+    example: null,
+  },
+  'GET /api/v1/app/medicines/exports': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.recordExportSchema, schemas.recordExportExample),
+    example: null,
+  },
+  'POST /api/v1/app/medicines': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.medicinesRecordSchema, schemas.medicinesRecordExample),
+    example: null,
+  },
+  'GET /api/v1/app/medicines/{medicine_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.medicinesRecordSchema, schemas.medicinesRecordExample),
+    example: null,
+  },
+  'PATCH /api/v1/app/medicines/{medicine_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.medicinesRecordSchema, schemas.medicinesRecordExample),
+    example: null,
+  },
+  'DELETE /api/v1/app/medicines/{medicine_id}': { statusCode: 204, schema: null, example: null },
+  'POST /api/v1/app/medicines/{medicine_id}/restore': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.medicinesRecordSchema, schemas.medicinesRecordExample),
+    example: null,
+  },
+  'POST /api/v1/app/medicines/near-expiry-discount': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      schemas.nearExpiryDiscountResultSchema,
+      schemas.nearExpiryDiscountResultExample,
+    ),
+    example: null,
+  },
+  'GET /api/v1/app/medical-purchase-orders': {
+    statusCode: 200,
+    schema: wrapPaginated(schemas.medicalPurchaseOrdersRecordSchema, [
+      schemas.medicalPurchaseOrdersRecordExample,
+    ]),
+    example: null,
+  },
+  'GET /api/v1/app/medical-purchase-orders/exports': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.recordExportSchema, schemas.recordExportExample),
+    example: null,
+  },
+  'POST /api/v1/app/medical-purchase-orders': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      schemas.medicalPurchaseOrdersRecordSchema,
+      schemas.medicalPurchaseOrdersRecordExample,
+    ),
+    example: null,
+  },
+  'GET /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      schemas.medicalPurchaseOrdersRecordSchema,
+      schemas.medicalPurchaseOrdersRecordExample,
+    ),
+    example: null,
+  },
+  'PATCH /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      schemas.medicalPurchaseOrdersRecordSchema,
+      schemas.medicalPurchaseOrdersRecordExample,
+    ),
+    example: null,
+  },
+  'DELETE /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}': {
+    statusCode: 204,
+    schema: null,
+    example: null,
+  },
+  'POST /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}/restore': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      schemas.medicalPurchaseOrdersRecordSchema,
+      schemas.medicalPurchaseOrdersRecordExample,
+    ),
+    example: null,
+  },
+  'POST /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}/receive': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      schemas.medicalPurchaseOrdersRecordSchema,
+      schemas.medicalPurchaseOrdersRecordExample,
+    ),
+    example: null,
+  },
   'GET /api/v1/app/medical-reps': {
     statusCode: 200,
     schema: wrapPaginated(schemas.medicalRepsRecordSchema, [schemas.medicalRepsRecordExample]),
@@ -1062,7 +1180,7 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     ),
     example: null,
   },
-  'GET /api/v1/app/medical-rep-visits/{medical_rep_visit_id}': {
+  'GET /api/v1/app/medical-reps/{medical_rep_id}/visits/{medical_rep_visit_id}': {
     statusCode: 200,
     schema: wrapSuccess(
       schemas.medicalRepVisitsRecordSchema,
@@ -1070,153 +1188,17 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     ),
     example: null,
   },
-  'PATCH /api/v1/app/medical-rep-visits/{medical_rep_visit_id}': {
+  'DELETE /api/v1/app/medical-reps/{medical_rep_id}/visits/{medical_rep_visit_id}': {
+    statusCode: 204,
+    schema: null,
+    example: null,
+  },
+  'POST /api/v1/app/medical-reps/{medical_rep_id}/visits/{medical_rep_visit_id}/restore': {
     statusCode: 200,
     schema: wrapSuccess(
       schemas.medicalRepVisitsRecordSchema,
       schemas.medicalRepVisitsRecordExample,
     ),
-    example: null,
-  },
-  'DELETE /api/v1/app/medical-rep-visits/{medical_rep_visit_id}': {
-    statusCode: 204,
-    schema: null,
-    example: null,
-  },
-  'POST /api/v1/app/medical-rep-visits/{medical_rep_visit_id}/restore': {
-    statusCode: 200,
-    schema: wrapSuccess(
-      schemas.medicalRepVisitsRecordSchema,
-      schemas.medicalRepVisitsRecordExample,
-    ),
-    example: null,
-  },
-  'GET /api/v1/app/medicines': {
-    statusCode: 200,
-    schema: wrapPaginated(schemas.medicinesRecordSchema, [schemas.medicinesRecordExample]),
-    example: null,
-  },
-  'GET /api/v1/app/medicines/exports': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.recordExportSchema, schemas.recordExportExample),
-    example: null,
-  },
-  'POST /api/v1/app/medicines': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.medicinesRecordSchema, schemas.medicinesRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/medicines/{medicine_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.medicinesRecordSchema, schemas.medicinesRecordExample),
-    example: null,
-  },
-  'PATCH /api/v1/app/medicines/{medicine_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.medicinesRecordSchema, schemas.medicinesRecordExample),
-    example: null,
-  },
-  'DELETE /api/v1/app/medicines/{medicine_id}': { statusCode: 204, schema: null, example: null },
-  'POST /api/v1/app/medicines/{medicine_id}/restore': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.medicinesRecordSchema, schemas.medicinesRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/medical-purchase-orders': {
-    statusCode: 200,
-    schema: wrapPaginated(schemas.medicalPurchaseOrdersRecordSchema, [
-      schemas.medicalPurchaseOrdersRecordExample,
-    ]),
-    example: null,
-  },
-  'GET /api/v1/app/medical-purchase-orders/exports': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.recordExportSchema, schemas.recordExportExample),
-    example: null,
-  },
-  'POST /api/v1/app/medical-purchase-orders': {
-    statusCode: 200,
-    schema: wrapSuccess(
-      schemas.medicalPurchaseOrdersRecordSchema,
-      schemas.medicalPurchaseOrdersRecordExample,
-    ),
-    example: null,
-  },
-  'GET /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(
-      schemas.medicalPurchaseOrdersRecordSchema,
-      schemas.medicalPurchaseOrdersRecordExample,
-    ),
-    example: null,
-  },
-  'PATCH /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(
-      schemas.medicalPurchaseOrdersRecordSchema,
-      schemas.medicalPurchaseOrdersRecordExample,
-    ),
-    example: null,
-  },
-  'POST /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}/receive': {
-    statusCode: 200,
-    schema: wrapSuccess(
-      schemas.medicalPurchaseOrdersRecordSchema,
-      schemas.medicalPurchaseOrdersRecordExample,
-    ),
-    example: null,
-  },
-  'POST /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}/cancel': {
-    statusCode: 200,
-    schema: wrapSuccess(
-      schemas.medicalPurchaseOrdersRecordSchema,
-      schemas.medicalPurchaseOrdersRecordExample,
-    ),
-    example: null,
-  },
-  'DELETE /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}': {
-    statusCode: 204,
-    schema: null,
-    example: null,
-  },
-  'POST /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}/restore': {
-    statusCode: 200,
-    schema: wrapSuccess(
-      schemas.medicalPurchaseOrdersRecordSchema,
-      schemas.medicalPurchaseOrdersRecordExample,
-    ),
-    example: null,
-  },
-  'GET /api/v1/app/medical-contacts': {
-    statusCode: 200,
-    schema: wrapPaginated(schemas.medicalContactsRecordSchema, [
-      schemas.medicalContactsRecordExample,
-    ]),
-    example: null,
-  },
-  'POST /api/v1/app/medical-contacts': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.medicalContactsRecordSchema, schemas.medicalContactsRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/medical-contacts/{medical_contact_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.medicalContactsRecordSchema, schemas.medicalContactsRecordExample),
-    example: null,
-  },
-  'PATCH /api/v1/app/medical-contacts/{medical_contact_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.medicalContactsRecordSchema, schemas.medicalContactsRecordExample),
-    example: null,
-  },
-  'DELETE /api/v1/app/medical-contacts/{medical_contact_id}': {
-    statusCode: 204,
-    schema: null,
-    example: null,
-  },
-  'POST /api/v1/app/medical-contacts/{medical_contact_id}/restore': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.medicalContactsRecordSchema, schemas.medicalContactsRecordExample),
     example: null,
   },
   'GET /api/v1/app/medical-sales': {
@@ -1239,11 +1221,6 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.medicalSalesRecordSchema, schemas.medicalSalesRecordExample),
     example: null,
   },
-  'POST /api/v1/app/medical-sales/{medical_sale_id}/void': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.medicalSalesRecordSchema, schemas.medicalSalesRecordExample),
-    example: null,
-  },
   'DELETE /api/v1/app/medical-sales/{medical_sale_id}': {
     statusCode: 204,
     schema: null,
@@ -1254,31 +1231,14 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.medicalSalesRecordSchema, schemas.medicalSalesRecordExample),
     example: null,
   },
-  'GET /api/v1/app/supplier-credits': {
+  'POST /api/v1/app/medical-sales/{medical_sale_id}/returns': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.supplierCreditsRecordSchema, [
-      schemas.supplierCreditsRecordExample,
-    ]),
+    schema: wrapSuccess(schemas.medicalSalesRecordSchema, schemas.medicalSalesRecordExample),
     example: null,
   },
-  'POST /api/v1/app/supplier-credits': {
+  'GET /api/v1/app/medical-payments': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.supplierCreditsRecordSchema, schemas.supplierCreditsRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/supplier-credits/{supplier_credit_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.supplierCreditsRecordSchema, schemas.supplierCreditsRecordExample),
-    example: null,
-  },
-  'DELETE /api/v1/app/supplier-credits/{supplier_credit_id}': {
-    statusCode: 204,
-    schema: null,
-    example: null,
-  },
-  'POST /api/v1/app/supplier-credits/{supplier_credit_id}/restore': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.supplierCreditsRecordSchema, schemas.supplierCreditsRecordExample),
+    schema: wrapPaginated(schemas.paymentsRecordSchema, [schemas.paymentsRecordExample]),
     example: null,
   },
   'GET /api/v1/app/stock-items': {

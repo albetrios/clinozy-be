@@ -1,4 +1,5 @@
 import type { PgTable } from 'drizzle-orm/pg-core';
+import type { ZodType } from 'zod';
 import type { OrganizationPrincipalDatabaseScope } from '@/infrastructure/database/contexts/database-context.js';
 import type {
   BaseRecordChildTable,
@@ -289,6 +290,11 @@ export interface BaseRecordDescriptor<Output> extends BaseRecordRules {
   /** The 404 name (`Offering`). */
   label: string;
   repository: BaseRecordRepository;
+  /**
+   * The `DELETE` query when the record has its own reasons (an order's cancel, a sale's void —
+   * `recordDeleteQuerySchemaOf`); the standard reasons otherwise.
+   */
+  deleteQuery?: ZodType<{ reason: string; note?: string | undefined }>;
   parseCreate: (body: unknown) => Record<string, unknown>;
   /**
    * Creates of their own body, one route each (`POST …/send-message`, `…/log-call`): name → parser.

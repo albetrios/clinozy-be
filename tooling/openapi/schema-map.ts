@@ -123,34 +123,32 @@ import { LogPatientFeedbackActionDto as appLogPatientFeedbackActionDto } from '@
 import {
   CreateManufacturerDto as appCreateManufacturerDto,
   UpdateManufacturerDto as appUpdateManufacturerDto,
-} from '@/domains/app/sub-domains/manufacturers/manufacturers.dto.js';
+} from '@/domains/app/sub-domains/medical/manufacturers/manufacturers.dto.js';
 import {
   CreateSupplierDto as appCreateSupplierDto,
+  PaySupplierDto as appPaySupplierDto,
   UpdateSupplierDto as appUpdateSupplierDto,
-} from '@/domains/app/sub-domains/suppliers/suppliers.dto.js';
+} from '@/domains/app/sub-domains/medical/suppliers/suppliers.dto.js';
 import {
   CreateMedicalRepDto as appCreateMedicalRepDto,
   UpdateMedicalRepDto as appUpdateMedicalRepDto,
-} from '@/domains/app/sub-domains/medical-reps/medical-reps.dto.js';
-import {
-  CreateMedicalRepVisitDto as appCreateMedicalRepVisitDto,
-  UpdateMedicalRepVisitDto as appUpdateMedicalRepVisitDto,
-} from '@/domains/app/sub-domains/medical-rep-visits/medical-rep-visits.dto.js';
+} from '@/domains/app/sub-domains/medical/medical-reps/medical-reps.dto.js';
+import { CreateMedicalRepVisitDto as appCreateMedicalRepVisitDto } from '@/domains/app/sub-domains/medical/medical-reps/medical-rep-visits/medical-rep-visits.dto.js';
 import {
   CreateMedicineDto as appCreateMedicineDto,
+  NearExpiryDiscountDto as appNearExpiryDiscountDto,
   UpdateMedicineDto as appUpdateMedicineDto,
-} from '@/domains/app/sub-domains/medicines/medicines.dto.js';
+} from '@/domains/app/sub-domains/medical/medicines/medicines.dto.js';
 import {
-  cancelMedicalPurchaseOrderDto as appCancelMedicalPurchaseOrderDto,
   CreateMedicalPurchaseOrderDto as appCreateMedicalPurchaseOrderDto,
+  ReceiveMedicalPurchaseOrderDto as appReceiveMedicalPurchaseOrderDto,
   UpdateMedicalPurchaseOrderDto as appUpdateMedicalPurchaseOrderDto,
-} from '@/domains/app/sub-domains/medical-purchase-orders/medical-purchase-orders.dto.js';
+} from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.dto.js';
 import {
-  CreateMedicalContactDto as appCreateMedicalContactDto,
-  UpdateMedicalContactDto as appUpdateMedicalContactDto,
-} from '@/domains/app/sub-domains/medical-contacts/medical-contacts.dto.js';
-import { CreateMedicalSaleDto as appCreateMedicalSaleDto } from '@/domains/app/sub-domains/medical-sales/medical-sales.dto.js';
-import { CreateSupplierCreditDto as appCreateSupplierCreditDto } from '@/domains/app/sub-domains/supplier-credits/supplier-credits.dto.js';
+  CreateMedicalSaleDto as appCreateMedicalSaleDto,
+  ReturnMedicalSaleDto as appReturnMedicalSaleDto,
+} from '@/domains/app/sub-domains/medical/medical-sales/medical-sales.dto.js';
+import { CreateSupplierCreditDto as appCreateSupplierCreditDto } from '@/domains/app/sub-domains/medical/suppliers/supplier-credits/supplier-credits.dto.js';
 import {
   CreateStockVendorDto as appCreateStockVendorDto,
   UpdateStockVendorDto as appUpdateStockVendorDto,
@@ -376,21 +374,21 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'POST /api/v1/app/stock-vendors': appCreateStockVendorDto,
   'POST /api/v1/app/supplier-credits': appCreateSupplierCreditDto,
   'POST /api/v1/app/medical-sales': appCreateMedicalSaleDto,
-  'PATCH /api/v1/app/medical-contacts/{medical_contact_id}': appUpdateMedicalContactDto,
-  'POST /api/v1/app/medical-contacts': appCreateMedicalContactDto,
-  'POST /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}/cancel':
-    appCancelMedicalPurchaseOrderDto,
+  'POST /api/v1/app/medical-sales/{medical_sale_id}/returns': appReturnMedicalSaleDto,
+  'POST /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}/receive':
+    appReceiveMedicalPurchaseOrderDto,
   'PATCH /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}':
     appUpdateMedicalPurchaseOrderDto,
   'POST /api/v1/app/medical-purchase-orders': appCreateMedicalPurchaseOrderDto,
   'PATCH /api/v1/app/medicines/{medicine_id}': appUpdateMedicineDto,
   'POST /api/v1/app/medicines': appCreateMedicineDto,
-  'PATCH /api/v1/app/medical-rep-visits/{medical_rep_visit_id}': appUpdateMedicalRepVisitDto,
+  'POST /api/v1/app/medicines/near-expiry-discount': appNearExpiryDiscountDto,
   'POST /api/v1/app/medical-reps/{medical_rep_id}/visits': appCreateMedicalRepVisitDto,
   'PATCH /api/v1/app/medical-reps/{medical_rep_id}': appUpdateMedicalRepDto,
   'POST /api/v1/app/medical-reps': appCreateMedicalRepDto,
   'PATCH /api/v1/app/suppliers/{supplier_id}': appUpdateSupplierDto,
   'POST /api/v1/app/suppliers': appCreateSupplierDto,
+  'POST /api/v1/app/suppliers/{supplier_id}/payments': appPaySupplierDto,
   'PATCH /api/v1/app/manufacturers/{manufacturer_id}': appUpdateManufacturerDto,
   'POST /api/v1/app/manufacturers': appCreateManufacturerDto,
   'POST /api/v1/app/patients/{patient_id}/reviews/{patient_review_id}/actions':

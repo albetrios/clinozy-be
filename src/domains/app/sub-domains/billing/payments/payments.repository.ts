@@ -9,7 +9,14 @@ import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.sc
 import { day_closes } from '@/domains/app/sub-domains/billing/day-closes/day-closes.schema.js';
 import { DAY_CLOSE_STATUS } from '@/domains/app/sub-domains/billing/day-closes/day-closes.constants.js';
 import { stock_purchases } from '@/domains/app/sub-domains/stock/stock-purchases/stock-purchases.schema.js';
-import { PAYMENT_MODE } from './payments.constants.js';
+import { MEDICAL_PURCHASE_ORDER_STAGE } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.constants.js';
+import { medical_purchase_orders } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.schema.js';
+import { INVOICE_TYPE } from '@/domains/app/sub-domains/billing/invoices/invoices.constants.js';
+import {
+  PAYMENT_EXPENSE_CATEGORY,
+  PAYMENT_MODE,
+  type SupplierBillPurchaseField,
+} from './payments.constants.js';
 import { payment_edits, payments } from './payments.schema.js';
 
 /** The organization's calendar day of a payment (its time zone) — the day it belongs to (B6). */
@@ -41,6 +48,14 @@ export interface PaymentEditRow {
 }
 
 /**
+ * MD22: a payment of the medical store — money on a `medical` invoice (receipts, refunds and their
+ * reversals), a supplier bill of a medical order, or a `medicines` expense.
+ */
+function medicalStorePayment(): SQL {
+  return sql`(${payments.medical_purchase_order_id} is not null or ${payments.expense_category} = ${PAYMENT_EXPENSE_CATEGORY.MEDICINES} or exists (select 1 from ${invoices} where ${invoices.id} = ${payments.invoice_id} and ${invoices.type} = ${INVOICE_TYPE.MEDICAL}))`;
+}
+
+/**
  * Persistence for `app.payments` and `app.payment_edits` (launch ROUTE #136, routes-final 8.C) —
  * the shared app record reads and writes, plus the ledger's money helpers: the day lock, the
  * invoice's paid amount, the edits, the reversals.
@@ -49,7 +64,7 @@ export interface PaymentEditRow {
  * - **Algorithm:** `q` on the payee or the number (`PAY-12`); sorts `paid_at` (newest first),
  *   `created_at`, `amount`; derived filters `mode` (has that split), the paid days (the
  *   organization's, inclusive), `patient_id` (the patient file's contact, B3) and `is_settled` (its
- *   day is closed). The day lock reads the day close `FOR SHARE` (closing takes it `FOR UPDATE`,
+ *   day is closed), `is_medical_store` (MD22). The day lock reads the day close `FOR SHARE` (closing takes it `FOR UPDATE`,
  *   B6); the paid amount moves in one guarded statement, never below 0 or above the total.
  */
 export class PaymentsRepository extends BaseRecordRepository {
@@ -79,6 +94,7 @@ export class PaymentsRepository extends BaseRecordRepository {
           sql`${payments.contact_id} = (select ${patients.contact_id} from ${patients} where ${patients.public_id} = ${String(value)})`,
         is_settled: (value, organizationId) =>
           value === true ? daySettled(organizationId) : sql`not ${daySettled(organizationId)}`,
+        is_medical_store: () => medicalStorePayment(),
       },
       defaultSort: 'paid_at',
       defaultOrder: 'desc',
@@ -139,14 +155,37 @@ export class PaymentsRepository extends BaseRecordRepository {
   }
 
   /**
-   * S11: moves a live stock purchase's paid amount by `delta` in one guarded statement — never
-   * below 0 nor above its bill; null when the guard refuses (or the purchase is gone).
+   * S11, MD7: moves a live purchase's paid amount by `delta` in one guarded statement — never
+   * below 0 nor above what is owed (a stock purchase's bill; a received medical order's total less
+   * its supplier credits); null when the guard refuses (or the purchase is gone).
    */
-  async adjustStockPurchasePaid(options: {
-    stockPurchaseId: number;
+  async adjustPurchasePaid(options: {
+    field: SupplierBillPurchaseField;
+    purchaseId: number;
     delta: number;
     userId: number | null;
   }): Promise<BaseRecordRow | null> {
+    if (options.field === 'medical_purchase_order_id') {
+      const moved = sql`${medical_purchase_orders.paid_amount} + ${options.delta}`;
+      const rows = (await getRequestDatabase()
+        .update(medical_purchase_orders)
+        .set({
+          paid_amount: moved,
+          updated_at: sql`greatest(${medical_purchase_orders.created_at}, now())`,
+          updated_by_user_id: options.userId,
+        } as never)
+        .where(
+          and(
+            eq(medical_purchase_orders.id, options.purchaseId),
+            isNull(medical_purchase_orders.deleted_at),
+            eq(medical_purchase_orders.stage, MEDICAL_PURCHASE_ORDER_STAGE.RECEIVED),
+            sql`${moved} >= 0`,
+            sql`${moved} + ${medical_purchase_orders.credited_amount} <= ${medical_purchase_orders.total}`,
+          ),
+        )
+        .returning()) as BaseRecordRow[];
+      return rows[0] ?? null;
+    }
     const moved = sql`${stock_purchases.paid_amount} + ${options.delta}`;
     const rows = (await getRequestDatabase()
       .update(stock_purchases)
@@ -157,7 +196,7 @@ export class PaymentsRepository extends BaseRecordRepository {
       } as never)
       .where(
         and(
-          eq(stock_purchases.id, options.stockPurchaseId),
+          eq(stock_purchases.id, options.purchaseId),
           isNull(stock_purchases.deleted_at),
           sql`${moved} >= 0`,
           sql`${moved} <= ${stock_purchases.bill_amount}`,

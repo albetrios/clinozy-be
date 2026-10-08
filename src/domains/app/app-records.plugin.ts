@@ -24,15 +24,7 @@ import { patientOfferingSuggestionsRoutes } from './sub-domains/patients/patient
 import { patientTreatmentsRoutes } from './sub-domains/patients/patient-treatments/patient-treatments.routes.js';
 import { patientCheckInsRoutes } from './sub-domains/patients/patient-check-ins/patient-check-ins.routes.js';
 import { patientReviewsRoutes } from './sub-domains/patients/patient-reviews/patient-reviews.routes.js';
-import { manufacturersRoutes } from './sub-domains/manufacturers/manufacturers.routes.js';
-import { suppliersRoutes } from './sub-domains/suppliers/suppliers.routes.js';
-import { medicalRepsRoutes } from './sub-domains/medical-reps/medical-reps.routes.js';
-import { medicalRepVisitsRoutes } from './sub-domains/medical-rep-visits/medical-rep-visits.routes.js';
-import { medicinesRoutes } from './sub-domains/medicines/medicines.routes.js';
-import { medicalPurchaseOrdersRoutes } from './sub-domains/medical-purchase-orders/medical-purchase-orders.routes.js';
-import { medicalContactsRoutes } from './sub-domains/medical-contacts/medical-contacts.routes.js';
-import { medicalSalesRoutes } from './sub-domains/medical-sales/medical-sales.routes.js';
-import { supplierCreditsRoutes } from './sub-domains/supplier-credits/supplier-credits.routes.js';
+import { medicalRoutes } from './sub-domains/medical/medical.routes.js';
 import { stockRoutes } from './sub-domains/stock/stock.routes.js';
 import { tasksRoutes } from './sub-domains/tasks/tasks.routes.js';
 
@@ -65,15 +57,7 @@ export async function registerAppRecordRoutes(
   await app.register(patientTreatmentsRoutes(services.patientTreatmentsService));
   await app.register(patientCheckInsRoutes(services.patientCheckInsService));
   await app.register(patientReviewsRoutes(services.patientReviewsService));
-  await app.register(manufacturersRoutes(services.manufacturersService));
-  await app.register(suppliersRoutes(services.suppliersService));
-  await app.register(medicalRepsRoutes(services.medicalRepsService));
-  await app.register(medicalRepVisitsRoutes(services.medicalRepVisitsService));
-  await app.register(medicinesRoutes(services.medicinesService));
-  await app.register(medicalPurchaseOrdersRoutes(services.medicalPurchaseOrdersService));
-  await app.register(medicalContactsRoutes(services.medicalContactsService));
-  await app.register(medicalSalesRoutes(services.medicalSalesService));
-  await app.register(supplierCreditsRoutes(services.supplierCreditsService));
+  await app.register(medicalRoutes(services));
   await app.register(stockRoutes(services));
   await app.register(tasksRoutes(services.tasksService));
 }

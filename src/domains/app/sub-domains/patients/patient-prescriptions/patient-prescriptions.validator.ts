@@ -49,6 +49,9 @@ export function validateListPatientPrescriptionsQuery(data: unknown): BaseRecord
     equals: {
       status: query.status,
     },
+    derived: {
+      is_filled: query.is_filled === undefined ? undefined : query.is_filled === 'true',
+    },
     referenceEquals: {
       patient_id: query.patient_id,
       appointment_id: query.appointment_id,

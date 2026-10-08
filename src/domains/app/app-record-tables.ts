@@ -23,15 +23,13 @@ import { invoice_credit_notes } from '@/domains/app/sub-domains/billing/invoice-
 import { pending_credits } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.schema.js';
 import { patient_check_ins } from '@/domains/app/sub-domains/patients/patient-check-ins/patient-check-ins.schema.js';
 import { patient_reviews } from '@/domains/app/sub-domains/patients/patient-reviews/patient-reviews.schema.js';
-import { manufacturers } from '@/domains/app/sub-domains/manufacturers/manufacturers.schema.js';
-import { suppliers } from '@/domains/app/sub-domains/suppliers/suppliers.schema.js';
-import { medical_reps } from '@/domains/app/sub-domains/medical-reps/medical-reps.schema.js';
-import { medical_rep_visits } from '@/domains/app/sub-domains/medical-rep-visits/medical-rep-visits.schema.js';
-import { medicines } from '@/domains/app/sub-domains/medicines/medicines.schema.js';
-import { medical_purchase_orders } from '@/domains/app/sub-domains/medical-purchase-orders/medical-purchase-orders.schema.js';
-import { medical_contacts } from '@/domains/app/sub-domains/medical-contacts/medical-contacts.schema.js';
-import { medical_sales } from '@/domains/app/sub-domains/medical-sales/medical-sales.schema.js';
-import { supplier_credits } from '@/domains/app/sub-domains/supplier-credits/supplier-credits.schema.js';
+import { manufacturers } from '@/domains/app/sub-domains/medical/manufacturers/manufacturers.schema.js';
+import { suppliers } from '@/domains/app/sub-domains/medical/suppliers/suppliers.schema.js';
+import { medical_reps } from '@/domains/app/sub-domains/medical/medical-reps/medical-reps.schema.js';
+import { medical_rep_visits } from '@/domains/app/sub-domains/medical/medical-reps/medical-rep-visits/medical-rep-visits.schema.js';
+import { medicines } from '@/domains/app/sub-domains/medical/medicines/medicines.schema.js';
+import { medical_purchase_orders } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.schema.js';
+import { medical_sales } from '@/domains/app/sub-domains/medical/medical-sales/medical-sales.schema.js';
 import { stock_vendors } from '@/domains/app/sub-domains/stock/stock-vendors/stock-vendors.schema.js';
 import { stock_items } from '@/domains/app/sub-domains/stock/stock-items/stock-items.schema.js';
 import { stock_purchases } from '@/domains/app/sub-domains/stock/stock-purchases/stock-purchases.schema.js';
@@ -46,7 +44,8 @@ import { tasks } from '@/domains/app/sub-domains/tasks/tasks.schema.js';
  *   deleted (D3, D16) — nor `app.patients` (never purged, P7), nor the tables that never soft-delete
  *   (`app.patient_treatments` — reversed, TR6; the append-only `app.patient_feedback_actions`,
  *   `app.payment_edits`, `app.day_close_events`, `app.stock_item_movements`, `app.stock_counts`,
- *   `app.task_owner_changes`; `app.task_rule_settings` — upserted; `app.day_closes` — opened and
+ *   `app.task_owner_changes`; `app.supplier_credits` — adjusted, never deleted, MD7;
+ *   `app.task_rule_settings` — upserted; `app.day_closes` — opened and
  *   closed, B25; an invoice's lines and members, a purchase's lines and a count's lines, which go
  *   with it).
  */
@@ -58,10 +57,12 @@ export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   // An item with movement history stays blocked (`RESTRICT` — the ledger keeps it, S5)
   { table: stock_items, label: 'app.stock_items' },
   { table: stock_vendors, label: 'app.stock_vendors' },
-  { table: supplier_credits, label: 'app.supplier_credits' },
+  // A voided sale goes before its invoice (`RESTRICT`); a sale with returns is never voided (MD19)
   { table: medical_sales, label: 'app.medical_sales' },
-  { table: medical_contacts, label: 'app.medical_contacts' },
+  // A cancelled order's lines go with it
   { table: medical_purchase_orders, label: 'app.medical_purchase_orders' },
+  // A medicine's batches and supplier prices go with it; one a bill line or a supplier credit
+  // still names stays blocked (`RESTRICT`)
   { table: medicines, label: 'app.medicines' },
   { table: medical_rep_visits, label: 'app.medical_rep_visits' },
   { table: medical_reps, label: 'app.medical_reps' },

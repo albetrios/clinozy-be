@@ -57,6 +57,9 @@ export const DEFAULT_WORKING_DAYS: readonly Weekday[] = [
 /** A phone number: `+91` and ten digits (`chk_<table>_phone`). */
 export const PHONE_NUMBER_PATTERN = '^\\+91\\d{10}$';
 
+/** GSTIN: state code, PAN, entity number, `Z`, check character (`chk_<table>_gst_number` — branches, suppliers). */
+export const GST_NUMBER_PATTERN = '^\\d{2}[A-Z]{5}\\d{4}[A-Z]\\d[Z][A-Z\\d]$';
+
 /** Why an app record was soft-deleted (the confirm drawer's choices). */
 export const RECORD_DELETE_REASON = {
   MISTAKE: 'mistake',

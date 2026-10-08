@@ -23,6 +23,7 @@ import {
   invoices,
 } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
 import { pending_credits } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.schema.js';
+import { medical_reps } from '@/domains/app/sub-domains/medical/medical-reps/medical-reps.schema.js';
 import { TASK_OWNER_ROLE, TASK_RULE, type TaskRule } from './tasks.constants.js';
 import type { TaskRecordLink } from './tasks.rule-tasks.js';
 import { tasks } from './tasks.schema.js';
@@ -84,6 +85,7 @@ export const TASK_SOURCE_KEY_PREFIX: Readonly<Record<TaskRecordLink | 'contact_i
   patient_review_id: 'patient_review',
   invoice_id: 'invoice',
   pending_credit_id: 'pending_credit',
+  medical_rep_id: 'medical_rep',
   contact_id: 'contact',
 };
 
@@ -590,7 +592,34 @@ function settleByRule(scope: TaskRuleScope): TaskRuleSource {
   };
 }
 
-/** The 14 rules (10.A.10), in the Rules popover's order. */
+/** `medical_rep_visit` (11, MD8): an MR's next visit date is today or past — 11:00 that day, the pharmacist queue. */
+function medicalRepVisitRule(scope: TaskRuleScope): TaskRuleSource {
+  return {
+    rule: TASK_RULE.MEDICAL_REP_VISIT,
+    link: 'medical_rep_id',
+    ownerRole: TASK_OWNER_ROLE.PHARMACIST,
+    priority: 'normal',
+    canOpen: true,
+    from: sql`${medical_reps}`,
+    organizationColumn: medical_reps.organization_id,
+    recordId: sql`${medical_reps.id}`,
+    qualifies: sql`${medical_reps.deleted_at} is null and ${medical_reps.next_visit_on} is not null
+      and ${medical_reps.next_visit_on} <= ${today(scope)}`,
+    opens: sql`true`,
+    due: () => localAt(scope, sql`${medical_reps.next_visit_on}`, '11:00'),
+    tracksDue: true,
+    columns: {
+      contactId: sql`null::bigint`,
+      branchId: sql`null::bigint`,
+      ownerMembershipId: sql`null::bigint`,
+      title: sql`'Meet ' || ${medical_reps.name}`,
+      why: sql`'Their visit is due — log it once they have been'`,
+      anchorAt: sql`${medical_reps.updated_at}`,
+    },
+  };
+}
+
+/** The 15 rules (10.A.10 and 11's `medical_rep_visit`), in the Rules popover's order. */
 export function taskRuleSources(scope: TaskRuleScope): TaskRuleSource[] {
   return [
     replyRule(),
@@ -607,6 +636,7 @@ export function taskRuleSources(scope: TaskRuleScope): TaskRuleSource[] {
     goneQuietRule(scope),
     paymentDueRule(scope),
     settleByRule(scope),
+    medicalRepVisitRule(scope),
   ];
 }
 

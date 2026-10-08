@@ -5,15 +5,12 @@ import {
   phoneNumberSchema,
   chipToneSchema,
   expectedUpdatedAtSchema,
+  gstNumberSchema,
   hourMinuteSchema,
   httpsLinkSchema,
   workingDaysSchema,
 } from '@/shared/utils/validation/record-fields.util.js';
-import {
-  BRANCH_GST_NUMBER_PATTERN,
-  BRANCH_MEMBERSHIP_IDS_MAX,
-  BRANCH_POSTAL_CODE_PATTERN,
-} from './branches.constants.js';
+import { BRANCH_MEMBERSHIP_IDS_MAX, BRANCH_POSTAL_CODE_PATTERN } from './branches.constants.js';
 
 const membershipPublicId = trimmedStringMinMax(1, 28);
 const httpsLink = httpsLinkSchema(512);
@@ -30,10 +27,7 @@ const branchCreateFields = {
   postal_code: trimmedString().regex(new RegExp(BRANCH_POSTAL_CODE_PATTERN), 'Six digits'),
   phone: phoneNumberSchema,
   email: trimmedStringMinMax(3, 120).pipe(z.email()),
-  gst_number: trimmedString()
-    .regex(new RegExp(BRANCH_GST_NUMBER_PATTERN), 'Not a valid GSTIN')
-    .nullable()
-    .optional(),
+  gst_number: gstNumberSchema.nullable().optional(),
   opens_at: hourMinuteSchema.optional(),
   closes_at: hourMinuteSchema.optional(),
   working_days: workingDaysSchema.optional(),

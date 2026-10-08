@@ -1,4 +1,8 @@
-import { resolveRecordIds, type BaseRecordRow } from '@/domains/app/base-record.repository.js';
+import {
+  type BaseRecordRow,
+  replaceLinkedIds,
+  resolveRecordIds,
+} from '@/domains/app/base-record.repository.js';
 import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import { ContactsRepository } from '@/domains/app/sub-domains/contacts/contacts.repository.js';
 import { organizationToday } from '@/domains/app/sub-domains/patients/patients.rules.js';
@@ -18,7 +22,11 @@ import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import { INVOICE_TYPE } from './invoices.constants.js';
 import type { InvoiceItemInput, InvoicePaidNowInput } from './invoices.dto.js';
 import { type InvoiceLinePlan, planInvoiceLines, writeInvoiceLines } from './invoices.lines.js';
-import type { InvoiceItemWriteRow, InvoicesRepository } from './invoices.repository.js';
+import {
+  INVOICE_MEMBERS_LINK,
+  type InvoiceItemWriteRow,
+  type InvoicesRepository,
+} from './invoices.repository.js';
 import { invoices } from './invoices.schema.js';
 import { serializeInvoiceItem } from './invoices.serializer.js';
 import type { BilledContactOutput } from './invoices.types.js';
@@ -64,6 +72,19 @@ async function requirePatientFile(options: {
     field: 'contact_id',
     messageKey: 'errors:validation.invoicePatientFileRequired',
   }).withReason('patient_file_required');
+}
+
+/**
+ * MDC18: a medical sale's invoice is the sale's — `/invoices` neither changes, deletes nor
+ * restores it (the sale's void and restore do); a 409 `invoice_of_sale`.
+ */
+async function assertNotSaleInvoice(
+  repository: InvoicesRepository,
+  invoiceId: number,
+): Promise<void> {
+  if ((await repository.findSaleState(invoiceId)) !== null) {
+    throw new ConflictError('errors:invoiceOfSale').withReason('invoice_of_sale');
+  }
 }
 
 /** A stored line as a change would send it unchanged — the plan keeps its snapshot. */
@@ -234,6 +255,7 @@ async function prepareInvoiceUpdate(options: {
   context: BaseRecordWriteContext;
 }): Promise<void> {
   const { values, existing, context } = options;
+  await assertNotSaleInvoice(options.repository, existing.id);
   const contactChanges = 'contact_id' in values && values.contact_id !== existing.contact_id;
   await assertInvoiceChangeable({ values, existing, contactChanges, context });
   const patientId = await requirePatientFile({
@@ -316,6 +338,41 @@ async function afterInvoiceWrite(options: {
 }
 
 /**
+ * Writes an invoice another write makes in its transaction — a medical sale's bill (MD7, MD19):
+ * the plan, the row, its lines, its credited team, "Paid now" and the activity entry, as
+ * `POST /invoices` does. `values` are column values (references resolved) plus `items`,
+ * `payment` and `member_ids` (membership ids).
+ *
+ * @remarks
+ * - **Failure modes:** as `POST /invoices` — `ValidationError` on `items`, `overall_discount`;
+ *   `ConflictError` `more_than_due`, `day_closed`.
+ */
+export async function recordInvoice(options: {
+  repository: InvoicesRepository;
+  values: Record<string, unknown> & { member_ids?: readonly number[] };
+  context: BaseRecordWriteContext;
+}): Promise<BaseRecordRow> {
+  const { repository, context } = options;
+  const { member_ids: memberIds = [], ...values } = options.values;
+  await prepareInvoiceCreate(values, context);
+  const row = await repository.insert({
+    ...values,
+    organization_id: context.organizationId,
+    created_by_user_id: context.userId,
+    updated_by_user_id: context.userId,
+  });
+  await replaceLinkedIds({
+    link: INVOICE_MEMBERS_LINK,
+    ownerId: row.id,
+    targetIds: memberIds,
+    organizationId: context.organizationId,
+    createdByUserId: context.userId,
+  });
+  await afterInvoiceWrite({ repository, row, kind: 'create', context });
+  return row;
+}
+
+/**
  * The invoice rules (launch ROUTE #136, routes-final 8.A): the billed person, the lines and their
  * amounts, what a change or a delete may do, "Paid now", the activity entry, and what a page reads.
  *
@@ -326,10 +383,12 @@ async function afterInvoiceWrite(options: {
  *   (B13) and a `system` entry (B7) — one transaction. A change is refused once settled (B12), may
  *   not move the date to another financial year (B11) or the total under what is paid; a contact
  *   change (nothing paid) moves the patient offerings with it. A delete needs nothing paid or
- *   credited and no spent session (B14); its patient offerings go and come back with it.
+ *   credited and no spent session (B14); its patient offerings go and come back with it. A
+ *   medical sale's invoice is the sale's (MDC18) — changing, deleting or restoring it here is a
+ *   409 `invoice_of_sale`.
  * - **Failure modes:** `ValidationError` on `contact_id` (`patient_file_required`), `items`,
  *   `invoice_date`, `overall_discount`, `patient_treatment_ids`, `below_lowest_price`;
- *   `ConflictError` `invoice_settled`, `below_paid`, `offering_in_use`, `invoice_paid`,
+ *   `ConflictError` `invoice_of_sale`, `invoice_settled`, `below_paid`, `offering_in_use`, `invoice_paid`,
  *   `treatment_billed`, `more_than_due`, `day_closed`.
  */
 export function createInvoicesRules(repository: InvoicesRepository): BaseRecordRules {
@@ -338,6 +397,7 @@ export function createInvoicesRules(repository: InvoicesRepository): BaseRecordR
     prepareUpdate: (values, existing, context) =>
       prepareInvoiceUpdate({ repository, values, existing, context }),
     prepareRemove: async (existing) => {
+      await assertNotSaleInvoice(repository, existing.id);
       if (
         (toAmount(existing.paid_amount) ?? 0) > 0 ||
         (await repository.hasLiveCreditNote(existing.id))
@@ -348,6 +408,7 @@ export function createInvoicesRules(repository: InvoicesRepository): BaseRecordR
         throw new ConflictError('errors:invoiceOfferingInUse').withReason('offering_in_use');
       }
     },
+    prepareRestore: (deleted) => assertNotSaleInvoice(repository, deleted.id),
     afterWrite: (row, change, context) =>
       afterInvoiceWrite({ repository, row, kind: change.kind, context }),
     decorate: async (outputs, context) => {

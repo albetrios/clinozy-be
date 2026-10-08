@@ -14,6 +14,7 @@ import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js'
 import { attachBilledContacts } from '@/domains/app/sub-domains/billing/invoices/invoices.rules.js';
 import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
 import { stock_purchases } from '@/domains/app/sub-domains/stock/stock-purchases/stock-purchases.schema.js';
+import { medical_purchase_orders } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.schema.js';
 import { InvoicesRepository } from '@/domains/app/sub-domains/billing/invoices/invoices.repository.js';
 import { InvoiceCreditNotesRepository } from '@/domains/app/sub-domains/billing/invoice-credit-notes/invoice-credit-notes.repository.js';
 import { DAY_CLOSE_STATUS } from '@/domains/app/sub-domains/billing/day-closes/day-closes.constants.js';
@@ -26,20 +27,21 @@ import {
   PAYMENT_KIND,
   PAYMENT_PAYEE_KIND_VALUES,
   PAYMENT_RECEIVED_KIND_VALUES,
+  SUPPLIER_BILL_PURCHASE_FIELDS,
 } from './payments.constants.js';
 import { ReversePaymentDto } from './payments.dto.js';
 import {
   applyInvoicePaid,
   applyPaymentEffects,
-  applyStockPurchasePaid,
+  applyPurchasePaid,
   assertPaymentDayOpen,
   columnsToSplits,
   invoiceEffect,
   organizationDayOf,
   type PaymentSplit,
+  purchaseEffect,
   recordPayment,
   splitsToColumns,
-  stockPurchaseEffect,
   writePaymentActivity,
 } from './payments.ledger.js';
 import { payments } from './payments.schema.js';
@@ -56,6 +58,7 @@ const RECORDED_FIELDS = [
   'contact_id',
   'invoice_id',
   'stock_purchase_id',
+  'medical_purchase_order_id',
   'payee_name',
   'expense_category',
   'reference',
@@ -112,10 +115,18 @@ async function assertKindFields(values: Readonly<Record<string, unknown>>): Prom
       });
     }
   }
-  if (typeof values.stock_purchase_id === 'number' && kind !== PAYMENT_KIND.SUPPLIER_BILL) {
+  for (const field of SUPPLIER_BILL_PURCHASE_FIELDS) {
+    if (typeof values[field] === 'number' && kind !== PAYMENT_KIND.SUPPLIER_BILL) {
+      throw fieldValidationError({
+        field,
+        messageKey: 'errors:validation.paymentPurchaseOnlySupplierBill',
+      });
+    }
+  }
+  if (SUPPLIER_BILL_PURCHASE_FIELDS.every((field) => typeof values[field] === 'number')) {
     throw fieldValidationError({
-      field: 'stock_purchase_id',
-      messageKey: 'errors:validation.paymentStockPurchaseOnlySupplierBill',
+      field: 'medical_purchase_order_id',
+      messageKey: 'errors:validation.paymentOnePurchase',
     });
   }
   if (
@@ -168,7 +179,7 @@ function applySplits(values: Record<string, unknown>, existing: BaseRecordRow): 
 /** A refund's, reversal's or settlement's contact, invoice and purchase stay as their write set them. */
 function assertLinksKept(values: Readonly<Record<string, unknown>>, existing: BaseRecordRow): void {
   if (!isFixedMoney(existing)) return;
-  for (const field of ['contact_id', 'invoice_id', 'stock_purchase_id'] as const) {
+  for (const field of ['contact_id', 'invoice_id', ...SUPPLIER_BILL_PURCHASE_FIELDS] as const) {
     if (field in values && values[field] !== existing[field]) {
       throw fieldValidationError({
         field,
@@ -192,6 +203,7 @@ const RECORDED_REFERENCES = {
   contact_id: contacts,
   invoice_id: invoices,
   stock_purchase_id: stock_purchases,
+  medical_purchase_order_id: medical_purchase_orders,
 } as const;
 
 /** A referenced field a change records. */
@@ -249,7 +261,7 @@ async function recordEdit(options: {
 }
 
 /**
- * B20, B21, S11: a change moves the invoice's and the stock purchase's paid amount by the
+ * B20, B21, S11, MD7: a change moves the invoice's and the purchase's paid amount by the
  * difference — one delta on the same record, or out of the old one and into the new one.
  */
 async function moveLinkedPaid(options: {
@@ -265,13 +277,14 @@ async function moveLinkedPaid(options: {
       effect: invoiceEffect,
       apply: (id: unknown, delta: number) => applyInvoicePaid({ context, invoiceId: id, delta }),
     },
-    {
-      field: 'stock_purchase_id',
-      effect: stockPurchaseEffect,
+    ...SUPPLIER_BILL_PURCHASE_FIELDS.map((field) => ({
+      field,
+      effect: (row: Readonly<Record<string, unknown>>, reversedRow?: BaseRecordRow) =>
+        purchaseEffect(row, field, reversedRow),
       apply: (id: unknown, delta: number) =>
-        applyStockPurchasePaid({ context, stockPurchaseId: id, delta }),
-    },
-  ] as const;
+        applyPurchasePaid({ context, field, purchaseId: id, delta }),
+    })),
+  ];
   for (const link of links) {
     const was = link.effect(before, reversed);
     const now = link.effect(after, reversed);
@@ -321,6 +334,7 @@ async function reversePayment(input: BaseRecordActionInput): Promise<BaseRecordR
       invoice_id: existing.invoice_id,
       pending_credit_id: existing.pending_credit_id,
       stock_purchase_id: existing.stock_purchase_id,
+      medical_purchase_order_id: existing.medical_purchase_order_id,
       reverses_payment_id: existing.id,
       note: body.reason,
     },
@@ -337,7 +351,8 @@ async function reversePayment(input: BaseRecordActionInput): Promise<BaseRecordR
  * - **Algorithm:** a create fixes the direction from the kind (B17), stores the splits as columns
  *   (B18), checks the kind's fields (B19) and its day (B6); once written, its money moves the
  *   invoice's paid amount and the pending credit's settled amount, and a `system` entry joins the
- *   contact's activity (B7); a supplier bill may pay a stock purchase (S11). A change (open day —
+ *   contact's activity (B7); a supplier bill may pay a stock purchase (S11) or a received
+ *   medical order (MD7). A change (open day —
  *   its old and new `paid_at`) keeps a refund's, reversal's or settlement's money and links, moves
  *   the invoice's and the purchase's paid amount by the difference and records the changed fields
  *   (B20). A delete or restore (open day) takes the money out or

@@ -26,6 +26,7 @@ import { patient_check_ins } from '@/domains/app/sub-domains/patients/patient-ch
 import { patient_reviews } from '@/domains/app/sub-domains/patients/patient-reviews/patient-reviews.schema.js';
 import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
 import { pending_credits } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.schema.js';
+import { medical_reps } from '@/domains/app/sub-domains/medical/medical-reps/medical-reps.schema.js';
 import { RECORD_DELETE_REASON_VALUES } from '@/shared/constants/record-fields.constants.js';
 import {
   TASK_KIND,
@@ -119,6 +120,11 @@ const taskColumns = {
     (): AnyPgColumn => pending_credits.id,
     { onDelete: 'cascade' },
   ),
+  // The MR whose next visit it reminds of (launch #153, MD8)
+  medical_rep_id: bigint('medical_rep_id', { mode: 'number' }).references(
+    (): AnyPgColumn => medical_reps.id,
+    { onDelete: 'cascade' },
+  ),
   // The one record (else the person) as text — one open task per rule per record (TK4)
   source_key: text('source_key').generatedAlwaysAs(
     (): SQL => sql`CASE
@@ -129,6 +135,7 @@ const taskColumns = {
       WHEN patient_review_id IS NOT NULL THEN 'patient_review:' || patient_review_id
       WHEN invoice_id IS NOT NULL THEN 'invoice:' || invoice_id
       WHEN pending_credit_id IS NOT NULL THEN 'pending_credit:' || pending_credit_id
+      WHEN medical_rep_id IS NOT NULL THEN 'medical_rep:' || medical_rep_id
       WHEN contact_id IS NOT NULL THEN 'contact:' || contact_id
     END`,
   ),
@@ -170,6 +177,7 @@ const TASK_RECORD_LINKS = [
   'patient_review_id',
   'invoice_id',
   'pending_credit_id',
+  'medical_rep_id',
 ] as const;
 
 /** The task indexes: one open task per rule per record (TK4), Mine, the queues, Everyone, the wake-up. */

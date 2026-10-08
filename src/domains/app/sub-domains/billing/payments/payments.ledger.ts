@@ -1,13 +1,24 @@
-import type { BaseRecordRow } from '@/domains/app/base-record.repository.js';
+import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
+import {
+  type BaseRecordRow,
+  listVisibleBranchIds,
+  resolveRecordIds,
+} from '@/domains/app/base-record.repository.js';
 import type { BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import { CONTACT_ACTIVITY_TYPE } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.constants.js';
 import { ContactActivitiesRepository } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.repository.js';
 import { DAY_CLOSE_STATUS } from '@/domains/app/sub-domains/billing/day-closes/day-closes.constants.js';
-import { ConflictError } from '@/shared/errors/index.js';
+import { ConflictError, ValidationError } from '@/shared/errors/index.js';
+import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import { calendarDateInTimeZone, toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import { PENDING_CREDIT_STATUS } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.constants.js';
 import { PendingCreditsRepository } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.repository.js';
-import { PAYMENT_KIND, PAYMENT_MODE_VALUES } from './payments.constants.js';
+import {
+  PAYMENT_KIND,
+  PAYMENT_MODE_VALUES,
+  SUPPLIER_BILL_PURCHASE_FIELDS,
+  type SupplierBillPurchaseField,
+} from './payments.constants.js';
 import { PAYMENT_MODE_COLUMNS, PaymentsRepository } from './payments.repository.js';
 
 const contactActivitiesRepository = new ContactActivitiesRepository();
@@ -73,6 +84,42 @@ export async function organizationDayOf(
 }
 
 /**
+ * B4, D9: the branch money moves at — live here and, without `branch:read`, one of the caller's
+ * (as on `POST /payments`); a 400 on `field` otherwise. A stock purchase's "Paid" (S11), paying a
+ * supplier (MD10).
+ */
+export async function requirePaymentBranchId(options: {
+  branchPublicId: string;
+  field: string;
+  context: BaseRecordWriteContext;
+}): Promise<number> {
+  const { branchPublicId, field, context } = options;
+  const branchId = (
+    await resolveRecordIds({
+      table: branches,
+      organizationId: context.organizationId,
+      publicIds: [branchPublicId],
+    })
+  ).get(branchPublicId);
+  const allBranches = await context.can(APP_PERMISSIONS.BRANCH_READ);
+  const mine =
+    allBranches || context.userId === null
+      ? []
+      : await listVisibleBranchIds({
+          organizationId: context.organizationId,
+          userId: context.userId,
+        });
+  if (branchId === undefined || !(allBranches || mine.includes(branchId))) {
+    throw new ValidationError(
+      'errors:validation.branchNotYours',
+      { field },
+      { [field]: ['This is not one of your branches'] },
+    );
+  }
+  return branchId;
+}
+
+/**
  * B6: the payment's day — its branch and the organization date of `paid_at` — must be open; the
  * day close is read `FOR SHARE`, so a close and the write never interleave.
  */
@@ -125,31 +172,34 @@ export async function applyInvoicePaid(options: {
 }
 
 /**
- * What a payment does to its stock purchase's paid amount (S11): a supplier bill adds, its
- * reversal takes it away; nothing else touches it.
+ * What a payment does to the paid amount of the purchase `field` names (S11, MD7): a supplier bill
+ * adds, its reversal takes it away; nothing else touches it.
  */
-export function stockPurchaseEffect(
+export function purchaseEffect(
   row: Readonly<Record<string, unknown>>,
+  field: SupplierBillPurchaseField,
   reversed?: BaseRecordRow,
 ): number {
-  if (typeof row.stock_purchase_id !== 'number') return 0;
+  if (typeof row[field] !== 'number') return 0;
   if (row.kind === PAYMENT_KIND.SUPPLIER_BILL) return toAmount(row.amount) ?? 0;
-  if (row.kind === PAYMENT_KIND.REVERSAL && reversed) return -stockPurchaseEffect(reversed);
+  if (row.kind === PAYMENT_KIND.REVERSAL && reversed) return -purchaseEffect(reversed, field);
   return 0;
 }
 
 /**
- * S11: moves a stock purchase's paid amount by `delta` in one guarded statement — over its bill
- * is a 409 `more_than_due`, under nothing a 409 `more_than_paid`.
+ * S11, MD7: moves the paid amount of the purchase `field` names by `delta` in one guarded
+ * statement — over what is due is a 409 `more_than_due`, under nothing a 409 `more_than_paid`.
  */
-export async function applyStockPurchasePaid(options: {
+export async function applyPurchasePaid(options: {
   context: BaseRecordWriteContext;
-  stockPurchaseId: unknown;
+  field: SupplierBillPurchaseField;
+  purchaseId: unknown;
   delta: number;
 }): Promise<void> {
-  if (typeof options.stockPurchaseId !== 'number' || options.delta === 0) return;
-  const moved = await paymentsRepository.adjustStockPurchasePaid({
-    stockPurchaseId: options.stockPurchaseId,
+  if (typeof options.purchaseId !== 'number' || options.delta === 0) return;
+  const moved = await paymentsRepository.adjustPurchasePaid({
+    field: options.field,
+    purchaseId: options.purchaseId,
     delta: options.delta,
     userId: options.context.userId,
   });
@@ -227,7 +277,7 @@ async function applyPendingCreditSettled(options: {
 
 /**
  * Applies a payment's money to what it points at — the invoice's paid amount (B5, B21), the
- * pending credit's settled amount (B24) and the stock purchase's paid amount (S11) — `sign` 1 when
+ * pending credit's settled amount (B24) and the purchase's paid amount (S11, MD7) — `sign` 1 when
  * it is written or restored, −1 when deleted.
  *
  * @remarks
@@ -246,11 +296,14 @@ export async function applyPaymentEffects(options: {
     delta: sign * invoiceEffect(row, options.reversed),
   });
   await applyPendingCreditSettled({ context, row, delta: sign * pendingCreditEffect(row) });
-  await applyStockPurchasePaid({
-    context,
-    stockPurchaseId: row.stock_purchase_id,
-    delta: sign * stockPurchaseEffect(row, options.reversed),
-  });
+  for (const field of SUPPLIER_BILL_PURCHASE_FIELDS) {
+    await applyPurchasePaid({
+      context,
+      field,
+      purchaseId: row[field],
+      delta: sign * purchaseEffect(row, field, options.reversed),
+    });
+  }
 }
 
 /** B7: the contact's `system` entry for a payment that moves their money. */
@@ -271,7 +324,7 @@ export async function writePaymentActivity(options: {
 /**
  * Writes a payment another write makes in its transaction — the invoice's "Paid now" receipt
  * (B13), a credit note's refund (B16), a pending credit's settlement (B24), a reversal (B21), a
- * stock purchase's "Paid" (S11): the day lock, the row, what it points at, the activity entry.
+ * purchase's "Paid" (S11, MD7): the day lock, the row, what it points at, the activity entry.
  *
  * @remarks
  * - **Failure modes:** `ConflictError` `day_closed`, `more_than_due`, `more_than_paid`,

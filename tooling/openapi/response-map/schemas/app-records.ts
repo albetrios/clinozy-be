@@ -1318,6 +1318,11 @@ export const paymentsRecordSchema = {
       nullable: true,
       description: 'The stock purchase a supplier bill pays (S11)',
     },
+    medical_purchase_order_id: {
+      type: 'string',
+      nullable: true,
+      description: 'The received medical order a supplier bill pays (MD7)',
+    },
     reverses_payment_id: { type: 'string', nullable: true },
     reversed_by_payment_id: { type: 'string', nullable: true },
     payee_name: { type: 'string', nullable: true },
@@ -1349,6 +1354,7 @@ export const paymentsRecordExample = {
   invoice_credit_note_id: null,
   pending_credit_id: null,
   stock_purchase_id: null,
+  medical_purchase_order_id: null,
   reverses_payment_id: null,
   reversed_by_payment_id: null,
   payee_name: null,
@@ -1791,506 +1797,545 @@ export const patientReviewsRecordExample = {
   updated_at: '2026-10-08T12:00:00.000Z',
 };
 
-/** `ManufacturerOutput`. */
+/** A linked record by id and name (a manufacturer's suppliers and MRs, 11.A.6). */
+const namedLinkSchema = {
+  type: 'object',
+  properties: { id: { type: 'string' }, name: { type: 'string' } },
+};
+
+/** A manufacturer chip — id, name and tone (11.B.6, 11.D.6, 11.F.6). */
+const manufacturerChipSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', example: 'mfr_k7x9m2pqr4w8n1v3a1b2c' },
+    name: { type: 'string', example: 'ALVI' },
+    tone: { type: 'string', enum: ['lav', 'sky', 'butter', 'blush', 'sage', 'mint'] },
+  },
+};
+
+/** `ManufacturerOutput` — a brand on the store's packs (launch #153, routes-final 11.A.6). */
 export const manufacturersRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'mfr_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    name: {
-      type: 'string',
-    },
-    tone: {
-      type: 'string',
-      enum: [
-        'butter',
-        'lav',
-        'sky',
-        'sage',
-        'blush',
-        'mint',
-        'peach',
-        'plum',
-        'lime',
-        'slate',
-        'stone',
-      ],
-    },
-    is_quick: {
-      type: 'boolean',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    id: { type: 'string', example: 'mfr_k7x9m2pqr4w8n1v3a1b2c' },
+    name: { type: 'string', example: 'ALVI', description: 'Stored upper case, unique in any case' },
+    tone: { type: 'string', enum: ['lav', 'sky', 'butter', 'blush', 'sage', 'mint'] },
+    is_quick: { type: 'boolean' },
+    medicine_count: { type: 'integer', description: 'Live medicines of this brand' },
+    suppliers: { type: 'array', items: namedLinkSchema },
+    medical_reps: { type: 'array', items: namedLinkSchema },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
 /** Example `ManufacturerOutput`. */
 export const manufacturersRecordExample = {
   id: 'mfr_k7x9m2pqr4w8n1v3a1b2c',
-  name: 'Sample name',
+  name: 'ALVI',
   tone: 'sky',
-  is_quick: true,
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  is_quick: false,
+  medicine_count: 4,
+  suppliers: [{ id: 'sup_k7x9m2pqr4w8n1v3a1b2c', name: 'Shree Medical Agency' }],
+  medical_reps: [{ id: 'mrep_k7x9m2pqr4w8n1v3a1b2c', name: 'Alvio Pharma · Rakesh' }],
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
 };
 
-/** `SupplierOutput`. */
+/** `SupplierOutput` — an agency the store buys from, with what it is owed (11.B.6). */
 export const suppliersRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'sup_k7x9m2pqr4w8n1v3a1b2c',
+    id: { type: 'string', example: 'sup_k7x9m2pqr4w8n1v3a1b2c' },
+    name: { type: 'string' },
+    phone: { type: 'string', example: '+919825044120', nullable: true },
+    gst_number: { type: 'string', example: '24ABCDE1234F1Z5', nullable: true },
+    is_quick: { type: 'boolean' },
+    manufacturers: { type: 'array', items: manufacturerChipSchema },
+    payable: {
+      type: 'number',
+      description: "Received orders' dues less open credits, rupees (never below 0)",
     },
-    name: {
-      type: 'string',
-    },
-    phone: {
-      type: 'string',
-      example: '+919825044120',
+    ageing_days: {
+      type: 'integer',
       nullable: true,
+      description: 'Days since the oldest received order still due',
     },
-    gst_number: {
-      type: 'string',
-      nullable: true,
-    },
-    manufacturer_ids: {
-      type: 'array',
-      items: {
-        type: 'string',
-      },
-    },
-    is_quick: {
-      type: 'boolean',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    order_count: { type: 'integer' },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
 /** Example `SupplierOutput`. */
 export const suppliersRecordExample = {
   id: 'sup_k7x9m2pqr4w8n1v3a1b2c',
-  name: 'Sample name',
-  phone: '+919800000001',
-  gst_number: 'Sample gst numb',
-  manufacturer_ids: ['ref_k7x9m2pqr4w8n1v3a1b2c'],
-  is_quick: true,
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  name: 'Shree Medical Agency',
+  phone: '+919825044120',
+  gst_number: '24ABCDE1234F1Z5',
+  is_quick: false,
+  manufacturers: [{ id: 'mfr_k7x9m2pqr4w8n1v3a1b2c', name: 'ALVI', tone: 'sky' }],
+  payable: 827,
+  ageing_days: 12,
+  order_count: 3,
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
 };
 
-/** `MedicalRepOutput`. */
+/** `MedicalRepOutput` — a medical representative (11.F.6). */
 export const medicalRepsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'mrep_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    name: {
-      type: 'string',
-    },
-    phone: {
-      type: 'string',
-      example: '+919825044120',
-      nullable: true,
-    },
-    manufacturer_ids: {
-      type: 'array',
-      items: {
-        type: 'string',
-      },
-    },
-    next_visit_on: {
-      type: 'string',
-      format: 'date',
-      nullable: true,
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    id: { type: 'string', example: 'mrep_k7x9m2pqr4w8n1v3a1b2c' },
+    name: { type: 'string', example: 'Alvio Pharma · Rakesh' },
+    phone: { type: 'string', nullable: true },
+    next_visit_on: { type: 'string', format: 'date', nullable: true },
+    is_visit_overdue: { type: 'boolean' },
+    last_visit_on: { type: 'string', format: 'date', nullable: true },
+    last_samples: { type: 'string', nullable: true },
+    manufacturers: { type: 'array', items: manufacturerChipSchema },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
 /** Example `MedicalRepOutput`. */
 export const medicalRepsRecordExample = {
   id: 'mrep_k7x9m2pqr4w8n1v3a1b2c',
-  name: 'Sample name',
-  phone: '+919800000001',
-  manufacturer_ids: ['ref_k7x9m2pqr4w8n1v3a1b2c'],
-  next_visit_on: '2026-10-08',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  name: 'Alvio Pharma · Rakesh',
+  phone: '+919825044121',
+  next_visit_on: '2026-10-22',
+  is_visit_overdue: false,
+  last_visit_on: '2026-10-08',
+  last_samples: '2 strips Alvi-D',
+  manufacturers: [{ id: 'mfr_k7x9m2pqr4w8n1v3a1b2c', name: 'ALVI', tone: 'sky' }],
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
 };
 
-/** `MedicalRepVisitOutput`. */
+/** `MedicalRepVisitOutput` — one logged MR visit (11.G.6). */
 export const medicalRepVisitsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'mrv_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    medical_rep_id: {
-      type: 'string',
-    },
-    visit_date: {
-      type: 'string',
-      format: 'date',
-    },
-    samples: {
-      type: 'string',
-      nullable: true,
-    },
-    notes: {
-      type: 'string',
-      nullable: true,
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    id: { type: 'string', example: 'mrv_k7x9m2pqr4w8n1v3a1b2c' },
+    medical_rep_id: { type: 'string' },
+    visit_date: { type: 'string', format: 'date' },
+    next_visit_on: { type: 'string', format: 'date', nullable: true },
+    samples: { type: 'string', nullable: true },
+    notes: { type: 'string', nullable: true },
+    logged_by_membership_id: { type: 'string', nullable: true },
+    created_at: { type: 'string', format: 'date-time' },
   },
 };
 
 /** Example `MedicalRepVisitOutput`. */
 export const medicalRepVisitsRecordExample = {
   id: 'mrv_k7x9m2pqr4w8n1v3a1b2c',
-  medical_rep_id: 'med_k7x9m2pqr4w8n1v3a1b2c',
+  medical_rep_id: 'mrep_k7x9m2pqr4w8n1v3a1b2c',
   visit_date: '2026-10-08',
-  samples: 'Sample samples',
-  notes: 'Sample notes',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  next_visit_on: '2026-10-22',
+  samples: '2 strips Alvi-D',
+  notes: 'New moisturiser launch next month',
+  logged_by_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
+  created_at: '2026-10-08T10:30:00.000Z',
 };
 
-/** `MedicineOutput`. */
+/** `MedicineOutput` — a medicine with its stock by batch (11.D.6). */
 export const medicinesRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'med_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    medicine_number: {
-      type: 'integer',
-    },
-    name: {
-      type: 'string',
-    },
-    composition: {
-      type: 'string',
+    id: { type: 'string', example: 'med_k7x9m2pqr4w8n1v3a1b2c' },
+    medicine_number: { type: 'integer', description: '#458' },
+    name: { type: 'string' },
+    composition: { type: 'string', nullable: true },
+    manufacturer: { ...manufacturerChipSchema, nullable: true },
+    is_prescription_only: { type: 'boolean' },
+    mrp: { type: 'number', description: 'GST inside, rupees' },
+    gst_percent: { type: 'integer', enum: [0, 5, 12, 18, 28] },
+    price_before_gst: { type: 'number' },
+    min_stock: { type: 'integer', description: 'Reorder at' },
+    max_stock: { type: 'integer', description: 'Fill up to' },
+    quantity: { type: 'integer', description: "Its batches' sum" },
+    stock_level: { type: 'string', enum: ['ok', 'low', 'out'] },
+    nearest_expiry: {
+      type: 'object',
       nullable: true,
+      properties: {
+        expiry_month: { type: 'string', example: '2027-03' },
+        batch_number: { type: 'string' },
+      },
     },
-    manufacturer_id: {
-      type: 'string',
+    near_expiry_discount_percent: { type: 'number', nullable: true },
+    best_rate: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        rate: { type: 'number' },
+        supplier_id: { type: 'string' },
+        supplier_name: { type: 'string' },
+      },
     },
-    mrp: {
-      type: 'number',
+    margin_percent: { type: 'number', nullable: true },
+    is_quick: { type: 'boolean' },
+    needs_details: { type: 'boolean' },
+    batches: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: 'mbt_k7x9m2pqr4w8n1v3a1b2c' },
+          batch_number: { type: 'string' },
+          expiry_month: { type: 'string', example: '2027-03' },
+          quantity: { type: 'integer' },
+          purchase_rate: { type: 'number', nullable: true },
+          supplier_id: { type: 'string', nullable: true },
+          is_expired: { type: 'boolean' },
+        },
+      },
     },
-    gst_percent: {
-      type: 'integer',
+    supplier_prices: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          supplier_id: { type: 'string' },
+          supplier_name: { type: 'string' },
+          rate: { type: 'number' },
+          free_quantity: { type: 'integer' },
+          lead_days: { type: 'integer' },
+        },
+      },
     },
-    min_stock: {
-      type: 'integer',
-    },
-    max_stock: {
-      type: 'integer',
-    },
-    batches: {},
-    supplier_rates: {},
-    is_quick: {
-      type: 'boolean',
-    },
-    is_prescription_only: {
-      type: 'boolean',
-    },
-    near_expiry_discount_percent: {
-      type: 'number',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
 /** Example `MedicineOutput`. */
 export const medicinesRecordExample = {
   id: 'med_k7x9m2pqr4w8n1v3a1b2c',
-  medicine_number: 12,
-  name: 'Sample name',
-  composition: 'Sample composition',
-  manufacturer_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  mrp: 100,
-  gst_percent: 1,
-  min_stock: 1,
-  max_stock: 1,
-  batches: [],
-  supplier_rates: [],
-  is_quick: true,
-  is_prescription_only: true,
-  near_expiry_discount_percent: 10,
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  medicine_number: 458,
+  name: 'Glycolac Cream',
+  composition: 'Glycolic acid 6%',
+  manufacturer: { id: 'mfr_k7x9m2pqr4w8n1v3a1b2c', name: 'ALVI', tone: 'sky' },
+  is_prescription_only: false,
+  mrp: 369,
+  gst_percent: 12,
+  price_before_gst: 329.46,
+  min_stock: 2,
+  max_stock: 10,
+  quantity: 7,
+  stock_level: 'ok',
+  nearest_expiry: { expiry_month: '2027-03', batch_number: 'GC2403' },
+  near_expiry_discount_percent: null,
+  best_rate: {
+    rate: 246,
+    supplier_id: 'sup_k7x9m2pqr4w8n1v3a1b2c',
+    supplier_name: 'Shree Medical Agency',
+  },
+  margin_percent: 33.33,
+  is_quick: false,
+  needs_details: false,
+  batches: [
+    {
+      id: 'mbt_k7x9m2pqr4w8n1v3a1b2c',
+      batch_number: 'GC2403',
+      expiry_month: '2027-03',
+      quantity: 7,
+      purchase_rate: 246,
+      supplier_id: 'sup_k7x9m2pqr4w8n1v3a1b2c',
+      is_expired: false,
+    },
+  ],
+  supplier_prices: [
+    {
+      supplier_id: 'sup_k7x9m2pqr4w8n1v3a1b2c',
+      supplier_name: 'Shree Medical Agency',
+      rate: 246,
+      free_quantity: 0,
+      lead_days: 2,
+    },
+  ],
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
 };
 
-/** `MedicalPurchaseOrderOutput`. */
+/** `{ updated_count }` — what the near-expiry discount changed (11.D.8 #24). */
+export const nearExpiryDiscountResultSchema = {
+  type: 'object',
+  properties: { updated_count: { type: 'integer' } },
+};
+
+/** Example near-expiry discount result. */
+export const nearExpiryDiscountResultExample = { updated_count: 3 };
+
+/** `MedicalPurchaseOrderOutput` — an order to a supplier: ordered, then received (11.E.6). */
 export const medicalPurchaseOrdersRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'mpo_k7x9m2pqr4w8n1v3a1b2c',
+    id: { type: 'string', example: 'mpo_k7x9m2pqr4w8n1v3a1b2c' },
+    purchase_order_number: { type: 'integer', description: 'PO #431' },
+    supplier: namedLinkSchema,
+    supplier_bill_number: { type: 'string', nullable: true },
+    order_date: { type: 'string', format: 'date' },
+    stage: { type: 'string', enum: ['ordered', 'received'] },
+    received_at: { type: 'string', format: 'date-time', nullable: true },
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: 'mpoi_k7x9m2pqr4w8n1v3a1b2c' },
+          line_number: { type: 'integer' },
+          medicine_id: { type: 'string' },
+          medicine_name: { type: 'string' },
+          quantity: { type: 'integer' },
+          free_quantity: { type: 'integer' },
+          rate: { type: 'number' },
+          amount: { type: 'number' },
+          is_received: { type: 'boolean', nullable: true },
+          batch_number: { type: 'string', nullable: true },
+          expiry_month: { type: 'string', nullable: true, example: '2028-10' },
+        },
+      },
     },
-    purchase_order_number: {
-      type: 'integer',
-    },
-    supplier_id: {
-      type: 'string',
-    },
-    supplier_bill_number: {
+    item_count: { type: 'integer' },
+    free_count: { type: 'integer' },
+    total: { type: 'number' },
+    paid_amount: { type: 'number' },
+    credited_amount: { type: 'number' },
+    due_amount: { type: 'number' },
+    payment_status: { type: 'string', enum: ['unpaid', 'partial', 'paid'] },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
+    deleted_at: { type: 'string', format: 'date-time', nullable: true },
+    delete_reason: {
       type: 'string',
       nullable: true,
+      enum: ['mistake', 'supplier_cant_deliver', 'price_changed', 'other'],
     },
-    order_date: {
-      type: 'string',
-      format: 'date',
-    },
-    stage: {
-      type: 'string',
-      enum: ['ordered', 'received', 'paid', 'cancelled'],
-    },
-    items: {},
-    paid_amount: {
-      type: 'number',
-    },
-    cancel_reason: {
-      type: 'string',
-      enum: ['mistake', 'duplicate', 'not_needed', 'other'],
-      nullable: true,
-    },
-    received_at: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    delete_note: { type: 'string', nullable: true },
   },
 };
 
 /** Example `MedicalPurchaseOrderOutput`. */
 export const medicalPurchaseOrdersRecordExample = {
   id: 'mpo_k7x9m2pqr4w8n1v3a1b2c',
-  purchase_order_number: 12,
-  supplier_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  supplier_bill_number: 'Sample supplier bill number',
+  purchase_order_number: 431,
+  supplier: { id: 'sup_k7x9m2pqr4w8n1v3a1b2c', name: 'Shree Medical Agency' },
+  supplier_bill_number: 'SMA-2291',
   order_date: '2026-10-08',
-  stage: 'ordered',
-  items: [],
-  paid_amount: 100,
-  cancel_reason: 'mistake',
-  received_at: '2026-10-08T10:00:00+05:30',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  stage: 'received',
+  received_at: '2026-10-08T12:00:00.000Z',
+  items: [
+    {
+      id: 'mpoi_k7x9m2pqr4w8n1v3a1b2c',
+      line_number: 1,
+      medicine_id: 'med_k7x9m2pqr4w8n1v3a1b2c',
+      medicine_name: 'Glycolac Cream',
+      quantity: 10,
+      free_quantity: 1,
+      rate: 246,
+      amount: 2460,
+      is_received: true,
+      batch_number: 'GC2403',
+      expiry_month: '2028-10',
+    },
+  ],
+  item_count: 1,
+  free_count: 1,
+  total: 2460,
+  paid_amount: 1633,
+  credited_amount: 0,
+  due_amount: 827,
+  payment_status: 'partial',
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T12:00:00.000Z',
+  deleted_at: null,
+  delete_reason: null,
+  delete_note: null,
 };
 
-/** `MedicalContactOutput`. */
-export const medicalContactsRecordSchema = {
-  type: 'object',
-  properties: {
-    id: {
-      type: 'string',
-      example: 'mcon_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    name: {
-      type: 'string',
-    },
-    phone: {
-      type: 'string',
-      example: '+919825044120',
-      nullable: true,
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-  },
-};
-
-/** Example `MedicalContactOutput`. */
-export const medicalContactsRecordExample = {
-  id: 'mcon_k7x9m2pqr4w8n1v3a1b2c',
-  name: 'Sample name',
-  phone: '+919800000001',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
-};
-
-/** `MedicalSaleOutput`. */
+/** `MedicalSaleOutput` — one sale and its `medical` invoice (11.H.6). */
 export const medicalSalesRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'msal_k7x9m2pqr4w8n1v3a1b2c',
+    id: { type: 'string', example: 'msal_k7x9m2pqr4w8n1v3a1b2c' },
+    sale_number: { type: 'integer', description: 'S-983' },
+    status: { type: 'string', enum: ['unpaid', 'paid', 'returned', 'voided'] },
+    contact: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        primary_phone: { type: 'string' },
+      },
     },
-    sale_number: {
-      type: 'integer',
+    patient_id: { type: 'string', nullable: true },
+    branch_id: { type: 'string' },
+    invoice: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        id: { type: 'string' },
+        invoice_number: { type: 'string' },
+        total: { type: 'number' },
+        paid_amount: { type: 'number' },
+        due_amount: { type: 'number' },
+        payment_status: { type: 'string', enum: ['unpaid', 'partial', 'paid'] },
+      },
     },
-    invoice_id: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          invoice_item_id: { type: 'string' },
+          medicine_id: { type: 'string', nullable: true },
+          name: { type: 'string' },
+          batch_number: { type: 'string', nullable: true },
+          expiry_month: { type: 'string', nullable: true },
+          quantity: { type: 'integer' },
+          rate: { type: 'number' },
+          discount_percent: { type: 'number' },
+          amount: { type: 'number' },
+          returned_quantity: { type: 'integer' },
+        },
+      },
+    },
+    returned_amount: { type: 'number' },
+    margin_amount: { type: 'number' },
+    margin_percent: { type: 'number', nullable: true },
+    member_ids: { type: 'array', items: { type: 'string' } },
+    patient_prescription_id: { type: 'string', nullable: true },
+    remark: { type: 'string', nullable: true },
+    returns: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: 'msrt_k7x9m2pqr4w8n1v3a1b2c' },
+          reason: {
+            type: 'string',
+            enum: ['unused', 'reaction', 'doctor_changed', 'wrong_item', 'damaged'],
+          },
+          refund_mode: { type: 'string', enum: ['cash', 'upi', 'card'] },
+          note: { type: 'string', nullable: true },
+          amount: { type: 'number' },
+          invoice_credit_note_id: { type: 'string' },
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                invoice_item_id: { type: 'string' },
+                quantity: { type: 'integer' },
+                amount: { type: 'number' },
+                is_restocked: { type: 'boolean' },
+              },
+            },
+          },
+          returned_by_membership_id: { type: 'string', nullable: true },
+          created_at: { type: 'string', format: 'date-time' },
+        },
+      },
+    },
+    sold_at: { type: 'string', format: 'date-time' },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
+    deleted_at: { type: 'string', format: 'date-time', nullable: true },
+    delete_reason: {
       type: 'string',
       nullable: true,
+      enum: ['billed_by_mistake', 'wrong_items', 'customer_changed_mind', 'other'],
     },
-    patient_id: {
-      type: 'string',
-      nullable: true,
-    },
-    medical_contact_id: {
-      type: 'string',
-      nullable: true,
-    },
-    prescription_id: {
-      type: 'string',
-      nullable: true,
-    },
-    lead_id: {
-      type: 'string',
-      nullable: true,
-    },
-    status: {
-      type: 'string',
-      enum: ['sold', 'voided'],
-    },
-    sold_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    voided_at: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
-    },
-    returns: {},
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    delete_note: { type: 'string', nullable: true },
   },
 };
 
 /** Example `MedicalSaleOutput`. */
 export const medicalSalesRecordExample = {
   id: 'msal_k7x9m2pqr4w8n1v3a1b2c',
-  sale_number: 12,
-  invoice_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  patient_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  medical_contact_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  prescription_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  lead_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  status: 'sold',
-  sold_at: '2026-10-08T10:00:00+05:30',
-  voided_at: '2026-10-08T10:00:00+05:30',
+  sale_number: 983,
+  status: 'paid',
+  contact: { id: 'con_k7x9m2pqr4w8n1v3a1b2c', name: 'Asha Patel', primary_phone: '+919825044122' },
+  patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
+  branch_id: 'brn_k7x9m2pqr4w8n1v3a1b2c',
+  invoice: {
+    id: 'inv_k7x9m2pqr4w8n1v3a1b2c',
+    invoice_number: '2026-27/0412',
+    total: 563,
+    paid_amount: 563,
+    due_amount: 0,
+    payment_status: 'paid',
+  },
+  items: [
+    {
+      invoice_item_id: 'invi_k7x9m2pqr4w8n1v3a1b2c',
+      medicine_id: 'med_k7x9m2pqr4w8n1v3a1b2c',
+      name: 'Glycolac Cream',
+      batch_number: 'GC2403',
+      expiry_month: '2027-03',
+      quantity: 1,
+      rate: 369,
+      discount_percent: 0,
+      amount: 369,
+      returned_quantity: 0,
+    },
+  ],
+  returned_amount: 0,
+  margin_amount: 123,
+  margin_percent: 33.33,
+  member_ids: ['mem_k7x9m2pqr4w8n1v3a1b2c'],
+  patient_prescription_id: null,
+  remark: null,
   returns: [],
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  sold_at: '2026-10-08T12:00:00.000Z',
+  created_at: '2026-10-08T12:00:00.000Z',
+  updated_at: '2026-10-08T12:00:00.000Z',
+  deleted_at: null,
+  delete_reason: null,
+  delete_note: null,
 };
 
-/** `SupplierCreditOutput`. */
+/** `SupplierCreditOutput` — stock returned to a supplier, owed back (11.C.6). */
 export const supplierCreditsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'scr_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    supplier_id: {
-      type: 'string',
-    },
-    medicine_id: {
-      type: 'string',
-      nullable: true,
-    },
-    batch_number: {
-      type: 'string',
-      nullable: true,
-    },
-    quantity: {
-      type: 'integer',
-    },
-    amount: {
-      type: 'number',
-    },
-    adjusted_at: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    id: { type: 'string', example: 'scr_k7x9m2pqr4w8n1v3a1b2c' },
+    supplier_id: { type: 'string' },
+    supplier_name: { type: 'string' },
+    medicine_id: { type: 'string' },
+    medicine_name: { type: 'string' },
+    medicine_batch_id: { type: 'string' },
+    batch_number: { type: 'string' },
+    quantity: { type: 'integer' },
+    rate: { type: 'number', description: "The batch's purchase rate" },
+    amount: { type: 'number', description: 'quantity × rate' },
+    applied_amount: { type: 'number', description: "Set against the supplier's dues" },
+    status: { type: 'string', enum: ['open', 'adjusted'] },
+    created_by_membership_id: { type: 'string', nullable: true },
+    created_at: { type: 'string', format: 'date-time' },
   },
 };
 
 /** Example `SupplierCreditOutput`. */
 export const supplierCreditsRecordExample = {
   id: 'scr_k7x9m2pqr4w8n1v3a1b2c',
-  supplier_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  medicine_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  batch_number: 'Sample batch number',
+  supplier_id: 'sup_k7x9m2pqr4w8n1v3a1b2c',
+  supplier_name: 'Shree Medical Agency',
+  medicine_id: 'med_k7x9m2pqr4w8n1v3a1b2c',
+  medicine_name: 'Glycolac Cream',
+  medicine_batch_id: 'mbt_k7x9m2pqr4w8n1v3a1b2c',
+  batch_number: 'GC2403',
   quantity: 1,
-  amount: 100,
-  adjusted_at: '2026-10-08T10:00:00+05:30',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  rate: 369,
+  amount: 369,
+  applied_amount: 369,
+  status: 'adjusted',
+  created_by_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
+  created_at: '2026-10-08T12:00:00.000Z',
 };
 
 /** `StockVendorOutput` — who the clinic buys consumables from (launch #137, routes-final 9.E.6). */

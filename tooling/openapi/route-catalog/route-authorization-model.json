@@ -549,21 +549,6 @@
     "model": "organization",
     "verifyNoMutation": true
   },
-  "GET /api/v1/app/medical-rep-visits/:medical_rep_visit_id": {
-    "model": "organization"
-  },
-  "PATCH /api/v1/app/medical-rep-visits/:medical_rep_visit_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "DELETE /api/v1/app/medical-rep-visits/:medical_rep_visit_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "POST /api/v1/app/medical-rep-visits/:medical_rep_visit_id/restore": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
   "GET /api/v1/app/medicines/:medicine_id": {
     "model": "organization"
   },
@@ -590,10 +575,6 @@
     "model": "organization",
     "verifyNoMutation": true
   },
-  "POST /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/cancel": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
   "DELETE /api/v1/app/medical-purchase-orders/:medical_purchase_order_id": {
     "model": "organization",
     "verifyNoMutation": true
@@ -602,27 +583,8 @@
     "model": "organization",
     "verifyNoMutation": true
   },
-  "GET /api/v1/app/medical-contacts/:medical_contact_id": {
-    "model": "organization"
-  },
-  "PATCH /api/v1/app/medical-contacts/:medical_contact_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "DELETE /api/v1/app/medical-contacts/:medical_contact_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "POST /api/v1/app/medical-contacts/:medical_contact_id/restore": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
   "GET /api/v1/app/medical-sales/:medical_sale_id": {
     "model": "organization"
-  },
-  "POST /api/v1/app/medical-sales/:medical_sale_id/void": {
-    "model": "organization",
-    "verifyNoMutation": true
   },
   "DELETE /api/v1/app/medical-sales/:medical_sale_id": {
     "model": "organization",
@@ -634,14 +596,6 @@
   },
   "GET /api/v1/app/supplier-credits/:supplier_credit_id": {
     "model": "organization"
-  },
-  "DELETE /api/v1/app/supplier-credits/:supplier_credit_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "POST /api/v1/app/supplier-credits/:supplier_credit_id/restore": {
-    "model": "organization",
-    "verifyNoMutation": true
   },
   "GET /api/v1/app/stock-vendors/:stock_vendor_id": {
     "model": "organization"
@@ -1005,6 +959,25 @@
     "verifyNoMutation": true
   },
   "POST /api/v1/app/tasks/:task_id/reassign": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id": {
+    "model": "organization"
+  },
+  "DELETE /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/medical-sales/:medical_sale_id/returns": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/suppliers/:supplier_id/payments": {
     "model": "organization",
     "verifyNoMutation": true
   }

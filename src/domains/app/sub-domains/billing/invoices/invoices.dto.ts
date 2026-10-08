@@ -87,7 +87,7 @@ export const invoicePaymentSplitDto = z
   .strict();
 
 /** The drawer's "Paid now" (B13): the receipt recorded with the bill, up to its total. */
-const paidNowDto = z
+export const invoicePaidNowDto = z
   .object({
     splits: z
       .array(invoicePaymentSplitDto)
@@ -138,7 +138,7 @@ export const CreateInvoiceDto = z
     overall_discount: invoiceFields.overall_discount.optional(),
     remark: invoiceFields.remark.optional(),
     patient_prescription_id: invoiceFields.patient_prescription_id.optional(),
-    payment: paidNowDto.optional(),
+    payment: invoicePaidNowDto.optional(),
   })
   .strict();
 
@@ -203,4 +203,4 @@ export type UpdateInvoiceInput = z.infer<typeof UpdateInvoiceDto>;
 /** One line as a create or a change sends it. */
 export type InvoiceItemInput = z.infer<typeof changedInvoiceItem>;
 /** The "Paid now" of a create. */
-export type InvoicePaidNowInput = z.infer<typeof paidNowDto>;
+export type InvoicePaidNowInput = z.infer<typeof invoicePaidNowDto>;

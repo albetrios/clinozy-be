@@ -35,6 +35,8 @@ export interface PaymentOutput {
   pending_credit_id: string | null;
   /** The stock purchase a supplier bill pays (launch #137, S11) */
   stock_purchase_id: string | null;
+  /** The received medical order a supplier bill pays (#153, MD7) */
+  medical_purchase_order_id: string | null;
   reverses_payment_id: string | null;
   reversed_by_payment_id: string | null;
   payee_name: string | null;

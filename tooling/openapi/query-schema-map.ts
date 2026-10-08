@@ -54,15 +54,14 @@ import { listDayClosesQueryDto as appDayClosesListQueryDto } from '@/domains/app
 import { listPatientTreatmentsQueryDto as appPatientTreatmentsListQueryDto } from '@/domains/app/sub-domains/patients/patient-treatments/patient-treatments.dto.js';
 import { listPatientCheckInsQueryDto as appPatientCheckInsListQueryDto } from '@/domains/app/sub-domains/patients/patient-check-ins/patient-check-ins.dto.js';
 import { listPatientReviewsQueryDto as appPatientReviewsListQueryDto } from '@/domains/app/sub-domains/patients/patient-reviews/patient-reviews.dto.js';
-import { listManufacturersQueryDto as appManufacturersListQueryDto } from '@/domains/app/sub-domains/manufacturers/manufacturers.dto.js';
-import { listSuppliersQueryDto as appSuppliersListQueryDto } from '@/domains/app/sub-domains/suppliers/suppliers.dto.js';
-import { listMedicalRepsQueryDto as appMedicalRepsListQueryDto } from '@/domains/app/sub-domains/medical-reps/medical-reps.dto.js';
-import { listMedicalRepVisitsQueryDto as appMedicalRepVisitsListQueryDto } from '@/domains/app/sub-domains/medical-rep-visits/medical-rep-visits.dto.js';
-import { listMedicinesQueryDto as appMedicinesListQueryDto } from '@/domains/app/sub-domains/medicines/medicines.dto.js';
-import { listMedicalPurchaseOrdersQueryDto as appMedicalPurchaseOrdersListQueryDto } from '@/domains/app/sub-domains/medical-purchase-orders/medical-purchase-orders.dto.js';
-import { listMedicalContactsQueryDto as appMedicalContactsListQueryDto } from '@/domains/app/sub-domains/medical-contacts/medical-contacts.dto.js';
-import { listMedicalSalesQueryDto as appMedicalSalesListQueryDto } from '@/domains/app/sub-domains/medical-sales/medical-sales.dto.js';
-import { listSupplierCreditsQueryDto as appSupplierCreditsListQueryDto } from '@/domains/app/sub-domains/supplier-credits/supplier-credits.dto.js';
+import { listManufacturersQueryDto as appManufacturersListQueryDto } from '@/domains/app/sub-domains/medical/manufacturers/manufacturers.dto.js';
+import { listSuppliersQueryDto as appSuppliersListQueryDto } from '@/domains/app/sub-domains/medical/suppliers/suppliers.dto.js';
+import { listMedicalRepsQueryDto as appMedicalRepsListQueryDto } from '@/domains/app/sub-domains/medical/medical-reps/medical-reps.dto.js';
+import { listMedicalRepVisitsQueryDto as appMedicalRepVisitsListQueryDto } from '@/domains/app/sub-domains/medical/medical-reps/medical-rep-visits/medical-rep-visits.dto.js';
+import { listMedicinesQueryDto as appMedicinesListQueryDto } from '@/domains/app/sub-domains/medical/medicines/medicines.dto.js';
+import { listMedicalPurchaseOrdersQueryDto as appMedicalPurchaseOrdersListQueryDto } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.dto.js';
+import { listMedicalSalesQueryDto as appMedicalSalesListQueryDto } from '@/domains/app/sub-domains/medical/medical-sales/medical-sales.dto.js';
+import { listSupplierCreditsQueryDto as appSupplierCreditsListQueryDto } from '@/domains/app/sub-domains/medical/suppliers/supplier-credits/supplier-credits.dto.js';
 import { listStockVendorsQueryDto as appStockVendorsListQueryDto } from '@/domains/app/sub-domains/stock/stock-vendors/stock-vendors.dto.js';
 import { listStockItemsQueryDto as appStockItemsListQueryDto } from '@/domains/app/sub-domains/stock/stock-items/stock-items.dto.js';
 import { listStockPurchasesQueryDto as appStockPurchasesListQueryDto } from '@/domains/app/sub-domains/stock/stock-purchases/stock-purchases.dto.js';
@@ -128,7 +127,7 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/app/medical-reps/{medical_rep_id}/visits': appMedicalRepVisitsListQueryDto,
   'GET /api/v1/app/medicines': appMedicinesListQueryDto,
   'GET /api/v1/app/medical-purchase-orders': appMedicalPurchaseOrdersListQueryDto,
-  'GET /api/v1/app/medical-contacts': appMedicalContactsListQueryDto,
+  'GET /api/v1/app/medical-payments': appPaymentsListQueryDto,
   'GET /api/v1/app/medical-sales': appMedicalSalesListQueryDto,
   'GET /api/v1/app/supplier-credits': appSupplierCreditsListQueryDto,
   'GET /api/v1/app/stock-vendors': appStockVendorsListQueryDto,

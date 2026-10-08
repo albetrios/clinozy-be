@@ -24,7 +24,10 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
-import { medicines } from '@/domains/app/sub-domains/medicines/medicines.schema.js';
+import {
+  medicine_batches,
+  medicines,
+} from '@/domains/app/sub-domains/medical/medicines/medicines.schema.js';
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
 import { patient_offering_suggestions } from '@/domains/app/sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.schema.js';
 import { patient_prescriptions } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.schema.js';
@@ -269,6 +272,11 @@ export const invoice_items = appSchema
         mode: 'number',
       }).references((): AnyPgColumn => patient_offering_suggestions.id, { onDelete: 'set null' }),
       batch_number: varchar('batch_number', { length: 20 }),
+      // The batch a medicine line draws from (launch #153, MD19)
+      medicine_batch_id: bigint('medicine_batch_id', { mode: 'number' }).references(
+        (): AnyPgColumn => medicine_batches.id,
+        { onDelete: 'restrict' },
+      ),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
@@ -288,6 +296,13 @@ export const invoice_items = appSchema
       index('idx_invoice_items_medicine_id')
         .on(table.medicine_id)
         .where(sql`${table.medicine_id} IS NOT NULL`),
+      index('idx_invoice_items_medicine_batch_id')
+        .on(table.medicine_batch_id)
+        .where(sql`${table.medicine_batch_id} IS NOT NULL`),
+      check(
+        'chk_invoice_items_medicine_batch',
+        sql`${table.medicine_batch_id} IS NULL OR ${table.medicine_id} IS NOT NULL`,
+      ),
       index('idx_invoice_items_patient_offering_suggestion_id')
         .on(table.patient_offering_suggestion_id)
         .where(sql`${table.patient_offering_suggestion_id} IS NOT NULL`),

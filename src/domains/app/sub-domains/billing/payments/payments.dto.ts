@@ -57,6 +57,7 @@ const paymentFields = {
   contact_id: recordIdSchema.nullable(),
   invoice_id: recordIdSchema.nullable(),
   stock_purchase_id: recordIdSchema.nullable(),
+  medical_purchase_order_id: recordIdSchema.nullable(),
   payee_name: trimmedStringMinMax(1, 120).nullable(),
   expense_category: z.enum(PAYMENT_EXPENSE_CATEGORY_VALUES).nullable(),
   reference: trimmedStringMinMax(1, 60).nullable(),
@@ -75,7 +76,8 @@ export const paymentsIdParamsDto = z
  * Body of `POST /app/payments` (routes-final 8.C.8 #14): `kind*` (`receipt` · `money_back` ·
  * `expense` · `supplier_bill` — refunds and reversals have their own routes), `branch_id*`,
  * `splits*` (money modes); optional `paid_at` (an open day), `contact_id` (a receipt's),
- * `invoice_id` (a receipt's), `stock_purchase_id` (a supplier bill's — launch #137, S11),
+ * `invoice_id` (a receipt's), `stock_purchase_id` (a supplier bill's — launch #137, S11) or
+ * `medical_purchase_order_id` (a supplier bill's received medical order — #153, MD7),
  * `payee_name`, `expense_category`, `reference`, `note`, `attachment_keys`.
  */
 export const CreatePaymentDto = z
@@ -87,6 +89,7 @@ export const CreatePaymentDto = z
     contact_id: paymentFields.contact_id.optional(),
     invoice_id: paymentFields.invoice_id.optional(),
     stock_purchase_id: paymentFields.stock_purchase_id.optional(),
+    medical_purchase_order_id: paymentFields.medical_purchase_order_id.optional(),
     payee_name: paymentFields.payee_name.optional(),
     expense_category: paymentFields.expense_category.optional(),
     reference: paymentFields.reference.optional(),
@@ -97,7 +100,8 @@ export const CreatePaymentDto = z
 
 /**
  * Body of `PATCH /app/payments/{payment_id}` (8.C.8 #16) — on an open day only: any of the splits,
- * `paid_at`, `contact_id`, `invoice_id`, `stock_purchase_id`, `payee_name`, `expense_category`,
+ * `paid_at`, `contact_id`, `invoice_id`, `stock_purchase_id`, `medical_purchase_order_id`,
+ * `payee_name`, `expense_category`,
  * `reference`, `note`, `attachment_keys` (null clears an optional one); `expected_updated_at` refuses a stale save. The
  * kind, direction and branch never change (B20).
  */
@@ -108,6 +112,7 @@ export const UpdatePaymentDto = z
     contact_id: paymentFields.contact_id.optional(),
     invoice_id: paymentFields.invoice_id.optional(),
     stock_purchase_id: paymentFields.stock_purchase_id.optional(),
+    medical_purchase_order_id: paymentFields.medical_purchase_order_id.optional(),
     payee_name: paymentFields.payee_name.optional(),
     expense_category: paymentFields.expense_category.optional(),
     reference: paymentFields.reference.optional(),
@@ -133,8 +138,8 @@ export const listPaymentEditsQueryDto = cursorPaginationSchema.strict();
 
 /**
  * Query of the ledger and its export (8.C.8 #12, #13): `q` (payee, `PAY-12`), the direction, kind,
- * mode, branch and category (several), the contact, patient, invoice, pending credit and stock
- * purchase, the paid days (inclusive), `is_settled`, the created range; sort `paid_at` (default,
+ * mode, branch and category (several), the contact, patient, invoice, pending credit, stock
+ * purchase and medical order, the paid days (inclusive), `is_settled`, the created range; sort `paid_at` (default,
  * newest first) | `created_at` | `amount`.
  */
 export const listPaymentsQueryDto = listSearchSortSchema([
@@ -152,6 +157,7 @@ export const listPaymentsQueryDto = listSearchSortSchema([
     invoice_id: recordIdSchema.optional(),
     pending_credit_id: recordIdSchema.optional(),
     stock_purchase_id: recordIdSchema.optional(),
+    medical_purchase_order_id: recordIdSchema.optional(),
     expense_category: valueListSchema(PAYMENT_EXPENSE_CATEGORY_VALUES).optional(),
     paid_date_from: calendarDateSchema.optional(),
     paid_date_to: calendarDateSchema.optional(),

@@ -245,90 +245,116 @@ src/
     │   │   │   ├── leads.service.ts
     │   │   │   ├── leads.types.ts
     │   │   │   └── leads.validator.ts
-    │   │   ├── manufacturers/
-    │   │   │   ├── manufacturers.constants.ts
-    │   │   │   ├── manufacturers.controller.ts
-    │   │   │   ├── manufacturers.dto.ts
-    │   │   │   ├── manufacturers.overview.md
-    │   │   │   ├── manufacturers.repository.ts
-    │   │   │   ├── manufacturers.routes.ts
-    │   │   │   ├── manufacturers.schema.ts
-    │   │   │   ├── manufacturers.serializer.ts
-    │   │   │   ├── manufacturers.service.ts
-    │   │   │   ├── manufacturers.types.ts
-    │   │   │   └── manufacturers.validator.ts
-    │   │   ├── medical-contacts/
-    │   │   │   ├── medical-contacts.constants.ts
-    │   │   │   ├── medical-contacts.controller.ts
-    │   │   │   ├── medical-contacts.dto.ts
-    │   │   │   ├── medical-contacts.overview.md
-    │   │   │   ├── medical-contacts.repository.ts
-    │   │   │   ├── medical-contacts.routes.ts
-    │   │   │   ├── medical-contacts.schema.ts
-    │   │   │   ├── medical-contacts.serializer.ts
-    │   │   │   ├── medical-contacts.service.ts
-    │   │   │   ├── medical-contacts.types.ts
-    │   │   │   └── medical-contacts.validator.ts
-    │   │   ├── medical-purchase-orders/
-    │   │   │   ├── medical-purchase-orders.constants.ts
-    │   │   │   ├── medical-purchase-orders.controller.ts
-    │   │   │   ├── medical-purchase-orders.dto.ts
-    │   │   │   ├── medical-purchase-orders.overview.md
-    │   │   │   ├── medical-purchase-orders.repository.ts
-    │   │   │   ├── medical-purchase-orders.routes.ts
-    │   │   │   ├── medical-purchase-orders.schema.ts
-    │   │   │   ├── medical-purchase-orders.serializer.ts
-    │   │   │   ├── medical-purchase-orders.service.ts
-    │   │   │   ├── medical-purchase-orders.types.ts
-    │   │   │   └── medical-purchase-orders.validator.ts
-    │   │   ├── medical-rep-visits/
-    │   │   │   ├── medical-rep-visits.constants.ts
-    │   │   │   ├── medical-rep-visits.controller.ts
-    │   │   │   ├── medical-rep-visits.dto.ts
-    │   │   │   ├── medical-rep-visits.overview.md
-    │   │   │   ├── medical-rep-visits.repository.ts
-    │   │   │   ├── medical-rep-visits.routes.ts
-    │   │   │   ├── medical-rep-visits.schema.ts
-    │   │   │   ├── medical-rep-visits.serializer.ts
-    │   │   │   ├── medical-rep-visits.service.ts
-    │   │   │   ├── medical-rep-visits.types.ts
-    │   │   │   └── medical-rep-visits.validator.ts
-    │   │   ├── medical-reps/
-    │   │   │   ├── medical-reps.constants.ts
-    │   │   │   ├── medical-reps.controller.ts
-    │   │   │   ├── medical-reps.dto.ts
-    │   │   │   ├── medical-reps.overview.md
-    │   │   │   ├── medical-reps.repository.ts
-    │   │   │   ├── medical-reps.routes.ts
-    │   │   │   ├── medical-reps.schema.ts
-    │   │   │   ├── medical-reps.serializer.ts
-    │   │   │   ├── medical-reps.service.ts
-    │   │   │   ├── medical-reps.types.ts
-    │   │   │   └── medical-reps.validator.ts
-    │   │   ├── medical-sales/
-    │   │   │   ├── medical-sales.constants.ts
-    │   │   │   ├── medical-sales.controller.ts
-    │   │   │   ├── medical-sales.dto.ts
-    │   │   │   ├── medical-sales.overview.md
-    │   │   │   ├── medical-sales.repository.ts
-    │   │   │   ├── medical-sales.routes.ts
-    │   │   │   ├── medical-sales.schema.ts
-    │   │   │   ├── medical-sales.serializer.ts
-    │   │   │   ├── medical-sales.service.ts
-    │   │   │   ├── medical-sales.types.ts
-    │   │   │   └── medical-sales.validator.ts
-    │   │   ├── medicines/
-    │   │   │   ├── medicines.constants.ts
-    │   │   │   ├── medicines.controller.ts
-    │   │   │   ├── medicines.dto.ts
-    │   │   │   ├── medicines.overview.md
-    │   │   │   ├── medicines.repository.ts
-    │   │   │   ├── medicines.routes.ts
-    │   │   │   ├── medicines.schema.ts
-    │   │   │   ├── medicines.serializer.ts
-    │   │   │   ├── medicines.service.ts
-    │   │   │   ├── medicines.types.ts
-    │   │   │   └── medicines.validator.ts
+    │   │   ├── medical/
+    │   │   │   ├── manufacturers/
+    │   │   │   │   ├── manufacturers.constants.ts
+    │   │   │   │   ├── manufacturers.controller.ts
+    │   │   │   │   ├── manufacturers.dto.ts
+    │   │   │   │   ├── manufacturers.overview.md
+    │   │   │   │   ├── manufacturers.repository.ts
+    │   │   │   │   ├── manufacturers.routes.ts
+    │   │   │   │   ├── manufacturers.rules.ts
+    │   │   │   │   ├── manufacturers.schema.ts
+    │   │   │   │   ├── manufacturers.serializer.ts
+    │   │   │   │   ├── manufacturers.service.ts
+    │   │   │   │   ├── manufacturers.types.ts
+    │   │   │   │   └── manufacturers.validator.ts
+    │   │   │   ├── medical-purchase-orders/
+    │   │   │   │   ├── medical-purchase-orders.constants.ts
+    │   │   │   │   ├── medical-purchase-orders.controller.ts
+    │   │   │   │   ├── medical-purchase-orders.dto.ts
+    │   │   │   │   ├── medical-purchase-orders.overview.md
+    │   │   │   │   ├── medical-purchase-orders.repository.ts
+    │   │   │   │   ├── medical-purchase-orders.routes.ts
+    │   │   │   │   ├── medical-purchase-orders.rules.ts
+    │   │   │   │   ├── medical-purchase-orders.schema.ts
+    │   │   │   │   ├── medical-purchase-orders.serializer.ts
+    │   │   │   │   ├── medical-purchase-orders.service.ts
+    │   │   │   │   ├── medical-purchase-orders.types.ts
+    │   │   │   │   └── medical-purchase-orders.validator.ts
+    │   │   │   ├── medical-reps/
+    │   │   │   │   ├── medical-rep-visits/
+    │   │   │   │   │   ├── medical-rep-visits.constants.ts
+    │   │   │   │   │   ├── medical-rep-visits.controller.ts
+    │   │   │   │   │   ├── medical-rep-visits.dto.ts
+    │   │   │   │   │   ├── medical-rep-visits.overview.md
+    │   │   │   │   │   ├── medical-rep-visits.repository.ts
+    │   │   │   │   │   ├── medical-rep-visits.routes.ts
+    │   │   │   │   │   ├── medical-rep-visits.rules.ts
+    │   │   │   │   │   ├── medical-rep-visits.schema.ts
+    │   │   │   │   │   ├── medical-rep-visits.serializer.ts
+    │   │   │   │   │   ├── medical-rep-visits.service.ts
+    │   │   │   │   │   ├── medical-rep-visits.types.ts
+    │   │   │   │   │   └── medical-rep-visits.validator.ts
+    │   │   │   │   ├── medical-reps.constants.ts
+    │   │   │   │   ├── medical-reps.controller.ts
+    │   │   │   │   ├── medical-reps.dto.ts
+    │   │   │   │   ├── medical-reps.overview.md
+    │   │   │   │   ├── medical-reps.repository.ts
+    │   │   │   │   ├── medical-reps.routes.ts
+    │   │   │   │   ├── medical-reps.rules.ts
+    │   │   │   │   ├── medical-reps.schema.ts
+    │   │   │   │   ├── medical-reps.serializer.ts
+    │   │   │   │   ├── medical-reps.service.ts
+    │   │   │   │   ├── medical-reps.types.ts
+    │   │   │   │   └── medical-reps.validator.ts
+    │   │   │   ├── medical-sales/
+    │   │   │   │   ├── medical-sales.constants.ts
+    │   │   │   │   ├── medical-sales.controller.ts
+    │   │   │   │   ├── medical-sales.dto.ts
+    │   │   │   │   ├── medical-sales.overview.md
+    │   │   │   │   ├── medical-sales.repository.ts
+    │   │   │   │   ├── medical-sales.routes.ts
+    │   │   │   │   ├── medical-sales.rules.ts
+    │   │   │   │   ├── medical-sales.schema.ts
+    │   │   │   │   ├── medical-sales.serializer.ts
+    │   │   │   │   ├── medical-sales.service.ts
+    │   │   │   │   ├── medical-sales.types.ts
+    │   │   │   │   └── medical-sales.validator.ts
+    │   │   │   ├── medicines/
+    │   │   │   │   ├── medicines.constants.ts
+    │   │   │   │   ├── medicines.controller.ts
+    │   │   │   │   ├── medicines.dto.ts
+    │   │   │   │   ├── medicines.overview.md
+    │   │   │   │   ├── medicines.repository.ts
+    │   │   │   │   ├── medicines.routes.ts
+    │   │   │   │   ├── medicines.rules.ts
+    │   │   │   │   ├── medicines.schema.ts
+    │   │   │   │   ├── medicines.serializer.ts
+    │   │   │   │   ├── medicines.service.ts
+    │   │   │   │   ├── medicines.stock.ts
+    │   │   │   │   ├── medicines.types.ts
+    │   │   │   │   └── medicines.validator.ts
+    │   │   │   ├── suppliers/
+    │   │   │   │   ├── supplier-credits/
+    │   │   │   │   │   ├── supplier-credits.constants.ts
+    │   │   │   │   │   ├── supplier-credits.controller.ts
+    │   │   │   │   │   ├── supplier-credits.dto.ts
+    │   │   │   │   │   ├── supplier-credits.ledger.ts
+    │   │   │   │   │   ├── supplier-credits.overview.md
+    │   │   │   │   │   ├── supplier-credits.repository.ts
+    │   │   │   │   │   ├── supplier-credits.routes.ts
+    │   │   │   │   │   ├── supplier-credits.rules.ts
+    │   │   │   │   │   ├── supplier-credits.schema.ts
+    │   │   │   │   │   ├── supplier-credits.serializer.ts
+    │   │   │   │   │   ├── supplier-credits.service.ts
+    │   │   │   │   │   ├── supplier-credits.types.ts
+    │   │   │   │   │   └── supplier-credits.validator.ts
+    │   │   │   │   ├── suppliers.constants.ts
+    │   │   │   │   ├── suppliers.controller.ts
+    │   │   │   │   ├── suppliers.dto.ts
+    │   │   │   │   ├── suppliers.overview.md
+    │   │   │   │   ├── suppliers.repository.ts
+    │   │   │   │   ├── suppliers.routes.ts
+    │   │   │   │   ├── suppliers.rules.ts
+    │   │   │   │   ├── suppliers.schema.ts
+    │   │   │   │   ├── suppliers.serializer.ts
+    │   │   │   │   ├── suppliers.service.ts
+    │   │   │   │   ├── suppliers.types.ts
+    │   │   │   │   └── suppliers.validator.ts
+    │   │   │   ├── medical.container.ts
+    │   │   │   ├── medical.overview.md
+    │   │   │   └── medical.routes.ts
     │   │   ├── memberships/
     │   │   │   ├── membership-preferences/
     │   │   │   │   ├── membership-preferences.constants.ts
@@ -638,30 +664,6 @@ src/
     │   │   │   ├── stock.container.ts
     │   │   │   ├── stock.overview.md
     │   │   │   └── stock.routes.ts
-    │   │   ├── supplier-credits/
-    │   │   │   ├── supplier-credits.constants.ts
-    │   │   │   ├── supplier-credits.controller.ts
-    │   │   │   ├── supplier-credits.dto.ts
-    │   │   │   ├── supplier-credits.overview.md
-    │   │   │   ├── supplier-credits.repository.ts
-    │   │   │   ├── supplier-credits.routes.ts
-    │   │   │   ├── supplier-credits.schema.ts
-    │   │   │   ├── supplier-credits.serializer.ts
-    │   │   │   ├── supplier-credits.service.ts
-    │   │   │   ├── supplier-credits.types.ts
-    │   │   │   └── supplier-credits.validator.ts
-    │   │   ├── suppliers/
-    │   │   │   ├── suppliers.constants.ts
-    │   │   │   ├── suppliers.controller.ts
-    │   │   │   ├── suppliers.dto.ts
-    │   │   │   ├── suppliers.overview.md
-    │   │   │   ├── suppliers.repository.ts
-    │   │   │   ├── suppliers.routes.ts
-    │   │   │   ├── suppliers.schema.ts
-    │   │   │   ├── suppliers.serializer.ts
-    │   │   │   ├── suppliers.service.ts
-    │   │   │   ├── suppliers.types.ts
-    │   │   │   └── suppliers.validator.ts
     │   │   └── tasks/
     │   │   │   ├── queues/
     │   │   │       ├── task-rules.job.schema.ts

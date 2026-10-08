@@ -39,10 +39,15 @@ export interface BaseRecordControllerOptions {
   hiddenFields?: Readonly<Record<string, string>>;
   /** Body fields only holders of a permission may send — 403 otherwise (`{ field: 'resource:code' }`). */
   guardedFields?: Readonly<Record<string, string>>;
-  /** The table's read permission — an export (gated by `list:export`) needs it too. */
+  /** The table's read permission — an export (gated by its resource's export code) needs it too. */
   readPermission?: string;
   /** The download's file name stem (`leads` → `leads-2026-10-07.csv`). */
   exportName?: string;
+  /**
+   * Derived filters every list call adds beside the query's — the same table read for another
+   * screen (the medical store's payments, MD22).
+   */
+  listDerived?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -150,6 +155,7 @@ export class BaseRecordController<Output extends { id: string }> {
       parentPublicId: this.readParentId(request),
       actingUserPublicId: this.actor(request),
       visibility: await this.visibility(request),
+      ...(this.options.listDerived ? { derived: this.options.listDerived } : {}),
     });
     return paginatedResponse(
       await this.present(request, page.items),

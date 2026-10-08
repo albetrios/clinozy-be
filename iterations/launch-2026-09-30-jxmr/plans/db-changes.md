@@ -1546,6 +1546,7 @@ erDiagram
 - **Open:** none
 
 - **Built:** `app.manufacturers` · ROUTE #44 (2026-10-07)
+- **Built (ROUTE #153, sub-domain 11.A):** `app.manufacturers` — `name` varchar(80) stored upper case (`name = upper(name)`), unique among live rows in any case (`idx_manufacturers_organization_name_unique`); `tone` the six swatches (`lav`, `sky`, `butter`, `blush`, `sage`, `mint`); `is_quick`; its suppliers and MRs are `app.supplier_manufacturers` / `app.medical_rep_manufacturers` rows (written from either side); derived `medicine_count`. Delete refused while a live medicine names it. Code `app/sub-domains/medical/manufacturers/`.
 ```mermaid
 erDiagram
   manufacturer["manufacturer · NEW"] {
@@ -1564,6 +1565,7 @@ erDiagram
 - **Open:** none — one payment may cover several bills (P58, D40)
 
 - **Built:** `app.suppliers` · ROUTE #45 (2026-10-07)
+- **Built (ROUTE #153, sub-domain 11.B):** `app.suppliers` — `name` varchar(120) unique among live rows in any case, `phone` varchar(13) `+91` and ten digits, `gst_number` varchar(15) the GSTIN pattern, `is_quick`; `app.supplier_manufacturers` (key `supplier_id`, `manufacturer_id`, both `CASCADE`); derived `payable` (received orders' dues less open credits), `ageing_days`, `order_count`. Code `app/sub-domains/medical/suppliers/`.
 ```mermaid
 erDiagram
   supplier["supplier · NEW"] {
@@ -1584,6 +1586,7 @@ erDiagram
 - **Open:** none
 
 - **Built:** `app.medical_reps` · ROUTE #46 (2026-10-07)
+- **Built (ROUTE #153, sub-domain 11.F):** `app.medical_reps` — `name` varchar(120) (not unique), `phone`, `next_visit_on` date (the `medical_rep_visit` task rule's date, MD8); `app.medical_rep_manufacturers` (key `medical_rep_id`, `manufacturer_id`); derived `last_visit_on`, `last_samples`, `is_visit_overdue`. Code `app/sub-domains/medical/medical-reps/`.
 ```mermaid
 erDiagram
   medical_rep["medical_rep · NEW"] {
@@ -1603,6 +1606,7 @@ erDiagram
 - **Open:** none
 
 - **Built:** `app.medical_rep_visits` · ROUTE #47 (2026-10-07)
+- **Built (ROUTE #153, sub-domain 11.G):** `app.medical_rep_visits` — `medical_rep_id` (`CASCADE`), `visit_date`, `next_visit_on` (`> visit_date`), `samples` varchar(120), `notes` varchar(500), `logged_by_membership_id` (K8 key, `RESTRICT`); never changed, soft-deleted. Code `app/sub-domains/medical/medical-reps/medical-rep-visits/`.
 ```mermaid
 erDiagram
   medical_rep_visit["medical_rep_visit · NEW"] {
@@ -1623,6 +1627,7 @@ erDiagram
 - **Open:** none — expiry is a month, MM/YY (B2, D40); MRP includes GST (D21)
 
 - **Built:** `app.medicines` · ROUTE #48 (2026-10-07)
+- **Built (ROUTE #153, sub-domain 11.D):** `app.medicines` — `medicine_number` (counter), `name` varchar(120) unique among live rows in any case, `composition` varchar(160), `manufacturer_id` (`RESTRICT`; required unless quick), `is_prescription_only`, `mrp` numeric(12,2) (`> 0`, or `0` while quick), `gst_percent` smallint (0 · 5 · 12 · 18 · 28), `min_stock` / `max_stock`, `quantity` integer (its batches' sum, MD4), `near_expiry_discount_percent` numeric(5,2), `is_quick`. The `batches` and supplier rates lists became `app.medicine_batches` and `app.medicine_supplier_prices` (below). Code `app/sub-domains/medical/medicines/`.
 ```mermaid
 erDiagram
   medicine["medicine · NEW"] {
@@ -1651,6 +1656,7 @@ erDiagram
 - **Open:** none
 
 - **Built:** `app.medical_purchase_orders` · ROUTE #49 (2026-10-07)
+- **Built (ROUTE #153, sub-domain 11.E):** `app.medical_purchase_orders` — `purchase_order_number` (counter), `supplier_id` (`RESTRICT`), `supplier_bill_number`, `order_date`, `stage` `ordered` · `received` with `received_at`, `total`, `paid_amount` (kept by supplier-bill payments, `app.payments.medical_purchase_order_id`), `credited_amount` (supplier credits), generated `due_amount` and `payment_status`; the cancel is the soft delete with its own reasons. The `items` list became `app.medical_purchase_order_items` (below). Code `app/sub-domains/medical/medical-purchase-orders/`.
 ```mermaid
 erDiagram
   medical_purchase_order["medical_purchase_order · NEW"] {
@@ -1674,6 +1680,7 @@ erDiagram
 - **Open:** none
 
 - **Built:** `app.medical_contacts` · ROUTE #50 (2026-10-07)
+- **Dropped (ROUTE #153, MD6):** a sale's buyer is an `app.contacts` record — `app.medical_contacts`, its routes and its folder are gone.
 ```mermaid
 erDiagram
   medical_contact["medical_contact · NEW"] {
@@ -1692,6 +1699,7 @@ erDiagram
 - **Open:** none — void and return effects settled (P54, P55, D3)
 
 - **Built:** `app.medical_sales` · ROUTE #51 (2026-10-07)
+- **Built (ROUTE #153, sub-domain 11.H):** `app.medical_sales` — `sale_number` (counter), `invoice_id` (unique, `RESTRICT` — its `medical` invoice, MD7), `contact_id` and `branch_id` (`RESTRICT`), `patient_prescription_id` (unique among live sales), `sold_at`; the void is the soft delete with its own reasons. `patient_id`, `medical_contact_id`, `lead_id`, `status`, `voided_at` and the `returns` list are gone — the status is derived, returns are `app.medical_sale_returns` (below). Code `app/sub-domains/medical/medical-sales/`.
 ```mermaid
 erDiagram
   medical_sale["medical_sale · NEW"] {
@@ -1716,6 +1724,7 @@ erDiagram
 - **Open:** none
 
 - **Built:** `app.supplier_credits` · ROUTE #52 (2026-10-07)
+- **Built (ROUTE #153, sub-domain 11.C):** `app.supplier_credits` — `supplier_id`, `medicine_id`, `medicine_batch_id` (all `RESTRICT`), `quantity`, `rate` (the batch's purchase rate), `amount` (`= quantity × rate`), `applied_amount` (set against the supplier's received orders, MD11), `created_by_membership_id` (K8); no soft delete. Code `app/sub-domains/medical/suppliers/supplier-credits/`.
 ```mermaid
 erDiagram
   supplier_credit["supplier_credit · NEW"] {
@@ -1726,6 +1735,83 @@ erDiagram
     number quantity
     money amount
     datetime adjusted_at
+  }
+```
+
+### medicine_batch · NEW
+
+- **Holds:** One batch of a medicine — its number, expiry month and what is left (MD5).
+- **Table:** `app.medicine_batches` — was the medicine's `batches` list (D-plan: embedded `json`)
+- **Built (ROUTE #153, sub-domain 11.D):** `medicine_id` (`CASCADE`), `batch_number` varchar(20) unique per medicine in any case, `expiry_month` date (the month's first day), `quantity` integer 0–9999, `purchase_rate` numeric(12,2), `supplier_id` (`SET NULL`), `medical_purchase_order_id` (`SET NULL`); index `(medicine_id, expiry_month, id) WHERE quantity > 0` — the order a sale draws in; public id `mbt_`. `app.invoice_items.medicine_batch_id` (`RESTRICT`) names the batch a sale line drew from.
+```mermaid
+erDiagram
+  medicine_batch["medicine_batch · NEW"] {
+    id id PK
+    id medicine_id FK
+    text batch_number
+    date expiry_month
+    integer quantity
+    money purchase_rate
+    id supplier_id FK
+    id medical_purchase_order_id FK
+  }
+```
+
+### medicine_supplier_price · NEW
+
+- **Holds:** What a supplier charges for a medicine (MD13).
+- **Table:** `app.medicine_supplier_prices` — was the medicine's supplier rates list
+- **Built (ROUTE #153, sub-domain 11.D):** key (`medicine_id`, `supplier_id`), both `CASCADE`; `rate` numeric(12,2) `> 0`, `free_quantity`, `lead_days`; a received order line refreshes the rate.
+```mermaid
+erDiagram
+  medicine_supplier_price["medicine_supplier_price · NEW"] {
+    id medicine_id FK
+    id supplier_id FK
+    money rate
+    integer free_quantity
+    integer lead_days
+  }
+```
+
+### medical_purchase_order_item · NEW
+
+- **Holds:** One line of a medical order; becomes a batch when received (MD15, MD16).
+- **Table:** `app.medical_purchase_order_items` — was the order's `items` list
+- **Built (ROUTE #153, sub-domain 11.E):** `medical_purchase_order_id` (`CASCADE`), `line_number`, `medicine_id` (`RESTRICT`), `quantity`, `free_quantity`, `rate` (`> 0`), `amount` (`= quantity × rate`), `is_received` (null until received), `batch_number`, `expiry_month`, `medicine_batch_id` (`RESTRICT`; required once received); public id `mpoi_`.
+```mermaid
+erDiagram
+  medical_purchase_order_item["medical_purchase_order_item · NEW"] {
+    id id PK
+    id medical_purchase_order_id FK
+    integer line_number
+    id medicine_id FK
+    integer quantity
+    integer free_quantity
+    money rate
+    money amount
+    boolean is_received
+    text batch_number
+    date expiry_month
+    id medicine_batch_id FK
+  }
+```
+
+### medical_sale_return · NEW
+
+- **Holds:** Medicines brought back on a sale and the refund (MD21).
+- **Table:** `app.medical_sale_returns` and its lines `app.medical_sale_return_items` — was the sale's `returns` list
+- **Built (ROUTE #153, sub-domain 11.H):** `medical_sale_id` (`RESTRICT`), `reason` (the five), `refund_mode` (cash · upi · card), `note`, `amount` (`> 0`), `invoice_credit_note_id` (unique, `RESTRICT` — its credit note), `returned_by_membership_id` (K8); append-only; public id `msrt_`. Lines: key (`medical_sale_return_id`, `invoice_item_id`), `quantity`, `amount`, `is_restocked`.
+```mermaid
+erDiagram
+  medical_sale_return["medical_sale_return · NEW"] {
+    id id PK
+    id medical_sale_id FK
+    choice reason
+    choice refund_mode
+    text note
+    money amount
+    id invoice_credit_note_id FK
+    id returned_by_membership_id FK
   }
 ```
 

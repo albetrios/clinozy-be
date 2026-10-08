@@ -14,6 +14,7 @@ import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.sc
 import { invoice_credit_notes } from '@/domains/app/sub-domains/billing/invoice-credit-notes/invoice-credit-notes.schema.js';
 import { pending_credits } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.schema.js';
 import { stock_purchases } from '@/domains/app/sub-domains/stock/stock-purchases/stock-purchases.schema.js';
+import { medical_purchase_orders } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.schema.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 import { listPaymentEditsQueryDto } from './payments.dto.js';
 import type { PaymentsRepository } from './payments.repository.js';
@@ -63,6 +64,11 @@ export class PaymentsService extends BaseRecordService<PaymentOutput> {
         { field: 'pending_credit_id', table: pending_credits, label: 'pending credit' },
         { field: 'reverses_payment_id', table: payments, label: 'payment' },
         { field: 'stock_purchase_id', table: stock_purchases, label: 'stock purchase' },
+        {
+          field: 'medical_purchase_order_id',
+          table: medical_purchase_orders,
+          label: 'medical purchase order',
+        },
       ],
       branchColumn: 'branch_id',
       ...createPaymentsRules(paymentsRepository),

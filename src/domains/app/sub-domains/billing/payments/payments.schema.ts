@@ -25,6 +25,7 @@ import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.sc
 import { invoice_credit_notes } from '@/domains/app/sub-domains/billing/invoice-credit-notes/invoice-credit-notes.schema.js';
 import { pending_credits } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.schema.js';
 import { stock_purchases } from '@/domains/app/sub-domains/stock/stock-purchases/stock-purchases.schema.js';
+import { medical_purchase_orders } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.schema.js';
 import { RECORD_DELETE_REASON_VALUES } from '@/shared/constants/record-fields.constants.js';
 import {
   PAYMENT_ATTACHMENT_KEYS_MAX,
@@ -90,6 +91,11 @@ const paymentColumns = {
     (): AnyPgColumn => stock_purchases.id,
     { onDelete: 'restrict' },
   ),
+  // The medical order a supplier bill pays (launch #153, MD7)
+  medical_purchase_order_id: bigint('medical_purchase_order_id', { mode: 'number' }).references(
+    (): AnyPgColumn => medical_purchase_orders.id,
+    { onDelete: 'restrict' },
+  ),
   payee_name: varchar('payee_name', { length: 120 }),
   expense_category: varchar('expense_category', { length: 11 }),
   reference: varchar('reference', { length: 60 }),
@@ -136,6 +142,9 @@ function paymentIndexes(table: PaymentTable) {
     index('idx_payments_stock_purchase_id')
       .on(table.stock_purchase_id)
       .where(sql`${table.stock_purchase_id} IS NOT NULL`),
+    index('idx_payments_medical_purchase_order_id')
+      .on(table.medical_purchase_order_id)
+      .where(sql`${table.medical_purchase_order_id} IS NOT NULL`),
     uniqueIndex('idx_payments_reverses_payment_id')
       .on(table.reverses_payment_id)
       .where(sql`${table.reverses_payment_id} IS NOT NULL`),
@@ -186,10 +195,10 @@ function paymentChecks(table: PaymentTable) {
       'chk_payments_reversal',
       sql`(${table.kind} = ${literal(PAYMENT_KIND.REVERSAL)}) = (${table.reverses_payment_id} IS NOT NULL)`,
     ),
-    // S11: only a supplier bill, or its reversal, pays a stock purchase
+    // S11, MD7: only a supplier bill, or its reversal, pays a purchase — one at most
     check(
-      'chk_payments_stock_purchase',
-      sql`${table.stock_purchase_id} IS NULL OR ${table.kind} IN (${literalList([PAYMENT_KIND.SUPPLIER_BILL, PAYMENT_KIND.REVERSAL])})`,
+      'chk_payments_purchase',
+      sql`(${table.stock_purchase_id} IS NULL AND ${table.medical_purchase_order_id} IS NULL) OR (${table.kind} IN (${literalList([PAYMENT_KIND.SUPPLIER_BILL, PAYMENT_KIND.REVERSAL])}) AND num_nonnulls(${table.stock_purchase_id}, ${table.medical_purchase_order_id}) = 1)`,
     ),
     check(
       'chk_payments_payee',

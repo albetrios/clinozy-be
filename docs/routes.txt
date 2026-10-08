@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 440
+  Total routes: 433
 ================================================================================
 
 Legend:
@@ -13,7 +13,7 @@ Legend:
 
 ================================================================================
   DOMAIN: APP (/api/v1/app)
-  Routes: 306
+  Routes: 299
 ================================================================================
 
   — Sub Domains —
@@ -109,53 +109,47 @@ Legend:
   POST   /api/v1/app/leads/:lead_id/release                       200  req  both  PERM: lead:update
   POST   /api/v1/app/leads/:lead_id/restore                       200  req  both  PERM: lead:delete
   GET    /api/v1/app/leads/exports                                200  -    both  PERM: lead:export
-  GET    /api/v1/app/manufacturers                                200  -    both  PERM: manufacturer:read
-  POST   /api/v1/app/manufacturers                                200  req  both  PERM: manufacturer:create
-  GET    /api/v1/app/manufacturers/:manufacturer_id               200  -    both  PERM: manufacturer:read
-  PATCH  /api/v1/app/manufacturers/:manufacturer_id               200  -    both  PERM: manufacturer:update
-  DELETE /api/v1/app/manufacturers/:manufacturer_id               204  -    both  PERM: manufacturer:delete
-  POST   /api/v1/app/manufacturers/:manufacturer_id/restore       200  req  both  PERM: manufacturer:delete
-  GET    /api/v1/app/medical-contacts                             200  -    both  PERM: medical_sale:read
-  POST   /api/v1/app/medical-contacts                             200  req  both  PERM: medical_sale:create
-  GET    /api/v1/app/medical-contacts/:medical_contact_id         200  -    both  PERM: medical_sale:read
-  PATCH  /api/v1/app/medical-contacts/:medical_contact_id         200  -    both  PERM: medical_sale:update
-  DELETE /api/v1/app/medical-contacts/:medical_contact_id         204  -    both  PERM: medical_sale:delete
-  POST   /api/v1/app/medical-contacts/:medical_contact_id/restore  200  req  both  PERM: medical_sale:delete
-  GET    /api/v1/app/medical-purchase-orders                      200  -    both  PERM: medical_purchase_order:read
-  POST   /api/v1/app/medical-purchase-orders                      200  req  both  PERM: medical_purchase_order:create
-  GET    /api/v1/app/medical-purchase-orders/:medical_purchase_order_id  200  -    both  PERM: medical_purchase_order:read
-  PATCH  /api/v1/app/medical-purchase-orders/:medical_purchase_order_id  200  -    both  PERM: medical_purchase_order:update
-  DELETE /api/v1/app/medical-purchase-orders/:medical_purchase_order_id  204  -    both  PERM: medical_purchase_order:delete
-  POST   /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/cancel  200  req  both  PERM: medical_purchase_order:update
-  POST   /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/receive  200  req  both  PERM: medical_purchase_order:update
-  POST   /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/restore  200  req  both  PERM: medical_purchase_order:delete
-  GET    /api/v1/app/medical-purchase-orders/exports              200  -    both  PERM: list:export
-  GET    /api/v1/app/medical-rep-visits/:medical_rep_visit_id     200  -    both  PERM: medical_rep:read
-  PATCH  /api/v1/app/medical-rep-visits/:medical_rep_visit_id     200  -    both  PERM: medical_rep:update
-  DELETE /api/v1/app/medical-rep-visits/:medical_rep_visit_id     204  -    both  PERM: medical_rep:update
-  POST   /api/v1/app/medical-rep-visits/:medical_rep_visit_id/restore  200  req  both  PERM: medical_rep:update
-  GET    /api/v1/app/medical-reps                                 200  -    both  PERM: medical_rep:read
-  POST   /api/v1/app/medical-reps                                 200  req  both  PERM: medical_rep:create
-  GET    /api/v1/app/medical-reps/:medical_rep_id                 200  -    both  PERM: medical_rep:read
-  PATCH  /api/v1/app/medical-reps/:medical_rep_id                 200  -    both  PERM: medical_rep:update
-  DELETE /api/v1/app/medical-reps/:medical_rep_id                 204  -    both  PERM: medical_rep:delete
-  POST   /api/v1/app/medical-reps/:medical_rep_id/restore         200  req  both  PERM: medical_rep:delete
-  GET    /api/v1/app/medical-reps/:medical_rep_id/visits          200  -    both  PERM: medical_rep:read
-  POST   /api/v1/app/medical-reps/:medical_rep_id/visits          200  req  both  PERM: medical_rep:update
-  GET    /api/v1/app/medical-sales                                200  -    both  PERM: medical_sale:read
-  POST   /api/v1/app/medical-sales                                200  req  both  PERM: medical_sale:create
-  GET    /api/v1/app/medical-sales/:medical_sale_id               200  -    both  PERM: medical_sale:read
-  DELETE /api/v1/app/medical-sales/:medical_sale_id               204  -    both  PERM: medical_sale:delete
-  POST   /api/v1/app/medical-sales/:medical_sale_id/restore       200  req  both  PERM: medical_sale:delete
-  POST   /api/v1/app/medical-sales/:medical_sale_id/void          200  req  both  PERM: sale:void
-  GET    /api/v1/app/medical-sales/exports                        200  -    both  PERM: list:export
+  GET    /api/v1/app/manufacturers                                200  -    both  PERM: medicine:read
+  POST   /api/v1/app/manufacturers                                200  req  both  PERM: medicine:create
+  GET    /api/v1/app/manufacturers/:manufacturer_id               200  -    both  PERM: medicine:read
+  PATCH  /api/v1/app/manufacturers/:manufacturer_id               200  -    both  PERM: medicine:update
+  DELETE /api/v1/app/manufacturers/:manufacturer_id               204  -    both  PERM: medicine:delete
+  POST   /api/v1/app/manufacturers/:manufacturer_id/restore       200  req  both  PERM: medicine:delete
+  GET    /api/v1/app/medical-payments                             200  -    both  PERM: medicine:read
+  GET    /api/v1/app/medical-purchase-orders                      200  -    both  PERM: medicine:read
+  POST   /api/v1/app/medical-purchase-orders                      200  req  both  PERM: medicine:create
+  GET    /api/v1/app/medical-purchase-orders/:medical_purchase_order_id  200  -    both  PERM: medicine:read
+  PATCH  /api/v1/app/medical-purchase-orders/:medical_purchase_order_id  200  -    both  PERM: medicine:update
+  DELETE /api/v1/app/medical-purchase-orders/:medical_purchase_order_id  204  -    both  PERM: medicine:delete
+  POST   /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/receive  200  req  both  PERM: medicine:update
+  POST   /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/restore  200  req  both  PERM: medicine:delete
+  GET    /api/v1/app/medical-purchase-orders/exports              200  -    both  PERM: medicine:export
+  GET    /api/v1/app/medical-reps                                 200  -    both  PERM: medicine:read
+  POST   /api/v1/app/medical-reps                                 200  req  both  PERM: medicine:create
+  GET    /api/v1/app/medical-reps/:medical_rep_id                 200  -    both  PERM: medicine:read
+  PATCH  /api/v1/app/medical-reps/:medical_rep_id                 200  -    both  PERM: medicine:update
+  DELETE /api/v1/app/medical-reps/:medical_rep_id                 204  -    both  PERM: medicine:delete
+  POST   /api/v1/app/medical-reps/:medical_rep_id/restore         200  req  both  PERM: medicine:delete
+  GET    /api/v1/app/medical-reps/:medical_rep_id/visits          200  -    both  PERM: medicine:read
+  POST   /api/v1/app/medical-reps/:medical_rep_id/visits          200  req  both  PERM: medicine:create
+  GET    /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id  200  -    both  PERM: medicine:read
+  DELETE /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id  204  -    both  PERM: medicine:delete
+  POST   /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id/restore  200  req  both  PERM: medicine:delete
+  GET    /api/v1/app/medical-sales                                200  -    both  PERM: medicine:read
+  POST   /api/v1/app/medical-sales                                200  req  both  PERM: medicine:create
+  GET    /api/v1/app/medical-sales/:medical_sale_id               200  -    both  PERM: medicine:read
+  DELETE /api/v1/app/medical-sales/:medical_sale_id               204  -    both  PERM: medicine:delete
+  POST   /api/v1/app/medical-sales/:medical_sale_id/restore       200  req  both  PERM: medicine:delete
+  POST   /api/v1/app/medical-sales/:medical_sale_id/returns       200  req  both  PERM: payment:create
+  GET    /api/v1/app/medical-sales/exports                        200  -    both  PERM: medicine:export
   GET    /api/v1/app/medicines                                    200  -    both  PERM: medicine:read
   POST   /api/v1/app/medicines                                    200  req  both  PERM: medicine:create
   GET    /api/v1/app/medicines/:medicine_id                       200  -    both  PERM: medicine:read
   PATCH  /api/v1/app/medicines/:medicine_id                       200  -    both  PERM: medicine:update
   DELETE /api/v1/app/medicines/:medicine_id                       204  -    both  PERM: medicine:delete
   POST   /api/v1/app/medicines/:medicine_id/restore               200  req  both  PERM: medicine:delete
-  GET    /api/v1/app/medicines/exports                            200  -    both  PERM: list:export
+  GET    /api/v1/app/medicines/exports                            200  -    both  PERM: medicine:export
+  POST   /api/v1/app/medicines/near-expiry-discount               200  req  both  PERM: medicine:update
   GET    /api/v1/app/memberships                                  200  -    both  PERM: organization:read
   GET    /api/v1/app/memberships/me/preferences                   200  -    both  PERM: organization:read
   PATCH  /api/v1/app/memberships/me/preferences                   200  -    both  PERM: organization:read
@@ -300,17 +294,16 @@ Legend:
   PATCH  /api/v1/app/stock-vendors/:stock_vendor_id               200  -    both  PERM: stock_item:update
   DELETE /api/v1/app/stock-vendors/:stock_vendor_id               204  -    both  PERM: stock_item:delete
   POST   /api/v1/app/stock-vendors/:stock_vendor_id/restore       200  req  both  PERM: stock_item:delete
-  GET    /api/v1/app/supplier-credits                             200  -    both  PERM: supplier:read
-  POST   /api/v1/app/supplier-credits                             200  req  both  PERM: supplier:update
-  GET    /api/v1/app/supplier-credits/:supplier_credit_id         200  -    both  PERM: supplier:read
-  DELETE /api/v1/app/supplier-credits/:supplier_credit_id         204  -    both  PERM: supplier:update
-  POST   /api/v1/app/supplier-credits/:supplier_credit_id/restore  200  req  both  PERM: supplier:update
-  GET    /api/v1/app/suppliers                                    200  -    both  PERM: supplier:read
-  POST   /api/v1/app/suppliers                                    200  req  both  PERM: supplier:create
-  GET    /api/v1/app/suppliers/:supplier_id                       200  -    both  PERM: supplier:read
-  PATCH  /api/v1/app/suppliers/:supplier_id                       200  -    both  PERM: supplier:update
-  DELETE /api/v1/app/suppliers/:supplier_id                       204  -    both  PERM: supplier:delete
-  POST   /api/v1/app/suppliers/:supplier_id/restore               200  req  both  PERM: supplier:delete
+  GET    /api/v1/app/supplier-credits                             200  -    both  PERM: medicine:read
+  POST   /api/v1/app/supplier-credits                             200  req  both  PERM: medicine:update
+  GET    /api/v1/app/supplier-credits/:supplier_credit_id         200  -    both  PERM: medicine:read
+  GET    /api/v1/app/suppliers                                    200  -    both  PERM: medicine:read
+  POST   /api/v1/app/suppliers                                    200  req  both  PERM: medicine:create
+  GET    /api/v1/app/suppliers/:supplier_id                       200  -    both  PERM: medicine:read
+  PATCH  /api/v1/app/suppliers/:supplier_id                       200  -    both  PERM: medicine:update
+  DELETE /api/v1/app/suppliers/:supplier_id                       204  -    both  PERM: medicine:delete
+  POST   /api/v1/app/suppliers/:supplier_id/payments              200  req  both  PERM: payment:create
+  POST   /api/v1/app/suppliers/:supplier_id/restore               200  req  both  PERM: medicine:delete
   GET    /api/v1/app/task-rule-settings                           200  -    both  PERM: task:read
   PUT    /api/v1/app/task-rule-settings                           200  -    both  PERM: organization:update
   GET    /api/v1/app/tasks                                        200  -    both  PERM: task:read
@@ -531,16 +524,16 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 440
+  Total routes    : 433
   Public          : 16
   Authenticated   : 51
   Role-guarded    : 9
-  Perm-guarded    : 359
+  Perm-guarded    : 352
   Token-guarded   : 5
   Team-only (O)   : 10
 
 ================================================================================
-  IDEMPOTENCY-REQUIRED WRITES (124) — X-Idempotency-Key required
+  IDEMPOTENCY-REQUIRED WRITES (122) — X-Idempotency-Key required
 ================================================================================
 
   Routes flagged I = req reject a missing or reused key (422); every other write
@@ -582,21 +575,19 @@ Legend:
     POST /api/v1/app/leads/:lead_id/restore
     POST /api/v1/app/manufacturers
     POST /api/v1/app/manufacturers/:manufacturer_id/restore
-    POST /api/v1/app/medical-contacts
-    POST /api/v1/app/medical-contacts/:medical_contact_id/restore
     POST /api/v1/app/medical-purchase-orders
-    POST /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/cancel
     POST /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/receive
     POST /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/restore
-    POST /api/v1/app/medical-rep-visits/:medical_rep_visit_id/restore
     POST /api/v1/app/medical-reps
     POST /api/v1/app/medical-reps/:medical_rep_id/restore
     POST /api/v1/app/medical-reps/:medical_rep_id/visits
+    POST /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id/restore
     POST /api/v1/app/medical-sales
     POST /api/v1/app/medical-sales/:medical_sale_id/restore
-    POST /api/v1/app/medical-sales/:medical_sale_id/void
+    POST /api/v1/app/medical-sales/:medical_sale_id/returns
     POST /api/v1/app/medicines
     POST /api/v1/app/medicines/:medicine_id/restore
+    POST /api/v1/app/medicines/near-expiry-discount
     POST /api/v1/app/memberships/me/saved-views
     POST /api/v1/app/offering-groups
     POST /api/v1/app/offering-groups/:offering_group_id/restore
@@ -645,8 +636,8 @@ Legend:
     POST /api/v1/app/stock-vendors
     POST /api/v1/app/stock-vendors/:stock_vendor_id/restore
     POST /api/v1/app/supplier-credits
-    POST /api/v1/app/supplier-credits/:supplier_credit_id/restore
     POST /api/v1/app/suppliers
+    POST /api/v1/app/suppliers/:supplier_id/payments
     POST /api/v1/app/suppliers/:supplier_id/restore
     POST /api/v1/app/tasks
     POST /api/v1/app/tasks/:task_id/reassign
@@ -704,25 +695,18 @@ Legend:
     contact:update                contact_activity:create       contact_activity:delete
     contact_activity:read         contact_activity:update       lead:create
     lead:delete                   lead:export                   lead:read
-    lead:update                   list:export                   manufacturer:create
-    manufacturer:delete           manufacturer:read             manufacturer:update
-    medical_purchase_order:create medical_purchase_order:delete medical_purchase_order:read
-    medical_purchase_order:update medical_rep:create            medical_rep:delete
-    medical_rep:read              medical_rep:update            medical_sale:create
-    medical_sale:delete           medical_sale:read             medical_sale:update
-    medicine:create               medicine:delete               medicine:read
-    medicine:update               offering:create               offering:delete
-    offering:export               offering:lower_price:read     offering:update
-    patient:clinical_record:read  patient:create                patient:delete
-    patient:export                patient:private_album:read    patient:read
-    patient:update                patient_prescription:create   patient_prescription:delete
-    patient_prescription:read     patient_prescription:update   patient_treatment:create
-    patient_treatment:read        patient_treatment:update      payment:create
-    payment:delete                payment:export                payment:read
-    payment:update                sale:void                     stock_item:create
-    stock_item:delete             stock_item:export             stock_item:read
-    stock_item:update             supplier:create               supplier:delete
-    supplier:read                 supplier:update               task:create
+    lead:update                   medicine:create               medicine:delete
+    medicine:export               medicine:read                 medicine:update
+    offering:create               offering:delete               offering:export
+    offering:lower_price:read     offering:update               patient:clinical_record:read
+    patient:create                patient:delete                patient:export
+    patient:private_album:read    patient:read                  patient:update
+    patient_prescription:create   patient_prescription:delete   patient_prescription:read
+    patient_prescription:update   patient_treatment:create      patient_treatment:read
+    patient_treatment:update      payment:create                payment:delete
+    payment:export                payment:read                  payment:update
+    stock_item:create             stock_item:delete             stock_item:export
+    stock_item:read               stock_item:update             task:create
     task:delete                   task:export                   task:read
     task:update
 

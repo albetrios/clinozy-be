@@ -1,4 +1,4 @@
-import { resolveRecordIds } from '@/domains/app/base-record.repository.js';
+import { type BaseRecordRow, resolveRecordIds } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import { InvoicesRepository } from '@/domains/app/sub-domains/billing/invoices/invoices.repository.js';
 import {
@@ -13,10 +13,12 @@ import {
 import { PaymentsRepository } from '@/domains/app/sub-domains/billing/payments/payments.repository.js';
 import { ConflictError } from '@/shared/errors/index.js';
 import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import { InvoiceCreditNotesRepository } from './invoice-credit-notes.repository.js';
 import { invoice_credit_notes } from './invoice-credit-notes.schema.js';
 
 const invoicesRepository = new InvoicesRepository();
 const paymentsRepository = new PaymentsRepository();
+const creditNotesRepository = new InvoiceCreditNotesRepository();
 
 /** The refund a credit note writes after its row (B16) — how the money goes back, and when. */
 interface PendingRefund {
@@ -30,6 +32,52 @@ interface PendingRefund {
 
 /** The refund in flight, by its write context — set by `prepareCreate`, read by `afterWrite`. */
 const pendingRefunds = new WeakMap<BaseRecordWriteContext, PendingRefund>();
+
+/**
+ * Writes a credit note another write makes in its transaction — a medical sale's return (MD21):
+ * the note, then its refund payment on the invoice's branch and contact, as
+ * `POST …/credit-notes` does; at most what the invoice has paid.
+ *
+ * @remarks
+ * - **Failure modes:** `ConflictError` `more_than_paid`, `day_closed`.
+ */
+export async function recordCreditNote(options: {
+  context: BaseRecordWriteContext;
+  invoice: BaseRecordRow;
+  amount: number;
+  reason: string;
+  splits: PaymentSplit[];
+  note: string | null;
+}): Promise<BaseRecordRow> {
+  const { context, invoice } = options;
+  if (Math.round(options.amount * 100) > Math.round((toAmount(invoice.paid_amount) ?? 0) * 100)) {
+    throw new ConflictError('errors:paymentMoreThanPaid').withReason('more_than_paid');
+  }
+  const creditNote = await creditNotesRepository.insert({
+    organization_id: context.organizationId,
+    invoice_id: invoice.id,
+    amount: options.amount.toFixed(2),
+    reason: options.reason,
+    created_by_user_id: context.userId,
+    updated_by_user_id: context.userId,
+  });
+  await recordPayment({
+    context,
+    values: {
+      kind: PAYMENT_KIND.REFUND,
+      direction: PAYMENT_DIRECTION.PAID,
+      branch_id: invoice.branch_id as number,
+      contact_id: (invoice.contact_id as number | null) ?? null,
+      invoice_id: invoice.id,
+      invoice_credit_note_id: creditNote.id,
+      paid_at: new Date(),
+      reference: null,
+      note: options.note,
+      ...splitsToColumns(options.splits),
+    },
+  });
+  return creditNote;
+}
 
 /**
  * The credit-note rules (launch ROUTE #136, routes-final 8.B, B16): a credit note is an invoice's

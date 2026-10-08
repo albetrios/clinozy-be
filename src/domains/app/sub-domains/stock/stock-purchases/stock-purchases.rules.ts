@@ -1,17 +1,12 @@
-import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
-import {
-  type BaseRecordRow,
-  listVisibleBranchIds,
-  resolveRecordIds,
-} from '@/domains/app/base-record.repository.js';
+import { type BaseRecordRow, resolveRecordIds } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
-import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import {
   PAYMENT_DIRECTION,
   PAYMENT_KIND,
 } from '@/domains/app/sub-domains/billing/payments/payments.constants.js';
 import {
   recordPayment,
+  requirePaymentBranchId,
   splitsToColumns,
 } from '@/domains/app/sub-domains/billing/payments/payments.ledger.js';
 import { organizationToday } from '@/domains/app/sub-domains/patients/patients.rules.js';
@@ -28,7 +23,7 @@ import { StockItemMovementsRepository } from '@/domains/app/sub-domains/stock/st
 import { StockItemsRepository } from '@/domains/app/sub-domains/stock/stock-items/stock-items.repository.js';
 import { stock_items } from '@/domains/app/sub-domains/stock/stock-items/stock-items.schema.js';
 import { StockVendorsRepository } from '@/domains/app/sub-domains/stock/stock-vendors/stock-vendors.repository.js';
-import { ConflictError, fieldValidationError, ValidationError } from '@/shared/errors/index.js';
+import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
 import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import type { StockPurchaseItemInput, StockPurchasePaymentInput } from './stock-purchases.dto.js';
 import type { StockPurchasesRepository } from './stock-purchases.repository.js';
@@ -135,39 +130,6 @@ async function assertPurchaseDate(date: unknown, context: BaseRecordWriteContext
 }
 
 /**
- * S11: the "Paid" branch — live here and, without `branch:read`, one of the caller's (as on
- * `POST /payments`, D9).
- */
-async function paymentBranchId(
-  branchPublicId: string,
-  context: BaseRecordWriteContext,
-): Promise<number> {
-  const branchId = (
-    await resolveRecordIds({
-      table: branches,
-      organizationId: context.organizationId,
-      publicIds: [branchPublicId],
-    })
-  ).get(branchPublicId);
-  const allBranches = await context.can(APP_PERMISSIONS.BRANCH_READ);
-  const mine =
-    allBranches || context.userId === null
-      ? []
-      : await listVisibleBranchIds({
-          organizationId: context.organizationId,
-          userId: context.userId,
-        });
-  if (branchId === undefined || !(allBranches || mine.includes(branchId))) {
-    throw new ValidationError(
-      'errors:validation.branchNotYours',
-      { field: 'payment.branch_id' },
-      { 'payment.branch_id': ['This is not one of your branches'] },
-    );
-  }
-  return branchId;
-}
-
-/**
  * S10, S11: a new purchase's lines, its bill (the lines' total unless sent), its date (today
  * unless sent, never in the future) and its "Paid" (never above the bill).
  */
@@ -191,7 +153,14 @@ async function preparePurchase(options: {
     if (paid > paiseOf(values.bill_amount)) {
       throw new ConflictError('errors:paymentMoreThanDue').withReason('more_than_due');
     }
-    pendingPayment = { ...payment, branchId: await paymentBranchId(payment.branch_id, context) };
+    pendingPayment = {
+      ...payment,
+      branchId: await requirePaymentBranchId({
+        branchPublicId: payment.branch_id,
+        field: 'payment.branch_id',
+        context,
+      }),
+    };
   }
   pendingPurchases.set(context, { lines, payment: pendingPayment });
 }

@@ -40,6 +40,7 @@ export interface TaskOutput {
   patient_review_id: string | null;
   invoice_id: string | null;
   pending_credit_id: string | null;
+  medical_rep_id: string | null;
   branch_id: string | null;
   due_at: string;
   status: string;

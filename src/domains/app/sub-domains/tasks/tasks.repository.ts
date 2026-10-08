@@ -19,6 +19,7 @@ import { patient_check_ins } from '@/domains/app/sub-domains/patients/patient-ch
 import { patient_reviews } from '@/domains/app/sub-domains/patients/patient-reviews/patient-reviews.schema.js';
 import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
 import { pending_credits } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.schema.js';
+import { medical_reps } from '@/domains/app/sub-domains/medical/medical-reps/medical-reps.schema.js';
 import { task_rule_settings } from './task-rule-settings/task-rule-settings.schema.js';
 import {
   TASK_KIND,
@@ -234,6 +235,13 @@ export class TasksRepository extends BaseRecordRepository {
             .select({ contactId: pending_credits.contact_id, branchId: sql<null>`null` })
             .from(pending_credits)
             .where(eq(pending_credits.id, options.id)),
+        );
+      case 'medical_rep_id':
+        return single(
+          database
+            .select({ contactId: sql<null>`null`, branchId: sql<null>`null` })
+            .from(medical_reps)
+            .where(eq(medical_reps.id, options.id)),
         );
       case 'patient_treatment_id':
         return single(

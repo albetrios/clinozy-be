@@ -41,6 +41,7 @@ const taskRecordFields = {
   patient_review_id: recordIdSchema.optional(),
   invoice_id: recordIdSchema.optional(),
   pending_credit_id: recordIdSchema.optional(),
+  medical_rep_id: recordIdSchema.optional(),
 };
 
 /** Path params of the by-id task routes. */

@@ -159,6 +159,8 @@ export const listPatientPrescriptionsQueryDto = listSearchSortSchema([
     doctor_membership_id: recordIdSchema.optional(),
     appointment_id: recordIdSchema.optional(),
     patient_id: recordIdSchema.optional(),
+    // MDC4: the pharmacy queue — filled by a live medical sale, or not yet
+    is_filled: z.enum(['true', 'false']).optional(),
     prescription_date_from: calendarDateSchema.optional(),
     prescription_date_to: calendarDateSchema.optional(),
     created_from: instantSchema.optional(),

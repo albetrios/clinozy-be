@@ -18,6 +18,7 @@ import { patient_check_ins } from '@/domains/app/sub-domains/patients/patient-ch
 import { patient_reviews } from '@/domains/app/sub-domains/patients/patient-reviews/patient-reviews.schema.js';
 import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
 import { pending_credits } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.schema.js';
+import { medical_reps } from '@/domains/app/sub-domains/medical/medical-reps/medical-reps.schema.js';
 import { TASK_OPEN_STATUS_VALUES, TASK_STATUS } from './tasks.constants.js';
 import type { TasksRepository } from './tasks.repository.js';
 import { createTasksRules } from './tasks.rules.js';
@@ -80,6 +81,7 @@ export class TasksService extends BaseRecordService<TaskOutput> {
         { field: 'patient_review_id', table: patient_reviews, label: 'review' },
         { field: 'invoice_id', table: invoices, label: 'invoice' },
         { field: 'pending_credit_id', table: pending_credits, label: 'pending credit' },
+        { field: 'medical_rep_id', table: medical_reps, label: 'MR' },
         { field: 'branch_id', table: branches, label: 'branch' },
       ],
       branchColumn: 'branch_id',

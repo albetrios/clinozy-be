@@ -50,30 +50,17 @@ import { PatientCheckInsRepository } from './sub-domains/patients/patient-check-
 import { PatientCheckInsService } from './sub-domains/patients/patient-check-ins/patient-check-ins.service.js';
 import { PatientReviewsRepository } from './sub-domains/patients/patient-reviews/patient-reviews.repository.js';
 import { PatientReviewsService } from './sub-domains/patients/patient-reviews/patient-reviews.service.js';
-import { ManufacturersRepository } from './sub-domains/manufacturers/manufacturers.repository.js';
-import { ManufacturersService } from './sub-domains/manufacturers/manufacturers.service.js';
-import { SuppliersRepository } from './sub-domains/suppliers/suppliers.repository.js';
-import { SuppliersService } from './sub-domains/suppliers/suppliers.service.js';
-import { MedicalRepsRepository } from './sub-domains/medical-reps/medical-reps.repository.js';
-import { MedicalRepsService } from './sub-domains/medical-reps/medical-reps.service.js';
-import { MedicalRepVisitsRepository } from './sub-domains/medical-rep-visits/medical-rep-visits.repository.js';
-import { MedicalRepVisitsService } from './sub-domains/medical-rep-visits/medical-rep-visits.service.js';
-import { MedicinesRepository } from './sub-domains/medicines/medicines.repository.js';
-import { MedicinesService } from './sub-domains/medicines/medicines.service.js';
-import { MedicalPurchaseOrdersRepository } from './sub-domains/medical-purchase-orders/medical-purchase-orders.repository.js';
-import { MedicalPurchaseOrdersService } from './sub-domains/medical-purchase-orders/medical-purchase-orders.service.js';
-import { MedicalContactsRepository } from './sub-domains/medical-contacts/medical-contacts.repository.js';
-import { MedicalContactsService } from './sub-domains/medical-contacts/medical-contacts.service.js';
-import { MedicalSalesRepository } from './sub-domains/medical-sales/medical-sales.repository.js';
-import { MedicalSalesService } from './sub-domains/medical-sales/medical-sales.service.js';
-import { SupplierCreditsRepository } from './sub-domains/supplier-credits/supplier-credits.repository.js';
-import { SupplierCreditsService } from './sub-domains/supplier-credits/supplier-credits.service.js';
+import {
+  createMedicalServices,
+  type MedicalServices,
+} from './sub-domains/medical/medical.container.js';
 import { TasksRepository } from './sub-domains/tasks/tasks.repository.js';
 import { TasksService } from './sub-domains/tasks/tasks.service.js';
 
 /** The services of the app record tables (launch iteration), one per table. */
 export type AppRecordServices = BillingServices &
-  StockServices & {
+  StockServices &
+  MedicalServices & {
     offeringGroupsService: OfferingGroupsService;
     branchRoomsService: BranchRoomsService;
     branchMachinesService: BranchMachinesService;
@@ -97,15 +84,6 @@ export type AppRecordServices = BillingServices &
     patientTreatmentsService: PatientTreatmentsService;
     patientCheckInsService: PatientCheckInsService;
     patientReviewsService: PatientReviewsService;
-    manufacturersService: ManufacturersService;
-    suppliersService: SuppliersService;
-    medicalRepsService: MedicalRepsService;
-    medicalRepVisitsService: MedicalRepVisitsService;
-    medicinesService: MedicinesService;
-    medicalPurchaseOrdersService: MedicalPurchaseOrdersService;
-    medicalContactsService: MedicalContactsService;
-    medicalSalesService: MedicalSalesService;
-    supplierCreditsService: SupplierCreditsService;
     tasksService: TasksService;
   };
 
@@ -217,30 +195,7 @@ export function createAppRecordServices(
     appointmentsService: new AppointmentsService(organizationService, new AppointmentsRepository()),
     ...createPatientFileServices(organizationService),
     ...createBillingServices(organizationService),
-    manufacturersService: new ManufacturersService(
-      organizationService,
-      new ManufacturersRepository(),
-    ),
-    suppliersService: new SuppliersService(organizationService, new SuppliersRepository()),
-    medicalRepsService: new MedicalRepsService(organizationService, new MedicalRepsRepository()),
-    medicalRepVisitsService: new MedicalRepVisitsService(
-      organizationService,
-      new MedicalRepVisitsRepository(),
-    ),
-    medicinesService: new MedicinesService(organizationService, new MedicinesRepository()),
-    medicalPurchaseOrdersService: new MedicalPurchaseOrdersService(
-      organizationService,
-      new MedicalPurchaseOrdersRepository(),
-    ),
-    medicalContactsService: new MedicalContactsService(
-      organizationService,
-      new MedicalContactsRepository(),
-    ),
-    medicalSalesService: new MedicalSalesService(organizationService, new MedicalSalesRepository()),
-    supplierCreditsService: new SupplierCreditsService(
-      organizationService,
-      new SupplierCreditsRepository(),
-    ),
+    ...createMedicalServices(organizationService),
     ...createStockServices(organizationService),
     tasksService: new TasksService(organizationService, new TasksRepository()),
   };

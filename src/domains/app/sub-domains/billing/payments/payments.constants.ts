@@ -73,16 +73,28 @@ export const PAYMENT_MONEY_MODE_VALUES = [
   PAYMENT_MODE.CARD,
 ] as const;
 
+/** An expense's category (B19) — `medicines` is the medical store's (MD22). */
+export const PAYMENT_EXPENSE_CATEGORY = {
+  MEDICINES: 'medicines',
+  CONSUMABLES: 'consumables',
+  SALARY: 'salary',
+  RENT: 'rent',
+  MARKETING: 'marketing',
+  UTILITIES: 'utilities',
+  MAINTENANCE: 'maintenance',
+  MISC: 'misc',
+} as const;
+
 /** Allowed values of `payments.expense_category`. */
 export const PAYMENT_EXPENSE_CATEGORY_VALUES = [
-  'medicines',
-  'consumables',
-  'salary',
-  'rent',
-  'marketing',
-  'utilities',
-  'maintenance',
-  'misc',
+  PAYMENT_EXPENSE_CATEGORY.MEDICINES,
+  PAYMENT_EXPENSE_CATEGORY.CONSUMABLES,
+  PAYMENT_EXPENSE_CATEGORY.SALARY,
+  PAYMENT_EXPENSE_CATEGORY.RENT,
+  PAYMENT_EXPENSE_CATEGORY.MARKETING,
+  PAYMENT_EXPENSE_CATEGORY.UTILITIES,
+  PAYMENT_EXPENSE_CATEGORY.MAINTENANCE,
+  PAYMENT_EXPENSE_CATEGORY.MISC,
 ] as const;
 
 /** A payment's display prefix (`PAY-12`) — also read by the ledger's `q`. */
@@ -90,3 +102,12 @@ export const PAYMENT_NUMBER_PREFIX = 'PAY';
 
 /** Most attachments on one payment. */
 export const PAYMENT_ATTACHMENT_KEYS_MAX = 5;
+
+/** The purchases a supplier bill pays, by its link field — a stock purchase (S11), a medical order (MD7). */
+export const SUPPLIER_BILL_PURCHASE_FIELDS = [
+  'stock_purchase_id',
+  'medical_purchase_order_id',
+] as const;
+
+/** A supplier bill's purchase link field. */
+export type SupplierBillPurchaseField = (typeof SUPPLIER_BILL_PURCHASE_FIELDS)[number];
