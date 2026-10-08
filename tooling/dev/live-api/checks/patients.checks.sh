@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# TEMPORARY — sub-domain 7, Patients 7.A–7.G (routes-final §7, launch ROUTE #133): the patient file
+# TEMPORARY — sub-domain 7, Patients 7.A–7.K (routes-final §7, launch ROUTE #133–#134): the patient file
 # on its contact, one per contact, check-in opening one, the list's search, filters, sorts and
 # export; clinical notes, prescriptions and their approval, kits, the diagnosis catalogue, photos in
 # three albums, reports; the clinical gates (P14), the private album (P23) and the `system` entries
@@ -353,7 +353,7 @@ as_role therapist
 expect 200 "the therapist's tabs" GET "/app/patients/${CHETAN_FILE}/images"
 expect_value "no private photo, no private count" '[(.data | length), (.meta.album_counts | has("private"))] | map(tostring) | join(",")' 2,false
 expect 404 "a private photo by id" GET "/app/patients/${CHETAN_FILE}/images/${PRIVATE_PHOTO}"
-expect 200 "the therapist's activity" GET "/app/contacts/${CHETAN}/activities?type=system"
+expect 200 "the therapist's activity" GET "/app/contacts/${CHETAN}/activities?type=system&limit=50"
 expect_value "the private photo's entry hidden (PC16)" "[.data[] | select(.patient_image_id == \"${PRIVATE_PHOTO}\")] | length" 0
 expect_value "the general photo's entry shown" "[.data[] | select(.patient_image_id == \"${PHOTO}\")] | length" 1
 expect 200 "album filter" GET "/app/patients/${CHETAN_FILE}/images?album=lhr"
@@ -375,7 +375,7 @@ as_role doctor
 expect 200 "the doctor moves it to private" PATCH "/app/patients/${CHETAN_FILE}/images/${PHOTO}" '{"album":"private"}'
 as_role therapist
 expect 404 "now a 404 to the therapist" GET "/app/patients/${CHETAN_FILE}/images/${PHOTO}"
-expect 200 "the therapist's activity again" GET "/app/contacts/${CHETAN}/activities?type=system"
+expect 200 "the therapist's activity again" GET "/app/contacts/${CHETAN}/activities?type=system&limit=50"
 expect_value "its entry follows into private" "[.data[] | select(.patient_image_id == \"${PHOTO}\")] | length" 0
 as_role front_desk
 expect 403 "the front desk sees no photos (P14)" GET "/app/patients/${CHETAN_FILE}/images"
@@ -428,4 +428,238 @@ expect 200 "the pharmacist exports (P5)" GET "/app/patients/exports?q=${T}"
 expect 403 "the pharmacist changes none" PATCH "/app/patients/${BINA_FILE}" '{"status":"new"}'
 as_role front_desk
 expect 200 "the front desk adds a file" POST /app/patients "{\"contact_id\":\"${DEV}\",\"home_branch_id\":\"${VESU}\"}"
+as_role owner
+
+# ==== #134 — 7.H treatments, 7.I check-ins, 7.J reviews, 7.K feedback actions ====================
+THERAPIST="$(fixture '.members.therapist.membership_id')"
+YESTERDAY="$(calendar_day -1)"
+IN_A_MONTH="$(calendar_day 30)"
+NOWHERE_CHECK_IN=chk_aaaaaaaaaaaaaaaaaaaaa
+
+# bought_offering FILE OFFERING TOTAL VALID_UNTIL — a bought offering of the patient (sub-domain 8
+# writes these through an invoice); prints its public id.
+bought_offering() {
+  local public_id
+  public_id="ppkg_$(printf '%s' "${T}-$1-$2-$4" | md5sum | head -c 21)"
+  patient_sql "INSERT INTO app.patient_packages (public_id, organization_id, patient_id, offering_id, sessions_total, valid_until)
+    SELECT '${public_id}', p.organization_id, p.id, f.id, $3, '$4'
+    FROM app.patients p, app.offerings f WHERE p.public_id = '$1' AND f.public_id = '$2';" >/dev/null
+  printf '%s' "${public_id}"
+}
+
+# sessions_used BOUGHT — the bought offering's spent sessions.
+sessions_used() { patient_sql "SELECT sessions_used FROM app.patient_packages WHERE public_id = '$1';"; }
+
+# call_backs SOURCE — the call-back tasks a check-in or review made (TR4).
+call_backs() { patient_sql "SELECT count(*) FROM app.tasks WHERE source_id = '$1' AND rule_key = 'call_back';"; }
+
+as_role owner
+expect 200 "offering Hydrafacial" POST /app/offerings "{\"name\":\"Hydrafacial ${S}\",\"price\":4000,\"sessions\":2,\"validity_days\":60}"
+HYDRA="$(last '.data.id')"
+expect 200 "offering Peel" POST /app/offerings "{\"name\":\"Peel ${S}\",\"price\":2500}"
+PEEL="$(last '.data.id')"
+expect 200 "offering Old" POST /app/offerings "{\"name\":\"Old ${S}\",\"price\":100}"
+OLD="$(last '.data.id')"
+expect 200 "retire Old" PATCH "/app/offerings/${OLD}" '{"is_active":false}'
+CHETAN_BOUGHT="$(bought_offering "${CHETAN_FILE}" "${HYDRA}" 2 "${IN_A_MONTH}")"
+CHETAN_EXPIRED="$(bought_offering "${CHETAN_FILE}" "${HYDRA}" 3 "${YESTERDAY}")"
+ASHA_BOUGHT="$(bought_offering "${ASHA_FILE}" "${HYDRA}" 2 "${IN_A_MONTH}")"
+expect 200 "Dev walks in" POST /app/appointments \
+  "$(jq -nc --arg contact "${DEV}" --arg branch "${VESU}" --arg doctor "${DOCTOR}" '{contact_id: $contact, branch_id: $branch, doctor_membership_id: $doctor, service_label: "Consultation", is_walk_in: true}')"
+DEV_VISIT="$(last '.data.id')"
+DEV_FILE="$(last '.data.patient_id')"
+expect 200 "Dev's check-in undone (booked — not a visit)" POST "/app/appointments/${DEV_VISIT}/undo-check-in"
+
+# ---- 7.H Treatments (routes 45–50, TR6–TR8, TR13) ------------------------------------------------
+expect 400 "a session in the future (TR8)" POST "/app/patients/${CHETAN_FILE}/treatments" '{"name":"Later","performed_at":"2099-01-01T10:00:00Z"}'
+expect_value "future: field" "${FIELDS}" performed_at
+expect 400 "a visit not checked in (TR8)" POST "/app/patients/${DEV_FILE}/treatments" "{\"name\":\"X\",\"appointment_id\":\"${DEV_VISIT}\"}"
+expect_value "not a visit: field" "${FIELDS}" appointment_id
+expect 400 "another patient's visit (TR3)" POST "/app/patients/${ASHA_FILE}/treatments" "{\"name\":\"X\",\"appointment_id\":\"${CHETAN_VISIT}\"}"
+expect 400 "an inactive offering (O13)" POST "/app/patients/${CHETAN_FILE}/treatments" "{\"name\":\"X\",\"offering_id\":\"${OLD}\"}"
+expect_value "inactive: field" "${FIELDS}" offering_id
+expect 400 "a number with a bought session (TR7)" POST "/app/patients/${CHETAN_FILE}/treatments" "{\"name\":\"X\",\"patient_offering_id\":\"${CHETAN_BOUGHT}\",\"session_number\":3}"
+expect_value "number with bought: field" "${FIELDS}" body.session_number
+expect 400 "another patient's bought offering" POST "/app/patients/${CHETAN_FILE}/treatments" "{\"name\":\"X\",\"patient_offering_id\":\"${ASHA_BOUGHT}\"}"
+expect_value "another's bought: field" "${FIELDS}" patient_offering_id
+expect 400 "a bought offering for another offering" POST "/app/patients/${CHETAN_FILE}/treatments" "{\"name\":\"X\",\"offering_id\":\"${PEEL}\",\"patient_offering_id\":\"${CHETAN_BOUGHT}\"}"
+expect_value "another offering: field" "${FIELDS}" patient_offering_id
+expect 409 "an expired bought offering" POST "/app/patients/${CHETAN_FILE}/treatments" "{\"name\":\"X\",\"patient_offering_id\":\"${CHETAN_EXPIRED}\"}"
+expect_value "expired: why" "${REASON}" offering_expired
+expect 200 "a session spent from the bought offering" POST "/app/patients/${CHETAN_FILE}/treatments" \
+  "$(jq -nc --arg visit "${CHETAN_VISIT}" --arg bought "${CHETAN_BOUGHT}" --arg doctor "${DOCTOR}" '{name: "Hydrafacial", appointment_id: $visit, patient_offering_id: $bought, doctor_membership_id: $doctor, body_parts: ["face", "neck"]}')"
+FIRST_SESSION="$(last '.data.id')"
+expect_value "spent: trt_, its offering, number 1, billed (TR7, TR13)" "[(.data.id | startswith(\"trt_\")), .data.offering_id, .data.session_number, .data.is_billed, .data.status, (.data.latest_check_in | tostring)] | map(tostring) | join(\",\")" "true,${HYDRA},1,true,done,null"
+expect_equal "one session spent" "$(sessions_used "${CHETAN_BOUGHT}")" 1
+expect 200 "Chetan's file after the first session" GET "/app/patients/${CHETAN_FILE}"
+expect_value "the first session converts (P4)" '.data.conversion' converted
+expect 200 "a second spent session" POST "/app/patients/${CHETAN_FILE}/treatments" "{\"name\":\"Hydrafacial\",\"patient_offering_id\":\"${CHETAN_BOUGHT}\"}"
+SECOND_SESSION="$(last '.data.id')"
+expect_value "second: number 2" '.data.session_number' 2
+expect 409 "none left (TR7)" POST "/app/patients/${CHETAN_FILE}/treatments" "{\"name\":\"Hydrafacial\",\"patient_offering_id\":\"${CHETAN_BOUGHT}\"}"
+expect_value "used up: why" "${REASON}" offering_used_up
+expect 200 "a session to bill after the visit" POST "/app/patients/${CHETAN_FILE}/treatments" \
+  "$(jq -nc --arg peel "${PEEL}" --arg doctor "${DOCTOR}" --arg therapist "${THERAPIST}" '{name: "Peel", offering_id: $peel, template: "physio", therapist_membership_id: $therapist, doctor_membership_id: $doctor, parameters: {region: "lower back"}, aftercare_call: "in_two_days", session_number: 3}')"
+PEEL_SESSION="$(last '.data.id')"
+expect_value "not billed yet (TR13)" '[.data.is_billed, .data.session_number, .data.parameters.region, .data.aftercare_call] | map(tostring) | join(",")' "false,3,lower back,in_two_days"
+expect 200 "a session with no offering" POST "/app/patients/${CHETAN_FILE}/treatments" '{"name":"Advice only"}'
+PLAIN_SESSION="$(last '.data.id')"
+expect_value "no offering: nothing to bill" '.data.is_billed | tostring' null
+expect 400 "thirteen body parts" POST "/app/patients/${CHETAN_FILE}/treatments" '{"name":"X","body_parts":["face","upper_lip","chin","neck","scalp","hair","chest","back","underarm","arms","hands","legs","body"]}'
+expect 400 "a linked session's number (TR7)" PATCH "/app/patients/${CHETAN_FILE}/treatments/${FIRST_SESSION}" '{"session_number":5}'
+expect_value "linked number: field" "${FIELDS}" session_number
+expect 400 "a linked session's offering" PATCH "/app/patients/${CHETAN_FILE}/treatments/${FIRST_SESSION}" "{\"offering_id\":\"${PEEL}\"}"
+expect_value "linked offering: field" "${FIELDS}" offering_id
+expect 400 "the bought offering can't be changed" PATCH "/app/patients/${CHETAN_FILE}/treatments/${FIRST_SESSION}" "{\"patient_offering_id\":\"${CHETAN_BOUGHT}\"}"
+expect 200 "a linked session's remark" PATCH "/app/patients/${CHETAN_FILE}/treatments/${FIRST_SESSION}" '{"remark":"Mild redness"}'
+expect 200 "an unlinked session's number" PATCH "/app/patients/${CHETAN_FILE}/treatments/${PEEL_SESSION}" '{"session_number":4}'
+expect 400 "a reverse without a reason" POST "/app/patients/${CHETAN_FILE}/treatments/${SECOND_SESSION}/reverse" '{}'
+expect 200 "reverse the second session (TR6)" POST "/app/patients/${CHETAN_FILE}/treatments/${SECOND_SESSION}/reverse" '{"reason":"Wrong patient"}'
+expect_value "reversed: status, reason, link cleared, stamped" '[.data.status, .data.reversed_reason, (.data.patient_offering_id | tostring), (.data.reversed_at != null), (.data.is_billed | tostring)] | map(tostring) | join(",")' "reversed,Wrong patient,null,true,null"
+expect_equal "the session given back" "$(sessions_used "${CHETAN_BOUGHT}")" 1
+expect 409 "reverse twice" POST "/app/patients/${CHETAN_FILE}/treatments/${SECOND_SESSION}/reverse" '{"reason":"Again"}'
+expect_value "twice: why" "${REASON}" transition_not_allowed
+expect 409 "change a reversed session" PATCH "/app/patients/${CHETAN_FILE}/treatments/${SECOND_SESSION}" '{"remark":"x"}'
+expect_value "reversed: why" "${REASON}" treatment_reversed
+expect 200 "the given-back session spent again" POST "/app/patients/${CHETAN_FILE}/treatments" "{\"name\":\"Hydrafacial\",\"patient_offering_id\":\"${CHETAN_BOUGHT}\"}"
+THIRD_SESSION="$(last '.data.id')"
+expect_value "again: number 2" '.data.session_number' 2
+expect 200 "Chetan's sessions" GET "/app/patients/${CHETAN_FILE}/treatments"
+expect_value "five, newest first" '[.data[].id] | join(",")' "${THIRD_SESSION},${PLAIN_SESSION},${PEEL_SESSION},${SECOND_SESSION},${FIRST_SESSION}"
+expect 200 "not billed" GET "/app/patients/${CHETAN_FILE}/treatments?is_billed=false"
+expect_value "not billed: the peel" '[.data[].id] | join(",")' "${PEEL_SESSION}"
+expect 200 "billed" GET "/app/patients/${CHETAN_FILE}/treatments?is_billed=true"
+expect_value "billed: the two spent" '[.data[].id] | join(",")' "${THIRD_SESSION},${FIRST_SESSION}"
+expect 200 "reversed" GET "/app/patients/${CHETAN_FILE}/treatments?status=reversed"
+expect_value "reversed: the second" '[.data[].id] | join(",")' "${SECOND_SESSION}"
+expect 200 "performed today" GET "/app/patients/${CHETAN_FILE}/treatments?performed_from=${TODAY}&performed_to=${TODAY}&q=hydra"
+expect_value "today's Hydrafacials" '.data | length' 3
+expect 200 "performed tomorrow on" GET "/app/patients/${CHETAN_FILE}/treatments?performed_from=${TOMORROW}"
+expect_value "none tomorrow" '.data | length' 0
+expect 200 "every patient's — a therapist's sessions (route 45)" GET "/app/patient-treatments?therapist_membership_id=${THERAPIST}&patient_id=${CHETAN_FILE}"
+expect_value "the therapist's: the peel" '[.data[].id] | join(",")' "${PEEL_SESSION}"
+expect 200 "the path wins over ?patient_id= (TR3)" GET "/app/patients/${CHETAN_FILE}/treatments?patient_id=${ASHA_FILE}"
+expect_value "path wins: Chetan's five" '.data | length' 5
+expect 404 "a session under another patient" GET "/app/patients/${ASHA_FILE}/treatments/${FIRST_SESSION}"
+expect 404 "an unknown session" GET "/app/patients/${CHETAN_FILE}/treatments/${NOWHERE_TREATMENT}"
+expect 404 "no delete (TR6)" DELETE "/app/patients/${CHETAN_FILE}/treatments/${FIRST_SESSION}?${DELETE_REASON}"
+expect 200 "the contact's activity" GET "/app/contacts/${CHETAN}/activities?type=system&limit=50"
+expect_value "recorded and reversed entries" '[.data[] | select(.patient_treatment_id != null) | .body | split(":")[0]] | unique | join(",")' "Treatment recorded,Treatment reversed"
+as_role front_desk
+expect 200 "the front desk reads sessions" GET "/app/patients/${CHETAN_FILE}/treatments"
+expect 403 "the front desk records none" POST "/app/patients/${CHETAN_FILE}/treatments" '{"name":"X"}'
+as_role therapist
+expect 200 "a therapist records a session" POST "/app/patients/${ASHA_FILE}/treatments" "{\"name\":\"Hydrafacial\",\"patient_offering_id\":\"${ASHA_BOUGHT}\"}"
+ASHA_SESSION="$(last '.data.id')"
+as_role counsellor
+expect 403 "a counsellor reverses none" POST "/app/patients/${ASHA_FILE}/treatments/${ASHA_SESSION}/reverse" '{"reason":"x"}'
+as_role marketing
+expect 403 "marketing reads no sessions" GET "/app/patient-treatments"
+as_role owner
+
+# ---- 7.I Check-ins (routes 51–56, TR9, TR10) -----------------------------------------------------
+expect 200 "a check-in after a session (TR9)" POST "/app/patients/${CHETAN_FILE}/check-ins" "{\"feel\":\"better\",\"score\":8,\"patient_treatment_id\":\"${FIRST_SESSION}\"}"
+GOOD_CHECK_IN="$(last '.data.id')"
+expect_value "after: chk_, context, today, no trend, no action needed" "[(.data.id | startswith(\"chk_\")), .data.context, .data.check_in_date, (.data.score_change | tostring), .data.needs_action, (.data.actions | length)] | map(tostring) | join(\",\")" "true,After Hydrafacial,${TODAY},null,false,0"
+expect_equal "no call-back when well" "$(call_backs "${GOOD_CHECK_IN}")" 0
+expect 200 "a worse check-in with the next offerings (TR10)" POST "/app/patients/${CHETAN_FILE}/check-ins" \
+  "$(jq -nc --arg peel "${PEEL}" --arg hydra "${HYDRA}" --arg visit "${CHETAN_VISIT}" '{feel: "worse", score: 3, appointment_id: $visit, followed: "partly", followed_note: "Skipped the sunscreen", next_plan: "Calm the skin", next_offering_ids: [$peel, $hydra]}')"
+WORSE_CHECK_IN="$(last '.data.id')"
+expect_value "worse: visit context, trend -5, needs action, planned" "[(.data.context | startswith(\"Visit · \")), .data.score_change, .data.needs_action, (.data.next_offering_ids | join(\"|\"))] | map(tostring) | join(\",\")" "true,-5,true,${PEEL}|${HYDRA}"
+expect_equal "a call-back for the doctor (TR4)" "$(call_backs "${WORSE_CHECK_IN}")" 1
+expect 200 "an offering already planned is skipped" POST "/app/patients/${CHETAN_FILE}/check-ins" "{\"feel\":\"same\",\"score\":6,\"context\":\"Phone call\",\"next_offering_ids\":[\"${PEEL}\"]}"
+SAME_CHECK_IN="$(last '.data.id')"
+expect_value "skipped: none planned, its context" '[(.data.next_offering_ids | length), .data.context, .data.score_change] | map(tostring) | join(",")' "0,Phone call,3"
+expect 400 "an inactive next offering" POST "/app/patients/${CHETAN_FILE}/check-ins" "{\"feel\":\"same\",\"score\":5,\"next_offering_ids\":[\"${OLD}\"]}"
+expect_value "inactive: field" "${FIELDS}" next_offering_ids
+expect 400 "eleven next offerings" POST "/app/patients/${CHETAN_FILE}/check-ins" "$(jq -nc '{feel: "same", score: 5, next_offering_ids: [range(0;11) | "off_\(.)"]}')"
+expect 400 "a check-in tomorrow" POST "/app/patients/${CHETAN_FILE}/check-ins" "{\"feel\":\"same\",\"score\":5,\"check_in_date\":\"${TOMORROW}\"}"
+expect_value "tomorrow: field" "${FIELDS}" check_in_date
+expect 400 "another patient's session" POST "/app/patients/${ASHA_FILE}/check-ins" "{\"feel\":\"same\",\"score\":5,\"patient_treatment_id\":\"${FIRST_SESSION}\"}"
+expect_value "another's session: field" "${FIELDS}" patient_treatment_id
+expect 400 "another patient's visit" POST "/app/patients/${ASHA_FILE}/check-ins" "{\"feel\":\"same\",\"score\":5,\"appointment_id\":\"${CHETAN_VISIT}\"}"
+expect_value "another's visit: field" "${FIELDS}" appointment_id
+expect 400 "a score of 11" POST "/app/patients/${CHETAN_FILE}/check-ins" '{"feel":"same","score":11}'
+expect 400 "next offerings on a change (create only)" PATCH "/app/patients/${CHETAN_FILE}/check-ins/${SAME_CHECK_IN}" "{\"next_offering_ids\":[\"${HYDRA}\"]}"
+expect 200 "the plan has the check-in's offerings" GET "/app/patients/${CHETAN_FILE}/check-ins/${WORSE_CHECK_IN}"
+expect_value "read back from the plan" '.data.next_offering_ids | length' 2
+expect 200 "needs action" GET "/app/patients/${CHETAN_FILE}/check-ins?needs_action=true"
+expect_value "needs action: the worse one" '[.data[].id] | join(",")' "${WORSE_CHECK_IN}"
+expect 200 "feel filter (several)" GET "/app/patients/${CHETAN_FILE}/check-ins?feel=worse,same"
+expect_value "worse and same" '.data | length' 2
+expect 200 "a session's check-ins" GET "/app/patients/${CHETAN_FILE}/check-ins?patient_treatment_id=${FIRST_SESSION}"
+expect_value "the session's: the good one" '[.data[].id] | join(",")' "${GOOD_CHECK_IN}"
+expect 200 "date range" GET "/app/patients/${CHETAN_FILE}/check-ins?check_in_date_from=${TODAY}&check_in_date_to=${TODAY}"
+expect_value "today's three" '.data | length' 3
+expect 400 "no q on check-ins" GET "/app/patients/${CHETAN_FILE}/check-ins?q=x"
+
+# ---- 7.K Feedback actions (routes 63–64, TR12) ---------------------------------------------------
+expect 400 "other without a note" POST "/app/patients/${CHETAN_FILE}/check-ins/${WORSE_CHECK_IN}/actions" '{"action":"other"}'
+expect_value "no note: field" "${FIELDS}" body.note
+expect 400 "an unknown action" POST "/app/patients/${CHETAN_FILE}/check-ins/${WORSE_CHECK_IN}/actions" '{"action":"emailed"}'
+expect 200 "the doctor called" POST "/app/patients/${CHETAN_FILE}/check-ins/${WORSE_CHECK_IN}/actions" '{"action":"doctor_called","note":"Advised cold compress"}'
+expect_value "logged: fba_, by a member, needs action off" '[(.data.actions[0].id | startswith("fba_")), .data.actions[0].action, (.data.actions[0].author_membership_id | startswith("mem_")), .data.needs_action] | map(tostring) | join(",")' "true,doctor_called,true,false"
+expect 200 "then a plan change" POST "/app/patients/${CHETAN_FILE}/check-ins/${WORSE_CHECK_IN}/actions" '{"action":"other","note":"Moved the peel out"}'
+expect_value "newest first" '[.data.actions[].action] | join(",")' "other,doctor_called"
+expect 200 "needs action, after the call" GET "/app/patients/${CHETAN_FILE}/check-ins?needs_action=true"
+expect_value "none needs action" '.data | length' 0
+expect 404 "an action under another patient" POST "/app/patients/${ASHA_FILE}/check-ins/${WORSE_CHECK_IN}/actions" '{"action":"doctor_called"}'
+expect 404 "an action on an unknown check-in" POST "/app/patients/${CHETAN_FILE}/check-ins/${NOWHERE_CHECK_IN}/actions" '{"action":"doctor_called"}'
+expect 200 "a change that turns it on" PATCH "/app/patients/${CHETAN_FILE}/check-ins/${SAME_CHECK_IN}" '{"score":2}'
+expect_value "turned on: needs action" '.data.needs_action' true
+expect_equal "a call-back when it turns on" "$(call_backs "${SAME_CHECK_IN}")" 1
+expect 200 "the session's latest check-in" GET "/app/patients/${CHETAN_FILE}/treatments/${FIRST_SESSION}"
+expect_value "latest check-in on the session (7.H.6)" '[.data.latest_check_in.id, .data.latest_check_in.feel, .data.latest_check_in.score] | map(tostring) | join(",")' "${GOOD_CHECK_IN},better,8"
+expect 204 "delete a check-in" DELETE "/app/patients/${CHETAN_FILE}/check-ins/${GOOD_CHECK_IN}?${DELETE_REASON}"
+expect 404 "a deleted check-in" GET "/app/patients/${CHETAN_FILE}/check-ins/${GOOD_CHECK_IN}"
+expect 404 "no action on a deleted check-in" POST "/app/patients/${CHETAN_FILE}/check-ins/${GOOD_CHECK_IN}/actions" '{"action":"doctor_called"}'
+expect 200 "restore it" POST "/app/patients/${CHETAN_FILE}/check-ins/${GOOD_CHECK_IN}/restore"
+expect 409 "restore a live one" POST "/app/patients/${CHETAN_FILE}/check-ins/${GOOD_CHECK_IN}/restore"
+expect_value "live: why" "${REASON}" record_not_deleted
+expect 404 "a check-in under another patient" GET "/app/patients/${ASHA_FILE}/check-ins/${GOOD_CHECK_IN}"
+
+# ---- 7.J Reviews (routes 57–62, TR11) ------------------------------------------------------------
+REVIEW_VIDEO="$(confirmed_upload review.mp4 video/mp4 8192)"
+expect 200 "a Google review" POST "/app/patients/${CHETAN_FILE}/reviews" '{"source":"google","rating":5,"text":"Lovely staff","link":"https://g.page/r/clinic"}'
+GOOGLE_REVIEW="$(last '.data.id')"
+expect_value "google: rev_, today, no action needed" "[(.data.id | startswith(\"rev_\")), .data.review_date, .data.needs_action] | map(tostring) | join(\",\")" "true,${TODAY},false"
+expect 400 "a link that is not https (TR11)" POST "/app/patients/${CHETAN_FILE}/reviews" '{"source":"google","link":"http://g.page/r/clinic"}'
+expect_value "http: field" "${FIELDS}" body.link
+expect 400 "an unconfirmed file" POST "/app/patients/${CHETAN_FILE}/reviews" '{"source":"video","file_keys":["organizations/none/uploads/v.mp4"]}'
+expect_value "unconfirmed: field" "${FIELDS}" file_keys
+expect 400 "a review tomorrow" POST "/app/patients/${CHETAN_FILE}/reviews" "{\"source\":\"whatsapp\",\"review_date\":\"${TOMORROW}\"}"
+expect_value "tomorrow: field" "${FIELDS}" review_date
+expect 400 "another contact's visit" POST "/app/patients/${ASHA_FILE}/reviews" "{\"source\":\"whatsapp\",\"appointment_id\":\"${CHETAN_VISIT}\"}"
+expect_value "another's visit: field" "${FIELDS}" appointment_id
+expect 400 "a rating of 6" POST "/app/patients/${CHETAN_FILE}/reviews" '{"source":"google","rating":6}'
+expect 200 "a low video review" POST "/app/patients/${CHETAN_FILE}/reviews" \
+  "$(jq -nc --arg key "${REVIEW_VIDEO}" --arg visit "${CHETAN_VISIT}" --arg day "${YESTERDAY}" '{source: "video", rating: 2, file_keys: [$key], appointment_id: $visit, review_date: $day}')"
+LOW_REVIEW="$(last '.data.id')"
+expect_value "low: needs action, the file" '[.data.needs_action, (.data.file_keys | length)] | map(tostring) | join(",")' "true,1"
+expect_equal "a call-back for the low rating (TR4)" "$(call_backs "${LOW_REVIEW}")" 1
+expect 200 "the reviews, newest first" GET "/app/patients/${CHETAN_FILE}/reviews"
+expect_value "newest review date first" '[.data[].id] | join(",")' "${GOOGLE_REVIEW},${LOW_REVIEW}"
+expect 200 "source filter (several)" GET "/app/patients/${CHETAN_FILE}/reviews?source=video,instagram"
+expect_value "video only" '[.data[].id] | join(",")' "${LOW_REVIEW}"
+expect 200 "needs action" GET "/app/patients/${CHETAN_FILE}/reviews?needs_action=true"
+expect_value "needs action: the low one" '[.data[].id] | join(",")' "${LOW_REVIEW}"
+expect 200 "date range" GET "/app/patients/${CHETAN_FILE}/reviews?review_date_to=${YESTERDAY}"
+expect_value "yesterday: the low one" '[.data[].id] | join(",")' "${LOW_REVIEW}"
+expect 200 "replied on Google" POST "/app/patients/${CHETAN_FILE}/reviews/${LOW_REVIEW}/actions" '{"action":"replied_google"}'
+expect_value "replied: needs action off" '[.data.needs_action, .data.actions[0].action] | map(tostring) | join(",")' "false,replied_google"
+expect 200 "a rating lowered to 1" PATCH "/app/patients/${CHETAN_FILE}/reviews/${GOOGLE_REVIEW}" '{"rating":1}'
+expect_equal "a call-back when it turns on" "$(call_backs "${GOOGLE_REVIEW}")" 1
+expect 400 "a change to an http link" PATCH "/app/patients/${CHETAN_FILE}/reviews/${GOOGLE_REVIEW}" '{"link":"ftp://x"}'
+expect 204 "delete a review" DELETE "/app/patients/${CHETAN_FILE}/reviews/${GOOGLE_REVIEW}?${DELETE_REASON}"
+expect 404 "no action on a deleted review" POST "/app/patients/${CHETAN_FILE}/reviews/${GOOGLE_REVIEW}/actions" '{"action":"replied_google"}'
+expect 200 "restore it" POST "/app/patients/${CHETAN_FILE}/reviews/${GOOGLE_REVIEW}/restore"
+expect 404 "a review under another patient" GET "/app/patients/${ASHA_FILE}/reviews/${LOW_REVIEW}"
+expect 200 "the contact's activity" GET "/app/contacts/${CHETAN}/activities?type=system&limit=50"
+expect_value "check-in and review entries" '[.data[] | select(.patient_check_in_id != null or .patient_review_id != null)] | length' 5
+as_role marketing
+expect 200 "marketing reads check-ins (patient:read)" GET "/app/patients/${CHETAN_FILE}/check-ins"
+expect 200 "marketing reads reviews" GET "/app/patients/${CHETAN_FILE}/reviews"
+as_role pharmacist
+expect 403 "the pharmacist logs no review (patient:update)" POST "/app/patients/${CHETAN_FILE}/reviews" '{"source":"google"}'
+expect 403 "the pharmacist logs no action" POST "/app/patients/${CHETAN_FILE}/reviews/${LOW_REVIEW}/actions" '{"action":"replied_google"}'
 as_role owner

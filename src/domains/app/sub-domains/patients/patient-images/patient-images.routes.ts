@@ -17,14 +17,6 @@ import {
 /** The by-id routes' path params. */
 type ImageParams = { Params: { patient_id: string; patient_image_id: string } };
 
-/** Reading the clinical record (P14). */
-const CLINICAL_READ = [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ)];
-/** Writing it: `patient:update` and the clinical code (P14). */
-const CLINICAL_WRITE = [
-  requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
-  requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
-];
-
 /**
  * Registers the `patient-images` routes (prefix `/api/v1/app`) — routes-final 7.F, routes
  * 33–38, nested under the patient.
@@ -38,7 +30,7 @@ export function patientImagesRoutes(service: PatientImagesService): FastifyPlugi
       '/patients/:patient_id/images',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_READ,
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ)],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: "List a patient's photos",
@@ -55,7 +47,10 @@ export function patientImagesRoutes(service: PatientImagesService): FastifyPlugi
       '/patients/:patient_id/images',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_WRITE,
+        preHandler: [
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
+        ],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Add a photo',
@@ -72,7 +67,7 @@ export function patientImagesRoutes(service: PatientImagesService): FastifyPlugi
       '/patients/:patient_id/images/:patient_image_id',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_READ,
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ)],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Get a photo',
@@ -88,7 +83,10 @@ export function patientImagesRoutes(service: PatientImagesService): FastifyPlugi
       '/patients/:patient_id/images/:patient_image_id',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_WRITE,
+        preHandler: [
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
+        ],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Change or move a photo',
@@ -105,7 +103,10 @@ export function patientImagesRoutes(service: PatientImagesService): FastifyPlugi
       '/patients/:patient_id/images/:patient_image_id',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_WRITE,
+        preHandler: [
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
+        ],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Delete a photo',
@@ -122,7 +123,10 @@ export function patientImagesRoutes(service: PatientImagesService): FastifyPlugi
       '/patients/:patient_id/images/:patient_image_id/restore',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_WRITE,
+        preHandler: [
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
+        ],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Restore a photo',

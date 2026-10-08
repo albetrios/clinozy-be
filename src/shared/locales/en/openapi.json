@@ -49,11 +49,9 @@
     "Patient": "Patients — registration, contact and consent",
     "Lead": "Leads — enquiries until the person becomes a patient",
     "Appointment": "Appointments — booking, confirming, check-in, cancel and the slots",
-    "Patient file": "A patient's file — clinical notes, prescriptions and kits, the diagnosis catalogue, photos and reports",
+    "Patient file": "A patient's file — clinical notes, prescriptions and kits, the diagnosis catalogue, photos, reports, treatment sessions, check-ins, reviews and the actions taken on them",
     "Invoice": "Invoices, packages and offering suggestions — numbered per branch GSTIN and financial year (D23)",
     "Payment": "Payments, pending credits, credit notes and the day close",
-    "Treatment": "Treatment sessions — reversed with a reason, never deleted (P89)",
-    "Feedback": "Check-ins, reviews and the actions taken on them",
     "Medical store": "The medical store — medicines, suppliers, manufacturers, reps, purchase orders and sales",
     "Stock": "Consumable stock — items, vendors, purchases, movements and counts",
     "Task": "Tasks — the work queue, its rules and their automatic handling"

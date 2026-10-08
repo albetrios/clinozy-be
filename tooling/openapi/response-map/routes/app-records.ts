@@ -814,118 +814,124 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.dayClosesRecordSchema, schemas.dayClosesRecordExample),
     example: null,
   },
+  'GET /api/v1/app/patient-treatments': {
+    statusCode: 200,
+    schema: wrapPaginated(schemas.patientTreatmentsRecordSchema, [
+      schemas.patientTreatmentsRecordExample,
+    ]),
+    example: null,
+  },
   'GET /api/v1/app/patients/{patient_id}/treatments': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.treatmentsRecordSchema, [schemas.treatmentsRecordExample]),
+    schema: wrapPaginated(schemas.patientTreatmentsRecordSchema, [
+      schemas.patientTreatmentsRecordExample,
+    ]),
     example: null,
   },
   'POST /api/v1/app/patients/{patient_id}/treatments': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.treatmentsRecordSchema, schemas.treatmentsRecordExample),
+    schema: wrapSuccess(
+      schemas.patientTreatmentsRecordSchema,
+      schemas.patientTreatmentsRecordExample,
+    ),
     example: null,
   },
-  'GET /api/v1/app/treatments': {
+  'GET /api/v1/app/patients/{patient_id}/treatments/{patient_treatment_id}': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.treatmentsRecordSchema, [schemas.treatmentsRecordExample]),
+    schema: wrapSuccess(
+      schemas.patientTreatmentsRecordSchema,
+      schemas.patientTreatmentsRecordExample,
+    ),
     example: null,
   },
-  'GET /api/v1/app/treatments/{treatment_id}': {
+  'PATCH /api/v1/app/patients/{patient_id}/treatments/{patient_treatment_id}': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.treatmentsRecordSchema, schemas.treatmentsRecordExample),
+    schema: wrapSuccess(
+      schemas.patientTreatmentsRecordSchema,
+      schemas.patientTreatmentsRecordExample,
+    ),
     example: null,
   },
-  'PATCH /api/v1/app/treatments/{treatment_id}': {
+  'POST /api/v1/app/patients/{patient_id}/treatments/{patient_treatment_id}/reverse': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.treatmentsRecordSchema, schemas.treatmentsRecordExample),
-    example: null,
-  },
-  'POST /api/v1/app/treatments/{treatment_id}/reverse': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.treatmentsRecordSchema, schemas.treatmentsRecordExample),
+    schema: wrapSuccess(
+      schemas.patientTreatmentsRecordSchema,
+      schemas.patientTreatmentsRecordExample,
+    ),
     example: null,
   },
   'GET /api/v1/app/patients/{patient_id}/check-ins': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.checkInsRecordSchema, [schemas.checkInsRecordExample]),
+    schema: wrapPaginated(schemas.patientCheckInsRecordSchema, [
+      schemas.patientCheckInsRecordExample,
+    ]),
     example: null,
   },
   'POST /api/v1/app/patients/{patient_id}/check-ins': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.checkInsRecordSchema, schemas.checkInsRecordExample),
+    schema: wrapSuccess(schemas.patientCheckInsRecordSchema, schemas.patientCheckInsRecordExample),
     example: null,
   },
-  'GET /api/v1/app/check-ins/{check_in_id}': {
+  'GET /api/v1/app/patients/{patient_id}/check-ins/{patient_check_in_id}': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.checkInsRecordSchema, schemas.checkInsRecordExample),
+    schema: wrapSuccess(schemas.patientCheckInsRecordSchema, schemas.patientCheckInsRecordExample),
     example: null,
   },
-  'PATCH /api/v1/app/check-ins/{check_in_id}': {
+  'PATCH /api/v1/app/patients/{patient_id}/check-ins/{patient_check_in_id}': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.checkInsRecordSchema, schemas.checkInsRecordExample),
+    schema: wrapSuccess(schemas.patientCheckInsRecordSchema, schemas.patientCheckInsRecordExample),
     example: null,
   },
-  'DELETE /api/v1/app/check-ins/{check_in_id}': { statusCode: 204, schema: null, example: null },
-  'POST /api/v1/app/check-ins/{check_in_id}/restore': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.checkInsRecordSchema, schemas.checkInsRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/patients/{patient_id}/reviews': {
-    statusCode: 200,
-    schema: wrapPaginated(schemas.reviewsRecordSchema, [schemas.reviewsRecordExample]),
-    example: null,
-  },
-  'POST /api/v1/app/patients/{patient_id}/reviews': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.reviewsRecordSchema, schemas.reviewsRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/reviews/{review_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.reviewsRecordSchema, schemas.reviewsRecordExample),
-    example: null,
-  },
-  'PATCH /api/v1/app/reviews/{review_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.reviewsRecordSchema, schemas.reviewsRecordExample),
-    example: null,
-  },
-  'DELETE /api/v1/app/reviews/{review_id}': { statusCode: 204, schema: null, example: null },
-  'POST /api/v1/app/reviews/{review_id}/restore': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.reviewsRecordSchema, schemas.reviewsRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/feedback-actions': {
-    statusCode: 200,
-    schema: wrapPaginated(schemas.feedbackActionsRecordSchema, [
-      schemas.feedbackActionsRecordExample,
-    ]),
-    example: null,
-  },
-  'POST /api/v1/app/feedback-actions': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.feedbackActionsRecordSchema, schemas.feedbackActionsRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/feedback-actions/{feedback_action_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.feedbackActionsRecordSchema, schemas.feedbackActionsRecordExample),
-    example: null,
-  },
-  'PATCH /api/v1/app/feedback-actions/{feedback_action_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.feedbackActionsRecordSchema, schemas.feedbackActionsRecordExample),
-    example: null,
-  },
-  'DELETE /api/v1/app/feedback-actions/{feedback_action_id}': {
+  'DELETE /api/v1/app/patients/{patient_id}/check-ins/{patient_check_in_id}': {
     statusCode: 204,
     schema: null,
     example: null,
   },
-  'POST /api/v1/app/feedback-actions/{feedback_action_id}/restore': {
+  'POST /api/v1/app/patients/{patient_id}/check-ins/{patient_check_in_id}/restore': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.feedbackActionsRecordSchema, schemas.feedbackActionsRecordExample),
+    schema: wrapSuccess(schemas.patientCheckInsRecordSchema, schemas.patientCheckInsRecordExample),
+    example: null,
+  },
+  'POST /api/v1/app/patients/{patient_id}/check-ins/{patient_check_in_id}/actions': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.patientCheckInsRecordSchema, schemas.patientCheckInsRecordExample),
+    example: null,
+  },
+  'GET /api/v1/app/patients/{patient_id}/reviews': {
+    statusCode: 200,
+    schema: wrapPaginated(schemas.patientReviewsRecordSchema, [
+      schemas.patientReviewsRecordExample,
+    ]),
+    example: null,
+  },
+  'POST /api/v1/app/patients/{patient_id}/reviews': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.patientReviewsRecordSchema, schemas.patientReviewsRecordExample),
+    example: null,
+  },
+  'GET /api/v1/app/patients/{patient_id}/reviews/{patient_review_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.patientReviewsRecordSchema, schemas.patientReviewsRecordExample),
+    example: null,
+  },
+  'PATCH /api/v1/app/patients/{patient_id}/reviews/{patient_review_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.patientReviewsRecordSchema, schemas.patientReviewsRecordExample),
+    example: null,
+  },
+  'DELETE /api/v1/app/patients/{patient_id}/reviews/{patient_review_id}': {
+    statusCode: 204,
+    schema: null,
+    example: null,
+  },
+  'POST /api/v1/app/patients/{patient_id}/reviews/{patient_review_id}/restore': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.patientReviewsRecordSchema, schemas.patientReviewsRecordExample),
+    example: null,
+  },
+  'POST /api/v1/app/patients/{patient_id}/reviews/{patient_review_id}/actions': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.patientReviewsRecordSchema, schemas.patientReviewsRecordExample),
     example: null,
   },
   'GET /api/v1/app/manufacturers': {

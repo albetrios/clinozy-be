@@ -42,13 +42,11 @@ export function buildTagDefinitions(
     Stock: 'Consumable stock — items, vendors, purchases, movements and counts',
     'Medical store':
       'The medical store — medicines, suppliers, manufacturers, reps, purchase orders and sales',
-    Feedback: 'Check-ins, reviews and the actions taken on them',
-    Treatment: 'Treatment sessions — reversed with a reason, never deleted (P89)',
     Payment: 'Payments, pending credits, credit notes and the day close',
     Invoice:
       'Invoices, packages and offering suggestions — numbered per branch GSTIN and financial year (D23)',
     'Patient file':
-      "A patient's file — clinical notes, prescriptions and kits, the diagnosis catalogue, photos and reports",
+      "A patient's file — clinical notes, prescriptions and kits, the diagnosis catalogue, photos, reports, treatment sessions, check-ins, reviews and the actions taken on them",
     Visit: 'Visits in progress — the floor stage, the consult note and the safety checks',
     Appointment: 'Appointments — booking, confirming, check-in, cancel and the slots',
     Lead: 'Leads, their conversations and message templates',
@@ -108,8 +106,6 @@ export function buildTagDefinitions(
     'Patient file',
     'Invoice',
     'Payment',
-    'Treatment',
-    'Feedback',
     'Medical store',
     'Stock',
     'Task',

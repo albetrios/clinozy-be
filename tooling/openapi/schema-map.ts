@@ -106,22 +106,19 @@ import {
   CreateDayCloseDto as appCreateDayCloseDto,
 } from '@/domains/app/sub-domains/day-closes/day-closes.dto.js';
 import {
-  CreateTreatmentDto as appCreateTreatmentDto,
-  reverseTreatmentDto as appReverseTreatmentDto,
-  UpdateTreatmentDto as appUpdateTreatmentDto,
-} from '@/domains/app/sub-domains/treatments/treatments.dto.js';
+  CreatePatientTreatmentDto as appCreatePatientTreatmentDto,
+  ReversePatientTreatmentDto as appReversePatientTreatmentDto,
+  UpdatePatientTreatmentDto as appUpdatePatientTreatmentDto,
+} from '@/domains/app/sub-domains/patients/patient-treatments/patient-treatments.dto.js';
 import {
-  CreateCheckInDto as appCreateCheckInDto,
-  UpdateCheckInDto as appUpdateCheckInDto,
-} from '@/domains/app/sub-domains/check-ins/check-ins.dto.js';
+  CreatePatientCheckInDto as appCreatePatientCheckInDto,
+  UpdatePatientCheckInDto as appUpdatePatientCheckInDto,
+} from '@/domains/app/sub-domains/patients/patient-check-ins/patient-check-ins.dto.js';
 import {
-  CreateReviewDto as appCreateReviewDto,
-  UpdateReviewDto as appUpdateReviewDto,
-} from '@/domains/app/sub-domains/reviews/reviews.dto.js';
-import {
-  CreateFeedbackActionDto as appCreateFeedbackActionDto,
-  UpdateFeedbackActionDto as appUpdateFeedbackActionDto,
-} from '@/domains/app/sub-domains/feedback-actions/feedback-actions.dto.js';
+  CreatePatientReviewDto as appCreatePatientReviewDto,
+  UpdatePatientReviewDto as appUpdatePatientReviewDto,
+} from '@/domains/app/sub-domains/patients/patient-reviews/patient-reviews.dto.js';
+import { LogPatientFeedbackActionDto as appLogPatientFeedbackActionDto } from '@/domains/app/sub-domains/patients/patient-feedback-actions/patient-feedback-actions.dto.js';
 import {
   CreateManufacturerDto as appCreateManufacturerDto,
   UpdateManufacturerDto as appUpdateManufacturerDto,
@@ -387,15 +384,20 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'POST /api/v1/app/suppliers': appCreateSupplierDto,
   'PATCH /api/v1/app/manufacturers/{manufacturer_id}': appUpdateManufacturerDto,
   'POST /api/v1/app/manufacturers': appCreateManufacturerDto,
-  'PATCH /api/v1/app/feedback-actions/{feedback_action_id}': appUpdateFeedbackActionDto,
-  'POST /api/v1/app/feedback-actions': appCreateFeedbackActionDto,
-  'PATCH /api/v1/app/reviews/{review_id}': appUpdateReviewDto,
-  'POST /api/v1/app/patients/{patient_id}/reviews': appCreateReviewDto,
-  'PATCH /api/v1/app/check-ins/{check_in_id}': appUpdateCheckInDto,
-  'POST /api/v1/app/patients/{patient_id}/check-ins': appCreateCheckInDto,
-  'POST /api/v1/app/treatments/{treatment_id}/reverse': appReverseTreatmentDto,
-  'PATCH /api/v1/app/treatments/{treatment_id}': appUpdateTreatmentDto,
-  'POST /api/v1/app/patients/{patient_id}/treatments': appCreateTreatmentDto,
+  'POST /api/v1/app/patients/{patient_id}/reviews/{patient_review_id}/actions':
+    appLogPatientFeedbackActionDto,
+  'PATCH /api/v1/app/patients/{patient_id}/reviews/{patient_review_id}': appUpdatePatientReviewDto,
+  'POST /api/v1/app/patients/{patient_id}/reviews': appCreatePatientReviewDto,
+  'POST /api/v1/app/patients/{patient_id}/check-ins/{patient_check_in_id}/actions':
+    appLogPatientFeedbackActionDto,
+  'PATCH /api/v1/app/patients/{patient_id}/check-ins/{patient_check_in_id}':
+    appUpdatePatientCheckInDto,
+  'POST /api/v1/app/patients/{patient_id}/check-ins': appCreatePatientCheckInDto,
+  'POST /api/v1/app/patients/{patient_id}/treatments/{patient_treatment_id}/reverse':
+    appReversePatientTreatmentDto,
+  'PATCH /api/v1/app/patients/{patient_id}/treatments/{patient_treatment_id}':
+    appUpdatePatientTreatmentDto,
+  'POST /api/v1/app/patients/{patient_id}/treatments': appCreatePatientTreatmentDto,
   'POST /api/v1/app/day-closes/{day_close_id}/close': appCloseDayCloseDto,
   'POST /api/v1/app/day-closes': appCreateDayCloseDto,
   'PATCH /api/v1/app/pending-credits/{pending_credit_id}': appUpdatePendingCreditDto,

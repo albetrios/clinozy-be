@@ -94,19 +94,6 @@ src/
     │   │   │   ├── branches.service.ts
     │   │   │   ├── branches.types.ts
     │   │   │   └── branches.validator.ts
-    │   │   ├── check-ins/
-    │   │   │   ├── check-ins.constants.ts
-    │   │   │   ├── check-ins.controller.ts
-    │   │   │   ├── check-ins.dto.ts
-    │   │   │   ├── check-ins.overview.md
-    │   │   │   ├── check-ins.repository.ts
-    │   │   │   ├── check-ins.routes.ts
-    │   │   │   ├── check-ins.rules.ts
-    │   │   │   ├── check-ins.schema.ts
-    │   │   │   ├── check-ins.serializer.ts
-    │   │   │   ├── check-ins.service.ts
-    │   │   │   ├── check-ins.types.ts
-    │   │   │   └── check-ins.validator.ts
     │   │   ├── contacts/
     │   │   │   ├── contact-activities/
     │   │   │   │   ├── contact-activities.constants.ts
@@ -187,18 +174,6 @@ src/
     │   │   │   ├── day-closes.service.ts
     │   │   │   ├── day-closes.types.ts
     │   │   │   └── day-closes.validator.ts
-    │   │   ├── feedback-actions/
-    │   │   │   ├── feedback-actions.constants.ts
-    │   │   │   ├── feedback-actions.controller.ts
-    │   │   │   ├── feedback-actions.dto.ts
-    │   │   │   ├── feedback-actions.overview.md
-    │   │   │   ├── feedback-actions.repository.ts
-    │   │   │   ├── feedback-actions.routes.ts
-    │   │   │   ├── feedback-actions.schema.ts
-    │   │   │   ├── feedback-actions.serializer.ts
-    │   │   │   ├── feedback-actions.service.ts
-    │   │   │   ├── feedback-actions.types.ts
-    │   │   │   └── feedback-actions.validator.ts
     │   │   ├── invoices/
     │   │   │   ├── invoices.constants.ts
     │   │   │   ├── invoices.controller.ts
@@ -410,6 +385,19 @@ src/
     │   │   │   ├── patient-packages.types.ts
     │   │   │   └── patient-packages.validator.ts
     │   │   ├── patients/
+    │   │   │   ├── patient-check-ins/
+    │   │   │   │   ├── patient-check-ins.constants.ts
+    │   │   │   │   ├── patient-check-ins.controller.ts
+    │   │   │   │   ├── patient-check-ins.dto.ts
+    │   │   │   │   ├── patient-check-ins.overview.md
+    │   │   │   │   ├── patient-check-ins.repository.ts
+    │   │   │   │   ├── patient-check-ins.routes.ts
+    │   │   │   │   ├── patient-check-ins.rules.ts
+    │   │   │   │   ├── patient-check-ins.schema.ts
+    │   │   │   │   ├── patient-check-ins.serializer.ts
+    │   │   │   │   ├── patient-check-ins.service.ts
+    │   │   │   │   ├── patient-check-ins.types.ts
+    │   │   │   │   └── patient-check-ins.validator.ts
     │   │   │   ├── patient-clinical-notes/
     │   │   │   │   ├── patient-clinical-notes.constants.ts
     │   │   │   │   ├── patient-clinical-notes.controller.ts
@@ -435,6 +423,16 @@ src/
     │   │   │   │   ├── patient-diagnoses.service.ts
     │   │   │   │   ├── patient-diagnoses.types.ts
     │   │   │   │   └── patient-diagnoses.validator.ts
+    │   │   │   ├── patient-feedback-actions/
+    │   │   │   │   ├── patient-feedback-actions.constants.ts
+    │   │   │   │   ├── patient-feedback-actions.dto.ts
+    │   │   │   │   ├── patient-feedback-actions.overview.md
+    │   │   │   │   ├── patient-feedback-actions.repository.ts
+    │   │   │   │   ├── patient-feedback-actions.rules.ts
+    │   │   │   │   ├── patient-feedback-actions.schema.ts
+    │   │   │   │   ├── patient-feedback-actions.serializer.ts
+    │   │   │   │   ├── patient-feedback-actions.types.ts
+    │   │   │   │   └── patient-feedback-actions.validator.ts
     │   │   │   ├── patient-images/
     │   │   │   │   ├── patient-images.constants.ts
     │   │   │   │   ├── patient-images.controller.ts
@@ -474,6 +472,32 @@ src/
     │   │   │   │   ├── patient-reports.service.ts
     │   │   │   │   ├── patient-reports.types.ts
     │   │   │   │   └── patient-reports.validator.ts
+    │   │   │   ├── patient-reviews/
+    │   │   │   │   ├── patient-reviews.constants.ts
+    │   │   │   │   ├── patient-reviews.controller.ts
+    │   │   │   │   ├── patient-reviews.dto.ts
+    │   │   │   │   ├── patient-reviews.overview.md
+    │   │   │   │   ├── patient-reviews.repository.ts
+    │   │   │   │   ├── patient-reviews.routes.ts
+    │   │   │   │   ├── patient-reviews.rules.ts
+    │   │   │   │   ├── patient-reviews.schema.ts
+    │   │   │   │   ├── patient-reviews.serializer.ts
+    │   │   │   │   ├── patient-reviews.service.ts
+    │   │   │   │   ├── patient-reviews.types.ts
+    │   │   │   │   └── patient-reviews.validator.ts
+    │   │   │   ├── patient-treatments/
+    │   │   │   │   ├── patient-treatments.constants.ts
+    │   │   │   │   ├── patient-treatments.controller.ts
+    │   │   │   │   ├── patient-treatments.dto.ts
+    │   │   │   │   ├── patient-treatments.overview.md
+    │   │   │   │   ├── patient-treatments.repository.ts
+    │   │   │   │   ├── patient-treatments.routes.ts
+    │   │   │   │   ├── patient-treatments.rules.ts
+    │   │   │   │   ├── patient-treatments.schema.ts
+    │   │   │   │   ├── patient-treatments.serializer.ts
+    │   │   │   │   ├── patient-treatments.service.ts
+    │   │   │   │   ├── patient-treatments.types.ts
+    │   │   │   │   └── patient-treatments.validator.ts
     │   │   │   ├── prescription-kits/
     │   │   │   │   ├── prescription-kits.constants.ts
     │   │   │   │   ├── prescription-kits.controller.ts
@@ -529,18 +553,6 @@ src/
     │   │   ├── record-counters/
     │   │   │   ├── record-counters.overview.md
     │   │   │   └── record-counters.schema.ts
-    │   │   ├── reviews/
-    │   │   │   ├── reviews.constants.ts
-    │   │   │   ├── reviews.controller.ts
-    │   │   │   ├── reviews.dto.ts
-    │   │   │   ├── reviews.overview.md
-    │   │   │   ├── reviews.repository.ts
-    │   │   │   ├── reviews.routes.ts
-    │   │   │   ├── reviews.schema.ts
-    │   │   │   ├── reviews.serializer.ts
-    │   │   │   ├── reviews.service.ts
-    │   │   │   ├── reviews.types.ts
-    │   │   │   └── reviews.validator.ts
     │   │   ├── stock-counts/
     │   │   │   ├── stock-counts.constants.ts
     │   │   │   ├── stock-counts.controller.ts
@@ -641,7 +653,7 @@ src/
     │   │   │   ├── task-rule-settings.service.ts
     │   │   │   ├── task-rule-settings.types.ts
     │   │   │   └── task-rule-settings.validator.ts
-    │   │   ├── tasks/
+    │   │   └── tasks/
     │   │   │   ├── tasks.constants.ts
     │   │   │   ├── tasks.controller.ts
     │   │   │   ├── tasks.dto.ts
@@ -653,19 +665,6 @@ src/
     │   │   │   ├── tasks.service.ts
     │   │   │   ├── tasks.types.ts
     │   │   │   └── tasks.validator.ts
-    │   │   └── treatments/
-    │   │   │   ├── treatments.constants.ts
-    │   │   │   ├── treatments.controller.ts
-    │   │   │   ├── treatments.dto.ts
-    │   │   │   ├── treatments.overview.md
-    │   │   │   ├── treatments.repository.ts
-    │   │   │   ├── treatments.routes.ts
-    │   │   │   ├── treatments.rules.ts
-    │   │   │   ├── treatments.schema.ts
-    │   │   │   ├── treatments.serializer.ts
-    │   │   │   ├── treatments.service.ts
-    │   │   │   ├── treatments.types.ts
-    │   │   │   └── treatments.validator.ts
     │   ├── workers/
     │   │   ├── app-record-purge.constants.ts
     │   │   ├── app-record-purge.processor.ts

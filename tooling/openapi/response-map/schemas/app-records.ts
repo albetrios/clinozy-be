@@ -1575,295 +1575,11 @@ export const dayClosesRecordExample = {
   updated_at: '2026-10-07T10:30:00.000Z',
 };
 
-/** `TreatmentOutput`. */
-export const treatmentsRecordSchema = {
+/** `PatientFeedbackActionOutput` — what was done about a check-in or a review (routes-final 7.K.6). */
+export const patientFeedbackActionSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'trt_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    patient_id: {
-      type: 'string',
-    },
-    appointment_id: {
-      type: 'string',
-      nullable: true,
-    },
-    offering_id: {
-      type: 'string',
-      nullable: true,
-    },
-    name: {
-      type: 'string',
-    },
-    template: {
-      type: 'string',
-      enum: ['skin', 'dental', 'physio', 'gynac', 'general'],
-    },
-    performed_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    doctor_membership_id: {
-      type: 'string',
-      nullable: true,
-    },
-    therapist_membership_id: {
-      type: 'string',
-      nullable: true,
-    },
-    body_parts: {
-      type: 'array',
-      items: {
-        type: 'string',
-        enum: [
-          'face',
-          'scalp',
-          'hair',
-          'body',
-          'chest',
-          'back',
-          'underarm',
-          'legs',
-          'arms',
-          'other',
-        ],
-      },
-    },
-    session_number: {
-      type: 'integer',
-    },
-    parameters: {},
-    remark: {
-      type: 'string',
-      nullable: true,
-    },
-    aftercare_call: {
-      type: 'string',
-      enum: ['none', 'next_day', 'in_two_days', 'in_week'],
-    },
-    patient_package_id: {
-      type: 'string',
-      nullable: true,
-    },
-    status: {
-      type: 'string',
-      enum: ['done', 'reversed'],
-    },
-    reversed_reason: {
-      type: 'string',
-      nullable: true,
-    },
-    reversed_at: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-  },
-};
-
-/** Example `TreatmentOutput`. */
-export const treatmentsRecordExample = {
-  id: 'trt_k7x9m2pqr4w8n1v3a1b2c',
-  patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
-  appointment_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  offering_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  name: 'Sample name',
-  template: 'skin',
-  performed_at: '2026-10-08T10:00:00+05:30',
-  doctor_membership_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  therapist_membership_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  body_parts: ['face'],
-  session_number: 1,
-  parameters: {},
-  remark: 'Sample remark',
-  aftercare_call: 'next_day',
-  patient_package_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  status: 'done',
-  reversed_reason: 'Sample reversed reason',
-  reversed_at: '2026-10-08T10:00:00+05:30',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
-};
-
-/** `CheckInOutput`. */
-export const checkInsRecordSchema = {
-  type: 'object',
-  properties: {
-    id: {
-      type: 'string',
-      example: 'chk_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    patient_id: {
-      type: 'string',
-    },
-    appointment_id: {
-      type: 'string',
-      nullable: true,
-    },
-    treatment_id: {
-      type: 'string',
-      nullable: true,
-    },
-    context: {
-      type: 'string',
-    },
-    feel: {
-      type: 'string',
-      enum: ['much_better', 'better', 'same', 'worse'],
-    },
-    score: {
-      type: 'integer',
-    },
-    followed: {
-      type: 'string',
-      enum: ['fully', 'mostly', 'partly', 'not_at_all'],
-      nullable: true,
-    },
-    followed_note: {
-      type: 'string',
-      nullable: true,
-    },
-    current_state: {
-      type: 'string',
-      nullable: true,
-    },
-    next_plan: {
-      type: 'string',
-      nullable: true,
-    },
-    next_offering_ids: {
-      type: 'array',
-      items: {
-        type: 'string',
-      },
-    },
-    check_in_date: {
-      type: 'string',
-      format: 'date',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-  },
-};
-
-/** Example `CheckInOutput`. */
-export const checkInsRecordExample = {
-  id: 'chk_k7x9m2pqr4w8n1v3a1b2c',
-  patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
-  appointment_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  treatment_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  context: 'Sample context',
-  feel: 'much_better',
-  score: 1,
-  followed: 'fully',
-  followed_note: 'Sample followed note',
-  current_state: 'Sample current state',
-  next_plan: 'Sample next plan',
-  next_offering_ids: ['ref_k7x9m2pqr4w8n1v3a1b2c'],
-  check_in_date: '2026-10-08',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
-};
-
-/** `ReviewOutput`. */
-export const reviewsRecordSchema = {
-  type: 'object',
-  properties: {
-    id: {
-      type: 'string',
-      example: 'rev_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    patient_id: {
-      type: 'string',
-    },
-    appointment_id: {
-      type: 'string',
-      nullable: true,
-    },
-    source: {
-      type: 'string',
-      enum: ['google', 'video', 'instagram', 'internal_form', 'whatsapp'],
-    },
-    rating: {
-      type: 'integer',
-      nullable: true,
-    },
-    text: {
-      type: 'string',
-      nullable: true,
-    },
-    link: {
-      type: 'string',
-      nullable: true,
-    },
-    file_keys: {
-      type: 'array',
-      items: {
-        type: 'string',
-      },
-    },
-    review_date: {
-      type: 'string',
-      format: 'date',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-  },
-};
-
-/** Example `ReviewOutput`. */
-export const reviewsRecordExample = {
-  id: 'rev_k7x9m2pqr4w8n1v3a1b2c',
-  patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
-  appointment_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  source: 'google',
-  rating: 1,
-  text: 'Sample text',
-  link: 'Sample link',
-  file_keys: ['sample'],
-  review_date: '2026-10-08',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
-};
-
-/** `FeedbackActionOutput`. */
-export const feedbackActionsRecordSchema = {
-  type: 'object',
-  properties: {
-    id: {
-      type: 'string',
-      example: 'fba_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    check_in_id: {
-      type: 'string',
-      nullable: true,
-    },
-    review_id: {
-      type: 'string',
-      nullable: true,
-    },
+    id: { type: 'string', example: 'fba_k7x9m2pqr4w8n1v3a1b2c' },
     action: {
       type: 'string',
       enum: [
@@ -1878,30 +1594,232 @@ export const feedbackActionsRecordSchema = {
         'other',
       ],
     },
-    note: {
-      type: 'string',
-      nullable: true,
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    note: { type: 'string', maxLength: 280, nullable: true },
+    author_membership_id: { type: 'string', nullable: true, description: 'The caller ("by")' },
+    created_at: { type: 'string', format: 'date-time' },
   },
 };
 
-/** Example `FeedbackActionOutput`. */
-export const feedbackActionsRecordExample = {
+/** Example `PatientFeedbackActionOutput`. */
+const patientFeedbackActionExample = {
   id: 'fba_k7x9m2pqr4w8n1v3a1b2c',
-  check_in_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  review_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
   action: 'doctor_called',
-  note: 'Sample note',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  note: null,
+  author_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
+  created_at: '2026-10-08T11:00:00.000Z',
+};
+
+/** `PatientTreatmentOutput` — one session (launch #134, routes-final 7.H.6). */
+export const patientTreatmentsRecordSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', example: 'trt_k7x9m2pqr4w8n1v3a1b2c' },
+    patient_id: { type: 'string' },
+    appointment_id: { type: 'string', nullable: true },
+    offering_id: { type: 'string', nullable: true },
+    name: { type: 'string', maxLength: 120 },
+    template: { type: 'string', enum: ['skin', 'dental', 'physio', 'gynac', 'general'] },
+    performed_at: { type: 'string', format: 'date-time' },
+    doctor_membership_id: { type: 'string', nullable: true },
+    therapist_membership_id: { type: 'string', nullable: true },
+    body_parts: {
+      type: 'array',
+      maxItems: 12,
+      items: {
+        type: 'string',
+        enum: [
+          'face',
+          'upper_lip',
+          'chin',
+          'neck',
+          'scalp',
+          'hair',
+          'chest',
+          'back',
+          'underarm',
+          'arms',
+          'hands',
+          'legs',
+          'body',
+          'full_body',
+          'other',
+        ],
+      },
+    },
+    session_number: { type: 'integer', minimum: 1, maximum: 999 },
+    parameters: {
+      type: 'object',
+      additionalProperties: { type: 'string', maxLength: 80 },
+      description: "The template's detail (teeth, regions — TR8)",
+    },
+    remark: { type: 'string', maxLength: 2000, nullable: true },
+    aftercare_call: { type: 'string', enum: ['none', 'next_day', 'in_two_days', 'in_week'] },
+    patient_offering_id: {
+      type: 'string',
+      nullable: true,
+      description: 'The bought session it spent (TR7, TR13)',
+    },
+    is_billed: {
+      type: 'boolean',
+      nullable: true,
+      description:
+        'true with a bought offering, false done with an offering and none, else null (TR13)',
+    },
+    status: { type: 'string', enum: ['done', 'reversed'] },
+    reversed_reason: { type: 'string', maxLength: 280, nullable: true },
+    reversed_at: { type: 'string', format: 'date-time', nullable: true },
+    latest_check_in: {
+      type: 'object',
+      nullable: true,
+      description: 'The Feedback column',
+      properties: {
+        id: { type: 'string' },
+        feel: { type: 'string', enum: ['much_better', 'better', 'same', 'worse'] },
+        score: { type: 'integer', minimum: 1, maximum: 10 },
+        check_in_date: { type: 'string', format: 'date' },
+      },
+    },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
+  },
+};
+
+/** Example `PatientTreatmentOutput`. */
+export const patientTreatmentsRecordExample = {
+  id: 'trt_k7x9m2pqr4w8n1v3a1b2c',
+  patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
+  appointment_id: 'appt_k7x9m2pqr4w8n1v3a1b2c',
+  offering_id: 'off_k7x9m2pqr4w8n1v3a1b2c',
+  name: 'Hydrafacial',
+  template: 'skin',
+  performed_at: '2026-10-08T10:30:00.000Z',
+  doctor_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
+  therapist_membership_id: null,
+  body_parts: ['face'],
+  session_number: 2,
+  parameters: { pressure: 'medium' },
+  remark: null,
+  aftercare_call: 'next_day',
+  patient_offering_id: 'ppkg_k7x9m2pqr4w8n1v3a1b2c',
+  is_billed: true,
+  status: 'done',
+  reversed_reason: null,
+  reversed_at: null,
+  latest_check_in: {
+    id: 'chk_k7x9m2pqr4w8n1v3a1b2c',
+    feel: 'better',
+    score: 8,
+    check_in_date: '2026-10-09',
+  },
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
+};
+
+/** `PatientCheckInOutput` — how a patient is doing (launch #134, routes-final 7.I.6). */
+export const patientCheckInsRecordSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', example: 'chk_k7x9m2pqr4w8n1v3a1b2c' },
+    patient_id: { type: 'string' },
+    appointment_id: { type: 'string', nullable: true },
+    patient_treatment_id: { type: 'string', nullable: true },
+    context: { type: 'string', maxLength: 80, description: 'Server-filled when not sent (TR9)' },
+    feel: { type: 'string', enum: ['much_better', 'better', 'same', 'worse'] },
+    score: { type: 'integer', minimum: 1, maximum: 10 },
+    score_change: {
+      type: 'integer',
+      nullable: true,
+      description: 'Against the previous check-in (the ▲▼ trend)',
+    },
+    followed: {
+      type: 'string',
+      enum: ['fully', 'mostly', 'partly', 'not_at_all'],
+      nullable: true,
+    },
+    followed_note: { type: 'string', maxLength: 280, nullable: true },
+    current_state: { type: 'string', maxLength: 500, nullable: true },
+    next_plan: { type: 'string', maxLength: 500, nullable: true },
+    next_offering_ids: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Read back from its plan rows (TR10)',
+    },
+    check_in_date: { type: 'string', format: 'date' },
+    needs_action: {
+      type: 'boolean',
+      description: 'Feel worse or a score ≤ 4 with no action logged',
+    },
+    actions: { type: 'array', items: patientFeedbackActionSchema, description: 'Newest first' },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
+  },
+};
+
+/** Example `PatientCheckInOutput`. */
+export const patientCheckInsRecordExample = {
+  id: 'chk_k7x9m2pqr4w8n1v3a1b2c',
+  patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
+  appointment_id: null,
+  patient_treatment_id: 'trt_k7x9m2pqr4w8n1v3a1b2c',
+  context: 'After Hydrafacial',
+  feel: 'worse',
+  score: 4,
+  score_change: -3,
+  followed: 'mostly',
+  followed_note: null,
+  current_state: 'Some redness on the left cheek',
+  next_plan: null,
+  next_offering_ids: ['off_k7x9m2pqr4w8n1v3a1b2c'],
+  check_in_date: '2026-10-09',
+  needs_action: false,
+  actions: [patientFeedbackActionExample],
+  created_at: '2026-10-09T09:00:00.000Z',
+  updated_at: '2026-10-09T09:00:00.000Z',
+};
+
+/** `PatientReviewOutput` — a review the patient gave (launch #134, routes-final 7.J.6). */
+export const patientReviewsRecordSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', example: 'rev_k7x9m2pqr4w8n1v3a1b2c' },
+    patient_id: { type: 'string' },
+    appointment_id: { type: 'string', nullable: true },
+    source: {
+      type: 'string',
+      enum: ['google', 'video', 'instagram', 'internal_form', 'whatsapp'],
+    },
+    rating: { type: 'integer', minimum: 1, maximum: 5, nullable: true },
+    text: { type: 'string', maxLength: 2000, nullable: true },
+    link: { type: 'string', format: 'uri', nullable: true, description: '`https://` only (TR11)' },
+    file_keys: {
+      type: 'array',
+      maxItems: 10,
+      items: { type: 'string' },
+      description: 'Confirmed uploads (video or screenshots)',
+    },
+    review_date: { type: 'string', format: 'date' },
+    needs_action: { type: 'boolean', description: 'A rating ≤ 3 with no action logged' },
+    actions: { type: 'array', items: patientFeedbackActionSchema, description: 'Newest first' },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
+  },
+};
+
+/** Example `PatientReviewOutput`. */
+export const patientReviewsRecordExample = {
+  id: 'rev_k7x9m2pqr4w8n1v3a1b2c',
+  patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
+  appointment_id: 'appt_k7x9m2pqr4w8n1v3a1b2c',
+  source: 'google',
+  rating: 5,
+  text: 'Lovely staff and a calm clinic.',
+  link: 'https://g.page/r/example',
+  file_keys: [],
+  review_date: '2026-10-08',
+  needs_action: false,
+  actions: [],
+  created_at: '2026-10-08T12:00:00.000Z',
+  updated_at: '2026-10-08T12:00:00.000Z',
 };
 
 /** `ManufacturerOutput`. */

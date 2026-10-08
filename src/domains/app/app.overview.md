@@ -30,7 +30,7 @@ as the launch's ROUTE builds them.
 | [contacts](sub-domains/contacts/contacts.overview.md) | `app.contacts`, `app.contact_phones`; nested `app.contact_members`, `app.contact_activities`, `app.contact_message_templates` | `/app/contacts…`, `/app/contacts/{contact_id}/{members,activities…}`, `/app/contact-message-templates…` |
 | [leads](sub-domains/leads/leads.overview.md) | `app.leads`, `app.lead_involved_memberships` | `/app/leads…` |
 | [appointments](sub-domains/appointments/appointments.overview.md) | `app.appointments` (the visit merged in) | `/app/appointments…` |
-| [patients](sub-domains/patients/patients.overview.md) | `app.patients`; nested `app.patient_clinical_notes`, `app.patient_prescriptions`, `app.prescription_kits`, `app.patient_diagnoses`, `app.patient_images`, `app.patient_reports` | `/app/patients…`, `/app/patients/{patient_id}/{clinical-notes,prescriptions,images,reports}…`, `/app/patient-prescriptions`, `/app/prescription-kits…`, `/app/patient-diagnoses…` |
+| [patients](sub-domains/patients/patients.overview.md) | `app.patients`; nested `app.patient_clinical_notes`, `app.patient_prescriptions`, `app.prescription_kits`, `app.patient_diagnoses`, `app.patient_images`, `app.patient_reports`, `app.patient_treatments`, `app.patient_check_ins`, `app.patient_reviews`, `app.patient_feedback_actions` | `/app/patients…`, `/app/patients/{patient_id}/{clinical-notes,prescriptions,images,reports,treatments,check-ins,reviews}…`, `/app/patient-prescriptions`, `/app/patient-treatments`, `/app/prescription-kits…`, `/app/patient-diagnoses…` |
 
 ## Patterns used
 

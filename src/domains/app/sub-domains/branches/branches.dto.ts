@@ -6,6 +6,7 @@ import {
   chipToneSchema,
   expectedUpdatedAtSchema,
   hourMinuteSchema,
+  httpsLinkSchema,
   workingDaysSchema,
 } from '@/shared/utils/validation/record-fields.util.js';
 import {
@@ -15,9 +16,7 @@ import {
 } from './branches.constants.js';
 
 const membershipPublicId = trimmedStringMinMax(1, 28);
-const httpsLink = trimmedString()
-  .max(512)
-  .pipe(z.url().refine((url) => url.startsWith('https://'), { message: 'Link must use HTTPS' }));
+const httpsLink = httpsLinkSchema(512);
 /** Fields a create accepts (required ones without `.optional()`). */
 const branchCreateFields = {
   name: trimmedStringMinMax(1, 60),

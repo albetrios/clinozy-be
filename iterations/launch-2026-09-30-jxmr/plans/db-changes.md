@@ -43,7 +43,7 @@ its table designs name them (60 tables; the medical store's wait for its own rev
 | 4. Contacts | `app.contacts`, `app.contact_phones`, `app.contact_members`, `app.contact_activities`, `app.contact_message_templates` | §4 | #129 (contacts, phones, members) · #130 (activities, templates) |
 | 5. Leads | `app.leads`, `app.lead_involved_memberships` | §5 | #131 |
 | 6. Appointments | `app.appointments` | §6 | #132 |
-| 7. Patients | `app.patients`, `app.patient_clinical_notes`, `app.patient_prescriptions`, `app.prescription_kits`, `app.patient_diagnoses`, `app.patient_images`, `app.patient_reports`, `app.patient_treatments`, `app.patient_check_ins`, `app.patient_reviews`, `app.patient_feedback_actions`, `app.patient_offerings`, `app.patient_offering_suggestions` | §7 | #133 (the file and 7.B–7.G) · #134–#135 |
+| 7. Patients | `app.patients`, `app.patient_clinical_notes`, `app.patient_prescriptions`, `app.prescription_kits`, `app.patient_diagnoses`, `app.patient_images`, `app.patient_reports`, `app.patient_treatments`, `app.patient_check_ins`, `app.patient_reviews`, `app.patient_feedback_actions`, `app.patient_offerings`, `app.patient_offering_suggestions` | §7 | #133 (the file and 7.B–7.G) · #134 (7.H–7.K) · #135 |
 | 8. Billing | `app.invoices`, `app.invoice_items`, `app.invoice_members`, `app.invoice_credit_notes`, `app.payments`, `app.payment_edits`, `app.pending_credits`, `app.day_closes`, `app.day_close_events` | §8 | #136 |
 | 9. Stock | `app.stock_items`, `app.stock_item_movements`, `app.stock_counts`, `app.stock_count_lines`, `app.stock_purchases`, `app.stock_purchase_items`, `app.stock_vendors` | §9 | #137 |
 | 10. Tasks & rules | `app.tasks`, `app.task_owner_changes`, `app.task_rule_settings` | §10 | #138 |
@@ -1223,6 +1223,7 @@ erDiagram
 - **Open:** none — A28 settled (derived); ideas come from patient_idea (D39)
 
 - **Built:** `app.offering_suggestions` · ROUTE #32 (2026-10-07)
+- **Built (ROUTE #134, TR10):** `patient_check_in_id` → `app.patient_check_ins` `SET NULL` with its index — a check-in's next offerings are `planned` rows linked here (source label `Check-in`, no `reason`); the rest of the plan's rebuild is #135 (7.M)
 ```mermaid
 erDiagram
   offering_suggestion["offering_suggestion · NEW"] {
@@ -1424,6 +1425,7 @@ erDiagram
 - **Open:** none — reversed with a reason, never deleted (P89, D40); the treatments code on Doctor and Therapist (D12, D13)
 
 - **Built:** `app.treatments` · ROUTE #40 (2026-10-07)
+- **Built (ROUTE #134, routes-final 7.H):** renamed **`app.patient_treatments`** (code `patients/patient-treatments/`) — no soft-delete columns, out of the purge list, no retention arm (TR6); `patient_package_id` → **`patient_offering_id`** `RESTRICT` (points at `app.patient_packages` until #135 renames it) with `chk_patient_treatments_patient_offering_done` (TR7, TR13); `chk_patient_treatments_reversed_reason`, `…_reversed_at`; `body_parts` on the one 15-part list, ≤ 12; `session_number` `smallint` 1–999; `parameters` an object; `aftercare_call` (`in_two_days`); the doctor and therapist K8 composite keys `RESTRICT` (K2); `patient_id` `RESTRICT`; indexes the tab, the organization list, the not-billed partial index (TR13), the link keys and the team's `(…, performed_at)`
 ```mermaid
 erDiagram
   treatment["treatment · NEW"] {
@@ -1456,6 +1458,7 @@ erDiagram
 - **Open:** none — details up to 300 (P37, D40); score nullable (P32, D3)
 
 - **Built:** `app.check_ins` · ROUTE #41 (2026-10-07)
+- **Built (ROUTE #134, routes-final 7.I):** renamed **`app.patient_check_ins`** (code `patients/patient-check-ins/`) — `treatment_id` → `patient_treatment_id` `SET NULL`; `context` 1–80, server-filled (TR9); `score` `smallint` 1–10; `followed_note` ≤ 280, `current_state`, `next_plan` ≤ 500; `patient_id` `RESTRICT`; indexes the card `(patient_id, check_in_date DESC, id)`, a session's latest, the call-back partial index (feel `worse` or score ≤ 4); FORCE RLS with the purge arm. **`app.check_in_next_offerings` dropped** — the next offerings are plan rows (`offering_suggestions.patient_check_in_id`, TR10)
 ```mermaid
 erDiagram
   check_in["check_in · NEW"] {
@@ -1484,6 +1487,7 @@ erDiagram
 - **Open:** none — Marketing logs reviews through the reviews code (D16)
 
 - **Built:** `app.reviews` · ROUTE #42 (2026-10-07)
+- **Built (ROUTE #134, routes-final 7.J):** renamed **`app.patient_reviews`** (code `patients/patient-reviews/`) — `rating` `smallint` 1–5; `chk_patient_reviews_link` (`^https://`, TR11); `file_keys` ≤ 10; `patient_id` `RESTRICT`; indexes `(patient_id, review_date DESC, id)`, the call-back partial index (rating ≤ 3); FORCE RLS with the purge arm
 ```mermaid
 erDiagram
   review["review · NEW"] {
@@ -1508,6 +1512,7 @@ erDiagram
 - **Open:** none — additions settled (P34, D3)
 
 - **Built:** `app.feedback_actions` · ROUTE #43 (2026-10-07)
+- **Built (ROUTE #134, routes-final 7.K):** renamed **`app.patient_feedback_actions`** (code `patients/patient-feedback-actions/`) — append-only: the `updated_*` and soft-delete columns gone, out of the purge list (TR12); `check_in_id` / `review_id` → `patient_check_in_id` / `patient_review_id` `CASCADE` with `chk_patient_feedback_actions_one_parent` (`num_nonnulls = 1`); `chk_patient_feedback_actions_note_when_other`; `author_membership_id` a K8 composite key `RESTRICT` (K2); indexes per parent `(…, created_at)`
 ```mermaid
 erDiagram
   feedback_action["feedback_action · NEW"] {

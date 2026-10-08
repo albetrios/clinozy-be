@@ -17,14 +17,6 @@ import {
 /** The by-id routes' path params. */
 type ReportParams = { Params: { patient_id: string; patient_report_id: string } };
 
-/** Reading the clinical record (P14). */
-const CLINICAL_READ = [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ)];
-/** Writing it: `patient:update` and the clinical code (P14). */
-const CLINICAL_WRITE = [
-  requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
-  requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
-];
-
 /**
  * Registers the `patient-reports` routes (prefix `/api/v1/app`) — routes-final 7.G, routes
  * 39–44, nested under the patient.
@@ -38,7 +30,7 @@ export function patientReportsRoutes(service: PatientReportsService): FastifyPlu
       '/patients/:patient_id/reports',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_READ,
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ)],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: "List a patient's reports",
@@ -55,7 +47,10 @@ export function patientReportsRoutes(service: PatientReportsService): FastifyPlu
       '/patients/:patient_id/reports',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_WRITE,
+        preHandler: [
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
+        ],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Add a report',
@@ -72,7 +67,7 @@ export function patientReportsRoutes(service: PatientReportsService): FastifyPlu
       '/patients/:patient_id/reports/:patient_report_id',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_READ,
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ)],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Get a report',
@@ -88,7 +83,10 @@ export function patientReportsRoutes(service: PatientReportsService): FastifyPlu
       '/patients/:patient_id/reports/:patient_report_id',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_WRITE,
+        preHandler: [
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
+        ],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Change a report',
@@ -105,7 +103,10 @@ export function patientReportsRoutes(service: PatientReportsService): FastifyPlu
       '/patients/:patient_id/reports/:patient_report_id',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_WRITE,
+        preHandler: [
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
+        ],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Delete a report',
@@ -122,7 +123,10 @@ export function patientReportsRoutes(service: PatientReportsService): FastifyPlu
       '/patients/:patient_id/reports/:patient_report_id/restore',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_WRITE,
+        preHandler: [
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
+        ],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Restore a report',

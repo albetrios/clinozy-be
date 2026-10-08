@@ -49,14 +49,12 @@ import { PendingCreditsRepository } from './sub-domains/pending-credits/pending-
 import { PendingCreditsService } from './sub-domains/pending-credits/pending-credits.service.js';
 import { DayClosesRepository } from './sub-domains/day-closes/day-closes.repository.js';
 import { DayClosesService } from './sub-domains/day-closes/day-closes.service.js';
-import { TreatmentsRepository } from './sub-domains/treatments/treatments.repository.js';
-import { TreatmentsService } from './sub-domains/treatments/treatments.service.js';
-import { CheckInsRepository } from './sub-domains/check-ins/check-ins.repository.js';
-import { CheckInsService } from './sub-domains/check-ins/check-ins.service.js';
-import { ReviewsRepository } from './sub-domains/reviews/reviews.repository.js';
-import { ReviewsService } from './sub-domains/reviews/reviews.service.js';
-import { FeedbackActionsRepository } from './sub-domains/feedback-actions/feedback-actions.repository.js';
-import { FeedbackActionsService } from './sub-domains/feedback-actions/feedback-actions.service.js';
+import { PatientTreatmentsRepository } from './sub-domains/patients/patient-treatments/patient-treatments.repository.js';
+import { PatientTreatmentsService } from './sub-domains/patients/patient-treatments/patient-treatments.service.js';
+import { PatientCheckInsRepository } from './sub-domains/patients/patient-check-ins/patient-check-ins.repository.js';
+import { PatientCheckInsService } from './sub-domains/patients/patient-check-ins/patient-check-ins.service.js';
+import { PatientReviewsRepository } from './sub-domains/patients/patient-reviews/patient-reviews.repository.js';
+import { PatientReviewsService } from './sub-domains/patients/patient-reviews/patient-reviews.service.js';
 import { ManufacturersRepository } from './sub-domains/manufacturers/manufacturers.repository.js';
 import { ManufacturersService } from './sub-domains/manufacturers/manufacturers.service.js';
 import { SuppliersRepository } from './sub-domains/suppliers/suppliers.repository.js';
@@ -115,10 +113,9 @@ export type AppRecordServices = {
   creditNotesService: CreditNotesService;
   pendingCreditsService: PendingCreditsService;
   dayClosesService: DayClosesService;
-  treatmentsService: TreatmentsService;
-  checkInsService: CheckInsService;
-  reviewsService: ReviewsService;
-  feedbackActionsService: FeedbackActionsService;
+  patientTreatmentsService: PatientTreatmentsService;
+  patientCheckInsService: PatientCheckInsService;
+  patientReviewsService: PatientReviewsService;
   manufacturersService: ManufacturersService;
   suppliersService: SuppliersService;
   medicalRepsService: MedicalRepsService;
@@ -170,24 +167,12 @@ function createPlaceOfferingContactServices(organizationService: OrganizationSer
   };
 }
 
-/** Builds every app record table's service on its repository. */
-export function createAppRecordServices(
-  organizationService: OrganizationService,
-): AppRecordServices {
-  const placeOfferingContactServices = createPlaceOfferingContactServices(organizationService);
+/**
+ * The services of a patient file's nested records (§7): the diagnosis catalogue, clinical notes,
+ * prescriptions and kits, photos, reports, treatment sessions, check-ins and reviews.
+ */
+function createPatientFileServices(organizationService: OrganizationService) {
   return {
-    ...placeOfferingContactServices,
-    patientsService: new PatientsService(
-      organizationService,
-      new PatientsRepository(),
-      placeOfferingContactServices.contactsService,
-    ),
-    leadsService: new LeadsService(
-      organizationService,
-      new LeadsRepository(),
-      placeOfferingContactServices.contactsService,
-    ),
-    appointmentsService: new AppointmentsService(organizationService, new AppointmentsRepository()),
     patientDiagnosesService: new PatientDiagnosesService(
       organizationService,
       new PatientDiagnosesRepository(),
@@ -212,6 +197,40 @@ export function createAppRecordServices(
       organizationService,
       new PatientReportsRepository(),
     ),
+    patientTreatmentsService: new PatientTreatmentsService(
+      organizationService,
+      new PatientTreatmentsRepository(),
+    ),
+    patientCheckInsService: new PatientCheckInsService(
+      organizationService,
+      new PatientCheckInsRepository(),
+    ),
+    patientReviewsService: new PatientReviewsService(
+      organizationService,
+      new PatientReviewsRepository(),
+    ),
+  };
+}
+
+/** Builds every app record table's service on its repository. */
+export function createAppRecordServices(
+  organizationService: OrganizationService,
+): AppRecordServices {
+  const placeOfferingContactServices = createPlaceOfferingContactServices(organizationService);
+  return {
+    ...placeOfferingContactServices,
+    patientsService: new PatientsService(
+      organizationService,
+      new PatientsRepository(),
+      placeOfferingContactServices.contactsService,
+    ),
+    leadsService: new LeadsService(
+      organizationService,
+      new LeadsRepository(),
+      placeOfferingContactServices.contactsService,
+    ),
+    appointmentsService: new AppointmentsService(organizationService, new AppointmentsRepository()),
+    ...createPatientFileServices(organizationService),
     invoicesService: new InvoicesService(organizationService, new InvoicesRepository()),
     patientPackagesService: new PatientPackagesService(
       organizationService,
@@ -228,13 +247,6 @@ export function createAppRecordServices(
       new PendingCreditsRepository(),
     ),
     dayClosesService: new DayClosesService(organizationService, new DayClosesRepository()),
-    treatmentsService: new TreatmentsService(organizationService, new TreatmentsRepository()),
-    checkInsService: new CheckInsService(organizationService, new CheckInsRepository()),
-    reviewsService: new ReviewsService(organizationService, new ReviewsRepository()),
-    feedbackActionsService: new FeedbackActionsService(
-      organizationService,
-      new FeedbackActionsRepository(),
-    ),
     manufacturersService: new ManufacturersService(
       organizationService,
       new ManufacturersRepository(),

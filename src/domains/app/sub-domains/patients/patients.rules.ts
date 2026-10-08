@@ -5,6 +5,8 @@ import { CONTACT_ACTIVITY_TYPE } from '@/domains/app/sub-domains/contacts/contac
 import { ContactActivitiesRepository } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.repository.js';
 import { ContactMembersRepository } from '@/domains/app/sub-domains/contacts/contact-members/contact-members.repository.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
+import { calendarDateInTimeZone } from '@/shared/utils/validation/record-fields.util.js';
+import { PatientTreatmentsRepository } from './patient-treatments/patient-treatments.repository.js';
 import { PatientsRepository } from './patients.repository.js';
 
 const appointmentsRepository = new AppointmentsRepository();
@@ -12,6 +14,7 @@ const contactsRepository = new ContactsRepository();
 const contactActivitiesRepository = new ContactActivitiesRepository();
 const contactMembersRepository = new ContactMembersRepository();
 const patientsRepository = new PatientsRepository();
+const patientTreatmentsRepository = new PatientTreatmentsRepository();
 
 /** The appointment statuses of a visit — a photo of the visit needs one (P25). */
 const VISIT_STATUS_VALUES: readonly unknown[] = ['checked_in', 'completed'];
@@ -48,12 +51,57 @@ export async function assertAppointmentOfPatient(options: {
   }
 }
 
+/** The organization's today (its time zone) — a patient-file date's default and latest day. */
+export async function organizationToday(context: BaseRecordWriteContext): Promise<string> {
+  const { timezone } = await context.ports.organizationSettings(context.scope);
+  return calendarDateInTimeZone(timezone);
+}
+
+/** A patient-file date is not after the organization's today — else a 400 on `field`. */
+export async function assertDateNotFuture(options: {
+  date: unknown;
+  field: string;
+  messageKey: string;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
+  if (
+    typeof options.date === 'string' &&
+    options.date > (await organizationToday(options.context))
+  ) {
+    throw fieldValidationError({ field: options.field, messageKey: options.messageKey });
+  }
+}
+
+/** The session is the patient's (TR3, P24) — else a 400 on `patient_treatment_id`. */
+export async function assertTreatmentOfPatient(options: {
+  treatmentId: unknown;
+  patientId: number;
+}): Promise<void> {
+  if (typeof options.treatmentId !== 'number') return;
+  const treatment = await patientTreatmentsRepository.findById(options.treatmentId);
+  if (treatment?.patient_id !== options.patientId) {
+    throw fieldValidationError({
+      field: 'patient_treatment_id',
+      messageKey: 'errors:validation.patientTreatmentOtherPatient',
+    });
+  }
+}
+
+/** The patient's usual doctor (internal membership id), or null. */
+export async function usualDoctorOf(patientId: number): Promise<number | null> {
+  const patient = await patientsRepository.findById(patientId);
+  return typeof patient?.doctor_membership_id === 'number' ? patient.doctor_membership_id : null;
+}
+
 /** The record a patient-file `system` entry links to (one column — the stream's one link). */
 export type PatientFileActivityLink =
   | { patient_prescription_id: number }
   | { patient_clinical_note_id: number }
   | { patient_image_id: number }
-  | { patient_report_id: number };
+  | { patient_report_id: number }
+  | { patient_treatment_id: number }
+  | { patient_check_in_id: number }
+  | { patient_review_id: number };
 
 /**
  * Writes a patient-file event into the contact's activity (7.10, M10): a `system` entry linked to

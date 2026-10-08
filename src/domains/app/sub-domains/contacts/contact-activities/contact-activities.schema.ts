@@ -24,10 +24,10 @@ import { invoices } from '@/domains/app/sub-domains/invoices/invoices.schema.js'
 import { payments } from '@/domains/app/sub-domains/payments/payments.schema.js';
 import { patient_prescriptions } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.schema.js';
 import { patient_packages } from '@/domains/app/sub-domains/patient-packages/patient-packages.schema.js';
-import { reviews } from '@/domains/app/sub-domains/reviews/reviews.schema.js';
-import { check_ins } from '@/domains/app/sub-domains/check-ins/check-ins.schema.js';
+import { patient_reviews } from '@/domains/app/sub-domains/patients/patient-reviews/patient-reviews.schema.js';
+import { patient_check_ins } from '@/domains/app/sub-domains/patients/patient-check-ins/patient-check-ins.schema.js';
 import { tasks } from '@/domains/app/sub-domains/tasks/tasks.schema.js';
-import { treatments } from '@/domains/app/sub-domains/treatments/treatments.schema.js';
+import { patient_treatments } from '@/domains/app/sub-domains/patients/patient-treatments/patient-treatments.schema.js';
 import { patient_clinical_notes } from '@/domains/app/sub-domains/patients/patient-clinical-notes/patient-clinical-notes.schema.js';
 import { patient_images } from '@/domains/app/sub-domains/patients/patient-images/patient-images.schema.js';
 import { patient_reports } from '@/domains/app/sub-domains/patients/patient-reports/patient-reports.schema.js';
@@ -125,13 +125,13 @@ export const contact_activities = appSchema
         },
       ),
       patient_review_id: bigint('patient_review_id', { mode: 'number' }).references(
-        (): AnyPgColumn => reviews.id,
+        (): AnyPgColumn => patient_reviews.id,
         {
           onDelete: 'set null',
         },
       ),
       patient_check_in_id: bigint('patient_check_in_id', { mode: 'number' }).references(
-        (): AnyPgColumn => check_ins.id,
+        (): AnyPgColumn => patient_check_ins.id,
         {
           onDelete: 'set null',
         },
@@ -140,7 +140,7 @@ export const contact_activities = appSchema
         onDelete: 'set null',
       }),
       patient_treatment_id: bigint('patient_treatment_id', { mode: 'number' }).references(
-        (): AnyPgColumn => treatments.id,
+        (): AnyPgColumn => patient_treatments.id,
         {
           onDelete: 'set null',
         },

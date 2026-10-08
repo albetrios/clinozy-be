@@ -15,7 +15,7 @@ import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-sc
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
-import { treatments } from '@/domains/app/sub-domains/treatments/treatments.schema.js';
+import { patient_treatments } from '@/domains/app/sub-domains/patients/patient-treatments/patient-treatments.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
 import { RECORD_DELETE_REASON_VALUES } from '@/shared/constants/record-fields.constants.js';
 import { PATIENT_BODY_PART_VALUES } from '@/domains/app/sub-domains/patients/patients.constants.js';
@@ -57,7 +57,7 @@ export const patient_images = appSchema
       ),
       // The session it was taken at (P24)
       patient_treatment_id: bigint('patient_treatment_id', { mode: 'number' }).references(
-        (): AnyPgColumn => treatments.id,
+        (): AnyPgColumn => patient_treatments.id,
         { onDelete: 'set null' },
       ),
       album: varchar('album', { length: 7 }).notNull().default('general'),

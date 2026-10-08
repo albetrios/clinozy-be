@@ -10,7 +10,7 @@ import type {
 } from '@/domains/app/base-record.types.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
-import { treatments } from '@/domains/app/sub-domains/treatments/treatments.schema.js';
+import { patient_treatments } from '@/domains/app/sub-domains/patients/patient-treatments/patient-treatments.schema.js';
 import { PATIENT_IMAGE_ALBUM } from './patient-images.constants.js';
 import type { PatientImagesRepository } from './patient-images.repository.js';
 import { createPatientImagesRules } from './patient-images.rules.js';
@@ -51,7 +51,7 @@ export class PatientImagesService extends BaseRecordService<PatientImageOutput> 
       references: [
         { field: 'patient_id', table: patients, label: 'patient' },
         { field: 'appointment_id', table: appointments, label: 'appointment' },
-        { field: 'patient_treatment_id', table: treatments, label: 'treatment' },
+        { field: 'patient_treatment_id', table: patient_treatments, label: 'treatment' },
       ],
       parent: { field: 'patient_id', table: patients, label: 'Patient' },
       conflicts: {

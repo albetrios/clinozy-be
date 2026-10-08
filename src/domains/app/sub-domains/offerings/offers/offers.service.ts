@@ -43,7 +43,7 @@ export class OffersService extends BaseRecordService<OfferOutput> {
           link: OFFER_OFFERINGS_LINK,
           label: 'offering',
           require: { is_active: true },
-          notFoundKey: 'errors:validation.offerOfferingNotActive',
+          notFoundKey: 'errors:validation.offeringNotActive',
         },
         { field: 'branch_ids', link: OFFER_BRANCHES_LINK, label: 'branch', emptyMeansEvery: true },
       ],

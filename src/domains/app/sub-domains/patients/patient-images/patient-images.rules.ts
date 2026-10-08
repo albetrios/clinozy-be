@@ -5,11 +5,12 @@ import { ContactActivitiesRepository } from '@/domains/app/sub-domains/contacts/
 import { patientFileValueLabel } from '@/domains/app/sub-domains/patients/patients.constants.js';
 import {
   assertAppointmentOfPatient,
+  assertDateNotFuture,
+  assertTreatmentOfPatient,
+  organizationToday,
   writePatientFileActivity,
 } from '@/domains/app/sub-domains/patients/patients.rules.js';
-import { TreatmentsRepository } from '@/domains/app/sub-domains/treatments/treatments.repository.js';
 import { fieldValidationError, ForbiddenError } from '@/shared/errors/index.js';
-import { calendarDateInTimeZone } from '@/shared/utils/validation/record-fields.util.js';
 import {
   PATIENT_IMAGE_ALBUM,
   PATIENT_IMAGE_ALBUM_VALUES,
@@ -20,7 +21,6 @@ import {
 import type { PatientImagesRepository } from './patient-images.repository.js';
 
 const contactActivitiesRepository = new ContactActivitiesRepository();
-const treatmentsRepository = new TreatmentsRepository();
 
 /** The albums every holder of the clinical code sees (P23). */
 const SHARED_ALBUMS = PATIENT_IMAGE_ALBUM_VALUES.filter(
@@ -35,37 +35,6 @@ async function assertAlbumAllowed(album: unknown, context: BaseRecordWriteContex
       field: 'album',
       permission: APP_PERMISSIONS.PATIENT_PRIVATE_ALBUM_READ,
     }).withReason('field_permission_required');
-  }
-}
-
-/** The organization's today — `taken_on`'s default and its latest day (P25). */
-async function organizationToday(context: BaseRecordWriteContext): Promise<string> {
-  const { timezone } = await context.ports.organizationSettings(context.scope);
-  return calendarDateInTimeZone(timezone);
-}
-
-/** `taken_on` is not in the future (P25) — else a 400. */
-async function assertTakenOnNotFuture(
-  takenOn: unknown,
-  context: BaseRecordWriteContext,
-): Promise<void> {
-  if (typeof takenOn === 'string' && takenOn > (await organizationToday(context))) {
-    throw fieldValidationError({
-      field: 'taken_on',
-      messageKey: 'errors:validation.patientImageTakenOnFuture',
-    });
-  }
-}
-
-/** The session is the patient's (P24, TR3) — else a 400 on `patient_treatment_id`. */
-async function assertTreatmentOfPatient(treatmentId: unknown, patientId: number): Promise<void> {
-  if (typeof treatmentId !== 'number') return;
-  const treatment = await treatmentsRepository.findById(treatmentId);
-  if (treatment?.patient_id !== patientId) {
-    throw fieldValidationError({
-      field: 'patient_treatment_id',
-      messageKey: 'errors:validation.patientTreatmentOtherPatient',
-    });
   }
 }
 
@@ -107,7 +76,7 @@ async function assertLinks(values: Record<string, unknown>, patientId: number): 
     });
   }
   if ('patient_treatment_id' in values) {
-    await assertTreatmentOfPatient(values.patient_treatment_id, patientId);
+    await assertTreatmentOfPatient({ treatmentId: values.patient_treatment_id, patientId });
   }
 }
 
@@ -138,12 +107,22 @@ export function createPatientImagesRules(repository: PatientImagesRepository): B
       await assertAlbumAllowed(values.album, context);
       values.file_name = await requirePhotoUpload(String(values.file_key), context);
       values.taken_on ??= await organizationToday(context);
-      await assertTakenOnNotFuture(values.taken_on, context);
+      await assertDateNotFuture({
+        date: values.taken_on,
+        field: 'taken_on',
+        messageKey: 'errors:validation.patientImageTakenOnFuture',
+        context,
+      });
       await assertLinks(values, values.patient_id as number);
     },
     prepareUpdate: async (values, existing, context) => {
       await assertAlbumAllowed(values.album, context);
-      await assertTakenOnNotFuture(values.taken_on, context);
+      await assertDateNotFuture({
+        date: values.taken_on,
+        field: 'taken_on',
+        messageKey: 'errors:validation.patientImageTakenOnFuture',
+        context,
+      });
       await assertLinks(values, existing.patient_id as number);
     },
     afterWrite: async (row, change, context) => {

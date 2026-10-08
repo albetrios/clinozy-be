@@ -19,6 +19,7 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
+import { patient_check_ins } from '@/domains/app/sub-domains/patients/patient-check-ins/patient-check-ins.schema.js';
 import {
   RECORD_DELETE_REASON,
   RECORD_DELETE_REASON_VALUES,
@@ -64,6 +65,11 @@ export const offering_suggestions = appSchema
         { onDelete: 'set null' },
       ),
       reason: varchar('reason', { length: 200 }),
+      // A check-in's next offering (TR10, PK8)
+      patient_check_in_id: bigint('patient_check_in_id', { mode: 'number' }).references(
+        (): AnyPgColumn => patient_check_ins.id,
+        { onDelete: 'set null' },
+      ),
       // { invoice_id, invoice_line_index, quantity } — written when an invoice is linked
       invoice_links: jsonb('invoice_links').notNull().default([]),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -103,6 +109,9 @@ export const offering_suggestions = appSchema
       index('idx_offering_suggestions_appointment_id')
         .on(table.appointment_id)
         .where(sql`${table.appointment_id} IS NOT NULL`),
+      index('idx_offering_suggestions_patient_check_in_id')
+        .on(table.patient_check_in_id)
+        .where(sql`${table.patient_check_in_id} IS NOT NULL`),
       check('chk_offering_suggestions_quantity', sql`${table.quantity} BETWEEN 1 AND 99`),
       check('chk_offering_suggestions_price', sql`${table.price} >= 0`),
       check(

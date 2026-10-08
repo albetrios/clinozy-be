@@ -16,14 +16,6 @@ import {
 /** The by-id routes' path params. */
 type ClinicalNoteParams = { Params: { patient_id: string; patient_clinical_note_id: string } };
 
-/** Reading the clinical record (P14). */
-const CLINICAL_READ = [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ)];
-/** Writing it: `patient:update` and the clinical code (P14). */
-const CLINICAL_WRITE = [
-  requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
-  requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
-];
-
 /**
  * Registers the `patient-clinical-notes` routes (prefix `/api/v1/app`) — routes-final 7.B, routes
  * 8–12, nested under the patient.
@@ -39,7 +31,7 @@ export function patientClinicalNotesRoutes(
       '/patients/:patient_id/clinical-notes',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_READ,
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ)],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: "List a patient's clinical notes",
@@ -56,7 +48,10 @@ export function patientClinicalNotesRoutes(
       '/patients/:patient_id/clinical-notes',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_WRITE,
+        preHandler: [
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
+        ],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Add a clinical note',
@@ -73,7 +68,7 @@ export function patientClinicalNotesRoutes(
       '/patients/:patient_id/clinical-notes/:patient_clinical_note_id',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_READ,
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ)],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Get a clinical note',
@@ -89,7 +84,10 @@ export function patientClinicalNotesRoutes(
       '/patients/:patient_id/clinical-notes/:patient_clinical_note_id',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_WRITE,
+        preHandler: [
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
+        ],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Delete a clinical note',
@@ -106,7 +104,10 @@ export function patientClinicalNotesRoutes(
       '/patients/:patient_id/clinical-notes/:patient_clinical_note_id/restore',
       {
         onRequest: [app.authenticate],
-        preHandler: CLINICAL_WRITE,
+        preHandler: [
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
+        ],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Restore a clinical note',

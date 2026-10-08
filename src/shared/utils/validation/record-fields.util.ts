@@ -101,6 +101,16 @@ export const moneySchema = z.number().min(0).max(9_999_999_999.99).multipleOf(0.
 /** A percent with at most two decimals (`numeric(5,2)`, 0–100). */
 export const percentSchema = z.number().min(0).max(100).multipleOf(0.01);
 
+/**
+ * An `https://` web address of at most `maxLength` characters (a branch's map or review link, a
+ * patient review's link — TR11); any other scheme is refused.
+ */
+export function httpsLinkSchema(maxLength: number): z.ZodType<string> {
+  return trimmedString()
+    .max(maxLength)
+    .pipe(z.url().refine((url) => url.startsWith('https://'), { message: 'Link must use HTTPS' }));
+}
+
 /** A calendar date as `YYYY-MM-DD` (Postgres `date`). */
 export const calendarDateSchema = z.iso.date();
 

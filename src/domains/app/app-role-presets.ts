@@ -108,8 +108,8 @@ const THERAPIST_PRESET: AppRolePreset = {
     ...PERSON_FACING_ROLE_CODES,
     ...sectionCodes('appointments', VIEW_CREATE_EDIT),
     ...resourceCodes('patient', VIEW_CREATE_EDIT),
-    ...resourceCodes('treatment', VIEW_CREATE_EDIT),
-    ...readCodes(['patient_prescription', 'review']),
+    ...resourceCodes('patient_treatment', VIEW_CREATE_EDIT),
+    ...readCodes(['patient_prescription']),
     ...sectionCodes('stock', VIEW_CREATE_EDIT),
     APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ,
   ]),
@@ -126,8 +126,7 @@ const FRONT_DESK_PRESET: AppRolePreset = {
     ...sectionCodes('leads', VIEW_CREATE_EDIT),
     ...sectionCodes('appointments', VIEW_CREATE_EDIT),
     ...resourceCodes('patient', VIEW_CREATE_EDIT),
-    ...resourceCodes('review', VIEW_CREATE_EDIT),
-    ...readCodes(['treatment']),
+    ...readCodes(['patient_treatment']),
     ...sectionCodes('stock', VIEW_CREATE_EDIT),
     ...sectionCodes('payments', VIEW_CREATE_EDIT),
   ]),
@@ -144,8 +143,7 @@ const COUNSELLOR_PRESET: AppRolePreset = {
     ...sectionCodes('leads', VIEW_CREATE_EDIT),
     ...sectionCodes('appointments', VIEW_CREATE_EDIT),
     ...resourceCodes('patient', VIEW_CREATE_EDIT),
-    ...resourceCodes('review', VIEW_CREATE_EDIT),
-    ...readCodes(['patient_prescription', 'treatment']),
+    ...readCodes(['patient_prescription', 'patient_treatment']),
     ...sectionCodes('payments', ['read', 'create']),
     // Groups, offerings — prices included — and offers (O2, O3)
     ...sectionCodes('offerings', ['create', 'update']),
@@ -195,14 +193,13 @@ const ACCOUNTANT_PRESET: AppRolePreset = {
 /** The Marketing role preset (D12). */
 const MARKETING_PRESET: AppRolePreset = {
   name: 'Marketing',
-  description: 'Works leads and campaigns, and logs reviews.',
+  description: 'Works leads and campaigns.',
   tone: CHIP_TONE.BLUSH,
   isLocked: false,
   permissionCodes: unique([
     ...PERSON_FACING_ROLE_CODES,
     ...sectionCodes('leads', VIEW_CREATE_EDIT),
     ...readCodes(['patient']),
-    ...resourceCodes('review', VIEW_CREATE_EDIT),
   ]),
 };
 

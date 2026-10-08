@@ -24,10 +24,8 @@ import { credit_notes } from '@/domains/app/sub-domains/credit-notes/credit-note
 import { pending_credits } from '@/domains/app/sub-domains/pending-credits/pending-credits.schema.js';
 import { day_closes } from '@/domains/app/sub-domains/day-closes/day-closes.schema.js';
 import { day_close_events } from '@/domains/app/sub-domains/day-close-events/day-close-events.schema.js';
-import { treatments } from '@/domains/app/sub-domains/treatments/treatments.schema.js';
-import { check_ins } from '@/domains/app/sub-domains/check-ins/check-ins.schema.js';
-import { reviews } from '@/domains/app/sub-domains/reviews/reviews.schema.js';
-import { feedback_actions } from '@/domains/app/sub-domains/feedback-actions/feedback-actions.schema.js';
+import { patient_check_ins } from '@/domains/app/sub-domains/patients/patient-check-ins/patient-check-ins.schema.js';
+import { patient_reviews } from '@/domains/app/sub-domains/patients/patient-reviews/patient-reviews.schema.js';
 import { manufacturers } from '@/domains/app/sub-domains/manufacturers/manufacturers.schema.js';
 import { suppliers } from '@/domains/app/sub-domains/suppliers/suppliers.schema.js';
 import { medical_reps } from '@/domains/app/sub-domains/medical-reps/medical-reps.schema.js';
@@ -52,7 +50,8 @@ import { task_rule_settings } from '@/domains/app/sub-domains/task-rule-settings
  *
  * @remarks
  * - **Notes:** generated with the app tables. `app.branches` is not here — a branch is never
- *   deleted (D3, D16) — nor `app.patients`: a patient file is never purged (P7).
+ *   deleted (D3, D16) — nor `app.patients` (never purged, P7), nor the tables that never soft-delete
+ *   (`app.patient_treatments` — reversed, TR6; the append-only `app.patient_feedback_actions`).
  */
 export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   { table: task_rule_settings, label: 'app.task_rule_settings' },
@@ -72,10 +71,9 @@ export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   { table: medical_reps, label: 'app.medical_reps' },
   { table: suppliers, label: 'app.suppliers' },
   { table: manufacturers, label: 'app.manufacturers' },
-  { table: feedback_actions, label: 'app.feedback_actions' },
-  { table: reviews, label: 'app.reviews' },
-  { table: check_ins, label: 'app.check_ins' },
-  { table: treatments, label: 'app.treatments' },
+  // A feedback action goes with its check-in or review (append-only, `ON DELETE CASCADE`)
+  { table: patient_reviews, label: 'app.patient_reviews' },
+  { table: patient_check_ins, label: 'app.patient_check_ins' },
   { table: day_close_events, label: 'app.day_close_events' },
   { table: day_closes, label: 'app.day_closes' },
   { table: pending_credits, label: 'app.pending_credits' },

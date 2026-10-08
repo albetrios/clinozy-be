@@ -18,7 +18,7 @@ care, in the nested sub-domains below. **The person lives on the contact** (P1, 
 | `patients.schema.ts` | `app.patients` — one live file per contact (`idx_patients_organization_contact_unique`), the counter, the K8 usual doctor, RLS without a retention arm (never purged, P7) |
 | `patients.constants.ts` | types, statuses, conversion, the clinical-list limits, the patient file's one body-part list (TR8), `PT` |
 | `patients.{dto,validator,serializer,types}.ts` | request shapes (a contact or an inline new one), the list's `q` (`PT-0412`, `#412`, the contact's text), the response, the export row |
-| `patients.rules.ts` | one file per contact, the usual doctor on the contact's team; the shared patient-file helpers — the same-patient visit check (TR3), the `system` entry in the contact's activity (M10) |
+| `patients.rules.ts` | one file per contact, the usual doctor on the contact's team; the shared patient-file helpers — the same-patient visit and session checks (TR3), the organization's today, the `system` entry in the contact's activity (M10) |
 | `patients.repository.ts` / `.service.ts` / `.controller.ts` / `.routes.ts` | routes 1–7: the inline contact through the contacts service, the export with the contact's name and number |
 | `patient-clinical-notes/` | 7.B — clinical notes, never edited (routes 8–12) |
 | `patient-prescriptions/` | 7.C — prescriptions, the pharmacy queue, approval (routes 13–20) |
@@ -26,6 +26,10 @@ care, in the nested sub-domains below. **The person lives on the contact** (P1, 
 | `patient-diagnoses/` | 7.E — the diagnosis catalogue (routes 27–32) |
 | `patient-images/` | 7.F — photos in three albums (routes 33–38) |
 | `patient-reports/` | 7.G — lab, scan, consent reports (routes 39–44) |
+| `patient-treatments/` | 7.H — treatment sessions, reversed never deleted (routes 45–50) |
+| `patient-check-ins/` | 7.I — how the patient is doing, the next offerings in the plan (routes 51–56) |
+| `patient-reviews/` | 7.J — reviews the patient gave (routes 57–62) |
+| `patient-feedback-actions/` | 7.K — what was done about a check-in or a review (routes 63–64, under their parent) |
 
 ## Routes
 

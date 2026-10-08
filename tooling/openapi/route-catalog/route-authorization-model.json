@@ -512,17 +512,6 @@
     "model": "organization",
     "verifyNoMutation": true
   },
-  "GET /api/v1/app/treatments/:treatment_id": {
-    "model": "organization"
-  },
-  "PATCH /api/v1/app/treatments/:treatment_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "POST /api/v1/app/treatments/:treatment_id/reverse": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
   "GET /api/v1/app/patients/:patient_id/check-ins": {
     "model": "organization"
   },
@@ -530,55 +519,10 @@
     "model": "organization",
     "verifyNoMutation": true
   },
-  "GET /api/v1/app/check-ins/:check_in_id": {
-    "model": "organization"
-  },
-  "PATCH /api/v1/app/check-ins/:check_in_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "DELETE /api/v1/app/check-ins/:check_in_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "POST /api/v1/app/check-ins/:check_in_id/restore": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
   "GET /api/v1/app/patients/:patient_id/reviews": {
     "model": "organization"
   },
   "POST /api/v1/app/patients/:patient_id/reviews": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "GET /api/v1/app/reviews/:review_id": {
-    "model": "organization"
-  },
-  "PATCH /api/v1/app/reviews/:review_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "DELETE /api/v1/app/reviews/:review_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "POST /api/v1/app/reviews/:review_id/restore": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "GET /api/v1/app/feedback-actions/:feedback_action_id": {
-    "model": "organization"
-  },
-  "PATCH /api/v1/app/feedback-actions/:feedback_action_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "DELETE /api/v1/app/feedback-actions/:feedback_action_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "POST /api/v1/app/feedback-actions/:feedback_action_id/restore": {
     "model": "organization",
     "verifyNoMutation": true
   },
@@ -1003,6 +947,55 @@
     "verifyNoMutation": true
   },
   "POST /api/v1/app/patients/:patient_id/reports/:patient_report_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id/actions": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/reviews/:patient_review_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/patients/:patient_id/reviews/:patient_review_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/patients/:patient_id/reviews/:patient_review_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/reviews/:patient_review_id/actions": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/reviews/:patient_review_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/treatments/:patient_treatment_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/patients/:patient_id/treatments/:patient_treatment_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/treatments/:patient_treatment_id/reverse": {
     "model": "organization",
     "verifyNoMutation": true
   }

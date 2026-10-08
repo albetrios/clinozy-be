@@ -45,10 +45,9 @@ import { listPaymentsQueryDto as appPaymentsListQueryDto } from '@/domains/app/s
 import { listCreditNotesQueryDto as appCreditNotesListQueryDto } from '@/domains/app/sub-domains/credit-notes/credit-notes.dto.js';
 import { listPendingCreditsQueryDto as appPendingCreditsListQueryDto } from '@/domains/app/sub-domains/pending-credits/pending-credits.dto.js';
 import { listDayClosesQueryDto as appDayClosesListQueryDto } from '@/domains/app/sub-domains/day-closes/day-closes.dto.js';
-import { listTreatmentsQueryDto as appTreatmentsListQueryDto } from '@/domains/app/sub-domains/treatments/treatments.dto.js';
-import { listCheckInsQueryDto as appCheckInsListQueryDto } from '@/domains/app/sub-domains/check-ins/check-ins.dto.js';
-import { listReviewsQueryDto as appReviewsListQueryDto } from '@/domains/app/sub-domains/reviews/reviews.dto.js';
-import { listFeedbackActionsQueryDto as appFeedbackActionsListQueryDto } from '@/domains/app/sub-domains/feedback-actions/feedback-actions.dto.js';
+import { listPatientTreatmentsQueryDto as appPatientTreatmentsListQueryDto } from '@/domains/app/sub-domains/patients/patient-treatments/patient-treatments.dto.js';
+import { listPatientCheckInsQueryDto as appPatientCheckInsListQueryDto } from '@/domains/app/sub-domains/patients/patient-check-ins/patient-check-ins.dto.js';
+import { listPatientReviewsQueryDto as appPatientReviewsListQueryDto } from '@/domains/app/sub-domains/patients/patient-reviews/patient-reviews.dto.js';
 import { listManufacturersQueryDto as appManufacturersListQueryDto } from '@/domains/app/sub-domains/manufacturers/manufacturers.dto.js';
 import { listSuppliersQueryDto as appSuppliersListQueryDto } from '@/domains/app/sub-domains/suppliers/suppliers.dto.js';
 import { listMedicalRepsQueryDto as appMedicalRepsListQueryDto } from '@/domains/app/sub-domains/medical-reps/medical-reps.dto.js';
@@ -107,11 +106,10 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/app/credit-notes': appCreditNotesListQueryDto,
   'GET /api/v1/app/pending-credits': appPendingCreditsListQueryDto,
   'GET /api/v1/app/day-closes': appDayClosesListQueryDto,
-  'GET /api/v1/app/patients/{patient_id}/treatments': appTreatmentsListQueryDto,
-  'GET /api/v1/app/treatments': appTreatmentsListQueryDto,
-  'GET /api/v1/app/patients/{patient_id}/check-ins': appCheckInsListQueryDto,
-  'GET /api/v1/app/patients/{patient_id}/reviews': appReviewsListQueryDto,
-  'GET /api/v1/app/feedback-actions': appFeedbackActionsListQueryDto,
+  'GET /api/v1/app/patients/{patient_id}/treatments': appPatientTreatmentsListQueryDto,
+  'GET /api/v1/app/patient-treatments': appPatientTreatmentsListQueryDto,
+  'GET /api/v1/app/patients/{patient_id}/check-ins': appPatientCheckInsListQueryDto,
+  'GET /api/v1/app/patients/{patient_id}/reviews': appPatientReviewsListQueryDto,
   'GET /api/v1/app/manufacturers': appManufacturersListQueryDto,
   'GET /api/v1/app/suppliers': appSuppliersListQueryDto,
   'GET /api/v1/app/medical-reps': appMedicalRepsListQueryDto,
