@@ -97,25 +97,25 @@ that drops them is built. The medical store's routes wait for its own review ([D
 
 | # | Change | Method | Path | Access | Operation | Source | Built |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 3.1 | KEPT | GET | `/offering-groups` | any member | List groups (menu order) | routes-final §3.A.7 | `GET /api/v1/app/offering-groups` · #128 (uncommitted) |
-| 3.2 | KEPT | POST | `/offering-groups` | `offering:create` | Add a group | routes-final §3.A.7 | `POST /api/v1/app/offering-groups` · #128 (uncommitted) |
-| 3.3 | KEPT | GET | `/offering-groups/{offering_group_id}` | any member | Get a group | routes-final §3.A.7 | `GET /api/v1/app/offering-groups/:offering_group_id` · #128 (uncommitted) |
-| 3.4 | KEPT | PATCH | `/offering-groups/{offering_group_id}` | `offering:update` | Rename / reorder a group | routes-final §3.A.7 | `PATCH /api/v1/app/offering-groups/:offering_group_id` · #128 (uncommitted) |
-| 3.5 | KEPT | DELETE | `/offering-groups/{offering_group_id}` | `offering:delete` | Delete an empty group (O7) | routes-final §3.A.7 | `DELETE /api/v1/app/offering-groups/:offering_group_id` · #128 (uncommitted) |
-| 3.6 | KEPT | POST | `/offering-groups/{offering_group_id}/restore` | `offering:delete` | Undo a delete | routes-final §3.A.7 | `POST /api/v1/app/offering-groups/:offering_group_id/restore` · #128 (uncommitted) |
-| 3.7 | KEPT | GET | `/offerings` | any member | List offerings | routes-final §3.B.7 | `GET /api/v1/app/offerings` · #128 (uncommitted) |
-| 3.8 | KEPT | GET | `/offerings/exports` | `offering:export` | Download the list as CSV | routes-final §3.B.7 | `GET /api/v1/app/offerings/exports` · #128 (uncommitted) |
-| 3.9 | KEPT | POST | `/offerings` | `offering:create` | Add an offering | routes-final §3.B.7 | `POST /api/v1/app/offerings` · #128 (uncommitted) |
-| 3.10 | KEPT | GET | `/offerings/{offering_id}` | any member | Get an offering | routes-final §3.B.7 | `GET /api/v1/app/offerings/:offering_id` · #128 (uncommitted) |
-| 3.11 | KEPT | PATCH | `/offerings/{offering_id}` | `offering:update` | Change an offering (prices included) | routes-final §3.B.7 | `PATCH /api/v1/app/offerings/:offering_id` · #128 (uncommitted) |
-| 3.12 | KEPT | DELETE | `/offerings/{offering_id}` | `offering:delete` | Delete an offering | routes-final §3.B.7 | `DELETE /api/v1/app/offerings/:offering_id` · #128 (uncommitted) |
-| 3.13 | KEPT | POST | `/offerings/{offering_id}/restore` | `offering:delete` | Undo a delete | routes-final §3.B.7 | `POST /api/v1/app/offerings/:offering_id/restore` · #128 (uncommitted) |
-| 3.14 | KEPT | GET | `/offers` | any member | List offers (Live → Scheduled → Paused → Ended) | routes-final §3.C.7 | `GET /api/v1/app/offers` · #128 (uncommitted) |
-| 3.15 | KEPT | POST | `/offers` | `offering:create` | Add an offer | routes-final §3.C.7 | `POST /api/v1/app/offers` · #128 (uncommitted) |
-| 3.16 | KEPT | GET | `/offers/{offer_id}` | any member | Get an offer | routes-final §3.C.7 | `GET /api/v1/app/offers/:offer_id` · #128 (uncommitted) |
-| 3.17 | KEPT | PATCH | `/offers/{offer_id}` | `offering:update` | Change, pause or resume an offer | routes-final §3.C.7 | `PATCH /api/v1/app/offers/:offer_id` · #128 (uncommitted) |
-| 3.18 | KEPT | DELETE | `/offers/{offer_id}` | `offering:delete` | Delete an offer | routes-final §3.C.7 | `DELETE /api/v1/app/offers/:offer_id` · #128 (uncommitted) |
-| 3.19 | KEPT | POST | `/offers/{offer_id}/restore` | `offering:delete` | Undo a delete | routes-final §3.C.7 | `POST /api/v1/app/offers/:offer_id/restore` · #128 (uncommitted) |
+| 3.1 | KEPT | GET | `/offering-groups` | any member | List groups (menu order) | routes-final §3.A.7 | `GET /api/v1/app/offering-groups` · #128 · 7f93ef6 |
+| 3.2 | KEPT | POST | `/offering-groups` | `offering:create` | Add a group | routes-final §3.A.7 | `POST /api/v1/app/offering-groups` · #128 · 7f93ef6 |
+| 3.3 | KEPT | GET | `/offering-groups/{offering_group_id}` | any member | Get a group | routes-final §3.A.7 | `GET /api/v1/app/offering-groups/:offering_group_id` · #128 · 7f93ef6 |
+| 3.4 | KEPT | PATCH | `/offering-groups/{offering_group_id}` | `offering:update` | Rename / reorder a group | routes-final §3.A.7 | `PATCH /api/v1/app/offering-groups/:offering_group_id` · #128 · 7f93ef6 |
+| 3.5 | KEPT | DELETE | `/offering-groups/{offering_group_id}` | `offering:delete` | Delete an empty group (O7) | routes-final §3.A.7 | `DELETE /api/v1/app/offering-groups/:offering_group_id` · #128 · 7f93ef6 |
+| 3.6 | KEPT | POST | `/offering-groups/{offering_group_id}/restore` | `offering:delete` | Undo a delete | routes-final §3.A.7 | `POST /api/v1/app/offering-groups/:offering_group_id/restore` · #128 · 7f93ef6 |
+| 3.7 | KEPT | GET | `/offerings` | any member | List offerings | routes-final §3.B.7 | `GET /api/v1/app/offerings` · #128 · 7f93ef6 |
+| 3.8 | KEPT | GET | `/offerings/exports` | `offering:export` | Download the list as CSV | routes-final §3.B.7 | `GET /api/v1/app/offerings/exports` · #128 · 7f93ef6 |
+| 3.9 | KEPT | POST | `/offerings` | `offering:create` | Add an offering | routes-final §3.B.7 | `POST /api/v1/app/offerings` · #128 · 7f93ef6 |
+| 3.10 | KEPT | GET | `/offerings/{offering_id}` | any member | Get an offering | routes-final §3.B.7 | `GET /api/v1/app/offerings/:offering_id` · #128 · 7f93ef6 |
+| 3.11 | KEPT | PATCH | `/offerings/{offering_id}` | `offering:update` | Change an offering (prices included) | routes-final §3.B.7 | `PATCH /api/v1/app/offerings/:offering_id` · #128 · 7f93ef6 |
+| 3.12 | KEPT | DELETE | `/offerings/{offering_id}` | `offering:delete` | Delete an offering | routes-final §3.B.7 | `DELETE /api/v1/app/offerings/:offering_id` · #128 · 7f93ef6 |
+| 3.13 | KEPT | POST | `/offerings/{offering_id}/restore` | `offering:delete` | Undo a delete | routes-final §3.B.7 | `POST /api/v1/app/offerings/:offering_id/restore` · #128 · 7f93ef6 |
+| 3.14 | KEPT | GET | `/offers` | any member | List offers (Live → Scheduled → Paused → Ended) | routes-final §3.C.7 | `GET /api/v1/app/offers` · #128 · 7f93ef6 |
+| 3.15 | KEPT | POST | `/offers` | `offering:create` | Add an offer | routes-final §3.C.7 | `POST /api/v1/app/offers` · #128 · 7f93ef6 |
+| 3.16 | KEPT | GET | `/offers/{offer_id}` | any member | Get an offer | routes-final §3.C.7 | `GET /api/v1/app/offers/:offer_id` · #128 · 7f93ef6 |
+| 3.17 | KEPT | PATCH | `/offers/{offer_id}` | `offering:update` | Change, pause or resume an offer | routes-final §3.C.7 | `PATCH /api/v1/app/offers/:offer_id` · #128 · 7f93ef6 |
+| 3.18 | KEPT | DELETE | `/offers/{offer_id}` | `offering:delete` | Delete an offer | routes-final §3.C.7 | `DELETE /api/v1/app/offers/:offer_id` · #128 · 7f93ef6 |
+| 3.19 | KEPT | POST | `/offers/{offer_id}/restore` | `offering:delete` | Undo a delete | routes-final §3.C.7 | `POST /api/v1/app/offers/:offer_id/restore` · #128 · 7f93ef6 |
 
 ## 4. Contacts
 

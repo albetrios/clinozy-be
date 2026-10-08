@@ -215,6 +215,7 @@ session starts → session-start hook (returns at once) → bootstrap.sh, detach
 | Know where it is | `pnpm dev:stack:status` — the running step (or `live`), API + worker `/livez` · `/readyz`, containers, logs |
 | Stop the API + worker | `pnpm dev:stack:stop` (Postgres + Redis stay; `pnpm compose:down` stops them) |
 | Bring it back | `bash tooling/setup/agent/bootstrap.sh` |
+| A scratch database again | `pnpm dev:stack:reset-db` — drops and recreates the local Compose database, then migrate, logins, seed, API and worker (the installs are skipped) |
 | A known demo password | set `DEMO_PASSWORD` in the environment's variables (`demo@example.com`) |
 | No auto-start for an environment | set `AGENT_AUTO_STACK=0` in its variables |
 
