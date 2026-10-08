@@ -3,18 +3,21 @@ import type { BaseRecordReferenceLookup } from '@/domains/app/base-record.types.
 import { toInstant } from '@/shared/utils/validation/record-fields.util.js';
 import type { ContactOutput, ContactPhoneOutput } from './contacts.types.js';
 
-/** A received entry newer than the team's last sent one (4.C–4.D). */
-function isAwaitingReply(row: BaseRecordRow): boolean {
-  const received = row.last_received_at as Date | null;
-  const sent = row.last_sent_at as Date | null;
+/**
+ * Whether a contact awaits a reply (M3): a received entry newer than the team's last sent one —
+ * the contact's own field, and a lead's and an appointment's copy of it.
+ */
+export function contactAwaitsReply(times: Readonly<Record<string, unknown>>): boolean {
+  const received = (times.last_received_at as Date | null | undefined) ?? null;
+  const sent = (times.last_sent_at as Date | null | undefined) ?? null;
   return received !== null && (sent === null || received > sent);
 }
 
 /**
  * Shapes an `app.contacts` row as the API returns it (routes-final 4.A.6): public ids, ISO times,
  * `phones` only on a single-contact response (the lookup has them), the reply state from the
- * activity times. `open_lead_id` / `open_lead_status` are the rules' `decorate` (one read per page,
- * #131); the patient and visit fields are null until #132–#133 (D61).
+ * activity times. The open lead, patient file and visit fields are the rules' `decorate` (one read
+ * each per page, #131–#132).
  */
 export function serializeContact(
   row: BaseRecordRow,
@@ -50,7 +53,7 @@ export function serializeContact(
     last_activity_at: toInstant(row.last_activity_at),
     last_sent_at: toInstant(row.last_sent_at),
     last_received_at: toInstant(row.last_received_at),
-    is_awaiting_reply: isAwaitingReply(row),
+    is_awaiting_reply: contactAwaitsReply(row),
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),
   };

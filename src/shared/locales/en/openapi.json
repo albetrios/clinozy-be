@@ -49,7 +49,6 @@
     "Patient": "Patients — registration, contact and consent",
     "Lead": "Leads — enquiries until the person becomes a patient",
     "Appointment": "Appointments — booking, confirming, check-in, cancel and the slots",
-    "Visit": "Visits in progress — the floor stage, the consult note and the safety checks",
     "Patient file": "A patient's file — clinical notes, prescriptions, images, reports and notes",
     "Invoice": "Invoices, packages and offering suggestions — numbered per branch GSTIN and financial year (D23)",
     "Payment": "Payments, pending credits, credit notes and the day close",

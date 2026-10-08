@@ -940,6 +940,37 @@ erDiagram
   }
 ```
 
+- **Built (ROUTE #132, sub-domain 6 — routes-final §6, the visit merged in):** `app.appointments` — `contact_id` → contacts `ON DELETE RESTRICT` (A1; `patient_id`, `lead_id`, their check and `patient_package_id` gone — A12), `branch_room_id` / `branch_machine_id` (A2), `duration_minutes smallint` 5–240 and a multiple of 5 (A13), the generated `time_range tsrange` and the three exclusion constraints `excl_appointments_doctor_time` / `_room_time` / `_machine_time` over live scheduled, confirmed, checked-in and completed bookings, walk-ins exempt (A3, `btree_gist`); `checked_in_at` / `completed_at` set exactly with their status, `visit_stage` (`waiting` · `with_doctor` · `treatment` · `checkout` · `pharmacy`) with `visit_stage_changed_at` exactly while `checked_in`, `visit_paused_at` only then (A5, A10); the doctor and therapist K8 composite keys `ON DELETE RESTRICT` (K2); notes ≤ 2000; the indexes of 6.3 (day view, branch day, doctor date, a contact's visits, the floor) plus each foreign key's. `app.patients.contact_id` (D68 — nullable until #133, one live file per contact).
+```mermaid
+erDiagram
+  appointments["app.appointments · REBUILT"] {
+    id id PK
+    number appointment_number
+    id contact_id FK "→ contact (RESTRICT)"
+    id branch_id FK "→ branch"
+    choice type
+    id offering_id FK "→ offering"
+    text service_label
+    id doctor_membership_id FK "→ membership"
+    id therapist_membership_id FK "→ membership"
+    id branch_room_id FK "→ branch_room"
+    id branch_machine_id FK "→ branch_machine"
+    date appointment_date
+    time start_time
+    number duration_minutes
+    range time_range "generated — EXCLUDE doctor / room / machine"
+    choice status
+    boolean is_walk_in
+    choice visit_stage
+    datetime visit_stage_changed_at
+    datetime visit_paused_at
+    datetime checked_in_at
+    datetime completed_at
+    id copied_from_appointment_id FK "→ appointment"
+  }
+  contacts ||--o{ appointments : "is booked"
+```
+
 ### visit · NEW
 
 - **Holds:** One visit in progress (frontend D18): the floor stage and when it changed, the consult note and the safety checks — shared by Today's Visit sheet and the patient file's visit flow.
@@ -971,6 +1002,9 @@ erDiagram
 ```
 
 ## Stage 5 — The clinical record
+
+
+- **Removed (ROUTE #132, A10):** `app.visits` dropped — the floor stage, its times and pause are columns of `app.appointments`; the consult notes, diagnoses and safety checks move to the patient file (sub-domain 7, #133).
 
 ### diagnosis · NEW
 

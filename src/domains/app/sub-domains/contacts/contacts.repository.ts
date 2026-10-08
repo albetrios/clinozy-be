@@ -8,6 +8,9 @@ import {
 } from '@/domains/app/base-record.repository.js';
 import { buildContainsLikePattern, escapeLikeTerm } from '@/shared/utils/http/list-query.util.js';
 import { contacts, contact_phones } from './contacts.schema.js';
+import type { ContactLinkedSearch } from './contacts.validator.js';
+import type { ContactSummaryRow } from './contacts.types.js';
+import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
 import { LEAD_OPEN_STATUS_VALUES } from '@/domains/app/sub-domains/leads/leads.constants.js';
 
@@ -49,6 +52,38 @@ function matchRank(_organizationId: number, query: BaseRecordListQuery): SQL {
 }
 
 /**
+ * The condition of a list about a contact for its `q` (leads L7, appointments 6.8 —
+ * `readContactLinkedSearch`): the contact's trigram-indexed search text or its contact number (an
+ * `IN` over the organization's contacts), or the record's own number — any of them; `false` when
+ * the search reads as none.
+ */
+export function contactLinkedSearchCondition(options: {
+  search: ContactLinkedSearch;
+  /** The record's column naming its contact (`leads.contact_id`). */
+  contactIdColumn: AnyPgColumn;
+  /** The record's running-number column (`leads.lead_number`). */
+  recordNumberColumn: AnyPgColumn;
+  organizationId: number;
+}): SQL {
+  const { search, contactIdColumn, organizationId } = options;
+  const conditions: SQL[] = [];
+  if (search.text !== undefined) {
+    conditions.push(
+      sql`${contactIdColumn} in (select ${contacts.id} from ${contacts} where ${contacts.organization_id} = ${organizationId} and ${contacts.search_text} ilike ${buildContainsLikePattern(search.text)})`,
+    );
+  }
+  if (search.contactNumber !== undefined) {
+    conditions.push(
+      sql`${contactIdColumn} in (select ${contacts.id} from ${contacts} where ${contacts.organization_id} = ${organizationId} and ${contacts.contact_number} = ${search.contactNumber})`,
+    );
+  }
+  if (search.recordNumber !== undefined) {
+    conditions.push(eq(options.recordNumberColumn, search.recordNumber));
+  }
+  return conditions.length === 0 ? sql`false` : sql`(${sql.join(conditions, sql` or `)})`;
+}
+
+/**
  * Persistence for `app.contacts` (launch ROUTE #129, routes-final 4.A) — the shared app record
  * reads and writes on its table, plus the number checks of the household rule (CT3).
  *
@@ -58,8 +93,8 @@ function matchRank(_organizationId: number, query: BaseRecordListQuery): SQL {
  *   (first, then last name — the name index), `match` (the best match for `q` first, then the name),
  *   `created_at` and `last_activity_at` (newest first; a contact with no activity last). The
  *   derived filters read the numbers (`phone`), the reply state, the tags (`&&`, the GIN index) —
- *   `has_open_lead` (a live lead in an open status, L6) and `is_patient`, which no contact can be
- *   until #133 (D61).
+ *   `has_open_lead` (a live lead in an open status, L6) and `is_patient` (a live patient file —
+ *   opened by a check-in since #132).
  * - **Failure modes:** a unique or exclusion violation propagates (the service maps it).
  */
 export class ContactsRepository extends BaseRecordRepository {
@@ -106,8 +141,10 @@ export class ContactsRepository extends BaseRecordRepository {
             (value as string[]).map((tag) => sql`${tag}`),
             sql`, `,
           )}]::text[]`,
-        // No contact is a patient until patient files point at contacts (#133, D61).
-        is_patient: (value) => (value === true ? sql`false` : sql`true`),
+        is_patient: (value) => {
+          const file = sql`exists (select 1 from ${patients} where ${patients.contact_id} = ${contacts.id} and ${patients.deleted_at} is null)`;
+          return value === true ? file : sql`not ${file}`;
+        },
         has_open_lead: (value) => {
           const open = sql`exists (select 1 from ${leads} where ${leads.contact_id} = ${contacts.id} and ${leads.deleted_at} is null and ${leads.status} in (${sql.join(
             LEAD_OPEN_STATUS_VALUES.map((status) => sql`${status}`),
@@ -213,5 +250,57 @@ export class ContactsRepository extends BaseRecordRepository {
           : {}),
       })
       .where(eq(contacts.id, options.contactId));
+  }
+
+  /**
+   * What a record about a contact shows of it (a lead's or an appointment's `contact`, L1, A1) and
+   * its activity fields, by the contacts' public ids — one read for a page.
+   */
+  async findSummaries(publicIds: readonly string[]): Promise<ContactSummaryRow[]> {
+    if (publicIds.length === 0) return [];
+    return getRequestDatabase()
+      .select({
+        id: contacts.public_id,
+        contact_number: contacts.contact_number,
+        first_name: contacts.first_name,
+        last_name: contacts.last_name,
+        primary_phone: contacts.primary_phone,
+        default_channel: contacts.default_channel,
+        last_activity_at: contacts.last_activity_at,
+        last_sent_at: contacts.last_sent_at,
+        last_received_at: contacts.last_received_at,
+      })
+      .from(contacts)
+      .where(inArray(contacts.public_id, [...publicIds]));
+  }
+
+  /**
+   * The live patient file of each contact (P1 — at most one), by the contacts' public ids: its
+   * public id and number.
+   */
+  async findPatientFiles(
+    contactPublicIds: readonly string[],
+  ): Promise<Map<string, { id: string; patient_number: number }>> {
+    if (contactPublicIds.length === 0) return new Map();
+    const rows = await getRequestDatabase()
+      .select({
+        contact_public_id: contacts.public_id,
+        id: patients.public_id,
+        patient_number: patients.patient_number,
+      })
+      .from(patients)
+      .innerJoin(contacts, eq(contacts.id, patients.contact_id))
+      .where(and(inArray(contacts.public_id, [...contactPublicIds]), isNull(patients.deleted_at)));
+    return new Map(rows.map(({ contact_public_id, ...file }) => [contact_public_id, file]));
+  }
+
+  /** The internal id of the contact's live patient file, or null (A14 — does the check-in open one?). */
+  async findPatientFileId(contactId: number): Promise<number | null> {
+    const rows = await getRequestDatabase()
+      .select({ id: patients.id })
+      .from(patients)
+      .where(and(eq(patients.contact_id, contactId), isNull(patients.deleted_at)))
+      .limit(1);
+    return rows[0]?.id ?? null;
   }
 }

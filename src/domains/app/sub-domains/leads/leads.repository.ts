@@ -8,11 +8,10 @@ import {
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
-import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
-import { buildContainsLikePattern } from '@/shared/utils/http/list-query.util.js';
+import { contactLinkedSearchCondition } from '@/domains/app/sub-domains/contacts/contacts.repository.js';
+import type { ContactLinkedSearch } from '@/domains/app/sub-domains/contacts/contacts.validator.js';
 import { LEAD_OPEN_STATUS_VALUES, LEAD_OWNERSHIP } from './leads.constants.js';
 import { leads, lead_involved_memberships } from './leads.schema.js';
-import type { LeadContactSummary, LeadSearch } from './leads.types.js';
 
 /** The `involved_membership_ids` link of a lead (`app.lead_involved_memberships`, L2). */
 export const LEAD_INVOLVED_MEMBERSHIPS_LINK: BaseRecordLinkTable = {
@@ -36,23 +35,6 @@ function contactColumn(column: SQL): SQL {
 /** The internal id of a membership of the organization by public id (none = no row matches). */
 function membershipIdOf(publicId: string, organizationId: number): SQL {
   return sql`(select ${memberships.id} from ${memberships} where ${memberships.public_id} = ${publicId} and ${memberships.organization_id} = ${organizationId})`;
-}
-
-/** The contacts of the organization a search matches — `IN` over their trigram-indexed search text (L7). */
-function contactsMatching(search: LeadSearch, organizationId: number): SQL[] {
-  const conditions: SQL[] = [];
-  if (search.text !== undefined) {
-    conditions.push(
-      sql`${leads.contact_id} in (select ${contacts.id} from ${contacts} where ${contacts.organization_id} = ${organizationId} and ${contacts.search_text} ilike ${buildContainsLikePattern(search.text)})`,
-    );
-  }
-  if (search.contactNumber !== undefined) {
-    conditions.push(
-      sql`${leads.contact_id} in (select ${contacts.id} from ${contacts} where ${contacts.organization_id} = ${organizationId} and ${contacts.contact_number} = ${search.contactNumber})`,
-    );
-  }
-  if (search.leadNumber !== undefined) conditions.push(eq(leads.lead_number, search.leadNumber));
-  return conditions;
 }
 
 /**
@@ -122,10 +104,13 @@ export class LeadsRepository extends BaseRecordRepository {
         },
       },
       derivedFilters: {
-        search: (value, organizationId) => {
-          const conditions = contactsMatching(value as LeadSearch, organizationId);
-          return conditions.length === 0 ? sql`false` : sql`(${sql.join(conditions, sql` or `)})`;
-        },
+        search: (value, organizationId) =>
+          contactLinkedSearchCondition({
+            search: value as ContactLinkedSearch,
+            contactIdColumn: leads.contact_id,
+            recordNumberColumn: leads.lead_number,
+            organizationId,
+          }),
         interests: (value) =>
           sql`${leads.interests} && array[${sql.join(
             (value as string[]).map((interest) => sql`${interest}`),
@@ -171,39 +156,6 @@ export class LeadsRepository extends BaseRecordRepository {
       )
       .limit(1);
     return rows[0] ?? null;
-  }
-
-  /** The summary every lead carries of its contact (L1), by the contacts' public ids. */
-  async findContactSummaries(publicIds: readonly string[]): Promise<LeadContactSummary[]> {
-    if (publicIds.length === 0) return [];
-    return getRequestDatabase()
-      .select({
-        id: contacts.public_id,
-        contact_number: contacts.contact_number,
-        first_name: contacts.first_name,
-        last_name: contacts.last_name,
-        primary_phone: contacts.primary_phone,
-        default_channel: contacts.default_channel,
-        last_activity_at: contacts.last_activity_at,
-        last_sent_at: contacts.last_sent_at,
-        last_received_at: contacts.last_received_at,
-      })
-      .from(contacts)
-      .where(inArray(contacts.public_id, [...publicIds]));
-  }
-
-  /**
-   * The live patient file each lead opened, by the leads' public ids (`patients.lead_id` — the
-   * contact's own file once patient files point at contacts, #133).
-   */
-  async findPatientPublicIds(leadPublicIds: readonly string[]): Promise<Map<string, string>> {
-    if (leadPublicIds.length === 0) return new Map();
-    const rows = await getRequestDatabase()
-      .select({ lead_public_id: leads.public_id, patient_public_id: patients.public_id })
-      .from(patients)
-      .innerJoin(leads, eq(leads.id, patients.lead_id))
-      .where(and(inArray(leads.public_id, [...leadPublicIds]), isNull(patients.deleted_at)));
-    return new Map(rows.map((row) => [row.lead_public_id, row.patient_public_id]));
   }
 
   /**
@@ -328,6 +280,23 @@ export class LeadsRepository extends BaseRecordRepository {
       .where(
         and(eq(leads.contact_id, contactId), eq(leads.status, 'new'), isNull(leads.deleted_at)),
       );
+  }
+
+  /**
+   * Check-in's move (L8, A14): the contact's open lead goes to `clinic_visited`, its last status —
+   * returns its id, or null when the contact has no open lead.
+   */
+  async markVisited(options: { contactId: number; userId: number | null }): Promise<number | null> {
+    const rows = await getRequestDatabase()
+      .update(leads)
+      .set({
+        status: 'clinic_visited',
+        updated_at: sql`greatest(now(), ${leads.created_at})`,
+        updated_by_user_id: options.userId,
+      })
+      .where(and(eq(leads.contact_id, options.contactId), isNull(leads.deleted_at), isOpenStatus))
+      .returning({ id: leads.id });
+    return rows[0]?.id ?? null;
   }
 
   /** The first interest of the contact's open lead — a message's `<interest>` (M9) — or null. */

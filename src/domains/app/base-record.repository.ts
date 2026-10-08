@@ -562,18 +562,22 @@ export async function findBranchBookingHours(options: {
 }
 
 /**
- * The working days of a live membership of the organization, or null when it has none.
+ * The working days and hours of a live membership of the organization, or null when it has none.
  *
  * @remarks
  * - **Algorithm:** one primary-key read of `tenancy.memberships` — a doctor is bookable only on
- *   the days they work.
+ *   the days they work, inside their hours (A4).
  */
-export async function findMembershipWorkingDays(options: {
+export async function findMembershipWorkingHours(options: {
   organizationId: number;
   membershipId: number;
-}): Promise<string[] | null> {
+}): Promise<{ working_days: string[]; work_starts_at: string; work_ends_at: string } | null> {
   const rows = await getRequestDatabase()
-    .select({ working_days: memberships.working_days })
+    .select({
+      working_days: memberships.working_days,
+      work_starts_at: memberships.work_starts_at,
+      work_ends_at: memberships.work_ends_at,
+    })
     .from(memberships)
     .where(
       and(
@@ -583,7 +587,7 @@ export async function findMembershipWorkingDays(options: {
       ),
     )
     .limit(1);
-  return rows[0]?.working_days ?? null;
+  return rows[0] ?? null;
 }
 
 /**

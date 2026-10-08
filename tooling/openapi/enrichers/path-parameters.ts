@@ -63,7 +63,6 @@ const ENTITY_LABELS: Record<PublicIdEntity, string> = {
   prescription: 'prescription',
   patientClinicalNote: 'clinical note',
   diagnosis: 'diagnosis',
-  visit: 'visit',
   appointment: 'appointment',
   contactMessageTemplate: 'message template',
   leadRead: 'lead read',

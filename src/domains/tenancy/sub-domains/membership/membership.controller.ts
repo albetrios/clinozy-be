@@ -152,6 +152,12 @@ function createMembershipWriteHandlers(service: MembershipService) {
       });
       return successResponse(data, getRequestIdentifier(request));
     },
+  };
+}
+
+/** The member's own actions: leave the organization, hand the ownership over. */
+function createMembershipSelfServiceHandlers(service: MembershipService) {
+  return {
     leaveOrganization: async (request: FastifyRequest, reply: FastifyReply) => {
       const auth = requireAuth(request);
       const scope = requireOrganizationScope(request);
@@ -195,5 +201,6 @@ export function createMembershipController(service: MembershipService) {
   return {
     ...createMembershipReadHandlers(service),
     ...createMembershipWriteHandlers(service),
+    ...createMembershipSelfServiceHandlers(service),
   };
 }

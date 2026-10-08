@@ -15,9 +15,9 @@ const CONTACT_NUMBER_QUERY = /^(?:c-?|#)\s*0*(\d{1,9})$/i;
 /** A typed number: digits with the separators people type (`+91 98765-43210`). */
 const PHONE_QUERY = /^[\d\s+().-]+$/;
 /** The fewest letters a name search takes — the trigram index needs three (CT9). */
-export const NAME_QUERY_MIN_LENGTH = 3;
+const NAME_QUERY_MIN_LENGTH = 3;
 /** The fewest digits a number search takes (CT9). */
-export const PHONE_QUERY_MIN_DIGITS = 4;
+const PHONE_QUERY_MIN_DIGITS = 4;
 /** The digits of a full Indian number after its `91` country code or `0` trunk prefix. */
 const LOCAL_NUMBER_LENGTH = 10;
 
@@ -28,7 +28,7 @@ type ContactSearch =
   | { kind: 'none' };
 
 /** The 400 for a `q` too short to search (CT9) — the contact search and the lead search (L7). */
-export function searchTooShortError(): ValidationError {
+function searchTooShortError(): ValidationError {
   return fieldValidationError({
     field: 'q',
     messageKey: 'errors:validation.contactSearchTooShort',
@@ -40,7 +40,7 @@ export function searchTooShortError(): ValidationError {
  * (`+91`, even on part of a number) or a full number's `91` / `0` dropped; undefined when `q` is not
  * a typed number. Shared by the contact search and the lead search (L7).
  */
-export function phoneQueryDigits(q: string): string | undefined {
+function phoneQueryDigits(q: string): string | undefined {
   if (!(PHONE_QUERY.test(q) && /\d/.test(q))) return undefined;
   const digits = q.replace(/\D/g, '');
   if (q.startsWith('+91')) return digits.slice(2);
@@ -48,6 +48,51 @@ export function phoneQueryDigits(q: string): string | undefined {
     return digits.slice(digits.length - LOCAL_NUMBER_LENGTH);
   }
   return digits;
+}
+
+/** A whole record number in a list about a contact: `#2371` (a lead's, an appointment's). */
+const RECORD_NUMBER_QUERY = /^#\s*0*(\d{1,9})$/;
+/** A whole contact number without the `#` a record number takes: `C-12345`, `c12345`. */
+const LINKED_CONTACT_NUMBER_QUERY = /^c-?\s*0*(\d{1,9})$/i;
+/** A bare number short enough to be a record number. */
+const BARE_NUMBER_QUERY = /^\s*0*(\d{1,9})\s*$/;
+
+/**
+ * How a list of records about a contact reads `q` (leads L7, appointments 6.8): the contact's search
+ * text (its rules — CT9), a contact number (`C-12345`) and the record's own number (`#2371`) — a
+ * plain number may be a record number and a phone's digits at once.
+ */
+export interface ContactLinkedSearch {
+  /** The contact's search text holds it (3+ letters, or 4+ digits of a number). */
+  text?: string | undefined;
+  contactNumber?: number | undefined;
+  recordNumber?: number | undefined;
+}
+
+/**
+ * Reads a `q` of a list about a contact (L7, 6.8): `#2371` is the record's number, `C-12345` the
+ * contact number; a typed number is the contact's digits (4 or more) and — when it could be one —
+ * the record number too; anything else is the contact's text, 3 or more characters (400 `q`
+ * otherwise).
+ */
+export function readContactLinkedSearch(q: string | undefined): ContactLinkedSearch | undefined {
+  if (q === undefined) return undefined;
+  const recordNumber = q.match(RECORD_NUMBER_QUERY)?.[1];
+  if (recordNumber !== undefined) return { recordNumber: Number(recordNumber) };
+  const contactNumber = q.match(LINKED_CONTACT_NUMBER_QUERY)?.[1];
+  if (contactNumber !== undefined) return { contactNumber: Number(contactNumber) };
+  const digits = phoneQueryDigits(q);
+  if (digits !== undefined) {
+    const bare = q.match(BARE_NUMBER_QUERY)?.[1];
+    const isNumber = digits.length >= PHONE_QUERY_MIN_DIGITS;
+    if (!isNumber && bare === undefined) throw searchTooShortError();
+    return {
+      text: isNumber ? digits : undefined,
+      recordNumber: bare === undefined ? undefined : Number(bare),
+    };
+  }
+  if (q.length < NAME_QUERY_MIN_LENGTH) throw searchTooShortError();
+  return { text: q };
 }
 
 /**

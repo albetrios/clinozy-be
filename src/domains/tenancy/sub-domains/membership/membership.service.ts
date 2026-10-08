@@ -168,6 +168,63 @@ export interface MembershipDirectoryQuery {
 }
 
 /**
+ * The checks of an edit of a live member (T10, K3, sec-new-T1): their name follows their profile,
+ * the owner's status and roles are locked, working hours end after they start, and an invited
+ * member's status moves only by accepting the invite.
+ *
+ * @remarks
+ * - **Failure modes:** `ValidationError` on `display_name`, `work_ends_at`, `status`;
+ *   `ForbiddenError` for the owner's status or roles.
+ */
+function assertLiveMembershipEdit(options: {
+  parsed: UpdateMembershipInput;
+  membership: { user_id: number; status: string; work_starts_at: string; work_ends_at: string };
+  ownerUserId: number | null;
+}): void {
+  const { parsed, membership } = options;
+  if (parsed.display_name !== undefined) {
+    // K3: a live member's name follows their profile in every organization.
+    throw new ValidationError(
+      'errors:validation.membershipNameFollowsProfile',
+      undefined,
+      undefined,
+      [{ field: 'display_name', messageKey: 'errors:validation.membershipNameFollowsProfile' }],
+    );
+  }
+  /**
+   * sec-new-T1: The organization owner's membership must not be modified by other members.
+   * An Admin holding MEMBERSHIP_UPDATE could otherwise SUSPEND the owner, locking
+   * them out of all RBAC-gated routes with no self-recovery path. The ownership
+   * transfer endpoint is the correct mechanism for any ownership-adjacent change.
+   */
+  // The owner's staff profile (phone, tone, hours, branches) stays editable; only their
+  // status and roles are locked.
+  const changesStatusOrRoles = parsed.status !== undefined || parsed.role_ids !== undefined;
+  if (changesStatusOrRoles && options.ownerUserId === membership.user_id) {
+    throw new ForbiddenError('errors:ownerMembershipCannotBeModified');
+  }
+  // Working hours: the DTO checks both ends when both come; one end is checked against the row.
+  const workStartsAt = parsed.work_starts_at ?? membership.work_starts_at.slice(0, 5);
+  const workEndsAt = parsed.work_ends_at ?? membership.work_ends_at.slice(0, 5);
+  if (workEndsAt <= workStartsAt) {
+    throw new ValidationError('errors:validation.workEndsBeforeStarts', undefined, {
+      work_ends_at: ['Working hours must end after they start'],
+    });
+  }
+  // T10: status moves only between active and suspended — an invited member becomes active
+  // only by accepting the invite.
+  if (
+    parsed.status !== undefined &&
+    parsed.status !== membership.status &&
+    membership.status === MEMBERSHIP_STATUS.INVITED
+  ) {
+    throw new ValidationError('errors:validation.membershipStatusMove', undefined, undefined, [
+      { field: 'status', messageKey: 'errors:validation.membershipStatusMove' },
+    ]);
+  }
+}
+
+/**
  * Application service for organization memberships: list/get/create/update/
  * delete, plus self-service `leaveOrganization` and `transferOwnership`.
  *
@@ -926,46 +983,7 @@ export class MembershipService {
           updatedByUserId: userId ?? null,
         });
       }
-      if (parsed.display_name !== undefined) {
-        // K3: a live member's name follows their profile in every organization.
-        throw new ValidationError(
-          'errors:validation.membershipNameFollowsProfile',
-          undefined,
-          undefined,
-          [{ field: 'display_name', messageKey: 'errors:validation.membershipNameFollowsProfile' }],
-        );
-      }
-      /**
-       * sec-new-T1: The organization owner's membership must not be modified by other members.
-       * An Admin holding MEMBERSHIP_UPDATE could otherwise SUSPEND the owner, locking
-       * them out of all RBAC-gated routes with no self-recovery path. The ownership
-       * transfer endpoint is the correct mechanism for any ownership-adjacent change.
-       */
-      // The owner's staff profile (phone, tone, hours, branches) stays editable; only their
-      // status and roles are locked.
-      const changesStatusOrRoles = parsed.status !== undefined || parsed.role_ids !== undefined;
-      if (changesStatusOrRoles && organization.owner_user_id === membership.user_id) {
-        throw new ForbiddenError('errors:ownerMembershipCannotBeModified');
-      }
-      // Working hours: the DTO checks both ends when both come; one end is checked against the row.
-      const workStartsAt = parsed.work_starts_at ?? membership.work_starts_at.slice(0, 5);
-      const workEndsAt = parsed.work_ends_at ?? membership.work_ends_at.slice(0, 5);
-      if (workEndsAt <= workStartsAt) {
-        throw new ValidationError('errors:validation.workEndsBeforeStarts', undefined, {
-          work_ends_at: ['Working hours must end after they start'],
-        });
-      }
-      // T10: status moves only between active and suspended — an invited member becomes active
-      // only by accepting the invite.
-      if (
-        parsed.status !== undefined &&
-        parsed.status !== membership.status &&
-        membership.status === MEMBERSHIP_STATUS.INVITED
-      ) {
-        throw new ValidationError('errors:validation.membershipStatusMove', undefined, undefined, [
-          { field: 'status', messageKey: 'errors:validation.membershipStatusMove' },
-        ]);
-      }
+      assertLiveMembershipEdit({ parsed, membership, ownerUserId: organization.owner_user_id });
       /**
        * F1: reactivating a suspended member re-consumes a seat — suspended memberships are NOT
        * counted toward the cap, so a `suspended -> active` transition adds one to the live seat

@@ -20,6 +20,7 @@ import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
+import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import {
   PHONE_NUMBER_PATTERN,
@@ -58,6 +59,11 @@ export const patients = appSchema
       organization_id: bigint('organization_id', { mode: 'number' })
         .notNull()
         .references(() => organizations.id, { onDelete: 'cascade' }),
+      // The contact this file is for — set by the check-in that opens it (#132, D68); every file
+      // has one once #133 rebuilds the patient file (P1).
+      contact_id: bigint('contact_id', { mode: 'number' }).references(() => contacts.id, {
+        onDelete: 'restrict',
+      }),
       // The "#3508" of the patient list — per organization, never reused
       patient_number: integer('patient_number').notNull().default(0),
       first_name: varchar('first_name', { length: 60 }).notNull(),
@@ -147,6 +153,13 @@ export const patients = appSchema
         .on(table.organization_id, table.follow_up_at, table.id)
         .where(sql`${table.deleted_at} IS NULL AND ${table.follow_up_at} IS NOT NULL`),
       index('idx_patients_lead_id').on(table.lead_id).where(sql`${table.lead_id} IS NOT NULL`),
+      // P1: one live file per contact
+      uniqueIndex('idx_patients_organization_contact_unique')
+        .on(table.organization_id, table.contact_id)
+        .where(sql`${table.deleted_at} IS NULL AND ${table.contact_id} IS NOT NULL`),
+      index('idx_patients_contact_id')
+        .on(table.contact_id)
+        .where(sql`${table.contact_id} IS NOT NULL`),
       index('idx_patients_search_text_trgm')
         .using('gin', table.search_text.op('gin_trgm_ops'))
         .where(sql`${table.deleted_at} IS NULL`),

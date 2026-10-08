@@ -23,13 +23,19 @@ Legend:
   PATCH  /api/v1/app/appointments/:appointment_id                 200  -    both  PERM: appointment:update
   DELETE /api/v1/app/appointments/:appointment_id                 204  -    both  PERM: appointment:delete
   POST   /api/v1/app/appointments/:appointment_id/cancel          200  req  both  PERM: appointment:update
+  POST   /api/v1/app/appointments/:appointment_id/check-in        200  req  both  PERM: appointment:update
+  POST   /api/v1/app/appointments/:appointment_id/complete        200  req  both  PERM: appointment:update
+  POST   /api/v1/app/appointments/:appointment_id/confirm         200  req  both  PERM: appointment:update
   POST   /api/v1/app/appointments/:appointment_id/copy            200  req  both  PERM: appointment:create
+  POST   /api/v1/app/appointments/:appointment_id/no-show         200  req  both  PERM: appointment:update
+  POST   /api/v1/app/appointments/:appointment_id/pause           200  req  both  PERM: appointment:update
   POST   /api/v1/app/appointments/:appointment_id/reinstate       200  req  both  PERM: appointment:update
   POST   /api/v1/app/appointments/:appointment_id/restore         200  req  both  PERM: appointment:delete
-  POST   /api/v1/app/appointments/:appointment_id/status          200  req  both  PERM: appointment:update
+  POST   /api/v1/app/appointments/:appointment_id/resume          200  req  both  PERM: appointment:update
+  POST   /api/v1/app/appointments/:appointment_id/stage           200  req  both  PERM: appointment:update
   POST   /api/v1/app/appointments/:appointment_id/undo-check-in   200  req  both  PERM: appointment:update
   GET    /api/v1/app/appointments/daily-counts                    200  -    both  PERM: appointment:read
-  GET    /api/v1/app/appointments/exports                         200  -    both  PERM: list:export
+  GET    /api/v1/app/appointments/exports                         200  -    both  PERM: appointment:export
   GET    /api/v1/app/appointments/slots                           200  -    both  PERM: appointment:read
   GET    /api/v1/app/branches                                     200  -    both  PERM: branch:read
   POST   /api/v1/app/branches                                     200  req  both  PERM: branch:create
@@ -326,12 +332,6 @@ Legend:
   GET    /api/v1/app/treatments/:treatment_id                     200  -    both  PERM: patient:read
   PATCH  /api/v1/app/treatments/:treatment_id                     200  -    both  PERM: treatment:update
   POST   /api/v1/app/treatments/:treatment_id/reverse             200  req  both  PERM: treatment:update
-  GET    /api/v1/app/visits                                       200  -    both  PERM: appointment:read
-  GET    /api/v1/app/visits/:visit_id                             200  -    both  PERM: appointment:read
-  PATCH  /api/v1/app/visits/:visit_id                             200  -    both  PERM: patient:update
-  POST   /api/v1/app/visits/:visit_id/pause                       200  req  both  PERM: appointment:update
-  POST   /api/v1/app/visits/:visit_id/resume                      200  req  both  PERM: appointment:update
-  POST   /api/v1/app/visits/:visit_id/stage                       200  req  both  PERM: appointment:update
 
 ================================================================================
   DOMAIN: AUDIT (/api/v1/audit)
@@ -549,7 +549,7 @@ Legend:
   Team-only (O)   : 10
 
 ================================================================================
-  IDEMPOTENCY-REQUIRED WRITES (122) — X-Idempotency-Key required
+  IDEMPOTENCY-REQUIRED WRITES (125) — X-Idempotency-Key required
 ================================================================================
 
   Routes flagged I = req reject a missing or reused key (422); every other write
@@ -557,10 +557,16 @@ Legend:
 
     POST /api/v1/app/appointments
     POST /api/v1/app/appointments/:appointment_id/cancel
+    POST /api/v1/app/appointments/:appointment_id/check-in
+    POST /api/v1/app/appointments/:appointment_id/complete
+    POST /api/v1/app/appointments/:appointment_id/confirm
     POST /api/v1/app/appointments/:appointment_id/copy
+    POST /api/v1/app/appointments/:appointment_id/no-show
+    POST /api/v1/app/appointments/:appointment_id/pause
     POST /api/v1/app/appointments/:appointment_id/reinstate
     POST /api/v1/app/appointments/:appointment_id/restore
-    POST /api/v1/app/appointments/:appointment_id/status
+    POST /api/v1/app/appointments/:appointment_id/resume
+    POST /api/v1/app/appointments/:appointment_id/stage
     POST /api/v1/app/appointments/:appointment_id/undo-check-in
     POST /api/v1/app/branches
     POST /api/v1/app/branches/:branch_id/holidays
@@ -657,9 +663,6 @@ Legend:
     POST /api/v1/app/tasks/:task_id/restore
     POST /api/v1/app/tasks/:task_id/snooze
     POST /api/v1/app/treatments/:treatment_id/reverse
-    POST /api/v1/app/visits/:visit_id/pause
-    POST /api/v1/app/visits/:visit_id/resume
-    POST /api/v1/app/visits/:visit_id/stage
     POST /api/v1/billing/payment-methods/setup
     POST /api/v1/billing/subscriptions
     POST /api/v1/billing/subscriptions/:subscription_id/cancel
@@ -704,40 +707,41 @@ Legend:
     upload:manage
 
   App:
-    appointment:create            appointment:delete            appointment:read
-    appointment:update            branch:create                 branch:delete
-    branch:read                   branch:update                 clinical_record:read
-    contact:create                contact:delete                contact:read
-    contact:update                contact_activity:create       contact_activity:delete
-    contact_activity:read         contact_activity:update       day_close:close
-    day_close:create              day_close:delete              day_close:read
-    day_close:update              invoice:create                invoice:delete
-    invoice:read                  invoice:update                lead:create
-    lead:delete                   lead:export                   lead:read
-    lead:update                   list:export                   manufacturer:create
-    manufacturer:delete           manufacturer:read             manufacturer:update
-    medical_purchase_order:create medical_purchase_order:delete medical_purchase_order:read
-    medical_purchase_order:update medical_rep:create            medical_rep:delete
-    medical_rep:read              medical_rep:update            medical_sale:create
-    medical_sale:delete           medical_sale:read             medical_sale:update
-    medicine:create               medicine:delete               medicine:read
-    medicine:update               offering:create               offering:delete
-    offering:export               offering:lower_price:read     offering:update
-    patient:create                patient:delete                patient:read
-    patient:update                payment:create                payment:delete
-    payment:read                  payment:reverse_settled       payment:update
-    prescription:create           prescription:delete           prescription:read
-    prescription:update           private_album:read            refund:create
-    review:create                 review:delete                 review:read
-    review:update                 sale:void                     stock_item:create
-    stock_item:delete             stock_item:read               stock_item:update
-    stock_purchase:create         stock_purchase:delete         stock_purchase:read
-    stock_purchase:update         stock_vendor:create           stock_vendor:delete
-    stock_vendor:read             stock_vendor:update           supplier:create
-    supplier:delete               supplier:read                 supplier:update
-    task:create                   task:delete                   task:read
-    task:update                   task_rule:update              treatment:create
-    treatment:delete              treatment:read                treatment:update
+    appointment:create            appointment:delete            appointment:export
+    appointment:read              appointment:update            branch:create
+    branch:delete                 branch:read                   branch:update
+    clinical_record:read          contact:create                contact:delete
+    contact:read                  contact:update                contact_activity:create
+    contact_activity:delete       contact_activity:read         contact_activity:update
+    day_close:close               day_close:create              day_close:delete
+    day_close:read                day_close:update              invoice:create
+    invoice:delete                invoice:read                  invoice:update
+    lead:create                   lead:delete                   lead:export
+    lead:read                     lead:update                   list:export
+    manufacturer:create           manufacturer:delete           manufacturer:read
+    manufacturer:update           medical_purchase_order:create medical_purchase_order:delete
+    medical_purchase_order:read   medical_purchase_order:update medical_rep:create
+    medical_rep:delete            medical_rep:read              medical_rep:update
+    medical_sale:create           medical_sale:delete           medical_sale:read
+    medical_sale:update           medicine:create               medicine:delete
+    medicine:read                 medicine:update               offering:create
+    offering:delete               offering:export               offering:lower_price:read
+    offering:update               patient:create                patient:delete
+    patient:read                  patient:update                payment:create
+    payment:delete                payment:read                  payment:reverse_settled
+    payment:update                prescription:create           prescription:delete
+    prescription:read             prescription:update           private_album:read
+    refund:create                 review:create                 review:delete
+    review:read                   review:update                 sale:void
+    stock_item:create             stock_item:delete             stock_item:read
+    stock_item:update             stock_purchase:create         stock_purchase:delete
+    stock_purchase:read           stock_purchase:update         stock_vendor:create
+    stock_vendor:delete           stock_vendor:read             stock_vendor:update
+    supplier:create               supplier:delete               supplier:read
+    supplier:update               task:create                   task:delete
+    task:read                     task:update                   task_rule:update
+    treatment:create              treatment:delete              treatment:read
+    treatment:update
 
   Global Roles:
     super_admin                   user

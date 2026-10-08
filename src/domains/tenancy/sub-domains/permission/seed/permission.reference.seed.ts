@@ -124,6 +124,7 @@ export const SYSTEM_PERMISSIONS = [
   { code: 'appointment:update', name: 'Update Appointments', category: 'appointments' },
   { code: 'appointment:create', name: 'Create Appointments', category: 'appointments' },
   { code: 'appointment:read', name: 'View Appointments', category: 'appointments' },
+  { code: 'appointment:export', name: 'Export Appointments', category: 'appointments' },
   { code: 'lead:delete', name: 'Delete Leads', category: 'leads' },
   { code: 'lead:update', name: 'Update Leads', category: 'leads' },
   { code: 'lead:create', name: 'Create Leads', category: 'leads' },

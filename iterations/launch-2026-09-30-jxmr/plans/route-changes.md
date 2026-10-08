@@ -148,40 +148,40 @@ that drops them is built. The medical store's routes wait for its own review ([D
 
 | # | Change | Method | Path | Access | Operation | Source | Built |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 5.1 | KEPT | GET | `/leads` | `lead:read` | List leads (Mine · Unreplied · All are filters) | routes-final §5.7 | `GET /api/v1/app/leads` · #131 |
-| 5.2 | KEPT | GET | `/leads/exports` | `lead:export` | Download the list as CSV | routes-final §5.7 | `GET /api/v1/app/leads/exports` · #131 |
-| 5.3 | KEPT | POST | `/leads` | `lead:create` | Add a lead (for a contact, or with a new one) | routes-final §5.7 | `POST /api/v1/app/leads` · #131 |
-| 5.4 | KEPT | GET | `/leads/{lead_id}` | `lead:read` | Get a lead | routes-final §5.7 | `GET /api/v1/app/leads/:lead_id` · #131 |
-| 5.5 | KEPT | PATCH | `/leads/{lead_id}` | `lead:update` | Change a lead | routes-final §5.7 | `PATCH /api/v1/app/leads/:lead_id` · #131 |
-| 5.6 | KEPT | DELETE | `/leads/{lead_id}` | `lead:delete` | Remove a lead | routes-final §5.7 | `DELETE /api/v1/app/leads/:lead_id` · #131 |
-| 5.7 | KEPT | POST | `/leads/{lead_id}/restore` | `lead:delete` | Undo a removal | routes-final §5.7 | `POST /api/v1/app/leads/:lead_id/restore` · #131 |
-| 5.8 | KEPT | POST | `/leads/{lead_id}/claim` | `lead:update` | Take the lead (and hold it) | routes-final §5.7 | `POST /api/v1/app/leads/:lead_id/claim` · #131 |
-| 5.9 | KEPT | POST | `/leads/{lead_id}/release` | `lead:update` | Give it back to the team | routes-final §5.7 | `POST /api/v1/app/leads/:lead_id/release` · #131 |
+| 5.1 | KEPT | GET | `/leads` | `lead:read` | List leads (Mine · Unreplied · All are filters) | routes-final §5.7 | `GET /api/v1/app/leads` · #131 · 9f8d4d9 |
+| 5.2 | KEPT | GET | `/leads/exports` | `lead:export` | Download the list as CSV | routes-final §5.7 | `GET /api/v1/app/leads/exports` · #131 · 9f8d4d9 |
+| 5.3 | KEPT | POST | `/leads` | `lead:create` | Add a lead (for a contact, or with a new one) | routes-final §5.7 | `POST /api/v1/app/leads` · #131 · 9f8d4d9 |
+| 5.4 | KEPT | GET | `/leads/{lead_id}` | `lead:read` | Get a lead | routes-final §5.7 | `GET /api/v1/app/leads/:lead_id` · #131 · 9f8d4d9 |
+| 5.5 | KEPT | PATCH | `/leads/{lead_id}` | `lead:update` | Change a lead | routes-final §5.7 | `PATCH /api/v1/app/leads/:lead_id` · #131 · 9f8d4d9 |
+| 5.6 | KEPT | DELETE | `/leads/{lead_id}` | `lead:delete` | Remove a lead | routes-final §5.7 | `DELETE /api/v1/app/leads/:lead_id` · #131 · 9f8d4d9 |
+| 5.7 | KEPT | POST | `/leads/{lead_id}/restore` | `lead:delete` | Undo a removal | routes-final §5.7 | `POST /api/v1/app/leads/:lead_id/restore` · #131 · 9f8d4d9 |
+| 5.8 | KEPT | POST | `/leads/{lead_id}/claim` | `lead:update` | Take the lead (and hold it) | routes-final §5.7 | `POST /api/v1/app/leads/:lead_id/claim` · #131 · 9f8d4d9 |
+| 5.9 | KEPT | POST | `/leads/{lead_id}/release` | `lead:update` | Give it back to the team | routes-final §5.7 | `POST /api/v1/app/leads/:lead_id/release` · #131 · 9f8d4d9 |
 
 ## 6. Appointments
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| 6.1 | KEPT | GET | `/appointments` | `appointment:read` | List appointments — and the clinic floor (`status=checked_in`) | routes-final §6.7 |
-| 6.2 | KEPT | GET | `/appointments/exports` | `appointment:export` | Download the list as CSV | routes-final §6.7 |
-| 6.3 | KEPT | GET | `/appointments/slots` | `appointment:read` | Free slots for a day | routes-final §6.7 |
-| 6.4 | KEPT | GET | `/appointments/daily-counts` | `appointment:read` | Counts per day and status | routes-final §6.7 |
-| 6.5 | KEPT | POST | `/appointments` | `appointment:create` | Book, or record a walk-in | routes-final §6.7 |
-| 6.6 | KEPT | GET | `/appointments/{appointment_id}` | `appointment:read` | Get an appointment | routes-final §6.7 |
-| 6.7 | KEPT | PATCH | `/appointments/{appointment_id}` | `appointment:update` | Change or move a booking | routes-final §6.7 |
-| 6.8 | KEPT | DELETE | `/appointments/{appointment_id}` | `appointment:delete` | Delete a booking | routes-final §6.7 |
-| 6.9 | KEPT | POST | `/appointments/{appointment_id}/restore` | `appointment:delete` | Undo a delete | routes-final §6.7 |
-| 6.10 | NEW | POST | `/appointments/{appointment_id}/confirm` | `appointment:update` | They said yes | routes-final §6.7 |
-| 6.11 | NEW | POST | `/appointments/{appointment_id}/check-in` | `appointment:update` | They arrived — stage `waiting` | routes-final §6.7 |
-| 6.12 | NEW | POST | `/appointments/{appointment_id}/complete` | `appointment:update` | The visit is done | routes-final §6.7 |
-| 6.13 | NEW | POST | `/appointments/{appointment_id}/no-show` | `appointment:update` | They did not come | routes-final §6.7 |
-| 6.14 | KEPT | POST | `/appointments/{appointment_id}/cancel` | `appointment:update` | Cancel with a reason | routes-final §6.7 |
-| 6.15 | KEPT | POST | `/appointments/{appointment_id}/reinstate` | `appointment:update` | Undo a cancel | routes-final §6.7 |
-| 6.16 | KEPT | POST | `/appointments/{appointment_id}/undo-check-in` | `appointment:update` | Undo a mistaken check-in | routes-final §6.7 |
-| 6.17 | KEPT | POST | `/appointments/{appointment_id}/copy` | `appointment:create` | Book again on another day | routes-final §6.7 |
-| 6.18 | CHANGED | POST | `/appointments/{appointment_id}/stage` | `appointment:update` | Move to a later floor stage | routes-final §6.7 |
-| 6.19 | CHANGED | POST | `/appointments/{appointment_id}/pause` | `appointment:update` | Pause the visit | routes-final §6.7 |
-| 6.20 | CHANGED | POST | `/appointments/{appointment_id}/resume` | `appointment:update` | Resume it | routes-final §6.7 |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 6.1 | KEPT | GET | `/appointments` | `appointment:read` | List appointments — and the clinic floor (`status=checked_in`) | routes-final §6.7 | `GET /api/v1/app/appointments` · #132 |
+| 6.2 | KEPT | GET | `/appointments/exports` | `appointment:export` | Download the list as CSV | routes-final §6.7 | `GET /api/v1/app/appointments/exports` · #132 |
+| 6.3 | KEPT | GET | `/appointments/slots` | `appointment:read` | Free slots for a day | routes-final §6.7 | `GET /api/v1/app/appointments/slots` · #132 |
+| 6.4 | KEPT | GET | `/appointments/daily-counts` | `appointment:read` | Counts per day and status | routes-final §6.7 | `GET /api/v1/app/appointments/daily-counts` · #132 |
+| 6.5 | KEPT | POST | `/appointments` | `appointment:create` | Book, or record a walk-in | routes-final §6.7 | `POST /api/v1/app/appointments` · #132 |
+| 6.6 | KEPT | GET | `/appointments/{appointment_id}` | `appointment:read` | Get an appointment | routes-final §6.7 | `GET /api/v1/app/appointments/:appointment_id` · #132 |
+| 6.7 | KEPT | PATCH | `/appointments/{appointment_id}` | `appointment:update` | Change or move a booking | routes-final §6.7 | `PATCH /api/v1/app/appointments/:appointment_id` · #132 |
+| 6.8 | KEPT | DELETE | `/appointments/{appointment_id}` | `appointment:delete` | Delete a booking | routes-final §6.7 | `DELETE /api/v1/app/appointments/:appointment_id` · #132 |
+| 6.9 | KEPT | POST | `/appointments/{appointment_id}/restore` | `appointment:delete` | Undo a delete | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/restore` · #132 |
+| 6.10 | NEW | POST | `/appointments/{appointment_id}/confirm` | `appointment:update` | They said yes | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/confirm` · #132 |
+| 6.11 | NEW | POST | `/appointments/{appointment_id}/check-in` | `appointment:update` | They arrived — stage `waiting` | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/check-in` · #132 |
+| 6.12 | NEW | POST | `/appointments/{appointment_id}/complete` | `appointment:update` | The visit is done | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/complete` · #132 |
+| 6.13 | NEW | POST | `/appointments/{appointment_id}/no-show` | `appointment:update` | They did not come | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/no-show` · #132 |
+| 6.14 | KEPT | POST | `/appointments/{appointment_id}/cancel` | `appointment:update` | Cancel with a reason | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/cancel` · #132 |
+| 6.15 | KEPT | POST | `/appointments/{appointment_id}/reinstate` | `appointment:update` | Undo a cancel | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/reinstate` · #132 |
+| 6.16 | KEPT | POST | `/appointments/{appointment_id}/undo-check-in` | `appointment:update` | Undo a mistaken check-in | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/undo-check-in` · #132 |
+| 6.17 | KEPT | POST | `/appointments/{appointment_id}/copy` | `appointment:create` | Book again on another day | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/copy` · #132 |
+| 6.18 | CHANGED | POST | `/appointments/{appointment_id}/stage` | `appointment:update` | Move to a later floor stage | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/stage` · #132 |
+| 6.19 | CHANGED | POST | `/appointments/{appointment_id}/pause` | `appointment:update` | Pause the visit | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/pause` · #132 |
+| 6.20 | CHANGED | POST | `/appointments/{appointment_id}/resume` | `appointment:update` | Resume it | routes-final §6.7 | `POST /api/v1/app/appointments/:appointment_id/resume` · #132 |
 
 ## 7. Patients
 

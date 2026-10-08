@@ -10,7 +10,6 @@ import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js'
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
 import { contact_message_templates } from '@/domains/app/sub-domains/contacts/contact-message-templates/contact-message-templates.schema.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
-import { visits } from '@/domains/app/sub-domains/visits/visits.schema.js';
 import { diagnoses } from '@/domains/app/sub-domains/diagnoses/diagnoses.schema.js';
 import { patient_clinical_notes } from '@/domains/app/sub-domains/patient-clinical-notes/patient-clinical-notes.schema.js';
 import { prescriptions } from '@/domains/app/sub-domains/prescriptions/prescriptions.schema.js';
@@ -97,7 +96,6 @@ export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   { table: prescriptions, label: 'app.prescriptions' },
   { table: patient_clinical_notes, label: 'app.patient_clinical_notes' },
   { table: diagnoses, label: 'app.diagnoses' },
-  { table: visits, label: 'app.visits' },
   { table: appointments, label: 'app.appointments' },
   { table: contact_message_templates, label: 'app.contact_message_templates' },
   { table: leads, label: 'app.leads' },

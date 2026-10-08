@@ -1,4 +1,4 @@
-import type { BaseRecordRules } from '@/domains/app/base-record.types.js';
+import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import {
   type BaseRecordRow,
   listChildRows,
@@ -14,6 +14,8 @@ import {
 } from './contacts.repository.js';
 import type { ContactPreviewOutput } from './contacts.types.js';
 import { LeadsRepository } from '@/domains/app/sub-domains/leads/leads.repository.js';
+import { AppointmentsRepository } from '@/domains/app/sub-domains/appointments/appointments.repository.js';
+import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
 
 /** One number of a write's `phones` (the DTO's defaults applied). */
 interface ContactPhoneInput {
@@ -73,6 +75,62 @@ function primaryPhoneOf(phones: readonly ContactPhoneInput[]): string {
   return phones.find((entry) => entry.is_primary)!.phone;
 }
 
+const leadsRepository = new LeadsRepository();
+const appointmentsRepository = new AppointmentsRepository();
+
+/** One appointment of a contact as its last or next visit. */
+type ContactVisit = {
+  id: string;
+  appointment_date: string;
+  start_time: string;
+  service_label: string;
+  status: string;
+};
+
+/** The organization's today (its time zone) — a contact's last and next visit split on it. */
+async function organizationToday(context: BaseRecordWriteContext): Promise<string> {
+  const { timezone } = await context.ports.organizationSettings(context.scope);
+  return calendarDateInTimeZone(timezone);
+}
+
+/** CT7: a live lead, patient file or appointment points at the contact. */
+async function isInUse(repository: ContactsRepository, contactId: number): Promise<boolean> {
+  return (
+    (await leadsRepository.hasLiveLeadForContact(contactId)) ||
+    (await repository.findPatientFileId(contactId)) !== null ||
+    (await appointmentsRepository.hasLiveAppointmentForContact(contactId))
+  );
+}
+
+/**
+ * Adds what a contact reads of the records about it to a page (4.A.6): its open lead (#131), its
+ * patient file and its last and next visit (#132) — one read each.
+ */
+async function decorateContacts(
+  repository: ContactsRepository,
+  outputs: Record<string, unknown>[],
+  context: BaseRecordWriteContext,
+): Promise<void> {
+  const ids = outputs.map((output) => String(output.id));
+  const openLeads = await leadsRepository.findOpenLeadsOfContacts(ids);
+  const patientFiles = await repository.findPatientFiles(ids);
+  const visits = await appointmentsRepository.findLastAndNextVisits({
+    contactPublicIds: ids,
+    today: await organizationToday(context),
+  });
+  for (const output of outputs) {
+    const id = String(output.id);
+    const lead = openLeads.get(id);
+    const patientFile = patientFiles.get(id);
+    output.open_lead_id = lead?.id ?? null;
+    output.open_lead_status = lead?.status ?? null;
+    output.patient_id = patientFile?.id ?? null;
+    output.patient_number = patientFile?.patient_number ?? null;
+    output.last_visit_on = visits.last.get(id)?.appointment_date ?? null;
+    output.next_visit_on = visits.next.get(id)?.appointment_date ?? null;
+  }
+}
+
 /**
  * The contacts rules (launch ROUTE #129, routes-final 4.A): the primary number's copy, the
  * household and its numbers (CT2, CT3), the numbers' soft delete with their contact, and the
@@ -88,14 +146,13 @@ function primaryPhoneOf(phones: readonly ContactPhoneInput[]): string {
  * - **Failure modes:** `ConflictError` (409 `contact_phone_exists`) for a number on another
  *   household; `ValidationError` (400 `household_contact_id`) for moving the first contact of a
  *   household that holds others (they would point at a contact of another household).
- *   A contact a live lead points at cannot be removed (`contact_in_use`, CT7); `open_lead_id` /
- *   `open_lead_status` and the preview's `open_lead` are its open lead (#131).
- * - **Notes:** the in-use guard's patient files and appointments, and the patient and visit fields,
- *   come with the rows that point at a contact — #132, #133 (D61).
+ *   A contact a live lead, patient file or appointment points at cannot be removed
+ *   (`contact_in_use`, CT7); the open lead (#131), the patient file and the last and next visit
+ *   (#132) are read per page; the preview's appointments only for `appointment:read` holders.
+ * - **Notes:** a patient file points at its contact once a check-in opens it (#132, D68); every
+ *   file does once #133 rebuilds the patient file.
  */
 export function createContactsRules(repository: ContactsRepository): BaseRecordRules {
-  const leadsRepository = new LeadsRepository();
-
   /** The household a named contact belongs to — its first contact. */
   const householdOf = async (contactId: number): Promise<number> => {
     const named = await repository.findById(contactId);
@@ -172,20 +229,11 @@ export function createContactsRules(repository: ContactsRepository): BaseRecordR
       }
     },
     prepareRemove: async (existing) => {
-      if (await leadsRepository.hasLiveLeadForContact(existing.id)) {
+      if (await isInUse(repository, existing.id)) {
         throw new ConflictError('errors:contactInUse').withReason('contact_in_use');
       }
     },
-    decorate: async (outputs) => {
-      const openLeads = await leadsRepository.findOpenLeadsOfContacts(
-        outputs.map((output) => String(output.id)),
-      );
-      for (const output of outputs) {
-        const lead = openLeads.get(String(output.id));
-        output.open_lead_id = lead?.id ?? null;
-        output.open_lead_status = lead?.status ?? null;
-      }
-    },
+    decorate: (outputs, context) => decorateContacts(repository, outputs, context),
     afterWrite: async (row, change, context) => {
       if (change.kind === 'delete') {
         await repository.setPhonesDeletedAt(row.id, row.deleted_at);
@@ -203,17 +251,36 @@ export function createContactsRules(repository: ContactsRepository): BaseRecordR
     views: {
       // The hover card: the contact (no `phones`) plus its open lead, patient file and the next and
       // last appointment — the patient file and the appointments null until #133 and #132 (D61).
-      preview: async ({ existing, present }) => {
+      preview: async ({ existing, present, context }) => {
         const [contact] = (await present([existing])) as ContactPreviewOutput[];
         const openLead = (await leadsRepository.findOpenLeadsOfContacts([existing.public_id])).get(
           existing.public_id,
         );
+        const patientFile = (await repository.findPatientFiles([existing.public_id])).get(
+          existing.public_id,
+        );
+        const visits = (await context.can(APP_PERMISSIONS.APPOINTMENT_READ))
+          ? await appointmentsRepository.findLastAndNextVisits({
+              contactPublicIds: [existing.public_id],
+              today: await organizationToday(context),
+            })
+          : null;
+        const appointmentOf = (visit: ContactVisit | undefined) =>
+          visit
+            ? {
+                id: visit.id,
+                appointment_date: visit.appointment_date,
+                start_time: visit.start_time,
+                service_label: visit.service_label,
+                status: visit.status,
+              }
+            : null;
         return {
           ...contact!,
           open_lead: openLead ?? null,
-          patient: null,
-          next_appointment: null,
-          last_appointment: null,
+          patient: patientFile ?? null,
+          next_appointment: appointmentOf(visits?.next.get(existing.public_id)),
+          last_appointment: appointmentOf(visits?.last.get(existing.public_id)),
         } satisfies ContactPreviewOutput;
       },
     },

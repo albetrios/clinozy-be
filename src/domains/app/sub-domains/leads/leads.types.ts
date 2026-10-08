@@ -42,20 +42,3 @@ export interface LeadOutput {
   created_at: string;
   updated_at: string;
 }
-
-/** A contact's columns a lead reads for its summary and the contact's activity fields. */
-export interface LeadContactSummary extends LeadContactOutput {
-  last_activity_at: Date | null;
-  last_sent_at: Date | null;
-  last_received_at: Date | null;
-}
-
-/**
- * How a lead list's `q` reads (L7): the contact's search text, a contact number (`C-12345`) and a
- * lead number (`#2371`) — a plain number may be a lead number and a phone's digits at once.
- */
-export interface LeadSearch {
-  text?: string | undefined;
-  contactNumber?: number | undefined;
-  leadNumber?: number | undefined;
-}

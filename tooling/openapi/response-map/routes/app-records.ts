@@ -287,11 +287,6 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.appointmentsRecordSchema, schemas.appointmentsRecordExample),
     example: null,
   },
-  'POST /api/v1/app/appointments/{appointment_id}/status': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.appointmentsRecordSchema, schemas.appointmentsRecordExample),
-    example: null,
-  },
   'POST /api/v1/app/appointments/{appointment_id}/cancel': {
     statusCode: 200,
     schema: wrapSuccess(schemas.appointmentsRecordSchema, schemas.appointmentsRecordExample),
@@ -308,6 +303,41 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     example: null,
   },
   'POST /api/v1/app/appointments/{appointment_id}/undo-check-in': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.appointmentsRecordSchema, schemas.appointmentsRecordExample),
+    example: null,
+  },
+  'POST /api/v1/app/appointments/{appointment_id}/confirm': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.appointmentsRecordSchema, schemas.appointmentsRecordExample),
+    example: null,
+  },
+  'POST /api/v1/app/appointments/{appointment_id}/check-in': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.appointmentsRecordSchema, schemas.appointmentsRecordExample),
+    example: null,
+  },
+  'POST /api/v1/app/appointments/{appointment_id}/complete': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.appointmentsRecordSchema, schemas.appointmentsRecordExample),
+    example: null,
+  },
+  'POST /api/v1/app/appointments/{appointment_id}/no-show': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.appointmentsRecordSchema, schemas.appointmentsRecordExample),
+    example: null,
+  },
+  'POST /api/v1/app/appointments/{appointment_id}/stage': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.appointmentsRecordSchema, schemas.appointmentsRecordExample),
+    example: null,
+  },
+  'POST /api/v1/app/appointments/{appointment_id}/pause': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.appointmentsRecordSchema, schemas.appointmentsRecordExample),
+    example: null,
+  },
+  'POST /api/v1/app/appointments/{appointment_id}/resume': {
     statusCode: 200,
     schema: wrapSuccess(schemas.appointmentsRecordSchema, schemas.appointmentsRecordExample),
     example: null,
@@ -330,36 +360,6 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
   'POST /api/v1/app/appointments/{appointment_id}/restore': {
     statusCode: 200,
     schema: wrapSuccess(schemas.appointmentsRecordSchema, schemas.appointmentsRecordExample),
-    example: null,
-  },
-  'GET /api/v1/app/visits': {
-    statusCode: 200,
-    schema: wrapPaginated(schemas.visitsRecordSchema, [schemas.visitsRecordExample]),
-    example: null,
-  },
-  'GET /api/v1/app/visits/{visit_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.visitsRecordSchema, schemas.visitsRecordExample),
-    example: null,
-  },
-  'PATCH /api/v1/app/visits/{visit_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.visitsRecordSchema, schemas.visitsRecordExample),
-    example: null,
-  },
-  'POST /api/v1/app/visits/{visit_id}/stage': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.visitsRecordSchema, schemas.visitsRecordExample),
-    example: null,
-  },
-  'POST /api/v1/app/visits/{visit_id}/pause': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.visitsRecordSchema, schemas.visitsRecordExample),
-    example: null,
-  },
-  'POST /api/v1/app/visits/{visit_id}/resume': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.visitsRecordSchema, schemas.visitsRecordExample),
     example: null,
   },
   'GET /api/v1/app/diagnoses': {

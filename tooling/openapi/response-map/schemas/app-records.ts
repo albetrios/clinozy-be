@@ -718,69 +718,59 @@ export const leadsRecordExample = {
   updated_at: '2026-10-07T10:30:00.000Z',
 };
 
-/** `AppointmentOutput`. */
+/** `AppointmentOutput` — one booking and, once checked in, its floor stage (launch #132, routes-final 6.6). */
 export const appointmentsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'appt_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    appointment_number: {
-      type: 'integer',
+    id: { type: 'string', example: 'appt_k7x9m2pqr4w8n1v3a1b2c' },
+    appointment_number: { type: 'integer', description: 'Shown as "#2841"' },
+    contact_id: { type: 'string', example: 'con_k7x9m2pqr4w8n1v3a1b2c' },
+    contact: {
+      type: 'object',
+      nullable: true,
+      description: "The contact's summary, for lists (A1)",
+      properties: {
+        id: { type: 'string' },
+        contact_number: { type: 'integer' },
+        first_name: { type: 'string' },
+        last_name: { type: 'string', nullable: true },
+        primary_phone: { type: 'string', example: '+919825044120' },
+      },
     },
     patient_id: {
       type: 'string',
       nullable: true,
+      description: "The contact's patient file — read-only",
     },
-    lead_id: {
-      type: 'string',
-      nullable: true,
-    },
-    branch_id: {
-      type: 'string',
-    },
+    lead_id: { type: 'string', nullable: true, description: "The contact's open lead — read-only" },
+    branch_id: { type: 'string' },
     type: {
       type: 'string',
       enum: ['consultation', 'follow_up', 'treatment', 'package_session', 'other'],
     },
-    offering_id: {
-      type: 'string',
-      nullable: true,
-    },
-    service_label: {
-      type: 'string',
-    },
-    doctor_membership_id: {
-      type: 'string',
-    },
-    therapist_membership_id: {
-      type: 'string',
-      nullable: true,
-    },
-    branch_room_id: {
-      type: 'string',
-      nullable: true,
-    },
-    branch_machine_id: {
-      type: 'string',
-      nullable: true,
-    },
-    appointment_date: {
-      type: 'string',
-      format: 'date',
-    },
-    start_time: {
-      type: 'string',
-      example: '10:00',
-    },
-    duration_minutes: {
-      type: 'integer',
-    },
+    offering_id: { type: 'string', nullable: true },
+    service_label: { type: 'string', minLength: 1, maxLength: 120 },
+    doctor_membership_id: { type: 'string' },
+    therapist_membership_id: { type: 'string', nullable: true },
+    branch_room_id: { type: 'string', nullable: true },
+    branch_machine_id: { type: 'string', nullable: true },
+    appointment_date: { type: 'string', format: 'date' },
+    start_time: { type: 'string', example: '10:30' },
+    end_time: { type: 'string', example: '11:00' },
+    duration_minutes: { type: 'integer', minimum: 5, maximum: 240, multipleOf: 5 },
     status: {
       type: 'string',
       enum: ['scheduled', 'confirmed', 'checked_in', 'completed', 'cancelled', 'no_show'],
     },
+    visit_stage: {
+      type: 'string',
+      enum: ['waiting', 'with_doctor', 'treatment', 'checkout', 'pharmacy'],
+      nullable: true,
+      description: 'Only while checked in (A10)',
+    },
+    visit_stage_changed_at: { type: 'string', format: 'date-time', nullable: true },
+    visit_paused_at: { type: 'string', format: 'date-time', nullable: true },
+    is_walk_in: { type: 'boolean' },
     cancel_reason: {
       type: 'string',
       enum: [
@@ -794,203 +784,78 @@ export const appointmentsRecordSchema = {
       ],
       nullable: true,
     },
-    cancel_note: {
-      type: 'string',
-      nullable: true,
-    },
-    rescheduled_from: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
-    },
-    reason: {
-      type: 'string',
-      nullable: true,
-    },
-    notes: {
-      type: 'string',
-      nullable: true,
-    },
-    follow_up_at: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
-    },
+    cancel_note: { type: 'string', nullable: true },
     checked_in_at: {
       type: 'string',
       format: 'date-time',
       nullable: true,
+      description: "The visit's start",
     },
     completed_at: {
       type: 'string',
       format: 'date-time',
       nullable: true,
+      description: "The visit's end",
     },
-    copied_from_appointment_id: {
-      type: 'string',
-      nullable: true,
-    },
+    rescheduled_from: { type: 'string', format: 'date-time', nullable: true },
+    move_count: { type: 'integer' },
+    reason: { type: 'string', maxLength: 160, nullable: true },
+    notes: { type: 'string', maxLength: 2000, nullable: true },
+    follow_up_at: { type: 'string', format: 'date-time', nullable: true },
+    copied_from_appointment_id: { type: 'string', nullable: true },
     reminder_status: {
       type: 'string',
       enum: ['not_sent', 'confirm_requested', 'reminder_queued', 'reminder_sent', 'failed'],
     },
-    is_confirmed_by_reply: {
-      type: 'boolean',
-    },
-    move_count: {
-      type: 'integer',
-    },
-    is_walk_in: {
-      type: 'boolean',
-    },
-    patient_package_id: {
-      type: 'string',
-      nullable: true,
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    is_confirmed_by_reply: { type: 'boolean' },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
 /** Example `AppointmentOutput`. */
 export const appointmentsRecordExample = {
   id: 'appt_k7x9m2pqr4w8n1v3a1b2c',
-  appointment_number: 12,
-  patient_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  lead_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  branch_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  type: 'consultation',
-  offering_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  service_label: 'Sample service label',
-  doctor_membership_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  therapist_membership_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  branch_room_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  branch_machine_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  appointment_date: '2026-10-08',
-  start_time: '10:00',
-  duration_minutes: 5,
-  status: 'scheduled',
-  cancel_reason: 'patient_asked',
-  cancel_note: 'Sample cancel note',
-  rescheduled_from: '2026-10-08T10:00:00+05:30',
-  reason: 'Sample reason',
-  notes: 'Sample notes',
-  follow_up_at: '2026-10-08T10:00:00+05:30',
-  checked_in_at: '2026-10-08T10:00:00+05:30',
-  completed_at: '2026-10-08T10:00:00+05:30',
-  copied_from_appointment_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  reminder_status: 'not_sent',
-  is_confirmed_by_reply: true,
-  move_count: 1,
-  is_walk_in: true,
-  patient_package_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
-};
-
-/** `VisitOutput`. */
-export const visitsRecordSchema = {
-  type: 'object',
-  properties: {
-    id: {
-      type: 'string',
-      example: 'vis_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    appointment_id: {
-      type: 'string',
-    },
-    patient_id: {
-      type: 'string',
-    },
-    stage: {
-      type: 'string',
-      enum: ['waiting', 'with_doctor', 'treatment', 'checkout', 'pharmacy', 'done'],
-    },
-    stage_changed_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    started_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    paused_at: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
-    },
-    completed_at: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
-    },
-    last_saved_at: {
-      type: 'string',
-      format: 'date-time',
-      nullable: true,
-    },
-    consult_complaint: {
-      type: 'string',
-      nullable: true,
-    },
-    consult_findings: {
-      type: 'string',
-      nullable: true,
-    },
-    consult_plan: {
-      type: 'string',
-      nullable: true,
-    },
-    diagnoses: {
-      type: 'array',
-      items: {
-        type: 'string',
-      },
-    },
-    is_safety_consent_checked: {
-      type: 'boolean',
-    },
-    is_safety_before_photos_taken: {
-      type: 'boolean',
-    },
-    is_safety_allergies_checked: {
-      type: 'boolean',
-    },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+  appointment_number: 2841,
+  contact_id: 'con_k7x9m2pqr4w8n1v3a1b2c',
+  contact: {
+    id: 'con_k7x9m2pqr4w8n1v3a1b2c',
+    contact_number: 12345,
+    first_name: 'Riya',
+    last_name: 'Shah',
+    primary_phone: '+919825044120',
   },
-};
-
-/** Example `VisitOutput`. */
-export const visitsRecordExample = {
-  id: 'vis_k7x9m2pqr4w8n1v3a1b2c',
-  appointment_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  patient_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  stage: 'waiting',
-  stage_changed_at: '2026-10-08T10:00:00+05:30',
-  started_at: '2026-10-08T10:00:00+05:30',
-  paused_at: '2026-10-08T10:00:00+05:30',
-  completed_at: '2026-10-08T10:00:00+05:30',
-  last_saved_at: '2026-10-08T10:00:00+05:30',
-  consult_complaint: 'Sample consult complaint',
-  consult_findings: 'Sample consult findings',
-  consult_plan: 'Sample consult plan',
-  diagnoses: ['sample'],
-  is_safety_consent_checked: true,
-  is_safety_before_photos_taken: true,
-  is_safety_allergies_checked: true,
+  patient_id: null,
+  lead_id: 'lead_k7x9m2pqr4w8n1v3a1b2c',
+  branch_id: 'brn_k7x9m2pqr4w8n1v3a1b2c',
+  type: 'consultation',
+  offering_id: null,
+  service_label: 'Consultation',
+  doctor_membership_id: 'mem_a1s2d3f4g5h6j7k8l9z0x',
+  therapist_membership_id: null,
+  branch_room_id: null,
+  branch_machine_id: null,
+  appointment_date: '2026-10-09',
+  start_time: '10:30',
+  end_time: '11:00',
+  duration_minutes: 30,
+  status: 'scheduled',
+  visit_stage: null,
+  visit_stage_changed_at: null,
+  visit_paused_at: null,
+  is_walk_in: false,
+  cancel_reason: null,
+  cancel_note: null,
+  checked_in_at: null,
+  completed_at: null,
+  rescheduled_from: null,
+  move_count: 0,
+  reason: null,
+  notes: null,
+  follow_up_at: null,
+  copied_from_appointment_id: null,
+  reminder_status: 'not_sent',
+  is_confirmed_by_reply: false,
   created_at: '2026-10-07T10:30:00.000Z',
   updated_at: '2026-10-07T10:30:00.000Z',
 };

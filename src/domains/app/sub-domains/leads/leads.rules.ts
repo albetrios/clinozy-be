@@ -6,12 +6,14 @@ import type {
   BaseRecordWriteContext,
 } from '@/domains/app/base-record.types.js';
 import { ContactsRepository } from '@/domains/app/sub-domains/contacts/contacts.repository.js';
+import { contactAwaitsReply } from '@/domains/app/sub-domains/contacts/contacts.serializer.js';
 import { ContactMembersRepository } from '@/domains/app/sub-domains/contacts/contact-members/contact-members.repository.js';
 import { ConflictError, ForbiddenError } from '@/shared/errors/index.js';
 import { toInstant } from '@/shared/utils/validation/record-fields.util.js';
 import { LEAD_OPEN_STATUS_VALUES, LEAD_STATUS } from './leads.constants.js';
 import type { LeadsRepository } from './leads.repository.js';
-import type { LeadContactSummary } from './leads.types.js';
+
+const contactsRepository = new ContactsRepository();
 
 /** A day in milliseconds (the lead hold is counted in days). */
 const DAY_MILLISECONDS = 86_400_000;
@@ -19,13 +21,6 @@ const DAY_MILLISECONDS = 86_400_000;
 /** Whether a status is an open one (L6). */
 function isOpen(status: unknown): boolean {
   return (LEAD_OPEN_STATUS_VALUES as readonly unknown[]).includes(status);
-}
-
-/** A received entry newer than the team's last sent one — the contact's "awaiting reply" (M3). */
-function isAwaitingReply(contact: LeadContactSummary): boolean {
-  const received = contact.last_received_at;
-  const sent = contact.last_sent_at;
-  return received !== null && (sent === null || received > sent);
 }
 
 /** The caller's membership in the organization — 403 for a caller who is not a member. */
@@ -99,22 +94,14 @@ async function releaseLead({
 
 /**
  * Adds what a lead reads of others to a page (L1, M3, L8): the contact summary, the contact's last
- * activity and reply state, and the patient file — one read each.
+ * activity and reply state, and the contact's patient file — one read each.
  */
-async function decorateLeads(
-  repository: LeadsRepository,
-  outputs: Record<string, unknown>[],
-): Promise<void> {
+async function decorateLeads(outputs: Record<string, unknown>[]): Promise<void> {
+  const contactIds = [...new Set(outputs.map((output) => String(output.contact_id)))];
   const contacts = new Map(
-    (
-      await repository.findContactSummaries([
-        ...new Set(outputs.map((output) => String(output.contact_id))),
-      ])
-    ).map((contact) => [contact.id, contact]),
+    (await contactsRepository.findSummaries(contactIds)).map((contact) => [contact.id, contact]),
   );
-  const patients = await repository.findPatientPublicIds(
-    outputs.map((output) => String(output.id)),
-  );
+  const patientFiles = await contactsRepository.findPatientFiles(contactIds);
   for (const output of outputs) {
     const contact = contacts.get(String(output.contact_id));
     if (contact) {
@@ -126,9 +113,9 @@ async function decorateLeads(
       } = contact;
       output.contact = summary;
       output.last_activity_at = toInstant(last_activity_at);
-      output.is_awaiting_reply = isAwaitingReply(contact);
+      output.is_awaiting_reply = contactAwaitsReply(contact);
     }
-    output.patient_id = patients.get(String(output.id)) ?? null;
+    output.patient_id = patientFiles.get(String(output.contact_id))?.id ?? null;
   }
 }
 
@@ -151,7 +138,6 @@ async function decorateLeads(
  *   `lead_not_yours`.
  */
 export function createLeadsRules(repository: LeadsRepository): BaseRecordRules {
-  const contactsRepository = new ContactsRepository();
   const contactMembersRepository = new ContactMembersRepository();
 
   /** Refuses a second open lead for the contact, naming the one it has (L6). */
@@ -237,7 +223,7 @@ export function createLeadsRules(repository: LeadsRepository): BaseRecordRules {
       if (change.kind === 'delete') return;
       await settleTeam(row, change.before, context);
     },
-    decorate: (outputs) => decorateLeads(repository, outputs),
+    decorate: decorateLeads,
     actions: { claim: claimLead, release: releaseLead },
   };
 }

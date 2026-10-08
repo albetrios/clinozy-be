@@ -83,7 +83,6 @@ export const EXPECTED_FORCE_RLS_TABLES: ForceRlsTableRef[] = [
   { schemaName: 'app', tableName: 'task_rule_settings' },
   { schemaName: 'app', tableName: 'tasks' },
   { schemaName: 'app', tableName: 'treatments' },
-  { schemaName: 'app', tableName: 'visits' },
   { schemaName: 'audit', tableName: 'dead_letter_jobs' },
   { schemaName: 'audit', tableName: 'logs' },
   { schemaName: 'audit', tableName: 'outbox' },

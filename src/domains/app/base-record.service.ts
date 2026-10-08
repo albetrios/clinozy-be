@@ -605,7 +605,8 @@ export class BaseRecordService<Output> {
             'record_restore_conflict',
           );
         }
-        throw error;
+        // A table's own exclusion conflict (a slot booked meanwhile — `slot_taken`, A3).
+        restored = await this.mapConflicts<BaseRecordRow | null>(() => Promise.reject(error));
       }
       if (!restored) throw new NotFoundError(this.descriptor.label);
       // A rule's own restore writes (a contact's numbers) may clash too — the table's 409, not a 500.

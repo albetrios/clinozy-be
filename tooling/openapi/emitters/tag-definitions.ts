@@ -104,7 +104,6 @@ export function buildTagDefinitions(
     'Patient',
     'Lead',
     'Appointment',
-    'Visit',
     'Patient file',
     'Invoice',
     'Payment',

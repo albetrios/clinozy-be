@@ -12,7 +12,6 @@ import { leadsRoutes } from './sub-domains/leads/leads.routes.js';
 import { contactActivitiesRoutes } from './sub-domains/contacts/contact-activities/contact-activities.routes.js';
 import { contactMessageTemplatesRoutes } from './sub-domains/contacts/contact-message-templates/contact-message-templates.routes.js';
 import { appointmentsRoutes } from './sub-domains/appointments/appointments.routes.js';
-import { visitsRoutes } from './sub-domains/visits/visits.routes.js';
 import { diagnosesRoutes } from './sub-domains/diagnoses/diagnoses.routes.js';
 import { patientClinicalNotesRoutes } from './sub-domains/patient-clinical-notes/patient-clinical-notes.routes.js';
 import { prescriptionsRoutes } from './sub-domains/prescriptions/prescriptions.routes.js';
@@ -64,7 +63,6 @@ export async function registerAppRecordRoutes(
   await app.register(patientsRoutes(services.patientsService));
   await app.register(leadsRoutes(services.leadsService));
   await app.register(appointmentsRoutes(services.appointmentsService));
-  await app.register(visitsRoutes(services.visitsService));
   await app.register(diagnosesRoutes(services.diagnosesService));
   await app.register(patientClinicalNotesRoutes(services.patientClinicalNotesService));
   await app.register(prescriptionsRoutes(services.prescriptionsService));

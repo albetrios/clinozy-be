@@ -23,8 +23,6 @@ import { ContactMessageTemplatesRepository } from './sub-domains/contacts/contac
 import { ContactMessageTemplatesService } from './sub-domains/contacts/contact-message-templates/contact-message-templates.service.js';
 import { AppointmentsRepository } from './sub-domains/appointments/appointments.repository.js';
 import { AppointmentsService } from './sub-domains/appointments/appointments.service.js';
-import { VisitsRepository } from './sub-domains/visits/visits.repository.js';
-import { VisitsService } from './sub-domains/visits/visits.service.js';
 import { DiagnosesRepository } from './sub-domains/diagnoses/diagnoses.repository.js';
 import { DiagnosesService } from './sub-domains/diagnoses/diagnoses.service.js';
 import { PatientClinicalNotesRepository } from './sub-domains/patient-clinical-notes/patient-clinical-notes.repository.js';
@@ -106,7 +104,6 @@ export type AppRecordServices = {
   patientsService: PatientsService;
   leadsService: LeadsService;
   appointmentsService: AppointmentsService;
-  visitsService: VisitsService;
   diagnosesService: DiagnosesService;
   patientClinicalNotesService: PatientClinicalNotesService;
   prescriptionsService: PrescriptionsService;
@@ -190,7 +187,6 @@ export function createAppRecordServices(
       placeOfferingContactServices.contactsService,
     ),
     appointmentsService: new AppointmentsService(organizationService, new AppointmentsRepository()),
-    visitsService: new VisitsService(organizationService, new VisitsRepository()),
     diagnosesService: new DiagnosesService(organizationService, new DiagnosesRepository()),
     patientClinicalNotesService: new PatientClinicalNotesService(
       organizationService,

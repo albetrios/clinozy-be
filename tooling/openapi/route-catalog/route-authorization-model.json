@@ -350,10 +350,6 @@
     "model": "organization",
     "verifyNoMutation": true
   },
-  "POST /api/v1/app/appointments/:appointment_id/status": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
   "POST /api/v1/app/appointments/:appointment_id/cancel": {
     "model": "organization",
     "verifyNoMutation": true
@@ -371,25 +367,6 @@
     "verifyNoMutation": true
   },
   "POST /api/v1/app/appointments/:appointment_id/restore": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "GET /api/v1/app/visits/:visit_id": {
-    "model": "organization"
-  },
-  "PATCH /api/v1/app/visits/:visit_id": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "POST /api/v1/app/visits/:visit_id/stage": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "POST /api/v1/app/visits/:visit_id/pause": {
-    "model": "organization",
-    "verifyNoMutation": true
-  },
-  "POST /api/v1/app/visits/:visit_id/resume": {
     "model": "organization",
     "verifyNoMutation": true
   },
@@ -1023,6 +1000,34 @@
     "model": "organization"
   },
   "POST /api/v1/app/contacts/:contact_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/check-in": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/complete": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/confirm": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/no-show": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/pause": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/resume": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/stage": {
     "model": "organization",
     "verifyNoMutation": true
   }

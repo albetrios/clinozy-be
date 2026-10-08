@@ -57,13 +57,9 @@ import {
   cancelAppointmentDto as appCancelAppointmentDto,
   copyAppointmentDto as appCopyAppointmentDto,
   CreateAppointmentDto as appCreateAppointmentDto,
-  statusAppointmentDto as appStatusAppointmentDto,
+  stageAppointmentDto as appStageAppointmentDto,
   UpdateAppointmentDto as appUpdateAppointmentDto,
 } from '@/domains/app/sub-domains/appointments/appointments.dto.js';
-import {
-  stageVisitDto as appStageVisitDto,
-  UpdateVisitDto as appUpdateVisitDto,
-} from '@/domains/app/sub-domains/visits/visits.dto.js';
 import {
   CreateDiagnosisDto as appCreateDiagnosisDto,
   UpdateDiagnosisDto as appUpdateDiagnosisDto,
@@ -426,10 +422,8 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'POST /api/v1/app/patients/{patient_id}/clinical-notes': appCreatePatientClinicalNoteDto,
   'PATCH /api/v1/app/diagnoses/{diagnosis_id}': appUpdateDiagnosisDto,
   'POST /api/v1/app/diagnoses': appCreateDiagnosisDto,
-  'POST /api/v1/app/visits/{visit_id}/stage': appStageVisitDto,
-  'PATCH /api/v1/app/visits/{visit_id}': appUpdateVisitDto,
   'POST /api/v1/app/appointments/{appointment_id}/cancel': appCancelAppointmentDto,
-  'POST /api/v1/app/appointments/{appointment_id}/status': appStatusAppointmentDto,
+  'POST /api/v1/app/appointments/{appointment_id}/stage': appStageAppointmentDto,
   'PATCH /api/v1/app/appointments/{appointment_id}': appUpdateAppointmentDto,
   'POST /api/v1/app/appointments': appCreateAppointmentDto,
   'PATCH /api/v1/app/contact-message-templates/{contact_message_template_id}':

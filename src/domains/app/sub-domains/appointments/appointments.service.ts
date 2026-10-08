@@ -1,36 +1,69 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
+import type { OrganizationPrincipalDatabaseScope } from '@/infrastructure/database/contexts/database-context.js';
+import { withAppDatabaseContext } from '@/infrastructure/database/contexts/database-context.js';
 import { BaseRecordService } from '@/domains/app/base-record.service.js';
-import { ValidationError } from '@/shared/errors/index.js';
-import { appointments } from './appointments.schema.js';
-import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
-import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
-import { branch_machines } from '@/domains/app/sub-domains/branches/branch-machines/branch-machines.schema.js';
+import type { BaseRecordVisibility } from '@/domains/app/base-record.types.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
-import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
-import { patient_packages } from '@/domains/app/sub-domains/patient-packages/patient-packages.schema.js';
-import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
+import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
+import { branch_machines } from '@/domains/app/sub-domains/branches/branch-machines/branch-machines.schema.js';
 import { branch_rooms } from '@/domains/app/sub-domains/branches/branch-rooms/branch-rooms.schema.js';
+import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
+import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
+import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
+import {
+  APPOINTMENT_MOVABLE_STATUS_VALUES,
+  APPOINTMENT_SLOT_CONSTRAINTS,
+  APPOINTMENT_STATUS,
+  APPOINTMENT_VISIT_STAGE_VALUES,
+} from './appointments.constants.js';
+import { copyAppointmentDto } from './appointments.dto.js';
 import type { AppointmentsRepository } from './appointments.repository.js';
+import { createAppointmentsRules } from './appointments.rules.js';
+import { appointments } from './appointments.schema.js';
 import { serializeAppointment } from './appointments.serializer.js';
 import type { AppointmentOutput } from './appointments.types.js';
-import { appointmentsRules } from './appointments.rules.js';
 import {
   validateCancelAppointment,
+  validateCopiedAppointment,
   validateCreateAppointment,
   validateListAppointmentsQuery,
-  validateStatusAppointment,
+  validateStageAppointment,
   validateUpdateAppointment,
 } from './appointments.validator.js';
 
+/** What leaving the floor clears — the stage and its times (A10). */
+const OFF_THE_FLOOR = { visit_stage: null, visit_stage_changed_at: null, visit_paused_at: null };
+
+/** The `slot_taken` message of each resource the exclusion constraints guard (A3). */
+const SLOT_TAKEN_KEYS: Readonly<Record<string, string>> = {
+  doctor: 'errors:slotTakenDoctor',
+  room: 'errors:slotTakenRoom',
+  machine: 'errors:slotTakenMachine',
+};
+
+/** Each exclusion constraint → its `slot_taken` 409, naming the resource (A3). */
+const SLOT_TAKEN_CONFLICTS = Object.fromEntries(
+  Object.entries(APPOINTMENT_SLOT_CONSTRAINTS).map(([constraint, resource]) => [
+    constraint,
+    { key: SLOT_TAKEN_KEYS[resource] ?? 'errors:conflict', reason: 'slot_taken' },
+  ]),
+);
+
 /**
- * Appointments of the active organization (launch ROUTE #21): list, read, create, update,
- * soft-delete with a reason and restore, and the lifecycle actions `status`, `cancel`, `reinstate`, `undo-check-in`.
+ * Appointments of the active organization (launch ROUTE #132, routes-final 6) — the visit merged
+ * in: book, walk in, list (and the floor), read, change or move, delete and restore, the lifecycle
+ * (confirm, check in, complete, no-show, cancel, reinstate, undo check-in), copy, and the floor
+ * stage, pause and resume; the calendar's slots and daily counts.
  *
  * @remarks
- * - **Algorithm:** the shared {@link BaseRecordService} with this table's parsing, references and
- *   serializer; every call runs in the caller's organization context.
- * - **Failure modes:** `NotFoundError('Appointment')`; `ValidationError` for a bad body or a
- *   reference that is no live record here; `ConflictError` for a stale save or a disallowed action.
+ * - **Algorithm:** the shared {@link BaseRecordService} with this table's parsing, references,
+ *   transitions, rules and serializer; every call runs in the caller's organization context. The
+ *   exclusion constraints map to `409 slot_taken` naming the doctor, room or machine (A3). Copy
+ *   reads the booking and books again through the create path — every check and conflict (A7).
+ *   Branch-scoped on `branch_id` (D9).
+ * - **Failure modes:** `NotFoundError('Appointment')`; `ValidationError` for a bad body or query
+ *   or a reference that is no live record here; `ConflictError` for the slot rules, a clash, a
+ *   status move not allowed, a stale save or a restore of a live booking.
  */
 export class AppointmentsService extends BaseRecordService<AppointmentOutput> {
   constructor(organizationService: OrganizationService, repository: AppointmentsRepository) {
@@ -38,12 +71,12 @@ export class AppointmentsService extends BaseRecordService<AppointmentOutput> {
       label: 'Appointment',
       repository,
       parseCreate: validateCreateAppointment,
+      namedCreates: { copy: validateCopiedAppointment },
       parseUpdate: validateUpdateAppointment,
       parseList: validateListAppointmentsQuery,
       serialize: serializeAppointment,
       references: [
-        { field: 'patient_id', table: patients, label: 'patient' },
-        { field: 'lead_id', table: leads, label: 'lead' },
+        { field: 'contact_id', table: contacts, label: 'contact' },
         { field: 'branch_id', table: branches, label: 'branch' },
         { field: 'offering_id', table: offerings, label: 'offering' },
         { field: 'doctor_membership_id', table: memberships, label: 'team member' },
@@ -51,43 +84,94 @@ export class AppointmentsService extends BaseRecordService<AppointmentOutput> {
         { field: 'branch_room_id', table: branch_rooms, label: 'room' },
         { field: 'branch_machine_id', table: branch_machines, label: 'machine' },
         { field: 'copied_from_appointment_id', table: appointments, label: 'appointment' },
-        { field: 'patient_package_id', table: patient_packages, label: 'patient package' },
       ],
       branchColumn: 'branch_id',
-      checkValues: (values) => {
-        if (
-          (values.patient_id === undefined || values.patient_id === null) ===
-          (values.lead_id === undefined || values.lead_id === null)
-        ) {
-          throw new ValidationError(
-            'errors:validation.recordFieldRule',
-            { field: 'patient_id' },
-            {
-              patient_id: ['Name exactly one of patient_id or lead_id'],
-            },
-          );
-        }
-      },
+      conflicts: SLOT_TAKEN_CONFLICTS,
       transitions: {
-        status: {
-          from: ['scheduled', 'confirmed', 'checked_in'],
-          parse: validateStatusAppointment,
+        confirm: {
+          from: [APPOINTMENT_STATUS.SCHEDULED],
+          set: { status: APPOINTMENT_STATUS.CONFIRMED },
+        },
+        'check-in': {
+          from: APPOINTMENT_MOVABLE_STATUS_VALUES,
+          set: {
+            status: APPOINTMENT_STATUS.CHECKED_IN,
+            visit_stage: APPOINTMENT_VISIT_STAGE_VALUES[0],
+          },
+          stamp: ['checked_in_at', 'visit_stage_changed_at'],
+        },
+        complete: {
+          from: [APPOINTMENT_STATUS.CHECKED_IN],
+          set: { status: APPOINTMENT_STATUS.COMPLETED, ...OFF_THE_FLOOR },
+          stamp: ['completed_at'],
+        },
+        'no-show': {
+          from: APPOINTMENT_MOVABLE_STATUS_VALUES,
+          set: { status: APPOINTMENT_STATUS.NO_SHOW },
         },
         cancel: {
-          from: ['scheduled', 'confirmed'],
-          set: { status: 'cancelled' },
+          from: APPOINTMENT_MOVABLE_STATUS_VALUES,
+          set: { status: APPOINTMENT_STATUS.CANCELLED },
           parse: validateCancelAppointment,
         },
         reinstate: {
-          from: ['cancelled'],
-          set: { status: 'scheduled', cancel_reason: null, cancel_note: null },
+          from: [APPOINTMENT_STATUS.CANCELLED],
+          set: { status: APPOINTMENT_STATUS.SCHEDULED, cancel_reason: null, cancel_note: null },
         },
         'undo-check-in': {
-          from: ['checked_in'],
-          set: { status: 'confirmed', checked_in_at: null },
+          from: [APPOINTMENT_STATUS.CHECKED_IN],
+          set: { status: APPOINTMENT_STATUS.CONFIRMED, checked_in_at: null, ...OFF_THE_FLOOR },
         },
+        stage: {
+          from: [APPOINTMENT_STATUS.CHECKED_IN],
+          stamp: ['visit_stage_changed_at'],
+          parse: validateStageAppointment,
+        },
+        pause: { from: [APPOINTMENT_STATUS.CHECKED_IN], stamp: ['visit_paused_at'] },
+        resume: { from: [APPOINTMENT_STATUS.CHECKED_IN], set: { visit_paused_at: null } },
       },
-      ...appointmentsRules,
+      ...createAppointmentsRules(repository),
+    });
+  }
+
+  /**
+   * Books again on another day (route 17, A7): the booking's contact, branch, people, places,
+   * service and length at the new `appointment_date` and `start_time`, through the create path —
+   * the slot rules and the clash 409s — with `copied_from_appointment_id`. Works on any live booking.
+   */
+  async copy(
+    scope: OrganizationPrincipalDatabaseScope,
+    publicId: string,
+    body: unknown,
+    actingUserPublicId: string | undefined,
+    visibility?: BaseRecordVisibility,
+  ): Promise<AppointmentOutput> {
+    const { appointment_date, start_time } = parseWithSchema(copyAppointmentDto, body ?? {});
+    return withAppDatabaseContext(scope, async () => {
+      const source = await this.get(scope, publicId, actingUserPublicId, visibility);
+      return this.create(
+        scope,
+        {
+          contact_id: source.contact_id,
+          branch_id: source.branch_id,
+          doctor_membership_id: source.doctor_membership_id,
+          appointment_date,
+          start_time,
+          type: source.type,
+          offering_id: source.offering_id,
+          service_label: source.service_label,
+          therapist_membership_id: source.therapist_membership_id,
+          branch_room_id: source.branch_room_id,
+          branch_machine_id: source.branch_machine_id,
+          duration_minutes: source.duration_minutes,
+          reason: source.reason,
+          copied_from_appointment_id: source.id,
+        },
+        actingUserPublicId,
+        undefined,
+        visibility,
+        'copy',
+      );
     });
   }
 }

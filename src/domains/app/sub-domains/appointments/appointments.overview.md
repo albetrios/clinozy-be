@@ -6,40 +6,56 @@ Parent: [app](../../app.overview.md)
 
 ## Purpose
 
-A booked slot for a patient or a lead with a doctor, in a branch — a room and a machine may be named (D28) (launch ROUTE #21). Table `app.appointments`.
+One booking of a contact with a doctor, at a branch, in a room or on a machine — and, once they
+arrive, its stage across the clinic floor (launch ROUTE #132 — routes-final §6). **The visit is not a
+table of its own** (A10): the floor stage, its times and pause are columns of `app.appointments`,
+set only while checked in; the visit's start is `checked_in_at`, its end `completed_at`. One folder,
+no nested sub-domains (`visits/` went).
 
 ## Layout
 
 | File | Role |
 | --- | --- |
-| `appointments.schema.ts` | the table, its CHECKs, indexes and RLS policy |
-| `appointments.constants.ts` | value lists the CHECKs and validators share |
-| `appointments.{dto,validator,serializer,types}.ts` | request shapes, parsing, the response |
-| `appointments.repository.ts` / `.service.ts` / `.controller.ts` | the shared app record layers on this table |
-| `appointments.routes.ts` | the routes below |
+| `appointments.schema.ts` | `app.appointments` — the generated `time_range`, the CHECKs (status stamps, the floor stage only while checked in), indexes, RLS; the three `EXCLUDE` constraints live in the baseline migration only |
+| `appointments.constants.ts` | types, statuses (slot-holding, movable), floor stages in order, cancel reasons, the length rules, the constraint → resource map |
+| `appointments.{dto,validator,serializer,types}.ts` | request shapes (a booking or a walk-in; the copy's internal create), the list's `q` and inclusive day range, the response (`end_time`, the contact summary) |
+| `appointments.rules.ts` | the slot rules (past, closed day, branch hours, doctor's days and hours), a room or machine of the same branch, the service label from the offering, walk-ins, moves, the lifecycle's own checks, the check-in conversion, the team on the contact, the `slots` and `daily-counts` reads |
+| `appointments.repository.ts` | the shared app record layers on this table: sorts (`appointment_date`, `visit_stage_changed_at`, `created_at`), the `search` filter, a contact's last and next visit, the busy spans, the in-use read |
+| `appointments.service.ts` / `.controller.ts` / `.routes.ts` | routes 1–20 below: the transitions, the `slot_taken` mapping, copy through the create path |
 
 ## Routes
 
 | Route | Gate |
 | --- | --- |
-| `GET /app/appointments` | `appointment:read` |
-| `GET /app/appointments/exports` | `list:export` |
-| `POST /app/appointments` | `appointment:create` |
-| `GET /app/appointments/{appointment_id}` | `appointment:read` |
-| `PATCH /app/appointments/{appointment_id}` | `appointment:update` |
-| `POST /app/appointments/{appointment_id}/status` | `appointment:update` |
-| `POST /app/appointments/{appointment_id}/cancel` | `appointment:update` |
-| `POST /app/appointments/{appointment_id}/reinstate` | `appointment:update` |
-| `POST /app/appointments/{appointment_id}/copy` | `appointment:create` |
-| `POST /app/appointments/{appointment_id}/undo-check-in` | `appointment:update` |
+| `GET /app/appointments` (and the floor: `status=checked_in`) | `appointment:read` |
+| `GET /app/appointments/exports` | `appointment:export` (+ `appointment:read`) |
 | `GET /app/appointments/slots` | `appointment:read` |
 | `GET /app/appointments/daily-counts` | `appointment:read` |
+| `POST /app/appointments` (a booking or a walk-in) | `appointment:create` |
+| `GET /app/appointments/{appointment_id}` | `appointment:read` |
+| `PATCH /app/appointments/{appointment_id}` | `appointment:update` |
 | `DELETE /app/appointments/{appointment_id}` | `appointment:delete` |
 | `POST /app/appointments/{appointment_id}/restore` | `appointment:delete` |
+| `POST …/confirm`, `…/check-in`, `…/complete`, `…/no-show`, `…/cancel`, `…/reinstate`, `…/undo-check-in` | `appointment:update` |
+| `POST …/copy` | `appointment:create` |
+| `POST …/stage`, `…/pause`, `…/resume` | `appointment:update` |
 
 ## Key invariants
 
-- **Tenant isolation:** ENABLE + FORCE RLS on the organization GUC; the retention-cleanup arm (USING only) lets the deleted-record purge (D38) erase rows.
-- **Soft delete carries its reason:** `delete_reason` set exactly when `deleted_at` is; `other` needs a `delete_note`.
-- **References are public ids:** a referenced id that is no live record of the organization is a 400 naming the field.
-- **Stale saves refused (D43):** a `PATCH` with an older `expected_updated_at` is a 409 naming who changed it and when.
+- **No double booking — the database's (A3):** `excl_appointments_doctor_time`, `_room_time` and
+  `_machine_time` (`btree_gist` over the generated `time_range`) on live scheduled, confirmed,
+  checked-in and completed bookings, walk-ins exempt; a clash is a 409 `slot_taken` naming the
+  resource — on create, move, reinstate, copy and restore.
+- **The slot rules (6.9):** a past start, a closed day (`branch_inactive`, `closed_day`, `holiday`,
+  `doctor_off` — the doctor's days and hours, A4) and a time outside the branch's hours are 409s.
+- **The lifecycle (A5):** `scheduled` → `confirmed` · `checked_in` · `cancelled` · `no_show`;
+  `confirmed` → `checked_in` · `cancelled` · `no_show`; `checked_in` → `completed`; a move returns a
+  confirmed booking to `scheduled`; `checked_in_at` / `completed_at` set exactly with their status.
+- **The floor (A10, A11):** the stage exists only while checked in, moves forward only; pause and
+  resume toggle `visit_paused_at`; undo check-in only while `waiting`.
+- **Check-in converts (A14):** the contact's open lead moves to `clinic_visited` (with a `system`
+  line in its stream) and a contact without a patient file gets one, in the check-in's transaction.
+- **The contact (A1, CT7, CT11):** `ON DELETE RESTRICT` and a live booking blocks the contact's
+  delete; the doctor and therapist handle the contact.
+- **Tenant isolation:** ENABLE + FORCE RLS on the organization GUC with the retention-cleanup arm;
+  branch visibility is the service's (D9).

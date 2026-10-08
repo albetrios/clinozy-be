@@ -35,7 +35,6 @@ import {
   listAppointmentsQueryDto as appAppointmentsListQueryDto,
   slotsAppointmentsQueryDto as appSlotsAppointmentsQueryDto,
 } from '@/domains/app/sub-domains/appointments/appointments.dto.js';
-import { listVisitsQueryDto as appVisitsListQueryDto } from '@/domains/app/sub-domains/visits/visits.dto.js';
 import { listDiagnosesQueryDto as appDiagnosesListQueryDto } from '@/domains/app/sub-domains/diagnoses/diagnoses.dto.js';
 import { listPatientClinicalNotesQueryDto as appPatientClinicalNotesListQueryDto } from '@/domains/app/sub-domains/patient-clinical-notes/patient-clinical-notes.dto.js';
 import { listPrescriptionsQueryDto as appPrescriptionsListQueryDto } from '@/domains/app/sub-domains/prescriptions/prescriptions.dto.js';
@@ -98,7 +97,6 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/app/leads': appLeadsListQueryDto,
   'GET /api/v1/app/contact-message-templates': listContactMessageTemplatesQueryDto,
   'GET /api/v1/app/appointments': appAppointmentsListQueryDto,
-  'GET /api/v1/app/visits': appVisitsListQueryDto,
   'GET /api/v1/app/diagnoses': appDiagnosesListQueryDto,
   'GET /api/v1/app/patients/{patient_id}/clinical-notes': appPatientClinicalNotesListQueryDto,
   'GET /api/v1/app/patients/{patient_id}/prescriptions': appPrescriptionsListQueryDto,

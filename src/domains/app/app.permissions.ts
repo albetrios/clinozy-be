@@ -43,6 +43,8 @@ export const APP_PERMISSIONS = {
   APPOINTMENT_CREATE: 'appointment:create',
   APPOINTMENT_UPDATE: 'appointment:update',
   APPOINTMENT_DELETE: 'appointment:delete',
+  /** Download the appointments CSV (launch #132, A9). */
+  APPOINTMENT_EXPORT: 'appointment:export',
   PRESCRIPTION_READ: 'prescription:read',
   PRESCRIPTION_CREATE: 'prescription:create',
   PRESCRIPTION_UPDATE: 'prescription:update',

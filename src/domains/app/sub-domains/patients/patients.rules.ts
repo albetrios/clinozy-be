@@ -1,9 +1,5 @@
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
-import {
-  type BaseRecordRepository,
-  type BaseRecordRow,
-  resolveRecordIds,
-} from '@/domains/app/base-record.repository.js';
+import type { BaseRecordRepository, BaseRecordRow } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordActionInput, BaseRecordRules } from '@/domains/app/base-record.types.js';
 import { AppointmentsRepository } from '@/domains/app/sub-domains/appointments/appointments.repository.js';
 import { CheckInsRepository } from '@/domains/app/sub-domains/check-ins/check-ins.repository.js';
@@ -17,9 +13,8 @@ import { PatientReportsRepository } from '@/domains/app/sub-domains/patient-repo
 import { PaymentsRepository } from '@/domains/app/sub-domains/payments/payments.repository.js';
 import { PrescriptionsRepository } from '@/domains/app/sub-domains/prescriptions/prescriptions.repository.js';
 import { TreatmentsRepository } from '@/domains/app/sub-domains/treatments/treatments.repository.js';
-import { VisitsRepository } from '@/domains/app/sub-domains/visits/visits.repository.js';
 import { calendarDateInTimeZone } from '@/shared/utils/validation/record-fields.util.js';
-import { patients } from './patients.schema.js';
+import { PatientsRepository } from './patients.repository.js';
 
 /** Appointments that were a visit. */
 const VISITED = ['checked_in', 'completed'];
@@ -27,6 +22,7 @@ const VISITED = ['checked_in', 'completed'];
 const UPCOMING = ['scheduled', 'confirmed'];
 
 const appointmentsRepository = new AppointmentsRepository();
+const patientsRepository = new PatientsRepository();
 
 /** The timeline's filter groups (the History tabs). */
 type TimelineGroup = 'clinical' | 'money' | 'messages';
@@ -48,13 +44,6 @@ interface TimelineSource {
 
 /** Every kind the timeline merges, newest first by when it was recorded. */
 const TIMELINE_SOURCES: readonly TimelineSource[] = [
-  {
-    kind: 'visit',
-    group: 'clinical',
-    repository: new VisitsRepository(),
-    permission: APP_PERMISSIONS.APPOINTMENT_READ,
-    fields: ['stage', 'started_at', 'completed_at'],
-  },
   {
     kind: 'treatment',
     group: 'clinical',
@@ -186,23 +175,21 @@ async function timeline({ existing, input, context, visibility }: BaseRecordActi
  * and the next booked visit — one GROUP BY per figure for the whole page.
  *
  * @remarks
- * - **Algorithm:** `last_visit_on` = the latest checked-in or completed appointment date;
- *   `next_visit_on` = the earliest scheduled or confirmed appointment on or after the
- *   organization's today (D41). The `timeline` view merges every kind of record the caller may
- *   read (visits, sessions, prescriptions, check-ins, packages, reports, photos, notes, bills,
+ * - **Algorithm:** `last_visit_on` = the latest checked-in or completed appointment date of the
+ *   file's contact; `next_visit_on` = its earliest scheduled or confirmed appointment on or after
+ *   the organization's today (D41) — appointments are the contact's since #132 (A1). The
+ *   `timeline` view merges every kind of record the caller may read (sessions, prescriptions, check-ins, packages, reports, photos, notes, bills,
  *   payments, messages) newest first, a Private photo only for its holders.
  */
 export const patientsRules: BaseRecordRules = {
   decorate: async (outputs, context) => {
-    const ids = await resolveRecordIds({
-      table: patients,
-      organizationId: context.organizationId,
-      publicIds: outputs.map((output) => String(output.id)),
-    });
-    const groupIds = [...ids.values()];
+    const contactOf = await patientsRepository.findContactIds(
+      outputs.map((output) => String(output.id)),
+    );
+    const groupIds = [...new Set([...contactOf.values()])];
     const last = await appointmentsRepository.aggregatePerGroup({
       organizationId: context.organizationId,
-      groupColumn: 'patient_id',
+      groupColumn: 'contact_id',
       groupIds,
       valueColumn: 'appointment_date',
       aggregate: 'max',
@@ -212,7 +199,7 @@ export const patientsRules: BaseRecordRules = {
     const today = calendarDateInTimeZone(timezone);
     const upcoming = await appointmentsRepository.aggregatePerGroup({
       organizationId: context.organizationId,
-      groupColumn: 'patient_id',
+      groupColumn: 'contact_id',
       groupIds,
       valueColumn: 'appointment_date',
       aggregate: 'min',
@@ -220,9 +207,9 @@ export const patientsRules: BaseRecordRules = {
       ranges: { appointment_date: { from: today } },
     });
     for (const output of outputs) {
-      const id = ids.get(String(output.id));
-      const lastVisit = id === undefined ? undefined : last.get(id);
-      const nextVisit = id === undefined ? undefined : upcoming.get(id);
+      const contactId = contactOf.get(String(output.id));
+      const lastVisit = contactId === undefined ? undefined : last.get(contactId);
+      const nextVisit = contactId === undefined ? undefined : upcoming.get(contactId);
       output.last_visit_on = lastVisit ? String(lastVisit) : null;
       output.next_visit_on = nextVisit ? String(nextVisit) : null;
     }

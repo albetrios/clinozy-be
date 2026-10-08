@@ -667,7 +667,7 @@ src/
     │   │   │   ├── tasks.service.ts
     │   │   │   ├── tasks.types.ts
     │   │   │   └── tasks.validator.ts
-    │   │   ├── treatments/
+    │   │   └── treatments/
     │   │   │   ├── treatments.constants.ts
     │   │   │   ├── treatments.controller.ts
     │   │   │   ├── treatments.dto.ts
@@ -680,18 +680,6 @@ src/
     │   │   │   ├── treatments.service.ts
     │   │   │   ├── treatments.types.ts
     │   │   │   └── treatments.validator.ts
-    │   │   └── visits/
-    │   │   │   ├── visits.constants.ts
-    │   │   │   ├── visits.controller.ts
-    │   │   │   ├── visits.dto.ts
-    │   │   │   ├── visits.overview.md
-    │   │   │   ├── visits.repository.ts
-    │   │   │   ├── visits.routes.ts
-    │   │   │   ├── visits.schema.ts
-    │   │   │   ├── visits.serializer.ts
-    │   │   │   ├── visits.service.ts
-    │   │   │   ├── visits.types.ts
-    │   │   │   └── visits.validator.ts
     │   ├── workers/
     │   │   ├── app-record-purge.constants.ts
     │   │   ├── app-record-purge.processor.ts
