@@ -55,29 +55,35 @@ export const ACCESS_TOKEN_EXPIRY_SECONDS = 900;
 export const SESSION_TOKEN_CACHE_TTL_SECONDS = 60;
 
 /**
- * Extra seconds so an in-flight idempotency placeholder outlives the request that claimed it.
+ * In-flight idempotency claim lifetime in seconds. The owner refreshes it while the handler runs.
  *
  * @remarks
- * The placeholder has to still be there when Fastify aborts the request at
- * `FASTIFY_REQUEST_TIMEOUT_MS`, and for the post-response cache write that follows a success.
- * Five seconds covers that tail. The completed-response TTL is a separate constant.
+ * `FASTIFY_REQUEST_TIMEOUT_MS` bounds how long the server waits to receive the request, not how
+ * long the handler may run, so the claim cannot be derived from it. Sixty seconds is long enough
+ * to cover a refresh gap and short enough that a crashed process stops answering 409 within a
+ * minute. This is its own literal: it is not an alias of the session-token cache TTL.
  */
-export const IDEMPOTENCY_PLACEHOLDER_TTL_BUFFER_SECONDS = 5;
+export const IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS = 60;
 
 /**
- * In-flight idempotency placeholder TTL in seconds: the configured request timeout, plus
- * {@link IDEMPOTENCY_PLACEHOLDER_TTL_BUFFER_SECONDS}.
+ * How often the claim owner extends {@link IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS} while it still holds the key.
  *
  * @remarks
- * A placeholder shorter than the request lets it expire while the handler is still running, and a
- * replay then executes the handler a second time. Callers pass the same timeout the HTTP server
- * uses (`FASTIFY_REQUEST_TIMEOUT_MS`, or {@link THIRTY_SECONDS_MS} when that variable is unset).
- * Redis `EX` is whole seconds, so the timeout is rounded up before the buffer is added.
+ * Twenty seconds is a third of the claim TTL, so one missed refresh still leaves the key in place.
+ * The timer is unref'd and stops when the response finishes, the client disconnects, the refresh
+ * finds the claim gone, or {@link IDEMPOTENCY_PLACEHOLDER_MAX_HOLD_SECONDS} elapses.
  */
-export function resolveIdempotencyPlaceholderTtlSeconds(requestTimeoutMs: number): number {
-  const timeoutSeconds = Math.ceil(requestTimeoutMs / MILLISECONDS_PER_SECOND);
-  return timeoutSeconds + IDEMPOTENCY_PLACEHOLDER_TTL_BUFFER_SECONDS;
-}
+export const IDEMPOTENCY_PLACEHOLDER_REFRESH_INTERVAL_MS = 20_000;
+
+/**
+ * Longest a single process may keep refreshing one in-flight claim (seconds).
+ *
+ * @remarks
+ * A hung handler must not pin a 409 forever. After ten minutes the refresh stops and the key
+ * expires on its own TTL, so a retry can proceed. A crashed process never reaches this bound:
+ * the key expires within {@link IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS}.
+ */
+export const IDEMPOTENCY_PLACEHOLDER_MAX_HOLD_SECONDS = 600;
 
 /** Cached idempotent HTTP response TTL (seconds). */
 export const IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS = SECONDS_PER_DAY;

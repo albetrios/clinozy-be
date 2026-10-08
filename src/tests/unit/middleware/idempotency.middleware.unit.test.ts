@@ -1,18 +1,31 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import {
+  IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS,
   IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS,
-  resolveIdempotencyPlaceholderTtlSeconds,
-  THIRTY_SECONDS_MS,
 } from '@/shared/constants/index.js';
-import { env } from '@/shared/config/env.config.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { buildIdempotencyRequestFingerprint } from '@/shared/utils/idempotency/idempotency-fingerprint.util.js';
 
-/** Same expression the claim path passes to Redis `EX`. */
-const IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS = resolveIdempotencyPlaceholderTtlSeconds(
-  env.FASTIFY_REQUEST_TIMEOUT_MS ?? THIRTY_SECONDS_MS,
-);
+/** Exact claim string the fenced completion and release scripts compare against. */
+const IDEMPOTENCY_CLAIM_VALUE = '{"state":"in_flight","fingerprint":"unit-claim"}';
+
+function fencedCompletionCalls(): unknown[][] {
+  return mockRedisEval.mock.calls.filter((call) => String(call[0]).includes("redis.call('SET'"));
+}
+
+function fencedReleaseCalls(): unknown[][] {
+  return mockRedisEval.mock.calls.filter((call) => String(call[0]).includes("redis.call('DEL'"));
+}
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+});
+
+afterEach(() => {
+  vi.clearAllTimers();
+  vi.useRealTimers();
+});
 
 const IDEMPOTENCY_KEY_HEADER = 'x-idempotency-key';
 const IDEMPOTENCY_TEST_KEY = 'test-key-1234567890';
@@ -541,6 +554,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyClaimValue: IDEMPOTENCY_CLAIM_VALUE,
       _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: { userId: TEST_USER_PUBLIC_ID },
     } as unknown as FastifyRequest & { _idempotencyClaimed?: boolean };
@@ -554,7 +568,8 @@ describe('idempotency middleware happy paths and conflicts', () => {
     expect(request._idempotencyClaimed).toBe(true);
 
     await onResponse(request, reply);
-    expect(mockRedisDel).toHaveBeenCalled();
+    expect(fencedReleaseCalls().length).toBeGreaterThan(0);
+    expect(mockRedisDel).not.toHaveBeenCalled();
     expect(request._idempotencyClaimed).toBe(false);
   });
 
@@ -668,6 +683,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyClaimValue: IDEMPOTENCY_CLAIM_VALUE,
       _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: {
         userId: TEST_USER_PUBLIC_ID,
@@ -685,17 +701,17 @@ describe('idempotency middleware happy paths and conflicts', () => {
 
     await onResponse(request, reply);
 
-    expect(mockRedisSet).toHaveBeenCalledWith(
-      expect.stringContaining(IDEMPOTENCY_TEST_KEY),
-      expect.stringContaining('"state":"completed"'),
-      'EX',
-      IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS,
-    );
-    // The entry carries the claim's fingerprint, so a later replay can compare payloads.
-    const storedEntry = JSON.parse(mockRedisSet.mock.calls.at(-1)?.[1] as string) as {
+    const completion = fencedCompletionCalls().at(-1);
+    expect(completion?.[2]).toEqual(expect.stringContaining(IDEMPOTENCY_TEST_KEY));
+    expect(completion?.[3]).toBe(IDEMPOTENCY_CLAIM_VALUE);
+    expect(completion?.[5]).toBe(String(IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS));
+    const storedEntry = JSON.parse(String(completion?.[4])) as {
+      state?: string;
       fingerprint?: string;
     };
+    expect(storedEntry.state).toBe('completed');
     expect(storedEntry.fingerprint).toBe(fingerprintFor('POST'));
+    expect(mockRedisSet).not.toHaveBeenCalled();
   });
 
   it('caches responses at exactly 100KB after onResponse runs', async () => {
@@ -703,6 +719,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyClaimValue: IDEMPOTENCY_CLAIM_VALUE,
       _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: {
         userId: TEST_USER_PUBLIC_ID,
@@ -718,12 +735,10 @@ describe('idempotency middleware happy paths and conflicts', () => {
     await onSend(request, reply, maxSizeBody);
     await onResponse(request, reply);
 
-    expect(mockRedisSet).toHaveBeenCalledWith(
-      expect.stringContaining(IDEMPOTENCY_TEST_KEY),
-      expect.any(String),
-      'EX',
-      IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS,
-    );
+    const completion = fencedCompletionCalls().at(-1);
+    expect(completion?.[2]).toEqual(expect.stringContaining(IDEMPOTENCY_TEST_KEY));
+    expect(completion?.[5]).toBe(String(IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS));
+    expect(mockRedisSet).not.toHaveBeenCalled();
   });
 
   it('skips caching responses larger than 100KB and releases placeholder', async () => {
@@ -732,6 +747,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyClaimValue: IDEMPOTENCY_CLAIM_VALUE,
       _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: {
         userId: TEST_USER_PUBLIC_ID,
@@ -749,7 +765,8 @@ describe('idempotency middleware happy paths and conflicts', () => {
     expect(mockRedisSet).not.toHaveBeenCalled();
 
     await onResponse(request, reply);
-    expect(mockRedisDel).toHaveBeenCalled();
+    expect(fencedReleaseCalls().length).toBeGreaterThan(0);
+    expect(mockRedisDel).not.toHaveBeenCalled();
     expect(mockRedisSet).not.toHaveBeenCalled();
     expect(request._idempotencyClaimed).toBe(false);
     expect(logger.warn).toHaveBeenCalledWith(
@@ -770,6 +787,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyClaimValue: IDEMPOTENCY_CLAIM_VALUE,
       _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: {
         userId: TEST_USER_PUBLIC_ID,
@@ -787,13 +805,11 @@ describe('idempotency middleware happy paths and conflicts', () => {
 
     await onResponse(request, reply);
 
-    expect(mockRedisSet).toHaveBeenCalledWith(
-      expect.stringContaining(IDEMPOTENCY_TEST_KEY),
-      expect.stringContaining('"statusCode":204'),
-      'EX',
-      IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS,
-    );
-    const storedEntry = mockRedisSet.mock.calls.at(-1)?.[1] as string;
+    const completion = fencedCompletionCalls().at(-1);
+    expect(completion?.[2]).toEqual(expect.stringContaining(IDEMPOTENCY_TEST_KEY));
+    expect(String(completion?.[4])).toContain('"statusCode":204');
+    expect(completion?.[5]).toBe(String(IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS));
+    const storedEntry = String(completion?.[4]);
     expect(JSON.parse(storedEntry)).toMatchObject({
       state: 'completed',
       statusCode: 204,
@@ -867,6 +883,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
       headers: {},
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyClaimValue: IDEMPOTENCY_CLAIM_VALUE,
       _idempotencyRequestFingerprint: fingerprintFor('POST'),
       organizationId: 'org-from-request',
     } as unknown as FastifyRequest & { organizationId: string };
@@ -878,15 +895,17 @@ describe('idempotency middleware happy paths and conflicts', () => {
     await onSend(request, reply, '{"ok":true}');
     await onResponse(request, reply);
 
-    expect(mockRedisSet).toHaveBeenCalled();
+    expect(fencedCompletionCalls().length).toBeGreaterThan(0);
+    expect(mockRedisSet).not.toHaveBeenCalled();
   });
 
   it('logs when Redis set fails during onResponse cache write', async () => {
-    mockRedisSet.mockRejectedValueOnce(new Error('set failed'));
+    mockRedisEval.mockRejectedValueOnce(new Error('set failed'));
     const { onSend, onResponse } = await registerIdempotencyHooks();
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyClaimValue: IDEMPOTENCY_CLAIM_VALUE,
       _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: { userId: TEST_USER_PUBLIC_ID },
     } as unknown as FastifyRequest;
@@ -898,15 +917,16 @@ describe('idempotency middleware happy paths and conflicts', () => {
     await onSend(request, reply, { id: 'created' });
     await onResponse(request, reply);
 
-    expect(mockRedisSet).toHaveBeenCalled();
+    expect(fencedCompletionCalls().length).toBeGreaterThan(0);
   });
 
   it('logs when placeholder release fails on error responses in onResponse', async () => {
-    mockRedisDel.mockRejectedValueOnce(new Error('del failed'));
+    mockRedisEval.mockRejectedValueOnce(new Error('del failed'));
     const { onSend, onResponse } = await registerIdempotencyHooks();
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyClaimValue: IDEMPOTENCY_CLAIM_VALUE,
       _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: { userId: TEST_USER_PUBLIC_ID },
     } as unknown as FastifyRequest;
@@ -918,7 +938,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     await onSend(request, reply, { error: 'server' });
     await onResponse(request, reply);
 
-    expect(mockRedisDel).toHaveBeenCalled();
+    expect(fencedReleaseCalls().length).toBeGreaterThan(0);
   });
 
   it('onRoute skips non-write methods and appends claim handler for write routes', async () => {
@@ -1135,6 +1155,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyClaimValue: IDEMPOTENCY_CLAIM_VALUE,
       _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: { userId: TEST_USER_PUBLIC_ID },
     } as unknown as FastifyRequest & { _idempotencyClaimed?: boolean };
@@ -1142,7 +1163,8 @@ describe('idempotency middleware happy paths and conflicts', () => {
 
     await onResponse(request, reply);
 
-    expect(mockRedisDel).toHaveBeenCalled();
+    expect(fencedReleaseCalls().length).toBeGreaterThan(0);
+    expect(mockRedisDel).not.toHaveBeenCalled();
     expect(mockRedisSet).not.toHaveBeenCalled();
     expect(request._idempotencyClaimed).toBe(false);
   });
@@ -1152,6 +1174,7 @@ describe('idempotency middleware happy paths and conflicts', () => {
     const request = {
       _idempotencyKey: IDEMPOTENCY_TEST_KEY,
       _idempotencyClaimed: true,
+      _idempotencyClaimValue: IDEMPOTENCY_CLAIM_VALUE,
       _idempotencyRequestFingerprint: fingerprintFor('POST'),
       _idempotencyScope: { userId: TEST_USER_PUBLIC_ID },
     } as unknown as FastifyRequest & { _idempotencyClaimed?: boolean };
@@ -1159,7 +1182,8 @@ describe('idempotency middleware happy paths and conflicts', () => {
 
     await onResponse(request, reply);
 
-    expect(mockRedisDel).toHaveBeenCalled();
+    expect(fencedReleaseCalls().length).toBeGreaterThan(0);
+    expect(mockRedisDel).not.toHaveBeenCalled();
     expect(mockRedisSet).not.toHaveBeenCalled();
   });
 });

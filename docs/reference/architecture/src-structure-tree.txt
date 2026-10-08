@@ -2016,6 +2016,7 @@ src/
     │   │   └── trust-proxy.security.test.ts
     │   ├── infrastructure/
     │   │   ├── api-versioning.security.test.ts
+    │   │   ├── idempotency-claim-fence.security.test.ts
     │   │   ├── idempotency-cross-actor.security.test.ts
     │   │   ├── idempotency.security.test.ts
     │   │   ├── mutation-audit.security.test.ts
@@ -2233,6 +2234,7 @@ src/
     │   │   ├── i18n.middleware.helpers.unit.test.ts
     │   │   ├── i18n.middleware.hook.unit.test.ts
     │   │   ├── idempotency-body-cap.policy.unit.test.ts
+    │   │   ├── idempotency-claim-heartbeat.unit.test.ts
     │   │   ├── idempotency.middleware.unit.test.ts
     │   │   ├── metrics.middleware.unit.test.ts
     │   │   ├── middleware-order.unit.test.ts

@@ -1,28 +1,25 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  IDEMPOTENCY_PLACEHOLDER_TTL_BUFFER_SECONDS,
-  MILLISECONDS_PER_SECOND,
-  resolveIdempotencyPlaceholderTtlSeconds,
-  THIRTY_SECONDS_MS,
+  IDEMPOTENCY_PLACEHOLDER_MAX_HOLD_SECONDS,
+  IDEMPOTENCY_PLACEHOLDER_REFRESH_INTERVAL_MS,
+  IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS,
 } from '@/shared/constants/ttl.constants.js';
 
-describe('resolveIdempotencyPlaceholderTtlSeconds', () => {
-  it('outlives the default request timeout by the buffer', () => {
-    expect(resolveIdempotencyPlaceholderTtlSeconds(THIRTY_SECONDS_MS)).toBe(
-      THIRTY_SECONDS_MS / MILLISECONDS_PER_SECOND + IDEMPOTENCY_PLACEHOLDER_TTL_BUFFER_SECONDS,
-    );
+describe('idempotency placeholder claim window', () => {
+  it('keeps a 60 second claim, a 20 second refresh, and a 10 minute max hold', () => {
+    expect(IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS).toBe(60);
+    expect(IDEMPOTENCY_PLACEHOLDER_REFRESH_INTERVAL_MS).toBe(20_000);
+    expect(IDEMPOTENCY_PLACEHOLDER_MAX_HOLD_SECONDS).toBe(600);
   });
 
-  it('outlives a 10 minute request timeout', () => {
-    const tenMinutesMs = 600_000;
-    expect(resolveIdempotencyPlaceholderTtlSeconds(tenMinutesMs)).toBe(
-      600 + IDEMPOTENCY_PLACEHOLDER_TTL_BUFFER_SECONDS,
+  it('declares the 60 second claim as its own literal', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/shared/constants/ttl.constants.ts'),
+      'utf8',
     );
-  });
-
-  it('rounds a fractional second up before adding the buffer', () => {
-    expect(resolveIdempotencyPlaceholderTtlSeconds(1_001)).toBe(
-      2 + IDEMPOTENCY_PLACEHOLDER_TTL_BUFFER_SECONDS,
-    );
+    expect(source).toMatch(/export const IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS = 60;/);
+    expect(source).not.toContain('resolveIdempotencyPlaceholderTtlSeconds');
   });
 });

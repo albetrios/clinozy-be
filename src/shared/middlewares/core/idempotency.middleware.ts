@@ -24,13 +24,15 @@ import {
   assertIdempotencyKeyPresentWhenRequired,
   isIdempotencyKeyRequiredForRequest,
 } from '@/shared/utils/idempotency/idempotency-required.util.js';
+import { IDEMPOTENCY_CACHED_BODY_BYTES } from '@/shared/constants/limits.constants.js';
 import {
-  IDEMPOTENCY_CACHED_BODY_BYTES,
+  IDEMPOTENCY_PLACEHOLDER_MAX_HOLD_SECONDS,
+  IDEMPOTENCY_PLACEHOLDER_REFRESH_INTERVAL_MS,
+  IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS,
   IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS,
   IDEMPOTENCY_STORE_UNAVAILABLE_RETRY_AFTER_SECONDS,
-  resolveIdempotencyPlaceholderTtlSeconds,
-  THIRTY_SECONDS_MS,
-} from '@/shared/constants/index.js';
+  MILLISECONDS_PER_SECOND,
+} from '@/shared/constants/ttl.constants.js';
 
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -60,6 +62,108 @@ if new_count == 1 then
 end
 return new_count
 `;
+
+/** Extends the claim TTL only while this process still owns the key. */
+const IDEMPOTENCY_REFRESH_CLAIM_LUA = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+return 0
+`;
+
+/**
+ * Writes the completed entry only when this claim still owns the key, or the key is already gone.
+ * A different owner's value is left untouched.
+ */
+const IDEMPOTENCY_COMPLETE_IF_CLAIMED_LUA = `
+local current = redis.call('GET', KEYS[1])
+if current == ARGV[1] or current == false then
+  redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+  return 1
+end
+return 0
+`;
+
+/** Compare-and-delete, same contract as the Redis lock release: delete only when the value still matches. */
+const IDEMPOTENCY_RELEASE_IF_CLAIMED_LUA = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0
+`;
+
+const idempotencyClaimHeartbeats = new WeakMap<FastifyRequest, () => void>();
+
+/** Stops the claim refresh timer. Safe to call more than once. */
+function stopIdempotencyClaimHeartbeat(request: FastifyRequest): void {
+  const stop = idempotencyClaimHeartbeats.get(request);
+  if (!stop) return;
+  idempotencyClaimHeartbeats.delete(request);
+  stop();
+}
+
+/**
+ * Refreshes the in-flight claim until the response ends, the client disconnects, the claim is
+ * lost, or the max hold elapses. A refresh error is logged and the timer keeps going.
+ */
+function startIdempotencyClaimHeartbeat(options: {
+  request: FastifyRequest;
+  reply: FastifyReply;
+  cacheKey: string;
+  claimValue: string;
+}): void {
+  const startedAtMs = Date.now();
+  let stopped = false;
+  const rawResponse = options.reply.raw;
+  let timer: ReturnType<typeof setInterval> | undefined;
+
+  const stop = (): void => {
+    if (stopped) return;
+    stopped = true;
+    if (timer !== undefined) clearInterval(timer);
+    rawResponse?.removeListener?.('close', stop);
+  };
+
+  timer = setInterval(() => {
+    const heldSeconds = (Date.now() - startedAtMs) / MILLISECONDS_PER_SECOND;
+    if (heldSeconds >= IDEMPOTENCY_PLACEHOLDER_MAX_HOLD_SECONDS) {
+      stopIdempotencyClaimHeartbeat(options.request);
+      return;
+    }
+    void refreshIdempotencyClaim({
+      cacheKey: options.cacheKey,
+      claimValue: options.claimValue,
+    }).then((refreshed) => {
+      if (refreshed === 0) stopIdempotencyClaimHeartbeat(options.request);
+    });
+  }, IDEMPOTENCY_PLACEHOLDER_REFRESH_INTERVAL_MS);
+  if (typeof timer.unref === 'function') timer.unref();
+
+  if (typeof rawResponse?.on === 'function') {
+    rawResponse.on('close', stop);
+  }
+  idempotencyClaimHeartbeats.set(options.request, stop);
+}
+
+/** Returns 1 when the claim was refreshed, 0 when it was lost, and null when Redis errored. */
+async function refreshIdempotencyClaim(options: {
+  cacheKey: string;
+  claimValue: string;
+}): Promise<number | null> {
+  try {
+    const result = await redisConnection.eval(
+      IDEMPOTENCY_REFRESH_CLAIM_LUA,
+      1,
+      options.cacheKey,
+      options.claimValue,
+      String(IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS),
+    );
+    return typeof result === 'number' ? result : 0;
+  } catch (error) {
+    logger.warn({ error, cacheKey: options.cacheKey }, 'idempotency.cache.refresh.failed');
+    return null;
+  }
+}
 
 /**
  * Surfaces a per-actor idempotency-key cap breach as a throttled Sentry warning so a noisy
@@ -146,6 +250,8 @@ interface RequestWithIdempotency extends FastifyRequest {
   _idempotencyScope?: { userId?: string; organizationId?: string; apiKeyPublicId?: string };
   /** Set when this request claimed the placeholder via SETNX. Used to release on error. */
   _idempotencyClaimed?: boolean;
+  /** Exact Redis value written by the SETNX claim. Refresh, completion, and release compare against it. */
+  _idempotencyClaimValue?: string;
   /** Serialized successful response stashed in onSend; written to Redis in onResponse. */
   _idempotencyPendingCompleted?: PendingIdempotencyCompletion;
 }
@@ -321,12 +427,6 @@ function sendIdempotencyKeyReuseConflict(
   );
 }
 
-/**
- * Short-lived placeholder TTL. Once a real response is computed, `onSend` overwrites the
- * key with the real cached response and the standard 24h TTL. Keeping the in-flight
- * window short avoids 24h "ghost" placeholders if the worker crashes hard before `onSend`
- * runs (and the error-path DEL has not had a chance to execute).
- */
 function resolveIdempotencyRoutePath(request: FastifyRequest): string {
   const routeTemplate = request.routeOptions?.url;
   if (typeof routeTemplate === 'string' && routeTemplate.length > 0) {
@@ -470,13 +570,17 @@ async function idempotencyClaimPreHandler(
       requestId: typeof request.id === 'string' ? request.id : String(request.id ?? ''),
       fingerprint: requestFingerprint,
     };
+    const claimValue = JSON.stringify(inFlightEntry);
     claimed = await redisConnection.set(
       cacheKey,
-      JSON.stringify(inFlightEntry),
+      claimValue,
       'EX',
-      resolveIdempotencyPlaceholderTtlSeconds(env.FASTIFY_REQUEST_TIMEOUT_MS ?? THIRTY_SECONDS_MS),
+      IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS,
       'NX',
     );
+    if (claimed) {
+      requestWithIdempotency._idempotencyClaimValue = claimValue;
+    }
   } catch (error) {
     return respondIdempotencyStoreUnavailable(request, reply, error, idempotencyKey);
   }
@@ -486,6 +590,10 @@ async function idempotencyClaimPreHandler(
   }
 
   requestWithIdempotency._idempotencyClaimed = true;
+  const claimValue = requestWithIdempotency._idempotencyClaimValue;
+  if (claimValue !== undefined) {
+    startIdempotencyClaimHeartbeat({ request, reply, cacheKey, claimValue });
+  }
 
   try {
     /**
@@ -709,9 +817,10 @@ async function idempotencyOnSend(
  * Final-step Redis write, run from the request-lifecycle `onResponse` hook once the
  * response is sent. Three terminal cases:
  *
- *  1. statusCode < 400 + pending completion stashed -> overwrite placeholder with completed entry
- *  2. statusCode >= 400 or pending completion absent (handler threw, body too large) -> DEL
- *     placeholder so the client may safely retry
+ *  1. statusCode < 400 + pending completion stashed -> write the completed entry only if this
+ *     claim still owns the key (or the key is already gone)
+ *  2. statusCode >= 400 or pending completion absent (handler threw, body too large) ->
+ *     compare-and-delete the placeholder so the client may safely retry
  *  3. claim was never acquired -> no-op
  */
 export async function idempotencyOnResponse(
@@ -719,6 +828,7 @@ export async function idempotencyOnResponse(
   reply: FastifyReply,
 ): Promise<void> {
   const requestWithIdempotency = request as RequestWithIdempotency;
+  stopIdempotencyClaimHeartbeat(request);
   if (!requestWithIdempotency._idempotencyClaimed) return;
 
   const idempotencyKey = requestWithIdempotency._idempotencyKey;
@@ -726,8 +836,14 @@ export async function idempotencyOnResponse(
 
   const scope = requestWithIdempotency._idempotencyScope ?? resolveIdempotencyScope(request);
   const requestFingerprint = requestWithIdempotency._idempotencyRequestFingerprint;
+  const claimValue = requestWithIdempotency._idempotencyClaimValue;
   const cacheKey = buildIdempotencyCacheKey(idempotencyKey, scope);
   requestWithIdempotency._idempotencyClaimed = false;
+
+  if (claimValue === undefined) {
+    logger.warn({ idempotencyKey }, 'idempotency.cache.claim_missing');
+    return;
+  }
 
   const statusCode = reply.statusCode;
   const pending = requestWithIdempotency._idempotencyPendingCompleted;
@@ -740,12 +856,17 @@ export async function idempotencyOnResponse(
       fingerprint: requestFingerprint,
     };
     try {
-      await redisConnection.set(
+      const written = await redisConnection.eval(
+        IDEMPOTENCY_COMPLETE_IF_CLAIMED_LUA,
+        1,
         cacheKey,
+        claimValue,
         JSON.stringify(completed),
-        'EX',
-        IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS,
+        String(IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS),
       );
+      if (written === 0) {
+        logger.warn({ idempotencyKey }, 'idempotency.cache.claim_lost');
+      }
     } catch (error) {
       logger.warn({ error, idempotencyKey }, 'idempotency.cache.set.failed');
     }
@@ -755,7 +876,7 @@ export async function idempotencyOnResponse(
 
   delete requestWithIdempotency._idempotencyPendingCompleted;
   try {
-    await redisConnection.del(cacheKey);
+    await redisConnection.eval(IDEMPOTENCY_RELEASE_IF_CLAIMED_LUA, 1, cacheKey, claimValue);
   } catch (error) {
     logger.warn({ error, idempotencyKey }, 'idempotency.cache.release.failed');
   }

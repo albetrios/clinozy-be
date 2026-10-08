@@ -56,14 +56,14 @@ The canonical exports live under [src/shared/constants/](src/shared/constants/) 
   - Increasing → larger Redis footprint; bounded by `IDEMPOTENCY_CACHED_BODY_BYTES`.
 - **Last reviewed**: 2026-05-28
 
-## IDEMPOTENCY_PLACEHOLDER_TTL (resolveIdempotencyPlaceholderTtlSeconds)
+## IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS
 
-- **Value**: `ceil(request timeout seconds) + IDEMPOTENCY_PLACEHOLDER_TTL_BUFFER_SECONDS` (buffer is 5). The request timeout is `FASTIFY_REQUEST_TIMEOUT_MS`, or 30 seconds when that variable is unset. A 30 second request keeps the placeholder for 35 seconds; a 10 minute request keeps it for 605 seconds.
+- **Value**: 60 seconds, refreshed every `IDEMPOTENCY_PLACEHOLDER_REFRESH_INTERVAL_MS` (20 seconds) while the owner still holds the key, and never refreshed past `IDEMPOTENCY_PLACEHOLDER_MAX_HOLD_SECONDS` (600 seconds).
 - **Source**: [src/shared/constants/ttl.constants.ts](src/shared/constants/ttl.constants.ts)
-- **Rationale**: The in-flight SETNX placeholder must outlive the handler that claimed it. `FASTIFY_REQUEST_TIMEOUT_MS` may be as long as 10 minutes; a fixed 60 second placeholder expired first and a replay ran the handler twice. The buffer covers the abort at the timeout and the post-response cache write. The completed-response TTL stays 24 hours.
+- **Rationale**: `FASTIFY_REQUEST_TIMEOUT_MS` bounds how long the server waits to receive a request, not how long the handler runs, so the in-flight claim is not derived from it. The owner extends a 60 second key with a compare-and-expire while the handler runs. A crashed process stops answering 409 within a minute. A hung process stops refreshing after 10 minutes. Completion and release both compare the stored value to the claim string, so a late first completion cannot overwrite a second claim. The completed-response TTL stays 24 hours.
 - **Consequences of change**:
-  - Decreasing the buffer → a request that finishes on the timeout can expire its placeholder before the completed entry is written, and a replay runs again.
-  - Increasing the buffer → a second caller waits longer when the first process dies mid-flight.
+  - Decreasing the TTL below the refresh interval → a live handler can lose its claim between refreshes, and a replay runs the handler twice.
+  - Increasing the max hold → a stuck handler pins a 409 for longer.
 - **Last reviewed**: 2026-10-08
 
 ## IDEMPOTENCY_CACHED_BODY_BYTES
