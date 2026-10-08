@@ -322,18 +322,6 @@ src/
     │   │   │   ├── memberships.service.ts
     │   │   │   ├── memberships.types.ts
     │   │   │   └── memberships.validator.ts
-    │   │   ├── offering-suggestions/
-    │   │   │   ├── offering-suggestions.constants.ts
-    │   │   │   ├── offering-suggestions.controller.ts
-    │   │   │   ├── offering-suggestions.dto.ts
-    │   │   │   ├── offering-suggestions.overview.md
-    │   │   │   ├── offering-suggestions.repository.ts
-    │   │   │   ├── offering-suggestions.routes.ts
-    │   │   │   ├── offering-suggestions.schema.ts
-    │   │   │   ├── offering-suggestions.serializer.ts
-    │   │   │   ├── offering-suggestions.service.ts
-    │   │   │   ├── offering-suggestions.types.ts
-    │   │   │   └── offering-suggestions.validator.ts
     │   │   ├── offerings/
     │   │   │   ├── offering-groups/
     │   │   │   │   ├── offering-groups.controller.ts
@@ -372,18 +360,6 @@ src/
     │   │   │   ├── offerings.service.ts
     │   │   │   ├── offerings.types.ts
     │   │   │   └── offerings.validator.ts
-    │   │   ├── patient-packages/
-    │   │   │   ├── patient-packages.constants.ts
-    │   │   │   ├── patient-packages.controller.ts
-    │   │   │   ├── patient-packages.dto.ts
-    │   │   │   ├── patient-packages.overview.md
-    │   │   │   ├── patient-packages.repository.ts
-    │   │   │   ├── patient-packages.routes.ts
-    │   │   │   ├── patient-packages.schema.ts
-    │   │   │   ├── patient-packages.serializer.ts
-    │   │   │   ├── patient-packages.service.ts
-    │   │   │   ├── patient-packages.types.ts
-    │   │   │   └── patient-packages.validator.ts
     │   │   ├── patients/
     │   │   │   ├── patient-check-ins/
     │   │   │   │   ├── patient-check-ins.constants.ts
@@ -446,6 +422,32 @@ src/
     │   │   │   │   ├── patient-images.service.ts
     │   │   │   │   ├── patient-images.types.ts
     │   │   │   │   └── patient-images.validator.ts
+    │   │   │   ├── patient-offering-suggestions/
+    │   │   │   │   ├── patient-offering-suggestions.constants.ts
+    │   │   │   │   ├── patient-offering-suggestions.controller.ts
+    │   │   │   │   ├── patient-offering-suggestions.dto.ts
+    │   │   │   │   ├── patient-offering-suggestions.overview.md
+    │   │   │   │   ├── patient-offering-suggestions.repository.ts
+    │   │   │   │   ├── patient-offering-suggestions.routes.ts
+    │   │   │   │   ├── patient-offering-suggestions.rules.ts
+    │   │   │   │   ├── patient-offering-suggestions.schema.ts
+    │   │   │   │   ├── patient-offering-suggestions.serializer.ts
+    │   │   │   │   ├── patient-offering-suggestions.service.ts
+    │   │   │   │   ├── patient-offering-suggestions.types.ts
+    │   │   │   │   └── patient-offering-suggestions.validator.ts
+    │   │   │   ├── patient-offerings/
+    │   │   │   │   ├── patient-offerings.constants.ts
+    │   │   │   │   ├── patient-offerings.controller.ts
+    │   │   │   │   ├── patient-offerings.dto.ts
+    │   │   │   │   ├── patient-offerings.overview.md
+    │   │   │   │   ├── patient-offerings.repository.ts
+    │   │   │   │   ├── patient-offerings.routes.ts
+    │   │   │   │   ├── patient-offerings.rules.ts
+    │   │   │   │   ├── patient-offerings.schema.ts
+    │   │   │   │   ├── patient-offerings.serializer.ts
+    │   │   │   │   ├── patient-offerings.service.ts
+    │   │   │   │   ├── patient-offerings.types.ts
+    │   │   │   │   └── patient-offerings.validator.ts
     │   │   │   ├── patient-prescriptions/
     │   │   │   │   ├── patient-prescriptions.constants.ts
     │   │   │   │   ├── patient-prescriptions.controller.ts

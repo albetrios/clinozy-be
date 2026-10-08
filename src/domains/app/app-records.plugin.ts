@@ -19,8 +19,8 @@ import { prescriptionKitsRoutes } from './sub-domains/patients/prescription-kits
 import { patientImagesRoutes } from './sub-domains/patients/patient-images/patient-images.routes.js';
 import { patientReportsRoutes } from './sub-domains/patients/patient-reports/patient-reports.routes.js';
 import { invoicesRoutes } from './sub-domains/invoices/invoices.routes.js';
-import { patientPackagesRoutes } from './sub-domains/patient-packages/patient-packages.routes.js';
-import { offeringSuggestionsRoutes } from './sub-domains/offering-suggestions/offering-suggestions.routes.js';
+import { patientOfferingsRoutes } from './sub-domains/patients/patient-offerings/patient-offerings.routes.js';
+import { patientOfferingSuggestionsRoutes } from './sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.routes.js';
 import { paymentsRoutes } from './sub-domains/payments/payments.routes.js';
 import { creditNotesRoutes } from './sub-domains/credit-notes/credit-notes.routes.js';
 import { pendingCreditsRoutes } from './sub-domains/pending-credits/pending-credits.routes.js';
@@ -68,8 +68,8 @@ export async function registerAppRecordRoutes(
   await app.register(patientImagesRoutes(services.patientImagesService));
   await app.register(patientReportsRoutes(services.patientReportsService));
   await app.register(invoicesRoutes(services.invoicesService));
-  await app.register(patientPackagesRoutes(services.patientPackagesService));
-  await app.register(offeringSuggestionsRoutes(services.offeringSuggestionsService));
+  await app.register(patientOfferingsRoutes(services.patientOfferingsService));
+  await app.register(patientOfferingSuggestionsRoutes(services.patientOfferingSuggestionsService));
   await app.register(paymentsRoutes(services.paymentsService));
   await app.register(creditNotesRoutes(services.creditNotesService));
   await app.register(pendingCreditsRoutes(services.pendingCreditsService));

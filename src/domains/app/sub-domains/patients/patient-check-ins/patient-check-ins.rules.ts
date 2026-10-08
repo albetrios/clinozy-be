@@ -8,6 +8,7 @@ import {
   assertDateNotFuture,
   assertTreatmentOfPatient,
   organizationToday,
+  shortCalendarDate,
   usualDoctorOf,
   writePatientFileActivity,
 } from '@/domains/app/sub-domains/patients/patients.rules.js';
@@ -40,22 +41,13 @@ function isCheckInFlagged(row: Readonly<Record<string, unknown>>): boolean {
   );
 }
 
-/** `2026-10-08` → `8 Oct` — a visit's date as the context names it. */
-function shortDate(date: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'UTC',
-  }).format(new Date(`${date}T00:00:00Z`));
-}
-
 /** TR9: "After <treatment>" for a session's check-in, else "Visit · <date>". */
 async function defaultContext(values: Record<string, unknown>): Promise<string> {
   if (typeof values.patient_treatment_id === 'number') {
     const treatment = await treatmentsRepository.findById(values.patient_treatment_id);
     if (treatment) return `After ${String(treatment.name)}`.slice(0, CONTEXT_MAX);
   }
-  return `Visit · ${shortDate(String(values.check_in_date))}`;
+  return `Visit · ${shortCalendarDate(String(values.check_in_date))}`;
 }
 
 /** The doctor a call-back goes to: the session's, else the visit's, else the usual doctor. */

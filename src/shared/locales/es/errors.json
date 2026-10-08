@@ -107,7 +107,9 @@
     "patientTreatmentLinkedFixed": "Una sesión gastada de un servicio comprado conserva su número y su servicio: anúlala y regístrala de nuevo",
     "offeringNotActive": "{{id}} no es un servicio activo de esta organización",
     "patientCheckInDateFuture": "Un seguimiento no puede ser futuro",
-    "patientReviewDateFuture": "Una reseña no puede tener fecha futura"
+    "patientReviewDateFuture": "Una reseña no puede tener fecha futura",
+    "patientOfferingSessionsBelowUsed": "Ya se gastaron {{used}} sesiones: el total no puede ser menor",
+    "patientOfferingValidBeforeInvoice": "Un servicio comprado no puede caducar antes de la fecha de su factura"
   },
   "missingSessionCookie": "Falta la cookie de sesión",
   "disposableEmail": "Este dominio de correo no está permitido.",
@@ -259,6 +261,7 @@
   "offeringExpired": "Este servicio comprado ha caducado",
   "offeringUsedUp": "Todas las sesiones de este servicio comprado están usadas",
   "treatmentReversed": "Una sesión revertida no se puede cambiar",
+  "patientOfferingSuggestionExists": "Este servicio ya está en el plan del paciente: cambia esa fila o márcala como rechazada primero",
   "ownMembershipRequired": "Las preferencias y las vistas guardadas pertenecen a un miembro que ha iniciado sesión como sí mismo; una clave de API no tiene",
   "savedViewExists": "Ya tienes una vista con este nombre en esta lista",
   "savedViewLimit": "Puedes guardar hasta {{max}} vistas por lista: elimina una primero"

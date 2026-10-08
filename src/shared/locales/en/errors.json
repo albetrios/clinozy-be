@@ -107,7 +107,9 @@
     "patientTreatmentLinkedFixed": "A session spent from a bought offering keeps its number and offering — reverse it and record it again",
     "offeringNotActive": "{{id}} is not an active offering of this organization",
     "patientCheckInDateFuture": "A check-in can't be in the future",
-    "patientReviewDateFuture": "A review can't be dated in the future"
+    "patientReviewDateFuture": "A review can't be dated in the future",
+    "patientOfferingSessionsBelowUsed": "{{used}} sessions are already spent — the total can't go below that",
+    "patientOfferingValidBeforeInvoice": "A bought offering can't expire before its invoice's date"
   },
   "missingSessionCookie": "Missing session cookie",
   "disposableEmail": "This email domain is not allowed.",
@@ -259,6 +261,7 @@
   "offeringExpired": "This bought offering has expired",
   "offeringUsedUp": "Every session of this bought offering is used",
   "treatmentReversed": "A reversed session cannot be changed",
+  "patientOfferingSuggestionExists": "This offering is already in the patient's plan — change that row, or mark it declined first",
   "ownMembershipRequired": "Preferences and saved views belong to a member signed in as themselves — an API key has none",
   "savedViewExists": "You already have a view with this name on this list",
   "savedViewLimit": "You can keep up to {{max}} views on a list — remove one first"

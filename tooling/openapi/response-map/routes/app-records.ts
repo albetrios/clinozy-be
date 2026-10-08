@@ -635,82 +635,79 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.invoicesRecordSchema, schemas.invoicesRecordExample),
     example: null,
   },
-  'GET /api/v1/app/patients/{patient_id}/packages': {
+  'GET /api/v1/app/patients/{patient_id}/offerings': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.patientPackagesRecordSchema, [
-      schemas.patientPackagesRecordExample,
+    schema: wrapPaginated(schemas.patientOfferingsRecordSchema, [
+      schemas.patientOfferingsRecordExample,
     ]),
     example: null,
   },
-  'POST /api/v1/app/patients/{patient_id}/packages': {
+  'GET /api/v1/app/patients/{patient_id}/offerings/{patient_offering_id}': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.patientPackagesRecordSchema, schemas.patientPackagesRecordExample),
+    schema: wrapSuccess(
+      schemas.patientOfferingsRecordSchema,
+      schemas.patientOfferingsRecordExample,
+    ),
     example: null,
   },
-  'GET /api/v1/app/patient-packages/{patient_package_id}': {
+  'PATCH /api/v1/app/patients/{patient_id}/offerings/{patient_offering_id}': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.patientPackagesRecordSchema, schemas.patientPackagesRecordExample),
-    example: null,
-  },
-  'PATCH /api/v1/app/patient-packages/{patient_package_id}': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.patientPackagesRecordSchema, schemas.patientPackagesRecordExample),
-    example: null,
-  },
-  'DELETE /api/v1/app/patient-packages/{patient_package_id}': {
-    statusCode: 204,
-    schema: null,
-    example: null,
-  },
-  'POST /api/v1/app/patient-packages/{patient_package_id}/restore': {
-    statusCode: 200,
-    schema: wrapSuccess(schemas.patientPackagesRecordSchema, schemas.patientPackagesRecordExample),
+    schema: wrapSuccess(
+      schemas.patientOfferingsRecordSchema,
+      schemas.patientOfferingsRecordExample,
+    ),
     example: null,
   },
   'GET /api/v1/app/patients/{patient_id}/offering-suggestions': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.offeringSuggestionsRecordSchema, [
-      schemas.offeringSuggestionsRecordExample,
-    ]),
+    schema: wrapPaginated(
+      schemas.patientOfferingSuggestionsRecordSchema,
+      [schemas.patientOfferingSuggestionsRecordExample],
+      {
+        plan_total: { type: 'number', description: 'The planned and accepted rows (PK9)' },
+      },
+    ),
     example: null,
   },
   'POST /api/v1/app/patients/{patient_id}/offering-suggestions': {
     statusCode: 200,
     schema: wrapSuccess(
-      schemas.offeringSuggestionsRecordSchema,
-      schemas.offeringSuggestionsRecordExample,
+      schemas.patientOfferingSuggestionsRecordSchema,
+      schemas.patientOfferingSuggestionsRecordExample,
     ),
     example: null,
   },
-  'GET /api/v1/app/offering-suggestions/{offering_suggestion_id}': {
+  'GET /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}': {
     statusCode: 200,
     schema: wrapSuccess(
-      schemas.offeringSuggestionsRecordSchema,
-      schemas.offeringSuggestionsRecordExample,
+      schemas.patientOfferingSuggestionsRecordSchema,
+      schemas.patientOfferingSuggestionsRecordExample,
     ),
     example: null,
   },
-  'PATCH /api/v1/app/offering-suggestions/{offering_suggestion_id}': {
+  'PATCH /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}': {
     statusCode: 200,
     schema: wrapSuccess(
-      schemas.offeringSuggestionsRecordSchema,
-      schemas.offeringSuggestionsRecordExample,
+      schemas.patientOfferingSuggestionsRecordSchema,
+      schemas.patientOfferingSuggestionsRecordExample,
     ),
     example: null,
   },
-  'DELETE /api/v1/app/offering-suggestions/{offering_suggestion_id}': {
-    statusCode: 204,
-    schema: null,
-    example: null,
-  },
-  'POST /api/v1/app/offering-suggestions/{offering_suggestion_id}/restore': {
-    statusCode: 200,
-    schema: wrapSuccess(
-      schemas.offeringSuggestionsRecordSchema,
-      schemas.offeringSuggestionsRecordExample,
-    ),
-    example: null,
-  },
+  'DELETE /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}':
+    {
+      statusCode: 204,
+      schema: null,
+      example: null,
+    },
+  'POST /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}/restore':
+    {
+      statusCode: 200,
+      schema: wrapSuccess(
+        schemas.patientOfferingSuggestionsRecordSchema,
+        schemas.patientOfferingSuggestionsRecordExample,
+      ),
+      example: null,
+    },
   'GET /api/v1/app/payments': {
     statusCode: 200,
     schema: wrapPaginated(schemas.paymentsRecordSchema, [schemas.paymentsRecordExample]),

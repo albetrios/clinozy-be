@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# TEMPORARY — sub-domain 7, Patients 7.A–7.K (routes-final §7, launch ROUTE #133–#134): the patient file
+# TEMPORARY — sub-domain 7, Patients 7.A–7.M (routes-final §7, launch ROUTE #133–#135): the patient file
 # on its contact, one per contact, check-in opening one, the list's search, filters, sorts and
 # export; clinical notes, prescriptions and their approval, kits, the diagnosis catalogue, photos in
 # three albums, reports; the clinical gates (P14), the private album (P23) and the `system` entries
@@ -440,15 +440,15 @@ NOWHERE_CHECK_IN=chk_aaaaaaaaaaaaaaaaaaaaa
 # writes these through an invoice); prints its public id.
 bought_offering() {
   local public_id
-  public_id="ppkg_$(printf '%s' "${T}-$1-$2-$4" | md5sum | head -c 21)"
-  patient_sql "INSERT INTO app.patient_packages (public_id, organization_id, patient_id, offering_id, sessions_total, valid_until)
+  public_id="poff_$(printf '%s' "${T}-$1-$2-$3-$4" | md5sum | head -c 21)"
+  patient_sql "INSERT INTO app.patient_offerings (public_id, organization_id, patient_id, offering_id, sessions_total, valid_until)
     SELECT '${public_id}', p.organization_id, p.id, f.id, $3, '$4'
     FROM app.patients p, app.offerings f WHERE p.public_id = '$1' AND f.public_id = '$2';" >/dev/null
   printf '%s' "${public_id}"
 }
 
 # sessions_used BOUGHT — the bought offering's spent sessions.
-sessions_used() { patient_sql "SELECT sessions_used FROM app.patient_packages WHERE public_id = '$1';"; }
+sessions_used() { patient_sql "SELECT sessions_used FROM app.patient_offerings WHERE public_id = '$1';"; }
 
 # call_backs SOURCE — the call-back tasks a check-in or review made (TR4).
 call_backs() { patient_sql "SELECT count(*) FROM app.tasks WHERE source_id = '$1' AND rule_key = 'call_back';"; }
@@ -662,4 +662,114 @@ expect 200 "marketing reads reviews" GET "/app/patients/${CHETAN_FILE}/reviews"
 as_role pharmacist
 expect 403 "the pharmacist logs no review (patient:update)" POST "/app/patients/${CHETAN_FILE}/reviews" '{"source":"google"}'
 expect 403 "the pharmacist logs no action" POST "/app/patients/${CHETAN_FILE}/reviews/${LOW_REVIEW}/actions" '{"action":"replied_google"}'
+as_role owner
+
+# ==== #135 — 7.L patient offerings, 7.M the plan =================================================
+# invoice_on FILE DATE — an invoice of the patient at the fixture's Vesu branch dated DATE
+# (sub-domain 8 writes these through its routes from #136); prints its public id.
+invoice_on() {
+  local public_id
+  public_id="invc_$(printf '%s' "${T}-invoice-$1-$2" | md5sum | head -c 21)"
+  patient_sql "INSERT INTO app.invoices (public_id, organization_id, invoice_number, financial_year, branch_id, patient_id, invoice_date)
+    SELECT '${public_id}', b.organization_id, 'CHK-${S}', '2026-27', b.id, p.id, '$2'
+    FROM app.branches b, app.patients p WHERE b.public_id = '${VESU}' AND p.public_id = '$1';" >/dev/null
+  printf '%s' "${public_id}"
+}
+
+as_role owner
+TODAY_INVOICE="$(invoice_on "${CHETAN_FILE}" "${TODAY}")"
+SEVEN_PACK="$(bought_offering "${CHETAN_FILE}" "${PEEL}" 7 "${IN_A_MONTH}")"
+patient_sql "UPDATE app.patient_offerings SET invoice_id = (SELECT id FROM app.invoices WHERE public_id = '${TODAY_INVOICE}') WHERE public_id = '${SEVEN_PACK}';" >/dev/null
+SINGLE_SESSION="$(bought_offering "${CHETAN_FILE}" "${HYDRA}" 1 "${IN_A_MONTH}")"
+patient_sql "UPDATE app.patient_offerings SET valid_until = NULL WHERE public_id = '${SINGLE_SESSION}';" >/dev/null
+
+# ---- 7.L Patient offerings (routes 65–67, PK4–PK6) -----------------------------------------------
+expect 200 "what Chetan bought" GET "/app/patients/${CHETAN_FILE}/offerings"
+expect_value "four, newest first" '[.data[].id] | join(",")' "${SINGLE_SESSION},${SEVEN_PACK},${CHETAN_EXPIRED},${CHETAN_BOUGHT}"
+expect 200 "a bought package" GET "/app/patients/${CHETAN_FILE}/offerings/${SEVEN_PACK}"
+expect_value "package: poff_, name, sessions, active, the bill" "[(.data.id | startswith(\"poff_\")), .data.offering_name, .data.sessions_total, .data.sessions_left, .data.is_package, .data.status, .data.invoice_id] | map(tostring) | join(\",\")" "true,Peel ${S},7,7,true,active,${TODAY_INVOICE}"
+expect 200 "the used-up one" GET "/app/patients/${CHETAN_FILE}/offerings/${CHETAN_BOUGHT}"
+expect_value "used up: 2 of 2" '[.data.sessions_used, .data.sessions_left, .data.status] | map(tostring) | join(",")' "2,0,used_up"
+expect 200 "active" GET "/app/patients/${CHETAN_FILE}/offerings?status=active"
+expect_value "active: the pack and the single" '[.data[].id] | join(",")' "${SINGLE_SESSION},${SEVEN_PACK}"
+expect 200 "used up or expired (several)" GET "/app/patients/${CHETAN_FILE}/offerings?status=used_up,expired"
+expect_value "used up and expired" '[.data[] | .status] | join(",")' "expired,used_up"
+expect 200 "single sessions (is_package=false)" GET "/app/patients/${CHETAN_FILE}/offerings?is_package=false"
+expect_value "the single" '[.data[].id] | join(",")' "${SINGLE_SESSION}"
+expect 200 "the packages tab" GET "/app/patients/${CHETAN_FILE}/offerings?is_package=true&offering_id=${HYDRA}"
+expect_value "Hydrafacial packages" '.data | length' 2
+expect 200 "by expiry, no expiry last" GET "/app/patients/${CHETAN_FILE}/offerings?sort=valid_until"
+expect_value "expiry order" '[.data[].id] | join(",")' "${CHETAN_EXPIRED},${CHETAN_BOUGHT},${SEVEN_PACK},${SINGLE_SESSION}"
+expect 400 "below what was spent (PK6)" PATCH "/app/patients/${CHETAN_FILE}/offerings/${CHETAN_BOUGHT}" '{"sessions_total":1}'
+expect_value "below spent: field" "${FIELDS}" sessions_total
+expect 400 "a thousand sessions" PATCH "/app/patients/${CHETAN_FILE}/offerings/${SEVEN_PACK}" '{"sessions_total":1000}'
+expect 400 "expiring before the bill" PATCH "/app/patients/${CHETAN_FILE}/offerings/${SEVEN_PACK}" "{\"valid_until\":\"${YESTERDAY}\"}"
+expect_value "before the bill: field" "${FIELDS}" valid_until
+expect 200 "no expiry" PATCH "/app/patients/${CHETAN_FILE}/offerings/${SEVEN_PACK}" '{"valid_until":null}'
+expect_value "no expiry: null" '.data.valid_until | tostring' null
+expect 200 "two more sessions" PATCH "/app/patients/${CHETAN_FILE}/offerings/${CHETAN_BOUGHT}" '{"sessions_total":4}'
+expect_value "active again, two left" '[.data.status, .data.sessions_left] | map(tostring) | join(",")' "active,2"
+expect 200 "extend the expired one" PATCH "/app/patients/${CHETAN_FILE}/offerings/${CHETAN_EXPIRED}" "{\"valid_until\":\"${IN_A_MONTH}\"}"
+expect_value "extended: active" '.data.status' active
+expect 200 "a session spent from the pack" POST "/app/patients/${CHETAN_FILE}/treatments" "{\"name\":\"Peel\",\"patient_offering_id\":\"${SEVEN_PACK}\"}"
+expect_value "spent: session 1 of the pack" '[.data.session_number, .data.patient_offering_id] | map(tostring) | join(",")' "1,${SEVEN_PACK}"
+expect 404 "under another patient" GET "/app/patients/${ASHA_FILE}/offerings/${SEVEN_PACK}"
+expect 404 "no create (PK4)" POST "/app/patients/${CHETAN_FILE}/offerings" "{\"offering_id\":\"${PEEL}\",\"sessions_total\":1}"
+expect 404 "no delete (PK6)" DELETE "/app/patients/${CHETAN_FILE}/offerings/${SEVEN_PACK}?${DELETE_REASON}"
+as_role front_desk
+expect 200 "the front desk changes one (payment:update)" PATCH "/app/patients/${CHETAN_FILE}/offerings/${SINGLE_SESSION}" '{"sessions_total":2}'
+as_role doctor
+expect 200 "a doctor reads them" GET "/app/patients/${CHETAN_FILE}/offerings"
+expect 403 "a doctor changes none" PATCH "/app/patients/${CHETAN_FILE}/offerings/${SINGLE_SESSION}" '{"sessions_total":3}'
+as_role owner
+
+# ---- 7.M The plan (routes 68–73, PK7–PK10) -------------------------------------------------------
+expect 200 "offering Consult" POST /app/offerings "{\"name\":\"Consult ${S}\",\"price\":500,\"min_price\":400}"
+CONSULT="$(last '.data.id')"
+expect 200 "Chetan's plan (a check-in planned two)" GET "/app/patients/${CHETAN_FILE}/offering-suggestions"
+expect_value "two from the check-in" '[.data[] | .source_label | startswith("Check-in · ")] | map(tostring) | join(",")' "true,true"
+PEEL_PLANNED="$(last "[.data[] | select(.offering_id == \"${PEEL}\") | .id] | first")"
+HYDRA_PLANNED="$(last "[.data[] | select(.offering_id == \"${HYDRA}\") | .id] | first")"
+expect_value "the plan's total (PK9)" '.meta.plan_total' 6500
+expect 409 "the same offering again (PK9)" POST "/app/patients/${CHETAN_FILE}/offering-suggestions" "{\"offering_id\":\"${HYDRA}\"}"
+expect_value "again: why" "${REASON}" suggestion_exists
+expect 400 "an inactive offering (O13)" POST "/app/patients/${CHETAN_FILE}/offering-suggestions" "{\"offering_id\":\"${OLD}\"}"
+expect_value "inactive: field" "${FIELDS}" offering_id
+expect 400 "another contact's visit" POST "/app/patients/${ASHA_FILE}/offering-suggestions" "{\"offering_id\":\"${CONSULT}\",\"appointment_id\":\"${CHETAN_VISIT}\"}"
+expect_value "another's visit: field" "${FIELDS}" appointment_id
+expect 400 "a quantity of 100" POST "/app/patients/${CHETAN_FILE}/offering-suggestions" "{\"offering_id\":\"${CONSULT}\",\"quantity\":100}"
+expect 200 "plan a consult at the visit, below its lowest price" POST "/app/patients/${CHETAN_FILE}/offering-suggestions" \
+  "$(jq -nc --arg consult "${CONSULT}" --arg visit "${CHETAN_VISIT}" '{offering_id: $consult, quantity: 2, price: 700, appointment_id: $visit, reason: "Review the peel"}')"
+CONSULT_PLANNED="$(last '.data.id')"
+expect_value "consult: osug_, the visit's label, below lowest, by a member, nothing invoiced" "[(.data.id | startswith(\"osug_\")), (.data.source_label | startswith(\"Appt #\")), (.data.source_label | endswith(\" · Consultation\")), .data.is_below_lowest_price, (.data.suggested_by_membership_id | startswith(\"mem_\")), .data.invoiced_quantity, .data.is_fully_invoiced, .data.offering_name] | map(tostring) | join(\",\")" "true,true,true,true,true,0,false,Consult ${S}"
+expect 200 "the plan with the consult" GET "/app/patients/${CHETAN_FILE}/offering-suggestions"
+expect_value "three rows, total with its price" '[(.data | length), .meta.plan_total] | map(tostring) | join(",")' "3,7200"
+expect 200 "a check-in's rows" GET "/app/patients/${CHETAN_FILE}/offering-suggestions?patient_check_in_id=${WORSE_CHECK_IN}"
+expect_value "the check-in's two" '.data | length' 2
+expect 200 "a visit's rows (Plan ready)" GET "/app/patients/${CHETAN_FILE}/offering-suggestions?appointment_id=${CHETAN_VISIT}"
+expect_value "the visit's three" '.data | length' 3
+expect 200 "decline the Hydrafacial" PATCH "/app/patients/${CHETAN_FILE}/offering-suggestions/${HYDRA_PLANNED}" '{"status":"declined"}'
+expect 200 "planned only" GET "/app/patients/${CHETAN_FILE}/offering-suggestions?status=planned,accepted"
+expect_value "planned: two, total without it" '[(.data | length), .meta.plan_total] | map(tostring) | join(",")' "2,3200"
+expect 200 "the Hydrafacial again, after the decline" POST "/app/patients/${CHETAN_FILE}/offering-suggestions" "{\"offering_id\":\"${HYDRA}\",\"status\":\"next_time\"}"
+HYDRA_AGAIN="$(last '.data.id')"
+expect_value "again: the patient file's label" '.data.source_label' "Patient file"
+expect 409 "the declined one back while another holds it" PATCH "/app/patients/${CHETAN_FILE}/offering-suggestions/${HYDRA_PLANNED}" '{"status":"planned"}'
+expect_value "back: why" "${REASON}" suggestion_exists
+expect 400 "the offering can't change" PATCH "/app/patients/${CHETAN_FILE}/offering-suggestions/${CONSULT_PLANNED}" "{\"offering_id\":\"${PEEL}\"}"
+expect 200 "change quantity and price" PATCH "/app/patients/${CHETAN_FILE}/offering-suggestions/${CONSULT_PLANNED}" '{"quantity":1,"price":null,"status":"accepted"}'
+expect_value "changed: no longer below" '[.data.quantity, (.data.price | tostring), .data.status, .data.is_below_lowest_price] | map(tostring) | join(",")' "1,null,accepted,false"
+expect 400 "remove without a note for other" DELETE "/app/patients/${CHETAN_FILE}/offering-suggestions/${HYDRA_AGAIN}?reason=other"
+expect 204 "remove the second Hydrafacial" DELETE "/app/patients/${CHETAN_FILE}/offering-suggestions/${HYDRA_AGAIN}?reason=duplicate"
+expect 404 "a removed row" GET "/app/patients/${CHETAN_FILE}/offering-suggestions/${HYDRA_AGAIN}"
+expect 200 "the declined one back now" PATCH "/app/patients/${CHETAN_FILE}/offering-suggestions/${HYDRA_PLANNED}" '{"status":"planned"}'
+expect 409 "restore while it is held again (PK9)" POST "/app/patients/${CHETAN_FILE}/offering-suggestions/${HYDRA_AGAIN}/restore"
+expect_value "restore held: why" "${REASON}" suggestion_exists
+expect 409 "restore a live row" POST "/app/patients/${CHETAN_FILE}/offering-suggestions/${PEEL_PLANNED}/restore"
+expect_value "live: why" "${REASON}" record_not_deleted
+expect 404 "a row under another patient" GET "/app/patients/${ASHA_FILE}/offering-suggestions/${PEEL_PLANNED}"
+as_role marketing
+expect 200 "marketing reads the plan" GET "/app/patients/${CHETAN_FILE}/offering-suggestions"
+as_role pharmacist
+expect 403 "the pharmacist plans nothing" POST "/app/patients/${CHETAN_FILE}/offering-suggestions" "{\"offering_id\":\"${CONSULT}\"}"
 as_role owner

@@ -43,7 +43,7 @@ its table designs name them (60 tables; the medical store's wait for its own rev
 | 4. Contacts | `app.contacts`, `app.contact_phones`, `app.contact_members`, `app.contact_activities`, `app.contact_message_templates` | §4 | #129 (contacts, phones, members) · #130 (activities, templates) |
 | 5. Leads | `app.leads`, `app.lead_involved_memberships` | §5 | #131 |
 | 6. Appointments | `app.appointments` | §6 | #132 |
-| 7. Patients | `app.patients`, `app.patient_clinical_notes`, `app.patient_prescriptions`, `app.prescription_kits`, `app.patient_diagnoses`, `app.patient_images`, `app.patient_reports`, `app.patient_treatments`, `app.patient_check_ins`, `app.patient_reviews`, `app.patient_feedback_actions`, `app.patient_offerings`, `app.patient_offering_suggestions` | §7 | #133 (the file and 7.B–7.G) · #134 (7.H–7.K) · #135 |
+| 7. Patients | `app.patients`, `app.patient_clinical_notes`, `app.patient_prescriptions`, `app.prescription_kits`, `app.patient_diagnoses`, `app.patient_images`, `app.patient_reports`, `app.patient_treatments`, `app.patient_check_ins`, `app.patient_reviews`, `app.patient_feedback_actions`, `app.patient_offerings`, `app.patient_offering_suggestions` | §7 | #133 (the file and 7.B–7.G) · #134 (7.H–7.K) · #135 (7.L–7.M) |
 | 8. Billing | `app.invoices`, `app.invoice_items`, `app.invoice_members`, `app.invoice_credit_notes`, `app.payments`, `app.payment_edits`, `app.pending_credits`, `app.day_closes`, `app.day_close_events` | §8 | #136 |
 | 9. Stock | `app.stock_items`, `app.stock_item_movements`, `app.stock_counts`, `app.stock_count_lines`, `app.stock_purchases`, `app.stock_purchase_items`, `app.stock_vendors` | §9 | #137 |
 | 10. Tasks & rules | `app.tasks`, `app.task_owner_changes`, `app.task_rule_settings` | §10 | #138 |
@@ -1202,6 +1202,7 @@ erDiagram
 - **Open:** none — package before its invoice settled (P33, D3)
 
 - **Built:** `app.patient_packages` · ROUTE #31 (2026-10-07)
+- **Built (ROUTE #135, routes-final 7.L):** renamed **`app.patient_offerings`** (code `patients/patient-offerings/`, PK4) — `sessions_total` / `sessions_used` `smallint` with `chk_patient_offerings_sessions_total` (1–999) and `chk_patient_offerings_sessions_used` (`0 ≤ used ≤ total`; the redundant `BETWEEN 0 AND 99` went); `valid_until` nullable (none = no expiry); `patient_id` and `offering_id` `RESTRICT`; indexes the tab `(patient_id, created_at DESC, id)`, the sessions-left `(patient_id, offering_id) WHERE sessions_used < sessions_total`, `(offering_id)`; FORCE RLS with the purge arm. **`invoice_id` stays** (nullable, `SET NULL`) until #136 replaces it with `invoice_item_id` → `app.invoice_items` `CASCADE`, unique (D71); every pointer to it repointed (`patient_treatments.patient_offering_id` `RESTRICT`, `contact_activities.patient_offering_id`)
 ```mermaid
 erDiagram
   patient_package["patient_package · NEW"] {
@@ -1224,6 +1225,7 @@ erDiagram
 
 - **Built:** `app.offering_suggestions` · ROUTE #32 (2026-10-07)
 - **Built (ROUTE #134, TR10):** `patient_check_in_id` → `app.patient_check_ins` `SET NULL` with its index — a check-in's next offerings are `planned` rows linked here (source label `Check-in`, no `reason`); the rest of the plan's rebuild is #135 (7.M)
+- **Built (ROUTE #135, routes-final 7.M):** renamed **`app.patient_offering_suggestions`** (code `patients/patient-offering-suggestions/`) — `source_label` and `invoice_links` dropped (PK7, PK8); `suggested_by_membership_id` a K8 composite key `RESTRICT` (K2); `quantity` `smallint` 1–99; `patient_id` and `offering_id` `RESTRICT`; indexes the plan `(patient_id, created_at DESC, id)`, the duplicate check `(patient_id, offering_id) WHERE status <> 'declined'` (PK9), the visit's and the check-in's, `(offering_id)`, the suggester's; FORCE RLS with the purge arm
 ```mermaid
 erDiagram
   offering_suggestion["offering_suggestion · NEW"] {

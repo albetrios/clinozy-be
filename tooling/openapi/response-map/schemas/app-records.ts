@@ -1119,121 +1119,107 @@ export const invoicesRecordExample = {
   updated_at: '2026-10-07T10:30:00.000Z',
 };
 
-/** `PatientPackageOutput`. */
-export const patientPackagesRecordSchema = {
+/** `PatientOfferingOutput` — what a patient bought (launch #135, routes-final 7.L.6). */
+export const patientOfferingsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'ppkg_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    patient_id: {
-      type: 'string',
-    },
-    offering_id: {
-      type: 'string',
-    },
-    invoice_id: {
+    id: { type: 'string', example: 'poff_k7x9m2pqr4w8n1v3a1b2c' },
+    patient_id: { type: 'string' },
+    offering_id: { type: 'string' },
+    offering_name: { type: 'string' },
+    invoice_id: { type: 'string', nullable: true, description: 'The bill it was bought on' },
+    invoice_item_id: {
       type: 'string',
       nullable: true,
+      description: 'Its invoice line (sub-domain 8)',
     },
-    sessions_total: {
-      type: 'integer',
-    },
-    sessions_used: {
-      type: 'integer',
-    },
+    sessions_total: { type: 'integer', minimum: 1, maximum: 999 },
+    sessions_used: { type: 'integer', minimum: 0 },
+    sessions_left: { type: 'integer', minimum: 0 },
+    is_package: { type: 'boolean', description: 'More than one session' },
     valid_until: {
       type: 'string',
       format: 'date',
       nullable: true,
+      description: 'None = no expiry',
     },
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    status: { type: 'string', enum: ['active', 'used_up', 'expired'] },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
-/** Example `PatientPackageOutput`. */
-export const patientPackagesRecordExample = {
-  id: 'ppkg_k7x9m2pqr4w8n1v3a1b2c',
+/** Example `PatientOfferingOutput`. */
+export const patientOfferingsRecordExample = {
+  id: 'poff_k7x9m2pqr4w8n1v3a1b2c',
   patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
-  offering_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  invoice_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  sessions_total: 1,
-  sessions_used: 1,
-  valid_until: '2026-10-08',
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  offering_id: 'off_k7x9m2pqr4w8n1v3a1b2c',
+  offering_name: 'Laser hair reduction — 7 sessions',
+  invoice_id: 'invc_k7x9m2pqr4w8n1v3a1b2c',
+  invoice_item_id: null,
+  sessions_total: 7,
+  sessions_used: 2,
+  sessions_left: 5,
+  is_package: true,
+  valid_until: '2027-04-08',
+  status: 'active',
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
 };
 
-/** `OfferingSuggestionOutput`. */
-export const offeringSuggestionsRecordSchema = {
+/** `PatientOfferingSuggestionOutput` — a row of the patient's plan (launch #135, routes-final 7.M.6). */
+export const patientOfferingSuggestionsRecordSchema = {
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      example: 'osug_k7x9m2pqr4w8n1v3a1b2c',
-    },
-    patient_id: {
-      type: 'string',
-    },
-    offering_id: {
-      type: 'string',
-    },
-    quantity: {
-      type: 'integer',
-    },
+    id: { type: 'string', example: 'osug_k7x9m2pqr4w8n1v3a1b2c' },
+    patient_id: { type: 'string' },
+    offering_id: { type: 'string' },
+    offering_name: { type: 'string' },
+    quantity: { type: 'integer', minimum: 1, maximum: 99 },
     price: {
       type: 'number',
       nullable: true,
+      description: "The whole quantity's final amount; none = the billed price × quantity",
     },
-    status: {
-      type: 'string',
-      enum: ['planned', 'accepted', 'next_time', 'declined'],
-    },
+    status: { type: 'string', enum: ['planned', 'accepted', 'next_time', 'declined'] },
+    reason: { type: 'string', maxLength: 200, nullable: true },
+    appointment_id: { type: 'string', nullable: true },
+    patient_check_in_id: { type: 'string', nullable: true },
     source_label: {
       type: 'string',
+      description: '"Check-in · 26 Sep", "Appt #2790 · Consultation", else "Patient file" (PK8)',
     },
-    appointment_id: {
-      type: 'string',
-      nullable: true,
+    suggested_by_membership_id: { type: 'string', nullable: true },
+    invoiced_quantity: { type: 'integer', minimum: 0 },
+    is_fully_invoiced: { type: 'boolean' },
+    is_below_lowest_price: {
+      type: 'boolean',
+      description: "Below the offering's lowest price × quantity — the invoice refuses it",
     },
-    reason: {
-      type: 'string',
-      nullable: true,
-    },
-    invoice_links: {},
-    created_at: {
-      type: 'string',
-      format: 'date-time',
-    },
-    updated_at: {
-      type: 'string',
-      format: 'date-time',
-    },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
   },
 };
 
-/** Example `OfferingSuggestionOutput`. */
-export const offeringSuggestionsRecordExample = {
+/** Example `PatientOfferingSuggestionOutput`. */
+export const patientOfferingSuggestionsRecordExample = {
   id: 'osug_k7x9m2pqr4w8n1v3a1b2c',
   patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
-  offering_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  quantity: 1,
-  price: 100,
+  offering_id: 'off_k7x9m2pqr4w8n1v3a1b2c',
+  offering_name: 'Glycolic peel',
+  quantity: 2,
+  price: 5000,
   status: 'planned',
-  source_label: 'Sample source label',
-  appointment_id: 'ref_k7x9m2pqr4w8n1v3a1b2c',
-  reason: 'Sample reason',
-  invoice_links: [],
-  created_at: '2026-10-07T10:30:00.000Z',
-  updated_at: '2026-10-07T10:30:00.000Z',
+  reason: 'Pigmentation on the cheeks',
+  appointment_id: 'appt_k7x9m2pqr4w8n1v3a1b2c',
+  patient_check_in_id: null,
+  source_label: 'Appt #2790 · Consultation',
+  suggested_by_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
+  invoiced_quantity: 0,
+  is_fully_invoiced: false,
+  is_below_lowest_price: false,
+  created_at: '2026-10-08T10:30:00.000Z',
+  updated_at: '2026-10-08T10:30:00.000Z',
 };
 
 /** `PaymentOutput`. */
@@ -1700,7 +1686,7 @@ export const patientTreatmentsRecordExample = {
   parameters: { pressure: 'medium' },
   remark: null,
   aftercare_call: 'next_day',
-  patient_offering_id: 'ppkg_k7x9m2pqr4w8n1v3a1b2c',
+  patient_offering_id: 'poff_k7x9m2pqr4w8n1v3a1b2c',
   is_billed: true,
   status: 'done',
   reversed_reason: null,

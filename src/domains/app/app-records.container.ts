@@ -37,10 +37,10 @@ import { PatientReportsRepository } from './sub-domains/patients/patient-reports
 import { PatientReportsService } from './sub-domains/patients/patient-reports/patient-reports.service.js';
 import { InvoicesRepository } from './sub-domains/invoices/invoices.repository.js';
 import { InvoicesService } from './sub-domains/invoices/invoices.service.js';
-import { PatientPackagesRepository } from './sub-domains/patient-packages/patient-packages.repository.js';
-import { PatientPackagesService } from './sub-domains/patient-packages/patient-packages.service.js';
-import { OfferingSuggestionsRepository } from './sub-domains/offering-suggestions/offering-suggestions.repository.js';
-import { OfferingSuggestionsService } from './sub-domains/offering-suggestions/offering-suggestions.service.js';
+import { PatientOfferingsRepository } from './sub-domains/patients/patient-offerings/patient-offerings.repository.js';
+import { PatientOfferingsService } from './sub-domains/patients/patient-offerings/patient-offerings.service.js';
+import { PatientOfferingSuggestionsRepository } from './sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.repository.js';
+import { PatientOfferingSuggestionsService } from './sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.service.js';
 import { PaymentsRepository } from './sub-domains/payments/payments.repository.js';
 import { PaymentsService } from './sub-domains/payments/payments.service.js';
 import { CreditNotesRepository } from './sub-domains/credit-notes/credit-notes.repository.js';
@@ -107,8 +107,8 @@ export type AppRecordServices = {
   patientImagesService: PatientImagesService;
   patientReportsService: PatientReportsService;
   invoicesService: InvoicesService;
-  patientPackagesService: PatientPackagesService;
-  offeringSuggestionsService: OfferingSuggestionsService;
+  patientOfferingsService: PatientOfferingsService;
+  patientOfferingSuggestionsService: PatientOfferingSuggestionsService;
   paymentsService: PaymentsService;
   creditNotesService: CreditNotesService;
   pendingCreditsService: PendingCreditsService;
@@ -169,7 +169,8 @@ function createPlaceOfferingContactServices(organizationService: OrganizationSer
 
 /**
  * The services of a patient file's nested records (§7): the diagnosis catalogue, clinical notes,
- * prescriptions and kits, photos, reports, treatment sessions, check-ins and reviews.
+ * prescriptions and kits, photos, reports, treatment sessions, check-ins, reviews, what the patient
+ * bought and the plan.
  */
 function createPatientFileServices(organizationService: OrganizationService) {
   return {
@@ -209,6 +210,14 @@ function createPatientFileServices(organizationService: OrganizationService) {
       organizationService,
       new PatientReviewsRepository(),
     ),
+    patientOfferingsService: new PatientOfferingsService(
+      organizationService,
+      new PatientOfferingsRepository(),
+    ),
+    patientOfferingSuggestionsService: new PatientOfferingSuggestionsService(
+      organizationService,
+      new PatientOfferingSuggestionsRepository(),
+    ),
   };
 }
 
@@ -232,14 +241,6 @@ export function createAppRecordServices(
     appointmentsService: new AppointmentsService(organizationService, new AppointmentsRepository()),
     ...createPatientFileServices(organizationService),
     invoicesService: new InvoicesService(organizationService, new InvoicesRepository()),
-    patientPackagesService: new PatientPackagesService(
-      organizationService,
-      new PatientPackagesRepository(),
-    ),
-    offeringSuggestionsService: new OfferingSuggestionsService(
-      organizationService,
-      new OfferingSuggestionsRepository(),
-    ),
     paymentsService: new PaymentsService(organizationService, new PaymentsRepository()),
     creditNotesService: new CreditNotesService(organizationService, new CreditNotesRepository()),
     pendingCreditsService: new PendingCreditsService(

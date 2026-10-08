@@ -23,7 +23,7 @@ import { appointments } from '@/domains/app/sub-domains/appointments/appointment
 import { invoices } from '@/domains/app/sub-domains/invoices/invoices.schema.js';
 import { payments } from '@/domains/app/sub-domains/payments/payments.schema.js';
 import { patient_prescriptions } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.schema.js';
-import { patient_packages } from '@/domains/app/sub-domains/patient-packages/patient-packages.schema.js';
+import { patient_offerings } from '@/domains/app/sub-domains/patients/patient-offerings/patient-offerings.schema.js';
 import { patient_reviews } from '@/domains/app/sub-domains/patients/patient-reviews/patient-reviews.schema.js';
 import { patient_check_ins } from '@/domains/app/sub-domains/patients/patient-check-ins/patient-check-ins.schema.js';
 import { tasks } from '@/domains/app/sub-domains/tasks/tasks.schema.js';
@@ -119,7 +119,7 @@ export const contact_activities = appSchema
         },
       ),
       patient_offering_id: bigint('patient_offering_id', { mode: 'number' }).references(
-        (): AnyPgColumn => patient_packages.id,
+        (): AnyPgColumn => patient_offerings.id,
         {
           onDelete: 'set null',
         },

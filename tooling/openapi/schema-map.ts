@@ -85,14 +85,11 @@ import {
   CreateInvoiceDto as appCreateInvoiceDto,
   UpdateInvoiceDto as appUpdateInvoiceDto,
 } from '@/domains/app/sub-domains/invoices/invoices.dto.js';
+import { UpdatePatientOfferingDto as appUpdatePatientOfferingDto } from '@/domains/app/sub-domains/patients/patient-offerings/patient-offerings.dto.js';
 import {
-  CreatePatientPackageDto as appCreatePatientPackageDto,
-  UpdatePatientPackageDto as appUpdatePatientPackageDto,
-} from '@/domains/app/sub-domains/patient-packages/patient-packages.dto.js';
-import {
-  CreateOfferingSuggestionDto as appCreateOfferingSuggestionDto,
-  UpdateOfferingSuggestionDto as appUpdateOfferingSuggestionDto,
-} from '@/domains/app/sub-domains/offering-suggestions/offering-suggestions.dto.js';
+  CreatePatientOfferingSuggestionDto as appCreatePatientOfferingSuggestionDto,
+  UpdatePatientOfferingSuggestionDto as appUpdatePatientOfferingSuggestionDto,
+} from '@/domains/app/sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.dto.js';
 import {
   CreatePaymentDto as appCreatePaymentDto,
   UpdatePaymentDto as appUpdatePaymentDto,
@@ -350,7 +347,8 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'POST /api/v1/app/contacts/{contact_id}/activities/log-call': LogContactCallDto,
   'POST /api/v1/app/contacts/{contact_id}/activities/add-note': AddContactNoteDto,
   'POST /api/v1/app/contact-activities/message-batches': ContactMessageBatchDto,
-  'PATCH /api/v1/app/patient-packages/{patient_package_id}': appUpdatePatientPackageDto,
+  'PATCH /api/v1/app/patients/{patient_id}/offerings/{patient_offering_id}':
+    appUpdatePatientOfferingDto,
   'PATCH /api/v1/app/patients/{patient_id}/reports/{patient_report_id}': appUpdatePatientReportDto,
   'PATCH /api/v1/app/patients/{patient_id}/images/{patient_image_id}': appUpdatePatientImageDto,
   'POST /api/v1/app/tasks/{task_id}/snooze': appSnoozeTaskDto,
@@ -404,9 +402,10 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'POST /api/v1/app/pending-credits': appCreatePendingCreditDto,
   'PATCH /api/v1/app/payments/{payment_id}': appUpdatePaymentDto,
   'POST /api/v1/app/payments': appCreatePaymentDto,
-  'PATCH /api/v1/app/offering-suggestions/{offering_suggestion_id}': appUpdateOfferingSuggestionDto,
-  'POST /api/v1/app/patients/{patient_id}/offering-suggestions': appCreateOfferingSuggestionDto,
-  'POST /api/v1/app/patients/{patient_id}/packages': appCreatePatientPackageDto,
+  'PATCH /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}':
+    appUpdatePatientOfferingSuggestionDto,
+  'POST /api/v1/app/patients/{patient_id}/offering-suggestions':
+    appCreatePatientOfferingSuggestionDto,
   'PATCH /api/v1/app/invoices/{invoice_id}': appUpdateInvoiceDto,
   'POST /api/v1/app/invoices': appCreateInvoiceDto,
   'POST /api/v1/app/patients/{patient_id}/reports': appCreatePatientReportDto,

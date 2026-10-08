@@ -4,6 +4,7 @@ import { ContactsRepository } from '@/domains/app/sub-domains/contacts/contacts.
 import { CONTACT_ACTIVITY_TYPE } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.constants.js';
 import { ContactActivitiesRepository } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.repository.js';
 import { ContactMembersRepository } from '@/domains/app/sub-domains/contacts/contact-members/contact-members.repository.js';
+import { OfferingsRepository } from '@/domains/app/sub-domains/offerings/offerings.repository.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
 import { calendarDateInTimeZone } from '@/shared/utils/validation/record-fields.util.js';
 import { PatientTreatmentsRepository } from './patient-treatments/patient-treatments.repository.js';
@@ -13,6 +14,7 @@ const appointmentsRepository = new AppointmentsRepository();
 const contactsRepository = new ContactsRepository();
 const contactActivitiesRepository = new ContactActivitiesRepository();
 const contactMembersRepository = new ContactMembersRepository();
+const offeringsRepository = new OfferingsRepository();
 const patientsRepository = new PatientsRepository();
 const patientTreatmentsRepository = new PatientTreatmentsRepository();
 
@@ -85,6 +87,31 @@ export async function assertTreatmentOfPatient(options: {
       messageKey: 'errors:validation.patientTreatmentOtherPatient',
     });
   }
+}
+
+/** A sent offering is active (O13, TR8, PK10) — else a 400 on `field` naming it. */
+export async function assertOfferingActive(
+  offeringId: unknown,
+  field = 'offering_id',
+): Promise<void> {
+  if (typeof offeringId !== 'number') return;
+  const offering = await offeringsRepository.findById(offeringId);
+  if (offering?.is_active !== true) {
+    throw fieldValidationError({
+      field,
+      messageKey: 'errors:validation.offeringNotActive',
+      messageParams: { id: String(offering?.public_id ?? '') },
+    });
+  }
+}
+
+/** `2026-10-08` → `8 Oct` — a patient-file date as a label names it (TR9, PK8). */
+export function shortCalendarDate(date: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  }).format(new Date(`${date}T00:00:00Z`));
 }
 
 /** The patient's usual doctor (internal membership id), or null. */

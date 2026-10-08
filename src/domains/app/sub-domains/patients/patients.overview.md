@@ -30,6 +30,8 @@ care, in the nested sub-domains below. **The person lives on the contact** (P1, 
 | `patient-check-ins/` | 7.I — how the patient is doing, the next offerings in the plan (routes 51–56) |
 | `patient-reviews/` | 7.J — reviews the patient gave (routes 57–62) |
 | `patient-feedback-actions/` | 7.K — what was done about a check-in or a review (routes 63–64, under their parent) |
+| `patient-offerings/` | 7.L — what the patient bought, spent by treatments (routes 65–67) |
+| `patient-offering-suggestions/` | 7.M — the plan (routes 68–73) |
 
 ## Routes
 

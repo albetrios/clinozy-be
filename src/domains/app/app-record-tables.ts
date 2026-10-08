@@ -16,8 +16,8 @@ import { prescription_kits } from '@/domains/app/sub-domains/patients/prescripti
 import { patient_images } from '@/domains/app/sub-domains/patients/patient-images/patient-images.schema.js';
 import { patient_reports } from '@/domains/app/sub-domains/patients/patient-reports/patient-reports.schema.js';
 import { invoices } from '@/domains/app/sub-domains/invoices/invoices.schema.js';
-import { patient_packages } from '@/domains/app/sub-domains/patient-packages/patient-packages.schema.js';
-import { offering_suggestions } from '@/domains/app/sub-domains/offering-suggestions/offering-suggestions.schema.js';
+import { patient_offerings } from '@/domains/app/sub-domains/patients/patient-offerings/patient-offerings.schema.js';
+import { patient_offering_suggestions } from '@/domains/app/sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.schema.js';
 import { payments } from '@/domains/app/sub-domains/payments/payments.schema.js';
 import { payment_edits } from '@/domains/app/sub-domains/payment-edits/payment-edits.schema.js';
 import { credit_notes } from '@/domains/app/sub-domains/credit-notes/credit-notes.schema.js';
@@ -80,8 +80,8 @@ export const APP_RECORD_TABLES: readonly { table: PgTable; label: string }[] = [
   { table: credit_notes, label: 'app.credit_notes' },
   { table: payment_edits, label: 'app.payment_edits' },
   { table: payments, label: 'app.payments' },
-  { table: offering_suggestions, label: 'app.offering_suggestions' },
-  { table: patient_packages, label: 'app.patient_packages' },
+  { table: patient_offering_suggestions, label: 'app.patient_offering_suggestions' },
+  { table: patient_offerings, label: 'app.patient_offerings' },
   { table: invoices, label: 'app.invoices' },
   { table: patient_reports, label: 'app.patient_reports' },
   { table: patient_images, label: 'app.patient_images' },

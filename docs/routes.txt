@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 438
+  Total routes: 435
 ================================================================================
 
 Legend:
@@ -13,7 +13,7 @@ Legend:
 
 ================================================================================
   DOMAIN: APP (/api/v1/app)
-  Routes: 304
+  Routes: 301
 ================================================================================
 
   — Sub Domains —
@@ -168,10 +168,6 @@ Legend:
   PATCH  /api/v1/app/offering-groups/:offering_group_id           200  -    both  PERM: offering:update
   DELETE /api/v1/app/offering-groups/:offering_group_id           204  -    both  PERM: offering:delete
   POST   /api/v1/app/offering-groups/:offering_group_id/restore   200  req  both  PERM: offering:delete
-  GET    /api/v1/app/offering-suggestions/:offering_suggestion_id  200  -    both  PERM: patient:read
-  PATCH  /api/v1/app/offering-suggestions/:offering_suggestion_id  200  -    both  PERM: patient:update
-  DELETE /api/v1/app/offering-suggestions/:offering_suggestion_id  204  -    both  PERM: patient:update
-  POST   /api/v1/app/offering-suggestions/:offering_suggestion_id/restore  200  req  both  PERM: patient:update
   GET    /api/v1/app/offerings                                    200  -    both  PERM: organization:read
   POST   /api/v1/app/offerings                                    200  req  both  PERM: offering:create
   GET    /api/v1/app/offerings/:offering_id                       200  -    both  PERM: organization:read
@@ -191,10 +187,6 @@ Legend:
   PATCH  /api/v1/app/patient-diagnoses/:patient_diagnosis_id      200  -    both  PERM: patient_prescription:update
   DELETE /api/v1/app/patient-diagnoses/:patient_diagnosis_id      204  -    both  PERM: patient_prescription:delete
   POST   /api/v1/app/patient-diagnoses/:patient_diagnosis_id/restore  200  req  both  PERM: patient_prescription:delete
-  GET    /api/v1/app/patient-packages/:patient_package_id         200  -    both  PERM: patient:read
-  PATCH  /api/v1/app/patient-packages/:patient_package_id         200  -    both  PERM: patient:update
-  DELETE /api/v1/app/patient-packages/:patient_package_id         204  -    both  PERM: payment:delete
-  POST   /api/v1/app/patient-packages/:patient_package_id/restore  200  req  both  PERM: payment:delete
   GET    /api/v1/app/patient-prescriptions                        200  -    both  PERM: patient_prescription:read
   GET    /api/v1/app/patient-treatments                           200  -    both  PERM: patient_treatment:read
   GET    /api/v1/app/patients                                     200  -    both  PERM: patient:read
@@ -222,8 +214,13 @@ Legend:
   POST   /api/v1/app/patients/:patient_id/images/:patient_image_id/restore  200  req  both  PERM: patient:update
   GET    /api/v1/app/patients/:patient_id/offering-suggestions    200  -    both  PERM: patient:read
   POST   /api/v1/app/patients/:patient_id/offering-suggestions    200  req  both  PERM: patient:update
-  GET    /api/v1/app/patients/:patient_id/packages                200  -    both  PERM: patient:read
-  POST   /api/v1/app/patients/:patient_id/packages                200  req  both  PERM: payment:create
+  GET    /api/v1/app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id  200  -    both  PERM: patient:read
+  PATCH  /api/v1/app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id  200  -    both  PERM: patient:update
+  DELETE /api/v1/app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id  204  -    both  PERM: patient:update
+  POST   /api/v1/app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id/restore  200  req  both  PERM: patient:update
+  GET    /api/v1/app/patients/:patient_id/offerings               200  -    both  PERM: patient:read
+  GET    /api/v1/app/patients/:patient_id/offerings/:patient_offering_id  200  -    both  PERM: patient:read
+  PATCH  /api/v1/app/patients/:patient_id/offerings/:patient_offering_id  200  -    both  PERM: payment:update
   GET    /api/v1/app/patients/:patient_id/prescriptions           200  -    both  PERM: patient_prescription:read
   POST   /api/v1/app/patients/:patient_id/prescriptions           200  req  both  PERM: patient_prescription:create
   GET    /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id  200  -    both  PERM: patient_prescription:read
@@ -529,16 +526,16 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 438
+  Total routes    : 435
   Public          : 16
   Authenticated   : 51
   Role-guarded    : 9
-  Perm-guarded    : 357
+  Perm-guarded    : 354
   Token-guarded   : 5
   Team-only (O)   : 10
 
 ================================================================================
-  IDEMPOTENCY-REQUIRED WRITES (123) — X-Idempotency-Key required
+  IDEMPOTENCY-REQUIRED WRITES (121) — X-Idempotency-Key required
 ================================================================================
 
   Routes flagged I = req reject a missing or reused key (422); every other write
@@ -597,14 +594,12 @@ Legend:
     POST /api/v1/app/memberships/me/saved-views
     POST /api/v1/app/offering-groups
     POST /api/v1/app/offering-groups/:offering_group_id/restore
-    POST /api/v1/app/offering-suggestions/:offering_suggestion_id/restore
     POST /api/v1/app/offerings
     POST /api/v1/app/offerings/:offering_id/restore
     POST /api/v1/app/offers
     POST /api/v1/app/offers/:offer_id/restore
     POST /api/v1/app/patient-diagnoses
     POST /api/v1/app/patient-diagnoses/:patient_diagnosis_id/restore
-    POST /api/v1/app/patient-packages/:patient_package_id/restore
     POST /api/v1/app/patients
     POST /api/v1/app/patients/:patient_id/check-ins
     POST /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id/actions
@@ -614,7 +609,7 @@ Legend:
     POST /api/v1/app/patients/:patient_id/images
     POST /api/v1/app/patients/:patient_id/images/:patient_image_id/restore
     POST /api/v1/app/patients/:patient_id/offering-suggestions
-    POST /api/v1/app/patients/:patient_id/packages
+    POST /api/v1/app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id/restore
     POST /api/v1/app/patients/:patient_id/prescriptions
     POST /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id/approve
     POST /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id/restore

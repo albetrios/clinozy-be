@@ -2,7 +2,7 @@ import type { OrganizationService } from '@/domains/tenancy/sub-domains/organiza
 import type { OrganizationPrincipalDatabaseScope } from '@/infrastructure/database/contexts/database-context.js';
 import { withAppDatabaseContext } from '@/infrastructure/database/contexts/database-context.js';
 import { ValidationError } from '@/shared/errors/index.js';
-import { resolveRecordIds } from '@/domains/app/base-record.repository.js';
+import { findMembershipIdOfUser, resolveRecordIds } from '@/domains/app/base-record.repository.js';
 import { BaseRecordService } from '@/domains/app/base-record.service.js';
 import type { BaseRecordVisibility } from '@/domains/app/base-record.types.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
@@ -113,13 +113,15 @@ export class PatientCheckInsService extends BaseRecordService<PatientCheckInOutp
       );
       const row = await this.checkInsRepository.findByPublicId(created.id, organizationId);
       if (!row) return created;
+      const userId = await this.userId(actingUserPublicId);
       await this.checkInsRepository.planNextOfferings({
         organizationId,
         patientId: row.patient_id as number,
         checkInId: row.id,
         appointmentId: (row.appointment_id as number | null) ?? null,
         offeringIds: nextOfferingIds.map((publicId) => offeringIds.get(publicId)!),
-        userId: await this.userId(actingUserPublicId),
+        suggestedByMembershipId: await findMembershipIdOfUser({ organizationId, userId }),
+        userId,
       });
       return this.get(scope, created.id, actingUserPublicId, visibility, parentPublicId);
     });

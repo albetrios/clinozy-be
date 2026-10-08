@@ -1,11 +1,11 @@
 import { resolveRecordIds, type BaseRecordRow } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
-import { OfferingsRepository } from '@/domains/app/sub-domains/offerings/offerings.repository.js';
-import { PatientPackagesRepository } from '@/domains/app/sub-domains/patient-packages/patient-packages.repository.js';
+import { PatientOfferingsRepository } from '@/domains/app/sub-domains/patients/patient-offerings/patient-offerings.repository.js';
 import { PATIENT_CONVERSION } from '@/domains/app/sub-domains/patients/patients.constants.js';
 import { PatientsRepository } from '@/domains/app/sub-domains/patients/patients.repository.js';
 import {
   assertAppointmentOfPatient,
+  assertOfferingActive,
   organizationToday,
   writePatientFileActivity,
 } from '@/domains/app/sub-domains/patients/patients.rules.js';
@@ -16,8 +16,7 @@ import type { PatientTreatmentsRepository } from './patient-treatments.repositor
 import { patient_treatments } from './patient-treatments.schema.js';
 
 const checkInsRepository = new PatientCheckInsRepository();
-const offeringsRepository = new OfferingsRepository();
-const patientOfferingsRepository = new PatientPackagesRepository();
+const patientOfferingsRepository = new PatientOfferingsRepository();
 const patientsRepository = new PatientsRepository();
 
 /** The reverse action (TR6). */
@@ -29,19 +28,6 @@ function assertPerformedNotFuture(performedAt: unknown): void {
     throw fieldValidationError({
       field: 'performed_at',
       messageKey: 'errors:validation.patientTreatmentPerformedFuture',
-    });
-  }
-}
-
-/** A sent offering is active (O13, TR8) — else a 400 on `offering_id`. */
-async function assertOfferingActive(offeringId: unknown): Promise<void> {
-  if (typeof offeringId !== 'number') return;
-  const offering = await offeringsRepository.findById(offeringId);
-  if (offering?.is_active !== true) {
-    throw fieldValidationError({
-      field: 'offering_id',
-      messageKey: 'errors:validation.offeringNotActive',
-      messageParams: { id: String(offering?.public_id ?? '') },
     });
   }
 }

@@ -20,7 +20,7 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
-import { patient_packages } from '@/domains/app/sub-domains/patient-packages/patient-packages.schema.js';
+import { patient_offerings } from '@/domains/app/sub-domains/patients/patient-offerings/patient-offerings.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
 import { PATIENT_BODY_PART_VALUES } from '@/domains/app/sub-domains/patients/patients.constants.js';
 import {
@@ -91,7 +91,7 @@ export const patient_treatments = appSchema
       aftercare_call: varchar('aftercare_call', { length: 11 }).notNull().default('next_day'),
       // The bought session it spent (TR7, TR13)
       patient_offering_id: bigint('patient_offering_id', { mode: 'number' }).references(
-        (): AnyPgColumn => patient_packages.id,
+        (): AnyPgColumn => patient_offerings.id,
         { onDelete: 'restrict' },
       ),
       status: varchar('status', { length: 8 }).notNull().default('done'),

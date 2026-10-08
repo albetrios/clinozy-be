@@ -3,7 +3,11 @@ import { getRequestDatabase } from '@/infrastructure/database/contexts/database-
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { BaseRecordRepository } from '@/domains/app/base-record.repository.js';
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
-import { offering_suggestions } from '@/domains/app/sub-domains/offering-suggestions/offering-suggestions.schema.js';
+import {
+  PATIENT_OFFERING_SUGGESTION_HELD_STATUS_VALUES,
+  PATIENT_OFFERING_SUGGESTION_STATUS,
+} from '@/domains/app/sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.constants.js';
+import { patient_offering_suggestions } from '@/domains/app/sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.schema.js';
 import { patient_feedback_actions } from '@/domains/app/sub-domains/patients/patient-feedback-actions/patient-feedback-actions.schema.js';
 import {
   PATIENT_CHECK_IN_ACTION_SCORE_MAX,
@@ -16,12 +20,6 @@ const isFlagged = sql`(${patient_check_ins.feel} = ${PATIENT_CHECK_IN_FEEL.WORSE
 
 /** A check-in has a feedback action (TR12). */
 const hasAction = sql`exists (select 1 from ${patient_feedback_actions} where ${patient_feedback_actions.patient_check_in_id} = ${patient_check_ins.id})`;
-
-/** The plan statuses that already hold an offering for the patient — a check-in skips them (TR10). */
-const HELD_SUGGESTION_STATUSES = ['planned', 'next_time', 'accepted'];
-
-/** What the plan names a check-in's next offerings after (TR10). */
-const CHECK_IN_SOURCE_LABEL = 'Check-in';
 
 /** A check-in's summary, as a session's latest one (7.H.6). */
 export interface PatientCheckInSummaryRow {
@@ -100,18 +98,18 @@ export class PatientCheckInsRepository extends BaseRecordRepository {
     if (checkInIds.length === 0) return new Map();
     const rows = await getRequestDatabase()
       .select({
-        check_in_id: offering_suggestions.patient_check_in_id,
+        check_in_id: patient_offering_suggestions.patient_check_in_id,
         offering_id: offerings.public_id,
       })
-      .from(offering_suggestions)
-      .innerJoin(offerings, eq(offerings.id, offering_suggestions.offering_id))
+      .from(patient_offering_suggestions)
+      .innerJoin(offerings, eq(offerings.id, patient_offering_suggestions.offering_id))
       .where(
         and(
-          inArray(offering_suggestions.patient_check_in_id, [...checkInIds]),
-          isNull(offering_suggestions.deleted_at),
+          inArray(patient_offering_suggestions.patient_check_in_id, [...checkInIds]),
+          isNull(patient_offering_suggestions.deleted_at),
         ),
       )
-      .orderBy(offering_suggestions.id);
+      .orderBy(patient_offering_suggestions.id);
     const planned = new Map<number, string[]>();
     for (const row of rows) {
       const checkInId = row.check_in_id as number;
@@ -122,7 +120,7 @@ export class PatientCheckInsRepository extends BaseRecordRepository {
 
   /**
    * TR10: plans a check-in's next offerings — one `planned` suggestion each, linked by
-   * `patient_check_in_id`, without a `reason`; an offering the patient's plan already holds
+   * `patient_check_in_id`, without a `reason`, the caller's membership suggesting it; an offering the patient's plan already holds
    * (planned, next time or accepted) is skipped, not duplicated.
    */
   async planNextOfferings(options: {
@@ -131,37 +129,40 @@ export class PatientCheckInsRepository extends BaseRecordRepository {
     checkInId: number;
     appointmentId: number | null;
     offeringIds: readonly number[];
+    suggestedByMembershipId: number | null;
     userId: number | null;
   }): Promise<void> {
     if (options.offeringIds.length === 0) return;
     const database = getRequestDatabase();
     const held = await database
-      .select({ offering_id: offering_suggestions.offering_id })
-      .from(offering_suggestions)
+      .select({ offering_id: patient_offering_suggestions.offering_id })
+      .from(patient_offering_suggestions)
       .where(
         and(
-          eq(offering_suggestions.patient_id, options.patientId),
-          inArray(offering_suggestions.offering_id, [...options.offeringIds]),
-          inArray(offering_suggestions.status, HELD_SUGGESTION_STATUSES),
-          isNull(offering_suggestions.deleted_at),
+          eq(patient_offering_suggestions.patient_id, options.patientId),
+          inArray(patient_offering_suggestions.offering_id, [...options.offeringIds]),
+          inArray(patient_offering_suggestions.status, [
+            ...PATIENT_OFFERING_SUGGESTION_HELD_STATUS_VALUES,
+          ]),
+          isNull(patient_offering_suggestions.deleted_at),
         ),
       );
     const skip = new Set(held.map((row) => row.offering_id));
     const rows = options.offeringIds
       .filter((offeringId) => !skip.has(offeringId))
       .map((offeringId) => ({
-        public_id: generatePublicId('offeringSuggestion'),
+        public_id: generatePublicId('patientOfferingSuggestion'),
         organization_id: options.organizationId,
         patient_id: options.patientId,
         offering_id: offeringId,
-        status: 'planned',
-        source_label: CHECK_IN_SOURCE_LABEL,
+        status: PATIENT_OFFERING_SUGGESTION_STATUS.PLANNED,
+        suggested_by_membership_id: options.suggestedByMembershipId,
         appointment_id: options.appointmentId,
         patient_check_in_id: options.checkInId,
         created_by_user_id: options.userId,
         updated_by_user_id: options.userId,
       }));
-    if (rows.length > 0) await database.insert(offering_suggestions).values(rows);
+    if (rows.length > 0) await database.insert(patient_offering_suggestions).values(rows);
   }
 
   /** Each session's latest live check-in (the treatment tab's Feedback column, 7.H.6). */

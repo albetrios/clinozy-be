@@ -3,7 +3,7 @@ import { memberships } from '@/domains/tenancy/sub-domains/membership/membership
 import { BaseRecordService } from '@/domains/app/base-record.service.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
-import { patient_packages } from '@/domains/app/sub-domains/patient-packages/patient-packages.schema.js';
+import { patient_offerings } from '@/domains/app/sub-domains/patients/patient-offerings/patient-offerings.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
 import { PATIENT_TREATMENT_STATUS } from './patient-treatments.constants.js';
 import type { PatientTreatmentsRepository } from './patient-treatments.repository.js';
@@ -49,7 +49,7 @@ export class PatientTreatmentsService extends BaseRecordService<PatientTreatment
         { field: 'offering_id', table: offerings, label: 'offering' },
         { field: 'doctor_membership_id', table: memberships, label: 'team member' },
         { field: 'therapist_membership_id', table: memberships, label: 'team member' },
-        { field: 'patient_offering_id', table: patient_packages, label: 'bought offering' },
+        { field: 'patient_offering_id', table: patient_offerings, label: 'bought offering' },
       ],
       parent: { field: 'patient_id', table: patients, label: 'Patient' },
       transitions: {
