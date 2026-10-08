@@ -54,8 +54,30 @@ export const ACCESS_TOKEN_EXPIRY_SECONDS = 900;
 /** Positive Redis cache TTL after a valid session token lookup (seconds). */
 export const SESSION_TOKEN_CACHE_TTL_SECONDS = 60;
 
-/** Idempotency in-flight placeholder TTL before the real response is cached (seconds). */
-export const IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS = SESSION_TOKEN_CACHE_TTL_SECONDS;
+/**
+ * Extra seconds so an in-flight idempotency placeholder outlives the request that claimed it.
+ *
+ * @remarks
+ * The placeholder has to still be there when Fastify aborts the request at
+ * `FASTIFY_REQUEST_TIMEOUT_MS`, and for the post-response cache write that follows a success.
+ * Five seconds covers that tail. The completed-response TTL is a separate constant.
+ */
+export const IDEMPOTENCY_PLACEHOLDER_TTL_BUFFER_SECONDS = 5;
+
+/**
+ * In-flight idempotency placeholder TTL in seconds: the configured request timeout, plus
+ * {@link IDEMPOTENCY_PLACEHOLDER_TTL_BUFFER_SECONDS}.
+ *
+ * @remarks
+ * A placeholder shorter than the request lets it expire while the handler is still running, and a
+ * replay then executes the handler a second time. Callers pass the same timeout the HTTP server
+ * uses (`FASTIFY_REQUEST_TIMEOUT_MS`, or {@link THIRTY_SECONDS_MS} when that variable is unset).
+ * Redis `EX` is whole seconds, so the timeout is rounded up before the buffer is added.
+ */
+export function resolveIdempotencyPlaceholderTtlSeconds(requestTimeoutMs: number): number {
+  const timeoutSeconds = Math.ceil(requestTimeoutMs / MILLISECONDS_PER_SECOND);
+  return timeoutSeconds + IDEMPOTENCY_PLACEHOLDER_TTL_BUFFER_SECONDS;
+}
 
 /** Cached idempotent HTTP response TTL (seconds). */
 export const IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS = SECONDS_PER_DAY;

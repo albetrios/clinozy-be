@@ -1,11 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import {
-  IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS,
   IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS,
+  resolveIdempotencyPlaceholderTtlSeconds,
+  THIRTY_SECONDS_MS,
 } from '@/shared/constants/index.js';
+import { env } from '@/shared/config/env.config.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { buildIdempotencyRequestFingerprint } from '@/shared/utils/idempotency/idempotency-fingerprint.util.js';
+
+/** Same expression the claim path passes to Redis `EX`. */
+const IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS = resolveIdempotencyPlaceholderTtlSeconds(
+  env.FASTIFY_REQUEST_TIMEOUT_MS ?? THIRTY_SECONDS_MS,
+);
 
 const IDEMPOTENCY_KEY_HEADER = 'x-idempotency-key';
 const IDEMPOTENCY_TEST_KEY = 'test-key-1234567890';

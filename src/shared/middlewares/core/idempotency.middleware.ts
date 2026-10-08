@@ -26,9 +26,10 @@ import {
 } from '@/shared/utils/idempotency/idempotency-required.util.js';
 import {
   IDEMPOTENCY_CACHED_BODY_BYTES,
-  IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS,
   IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS,
   IDEMPOTENCY_STORE_UNAVAILABLE_RETRY_AFTER_SECONDS,
+  resolveIdempotencyPlaceholderTtlSeconds,
+  THIRTY_SECONDS_MS,
 } from '@/shared/constants/index.js';
 
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -473,7 +474,7 @@ async function idempotencyClaimPreHandler(
       cacheKey,
       JSON.stringify(inFlightEntry),
       'EX',
-      IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS,
+      resolveIdempotencyPlaceholderTtlSeconds(env.FASTIFY_REQUEST_TIMEOUT_MS ?? THIRTY_SECONDS_MS),
       'NX',
     );
   } catch (error) {

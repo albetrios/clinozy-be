@@ -81,7 +81,7 @@ Mutating endpoints (`POST` / `PUT` / `PATCH` / `DELETE`) accept an `X-Idempotenc
 ### Where it lives
 
 - Middleware: [src/shared/middlewares/core/idempotency.middleware.ts](src/shared/middlewares/core/idempotency.middleware.ts).
-- Redis: keys live under the `idempotency:` prefix; payload caps at `IDEMPOTENCY_CACHED_BODY_BYTES` (100 KiB); TTL = `IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS` (24 h) for completed entries and `IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS` (60 s) for in-flight placeholders.
+- Redis: keys live under the `idempotency:` prefix; payload caps at `IDEMPOTENCY_CACHED_BODY_BYTES` (100 KiB); TTL = `IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS` (24 h) for completed entries. In-flight placeholders use `resolveIdempotencyPlaceholderTtlSeconds` — the configured request timeout plus a 5 second buffer — so a slow request cannot outlive its claim.
 - Cardinality guard: [src/infrastructure/observability/idempotency-cardinality/](src/infrastructure/observability/idempotency-cardinality/) — bounded SCAN job that warns when the key set exceeds threshold.
 
 ### Implementation
@@ -94,7 +94,7 @@ flowchart TD
     B -- Yes --> C[GET idempotency:user:organization:method:path:key]
     C -- hit completed --> D[Return cached status, body, headers]
     C -- hit in_flight --> E[409 conflict / wait]
-    C -- miss --> F[SETNX placeholder TTL=60s]
+    C -- miss --> F[SETNX placeholder TTL = request timeout + buffer]
     F -- claimed --> G[Run handler]
     G --> H[onSend: stash response]
     H --> I[onResponse: SET completed entry, TTL=24h]

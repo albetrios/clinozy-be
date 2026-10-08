@@ -56,15 +56,15 @@ The canonical exports live under [src/shared/constants/](src/shared/constants/) 
   - Increasing → larger Redis footprint; bounded by `IDEMPOTENCY_CACHED_BODY_BYTES`.
 - **Last reviewed**: 2026-05-28
 
-## IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS
+## IDEMPOTENCY_PLACEHOLDER_TTL (resolveIdempotencyPlaceholderTtlSeconds)
 
-- **Value**: 60 seconds
+- **Value**: `ceil(request timeout seconds) + IDEMPOTENCY_PLACEHOLDER_TTL_BUFFER_SECONDS` (buffer is 5). The request timeout is `FASTIFY_REQUEST_TIMEOUT_MS`, or 30 seconds when that variable is unset. A 30 second request keeps the placeholder for 35 seconds; a 10 minute request keeps it for 605 seconds.
 - **Source**: [src/shared/constants/ttl.constants.ts](src/shared/constants/ttl.constants.ts)
-- **Rationale**: TTL of the in-flight SETNX placeholder claimed by the first concurrent caller. 60 s is enough to cover the slowest legitimate request (Stripe API call + Postgres write) while bounding the wait for a second caller if the first crashes mid-flight.
+- **Rationale**: The in-flight SETNX placeholder must outlive the handler that claimed it. `FASTIFY_REQUEST_TIMEOUT_MS` may be as long as 10 minutes; a fixed 60 second placeholder expired first and a replay ran the handler twice. The buffer covers the abort at the timeout and the post-response cache write. The completed-response TTL stays 24 hours.
 - **Consequences of change**:
-  - Decreasing → second concurrent caller may run a duplicate execution earlier on a crash.
-  - Increasing → second caller waits longer on a crash.
-- **Last reviewed**: 2026-05-28
+  - Decreasing the buffer → a request that finishes on the timeout can expire its placeholder before the completed entry is written, and a replay runs again.
+  - Increasing the buffer → a second caller waits longer when the first process dies mid-flight.
+- **Last reviewed**: 2026-10-08
 
 ## IDEMPOTENCY_CACHED_BODY_BYTES
 

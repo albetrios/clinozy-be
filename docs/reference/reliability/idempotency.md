@@ -11,7 +11,7 @@ clinozy-be deduplicates mutating HTTP requests when clients send an **`X-Idempot
 | **Methods** | `POST`, `PUT`, `PATCH`, `DELETE` |
 | **Header** | `X-Idempotency-Key` — 16–255 chars, `[A-Za-z0-9._:~+/=-]` (see `parseIdempotencyKeyHeader`) |
 | **Scope** | Redis key includes organization and user when present: `idempotency:{organization}:{user}:{key}` |
-| **TTL** | 24 hours for completed responses; 60s placeholder while in flight |
+| **TTL** | 24 hours for completed responses; in-flight placeholder = request timeout (`FASTIFY_REQUEST_TIMEOUT_MS`, default 30s) plus a 5 second buffer |
 | **Redis down** | **503** `service_unavailable` (fail closed) |
 | **Duplicate while in flight** | **409** `conflict_in_flight` (translation key `errors:idempotencyKeyInFlight`) |
 | **Lost SETNX race after miss** | **409** `conflict` (translation key `errors:idempotencyKeyConflict`); replay if the winner has already completed |
