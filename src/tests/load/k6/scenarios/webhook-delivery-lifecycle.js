@@ -1,4 +1,5 @@
 import http from 'k6/http';
+import crypto from 'k6/crypto';
 import { Counter } from 'k6/metrics';
 import { credentialPool, mintTokenPool, vuToken } from '../helpers/pool.js';
 import { API_PREFIX } from '../helpers/config.js';
@@ -107,6 +108,92 @@ export default function (actors) {
     assertCondition(
       attempts.length === 1 && attempts[0].http_status_code === 200,
       'one successful attempt persisted',
+    );
+    const staleTimestamp = Math.floor(Date.now() / 1000) - 600;
+    const staleBody = JSON.stringify({ event: 'webhook.test', data: { webhook_id: created.id } });
+    const stale = fixture(`/receiver/load-webhook/${receiver.id}`, {
+      body: staleBody,
+      headers: {
+        'x-webhook-event': 'webhook.test',
+        'x-webhook-signature': `t=${staleTimestamp},v1=${crypto.hmac('sha256', receiver.secret, `${staleTimestamp}.${staleBody}`, 'hex')}`,
+      },
+    });
+    assertCondition(stale.status === 401, 'receiver rejects a correctly signed stale timestamp');
+
+    fixture('/receiver/configure', { id: receiver.id, responseStatus: 503 });
+    const failed = requireData(
+      request('POST', `/notify/webhooks/${created.id}/test`, actor.token, {}),
+      'failed delivery result',
+    );
+    assertCondition(
+      failed.success === false && failed.status_code === 503,
+      'provider 503 remains a visible delivery failure',
+    );
+    const failedAttempts = requireData(
+      request('GET', `/notify/webhooks/${created.id}/delivery-attempts`, actor.token),
+      'failed delivery history',
+    );
+    assertCondition(
+      failedAttempts.length === 2 &&
+        failedAttempts.some(
+          (attempt) => attempt.status === 'FAILED' && attempt.http_status_code === 503,
+        ),
+      'failed provider acknowledgement is persisted',
+    );
+
+    fixture('/receiver/configure', { id: receiver.id, responseStatus: 200 });
+    const recovered = requireData(
+      request('POST', `/notify/webhooks/${created.id}/test`, actor.token, {}),
+      'recovered delivery result',
+    );
+    assertCondition(
+      recovered.success === true && recovered.status_code === 200,
+      'subsequent test delivery recovers after provider failure',
+    );
+
+    const rotatedSecret = receiver.secret.slice(32) + receiver.secret.slice(0, 32);
+    request('PATCH', `/notify/webhooks/${created.id}`, actor.token, { secret: rotatedSecret });
+    fixture('/receiver/configure', { id: receiver.id, secret: rotatedSecret });
+    const rotated = requireData(
+      request('POST', `/notify/webhooks/${created.id}/test`, actor.token, {}),
+      'rotated secret delivery',
+    );
+    assertCondition(
+      rotated.success === true && rotated.status_code === 200,
+      'production sender signs with the rotated secret',
+    );
+    const now = Math.floor(Date.now() / 1000);
+    const oldSignature = fixture(`/receiver/load-webhook/${receiver.id}`, {
+      body: staleBody,
+      headers: {
+        'x-webhook-event': 'webhook.test',
+        'x-webhook-signature': `t=${now},v1=${crypto.hmac('sha256', receiver.secret, `${now}.${staleBody}`, 'hex')}`,
+      },
+    });
+    assertCondition(oldSignature.status === 401, 'old signing secret is rejected after rotation');
+    const finalHistory = requireData(
+      request('GET', `/notify/webhooks/${created.id}/delivery-attempts`, actor.token),
+      'final delivery history',
+    );
+    assertCondition(
+      finalHistory.length === 4 &&
+        finalHistory.filter(
+          (attempt) => attempt.status === 'SENT' && attempt.http_status_code === 200,
+        ).length === 3 &&
+        finalHistory.filter(
+          (attempt) => attempt.status === 'FAILED' && attempt.http_status_code === 503,
+        ).length === 1,
+      'recovery preserves the failed attempt without false success',
+    );
+    const finalReceived = fixture('/receiver/status', { id: receiver.id }).deliveries;
+    assertCondition(
+      finalReceived.length === 4 &&
+        finalReceived.every(
+          (entry) =>
+            entry.signatureVerified && entry.timestampFresh && entry.webhookId === created.id,
+        ) &&
+        finalReceived.filter((entry) => entry.responseStatus === 503).length === 1,
+      'receiver independently confirms four signed attempts and one rejected acknowledgement',
     );
     completed.add(1);
   } finally {

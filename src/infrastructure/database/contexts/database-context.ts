@@ -11,6 +11,7 @@
  *   RLS-scoped context is a new KIND in one of the three registries here,
  *   never a new file or wrapper.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { sql as drizzleSql } from 'drizzle-orm';
 import * as databaseConnection from '@/infrastructure/database/connection.js';
 import { database } from '@/infrastructure/database/connection.js';
@@ -200,6 +201,36 @@ export const PRINCIPAL_SCOPE: {
     createPrincipalDatabaseScope({ ...identity, source: 'verified' })) as PrincipalScopeMinter,
 });
 
+// Only the original identity of a fresh principal transaction may be reused.
+// Once a different user is requested, optimization stays disabled until the
+// transaction ends, including after a savepoint rollback or concurrent layering.
+const principalIdentityReuseStorage = new AsyncLocalStorage<{
+  databaseHandle: RequestScopedPostgresDatabase;
+  userPublicId: string | undefined;
+  identityChanged: boolean;
+}>();
+
+async function layerPrincipalUserIdentity(options: {
+  databaseHandle: RequestScopedPostgresDatabase;
+  userPublicId: string;
+}): Promise<void> {
+  const original = principalIdentityReuseStorage.getStore();
+  if (original !== undefined) {
+    if (
+      !original.identityChanged &&
+      original.databaseHandle === options.databaseHandle &&
+      original.userPublicId === options.userPublicId
+    )
+      return;
+    original.identityChanged = true;
+  }
+  await setLocalDatabaseConfig(
+    options.databaseHandle,
+    'app.current_user_public_id',
+    options.userPublicId,
+  );
+}
+
 // The principal branch of withAppDatabaseContext: same-organization reuse, user-GUC
 // layering, and a fresh transaction with both identity GUCs in one round trip
 // otherwise. Only reachable through the exported app wrapper.
@@ -293,11 +324,10 @@ async function runPrincipalDatabaseContext<T>(
   ) {
     return runWithWorkerDatabaseContext(workerContext, async () => {
       if (userPublicId !== undefined) {
-        await setLocalDatabaseConfig(
-          activeSession.databaseHandle,
-          'app.current_user_public_id',
+        await layerPrincipalUserIdentity({
+          databaseHandle: activeSession.databaseHandle,
           userPublicId,
-        );
+        });
       }
       return callback(brandWorkerContextDatabaseHandle(activeSession.databaseHandle));
     });
@@ -315,11 +345,10 @@ async function runPrincipalDatabaseContext<T>(
     userPublicId !== undefined
   ) {
     return runWithWorkerDatabaseContext(workerContext, async () => {
-      await setLocalDatabaseConfig(
-        activeSession.databaseHandle,
-        'app.current_user_public_id',
+      await layerPrincipalUserIdentity({
+        databaseHandle: activeSession.databaseHandle,
         userPublicId,
-      );
+      });
       return callback(brandWorkerContextDatabaseHandle(activeSession.databaseHandle));
     });
   }
@@ -362,10 +391,21 @@ async function runPrincipalTransaction<T>(options: {
     await applyWorkerStatementTimeout(databaseHandle);
   }
   await databaseHandle.execute(buildIdentityGucStatement({ userPublicId, organizationPublicId }));
-  const runCallback = () => callback(brandWorkerContextDatabaseHandle(databaseHandle));
-  return organizationPublicId !== undefined
-    ? runWithPinnedOrganizationDatabaseSession(organizationPublicId, databaseHandle, runCallback)
-    : runWithPinnedDatabaseHandle(databaseHandle, runCallback);
+  // The cache is bookkeeping, never an authorization source. It follows nested
+  // pinned savepoint handles too: layering there invalidates the outer shortcut,
+  // since RELEASE SAVEPOINT preserves its identity settings.
+  const originalIdentity = { databaseHandle, userPublicId, identityChanged: false };
+  const runCallback = () =>
+    principalIdentityReuseStorage.run(originalIdentity, () =>
+      callback(brandWorkerContextDatabaseHandle(databaseHandle)),
+    );
+  try {
+    return await (organizationPublicId !== undefined
+      ? runWithPinnedOrganizationDatabaseSession(organizationPublicId, databaseHandle, runCallback)
+      : runWithPinnedDatabaseHandle(databaseHandle, runCallback));
+  } finally {
+    originalIdentity.identityChanged = true;
+  }
 }
 
 /**

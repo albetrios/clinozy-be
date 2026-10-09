@@ -13,6 +13,12 @@ import {
   executeAsClinozyBeAppUser,
 } from '@/tests/helpers/rls-matrix.helper.js';
 import { organization_settings } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.schema.js';
+import {
+  PRINCIPAL_SCOPE,
+  withAppDatabaseContext,
+} from '@/infrastructure/database/contexts/database-context.js';
+import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
+import { eq } from 'drizzle-orm';
 import { OrganizationSettingsRepository } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.repository.js';
 
 /**
@@ -148,5 +154,28 @@ describe('Security: organization-settings login-time resolvers under FORCE RLS',
       return scalarFromResult<string>(result, 'default_locale');
     });
     expect(localeUnderAppRole).toBe('es');
+  });
+  it('locale and MFA resolvers reuse the caller transaction and see uncommitted policy changes under the app role', async () => {
+    const { user, organization } = await seedUserInOrg({ mfaRequired: false, locale: 'en' });
+    const scope = PRINCIPAL_SCOPE.VERIFIED({
+      userPublicId: user.public_id,
+      organizationPublicId: organization.public_id,
+    });
+    await withAppDatabaseContext(scope, async (handle) => {
+      await setLocalApplicationRole(handle);
+      expect(await repository.findDefaultLocaleByOrganizationPublicId(organization.public_id)).toBe(
+        'en',
+      );
+      await handle
+        .update(organization_settings)
+        .set({ default_locale: 'es', security_policy: { mfa_required: true } })
+        .where(eq(organization_settings.organization_id, organization.id));
+      // A second pooled connection would see the old committed en/false values.
+      expect(await repository.findDefaultLocaleByOrganizationPublicId(organization.public_id)).toBe(
+        'es',
+      );
+      expect(await repository.userHasOrganizationRequiringMfa(user.id)).toBe(true);
+      expect(await repository.organizationRequiresMfa(organization.public_id)).toBe(true);
+    });
   });
 });

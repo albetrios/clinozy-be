@@ -1,6 +1,8 @@
-import { and, asc, count, eq, gt, isNull, type SQL } from 'drizzle-orm';
-import { sql } from '@/infrastructure/database/connection.js';
-import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
+import { and, asc, count, eq, gt, isNull, sql, type SQL } from 'drizzle-orm';
+import {
+  getContextFreeDatabase,
+  getRequestDatabase,
+} from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { member_invitations } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
@@ -30,6 +32,13 @@ export interface MemberInvitationOrganizationLookupRow {
   membership_public_id: string;
   membership_id: number;
 }
+
+type MemberInvitationOrganizationLookupDatabaseRow = {
+  organization_public_id: string;
+  organization_id: string | number;
+  membership_public_id: string;
+  membership_id: string | number;
+};
 
 /**
  * Cursor-pagination options for {@link MemberInvitationRepository.findByOrganizationId}.
@@ -161,21 +170,10 @@ export class MemberInvitationRepository {
   async lookupOrganizationByInvitationPublicId(
     invitation_public_id: string,
   ): Promise<MemberInvitationOrganizationLookupRow | null> {
-    const rows = await sql<
-      Array<{
-        organization_public_id: string;
-        organization_id: string | number;
-        membership_public_id: string;
-        membership_id: string | number;
-      }>
-    >`
-      SELECT
-        organization_public_id,
-        organization_id,
-        membership_public_id,
-        membership_id
-      FROM tenancy.resolve_member_invitation_lookup_by_public_id(${invitation_public_id})
-    `;
+    const rows =
+      await getContextFreeDatabase().execute<MemberInvitationOrganizationLookupDatabaseRow>(
+        sql`SELECT organization_public_id, organization_id, membership_public_id, membership_id FROM tenancy.resolve_member_invitation_lookup_by_public_id(${invitation_public_id})`,
+      );
     const row = rows[0];
     if (!row) return null;
     return {

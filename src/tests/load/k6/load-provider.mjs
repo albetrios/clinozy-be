@@ -267,9 +267,50 @@ function receive(path, input) {
     webhookId: payload.data.webhook_id,
     event: payload.event,
     timestampFresh: true,
+    responseStatus: receiver.responseStatus,
   });
-  return { status: 200, body: { accepted: true } };
+  return { status: receiver.responseStatus, body: { accepted: receiver.responseStatus === 200 } };
 }
+async function accountReadIds(subscriptionId) {
+  const row = await ownedSubscription(subscriptionId);
+  const customerId = row.provider_customer_id;
+  if (!customerId) throw new Error('Owned subscription lacks a provider customer');
+  const invoices = stripe
+    ? await stripe.invoices.list({ customer: customerId, limit: 100 })
+    : localStripe('get', '/v1/invoices', { customer: customerId });
+  const methods = stripe
+    ? await stripe.paymentMethods.list({ customer: customerId, type: 'card' })
+    : localStripe('get', '/v1/payment_methods', { customer: customerId });
+  return {
+    invoiceIds: invoices.data.map((invoice) => invoice.id).sort(),
+    paymentMethodIds: methods.data.map((method) => method.id).sort(),
+  };
+}
+
+function configureReceiver(input) {
+  if (mode !== 'contract') throw new Error('Receiver faults require contract mode');
+  const receiver = receivers.get(input.id);
+  if (!receiver) throw new Error('Unknown receiver');
+  if (input.responseStatus !== undefined) {
+    if (![200, 503].includes(input.responseStatus)) throw new Error('Unsupported receiver status');
+    receiver.responseStatus = input.responseStatus;
+  }
+  if (input.secret !== undefined) {
+    if (!/^[a-f0-9]{64}$/.test(input.secret)) throw new Error('Invalid receiver secret');
+    receiver.secret = input.secret;
+  }
+  return { configured: true };
+}
+
+async function readInput(request) {
+  let raw = '';
+  for await (const chunk of request) {
+    raw += chunk;
+    if (raw.length > 65536) throw new Error('Payload too large');
+  }
+  return raw ? JSON.parse(raw) : {};
+}
+
 const server = createServer(async (request, response) => {
   response.setHeader('Content-Type', 'application/json');
   try {
@@ -277,12 +318,7 @@ const server = createServer(async (request, response) => {
       response.writeHead(403).end('{}');
       return;
     }
-    let raw = '';
-    for await (const chunk of request) {
-      raw += chunk;
-      if (raw.length > 65536) throw new Error('Payload too large');
-    }
-    const input = raw ? JSON.parse(raw) : {},
+    const input = await readInput(request),
       parsed = new URL(request.url, 'http://127.0.0.1'),
       path = parsed.pathname;
     let data;
@@ -302,11 +338,15 @@ const server = createServer(async (request, response) => {
           remote.cancel_at_period_end === false &&
           remote.items.data[0].price.id === prices[1].id,
       };
+    } else if (path === '/account-reads') {
+      data = await accountReadIds(input.subscriptionId);
     } else if (path === '/receiver/create') {
       const identifier = id('receiver'),
         secret = randomBytes(32).toString('hex');
-      receivers.set(identifier, { secret, deliveries: [] });
+      receivers.set(identifier, { secret, deliveries: [], responseStatus: 200 });
       data = { id: identifier, secret, url: `https://1.1.1.1/load-webhook/${identifier}` };
+    } else if (path === '/receiver/configure') {
+      data = configureReceiver(input);
     } else if (path === '/receiver/status') {
       const receiver = receivers.get(input.id);
       if (!receiver) throw new Error('Unknown receiver');

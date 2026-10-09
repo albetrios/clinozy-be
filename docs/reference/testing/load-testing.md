@@ -38,7 +38,7 @@ Prerequisites → Quick (health, bench) vs Scoped stress checks (stress, stress:
 
 Count distinct **method + route template** pairs actually requested, and compare API pairs with the current [route catalogue](../../routes.txt). Scenario files and optional branches are potential coverage; they are not executed coverage. `api-stress.js` exercises five reads, `rls-concurrency-beyond-pool.js` exercises one of those membership reads, and `session-refresh-journey.js` adds login, refresh, and logout. Increasing VUs does not increase route coverage or the number of identities.
 
-`pnpm load:read-surface` adds 23 nondestructive GET routes across auth, user, tenancy, billing, and notify. Supply `TEST_TOKEN` scoped to `TEST_ORG_ID`; setup verifies a TEAM tenant and the required permissions. Defaults are 10 concurrent clients and 20 complete journeys (`VUS` / `ITERATIONS`). Every route must execute, return HTTP 200, and pass its basic response-shape checks. This is functional read load, not full business-invariant or production capacity certification. It excludes destructive writes, admin routes, resource details, and live Stripe/S3 calls.
+`pnpm load:read-surface` adds 24 nondestructive GET routes across auth, user, tenancy, billing, and notify. Supply `TEST_TOKEN` scoped to `TEST_ORG_ID`; setup verifies a TEAM tenant and the required permissions. Defaults are 10 concurrent clients and 20 complete journeys (`VUS` / `ITERATIONS`). Every route must execute, return HTTP 200, and pass its basic response-shape checks. This is functional read load, not full business-invariant or production capacity certification. It excludes destructive writes, admin routes, resource details, and live Stripe/S3 calls.
 
 Load scenarios must fail on missing prerequisites and gate semantic checks as well as HTTP/latency metrics. API/RLS stress now require credentials and request counts; membership denial cannot pass as an authorized success. The session journey preserves the current rotated cookies before logout, replays them with valid CSRF, and requires 401 for both refresh and bearer access. Clearing the client cookie or receiving 403/429 does not prove server revocation.
 
@@ -493,7 +493,8 @@ name, and the complete notification-preference set. Billing reads
 require nonempty plan/subscription fixtures and matching tenant-scoped details.
 Billing uses two ordinary bulk-seeded tenants and proves foreign subscription
 access returns 404. It does not send fake seed customer IDs to live payment
-providers; provider-free invoice/payment-method shapes remain in read-surface.
+providers; invoice and payment-method reads are compared with independent provider records
+in `billing-provider-lifecycle.js`.
 These strict steps fail the job; earlier informational scenarios retain their
 separate purpose. The idempotency storm reuses the strict role journey instead
 of treating billing validation rejections as successful idempotency coverage.
@@ -513,7 +514,7 @@ boundary row, so deletion between pages does not change its sort position.
 
 ## Sustained distinct-user validation
 
-Set `VUS` to the number of distinct credential-pool users. Set `DURATION=10m` for `multi-tenant-membership-read.js` to run sustained journeys instead of two iterations per user. The scenario requires every check to pass, zero unexpected HTTP failures, zero dropped iterations, and p95 below 500 ms / p99 below 1000 ms. It verifies tenant scope, pagination, permissions and foreign-tenant denial. The sustained completion gate requires at least one completed journey per configured user; inspect per-user samples for distribution.
+Set `VUS` to the number of distinct credential-pool users. Set `DURATION=10m` for `multi-tenant-membership-read.js` to run sustained journeys instead of two iterations per user. The scenario requires every check to pass, zero unexpected HTTP failures, zero dropped iterations, and p95 below 500 ms / p99 below 1000 ms. It verifies tenant scope, pagination, permissions and foreign-tenant denial. The sustained run requires every configured distinct user to finish their first complete journey (`tenant_read_distinct_users_completed == VUS`), as well as the total completion gate. Setup rejects duplicate user identities. Short bursts and sustained runs are separate results; a passing soak does not waive a failed burst or certify different pool/admission settings.
 
 Measure RSS and file descriptors for the actual API process, after warm-up. The existing memory-soak helper measures its orchestration process and is insufficient evidence of API memory stability. Raising overload admission can remove 503 responses while increasing latency; retain the latency thresholds and report both outcomes.
 
@@ -554,7 +555,7 @@ against an authenticated stateful loopback Stripe model. The outbound webhook
 journey intercepts only the final HTTP transport to a public-IP fixture. Production
 URL validation, signing and delivery-history writes remain active: a private URL
 is rejected, a forged signature fails, a valid timestamped HMAC reaches the owned
-receiver and the persisted delivery attempt records HTTP 200. No tunnel or ngrok
+receiver and the persisted delivery attempt records HTTP 200. The receiver then returns 503: the API must report failure and persist a FAILED attempt. A subsequent manual test delivery recovers, secret rotation must use the new HMAC, and old-secret or correctly signed stale requests are rejected. Delivery history must retain all four attempts with three SENT/200 and one FAILED/503. This tests synchronous test-delivery recovery; automatic BullMQ retries and public transport need separate evidence. No tunnel or ngrok
 credential is required. This contract gate uses p95 below 500 ms, zero unexpected
 HTTP failures, every check passing and exactly 20 completed journeys per scenario
 by default (`VUS=4`, `ITERATIONS=5`). It runs separately from the six existing

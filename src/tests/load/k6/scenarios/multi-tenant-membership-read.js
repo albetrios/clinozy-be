@@ -9,6 +9,7 @@ import { credentialPool, mintTokenPool, vuToken } from '../helpers/pool.js';
 const users = Number(__ENV.VUS || '20');
 const duration = __ENV.DURATION;
 const completed = new Counter('tenant_read_journeys_completed');
+const distinctCompleted = new Counter('tenant_read_distinct_users_completed');
 export const options = {
   scenarios: {
     readers: duration
@@ -17,8 +18,10 @@ export const options = {
   },
   thresholds: {
     ...THRESHOLDS,
+    'http_req_duration{expected_response:true}': ['p(95)<500', 'p(99)<1000'],
     checks: ['rate==1'],
     http_req_failed: ['rate==0'],
+    tenant_read_distinct_users_completed: [`count==${users}`],
     dropped_iterations: ['count==0'],
     tenant_read_journeys_completed: [duration ? `count>=${users}` : `count==${users * 2}`],
   },
@@ -46,6 +49,10 @@ export function setup() {
     for (const group of groups.values())
       if (group.length && ordered.length < users) ordered.push(group.shift());
   }
+  requireCheck(
+    new Set(ordered.map((actor) => actor.userPublicId)).size === users,
+    'fixture: every configured actor is a distinct user',
+  );
   const pool = mintTokenPool(ordered);
   const examples = [];
   for (const actor of pool) {
@@ -63,73 +70,82 @@ export function setup() {
   return { pool, examples };
 }
 export default function (fixtures) {
-  const actor = vuToken(fixtures.pool);
-  const profile = read('/users/me', actor.token, 'distinct-profile').json('data');
-  requireCheck(profile.id === actor.userPublicId, 'profile bound to actual user');
-  const context = read('/auth/me/context', actor.token, 'distinct-context').json('data');
-  requireCheck(
-    context.user.id === actor.userPublicId &&
-      context.active_organization.id === actor.organizationPublicId,
-    'auth context bound to actual tenant and user',
-  );
-  const first = read('/tenancy/organization/memberships?limit=2', actor.token, 'members-page-one');
-  const rows = first.json('data');
-  const cursor = first.json('meta.pagination.next');
-  requireCheck(
-    Array.isArray(rows) && rows.length === 2 && typeof cursor === 'string',
-    'first page populated with next cursor',
-  );
-  const second = read(
-    `/tenancy/organization/memberships?limit=2&after=${encodeURIComponent(cursor)}`,
-    actor.token,
-    'members-page-two',
-  ).json('data');
-  requireCheck(Array.isArray(second) && second.length === 2, 'second page populated');
-  requireCheck(
-    [...rows, ...second].every((row) => row.organization_id === actor.organizationPublicId),
-    'all page rows belong to authenticated tenant',
-  );
-  if (second.some((row) => rows.some((previous) => previous.id === row.id))) {
-    console.error(
-      JSON.stringify({
-        issue: 'cursor-page-overlap',
-        tenant: actor.organizationPublicId,
-        first: rows.map((row) => ({ id: row.id, created_at: row.created_at })),
-        second: second.map((row) => ({ id: row.id, created_at: row.created_at })),
-      }),
+  try {
+    const actor = vuToken(fixtures.pool);
+    const profile = read('/users/me', actor.token, 'distinct-profile').json('data');
+    requireCheck(profile.id === actor.userPublicId, 'profile bound to actual user');
+    const context = read('/auth/me/context', actor.token, 'distinct-context').json('data');
+    requireCheck(
+      context.user.id === actor.userPublicId &&
+        context.active_organization.id === actor.organizationPublicId,
+      'auth context bound to actual tenant and user',
     );
+    const first = read(
+      '/tenancy/organization/memberships?limit=2',
+      actor.token,
+      'members-page-one',
+    );
+    const rows = first.json('data');
+    const cursor = first.json('meta.pagination.next');
+    requireCheck(
+      Array.isArray(rows) && rows.length === 2 && typeof cursor === 'string',
+      'first page populated with next cursor',
+    );
+    const second = read(
+      `/tenancy/organization/memberships?limit=2&after=${encodeURIComponent(cursor)}`,
+      actor.token,
+      'members-page-two',
+    ).json('data');
+    requireCheck(Array.isArray(second) && second.length === 2, 'second page populated');
+    requireCheck(
+      [...rows, ...second].every((row) => row.organization_id === actor.organizationPublicId),
+      'all page rows belong to authenticated tenant',
+    );
+    if (second.some((row) => rows.some((previous) => previous.id === row.id))) {
+      console.error(
+        JSON.stringify({
+          issue: 'cursor-page-overlap',
+          tenant: actor.organizationPublicId,
+          first: rows.map((row) => ({ id: row.id, created_at: row.created_at })),
+          second: second.map((row) => ({ id: row.id, created_at: row.created_at })),
+        }),
+      );
+    }
+    requireCheck(
+      second.every((row) => !rows.some((previous) => previous.id === row.id)),
+      'cursor pages do not repeat rows',
+    );
+    const ownMember = read(
+      `/tenancy/organization/memberships/${rows[0].id}`,
+      actor.token,
+      'member-detail',
+    ).json('data');
+    requireCheck(
+      ownMember.id === rows[0].id && ownMember.organization_id === actor.organizationPublicId,
+      'member detail belongs to authenticated tenant',
+    );
+    const permissions = read(
+      `/tenancy/organization/memberships/${rows[0].id}/permissions`,
+      actor.token,
+      'member-permissions',
+    ).json('data');
+    requireCheck(
+      Array.isArray(permissions.permissions) && permissions.permissions.includes('membership:read'),
+      'member permissions reflect seeded role',
+    );
+    const foreign = fixtures.examples.find(
+      (entry) => entry.organization !== actor.organizationPublicId,
+    );
+    const denied = http.get(`${API_PREFIX}/tenancy/organization/memberships/${foreign.member}`, {
+      ...authHeaders(actor.token),
+      tags: { name: 'foreign-member-denied' },
+      responseCallback: http.expectedStatuses(404),
+    });
+    requireCheck(denied.status === 404, 'foreign membership denied without exposing resource');
+    completed.add(1);
+    if (__ITER === 0) distinctCompleted.add(1);
+  } finally {
+    // Preserve the failure gate while preventing failed journeys from hot-looping.
+    if (duration) sleep(0.1);
   }
-  requireCheck(
-    second.every((row) => !rows.some((previous) => previous.id === row.id)),
-    'cursor pages do not repeat rows',
-  );
-  const ownMember = read(
-    `/tenancy/organization/memberships/${rows[0].id}`,
-    actor.token,
-    'member-detail',
-  ).json('data');
-  requireCheck(
-    ownMember.id === rows[0].id && ownMember.organization_id === actor.organizationPublicId,
-    'member detail belongs to authenticated tenant',
-  );
-  const permissions = read(
-    `/tenancy/organization/memberships/${rows[0].id}/permissions`,
-    actor.token,
-    'member-permissions',
-  ).json('data');
-  requireCheck(
-    Array.isArray(permissions.permissions) && permissions.permissions.includes('membership:read'),
-    'member permissions reflect seeded role',
-  );
-  const foreign = fixtures.examples.find(
-    (entry) => entry.organization !== actor.organizationPublicId,
-  );
-  const denied = http.get(`${API_PREFIX}/tenancy/organization/memberships/${foreign.member}`, {
-    ...authHeaders(actor.token),
-    tags: { name: 'foreign-member-denied' },
-    responseCallback: http.expectedStatuses(404),
-  });
-  requireCheck(denied.status === 404, 'foreign membership denied without exposing resource');
-  completed.add(1);
-  if (duration) sleep(0.1);
 }

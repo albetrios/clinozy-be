@@ -27,7 +27,7 @@ Org-scoped routes are flat — they carry **no** `/organizations/{organization_i
 
 **Scoped stress checks:** Run `pnpm load:stress` (health) and `pnpm load:stress:api` (API with TEST_TOKEN + TEST_ORG_ID). See [docs/reference/testing/load-testing.md](../../../../docs/reference/testing/load-testing.md#scoped-load-coverage).
 
-**Read breadth:** `pnpm load:read-surface` exercises 23 nondestructive GET routes with a TEAM-scoped `TEST_TOKEN` / `TEST_ORG_ID`. See the [coverage and intent rules](../../../../docs/reference/testing/load-testing.md#route-coverage-and-test-intent); scenario presence is not proof of execution.
+**Read breadth:** `pnpm load:read-surface` exercises 24 nondestructive GET routes with a TEAM-scoped `TEST_TOKEN` / `TEST_ORG_ID`. See the [coverage and intent rules](../../../../docs/reference/testing/load-testing.md#route-coverage-and-test-intent); scenario presence is not proof of execution.
 
 **Nightly CI:** [.github/workflows/scheduled-k6-load-slo.yml](../../../../.github/workflows/scheduled-k6-load-slo.yml) (`Scheduled k6 API load & SLO`) — gate on `load:stress`-equivalent and `load:stress:api`-equivalent k6 runs; see [docs/reference/testing/load-testing.md](../../../../docs/reference/testing/load-testing.md#nightly-ci-gate-github-actions).
 

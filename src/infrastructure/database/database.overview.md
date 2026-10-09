@@ -31,6 +31,14 @@ Postgres connection management, the abstract `BaseRepository` (with cursor pagin
 - **Append-heavy table retention**: `audit.logs` and `notify.notifications` are plain (non-partitioned) tables. Growth is bounded by row-level retention workers (`audit-retention`, `notification-retention`) that batch-`DELETE` rows older than their configured retention window, backed by the `created_at` indexes.
 - **Migrations** live under [migrations/](migrations/) at repo root; the runner is `pnpm db:migrate`. The lint check is `pnpm db:migrate:lint`.
 
+## Repeated principal identity settings
+
+Nested principal scopes may omit a redundant user `set_config` only when they use the original transaction handle and its unchanged original user. Requesting a different identity or layering on a pinned savepoint permanently disables the shortcut for that transaction. This avoids trusting cached identity after savepoint release/rollback; every fresh transaction still arms its own RLS GUCs. The bookkeeping carries no permission grant and expires with the callback. Real application-role regressions live in `savepoint-guc-totality.security.test.ts`.
+
+## Resolver checkouts
+
+Context-free SECURITY DEFINER reads still reuse an active pinned handle. A resolver must not call the global pool while its service holds a pooled transaction: concurrent cache misses can reserve every connection and then exhaust the pool while waiting for second checkouts. Organization locale and MFA-policy reads use `getContextFreeDatabase()` so they also see the caller's uncommitted policy changes. Resolver tests assert the values under the application role.
+
 ## External dependencies
 
 - **Postgres 17+** — production runs against managed Postgres; `pnpm db:migrate` refuses anything older. Local dev uses Docker Compose.

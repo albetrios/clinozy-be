@@ -79,9 +79,7 @@ describe('Global: no direct DB-query primitives outside repositories (sec-r5-arc
       if (!entry.name.endsWith('.ts')) continue;
       if (entry.name.endsWith('.test.ts')) continue;
       if (entry.name.endsWith('.d.ts')) continue;
-      // Repositories and schemas are the ONLY files allowed to touch the
-      // DB-query primitives directly.
-      if (REPOSITORY_OR_SCHEMA_SUFFIXES.some((suffix) => entry.name.endsWith(suffix))) continue;
+      // Each guard chooses the layers it checks from these runtime domain files.
       yield entryPath;
     }
   }
@@ -117,6 +115,7 @@ describe('Global: no direct DB-query primitives outside repositories (sec-r5-arc
     const violations: string[] = [];
 
     for await (const absolutePath of walkDomainFiles(domainsRoot)) {
+      if (REPOSITORY_OR_SCHEMA_SUFFIXES.some((suffix) => absolutePath.endsWith(suffix))) continue;
       const relativePath = relative(repositoryRoot, absolutePath);
       if (JUSTIFIED_NON_REPO_DOMAIN_FILES.has(relativePath)) continue;
 
@@ -142,7 +141,7 @@ describe('Global: no direct DB-query primitives outside repositories (sec-r5-arc
    * Closes the gap that let `resolve-active-organization.ts` build a full `.select().from()` query
    * inline on the login path while still passing the check above (it imported `sql` from
    * `drizzle-orm` + a context wrapper, not from `connection.js`). Request-path domain files MUST
-   * delegate SQL to a repository. Only repositories (`.repository.ts`, already skipped by the walk)
+   * delegate SQL to a repository. Only repositories (`.repository.ts`, filtered below)
    * and the async maintenance layer (`*.worker.ts` / `*.processor.ts`, which bind a context handle
    * for retention jobs) may import the `drizzle-orm` query builder.
    */
@@ -153,6 +152,7 @@ describe('Global: no direct DB-query primitives outside repositories (sec-r5-arc
     const violations: string[] = [];
 
     for await (const absolutePath of walkDomainFiles(domainsRoot)) {
+      if (REPOSITORY_OR_SCHEMA_SUFFIXES.some((suffix) => absolutePath.endsWith(suffix))) continue;
       const relativePath = relative(repositoryRoot, absolutePath);
       if (relativePath.endsWith('.worker.ts') || relativePath.endsWith('.processor.ts')) continue;
 
@@ -170,5 +170,27 @@ describe('Global: no direct DB-query primitives outside repositories (sec-r5-arc
       );
     }
     expect(violations).toEqual([]);
+  });
+  it('repositories use pinned accessors instead of opening second checkouts through connection singletons', async () => {
+    const violations: string[] = [];
+    let scannedRepositories = 0;
+    for await (const absolutePath of walkDomainFiles(join(process.cwd(), 'src', 'domains'))) {
+      if (!absolutePath.endsWith('.repository.ts')) continue;
+      scannedRepositories += 1;
+      const source = await fs.readFile(absolutePath, 'utf8');
+      for (const { name, pattern } of FORBIDDEN_IMPORT_PATTERNS.slice(0, 2)) {
+        pattern.lastIndex = 0;
+        if (pattern.test(source))
+          violations.push(`${relative(process.cwd(), absolutePath)} — ${name}`);
+      }
+    }
+    expect(
+      scannedRepositories,
+      'The policy must scan the actual repository inventory',
+    ).toBeGreaterThan(20);
+    expect(
+      violations,
+      'A direct global-pool query can deadlock a service that already holds a checkout. Use getRequestDatabase/getContextFreeDatabase or the supplied worker handle.',
+    ).toEqual([]);
   });
 });

@@ -7,7 +7,7 @@ import { authHeaders } from '../helpers/auth.js';
 /**
  * Read-surface functional load: one authenticated account, one TEAM tenant,
  * shared by all VUs. VUs are concurrent clients, not distinct people/tenants.
- * All 23 routes must return 200 and their basic public data shape. This excludes
+ * All 24 routes must return 200 and their basic public data shape. This excludes
  * destructive writes, external-provider callbacks, live Stripe/S3 operations,
  * admin-only routes and dynamic resource detail routes needing other fixtures.
  * No 403 or rate-limit rejection is counted as successful route execution.
@@ -122,6 +122,12 @@ const READ_ROUTES = [
     path: '/tenancy/organization/settings',
     shape: 'object',
     permission: 'organization:read',
+  },
+  {
+    name: 'organization-audit-logs',
+    path: '/tenancy/organization/audit-logs',
+    shape: 'array',
+    permission: 'audit-log:read',
   },
   {
     name: 'memberships',

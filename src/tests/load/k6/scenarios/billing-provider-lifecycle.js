@@ -72,6 +72,32 @@ export function setup() {
     foreignToken: mintTokenPool([credentialPool[vus * iterations]])[0].token,
   };
 }
+function verifyAccountReads({ subscriptionId, token, planId }) {
+  const plan = requireData(request('GET', `/billing/plans/${planId}`, token), 'owned plan detail');
+  assertCondition(plan.id === planId, 'plan detail matches the subscription plan');
+  const expectedAccount = fixture('/account-reads', { subscriptionId: subscriptionId });
+  const invoices = requireData(
+    request('GET', '/billing/invoices?limit=100', token),
+    'provider invoices',
+  );
+  const methods = requireData(
+    request('GET', '/billing/payment-methods', token),
+    'provider payment methods',
+  );
+  assertCondition(
+    Array.isArray(invoices) &&
+      JSON.stringify(invoices.map((invoice) => invoice.id).sort()) ===
+        JSON.stringify(expectedAccount.invoiceIds),
+    'invoice API matches independently retrieved provider records',
+  );
+  assertCondition(
+    Array.isArray(methods) &&
+      JSON.stringify(methods.map((method) => method.id).sort()) ===
+        JSON.stringify(expectedAccount.paymentMethodIds),
+    'payment-method API matches independently retrieved provider records',
+  );
+}
+
 export default function (data) {
   const actor = data.actors[(__VU - 1) * iterations + __ITER];
   const login = requireData(
@@ -141,6 +167,7 @@ export default function (data) {
       sleep(0.25);
     }
     assertCondition(active.status === 'ACTIVE', 'real worker persisted activation');
+    verifyAccountReads({ subscriptionId: subscription.id, token, planId: data.plans[0] });
     const changed = requireData(
       request('POST', `/billing/subscriptions/${subscription.id}/change-plan`, token, {
         plan_id: data.plans[1],

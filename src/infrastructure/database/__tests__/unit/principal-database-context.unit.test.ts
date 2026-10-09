@@ -175,6 +175,81 @@ describe('withAppDatabaseContext', () => {
     });
   });
 
+  it('does not re-arm the unchanged original user in nested principal scopes', async () => {
+    const scope = PRINCIPAL_SCOPE.REQUEST({ userPublicId: 'usr_a', organizationPublicId: 'org_x' });
+    await withAppDatabaseContext(scope, async (outerHandle) => {
+      await withAppDatabaseContext(scope, async (innerHandle) => {
+        expect(innerHandle).toBe(outerHandle);
+      });
+      await withAppDatabaseContext(
+        PRINCIPAL_SCOPE.VERIFIED({ userPublicId: 'usr_a' }),
+        async () => undefined,
+      );
+    });
+    expect(mockExecute).toHaveBeenCalledTimes(1);
+  });
+
+  it('always re-arms identities after any different user has been requested', async () => {
+    const scope = PRINCIPAL_SCOPE.REQUEST({ userPublicId: 'usr_a', organizationPublicId: 'org_x' });
+    await withAppDatabaseContext(scope, async () => {
+      await withAppDatabaseContext(
+        PRINCIPAL_SCOPE.VERIFIED({ userPublicId: 'usr_b' }),
+        async () => undefined,
+      );
+      await withAppDatabaseContext(scope, async () => undefined);
+      await withAppDatabaseContext(scope, async () => undefined);
+    });
+    expect(mockExecute).toHaveBeenCalledTimes(4);
+    expect(executedSqlTexts()[1]).toContain('usr_b');
+    expect(executedSqlTexts()[2]).toContain('usr_a');
+    expect(executedSqlTexts()[3]).toContain('usr_a');
+  });
+
+  it('invalidates original-user reuse before a concurrent identity write completes', async () => {
+    const scope = PRINCIPAL_SCOPE.REQUEST({ userPublicId: 'usr_a', organizationPublicId: 'org_x' });
+    await withAppDatabaseContext(scope, async () => {
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      mockExecute.mockImplementationOnce(() => pending);
+      const other = withAppDatabaseContext(
+        PRINCIPAL_SCOPE.VERIFIED({ userPublicId: 'usr_b' }),
+        async () => undefined,
+      );
+      await withAppDatabaseContext(scope, async () => undefined);
+      release();
+      await other;
+    });
+    expect(mockExecute).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not reuse original-user knowledge after a failed identity write', async () => {
+    const scope = PRINCIPAL_SCOPE.REQUEST({ userPublicId: 'usr_a', organizationPublicId: 'org_x' });
+    await withAppDatabaseContext(scope, async () => {
+      mockExecute.mockRejectedValueOnce(new Error('identity write failed'));
+      await expect(
+        withAppDatabaseContext(
+          PRINCIPAL_SCOPE.VERIFIED({ userPublicId: 'usr_b' }),
+          async () => undefined,
+        ),
+      ).rejects.toThrow('identity write failed');
+      await withAppDatabaseContext(scope, async () => undefined);
+    });
+    expect(mockExecute).toHaveBeenCalledTimes(3);
+  });
+
+  it('arms a new transaction even if a previous callback failed on the same mock handle', async () => {
+    const scope = PRINCIPAL_SCOPE.REQUEST({ userPublicId: 'usr_a', organizationPublicId: 'org_x' });
+    await expect(
+      withAppDatabaseContext(scope, async () => {
+        throw new Error('rollback');
+      }),
+    ).rejects.toThrow('rollback');
+    await withAppDatabaseContext(scope, async () => undefined);
+    expect(mockExecute).toHaveBeenCalledTimes(2);
+  });
+
   it('an organization-bearing scope for a DIFFERENT organization opens its own transaction (second checkout)', async () => {
     const organizationScope = PRINCIPAL_SCOPE.REQUEST({
       organizationPublicId: 'org_x',
