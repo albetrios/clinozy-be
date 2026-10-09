@@ -35,7 +35,7 @@ ROUTE #127) with its branch filter `app.membership_preference_branches`.
 - **One row per membership, upserted (U4):** `INSERT … ON CONFLICT (membership_id) DO UPDATE`, so
   two first saves at once both land.
 - **Branch filter:** `branch_ids` names branches the caller can see — every branch with
-  `branch:read`, otherwise their own (`app.branch_members`); empty = every branch.
+  `branch:read`, otherwise their own (`app.branch_members`); empty = every branch. A read lists only the branches the member can still see — one taken away since the save drops out, and comes back if access returns.
 - **Recent picks:** `room:field:value`, newest first; the server keeps the newest 3 per
   `room:field` and drops repeats.
 - **No soft delete:** the leave step deletes the row and its branch filter (K4,

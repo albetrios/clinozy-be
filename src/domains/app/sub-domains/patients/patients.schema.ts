@@ -173,7 +173,6 @@ export const patients = appSchema
         'chk_patients_delete_note_when_other',
         sql`${table.delete_reason} IS DISTINCT FROM 'other' OR ${table.delete_note} IS NOT NULL`,
       ),
-      // The AI ideas sweep (WC-47, D80) finds the organizations with stale files across tenants.
       pgPolicy('patients_tenant_isolation', {
         as: 'permissive',
         for: 'all',
@@ -181,12 +180,19 @@ export const patients = appSchema
         using: sql`${table.organization_id} = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR ${maintenanceBypassArm('app.global_retention_cleanup')}`,
+          )`,
         withCheck: sql`${table.organization_id} = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )`,
+      }),
+      // The AI ideas sweep (WC-47, D80) reads the stale marks across organizations — a read only:
+      // a patient file is never purged (P7), so the maintenance role gets no write arm here.
+      pgPolicy('patients_ideas_sweep_read', {
+        as: 'permissive',
+        for: 'select',
+        to: 'public',
+        using: sql`${maintenanceBypassArm('app.global_retention_cleanup')}`,
       }),
     ],
   )

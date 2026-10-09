@@ -34,7 +34,8 @@ const BRANCH_NOT_VISIBLE_KEY = 'errors:validation.preferenceBranchNotVisible';
  * @remarks
  * - **Algorithm:** inside the caller's `withAppDatabaseContext`, resolve the caller's own membership
  *   (403 for an API key); a read returns the row or the defaults before the first save; a save is
- *   one upsert on `membership_id`, then the branch filter is replaced when sent.
+ *   one upsert on `membership_id`, then the branch filter is replaced when sent. Every answer
+ *   lists only the branches the member can still see.
  * - **Failure modes:** `ForbiddenError('errors:ownMembershipRequired')`; `ValidationError` for a
  *   bad body or a branch the member can't see; `ConflictError` `record_changed` for a stale save.
  * - **Side effects:** the first save inserts the member's row; `branch_ids` rewrites
@@ -51,18 +52,22 @@ export class MembershipPreferencesService {
    * The caller's preferences, or the defaults (`id` null) before their first save.
    *
    * @remarks
-   * - **Algorithm:** one read of the caller's row and its branch filter.
+   * - **Algorithm:** one read of the caller's row and its branch filter — only the branches the
+   *   member can still see (a branch taken away since the save drops out, D9).
    * - **Failure modes:** `ForbiddenError` without a membership.
    */
   async getMine(
     scope: OrganizationPrincipalDatabaseScope,
-    actingUserPublicId: string | undefined,
+    options: { actingUserPublicId: string | undefined; allBranches: boolean },
   ): Promise<MembershipPreferencesOutput> {
     return withAppDatabaseContext(scope, async () => {
-      const caller = await this.requireCaller(scope, actingUserPublicId);
+      const caller = await this.requireCaller(scope, options.actingUserPublicId);
       const row = await this.repository.findByMembershipId(caller.membershipId);
       if (!row) return defaultMembershipPreferences();
-      return serializeMembershipPreferences(row, await this.repository.listBranchPublicIds(row.id));
+      return serializeMembershipPreferences(
+        row,
+        await this.visibleBranchFilter({ caller, rowId: row.id, allBranches: options.allBranches }),
+      );
     });
   }
 
@@ -127,8 +132,25 @@ export class MembershipPreferencesService {
           branch_ids: branchIds,
         });
       }
-      return serializeMembershipPreferences(row, await this.repository.listBranchPublicIds(row.id));
+      return serializeMembershipPreferences(
+        row,
+        await this.visibleBranchFilter({ caller, rowId: row.id, allBranches: options.allBranches }),
+      );
     });
+  }
+
+  /** The saved branch filter, without the branches the caller can no longer see (D9). */
+  private async visibleBranchFilter(options: {
+    caller: CallerMembership;
+    rowId: number;
+    allBranches: boolean;
+  }): Promise<string[]> {
+    if (options.allBranches) return this.repository.listBranchPublicIds(options.rowId);
+    const visible = await listVisibleBranchIds({
+      organizationId: options.caller.organizationId,
+      userId: options.caller.userId,
+    });
+    return this.repository.listBranchPublicIds(options.rowId, visible);
   }
 
   private requireCaller(

@@ -3363,11 +3363,11 @@ CREATE INDEX IF NOT EXISTS "idx_patients_updated_by_user_id" ON "app"."patients"
 CREATE POLICY "patients_tenant_isolation" ON "app"."patients" AS PERMISSIVE FOR ALL TO public USING ("app"."patients"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."patients"."organization_id" = (
+          )) WITH CHECK ("app"."patients"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
+CREATE POLICY "patients_ideas_sweep_read" ON "app"."patients" AS PERMISSIVE FOR SELECT TO public USING (((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance'));--> statement-breakpoint
 ALTER TABLE "app"."patients" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TRIGGER trg_patients_patient_number BEFORE INSERT ON "app"."patients" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('patient_number');--> statement-breakpoint
 -- app.patient_diagnoses (folded from the Drizzle schema): keys, indexes, RLS.

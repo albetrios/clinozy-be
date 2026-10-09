@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
@@ -63,13 +63,27 @@ export class MembershipPreferencesRepository {
     return row;
   }
 
-  /** The branch filter's branches (`brn_…`), by branch name. */
-  async listBranchPublicIds(membership_preference_id: number): Promise<string[]> {
+  /**
+   * The branch filter's branches (`brn_…`), by branch name — only those in `onlyBranchIds` when
+   * given (the branches the member can still see).
+   */
+  async listBranchPublicIds(
+    membership_preference_id: number,
+    onlyBranchIds?: readonly number[],
+  ): Promise<string[]> {
+    if (onlyBranchIds?.length === 0) return [];
     const rows = await getRequestDatabase()
       .select({ public_id: branches.public_id })
       .from(membership_preference_branches)
       .innerJoin(branches, eq(branches.id, membership_preference_branches.branch_id))
-      .where(eq(membership_preference_branches.membership_preference_id, membership_preference_id))
+      .where(
+        and(
+          eq(membership_preference_branches.membership_preference_id, membership_preference_id),
+          onlyBranchIds === undefined
+            ? undefined
+            : inArray(membership_preference_branches.branch_id, [...onlyBranchIds]),
+        ),
+      )
       .orderBy(asc(branches.name), asc(branches.public_id));
     return rows.map((row) => row.public_id);
   }

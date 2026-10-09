@@ -48,14 +48,14 @@ Biome, typecheck and tsdoc, then is committed and pushed. The full `pnpm test`,
 | PT2 — the last session spent twice | 2 | done | `app-races.integration.test.ts` › PT2 (the guarded counter holds) |
 | L1 — one lead claimed twice | 2 | done | `app-races.integration.test.ts` › L1 — after the fix below |
 | AP3 — appointment status machine | 2 | done | `appointments-lifecycle.integration.test.ts` (60 pairs against A5, plus pause, resume and stage) |
-| PT1 — clinical gates pinned | 3 | planned | — |
-| PT3 — prescription approval edges | 3 | planned | — |
-| T1 — extra roles end to end | 3 | planned | — |
-| T2 — preferences and saved views | 3 | planned | — |
-| T3 — the locked Admin role | 3 | planned | — |
-| P2 — branch access per section | 3 | planned | — |
-| RL1 — unit-db lane as the RLS role | 3 | planned | — |
-| RL2 — read-only retention arm | 3 | planned | — |
+| PT1 — clinical gates pinned | 3 | done | `app-role-presets.policy.unit.test.ts` (11 sensitive codes pinned; no preset deletes, manages the team or holds an unknown code; only Admin locked) |
+| PT3 — prescription approval edges | 3 | done | approve again, change and delete after approval were already in `patients`; added: a role without the code is refused — `app-team-access.integration.test.ts` › T1, PT3 |
+| T1 — extra roles end to end | 3 | done | `app-team-access.integration.test.ts` › T1 (the union, and refused at once when the role goes) |
+| T2 — preferences and saved views | 3 | done | limits, other members' views and hidden branches were already in `memberships`; added: a branch taken away — after the fix below |
+| T3 — the locked Admin role | 3 | done | `app-team-access.integration.test.ts` › T3 |
+| P2 — branch access per section | 3 | done | `app-branch-access.integration.test.ts` (appointments, leads, invoices, payments, day closes, medical sales) |
+| RL1 — unit-db lane as the RLS role | 3 | dropped (decision) | see Decisions |
+| RL2 — read-only retention arm | 3 | done | `patients-ideas-sweep-read-only.security.test.ts` — after the fix below |
 | AP1 — time zones and midnight | 4 | planned | — |
 | P1 — holidays, rooms and machines in booking | 4 | planned | — |
 | R1 — task rules at their due times | 4 | planned | — |
@@ -86,6 +86,11 @@ Biome, typecheck and tsdoc, then is committed and pushed. The full `pnpm test`,
 
 Taken by recommendation (no question asked), one line each, as the batches reach them.
 
+| Batch | Decision | Why |
+| --- | --- | --- |
+| 3 | RL1 is dropped: the unit-db lane stays on the operator role. | Run as `clinozy_be_app`, 39 of its 62 files fail by design: they test repository SQL directly, without the database context a request or a job opens. Wrapping each would test the contexts, not the SQL. The RLS role already runs the e2e and integration lanes (1,349 tests), and the security lane probes every policy per role. |
+| 3 | A member's saved branch filter lists only the branches they can see today. | A save already refuses a branch the member cannot see, so a read now drops one taken away since. The row is kept, so the branch comes back if access returns. |
+
 ## Findings
 
 Bugs the new tests found, and their fixes.
@@ -94,6 +99,8 @@ Bugs the new tests found, and their fixes.
 | --- | --- | --- | --- |
 | 1 | B2 property test | The overall discount's last line took the other lines' rounding. On a bill whose overall discount covered nearly everything, with a small last line, that line's net went to −₹0.01, so its taxable value and GST went negative. | `computeInvoiceAmounts` now caps the last line's share at what it has left, and moves the excess back to the lines before it (`spillShareExcess`). Bills where the old rule held are unchanged. The counterexample is a regression case in `invoices.amounts.unit.test.ts`. |
 | 2 | L1 race test | Two members claiming the same open lead at once both got 200: the claim read the lead, checked the hold, then wrote without a lock, so both saw an unheld lead and the second silently took it over. | `LeadsRepository.claim` makes the claim one guarded `UPDATE` (only while nobody else holds the lead). The loser re-reads and gets the 409 `lead_held`, as a later claim would. |
+| 3 | T2 test | A member moved off a branch still had it in their saved branch filter, although saving it again would be refused. | `MembershipPreferencesService` reads the filter through the member's visible branches (`listBranchPublicIds` takes them), on both the read and the save answer. |
+| 3 | RL2 review | The retention arm added to `app.patients` for the ideas sweep (#152) sat on the `FOR ALL` policy. It let the maintenance role delete or change a patient file under the retention context, and patient files are never purged (P7). | The arm moved to its own `FOR SELECT` policy, `patients_ideas_sweep_read`, in the schema and the baseline migration. The security test proves read yes, update and delete no. |
 
 ## Not code — left with their owners
 

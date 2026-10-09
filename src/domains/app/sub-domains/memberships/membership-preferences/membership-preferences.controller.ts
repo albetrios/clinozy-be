@@ -14,10 +14,10 @@ import type { MembershipPreferencesService } from './membership-preferences.serv
 export function createMembershipPreferencesController(service: MembershipPreferencesService) {
   return {
     getMine: async (request: FastifyRequest, _reply: FastifyReply) => {
-      const data = await service.getMine(
-        requireOrganizationScope(request),
-        getActingUserPublicId(requirePrincipal(request)),
-      );
+      const data = await service.getMine(requireOrganizationScope(request), {
+        actingUserPublicId: getActingUserPublicId(requirePrincipal(request)),
+        allBranches: await hasOrganizationPermission(request, APP_PERMISSIONS.BRANCH_READ),
+      });
       return successResponse(data, getRequestIdentifier(request));
     },
     updateMine: async (request: FastifyRequest, _reply: FastifyReply) => {
