@@ -76,3 +76,5 @@ and distinct-user tenant pagination scenarios. Configure lifecycle runs with
 `DURATION` and `MIN_COMPLETED`; configure distinct-user reads with `VUS`.
 The nightly workflow enforces the distinct-user and persisted-lifecycle gates;
 failed checks or incomplete journeys fail the job.
+
+The five additional account, MFA, tenant, admin and upload lifecycle gates use an isolated database and loopback fixtures. See [fixture-backed lifecycle coverage](../../../../docs/reference/testing/load-testing.md#fixture-backed-lifecycle-coverage) for setup, verified behavior and provider limitations.

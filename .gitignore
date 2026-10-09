@@ -150,3 +150,6 @@ SESSION.md
 
 # Local greenfield legacy-cleanup reference notes (never committed)
 LEGACY-CLEANUP-NOTES.md
+
+# Local fixture-backed k6 reports (raw request samples and process logs).
+k6-lifecycle/
