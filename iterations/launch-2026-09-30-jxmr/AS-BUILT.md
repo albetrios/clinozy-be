@@ -164,6 +164,12 @@ approved plan; [plans/acceptance.md](plans/acceptance.md) holds a result and evi
     launch's curl-only rule).
   - AI ideas (WC-47) with a provider through the env schema (D39) — its own iteration.
   - KC5 — anonymising an ended login, in the platform review (D56).
+  - WhatsApp approved templates (D32): the automated notices (confirm request, reminder, receipt,
+    day-close summary) are plain text, and Meta refuses free text outside the 24-hour window, so
+    most of them fail (each failure opens a call task, WC-4) until templates are built.
+  - Deploy: the monolithic worker serves about 63 Postgres connections, and it refuses to boot
+    when `DATABASE_POOL_MAX` is lower. Set the hosted worker services to 80, the template
+    value.
   - Before launch, outside the code: the clinic's accountant confirms the tax rules (D20, D21, D23);
     the clinic's advisor confirms the 7-day purge (D38); clinozy-fe confirms machines (D28); the
     WhatsApp Business number is verified and the Meta app's webhook pointed at the API (D32, D77).
@@ -181,7 +187,14 @@ approved plan; [plans/acceptance.md](plans/acceptance.md) holds a result and evi
     audit.
   - **Biome, SonarQube and the intake check:** Biome clean; SonarQube 0 issues / 0 hotspots;
     `pnpm iteration:intake --check` passed.
-  - **`pnpm test:rls-role`:** the e2e and integration lanes as the RLS-subject role — result recorded with the status change below.
+  - **`pnpm test:rls-role`:** the e2e and integration lanes as the RLS-subject role — 158 files /
+    1,342 tests passed (3 files / 6 tests skipped). `pnpm test:contract`: 10 files / 48 tests.
+  - **Live API (`pnpm dev:checks`, real HTTP against the running API and worker, on a database
+    rebuilt from the baseline):** 2,409 checks pass over offerings, contacts, contact activity,
+    leads, appointments, patients, billing, stock, tasks and medical. The first run found three
+    issues: a photo whose stored file is gone answered 503 on every retry (fixed: it is filed, as
+    any attach files an upload), the leads check predating WC-16 (updated), and the local worker
+    not booting on a stale machine-local `DATABASE_POOL_MAX=60` (the template ships 80).
 - Pre-merge review (`/be-pre-merge-review`, review only; each finding checked before acting):
   - **SQL design:** one blocking finding, confirmed and fixed. `app.fn_assign_invoice_number`
     used `lpad(n, 4)`, and Postgres cuts a longer string, so invoice 10000 would have become
