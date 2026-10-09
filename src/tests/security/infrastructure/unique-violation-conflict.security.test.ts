@@ -13,6 +13,7 @@ import {
   seedPermissions,
   createRoleWithPermissions,
   createMembership,
+  MEMBERSHIP_WRITE_PERMISSION_CODES,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 
 /**
@@ -121,7 +122,7 @@ describe('Security: unique-violation conflict handling', () => {
   describe('membership duplicate (POST)', () => {
     beforeEach(async () => {
       await cleanupDatabase();
-      await seedPermissions(['membership:manage', 'membership:read', 'role:read']);
+      await seedPermissions([...MEMBERSHIP_WRITE_PERMISSION_CODES, 'membership:read', 'role:read']);
     });
 
     async function membershipAdminContext() {
@@ -129,7 +130,7 @@ describe('Security: unique-violation conflict handling', () => {
       const organization = await createTestOrganization({ ownerUserId: owner.id });
       const adminRole = await createRoleWithPermissions({
         organizationId: organization.id,
-        permissionCodes: ['membership:manage', 'membership:read', 'role:read'],
+        permissionCodes: [...MEMBERSHIP_WRITE_PERMISSION_CODES, 'membership:read', 'role:read'],
       });
       await createMembership({
         userId: owner.id,
@@ -158,7 +159,7 @@ describe('Security: unique-violation conflict handling', () => {
       };
     }
 
-    // REQ-1: "Add member" is invite-by-email. It provisions/finds the invitee, creates an INVITED
+    // REQ-1: "Add member" is invite-by-email. It provisions/finds the invitee, creates an invited
     // membership, and emails a token (raw token never returned). Re-adding the same email collides on
     // the (user_id, organization_id) unique index (the email resolves to the same user) — the service
     // maps that unique_violation to a clean 409 (errors:membershipAlreadyExists), not a raw 500.

@@ -15,6 +15,7 @@ import {
 import { invalidatePermissions } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
 import { loadOrganizationPermissionRoutesFromCatalog } from '@/tests/helpers/route-catalog-registry.js';
 import type { FastifyInstance } from 'fastify';
+import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
 import {
   appRouteBody,
   appRouteDeleteQuery,
@@ -29,6 +30,21 @@ const API_PREFIX = '/api/v1';
 
 /** Placeholder ids for the shared table's bodies — the permission check answers before any lookup. */
 const PLACEHOLDER_REFERENCES = placeholderAppRouteReferences();
+
+/**
+ * The codes a route checks besides the one its catalog line names: an app export also reads the
+ * list (`<resource>:read`, the base controller's `readPermission`), and a patient's clinical notes,
+ * images and reports also need `patient_clinical_record:read` (their routes stack both checks).
+ */
+function companionPermissionCodes(route: (typeof organizationPermissionRoutes)[number]): string[] {
+  if (route.permissionCode.endsWith(':export')) {
+    return [route.permissionCode.replace(/:export$/, ':read')];
+  }
+  if (/\/app\/patients\/:patient_id\/(clinical-notes|images|reports)\b/.test(route.path)) {
+    return [APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ];
+  }
+  return [];
+}
 
 /** A catalog path without the API prefix (`/app/…`, `/tenancy/…`). */
 function routeKeyPath(path: string): string {
@@ -194,13 +210,14 @@ describe('Security: Permission route matrix', () => {
     });
 
     it(`${route.method} ${route.path} does not return 403 with ${route.permissionCode}`, async () => {
-      await seedPermissions([route.permissionCode]);
+      const grantedCodes = [route.permissionCode, ...companionPermissionCodes(route)];
+      await seedPermissions(grantedCodes);
 
       const user = await createTestUser();
       const organization = await createTestOrganization({ ownerUserId: user.id });
       const role = await createRoleWithPermissions({
         organizationId: organization.id,
-        permissionCodes: [route.permissionCode],
+        permissionCodes: grantedCodes,
         createdByUserId: user.id,
       });
       await createMembership({
@@ -226,7 +243,7 @@ describe('Security: Permission route matrix', () => {
         ...(payload !== undefined ? { payload } : {}),
       });
 
-      expect(response.statusCode).not.toBe(403);
+      expect(response.statusCode, response.body).not.toBe(403);
     });
   }
 });

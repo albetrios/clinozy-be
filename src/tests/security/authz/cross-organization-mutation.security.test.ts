@@ -188,7 +188,7 @@ describe('Security: cross-organization mutation isolation (model: organization â
       label: 'role PATCH',
       method: 'PATCH',
       target: (organization) => `/tenancy/organization/roles/${organization.role.public_id}`,
-      body: {},
+      body: { name: 'Renamed across organizations' },
     },
     {
       label: 'role DELETE',

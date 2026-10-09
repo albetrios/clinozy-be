@@ -134,8 +134,8 @@ describe('Security: cross-organization resource isolation (model: organization)'
       path: (organization) => `/app/branches/${organization.branch.public_id}`,
     },
     {
-      label: 'branch user-accesses',
-      path: (organization) => `/app/branches/${organization.branch.public_id}/user-accesses`,
+      label: 'branch members',
+      path: (organization) => `/app/branches/${organization.branch.public_id}/members`,
     },
     {
       label: 'membership permissions',
