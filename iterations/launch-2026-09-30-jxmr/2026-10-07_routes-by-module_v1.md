@@ -1,5 +1,8 @@
 # Clinozy API — every route, by module
 
+> **Superseded** — this snapshot predates the launch's rebuild of the app routes (ROUTE #124–#153). The
+> current map for clinozy-fe, with the design's operations and every route built: [plans/frontend-route-map.md](plans/frontend-route-map.md).
+
 Generated 2026-10-07 from the running code (`docs/openapi/openapi.json` + `docs/routes.txt`) on branch `feat/clinic-launch-api` (uncommitted work). **435 routes**, **305 under `/api/v1/app`**.
 
 ## How to read it

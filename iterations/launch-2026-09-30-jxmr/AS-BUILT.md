@@ -225,7 +225,7 @@ evidence for all 59 criteria.
     incremental sort serves it, which is fine at clinic volumes.
   - Drop the three membership indexes the composite foreign-key indexes already cover (supplier
     credits, MR visits, sale returns).
-- Frontend adapts (user rule, 2026-10-07) — at the route rows that expose them: money as `numeric(12,2)` rupees (clinozy-fe contracts hold paise) · the operating settings read and written through `/tenancy/organization/settings` (#1) · one contact per person (`/app/contacts`, D61) with the patient file and lead holding `contact_id` · every deviation below.
+- Frontend adapts (user rule, 2026-10-07; the full map for clinozy-fe — each design operation's route, every route, and the design features dropped: [plans/frontend-route-map.md](plans/frontend-route-map.md)) — at the route rows that expose them: money as `numeric(12,2)` rupees (clinozy-fe contracts hold paise) · the operating settings read and written through `/tenancy/organization/settings` (#1) · one contact per person (`/app/contacts`, D61) with the patient file and lead holding `contact_id` · every deviation below.
 
 ## Standing deviations
 
