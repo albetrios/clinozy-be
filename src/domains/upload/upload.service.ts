@@ -402,7 +402,8 @@ export class UploadService {
    *   XMP ({@link removeImageLocation}) and writes it back under the same key and type when
    *   anything was removed. Any other type is left alone.
    * - **Failure modes:** `ValidationError` (`uploadNotConfirmed`) for a key that is not the
-   *   organization's confirmed upload; storage errors propagate — the caller files nothing.
+   *   organization's confirmed upload; a stored file that is gone has no location to remove (a
+   *   warning, no error); any other storage error propagates — the caller files nothing.
    * - **Side effects:** one GET and at most one PUT on the object store; the upload row is not
    *   changed (its `file_size` keeps the size the client sent).
    */
@@ -418,7 +419,12 @@ export class UploadService {
       }),
     );
     if (upload.mimeType !== 'image/jpeg' && upload.mimeType !== 'image/png') return;
-    const stored = await this.objectStorage.getObject(options.fileKey);
+    const stored = await this.readStoredObject(options.fileKey);
+    if (stored === null) {
+      // No stored file, no location to remove: the photo is filed as any attach files an upload
+      logger.warn({ fileKey: options.fileKey }, 'upload.image_location_object_missing');
+      return;
+    }
     const cleaned = removeImageLocation(stored.body, upload.mimeType);
     if (!cleaned.changed) return;
     await this.objectStorage.putObject({
@@ -427,6 +433,20 @@ export class UploadService {
       contentType: upload.mimeType,
     });
     logger.info({ fileKey: options.fileKey }, 'upload.image_location_removed');
+  }
+
+  /**
+   * The stored object, or `null` when it is gone — a failed read is told apart from a missing
+   * object by a HEAD, only on the failure path; any other failure (an outage, a denial) throws.
+   */
+  private async readStoredObject(key: string): Promise<{ body: Buffer } | null> {
+    try {
+      return await this.objectStorage.getObject(key);
+    } catch (error) {
+      const head = await this.objectStorage.headObject(key).catch(() => undefined);
+      if (head === null) return null;
+      throw error;
+    }
   }
 
   private async assertUserCanAccessOrgScopedUpload(

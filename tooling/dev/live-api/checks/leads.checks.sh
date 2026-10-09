@@ -19,6 +19,8 @@ ADAJAN="$(fixture '.branches.adajan')"
 ADMIN="$(fixture '.members.admin.membership_id')"
 DOCTOR="$(fixture '.members.doctor.membership_id')"
 FRONT_DESK="$(fixture '.members.front_desk.membership_id')"
+# The fixture owner wrote to the people above: a member who works a person joins their open lead (WC-16)
+OWNER="$(fixture '.members.owner.membership_id')"
 MARKETING="$(fixture '.members.marketing.membership_id')"
 
 # person FIRST SUFFIX — a contact of this run with its own number; sets LAST_CONTACT.
@@ -226,11 +228,11 @@ HELD_BEFORE="$(last '.data.held_until')"
 expect 200 "assign Riya's lead to the admin" PATCH "/app/leads/${RIYA_LEAD}" "{\"owner_membership_id\":\"${ADMIN}\",\"expected_updated_at\":\"${UPDATED_AT}\"}"
 expect_value "new owner" '.data.owner_membership_id' "${ADMIN}"
 expect_value "a new hold" ".data.held_until != \"${HELD_BEFORE}\" and .data.held_until != null" true
-expect_value "the replaced owner stays involved (L9)" "[.data.involved_membership_ids[]] | sort | join(\",\")" "$(printf '%s\n' "${DOCTOR}" "${FRONT_DESK}" | sort | paste -sd, -)"
+expect_value "the replaced owner stays involved (L9)" "[.data.involved_membership_ids[]] | sort | join(\",\")" "$(printf '%s\n' "${DOCTOR}" "${FRONT_DESK}" "${OWNER}" | sort | paste -sd, -)"
 expect 409 "a stale save (D43)" PATCH "/app/leads/${RIYA_LEAD}" "{\"notes\":\"x\",\"expected_updated_at\":\"${UPDATED_AT}\"}"
 expect_value "stale save: reason" '.error.reason' record_changed
 expect 200 "assign it to the involved front desk" PATCH "/app/leads/${RIYA_LEAD}" "{\"owner_membership_id\":\"${FRONT_DESK}\"}"
-expect_value "the owner is not also involved" "[.data.involved_membership_ids[]] | sort | join(\",\")" "$(printf '%s\n' "${DOCTOR}" "${ADMIN}" | sort | paste -sd, -)"
+expect_value "the owner is not also involved" "[.data.involved_membership_ids[]] | sort | join(\",\")" "$(printf '%s\n' "${DOCTOR}" "${ADMIN}" "${OWNER}" | sort | paste -sd, -)"
 expect 400 "owner and involved name the same member" PATCH "/app/leads/${RIYA_LEAD}" \
   "{\"owner_membership_id\":\"${DOCTOR}\",\"involved_membership_ids\":[\"${DOCTOR}\"]}"
 expect 200 "replace the involved set" PATCH "/app/leads/${RIYA_LEAD}" "{\"involved_membership_ids\":[\"${MARKETING}\"]}"
@@ -282,10 +284,10 @@ expect_value "not yours: reason" '.error.reason' lead_not_yours
 lead_sql "UPDATE app.leads SET held_until = now() - interval '1 minute' WHERE public_id = '${KABIR_LEAD}';"
 expect 200 "the hold ran out: the doctor takes it over" POST "/app/leads/${KABIR_LEAD}/claim"
 expect_value "taken over" '.data.owner_membership_id' "${DOCTOR}"
-expect_value "the front desk stays involved (L9)" '.data.involved_membership_ids | join(",")' "${FRONT_DESK}"
+expect_value "the front desk stays involved (L9)" "[.data.involved_membership_ids[]] | sort | join(\",\")" "$(printf '%s\n' "${FRONT_DESK}" "${OWNER}" | sort | paste -sd, -)"
 expect 200 "the doctor releases it" POST "/app/leads/${KABIR_LEAD}/release"
 expect_value "released: no owner, no hold" '[.data.owner_membership_id, .data.held_until] | map(tostring) | join(",")' null,null
-expect_value "released: the doctor stays involved" "[.data.involved_membership_ids[]] | sort | join(\",\")" "$(printf '%s\n' "${DOCTOR}" "${FRONT_DESK}" | sort | paste -sd, -)"
+expect_value "released: the doctor stays involved" "[.data.involved_membership_ids[]] | sort | join(\",\")" "$(printf '%s\n' "${DOCTOR}" "${FRONT_DESK}" "${OWNER}" | sort | paste -sd, -)"
 expect 403 "release a lead nobody owns" POST "/app/leads/${KABIR_LEAD}/release"
 expect 409 "claim a closed lead" POST "/app/leads/${MEERA_LEAD_AGAIN}/claim"
 expect_value "claim closed: reason" '.error.reason' lead_closed

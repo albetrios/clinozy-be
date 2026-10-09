@@ -55,7 +55,10 @@ adajan="$(last '.data.id')"
 need 200 "list roles" GET /tenancy/organization/roles
 roles_json="$(last '[.data[] | {key: (.name | ascii_downcase | gsub(" "; "_")), value: .id}] | from_entries')"
 
-members_json="$(jq -nc --arg email "${owner_email}" '{owner: {email: $email, role: "Owner"}}')"
+need 200 "the owner's membership" GET "/app/memberships?q=$(jq -rn --arg q "${owner_email}" '$q | @uri')"
+owner_membership="$(last '.data[0].id')"
+members_json="$(jq -nc --arg email "${owner_email}" --arg membership "${owner_membership}" \
+  '{owner: {email: $email, role: "Owner", membership_id: $membership}}')"
 for role in Admin Doctor Therapist "Front desk" Counsellor Pharmacist Accountant Marketing; do
   key="$(printf '%s' "${role}" | tr '[:upper:]' '[:lower:]' | tr ' ' '_')"
   email="${key//_/-}.${stamp}@fixture.example"

@@ -120,5 +120,29 @@ describe('UploadService.removeImageLocation', () => {
     await expect(
       service.removeImageLocation({ scope: SCOPE, fileKey: FILE_KEY, organizationInternalId: 10 }),
     ).rejects.toThrow('S3 unavailable');
+    expect(storage.headObject).toHaveBeenCalledWith(FILE_KEY);
+  });
+
+  it('a stored file that is gone has no location to remove — nothing written, no error', async () => {
+    findByFileKey.mockResolvedValue(uploadRow('image/jpeg'));
+    storage.getObject.mockRejectedValue(new Error('NoSuchKey'));
+    storage.headObject.mockResolvedValueOnce(null);
+
+    await service.removeImageLocation({
+      scope: SCOPE,
+      fileKey: FILE_KEY,
+      organizationInternalId: ORGANIZATION_INTERNAL_ID,
+    });
+    expect(storage.putObject).not.toHaveBeenCalled();
+  });
+
+  it('a read failure the HEAD cannot explain still propagates', async () => {
+    findByFileKey.mockResolvedValue(uploadRow('image/jpeg'));
+    storage.getObject.mockRejectedValue(new Error('S3 unavailable'));
+    storage.headObject.mockRejectedValueOnce(new Error('S3 unavailable'));
+
+    await expect(
+      service.removeImageLocation({ scope: SCOPE, fileKey: FILE_KEY, organizationInternalId: 10 }),
+    ).rejects.toThrow('S3 unavailable');
   });
 });

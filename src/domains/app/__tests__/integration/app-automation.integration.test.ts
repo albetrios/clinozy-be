@@ -266,5 +266,22 @@ describe('App automation — integration (launch D79, ROUTE #143–#147)', () =>
       SELECT count(*)::int AS count FROM app.patient_images WHERE file_key = ${second}
     `;
     expect(filed[0]?.count).toBe(0);
+
+    // The stored file is gone (S3 answers 404): no location to remove — filed like any attach.
+    const gone = await confirmedUpload('gone.jpg', 'image/jpeg');
+    nock(S3_HOST)
+      .get(`/${gone}`)
+      .query(true)
+      .reply(404, '<Error><Code>NoSuchKey</Code></Error>', { 'content-type': 'application/xml' });
+    nock(S3_HOST).head(`/${gone}`).query(true).reply(404);
+    await flow.expect(
+      200,
+      'a photo whose stored file is gone',
+      'POST',
+      `/app/patients/${file}/images`,
+      {
+        file_key: gone,
+      },
+    );
   });
 });
