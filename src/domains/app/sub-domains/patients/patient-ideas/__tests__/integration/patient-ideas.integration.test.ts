@@ -279,6 +279,9 @@ describe('Patient ideas — integration (routes-final 7.N, ROUTE #152)', () => {
     otherFlow.as('owner');
     await otherFlow.expect(404, "another clinic's patient", 'GET', ideas);
 
+    flow.as('marketing');
+    await flow.expect(200, 'marketing reads the ideas (patient:read)', 'GET', ideas);
+    flow.as('owner');
     const permissions = `/tenancy/organization/roles/${fixture.roles.marketing}/permissions`;
     await flow.expect(200, "marketing's permissions", 'GET', permissions);
     const granted = flow.lastBody() as { data: { permission_code: string }[] };
