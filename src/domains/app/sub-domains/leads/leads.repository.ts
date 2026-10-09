@@ -10,7 +10,11 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import { contactLinkedSearchCondition } from '@/domains/app/sub-domains/contacts/contacts.repository.js';
 import type { ContactLinkedSearch } from '@/domains/app/sub-domains/contacts/contacts.validator.js';
-import { LEAD_OPEN_STATUS_VALUES, LEAD_OWNERSHIP } from './leads.constants.js';
+import {
+  LEAD_INVOLVED_MEMBERSHIPS_MAX,
+  LEAD_OPEN_STATUS_VALUES,
+  LEAD_OWNERSHIP,
+} from './leads.constants.js';
 import { leads, lead_involved_memberships } from './leads.schema.js';
 
 /** The `involved_membership_ids` link of a lead (`app.lead_involved_memberships`, L2). */
@@ -215,6 +219,42 @@ export class LeadsRepository extends BaseRecordRepository {
         })),
       )
       .onConflictDoNothing();
+  }
+
+  /**
+   * WC-16 (D79): a member who worked the contact — sent a message, logged a call, wrote a note,
+   * booked a visit — joins the involved members of the contact's open lead, unless they own it or
+   * the lead already has its ten (L2).
+   */
+  async involveInOpenLead(options: {
+    organizationId: number;
+    contactId: number;
+    membershipId: number;
+    userId: number | null;
+  }): Promise<void> {
+    const involvedCount = sql`(select count(*) from ${lead_involved_memberships} where ${lead_involved_memberships.lead_id} = ${leads.id})`;
+    const open = await getRequestDatabase()
+      .select({ id: leads.id })
+      .from(leads)
+      .where(
+        and(
+          eq(leads.organization_id, options.organizationId),
+          eq(leads.contact_id, options.contactId),
+          isNull(leads.deleted_at),
+          inArray(leads.status, [...LEAD_OPEN_STATUS_VALUES]),
+          sql`${leads.owner_membership_id} is distinct from ${options.membershipId}`,
+          sql`${involvedCount} < ${LEAD_INVOLVED_MEMBERSHIPS_MAX}`,
+        ),
+      )
+      .limit(1);
+    const lead = open[0];
+    if (!lead) return;
+    await this.addInvolvedMemberships({
+      organizationId: options.organizationId,
+      leadId: lead.id,
+      membershipIds: [options.membershipId],
+      userId: options.userId,
+    });
   }
 
   /** The internal membership ids involved in a lead. */

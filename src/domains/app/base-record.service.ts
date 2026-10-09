@@ -71,7 +71,7 @@ export class BaseRecordService<Output> {
   ) {}
 
   /** The ports rules call outside the app records — set by the app container ({@link usePorts}). */
-  private ports: BaseRecordPorts = UNWIRED_PORTS;
+  protected ports: BaseRecordPorts = UNWIRED_PORTS;
 
   /** Wires the ports (once, from the app container). */
   usePorts(ports: BaseRecordPorts): void {
@@ -1144,6 +1144,9 @@ const UNWIRED_PORTS: BaseRecordPorts = {
     throw new Error('BaseRecordService ports are not wired (app.container.ts → usePorts)');
   },
   findConfirmedUpload: () => {
+    throw new Error('BaseRecordService ports are not wired (app.container.ts → usePorts)');
+  },
+  removeImageLocation: () => {
     throw new Error('BaseRecordService ports are not wired (app.container.ts → usePorts)');
   },
 };

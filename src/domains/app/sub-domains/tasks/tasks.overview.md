@@ -54,6 +54,11 @@ the step of the due tasks of the rules set to "Let Clinozy handle" (a queued Wha
 `confirm`, `payment_due` and `feedback`; a re-target lead for `gone_quiet`) and closes them. At most
 200 tasks per rule per run.
 
+It then opens a re-target lead (launch D35, D79 WC-17 — `kind` `retarget`, no owner) for each
+patient whose last visit — checked in or completed — is the clinic's `retarget_after_days` (default
+90) or more ago, with marketing consent, nothing booked, no open lead and no re-target lead since that
+visit; staff send the first message.
+
 Then, when the clinic's WhatsApp is connected and delivery is on, it queues Clinozy's notices
 (launch D78, `workers/task-rules-messages.processor.ts`): the day-before reminder of tomorrow's
 bookings once the clinic's `reminder_hour` has passed (WC-6, `reminder_queued`), the confirm

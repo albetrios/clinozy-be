@@ -41,6 +41,9 @@ process.env.META_GRAPH_ACCESS_TOKEN = 'test-meta-graph-access-token';
 process.env.META_APP_SECRET = 'test-meta-app-secret';
 process.env.META_WEBHOOK_VERIFY_TOKEN = 'test-meta-webhook-verify-token';
 process.env.MESSAGING_DELIVERY_ENABLED = 'false';
+// The harness's uploads have no stored object (S3 is out of reach): the photo's location removal
+// (launch D79) is off unless a suite turns it on and answers the S3 calls.
+process.env.PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED = 'false';
 
 for (const key of [
   'S3_ENDPOINT',

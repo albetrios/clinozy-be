@@ -136,6 +136,16 @@ export interface BaseRecordPorts {
     organizationId: number;
     fileKey: string;
   }) => Promise<BaseRecordConfirmedUpload | null>;
+  /**
+   * Rewrites `fileKey`'s stored photo without where it was taken (launch D79, WC-42) — late-wired
+   * from the upload domain; called outside any database context, before the photo is filed. Throws
+   * for a key that is not the organization's confirmed upload, or when the storage fails.
+   */
+  removeImageLocation: (options: {
+    scope: OrganizationPrincipalDatabaseScope;
+    organizationId: number;
+    fileKey: string;
+  }) => Promise<void>;
 }
 
 /** What a rule reads of a confirmed upload: its type, the client's file name, its size in bytes. */

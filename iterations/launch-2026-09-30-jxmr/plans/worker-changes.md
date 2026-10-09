@@ -73,12 +73,12 @@ Not background work (computed when read, no schedule needed): offer start / end 
 
 ## Leads
 
-| # | Change | Background work | When it runs | What it touches | On failure | Who is told | Requirement | Source |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| WC-14 | NEW | open a held lead to the team after its idle days (default 3), or at once when its owner has left; warn the day before | daily, and when an owner leaves | lead hold state | safe to run again; never changes the owner by itself | the team ("Open to team"), the owner ("hold expires soon") | `background.lead-hold-release` | `leads.md:32, 180, 402–403`; `tasks.md:46`; `H:3869, 5738` |
-| WC-15 | NEW | move a lead's status by itself: first reply or logged call → Contacted; check-in → Clinic visited — each with a system line in the chat (P21, D40) | the reply / call / check-in happens | the lead's status, its conversation | the status stays; never moves a closed lead | the lead's owner | `background.lead-status-auto` | `leads.md:119, 280–282`; `appointments.md:100, 239`; `schema-routes.md:1142, 1610` |
-| WC-16 | NEW | add a team member to "involved" when they reply, call, note or book | that action on the lead | the lead's involved people | — | — | `background.lead-involved-auto` | `leads.md:192, 196`; `H:1791` |
-| WC-17 | NEW | create re-target leads for lapsed patients — no visit in N days (clinic setting, default 90), marketing consent given, nothing booked; staff send the first message, nothing goes out by itself (D35) | daily | new leads (Re-targeted), their first message | each patient gets one re-target lead at most | the assigned owner | `background.retarget-leads` | `schema-routes.md:244, 263, 1084, 1100`; `H:3349–3356, 3377, 3398–3399` |
+| # | Change | Background work | When it runs | What it touches | On failure | Who is told | Requirement | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| WC-14 | NEW | open a held lead to the team after its idle days (default 3), or at once when its owner has left; warn the day before | daily, and when an owner leaves | lead hold state | safe to run again; never changes the owner by itself | the team ("Open to team"), the owner ("hold expires soon") | `background.lead-hold-release` | `leads.md:32, 180, 402–403`; `tasks.md:46`; `H:3869, 5738` | the hold is `held_until` (read as `ownership` open · held · releasing_today, L7 — the owner's "releasing today"); the `claim` rule opens a task when it ends or the owner leaves (D74); the K4 leave step releases — no job · #131 · #138 |
+| WC-15 | NEW | move a lead's status by itself: first reply or logged call → Contacted; check-in → Clinic visited — each with a system line in the chat (P21, D40) | the reply / call / check-in happens | the lead's status, its conversation | the status stays; never moves a closed lead | the lead's owner | `background.lead-status-auto` | `leads.md:119, 280–282`; `appointments.md:100, 239`; `schema-routes.md:1142, 1610` | in the write: a sent message or call moves a `new` lead to `contacted` (#130); check-in moves it to `clinic_visited` with its system line (#132) |
+| WC-16 | NEW | add a team member to "involved" when they reply, call, note or book | that action on the lead | the lead's involved people | — | — | `background.lead-involved-auto` | `leads.md:192, 196`; `H:1791` | in the write (D79): a member who sends a message, logs a call, writes a note or books joins the contact's open lead's involved members (`involveInOpenLead`; never the owner, ≤ 10) · #143 |
+| WC-17 | NEW | create re-target leads for lapsed patients — no visit in N days (clinic setting, default 90), marketing consent given, nothing booked; staff send the first message, nothing goes out by itself (D35) | daily | new leads (Re-targeted), their first message | each patient gets one re-target lead at most | the assigned owner | `background.retarget-leads` | `schema-routes.md:244, 263, 1084, 1100`; `H:3349–3356, 3377, 3398–3399` | the `task-rules` run (D35, D79): a `retarget` lead, no owner, for each patient lapsed `retarget_after_days` with marketing consent, nothing booked, no open lead and no re-target since the visit; no message by itself · #143 |
 
 ## Tasks
 
@@ -118,28 +118,28 @@ A task appears by itself when its condition becomes true, and closes by itself w
 
 ## Team and access
 
-| # | Change | Background work | When it runs | What it touches | On failure | Who is told | Requirement | Source |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| WC-40 | NEW | apply a role's permission change to everyone holding it at once | a role's access or special permissions change | each holder's effective access | — | — | `background.permission-refresh` | `users.md:19, 77` |
-| WC-41 | NEW | sign out a staff member set to Inactive | the user is set Inactive | their sessions | — | — | `background.inactive-sign-out` | `users.md:117` |
+| # | Change | Background work | When it runs | What it touches | On failure | Who is told | Requirement | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| WC-40 | NEW | apply a role's permission change to everyone holding it at once | a role's access or special permissions change | each holder's effective access | — | — | `background.permission-refresh` | `users.md:19, 77` | tenancy: a role's permission change invalidates the organization's permission cache after commit — the next request reads the new set |
+| WC-41 | NEW | sign out a staff member set to Inactive | the user is set Inactive | their sessions | — | — | `background.inactive-sign-out` | `users.md:117` | tenancy: a member set `suspended` has their permissions invalidated after commit — refused at once in this organization; sessions stay (the user may belong to others) |
 
 ## Files
 
-| # | Change | Background work | When it runs | What it touches | On failure | Who is told | Requirement | Source |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| WC-42 | NEW | remove location data from uploaded photos, keeping capture order | a photo is uploaded | PatientImage | the photo is not shown until cleaned *(D40)* | — | `background.photo-cleanup` | `today.md:262` |
-| WC-43 | NEW | pair before photos with the matching after photos | visit photos are added | PatientImage | — | — | `background.photo-pairing` | `patient-file.md:396` |
+| # | Change | Background work | When it runs | What it touches | On failure | Who is told | Requirement | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| WC-42 | NEW | remove location data from uploaded photos, keeping capture order | a photo is uploaded | PatientImage | the photo is not shown until cleaned *(D40)* | — | `background.photo-cleanup` | `today.md:262` | synchronous (D79): `PatientImagesService.create` → the upload domain's `removeImageLocation` rewrites the stored JPEG / PNG without its GPS block and XMP before the photo is filed; a storage failure files nothing; `PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED` · #145 |
+| WC-43 | NEW | pair before photos with the matching after photos | visit photos are added | PatientImage | — | — | `background.photo-pairing` | `patient-file.md:396` | read, not computed: a session's `before` / `after` photos of one body part pair on `patient_treatment_id`, `stage`, `body_part` (P24) · #133 |
 
 ## Live updates
 
-| # | Change | Background work | When it runs | What it touches | On failure | Who is told | Requirement | Source |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| WC-44 | NEW | tell the doctor's queue and room that a patient checked in, and move the card for everyone on Today | check-in, and every stage change | Today, the visit | the next refresh shows it (Today polls every 60 s; no push, D37) | the doctor | `background.floor-live` | `today.md:41, 208`; `appointments.md:376`; `schema-routes.md:1577` |
-| WC-45 | NEW | put an approved prescription in the pharmacy queue (D31) | Approve | Today (Pharmacy lane), the prescription | the next refresh shows it | the pharmacist | `background.pharmacy-queue` | `today.md:92`; `H:6093` |
+| # | Change | Background work | When it runs | What it touches | On failure | Who is told | Requirement | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| WC-44 | NEW | tell the doctor's queue and room that a patient checked in, and move the card for everyone on Today | check-in, and every stage change | Today, the visit | the next refresh shows it (Today polls every 60 s; no push, D37) | the doctor | `background.floor-live` | `today.md:41, 208`; `appointments.md:376`; `schema-routes.md:1577` | the floor reads (`/app/appointments?…floor`, #132); Today polls every 60 s — no push (D37) |
+| WC-45 | NEW | put an approved prescription in the pharmacy queue (D31) | Approve | Today (Pharmacy lane), the prescription | the next refresh shows it | the pharmacist | `background.pharmacy-queue` | `today.md:92`; `H:6093` | the pharmacy queue's `is_filled` filter on prescriptions (#153) |
 
 ## Records and ideas
 
-| # | Change | Background work | When it runs | What it touches | On failure | Who is told | Requirement | Source |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| WC-46 | NEW | erase deleted records for good once their restore window ends (default 7 days, a clinic setting); live records are never touched | daily | every clinic record deleted more than N days ago | retried the next day; nothing erased twice *(D40)* | — | `background.deleted-record-purge` | D38 |
+| # | Change | Background work | When it runs | What it touches | On failure | Who is told | Requirement | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| WC-46 | NEW | erase deleted records for good once their restore window ends (default 7 days, a clinic setting); live records are never touched | daily | every clinic record deleted more than N days ago | retried the next day; nothing erased twice *(D40)* | — | `background.deleted-record-purge` | D38 | `app-record-purge` (daily, global retention context) erases every soft-deleting app table past `deleted_record_purge_days`, children first (#124, D38) |
 | WC-47 | NEW | refresh a patient's AI ideas from a de-identified summary (Data consent only) | after a visit, treatment, package or plan change | the patient's ideas | the rule-based ideas stay shown *(D40)* | — | `background.patient-ideas` | D39; `schema-routes.md:1635`; `H:4355–4367` |

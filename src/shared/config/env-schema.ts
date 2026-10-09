@@ -619,6 +619,13 @@ const envSchemaBase = z.object({
    */
   BILLING_DUNNING_GRACE_DAYS: z.coerce.number().int().min(0).max(120).default(14),
 
+  /**
+   * Category-B. Removes a patient photo's location (its EXIF GPS block and XMP) from the stored
+   * file before the photo is filed (launch D79, WC-42). Defaults true (privacy); the refine keeps it
+   * true in production. The test harness sets false — its uploads have no stored object.
+   */
+  PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED: booleanString('true'),
+
   // Messaging — the platform Meta app (WhatsApp Business Platform + Instagram messaging, launch D77)
   /**
    * Sends the queued WhatsApp and Instagram messages through the Meta Graph API. Off, messages stay
@@ -1620,6 +1627,15 @@ export const envSchema = envSchemaBase
       'WEBHOOK_ALLOWLIST_REQUIRED must be true in production (an empty webhook allowlist would open an SSRF hole).',
     path: ['WEBHOOK_ALLOWLIST_REQUIRED'],
   })
+  .refine(
+    (data) =>
+      data.NODE_ENV !== 'production' || data.PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED === true,
+    {
+      message:
+        'PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED must be true in production (a patient photo must never be filed with where it was taken).',
+      path: ['PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED'],
+    },
+  )
   .refine((data) => data.NODE_ENV !== 'production' || data.METRICS_AUTH_REQUIRED === true, {
     message:
       'METRICS_AUTH_REQUIRED must be true in production (the worker /metrics endpoint must require a bearer token).',

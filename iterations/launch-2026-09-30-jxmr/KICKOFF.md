@@ -159,11 +159,11 @@ its links working (the invoices' medical lines and links) until the medical stor
 | 140 | **Booking messages** — WC-5–WC-8: confirm request, the day-before reminder, rescheduling, confirm on reply | background | #132, #139 | `/be-build-requirement` | WC-5–WC-8 | — | done |
 | 141 | **Money messages** — WC-9, WC-10, WC-12: payment receipt, day-close summary, bulk payment reminders | background | #136, #139 | `/be-build-requirement` | WC-9, WC-10, WC-12 | — | done |
 | 142 | **Visit share** — WC-11: "Share Rx, invoice & photos" | background | #133, #136, #139 | `/be-build-requirement` | WC-11 | — | done |
-| 143 | **Lead automation** — WC-14–WC-17: hold release, status moves, involved members, re-target leads — as §4 and §5 settle them (some now happen in the write itself) | background | #130, #131 | `/be-build-requirement` | WC-14–WC-17 | — | open |
-| 144 | **Team** — WC-40, WC-41: apply a role's permission change at once, sign out an inactive member | background | #126 | `/be-build-requirement` | WC-40, WC-41 | — | open |
-| 145 | **Photos** — WC-42, WC-43: strip location data, pair before and after | background | #133 | `/be-build-requirement` | WC-42, WC-43 | — | open |
-| 146 | **Floor** — WC-44: the doctor's queue and room learn of a check-in (refresh, no push — D37) | background | #132 | `/be-build-requirement` | WC-44 | — | open |
-| 147 | **Purge** — WC-46: erase deleted records once their restore window ends | background | #124 | `/be-build-requirement` | WC-46 | — | open |
+| 143 | **Lead automation** — WC-14–WC-17: hold release, status moves, involved members, re-target leads — as §4 and §5 settle them (some now happen in the write itself) | background | #130, #131 | `/be-build-requirement` | WC-14–WC-17 | — | done |
+| 144 | **Team** — WC-40, WC-41: apply a role's permission change at once, sign out an inactive member | background | #126 | `/be-build-requirement` | WC-40, WC-41 | — | done |
+| 145 | **Photos** — WC-42, WC-43: strip location data, pair before and after | background | #133 | `/be-build-requirement` | WC-42, WC-43 | — | done |
+| 146 | **Floor** — WC-44: the doctor's queue and room learn of a check-in (refresh, no push — D37) | background | #132 | `/be-build-requirement` | WC-44 | — | done |
+| 147 | **Purge** — WC-46: erase deleted records once their restore window ends | background | #124 | `/be-build-requirement` | WC-46 | — | done |
 | 148 | [Flow 1 — an enquiry becomes a patient](plans/features/flow-enquiry-to-patient/story.md) — end-to-end | flow | #131, #132, #133 | `/be-build-requirement` | flow-enquiry-to-patient.1 | — | open |
 | 149 | [Flow 2 — visit, prescription, payment](plans/features/flow-visit-to-payment/story.md) — end-to-end, without the medicine sale ([D49](plans/decisions.md)) | flow | #133, #136 | `/be-build-requirement` | flow-visit-to-payment.1 (sale part deferred) | — | open |
 | 150 | [Flow 3 — treatment plan and feedback](plans/features/flow-plan-and-feedback/story.md) — end-to-end | flow | #134, #135, #136, #138 | `/be-build-requirement` | flow-plan-and-feedback.1 | — | open |

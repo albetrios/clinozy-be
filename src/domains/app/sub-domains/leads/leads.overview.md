@@ -51,6 +51,12 @@ contact (launch ROUTE #131 — routes-final §5). The person lives on the [conta
   be removed (`contact_in_use`); the owner and involved members handle the contact.
 - **Moves from the stream (5.10):** a sent line moves the contact's open lead from `new` to
   `contacted`; a message's `<interest>` is the open lead's first interest.
+- **Who worked it (WC-16, D79):** a member who sends the person a message, logs a call, writes a
+  note or books their visit joins the open lead's involved members (`involveInOpenLead` — never its
+  owner, at most ten).
+- **Re-target leads (D35, WC-17):** the task rules run opens one (`kind` `retarget`, no owner) for
+  each patient whose last visit is `retarget_after_days` ago, with marketing consent and nothing
+  booked; staff send the first message.
 - **Tenant isolation:** ENABLE + FORCE RLS on the organization GUC; the retention-cleanup arm
   (USING only) lets the deleted-record purge (D38) erase rows. Branch visibility is the service's
   (D9 — no branch = every branch).

@@ -10,8 +10,13 @@ import { contact_activities } from '@/domains/app/sub-domains/contacts/contact-a
 import type { ContactActivityAutomationKind } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.constants.js';
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
+import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
+import { LEAD_OPEN_STATUS_VALUES } from '@/domains/app/sub-domains/leads/leads.constants.js';
 import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
-import { ORGANIZATION_SETTINGS_DEFAULT_REMINDER_HOUR } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.constants.js';
+import {
+  ORGANIZATION_SETTINGS_DEFAULT_REMINDER_HOUR,
+  ORGANIZATION_SETTINGS_DEFAULT_RETARGET_AFTER_DAYS,
+} from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.constants.js';
 import { task_rule_settings } from './task-rule-settings/task-rule-settings.schema.js';
 import {
   TASK_DONE_BY_CLINOZY,
@@ -46,6 +51,15 @@ export interface TaskRulesOrganization {
   reminderHour: number;
   /** Whether the clinic's WhatsApp number is on the platform Meta app (D77). */
   isWhatsAppConnected: boolean;
+  /** The days without a visit after which a patient gets a re-target lead (D35). */
+  retargetAfterDays: number;
+}
+
+/** A patient whose last visit was long enough ago for a re-target lead (D35, WC-17). */
+export interface LapsedPatient {
+  contactId: number;
+  /** The branch of their last visit — the lead's. */
+  branchId: number | null;
 }
 
 /** A record a Clinozy message points at (M5). */
@@ -138,6 +152,7 @@ export class TaskRulesRepository {
         id: organizations.id,
         timeZone: organizations.timezone,
         reminderHour: organization_settings.reminder_hour,
+        retargetAfterDays: organization_settings.retarget_after_days,
         whatsappPhoneNumberId: organization_settings.whatsapp_phone_number_id,
       })
       .from(organizations)
@@ -151,6 +166,8 @@ export class TaskRulesRepository {
           timeZone: row.timeZone ?? 'UTC',
           reminderHour: row.reminderHour ?? ORGANIZATION_SETTINGS_DEFAULT_REMINDER_HOUR,
           isWhatsAppConnected: (row.whatsappPhoneNumberId ?? null) !== null,
+          retargetAfterDays:
+            row.retargetAfterDays ?? ORGANIZATION_SETTINGS_DEFAULT_RETARGET_AFTER_DAYS,
         }
       : null;
   }
@@ -387,6 +404,59 @@ export class TaskRulesRepository {
       .onConflictDoNothing()
       .returning({ id: leads.id });
     return rows.length > 0;
+  }
+
+  /**
+   * WC-17 (D35, D79): the patients whose last visit — checked in or completed — is at least
+   * `afterDays` ago, who gave marketing consent, have nothing booked, no open lead and no
+   * re-target lead since that visit; oldest visit first, a batch per run.
+   */
+  async findLapsedPatients(options: {
+    organizationId: number;
+    timeZone: string;
+    afterDays: number;
+  }): Promise<LapsedPatient[]> {
+    const { organizationId, timeZone, afterDays } = options;
+    const rows = (await this.databaseHandle.execute(sql`select ${contacts.id} as contact_id,
+        last_visit.branch_id as branch_id
+      from ${patients}
+      join ${contacts} on ${contacts.id} = ${patients.contact_id}
+      cross join lateral (
+        select ${appointments.branch_id} as branch_id,
+          ((${appointments.appointment_date} + ${appointments.start_time}) at time zone ${timeZone}) as visited_at
+        from ${appointments}
+        where ${appointments.contact_id} = ${contacts.id}
+          and ${appointments.deleted_at} is null
+          and ${appointments.status} in ('checked_in', 'completed')
+        order by ${appointments.appointment_date} desc, ${appointments.start_time} desc
+        limit 1
+      ) as last_visit
+      where ${patients.organization_id} = ${organizationId}
+        and ${patients.deleted_at} is null
+        and ${contacts.deleted_at} is null
+        and ${contacts.has_marketing_consent}
+        and last_visit.visited_at <= now() - make_interval(days => ${afterDays})
+        and not exists (select 1 from ${appointments} as booked
+          where booked.contact_id = ${contacts.id} and booked.deleted_at is null
+            and booked.status in ('scheduled', 'confirmed'))
+        and not exists (select 1 from ${leads} as open_lead
+          where open_lead.contact_id = ${contacts.id} and open_lead.deleted_at is null
+            and open_lead.status in (${sql.join(
+              LEAD_OPEN_STATUS_VALUES.map((status) => sql`${status}`),
+              sql`, `,
+            )}))
+        and not exists (select 1 from ${leads} as retargeted
+          where retargeted.contact_id = ${contacts.id} and retargeted.kind = 'retarget'
+            and retargeted.created_at >= last_visit.visited_at)
+      order by last_visit.visited_at, ${contacts.id}
+      limit ${TASK_RULES_TASKS_PER_RULE}`)) as unknown as {
+      contact_id: string | number;
+      branch_id: string | number | null;
+    }[];
+    return rows.map((row) => ({
+      contactId: Number(row.contact_id),
+      branchId: idOrNull(row.branch_id),
+    }));
   }
 
   /** TK10: closes a task Clinozy took — "Done by Clinozy". */

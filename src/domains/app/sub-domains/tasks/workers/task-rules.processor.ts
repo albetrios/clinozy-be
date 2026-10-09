@@ -11,6 +11,7 @@ import {
   type ClinozyMessageLink,
   type ClinozyStepTask,
   createWorkerTaskRulesRepository,
+  type TaskRulesOrganization,
   type TaskRulesRepository,
   type TaskRuleSwitch,
 } from '@/domains/app/sub-domains/tasks/task-rules.repository.js';
@@ -28,7 +29,8 @@ import { TASK_RULES_GONE_QUIET_REASON } from './task-rules.constants.js';
  * @remarks
  * - **Notes:** `wokenCount` — snoozed tasks open again; `closedCount` — tasks closed "Done by
  *   Clinozy" because their record changed; `openedCount` — new rule tasks; `handledCount` — steps
- *   "Let Clinozy handle" took; `messageCount` — booking messages and receipts queued (D78).
+ *   "Let Clinozy handle" took; `messageCount` — booking messages and receipts queued (D78);
+ *   `retargetCount` — re-target leads opened for lapsed patients (D35, WC-17).
  */
 export interface TaskRulesRunCounts {
   wokenCount: number;
@@ -36,6 +38,7 @@ export interface TaskRulesRunCounts {
   openedCount: number;
   handledCount: number;
   messageCount: number;
+  retargetCount: number;
 }
 
 /** A rule with no saved switch is on, by hand (TK10). */
@@ -119,6 +122,32 @@ async function takeClinozyStep(options: {
 }
 
 /**
+ * WC-17 (D35, D79): a re-target lead — no owner, the counsellor queue — for each patient whose last
+ * visit is the clinic's `retarget_after_days` ago, with marketing consent and nothing booked; staff
+ * send the first message. Answers how many it opened.
+ */
+async function openLapsedPatientLeads(
+  repository: TaskRulesRepository,
+  organization: TaskRulesOrganization,
+): Promise<number> {
+  let opened = 0;
+  for (const patient of await repository.findLapsedPatients({
+    organizationId: organization.id,
+    timeZone: organization.timeZone,
+    afterDays: organization.retargetAfterDays,
+  })) {
+    const isNew = await repository.openRetargetLead({
+      organizationId: organization.id,
+      contactId: patient.contactId,
+      branchId: patient.branchId,
+      reason: `No visit in ${organization.retargetAfterDays} days`,
+    });
+    if (isNew) opened += 1;
+  }
+  return opened;
+}
+
+/**
  * Runs one organization's task rules (TK4, TK7, TK10): wakes the snoozed tasks whose time came,
  * closes each rule's tasks whose record changed ("Done by Clinozy"), opens the tasks of the rules
  * that are on for the records that qualify, and takes the step of the due tasks Clinozy handles.
@@ -149,6 +178,7 @@ export async function runTaskRulesJob(
     openedCount: 0,
     handledCount: 0,
     messageCount: 0,
+    retargetCount: 0,
   };
   if (organization === null) return counts;
   const scope = { organizationId: organization.id, timeZone: organization.timeZone };
@@ -172,6 +202,7 @@ export async function runTaskRulesJob(
     if (await takeClinozyStep({ repository, organizationId: organization.id, step }))
       counts.handledCount += 1;
   }
+  counts.retargetCount = await openLapsedPatientLeads(repository, organization);
   counts.messageCount = await queueClinozyMessages({
     repository,
     messages: createWorkerTaskRuleMessagesRepository(databaseHandle),

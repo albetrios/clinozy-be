@@ -1,6 +1,7 @@
 import {
   type BaseRecordRow,
   findBranchBookingHours,
+  findMembershipIdOfUser,
   findMembershipWorkingHours,
 } from '@/domains/app/base-record.repository.js';
 import type {
@@ -505,6 +506,21 @@ async function prepareMove(
   Object.assign(values, APPOINTMENT_BOOKING_MESSAGES_RESET);
 }
 
+/** WC-16 (D79): the member who booked the visit joins the involved members of the person's open lead. */
+async function involveBooker(row: BaseRecordRow, context: BaseRecordWriteContext): Promise<void> {
+  const membershipId = await findMembershipIdOfUser({
+    organizationId: context.organizationId,
+    userId: context.userId,
+  });
+  if (membershipId === null) return;
+  await leadsRepository.involveInOpenLead({
+    organizationId: context.organizationId,
+    contactId: Number(row.contact_id),
+    membershipId,
+    userId: context.userId,
+  });
+}
+
 /** Whether a write moved the booking to another day or time — {@link prepareMove} counted it. */
 function wasMoved(row: BaseRecordRow, change: BaseRecordChange): boolean {
   return (
@@ -640,6 +656,7 @@ export function createAppointmentsRules(repository: AppointmentsRepository): Bas
       if (checkedIn || change.kind === 'create' || change.kind === 'update') {
         await addTeamToContact(row, context);
       }
+      if (change.kind === 'create') await involveBooker(row, context);
       await followBookingMessages(repository, row, change, context);
     },
     decorate: decorateAppointments,

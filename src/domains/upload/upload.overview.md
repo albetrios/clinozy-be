@@ -43,6 +43,12 @@ This domain implements the contracts documented in [src/PATTERNS.md](src/PATTERN
 
 ## Cross-domain flows
 
+- **A patient photo loses its location (launch D79, WC-42):** the app's photo create calls
+  `UploadService.removeImageLocation` (the app port `removeImageLocation`) — the organization's
+  confirmed JPEG / PNG is read, its EXIF GPS block and XMP removed
+  (`src/shared/utils/security/image-location.util.ts`) and written back under the same key, before
+  the photo is filed.
+
 The upload domain is consumed by other domains rather than driving any flow itself. Notable consumers:
 
 - `user-data-export` (in [user/sub-domains/user-data-export/](src/domains/user/sub-domains/user-data-export/)) presigns the download URL for the GDPR export bundle.

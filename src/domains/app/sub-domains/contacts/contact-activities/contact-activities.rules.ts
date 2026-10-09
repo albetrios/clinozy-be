@@ -120,6 +120,21 @@ function assertBatchContacts(
   }
 }
 
+/** WC-16 (D79): whoever wrote the entry worked the person — involved in their open lead. */
+async function involveAuthor(
+  leads: LeadsRepository,
+  row: BaseRecordRow,
+  context: BaseRecordWriteContext,
+): Promise<void> {
+  if (typeof row.author_membership_id !== 'number') return;
+  await leads.involveInOpenLead({
+    organizationId: context.organizationId,
+    contactId: row.contact_id as number,
+    membershipId: row.author_membership_id,
+    userId: context.userId,
+  });
+}
+
 /**
  * The contact activity rules (launch ROUTE #130, routes-final 4.C): what every entry checks and
  * writes, whichever route makes it (M6, M7, M9, M10).
@@ -224,7 +239,10 @@ export function createContactActivitiesRules(
     },
     prepareCreate: prepareEntry,
     afterWrite: async (row, change, context) => {
-      if (change.kind === 'create') await touchContact(row);
+      if (change.kind === 'create') {
+        await touchContact(row);
+        await involveAuthor(leadsRepository, row, context);
+      }
       // A queued message — written, or a failed one resent — goes to the messaging worker (D77).
       if (row.delivery_status === CONTACT_ACTIVITY_DELIVERY_STATUS.QUEUED) {
         await scheduleDelivery(context);

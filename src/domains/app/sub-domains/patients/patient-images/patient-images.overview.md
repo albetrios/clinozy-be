@@ -39,5 +39,11 @@ A private photo also needs `patient:private_album:read` on every route (P23).
   listed, not counted, a 404 by id, and its activity entry is hidden (`is_private_photo`, PC16).
 - **The upload (P19, P25):** a confirmed JPG or PNG of the organization, up to 15 MB, filed once
   (409 `image_exists`); `file_name` is the upload's.
+- **Filed without its location (WC-42, D79):** before a photo is filed, the upload domain rewrites
+  its stored JPEG / PNG without the EXIF GPS block and XMP (`removeImageLocation`; the capture time
+  and orientation stay); a storage failure files nothing. `PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED`
+  (on, required on in production) switches it.
+- **Pairing (WC-43):** a session's `before` and `after` photos of one body part pair on
+  `patient_treatment_id`, `stage` and `body_part` (P24) — read, not computed.
 - **The links (P24, P25, TR3):** the visit is the patient's contact's and checked in or completed;
   the session is the patient's; `taken_on` is never in the future.

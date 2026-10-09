@@ -50,6 +50,8 @@ describe('Leads — integration (routes-final §5)', () => {
 
   /** Two membership ids as a sorted, comma-joined list. */
   const sortedPair = (first: string, second: string) => [first, second].sort().join(',');
+  /** Members sorted and joined, as the involved lists are compared. */
+  const sortedOf = (...ids: string[]) => [...ids].sort().join(',');
 
   /** A contact of this run with its own number. */
   async function person(firstName: string, suffix: string): Promise<string> {
@@ -631,9 +633,10 @@ describe('Leads — integration (routes-final §5)', () => {
       true,
     );
     flow.expectValue(
+      // the owner wrote to Riya, so works her lead too (WC-16)
       'the replaced owner stays involved (L9)',
       '[.data.involved_membership_ids[]] | sort | join(",")',
-      sortedPair(doctor, frontDesk),
+      sortedOf(doctor, frontDesk, fixture.members.owner.membershipPublicId),
     );
     await flow.expect(409, 'a stale save (D43)', 'PATCH', `/app/leads/${riyaLead}`, {
       notes: 'x',
@@ -650,7 +653,7 @@ describe('Leads — integration (routes-final §5)', () => {
     flow.expectValue(
       'the owner is not also involved',
       '[.data.involved_membership_ids[]] | sort | join(",")',
-      sortedPair(doctor, admin),
+      sortedOf(doctor, admin, fixture.members.owner.membershipPublicId),
     );
     await flow.expect(
       400,
@@ -822,9 +825,10 @@ describe('Leads — integration (routes-final §5)', () => {
     );
     flow.expectValue('taken over', '.data.owner_membership_id', doctor);
     flow.expectValue(
+      // the owner logged Kabir's calls, so works his lead too (WC-16)
       'the front desk stays involved (L9)',
-      '.data.involved_membership_ids | join(",")',
-      frontDesk,
+      '[.data.involved_membership_ids[]] | sort | join(",")',
+      sortedOf(frontDesk, fixture.members.owner.membershipPublicId),
     );
     await flow.expect(200, 'the doctor releases it', 'POST', `/app/leads/${kabirLead}/release`);
     flow.expectValue(
@@ -835,7 +839,7 @@ describe('Leads — integration (routes-final §5)', () => {
     flow.expectValue(
       'released: the doctor stays involved',
       '[.data.involved_membership_ids[]] | sort | join(",")',
-      sortedPair(doctor, frontDesk),
+      sortedOf(doctor, frontDesk, fixture.members.owner.membershipPublicId),
     );
     await flow.expect(403, 'release a lead nobody owns', 'POST', `/app/leads/${kabirLead}/release`);
     await flow.expect(409, 'claim a closed lead', 'POST', `/app/leads/${meeraLeadAgain}/claim`);

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     markBookingMessageQueued: vi.fn(),
     openRetargetLead: vi.fn(),
     closeTaskByClinozy: vi.fn(),
+    findLapsedPatients: vi.fn(),
   },
   queueClinozyMessages: vi.fn(),
 }));
@@ -71,7 +72,9 @@ describe('runTaskRulesJob', () => {
       timeZone: 'Asia/Kolkata',
       reminderHour: 16,
       isWhatsAppConnected: true,
+      retargetAfterDays: 90,
     });
+    repository.findLapsedPatients.mockResolvedValue([]);
     repository.wakeSnoozed.mockResolvedValue(1);
     repository.findRuleSwitches.mockResolvedValue(new Map());
     repository.closeGoneTasks.mockResolvedValue(1);
@@ -86,6 +89,7 @@ describe('runTaskRulesJob', () => {
       openedCount: 6,
       handledCount: 0,
       messageCount: 2,
+      retargetCount: 0,
     });
     expect(mocks.queueClinozyMessages).toHaveBeenCalledOnce();
   });
@@ -154,6 +158,27 @@ describe('runTaskRulesJob', () => {
     expect(repository.closeTaskByClinozy).not.toHaveBeenCalled();
   });
 
+  it('WC-17: opens a re-target lead for each lapsed patient — none twice', async () => {
+    repository.findLapsedPatients.mockResolvedValue([
+      { contactId: 5, branchId: 2 },
+      { contactId: 6, branchId: null },
+    ]);
+    repository.openRetargetLead.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+    expect((await runTaskRulesJob({} as never, ORGANIZATION)).retargetCount).toBe(1);
+    expect(repository.findLapsedPatients).toHaveBeenCalledWith({
+      organizationId: 7,
+      timeZone: 'Asia/Kolkata',
+      afterDays: 90,
+    });
+    expect(repository.openRetargetLead).toHaveBeenCalledWith({
+      organizationId: 7,
+      contactId: 5,
+      branchId: 2,
+      reason: 'No visit in 90 days',
+    });
+  });
+
   it('an organization that is gone runs nothing', async () => {
     repository.findOrganization.mockResolvedValue(null);
 
@@ -163,6 +188,7 @@ describe('runTaskRulesJob', () => {
       openedCount: 0,
       handledCount: 0,
       messageCount: 0,
+      retargetCount: 0,
     });
     expect(repository.wakeSnoozed).not.toHaveBeenCalled();
   });

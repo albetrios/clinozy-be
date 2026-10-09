@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { removeImageLocation } from '@/shared/utils/security/image-location.util.js';
 import { getEnv } from '@/shared/config/env.config.js';
 import {
   ConfigurationError,
@@ -39,6 +40,7 @@ import { serializeUploadCreate, serializeUploadDetail } from './upload.serialize
 import { validateUploadPublicIdParam } from './upload.validator.js';
 import {
   MAINTENANCE_SCOPE,
+  type OrganizationPrincipalDatabaseScope,
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
   withMaintenanceDatabaseContext,
@@ -388,6 +390,43 @@ export class UploadService {
       throw notConfirmed();
     }
     return { mimeType: row.mime_type, fileName: row.file_name, fileSize: row.file_size };
+  }
+
+  /**
+   * Rewrites an organization's confirmed photo without where it was taken (launch D79, WC-42) — the
+   * app files patient photos only after this.
+   *
+   * @remarks
+   * - **Algorithm:** checks the key is the organization's confirmed upload (in the caller's
+   *   organization context); for a JPEG or PNG reads the stored object, removes its GPS block and
+   *   XMP ({@link removeImageLocation}) and writes it back under the same key and type when
+   *   anything was removed. Any other type is left alone.
+   * - **Failure modes:** `ValidationError` (`uploadNotConfirmed`) for a key that is not the
+   *   organization's confirmed upload; storage errors propagate — the caller files nothing.
+   * - **Side effects:** one GET and at most one PUT on the object store; the upload row is not
+   *   changed (its `file_size` keeps the size the client sent).
+   */
+  async removeImageLocation(options: {
+    scope: OrganizationPrincipalDatabaseScope;
+    fileKey: string;
+    organizationInternalId: number;
+  }): Promise<void> {
+    const upload = await withAppDatabaseContext(options.scope, () =>
+      this.assertKeyConfirmedForOwner({
+        fileKey: options.fileKey,
+        organizationInternalId: options.organizationInternalId,
+      }),
+    );
+    if (upload.mimeType !== 'image/jpeg' && upload.mimeType !== 'image/png') return;
+    const stored = await this.objectStorage.getObject(options.fileKey);
+    const cleaned = removeImageLocation(stored.body, upload.mimeType);
+    if (!cleaned.changed) return;
+    await this.objectStorage.putObject({
+      key: options.fileKey,
+      body: cleaned.body,
+      contentType: upload.mimeType,
+    });
+    logger.info({ fileKey: options.fileKey }, 'upload.image_location_removed');
   }
 
   private async assertUserCanAccessOrgScopedUpload(

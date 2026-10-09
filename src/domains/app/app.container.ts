@@ -1,3 +1,4 @@
+import type { OrganizationPrincipalDatabaseScope } from '@/infrastructure/database/contexts/database-context.js';
 import type { FastifyInstance } from 'fastify';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import type { MembershipService } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
@@ -72,6 +73,9 @@ export function createAppContainer(
     findConfirmedUpload: () => {
       throw new Error('App uploads are not wired (domain-containers.plugin.ts → wireAppUploads)');
     },
+    removeImageLocation: () => {
+      throw new Error('App uploads are not wired (domain-containers.plugin.ts → wireAppUploads)');
+    },
   };
   for (const service of Object.values(records)) service.usePorts(ports);
   return {
@@ -122,6 +126,11 @@ export interface AppUploadChecker {
     fileKey: string;
     organizationInternalId?: number;
   }): Promise<BaseRecordConfirmedUpload>;
+  removeImageLocation(options: {
+    scope: OrganizationPrincipalDatabaseScope;
+    fileKey: string;
+    organizationInternalId: number;
+  }): Promise<void>;
 }
 
 /**
@@ -144,6 +153,8 @@ export function wireAppUploads(container: AppContainer, uploads: AppUploadChecke
       throw error;
     }
   };
+  container.ports.removeImageLocation = ({ scope, organizationId, fileKey }) =>
+    uploads.removeImageLocation({ scope, fileKey, organizationInternalId: organizationId });
 }
 
 /** Decorates `appDomain` on the Fastify instance (after the tenancy container). */

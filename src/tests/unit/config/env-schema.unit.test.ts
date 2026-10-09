@@ -354,6 +354,38 @@ describe('env-schema', () => {
     });
   });
 
+  describe('PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED (launch D79)', () => {
+    it('is on by default', () => {
+      const parsed = envSchema.safeParse({ ...commonRequiredBase, NODE_ENV: 'development' });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) expect(parsed.data.PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED).toBe(true);
+    });
+
+    it('rejects false in production', () => {
+      const parsed = envSchema.safeParse({
+        ...productionRequiredBase,
+        PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED: 'false',
+      });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(
+          parsed.error.issues.some((issue) =>
+            issue.path.includes('PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED'),
+          ),
+        ).toBe(true);
+      }
+    });
+
+    it('allows false outside production', () => {
+      const parsed = envSchema.safeParse({
+        ...commonRequiredBase,
+        NODE_ENV: 'development',
+        PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED: 'false',
+      });
+      expect(parsed.success).toBe(true);
+    });
+  });
+
   it('allows EMAIL_FROM_ADDRESS to be absent when RESEND_API_KEY is unset', () => {
     const parsed = envSchema.safeParse({
       ...commonRequiredBase,

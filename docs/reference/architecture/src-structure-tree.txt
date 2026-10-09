@@ -15,6 +15,7 @@ src/
     │   │   │   ├── app-fixture.factory.ts
     │   │   │   └── app-flow.factory.ts
     │   │   └── integration/
+    │   │   │   ├── app-automation.integration.test.ts
     │   │   │   ├── app-record-lifecycle.integration.test.ts
     │   │   │   ├── app-route-smoke.integration.test.ts
     │   │   │   └── clinozy-messages.integration.test.ts
@@ -1890,6 +1891,7 @@ src/
     │   │   │   ├── upload.service.assert-key-confirmed.unit.test.ts
     │   │   │   ├── upload.service.organization-quota-concurrency.db.unit.test.ts
     │   │   │   ├── upload.service.quota-concurrency.db.unit.test.ts
+    │   │   │   ├── upload.service.remove-image-location.unit.test.ts
     │   │   │   ├── upload.service.unit.test.ts
     │   │   │   ├── upload.validator.mime-and-size.unit.test.ts
     │   │   │   └── upload.validator.unit.test.ts
@@ -2584,6 +2586,7 @@ src/
     │   │   ├── bearer-token.util.ts
     │   │   ├── encryption.util.ts
     │   │   ├── field-secret-encryption.util.ts
+    │   │   ├── image-location.util.ts
     │   │   ├── jwt.util.ts
     │   │   ├── password.util.ts
     │   │   ├── response-encryption-keyring.util.ts
@@ -3327,6 +3330,7 @@ src/
     │   │   │   ├── bearer-token.util.unit.test.ts
     │   │   │   ├── encryption.util.unit.test.ts
     │   │   │   ├── field-secret-encryption.unit.test.ts
+    │   │   │   ├── image-location.util.unit.test.ts
     │   │   │   ├── jwt-key-material.unit.test.ts
     │   │   │   ├── jwt.util.unit.test.ts
     │   │   │   ├── password.util.unit.test.ts
