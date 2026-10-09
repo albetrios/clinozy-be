@@ -43,7 +43,7 @@ contact (launch ROUTE #131 — routes-final §5). The person lives on the [conta
   create, a reopening `PATCH` or a restore of a second is a 409 `lead_open_exists` naming the one
   there; the partial unique index backs it up.
 - **`clinic_visited` is check-in's (L8):** set only when the person checks in at an appointment
-  (sub-domain 6) and final — a 409 `lead_closed` otherwise; claim and release work on open leads only.
+  (sub-domain 6) and final — a 409 `lead_closed` otherwise; claim and release work on open leads only. A claim is one guarded `UPDATE` (`LeadsRepository.claim`): two members claiming at once cannot both win — the loser gets the 409 `lead_held`.
 - **The hold (D40, L9):** a new owner holds the lead for `lead_hold_days`; no owner, no hold
   (`chk_leads_held_until_owner`); the owner a claim or `PATCH` replaces stays involved, and the owner
   is never also involved. A member who leaves releases their leads and stays involved (K4).

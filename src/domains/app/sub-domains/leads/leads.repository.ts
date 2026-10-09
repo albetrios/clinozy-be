@@ -310,6 +310,38 @@ export class LeadsRepository extends BaseRecordRepository {
   }
 
   /**
+   * `claim` (D40, L9) in one guarded statement: the member owns the lead and holds it until
+   * `heldUntil` — only while it is live, open, and nobody else holds it (no owner, the caller
+   * already, or a hold that has run out). Two members claiming at once cannot both win; the one the
+   * guard refuses gets null.
+   */
+  async claim(options: {
+    leadId: number;
+    membershipId: number;
+    heldUntil: Date;
+    userId: number | null;
+  }): Promise<Record<string, unknown> | null> {
+    const rows = await getRequestDatabase()
+      .update(leads)
+      .set({
+        owner_membership_id: options.membershipId,
+        held_until: options.heldUntil,
+        updated_at: sql`greatest(now(), ${leads.created_at})`,
+        updated_by_user_id: options.userId,
+      })
+      .where(
+        and(
+          eq(leads.id, options.leadId),
+          isNull(leads.deleted_at),
+          isOpenStatus,
+          sql`(${leads.owner_membership_id} is null or ${leads.owner_membership_id} = ${options.membershipId} or ${leads.held_until} is null or ${leads.held_until} <= now())`,
+        ),
+      )
+      .returning();
+    return rows[0] ?? null;
+  }
+
+  /**
    * The automatic move of a sent line (4, 5.10): the contact's open lead goes from `new` to
    * `contacted` — any other status stays.
    */

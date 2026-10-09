@@ -42,12 +42,12 @@ Biome, typecheck and tsdoc, then is committed and pushed. The full `pnpm test`,
 | B3 — financial-year rollover | 1 | done | `invoice-numbering.integration.test.ts` › restarts each branch's series on 1 April |
 | B4 — billing concurrency | 1 | done | `billing-races.integration.test.ts` (receipts past the total, refunds of everything paid, a close racing a payment) |
 | B5 — refund flow e2e | 1 | done | `flow-refund-and-credit.e2e.test.ts` |
-| AP2 — one slot booked twice | 2 | planned | — |
-| S1 — concurrent stock movements | 2 | planned | — |
-| MD2 — the last unit sold twice | 2 | planned | — |
-| PT2 — the last session spent twice | 2 | planned | — |
-| L1 — one lead claimed twice | 2 | planned | — |
-| AP3 — appointment status machine | 2 | planned | — |
+| AP2 — one slot booked twice | 2 | done | `app-races.integration.test.ts` › AP2 (the exclusion constraints hold) |
+| S1 — concurrent stock movements | 2 | done | `app-races.integration.test.ts` › S1 × 2 (the row lock holds) |
+| MD2 — the last unit sold twice | 2 | done | `app-races.integration.test.ts` › MD2 |
+| PT2 — the last session spent twice | 2 | done | `app-races.integration.test.ts` › PT2 (the guarded counter holds) |
+| L1 — one lead claimed twice | 2 | done | `app-races.integration.test.ts` › L1 — after the fix below |
+| AP3 — appointment status machine | 2 | done | `appointments-lifecycle.integration.test.ts` (60 pairs against A5, plus pause, resume and stage) |
 | PT1 — clinical gates pinned | 3 | planned | — |
 | PT3 — prescription approval edges | 3 | planned | — |
 | T1 — extra roles end to end | 3 | planned | — |
@@ -93,6 +93,7 @@ Bugs the new tests found, and their fixes.
 | Batch | Found by | Bug | Fix |
 | --- | --- | --- | --- |
 | 1 | B2 property test | The overall discount's last line took the other lines' rounding. On a bill whose overall discount covered nearly everything, with a small last line, that line's net went to −₹0.01, so its taxable value and GST went negative. | `computeInvoiceAmounts` now caps the last line's share at what it has left, and moves the excess back to the lines before it (`spillShareExcess`). Bills where the old rule held are unchanged. The counterexample is a regression case in `invoices.amounts.unit.test.ts`. |
+| 2 | L1 race test | Two members claiming the same open lead at once both got 200: the claim read the lead, checked the hold, then wrote without a lock, so both saw an unheld lead and the second silently took it over. | `LeadsRepository.claim` makes the claim one guarded `UPDATE` (only while nobody else holds the lead). The loser re-reads and gets the 409 `lead_held`, as a later claim would. |
 
 ## Not code — left with their owners
 

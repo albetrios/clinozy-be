@@ -41,34 +41,42 @@ async function holdEnd(context: BaseRecordWriteContext): Promise<Date> {
   return new Date(Date.now() + holdDays * MILLISECONDS_PER_DAY);
 }
 
+/** The 409 of a lead another member holds, naming when the hold ends. */
+function leadHeldError(heldUntil: Date): ConflictError {
+  return new ConflictError('errors:leadHeld', {
+    held_until: heldUntil.toISOString(),
+  }).withReason('lead_held');
+}
+
 /**
  * `claim` (D40, L9): the caller — a member — owns an open lead and holds it for `lead_hold_days`;
- * claiming again extends the hold; another member's running hold is a 409 `lead_held`.
+ * claiming again extends the hold; another member's running hold is a 409 `lead_held`. The write
+ * is the repository's guarded claim, so two members claiming at once cannot both win: the loser's
+ * statement finds the lead held and answers the same 409.
  */
-async function claimLead({
-  existing,
-  context,
-  repository: records,
-}: BaseRecordActionInput): Promise<BaseRecordRow> {
-  if (!isOpen(existing.status)) throw leadClosedError('errors:leadClosed');
-  const membershipId = await requireMembership(context.organizationId, context.userId);
-  const heldUntil = existing.held_until as Date | null;
-  const heldByOther =
-    existing.owner_membership_id !== null &&
-    existing.owner_membership_id !== membershipId &&
-    heldUntil !== null &&
-    heldUntil > new Date();
-  if (heldByOther) {
-    throw new ConflictError('errors:leadHeld', {
-      held_until: heldUntil.toISOString(),
-    }).withReason('lead_held');
-  }
-  const claimed = await records.update(
-    existing.id,
-    { owner_membership_id: membershipId, held_until: await holdEnd(context) },
-    context.userId,
-  );
-  return claimed ?? existing;
+function createClaimLead(leadsRepository: LeadsRepository) {
+  return async ({ existing, context }: BaseRecordActionInput): Promise<BaseRecordRow> => {
+    if (!isOpen(existing.status)) throw leadClosedError('errors:leadClosed');
+    const membershipId = await requireMembership(context.organizationId, context.userId);
+    const heldUntil = existing.held_until as Date | null;
+    const heldByOther =
+      existing.owner_membership_id !== null &&
+      existing.owner_membership_id !== membershipId &&
+      heldUntil !== null &&
+      heldUntil > new Date();
+    if (heldByOther) throw leadHeldError(heldUntil);
+    const claimed = await leadsRepository.claim({
+      leadId: existing.id,
+      membershipId,
+      heldUntil: await holdEnd(context),
+      userId: context.userId,
+    });
+    if (claimed) return claimed as BaseRecordRow;
+    // Refused by the guard: closed, removed or claimed by another member meanwhile
+    const now = await leadsRepository.findById(existing.id);
+    if (!(now && isOpen(now.status))) throw leadClosedError('errors:leadClosed');
+    throw leadHeldError((now.held_until as Date | null) ?? new Date());
+  };
 }
 
 /** `release` (D40): its owner gives an open lead back to the team — no owner, no hold. */
@@ -222,6 +230,6 @@ export function createLeadsRules(repository: LeadsRepository): BaseRecordRules {
       await settleTeam(row, change.before, context);
     },
     decorate: decorateLeads,
-    actions: { claim: claimLead, release: releaseLead },
+    actions: { claim: createClaimLead(repository), release: releaseLead },
   };
 }
