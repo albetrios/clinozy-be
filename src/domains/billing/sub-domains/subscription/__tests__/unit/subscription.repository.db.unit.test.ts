@@ -120,6 +120,90 @@ describe('SubscriptionRepository (database)', () => {
     expect(synced?.status).toBe('PAUSED');
   });
 
+  it('reconciles a same-second activation without lowering the millisecond watermark', async () => {
+    const owner = await createTestUser();
+    const organization = await createTestOrganization({ ownerUserId: owner.id });
+    const plan = await createTestPlan();
+    const providerId = `sub_tied_${Date.now()}`;
+    const seeded = await createTestSubscription({
+      organizationId: organization.id,
+      planId: plan.id,
+      providerSubscriptionId: providerId,
+      status: 'INCOMPLETE',
+    });
+    const watermark = new Date('2026-06-01T00:00:00.800Z');
+    await database
+      .update(subscriptions)
+      .set({ last_stripe_event_created_at: watermark })
+      .where(eq(subscriptions.id, seeded.id));
+    const ordering = await repository.findStripeProviderOrderingState(providerId);
+    expect(ordering).not.toBeNull();
+    const synced = await repository.syncFromStripeProviderSubscription(
+      providerId,
+      { status: 'ACTIVE' },
+      new Date('2026-06-01T00:00:00.000Z'),
+      ordering!,
+    );
+    expect(synced?.status).toBe('ACTIVE');
+    expect(synced?.last_stripe_event_created_at?.toISOString()).toBe(watermark.toISOString());
+    // The previous MVCC version can never apply twice.
+    expect(
+      await repository.syncFromStripeProviderSubscription(
+        providerId,
+        { status: 'PAST_DUE' },
+        new Date('2026-06-01T00:00:00.000Z'),
+        ordering!,
+      ),
+    ).toBeNull();
+  });
+
+  it('rejects reconciliation after a concurrent cancellation and rejects older seconds', async () => {
+    const owner = await createTestUser();
+    const organization = await createTestOrganization({ ownerUserId: owner.id });
+    const plan = await createTestPlan();
+    const providerId = `sub_raced_${Date.now()}`;
+    const seeded = await createTestSubscription({
+      organizationId: organization.id,
+      planId: plan.id,
+      providerSubscriptionId: providerId,
+    });
+    const eventAt = new Date('2026-06-01T00:00:00.000Z');
+    await database
+      .update(subscriptions)
+      .set({ last_stripe_event_created_at: eventAt })
+      .where(eq(subscriptions.id, seeded.id));
+    const ordering = (await repository.findStripeProviderOrderingState(providerId))!;
+    expect(
+      await repository.syncFromStripeProviderSubscription(
+        providerId,
+        { status: 'ACTIVE' },
+        new Date('2026-05-31T23:59:59.000Z'),
+        ordering,
+      ),
+    ).toBeNull();
+    await repository.markCanceledByProviderSubscriptionId(providerId, eventAt);
+    expect(
+      await repository.syncFromStripeProviderSubscription(
+        providerId,
+        { status: 'ACTIVE' },
+        eventAt,
+        ordering,
+      ),
+    ).toBeNull();
+    const terminalOrdering = (await repository.findStripeProviderOrderingState(providerId))!;
+    expect(
+      await repository.syncFromStripeProviderSubscription(
+        providerId,
+        { status: 'ACTIVE' },
+        eventAt,
+        terminalOrdering,
+      ),
+    ).toBeNull();
+    expect((await repository.findByPublicId(seeded.public_id, organization.id))?.status).toBe(
+      'CANCELED',
+    );
+  });
+
   it('markCanceledByProviderSubscriptionId cancels on fresh events and ignores stale ones', async () => {
     const owner = await createTestUser();
     const organization = await createTestOrganization({ ownerUserId: owner.id });

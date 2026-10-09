@@ -216,6 +216,24 @@ export async function listRecentStripeEvents(options: {
 
 // ── Subscription helpers ──────────────────────────────────────
 
+/** Retrieve current authoritative subscription state when second-resolution events cannot be ordered. */
+export async function retrieveStripeSubscriptionSnapshot(
+  subscriptionId: string,
+): Promise<Stripe.Subscription> {
+  return outboundCall(
+    buildOutboundCallOptions({
+      name: 'stripe',
+      enforceAbortTimeout: true,
+      rethrowIf: (error) => error instanceof Stripe.errors.StripeError,
+      operation: async () =>
+        getStripeClient().subscriptions.retrieve(subscriptionId, undefined, {
+          timeout: env.STRIPE_HTTP_TIMEOUT_MS,
+          maxNetworkRetries: 0,
+        }),
+    }),
+  );
+}
+
 /**
  * Creates a Stripe subscription in `default_incomplete` payment behaviour so the
  * platform can confirm the first PaymentIntent client-side before activation. Passes a

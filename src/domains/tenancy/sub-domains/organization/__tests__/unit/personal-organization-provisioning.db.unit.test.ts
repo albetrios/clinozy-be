@@ -77,12 +77,27 @@ describe('personal organization provisioning (database)', () => {
       const user = await createTestUser();
       const { organization } = await provisionPersonalOrganization(user.id);
 
-      expect(await resolvePersonalOrganizationPublicId(user.id)).toBe(organization.public_id);
+      expect(await resolvePersonalOrganizationPublicId({ ownerUserInternalId: user.id })).toBe(
+        organization.public_id,
+      );
+    });
+
+    it('resolves the personal organization using an already-known public user identity', async () => {
+      const user = await createTestUser();
+      const { organization } = await provisionPersonalOrganization(user.id);
+      expect(
+        await resolvePersonalOrganizationPublicId({
+          ownerUserInternalId: user.id,
+          userPublicId: user.public_id,
+        }),
+      ).toBe(organization.public_id);
     });
 
     it('resolvePersonalOrganizationPublicId returns undefined without a personal org', async () => {
       const user = await createTestUser();
-      expect(await resolvePersonalOrganizationPublicId(user.id)).toBeUndefined();
+      expect(
+        await resolvePersonalOrganizationPublicId({ ownerUserInternalId: user.id }),
+      ).toBeUndefined();
     });
 
     it('findUserActiveOrganizationPublicId confirms the owner active membership', async () => {
@@ -118,14 +133,18 @@ describe('personal organization provisioning (database)', () => {
       const user = await createTestUser();
 
       // Precondition: no personal organization (signup-time provision failed/was skipped).
-      expect(await resolvePersonalOrganizationPublicId(user.id)).toBeUndefined();
+      expect(
+        await resolvePersonalOrganizationPublicId({ ownerUserInternalId: user.id }),
+      ).toBeUndefined();
 
       const ensured = await ensurePersonalOrganization(user);
 
       expect(ensured).toBeDefined();
       expect(ensured!.public_id).toMatch(/^org_[a-z0-9]{21}$/);
       // Now resolvable by the normal read path (an existing stuck user is fixed).
-      expect(await resolvePersonalOrganizationPublicId(user.id)).toBe(ensured!.public_id);
+      expect(await resolvePersonalOrganizationPublicId({ ownerUserInternalId: user.id })).toBe(
+        ensured!.public_id,
+      );
     });
 
     it('returns the existing personal organization without creating a second one', async () => {
@@ -154,7 +173,9 @@ describe('personal organization provisioning (database)', () => {
 
       expect(await ensurePersonalOrganization(user)).toBeUndefined();
       // No organization created — switch-to-personal legitimately stays a 404.
-      expect(await resolvePersonalOrganizationPublicId(user.id)).toBeUndefined();
+      expect(
+        await resolvePersonalOrganizationPublicId({ ownerUserInternalId: user.id }),
+      ).toBeUndefined();
     });
 
     it('ensurePersonalOrganizationPublicId returns the id (enabled) / undefined (disabled)', async () => {
@@ -195,7 +216,9 @@ describe('personal organization provisioning (database)', () => {
       // provisioning FK-fails, but the read-safe variant swallows it → undefined (→ null id).
       await expect(ensurePersonalOrganizationPublicId(user)).resolves.toBeUndefined();
       // No personal organization was created (the provision genuinely failed).
-      expect(await resolvePersonalOrganizationPublicId(user.id)).toBeUndefined();
+      expect(
+        await resolvePersonalOrganizationPublicId({ ownerUserInternalId: user.id }),
+      ).toBeUndefined();
     });
 
     it('EXPLICIT path (ensurePersonalOrganization) still throws so switch-to-personal surfaces it', async () => {

@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
+const subscriptionUpdatePayloadSpy = vi.hoisted(() => vi.fn());
+const stripeOrderingSelect = vi.hoisted(() =>
+  vi.fn(() => ({
+    from: () => ({ where: () => ({ limit: async () => [] }) }),
+  })),
+);
 const drizzleOutboundWebhookDatabaseUpdateSpy = vi.hoisted(() => vi.fn());
 const stripeWebhookTryClaimEventMock = vi.hoisted(() => vi.fn().mockResolvedValue('claimed'));
 const stripeWebhookMarkProcessedMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
@@ -8,6 +14,7 @@ const stripeWebhookMarkFailedMock = vi.hoisted(() => vi.fn().mockResolvedValue(u
 vi.mock('@/infrastructure/database/connection.js', () => ({
   database: {
     update: drizzleOutboundWebhookDatabaseUpdateSpy,
+    select: stripeOrderingSelect,
   },
 }));
 
@@ -17,7 +24,7 @@ vi.mock('@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-organizatio
       _event: unknown,
       _repository: unknown,
       handler: (databaseHandle: unknown) => Promise<void>,
-    ) => handler({ update: drizzleOutboundWebhookDatabaseUpdateSpy }),
+    ) => handler({ update: drizzleOutboundWebhookDatabaseUpdateSpy, select: stripeOrderingSelect }),
   ),
 }));
 
@@ -57,9 +64,10 @@ function createFluentDrizzleUpdateMockBuilderReturningRowsOutbound(
   outboundReturningResolvedRowsPayload: unknown[],
 ) {
   const fluentDrizzleUpdateBuilderReturningOutbound: Record<string, unknown> = {};
-  fluentDrizzleUpdateBuilderReturningOutbound.set = vi.fn(
-    () => fluentDrizzleUpdateBuilderReturningOutbound,
-  );
+  fluentDrizzleUpdateBuilderReturningOutbound.set = vi.fn((payload) => {
+    subscriptionUpdatePayloadSpy(payload);
+    return fluentDrizzleUpdateBuilderReturningOutbound;
+  });
   fluentDrizzleUpdateBuilderReturningOutbound.where = vi.fn(() => ({
     returning: vi.fn(async () => outboundReturningResolvedRowsPayload),
   }));
@@ -103,10 +111,11 @@ describe('Stripe webhook ingestion contract (`constructStripeWebhookEvent` + Str
 
   beforeEach(() => {
     drizzleOutboundWebhookDatabaseUpdateSpy.mockReset();
+    subscriptionUpdatePayloadSpy.mockReset();
     webhookStripeSigningSecretBaseline = env.STRIPE_WEBHOOK_SECRET ?? '';
   });
 
-  test('customer.subscription.updated verifies signature payload and persists subscription deltas', async () => {
+  test('customer.subscription.updated verifies signature payload and maps subscription deltas to the writer', async () => {
     const validatedBaselineEnvelopeOutbound =
       StripeEventEnvelopeSubscriptionWebhookContractSchema.parse(
         webhookSubscriptionUpdatedBaseline,
@@ -135,6 +144,30 @@ describe('Stripe webhook ingestion contract (`constructStripeWebhookEvent` + Str
 
     expect(drizzleOutboundWebhookDatabaseUpdateSpy).toHaveBeenCalledOnce();
     expect(drizzleOutboundWebhookDatabaseUpdateSpy.mock.calls[0]?.[0]).toBe(subscriptions);
+    const providerSubscription = validatedBaselineEnvelopeOutbound.data.object;
+    const item = providerSubscription.items?.data[0];
+    if (!item) throw new Error('Subscription item fixture missing');
+    expect(subscriptionUpdatePayloadSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: providerSubscription.status.toUpperCase(),
+        cancel_at_period_end: providerSubscription.cancel_at_period_end,
+        current_period_start: new Date(item.current_period_start * 1000),
+        current_period_end: new Date(item.current_period_end * 1000),
+      }),
+    );
+  });
+
+  test('create/update contracts reject missing item periods instead of accepting invalid mapped dates', () => {
+    const invalid = structuredClone(webhookSubscriptionUpdatedBaseline);
+    Reflect.deleteProperty(invalid.data.object.items.data[0]!, 'current_period_start');
+    expect(() => StripeEventEnvelopeSubscriptionWebhookContractSchema.parse(invalid)).toThrow();
+    Reflect.deleteProperty(invalid.data.object, 'items');
+    expect(() => StripeEventEnvelopeSubscriptionWebhookContractSchema.parse(invalid)).toThrow();
+    expect(() =>
+      StripeEventEnvelopeSubscriptionWebhookContractSchema.parse(
+        webhookSubscriptionDeletedBaseline,
+      ),
+    ).not.toThrow();
   });
 
   test('customer.subscription.created follows the subscription webhook envelope schema', async () => {

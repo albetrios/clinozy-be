@@ -11,6 +11,17 @@ const local = existsSync(`${repo}/.env.local`)
   : {};
 const mode = randomBytes(8).toString('hex');
 const output = root;
+const providerMode = process.env.LOAD_PROVIDER_MODE;
+if (providerMode && !['contract', 'sandbox'].includes(providerMode))
+  throw new Error('Invalid LOAD_PROVIDER_MODE');
+if (
+  providerMode === 'sandbox' &&
+  process.argv.slice(2).some((path) => path.endsWith('/webhook-delivery-lifecycle.js'))
+)
+  throw new Error(
+    'Local outbound receiver requires contract mode; run it separately from the real Stripe transport',
+  );
+const providerToken = randomBytes(32).toString('hex');
 mkdirSync(output, { recursive: true });
 const database = process.env.LOAD_TEST_DATABASE;
 if (!(database && /^[a-z][a-z0-9_]*$/.test(database) && /(?:^|_)(load|test)(?:_|$)/.test(database)))
@@ -71,8 +82,24 @@ const env = {
   FRONTEND_URL: 'http://localhost:5173',
   ALLOWED_ORIGINS: 'http://localhost:5173',
   WEBAUTHN_RP_ID: 'localhost',
+  HOST: '127.0.0.1',
   REDIS_KEY_PREFIX: `clinozy:load-lifecycle:${mode}:`,
 };
+if (providerMode) {
+  env.LOAD_PROVIDER_MODE = providerMode;
+  env.LOAD_PROVIDER_URL = 'http://127.0.0.1:3006';
+  env.LOAD_PROVIDER_TOKEN = providerToken;
+  env.CONTRACT_TESTS_ENABLED = providerMode === 'contract' ? 'true' : 'false';
+  env.NODE_OPTIONS = [
+    shared.NODE_OPTIONS || '',
+    ...(providerMode === 'contract'
+      ? ['--import=nock', '--import=./src/tests/load/k6/load-provider-preload.mjs']
+      : []),
+  ]
+    .filter(Boolean)
+    .join(' ');
+  if (providerMode === 'contract') env.STRIPE_SECRET_KEY = 'sk_test_load_contract_fixture_only';
+}
 for (const key of [
   'DATABASE_URL',
   'DATABASE_OPERATOR_URL',
@@ -85,13 +112,35 @@ for (const key of [
     env[key] = u.toString();
   }
 for (const key of ['SENTRY_DSN', 'OTEL_EXPORTER_OTLP_ENDPOINT', 'POSTHOG_KEY']) delete env[key];
-for (const port of [3002, 3003, 3004, 3005]) {
+for (const port of [3002, 3003, 3004, 3005, ...(providerMode ? [3006, 9092] : [])]) {
   const probe = createServer();
   await new Promise((resolve, reject) => {
     probe.once('error', reject);
     probe.listen(port, '127.0.0.1', () => probe.close(resolve));
   });
 }
+const provider = providerMode
+  ? spawn(process.execPath, ['src/tests/load/k6/load-provider.mjs'], {
+      cwd: repo,
+      env: { ...env, NODE_OPTIONS: shared.NODE_OPTIONS || '' },
+      stdio: [
+        'ignore',
+        openSync(`${output}/provider.log`, 'w'),
+        openSync(`${output}/provider.errors.log`, 'w'),
+      ],
+    })
+  : null;
+const worker = providerMode
+  ? spawn(process.execPath, ['dist/src/worker.js'], {
+      cwd: repo,
+      env: { ...env, WORKER_QUEUE_FAMILIES: 'stripe', WORKER_HEALTH_PORT: '9092' },
+      stdio: [
+        'ignore',
+        openSync(`${output}/worker.log`, 'w'),
+        openSync(`${output}/worker.errors.log`, 'w'),
+      ],
+    })
+  : null;
 const storage = spawn(process.execPath, ['src/tests/load/k6/load-storage.mjs'], {
   cwd: repo,
   env: { ...shared, LOAD_STORAGE_PORT: '3004' },
@@ -149,7 +198,9 @@ try {
       api.exitCode !== null ||
       mailbox.exitCode !== null ||
       storage.exitCode !== null ||
-      authenticator.exitCode !== null
+      authenticator.exitCode !== null ||
+      (provider && provider.exitCode !== null) ||
+      (worker && worker.exitCode !== null)
     )
       throw new Error('Fixture process exited');
     try {
@@ -190,7 +241,8 @@ try {
           execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim()
             .length > 0,
         mailboxLoopback: true,
-        workerStarted: false,
+        workerStarted: Boolean(worker),
+        providerMode: providerMode || null,
         liveEmailSent: false,
       },
       null,
@@ -199,7 +251,30 @@ try {
   );
   const results = [];
   const sourceHashes = {};
-  for (const file of ['dist/src/server.js', ...process.argv.slice(2)])
+  for (const file of [
+    'dist/src/server.js',
+    'src/tests/load/k6/run-lifecycle.mjs',
+    'src/tests/load/k6/load-provider.mjs',
+    'src/tests/load/k6/load-provider-preload.mjs',
+    ...process.argv.slice(2),
+    ...(!process.argv.slice(2).length
+      ? [
+          ...(providerMode
+            ? [
+                'billing-provider-lifecycle',
+                ...(providerMode === 'contract' ? ['webhook-delivery-lifecycle'] : []),
+              ]
+            : [
+                'auth-security-lifecycle',
+                'account-onboarding-lifecycle',
+                'tenant-membership-lifecycle',
+                'admin',
+                'upload-asset-lifecycle',
+                'webauthn-lifecycle',
+              ]),
+        ].map((name) => `src/tests/load/k6/scenarios/${name}.js`)
+      : []),
+  ])
     sourceHashes[file] = createHash('sha256').update(readFileSync(file)).digest('hex');
   writeFileSync(`${output}/source-hashes.json`, JSON.stringify(sourceHashes, null, 2));
   const paths = process.argv.slice(2);
@@ -209,14 +284,18 @@ try {
           throw new Error('Invalid scenario path');
         return path.split('/').at(-1).slice(0, -3);
       })
-    : [
-        'auth-security-lifecycle',
-        'account-onboarding-lifecycle',
-        'tenant-membership-lifecycle',
-        'admin',
-        'upload-asset-lifecycle',
-        'webauthn-lifecycle',
-      ];
+    : providerMode
+      ? providerMode === 'sandbox'
+        ? ['billing-provider-lifecycle']
+        : ['billing-provider-lifecycle', 'webhook-delivery-lifecycle']
+      : [
+          'auth-security-lifecycle',
+          'account-onboarding-lifecycle',
+          'tenant-membership-lifecycle',
+          'admin',
+          'upload-asset-lifecycle',
+          'webauthn-lifecycle',
+        ];
   for (const script of scripts) {
     const processK6 = spawn(
       'k6',
@@ -275,6 +354,16 @@ try {
   console.error(error.message);
   process.exitCode = 1;
 } finally {
+  if (provider) {
+    try {
+      const state = await (
+        await fetch('http://127.0.0.1:3006/state', {
+          headers: { Authorization: `Bearer ${providerToken}` },
+        })
+      ).json();
+      writeFileSync(`${output}/provider-fixture-state.json`, JSON.stringify(state.data, null, 2));
+    } catch {}
+  }
   try {
     const state = await (await fetch('http://127.0.0.1:3004/__fixture__/state')).json();
     writeFileSync(`${output}/storage-fixture-state.json`, JSON.stringify(state, null, 2));
@@ -283,6 +372,12 @@ try {
   storage.kill('SIGTERM');
   api.kill('SIGTERM');
   mailbox.kill('SIGTERM');
+  worker?.kill('SIGTERM');
+  if (worker)
+    await new Promise((resolve) =>
+      worker.exitCode !== null ? resolve() : worker.on('close', resolve),
+    );
+  provider?.kill('SIGTERM');
   await Promise.all([
     new Promise((resolve) =>
       authenticator.exitCode !== null ? resolve() : authenticator.on('close', resolve),
@@ -294,7 +389,15 @@ try {
     new Promise((resolve) =>
       mailbox.exitCode !== null ? resolve() : mailbox.on('close', resolve),
     ),
+    ...(provider
+      ? [
+          new Promise((resolve) =>
+            provider.exitCode !== null ? resolve() : provider.on('close', resolve),
+          ),
+        ]
+      : []),
   ]);
+  if (provider && provider.exitCode !== 0) process.exitCode = 1;
   writeFileSync(
     `${output}/runtime-stopped.json`,
     JSON.stringify({
@@ -302,6 +405,9 @@ try {
       mailboxStopped: true,
       storageStopped: true,
       authenticatorStopped: true,
+      providerMode: providerMode || null,
+      providerStopped: provider ? provider.exitCode !== null : null,
+      workerStopped: worker ? worker.exitCode !== null : null,
     }),
   );
 }

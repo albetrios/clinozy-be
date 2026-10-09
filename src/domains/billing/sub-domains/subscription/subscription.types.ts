@@ -1,3 +1,10 @@
+/** MVCC token and provider watermark used to guard an authoritative same-second reconciliation. */
+export interface StripeSubscriptionOrderingState {
+  version: string;
+  watermark: Date | null;
+  status: string;
+}
+
 /** Repository-level input for {@link SubscriptionRepository.create} — already-resolved numeric IDs. */
 export interface SubscriptionCreateData {
   organization_id: number;

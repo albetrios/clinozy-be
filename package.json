@@ -84,6 +84,7 @@
     "docker:smoke:down": "docker compose --profile smoke stop api-smoke && docker compose --profile smoke rm -f api-smoke",
     "docker:smoke:logs": "docker compose --profile smoke logs -f api-smoke",
     "test": "tsx tooling/vitest/run-parallel.ts",
+    "test:stripe:load": "node src/tests/load/k6/run-stripe-validation.mjs",
     "test:unit": "vitest run --project unit",
     "test:unit-db": "vitest run --project unit-db",
     "test:db-bound": "vitest run --project unit-db --project e2e --project integration --project security --project performance",

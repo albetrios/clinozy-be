@@ -92,7 +92,7 @@ Artifacts (`k6-*.json` summaries and `server.log`) are uploaded for 14 days. Opt
 
 **Writes, paced.** Every organization write route carries a 100-per-minute cap per (organization, actor) that `RATE_LIMIT_RELAXED_CAPS` does not lift, and a k6 run is one actor (the demo user). The write scenarios therefore use the `pacedWrites` profile in `helpers/config.js` (one iteration per second) rather than 10 closed-loop VUs, which measured the rate limiter (429) instead of the route. Writes take their `X-Idempotency-Key` from `idempotencyKey()` in `helpers/idempotency.js`: the API requires 16–255 characters, and a timestamp keeps a key from replaying an earlier run.
 
-**Route coverage.** `pnpm load:coverage` matches every request the scenario files make — method and path — against `docs/routes.txt`; `pnpm load:coverage --nightly` counts only the files this workflow runs. It skips ROLE and TOKEN routes and public infrastructure routes (OAuth, email sign-in, WebAuthn, the Stripe webhook, health). The nightly count is a ratchet: `tooling/ci/load-coverage-budget.json` records it, and `k6-coverage.policy.unit.test.ts` fails when the nightly load-tests fewer routes — raise the budget when a change adds coverage. Remaining inventory gaps: live webhook delivery and Stripe-backed writes. Account deletion, organization leave/ownership transfer and S3 transport writes now run in the isolated lifecycle gate. The runner provisions a distinct real super-admin session per virtual user and permits at most five deletion iterations per admin, respecting the five-deletions-per-five-minutes protection.
+**Route coverage.** `pnpm load:coverage` matches every request the scenario files make — method and path — against `docs/routes.txt`; `pnpm load:coverage --nightly` counts only the files this workflow runs. It skips ROLE and TOKEN routes and public infrastructure routes (OAuth, email sign-in, WebAuthn, the Stripe webhook, health). The nightly count is a ratchet: `tooling/ci/load-coverage-budget.json` records it, and `k6-coverage.policy.unit.test.ts` fails when the nightly load-tests fewer routes — raise the budget when a change adds coverage. The workflow references all 104 eligible catalog routes; this static inventory does not prove every route passed at runtime. Stripe-backed writes and signed outbound webhook delivery run in the separate provider contract gate. Account deletion, organization leave/ownership transfer and S3 transport writes now run in the isolated lifecycle gate. The runner provisions a distinct real super-admin session per virtual user and permits at most five deletion iterations per admin, respecting the five-deletions-per-five-minutes protection.
 
 **Reproduce locally:** `pnpm compose:up`, `pnpm db:migrate`, `pnpm setup:local --only-env`, `DEMO_PASSWORD=DemoPassword123! pnpm db:seed:full`, `pnpm dev:loadtest`, then `pnpm tool:load-test-credentials`, export `TEST_TOKEN` / `TEST_ORG_ID`, and run `pnpm load:stress` and `pnpm load:stress:api` (same thresholds as CI).
 
@@ -478,8 +478,9 @@ VUS=20 BASE_URL=http://localhost:3002 k6 run src/tests/load/k6/scenarios/multi-t
 DURATION=20s MIN_COMPLETED=20 k6 run src/tests/load/k6/scenarios/tenancy-role-write.js
 ```
 
-Queue recovery, external-provider delivery, and future clinic workflows require
-additional controlled fixtures; these scenarios do not exercise those paths.
+Queue recovery and future clinic workflows require additional controlled fixtures.
+Provider-backed billing and signed outbound webhook processing use the separate
+provider journeys described below.
 
 The nightly workflow runs the strict notification and tenant journeys after
 bulk seeding and before front-end scenarios consume those fixtures. Notification
@@ -500,7 +501,8 @@ of treating billing validation rejections as successful idempotency coverage.
 Webhook CRUD never invokes test delivery. `WEBHOOK_TEST_BASE_URL` can select a
 public numeric HTTPS fixture to isolate backend latency from external hostname
 DNS latency; the default remains `https://example.com`. SSRF checks still apply.
-Hostname DNS behavior and outbound delivery need their own measurements.
+Hostname DNS behavior and public-network delivery still need separate measurements.
+The provider contract gate below verifies local signed delivery and persisted attempts.
 
 Timestamp keysets select `cursor_created_at` using
 `cursorTimestampSelection(created_at)` and pass it through cursor creation.
@@ -516,3 +518,55 @@ Set `VUS` to the number of distinct credential-pool users. Set `DURATION=10m` fo
 Measure RSS and file descriptors for the actual API process, after warm-up. The existing memory-soak helper measures its orchestration process and is insufficient evidence of API memory stability. Raising overload admission can remove 503 responses while increasing latency; retain the latency thresholds and report both outcomes.
 
 For managed HTTP proxies on Node 24, start the API with `NODE_USE_ENV_PROXY=1` and retain loopback addresses in `NO_PROXY`. The Stripe production SDK uses the platform HTTPS agent so these proxy settings apply; retain platform CA trust.
+
+## Stripe provider and outbound webhook validation
+
+`pnpm test:stripe:load` first uses the configured `STRIPE_SECRET_KEY` when it is an
+`sk_test_` key, then runs the local contract fixture. A missing key or failed provider
+run still produces local test results, but the command exits nonzero until both
+checks pass. Live keys are rejected for these tests. Keys stay in environment
+configuration; reports contain modes, exit codes and results, never key values.
+
+```sh
+LOAD_TEST_DATABASE=clinozy_load_lifecycle \
+LOAD_TEST_CREATE_DATABASE=true \
+LOAD_TEST_REPORT_DIR=k6-stripe-validation \
+pnpm test:stripe:load
+```
+
+Use a new scratch database when cloning with `LOAD_TEST_CREATE_DATABASE=true`.
+For an existing scratch database omit that flag. The runner rejects the application
+database, redirects all four database URLs, namespaces Redis and owns its API,
+Stripe worker and fixtures. It cleans up owned test-account subscriptions,
+customers and catalog objects after stopping the worker.
+
+The configured-key run uses Stripe's actual test account: creates provider plans,
+customers and subscriptions, confirms a virtual `pm_card_visa` payment, retrieves
+the real provider activation event, signs it locally and sends it through the real
+ingress and BullMQ worker. It checks payment/setup secrets, idempotency replay,
+foreign-tenant denial, plan change, cancel/resume and final provider/local agreement.
+It proves provider API behavior and local webhook processing; it does not prove
+Stripe can initiate delivery to a public tunnel. Billing's provider latency budget
+is p95 below 3000 ms, separately from the tenant-read p95 below 500 ms.
+
+The local mode (`LOAD_PROVIDER_MODE=contract`) exercises those same API writes
+against an authenticated stateful loopback Stripe model. The outbound webhook
+journey intercepts only the final HTTP transport to a public-IP fixture. Production
+URL validation, signing and delivery-history writes remain active: a private URL
+is rejected, a forged signature fails, a valid timestamped HMAC reaches the owned
+receiver and the persisted delivery attempt records HTTP 200. No tunnel or ngrok
+credential is required. This contract gate uses p95 below 500 ms, zero unexpected
+HTTP failures, every check passing and exactly 20 completed journeys per scenario
+by default (`VUS=4`, `ITERATIONS=5`). It runs separately from the six existing
+lifecycle scenarios so the Stripe worker does not alter their queue assertions.
+
+Same-second subscription events reconcile against current provider truth outside
+SQL transactions. The subsequent write compares PostgreSQL's exact MVCC version,
+keeps the watermark from regressing and retries concurrent changes. Older seconds
+and terminal subscriptions retain their stale-event and non-resurrection guards.
+
+Contract fixtures pin item-level billing-period timestamps from the configured
+Stripe API version and assert the dates and status passed to the writer. The worker
+also accepts valid subscription-level timestamps from older webhook endpoint API
+versions. Missing items, malformed timestamps and reversed periods fail before a
+database write; they do not manufacture a billing period or pass Invalid Dates to SQL.

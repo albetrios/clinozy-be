@@ -134,11 +134,23 @@ export async function findUserActiveOrganizationPublicIdByInternalId(
  * Resolve the caller's own PERSONAL organization `public_id` — the target for
  * `switch-to-personal` (no body; the server resolves it). Returns `undefined` when the
  * user has no personal organization (e.g. personal disabled), which the caller maps to 409.
+ * An optional public identity must come from the matching, already-resolved user row;
+ * it avoids a repeated internal-id lookup while retaining that user's RLS context.
  */
-export async function resolvePersonalOrganizationPublicId(
-  ownerUserInternalId: number,
-): Promise<string | undefined> {
-  return (await resolvePersonalOrganization(ownerUserInternalId))?.public_id;
+export async function resolvePersonalOrganizationPublicId(options: {
+  ownerUserInternalId: number;
+  userPublicId?: string;
+}): Promise<string | undefined> {
+  if (options.userPublicId !== undefined) {
+    // Profile reads already resolved the user. Keep the caller's own RLS scope while
+    // avoiding another SECURITY DEFINER lookup of the same internal/public identity pair.
+    const publicId = await withAppDatabaseContext(
+      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
+      () => organizationRepository.findPersonalOrganizationPublicId(options.ownerUserInternalId),
+    );
+    return publicId ?? undefined;
+  }
+  return (await resolvePersonalOrganization(options.ownerUserInternalId))?.public_id;
 }
 
 /**

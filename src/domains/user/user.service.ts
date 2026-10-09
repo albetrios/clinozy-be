@@ -506,7 +506,10 @@ export class UserService {
         return {
           user: row,
           existingPersonalOrganizationId: env.PERSONAL_ORGANIZATION_ENABLED
-            ? ((await resolvePersonalOrganizationPublicId(row.id)) ?? null)
+            ? ((await resolvePersonalOrganizationPublicId({
+                ownerUserInternalId: row.id,
+                userPublicId: row.public_id,
+              })) ?? null)
             : null,
         };
       },

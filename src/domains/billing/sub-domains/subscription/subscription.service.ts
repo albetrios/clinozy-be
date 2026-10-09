@@ -47,7 +47,10 @@ import { assertTeamOrganization } from '@/domains/tenancy/sub-domains/organizati
 import type { PlanService } from '@/domains/billing/sub-domains/plan/plan.service.js';
 import type { PaymentProvider } from './payment-provider.port.js';
 import type { SubscriptionRepository } from './subscription.repository.js';
-import type { SubscriptionUpdateData } from './subscription.types.js';
+import type {
+  StripeSubscriptionOrderingState,
+  SubscriptionUpdateData,
+} from './subscription.types.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { PAGINATION } from '@/shared/constants/pagination.constants.js';
 import { BillingAccountSerializer } from './billing-account.serializer.js';
@@ -397,12 +400,14 @@ export class SubscriptionService {
     data: SubscriptionUpdateData,
     stripe_event_created_at: Date,
     repositoryOverride?: SubscriptionRepository,
+    reconciliation?: StripeSubscriptionOrderingState,
   ) {
     const repository = repositoryOverride ?? this.repository;
     return repository.syncFromStripeProviderSubscription(
       provider_subscription_id,
       data,
       stripe_event_created_at,
+      ...(reconciliation ? [reconciliation] : []),
     );
   }
 

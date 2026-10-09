@@ -12,6 +12,26 @@ import type { SubscriptionService } from '@/domains/billing/sub-domains/subscrip
 import type { StripeWebhookEventRepository } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-event.repository.js';
 import type { PlanRepository } from '@/domains/billing/sub-domains/plan/plan.repository.js';
 
+const orderingMocks = vi.hoisted(() => ({
+  findOrdering: vi.fn().mockResolvedValue(null),
+  retrieveSnapshot: vi.fn(),
+}));
+vi.mock(
+  '@/domains/billing/sub-domains/subscription/subscription.repository.js',
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import('@/domains/billing/sub-domains/subscription/subscription.repository.js')
+    >()),
+    createWorkerSubscriptionRepository: vi.fn(() => ({
+      findStripeProviderOrderingState: orderingMocks.findOrdering,
+      databaseHandle: {},
+    })),
+  }),
+);
+vi.mock('@/infrastructure/payment/stripe.client.js', () => ({
+  retrieveStripeSubscriptionSnapshot: orderingMocks.retrieveSnapshot,
+}));
+
 const queueMocks = vi.hoisted(() => ({
   enqueueStripeWebhook: vi.fn().mockResolvedValue(undefined),
 }));
@@ -118,6 +138,7 @@ describe('StripeWebhookService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    orderingMocks.findOrdering.mockResolvedValue(null);
     vi.mocked(stripeWebhookEventRepository.tryClaimEvent).mockResolvedValue('claimed');
     // sec-new-D2: markProcessed returns whether a row was updated; markFailed returns the row's
     // attempt count (null when no row matched).
@@ -142,6 +163,86 @@ describe('StripeWebhookService', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  describe('same-second provider reconciliation', () => {
+    it('uses current provider truth when event seconds tie a millisecond local watermark', async () => {
+      const ordering = {
+        version: '42',
+        watermark: new Date(stripeEventCreatedAtSeconds * 1000 + 800),
+        status: 'INCOMPLETE',
+      };
+      orderingMocks.findOrdering.mockResolvedValue(ordering);
+      orderingMocks.retrieveSnapshot.mockResolvedValue(buildSubscription({ status: 'active' }));
+      await service.handleEvent(
+        buildEvent({ data: { object: buildSubscription({ status: 'incomplete' }) } }),
+      );
+      expect(orderingMocks.retrieveSnapshot).toHaveBeenCalledWith('sub_123');
+      expect(subscriptionService.syncFromStripeProviderSubscription).toHaveBeenCalledWith(
+        'sub_123',
+        expect.objectContaining({ status: 'ACTIVE' }),
+        new Date(stripeEventCreatedAtSeconds * 1000),
+        expect.anything(),
+        ordering,
+      );
+      expect(stripeWebhookEventRepository.markProcessed).toHaveBeenCalledWith('evt_1');
+    });
+    it.each(['CANCELED', 'INCOMPLETE_EXPIRED'])(
+      'does not fetch or resurrect terminal %s state',
+      async (status) => {
+        orderingMocks.findOrdering.mockResolvedValue({
+          version: '42',
+          watermark: new Date(stripeEventCreatedAtSeconds * 1000),
+          status,
+        });
+        await service.handleEvent(buildEvent());
+        expect(orderingMocks.retrieveSnapshot).not.toHaveBeenCalled();
+      },
+    );
+    it('keeps older-second events on the existing stale-event guard', async () => {
+      orderingMocks.findOrdering.mockResolvedValue({
+        version: '42',
+        watermark: new Date((stripeEventCreatedAtSeconds + 1) * 1000),
+        status: 'ACTIVE',
+      });
+      await service.handleEvent(buildEvent());
+      expect(orderingMocks.retrieveSnapshot).not.toHaveBeenCalled();
+    });
+    it('retries a concurrent database change without marking the event processed', async () => {
+      orderingMocks.findOrdering.mockResolvedValue({
+        version: '42',
+        watermark: new Date(stripeEventCreatedAtSeconds * 1000),
+        status: 'INCOMPLETE',
+      });
+      orderingMocks.retrieveSnapshot.mockResolvedValue(buildSubscription());
+      vi.mocked(subscriptionService.syncFromStripeProviderSubscription).mockResolvedValue(null);
+      await expect(service.handleEvent(buildEvent())).rejects.toThrow(StripeWebhookRetryLaterError);
+      expect(stripeWebhookEventRepository.markFailed).toHaveBeenCalled();
+      expect(stripeWebhookEventRepository.markProcessed).not.toHaveBeenCalled();
+    });
+    it('rejects a provider snapshot for a different subscription', async () => {
+      orderingMocks.findOrdering.mockResolvedValue({
+        version: '42',
+        watermark: new Date(stripeEventCreatedAtSeconds * 1000),
+        status: 'INCOMPLETE',
+      });
+      orderingMocks.retrieveSnapshot.mockResolvedValue(buildSubscription({ id: 'sub_other' }));
+      await expect(service.handleEvent(buildEvent())).rejects.toThrow(StripeWebhookRetryLaterError);
+      expect(subscriptionService.syncFromStripeProviderSubscription).not.toHaveBeenCalled();
+      expect(stripeWebhookEventRepository.markProcessed).not.toHaveBeenCalled();
+    });
+    it('records provider read failures for retry instead of silently accepting the stale payload', async () => {
+      orderingMocks.findOrdering.mockResolvedValue({
+        version: '42',
+        watermark: new Date(stripeEventCreatedAtSeconds * 1000),
+        status: 'INCOMPLETE',
+      });
+      orderingMocks.retrieveSnapshot.mockRejectedValue(new Error('provider unavailable'));
+      await expect(service.handleEvent(buildEvent())).rejects.toThrow(StripeWebhookRetryLaterError);
+      expect(subscriptionService.syncFromStripeProviderSubscription).not.toHaveBeenCalled();
+      expect(stripeWebhookEventRepository.markFailed).toHaveBeenCalled();
+      expect(stripeWebhookEventRepository.markProcessed).not.toHaveBeenCalled();
+    });
   });
 
   describe('event claim / idempotency', () => {
@@ -321,24 +422,57 @@ describe('StripeWebhookService', () => {
       );
     });
 
-    it('falls back to a valid Date when no subscription item is present (not Invalid Date)', async () => {
+    it('supports period boundaries from an older Stripe webhook API version', async () => {
       await service.handleEvent(
         buildEvent({
           data: {
-            object: buildSubscription({ items: { data: [] } }),
+            object: buildSubscription({
+              current_period_start: periodStartSeconds,
+              current_period_end: periodEndSeconds,
+              items: { data: [{ id: 'si_legacy' }] },
+            }),
           },
         }),
       );
+      expect(subscriptionService.syncFromStripeProviderSubscription).toHaveBeenCalledWith(
+        'sub_123',
+        expect.objectContaining({
+          current_period_start: new Date(periodStartSeconds * 1000),
+          current_period_end: new Date(periodEndSeconds * 1000),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+    it.each([
+      { label: 'missing boundaries', item: { id: 'si_bad' } },
+      {
+        label: 'reversed boundaries',
+        item: { current_period_start: periodEndSeconds, current_period_end: periodStartSeconds },
+      },
+      {
+        label: 'timestamps beyond Date range',
+        item: { current_period_start: 9_000_000_000_000, current_period_end: 9_000_000_000_001 },
+      },
+    ])('abandons $label before passing Invalid Dates to the database', async ({ item }) => {
+      await expect(
+        service.handleEvent(
+          buildEvent({ data: { object: buildSubscription({ items: { data: [item] } }) } }),
+        ),
+      ).rejects.toThrow(StripeWebhookEventAbandonedError);
+      expect(subscriptionService.syncFromStripeProviderSubscription).not.toHaveBeenCalled();
+      expect(stripeWebhookEventRepository.markAbandoned).toHaveBeenCalled();
+      expect(stripeWebhookEventRepository.markProcessed).not.toHaveBeenCalled();
+    });
 
-      const [, payload] = vi.mocked(subscriptionService.syncFromStripeProviderSubscription).mock
-        .calls[0]!;
-      const { current_period_start, current_period_end } = payload as {
-        current_period_start: Date;
-        current_period_end: Date;
-      };
-      // A mutant forcing the `* 1000` branch on a non-number yields `new Date(NaN)`.
-      expect(Number.isNaN(current_period_start.getTime())).toBe(false);
-      expect(Number.isNaN(current_period_end.getTime())).toBe(false);
+    it('rejects a missing subscription item instead of inventing a billing period', async () => {
+      await expect(
+        service.handleEvent(
+          buildEvent({ data: { object: buildSubscription({ items: { data: [] } }) } }),
+        ),
+      ).rejects.toThrow(StripeWebhookEventAbandonedError);
+      expect(subscriptionService.syncFromStripeProviderSubscription).not.toHaveBeenCalled();
+      expect(stripeWebhookEventRepository.markAbandoned).toHaveBeenCalled();
     });
 
     it('logs subscription_synced when the local row was updated', async () => {
@@ -481,17 +615,14 @@ describe('StripeWebhookService', () => {
       );
     });
 
-    it('omits plan_id when items.data is empty (no price to resolve)', async () => {
-      await service.handleEvent(
-        buildEvent({
-          data: { object: buildSubscription({ items: { data: [] } }) },
-        }),
-      );
-
+    it('does not resolve a plan or write a subscription for an empty item list', async () => {
+      await expect(
+        service.handleEvent(
+          buildEvent({ data: { object: buildSubscription({ items: { data: [] } }) } }),
+        ),
+      ).rejects.toThrow(StripeWebhookEventAbandonedError);
       expect(planRepository.findByStripePriceId).not.toHaveBeenCalled();
-      const [, payload] = vi.mocked(subscriptionService.syncFromStripeProviderSubscription).mock
-        .calls[0]!;
-      expect((payload as Record<string, unknown>).plan_id).toBeUndefined();
+      expect(subscriptionService.syncFromStripeProviderSubscription).not.toHaveBeenCalled();
     });
   });
 

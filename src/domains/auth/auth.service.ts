@@ -489,7 +489,9 @@ export class AuthService {
     ) {
       return organizationPublicId;
     }
-    const personalOrganizationPublicId = await resolvePersonalOrganizationPublicId(options.userId);
+    const personalOrganizationPublicId = await resolvePersonalOrganizationPublicId({
+      ownerUserInternalId: options.userId,
+    });
     if (
       personalOrganizationPublicId &&
       personalOrganizationPublicId !== organizationPublicId &&

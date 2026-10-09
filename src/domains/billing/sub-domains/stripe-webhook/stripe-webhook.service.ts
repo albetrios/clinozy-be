@@ -1,4 +1,6 @@
 import type Stripe from 'stripe';
+import { retrieveStripeSubscriptionSnapshot } from '@/infrastructure/payment/stripe.client.js';
+import type { StripeSubscriptionOrderingState } from '@/domains/billing/sub-domains/subscription/subscription.types.js';
 import type { SubscriptionRepository } from '@/domains/billing/sub-domains/subscription/subscription.repository.js';
 import { createWorkerSubscriptionRepository } from '@/domains/billing/sub-domains/subscription/subscription.repository.js';
 import type { SubscriptionService } from '@/domains/billing/sub-domains/subscription/subscription.service.js';
@@ -47,6 +49,36 @@ function resolveBillingCycleForStripePrice(
     return 'yearly';
   }
   return 'monthly';
+}
+
+/** Read current item-level periods, retaining compatibility with older webhook API versions. */
+function resolveStripeSubscriptionPeriod(subscription: Stripe.Subscription): {
+  start: Date;
+  end: Date;
+} {
+  const item = subscription.items?.data?.[0];
+  if (!item) throw new StripeWebhookPermanentError('stripe.webhook.subscription_item_missing');
+  const legacy = subscription as Stripe.Subscription & {
+    current_period_start?: number;
+    current_period_end?: number;
+  };
+  const start = item.current_period_start ?? legacy.current_period_start;
+  const end = item.current_period_end ?? legacy.current_period_end;
+  if (
+    start === undefined ||
+    end === undefined ||
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(end) ||
+    end < start
+  ) {
+    throw new StripeWebhookPermanentError('stripe.webhook.subscription_invalid_period_boundaries');
+  }
+  const startDate = new Date(start * 1000),
+    endDate = new Date(end * 1000);
+  if (!(Number.isFinite(startDate.getTime()) && Number.isFinite(endDate.getTime()))) {
+    throw new StripeWebhookPermanentError('stripe.webhook.subscription_invalid_period_boundaries');
+  }
+  return { start: startDate, end: endDate };
 }
 
 /**
@@ -143,57 +175,62 @@ export class StripeWebhookService {
   async handleEvent(event: Stripe.Event, context?: { requestId?: string }): Promise<void> {
     const stripeEventCreatedAt = new Date(event.created * 1000);
 
-    await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, async () => {
-      const claimResult = await this.stripeWebhookEventRepository.tryClaimEvent(
-        omitUndefined({
-          stripe_event_id: event.id,
-          event_type: event.type,
-          stripe_created_at: stripeEventCreatedAt,
-          request_id: context?.requestId,
-        }),
-      );
-
-      if (claimResult === 'processed_duplicate') {
-        logger.info(
-          { eventId: event.id, eventType: event.type },
-          'stripe.webhook.duplicate_skipped',
+    const claimResult = await withMaintenanceDatabaseContext(
+      MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+      async () => {
+        return this.stripeWebhookEventRepository.tryClaimEvent(
+          omitUndefined({
+            stripe_event_id: event.id,
+            event_type: event.type,
+            stripe_created_at: stripeEventCreatedAt,
+            request_id: context?.requestId,
+          }),
         );
-        return;
-      }
+      },
+    );
 
-      if (claimResult === 'abandoned') {
-        // Given up on — never retried on its own; an operator retries it with the replay tool.
-        logger.warn(
-          { eventId: event.id, eventType: event.type },
-          'stripe.webhook.abandoned_skipped',
-        );
-        return;
-      }
+    if (claimResult === 'processed_duplicate') {
+      logger.info({ eventId: event.id, eventType: event.type }, 'stripe.webhook.duplicate_skipped');
+      return;
+    }
 
-      if (claimResult === 'still_processing_within_lease') {
-        // Another execution holds the event; if it died, the reclaim sweep picks the row up once
-        // the lease passes — so running out of attempts here needs no page.
-        throw new StripeWebhookRetryLaterError(`stripe.webhook.event_in_flight:${event.id}`);
-      }
+    if (claimResult === 'abandoned') {
+      // Given up on — never retried on its own; an operator retries it with the replay tool.
+      logger.warn({ eventId: event.id, eventType: event.type }, 'stripe.webhook.abandoned_skipped');
+      return;
+    }
 
-      if (claimResult === 'reclaimed') {
-        logger.info({ eventId: event.id, eventType: event.type }, 'stripe.webhook.reclaimed');
-      }
+    if (claimResult === 'still_processing_within_lease') {
+      // Another execution holds the event; if it died, the reclaim sweep picks the row up once
+      // the lease passes — so running out of attempts here needs no page.
+      throw new StripeWebhookRetryLaterError(`stripe.webhook.event_in_flight:${event.id}`);
+    }
 
-      // audit #44 — IDEMPOTENCY BOUNDARY: `markProcessed` (below) runs on a different context than
-      // the business write, so a crash between the two leaves the ledger row `processing` and the
-      // reclaim lease re-runs this dispatch. That is safe ONLY because every side effect here is a
-      // Postgres write guarded by the `last_stripe_event_created_at` watermark + unique-violation
-      // handling (a re-run is a no-op), and there is NO outbound call in this handler. Any NEW side
-      // effect added to `dispatchEvent` MUST be idempotency-keyed or watermark-guarded — do not
-      // assume `markProcessed` is a transactional barrier.
-      try {
+    if (claimResult === 'reclaimed') {
+      logger.info({ eventId: event.id, eventType: event.type }, 'stripe.webhook.reclaimed');
+    }
+
+    // audit #44 — IDEMPOTENCY BOUNDARY: `markProcessed` (below) runs on a different context than
+    // the business write, so a crash between the two leaves the ledger row `processing` and the
+    // reclaim lease re-runs this dispatch. That is safe ONLY because every side effect here is a
+    // Postgres write guarded by the `last_stripe_event_created_at` watermark + unique-violation
+    // handling (a re-run is a no-op), and the only outbound call is an idempotent provider read before the business transaction. Any NEW side
+    // effect added to `dispatchEvent` MUST be idempotency-keyed or watermark-guarded — do not
+    // assume `markProcessed` is a transactional barrier.
+    try {
+      const prepared = await this.prepareEventForDispatch(event);
+      await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, async () => {
         await runStripeWebhookHandlerWithOrganizationContext(
-          event,
+          prepared.event,
           this.stripeWebhookEventRepository,
           async (databaseHandle) => {
             const workerSubscriptionRepository = createWorkerSubscriptionRepository(databaseHandle);
-            await this.dispatchEvent(event, stripeEventCreatedAt, workerSubscriptionRepository);
+            await this.dispatchEvent(
+              prepared.event,
+              stripeEventCreatedAt,
+              workerSubscriptionRepository,
+              prepared.reconciliation,
+            );
           },
         );
         // sec-new-D2: detect no-op writes (ledger row unexpectedly absent)
@@ -204,10 +241,53 @@ export class StripeWebhookService {
             'stripe.webhook.mark_processed.no_row',
           );
         }
-      } catch (error) {
-        throw await this.settleFailedEvent(event, error);
-      }
-    });
+      });
+    } catch (error) {
+      throw await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, () =>
+        this.settleFailedEvent(event, error),
+      );
+    }
+  }
+
+  /** Resolve ambiguous second-resolution ordering using a provider read outside SQL contexts. */
+  private async prepareEventForDispatch(event: Stripe.Event): Promise<{
+    event: Stripe.Event;
+    reconciliation?: StripeSubscriptionOrderingState;
+  }> {
+    if (
+      event.type !== 'customer.subscription.created' &&
+      event.type !== 'customer.subscription.updated'
+    )
+      return { event };
+    const ordering = await withMaintenanceDatabaseContext(
+      MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+      () =>
+        runStripeWebhookHandlerWithOrganizationContext(
+          event,
+          this.stripeWebhookEventRepository,
+          async (databaseHandle) =>
+            createWorkerSubscriptionRepository(databaseHandle).findStripeProviderOrderingState(
+              event.data.object.id,
+            ),
+        ),
+    );
+    if (
+      !ordering?.watermark ||
+      ['CANCELED', 'INCOMPLETE_EXPIRED'].includes(ordering.status) ||
+      Math.floor(ordering.watermark.getTime() / 1000) !== event.created
+    )
+      return { event };
+    // Read current provider truth, then apply only to the observed MVCC version.
+    const snapshot = await retrieveStripeSubscriptionSnapshot(event.data.object.id);
+    if (snapshot.id !== event.data.object.id) {
+      throw new StripeWebhookRetryLaterError(
+        'stripe.webhook.subscription_snapshot_identity_mismatch',
+      );
+    }
+    return {
+      event: { ...event, data: { ...event.data, object: snapshot } } as Stripe.Event,
+      reconciliation: ordering,
+    };
   }
 
   /**
@@ -265,6 +345,7 @@ export class StripeWebhookService {
     event: Stripe.Event,
     stripeEventCreatedAt: Date,
     subscriptionRepository: SubscriptionRepository,
+    reconciliation?: StripeSubscriptionOrderingState,
   ): Promise<void> {
     switch (event.type) {
       case 'customer.subscription.created':
@@ -274,6 +355,7 @@ export class StripeWebhookService {
           stripeEventCreatedAt,
           subscriptionRepository,
           event.type,
+          reconciliation,
         );
         break;
 
@@ -295,6 +377,7 @@ export class StripeWebhookService {
     stripeEventCreatedAt: Date,
     subscriptionRepository: SubscriptionRepository,
     eventType: 'customer.subscription.created' | 'customer.subscription.updated',
+    reconciliation?: StripeSubscriptionOrderingState,
   ): Promise<void> {
     const providerSubscriptionId = stripeSubscription.id;
 
@@ -313,8 +396,8 @@ export class StripeWebhookService {
       statusMap[stripeSubscription.status] ?? stripeSubscription.status.toUpperCase();
 
     const firstItem = stripeSubscription.items.data[0];
-    const periodStart = firstItem ? new Date(firstItem.current_period_start * 1000) : new Date();
-    const periodEnd = firstItem ? new Date(firstItem.current_period_end * 1000) : new Date();
+    const { start: periodStart, end: periodEnd } =
+      resolveStripeSubscriptionPeriod(stripeSubscription);
     // REQ-4: reconcile the purchased seat quantity FROM Stripe (the subscription item quantity).
     // Stripe is the source of truth for `seats`, so a Dashboard-driven quantity change flows here.
     const seats =
@@ -379,6 +462,7 @@ export class StripeWebhookService {
       }),
       stripeEventCreatedAt,
       subscriptionRepository,
+      ...(reconciliation ? [reconciliation] : []),
     );
 
     if (row) {
@@ -387,6 +471,12 @@ export class StripeWebhookService {
         'stripe.webhook.subscription_synced',
       );
       return;
+    }
+
+    if (reconciliation) {
+      throw new StripeWebhookRetryLaterError(
+        `stripe.webhook.subscription_reconciliation_raced:${providerSubscriptionId}`,
+      );
     }
 
     // BILL-03: if a deletion tombstone at or after this event's timestamp exists, the

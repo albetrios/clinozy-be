@@ -302,6 +302,23 @@ jobs:
           src/tests/load/k6/scenarios/upload-asset-lifecycle.js
           src/tests/load/k6/scenarios/webauthn-lifecycle.js
 
+      - name: Strict Stripe contract and signed outbound webhook lifecycles
+        env:
+          DATABASE_TLS_ENFORCED: 'false'
+          DATABASE_RLS_SAFETY_ENFORCED: 'false'
+          DATABASE_CONNECTION_BUDGET_ENFORCED: 'false'
+          REDIS_TLS_ENFORCED: 'false'
+          TRUST_PROXY_REQUIRED: 'false'
+          LOAD_TEST_DATABASE: clinozy_load_lifecycle
+          LOAD_PROVIDER_MODE: contract
+          LOAD_TEST_REPORT_DIR: k6-provider-lifecycle
+          VUS: '4'
+          ITERATIONS: '5'
+        run: >
+          node src/tests/load/k6/run-lifecycle.mjs
+          src/tests/load/k6/scenarios/billing-provider-lifecycle.js
+          src/tests/load/k6/scenarios/webhook-delivery-lifecycle.js
+
       - name: Upload k6 summaries and server log
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -311,6 +328,7 @@ jobs:
             k6-*.json
             server.log
             k6-lifecycle/**
+            k6-provider-lifecycle/**
           retention-days: 14
 
       - name: Send load-test results email (from k6 summaries)

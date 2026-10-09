@@ -13,7 +13,11 @@ import { capListWithWarning } from '@/shared/utils/infrastructure/list-cap.util.
 import { subscriptions } from '@/domains/billing/sub-domains/subscription/subscription.schema.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
-import type { SubscriptionCreateData, SubscriptionUpdateData } from './subscription.types.js';
+import type {
+  SubscriptionCreateData,
+  SubscriptionUpdateData,
+  StripeSubscriptionOrderingState,
+} from './subscription.types.js';
 
 /**
  * Subscription statuses that release the per-organization subscription slot.
@@ -330,16 +334,35 @@ export class SubscriptionRepository {
     return rows.length > 0;
   }
 
+  /** Read the precise MVCC version without losing PostgreSQL timestamp microseconds in a JS Date. */
+  async findStripeProviderOrderingState(
+    providerSubscriptionId: string,
+  ): Promise<StripeSubscriptionOrderingState | null> {
+    const rows = await this.db()
+      .select({
+        version: sql<string>`xmin::text`,
+        watermark: subscriptions.last_stripe_event_created_at,
+        status: subscriptions.status,
+      })
+      .from(subscriptions)
+      .where(eq(subscriptions.provider_subscription_id, providerSubscriptionId))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
   async syncFromStripeProviderSubscription(
     provider_subscription_id: string,
     data: SubscriptionUpdateData,
     stripe_event_created_at: Date,
+    reconciliation?: StripeSubscriptionOrderingState,
   ) {
     const rows = await this.db()
       .update(subscriptions)
       .set({
         ...data,
-        last_stripe_event_created_at: stripe_event_created_at,
+        last_stripe_event_created_at: reconciliation
+          ? sql`GREATEST(${subscriptions.last_stripe_event_created_at}, ${stripe_event_created_at.toISOString()}::timestamptz)`
+          : stripe_event_created_at,
         updated_at: databaseNowTimestamp,
       })
       .where(
@@ -352,10 +375,15 @@ export class SubscriptionRepository {
           // (route-audit B5). A non-terminal Dashboard cancel (ACTIVE → CANCELED via `.updated`) is
           // unaffected: the guard checks the CURRENT row status, not the incoming one.
           notInArray(subscriptions.status, [...INACTIVE_SUBSCRIPTION_STATUSES]),
-          or(
-            isNull(subscriptions.last_stripe_event_created_at),
-            lt(subscriptions.last_stripe_event_created_at, stripe_event_created_at),
-          ),
+          reconciliation
+            ? and(
+                sql`xmin::text = ${reconciliation.version}`,
+                sql`date_trunc('second', ${subscriptions.last_stripe_event_created_at}) = ${stripe_event_created_at.toISOString()}::timestamptz`,
+              )
+            : or(
+                isNull(subscriptions.last_stripe_event_created_at),
+                lt(subscriptions.last_stripe_event_created_at, stripe_event_created_at),
+              ),
         ),
       )
       .returning();

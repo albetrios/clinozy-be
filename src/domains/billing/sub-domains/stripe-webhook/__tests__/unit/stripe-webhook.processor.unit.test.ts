@@ -18,6 +18,21 @@ vi.mock('@/shared/utils/validation/bullmq-job-validation.util.js', () => ({
   parseBullMQJobData: parseBullMQJobDataSpy,
 }));
 
+// The duplicate/race fixtures have no stored watermark; database reconciliation is
+// covered by the service units and real repository/database tests.
+vi.mock(
+  '@/domains/billing/sub-domains/subscription/subscription.repository.js',
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import('@/domains/billing/sub-domains/subscription/subscription.repository.js')
+    >()),
+    createWorkerSubscriptionRepository: vi.fn((databaseHandle) => ({
+      databaseHandle,
+      findStripeProviderOrderingState: vi.fn().mockResolvedValue(null),
+    })),
+  }),
+);
+
 const retrieveStripeEventMock = vi.fn();
 
 vi.mock('@/infrastructure/payment/stripe.client.js', () => ({
