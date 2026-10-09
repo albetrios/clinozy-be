@@ -275,11 +275,19 @@ jobs:
         # calls it cannot reach. Signs in with the static code (job env), so it needs no mail.
         run: k6 run --summary-export=k6-fe-full-surface.json src/tests/load/k6/scenarios/fe-full-surface.js
 
+      - name: Build isolated lifecycle API
+        run: pnpm build
+
       - name: Stop baseline API before isolated lifecycle tests
         uses: ./.github/actions/stop-api-server
 
       - name: Strict account, MFA, tenant, admin and upload lifecycles
         env:
+          DATABASE_TLS_ENFORCED: 'false'
+          DATABASE_RLS_SAFETY_ENFORCED: 'false'
+          DATABASE_CONNECTION_BUDGET_ENFORCED: 'false'
+          REDIS_TLS_ENFORCED: 'false'
+          TRUST_PROXY_REQUIRED: 'false'
           LOAD_TEST_DATABASE: clinozy_load_lifecycle
           LOAD_TEST_CREATE_DATABASE: 'true'
           LOAD_TEST_REPORT_DIR: k6-lifecycle

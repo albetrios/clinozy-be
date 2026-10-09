@@ -61,6 +61,10 @@ const env = {
   OVERLOAD_DB_POOL_SHED_RATIO: '3',
   WEBHOOK_URL_ALLOWLIST: 'example.com,1.1.1.1',
   S3_ENDPOINT: 'http://127.0.0.1:3004',
+  S3_BUCKET: 'load-fixture',
+  S3_REGION: 'us-east-1',
+  S3_ACCESS_KEY_ID: 'load-fixture-access-key',
+  S3_SECRET_ACCESS_KEY: 'load-fixture-secret-key-for-loopback-only',
   S3_FORCE_PATH_STYLE: 'true',
   REDIS_KEY_PREFIX: `clinozy:load-lifecycle:${mode}:`,
 };
