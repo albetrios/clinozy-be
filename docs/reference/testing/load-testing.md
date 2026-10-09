@@ -632,17 +632,91 @@ pnpm test:stripe:load
 Use a new scratch database when cloning with `LOAD_TEST_CREATE_DATABASE=true`.
 For an existing scratch database omit that flag. The runner rejects the application
 database, redirects all four database URLs, namespaces Redis and owns its API,
-Stripe worker and fixtures. It cleans up owned test-account subscriptions,
-customers and catalog objects after stopping the worker.
+Stripe worker and fixtures. The provider fixture retains its owned sandbox
+subscriptions, customers and catalog objects after stopping the worker. Reports
+record retention; unrelated provider objects must never be modified.
 
-The configured-key run uses Stripe's actual test account: creates provider plans,
-customers and subscriptions, confirms a virtual `pm_card_visa` payment, retrieves
+The configured-key run uses Stripe's actual test account: independently retrieves
+an existing owned catalog, creates synthetic customers and subscriptions, confirms
+a virtual Visa payment for paid subscriptions, retrieves
 the real provider activation event, signs it locally and sends it through the real
 ingress and BullMQ worker. It checks payment/setup secrets, idempotency replay,
 foreign-tenant denial, plan change, cancel/resume and final provider/local agreement.
 It proves provider API behavior and local webhook processing; it does not prove
 Stripe can initiate delivery to a public tunnel. Billing's provider latency budget
 is p95 below 3000 ms, separately from the tenant-read p95 below 500 ms.
+
+### Four-plan billing matrix
+
+The approved sandbox catalog has distinct Free, Starter, Growth and Pro titles and
+descriptions. Monthly USD prices are 0, 10, 30 and 99; annual USD prices are 100,
+300 and 990 for the paid tiers. Free annual is not advertised. Set
+`LOAD_PROVIDER_CATALOG_FILE` to its private JSON manifest with
+`realStripeSandbox: true` and four `products` containing provider `id`,
+`title`, `description`, and `prices` with provider `id`/`cycle`. Sandbox setup
+independently checks active, non-live products and all seven price amounts,
+currencies and recurring intervals. It reuses these objects and never creates
+replacement products or prices. Contract setup models this catalog locally.
+
+Prepare fresh synthetic TEAM organizations, ACTIVE memberships and permissions
+with the existing test factories in an isolated migrated database. Each journey
+actor also needs a distinct owned PERSONAL organization and membership. Supply a
+private `LOAD_PROVIDER_CREDENTIAL_POOL` JSON array with the existing `email`,
+`password`, `userPublicId` and `organizationPublicId` fields plus
+`personalOrganizationPublicId` for each journey actor. The final actor is a
+foreign-tenant fixture. Do not overwrite the original tenant-burst pool, share
+these fixtures with truncating Vitest suites, or reuse teams with subscriptions.
+Every organization switch returns a rebound token; the journey uses that token
+for subsequent requests.
+
+The key-first `pnpm test:stripe:load` wrapper runs sandbox and contract against
+the same selected scratch database. Supply a private object with separate
+`sandbox` and `contract` actor arrays when using that wrapper: their teams must
+be distinct and unsubscribed. A single array is sufficient for one explicitly
+selected lane. Setup validates distinct user identities and both required
+organization scopes before starting any journey.
+
+Seven sequential journeys cover all advertised plan/cycle combinations, 18
+directed same-cycle plan changes and 24 cross-cycle requests. Change-plan rejects
+`billing_cycle` with 400; those cases establish schema rejection, not cycle
+migration. Exact counters require every combination and transition, every check,
+zero unexpected HTTP errors, zero drops and all journeys completing. Backend
+p95 remains below 500 ms for contract mode and 3000 ms for real sandbox mode.
+
+```bash
+LOAD_TEST_DATABASE=clinozy_load_billing_contract \
+LOAD_TEST_REPORT_DIR=/absolute/path/to/new-private-contract-report \
+LOAD_PROVIDER_MODE=contract \
+LOAD_PROVIDER_CREDENTIAL_POOL=/absolute/path/to/fresh-private-pool.json \
+VUS=1 ITERATIONS=7 \
+node src/tests/load/k6/run-lifecycle.mjs src/tests/load/k6/scenarios/billing-provider-lifecycle.js
+```
+
+For the real lane, use a separately prepared scratch database/pool, set
+`LOAD_PROVIDER_MODE=sandbox` and `LOAD_PROVIDER_CATALOG_FILE`, and retain test-only
+Stripe credentials in private environment configuration. A k6 archive freezes
+execution options: explicitly pass VUS, ITERATIONS, provider mode and the private
+pool while creating it, then verify its metadata. Keep archives private because
+they contain credentials. Normal direct execution does not need an archive.
+
+The matrix checks replay markers/stable IDs, the specific 422
+`idempotency_key_reuse` conflict, duplicate-subscription409, unauthenticated401,
+explicit PERSONAL422, foreign-tenant404 and invalid payload/unknown-plan denials.
+Zero-price subscriptions have no payment secret; paid subscriptions use actual
+PaymentIntents. Account IDs are compared with independent provider reads. Cancel
+and resume both compare API, database and provider state, including the expected
+period-end cancellation flag.
+
+Five bounded payment probes cover decline, insufficient funds, expired card,
+requires-action and canceled states; the three declines recover with a valid
+virtual method. These are standalone owned USD1 PaymentIntents, not subscription
+invoice failure/dunning tests. API `requires_action` does not prove completed
+browser SCA. Locally signing retrieved provider events proves ingress/worker
+processing, not Stripe-initiated public delivery. Eventual cancellation, invoice
+totals/proration, seat-cap enforcement, wider IAM/provider failures and public
+ingress require separate evidence. Absence of an annual Free provider price does
+not establish backend rejection: the existing adapter can fall back to a
+local-only subscription when the price is missing.
 
 The local mode (`LOAD_PROVIDER_MODE=contract`) exercises those same API writes
 against an authenticated stateful loopback Stripe model. The outbound webhook
@@ -651,8 +725,10 @@ URL validation, signing and delivery-history writes remain active: a private URL
 is rejected, a forged signature fails, a valid timestamped HMAC reaches the owned
 receiver and the persisted delivery attempt records HTTP 200. The receiver then returns 503: the API must report failure and persist a FAILED attempt. A subsequent manual test delivery recovers, secret rotation must use the new HMAC, and old-secret or correctly signed stale requests are rejected. Delivery history must retain all four attempts with three SENT/200 and one FAILED/503. This tests synchronous test-delivery recovery; automatic BullMQ retries and public transport need separate evidence. No tunnel or ngrok
 credential is required. This contract gate uses p95 below 500 ms, zero unexpected
-HTTP failures, every check passing and exactly 20 completed journeys per scenario
-by default (`VUS=4`, `ITERATIONS=5`). It runs separately from the six existing
+HTTP failures and every check passing. Billing requires at least seven prepared
+journey actors plus a foreign tenant; the example uses exactly seven completed
+journeys (`VUS=1`, `ITERATIONS=7`). The separate outbound scenario defaults to 20
+completed journeys (`VUS=4`, `ITERATIONS=5`). Provider runs remain separate from the six existing
 lifecycle scenarios so the Stripe worker does not alter their queue assertions.
 
 Same-second subscription events reconcile against current provider truth outside
