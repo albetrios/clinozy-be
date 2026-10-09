@@ -62,6 +62,16 @@ event-loop lag crosses its threshold or in-flight database units of work reach
 three; the count includes units waiting for a connection as well as running
 transactions. Liveness, readiness and metrics paths bypass this guard.
 
+Match capacity-test expectations to this admission limit. A pool of 60 with the
+default ratio of three admits at most 180 in-flight units of work; a 240-client
+test can therefore receive intentional `database_pool_overload` responses even
+when its latency is below the SLO. To evaluate a bounded 240-client queue on that
+pool, explicitly configure `OVERLOAD_DB_POOL_SHED_RATIO=5` (300 in-flight units),
+then retain the original latency and zero-error acceptance criteria. This is
+workload-specific admission tuning, not evidence that the default configuration
+supports 240 clients. Keep acquisition timeouts and event-loop shedding enabled,
+and record both the default-policy failures and the tuned-policy results.
+
 The structured `request.service_unavailable` log identifies the triggering signal
 as `event_loop_overload` or `database_pool_overload` in its `reason` field. If both
 signals cross their thresholds, event-loop overload takes precedence. Internal
