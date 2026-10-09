@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { lookup } from 'node:dns/promises';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { audit_outbox } from '@/domains/audit/audit-outbox.schema.js';
@@ -23,6 +24,12 @@ import { generateTestToken } from '@/tests/helpers/test-auth.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 
+// The webhook URL check resolves the host (SSRF guard); the harness has no network beyond
+// loopback, so the lookup answers with a public address instead of real DNS.
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(),
+}));
+
 const WEBHOOK_PERMISSIONS = [NOTIFY_PERMISSIONS.WEBHOOK_READ, NOTIFY_PERMISSIONS.WEBHOOK_MANAGE];
 
 /**
@@ -44,6 +51,9 @@ describe('notify audit trail — webhook changes reach the audit log', () => {
   });
 
   beforeEach(async () => {
+    vi.mocked(lookup).mockResolvedValue([
+      { address: '93.184.216.34', family: 4 },
+    ] as unknown as Awaited<ReturnType<typeof lookup>>);
     await cleanupDatabase();
     await seedPermissions(WEBHOOK_PERMISSIONS);
   });
