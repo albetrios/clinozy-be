@@ -31,6 +31,7 @@ const WORKER_TEST_ALLOWLIST = new Set([
   'session-cleanup.worker.ts',
   'notification-retention.worker.ts',
   'stripe-webhook-event-retention.worker.ts',
+  'messaging-webhook-event-retention.worker.ts',
   'stripe-webhook-event-reclaim.worker.ts',
   'stripe-webhook.worker.ts',
   'notification.worker.ts',

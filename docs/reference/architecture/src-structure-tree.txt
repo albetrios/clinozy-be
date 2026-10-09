@@ -23,8 +23,10 @@ src/
     │   ├── sub-domains/
     │   │   ├── appointments/
     │   │   │   ├── __tests__/
-    │   │   │   │   └── integration/
+    │   │   │   │   ├── integration/
     │   │   │   │   │   └── appointments.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   └── appointments.service.unit.test.ts
     │   │   │   ├── appointments.constants.ts
     │   │   │   ├── appointments.controller.ts
     │   │   │   ├── appointments.dto.ts
@@ -44,7 +46,10 @@ src/
     │   │   │   ├── day-closes/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
-    │   │   │   │   │   │   └── day-close-summary.message.unit.test.ts
+    │   │   │   │   │   │   ├── day-close-auto-close-sweep.processor.unit.test.ts
+    │   │   │   │   │   │   ├── day-close-auto-close.processor.unit.test.ts
+    │   │   │   │   │   │   ├── day-close-summary.message.unit.test.ts
+    │   │   │   │   │   │   └── day-closes.service.unit.test.ts
     │   │   │   │   ├── queues/
     │   │   │   │   │   ├── day-close-auto-close.job.schema.ts
     │   │   │   │   │   └── day-close-auto-close.queue.ts
@@ -70,6 +75,9 @@ src/
     │   │   │   │   ├── day-closes.types.ts
     │   │   │   │   └── day-closes.validator.ts
     │   │   │   ├── invoice-credit-notes/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── invoice-credit-notes.service.unit.test.ts
     │   │   │   │   ├── invoice-credit-notes.constants.ts
     │   │   │   │   ├── invoice-credit-notes.controller.ts
     │   │   │   │   ├── invoice-credit-notes.dto.ts
@@ -83,6 +91,9 @@ src/
     │   │   │   │   ├── invoice-credit-notes.types.ts
     │   │   │   │   └── invoice-credit-notes.validator.ts
     │   │   │   ├── invoices/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── invoices.service.unit.test.ts
     │   │   │   │   ├── invoices.amounts.ts
     │   │   │   │   ├── invoices.constants.ts
     │   │   │   │   ├── invoices.controller.ts
@@ -98,6 +109,9 @@ src/
     │   │   │   │   ├── invoices.types.ts
     │   │   │   │   └── invoices.validator.ts
     │   │   │   ├── payments/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── payments.service.unit.test.ts
     │   │   │   │   ├── payments.constants.ts
     │   │   │   │   ├── payments.controller.ts
     │   │   │   │   ├── payments.dto.ts
@@ -112,6 +126,9 @@ src/
     │   │   │   │   ├── payments.types.ts
     │   │   │   │   └── payments.validator.ts
     │   │   │   ├── pending-credits/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── pending-credits.service.unit.test.ts
     │   │   │   │   ├── pending-credits.constants.ts
     │   │   │   │   ├── pending-credits.controller.ts
     │   │   │   │   ├── pending-credits.dto.ts
@@ -129,10 +146,15 @@ src/
     │   │   │   └── billing.routes.ts
     │   │   ├── branches/
     │   │   │   ├── __tests__/
-    │   │   │   │   └── integration/
+    │   │   │   │   ├── integration/
     │   │   │   │   │   ├── branches-schema.integration.test.ts
     │   │   │   │   │   └── branches.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   └── branches.service.unit.test.ts
     │   │   │   ├── branch-holidays/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── branch-holidays.service.unit.test.ts
     │   │   │   │   ├── branch-holidays.constants.ts
     │   │   │   │   ├── branch-holidays.controller.ts
     │   │   │   │   ├── branch-holidays.dto.ts
@@ -145,6 +167,9 @@ src/
     │   │   │   │   ├── branch-holidays.types.ts
     │   │   │   │   └── branch-holidays.validator.ts
     │   │   │   ├── branch-machines/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── branch-machines.service.unit.test.ts
     │   │   │   │   ├── branch-machines.constants.ts
     │   │   │   │   ├── branch-machines.controller.ts
     │   │   │   │   ├── branch-machines.dto.ts
@@ -157,6 +182,9 @@ src/
     │   │   │   │   ├── branch-machines.types.ts
     │   │   │   │   └── branch-machines.validator.ts
     │   │   │   ├── branch-members/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── branch-members.service.unit.test.ts
     │   │   │   │   ├── branch-members.controller.ts
     │   │   │   │   ├── branch-members.dto.ts
     │   │   │   │   ├── branch-members.repository.ts
@@ -166,6 +194,9 @@ src/
     │   │   │   │   ├── branch-members.service.ts
     │   │   │   │   └── branch-members.validator.ts
     │   │   │   ├── branch-rooms/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── branch-rooms.service.unit.test.ts
     │   │   │   │   ├── branch-rooms.constants.ts
     │   │   │   │   ├── branch-rooms.controller.ts
     │   │   │   │   ├── branch-rooms.dto.ts
@@ -194,11 +225,17 @@ src/
     │   │   │   └── branches.validator.ts
     │   │   ├── contacts/
     │   │   │   ├── __tests__/
-    │   │   │   │   └── integration/
+    │   │   │   │   ├── integration/
     │   │   │   │   │   ├── contact-activities.integration.test.ts
     │   │   │   │   │   ├── contact-messaging.integration.test.ts
     │   │   │   │   │   └── contacts.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   └── contacts.service.unit.test.ts
     │   │   │   ├── contact-activities/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   ├── contact-activities.service.unit.test.ts
+    │   │   │   │   │   │   └── contact-message-delivery.processor.unit.test.ts
     │   │   │   │   ├── queues/
     │   │   │   │   │   ├── contact-message-delivery.job.schema.ts
     │   │   │   │   │   └── contact-message-delivery.queue.ts
@@ -220,6 +257,9 @@ src/
     │   │   │   │   ├── contact-activities.validator.ts
     │   │   │   │   └── contact-message-delivery.repository.ts
     │   │   │   ├── contact-members/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── contact-members.service.unit.test.ts
     │   │   │   │   ├── contact-members.controller.ts
     │   │   │   │   ├── contact-members.dto.ts
     │   │   │   │   ├── contact-members.repository.ts
@@ -230,6 +270,9 @@ src/
     │   │   │   │   ├── contact-members.types.ts
     │   │   │   │   └── contact-members.validator.ts
     │   │   │   ├── contact-message-templates/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── contact-message-templates.service.unit.test.ts
     │   │   │   │   ├── contact-message-templates.constants.ts
     │   │   │   │   ├── contact-message-templates.controller.ts
     │   │   │   │   ├── contact-message-templates.dto.ts
@@ -244,8 +287,10 @@ src/
     │   │   │   ├── contact-messaging-webhook/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   ├── contact-messaging-sweep.processor.unit.test.ts
     │   │   │   │   │   │   ├── contact-messaging-webhook.replies.unit.test.ts
-    │   │   │   │   │   │   └── contact-messaging-webhook.service.unit.test.ts
+    │   │   │   │   │   │   ├── contact-messaging-webhook.service.unit.test.ts
+    │   │   │   │   │   │   └── messaging-webhook-event.processor.unit.test.ts
     │   │   │   │   ├── queues/
     │   │   │   │   │   ├── messaging-webhook-event.job.schema.ts
     │   │   │   │   │   └── messaging-webhook-event.queue.ts
@@ -286,8 +331,10 @@ src/
     │   │   │   └── contacts.validator.ts
     │   │   ├── leads/
     │   │   │   ├── __tests__/
-    │   │   │   │   └── integration/
+    │   │   │   │   ├── integration/
     │   │   │   │   │   └── leads.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   └── leads.service.unit.test.ts
     │   │   │   ├── seed/
     │   │   │   │   ├── index.ts
     │   │   │   │   ├── leads.bulk.seed.ts
@@ -309,6 +356,9 @@ src/
     │   │   │   │   └── integration/
     │   │   │   │   │   └── medical.integration.test.ts
     │   │   │   ├── manufacturers/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── manufacturers.service.unit.test.ts
     │   │   │   │   ├── manufacturers.constants.ts
     │   │   │   │   ├── manufacturers.controller.ts
     │   │   │   │   ├── manufacturers.dto.ts
@@ -322,6 +372,9 @@ src/
     │   │   │   │   ├── manufacturers.types.ts
     │   │   │   │   └── manufacturers.validator.ts
     │   │   │   ├── medical-purchase-orders/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── medical-purchase-orders.service.unit.test.ts
     │   │   │   │   ├── medical-purchase-orders.constants.ts
     │   │   │   │   ├── medical-purchase-orders.controller.ts
     │   │   │   │   ├── medical-purchase-orders.dto.ts
@@ -335,7 +388,13 @@ src/
     │   │   │   │   ├── medical-purchase-orders.types.ts
     │   │   │   │   └── medical-purchase-orders.validator.ts
     │   │   │   ├── medical-reps/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── medical-reps.service.unit.test.ts
     │   │   │   │   ├── medical-rep-visits/
+    │   │   │   │   │   ├── __tests__/
+    │   │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   │   └── medical-rep-visits.service.unit.test.ts
     │   │   │   │   │   ├── medical-rep-visits.constants.ts
     │   │   │   │   │   ├── medical-rep-visits.controller.ts
     │   │   │   │   │   ├── medical-rep-visits.dto.ts
@@ -361,6 +420,9 @@ src/
     │   │   │   │   ├── medical-reps.types.ts
     │   │   │   │   └── medical-reps.validator.ts
     │   │   │   ├── medical-sales/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── medical-sales.service.unit.test.ts
     │   │   │   │   ├── medical-sales.constants.ts
     │   │   │   │   ├── medical-sales.controller.ts
     │   │   │   │   ├── medical-sales.dto.ts
@@ -374,6 +436,9 @@ src/
     │   │   │   │   ├── medical-sales.types.ts
     │   │   │   │   └── medical-sales.validator.ts
     │   │   │   ├── medicines/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── medicines.service.unit.test.ts
     │   │   │   │   ├── medicines.constants.ts
     │   │   │   │   ├── medicines.controller.ts
     │   │   │   │   ├── medicines.dto.ts
@@ -388,7 +453,13 @@ src/
     │   │   │   │   ├── medicines.types.ts
     │   │   │   │   └── medicines.validator.ts
     │   │   │   ├── suppliers/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── suppliers.service.unit.test.ts
     │   │   │   │   ├── supplier-credits/
+    │   │   │   │   │   ├── __tests__/
+    │   │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   │   └── supplier-credits.service.unit.test.ts
     │   │   │   │   │   ├── supplier-credits.constants.ts
     │   │   │   │   │   ├── supplier-credits.controller.ts
     │   │   │   │   │   ├── supplier-credits.dto.ts
@@ -419,9 +490,14 @@ src/
     │   │   │   └── medical.routes.ts
     │   │   ├── memberships/
     │   │   │   ├── __tests__/
-    │   │   │   │   └── integration/
+    │   │   │   │   ├── integration/
     │   │   │   │   │   └── memberships.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   └── memberships.service.unit.test.ts
     │   │   │   ├── membership-preferences/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── membership-preferences.service.unit.test.ts
     │   │   │   │   ├── membership-preferences.constants.ts
     │   │   │   │   ├── membership-preferences.controller.ts
     │   │   │   │   ├── membership-preferences.dto.ts
@@ -434,6 +510,9 @@ src/
     │   │   │   │   ├── membership-preferences.types.ts
     │   │   │   │   └── membership-preferences.validator.ts
     │   │   │   ├── membership-saved-views/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── membership-saved-views.service.unit.test.ts
     │   │   │   │   ├── membership-saved-views.constants.ts
     │   │   │   │   ├── membership-saved-views.controller.ts
     │   │   │   │   ├── membership-saved-views.dto.ts
@@ -457,9 +536,14 @@ src/
     │   │   │   └── memberships.validator.ts
     │   │   ├── offerings/
     │   │   │   ├── __tests__/
-    │   │   │   │   └── integration/
+    │   │   │   │   ├── integration/
     │   │   │   │   │   └── offerings.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   └── offerings.service.unit.test.ts
     │   │   │   ├── offering-groups/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── offering-groups.service.unit.test.ts
     │   │   │   │   ├── offering-groups.controller.ts
     │   │   │   │   ├── offering-groups.dto.ts
     │   │   │   │   ├── offering-groups.overview.md
@@ -472,6 +556,9 @@ src/
     │   │   │   │   ├── offering-groups.types.ts
     │   │   │   │   └── offering-groups.validator.ts
     │   │   │   ├── offers/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── offers.service.unit.test.ts
     │   │   │   │   ├── offers.constants.ts
     │   │   │   │   ├── offers.controller.ts
     │   │   │   │   ├── offers.dto.ts
@@ -498,9 +585,14 @@ src/
     │   │   │   └── offerings.validator.ts
     │   │   ├── patients/
     │   │   │   ├── __tests__/
-    │   │   │   │   └── integration/
+    │   │   │   │   ├── integration/
     │   │   │   │   │   └── patients.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   └── patients.service.unit.test.ts
     │   │   │   ├── patient-check-ins/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-check-ins.service.unit.test.ts
     │   │   │   │   ├── patient-check-ins.constants.ts
     │   │   │   │   ├── patient-check-ins.controller.ts
     │   │   │   │   ├── patient-check-ins.dto.ts
@@ -514,6 +606,9 @@ src/
     │   │   │   │   ├── patient-check-ins.types.ts
     │   │   │   │   └── patient-check-ins.validator.ts
     │   │   │   ├── patient-clinical-notes/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-clinical-notes.service.unit.test.ts
     │   │   │   │   ├── patient-clinical-notes.constants.ts
     │   │   │   │   ├── patient-clinical-notes.controller.ts
     │   │   │   │   ├── patient-clinical-notes.dto.ts
@@ -527,6 +622,9 @@ src/
     │   │   │   │   ├── patient-clinical-notes.types.ts
     │   │   │   │   └── patient-clinical-notes.validator.ts
     │   │   │   ├── patient-diagnoses/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-diagnoses.service.unit.test.ts
     │   │   │   │   ├── patient-diagnoses.constants.ts
     │   │   │   │   ├── patient-diagnoses.controller.ts
     │   │   │   │   ├── patient-diagnoses.dto.ts
@@ -549,6 +647,9 @@ src/
     │   │   │   │   ├── patient-feedback-actions.types.ts
     │   │   │   │   └── patient-feedback-actions.validator.ts
     │   │   │   ├── patient-images/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-images.service.unit.test.ts
     │   │   │   │   ├── patient-images.constants.ts
     │   │   │   │   ├── patient-images.controller.ts
     │   │   │   │   ├── patient-images.dto.ts
@@ -562,6 +663,9 @@ src/
     │   │   │   │   ├── patient-images.types.ts
     │   │   │   │   └── patient-images.validator.ts
     │   │   │   ├── patient-offering-suggestions/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-offering-suggestions.service.unit.test.ts
     │   │   │   │   ├── patient-offering-suggestions.constants.ts
     │   │   │   │   ├── patient-offering-suggestions.controller.ts
     │   │   │   │   ├── patient-offering-suggestions.dto.ts
@@ -575,6 +679,9 @@ src/
     │   │   │   │   ├── patient-offering-suggestions.types.ts
     │   │   │   │   └── patient-offering-suggestions.validator.ts
     │   │   │   ├── patient-offerings/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-offerings.service.unit.test.ts
     │   │   │   │   ├── patient-offerings.constants.ts
     │   │   │   │   ├── patient-offerings.controller.ts
     │   │   │   │   ├── patient-offerings.dto.ts
@@ -588,6 +695,9 @@ src/
     │   │   │   │   ├── patient-offerings.types.ts
     │   │   │   │   └── patient-offerings.validator.ts
     │   │   │   ├── patient-prescriptions/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-prescriptions.service.unit.test.ts
     │   │   │   │   ├── patient-prescriptions.constants.ts
     │   │   │   │   ├── patient-prescriptions.controller.ts
     │   │   │   │   ├── patient-prescriptions.dto.ts
@@ -601,6 +711,9 @@ src/
     │   │   │   │   ├── patient-prescriptions.types.ts
     │   │   │   │   └── patient-prescriptions.validator.ts
     │   │   │   ├── patient-reports/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-reports.service.unit.test.ts
     │   │   │   │   ├── patient-reports.constants.ts
     │   │   │   │   ├── patient-reports.controller.ts
     │   │   │   │   ├── patient-reports.dto.ts
@@ -614,6 +727,9 @@ src/
     │   │   │   │   ├── patient-reports.types.ts
     │   │   │   │   └── patient-reports.validator.ts
     │   │   │   ├── patient-reviews/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-reviews.service.unit.test.ts
     │   │   │   │   ├── patient-reviews.constants.ts
     │   │   │   │   ├── patient-reviews.controller.ts
     │   │   │   │   ├── patient-reviews.dto.ts
@@ -627,6 +743,9 @@ src/
     │   │   │   │   ├── patient-reviews.types.ts
     │   │   │   │   └── patient-reviews.validator.ts
     │   │   │   ├── patient-treatments/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-treatments.service.unit.test.ts
     │   │   │   │   ├── patient-treatments.constants.ts
     │   │   │   │   ├── patient-treatments.controller.ts
     │   │   │   │   ├── patient-treatments.dto.ts
@@ -640,6 +759,9 @@ src/
     │   │   │   │   ├── patient-treatments.types.ts
     │   │   │   │   └── patient-treatments.validator.ts
     │   │   │   ├── prescription-kits/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── prescription-kits.service.unit.test.ts
     │   │   │   │   ├── prescription-kits.constants.ts
     │   │   │   │   ├── prescription-kits.controller.ts
     │   │   │   │   ├── prescription-kits.dto.ts
@@ -671,6 +793,9 @@ src/
     │   │   │   │   └── integration/
     │   │   │   │   │   └── stock.integration.test.ts
     │   │   │   ├── stock-counts/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── stock-counts.service.unit.test.ts
     │   │   │   │   ├── stock-counts.constants.ts
     │   │   │   │   ├── stock-counts.controller.ts
     │   │   │   │   ├── stock-counts.dto.ts
@@ -684,6 +809,9 @@ src/
     │   │   │   │   ├── stock-counts.types.ts
     │   │   │   │   └── stock-counts.validator.ts
     │   │   │   ├── stock-item-movements/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── stock-item-movements.service.unit.test.ts
     │   │   │   │   ├── stock-item-movements.constants.ts
     │   │   │   │   ├── stock-item-movements.controller.ts
     │   │   │   │   ├── stock-item-movements.dto.ts
@@ -698,6 +826,9 @@ src/
     │   │   │   │   ├── stock-item-movements.types.ts
     │   │   │   │   └── stock-item-movements.validator.ts
     │   │   │   ├── stock-items/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── stock-items.service.unit.test.ts
     │   │   │   │   ├── stock-items.constants.ts
     │   │   │   │   ├── stock-items.controller.ts
     │   │   │   │   ├── stock-items.dto.ts
@@ -711,6 +842,9 @@ src/
     │   │   │   │   ├── stock-items.types.ts
     │   │   │   │   └── stock-items.validator.ts
     │   │   │   ├── stock-purchases/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── stock-purchases.service.unit.test.ts
     │   │   │   │   ├── stock-purchases.constants.ts
     │   │   │   │   ├── stock-purchases.controller.ts
     │   │   │   │   ├── stock-purchases.dto.ts
@@ -724,6 +858,9 @@ src/
     │   │   │   │   ├── stock-purchases.types.ts
     │   │   │   │   └── stock-purchases.validator.ts
     │   │   │   ├── stock-vendors/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── stock-vendors.service.unit.test.ts
     │   │   │   │   ├── stock-vendors.controller.ts
     │   │   │   │   ├── stock-vendors.dto.ts
     │   │   │   │   ├── stock-vendors.overview.md
@@ -743,11 +880,17 @@ src/
     │   │   │       ├── integration/
     │   │   │       │   └── tasks.integration.test.ts
     │   │   │       └── unit/
-    │   │   │       │   └── task-rules-messages.unit.test.ts
+    │   │   │       │   ├── task-rules-messages.unit.test.ts
+    │   │   │       │   ├── task-rules-sweep.processor.unit.test.ts
+    │   │   │       │   ├── task-rules.processor.unit.test.ts
+    │   │   │       │   └── tasks.service.unit.test.ts
     │   │   │   ├── queues/
     │   │   │       ├── task-rules.job.schema.ts
     │   │   │       └── task-rules.queue.ts
     │   │   │   ├── task-rule-settings/
+    │   │   │       ├── __tests__/
+    │   │   │       │   └── unit/
+    │   │   │       │   │   └── task-rule-settings.service.unit.test.ts
     │   │   │       ├── task-rule-settings.controller.ts
     │   │   │       ├── task-rule-settings.dto.ts
     │   │   │       ├── task-rule-settings.overview.md
@@ -2629,6 +2772,7 @@ src/
     │   │   └── unit/
     │   │   │   ├── test-api-prefix.helper.unit.test.ts
     │   │   │   └── test-http-inject.helper.unit.test.ts
+    │   ├── app-record-service-contract.helper.ts
     │   ├── app-route-requests.ts
     │   ├── audit-log-partition.helper.ts
     │   ├── database-context-mock.helper.ts

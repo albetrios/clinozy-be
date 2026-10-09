@@ -1,0 +1,169 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  repository: {
+    findOrganization: vi.fn(),
+    wakeSnoozed: vi.fn(),
+    findRuleSwitches: vi.fn(),
+    closeGoneTasks: vi.fn(),
+    openTasks: vi.fn(),
+    findDueClinozySteps: vi.fn(),
+    queueClinozyMessage: vi.fn(),
+    markBookingMessageQueued: vi.fn(),
+    openRetargetLead: vi.fn(),
+    closeTaskByClinozy: vi.fn(),
+  },
+  queueClinozyMessages: vi.fn(),
+}));
+
+vi.mock('@/domains/app/sub-domains/tasks/task-rules.repository.js', () => ({
+  createWorkerTaskRulesRepository: () => mocks.repository,
+}));
+vi.mock('@/domains/app/sub-domains/tasks/task-rule-messages.repository.js', () => ({
+  createWorkerTaskRuleMessagesRepository: () => ({}),
+}));
+vi.mock('@/domains/app/sub-domains/tasks/task-rule-conditions.repository.js', () => ({
+  taskRuleSources: () => [
+    { rule: 'confirm', canOpen: true },
+    { rule: 'feedback', canOpen: true },
+    { rule: 'gone_quiet', canOpen: true },
+  ],
+}));
+vi.mock('@/domains/app/sub-domains/tasks/workers/task-rules-messages.processor.js', () => ({
+  queueClinozyMessages: mocks.queueClinozyMessages,
+}));
+vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+
+import { runTaskRulesJob } from '@/domains/app/sub-domains/tasks/workers/task-rules.processor.js';
+
+const ORGANIZATION = 'org_aaaaaaaaaaaaaaaaaaaa1';
+
+/** A due task Clinozy handles (TK10). */
+function step(overrides: Record<string, unknown>) {
+  return {
+    taskId: 1,
+    rule: 'confirm',
+    contactId: 5,
+    firstName: 'Asha',
+    branchId: 2,
+    appointmentId: 9,
+    invoiceId: null,
+    visitDate: '12 Oct',
+    visitTime: '10:30',
+    reminderStatus: 'not_sent',
+    invoiceNumber: null,
+    dueAmount: null,
+    ...overrides,
+  };
+}
+
+/** One organization's rules run (TK4, TK10, D74, D78). */
+describe('runTaskRulesJob', () => {
+  const { repository } = mocks;
+
+  beforeEach(() => {
+    for (const method of Object.values(repository)) method.mockReset();
+    mocks.queueClinozyMessages.mockReset().mockResolvedValue(2);
+    repository.findOrganization.mockResolvedValue({
+      id: 7,
+      timeZone: 'Asia/Kolkata',
+      reminderHour: 16,
+      isWhatsAppConnected: true,
+    });
+    repository.wakeSnoozed.mockResolvedValue(1);
+    repository.findRuleSwitches.mockResolvedValue(new Map());
+    repository.closeGoneTasks.mockResolvedValue(1);
+    repository.openTasks.mockResolvedValue(2);
+    repository.findDueClinozySteps.mockResolvedValue([]);
+  });
+
+  it('wakes, closes and opens per rule, then queues the booking messages and receipts', async () => {
+    expect(await runTaskRulesJob({} as never, ORGANIZATION)).toEqual({
+      wokenCount: 1,
+      closedCount: 3,
+      openedCount: 6,
+      handledCount: 0,
+      messageCount: 2,
+    });
+    expect(mocks.queueClinozyMessages).toHaveBeenCalledOnce();
+  });
+
+  it('a rule that is off opens nothing, but its tasks still close', async () => {
+    repository.findRuleSwitches.mockResolvedValue(
+      new Map([['feedback', { isOn: false, isAutomatic: false }]]),
+    );
+
+    const counts = await runTaskRulesJob({} as never, ORGANIZATION);
+
+    expect([counts.closedCount, counts.openedCount]).toEqual([3, 4]);
+  });
+
+  it('takes the step of the rules Clinozy handles: a message, then "Done by Clinozy"', async () => {
+    repository.findRuleSwitches.mockResolvedValue(
+      new Map([
+        ['confirm', { isOn: true, isAutomatic: true }],
+        ['gone_quiet', { isOn: true, isAutomatic: true }],
+      ]),
+    );
+    repository.findDueClinozySteps.mockResolvedValue([
+      step({}),
+      step({ taskId: 2, rule: 'gone_quiet', appointmentId: null }),
+    ]);
+
+    const counts = await runTaskRulesJob({} as never, ORGANIZATION);
+
+    expect(counts.handledCount).toBe(2);
+    expect(repository.findDueClinozySteps.mock.calls[0]?.[0].rules).toEqual([
+      'confirm',
+      'gone_quiet',
+    ]);
+    expect(repository.queueClinozyMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ contactId: 5, automationKind: 'booking_confirm' }),
+    );
+    expect(repository.markBookingMessageQueued).toHaveBeenCalledWith({
+      appointmentId: 9,
+      from: ['not_sent'],
+      to: 'confirm_requested',
+    });
+    expect(repository.openRetargetLead).toHaveBeenCalledOnce();
+    expect(repository.closeTaskByClinozy.mock.calls.map((call) => call[0])).toEqual([1, 2]);
+  });
+
+  it('D78: a confirm task whose booking was already asked closes without a second message', async () => {
+    repository.findRuleSwitches.mockResolvedValue(
+      new Map([['confirm', { isOn: true, isAutomatic: true }]]),
+    );
+    repository.findDueClinozySteps.mockResolvedValue([
+      step({ reminderStatus: 'confirm_requested' }),
+    ]);
+
+    expect((await runTaskRulesJob({} as never, ORGANIZATION)).handledCount).toBe(1);
+    expect(repository.queueClinozyMessage).not.toHaveBeenCalled();
+    expect(repository.closeTaskByClinozy).toHaveBeenCalledWith(1);
+  });
+
+  it('a step with nobody to message stays for a person', async () => {
+    repository.findRuleSwitches.mockResolvedValue(
+      new Map([['confirm', { isOn: true, isAutomatic: true }]]),
+    );
+    repository.findDueClinozySteps.mockResolvedValue([step({ contactId: null })]);
+
+    expect((await runTaskRulesJob({} as never, ORGANIZATION)).handledCount).toBe(0);
+    expect(repository.closeTaskByClinozy).not.toHaveBeenCalled();
+  });
+
+  it('an organization that is gone runs nothing', async () => {
+    repository.findOrganization.mockResolvedValue(null);
+
+    expect(await runTaskRulesJob({} as never, ORGANIZATION)).toEqual({
+      wokenCount: 0,
+      closedCount: 0,
+      openedCount: 0,
+      handledCount: 0,
+      messageCount: 0,
+    });
+    expect(repository.wakeSnoozed).not.toHaveBeenCalled();
+  });
+});

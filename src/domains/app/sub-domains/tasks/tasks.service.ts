@@ -102,6 +102,8 @@ export class TasksService extends BaseRecordService<TaskOutput> {
     query: unknown,
     options: TaskListOptions = {},
   ): Promise<BaseRecordListResult<TaskOutput>> {
+    // A bad query is refused before the caller's membership is looked up
+    validateListTasksQuery(query);
     if ((query as { scope?: string } | null)?.scope === 'everyone') {
       return super.list(scope, query, options);
     }
