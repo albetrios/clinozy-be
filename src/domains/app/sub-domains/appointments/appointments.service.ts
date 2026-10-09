@@ -13,6 +13,7 @@ import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.uti
 import {
   APPOINTMENT_MOVABLE_STATUS_VALUES,
   APPOINTMENT_SLOT_CONSTRAINTS,
+  APPOINTMENT_BOOKING_MESSAGES_RESET,
   APPOINTMENT_STATUS,
   APPOINTMENT_VISIT_STAGE_VALUES,
 } from './appointments.constants.js';
@@ -116,7 +117,12 @@ export class AppointmentsService extends BaseRecordService<AppointmentOutput> {
         },
         reinstate: {
           from: [APPOINTMENT_STATUS.CANCELLED],
-          set: { status: APPOINTMENT_STATUS.SCHEDULED, cancel_reason: null, cancel_note: null },
+          set: {
+            status: APPOINTMENT_STATUS.SCHEDULED,
+            cancel_reason: null,
+            cancel_note: null,
+            ...APPOINTMENT_BOOKING_MESSAGES_RESET,
+          },
         },
         'undo-check-in': {
           from: [APPOINTMENT_STATUS.CHECKED_IN],

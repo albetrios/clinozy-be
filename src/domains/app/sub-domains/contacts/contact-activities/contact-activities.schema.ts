@@ -33,6 +33,7 @@ import { patient_images } from '@/domains/app/sub-domains/patients/patient-image
 import { patient_reports } from '@/domains/app/sub-domains/patients/patient-reports/patient-reports.schema.js';
 import {
   CONTACT_ACTIVITY_ATTACHMENTS_MAX,
+  CONTACT_ACTIVITY_AUTOMATION_KIND_VALUES,
   CONTACT_ACTIVITY_DELIVERY_STATUS_VALUES,
   CONTACT_ACTIVITY_DIRECTION_VALUES,
   CONTACT_ACTIVITY_LINK_COLUMNS,
@@ -78,6 +79,8 @@ const contactActivityColumns = {
   delivery_claimed_at: timestamp('delivery_claimed_at', { withTimezone: true }),
   // A received Instagram message's sender (Instagram-scoped id) — the address a reply goes to
   provider_sender_id: varchar('provider_sender_id', { length: 64 }),
+  // What a message Clinozy queued is for — the booking's, a receipt, TK10's (launch D78)
+  automation_kind: varchar('automation_kind', { length: 16 }),
   occurred_at: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
   delivered_at: timestamp('delivered_at', { withTimezone: true }),
   read_at: timestamp('read_at', { withTimezone: true }),
@@ -211,6 +214,10 @@ function contactActivityChecks(table: ContactActivityTable) {
     check(
       'chk_contact_activities_provider_sender',
       sql`${table.provider_sender_id} IS NULL OR ${table.direction} = 'received'`,
+    ),
+    check(
+      'chk_contact_activities_automation_kind',
+      sql`${table.automation_kind} IS NULL OR (${table.automation_kind} IN (${joinValues(CONTACT_ACTIVITY_AUTOMATION_KIND_VALUES)}) AND ${table.type} = 'whatsapp' AND ${table.direction} = 'sent' AND ${table.author_membership_id} IS NULL)`,
     ),
     check('chk_contact_activities_updated', sql`${table.updated_at} >= ${table.created_at}`),
   ];

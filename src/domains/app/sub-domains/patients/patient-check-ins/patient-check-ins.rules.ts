@@ -1,3 +1,4 @@
+import { RECORD_LABEL_MAX } from '@/shared/constants/record-fields.constants.js';
 import { resolveRecordIds, type BaseRecordRow } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import { AppointmentsRepository } from '@/domains/app/sub-domains/appointments/appointments.repository.js';
@@ -27,7 +28,7 @@ import { patient_check_ins } from './patient-check-ins.schema.js';
 
 /** How soon a doctor calls back a patient who needs it (TR4). */
 /** The longest server-filled context. */
-const CONTEXT_MAX = 80;
+const CONTEXT_MAX = RECORD_LABEL_MAX;
 
 const appointmentsRepository = new AppointmentsRepository();
 const tasksRepository = new TasksRepository();

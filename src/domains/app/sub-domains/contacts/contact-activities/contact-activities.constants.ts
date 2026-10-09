@@ -52,6 +52,40 @@ export const CONTACT_ACTIVITY_DELIVERY_STATUS_VALUES = [
   CONTACT_ACTIVITY_DELIVERY_STATUS.FAILED,
 ] as const;
 
+/**
+ * What a message Clinozy queues is for (launch D78) — the booking's confirm request and reminder,
+ * a receipt, and TK10's payment reminder and review request; `null` on everything a person writes.
+ */
+export const CONTACT_ACTIVITY_AUTOMATION_KIND = {
+  BOOKING_CONFIRM: 'booking_confirm',
+  BOOKING_REMINDER: 'booking_reminder',
+  PAYMENT_RECEIPT: 'payment_receipt',
+  PAYMENT_REMINDER: 'payment_reminder',
+  FEEDBACK_REQUEST: 'feedback_request',
+} as const;
+
+/** Allowed values of `contact_activities.automation_kind`. */
+export const CONTACT_ACTIVITY_AUTOMATION_KIND_VALUES = [
+  CONTACT_ACTIVITY_AUTOMATION_KIND.BOOKING_CONFIRM,
+  CONTACT_ACTIVITY_AUTOMATION_KIND.BOOKING_REMINDER,
+  CONTACT_ACTIVITY_AUTOMATION_KIND.PAYMENT_RECEIPT,
+  CONTACT_ACTIVITY_AUTOMATION_KIND.PAYMENT_REMINDER,
+  CONTACT_ACTIVITY_AUTOMATION_KIND.FEEDBACK_REQUEST,
+] as const;
+
+/** A Clinozy message kind. */
+export type ContactActivityAutomationKind =
+  (typeof CONTACT_ACTIVITY_AUTOMATION_KIND_VALUES)[number];
+
+/** The booking messages (WC-5, WC-6) — the ones a move, a cancel or a delete stops (WC-7). */
+export const CONTACT_ACTIVITY_BOOKING_AUTOMATION_KINDS = [
+  CONTACT_ACTIVITY_AUTOMATION_KIND.BOOKING_CONFIRM,
+  CONTACT_ACTIVITY_AUTOMATION_KIND.BOOKING_REMINDER,
+] as const;
+
+/** The failure reason of a booking message stopped before it went (WC-7) — no `failed_message` task. */
+export const CONTACT_ACTIVITY_REMINDER_STOPPED_REASON = 'reminder_stopped';
+
 /** The stream's groups (M10): conversation, clinical, money and task entries. */
 export const CONTACT_ACTIVITY_GROUP = {
   MESSAGES: 'messages',

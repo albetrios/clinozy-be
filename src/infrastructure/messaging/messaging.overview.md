@@ -17,7 +17,9 @@ module owns the calls.
 ## Files
 
 - `meta-graph.client.ts` — `sendWhatsAppTextMessage`, `sendInstagramTextMessage`,
-  `fetchInstagramUsername` (each one `outboundFetchJson` call, integration `meta`), and
+  `sendWhatsAppMediaMessage` / `sendInstagramAttachmentMessage` (a file from a short-lived link —
+  the visit share, D78), `fetchInstagramUsername` (each one `outboundFetchJson` call, integration
+  `meta`), and
   `isMetaProviderDown` (the circuit's state, for the composer's "WhatsApp down").
 - `meta-graph-error.util.ts` — `MetaGraphApiError`: a 4xx about one message (not a 401 / 403) and a
   throttle (429 or a rate-limit code) do not count against the circuit; a revoked token, a 5xx and a

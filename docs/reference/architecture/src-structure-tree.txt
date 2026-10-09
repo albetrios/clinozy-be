@@ -16,7 +16,8 @@ src/
     │   │   │   └── app-flow.factory.ts
     │   │   └── integration/
     │   │   │   ├── app-record-lifecycle.integration.test.ts
-    │   │   │   └── app-route-smoke.integration.test.ts
+    │   │   │   ├── app-route-smoke.integration.test.ts
+    │   │   │   └── clinozy-messages.integration.test.ts
     │   ├── seed/
     │   │   └── index.ts
     │   ├── sub-domains/
@@ -41,6 +42,9 @@ src/
     │   │   │   │   └── integration/
     │   │   │   │   │   └── billing.integration.test.ts
     │   │   │   ├── day-closes/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── day-close-summary.message.unit.test.ts
     │   │   │   │   ├── queues/
     │   │   │   │   │   ├── day-close-auto-close.job.schema.ts
     │   │   │   │   │   └── day-close-auto-close.queue.ts
@@ -51,6 +55,8 @@ src/
     │   │   │   │   │   ├── day-close-auto-close.processor.ts
     │   │   │   │   │   └── day-close-auto-close.worker.ts
     │   │   │   │   ├── day-close-auto-close.repository.ts
+    │   │   │   │   ├── day-close-summary.message.ts
+    │   │   │   │   ├── day-close-summary.repository.ts
     │   │   │   │   ├── day-closes.constants.ts
     │   │   │   │   ├── day-closes.controller.ts
     │   │   │   │   ├── day-closes.dto.ts
@@ -238,6 +244,7 @@ src/
     │   │   │   ├── contact-messaging-webhook/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   ├── contact-messaging-webhook.replies.unit.test.ts
     │   │   │   │   │   │   └── contact-messaging-webhook.service.unit.test.ts
     │   │   │   │   ├── queues/
     │   │   │   │   │   ├── messaging-webhook-event.job.schema.ts
@@ -254,6 +261,8 @@ src/
     │   │   │   │   ├── contact-messaging-webhook.constants.ts
     │   │   │   │   ├── contact-messaging-webhook.controller.ts
     │   │   │   │   ├── contact-messaging-webhook.dto.ts
+    │   │   │   │   ├── contact-messaging-webhook.overview.md
+    │   │   │   │   ├── contact-messaging-webhook.replies.ts
     │   │   │   │   ├── contact-messaging-webhook.repository.ts
     │   │   │   │   ├── contact-messaging-webhook.routes.ts
     │   │   │   │   ├── contact-messaging-webhook.schema.ts
@@ -731,8 +740,10 @@ src/
     │   │   │   └── stock.routes.ts
     │   │   └── tasks/
     │   │   │   ├── __tests__/
-    │   │   │       └── integration/
+    │   │   │       ├── integration/
     │   │   │       │   └── tasks.integration.test.ts
+    │   │   │       └── unit/
+    │   │   │       │   └── task-rules-messages.unit.test.ts
     │   │   │   ├── queues/
     │   │   │       ├── task-rules.job.schema.ts
     │   │   │       └── task-rules.queue.ts
@@ -747,12 +758,14 @@ src/
     │   │   │       ├── task-rule-settings.types.ts
     │   │   │       └── task-rule-settings.validator.ts
     │   │   │   ├── workers/
+    │   │   │       ├── task-rules-messages.processor.ts
     │   │   │       ├── task-rules-sweep.processor.ts
     │   │   │       ├── task-rules-sweep.worker.ts
     │   │   │       ├── task-rules.constants.ts
     │   │   │       ├── task-rules.processor.ts
     │   │   │       └── task-rules.worker.ts
     │   │   │   ├── task-rule-conditions.repository.ts
+    │   │   │   ├── task-rule-messages.repository.ts
     │   │   │   ├── task-rules.repository.ts
     │   │   │   ├── tasks.constants.ts
     │   │   │   ├── tasks.controller.ts
@@ -3185,6 +3198,7 @@ src/
     │   │   │   ├── bullmq-job-validation.unit.test.ts
     │   │   │   ├── file-magic.util.unit.test.ts
     │   │   │   ├── parse-with-schema.util.unit.test.ts
+    │   │   │   ├── record-fields.rupees.unit.test.ts
     │   │   │   ├── record-fields.to-text.unit.test.ts
     │   │   │   └── validation.util.unit.test.ts
     │   ├── validators/

@@ -2,10 +2,12 @@ import { findMembershipIdOfUser, resolveRecordIds } from '@/domains/app/base-rec
 import type { BaseRecordRow } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import { organizationToday } from '@/domains/app/sub-domains/patients/patients.rules.js';
-import { rupees } from '@/domains/app/sub-domains/billing/payments/payments.ledger.js';
+import { runEnqueueAfterCommit } from '@/core/events/event-bus.js';
+import { requestContactMessageDelivery } from '@/domains/app/sub-domains/contacts/contact-activities/queues/contact-message-delivery.queue.js';
 import { fieldValidationError } from '@/shared/errors/index.js';
 import {
   addDaysToCalendarDate,
+  rupees,
   toAmount,
   toInstant,
 } from '@/shared/utils/validation/record-fields.util.js';
@@ -105,6 +107,8 @@ function prepareDayReopen(values: Record<string, unknown>, context: BaseRecordWr
     close_kind: null,
     closed_at: null,
     closed_by_membership_id: null,
+    // The next close sends its own summary (WC-10, D78)
+    summary_sent_at: null,
   });
 }
 
@@ -163,7 +167,12 @@ export function createDayClosesRules(repository: DayClosesRepository): BaseRecor
       action === 'reopen'
         ? prepareDayReopen(values, context)
         : prepareDayClose({ repository, values, existing, context }),
-    afterWrite: async (row, _change, context) => {
+    afterWrite: async (row, change, context) => {
+      if (change.kind === 'transition' && change.action === 'close') {
+        // The summary goes to the admins right after the commit (WC-10, D78)
+        const { organizationPublicId } = context.scope;
+        await runEnqueueAfterCommit(() => requestContactMessageDelivery(organizationPublicId));
+      }
       const events = pendingEvents.get(context);
       pendingEvents.delete(context);
       const membershipId = events ? await membershipOf(context) : null;

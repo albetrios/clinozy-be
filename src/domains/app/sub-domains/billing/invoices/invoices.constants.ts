@@ -1,3 +1,5 @@
+import { RECORD_COUNT_MAX } from '@/shared/constants/record-fields.constants.js';
+
 /** An invoice's type (B8): its lines are offerings (clinic, consultation) or medicines (medical). */
 export const INVOICE_TYPE = {
   CLINIC: 'clinic',
@@ -33,7 +35,7 @@ export const INVOICE_ITEM_GST_PERCENT_VALUES = [0, 5, 12, 18, 28] as const;
 export const INVOICE_ITEMS_MAX = 50;
 
 /** Most of one line. */
-export const INVOICE_ITEM_QUANTITY_MAX = 999;
+export const INVOICE_ITEM_QUANTITY_MAX = RECORD_COUNT_MAX;
 
 /** Most members credited on one invoice (B15). */
 export const INVOICE_MEMBERS_MAX = 10;

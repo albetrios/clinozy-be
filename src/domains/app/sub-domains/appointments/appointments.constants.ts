@@ -61,14 +61,32 @@ export const APPOINTMENT_CANCEL_REASON_VALUES = [
   'other',
 ] as const;
 
+/** Where a booking's messages stand (A13, D78) — written by the rules job and the messaging worker. */
+export const APPOINTMENT_REMINDER_STATUS = {
+  NOT_SENT: 'not_sent',
+  CONFIRM_REQUESTED: 'confirm_requested',
+  REMINDER_QUEUED: 'reminder_queued',
+  REMINDER_SENT: 'reminder_sent',
+  FAILED: 'failed',
+} as const;
+
 /** Allowed values of `appointments.reminder_status` (the messaging worker's, A13). */
 export const APPOINTMENT_REMINDER_STATUS_VALUES = [
-  'not_sent',
-  'confirm_requested',
-  'reminder_queued',
-  'reminder_sent',
-  'failed',
+  APPOINTMENT_REMINDER_STATUS.NOT_SENT,
+  APPOINTMENT_REMINDER_STATUS.CONFIRM_REQUESTED,
+  APPOINTMENT_REMINDER_STATUS.REMINDER_QUEUED,
+  APPOINTMENT_REMINDER_STATUS.REMINDER_SENT,
+  APPOINTMENT_REMINDER_STATUS.FAILED,
 ] as const;
+
+/**
+ * A move and a reinstate start the booking's messages over (WC-7, D78): a new confirm request goes,
+ * and an earlier "Yes" no longer counts.
+ */
+export const APPOINTMENT_BOOKING_MESSAGES_RESET = {
+  reminder_status: APPOINTMENT_REMINDER_STATUS.NOT_SENT,
+  is_confirmed_by_reply: false,
+} as const;
 
 /** The shortest booking (minutes). */
 export const APPOINTMENT_DURATION_MIN = 5;

@@ -1,3 +1,4 @@
+import { MILLISECONDS_PER_DAY } from '@/shared/constants/ttl.constants.js';
 import { ConflictError, NotFoundError, UnprocessableEntityError } from '@/shared/errors/index.js';
 import { randomUUID } from 'node:crypto';
 
@@ -41,7 +42,6 @@ const TERMINAL_STATUSES = new Set<string>(INACTIVE_SUBSCRIPTION_STATUSES);
  */
 const DUNNING_STATUSES = new Set<string>(['PAST_DUE', 'UNPAID', 'INCOMPLETE']);
 
-const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import { assertTeamOrganization } from '@/domains/tenancy/sub-domains/organization/organization-capability.js';
 import type { PlanService } from '@/domains/billing/sub-domains/plan/plan.service.js';

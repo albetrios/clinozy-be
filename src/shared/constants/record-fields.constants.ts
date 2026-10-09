@@ -78,3 +78,27 @@ export const RECORD_DELETE_REASON_VALUES = Object.values(
 
 /** Longest note a soft delete may carry (required when the reason is `other`). */
 export const RECORD_DELETE_NOTE_MAX_LENGTH = 280;
+
+/**
+ * The most of anything counted on one record line — a bill line's quantity, a package's sessions,
+ * a treatment's session number (TR8: packages up to 999).
+ */
+export const RECORD_COUNT_MAX = 999;
+
+/**
+ * The longest short label a record carries — a manufacturer or kit name, a treatment parameter's
+ * value, what stock was used for, a check-in's context line.
+ */
+export const RECORD_LABEL_MAX = 80;
+
+/**
+ * The longest short text a record carries — a diagnosis or clinical item, a file or display name,
+ * an MR visit's samples.
+ */
+export const RECORD_SHORT_TEXT_MAX = 120;
+
+/** The furthest a record's date may sit from today, in days — a day's back-date, an MR's next visit. */
+export const RECORD_DATE_WINDOW_DAYS_MAX = 120;
+
+/** The most of a small two-digit count — an offer's extra sessions, a suggested quantity. */
+export const RECORD_SMALL_COUNT_MAX = 99;

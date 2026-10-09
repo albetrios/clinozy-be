@@ -9,6 +9,7 @@ import { role_permissions } from '@/domains/tenancy/sub-domains/member-roles/mem
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import { contact_activities } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.schema.js';
+import { CONTACT_ACTIVITY_REMINDER_STOPPED_REASON } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.constants.js';
 import { lead_involved_memberships, leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
 import { LEAD_OPEN_STATUS_VALUES } from '@/domains/app/sub-domains/leads/leads.constants.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
@@ -203,6 +204,7 @@ function failedMessageRule(): TaskRuleSource {
       select ${contact_activities.delivery_status} as delivery_status,
         ${contact_activities.author_membership_id} as author_membership_id,
         coalesce(${contact_activities.failed_at}, ${contact_activities.occurred_at}) as failed_at,
+        ${contact_activities.failure_reason} as failure_reason,
         ${contact_activities.occurred_at} as occurred_at
       from ${contact_activities}
       where ${contact_activities.contact_id} = ${contacts.id}
@@ -213,7 +215,9 @@ function failedMessageRule(): TaskRuleSource {
     ) as last_sent`,
     organizationColumn: contacts.organization_id,
     recordId: sql`${contacts.id}`,
-    qualifies: sql`${contacts.deleted_at} is null and last_sent.delivery_status = 'failed'`,
+    // A booking message stopped before it went (WC-7, D78) is no failure to chase
+    qualifies: sql`${contacts.deleted_at} is null and last_sent.delivery_status = 'failed'
+      and last_sent.failure_reason is distinct from ${CONTACT_ACTIVITY_REMINDER_STOPPED_REASON}`,
     opens: sql`last_sent.occurred_at >= now() - interval '30 days'`,
     due: () => sql`last_sent.failed_at`,
     tracksDue: false,

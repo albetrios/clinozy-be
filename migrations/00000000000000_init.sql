@@ -2260,6 +2260,7 @@ CREATE TABLE IF NOT EXISTS "app"."day_closes" (
 	"close_kind" varchar(6),
 	"closed_at" timestamp with time zone,
 	"closed_by_membership_id" bigint,
+	"summary_sent_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
@@ -2271,6 +2272,7 @@ CREATE TABLE IF NOT EXISTS "app"."day_closes" (
 	CONSTRAINT "chk_day_closes_close_kind" CHECK ("app"."day_closes"."close_kind" IN ('manual', 'auto')),
 	CONSTRAINT "chk_day_closes_closed" CHECK (("app"."day_closes"."status" = 'closed') = ("app"."day_closes"."closed_at" IS NOT NULL AND "app"."day_closes"."expected_cash" IS NOT NULL AND "app"."day_closes"."counted_cash" IS NOT NULL AND "app"."day_closes"."close_kind" IS NOT NULL)),
 	CONSTRAINT "chk_day_closes_difference_reason" CHECK ("app"."day_closes"."counted_cash" IS NULL OR "app"."day_closes"."counted_cash" = "app"."day_closes"."expected_cash" OR "app"."day_closes"."difference_reason" IS NOT NULL),
+	CONSTRAINT "chk_day_closes_summary_sent" CHECK ("app"."day_closes"."summary_sent_at" IS NULL OR "app"."day_closes"."status" = 'closed'),
 	CONSTRAINT "chk_day_closes_updated" CHECK ("app"."day_closes"."updated_at" >= "app"."day_closes"."created_at")
 );--> statement-breakpoint
 ALTER TABLE "app"."day_closes" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
@@ -3118,6 +3120,7 @@ CREATE TABLE IF NOT EXISTS "app"."contact_activities" (
 	"failure_reason" varchar(280),
 	"delivery_claimed_at" timestamp with time zone,
 	"provider_sender_id" varchar(64),
+	"automation_kind" varchar(16),
 	"occurred_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"delivered_at" timestamp with time zone,
 	"read_at" timestamp with time zone,
@@ -3152,6 +3155,7 @@ CREATE TABLE IF NOT EXISTS "app"."contact_activities" (
 	CONSTRAINT "chk_contact_activities_one_link" CHECK (num_nonnulls("app"."contact_activities"."appointment_id", "app"."contact_activities"."invoice_id", "app"."contact_activities"."payment_id", "app"."contact_activities"."patient_prescription_id", "app"."contact_activities"."patient_offering_id", "app"."contact_activities"."patient_review_id", "app"."contact_activities"."patient_check_in_id", "app"."contact_activities"."task_id", "app"."contact_activities"."patient_treatment_id", "app"."contact_activities"."patient_clinical_note_id", "app"."contact_activities"."patient_image_id", "app"."contact_activities"."patient_report_id") <= 1),
 	CONSTRAINT "chk_contact_activities_delivery_claim" CHECK ("app"."contact_activities"."delivery_claimed_at" IS NULL OR "app"."contact_activities"."delivery_status" = 'queued'),
 	CONSTRAINT "chk_contact_activities_provider_sender" CHECK ("app"."contact_activities"."provider_sender_id" IS NULL OR "app"."contact_activities"."direction" = 'received'),
+	CONSTRAINT "chk_contact_activities_automation_kind" CHECK ("app"."contact_activities"."automation_kind" IS NULL OR ("app"."contact_activities"."automation_kind" IN ('booking_confirm', 'booking_reminder', 'payment_receipt', 'payment_reminder', 'feedback_request') AND "app"."contact_activities"."type" = 'whatsapp' AND "app"."contact_activities"."direction" = 'sent' AND "app"."contact_activities"."author_membership_id" IS NULL)),
 	CONSTRAINT "chk_contact_activities_updated" CHECK ("app"."contact_activities"."updated_at" >= "app"."contact_activities"."created_at")
 );
 --> statement-breakpoint
@@ -3799,6 +3803,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "idx_day_closes_organization_branch_date" ON "
 CREATE INDEX IF NOT EXISTS "idx_day_closes_organization_close_date" ON "app"."day_closes" USING btree ("organization_id","close_date" DESC NULLS LAST,"id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_day_closes_branch_close_date" ON "app"."day_closes" USING btree ("branch_id","close_date");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_day_closes_organization_open" ON "app"."day_closes" USING btree ("organization_id","close_date") WHERE "app"."day_closes"."status" = 'open';--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_day_closes_summary_pending" ON "app"."day_closes" USING btree ("closed_at") WHERE "app"."day_closes"."status" = 'closed' AND "app"."day_closes"."summary_sent_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_day_closes_opening_accepted_by" ON "app"."day_closes" USING btree ("organization_id","opening_accepted_by_membership_id") WHERE "app"."day_closes"."opening_accepted_by_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_day_closes_closed_by" ON "app"."day_closes" USING btree ("organization_id","closed_by_membership_id") WHERE "app"."day_closes"."closed_by_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_day_closes_created_by_user_id" ON "app"."day_closes" USING btree ("created_by_user_id") WHERE "app"."day_closes"."created_by_user_id" IS NOT NULL;--> statement-breakpoint

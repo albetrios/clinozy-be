@@ -30,8 +30,11 @@ Both answer 503 while the webhook is not configured.
    (`sent` → `delivered` → `read`, or `failed`); a WhatsApp reply joins the stream of the contact with
    that number, an unknown number becomes a new contact with an open lead (source `whatsapp`); an
    Instagram message joins the stream of the contact who wrote from that id before or whose
-   Instagram handle matches — a stranger is dropped (a contact needs a number). A failing update is
-   retried by the next job and kept `failed` after five tries.
+   Instagram handle matches — a stranger is dropped (a contact needs a number). A new WhatsApp reply
+   that says yes (`contact-messaging-webhook.replies.ts` — "Yes 👍", not "yes but can we move it")
+   confirms the person's next booking that was asked (WC-8, D78); a report on a booking message moves
+   the booking's `reminder_status`. A failing update is retried by the next job and kept `failed`
+   after five tries.
 3. **Safety nets**: the one-minute `contact-messaging-sweep` re-enqueues organizations with pending
    updates no job holds (and with queued messages for delivery); `messaging-webhook-event-retention`
    purges processed and failed updates after 30 days.

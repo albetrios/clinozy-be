@@ -4,6 +4,7 @@ import {
   findMembershipWorkingHours,
 } from '@/domains/app/base-record.repository.js';
 import type {
+  BaseRecordChange,
   BaseRecordCollectionInput,
   BaseRecordRules,
   BaseRecordWriteContext,
@@ -18,6 +19,8 @@ import { ContactMembersRepository } from '@/domains/app/sub-domains/contacts/con
 import { LeadsRepository } from '@/domains/app/sub-domains/leads/leads.repository.js';
 import { OfferingsRepository } from '@/domains/app/sub-domains/offerings/offerings.repository.js';
 import { PatientsRepository } from '@/domains/app/sub-domains/patients/patients.repository.js';
+import { requestTaskRulesRun } from '@/domains/app/sub-domains/tasks/queues/task-rules.queue.js';
+import { runEnqueueAfterCommit } from '@/core/events/event-bus.js';
 import { ConflictError, fieldValidationError, NotFoundError } from '@/shared/errors/index.js';
 import {
   addDaysToCalendarDate,
@@ -31,6 +34,7 @@ import {
   weekdayOfCalendarDate,
 } from '@/shared/utils/validation/record-fields.util.js';
 import {
+  APPOINTMENT_BOOKING_MESSAGES_RESET,
   APPOINTMENT_DAILY_COUNTS_MAX_DAYS,
   APPOINTMENT_DEFAULT_DURATION,
   APPOINTMENT_DURATION_STEP,
@@ -496,8 +500,49 @@ async function prepareMove(
     timeZone,
   });
   values.move_count = Number(existing.move_count) + 1;
-  // A confirmed booking moved returns to scheduled (A5)
+  // A confirmed booking moved returns to scheduled (A5), and its messages start over (WC-7)
   values.status = APPOINTMENT_STATUS.SCHEDULED;
+  Object.assign(values, APPOINTMENT_BOOKING_MESSAGES_RESET);
+}
+
+/** Whether a write moved the booking to another day or time — {@link prepareMove} counted it. */
+function wasMoved(row: BaseRecordRow, change: BaseRecordChange): boolean {
+  return (
+    change.kind === 'update' &&
+    change.before !== undefined &&
+    Number(row.move_count) > Number(change.before.move_count)
+  );
+}
+
+/** The lifecycle actions that end what the booking's messages were about (WC-7). */
+const BOOKING_MESSAGE_STOPPING_ACTIONS: ReadonlySet<string> = new Set([
+  'cancel',
+  'no-show',
+  'reinstate',
+]);
+
+/**
+ * WC-5, WC-7 (launch D78): a move, a cancel, a no-show, a reinstate or a delete stops the booking
+ * message still waiting in the queue; a booking, a move and a reinstate ask for the rules run that
+ * sends the confirm request right after the commit.
+ */
+async function followBookingMessages(
+  repository: AppointmentsRepository,
+  row: BaseRecordRow,
+  change: BaseRecordChange,
+  context: BaseRecordWriteContext,
+): Promise<void> {
+  const moved = wasMoved(row, change);
+  const action = change.kind === 'transition' ? change.action : undefined;
+  const stops =
+    moved ||
+    change.kind === 'delete' ||
+    (action !== undefined && BOOKING_MESSAGE_STOPPING_ACTIONS.has(action));
+  if (stops) await repository.stopQueuedBookingMessages(Number(row.id));
+  if (change.kind === 'create' || moved || action === 'reinstate') {
+    const { organizationPublicId } = context.scope;
+    await runEnqueueAfterCommit(() => requestTaskRulesRun(organizationPublicId));
+  }
 }
 
 /** A check-in waits for the booking's day, a no-show for its start (6.9) — 409 `appointment_not_due` before. */
@@ -595,6 +640,7 @@ export function createAppointmentsRules(repository: AppointmentsRepository): Bas
       if (checkedIn || change.kind === 'create' || change.kind === 'update') {
         await addTeamToContact(row, context);
       }
+      await followBookingMessages(repository, row, change, context);
     },
     decorate: decorateAppointments,
     collectionViews: {

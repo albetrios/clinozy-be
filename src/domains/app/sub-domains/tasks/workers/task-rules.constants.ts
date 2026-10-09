@@ -9,3 +9,6 @@ export const TASK_RULES_TASKS_PER_RULE = 200;
 
 /** Why a "Let Clinozy handle" `gone_quiet` opens a re-target lead (5, `retarget_reason`). */
 export const TASK_RULES_GONE_QUIET_REASON = 'Sessions left; no visit in 30+ days';
+
+/** How many booking messages and receipts of each kind one organization run queues (D78) — the rest next run. */
+export const TASK_RULES_MESSAGES_PER_KIND = 200;

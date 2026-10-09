@@ -18,3 +18,12 @@ export const CONTACT_MESSAGE_FAILURE_INSTAGRAM_NOT_CONNECTED =
 /** Why an Instagram message failed before Meta saw it — the person never messaged the clinic there. */
 export const CONTACT_MESSAGE_FAILURE_NO_INSTAGRAM_CONVERSATION =
   'No Instagram conversation with this person yet — they need to message the clinic first';
+/** Why a message with files failed before Meta saw it — one of its uploads is gone (D78, WC-11). */
+export const CONTACT_MESSAGE_FAILURE_ATTACHMENT_MISSING =
+  'One of the attached files is no longer available — attach it again';
+
+/** The attached files WhatsApp shows as an image — the rest go as documents. */
+export const CONTACT_MESSAGE_IMAGE_MIME_TYPES: ReadonlySet<string> = new Set([
+  'image/jpeg',
+  'image/png',
+]);

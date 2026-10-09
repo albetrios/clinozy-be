@@ -216,6 +216,17 @@ export async function assertRecordNotChangedSince(options: {
 }
 
 /**
+ * `₹1,500.00` — an amount as an activity entry, an event or a message shows it.
+ *
+ * @remarks
+ * - **Algorithm:** Indian digit grouping (`en-IN`), always two decimals.
+ * - **Failure modes:** none.
+ */
+export function rupees(amount: number): string {
+  return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/**
  * A stored `numeric` (decimal text) as the number the API speaks.
  *
  * @remarks

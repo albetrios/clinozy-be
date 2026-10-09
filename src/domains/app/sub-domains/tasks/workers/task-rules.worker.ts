@@ -50,7 +50,8 @@ export function createTaskRulesWorker(): WorkerHandle {
             (databaseHandle) => runTaskRulesJob(databaseHandle, organizationPublicId),
           );
           // Clinozy's steps queued messages (TK10): send them now, after the commit (D77).
-          if (counts.handledCount > 0) await requestContactMessageDelivery(organizationPublicId);
+          if (counts.handledCount + counts.messageCount > 0)
+            await requestContactMessageDelivery(organizationPublicId);
           return counts;
         },
       );

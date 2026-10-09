@@ -2,9 +2,13 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'dri
 import { assertWorkerDatabaseContext } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
+import { uploads } from '@/domains/upload/upload.schema.js';
 import { organization_settings } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.schema.js';
 import { contact_phones, contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
+import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import {
+  CONTACT_ACTIVITY_AUTOMATION_KIND,
+  CONTACT_ACTIVITY_BOOKING_AUTOMATION_KINDS,
   CONTACT_ACTIVITY_DELIVERY_STATUS,
   CONTACT_ACTIVITY_DIRECTION,
   CONTACT_ACTIVITY_TYPE,
@@ -35,6 +39,17 @@ export interface ClaimedContactMessage {
   isOnWhatsApp: boolean;
   /** The Instagram-scoped id of the person's latest Instagram message — the reply address. */
   instagramRecipientId: string | null;
+  /** The files it carries (D78, WC-11), in the order they were attached. */
+  attachments: ContactMessageAttachment[];
+  /** How many files it was sent with — more than `attachments` when an upload is gone. */
+  attachmentKeyCount: number;
+}
+
+/** A file a queued message carries — one of the organization's confirmed uploads. */
+export interface ContactMessageAttachment {
+  fileKey: string;
+  mimeType: string;
+  fileName: string;
 }
 
 /** The claim condition: queued, and unclaimed or claimed by a job that died. */
@@ -49,6 +64,45 @@ function claimable() {
       ),
     ),
   );
+}
+
+/**
+ * A booking message's outcome on its appointment (launch D78, WC-6): the reminder sent moves
+ * `reminder_queued` to `reminder_sent`; a failure of the message the booking waits on — the
+ * confirm request while `confirm_requested`, the reminder after it — makes it `failed`.
+ *
+ * @remarks
+ * - **Algorithm:** one `UPDATE … FROM` over the given entries that carry a booking
+ *   `automation_kind` and an appointment; a message of an earlier step (the booking moved since,
+ *   or its reminder already queued) changes nothing. `updated_at` stays — the worker's write is
+ *   not an edit.
+ * - **Failure modes:** a database error propagates to the caller's job.
+ */
+export async function recordBookingMessageOutcome(
+  databaseHandle: WorkerDatabaseHandle,
+  options: { contactActivityIds: readonly number[]; outcome: 'sent' | 'failed' },
+): Promise<void> {
+  if (options.contactActivityIds.length === 0) return;
+  const kind = contact_activities.automation_kind;
+  const status = appointments.reminder_status;
+  const reminder = sql`${kind} = ${CONTACT_ACTIVITY_AUTOMATION_KIND.BOOKING_REMINDER}`;
+  const moves =
+    options.outcome === 'sent'
+      ? sql`${reminder} and ${status} = 'reminder_queued'`
+      : sql`(${kind} = ${CONTACT_ACTIVITY_AUTOMATION_KIND.BOOKING_CONFIRM} and ${status} = 'confirm_requested')
+          or (${reminder} and ${status} in ('reminder_queued', 'reminder_sent'))`;
+  await databaseHandle
+    .update(appointments)
+    .set({ reminder_status: options.outcome === 'sent' ? 'reminder_sent' : 'failed' } as never)
+    .from(contact_activities)
+    .where(
+      and(
+        inArray(contact_activities.id, [...options.contactActivityIds]),
+        eq(contact_activities.appointment_id, appointments.id),
+        inArray(kind, [...CONTACT_ACTIVITY_BOOKING_AUTOMATION_KINDS]),
+        sql`(${moves})`,
+      ),
+    );
 }
 
 /**
@@ -141,8 +195,13 @@ export class ContactMessageDeliveryRepository {
         body: contact_activities.body,
         contactId: contact_activities.contact_id,
         occurredAt: contact_activities.occurred_at,
+        attachmentKeys: contact_activities.attachment_keys,
       });
     if (claimed.length === 0) return [];
+    const files = await this.findAttachments({
+      organizationId: options.organizationId,
+      fileKeys: claimed.flatMap((message) => message.attachmentKeys),
+    });
     const contactIds = [...new Set(claimed.map((message) => message.contactId))];
     const addresses = await this.databaseHandle
       .select({
@@ -194,7 +253,36 @@ export class ContactMessageDeliveryRepository {
       primaryPhone: addressOf.get(message.contactId)?.primaryPhone ?? '',
       isOnWhatsApp: addressOf.get(message.contactId)?.isOnWhatsApp ?? false,
       instagramRecipientId: senderOf.get(message.contactId) ?? null,
+      attachments: message.attachmentKeys.flatMap((fileKey) => {
+        const file = files.get(fileKey);
+        return file ? [file] : [];
+      }),
+      attachmentKeyCount: message.attachmentKeys.length,
     }));
+  }
+
+  /** The organization's confirmed, live uploads among `fileKeys`, by key. */
+  private async findAttachments(options: {
+    organizationId: number;
+    fileKeys: readonly string[];
+  }): Promise<Map<string, ContactMessageAttachment>> {
+    if (options.fileKeys.length === 0) return new Map();
+    const rows = await this.databaseHandle
+      .select({
+        fileKey: uploads.file_key,
+        mimeType: uploads.mime_type,
+        fileName: uploads.file_name,
+      })
+      .from(uploads)
+      .where(
+        and(
+          eq(uploads.organization_id, options.organizationId),
+          inArray(uploads.file_key, [...new Set(options.fileKeys)]),
+          eq(uploads.status, 'UPLOADED'),
+          isNull(uploads.deleted_at),
+        ),
+      );
+    return new Map(rows.map((row) => [row.fileKey, row]));
   }
 
   /** The claimed message went out: `sent`, with Meta's id (its delivery reports carry it). */
@@ -208,6 +296,10 @@ export class ContactMessageDeliveryRepository {
         updated_at: sql`greatest(now(), ${contact_activities.created_at})`,
       } as never)
       .where(this.stillClaimed(options.id));
+    await recordBookingMessageOutcome(this.databaseHandle, {
+      contactActivityIds: [options.id],
+      outcome: 'sent',
+    });
   }
 
   /** Meta (or the clinic's setup) refused the message: `failed`, with why — staff can resend it. */
@@ -222,6 +314,10 @@ export class ContactMessageDeliveryRepository {
         updated_at: sql`greatest(now(), ${contact_activities.created_at})`,
       } as never)
       .where(this.stillClaimed(options.id));
+    await recordBookingMessageOutcome(this.databaseHandle, {
+      contactActivityIds: [options.id],
+      outcome: 'failed',
+    });
   }
 
   /** Gives claimed messages back to the queue (an outage, a throttle) — they stay `queued`. */

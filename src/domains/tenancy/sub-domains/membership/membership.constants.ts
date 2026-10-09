@@ -1,4 +1,8 @@
-import { CHIP_TONE, RECORD_DELETE_REASON } from '@/shared/constants/record-fields.constants.js';
+import {
+  CHIP_TONE,
+  RECORD_DELETE_REASON,
+  RECORD_SHORT_TEXT_MAX,
+} from '@/shared/constants/record-fields.constants.js';
 
 /**
  * A membership's status (`tenancy.memberships.status`, launch T17 — lowercase like every enum in the
@@ -50,4 +54,4 @@ export const MEMBERSHIP_DELETE_REASON_VALUES = Object.values(
 ) as MembershipDeleteReason[];
 
 /** Longest name an organization keeps for a member (`tenancy.memberships.display_name`, K3). */
-export const MEMBERSHIP_DISPLAY_NAME_MAX_LENGTH = 120;
+export const MEMBERSHIP_DISPLAY_NAME_MAX_LENGTH = RECORD_SHORT_TEXT_MAX;

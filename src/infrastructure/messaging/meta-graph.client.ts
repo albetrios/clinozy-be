@@ -110,6 +110,82 @@ export async function sendInstagramTextMessage(options: {
   return sentMessageOf(answer);
 }
 
+/** A file a message carries — a link Meta fetches it from when it sends (launch D78, WC-11). */
+export interface MetaMediaAttachment {
+  /** `image` (JPEG or PNG) or `document` (anything else — a PDF, a WebP). */
+  kind: 'image' | 'document';
+  /** A short-lived HTTPS link to the file (a presigned download URL). */
+  url: string;
+  fileName: string;
+}
+
+/**
+ * Sends one file as a WhatsApp media message — an image, or a document with its file name — with
+ * an optional caption (launch D78, WC-11: the visit's Rx, invoice and photos).
+ *
+ * @remarks
+ * - **Algorithm:** `POST /{phone-number-id}/messages` with `type` `image` or `document` and its
+ *   `link`; Meta downloads the file from the link; returns Meta's `wamid`.
+ * - **Failure modes:** as {@link sendWhatsAppTextMessage}; Meta refuses a link it cannot fetch
+ *   (a 4xx — a rejection).
+ * - **Side effects:** one HTTPS request to the Graph API.
+ */
+export async function sendWhatsAppMediaMessage(options: {
+  phoneNumberId: string;
+  to: string;
+  attachment: MetaMediaAttachment;
+  caption?: string;
+}): Promise<MetaSentMessage> {
+  const { attachment } = options;
+  const media: Record<string, unknown> = {
+    link: attachment.url,
+    ...(options.caption ? { caption: options.caption } : {}),
+    ...(attachment.kind === 'document' ? { filename: attachment.fileName } : {}),
+  };
+  const answer = await callGraph<GraphSendAnswer>({
+    path: `${encodeURIComponent(options.phoneNumberId)}/messages`,
+    method: 'POST',
+    body: {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: options.to.replace(/^\+/, ''),
+      type: attachment.kind,
+      [attachment.kind]: media,
+    },
+  });
+  return sentMessageOf(answer);
+}
+
+/**
+ * Sends one file as an Instagram attachment — an image or a file (launch D78, WC-11).
+ *
+ * @remarks
+ * - **Algorithm:** `POST /{instagram-account-id}/messages` with `attachment.type` `image` or
+ *   `file` and its `payload.url`; returns Meta's message id.
+ * - **Failure modes:** as {@link sendWhatsAppTextMessage}.
+ * - **Side effects:** one HTTPS request to the Graph API.
+ */
+export async function sendInstagramAttachmentMessage(options: {
+  accountId: string;
+  recipientId: string;
+  attachment: MetaMediaAttachment;
+}): Promise<MetaSentMessage> {
+  const answer = await callGraph<GraphSendAnswer>({
+    path: `${encodeURIComponent(options.accountId)}/messages`,
+    method: 'POST',
+    body: {
+      recipient: { id: options.recipientId },
+      message: {
+        attachment: {
+          type: options.attachment.kind === 'image' ? 'image' : 'file',
+          payload: { url: options.attachment.url },
+        },
+      },
+    },
+  });
+  return sentMessageOf(answer);
+}
+
 /**
  * The Instagram username behind an Instagram-scoped id — how an unknown sender is matched to a
  * contact's Instagram handles (launch D77).

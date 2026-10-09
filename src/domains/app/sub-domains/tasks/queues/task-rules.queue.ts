@@ -11,6 +11,7 @@ import {
 import { captureTraceContextForPropagation } from '@/infrastructure/observability/tracing/trace-context.util.js';
 import { parseBullMQJobData } from '@/shared/utils/validation/bullmq-job-validation.util.js';
 import { SEVEN_DAYS_SECONDS } from '@/shared/constants/ttl.constants.js';
+import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { type TaskRulesJobData, taskRulesJobDataSchema } from './task-rules.job.schema.js';
 
 /** BullMQ queue that runs one organization's task rules (TK4). */
@@ -64,6 +65,22 @@ export async function enqueueTaskRules(organizationPublicId: string): Promise<vo
     jobId: `task-rules-${organizationPublicId}-${randomUUID()}`,
     deduplication: taskRulesDeduplication(organizationPublicId),
   });
+}
+
+/**
+ * {@link enqueueTaskRules} that never throws — a booking's after-commit step asks for the run that
+ * sends its confirm request (launch D78); a Redis outage fails nothing (the five-minute sweep
+ * runs it anyway).
+ *
+ * @remarks
+ * - **Failure modes:** none — an enqueue error is logged (`task-rules.enqueue_failed`).
+ */
+export async function requestTaskRulesRun(organizationPublicId: string): Promise<void> {
+  try {
+    await enqueueTaskRules(organizationPublicId);
+  } catch (error) {
+    logger.warn({ error, organizationPublicId }, 'task-rules.enqueue_failed');
+  }
 }
 
 /** Closes the lazily created producer queue during graceful shutdown. */

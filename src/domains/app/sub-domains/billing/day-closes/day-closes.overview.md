@@ -19,6 +19,7 @@ Closing locks the day's money (B6); the auto-close worker (WC-39) closes the day
 | `day-closes.rules.ts` | the carried opening, the expected cash at close, the reason check, reopen, the events, a page's live figures |
 | `day-closes.repository.ts` | the shared reads and writes, the day's live money, the close's `FOR UPDATE` |
 | `day-close-auto-close.repository.ts` | the auto-close worker's reads and writes on its pinned handle |
+| `day-close-summary.repository.ts` · `day-close-summary.message.ts` | WC-10 (D78): the closed days waiting for their summary, the admins' numbers, the stamp, the messaging sweep's read; the summary's text |
 | `day-closes.{dto,validator,serializer,types}.ts` | request shapes, the response with figures and events |
 | `day-closes.service.ts` / `.controller.ts` / `.routes.ts` | routes 28–32 |
 | `queues/` · `workers/` | WC-39: the hourly sweep (`day-close-auto-close-sweep`) and the per-organization job (`day-close-auto-close`) |
@@ -40,3 +41,7 @@ Closing locks the day's money (B6); the auto-close worker (WC-39) closes the day
 - **Never changed or deleted:** opened, closed, reopened — each step an event (B27).
 - **Auto close (B26):** a day still open at the end of the day after it closes with the count
   taken as expected (`close_kind = auto`); money on a day nobody opened opens it first.
+- **The summary goes to the admins (WC-10, D78):** a closed day's figures go on WhatsApp to the
+  active members holding `organization:update` with a phone, sent by the `contact-message-delivery`
+  job (asked for after a close and the auto-close; the one-minute sweep covers a lost ask), then
+  `summary_sent_at` is stamped — only while closed, cleared by a reopen, within 24 hours of the close.

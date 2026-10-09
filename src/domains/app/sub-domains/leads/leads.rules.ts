@@ -1,3 +1,4 @@
+import { MILLISECONDS_PER_DAY } from '@/shared/constants/ttl.constants.js';
 import { findMembershipIdOfUser } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordRow } from '@/domains/app/base-record.repository.js';
 import type {
@@ -14,9 +15,6 @@ import { LEAD_OPEN_STATUS_VALUES, LEAD_STATUS } from './leads.constants.js';
 import type { LeadsRepository } from './leads.repository.js';
 
 const contactsRepository = new ContactsRepository();
-
-/** A day in milliseconds (the lead hold is counted in days). */
-const DAY_MILLISECONDS = 86_400_000;
 
 /** Whether a status is an open one (L6). */
 function isOpen(status: unknown): boolean {
@@ -40,7 +38,7 @@ function leadClosedError(messageKey: string): ConflictError {
 /** When a hold that starts now ends — the organization's `lead_hold_days` from now (D40). */
 async function holdEnd(context: BaseRecordWriteContext): Promise<Date> {
   const { lead_hold_days: holdDays } = await context.ports.organizationSettings(context.scope);
-  return new Date(Date.now() + holdDays * DAY_MILLISECONDS);
+  return new Date(Date.now() + holdDays * MILLISECONDS_PER_DAY);
 }
 
 /**

@@ -1,3 +1,4 @@
+import { RECORD_DATE_WINDOW_DAYS_MAX } from '@/shared/constants/record-fields.constants.js';
 /** A day close's status (B25). */
 export const DAY_CLOSE_STATUS = {
   OPEN: 'open',
@@ -47,4 +48,4 @@ export const DAY_CLOSE_EVENT_KIND_VALUES = [
 ] as const;
 
 /** How far back a day can be opened (8.E.8 #29). */
-export const DAY_CLOSE_BACKDATE_DAYS_MAX = 120;
+export const DAY_CLOSE_BACKDATE_DAYS_MAX = RECORD_DATE_WINDOW_DAYS_MAX;

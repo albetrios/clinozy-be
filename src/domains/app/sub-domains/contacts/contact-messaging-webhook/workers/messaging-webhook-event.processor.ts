@@ -22,6 +22,7 @@ import type {
   WhatsAppChangeValue,
   WhatsAppInboundMessage,
 } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/contact-messaging-webhook.types.js';
+import { isConfirmationReply } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/contact-messaging-webhook.replies.js';
 import { requestMessagingWebhookEventProcessing } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/queues/messaging-webhook-event.queue.js';
 
 /** The WhatsApp report statuses the stream knows (`deleted`, `warning` … are not messages' states). */
@@ -71,7 +72,10 @@ async function applyWhatsAppValue(
   }
 }
 
-/** One WhatsApp message to the clinic: matched by number, or a new contact with a lead (WC-3). */
+/**
+ * One WhatsApp message to the clinic: matched by number, or a new contact with a lead (WC-3); a
+ * "yes" confirms the person's next booking that was asked (WC-8, D78).
+ */
 async function applyWhatsAppMessage(
   inbound: ContactMessagingInboundRepository,
   organizationId: number,
@@ -88,15 +92,20 @@ async function applyWhatsAppMessage(
       phone,
       firstName: profileName !== undefined && profileName.length > 0 ? profileName : phone,
     }));
-  await inbound.insertReceivedMessage({
+  const body = inboundBody(message.text?.body, message.type);
+  const isNew = await inbound.insertReceivedMessage({
     organizationId,
     contactId,
     type: MESSAGING_WEBHOOK_CHANNEL.WHATSAPP,
-    body: inboundBody(message.text?.body, message.type),
+    body,
     providerMessageId: message.id,
     occurredAt: dateFromSeconds(message.timestamp),
     ...(message.context?.id ? { replyToProviderMessageId: message.context.id } : {}),
   });
+  const text = message.text?.body;
+  if (isNew && text !== undefined && isConfirmationReply(text)) {
+    await inbound.confirmBookingByReply({ organizationId, contactId });
+  }
 }
 
 /** Applies an Instagram event: a read receipt, or a message to the clinic from a known person. */

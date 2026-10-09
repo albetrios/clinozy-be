@@ -10,7 +10,11 @@ import { ContactActivitiesRepository } from '@/domains/app/sub-domains/contacts/
 import { DAY_CLOSE_STATUS } from '@/domains/app/sub-domains/billing/day-closes/day-closes.constants.js';
 import { ConflictError, ValidationError } from '@/shared/errors/index.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
-import { calendarDateInTimeZone, toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import {
+  calendarDateInTimeZone,
+  rupees,
+  toAmount,
+} from '@/shared/utils/validation/record-fields.util.js';
 import { PENDING_CREDIT_STATUS } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.constants.js';
 import { PendingCreditsRepository } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.repository.js';
 import {
@@ -44,8 +48,8 @@ export interface PaymentSplitColumns {
 }
 
 /** Paise for exact sums. */
-function toPaise(rupees: number): number {
-  return Math.round(rupees * 100);
+function toPaise(amount: number): number {
+  return Math.round(amount * 100);
 }
 
 /** B18: the splits as columns, and `amount` their total. */
@@ -67,11 +71,6 @@ export function columnsToSplits(row: Readonly<Record<string, unknown>>): Payment
     const amount = toAmount(row[PAYMENT_MODE_COLUMNS[mode]]) ?? 0;
     return amount > 0 ? [{ mode, amount }] : [];
   });
-}
-
-/** `₹1,500.00` — an amount as an activity entry shows it. */
-export function rupees(amount: number): string {
-  return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 /** The organization's calendar day a moment falls on (its time zone) — a payment's day (B6). */

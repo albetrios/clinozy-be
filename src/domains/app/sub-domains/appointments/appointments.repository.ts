@@ -3,6 +3,12 @@ import { getRequestDatabase } from '@/infrastructure/database/contexts/database-
 import { BaseRecordRepository, nullsLastSortKeys } from '@/domains/app/base-record.repository.js';
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import { contactLinkedSearchCondition } from '@/domains/app/sub-domains/contacts/contacts.repository.js';
+import { contact_activities } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.schema.js';
+import {
+  CONTACT_ACTIVITY_BOOKING_AUTOMATION_KINDS,
+  CONTACT_ACTIVITY_DELIVERY_STATUS,
+  CONTACT_ACTIVITY_REMINDER_STOPPED_REASON,
+} from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.constants.js';
 import type { ContactLinkedSearch } from '@/domains/app/sub-domains/contacts/contacts.validator.js';
 import { buildContainsLikePattern } from '@/shared/utils/http/list-query.util.js';
 import { toHourMinute } from '@/shared/utils/validation/record-fields.util.js';
@@ -78,6 +84,31 @@ export class AppointmentsRepository extends BaseRecordRepository {
       defaultSort: 'appointment_date',
       defaultOrder: 'asc',
     });
+  }
+
+  /**
+   * WC-7 (launch D78): the booking's confirm request or reminder still waiting in the queue — no
+   * delivery job holds it — is stopped (`failed`, `reminder_stopped`); one in flight goes.
+   */
+  async stopQueuedBookingMessages(appointmentId: number): Promise<void> {
+    await getRequestDatabase()
+      .update(contact_activities)
+      .set({
+        delivery_status: CONTACT_ACTIVITY_DELIVERY_STATUS.FAILED,
+        failure_reason: CONTACT_ACTIVITY_REMINDER_STOPPED_REASON,
+        failed_at: sql`now()`,
+        updated_at: sql`greatest(now(), ${contact_activities.created_at})`,
+      } as never)
+      .where(
+        and(
+          eq(contact_activities.appointment_id, appointmentId),
+          inArray(contact_activities.automation_kind, [
+            ...CONTACT_ACTIVITY_BOOKING_AUTOMATION_KINDS,
+          ]),
+          eq(contact_activities.delivery_status, CONTACT_ACTIVITY_DELIVERY_STATUS.QUEUED),
+          isNull(contact_activities.delivery_claimed_at),
+        ),
+      );
   }
 
   /** Whether any live appointment points at the contact (CT7 — the contact cannot be removed). */

@@ -23,7 +23,8 @@ task is resolved, and the tasks the rules open and close by themselves. Tables `
 | `tasks.rule-tasks.ts` | `openRuleTask` / `openCallBackTask` — the write-time rule tasks (a check-in or review needing action, an `unhappy` outcome) |
 | `tasks.service.ts` / `.controller.ts` / `.routes.ts` | the routes below |
 | `task-rule-conditions.repository.ts` | the 14 rules as SQL — which records open a task, while when it stays open, its due time and owner |
-| `task-rules.repository.ts` | the rules job's reads and writes on its pinned handle; the sweep's organization read |
+| `task-rules.repository.ts` | the rules job's reads and writes on its pinned handle; the sweep's organization read; `queueClinozyMessage` (a queued WhatsApp entry from Clinozy with its `automation_kind`) |
+| `task-rule-messages.repository.ts` | the reads of the messages the run queues (D78): the day-before reminders, the confirm requests, the receipts |
 | `queues/` · `workers/` | TK4: the five-minute sweep (`task-rules-sweep`) and the per-organization job (`task-rules`) |
 | `task-rule-settings/` | routes 11–12 — the switches |
 
@@ -52,6 +53,17 @@ qualifies and has no open one (nor one a person resolved since the condition beg
 the step of the due tasks of the rules set to "Let Clinozy handle" (a queued WhatsApp message for
 `confirm`, `payment_due` and `feedback`; a re-target lead for `gone_quiet`) and closes them. At most
 200 tasks per rule per run.
+
+Then, when the clinic's WhatsApp is connected and delivery is on, it queues Clinozy's notices
+(launch D78, `workers/task-rules-messages.processor.ts`): the day-before reminder of tomorrow's
+bookings once the clinic's `reminder_hour` has passed (WC-6, `reminder_queued`), the confirm
+request of each scheduled booking not asked yet — more than 2 hours and at most 60 days ahead, no
+walk-in (WC-5, `confirm_requested`) — and the receipt of each `receipt` payment of the last 24 hours
+(WC-9). Reminders go first, so a booking due both gets the reminder alone. A notice moves only the
+contact's `last_activity_at` (a question the person asked still waits for a person — the `reply`
+rule). `confirm`'s own step sends nothing when the booking was asked already. A booking, a move
+and a reinstate ask for the run right after their commit; the job asks for delivery when it
+queued anything.
 
 ## Key invariants
 

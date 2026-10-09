@@ -235,7 +235,7 @@ describe('Messaging — integration (launch D77, ROUTE #139)', () => {
       )
       .reply(200, { messages: [{ id: 'wamid.ONE' }] });
     const first = await runContactMessageDeliveryJob(organizationPublicId);
-    expect(first).toEqual({ sentCount: 1, failedCount: 0 });
+    expect(first).toEqual({ sentCount: 1, failedCount: 0, summaryCount: 0 });
     expect(sentTo).toEqual([ASHA_PHONE.slice(1)]);
     const sent = (await stream(asha)).find((item) => item.provider_message_id === 'wamid.ONE');
     expect(sent?.delivery_status).toBe('sent');
@@ -245,6 +245,7 @@ describe('Messaging — integration (launch D77, ROUTE #139)', () => {
     expect(await runContactMessageDeliveryJob(organizationPublicId)).toEqual({
       sentCount: 0,
       failedCount: 1,
+      summaryCount: 0,
     });
     const refused = await entry(asha, toInstagram);
     expect([refused.delivery_status, String(refused.failure_reason)]).toEqual([
@@ -260,6 +261,7 @@ describe('Messaging — integration (launch D77, ROUTE #139)', () => {
     expect(await runContactMessageDeliveryJob(organizationPublicId)).toEqual({
       sentCount: 0,
       failedCount: 1,
+      summaryCount: 0,
     });
     const failed = await entry(asha, undeliverable);
     expect([failed.delivery_status, failed.failure_reason]).toEqual([
@@ -294,6 +296,7 @@ describe('Messaging — integration (launch D77, ROUTE #139)', () => {
     expect(await runContactMessageDeliveryJob(organizationPublicId)).toEqual({
       sentCount: 1,
       failedCount: 0,
+      summaryCount: 0,
     });
     expect((await entry(asha, undeliverable)).provider_message_id).toBe('wamid.TWO');
   });
@@ -467,6 +470,7 @@ describe('Messaging — integration (launch D77, ROUTE #139)', () => {
     expect(await runContactMessageDeliveryJob(organizationPublicId)).toEqual({
       sentCount: 1,
       failedCount: 0,
+      summaryCount: 0,
     });
     expect(recipient).toBe(BELA_SENDER);
 

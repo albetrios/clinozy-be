@@ -1,3 +1,4 @@
+import { RECORD_SHORT_TEXT_MAX } from '@/shared/constants/record-fields.constants.js';
 /** The patient number's display prefix (`PT-0412`) — also read by the list's `q` (P9). */
 export const PATIENT_NUMBER_PREFIX = 'PT';
 
@@ -29,7 +30,7 @@ export const PATIENT_CONVERSION_VALUES = [
 /** Most allergies, and most contraindications, on one file. */
 export const PATIENT_CLINICAL_LIST_MAX = 30;
 /** The longest allergy or contraindication. */
-export const PATIENT_CLINICAL_ITEM_MAX = 120;
+export const PATIENT_CLINICAL_ITEM_MAX = RECORD_SHORT_TEXT_MAX;
 /** The longest patient notes. */
 export const PATIENT_NOTES_MAX = 2000;
 

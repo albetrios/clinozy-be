@@ -12,6 +12,8 @@ import {
   CONTACT_ACTIVITY_TYPE,
 } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.constants.js';
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
+import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
+import { recordBookingMessageOutcome } from '@/domains/app/sub-domains/contacts/contact-activities/contact-message-delivery.repository.js';
 
 /** A delivery report's status, in the order a message moves (D77) — `failed` ends it early. */
 export type InboundDeliveryStatus = 'sent' | 'delivered' | 'read' | 'failed';
@@ -98,7 +100,44 @@ export class ContactMessagingInboundRepository {
         ),
       )
       .returning({ id: contact_activities.id });
+    if (status === 'sent' || status === 'failed') {
+      await recordBookingMessageOutcome(this.databaseHandle, {
+        contactActivityIds: updated.map((row) => row.id),
+        outcome: status,
+      });
+    }
     return updated.length > 0;
+  }
+
+  /**
+   * A "yes" from the person (WC-8, D78): their next booking that was asked to confirm — scheduled
+   * or confirmed, still ahead, its confirm request or reminder sent — becomes `confirmed`, "Replied
+   * Yes" (`is_confirmed_by_reply`). Answers whether one moved.
+   */
+  async confirmBookingByReply(options: {
+    organizationId: number;
+    contactId: number;
+  }): Promise<boolean> {
+    const timeZone = sql`(select coalesce(${organizations.timezone}, 'UTC') from ${organizations} where ${organizations.id} = ${options.organizationId})`;
+    const next = sql`(select ${appointments.id} from ${appointments}
+      where ${appointments.organization_id} = ${options.organizationId}
+        and ${appointments.contact_id} = ${options.contactId}
+        and ${appointments.deleted_at} is null
+        and ${appointments.status} in ('scheduled', 'confirmed')
+        and ${appointments.reminder_status} in ('confirm_requested', 'reminder_queued', 'reminder_sent')
+        and ((${appointments.appointment_date} + ${appointments.start_time}) at time zone ${timeZone}) > now()
+      order by ${appointments.appointment_date}, ${appointments.start_time}, ${appointments.id}
+      limit 1)`;
+    const confirmed = await this.databaseHandle
+      .update(appointments)
+      .set({
+        status: 'confirmed',
+        is_confirmed_by_reply: true,
+        updated_at: sql`greatest(now(), ${appointments.created_at})`,
+      } as never)
+      .where(eq(appointments.id, next))
+      .returning({ id: appointments.id });
+    return confirmed.length > 0;
   }
 
   /** The live contact a number belongs to (its primary first), or `null`. */

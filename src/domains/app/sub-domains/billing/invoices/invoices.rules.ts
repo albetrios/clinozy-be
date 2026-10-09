@@ -12,13 +12,12 @@ import {
 } from '@/domains/app/sub-domains/billing/payments/payments.constants.js';
 import {
   recordPayment,
-  rupees,
   splitsToColumns,
   writeBillingActivity,
 } from '@/domains/app/sub-domains/billing/payments/payments.ledger.js';
 import { PaymentsRepository } from '@/domains/app/sub-domains/billing/payments/payments.repository.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
-import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import { rupees, toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import { INVOICE_TYPE } from './invoices.constants.js';
 import type { InvoiceItemInput, InvoicePaidNowInput } from './invoices.dto.js';
 import { type InvoiceLinePlan, planInvoiceLines, writeInvoiceLines } from './invoices.lines.js';

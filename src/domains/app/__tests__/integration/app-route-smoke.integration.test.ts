@@ -10,7 +10,11 @@ import {
 } from '@/tests/helpers/route-http-coverage.helper.js';
 import type { FastifyInstance } from 'fastify';
 
-const appRoutes = loadRoutesForDomain('app');
+// The messaging webhook is Meta's signed callback, not a caller's route: its handshake and
+// signature checks are covered by `contacts/__tests__/integration/contact-messaging.integration.test.ts`.
+const appRoutes = loadRoutesForDomain('app').filter(
+  (route) => !route.path.includes('/messaging-webhook'),
+);
 
 describe('App route smoke (catalog)', () => {
   let app: FastifyInstance;

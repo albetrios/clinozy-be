@@ -1,3 +1,4 @@
+import { RECORD_LABEL_MAX } from '@/shared/constants/record-fields.constants.js';
 /** A movement's type — it fixes the sign of its change (S7). */
 export const STOCK_ITEM_MOVEMENT_TYPE = {
   OPENING: 'opening',
@@ -59,7 +60,7 @@ export const STOCK_ITEM_MOVEMENT_REVERT_REASON_VALUES = [
 ] as const;
 
 /** Longest "Used for". */
-export const STOCK_ITEM_MOVEMENT_USED_FOR_MAX = 80;
+export const STOCK_ITEM_MOVEMENT_USED_FOR_MAX = RECORD_LABEL_MAX;
 
 /** Longest note (the design's Remark). */
 export const STOCK_ITEM_MOVEMENT_NOTE_MAX = 280;

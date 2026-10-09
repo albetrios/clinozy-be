@@ -1,3 +1,4 @@
+import { RECORD_SMALL_COUNT_MAX } from '@/shared/constants/record-fields.constants.js';
 /** A plan row's status (PK7) — moved freely by the team; `accepted` when an invoice line names it. */
 export const PATIENT_OFFERING_SUGGESTION_STATUS = {
   PLANNED: 'planned',
@@ -28,7 +29,7 @@ export const PATIENT_OFFERING_SUGGESTION_TOTAL_STATUS_VALUES = [
 ] as const;
 
 /** Most of one offering on a plan row. */
-export const PATIENT_OFFERING_SUGGESTION_QUANTITY_MAX = 99;
+export const PATIENT_OFFERING_SUGGESTION_QUANTITY_MAX = RECORD_SMALL_COUNT_MAX;
 
 /** The longest "why". */
 export const PATIENT_OFFERING_SUGGESTION_REASON_MAX = 200;

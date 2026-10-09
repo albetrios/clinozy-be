@@ -1,3 +1,5 @@
+import { RECORD_COUNT_MAX } from '@/shared/constants/record-fields.constants.js';
+
 /** A bought offering's derived status (PK5): a session left and not expired, none left, past `valid_until`. */
 export const PATIENT_OFFERING_STATUS = {
   ACTIVE: 'active',
@@ -13,4 +15,4 @@ export const PATIENT_OFFERING_STATUS_VALUES = [
 ] as const;
 
 /** Most sessions one bought offering holds (packages up to 999 — TR8). */
-export const PATIENT_OFFERING_SESSIONS_MAX = 999;
+export const PATIENT_OFFERING_SESSIONS_MAX = RECORD_COUNT_MAX;

@@ -51,6 +51,12 @@ no nested sub-domains (`visits/` went).
 - **The lifecycle (A5):** `scheduled` → `confirmed` · `checked_in` · `cancelled` · `no_show`;
   `confirmed` → `checked_in` · `cancelled` · `no_show`; `checked_in` → `completed`; a move returns a
   confirmed booking to `scheduled`; `checked_in_at` / `completed_at` set exactly with their status.
+- **The booking's messages (D34, D78):** the rules run queues the confirm request (WC-5,
+  `confirm_requested`) and the day-before reminder (WC-6, `reminder_queued` → `reminder_sent`, or
+  `failed`) when the clinic's WhatsApp is connected; a move and a reinstate start them over
+  (`not_sent`, `is_confirmed_by_reply` false); a move, a cancel, a no-show, a reinstate or a delete
+  stops the one still waiting (WC-7); a "Yes" on WhatsApp confirms the next asked booking (WC-8,
+  `is_confirmed_by_reply`). A booking, a move and a reinstate ask for the rules run after the commit.
 - **The floor (A10, A11):** the stage exists only while checked in, moves forward only; pause and
   resume toggle `visit_paused_at`; undo check-in only while `waiting`.
 - **Check-in converts (A14):** the contact's open lead moves to `clinic_visited` (with a `system`

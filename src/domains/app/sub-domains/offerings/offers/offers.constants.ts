@@ -1,3 +1,4 @@
+import { RECORD_SMALL_COUNT_MAX } from '@/shared/constants/record-fields.constants.js';
 /** The kinds of offer (O11): % off, ₹ off, a fixed price, or extra sessions. */
 export const OFFER_KIND = {
   PERCENT: 'percent',
@@ -43,7 +44,7 @@ export type OfferStatus = (typeof OFFER_STATUS_VALUES)[number];
 export const OFFER_PERCENT_MAX = 100;
 
 /** The most extra sessions an `extra` offer gives (O11). */
-export const OFFER_EXTRA_SESSIONS_MAX = 99;
+export const OFFER_EXTRA_SESSIONS_MAX = RECORD_SMALL_COUNT_MAX;
 
 /** The longest offer code (O11). */
 export const OFFER_CODE_MAX_LENGTH = 16;

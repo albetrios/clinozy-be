@@ -4,11 +4,14 @@ import { assertWorkerDatabaseContext } from '@/infrastructure/database/contexts/
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
+import { organization_settings } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.schema.js';
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import { contact_activities } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.schema.js';
+import type { ContactActivityAutomationKind } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.constants.js';
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
+import { ORGANIZATION_SETTINGS_DEFAULT_REMINDER_HOUR } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.constants.js';
 import { task_rule_settings } from './task-rule-settings/task-rule-settings.schema.js';
 import {
   TASK_DONE_BY_CLINOZY,
@@ -35,6 +38,23 @@ export interface TaskRuleSwitch {
   isAutomatic: boolean;
 }
 
+/** The organization a rules run is for — its clock, and what its messages need (D74, D78). */
+export interface TaskRulesOrganization {
+  id: number;
+  timeZone: string;
+  /** The clinic's hour for the day-before reminder (D34). */
+  reminderHour: number;
+  /** Whether the clinic's WhatsApp number is on the platform Meta app (D77). */
+  isWhatsAppConnected: boolean;
+}
+
+/** A record a Clinozy message points at (M5). */
+export type ClinozyMessageLink =
+  | { appointment_id: number }
+  | { invoice_id: number }
+  | { payment_id: number }
+  | Record<string, never>;
+
 /** An open task "Let Clinozy handle" takes (TK10), with what its message says. */
 export interface ClinozyStepTask {
   taskId: number;
@@ -46,6 +66,8 @@ export interface ClinozyStepTask {
   invoiceId: number | null;
   visitDate: string | null;
   visitTime: string | null;
+  /** The booking's messages so far (`confirm` — D78: the confirm step sends only when none went). */
+  reminderStatus: string | null;
   invoiceNumber: string | null;
   dueAmount: string | null;
 }
@@ -109,17 +131,28 @@ export async function findOrganizationsForTaskRules(
 export class TaskRulesRepository {
   constructor(private readonly databaseHandle: WorkerDatabaseHandle) {}
 
-  /** The organization's internal id and time zone. */
-  async findOrganization(
-    organizationPublicId: string,
-  ): Promise<{ id: number; timeZone: string } | null> {
+  /** The organization's internal id, time zone, reminder hour and WhatsApp connection. */
+  async findOrganization(organizationPublicId: string): Promise<TaskRulesOrganization | null> {
     const rows = await this.databaseHandle
-      .select({ id: organizations.id, timeZone: organizations.timezone })
+      .select({
+        id: organizations.id,
+        timeZone: organizations.timezone,
+        reminderHour: organization_settings.reminder_hour,
+        whatsappPhoneNumberId: organization_settings.whatsapp_phone_number_id,
+      })
       .from(organizations)
+      .leftJoin(organization_settings, eq(organization_settings.organization_id, organizations.id))
       .where(eq(organizations.public_id, organizationPublicId))
       .limit(1);
     const row = rows[0];
-    return row ? { id: row.id, timeZone: row.timeZone ?? 'UTC' } : null;
+    return row
+      ? {
+          id: row.id,
+          timeZone: row.timeZone ?? 'UTC',
+          reminderHour: row.reminderHour ?? ORGANIZATION_SETTINGS_DEFAULT_REMINDER_HOUR,
+          isWhatsAppConnected: (row.whatsappPhoneNumberId ?? null) !== null,
+        }
+      : null;
   }
 
   /** TK7: snoozed tasks whose time has come are open again. */
@@ -229,6 +262,7 @@ export class TaskRulesRepository {
         invoiceId: tasks.invoice_id,
         visitDate: sql<string | null>`to_char(${appointments.appointment_date}, 'DD Mon')`,
         visitTime: sql<string | null>`to_char(${appointments.start_time}, 'HH24:MI')`,
+        reminderStatus: appointments.reminder_status,
         invoiceNumber: invoices.invoice_number,
         dueAmount: sql<string | null>`${invoices.due_amount}::text`,
       })
@@ -252,15 +286,19 @@ export class TaskRulesRepository {
   }
 
   /**
-   * TK10's message: a queued WhatsApp message from Clinozy (no author) on the person's stream — the
-   * messaging worker sends it — with the contact's activity times and a `new` lead moved to
-   * `contacted`, as a person's send does (M7, 5.10).
+   * A queued WhatsApp message from Clinozy (no author) on the person's stream — the messaging
+   * worker sends it — marked with what it is for (`automationKind`, D78). TK10's outreach moves
+   * the contact's activity times and a `new` lead to `contacted`, as a person's send does (M7,
+   * 5.10); a notice (`isNotice` — a booking message, a receipt) moves only the last activity, so
+   * a question the person asked still waits for a person (the `reply` rule).
    */
   async queueClinozyMessage(options: {
     organizationId: number;
     contactId: number;
     body: string;
-    link: { appointment_id: number } | { invoice_id: number } | Record<string, never>;
+    link: ClinozyMessageLink;
+    automationKind: ContactActivityAutomationKind;
+    isNotice?: boolean;
   }): Promise<void> {
     await this.databaseHandle.insert(contact_activities).values({
       public_id: generatePublicId('contactActivity'),
@@ -268,38 +306,61 @@ export class TaskRulesRepository {
       contact_id: options.contactId,
       type: 'whatsapp',
       direction: 'sent',
-      body: options.body,
+      body: options.body.slice(0, 1000),
       delivery_status: 'queued',
+      automation_kind: options.automationKind,
       ...options.link,
     } as never);
     const latest = (column: AnyPgColumn) =>
       sql`greatest(coalesce(${column}, '-infinity'::timestamptz), now())`;
-    await this.databaseHandle
-      .update(contacts)
-      .set({
-        last_activity_at: latest(contacts.last_activity_at),
-        last_sent_at: latest(contacts.last_sent_at),
-        default_channel: 'whatsapp',
-      } as never)
-      .where(eq(contacts.id, options.contactId));
-    await this.databaseHandle
-      .update(leads)
-      .set({ status: 'contacted', updated_at: sql`greatest(now(), ${leads.created_at})` } as never)
-      .where(
-        and(
-          eq(leads.contact_id, options.contactId),
-          eq(leads.status, 'new'),
-          isNull(leads.deleted_at),
-        ),
-      );
+    if (options.isNotice === true) {
+      await this.databaseHandle
+        .update(contacts)
+        .set({ last_activity_at: latest(contacts.last_activity_at) } as never)
+        .where(eq(contacts.id, options.contactId));
+    } else {
+      await this.databaseHandle
+        .update(contacts)
+        .set({
+          last_activity_at: latest(contacts.last_activity_at),
+          last_sent_at: latest(contacts.last_sent_at),
+          default_channel: 'whatsapp',
+        } as never)
+        .where(eq(contacts.id, options.contactId));
+      await this.databaseHandle
+        .update(leads)
+        .set({
+          status: 'contacted',
+          updated_at: sql`greatest(now(), ${leads.created_at})`,
+        } as never)
+        .where(
+          and(
+            eq(leads.contact_id, options.contactId),
+            eq(leads.status, 'new'),
+            isNull(leads.deleted_at),
+          ),
+        );
+    }
   }
 
-  /** TK10 `confirm`: the booking's reminder status says the confirmation went out. */
-  async markConfirmRequested(appointmentId: number): Promise<void> {
+  /**
+   * A booking message went into the queue (TK10 `confirm`, D78 WC-5, WC-6): the booking's reminder
+   * status moves to `to` — only from one of `from`, so a write in between is never undone.
+   */
+  async markBookingMessageQueued(options: {
+    appointmentId: number;
+    from: readonly string[];
+    to: string;
+  }): Promise<void> {
     await this.databaseHandle
       .update(appointments)
-      .set({ reminder_status: 'confirm_requested' } as never)
-      .where(and(eq(appointments.id, appointmentId), eq(appointments.reminder_status, 'not_sent')));
+      .set({ reminder_status: options.to } as never)
+      .where(
+        and(
+          eq(appointments.id, options.appointmentId),
+          inArray(appointments.reminder_status, [...options.from]),
+        ),
+      );
   }
 
   /**
