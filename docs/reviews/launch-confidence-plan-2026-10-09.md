@@ -77,7 +77,7 @@ Biome, typecheck and tsdoc, then is committed and pushed. The full `pnpm test`,
 | F1 — unhappy-path flows | 6 | done | `flow-unhappy-paths.e2e.test.ts`: a no-show opens the rebook task and the new booking closes it; a cancel frees the slot for someone else and the cancelled booking cannot take it back; a package that expires half used refuses its sessions and a new one is billed. The refund and its credit note are B5's flow (`flow-refund-and-credit.e2e.test.ts`) |
 | F2 — a day in the clinic | 6 | done | `flow-day-in-the-clinic.e2e.test.ts`: Vesu opens on a recounted float of ₹2,000 and Adajan carries none; walk-ins at both branches paid in cash, UPI and card, each day's totals by mode; Vesu closes on a matching count, Adajan short with its reason (refused without one); the closed day refuses a late receipt (409 `day_closed`); each close's summary reaches the admins on WhatsApp once |
 | C2 — the activity stream at volume | 7 | done | `contact-activities-volume.performance.test.ts`: 5,000 entries on one contact; the newest page and page 41 each one page of 50 under 750 ms; `EXPLAIN` shows `Index Only Scan Backward using idx_contact_activities_contact_id_occurred_at`, no sort |
-| R2 — the sweep at scale | 7 | done | `task-rules-sweep-scale.performance.test.ts`: one organization with 50 records keeping rule tasks open. First run 190 ms (opened 50); at rest 111 ms (median of 5). 500 organizations ≈ 56 s per sweep on one worker at concurrency 1 — under a fifth of the five-minute interval. The test fails above half the interval |
+| R2 — the sweep at scale | 7 | done | `task-rules-sweep-scale.performance.test.ts`: one organization with 50 records keeping rule tasks open. Two runs: first run 190–222 ms (opened 50); at rest 111–141 ms (median of 5). 500 organizations ≈ 56–70 s per sweep on one worker at concurrency 1 — under a quarter of the five-minute interval. The test fails above half the interval |
 | X2 — k6 scenarios for the app | 7 | done | `src/tests/load/k6/scenarios/app-clinic-day.js`: three scenarios in one run (Today, the patient file, billing) with a p95 threshold per call. First run, 120 s on the local stack: every threshold passed, 0 of 188 requests failed. p95: today-appointments 37 ms, today-daily-counts 41 ms, patient-read 35 ms, patient-lists 63 ms, patient-ideas 81 ms, invoice-create 299 ms, payment-create 143 ms |
 | X5 — index follow-ups | 8 | done | 44 list-index columns in the app schemas and the baseline migration are ascending now (`DESC NULLS LAST` gone), and the three redundant membership indexes are dropped (`idx_supplier_credits_created_by_membership_id`, `idx_medical_rep_visits_logged_by_membership_id`, `idx_medical_sale_returns_returned_by_membership_id`). `app-list-indexes.performance.test.ts`: leads, invoices and patients read their indexes backwards with no sort. `index-hygiene.integration.test.ts` passes |
 | X6 — remove the temporary live checks | 8 | done | `tooling/dev/live-api/`, `pnpm dev:fixture`, `pnpm dev:checks` and their CLAUDE.md line are gone; the suites' doc comments no longer point at them. Every sub-domain's suite holds more assertions than its checks did — checks / assertions: offerings 56 / 190, contacts 71 / 203, contact activity 45 / 134, leads 106 / 241, appointments 78 / 236, patients 178 / 510, billing 106 / 308, stock 103 / 269, tasks 54 / 130, medical 102 / 279 |
@@ -123,6 +123,48 @@ Bugs the new tests found, and their fixes.
 | 3 | RL2 review | The retention arm added to `app.patients` for the ideas sweep (#152) sat on the `FOR ALL` policy. It let the maintenance role delete or change a patient file under the retention context, and patient files are never purged (P7). | The arm moved to its own `FOR SELECT` policy, `patients_ideas_sweep_read`, in the schema and the baseline migration. The security test proves read yes, update and delete no. |
 | 4 | R3 overlap test | Two runs of one organization's task rules at once (a retried or stalled job beside a fresh one) both took the same due step: two payment reminders queued for one task. | `TaskRulesRepository.lockRun` — the run takes the organization's advisory lock first; the second run waits, then finds the step taken. |
 | 4 | R3 repeat test | After Clinozy took a step ("Let Clinozy handle"), the next run opened a fresh task for the same, still-unpaid bill and sent the reminder again — every five minutes. The rule ignored tasks resolved automatically, so it could not tell a step taken from a record changed. Feedback requests repeated the same way; confirm and re-target tasks reopened and closed each run. | `closeTaskByClinozy` marks the task `is_handled_by_clinozy`; the rule's candidates treat it like a person's resolution. Three runs now queue one reminder. |
+
+## Final runs (2026-10-09, after batch 8)
+
+| Gate | Result |
+| --- | --- |
+| `pnpm test` | fast lane (unit, property, global) 716 files / 5,239 tests; unit-db 62 / 292; e2e 29 / 211; integration 147 / 1,258 (1 skipped); security 94 / 2,375; performance 13 / 31 — all green after the two test fixes below |
+| Route success coverage | 436 / 436 routes (budget 0); the error-status documentation check passed |
+| `pnpm test:rls-role` | the e2e and integration lanes as `clinozy_be_app`: 173 files / 1,463 tests passed (3 files / 6 tests skipped) |
+| SonarQube | 0 issues / 0 hotspots |
+| Biome, typecheck, tsdoc, test naming, migration lint, domain validators, knip, project identity | clean |
+
+The first full run failed two older suites, `notify-audit-trail.integration.test.ts` and
+`notify-isolation.security.test.ts`. Both sent `example.com` webhook URLs through the real DNS
+resolver (the SSRF guard looks the host up), and this container has no outside DNS; the harness
+promises no network beyond loopback. Both now stub `node:dns/promises`, as the other webhook suites
+do. No app code changed.
+
+## Scores after the code tasks
+
+The module scores from the task list, with every code task above done. The rest of each gap is the
+non-code work under the next heading.
+
+| Module | Before | Now | Target |
+| --- | --- | --- | --- |
+| Messaging | 72 | 80 | 88 |
+| Patient ideas | 80 | 84 | 88 |
+| Billing | 84 | 87 | 92 |
+| Team | 87 | 92 | 92 |
+| Tasks and rules | 87 | 92 | 92 |
+| Lead automation, photos, purge | 87 | 89 | 91 |
+| Branches and places | 88 | 92 | 92 |
+| Appointments | 88 | 92 | 92 |
+| Medical store | 88 | 92 | 92 |
+| Contacts | 90 | 93 | 93 |
+| Patients | 90 | 93 | 93 |
+| Stock | 90 | 93 | 93 |
+| End-to-end flows | 90 | 94 | 94 |
+| Leads | 91 | 93 | 94 |
+| Platform | 92 | 92 | 95 |
+| Offerings | 93 | 95 | 95 |
+| Tenant isolation | 95 | 96 | 97 |
+| **Overall** | **~88** | **~91** | **~93** |
 
 ## Not code — left with their owners
 
