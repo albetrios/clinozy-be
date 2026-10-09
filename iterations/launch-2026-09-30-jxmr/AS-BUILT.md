@@ -146,12 +146,28 @@ Baseline: none · KICKOFF.md approved 2026-10-03 · implementing since 2026-10-0
 
 ## Summary
 
-Written at the close.
+Written at the close (2026-10-09). Every ROUTE row #124–#153 is `done` except #152, deferred in the
+approved plan; [plans/acceptance.md](plans/acceptance.md) holds a result and evidence for all 59 criteria.
 
-- Planned, not built (deferred — user OK): KC5's login anonymisation → the platform review (D56).
-- Built, not planned: …
-- Follow-ups for the next iteration: …
-- Frontend adapts (user rule, 2026-10-07) — at the route rows that expose them: money as `numeric(12,2)` rupees (clinozy-fe contracts hold paise) · the operating settings read and written through `/tenancy/organization/settings` (#1).
+- Planned, not built (deferred — user OK): **AI ideas** — KICKOFF #152 (WC-47), deferred at approval:
+  `app.patient_ideas` dropped until its feature is built (P20, PK10), so patient-file.5 is Partial;
+  D39's provider was never chosen. **KC5's login anonymisation** → the platform review (D56).
+- Built, not planned: the medical store (ROUTE #153, deferred at approval, built after D75 — 51
+  routes under `medical/`, WC-34 as the `medical_rep_visit` rule, WC-45 as the pharmacy queue);
+  the record kernel's extensions every row reused (`sortKeys`, `derivedFilters`, `linkEquals`,
+  `prepareRemove`, child lists, ports); the dev tooling the user asked for (`pnpm dev:stack:reset-db`,
+  `pnpm dev:fixture`, `pnpm dev:checks`); the env flag `PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED`
+  (WC-42); the purge suite and the three flow suites (#147, #148–#150).
+- Follow-ups for the next iteration:
+  - Remove the temporary curl checks — `tooling/dev/live-api/`, `pnpm dev:fixture` /
+    `pnpm dev:checks` and their CLAUDE.md lines — now that the suites cover every route (the
+    launch's curl-only rule).
+  - AI ideas (WC-47) with a provider through the env schema (D39) — its own iteration.
+  - KC5 — anonymising an ended login, in the platform review (D56).
+  - Before launch, outside the code: the clinic's accountant confirms the tax rules (D20, D21, D23);
+    the clinic's advisor confirms the 7-day purge (D38); clinozy-fe confirms machines (D28); the
+    WhatsApp Business number is verified and the Meta app's webhook pointed at the API (D32, D77).
+- Frontend adapts (user rule, 2026-10-07) — at the route rows that expose them: money as `numeric(12,2)` rupees (clinozy-fe contracts hold paise) · the operating settings read and written through `/tenancy/organization/settings` (#1) · one contact per person (`/app/contacts`, D61) with the patient file and lead holding `contact_id` · every deviation below.
 
 ## Standing deviations
 
@@ -161,6 +177,18 @@ deviations this iteration plans; each joins this table when the row that builds 
 
 | Item | Design says | Built as | Since iteration | Decision |
 | --- | --- | --- | --- | --- |
+| API conventions | camelCase fields, the organization in the URL, raw record ids (schema-routes.md:8–10) | the repository's API contract: snake_case bodies, params and errors; the signed `org` claim (no organization segment); public ids (`con_…`, `appt_…`) as `id`; 200 for every method but DELETE (204) | launch-2026-09-30-jxmr | C1–C3 (R4), D1 |
+| Staff accounts | an admin creates a user with a password (schema-routes.md:197, 1752) | an invitation by email — the person signs in their own way and accepts it (`tenancy` membership invitation) | launch-2026-09-30-jxmr | D4 |
+| Roles | a fixed list of 9 (schema-routes.md:996–1007) | Owner plus eight seeded, editable roles (`app-role-presets.ts`), several per person (`membership-additional-roles`), custom roles | launch-2026-09-30-jxmr | D5 |
+| Value lists | 58 enums (schema-routes.md:994–1534) | CHECKed allowed values in snake_case; the lists a clinic changes are records (diagnosis catalogue, message templates, offering groups, prescription kits) | launch-2026-09-30-jxmr | D10 |
+| Rooms and machines | a fixed room list, no machines (schema-routes.md:337) | `app.branch_rooms` and `app.branch_machines` per branch; a booking may name both (also a request back to clinozy-fe) | launch-2026-09-30-jxmr | D28 |
+| Invoice numbers | one running `seq` (schema-routes.md:609) | `invoice_sequence` organization-wide (for search) and the statutory `invoice_number` per branch and financial year ("2026-27/0412") — both from triggers, never reused | launch-2026-09-30-jxmr | D23, B11 |
+| Discount and GST | the overall discount after line GST (schema-routes.md:616, 622) | the overall discount before tax; a medicine's MRP includes GST (`is_gst_inclusive`) | launch-2026-09-30-jxmr | D20, D21, B9 |
+| Prescriptions | final on save, filled derived (schema-routes.md:372) | a draft until a Doctor or Admin approves it, then final (P15); filled by a live medical sale (`is_filled`, MDC4) | launch-2026-09-30-jxmr | D31, P15 |
+| Delete | restore within 10 s (schema-routes.md:1546) | soft delete with a reason, restorable until the clinic's purge window (`deleted_record_purge_days`, 7 days by default), then erased by the daily purge (WC-46) | launch-2026-09-30-jxmr | D38 |
+| Billing below the offer price | the design's "Bill below the offer price" switch | no switch: whoever bills may go below the offer price down to `min_price`; nobody below it (B10) | launch-2026-09-30-jxmr | O16 |
+| Patient at check-in | Flow 1 step 4 — "Not a patient yet" → Create patient record, then Complete (PRD.md:114) | the check-in opens the file itself (home branch and doctor from the visit) and moves the open lead to Clinic visited | launch-2026-09-30-jxmr | A14, L8 |
+| Package session on completion | completing the visit uses a package session (PRD.md:46) | complete only ends the visit; a session is spent by the treatment recorded for it (TR7) or billed after it (TR13), given back by reversing it | launch-2026-09-30-jxmr | TR7, TR13 |
 | Branch field names | `addressLine1/2`, `pin`, `active`, `defaultDoctorId` … (schema-routes.md:154–180) | `address_line_one/two`, `postal_code`, `is_active`, `default_doctor_membership_id` … (snake_case, no digits, full names) | launch-2026-09-30-jxmr | repository rules; user 2026-10-07 (frontend adapts) |
 | Branch access | a user's `branchIds` (schema-routes.md:199) | `app.branch_members` (branch ↔ membership, renamed at #125) + `GET /app/branches/my` | launch-2026-09-30-jxmr | user 2026-10-07 |
 | Access model | role × section matrix (schema-routes.md:211–225) | per-resource permission codes (`branch:*`) | launch-2026-09-30-jxmr | user 2026-10-07 |
@@ -168,7 +196,7 @@ deviations this iteration plans; each joins this table when the row that builds 
 | Offering field names | `seq`, `durationMin`, `gstPct`, `active`, `groupId` (schema-routes.md:557–577; `groupId` a frontend request, D29) | `offering_number`, `duration_minutes`, `gst_percent`, `is_active`, `offering_group_id` (O1) | launch-2026-09-30-jxmr | repository rules; route review O1 |
 | Offering default staff | `defaultDoctorId`, `room` on an offering (schema-routes.md:570–571) | none — an offering links only to its group, branches and offers | launch-2026-09-30-jxmr | O6 (route review) |
 | Offer shape | `paused` (bool), `branchIds` ≥ 1 (default all), `startsOn` (default today) and `endsOn` required, `extra` 1–20 sessions, `value` in paise (schema-routes.md:581–598) | `is_active` (false = paused) plus a derived `status`; `branch_ids` empty = every branch; `starts_on` / `ends_on` optional (empty = from now / no end); `extra` 1–99; `value` in rupees; `code` unique among live offers | launch-2026-09-30-jxmr | O5, O10, O11 (route review); money in rupees (user 2026-10-07) |
-| Contact | person fields on Lead and Patient; the contact card looks a Patient / Lead / MedicalContact up by name or id (schema-routes.md:1566) | one `app.contacts` record (numbers in `app.contact_phones`, one primary, a number inside one household; who handles them in `app.contact_members`) at `/app/contacts` — a paginated search, the hover card over contacts, preferences as snake_case tags; the lead and patient keep their person fields until #131 / #133 (D61) | launch-2026-09-30-jxmr | CT1–CT14 (route review), D61 |
+| Contact | person fields on Lead and Patient; the contact card looks a Patient / Lead / MedicalContact up by name or id (schema-routes.md:1566) | one `app.contacts` record (numbers in `app.contact_phones`, one primary, a number inside one household; who handles them in `app.contact_members`) at `/app/contacts` — a paginated search, the hover card over contacts, preferences as snake_case tags; the person fields left `app.leads` at #131 and `app.patients` at #133 (D61) | launch-2026-09-30-jxmr | CT1–CT14 (route review), D61 |
 | Patient file | a Patient with the person's fields, a timeline, patient notes and AI ideas (schema-routes.md Patient, PatientNote, PatientIdea) | the clinical side of a contact — `app.patients` carries `contact_id` only (P1–P3); the timeline is the contact's activity with `system` entries (P8, M10); a team note is an activity `note` (P20); `app.patient_ideas` dropped until built; the patient-file records nest under `/patients/{patient_id}/…` (P11, P21) | launch-2026-09-30-jxmr | route review P1–P3, P8, P11, P20, P21 |
 | Patient photos | an image with an album and a body part (schema-routes.md PatientImage) | also `patient_treatment_id` and `stage` (P24), `display_name`, the one 15-part body list (TR8); `file_name` from the upload; the list's `meta.album_counts` | launch-2026-09-30-jxmr | route review P23–P26 |
 | Invoice lines and money | `Invoice.items` a jsonb list; totals, paid and due sent by the client (schema-routes.md Invoice, InvoiceItem) | `app.invoice_items` rows; every amount computed and stored by the server (B5, B9); `paid_amount` kept by the payment writes, `due_amount` / `payment_status` generated | launch-2026-09-30-jxmr | route review B5, B9 |
