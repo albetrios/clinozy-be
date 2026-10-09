@@ -215,21 +215,30 @@ export class OrganizationRepository extends BaseRepository {
    * The organization, if this user may see it — otherwise `null`.
    *
    * @remarks
-   * Returns the ROW rather than a boolean because every caller needed it next and
-   * fetched it again: `getByPublicId` ran `findByPublicId` here and then a second,
-   * identical `findByPublicId` immediately after, so the normal team-member path
-   * cost four queries to read one row. Handing the row back removes that entirely.
+   * Returns the row and checks owner/active membership in one RLS-scoped query.
+   * The explicit user predicate remains necessary when an organization-scoped
+   * caller can see the row through the tenant policy. No permission is cached.
    */
   async userCanAccessOrganization(
     user_public_id: string,
     organization_public_id: string,
   ): Promise<Organization | null> {
-    const organization = await this.findByPublicId(organization_public_id);
-    if (!organization) {
-      return null;
-    }
-    const canAccess = await this.userCanAccessLoadedOrganization(user_public_id, organization);
-    return canAccess ? organization : null;
+    const rows = await getRequestDatabase()
+      .select(getTableColumns(organizations))
+      .from(organizations)
+      .innerJoin(authUsers, eq(authUsers.public_id, user_public_id))
+      .where(
+        and(
+          eq(organizations.public_id, organization_public_id),
+          isNull(organizations.deleted_at),
+          or(
+            and(eq(organizations.owner_user_id, authUsers.id), isNull(authUsers.deleted_at)),
+            sql`EXISTS (SELECT 1 FROM ${memberships} WHERE ${memberships.organization_id} = ${organizations.id} AND ${memberships.user_id} = ${authUsers.id} AND ${memberships.status} = 'ACTIVE' AND ${memberships.deleted_at} IS NULL)`,
+          ),
+        ),
+      )
+      .limit(1);
+    return (rows[0] ?? null) as Organization | null;
   }
 
   /**

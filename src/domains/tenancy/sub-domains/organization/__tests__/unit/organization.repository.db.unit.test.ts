@@ -1,8 +1,14 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import { OrganizationRepository } from '@/domains/tenancy/sub-domains/organization/organization.repository.js';
+import {
+  PRINCIPAL_SCOPE,
+  withAppDatabaseContext,
+} from '@/infrastructure/database/contexts/database-context.js';
+import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
+import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
 import {
   createMembership,
   createRoleWithPermissions,
@@ -11,6 +17,57 @@ import {
 
 describe('OrganizationRepository (database)', () => {
   const repository = new OrganizationRepository();
+
+  beforeAll(async () => {
+    await grantClinozyBeAppRoleForTests();
+  });
+
+  it('checks owner and active-member access under FORCE RLS even when the tenant claim exposes the row', async () => {
+    const owner = await createTestUser();
+    const organization = await createTestOrganization({ ownerUserId: owner.id });
+    const role = await createRoleWithPermissions({
+      organizationId: organization.id,
+      permissionCodes: [],
+    });
+    const actors = [{ user: owner, allowed: true }];
+    for (const status of ['ACTIVE', 'INVITED', 'SUSPENDED'] as const) {
+      const user = await createTestUser();
+      await createMembership({
+        userId: user.id,
+        organizationId: organization.id,
+        roleId: role.id,
+        status,
+      });
+      actors.push({ user, allowed: status === 'ACTIVE' });
+    }
+    actors.push({ user: await createTestUser(), allowed: false });
+    for (const { user, allowed } of actors) {
+      for (const includeTenantClaim of [false, true]) {
+        await withAppDatabaseContext(
+          PRINCIPAL_SCOPE.VERIFIED({
+            userPublicId: user.public_id,
+            ...(includeTenantClaim ? { organizationPublicId: organization.public_id } : {}),
+          }),
+          async (handle) => {
+            await setLocalApplicationRole(handle);
+            const result = await repository.userCanAccessOrganization(
+              user.public_id,
+              organization.public_id,
+            );
+            expect(result?.public_id ?? null).toBe(allowed ? organization.public_id : null);
+            expect(
+              await repository.userCanAccessOrganization('usr_missing', organization.public_id),
+            ).toBeNull();
+          },
+        );
+      }
+    }
+    await repository.markDeletionStarted(organization.public_id);
+    expect(await repository.softDelete(organization.public_id)).not.toBeNull();
+    expect(
+      await repository.userCanAccessOrganization(owner.public_id, organization.public_id),
+    ).toBeNull();
+  });
 
   beforeEach(async () => {
     await cleanupDatabase();

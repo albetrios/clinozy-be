@@ -478,6 +478,28 @@ VUS=20 BASE_URL=http://localhost:3002 k6 run src/tests/load/k6/scenarios/multi-t
 DURATION=20s MIN_COMPLETED=20 k6 run src/tests/load/k6/scenarios/tenancy-role-write.js
 ```
 
+For 240-user capacity investigations, record the admission ceiling as
+`ceil(DATABASE_POOL_MAX × OVERLOAD_DB_POOL_SHED_RATIO)`: this counts running and
+waiting organization-scoped database work, rather than database connections alone.
+The lifecycle runner honors explicit `DATABASE_POOL_MAX` and
+`OVERLOAD_DB_POOL_SHED_RATIO` process variables and records their effective values
+in `runtime.json`; its fallback remains pool 60 / ratio 3. That fallback starts
+shedding at 180 in-flight units and cannot promise error-free admission of a
+synchronized 240-user burst.
+
+On the four-core cloud host, pool 30 / ratio 10 (a bounded ceiling of 300) eliminated
+unexpected HTTP errors across repeated 240-user bursts. The organization access
+check now fetches the row and checks owner/active membership in one query, with
+FORCE RLS regression coverage. Three consecutive bursts on one API process passed
+p95 <500 ms / p99 <1000 ms (p95 489.71, 436.58, 404.97 ms), but fresh-process runs
+still failed the 500 ms p95 gate. This configuration is an **HTTP-error mitigation,
+not a complete latency fix**. Keep cold-process and warm-process results separate;
+do not prewarm a benchmark, dilute cold samples, or relax thresholds to claim a fix.
+Connection warming, TCP_NODELAY, a larger libuv thread pool, combined summary queries,
+and two/four API processes did not produce repeatable cold-burst passes on this host.
+Keep the monolithic worker's independently budgeted pool (60 in `.env.example`);
+do not apply the API's smaller pool to that worker.
+
 Queue recovery and future clinic workflows require additional controlled fixtures.
 Provider-backed billing and signed outbound webhook processing use the separate
 provider journeys described below.

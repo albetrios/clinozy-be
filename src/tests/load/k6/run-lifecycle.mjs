@@ -70,8 +70,8 @@ const env = {
   PORT: '3002',
   NODE_USE_ENV_PROXY: '1',
   NO_PROXY: [shared.NO_PROXY || '', '127.0.0.1', 'localhost'].filter(Boolean).join(','),
-  DATABASE_POOL_MAX: '60',
-  OVERLOAD_DB_POOL_SHED_RATIO: '3',
+  DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX || '60',
+  OVERLOAD_DB_POOL_SHED_RATIO: process.env.OVERLOAD_DB_POOL_SHED_RATIO || '3',
   WEBHOOK_URL_ALLOWLIST: 'example.com,1.1.1.1',
   S3_ENDPOINT: 'http://127.0.0.1:3004',
   S3_BUCKET: 'load-fixture',
@@ -230,8 +230,8 @@ try {
       {
         pid: api.pid,
         database,
-        pool: 60,
-        admissionRatio: 3,
+        pool: Number(env.DATABASE_POOL_MAX),
+        admissionRatio: Number(env.OVERLOAD_DB_POOL_SHED_RATIO),
         branch: execFileSync('git', ['branch', '--show-current'], {
           cwd: repo,
           encoding: 'utf8',
