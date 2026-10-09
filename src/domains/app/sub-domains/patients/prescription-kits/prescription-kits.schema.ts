@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   bigint,
   bigserial,
@@ -12,16 +12,12 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { RECORD_DELETE_REASON_VALUES } from '@/shared/constants/record-fields.constants.js';
 import { PATIENT_PRESCRIPTION_ITEMS_MAX } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` or `ARRAY[…]` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
 
 /**
  * Drizzle table for `app.prescription_kits` — a doctor's own reusable prescription lines, copied
@@ -95,7 +91,7 @@ export const prescription_kits = appSchema
       check('chk_prescription_kits_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_prescription_kits_delete_reason',
-        sql`${table.delete_reason} IN (${literalList(RECORD_DELETE_REASON_VALUES)})`,
+        sql`${table.delete_reason} IN (${sqlLiteralList(RECORD_DELETE_REASON_VALUES)})`,
       ),
       check(
         'chk_prescription_kits_delete_reason_when_deleted',

@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   bigint,
@@ -15,6 +15,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteral, sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -32,19 +33,9 @@ import {
   PATIENT_TREATMENT_TEMPLATE_VALUES,
 } from '@/domains/app/sub-domains/patients/patient-treatments/patient-treatments.constants.js';
 
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` or `ARRAY[…]` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
-
-/** A literal number in a CHECK. */
-function literalNumber(value: number): SQL {
-  return sql.raw(String(value));
-}
-
 /** `'done'` / `'reversed'` as SQL literals. */
-const DONE = sql.raw(`'${PATIENT_TREATMENT_STATUS.DONE}'`);
-const REVERSED = sql.raw(`'${PATIENT_TREATMENT_STATUS.REVERSED}'`);
+const DONE = sqlLiteral(PATIENT_TREATMENT_STATUS.DONE);
+const REVERSED = sqlLiteral(PATIENT_TREATMENT_STATUS.REVERSED);
 
 /**
  * Drizzle table for `app.patient_treatments` — one session recorded for a patient, reversed with a
@@ -161,24 +152,24 @@ export const patient_treatments = appSchema
       check('chk_patient_treatments_name', sql`char_length(${table.name}) > 0`),
       check(
         'chk_patient_treatments_template',
-        sql`${table.template} IN (${literalList(PATIENT_TREATMENT_TEMPLATE_VALUES)})`,
+        sql`${table.template} IN (${sqlLiteralList(PATIENT_TREATMENT_TEMPLATE_VALUES)})`,
       ),
       check(
         'chk_patient_treatments_body_parts',
-        sql`${table.body_parts} <@ ARRAY[${literalList(PATIENT_BODY_PART_VALUES)}]::text[] AND cardinality(${table.body_parts}) <= ${literalNumber(PATIENT_TREATMENT_BODY_PARTS_MAX)}`,
+        sql`${table.body_parts} <@ ARRAY[${sqlLiteralList(PATIENT_BODY_PART_VALUES)}]::text[] AND cardinality(${table.body_parts}) <= ${sqlLiteral(PATIENT_TREATMENT_BODY_PARTS_MAX)}`,
       ),
       check(
         'chk_patient_treatments_session_number',
-        sql`${table.session_number} BETWEEN 1 AND ${literalNumber(PATIENT_TREATMENT_SESSION_MAX)}`,
+        sql`${table.session_number} BETWEEN 1 AND ${sqlLiteral(PATIENT_TREATMENT_SESSION_MAX)}`,
       ),
       check('chk_patient_treatments_parameters', sql`jsonb_typeof(${table.parameters}) = 'object'`),
       check(
         'chk_patient_treatments_aftercare_call',
-        sql`${table.aftercare_call} IN (${literalList(PATIENT_TREATMENT_AFTERCARE_CALL_VALUES)})`,
+        sql`${table.aftercare_call} IN (${sqlLiteralList(PATIENT_TREATMENT_AFTERCARE_CALL_VALUES)})`,
       ),
       check(
         'chk_patient_treatments_status',
-        sql`${table.status} IN (${literalList(PATIENT_TREATMENT_STATUS_VALUES)})`,
+        sql`${table.status} IN (${sqlLiteralList(PATIENT_TREATMENT_STATUS_VALUES)})`,
       ),
       // TR7, TR6: a spent session is held while done, given back on reverse
       check(

@@ -192,6 +192,7 @@ function replyRule(): TaskRuleSource {
 /** `failed_message`: the last message sent to a person failed. */
 function failedMessageRule(): TaskRuleSource {
   const openLeadOwner = sql`(select ${leads.owner_membership_id} from ${leads} where ${leads.contact_id} = ${contacts.id} and ${OPEN_LEAD} limit 1)`;
+  const lastSentAuthor = sql`last_sent.author_membership_id`;
   return {
     rule: TASK_RULE.FAILED_MESSAGE,
     link: null,
@@ -219,7 +220,7 @@ function failedMessageRule(): TaskRuleSource {
     columns: {
       contactId: sql`${contacts.id}`,
       branchId: sql`null::bigint`,
-      ownerMembershipId: sql`coalesce(${taskMember(sql`last_sent.author_membership_id`)}, ${taskMember(openLeadOwner)})`,
+      ownerMembershipId: sql`coalesce(${taskMember(lastSentAuthor)}, ${taskMember(openLeadOwner)})`,
       title: sql`'Message to ' || ${contacts.first_name} || ' failed'`,
       why: sql`'Send it again or call them'`,
       anchorAt: sql`last_sent.occurred_at`,
@@ -291,6 +292,7 @@ function claimRule(): TaskRuleSource {
  */
 function confirmRule(scope: TaskRuleScope): TaskRuleSource {
   const start = startOf(scope);
+  const dayBefore = sql`${appointments.appointment_date} - 1`;
   return {
     rule: TASK_RULE.CONFIRM,
     link: 'appointment_id',
@@ -305,7 +307,7 @@ function confirmRule(scope: TaskRuleScope): TaskRuleSource {
     opens: sql`${start} <= now() + interval '48 hours'`,
     due: (reference) =>
       sql`case when ${start} - ${reference} < interval '20 hours' then ${start} - interval '2 hours'
-        else ${localAt(scope, sql`${appointments.appointment_date} - 1`, '18:00')} end`,
+        else ${localAt(scope, dayBefore, '18:00')} end`,
     tracksDue: true,
     columns: {
       contactId: sql`${appointments.contact_id}`,
@@ -651,9 +653,8 @@ export function taskLinkColumn(source: TaskRuleSource): AnyPgColumn {
  */
 export function ruleStillHolds(source: TaskRuleSource): SQL {
   if (!source.canOpen) return source.qualifies;
-  const dueMatch = source.tracksDue
-    ? sql` and ${tasks.due_at} = ${source.due(sql`${tasks.created_at}`)}`
-    : sql``;
+  const createdAt = sql`${tasks.created_at}`;
+  const dueMatch = source.tracksDue ? sql` and ${tasks.due_at} = ${source.due(createdAt)}` : sql``;
   return sql`exists (select 1 from ${source.from}
     where ${source.recordId} = ${taskLinkColumn(source)} and ${source.qualifies}${dueMatch})`;
 }

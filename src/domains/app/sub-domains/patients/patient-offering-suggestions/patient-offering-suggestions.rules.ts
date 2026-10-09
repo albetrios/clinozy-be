@@ -1,3 +1,4 @@
+import { toText } from '@/shared/utils/validation/record-fields.util.js';
 import {
   findMembershipIdOfUser,
   resolveRecordIds,
@@ -125,10 +126,10 @@ export function createPatientOfferingSuggestionsRules(
       );
       const sources = await repository.findSources({
         checkInPublicIds: outputs.flatMap((output) =>
-          output.patient_check_in_id ? [String(output.patient_check_in_id)] : [],
+          output.patient_check_in_id ? [toText(output.patient_check_in_id)] : [],
         ),
         appointmentPublicIds: outputs.flatMap((output) =>
-          output.appointment_id ? [String(output.appointment_id)] : [],
+          output.appointment_id ? [toText(output.appointment_id)] : [],
         ),
       });
       for (const output of outputs) {

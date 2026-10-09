@@ -22,7 +22,7 @@ function searchCondition(value: unknown): SQL {
   const q = String(value);
   const pattern = buildContainsLikePattern(q);
   const vendorNamed = sql`exists (select 1 from ${stock_vendors} where ${stock_vendors.id} = ${stock_purchases.stock_vendor_id} and ${stock_vendors.name} ilike ${pattern})`;
-  const digits = q.match(/^\s*#?0*(\d{1,9})\s*$/)?.[1];
+  const digits = /^\s*#?0*(\d{1,9})\s*$/.exec(q)?.[1];
   return or(
     sql`${stock_purchases.bill_number} ilike ${pattern}`,
     vendorNamed,

@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   bigint,
@@ -13,6 +13,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { stock_vendors } from '@/domains/app/sub-domains/stock/stock-vendors/stock-vendors.schema.js';
@@ -24,11 +25,6 @@ import {
   STOCK_ITEM_MEASURE_UNIT_VALUES,
   STOCK_ITEM_UNIT_VALUES,
 } from '@/domains/app/sub-domains/stock/stock-items/stock-items.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
 
 /**
  * Drizzle table for `app.stock_items` — one consumable or piece of equipment and how much is left
@@ -125,12 +121,15 @@ export const stock_items = appSchema
       check('chk_stock_items_name', sql`char_length(${table.name}) > 0`),
       check(
         'chk_stock_items_category',
-        sql`${table.category} IN (${literalList(STOCK_ITEM_CATEGORY_VALUES)})`,
+        sql`${table.category} IN (${sqlLiteralList(STOCK_ITEM_CATEGORY_VALUES)})`,
       ),
-      check('chk_stock_items_unit', sql`${table.unit} IN (${literalList(STOCK_ITEM_UNIT_VALUES)})`),
+      check(
+        'chk_stock_items_unit',
+        sql`${table.unit} IN (${sqlLiteralList(STOCK_ITEM_UNIT_VALUES)})`,
+      ),
       check(
         'chk_stock_items_measure_unit',
-        sql`${table.measure_unit} IN (${literalList(STOCK_ITEM_MEASURE_UNIT_VALUES)})`,
+        sql`${table.measure_unit} IN (${sqlLiteralList(STOCK_ITEM_MEASURE_UNIT_VALUES)})`,
       ),
       check('chk_stock_items_size_per_unit', sql`${table.size_per_unit} > 0`),
       // The size and its measure come both or neither
@@ -146,7 +145,7 @@ export const stock_items = appSchema
       check('chk_stock_items_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_stock_items_delete_reason',
-        sql`${table.delete_reason} IN (${literalList(RECORD_DELETE_REASON_VALUES)})`,
+        sql`${table.delete_reason} IN (${sqlLiteralList(RECORD_DELETE_REASON_VALUES)})`,
       ),
       check(
         'chk_stock_items_delete_reason_when_deleted',

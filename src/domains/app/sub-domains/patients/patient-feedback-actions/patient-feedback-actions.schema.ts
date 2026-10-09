@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   bigint,
@@ -12,6 +12,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -21,11 +22,6 @@ import {
   PATIENT_FEEDBACK_ACTION,
   PATIENT_FEEDBACK_ACTION_VALUES,
 } from '@/domains/app/sub-domains/patients/patient-feedback-actions/patient-feedback-actions.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` or `ARRAY[…]` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
 
 /**
  * Drizzle table for `app.patient_feedback_actions` — what was done about one check-in or one
@@ -90,7 +86,7 @@ export const patient_feedback_actions = appSchema
       ),
       check(
         'chk_patient_feedback_actions_action',
-        sql`${table.action} IN (${literalList(PATIENT_FEEDBACK_ACTION_VALUES)})`,
+        sql`${table.action} IN (${sqlLiteralList(PATIENT_FEEDBACK_ACTION_VALUES)})`,
       ),
       check(
         'chk_patient_feedback_actions_note_when_other',

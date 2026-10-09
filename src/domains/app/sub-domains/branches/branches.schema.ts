@@ -15,6 +15,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteral } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -39,11 +40,6 @@ function inList(column: AnyPgColumn, values: readonly string[]): SQL {
     values.map((value) => sql`${value}`),
     sql`, `,
   )})`;
-}
-
-/** A regex pattern constant as a quoted SQL literal. */
-function pattern(value: string): SQL {
-  return sql.raw(`'${value}'`);
 }
 
 /**
@@ -168,10 +164,13 @@ export const branches = appSchema
       check('chk_branches_tone', inList(table.tone, CHIP_TONE_VALUES)),
       check(
         'chk_branches_postal_code',
-        sql`${table.postal_code} ~ ${pattern(BRANCH_POSTAL_CODE_PATTERN)}`,
+        sql`${table.postal_code} ~ ${sqlLiteral(BRANCH_POSTAL_CODE_PATTERN)}`,
       ),
-      check('chk_branches_phone', sql`${table.phone} ~ ${pattern(PHONE_NUMBER_PATTERN)}`),
-      check('chk_branches_gst_number', sql`${table.gst_number} ~ ${pattern(GST_NUMBER_PATTERN)}`),
+      check('chk_branches_phone', sql`${table.phone} ~ ${sqlLiteral(PHONE_NUMBER_PATTERN)}`),
+      check(
+        'chk_branches_gst_number',
+        sql`${table.gst_number} ~ ${sqlLiteral(GST_NUMBER_PATTERN)}`,
+      ),
       check('chk_branches_hours', sql`${table.closes_at} > ${table.opens_at}`),
       check(
         'chk_branches_working_days_allowed',

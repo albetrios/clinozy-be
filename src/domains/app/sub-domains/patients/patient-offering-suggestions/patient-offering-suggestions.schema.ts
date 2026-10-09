@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   bigint,
@@ -14,6 +14,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -27,11 +28,6 @@ import {
   PATIENT_OFFERING_SUGGESTION_STATUS,
   PATIENT_OFFERING_SUGGESTION_STATUS_VALUES,
 } from '@/domains/app/sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
 
 /**
  * Drizzle table for `app.patient_offering_suggestions` — the patient's plan: an offering the team
@@ -136,7 +132,7 @@ export const patient_offering_suggestions = appSchema
       check('chk_patient_offering_suggestions_price', sql`${table.price} >= 0`),
       check(
         'chk_patient_offering_suggestions_status',
-        sql`${table.status} IN (${literalList(PATIENT_OFFERING_SUGGESTION_STATUS_VALUES)})`,
+        sql`${table.status} IN (${sqlLiteralList(PATIENT_OFFERING_SUGGESTION_STATUS_VALUES)})`,
       ),
       check(
         'chk_patient_offering_suggestions_updated',
@@ -144,7 +140,7 @@ export const patient_offering_suggestions = appSchema
       ),
       check(
         'chk_patient_offering_suggestions_delete_reason',
-        sql`${table.delete_reason} IN (${literalList(RECORD_DELETE_REASON_VALUES)})`,
+        sql`${table.delete_reason} IN (${sqlLiteralList(RECORD_DELETE_REASON_VALUES)})`,
       ),
       check(
         'chk_patient_offering_suggestions_delete_reason_when_deleted',

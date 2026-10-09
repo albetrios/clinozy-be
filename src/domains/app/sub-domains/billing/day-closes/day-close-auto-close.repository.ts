@@ -5,6 +5,7 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { payments } from '@/domains/app/sub-domains/billing/payments/payments.schema.js';
 import {
+  DAY_CLOSE_BACKDATE_DAYS_MAX,
   DAY_CLOSE_EVENT_KIND,
   DAY_CLOSE_KIND,
   DAY_CLOSE_OPENING_SOURCE,
@@ -23,7 +24,6 @@ import {
   DAY_CLOSE_AUTO_CLOSE_DAYS_PER_JOB,
   DAY_CLOSE_AUTO_CLOSE_SWEEP_BATCH,
 } from './workers/day-close-auto-close.constants.js';
-import { DAY_CLOSE_BACKDATE_DAYS_MAX } from './day-closes.constants.js';
 
 /** A branch-day the worker closes: its open day close, or none yet (money moved, nobody opened it). */
 export interface DayToAutoClose {

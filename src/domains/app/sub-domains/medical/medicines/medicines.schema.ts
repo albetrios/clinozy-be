@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   bigint,
@@ -17,6 +17,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteral, sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { manufacturers } from '@/domains/app/sub-domains/medical/manufacturers/manufacturers.schema.js';
@@ -31,18 +32,6 @@ import {
   MEDICINE_NEAR_EXPIRY_DISCOUNT_MAX,
   MEDICINE_QUANTITY_MAX,
 } from './medicines.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` CHECK. */
-function literalList(values: readonly (string | number)[]): SQL {
-  return sql.raw(
-    values.map((value) => (typeof value === 'number' ? `${value}` : `'${value}'`)).join(', '),
-  );
-}
-
-/** A literal number in a CHECK. */
-function literal(value: number): SQL {
-  return sql.raw(String(value));
-}
 
 /** The organization GUC's row, for a policy. */
 const ACTIVE_ORGANIZATION = sql`(
@@ -142,21 +131,21 @@ export const medicines = appSchema
       check('chk_medicines_mrp', sql`${table.mrp} > 0 OR (${table.is_quick} AND ${table.mrp} = 0)`),
       check(
         'chk_medicines_gst_percent',
-        sql`${table.gst_percent} IN (${literalList(MEDICINE_GST_PERCENT_VALUES)})`,
+        sql`${table.gst_percent} IN (${sqlLiteralList(MEDICINE_GST_PERCENT_VALUES)})`,
       ),
       check(
         'chk_medicines_stock_levels',
-        sql`${table.min_stock} >= 0 AND ${table.max_stock} >= ${table.min_stock} AND ${table.max_stock} <= ${literal(MEDICINE_QUANTITY_MAX)}`,
+        sql`${table.min_stock} >= 0 AND ${table.max_stock} >= ${table.min_stock} AND ${table.max_stock} <= ${sqlLiteral(MEDICINE_QUANTITY_MAX)}`,
       ),
       check('chk_medicines_quantity', sql`${table.quantity} >= 0`),
       check(
         'chk_medicines_near_expiry_discount_percent',
-        sql`${table.near_expiry_discount_percent} > 0 AND ${table.near_expiry_discount_percent} <= ${literal(MEDICINE_NEAR_EXPIRY_DISCOUNT_MAX)}`,
+        sql`${table.near_expiry_discount_percent} > 0 AND ${table.near_expiry_discount_percent} <= ${sqlLiteral(MEDICINE_NEAR_EXPIRY_DISCOUNT_MAX)}`,
       ),
       check('chk_medicines_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_medicines_delete_reason',
-        sql`${table.delete_reason} IN (${literalList(RECORD_DELETE_REASON_VALUES)})`,
+        sql`${table.delete_reason} IN (${sqlLiteralList(RECORD_DELETE_REASON_VALUES)})`,
       ),
       check(
         'chk_medicines_delete_reason_when_deleted',
@@ -247,7 +236,7 @@ export const medicine_batches = appSchema
       check('chk_medicine_batches_expiry_month', sql`extract(day from ${table.expiry_month}) = 1`),
       check(
         'chk_medicine_batches_quantity',
-        sql`${table.quantity} >= 0 AND ${table.quantity} <= ${literal(MEDICINE_QUANTITY_MAX)}`,
+        sql`${table.quantity} >= 0 AND ${table.quantity} <= ${sqlLiteral(MEDICINE_QUANTITY_MAX)}`,
       ),
       check('chk_medicine_batches_purchase_rate', sql`${table.purchase_rate} >= 0`),
       check('chk_medicine_batches_updated', sql`${table.updated_at} >= ${table.created_at}`),
@@ -300,7 +289,7 @@ export const medicine_supplier_prices = appSchema
       check('chk_medicine_supplier_prices_rate', sql`${table.rate} > 0`),
       check(
         'chk_medicine_supplier_prices_free_quantity',
-        sql`${table.free_quantity} >= 0 AND ${table.free_quantity} <= ${literal(MEDICINE_QUANTITY_MAX)}`,
+        sql`${table.free_quantity} >= 0 AND ${table.free_quantity} <= ${sqlLiteral(MEDICINE_QUANTITY_MAX)}`,
       ),
       check(
         'chk_medicine_supplier_prices_lead_days',

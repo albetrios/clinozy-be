@@ -1,6 +1,6 @@
 import type { BaseRecordRules } from '@/domains/app/base-record.types.js';
 import { fieldValidationError, type ValidationError } from '@/shared/errors/index.js';
-import { calendarDateInTimeZone } from '@/shared/utils/validation/record-fields.util.js';
+import { calendarDateInTimeZone, toText } from '@/shared/utils/validation/record-fields.util.js';
 import {
   OFFER_EXTRA_SESSIONS_MAX,
   OFFER_KIND,
@@ -55,7 +55,10 @@ export function assertOfferValues(values: Record<string, unknown>): void {
   if (kind === OFFER_KIND.PERCENT && !isWholeBetweenOneAnd(value, OFFER_PERCENT_MAX)) {
     throw offerFieldError('value', 'errors:validation.offerPercentValue');
   }
-  if ((kind === OFFER_KIND.AMOUNT || kind === OFFER_KIND.FIXED) && !(value > 0)) {
+  if (
+    (kind === OFFER_KIND.AMOUNT || kind === OFFER_KIND.FIXED) &&
+    (Number.isNaN(value) || value <= 0)
+  ) {
     throw offerFieldError('value', 'errors:validation.offerAmountValue');
   }
   if (kind === OFFER_KIND.EXTRA && !isWholeBetweenOneAnd(value, OFFER_EXTRA_SESSIONS_MAX)) {
@@ -64,7 +67,7 @@ export function assertOfferValues(values: Record<string, unknown>): void {
   if (
     values.ends_on != null &&
     values.starts_on != null &&
-    String(values.ends_on) < String(values.starts_on)
+    toText(values.ends_on) < toText(values.starts_on)
   ) {
     throw offerFieldError('ends_on', 'errors:validation.offerEndsBeforeStarts');
   }

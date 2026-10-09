@@ -14,6 +14,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteral, sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -38,16 +39,6 @@ import {
   TASK_STATUS,
   TASK_STATUS_VALUES,
 } from '@/domains/app/sub-domains/tasks/tasks.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
-
-/** A value as a SQL literal. */
-function literal(value: string): SQL {
-  return sql.raw(`'${value}'`);
-}
 
 /** The organization policy of a task table, with the retention-cleanup arm when it is purged. */
 function organizationPolicy(options: {
@@ -188,7 +179,7 @@ function taskIndexes(table: TaskTable) {
     uniqueIndex('idx_tasks_open_rule_source')
       .on(table.organization_id, table.rule_key, table.source_key)
       .where(
-        sql`${table.kind} = ${literal(TASK_KIND.RULE)} AND ${table.status} <> ${literal(TASK_STATUS.DONE)} AND ${live}`,
+        sql`${table.kind} = ${sqlLiteral(TASK_KIND.RULE)} AND ${table.status} <> ${sqlLiteral(TASK_STATUS.DONE)} AND ${live}`,
       ),
     index('idx_tasks_owner_status_due').on(table.owner_membership_id, table.status, table.due_at),
     index('idx_tasks_organization_queue')
@@ -202,7 +193,7 @@ function taskIndexes(table: TaskTable) {
     ),
     index('idx_tasks_snoozed_until')
       .on(table.snoozed_until)
-      .where(sql`${table.status} = ${literal(TASK_STATUS.SNOOZED)} AND ${live}`),
+      .where(sql`${table.status} = ${sqlLiteral(TASK_STATUS.SNOOZED)} AND ${live}`),
     index('idx_tasks_contact_id').on(table.contact_id).where(sql`${table.contact_id} IS NOT NULL`),
     ...TASK_RECORD_LINKS.map((column) =>
       index(`idx_tasks_${column}`).on(table[column]).where(sql`${table[column]} IS NOT NULL`),
@@ -228,37 +219,40 @@ function taskChecks(table: TaskTable) {
     sql`, `,
   );
   return [
-    check('chk_tasks_kind', sql`${table.kind} IN (${literalList(TASK_KIND_VALUES)})`),
-    check('chk_tasks_rule_key', sql`${table.rule_key} IN (${literalList(TASK_RULE_VALUES)})`),
+    check('chk_tasks_kind', sql`${table.kind} IN (${sqlLiteralList(TASK_KIND_VALUES)})`),
+    check('chk_tasks_rule_key', sql`${table.rule_key} IN (${sqlLiteralList(TASK_RULE_VALUES)})`),
     check(
       'chk_tasks_rule_kind',
-      sql`(${table.kind} = ${literal(TASK_KIND.RULE)}) = (${table.rule_key} IS NOT NULL)`,
+      sql`(${table.kind} = ${sqlLiteral(TASK_KIND.RULE)}) = (${table.rule_key} IS NOT NULL)`,
     ),
     check('chk_tasks_title', sql`char_length(${table.title}) > 0`),
     check(
       'chk_tasks_owner_role',
-      sql`${table.owner_role} IN (${literalList(TASK_OWNER_ROLE_VALUES)})`,
+      sql`${table.owner_role} IN (${sqlLiteralList(TASK_OWNER_ROLE_VALUES)})`,
     ),
     check(
       'chk_tasks_owner_or_queue',
       sql`${table.owner_membership_id} IS NOT NULL OR ${table.owner_role} IS NOT NULL`,
     ),
     check('chk_tasks_one_record', sql`num_nonnulls(${links}) <= 1`),
-    check('chk_tasks_status', sql`${table.status} IN (${literalList(TASK_STATUS_VALUES)})`),
+    check('chk_tasks_status', sql`${table.status} IN (${sqlLiteralList(TASK_STATUS_VALUES)})`),
     check(
       'chk_tasks_snoozed',
-      sql`(${table.status} = ${literal(TASK_STATUS.SNOOZED)}) = (${table.snoozed_until} IS NOT NULL)`,
+      sql`(${table.status} = ${sqlLiteral(TASK_STATUS.SNOOZED)}) = (${table.snoozed_until} IS NOT NULL)`,
     ),
-    check('chk_tasks_outcome', sql`${table.outcome} IN (${literalList(TASK_OUTCOME_VALUES)})`),
+    check('chk_tasks_outcome', sql`${table.outcome} IN (${sqlLiteralList(TASK_OUTCOME_VALUES)})`),
     check(
       'chk_tasks_done',
-      sql`(${table.status} = ${literal(TASK_STATUS.DONE)}) = (${table.outcome} IS NOT NULL AND ${table.resolved_at} IS NOT NULL)`,
+      sql`(${table.status} = ${sqlLiteral(TASK_STATUS.DONE)}) = (${table.outcome} IS NOT NULL AND ${table.resolved_at} IS NOT NULL)`,
     ),
-    check('chk_tasks_priority', sql`${table.priority} IN (${literalList(TASK_PRIORITY_VALUES)})`),
+    check(
+      'chk_tasks_priority',
+      sql`${table.priority} IN (${sqlLiteralList(TASK_PRIORITY_VALUES)})`,
+    ),
     check('chk_tasks_updated', sql`${table.updated_at} >= ${table.created_at}`),
     check(
       'chk_tasks_delete_reason',
-      sql`${table.delete_reason} IN (${literalList(RECORD_DELETE_REASON_VALUES)})`,
+      sql`${table.delete_reason} IN (${sqlLiteralList(RECORD_DELETE_REASON_VALUES)})`,
     ),
     check(
       'chk_tasks_delete_reason_when_deleted',
@@ -356,11 +350,11 @@ export const task_owner_changes = appSchema
       ),
       check(
         'chk_task_owner_changes_from_role',
-        sql`${table.from_role} IN (${literalList(TASK_OWNER_ROLE_VALUES)})`,
+        sql`${table.from_role} IN (${sqlLiteralList(TASK_OWNER_ROLE_VALUES)})`,
       ),
       check(
         'chk_task_owner_changes_to_role',
-        sql`${table.to_role} IN (${literalList(TASK_OWNER_ROLE_VALUES)})`,
+        sql`${table.to_role} IN (${sqlLiteralList(TASK_OWNER_ROLE_VALUES)})`,
       ),
       check(
         'chk_task_owner_changes_to',

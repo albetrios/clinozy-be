@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   bigint,
@@ -13,6 +13,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
@@ -25,11 +26,6 @@ import {
   PATIENT_CHECK_IN_FEEL_VALUES,
   PATIENT_CHECK_IN_FOLLOWED_VALUES,
 } from '@/domains/app/sub-domains/patients/patient-check-ins/patient-check-ins.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` or `ARRAY[…]` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
 
 /**
  * Drizzle table for `app.patient_check_ins` — how a patient is doing after a visit or a session
@@ -117,17 +113,17 @@ export const patient_check_ins = appSchema
       check('chk_patient_check_ins_context', sql`char_length(${table.context}) > 0`),
       check(
         'chk_patient_check_ins_feel',
-        sql`${table.feel} IN (${literalList(PATIENT_CHECK_IN_FEEL_VALUES)})`,
+        sql`${table.feel} IN (${sqlLiteralList(PATIENT_CHECK_IN_FEEL_VALUES)})`,
       ),
       check('chk_patient_check_ins_score', sql`${table.score} BETWEEN 1 AND 10`),
       check(
         'chk_patient_check_ins_followed',
-        sql`${table.followed} IN (${literalList(PATIENT_CHECK_IN_FOLLOWED_VALUES)})`,
+        sql`${table.followed} IN (${sqlLiteralList(PATIENT_CHECK_IN_FOLLOWED_VALUES)})`,
       ),
       check('chk_patient_check_ins_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_patient_check_ins_delete_reason',
-        sql`${table.delete_reason} IN (${literalList(RECORD_DELETE_REASON_VALUES)})`,
+        sql`${table.delete_reason} IN (${sqlLiteralList(RECORD_DELETE_REASON_VALUES)})`,
       ),
       check(
         'chk_patient_check_ins_delete_reason_when_deleted',

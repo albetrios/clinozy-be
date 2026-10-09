@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   bigint,
   bigserial,
@@ -11,15 +11,11 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { RECORD_DELETE_REASON_VALUES } from '@/shared/constants/record-fields.constants.js';
 import { MANUFACTURER_TONE_VALUES } from './manufacturers.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
 
 /**
  * Drizzle table for `app.manufacturers` — the brand on a medicine's pack (launch ROUTE #153,
@@ -84,12 +80,12 @@ export const manufacturers = appSchema
       ),
       check(
         'chk_manufacturers_tone',
-        sql`${table.tone} IN (${literalList(MANUFACTURER_TONE_VALUES)})`,
+        sql`${table.tone} IN (${sqlLiteralList(MANUFACTURER_TONE_VALUES)})`,
       ),
       check('chk_manufacturers_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_manufacturers_delete_reason',
-        sql`${table.delete_reason} IN (${literalList(RECORD_DELETE_REASON_VALUES)})`,
+        sql`${table.delete_reason} IN (${sqlLiteralList(RECORD_DELETE_REASON_VALUES)})`,
       ),
       check(
         'chk_manufacturers_delete_reason_when_deleted',

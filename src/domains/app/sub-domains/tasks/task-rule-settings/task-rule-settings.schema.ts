@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   bigint,
   bigserial,
@@ -11,17 +11,13 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import {
   TASK_AUTOMATIC_RULE_VALUES,
   TASK_RULE_VALUES,
 } from '@/domains/app/sub-domains/tasks/tasks.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
 
 /**
  * Drizzle table for `app.task_rule_settings` — one task rule's switches for the organization (launch
@@ -69,11 +65,11 @@ export const task_rule_settings = appSchema
         .where(sql`${table.updated_by_user_id} IS NOT NULL`),
       check(
         'chk_task_rule_settings_rule_key',
-        sql`${table.rule_key} IN (${literalList(TASK_RULE_VALUES)})`,
+        sql`${table.rule_key} IN (${sqlLiteralList(TASK_RULE_VALUES)})`,
       ),
       check(
         'chk_task_rule_settings_automatic',
-        sql`NOT ${table.is_automatic} OR ${table.rule_key} IN (${literalList(TASK_AUTOMATIC_RULE_VALUES)})`,
+        sql`NOT ${table.is_automatic} OR ${table.rule_key} IN (${sqlLiteralList(TASK_AUTOMATIC_RULE_VALUES)})`,
       ),
       check('chk_task_rule_settings_updated', sql`${table.updated_at} >= ${table.created_at}`),
       pgPolicy('task_rule_settings_tenant_isolation', {

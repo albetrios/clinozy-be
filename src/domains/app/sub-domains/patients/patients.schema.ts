@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   bigint,
@@ -15,6 +15,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -29,11 +30,6 @@ import {
   PATIENT_STATUS_VALUES,
   PATIENT_TYPES_VALUES,
 } from '@/domains/app/sub-domains/patients/patients.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` or `ARRAY[…]` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
 
 /**
  * Drizzle table for `app.patients` — the clinical side of a contact: consents, allergies, usual
@@ -135,12 +131,15 @@ export const patients = appSchema
       check('chk_patients_patient_number', sql`${table.patient_number} > 0`),
       check(
         'chk_patients_types',
-        sql`${table.types} <@ ARRAY[${literalList(PATIENT_TYPES_VALUES)}]::text[] AND cardinality(${table.types}) <= ${sql.raw(String(PATIENT_TYPES_VALUES.length))}`,
+        sql`${table.types} <@ ARRAY[${sqlLiteralList(PATIENT_TYPES_VALUES)}]::text[] AND cardinality(${table.types}) <= ${sql.raw(String(PATIENT_TYPES_VALUES.length))}`,
       ),
-      check('chk_patients_status', sql`${table.status} IN (${literalList(PATIENT_STATUS_VALUES)})`),
+      check(
+        'chk_patients_status',
+        sql`${table.status} IN (${sqlLiteralList(PATIENT_STATUS_VALUES)})`,
+      ),
       check(
         'chk_patients_conversion',
-        sql`${table.conversion} IN (${literalList(PATIENT_CONVERSION_VALUES)})`,
+        sql`${table.conversion} IN (${sqlLiteralList(PATIENT_CONVERSION_VALUES)})`,
       ),
       check(
         'chk_patients_notes',
@@ -157,7 +156,7 @@ export const patients = appSchema
       check('chk_patients_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_patients_delete_reason',
-        sql`${table.delete_reason} IN (${literalList(RECORD_DELETE_REASON_VALUES)})`,
+        sql`${table.delete_reason} IN (${sqlLiteralList(RECORD_DELETE_REASON_VALUES)})`,
       ),
       check(
         'chk_patients_delete_reason_when_deleted',

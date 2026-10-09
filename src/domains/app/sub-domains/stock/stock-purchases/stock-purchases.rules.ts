@@ -24,7 +24,7 @@ import { StockItemsRepository } from '@/domains/app/sub-domains/stock/stock-item
 import { stock_items } from '@/domains/app/sub-domains/stock/stock-items/stock-items.schema.js';
 import { StockVendorsRepository } from '@/domains/app/sub-domains/stock/stock-vendors/stock-vendors.repository.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
-import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import { toAmount, toText } from '@/shared/utils/validation/record-fields.util.js';
 import type { StockPurchaseItemInput, StockPurchasePaymentInput } from './stock-purchases.dto.js';
 import type { StockPurchasesRepository } from './stock-purchases.repository.js';
 import { stock_purchases } from './stock-purchases.schema.js';
@@ -198,7 +198,7 @@ async function recordPurchasePaid(options: {
       branch_id: payment.branchId,
       paid_at: payment.paid_at === undefined ? new Date() : new Date(payment.paid_at),
       reference: payment.reference ?? null,
-      payee_name: String(vendor?.name ?? ''),
+      payee_name: toText(vendor?.name),
       stock_purchase_id: purchase.id,
       ...splitsToColumns(payment.splits),
     },

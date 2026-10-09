@@ -19,6 +19,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteral, sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -39,18 +40,6 @@ import {
   INVOICE_TYPE,
   INVOICE_TYPE_VALUES,
 } from '@/domains/app/sub-domains/billing/invoices/invoices.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` CHECK. */
-function literalList(values: readonly (string | number)[]): SQL {
-  return sql.raw(
-    values.map((value) => (typeof value === 'number' ? String(value) : `'${value}'`)).join(', '),
-  );
-}
-
-/** A literal number in a CHECK. */
-function literalNumber(value: number): SQL {
-  return sql.raw(String(value));
-}
 
 /**
  * Drizzle table for `app.invoices` — one bill, clinic, consultation or medical (launch ROUTE #136,
@@ -167,7 +156,7 @@ export const invoices = appSchema
         .where(sql`${table.updated_by_user_id} IS NOT NULL`),
       check('chk_invoices_invoice_sequence', sql`${table.invoice_sequence} > 0`),
       check('chk_invoices_financial_year', sql`${table.financial_year} ~ '^\\d{4}-\\d{2}$'`),
-      check('chk_invoices_type', sql`${table.type} IN (${literalList(INVOICE_TYPE_VALUES)})`),
+      check('chk_invoices_type', sql`${table.type} IN (${sqlLiteralList(INVOICE_TYPE_VALUES)})`),
       check(
         'chk_invoices_contact_unless_medical',
         sql`${table.contact_id} IS NOT NULL OR ${table.type} = '${sql.raw(INVOICE_TYPE.MEDICAL)}'`,
@@ -188,7 +177,7 @@ export const invoices = appSchema
       check('chk_invoices_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_invoices_delete_reason',
-        sql`${table.delete_reason} IN (${literalList(RECORD_DELETE_REASON_VALUES)})`,
+        sql`${table.delete_reason} IN (${sqlLiteralList(RECORD_DELETE_REASON_VALUES)})`,
       ),
       check(
         'chk_invoices_delete_reason_when_deleted',
@@ -315,7 +304,7 @@ export const invoice_items = appSchema
         .where(sql`${table.updated_by_user_id} IS NOT NULL`),
       check(
         'chk_invoice_items_line_number',
-        sql`${table.line_number} BETWEEN 1 AND ${literalNumber(INVOICE_ITEMS_MAX)}`,
+        sql`${table.line_number} BETWEEN 1 AND ${sqlLiteral(INVOICE_ITEMS_MAX)}`,
       ),
       check(
         'chk_invoice_items_one_item',
@@ -324,13 +313,13 @@ export const invoice_items = appSchema
       check('chk_invoice_items_name', sql`char_length(${table.name}) > 0`),
       check(
         'chk_invoice_items_quantity',
-        sql`${table.quantity} BETWEEN 1 AND ${literalNumber(INVOICE_ITEM_QUANTITY_MAX)}`,
+        sql`${table.quantity} BETWEEN 1 AND ${sqlLiteral(INVOICE_ITEM_QUANTITY_MAX)}`,
       ),
       check('chk_invoice_items_rate', sql`${table.rate} >= 0`),
       check('chk_invoice_items_discount_percent', sql`${table.discount_percent} BETWEEN 0 AND 100`),
       check(
         'chk_invoice_items_gst_percent',
-        sql`${table.gst_percent} IN (${literalList(INVOICE_ITEM_GST_PERCENT_VALUES)})`,
+        sql`${table.gst_percent} IN (${sqlLiteralList(INVOICE_ITEM_GST_PERCENT_VALUES)})`,
       ),
       check(
         'chk_invoice_items_amounts',

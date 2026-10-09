@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   bigint,
@@ -12,6 +12,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
@@ -23,11 +24,6 @@ import {
   PATIENT_IMAGE_ALBUM_VALUES,
   PATIENT_IMAGE_STAGE_VALUES,
 } from '@/domains/app/sub-domains/patients/patient-images/patient-images.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` or `ARRAY[…]` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
 
 /**
  * Drizzle table for `app.patient_images` — a photo of a patient in one of three albums, optionally
@@ -114,20 +110,20 @@ export const patient_images = appSchema
         .where(sql`${table.updated_by_user_id} IS NOT NULL`),
       check(
         'chk_patient_images_album',
-        sql`${table.album} IN (${literalList(PATIENT_IMAGE_ALBUM_VALUES)})`,
+        sql`${table.album} IN (${sqlLiteralList(PATIENT_IMAGE_ALBUM_VALUES)})`,
       ),
       check(
         'chk_patient_images_stage',
-        sql`${table.stage} IN (${literalList(PATIENT_IMAGE_STAGE_VALUES)})`,
+        sql`${table.stage} IN (${sqlLiteralList(PATIENT_IMAGE_STAGE_VALUES)})`,
       ),
       check(
         'chk_patient_images_body_part',
-        sql`${table.body_part} IN (${literalList(PATIENT_BODY_PART_VALUES)})`,
+        sql`${table.body_part} IN (${sqlLiteralList(PATIENT_BODY_PART_VALUES)})`,
       ),
       check('chk_patient_images_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_patient_images_delete_reason',
-        sql`${table.delete_reason} IN (${literalList(RECORD_DELETE_REASON_VALUES)})`,
+        sql`${table.delete_reason} IN (${sqlLiteralList(RECORD_DELETE_REASON_VALUES)})`,
       ),
       check(
         'chk_patient_images_delete_reason_when_deleted',

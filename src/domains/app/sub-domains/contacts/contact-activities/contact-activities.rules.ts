@@ -1,3 +1,4 @@
+import { toText } from '@/shared/utils/validation/record-fields.util.js';
 import {
   type BaseRecordRow,
   findMembershipIdOfUser,
@@ -61,7 +62,7 @@ function fillPlaceholders(
       ? ''
       : (LEAD_INTEREST_LABELS[interest as keyof typeof LEAD_INTEREST_LABELS] ?? interest);
   const filled = body
-    .replaceAll(CONTACT_ACTIVITY_PLACEHOLDER.FIRST_NAME, String(contact?.first_name ?? ''))
+    .replaceAll(CONTACT_ACTIVITY_PLACEHOLDER.FIRST_NAME, toText(contact?.first_name))
     .replaceAll(CONTACT_ACTIVITY_PLACEHOLDER.INTEREST, interestLabel);
   if (filled.length > CONTACT_ACTIVITY_BODY_MAX) {
     throw fieldValidationError({

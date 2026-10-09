@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   bigint,
@@ -13,6 +13,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
@@ -22,11 +23,6 @@ import {
   PATIENT_REPORT_NOTES_MAX,
   PATIENT_REPORT_TYPE_VALUES,
 } from '@/domains/app/sub-domains/patients/patient-reports/patient-reports.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` or `ARRAY[…]` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
 
 /**
  * Drizzle table for `app.patient_reports` — a lab, scan or consent document of a patient, up to ten
@@ -86,7 +82,7 @@ export const patient_reports = appSchema
         .where(sql`${table.updated_by_user_id} IS NOT NULL`),
       check(
         'chk_patient_reports_type',
-        sql`${table.type} IN (${literalList(PATIENT_REPORT_TYPE_VALUES)})`,
+        sql`${table.type} IN (${sqlLiteralList(PATIENT_REPORT_TYPE_VALUES)})`,
       ),
       check('chk_patient_reports_name', sql`char_length(${table.name}) > 0`),
       check(
@@ -100,7 +96,7 @@ export const patient_reports = appSchema
       check('chk_patient_reports_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_patient_reports_delete_reason',
-        sql`${table.delete_reason} IN (${literalList(RECORD_DELETE_REASON_VALUES)})`,
+        sql`${table.delete_reason} IN (${sqlLiteralList(RECORD_DELETE_REASON_VALUES)})`,
       ),
       check(
         'chk_patient_reports_delete_reason_when_deleted',

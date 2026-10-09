@@ -1,19 +1,14 @@
+import { toText } from '@/shared/utils/validation/record-fields.util.js';
+
 /** Cells a spreadsheet would run as a formula (CSV injection) — prefixed with `'` on export. */
 const FORMULA_START = /^[=+\-@\t\r]/;
 
 /** One CSV cell: arrays joined with `|`, objects as JSON, quoted when needed, formulas defused. */
 function csvCell(value: unknown): string {
   if (value === null || value === undefined) return '';
-  let text: string;
-  if (Array.isArray(value)) {
-    text = value
-      .map((item) => (typeof item === 'object' ? JSON.stringify(item) : String(item)))
-      .join('|');
-  } else if (typeof value === 'object') {
-    text = JSON.stringify(value);
-  } else {
-    text = String(value);
-  }
+  let text = Array.isArray(value)
+    ? value.map((item: unknown) => toText(item)).join('|')
+    : toText(value);
   if (FORMULA_START.test(text)) text = `'${text}`;
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }

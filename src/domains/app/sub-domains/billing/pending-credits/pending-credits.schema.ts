@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   bigint,
@@ -14,6 +14,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteral, sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
@@ -26,13 +27,8 @@ import {
   PENDING_CREDIT_STATUS_VALUES,
 } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.constants.js';
 
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
-
 /** `'open'` as a SQL literal. */
-const OPEN = sql.raw(`'${PENDING_CREDIT_STATUS.OPEN}'`);
+const OPEN = sqlLiteral(PENDING_CREDIT_STATUS.OPEN);
 
 /**
  * Drizzle table for `app.pending_credits` — money owed to or by someone, settled in parts by
@@ -125,7 +121,7 @@ export const pending_credits = appSchema
       check('chk_pending_credits_number', sql`${table.pending_credit_number} > 0`),
       check(
         'chk_pending_credits_direction',
-        sql`${table.direction} IN (${literalList(PENDING_CREDIT_DIRECTION_VALUES)})`,
+        sql`${table.direction} IN (${sqlLiteralList(PENDING_CREDIT_DIRECTION_VALUES)})`,
       ),
       check(
         'chk_pending_credits_party',
@@ -138,7 +134,7 @@ export const pending_credits = appSchema
       ),
       check(
         'chk_pending_credits_status',
-        sql`${table.status} IN (${literalList(PENDING_CREDIT_STATUS_VALUES)})`,
+        sql`${table.status} IN (${sqlLiteralList(PENDING_CREDIT_STATUS_VALUES)})`,
       ),
       check(
         'chk_pending_credits_status_open',
@@ -148,7 +144,7 @@ export const pending_credits = appSchema
       check('chk_pending_credits_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_pending_credits_delete_reason',
-        sql`${table.delete_reason} IN (${literalList(RECORD_DELETE_REASON_VALUES)})`,
+        sql`${table.delete_reason} IN (${sqlLiteralList(RECORD_DELETE_REASON_VALUES)})`,
       ),
       check(
         'chk_pending_credits_delete_reason_when_deleted',

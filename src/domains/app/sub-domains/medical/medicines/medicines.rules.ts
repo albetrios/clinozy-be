@@ -15,7 +15,7 @@ import {
   type MedicineSupplierPriceInput,
   NearExpiryDiscountDto,
 } from './medicines.dto.js';
-import type { MedicinesRepository } from './medicines.repository.js';
+import type { MedicineBatchValues, MedicinesRepository } from './medicines.repository.js';
 import { medicines } from './medicines.schema.js';
 import { moveMedicineBatch } from './medicines.stock.js';
 
@@ -110,6 +110,59 @@ async function holdBatchesAndPrices(
   });
 }
 
+/** MD13: every kept batch (`id`) is one of this medicine's — 400 on `batches` otherwise. */
+function assertBatchesOfMedicine(
+  batches: readonly MedicineBatchInput[],
+  byPublicId: ReadonlyMap<string, unknown>,
+): void {
+  for (const batch of batches) {
+    if (batch.id !== undefined && !byPublicId.has(batch.id)) {
+      throw fieldValidationError({
+        field: 'batches',
+        messageKey: 'errors:validation.medicineBatchNotOfMedicine',
+        messageParams: { id: batch.id },
+      });
+    }
+  }
+}
+
+/** MD13: a batch number a left-out batch keeps is not free — 409 `record_already_exists`. */
+function assertBatchNumbersFree(
+  batches: readonly MedicineBatchInput[],
+  leftOut: readonly { batch_number: string }[],
+): void {
+  const taken = new Set(leftOut.map((batch) => batch.batch_number.toLowerCase()));
+  for (const batch of batches) {
+    if (taken.has(batch.batch_number.toLowerCase())) {
+      throw new ConflictError('errors:medicineBatchNumberTaken', {
+        batch_number: batch.batch_number,
+      }).withReason('record_already_exists');
+    }
+  }
+}
+
+/** A batch's stored details — the rate and the supplier only when the save sent them. */
+function batchDetails(
+  batch: MedicineBatchInput,
+  supplierIds: ReadonlyMap<string, number>,
+): Omit<MedicineBatchValues, 'quantity'> & { batch_number: string; expiry_month: string } {
+  const details: Omit<MedicineBatchValues, 'quantity'> & {
+    batch_number: string;
+    expiry_month: string;
+  } = {
+    batch_number: batch.batch_number,
+    expiry_month: monthStartOf(batch.expiry_month),
+  };
+  if (batch.purchase_rate !== undefined) {
+    details.purchase_rate = batch.purchase_rate === null ? null : batch.purchase_rate.toFixed(2);
+  }
+  if (batch.supplier_id !== undefined) {
+    details.supplier_id =
+      batch.supplier_id === null ? null : (supplierIds.get(batch.supplier_id) ?? null);
+  }
+  return details;
+}
+
 /**
  * MD13: a save's batch list — a kept batch (its `id`) changes its details and its quantity moves
  * by the difference; a new one is added; a stored one left out goes to zero (and stays). A number
@@ -126,44 +179,15 @@ async function syncBatches(options: {
   const name = String(medicine.name);
   const stored = await repository.lockBatches(medicine.id);
   const byPublicId = new Map(stored.map((batch) => [batch.public_id, batch]));
-  for (const batch of options.batches) {
-    if (batch.id !== undefined && !byPublicId.has(batch.id)) {
-      throw fieldValidationError({
-        field: 'batches',
-        messageKey: 'errors:validation.medicineBatchNotOfMedicine',
-        messageParams: { id: batch.id },
-      });
-    }
-  }
+  assertBatchesOfMedicine(options.batches, byPublicId);
   const keptIds = new Set(options.batches.flatMap((batch) => (batch.id ? [batch.id] : [])));
   const leftOut = stored.filter((batch) => !keptIds.has(batch.public_id));
-  const taken = new Set(leftOut.map((batch) => batch.batch_number.toLowerCase()));
-  for (const batch of options.batches) {
-    if (taken.has(batch.batch_number.toLowerCase())) {
-      throw new ConflictError('errors:medicineBatchNumberTaken', {
-        batch_number: batch.batch_number,
-      }).withReason('record_already_exists');
-    }
-  }
+  assertBatchNumbersFree(options.batches, leftOut);
   for (const batch of leftOut) {
     await moveMedicineBatch({ context, batchId: batch.id, change: -batch.quantity, name });
   }
   for (const batch of options.batches) {
-    const details = {
-      batch_number: batch.batch_number,
-      expiry_month: monthStartOf(batch.expiry_month),
-      ...(batch.purchase_rate === undefined
-        ? {}
-        : { purchase_rate: batch.purchase_rate === null ? null : batch.purchase_rate.toFixed(2) }),
-      ...(batch.supplier_id === undefined
-        ? {}
-        : {
-            supplier_id:
-              batch.supplier_id === null
-                ? null
-                : (options.supplierIds.get(batch.supplier_id) ?? null),
-          }),
-    };
+    const details = batchDetails(batch, options.supplierIds);
     const kept = batch.id === undefined ? undefined : byPublicId.get(batch.id);
     if (kept) {
       await repository.updateBatch({ id: kept.id, values: details, userId: context.userId });

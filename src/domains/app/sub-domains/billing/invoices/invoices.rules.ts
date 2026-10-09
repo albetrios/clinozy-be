@@ -301,7 +301,7 @@ async function afterInvoiceWrite(options: {
         options.kind === 'delete'
           ? {
               reason: String(row.delete_reason),
-              note: (row.delete_note as string | null) ?? null,
+              note: row.delete_note ?? null,
             }
           : null,
       userId: context.userId,

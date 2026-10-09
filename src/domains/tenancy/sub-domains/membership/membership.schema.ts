@@ -14,6 +14,7 @@ import {
   pgPolicy,
 } from 'drizzle-orm/pg-core';
 import { maintenanceBypassArm, tenancySchema } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteral } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
@@ -149,7 +150,7 @@ export const memberships = tenancySchema
       // The target of the app's composite membership foreign keys (K8).
       uniqueIndex('idx_memberships_organization_id_id').on(table.organization_id, table.id),
       check('chk_memberships_staff_number', sql`${table.staff_number} > 0`),
-      check('chk_memberships_phone', sql`${table.phone} ~ ${sql.raw(`'${PHONE_NUMBER_PATTERN}'`)}`),
+      check('chk_memberships_phone', sql`${table.phone} ~ ${sqlLiteral(PHONE_NUMBER_PATTERN)}`),
       check('chk_memberships_tone', sql`${table.tone} IN (${joinValues(CHIP_TONE_VALUES)})`),
       check(
         'chk_memberships_working_days_allowed',

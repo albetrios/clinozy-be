@@ -16,6 +16,11 @@ import { invalidatePermissions } from '@/domains/tenancy/sub-domains/permission/
 import { loadOrganizationPermissionRoutesFromCatalog } from '@/tests/helpers/route-catalog-registry.js';
 import type { FastifyInstance } from 'fastify';
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
+import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
+import {
+  PARAM_NAME_TO_ENTITY,
+  publicIdPlaceholderFor,
+} from '@/shared/utils/identity/public-id.util.js';
 import {
   appRouteBody,
   appRouteDeleteQuery,
@@ -33,27 +38,29 @@ const PLACEHOLDER_REFERENCES = placeholderAppRouteReferences();
 
 /**
  * The codes a route checks besides the one its catalog line names: an app export also reads the
- * list (`<resource>:read`, the base controller's `readPermission`), and a patient's clinical notes,
- * images and reports also need `patient_clinical_record:read` (their routes stack both checks).
+ * list — the base controller's `readPermission`, `<resource>:read` or the member-wide
+ * `organization:read` (offerings) — and a patient's clinical notes, images and reports writes also
+ * need `patient:clinical_record:read` (their routes stack both checks). Deduplicated, so a route
+ * whose catalog code is the companion grants it once.
  */
-function companionPermissionCodes(route: (typeof organizationPermissionRoutes)[number]): string[] {
+function grantedPermissionCodes(route: (typeof organizationPermissionRoutes)[number]): string[] {
+  const codes = [route.permissionCode];
   if (route.permissionCode.endsWith(':export')) {
-    return [route.permissionCode.replace(/:export$/, ':read')];
+    codes.push(
+      route.permissionCode.replace(/:export$/, ':read'),
+      TENANCY_PERMISSIONS.ORGANIZATION_READ,
+    );
   }
   if (/\/app\/patients\/:patient_id\/(clinical-notes|images|reports)\b/.test(route.path)) {
-    return [APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ];
+    codes.push(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ);
   }
-  return [];
+  return [...new Set(codes)];
 }
 
 /** A catalog path without the API prefix (`/app/…`, `/tenancy/…`). */
 function routeKeyPath(path: string): string {
   return path.startsWith(API_PREFIX) ? path.slice(API_PREFIX.length) : path;
 }
-import {
-  PARAM_NAME_TO_ENTITY,
-  publicIdPlaceholderFor,
-} from '@/shared/utils/identity/public-id.util.js';
 
 function placeholderForParamName(paramName: string): string {
   const entity = PARAM_NAME_TO_ENTITY[paramName as keyof typeof PARAM_NAME_TO_ENTITY];
@@ -210,7 +217,7 @@ describe('Security: Permission route matrix', () => {
     });
 
     it(`${route.method} ${route.path} does not return 403 with ${route.permissionCode}`, async () => {
-      const grantedCodes = [route.permissionCode, ...companionPermissionCodes(route)];
+      const grantedCodes = grantedPermissionCodes(route);
       await seedPermissions(grantedCodes);
 
       const user = await createTestUser();

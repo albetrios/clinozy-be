@@ -14,6 +14,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteral, sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -26,14 +27,9 @@ import {
   DAY_CLOSE_STATUS_VALUES,
 } from '@/domains/app/sub-domains/billing/day-closes/day-closes.constants.js';
 
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
-
 /** `'closed'` / `'open'` as SQL literals. */
-const CLOSED = sql.raw(`'${DAY_CLOSE_STATUS.CLOSED}'`);
-const OPEN = sql.raw(`'${DAY_CLOSE_STATUS.OPEN}'`);
+const CLOSED = sqlLiteral(DAY_CLOSE_STATUS.CLOSED);
+const OPEN = sqlLiteral(DAY_CLOSE_STATUS.OPEN);
 
 /**
  * Drizzle table for `app.day_closes` — one branch's day: the opening cash, the counted cash, and
@@ -130,17 +126,17 @@ export const day_closes = appSchema
       }).onDelete('restrict'),
       check(
         'chk_day_closes_status',
-        sql`${table.status} IN (${literalList(DAY_CLOSE_STATUS_VALUES)})`,
+        sql`${table.status} IN (${sqlLiteralList(DAY_CLOSE_STATUS_VALUES)})`,
       ),
       check(
         'chk_day_closes_opening_source',
-        sql`${table.opening_source} IN (${literalList(DAY_CLOSE_OPENING_SOURCE_VALUES)})`,
+        sql`${table.opening_source} IN (${sqlLiteralList(DAY_CLOSE_OPENING_SOURCE_VALUES)})`,
       ),
       check('chk_day_closes_opening_cash', sql`${table.opening_cash} >= 0`),
       check('chk_day_closes_counted_cash', sql`${table.counted_cash} >= 0`),
       check(
         'chk_day_closes_close_kind',
-        sql`${table.close_kind} IN (${literalList(DAY_CLOSE_KIND_VALUES)})`,
+        sql`${table.close_kind} IN (${sqlLiteralList(DAY_CLOSE_KIND_VALUES)})`,
       ),
       // Closed exactly when the close's fields are set (B25)
       check(
@@ -219,7 +215,7 @@ export const day_close_events = appSchema
       }).onDelete('restrict'),
       check(
         'chk_day_close_events_kind',
-        sql`${table.kind} IN (${literalList(DAY_CLOSE_EVENT_KIND_VALUES)})`,
+        sql`${table.kind} IN (${sqlLiteralList(DAY_CLOSE_EVENT_KIND_VALUES)})`,
       ),
       pgPolicy('day_close_events_tenant_isolation', {
         as: 'permissive',

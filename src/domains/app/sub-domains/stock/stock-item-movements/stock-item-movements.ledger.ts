@@ -1,3 +1,4 @@
+import { toText } from '@/shared/utils/validation/record-fields.util.js';
 import {
   type BaseRecordRow,
   findMembershipIdOfUser,
@@ -42,7 +43,7 @@ export async function moveStock(options: {
   const item = await itemsRepository.findById(options.stockItemId);
   throw new ConflictError('errors:stockNotEnough', {
     quantity: Number(item?.quantity ?? 0),
-    unit: String(item?.unit ?? ''),
+    unit: toText(item?.unit),
   }).withReason('not_enough_stock');
 }
 

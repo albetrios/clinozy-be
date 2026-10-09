@@ -1933,7 +1933,8 @@ src/
     │   │   ├── capped-count.util.ts
     │   │   ├── connection-url.util.ts
     │   │   ├── database-handle.types.ts
-    │   │   └── force-rls-tables.constants.ts
+    │   │   ├── force-rls-tables.constants.ts
+    │   │   └── sql-literal.util.ts
     │   ├── base-repository.ts
     │   ├── connection.ts
     │   ├── database.overview.md
@@ -2574,6 +2575,7 @@ src/
     │   │   └── unit/
     │   │   │   ├── test-api-prefix.helper.unit.test.ts
     │   │   │   └── test-http-inject.helper.unit.test.ts
+    │   ├── app-route-requests.ts
     │   ├── audit-log-partition.helper.ts
     │   ├── database-context-mock.helper.ts
     │   ├── fast-check-property.util.ts
@@ -2811,7 +2813,7 @@ src/
     │   │   ├── bypass-arm-role-binding.security.test.ts
     │   │   ├── clinozy-be-app-role-privileges.security.test.ts
     │   │   ├── force-rls-policies-restrict.security.test.ts
-    │   │   ├── membership-name-sort-resolver.security.test.ts
+    │   │   ├── membership-name-sort.security.test.ts
     │   │   ├── membership-search-resolver.security.test.ts
     │   │   ├── organization-provisioning-rls.security.test.ts
     │   │   ├── organization-repository-user-resolvers.security.test.ts
@@ -2944,6 +2946,7 @@ src/
     │   │   │   ├── scope-observability.unit.test.ts
     │   │   │   ├── scope-shape-contract.policy.unit.test.ts
     │   │   │   ├── session-context-confinement.policy.unit.test.ts
+    │   │   │   ├── sql-literal.util.unit.test.ts
     │   │   │   ├── transaction.util.db.unit.test.ts
     │   │   │   ├── unscoped-query-counter.unit.test.ts
     │   │   │   ├── verified-scope-usage.policy.unit.test.ts
@@ -3140,6 +3143,7 @@ src/
     │   │   │   ├── bullmq-job-validation.unit.test.ts
     │   │   │   ├── file-magic.util.unit.test.ts
     │   │   │   ├── parse-with-schema.util.unit.test.ts
+    │   │   │   ├── record-fields.to-text.unit.test.ts
     │   │   │   └── validation.util.unit.test.ts
     │   ├── validators/
     │   │   ├── idempotency-key.property.unit.test.ts

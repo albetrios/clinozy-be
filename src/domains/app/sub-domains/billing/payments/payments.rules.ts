@@ -87,34 +87,29 @@ function isFixedMoney(row: Readonly<Record<string, unknown>>): boolean {
   );
 }
 
-/**
- * B17, B19: the fields a kind needs — a receipt's contact (the invoice's, when it names one), an
- * invoice only on a receipt, the payee of an expense or a supplier bill, an expense's category.
- */
-async function assertKindFields(values: Readonly<Record<string, unknown>>): Promise<void> {
-  const kind = String(values.kind);
-  if (!(PAYMENT_CREATE_KIND_VALUES as readonly string[]).includes(kind)) return;
-  if (kind === PAYMENT_KIND.RECEIPT && typeof values.contact_id !== 'number') {
+/** B17: an invoice only on a receipt, and the receipt's contact the invoice's. */
+async function assertInvoiceOfReceipt(
+  kind: string,
+  values: Readonly<Record<string, unknown>>,
+): Promise<void> {
+  if (typeof values.invoice_id !== 'number') return;
+  if (kind !== PAYMENT_KIND.RECEIPT) {
     throw fieldValidationError({
-      field: 'contact_id',
-      messageKey: 'errors:validation.paymentContactRequired',
+      field: 'invoice_id',
+      messageKey: 'errors:validation.paymentInvoiceOnlyReceipt',
     });
   }
-  if (typeof values.invoice_id === 'number') {
-    if (kind !== PAYMENT_KIND.RECEIPT) {
-      throw fieldValidationError({
-        field: 'invoice_id',
-        messageKey: 'errors:validation.paymentInvoiceOnlyReceipt',
-      });
-    }
-    const invoice = await invoicesRepository.findById(values.invoice_id);
-    if (invoice?.contact_id !== values.contact_id) {
-      throw fieldValidationError({
-        field: 'contact_id',
-        messageKey: 'errors:validation.paymentContactNotInvoices',
-      });
-    }
+  const invoice = await invoicesRepository.findById(values.invoice_id);
+  if (invoice?.contact_id !== values.contact_id) {
+    throw fieldValidationError({
+      field: 'contact_id',
+      messageKey: 'errors:validation.paymentContactNotInvoices',
+    });
   }
+}
+
+/** A purchase (a medical purchase order or a stock purchase) only on a supplier bill — and one of them. */
+function assertSupplierBillPurchase(kind: string, values: Readonly<Record<string, unknown>>): void {
   for (const field of SUPPLIER_BILL_PURCHASE_FIELDS) {
     if (typeof values[field] === 'number' && kind !== PAYMENT_KIND.SUPPLIER_BILL) {
       throw fieldValidationError({
@@ -129,6 +124,23 @@ async function assertKindFields(values: Readonly<Record<string, unknown>>): Prom
       messageKey: 'errors:validation.paymentOnePurchase',
     });
   }
+}
+
+/**
+ * B17, B19: the fields a kind needs — a receipt's contact (the invoice's, when it names one), an
+ * invoice only on a receipt, the payee of an expense or a supplier bill, an expense's category.
+ */
+async function assertKindFields(values: Readonly<Record<string, unknown>>): Promise<void> {
+  const kind = String(values.kind);
+  if (!(PAYMENT_CREATE_KIND_VALUES as readonly string[]).includes(kind)) return;
+  if (kind === PAYMENT_KIND.RECEIPT && typeof values.contact_id !== 'number') {
+    throw fieldValidationError({
+      field: 'contact_id',
+      messageKey: 'errors:validation.paymentContactRequired',
+    });
+  }
+  await assertInvoiceOfReceipt(kind, values);
+  assertSupplierBillPurchase(kind, values);
   if (
     (PAYMENT_PAYEE_KIND_VALUES as readonly string[]).includes(kind) &&
     typeof values.payee_name !== 'string'
@@ -443,7 +455,7 @@ export function createPaymentsRules(repository: PaymentsRepository): BaseRecordR
         row.invoice_credit_note_id,
         {
           delete_reason: String(row.delete_reason),
-          delete_note: (row.delete_note as string | null) ?? null,
+          delete_note: row.delete_note ?? null,
         },
         context.userId,
       );

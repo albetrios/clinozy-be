@@ -193,6 +193,39 @@ function keysetCondition(options: {
   return or(...branches) as SQL;
 }
 
+/**
+ * The filters a list cursor was minted under — a cursor carried to other filters starts over at
+ * page one (its fingerprint differs).
+ */
+function listFingerprint(
+  query: BaseRecordListQuery,
+  sort: { name: string; order: string },
+): string {
+  const linked = query.linked?.length
+    ? query.linked.map((filter) => [
+        filter.link.ownerColumn,
+        filter.link.targetColumn,
+        filter.targetId,
+        filter.orUnlinked,
+      ])
+    : undefined;
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        q: query.q ?? '',
+        sort: sort.name,
+        order: sort.order,
+        equals: query.equals ?? {},
+        ranges: query.ranges ?? {},
+        branch: query.branchScope?.ids ?? null,
+        ...(linked ? { linked } : {}),
+        ...(query.derived ? { derived: query.derived } : {}),
+        ...(query.deletedRows ? { deleted_rows: query.deletedRows } : {}),
+      }),
+    )
+    .digest('hex');
+}
+
 /** A cursor's sort values: the plain text of a one-key sort, a JSON list for several keys; null when unreadable. */
 function readCursorSortValues(sortValue: string, keyCount: number): string[] | null {
   if (keyCount === 1) return [sortValue];
@@ -201,7 +234,7 @@ function readCursorSortValues(sortValue: string, keyCount: number): string[] | n
     return Array.isArray(values) &&
       values.length === keyCount &&
       values.every((value) => typeof value === 'string')
-      ? (values as string[])
+      ? values
       : null;
   } catch {
     return null;
@@ -790,30 +823,7 @@ export class BaseRecordRepository extends BaseRepository {
   async list(organization_id: number, query: BaseRecordListQuery): Promise<BaseRecordPage> {
     const sort = this.resolveSort(query, organization_id);
     const idColumn = this.column('id');
-    const fingerprint = createHash('sha256')
-      .update(
-        JSON.stringify({
-          q: query.q ?? '',
-          sort: sort.name,
-          order: sort.order,
-          equals: query.equals ?? {},
-          ranges: query.ranges ?? {},
-          branch: query.branchScope?.ids ?? null,
-          ...(query.linked?.length
-            ? {
-                linked: query.linked.map((filter) => [
-                  filter.link.ownerColumn,
-                  filter.link.targetColumn,
-                  filter.targetId,
-                  filter.orUnlinked,
-                ]),
-              }
-            : {}),
-          ...(query.derived ? { derived: query.derived } : {}),
-          ...(query.deletedRows ? { deleted_rows: query.deletedRows } : {}),
-        }),
-      )
-      .digest('hex');
+    const fingerprint = listFingerprint(query, sort);
     const cursor = parseListCursor(query.after);
     const resumeValues =
       cursor && cursor.filter_fingerprint === fingerprint && cursor.sort_value !== undefined

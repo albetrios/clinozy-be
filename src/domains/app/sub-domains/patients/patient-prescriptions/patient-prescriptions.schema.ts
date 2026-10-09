@@ -16,6 +16,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -29,11 +30,6 @@ import {
   PATIENT_PRESCRIPTION_STATUS_VALUES,
   PATIENT_PRESCRIPTION_TEXT_MAX,
 } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` or `ARRAY[…]` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
 
 /** `char_length(column) <= max` — a text column's length CHECK. */
 function textAtMost(column: AnyPgColumn, max: number): SQL {
@@ -161,11 +157,11 @@ export const patient_prescriptions = appSchema
       ),
       check(
         'chk_patient_prescriptions_print_language',
-        sql`${table.print_language} IN (${literalList(PATIENT_PRESCRIPTION_PRINT_LANGUAGE_VALUES)})`,
+        sql`${table.print_language} IN (${sqlLiteralList(PATIENT_PRESCRIPTION_PRINT_LANGUAGE_VALUES)})`,
       ),
       check(
         'chk_patient_prescriptions_status',
-        sql`${table.status} IN (${literalList(PATIENT_PRESCRIPTION_STATUS_VALUES)})`,
+        sql`${table.status} IN (${sqlLiteralList(PATIENT_PRESCRIPTION_STATUS_VALUES)})`,
       ),
       // P15: approved exactly when stamped with its time and approver
       check(
@@ -175,7 +171,7 @@ export const patient_prescriptions = appSchema
       check('chk_patient_prescriptions_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_patient_prescriptions_delete_reason',
-        sql`${table.delete_reason} IN (${literalList(RECORD_DELETE_REASON_VALUES)})`,
+        sql`${table.delete_reason} IN (${sqlLiteralList(RECORD_DELETE_REASON_VALUES)})`,
       ),
       check(
         'chk_patient_prescriptions_delete_reason_when_deleted',

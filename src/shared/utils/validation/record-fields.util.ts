@@ -235,7 +235,25 @@ export function toAmount(value: unknown): number | null {
  */
 export function toInstant(value: unknown): string | null {
   if (value === null || value === undefined) return null;
-  return value instanceof Date ? value.toISOString() : String(value);
+  return toText(value);
+}
+
+/**
+ * A stored value as text — the one way a row's `unknown` column reaches a string.
+ *
+ * @remarks
+ * - **Algorithm:** `null` / `undefined` → `''`; text passes through; a number, boolean or bigint
+ *   prints itself; a `Date` → `toISOString()`; anything else (an array, a JSON object) → JSON.
+ * - **Failure modes:** none.
+ */
+export function toText(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return value.toString();
+  }
+  if (value instanceof Date) return value.toISOString();
+  return JSON.stringify(value) ?? '';
 }
 
 /** Rupees that may be negative (an adjustment, a reversal), with at most two decimals. */
@@ -259,7 +277,8 @@ export function withInstants<T extends Record<string, unknown>>(
 ): T {
   const out: Record<string, unknown> = { ...values };
   for (const field of fields) {
-    if (typeof out[field] === 'string') out[field] = new Date(out[field] as string);
+    const value = out[field];
+    if (typeof value === 'string') out[field] = new Date(value);
   }
   return out as T;
 }

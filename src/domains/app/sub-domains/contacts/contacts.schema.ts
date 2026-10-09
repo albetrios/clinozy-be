@@ -17,6 +17,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteral } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import {
@@ -44,6 +45,8 @@ function joinValues(values: readonly string[]): SQL {
 
 /** The tag pattern as a list of comma-joined tags — `CHECK` on `array_to_string(tags, ',')` (CT14). */
 const TAG_BODY = CONTACT_PREFERENCE_TAG_PATTERN.slice(1, -1);
+/** The whole tag list as one comma-joined text — empty, or tags each matching the tag pattern. */
+const PREFERENCE_TAGS_PATTERN = `^(${TAG_BODY}(,${TAG_BODY})*)?$`;
 
 /**
  * Drizzle table for `app.contacts` — one person, shared by their leads, conversation, patient file
@@ -173,7 +176,7 @@ export const contacts = appSchema
       ),
       check(
         'chk_contacts_preference_tags',
-        sql`cardinality(${table.preference_tags}) <= ${sql.raw(String(CONTACT_PREFERENCE_TAGS_MAX))} AND array_to_string(${table.preference_tags}, ',') ~ ${sql.raw(`'^(${TAG_BODY}(,${TAG_BODY})*)?$'`)}`,
+        sql`cardinality(${table.preference_tags}) <= ${sqlLiteral(CONTACT_PREFERENCE_TAGS_MAX)} AND array_to_string(${table.preference_tags}, ',') ~ ${sqlLiteral(PREFERENCE_TAGS_PATTERN)}`,
       ),
       check(
         'chk_contacts_referral_source',
@@ -185,7 +188,7 @@ export const contacts = appSchema
       ),
       check(
         'chk_contacts_primary_phone',
-        sql`${table.primary_phone} ~ ${sql.raw(`'${PHONE_NUMBER_PATTERN}'`)}`,
+        sql`${table.primary_phone} ~ ${sqlLiteral(PHONE_NUMBER_PATTERN)}`,
       ),
       check('chk_contacts_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
@@ -261,10 +264,7 @@ export const contact_phones = appSchema
         .where(sql`${table.is_primary}`),
       index('idx_contact_phones_organization_id_phone').on(table.organization_id, table.phone),
       index('idx_contact_phones_household_contact_id').on(table.household_contact_id),
-      check(
-        'chk_contact_phones_phone',
-        sql`${table.phone} ~ ${sql.raw(`'${PHONE_NUMBER_PATTERN}'`)}`,
-      ),
+      check('chk_contact_phones_phone', sql`${table.phone} ~ ${sqlLiteral(PHONE_NUMBER_PATTERN)}`),
       pgPolicy('contact_phones_tenant_isolation', {
         as: 'permissive',
         for: 'all',

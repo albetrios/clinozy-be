@@ -1,3 +1,4 @@
+import { toText } from '@/shared/utils/validation/record-fields.util.js';
 import { resolveRecordIds } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordRules } from '@/domains/app/base-record.types.js';
 import { InvoicesRepository } from '@/domains/app/sub-domains/billing/invoices/invoices.repository.js';
@@ -54,7 +55,7 @@ export const patientOfferingsRules: BaseRecordRules = {
       table: invoice_items,
       organizationId: context.organizationId,
       publicIds: outputs.flatMap((output) =>
-        output.invoice_item_id ? [String(output.invoice_item_id)] : [],
+        output.invoice_item_id ? [toText(output.invoice_item_id)] : [],
       ),
     });
     const invoicesOfItems = await invoicesRepository.findInvoicesOfItems([...itemIds.values()]);

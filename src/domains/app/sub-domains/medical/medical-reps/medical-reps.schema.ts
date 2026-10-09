@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   bigint,
   bigserial,
@@ -12,6 +12,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteral, sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { manufacturers } from '@/domains/app/sub-domains/medical/manufacturers/manufacturers.schema.js';
@@ -19,11 +20,6 @@ import {
   PHONE_NUMBER_PATTERN,
   RECORD_DELETE_REASON_VALUES,
 } from '@/shared/constants/record-fields.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
 
 /** The organization GUC's row, for a policy. */
 const ACTIVE_ORGANIZATION = sql`(
@@ -89,14 +85,11 @@ export const medical_reps = appSchema
         .on(table.updated_by_user_id)
         .where(sql`${table.updated_by_user_id} IS NOT NULL`),
       check('chk_medical_reps_name', sql`char_length(${table.name}) > 0`),
-      check(
-        'chk_medical_reps_phone',
-        sql`${table.phone} ~ ${sql.raw(`'${PHONE_NUMBER_PATTERN}'`)}`,
-      ),
+      check('chk_medical_reps_phone', sql`${table.phone} ~ ${sqlLiteral(PHONE_NUMBER_PATTERN)}`),
       check('chk_medical_reps_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_medical_reps_delete_reason',
-        sql`${table.delete_reason} IN (${literalList(RECORD_DELETE_REASON_VALUES)})`,
+        sql`${table.delete_reason} IN (${sqlLiteralList(RECORD_DELETE_REASON_VALUES)})`,
       ),
       check(
         'chk_medical_reps_delete_reason_when_deleted',

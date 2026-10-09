@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   bigint,
@@ -16,6 +16,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -32,11 +33,6 @@ import {
   MEDICAL_SALE_RETURN_REASON_VALUES,
   MEDICAL_SALE_VOID_REASON_VALUES,
 } from './medical-sales.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
 
 /** The organization GUC's row, for a policy. */
 const ACTIVE_ORGANIZATION = sql`(
@@ -125,7 +121,7 @@ export const medical_sales = appSchema
       check('chk_medical_sales_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_medical_sales_delete_reason',
-        sql`${table.delete_reason} IN (${literalList(MEDICAL_SALE_VOID_REASON_VALUES)})`,
+        sql`${table.delete_reason} IN (${sqlLiteralList(MEDICAL_SALE_VOID_REASON_VALUES)})`,
       ),
       check(
         'chk_medical_sales_delete_reason_when_deleted',
@@ -203,11 +199,11 @@ export const medical_sale_returns = appSchema
         .where(sql`${table.created_by_user_id} IS NOT NULL`),
       check(
         'chk_medical_sale_returns_reason',
-        sql`${table.reason} IN (${literalList(MEDICAL_SALE_RETURN_REASON_VALUES)})`,
+        sql`${table.reason} IN (${sqlLiteralList(MEDICAL_SALE_RETURN_REASON_VALUES)})`,
       ),
       check(
         'chk_medical_sale_returns_refund_mode',
-        sql`${table.refund_mode} IN (${literalList(MEDICAL_SALE_REFUND_MODE_VALUES)})`,
+        sql`${table.refund_mode} IN (${sqlLiteralList(MEDICAL_SALE_REFUND_MODE_VALUES)})`,
       ),
       check('chk_medical_sale_returns_amount', sql`${table.amount} > 0`),
       foreignKey({

@@ -83,14 +83,14 @@ export function readContactLinkedSearch(
   const prefixed =
     options.recordPrefix === undefined
       ? undefined
-      : q.match(new RegExp(`^${options.recordPrefix}-?\\s*0*(\\d{1,9})$`, 'i'))?.[1];
-  const recordNumber = prefixed ?? q.match(RECORD_NUMBER_QUERY)?.[1];
+      : new RegExp(`^${options.recordPrefix}-?\\s*0*(\\d{1,9})$`, 'i').exec(q)?.[1];
+  const recordNumber = prefixed ?? RECORD_NUMBER_QUERY.exec(q)?.[1];
   if (recordNumber !== undefined) return { recordNumber: Number(recordNumber) };
-  const contactNumber = q.match(LINKED_CONTACT_NUMBER_QUERY)?.[1];
+  const contactNumber = LINKED_CONTACT_NUMBER_QUERY.exec(q)?.[1];
   if (contactNumber !== undefined) return { contactNumber: Number(contactNumber) };
   const digits = phoneQueryDigits(q);
   if (digits !== undefined) {
-    const bare = q.match(BARE_NUMBER_QUERY)?.[1];
+    const bare = BARE_NUMBER_QUERY.exec(q)?.[1];
     const isNumber = digits.length >= PHONE_QUERY_MIN_DIGITS;
     if (!isNumber && bare === undefined) throw searchTooShortError();
     return {
@@ -109,7 +109,7 @@ export function readContactLinkedSearch(
  */
 function readContactSearch(q: string | undefined): ContactSearch {
   if (q === undefined) return { kind: 'none' };
-  const contactNumber = q.match(CONTACT_NUMBER_QUERY)?.[1];
+  const contactNumber = CONTACT_NUMBER_QUERY.exec(q)?.[1];
   if (contactNumber !== undefined)
     return { kind: 'contact_number', contactNumber: Number(contactNumber) };
   const digits = phoneQueryDigits(q);

@@ -12,7 +12,7 @@ import {
 } from '@/domains/app/sub-domains/billing/payments/payments.ledger.js';
 import { PaymentsRepository } from '@/domains/app/sub-domains/billing/payments/payments.repository.js';
 import { ConflictError } from '@/shared/errors/index.js';
-import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import { toAmount, toText } from '@/shared/utils/validation/record-fields.util.js';
 import { InvoiceCreditNotesRepository } from './invoice-credit-notes.repository.js';
 import { invoice_credit_notes } from './invoice-credit-notes.schema.js';
 
@@ -101,7 +101,7 @@ export function createInvoiceCreditNotesRules(): BaseRecordRules {
       }
       pendingRefunds.set(context, {
         splits: values.splits as PaymentSplit[],
-        paidAt: values.paid_at === undefined ? new Date() : new Date(String(values.paid_at)),
+        paidAt: values.paid_at === undefined ? new Date() : new Date(toText(values.paid_at)),
         reference: (values.reference as string | null | undefined) ?? null,
         note: (values.note as string | null | undefined) ?? null,
         branchId: invoice.branch_id as number,

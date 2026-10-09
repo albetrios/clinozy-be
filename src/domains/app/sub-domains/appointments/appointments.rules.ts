@@ -500,6 +500,24 @@ async function prepareMove(
   values.status = APPOINTMENT_STATUS.SCHEDULED;
 }
 
+/** A check-in waits for the booking's day, a no-show for its start (6.9) — 409 `appointment_not_due` before. */
+async function assertDue(
+  action: 'check-in' | 'no-show',
+  existing: BaseRecordRow,
+  context: BaseRecordWriteContext,
+): Promise<void> {
+  const now = await organizationNow(context);
+  const date = String(existing.appointment_date);
+  const started =
+    date < now.today ||
+    (date === now.today && minutesOfClockTime(String(existing.start_time)) <= now.nowMinutes);
+  if ((action === 'no-show' && !started) || (action === 'check-in' && date > now.today)) {
+    throw new ConflictError('errors:appointmentNotDue', { action }).withReason(
+      'appointment_not_due',
+    );
+  }
+}
+
 /** The lifecycle's own checks (6.9): due dates, the floor's forward-only stage, pause and resume (A5, A11). */
 async function prepareLifecycle(
   action: string,
@@ -514,16 +532,7 @@ async function prepareLifecycle(
       context,
     );
   } else if (action === 'check-in' || action === 'no-show') {
-    const now = await organizationNow(context);
-    const date = String(existing.appointment_date);
-    const started =
-      date < now.today ||
-      (date === now.today && minutesOfClockTime(String(existing.start_time)) <= now.nowMinutes);
-    if ((action === 'no-show' && !started) || (action === 'check-in' && date > now.today)) {
-      throw new ConflictError('errors:appointmentNotDue', { action }).withReason(
-        'appointment_not_due',
-      );
-    }
+    await assertDue(action, existing, context);
   } else if (
     action === 'undo-check-in' &&
     existing.visit_stage !== APPOINTMENT_VISIT_STAGE_VALUES[0]

@@ -32,6 +32,9 @@ export interface ContactPhoneClash {
   last_name: string | null;
 }
 
+/** Joins a search's alternatives (any one matches). */
+const OR_SEPARATOR = sql` or `;
+
 /** A contact without a last name sorts as if it were empty (the name index's expression). */
 const lastNameKey = sql`coalesce(${contacts.last_name}, '')`;
 
@@ -80,7 +83,7 @@ export function contactLinkedSearchCondition(options: {
   if (search.recordNumber !== undefined) {
     conditions.push(eq(options.recordNumberColumn, search.recordNumber));
   }
-  return conditions.length === 0 ? sql`false` : sql`(${sql.join(conditions, sql` or `)})`;
+  return conditions.length === 0 ? sql`false` : sql`(${sql.join(conditions, OR_SEPARATOR)})`;
 }
 
 /**

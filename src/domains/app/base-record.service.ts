@@ -385,7 +385,8 @@ export class BaseRecordService<Output> {
         visibility,
       });
       const statusColumn = transition.statusColumn ?? 'status';
-      const status = String(existing[statusColumn] ?? '');
+      const currentStatus = existing[statusColumn];
+      const status = typeof currentStatus === 'string' ? currentStatus : '';
       if (transition.from && !transition.from.includes(status)) {
         throw new ConflictError('errors:recordTransitionNotAllowed', { action, status }).withReason(
           'transition_not_allowed',
@@ -622,7 +623,9 @@ export class BaseRecordService<Output> {
           );
         }
         // A table's own exclusion conflict (a slot booked meanwhile — `slot_taken`, A3).
-        restored = await this.mapConflicts<BaseRecordRow | null>(() => Promise.reject(error));
+        restored = await this.mapConflicts<BaseRecordRow | null>(async () => {
+          throw error;
+        });
       }
       if (!restored) throw new NotFoundError(this.descriptor.label);
       // A rule's own restore writes (a contact's numbers) may clash too — the table's 409, not a 500.
@@ -815,12 +818,11 @@ export class BaseRecordService<Output> {
     const readScope = await this.readScopeOf(visibility);
     for (const [field, allowed] of Object.entries(readScope ?? {})) {
       const requested = equals[field];
+      const requestedValues = Array.isArray(requested) ? requested : [requested];
       const kept =
         requested === undefined
           ? [...allowed]
-          : (Array.isArray(requested) ? requested : [requested]).filter((value) =>
-              allowed.includes(value),
-            );
+          : requestedValues.filter((value) => allowed.includes(value));
       if (kept.length === 0) return false;
       equals[field] = kept;
     }

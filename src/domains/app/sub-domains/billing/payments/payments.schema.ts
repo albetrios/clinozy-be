@@ -1,4 +1,4 @@
-import { type BuildExtraConfigColumns, sql, type SQL } from 'drizzle-orm';
+import { type BuildExtraConfigColumns, sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   bigint,
@@ -16,6 +16,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteral, sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -37,16 +38,6 @@ import {
   PAYMENT_PAYEE_KIND_VALUES,
   PAYMENT_RECEIVED_KIND_VALUES,
 } from '@/domains/app/sub-domains/billing/payments/payments.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
-
-/** A value as a SQL literal. */
-function literal(value: string | number): SQL {
-  return sql.raw(typeof value === 'number' ? String(value) : `'${value}'`);
-}
 
 /** The columns of `app.payments`. */
 const paymentColumns = {
@@ -167,13 +158,13 @@ function paymentChecks(table: PaymentTable) {
     check('chk_payments_payment_number', sql`${table.payment_number} > 0`),
     check(
       'chk_payments_direction',
-      sql`${table.direction} IN (${literalList(PAYMENT_DIRECTION_VALUES)})`,
+      sql`${table.direction} IN (${sqlLiteralList(PAYMENT_DIRECTION_VALUES)})`,
     ),
-    check('chk_payments_kind', sql`${table.kind} IN (${literalList(PAYMENT_KIND_VALUES)})`),
+    check('chk_payments_kind', sql`${table.kind} IN (${sqlLiteralList(PAYMENT_KIND_VALUES)})`),
     // B17: the kind fixes the direction; a reversal runs opposite to what it undoes
     check(
       'chk_payments_kind_direction',
-      sql`${table.kind} = ${literal(PAYMENT_KIND.REVERSAL)} OR (${table.direction} = ${literal(PAYMENT_DIRECTION.RECEIVED)}) = (${table.kind} IN (${literalList(PAYMENT_RECEIVED_KIND_VALUES)}))`,
+      sql`${table.kind} = ${sqlLiteral(PAYMENT_KIND.REVERSAL)} OR (${table.direction} = ${sqlLiteral(PAYMENT_DIRECTION.RECEIVED)}) = (${table.kind} IN (${sqlLiteralList(PAYMENT_RECEIVED_KIND_VALUES)}))`,
     ),
     check('chk_payments_amount', sql`${table.amount} > 0`),
     // B18: the splits add up
@@ -187,33 +178,33 @@ function paymentChecks(table: PaymentTable) {
     ),
     check(
       'chk_payments_receipt_contact',
-      sql`${table.kind} <> ${literal(PAYMENT_KIND.RECEIPT)} OR ${table.contact_id} IS NOT NULL`,
+      sql`${table.kind} <> ${sqlLiteral(PAYMENT_KIND.RECEIPT)} OR ${table.contact_id} IS NOT NULL`,
     ),
     check(
       'chk_payments_reversal',
-      sql`(${table.kind} = ${literal(PAYMENT_KIND.REVERSAL)}) = (${table.reverses_payment_id} IS NOT NULL)`,
+      sql`(${table.kind} = ${sqlLiteral(PAYMENT_KIND.REVERSAL)}) = (${table.reverses_payment_id} IS NOT NULL)`,
     ),
     // S11, MD7: only a supplier bill, or its reversal, pays a purchase — one at most
     check(
       'chk_payments_purchase',
-      sql`(${table.stock_purchase_id} IS NULL AND ${table.medical_purchase_order_id} IS NULL) OR (${table.kind} IN (${literalList([PAYMENT_KIND.SUPPLIER_BILL, PAYMENT_KIND.REVERSAL])}) AND num_nonnulls(${table.stock_purchase_id}, ${table.medical_purchase_order_id}) = 1)`,
+      sql`(${table.stock_purchase_id} IS NULL AND ${table.medical_purchase_order_id} IS NULL) OR (${table.kind} IN (${sqlLiteralList([PAYMENT_KIND.SUPPLIER_BILL, PAYMENT_KIND.REVERSAL])}) AND num_nonnulls(${table.stock_purchase_id}, ${table.medical_purchase_order_id}) = 1)`,
     ),
     check(
       'chk_payments_payee',
-      sql`${table.kind} NOT IN (${literalList(PAYMENT_PAYEE_KIND_VALUES)}) OR ${table.payee_name} IS NOT NULL`,
+      sql`${table.kind} NOT IN (${sqlLiteralList(PAYMENT_PAYEE_KIND_VALUES)}) OR ${table.payee_name} IS NOT NULL`,
     ),
     check(
       'chk_payments_expense_category',
-      sql`(${table.kind} = ${literal(PAYMENT_KIND.EXPENSE)}) = (${table.expense_category} IS NOT NULL) AND (${table.expense_category} IS NULL OR ${table.expense_category} IN (${literalList(PAYMENT_EXPENSE_CATEGORY_VALUES)}))`,
+      sql`(${table.kind} = ${sqlLiteral(PAYMENT_KIND.EXPENSE)}) = (${table.expense_category} IS NOT NULL) AND (${table.expense_category} IS NULL OR ${table.expense_category} IN (${sqlLiteralList(PAYMENT_EXPENSE_CATEGORY_VALUES)}))`,
     ),
     check(
       'chk_payments_attachment_keys',
-      sql`cardinality(${table.attachment_keys}) <= ${literal(PAYMENT_ATTACHMENT_KEYS_MAX)}`,
+      sql`cardinality(${table.attachment_keys}) <= ${sqlLiteral(PAYMENT_ATTACHMENT_KEYS_MAX)}`,
     ),
     check('chk_payments_updated', sql`${table.updated_at} >= ${table.created_at}`),
     check(
       'chk_payments_delete_reason',
-      sql`${table.delete_reason} IN (${literalList(RECORD_DELETE_REASON_VALUES)})`,
+      sql`${table.delete_reason} IN (${sqlLiteralList(RECORD_DELETE_REASON_VALUES)})`,
     ),
     check(
       'chk_payments_delete_reason_when_deleted',

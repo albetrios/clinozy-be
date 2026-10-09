@@ -30,7 +30,7 @@ export function serializeMedicalSale(
     patient_prescription_id: references.publicIdOf('patient_prescription_id', row),
     remark: null,
     returns: [],
-    sold_at: (toInstant(row.sold_at) ?? row.created_at.toISOString()) as string,
+    sold_at: toInstant(row.sold_at) ?? row.created_at.toISOString(),
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),
     deleted_at: toInstant(row.deleted_at),

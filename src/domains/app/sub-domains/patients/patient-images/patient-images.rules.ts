@@ -1,3 +1,4 @@
+import { toText } from '@/shared/utils/validation/record-fields.util.js';
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
 import { requireConfirmedUploads } from '@/domains/app/base-record.service.js';
 import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
@@ -146,14 +147,14 @@ export function createPatientImagesRules(repository: PatientImagesRepository): B
       const appointmentIds = [
         ...new Set(
           outputs.flatMap((output) =>
-            output.appointment_id ? [String(output.appointment_id)] : [],
+            output.appointment_id ? [toText(output.appointment_id)] : [],
           ),
         ),
       ];
       const labels = await repository.findServiceLabels(appointmentIds);
       for (const output of outputs) {
         output.service_label = output.appointment_id
-          ? (labels.get(String(output.appointment_id)) ?? null)
+          ? (labels.get(toText(output.appointment_id)) ?? null)
           : null;
       }
     },

@@ -16,6 +16,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { suppliers } from '@/domains/app/sub-domains/medical/suppliers/suppliers.schema.js';
@@ -29,11 +30,6 @@ import {
   MEDICAL_PURCHASE_ORDER_STAGE,
   MEDICAL_PURCHASE_ORDER_STAGE_VALUES,
 } from './medical-purchase-orders.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
 
 /** The organization GUC's row, for a policy. */
 const ACTIVE_ORGANIZATION = sql`(
@@ -134,7 +130,7 @@ export const medical_purchase_orders = appSchema
       ),
       check(
         'chk_medical_purchase_orders_stage',
-        sql`${table.stage} IN (${literalList(MEDICAL_PURCHASE_ORDER_STAGE_VALUES)})`,
+        sql`${table.stage} IN (${sqlLiteralList(MEDICAL_PURCHASE_ORDER_STAGE_VALUES)})`,
       ),
       check(
         'chk_medical_purchase_orders_received',
@@ -147,7 +143,7 @@ export const medical_purchase_orders = appSchema
       check('chk_medical_purchase_orders_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_medical_purchase_orders_delete_reason',
-        sql`${table.delete_reason} IN (${literalList(MEDICAL_PURCHASE_ORDER_CANCEL_REASON_VALUES)})`,
+        sql`${table.delete_reason} IN (${sqlLiteralList(MEDICAL_PURCHASE_ORDER_CANCEL_REASON_VALUES)})`,
       ),
       check(
         'chk_medical_purchase_orders_delete_reason_when_deleted',

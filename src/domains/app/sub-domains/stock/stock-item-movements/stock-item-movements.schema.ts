@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   bigint,
@@ -13,6 +13,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteral, sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -28,16 +29,6 @@ import {
   STOCK_ITEM_MOVEMENT_TYPE,
   STOCK_ITEM_MOVEMENT_TYPE_VALUES,
 } from '@/domains/app/sub-domains/stock/stock-item-movements/stock-item-movements.constants.js';
-
-/** `'a', 'b', …` — a value list as SQL literals, for an `IN (…)` CHECK. */
-function literalList(values: readonly string[]): SQL {
-  return sql.raw(values.map((value) => `'${value}'`).join(', '));
-}
-
-/** A value as a SQL literal. */
-function literal(value: string): SQL {
-  return sql.raw(`'${value}'`);
-}
 
 /**
  * Drizzle table for `app.stock_item_movements` — every change to an item's quantity, one row each
@@ -135,46 +126,46 @@ export const stock_item_movements = appSchema
       }).onDelete('restrict'),
       check(
         'chk_stock_item_movements_type',
-        sql`${table.type} IN (${literalList(STOCK_ITEM_MOVEMENT_TYPE_VALUES)})`,
+        sql`${table.type} IN (${sqlLiteralList(STOCK_ITEM_MOVEMENT_TYPE_VALUES)})`,
       ),
       // S7: the type fixes the sign; never 0
       check(
         'chk_stock_item_movements_sign',
         sql`${table.quantity_change} <> 0
-          AND (${table.type} NOT IN (${literalList(STOCK_ITEM_MOVEMENT_ADDING_TYPE_VALUES)}) OR ${table.quantity_change} > 0)
-          AND (${table.type} NOT IN (${literalList(STOCK_ITEM_MOVEMENT_TAKING_TYPE_VALUES)}) OR ${table.quantity_change} < 0)`,
+          AND (${table.type} NOT IN (${sqlLiteralList(STOCK_ITEM_MOVEMENT_ADDING_TYPE_VALUES)}) OR ${table.quantity_change} > 0)
+          AND (${table.type} NOT IN (${sqlLiteralList(STOCK_ITEM_MOVEMENT_TAKING_TYPE_VALUES)}) OR ${table.quantity_change} < 0)`,
       ),
       check('chk_stock_item_movements_quantity_after', sql`${table.quantity_after} >= 0`),
       check(
         'chk_stock_item_movements_used_for',
-        sql`${table.used_for} IS NULL OR ${table.type} = ${literal(STOCK_ITEM_MOVEMENT_TYPE.USED)}`,
+        sql`${table.used_for} IS NULL OR ${table.type} = ${sqlLiteral(STOCK_ITEM_MOVEMENT_TYPE.USED)}`,
       ),
       // S14: a session only on a use
       check(
         'chk_stock_item_movements_patient_treatment',
-        sql`${table.patient_treatment_id} IS NULL OR ${table.type} = ${literal(STOCK_ITEM_MOVEMENT_TYPE.USED)}`,
+        sql`${table.patient_treatment_id} IS NULL OR ${table.type} = ${sqlLiteral(STOCK_ITEM_MOVEMENT_TYPE.USED)}`,
       ),
       check(
         'chk_stock_item_movements_stock_purchase',
-        sql`${table.stock_purchase_id} IS NULL OR ${table.type} IN (${literalList([STOCK_ITEM_MOVEMENT_TYPE.RECEIVED, STOCK_ITEM_MOVEMENT_TYPE.REVERTED])})`,
+        sql`${table.stock_purchase_id} IS NULL OR ${table.type} IN (${sqlLiteralList([STOCK_ITEM_MOVEMENT_TYPE.RECEIVED, STOCK_ITEM_MOVEMENT_TYPE.REVERTED])})`,
       ),
       check(
         'chk_stock_item_movements_stock_count',
-        sql`${table.stock_count_id} IS NULL OR ${table.type} = ${literal(STOCK_ITEM_MOVEMENT_TYPE.ADJUST)}`,
+        sql`${table.stock_count_id} IS NULL OR ${table.type} = ${sqlLiteral(STOCK_ITEM_MOVEMENT_TYPE.ADJUST)}`,
       ),
       // S8: a revert points at what it undoes, with its reason
       check(
         'chk_stock_item_movements_reverts',
-        sql`(${table.type} = ${literal(STOCK_ITEM_MOVEMENT_TYPE.REVERTED)}) = (${table.reverts_stock_item_movement_id} IS NOT NULL)
-          AND (${table.type} = ${literal(STOCK_ITEM_MOVEMENT_TYPE.REVERTED)}) = (${table.revert_reason} IS NOT NULL)`,
+        sql`(${table.type} = ${sqlLiteral(STOCK_ITEM_MOVEMENT_TYPE.REVERTED)}) = (${table.reverts_stock_item_movement_id} IS NOT NULL)
+          AND (${table.type} = ${sqlLiteral(STOCK_ITEM_MOVEMENT_TYPE.REVERTED)}) = (${table.revert_reason} IS NOT NULL)`,
       ),
       check(
         'chk_stock_item_movements_revert_reason',
-        sql`${table.revert_reason} IN (${literalList(STOCK_ITEM_MOVEMENT_REVERT_REASON_VALUES)})`,
+        sql`${table.revert_reason} IN (${sqlLiteralList(STOCK_ITEM_MOVEMENT_REVERT_REASON_VALUES)})`,
       ),
       check(
         'chk_stock_item_movements_note_when_other',
-        sql`${table.revert_reason} IS DISTINCT FROM ${literal(STOCK_ITEM_MOVEMENT_REVERT_REASON.OTHER)} OR ${table.note} IS NOT NULL`,
+        sql`${table.revert_reason} IS DISTINCT FROM ${sqlLiteral(STOCK_ITEM_MOVEMENT_REVERT_REASON.OTHER)} OR ${table.note} IS NOT NULL`,
       ),
       pgPolicy('stock_item_movements_tenant_isolation', {
         as: 'permissive',
