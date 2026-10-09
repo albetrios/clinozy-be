@@ -281,7 +281,7 @@ jobs:
       - name: Stop baseline API before isolated lifecycle tests
         uses: ./.github/actions/stop-api-server
 
-      - name: Strict account, MFA, tenant, admin and upload lifecycles
+      - name: Strict account, MFA, tenant, admin, upload and WebAuthn lifecycles
         env:
           DATABASE_TLS_ENFORCED: 'false'
           DATABASE_RLS_SAFETY_ENFORCED: 'false'
@@ -300,6 +300,7 @@ jobs:
           src/tests/load/k6/scenarios/tenant-membership-lifecycle.js
           src/tests/load/k6/scenarios/admin.js
           src/tests/load/k6/scenarios/upload-asset-lifecycle.js
+          src/tests/load/k6/scenarios/webauthn-lifecycle.js
 
       - name: Upload k6 summaries and server log
         if: always()

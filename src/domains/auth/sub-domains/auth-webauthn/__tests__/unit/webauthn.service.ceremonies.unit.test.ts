@@ -90,7 +90,9 @@ function buildService(overrides: { user?: unknown; credential?: unknown; listAct
     updateCounter: vi.fn().mockResolvedValue(undefined),
     acquireCreationQuotaLock: vi.fn().mockResolvedValue(undefined),
     countActiveByUserId: vi.fn().mockResolvedValue(0),
-    createCredential: vi.fn().mockResolvedValue({ credential_id: 'cred-new' }),
+    createCredential: vi
+      .fn()
+      .mockResolvedValue({ credential_id: 'cred-new', public_id: 'wac_aaaaaaaaaaaaaaaaaaaaa' }),
   } as unknown as WebauthnCredentialRepository;
   const service = new WebauthnService(
     userService,
@@ -340,7 +342,8 @@ describe('WebauthnService.verifyRegistration', () => {
     expect(Buffer.from(created.public_key, 'base64url').toString('utf8')).toBe('new-public-key');
     expect(created.counter).toBe(0);
     expect(created.backed_up).toBe(true);
-    expect(result).toEqual({ verified: true, credential_id: 'cred-new' });
+    expect(result).toEqual({ verified: true, credential_id: 'wac_aaaaaaaaaaaaaaaaaaaaa' });
+    expect(result.credential_id).not.toBe(created.credential_id);
   });
 
   it('rejects a challenge minted for a different user without touching the verifier', async () => {

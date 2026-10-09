@@ -1,5 +1,5 @@
 import http from 'k6/http';
-import { check } from 'k6';
+import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
 import { API_PREFIX, THRESHOLDS } from '../helpers/config.js';
 import { authHeaders } from '../helpers/auth.js';
@@ -7,15 +7,20 @@ import { credentialPool, mintTokenPool, vuToken } from '../helpers/pool.js';
 
 /** Distinct users across tenants: identity binding, cursor pages, and foreign-member denial. */
 const users = Number(__ENV.VUS || '20');
+const duration = __ENV.DURATION;
 const completed = new Counter('tenant_read_journeys_completed');
 export const options = {
   scenarios: {
-    readers: { executor: 'per-vu-iterations', vus: users, iterations: 2, maxDuration: '2m' },
+    readers: duration
+      ? { executor: 'constant-vus', vus: users, duration, gracefulStop: '30s' }
+      : { executor: 'per-vu-iterations', vus: users, iterations: 2, maxDuration: '2m' },
   },
   thresholds: {
     ...THRESHOLDS,
     checks: ['rate==1'],
-    tenant_read_journeys_completed: [`count==${users * 2}`],
+    http_req_failed: ['rate==0'],
+    dropped_iterations: ['count==0'],
+    tenant_read_journeys_completed: [duration ? `count>=${users}` : `count==${users * 2}`],
   },
   setupTimeout: '3m',
 };
@@ -126,4 +131,5 @@ export default function (fixtures) {
   });
   requireCheck(denied.status === 404, 'foreign membership denied without exposing resource');
   completed.add(1);
+  if (duration) sleep(0.1);
 }

@@ -46,7 +46,7 @@ Report separately: executed route coverage, concurrency profile, fixture/identit
 
 ## Fixture-backed lifecycle coverage
 
-The nightly workflow additionally gates five lifecycle scenarios, each with four virtual users and five iterations. They require 100% checks, zero unexpected HTTP failures, zero dropped iterations and exactly 20 completed journeys per scenario.
+The nightly workflow additionally gates six lifecycle scenarios, each with four virtual users and five iterations. They require 100% checks, zero unexpected HTTP failures, zero dropped iterations and exactly 20 completed journeys per scenario.
 
 | Scenario | Verified behavior |
 | --- | --- |
@@ -54,6 +54,7 @@ The nightly workflow additionally gates five lifecycle scenarios, each with four
 | `account-onboarding-lifecycle.js` | Real email-code redemption, password reset/replay, settings read, onboarding persistence, export request/status and account deletion |
 | `tenant-membership-lifecycle.js` | Team creation, invitations/resend/acceptance, suspension, ownership transfer, leave, invitation revocation, membership removal and team deletion |
 | `admin.js` | Real super-admin context, ordinary-user denials, user search/detail/update/readback, global audit and deletion |
+| `webauthn-lifecycle.js` | Genuine P-256 registration and signed authentication, challenge replay denials, identity binding, credential listing and revocation |
 | `upload-asset-lifecycle.js` | Actual PNG bytes, upload ownership denials, confirmation, avatar/logo attach/readback/detach and upload deletion |
 
 Run `pnpm build` first. Generate a credential pool against the seeded source database. Stop every connection to that source before cloning it, then run:
@@ -63,9 +64,9 @@ LOAD_TEST_DATABASE=clinozy_load_lifecycle LOAD_TEST_CREATE_DATABASE=true \
   node src/tests/load/k6/run-lifecycle.mjs
 ```
 
-Cloning requires PostgreSQL CREATEDB permission. To use an already prepared scratch database, omit `LOAD_TEST_CREATE_DATABASE`. The runner refuses the configured application database and requires a database name containing an underscore-delimited `load` or `test` segment. It redirects **all four** configured database URLs, including `DATABASE_MAINTENANCE_URL`, to the scratch database, uses a unique Redis namespace, checks that ports 3002–3004 are free, and stops only its own API and fixture processes. Scratch data and reports are retained for investigation; the runner does not drop databases. Reports default to `k6-lifecycle/`; override with `LOAD_TEST_REPORT_DIR`.
+Cloning requires PostgreSQL CREATEDB permission. To use an already prepared scratch database, omit `LOAD_TEST_CREATE_DATABASE`. The runner refuses the configured application database and requires a database name containing an underscore-delimited `load` or `test` segment. It redirects **all four** configured database URLs, including `DATABASE_MAINTENANCE_URL`, to the scratch database, uses a unique Redis namespace, checks that ports 3002–3005 are free, and stops only its own API and fixture processes. Scratch data and reports are retained for investigation; the runner does not drop databases. Reports default to `k6-lifecycle/`; override with `LOAD_TEST_REPORT_DIR`.
 
-The authenticated loopback mailbox reads tokens from actual committed mail-outbox records and can create a provider-free local subscription for newly created load teams. This preserves seat-quota enforcement without making payment-provider requests. No worker is started and no live email is sent. The loopback storage fixture handles actual bytes and the application's HEAD/GET/copy/delete requests, but does not validate AWS signatures. Export testing verifies the persisted queued request and status, not worker completion or downloadable contents. Live payment-provider flows, OAuth completion and browser WebAuthn ceremonies need separate environments and are not claimed as covered here.
+The authenticated loopback mailbox reads tokens from actual committed mail-outbox records and can create a provider-free local subscription for newly created load teams. This preserves seat-quota enforcement without making payment-provider requests. No worker is started and no live email is sent. The loopback storage fixture handles actual bytes and the application's HEAD/GET/copy/delete requests, but does not validate AWS signatures. Export testing verifies the persisted queued request and status, not worker completion or downloadable contents. The loopback virtual authenticator generates genuine P-256 keys, CBOR attestation and signed assertions; the API uses its real WebAuthn verifier. It does not cover browser UI or physical authenticators. Live payment-provider flows and OAuth completion require separate validation.
 
 Source coverage is a route-inventory guard, not proof that each route executed successfully. Keep raw samples and exact journey counters alongside each result. Expected 400/401/403/404 responses prove specific denial or replay behavior and must not be counted as successful positive-route coverage.
 
@@ -91,7 +92,7 @@ Artifacts (`k6-*.json` summaries and `server.log`) are uploaded for 14 days. Opt
 
 **Writes, paced.** Every organization write route carries a 100-per-minute cap per (organization, actor) that `RATE_LIMIT_RELAXED_CAPS` does not lift, and a k6 run is one actor (the demo user). The write scenarios therefore use the `pacedWrites` profile in `helpers/config.js` (one iteration per second) rather than 10 closed-loop VUs, which measured the rate limiter (429) instead of the route. Writes take their `X-Idempotency-Key` from `idempotencyKey()` in `helpers/idempotency.js`: the API requires 16–255 characters, and a timestamp keeps a key from replaying an earlier run.
 
-**Route coverage.** `pnpm load:coverage` matches every request the scenario files make — method and path — against `docs/routes.txt`; `pnpm load:coverage --nightly` counts only the files this workflow runs. It skips ROLE and TOKEN routes and public infrastructure routes (OAuth, email sign-in, WebAuthn, the Stripe webhook, health). The nightly count is a ratchet: `tooling/ci/load-coverage-budget.json` records it, and `k6-coverage.policy.unit.test.ts` fails when the nightly load-tests fewer routes — raise the budget when a change adds coverage. Remaining inventory gaps: live webhook delivery, Stripe-backed writes and WebAuthn credential verification/removal. Account deletion, organization leave/ownership transfer and S3 transport writes now run in the isolated lifecycle gate. The runner provisions a distinct real super-admin session per virtual user and permits at most five deletion iterations per admin, respecting the five-deletions-per-five-minutes protection.
+**Route coverage.** `pnpm load:coverage` matches every request the scenario files make — method and path — against `docs/routes.txt`; `pnpm load:coverage --nightly` counts only the files this workflow runs. It skips ROLE and TOKEN routes and public infrastructure routes (OAuth, email sign-in, WebAuthn, the Stripe webhook, health). The nightly count is a ratchet: `tooling/ci/load-coverage-budget.json` records it, and `k6-coverage.policy.unit.test.ts` fails when the nightly load-tests fewer routes — raise the budget when a change adds coverage. Remaining inventory gaps: live webhook delivery and Stripe-backed writes. Account deletion, organization leave/ownership transfer and S3 transport writes now run in the isolated lifecycle gate. The runner provisions a distinct real super-admin session per virtual user and permits at most five deletion iterations per admin, respecting the five-deletions-per-five-minutes protection.
 
 **Reproduce locally:** `pnpm compose:up`, `pnpm db:migrate`, `pnpm setup:local --only-env`, `DEMO_PASSWORD=DemoPassword123! pnpm db:seed:full`, `pnpm dev:loadtest`, then `pnpm tool:load-test-credentials`, export `TEST_TOKEN` / `TEST_ORG_ID`, and run `pnpm load:stress` and `pnpm load:stress:api` (same thresholds as CI).
 
@@ -507,3 +508,11 @@ It preserves PostgreSQL microseconds in the encrypted cursor; API serializers
 omit this internal field. Ordering and predicates still use the original indexed
 timestamp column and id tie-breaker. Cursor comparison does not look up the
 boundary row, so deletion between pages does not change its sort position.
+
+## Sustained distinct-user validation
+
+Set `VUS` to the number of distinct credential-pool users. Set `DURATION=10m` for `multi-tenant-membership-read.js` to run sustained journeys instead of two iterations per user. The scenario requires every check to pass, zero unexpected HTTP failures, zero dropped iterations, and p95 below 500 ms / p99 below 1000 ms. It verifies tenant scope, pagination, permissions and foreign-tenant denial. The sustained completion gate requires at least one completed journey per configured user; inspect per-user samples for distribution.
+
+Measure RSS and file descriptors for the actual API process, after warm-up. The existing memory-soak helper measures its orchestration process and is insufficient evidence of API memory stability. Raising overload admission can remove 503 responses while increasing latency; retain the latency thresholds and report both outcomes.
+
+For managed HTTP proxies on Node 24, start the API with `NODE_USE_ENV_PROXY=1` and retain loopback addresses in `NO_PROXY`. The Stripe production SDK uses the platform HTTPS agent so these proxy settings apply; retain platform CA trust.

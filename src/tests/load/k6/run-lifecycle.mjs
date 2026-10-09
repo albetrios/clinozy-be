@@ -57,6 +57,8 @@ const shared = {
 const env = {
   ...shared,
   PORT: '3002',
+  NODE_USE_ENV_PROXY: '1',
+  NO_PROXY: [shared.NO_PROXY || '', '127.0.0.1', 'localhost'].filter(Boolean).join(','),
   DATABASE_POOL_MAX: '60',
   OVERLOAD_DB_POOL_SHED_RATIO: '3',
   WEBHOOK_URL_ALLOWLIST: 'example.com,1.1.1.1',
@@ -66,6 +68,9 @@ const env = {
   S3_ACCESS_KEY_ID: 'load-fixture-access-key',
   S3_SECRET_ACCESS_KEY: 'load-fixture-secret-key-for-loopback-only',
   S3_FORCE_PATH_STYLE: 'true',
+  FRONTEND_URL: 'http://localhost:5173',
+  ALLOWED_ORIGINS: 'http://localhost:5173',
+  WEBAUTHN_RP_ID: 'localhost',
   REDIS_KEY_PREFIX: `clinozy:load-lifecycle:${mode}:`,
 };
 for (const key of [
@@ -80,7 +85,7 @@ for (const key of [
     env[key] = u.toString();
   }
 for (const key of ['SENTRY_DSN', 'OTEL_EXPORTER_OTLP_ENDPOINT', 'POSTHOG_KEY']) delete env[key];
-for (const port of [3002, 3003, 3004]) {
+for (const port of [3002, 3003, 3004, 3005]) {
   const probe = createServer();
   await new Promise((resolve, reject) => {
     probe.once('error', reject);
@@ -94,6 +99,16 @@ const storage = spawn(process.execPath, ['src/tests/load/k6/load-storage.mjs'], 
     'ignore',
     openSync(`${output}/storage.log`, 'w'),
     openSync(`${output}/storage.errors.log`, 'w'),
+  ],
+});
+const authenticatorToken = randomBytes(32).toString('hex');
+const authenticator = spawn(process.execPath, ['src/tests/load/k6/load-authenticator.mjs'], {
+  cwd: repo,
+  env: { ...shared, LOAD_AUTHENTICATOR_TOKEN: authenticatorToken },
+  stdio: [
+    'ignore',
+    openSync(`${output}/authenticator.log`, 'w'),
+    openSync(`${output}/authenticator.errors.log`, 'w'),
   ],
 });
 const mailboxToken = randomBytes(32).toString('hex');
@@ -130,7 +145,12 @@ async function request(path, body) {
 try {
   let ready = false;
   for (let i = 0; i < 45; i++) {
-    if (api.exitCode !== null || mailbox.exitCode !== null || storage.exitCode !== null)
+    if (
+      api.exitCode !== null ||
+      mailbox.exitCode !== null ||
+      storage.exitCode !== null ||
+      authenticator.exitCode !== null
+    )
       throw new Error('Fixture process exited');
     try {
       const response = await fetch(`${base}/readyz`);
@@ -195,6 +215,7 @@ try {
         'tenant-membership-lifecycle',
         'admin',
         'upload-asset-lifecycle',
+        'webauthn-lifecycle',
       ];
   for (const script of scripts) {
     const processK6 = spawn(
@@ -219,6 +240,8 @@ try {
           ADMIN_TOKENS: JSON.stringify(adminTokens),
           LOAD_MAILBOX_URL: 'http://127.0.0.1:3003',
           LOAD_MAILBOX_TOKEN: mailboxToken,
+          LOAD_AUTHENTICATOR_URL: 'http://127.0.0.1:3005',
+          LOAD_AUTHENTICATOR_TOKEN: authenticatorToken,
           VUS: process.env.VUS || '4',
           ITERATIONS: process.env.ITERATIONS || '5',
         },
@@ -256,10 +279,14 @@ try {
     const state = await (await fetch('http://127.0.0.1:3004/__fixture__/state')).json();
     writeFileSync(`${output}/storage-fixture-state.json`, JSON.stringify(state, null, 2));
   } catch {}
+  authenticator.kill('SIGTERM');
   storage.kill('SIGTERM');
   api.kill('SIGTERM');
   mailbox.kill('SIGTERM');
   await Promise.all([
+    new Promise((resolve) =>
+      authenticator.exitCode !== null ? resolve() : authenticator.on('close', resolve),
+    ),
     new Promise((resolve) =>
       storage.exitCode !== null ? resolve() : storage.on('close', resolve),
     ),
@@ -270,6 +297,11 @@ try {
   ]);
   writeFileSync(
     `${output}/runtime-stopped.json`,
-    JSON.stringify({ apiStopped: true, mailboxStopped: true, storageStopped: true }),
+    JSON.stringify({
+      apiStopped: true,
+      mailboxStopped: true,
+      storageStopped: true,
+      authenticatorStopped: true,
+    }),
   );
 }

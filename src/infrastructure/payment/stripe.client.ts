@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { globalAgent as httpsGlobalAgent } from 'node:https';
 import { env } from '@/shared/config/env.config.js';
 import { PAGINATION } from '@/shared/constants/pagination.constants.js';
 import { buildOutboundCallOptions, outboundCall } from '@/infrastructure/outbound/index.js';
@@ -47,6 +48,9 @@ export function getStripeClient(): Stripe {
     typescript: true,
     maxNetworkRetries: STRIPE_MAX_NETWORK_RETRIES,
     timeout: env.STRIPE_HTTP_TIMEOUT_MS,
+    // The SDK's private agent ignores Node's managed proxy configuration. Reuse the platform
+    // HTTPS agent so NODE_USE_ENV_PROXY also applies to Stripe's production HTTP transport.
+    httpAgent: httpsGlobalAgent,
     ...optionalOutboundHttpClientForContractTests,
   });
 

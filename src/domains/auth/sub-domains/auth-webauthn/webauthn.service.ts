@@ -235,7 +235,7 @@ export class WebauthnService {
       throw error;
     }
 
-    return { verified: true, credential_id: created.credential_id };
+    return { verified: true, credential_id: created.public_id };
   }
 
   async generateAuthenticationOptions(

@@ -1965,11 +1965,13 @@ src/
     │   │   │   ├── upload-list.js
     │   │   │   ├── user-data-export.js
     │   │   │   ├── user-journey.js
+    │   │   │   ├── webauthn-lifecycle.js
     │   │   │   └── webhooks.js
     │   │   ├── COMPREHENSIVE-JOURNEY.md
     │   │   ├── README.md
     │   │   ├── check-prereqs.mjs
     │   │   ├── export-load-test-credentials.sh
+    │   │   ├── load-authenticator.mjs
     │   │   ├── load-mailbox.mjs
     │   │   ├── load-storage.mjs
     │   │   ├── run-journey.sh
@@ -2220,7 +2222,8 @@ src/
     │   │   ├── boot-tls-guards.unit.test.ts
     │   │   ├── database-suite-lock.unit.test.ts
     │   │   ├── local-test-database.unit.test.ts
-    │   │   └── migration-error-hint.unit.test.ts
+    │   │   ├── migration-error-hint.unit.test.ts
+    │   │   └── stripe-client-proxy.unit.test.ts
     │   ├── middleware/
     │   │   ├── api-key-auth.middleware.unit.test.ts
     │   │   ├── api-versioning.middleware.unit.test.ts
