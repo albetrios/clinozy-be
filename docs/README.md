@@ -195,6 +195,7 @@ Grouped index: **[deployment/README.md](deployment/README.md)** (`setup/`, `ci-c
 | Doc                                                                                                        | Description                                                    |
 | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | [reviews/codebase-audit-loop.md](reviews/codebase-audit-loop.md)                                           | Repeatable `/loop`-driven audit procedure (rotating perspectives; append-only living log). |
+| [reviews/launch-confidence-tasks-2026-10-09.md](reviews/launch-confidence-tasks-2026-10-09.md)           | Module-wise confidence after the launch iteration, and the tasks that raise each score. |
 | [reviews/production-readiness-2026-09-24.md](reviews/production-readiness-2026-09-24.md)                   | Pending items from the 2026-09-24 readiness pass (security findings tracked privately). |
 | [reviews/production-readiness-audit-2026-05-29.md](reviews/production-readiness-audit-2026-05-29.md)       | Principal-staff production-readiness audit for scale risks.    |
 | [reviews/production-readiness-remediation-2026-05-30.md](reviews/production-readiness-remediation-2026-05-30.md) | Remediation status tracker (findings 1–16 + extended bugs 31–64). |
