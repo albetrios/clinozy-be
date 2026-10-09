@@ -7,7 +7,7 @@
  *      no password yet — one hash computation, one bulk UPDATE — so they become loginable
  *      via POST /api/v1/auth/login without touching any other seed logic.
  *   2. Joins users → memberships → organizations to export
- *      `src/tests/load/k6/data/credential-pool.json`, one entry per active bulk membership.
+ *      `src/tests/load/k6/data/credential-pool.json`, one entry per distinct user with an active bulk membership.
  *      k6 scenarios index into this pool by `__VU` so each VU authenticates as a distinct user.
  *
  * Env knobs:
@@ -66,10 +66,8 @@ async function run(env: NodeJS.ProcessEnv): Promise<void> {
 
   logger.info({ stamped: stamped.length }, 'load-test-credential-pool: password hash stamped');
 
-  // Step 2 — build pool: one entry per active bulk-organization membership.
-  // A user round-robined into multiple organizations by the bulk seeder yields multiple entries,
-  // which is fine — k6 VUs that collide on the same user just share organization context rather
-  // than failing.
+  // Step 2 — export one deterministic organization per distinct user. Reusing a user
+  // across VUs can rebind its session and invalidate another VU's scoped token.
   //
   // MFA accounts are excluded, and the two exclusions below mirror `completeFirstFactorAuth`'s
   // gate exactly (`user.is_mfa_enabled || organizationRequiresMfa`). For such an account the
@@ -92,22 +90,26 @@ async function run(env: NodeJS.ProcessEnv): Promise<void> {
       and(
         like(users.email, BULK_EMAIL_PATTERN),
         like(organizations.slug, BULK_ORG_SLUG_PATTERN),
+        eq(users.status, 'ACTIVE'),
+        isNull(users.deleted_at),
+        eq(organizations.status, 'ACTIVE'),
+        isNull(organizations.deleted_at),
         eq(memberships.status, 'ACTIVE'),
         isNull(memberships.deleted_at),
         eq(users.is_mfa_enabled, false),
         // Same SECURITY DEFINER resolver the login path uses, so this can never drift from it.
         sql`NOT tenancy.user_has_organization_requiring_mfa(${users.id})`,
       ),
-    );
+    )
+    .orderBy(users.public_id, organizations.public_id);
 
   if (rows.length === 0) {
-    logger.warn(
-      'load-test-credential-pool: no bulk users with active memberships found — run pnpm db:seed:bulk first',
-    );
-    return;
+    throw new Error('No eligible bulk users found; run pnpm db:seed:bulk first');
   }
 
-  const pool: CredentialPoolEntry[] = rows.map((row) => ({
+  const uniqueRows = [...new Map(rows.map((row) => [row.userPublicId, row])).values()];
+
+  const pool: CredentialPoolEntry[] = uniqueRows.map((row) => ({
     email: row.email,
     password,
     organizationPublicId: row.organizationPublicId,

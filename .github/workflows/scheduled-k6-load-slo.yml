@@ -186,11 +186,6 @@ jobs:
         continue-on-error: true
         run: k6 run --summary-export=k6-daily-ops.json src/tests/load/k6/scenarios/daily-ops.js
 
-      - name: k6 billing (informational)
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        run: k6 run --summary-export=k6-billing.json src/tests/load/k6/scenarios/billing.js
-
       - name: k6 webhooks (informational)
         if: ${{ !cancelled() }}
         continue-on-error: true
@@ -242,7 +237,6 @@ jobs:
           k6 run --summary-export=k6-permission-write.json src/tests/load/k6/scenarios/permission-write.js || failed=1
           k6 run --summary-export=k6-tenancy-role-write.json src/tests/load/k6/scenarios/tenancy-role-write.js || failed=1
           k6 run --summary-export=k6-organization-settings-write.json src/tests/load/k6/scenarios/organization-settings-write.js || failed=1
-          k6 run --summary-export=k6-notification-write.json src/tests/load/k6/scenarios/notification-write.js || failed=1
           k6 run --summary-export=k6-organization-api-key-lifecycle.json src/tests/load/k6/scenarios/organization-api-key-lifecycle.js || failed=1
           exit "$failed"
 
@@ -253,6 +247,31 @@ jobs:
         # from (src/tests/load/k6/data/credential-pool.json). Last, so the extra rows cannot shift the
         # scenarios before it.
         run: pnpm db:seed:loadtest
+
+      - name: Strict distinct-user notification and tenant journeys
+        if: ${{ !cancelled() }}
+        # Run before FE scenarios consume the seeded unread notifications.
+        run: |
+          failed=0
+          VUS=20 k6 run --summary-export=k6-multi-tenant-membership-read.json src/tests/load/k6/scenarios/multi-tenant-membership-read.js || failed=1
+          VUS=20 k6 run --summary-export=k6-notification-write.json src/tests/load/k6/scenarios/notification-write.js || failed=1
+          exit "$failed"
+
+      - name: Refresh credentials for strict lifecycle gate
+        if: ${{ !cancelled() }}
+        run: bash src/tests/load/k6/export-load-test-credentials.sh
+
+      - name: Strict lifecycle and persisted settings gate
+        if: ${{ !cancelled() }}
+        run: |
+          failed=0
+          DURATION=20s MIN_COMPLETED=20 k6 run --summary-export=k6-strict-roles.json src/tests/load/k6/scenarios/tenancy-role-write.js || failed=1
+          DURATION=20s MIN_COMPLETED=20 k6 run --summary-export=k6-strict-api-keys.json src/tests/load/k6/scenarios/organization-api-key-lifecycle.js || failed=1
+          VUS=4 ITERATIONS=5 k6 run --summary-export=k6-strict-policy.json src/tests/load/k6/scenarios/notification-policy-crud.js || failed=1
+          ITERATIONS=20 k6 run --summary-export=k6-strict-settings.json src/tests/load/k6/scenarios/organization-settings-write.js || failed=1
+          VUS=4 ITERATIONS=5 k6 run --summary-export=k6-strict-webhooks.json src/tests/load/k6/scenarios/webhooks.js || failed=1
+          VUS=4 ITERATIONS=5 k6 run --summary-export=k6-strict-billing-read.json src/tests/load/k6/scenarios/billing.js || failed=1
+          exit "$failed"
 
       - name: k6 fe-full-surface (informational)
         if: ${{ !cancelled() }}

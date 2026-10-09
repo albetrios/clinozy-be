@@ -1,3 +1,5 @@
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
+import { sql } from 'drizzle-orm';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { database } from '@/infrastructure/database/connection.js';
@@ -329,5 +331,43 @@ describe('WebhookRepository (database)', () => {
       expect(revived.public_id).toBe(created.public_id);
       expect(revived.deleted_at).toBeNull();
     });
+  });
+  it('event fan-out pages microsecond timestamps without duplicates or missing subscribers', async () => {
+    const user = await createTestUser();
+    const organization = await createTestOrganization({ ownerUserId: user.id });
+    const database = getOperatorDatabase();
+    for (const [index, fraction] of [
+      '000900',
+      '000100',
+      '000700',
+      '000100',
+      '000200',
+      '001000',
+    ].entries()) {
+      const hook = await repository.create({
+        organization_id: organization.id,
+        url: `https://example.com/precision-${index}`,
+        encrypted_secret: 'test-encrypted-fixture',
+        events: ['subscription.updated'],
+        is_enabled: true,
+        created_by_user_id: user.id,
+      });
+      await database.execute(
+        sql`UPDATE notify.webhooks SET created_at=${'2026-01-01T00:00:00.' + fraction + 'Z'}::timestamptz WHERE id=${hook.id}`,
+      );
+    }
+    const expected = await database.execute<{ public_id: string }>(
+      sql`SELECT public_id FROM notify.webhooks WHERE organization_id=${organization.id} ORDER BY created_at ASC, id ASC`,
+    );
+    const subscribers = await repository.listEnabledSubscribedToEvent(
+      organization.id,
+      'subscription.updated',
+      2,
+      10,
+    );
+    expect(subscribers.map((hook) => hook.public_id)).toEqual(
+      [...expected].map((row) => row.public_id),
+    );
+    expect(new Set(subscribers.map((hook) => hook.public_id)).size).toBe(6);
   });
 });

@@ -1,6 +1,17 @@
 import { createHash } from 'node:crypto';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
-import { and, asc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm';
+import {
+  getTableColumns,
+  and,
+  asc,
+  eq,
+  ilike,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
 import {
   getContextFreeDatabase,
@@ -11,6 +22,7 @@ import { escapeLikePattern } from '@/shared/utils/validation/validation.util.js'
 import {
   buildAscendingCreatedAtIdCursorCondition,
   createOpaqueCursorFromRow,
+  cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
 
@@ -281,7 +293,10 @@ export class UserRepository {
 
     // Fetch one extra row so has_more is accurate without depending on count(*).
     const rowsPromise = getRequestDatabase()
-      .select()
+      .select({
+        ...getTableColumns(users),
+        cursor_created_at: cursorTimestampSelection(users.created_at),
+      })
       .from(users)
       .where(where)
       .orderBy(asc(users.created_at), asc(users.id))

@@ -1,5 +1,16 @@
 import { createHash } from 'node:crypto';
-import { and, desc, eq, gte, inArray, isNull, lte, sql, type SQL } from 'drizzle-orm';
+import {
+  getTableColumns,
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lte,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
 import {
   getContextFreeDatabase,
@@ -12,6 +23,7 @@ import { ValidationError } from '@/shared/errors/index.js';
 import {
   buildDescendingCreatedAtIdCursorCondition,
   createOpaqueCursorFromRow,
+  cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
@@ -122,7 +134,10 @@ export class AuditRepository {
 
     // Fetch one extra row so has_more is accurate without depending on count(*).
     const rowsPromise = getRequestDatabase()
-      .select()
+      .select({
+        ...getTableColumns(logs),
+        cursor_created_at: cursorTimestampSelection(logs.created_at),
+      })
       .from(logs)
       .where(where)
       .orderBy(desc(logs.created_at), desc(logs.id))

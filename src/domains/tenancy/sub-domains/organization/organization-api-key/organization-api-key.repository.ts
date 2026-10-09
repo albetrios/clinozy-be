@@ -1,4 +1,5 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { cursorTimestampSelection } from '@/shared/utils/http/pagination.util.js';
+import { getTableColumns, and, eq, isNull, sql } from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import {
   getContextFreeDatabase,
@@ -118,7 +119,10 @@ export class OrganizationApiKeyRepository extends BaseRepository {
       cursorCondition,
     );
     const rows = (await getRequestDatabase()
-      .select()
+      .select({
+        ...getTableColumns(api_keys),
+        cursor_created_at: cursorTimestampSelection(api_keys.created_at),
+      })
       .from(api_keys)
       .where(where)
       .orderBy(...orderBy)

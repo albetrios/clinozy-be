@@ -14,6 +14,7 @@ import {
 import {
   buildDescendingCreatedAtIdCursorCondition,
   createOpaqueCursorFromRow,
+  cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
 
@@ -93,6 +94,7 @@ export class WebhookDeliveryAttemptRepository {
         attempt_count: webhook_delivery_attempts.attempt_count,
         next_retry_at: webhook_delivery_attempts.next_retry_at,
         created_at: webhook_delivery_attempts.created_at,
+        cursor_created_at: cursorTimestampSelection(webhook_delivery_attempts.created_at),
         // Keep the keyset cursor columns available to the serializer.
         id: webhook_delivery_attempts.id,
       })

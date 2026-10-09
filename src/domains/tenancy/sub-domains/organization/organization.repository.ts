@@ -1,4 +1,15 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import {
+  getTableColumns,
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import {
   getContextFreeDatabase,
@@ -17,6 +28,7 @@ import {
 import {
   buildAscendingCreatedAtIdCursorCondition,
   createOpaqueCursorFromRow,
+  cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
 import type { Organization } from './organization.types.js';
@@ -179,7 +191,10 @@ export class OrganizationRepository extends BaseRepository {
       ),
     );
     const rows = await getRequestDatabase()
-      .select()
+      .select({
+        ...getTableColumns(organizations),
+        cursor_created_at: cursorTimestampSelection(organizations.created_at),
+      })
       .from(organizations)
       .where(accessWhere)
       .orderBy(asc(organizations.created_at), asc(organizations.id))

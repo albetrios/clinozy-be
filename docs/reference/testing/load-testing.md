@@ -421,3 +421,64 @@ CI runs a subset in the **organization-scoped routes** job step (see `scheduled-
 ## Optional env (all scenarios)
 
 - `BASE_URL`: API base URL (default `http://localhost:3000`). k6 reads this as `__ENV.BASE_URL`.
+
+### Strict lifecycle and distinct-user validation
+
+`tenancy-role-write.js` requires scoped `TEST_TOKEN` and `TEST_ORG_ID`. Each
+journey sends concurrent duplicate creates, requires one persisted role and the
+same replay id, reads back updates and exact permissions, then deletes and
+checks absence. `organization-api-key-lifecycle.js` checks persisted renaming,
+secret omission from detail responses, fresh rotation secrets, new-key authentication, old/deleted-key rejection,
+read-only scope enforcement, and deletion.
+Both enforce 100% checks, a completed-journey minimum (`MIN_COMPLETED`, default 1),
+and zero dropped iterations. `DURATION` overrides the default two-minute run.
+These scenarios share one actor; their VUs are concurrent clients, not distinct users.
+
+`multi-tenant-membership-read.js` uses the generated credential pool and runs two
+journeys per distinct user (`VUS`, default 20). It verifies user/tenant binding,
+two nonempty disjoint cursor pages belonging to that tenant, and member detail and resolved permissions, and a foreign
+membership returning 404. Setup requires at least two tenants and fails on an
+undersized pool. The pool generator chooses one deterministic membership per
+user; the reader rejects duplicate identities and incomplete credentials.
+Use a separate seeded database and Redis namespace. Generated credentials and
+raw response secrets must never be committed. Successful assertions do not
+establish production capacity; dataset size, API pool size, user count, tenant
+count, and latency threshold results must accompany every report.
+
+Example (from the repository root, with the API using the same isolated database):
+
+```sh
+VUS=20 BASE_URL=http://localhost:3002 k6 run src/tests/load/k6/scenarios/multi-tenant-membership-read.js
+DURATION=20s MIN_COMPLETED=20 k6 run src/tests/load/k6/scenarios/tenancy-role-write.js
+```
+
+Queue recovery, external-provider delivery, and future clinic workflows require
+additional controlled fixtures; these scenarios do not exercise those paths.
+
+The nightly workflow runs the strict notification and tenant journeys after
+bulk seeding and before front-end scenarios consume those fixtures. Notification
+writes require seeded unread rows for every selected user, assert a one-item
+unread-count decrement, mark all read, verify zero, and delete an owned item.
+Policy and webhook CRUD require completed lifecycles and persisted updates;
+policy conflicts fail instead of skipping work. Settings/profile toggles use one writer,
+check independent readback, and restore settings, profile fields, organization
+name, and the complete notification-preference set. Billing reads
+require nonempty plan/subscription fixtures and matching tenant-scoped details.
+Billing uses two ordinary bulk-seeded tenants and proves foreign subscription
+access returns 404. It does not send fake seed customer IDs to live payment
+providers; provider-free invoice/payment-method shapes remain in read-surface.
+These strict steps fail the job; earlier informational scenarios retain their
+separate purpose. The idempotency storm reuses the strict role journey instead
+of treating billing validation rejections as successful idempotency coverage.
+
+Webhook CRUD never invokes test delivery. `WEBHOOK_TEST_BASE_URL` can select a
+public numeric HTTPS fixture to isolate backend latency from external hostname
+DNS latency; the default remains `https://example.com`. SSRF checks still apply.
+Hostname DNS behavior and outbound delivery need their own measurements.
+
+Timestamp keysets select `cursor_created_at` using
+`cursorTimestampSelection(created_at)` and pass it through cursor creation.
+It preserves PostgreSQL microseconds in the encrypted cursor; API serializers
+omit this internal field. Ordering and predicates still use the original indexed
+timestamp column and id tie-breaker. Cursor comparison does not look up the
+boundary row, so deletion between pages does not change its sort position.

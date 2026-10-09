@@ -1,4 +1,5 @@
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { cursorTimestampSelection } from '@/shared/utils/http/pagination.util.js';
+import { getTableColumns, and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
@@ -92,7 +93,10 @@ export class MemberRoleRepository extends BaseRepository {
       cursorCondition,
     );
     const rows = (await getRequestDatabase()
-      .select()
+      .select({
+        ...getTableColumns(roles),
+        cursor_created_at: cursorTimestampSelection(roles.created_at),
+      })
       .from(roles)
       .where(where)
       .orderBy(...orderBy)

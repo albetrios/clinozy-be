@@ -1,4 +1,15 @@
-import { and, asc, desc, eq, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm';
+import {
+  getTableColumns,
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  ne,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import {
   getContextFreeDatabase,
@@ -14,7 +25,7 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import { type MembershipRow, SEAT_CONSUMING_MEMBERSHIP_STATUSES } from './membership.types.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
-import { parseListCursor } from '@/shared/utils/http/pagination.util.js';
+import { parseListCursor, cursorTimestampSelection } from '@/shared/utils/http/pagination.util.js';
 import {
   buildContainsLikePattern,
   computeListFilterFingerprint,
@@ -149,7 +160,10 @@ export class MembershipRepository extends BaseRepository {
         after,
       });
     const rows = (await getRequestDatabase()
-      .select()
+      .select({
+        ...getTableColumns(memberships),
+        cursor_created_at: cursorTimestampSelection(memberships.created_at),
+      })
       .from(memberships)
       .where(
         and(

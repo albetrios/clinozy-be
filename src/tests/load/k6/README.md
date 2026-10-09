@@ -67,3 +67,12 @@ Org-scoped routes are flat — they carry **no** `/organizations/{organization_i
 **Before reporting a before/after**, read [Trusting a result](../../../../docs/reference/testing/load-testing.md#trusting-a-result). Run-to-run variance on a co-located box has been measured at 2.07x, so a single-run comparison proves nothing.
 
 Full details (env, how to run each scenario): [docs/reference/testing/load-testing.md](../../../../docs/reference/testing/load-testing.md).
+
+### Strict lifecycle and distinct-user validation
+
+See [the canonical load-testing guide](../../../../docs/reference/testing/load-testing.md#strict-lifecycle-and-distinct-user-validation)
+for prerequisites, assertions, cleanup, and limits of the role/API-key lifecycle
+and distinct-user tenant pagination scenarios. Configure lifecycle runs with
+`DURATION` and `MIN_COMPLETED`; configure distinct-user reads with `VUS`.
+The nightly workflow enforces the distinct-user and persisted-lifecycle gates;
+failed checks or incomplete journeys fail the job.

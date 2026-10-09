@@ -13,6 +13,7 @@ import type { MemberInvitationRow } from './member-invitation.types.js';
 import {
   buildAscendingCreatedAtIdCursorCondition,
   createOpaqueCursorFromRow,
+  cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
 
@@ -68,6 +69,7 @@ export class MemberInvitationRepository {
     const rowsPromise = getRequestDatabase()
       .select({
         invitation: member_invitations,
+        cursor_created_at: cursorTimestampSelection(member_invitations.created_at),
         membership_public_id: memberships.public_id,
       })
       .from(member_invitations)
@@ -90,6 +92,7 @@ export class MemberInvitationRepository {
     const rows = hasMore ? fetchedRows.slice(0, limit) : fetchedRows;
     const items = rows.map((row) => ({
       ...row.invitation,
+      cursor_created_at: row.cursor_created_at,
       membership_public_id: row.membership_public_id,
     }));
     const lastItem = items.at(-1);

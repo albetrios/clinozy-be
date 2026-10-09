@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
-import { and, eq, gt, lt, ne, or, type AnyColumn, type SQL } from 'drizzle-orm';
+import { and, eq, gt, lt, or, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import { PAGINATION } from '@/shared/constants/pagination.constants.js';
 import { AES_GCM_ALGORITHM, AES_GCM_IV_LENGTH } from '@/shared/constants/security.constants.js';
@@ -67,6 +67,7 @@ export type ListCursorPayload = z.infer<typeof listCursorPayloadSchema>;
 export type ParsedListCursor = {
   kind: 'opaque';
   created_at: Date;
+  created_at_iso?: string;
   sort_value?: string;
   public_id?: string;
   id?: number;
@@ -146,6 +147,7 @@ export function parseListCursor(after: string | undefined): ParsedListCursor | n
     return omitUndefined({
       kind: 'opaque' as const,
       created_at: new Date(opaque.created_at),
+      created_at_iso: opaque.created_at,
       sort_value: opaque.sort_value,
       public_id: opaque.public_id,
       id: opaque.id,
@@ -155,9 +157,19 @@ export function parseListCursor(after: string | undefined): ParsedListCursor | n
   return null;
 }
 
-/** Builds an opaque cursor string from a row's pagination columns; serializes `created_at` as ISO 8601. */
+/**
+ * Projects the PostgreSQL timestamp as UTC ISO text without losing microseconds.
+ * Select it as `cursor_created_at` alongside public row fields; serializers omit it.
+ * The underlying timestamp remains the indexed ORDER BY and comparison column.
+ */
+export function cursorTimestampSelection(createdAtColumn: AnyColumn): SQL<string> {
+  return sql<string>`to_char(${createdAtColumn} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+}
+
+/** Builds an encrypted cursor using the full database timestamp when selected. */
 export function createOpaqueCursorFromRow(row: {
   created_at: Date;
+  cursor_created_at?: string;
   sort_value?: string;
   public_id?: string;
   id: number;
@@ -165,7 +177,7 @@ export function createOpaqueCursorFromRow(row: {
 }): string {
   return encodeListCursor(
     omitUndefined({
-      created_at: row.created_at.toISOString(),
+      created_at: row.cursor_created_at ?? row.created_at.toISOString(),
       sort_value: row.sort_value,
       public_id: row.public_id,
       id: row.id,
@@ -196,9 +208,8 @@ export function buildAscendingIdCursorCondition(
 
 /**
  * Builds a Drizzle `WHERE` clause for ascending pagination on
- * `(created_at, id)`. Excludes the boundary row by id so PostgreSQL's
- * microsecond precision (vs JavaScript's millisecond) cannot repeat the
- * cursor row across pages.
+ * `(created_at, id)`. Compares the full ISO timestamp retained by the opaque
+ * cursor, including PostgreSQL microseconds, with the id as an exact tie-breaker.
  */
 export function buildAscendingCreatedAtIdCursorCondition(
   createdAtColumn: AnyColumn,
@@ -208,15 +219,14 @@ export function buildAscendingCreatedAtIdCursorCondition(
   if (cursor === null) {
     return undefined;
   }
+  const timestamp = sql`${cursor.created_at_iso ?? cursor.created_at.toISOString()}::timestamptz`;
   const cursorId = cursor.id;
   if (cursorId === undefined) {
-    return gt(createdAtColumn, cursor.created_at);
+    return gt(createdAtColumn, timestamp);
   }
-  // PostgreSQL stores microseconds, while JavaScript Date serializes milliseconds.
-  // Exclude the boundary row by id so precision loss cannot repeat it.
   return or(
-    and(gt(createdAtColumn, cursor.created_at), ne(idColumn, cursorId)),
-    and(eq(createdAtColumn, cursor.created_at), gt(idColumn, cursorId)),
+    gt(createdAtColumn, timestamp),
+    and(eq(createdAtColumn, timestamp), gt(idColumn, cursorId)),
   )!;
 }
 
@@ -253,15 +263,14 @@ export function buildDescendingCreatedAtIdCursorCondition(
   if (cursor === null) {
     return undefined;
   }
+  const timestamp = sql`${cursor.created_at_iso ?? cursor.created_at.toISOString()}::timestamptz`;
   const cursorId = cursor.id;
   if (cursorId === undefined) {
-    return lt(createdAtColumn, cursor.created_at);
+    return lt(createdAtColumn, timestamp);
   }
-  // PostgreSQL stores microseconds, while JavaScript Date serializes milliseconds.
-  // Exclude the boundary row by id so precision loss cannot repeat it.
   return or(
-    and(lt(createdAtColumn, cursor.created_at), ne(idColumn, cursorId)),
-    and(eq(createdAtColumn, cursor.created_at), lt(idColumn, cursorId)),
+    lt(createdAtColumn, timestamp),
+    and(eq(createdAtColumn, timestamp), lt(idColumn, cursorId)),
   )!;
 }
 

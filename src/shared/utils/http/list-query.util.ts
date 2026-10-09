@@ -182,9 +182,12 @@ export function resolveKeysetSort<Row>(args: {
 /**
  * Turns a `limit + 1` fetch into a page result: slices to `limit`, computes `has_more`, and mints
  * the next opaque cursor (embedding `sort_value` + `filter_fingerprint`). Rows must expose
- * `created_at` + `id` for the cursor.
+ * `created_at` + `id` for the cursor; timestamp-sorted queries also select
+ * `cursor_created_at` with `cursorTimestampSelection` to retain PostgreSQL microseconds.
  */
-export function finishKeysetPage<Row extends { created_at: Date; id: number; public_id?: string }>(
+export function finishKeysetPage<
+  Row extends { created_at: Date; id: number; public_id?: string; cursor_created_at?: string },
+>(
   rows: Row[],
   args: {
     limit: number;
@@ -201,6 +204,9 @@ export function finishKeysetPage<Row extends { created_at: Date; id: number; pub
     // exactOptionalPropertyTypes: omit undefined-valued optional keys rather than pass `undefined`.
     next_cursor = createOpaqueCursorFromRow({
       created_at: last.created_at,
+      ...(last.cursor_created_at !== undefined
+        ? { cursor_created_at: last.cursor_created_at }
+        : {}),
       id: last.id,
       ...(last.public_id !== undefined ? { public_id: last.public_id } : {}),
       ...(sortValue !== undefined ? { sort_value: sortValue } : {}),

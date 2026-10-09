@@ -1942,6 +1942,7 @@ src/
     │   │   │   ├── login-burst-rate-limit.js
     │   │   │   ├── login-smoke.js
     │   │   │   ├── member-role-permission-list.js
+    │   │   │   ├── multi-tenant-membership-read.js
     │   │   │   ├── notification-policy-crud.js
     │   │   │   ├── notification-write.js
     │   │   │   ├── organization-api-key-lifecycle.js

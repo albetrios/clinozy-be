@@ -35,3 +35,27 @@ export function checkJsonBody(response, name) {
     },
   });
 }
+
+/** Records a functional check and aborts the journey on failure. */
+export function assertCondition(condition, name) {
+  if (!check(condition, { [name]: (value) => value })) throw new Error(name);
+}
+
+/** Requires an exact successful response and a public JSON data object/array. */
+export function requireData(response, name) {
+  assertCondition(response.status === 200, `${name}: exact 200`);
+  let data;
+  try {
+    data = response.json('data');
+  } catch {
+    assertCondition(false, `${name}: valid JSON`);
+  }
+  assertCondition(data !== null && typeof data === 'object', `${name}: public data`);
+  return data;
+}
+
+/** Fails setup instead of allowing an unauthenticated scenario to pass without work. */
+export function requireScopedCredentials() {
+  if (!(__ENV.TEST_TOKEN && __ENV.TEST_ORG_ID))
+    throw new Error('TEST_TOKEN and TEST_ORG_ID required');
+}

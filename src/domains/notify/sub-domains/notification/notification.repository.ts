@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
+import { getTableColumns, and, count, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
 import { NOTIFICATION_MARK_ALL_READ_BATCH_SIZE } from '@/shared/constants/notification.constants.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
@@ -14,6 +14,7 @@ import { users } from '@/domains/user/user.schema.js';
 import {
   buildDescendingCreatedAtIdCursorCondition,
   createOpaqueCursorFromRow,
+  cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
 
@@ -138,7 +139,10 @@ export class NotificationRepository {
 
     // Fetch one extra row so has_more is accurate without depending on count(*).
     const rowsPromise = this.db()
-      .select()
+      .select({
+        ...getTableColumns(notifications),
+        cursor_created_at: cursorTimestampSelection(notifications.created_at),
+      })
       .from(notifications)
       .where(where)
       .orderBy(desc(notifications.created_at), desc(notifications.id))

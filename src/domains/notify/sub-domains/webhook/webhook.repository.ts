@@ -1,4 +1,4 @@
-import { and, asc, count, eq, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
+import { getTableColumns, and, asc, count, eq, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { DEFAULT_REPOSITORY_LIST_LIMIT } from '@/shared/constants/query-limits.constants.js';
@@ -13,6 +13,7 @@ import type { WebhookCreateData, WebhookUpdateData } from './webhook.types.js';
 import {
   buildAscendingCreatedAtIdCursorCondition,
   createOpaqueCursorFromRow,
+  cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
 
@@ -62,7 +63,10 @@ export class WebhookRepository {
       cursorCondition !== undefined ? and(...filterConditions, cursorCondition) : countWhere;
 
     const rowsPromise = getRequestDatabase()
-      .select()
+      .select({
+        ...getTableColumns(webhooks),
+        cursor_created_at: cursorTimestampSelection(webhooks.created_at),
+      })
       .from(webhooks)
       .where(where)
       .orderBy(asc(webhooks.created_at), asc(webhooks.id))
@@ -141,7 +145,10 @@ export class WebhookRepository {
           : and(...filterConditions);
 
       const fetchedRows = await getRequestDatabase()
-        .select()
+        .select({
+          ...getTableColumns(webhooks),
+          cursor_created_at: cursorTimestampSelection(webhooks.created_at),
+        })
         .from(webhooks)
         .where(where)
         .orderBy(asc(webhooks.created_at), asc(webhooks.id))
