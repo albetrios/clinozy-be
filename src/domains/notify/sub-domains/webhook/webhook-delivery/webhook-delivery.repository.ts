@@ -1,4 +1,4 @@
-import { and, asc, eq, lt } from 'drizzle-orm';
+import { and, asc, eq, lt, sql } from 'drizzle-orm';
 import {
   type RequestScopedPostgresDatabase,
   assertWorkerDatabaseContext,
@@ -238,6 +238,8 @@ export async function createPendingWebhookDeliveryAttempt(input: {
       .values({ ...baseValues, event_key: input.eventKey })
       .onConflictDoNothing({
         target: [webhook_delivery_attempts.webhook_id, webhook_delivery_attempts.event_key],
+        // PostgreSQL must infer the existing partial index, including its literal predicate.
+        where: sql`${webhook_delivery_attempts.status} = 'PENDING' AND ${webhook_delivery_attempts.event_key} IS NOT NULL`,
       })
       .returning({ publicId: webhook_delivery_attempts.public_id });
     if (rows[0]) return rows[0];

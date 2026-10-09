@@ -15,6 +15,13 @@ export const options = {
   thresholds: {
     ...THRESHOLDS,
     checks: ['rate==1'],
+    http_req_failed: ['rate==0'],
+    dropped_iterations: ['count==0'],
+    'http_req_duration{name:create-webhook}': ['p(95)<500', 'p(99)<1000'],
+    'http_req_duration{name:get-webhook}': ['p(95)<500', 'p(99)<1000'],
+    'http_req_duration{name:update-webhook}': ['p(95)<500', 'p(99)<1000'],
+    'http_req_duration{name:update-webhook-url}': ['p(95)<500', 'p(99)<1000'],
+    'http_req_duration{name:delete-webhook}': ['p(95)<500', 'p(99)<1000'],
     webhook_journeys_completed: [`count==${vus * iterations}`],
   },
 };
@@ -54,6 +61,14 @@ export default function webhookOps() {
         before.secret === undefined,
       'created webhook without leaked signing material',
     );
+    const updatedUrl = `${target}/k6-updated-${__VU}-${__ITER}-${Date.now()}`;
+    requireData(
+      http.patch(`${API_PREFIX}/notify/webhooks/${id}`, JSON.stringify({ url: updatedUrl }), {
+        headers,
+        tags: { name: 'update-webhook-url' },
+      }),
+      'update-webhook-url',
+    );
     requireData(
       http.patch(`${API_PREFIX}/notify/webhooks/${id}`, JSON.stringify({ is_enabled: false }), {
         headers,
@@ -69,8 +84,8 @@ export default function webhookOps() {
       'updated-webhook',
     );
     assertCondition(
-      updated.id === id && updated.is_enabled === false,
-      'webhook disabled persistently',
+      updated.id === id && updated.url === updatedUrl && updated.is_enabled === false,
+      'webhook URL and disabled state persisted',
     );
     const attempts = requireData(
       http.get(`${API_PREFIX}/notify/webhooks/${id}/delivery-attempts`, {

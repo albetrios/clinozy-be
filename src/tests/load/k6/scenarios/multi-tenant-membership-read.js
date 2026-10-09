@@ -1,6 +1,6 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { Counter } from 'k6/metrics';
+import { Counter, Trend } from 'k6/metrics';
 import { API_PREFIX, THRESHOLDS } from '../helpers/config.js';
 import { authHeaders } from '../helpers/auth.js';
 import { credentialPool, mintTokenPool, vuToken } from '../helpers/pool.js';
@@ -10,6 +10,9 @@ const users = Number(__ENV.VUS || '20');
 const duration = __ENV.DURATION;
 const completed = new Counter('tenant_read_journeys_completed');
 const distinctCompleted = new Counter('tenant_read_distinct_users_completed');
+const coldRequestDuration = new Trend('tenant_cold_request_duration', true);
+const warmRequestDuration = new Trend('tenant_warm_request_duration', true);
+let journeyPhase;
 export const options = {
   scenarios: {
     readers: duration
@@ -19,6 +22,8 @@ export const options = {
   thresholds: {
     ...THRESHOLDS,
     'http_req_duration{expected_response:true}': ['p(95)<500', 'p(99)<1000'],
+    tenant_cold_request_duration: ['p(95)<500', 'p(99)<1000'],
+    tenant_warm_request_duration: ['p(95)<500', 'p(99)<1000'],
     checks: ['rate==1'],
     http_req_failed: ['rate==0'],
     tenant_read_distinct_users_completed: [`count==${users}`],
@@ -32,8 +37,15 @@ function requireCheck(condition, label) {
 }
 function read(path, token, name) {
   const response = http.get(`${API_PREFIX}${path}`, { ...authHeaders(token), tags: { name } });
+  observeJourneyRequest(response);
   requireCheck(response.status === 200, `${name}: exact 200`);
   return response;
+}
+
+function observeJourneyRequest(response) {
+  // Setup reads have no journey phase; never mix them into first-journey latency.
+  if (journeyPhase === 'cold') coldRequestDuration.add(response.timings.duration);
+  if (journeyPhase === 'warm') warmRequestDuration.add(response.timings.duration);
 }
 export function setup() {
   if (credentialPool.length < users) throw new Error('Insufficient distinct users');
@@ -70,6 +82,7 @@ export function setup() {
   return { pool, examples };
 }
 export default function (fixtures) {
+  journeyPhase = __ITER === 0 ? 'cold' : 'warm';
   try {
     const actor = vuToken(fixtures.pool);
     const profile = read('/users/me', actor.token, 'distinct-profile').json('data');
@@ -141,6 +154,7 @@ export default function (fixtures) {
       tags: { name: 'foreign-member-denied' },
       responseCallback: http.expectedStatuses(404),
     });
+    observeJourneyRequest(denied);
     requireCheck(denied.status === 404, 'foreign membership denied without exposing resource');
     completed.add(1);
     if (__ITER === 0) distinctCompleted.add(1);

@@ -5,6 +5,7 @@ import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import { WebhookRepository } from '@/domains/notify/sub-domains/webhook/webhook.repository.js';
+import { createPendingWebhookDeliveryAttempt } from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.js';
 import { WebhookDeliveryAttemptRepository } from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery-attempt.repository.js';
 import { webhook_delivery_attempts } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
 
@@ -16,6 +17,36 @@ describe('WebhookDeliveryAttemptRepository (database)', () => {
 
   beforeEach(async () => {
     await cleanupDatabase();
+  });
+
+  it('infers the partial event-key index and reuses only a PENDING attempt', async () => {
+    const owner = await createTestUser();
+    const organization = await createTestOrganization({ ownerUserId: owner.id });
+    const webhook = await webhookRepository.create({
+      organization_id: organization.id,
+      url: 'https://example.com/event-key',
+      events: ['subscription.updated'],
+      encrypted_secret: 'sample-webhook-secret',
+      created_by_user_id: owner.id,
+    });
+    const input = {
+      webhookId: webhook.id,
+      eventType: 'subscription.updated',
+      eventKey: 'evt_database_dedupe',
+      payload: { run: 'database-regression' },
+    };
+    const first = await createPendingWebhookDeliveryAttempt(input);
+    expect(first).not.toBeNull();
+    expect(await createPendingWebhookDeliveryAttempt(input)).toEqual(first);
+    const rows = await database.select().from(webhook_delivery_attempts);
+    expect(rows).toHaveLength(1);
+    await database
+      .update(webhook_delivery_attempts)
+      .set({ status: 'SENT' })
+      .where(eq(webhook_delivery_attempts.public_id, first!.publicId));
+    const later = await createPendingWebhookDeliveryAttempt(input);
+    expect(later).not.toBeNull();
+    expect(later!.publicId).not.toBe(first!.publicId);
   });
 
   it('creates and lists delivery attempts for webhook', async () => {

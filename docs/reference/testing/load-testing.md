@@ -593,3 +593,58 @@ Stripe API version and assert the dates and status passed to the writer. The wor
 also accepts valid subscription-level timestamps from older webhook endpoint API
 versions. Missing items, malformed timestamps and reversed periods fail before a
 database write; they do not manufacture a billing period or pass Invalid Dates to SQL.
+
+### Local investigation — 2026-10-09
+
+These results use an isolated local Docker/Linux API, PostgreSQL 17.10 and Redis.
+They do not establish deployed/public API performance. The starting revision was
+`d7e4e32976534c322df42ed6cb580f1cc137f936`; the retained runtime change corrects
+PostgreSQL partial-index conflict inference for pending event-key webhook deliveries.
+The conflict target now includes the existing `status = 'PENDING' AND event_key IS NOT NULL`
+predicate. A real PostgreSQL regression verifies pending deduplication and a new
+attempt after the prior attempt becomes `SENT`; this is not permanent exactly-once delivery.
+
+The distinct-user scenario now separately gates each VU's first journey and subsequent
+journeys at p95 <500 ms and p99 <1,000 ms. Setup still authenticates/switches actors and
+reads membership fixtures before those journeys. "Cold" therefore means a first measured
+journey in a fresh API process after that setup, not an untouched API's first request.
+Setup samples do not dilute either trend; expected foreign-resource 404s remain included.
+The webhook CRUD scenario adds an actual URL-changing PATCH and per-operation gates.
+Existing provider budgets and zero-error/completion gates remain unchanged.
+
+| Section | Evidence | Result and limit |
+| --- | --- | --- |
+| Final local cold bursts, three fresh processes | p95 1,231–1,311 ms; p99 1,514–1,665 ms | FAIL: both latency targets exceeded |
+| Final local warm journeys, three runs | p95 225–369 ms; p99 254–417 ms | PASS for this local configuration; deployed repeatability unverified |
+| Journey completion in each run | 240 distinct users, 480 journeys, 7,216 passing checks | Zero unexpected HTTP failures, failed checks or dropped iterations |
+| Local public-domain CRUD | 20 journeys, 160 requests, 360 checks; p95 22.9 ms, p99 85.1 ms | PASS including public DNS validation and URL-changing PATCH; historical remote p99 was not reproduced here |
+| Real public outbound HTTPS | Receiver validates timestamp/HMAC and records actual public HTTPS receipt | PASS for the covered receiver |
+| Real public queue retry/restart | Receiver 503, worker restart, automatic retry after 61,081 ms, same payload hash, valid signatures, persisted `SENT`, attempt count 2 | PASS using normal backoff and the existing on-commit boundary |
+| Real Stripe sandbox SCA | Backend creates an incomplete subscription and returns the actual PaymentIntent secret; user completes provider-hosted browser challenge; independent Stripe read reports succeeded, non-live, 3DS authenticated and active subscription | PASS for this single native-local/provider flow; provider-initiated public ingress/reconciliation unverified |
+| Local browser/IAM | Real browser login, cookie refresh, identity/organization binding and foreign-organization 403; independent HTTP logout returns policy-defined 200/empty and revoked bearer returns 401 | Covered behavior verified; local CAPTCHA disabled and secure/cross-site cookies, OAuth, MFA and WebAuthn not independently exercised |
+| Final unit/global and DB regressions | 4,747 tests / 622 files; 14 DB tests across queue dedupe and organization/RLS | PASS on retained runtime source |
+| Final repository quality | `ci:quality`, production TypeScript build, alias rewrite and the unchanged Sonar gate on an owned isolated instance | PASS; SonarQube reports 0 issues / 0 hotspots with type dependencies mounted read-only |
+| Final isolated chaos | 13 tests pass; four failures are owner-fixture lookups under FORCE RLS; two Redis idempotency assertions fail (missing replay marker and expected 503 versus received 401) | INCOMPLETE: four fault cases are inconclusive and two assertion failures remain unresolved; preserve runtime RLS |
+
+Two auth/user read-narrowing candidates failed the separate cold gates and were restored.
+No latency experiment remains in the source. Do not treat passing aggregate or warm
+latency as a cold-burst pass. Baseline CPU profiling still showed SQL construction,
+socket writes and garbage collection among prominent busy paths.
+
+The public retry producer emits a synthetic source event through the production queue;
+its transport is real. It uses `runWithOnCommitScope`, commits the RLS database work,
+then flushes the on-commit event bus. A retained earlier producer without that boundary
+raced the worker and left a failed job/pending attempt. The passing test does not prove
+recovery for arbitrary transactional callers. No non-test caller of the organization
+webhook fanout service was found, so automatic business-event-to-webhook wiring remains
+unverified. Local transport fixtures and locally signed Stripe ingress remain separate
+from actual provider-initiated public delivery and browser SCA evidence.
+
+The API role remains non-superuser/non-BYPASSRLS, with 31 FORCE RLS tables. The isolated
+fixture operator has BYPASSRLS for test setup; those privileged fixture operations are
+not runtime RLS evidence. The separately approved chaos login is non-superuser/non-BYPASSRLS.
+Its bootstrap aliases the fixture operator URL to the application URL, so unscoped factory
+reads are hidden by FORCE RLS. A future chaos harness repair should keep an independent
+operator connection through the owned proxy while retaining the unprivileged runtime role.
+The Docker sandbox billing attempt also reached its unchanged 30-second outbound timeout;
+the successful native provider flow does not establish Docker/provider transport recovery.
