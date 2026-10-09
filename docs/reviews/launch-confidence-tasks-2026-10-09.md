@@ -220,7 +220,6 @@ temporary (AS-BUILT › Follow-ups).
 The code tasks are planned and tracked in
 [launch-confidence-plan-2026-10-09.md](launch-confidence-plan-2026-10-09.md).
 
-
 Work the tasks as a `fix` or `feat` iteration (`pnpm iteration:new`), or as small PRs. When a task
 is done, note it in the next confidence review — this file is a dated snapshot and is not
 rewritten (see [docs/README.md](../README.md) › Reviews and audits).
