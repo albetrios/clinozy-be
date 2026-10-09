@@ -9,6 +9,8 @@ import {
 
 describe('Chaos resilience: Postgres premature connection timeout toxin', () => {
   it('surfaces Postgres driver rejects while toxin is armed and heals immediately afterward', async () => {
+    // Separate healthy startup from the transport-fault assertion on an established connection.
+    await expect(sql`SELECT 1`).resolves.not.toThrow();
     await withTemporaryListeningProxyToxinForChaosAssertion(
       CHAOS_POSTGRES_PROXY_NAME,
       {

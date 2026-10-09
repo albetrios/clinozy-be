@@ -6,6 +6,78 @@ Load tests use [k6](https://k6.io/) and Autocannon. Keep this doc in sync with [
 
 ---
 
+## Browser contracts without Browser-MCP
+
+The repository-owned Playwright suite runs Chromium independently of agent browser
+tools. Install dependencies with the pinned package manager, then run
+`pnpm test:browser:install`. Start an owned isolated backend with synthetic accounts,
+a dedicated database and Redis namespace. Never share its database with Vitest suites
+that truncate fixtures: clone the owned seed database for the browser process. Use
+`CAPTCHA_PROVIDER=disabled` for these local cases,
+`SESSION_ORIGIN_CSRF_REQUIRED=true`, `COOKIE_SECURE=false`, and
+`ALLOWED_ORIGINS=http://localhost:5175`. This suite measures local HTTP contracts;
+trusted HTTPS, Secure/cross-site cookies, real OAuth, CAPTCHA, physical authenticators
+and provider-hosted SCA require separate evidence.
+
+```bash
+BROWSER_TEST_API_URL=http://localhost:63003 \
+BROWSER_TEST_CREDENTIAL_POOL=/absolute/path/to/synthetic-credential-pool.json \
+BROWSER_TEST_REPORT_DIR=/absolute/path/to/new-private-report-directory \
+pnpm test:browser
+```
+
+The credential pool uses the existing load-pool fields and must contain two distinct
+tenants. The harness serves pages on localhost ports 5175 and 5176; only 5175 is
+allowed by the backend. Override these through `BROWSER_TEST_ORIGIN` and
+`BROWSER_TEST_DENIED_ORIGIN`, keeping the API allowlist aligned. The suite verifies
+login and input/authentication rejection, credentialed CORS, HttpOnly/path cookies,
+session refresh, organization binding and foreign-tenant denial, originless CSRF
+double-submit handling, and logout revocation. It exercises backend browser
+contracts rather than the product frontend.
+
+Missing browser binaries or backend prerequisites fail the browser run explicitly.
+Vitest, database, queue, k6 and sandbox-provider API tests remain independent. Record
+browser cases as NOT RUN until a real browser executes them. JSON results,
+failure screenshots and traces remain private: traces can contain credentials and
+session data and must not be committed. Retries are disabled so failures remain visible.
+
+```mermaid
+flowchart LR
+  commands["Repository test commands"] --> api["API / database / queue / sandbox APIs"]
+  commands --> playwright["Playwright CLI + Chromium"]
+  playwright --> harness["Local browser contract harness"]
+  harness --> backend["Owned isolated backend"]
+  api --> backend
+  playwright --> evidence["Private JSON / screenshots / traces"]
+```
+
+## Per-test evidence and confidence
+
+`pnpm test:evidence` builds Markdown and JSON ledgers from Vitest/Playwright JSON
+reporters and an optional explicit evidence manifest. Use `--help` for the manifest
+schema. Supply the execution revision, timestamp, layer and freshness for every run;
+report generation time is not execution time. Use fresh output filenames. The
+reporter refuses to overwrite existing reports and retains failed, skipped,
+unclassified and unmapped cases.
+
+Scores describe evidence strength, not a probability that the backend is correct:
+0 means no evidence; 1 historical/source evidence; 2 current fixtures or simulated
+contracts; 3 current isolated runtime or browser evidence for a limited assertion.
+Automatic scores stop at 3. Repeated target-environment and real-provider evidence
+needs independent review before stronger confidence is warranted. A FAIL can have
+strong evidence and still fail its gate. Map route dimensions to executed test IDs
+explicitly; filename matching or a route literal does not prove runtime coverage.
+Keep real-provider transport, simulated provider contracts, local browser tests and
+historical load results in separate rows. Preserve p95 <500 ms, p99 <1,000 ms,
+all 240 distinct-user completions, zero unexpected HTTP errors/check failures/dropped
+iterations and existing provider latency budgets.
+
+```bash
+pnpm test:evidence --manifest /absolute/path/to/evidence-manifest.json \
+  --output /absolute/path/to/new-confidence-report.md \
+  --json-output /absolute/path/to/new-confidence-ledger.json
+```
+
 ## Flow overview
 
 ```mermaid

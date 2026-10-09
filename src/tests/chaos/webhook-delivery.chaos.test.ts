@@ -13,14 +13,16 @@ import {
   WEBHOOK_DELIVERY_QUEUE_NAME,
   type WebhookDeliveryJobData,
 } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
-import { createPendingWebhookDeliveryAttempt } from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.js';
 import {
   getBullMQConnectionOptions,
   getBullMQKeyPrefix,
 } from '@/infrastructure/queue/connection.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
-import { createTestWebhook } from '@/tests/factories/webhook.factory.js';
+import {
+  createTestWebhook,
+  createTestWebhookDeliveryAttempt,
+} from '@/tests/factories/webhook.factory.js';
 
 const misbehavingSubscriberWebhookUrl =
   'https://example.org/api/v1/chaos_fixture_webhooks/misbehaving-ingest';
@@ -111,13 +113,13 @@ describe('Chaos resilience: webhook delivery circuit breaker isolates misbehavin
     });
     await queueEvents.waitUntilReady();
 
-    const misbehavingAttempt = await createPendingWebhookDeliveryAttempt({
+    const misbehavingAttempt = await createTestWebhookDeliveryAttempt({
       webhookId: misbehavingWebhook.id,
       eventType: 'chaos.webhook.misbehaving',
       payload: { probe: 'misbehaving' },
     });
 
-    const healthyAttempt = await createPendingWebhookDeliveryAttempt({
+    const healthyAttempt = await createTestWebhookDeliveryAttempt({
       webhookId: healthyWebhook.id,
       eventType: 'chaos.webhook.healthy',
       payload: { probe: 'healthy' },

@@ -94,10 +94,14 @@ process.env.REDIS_URL = 'redis://127.0.0.1:26379';
  * go through the proxy too. Left on a developer's direct URL, cleanup bypasses Toxiproxy and the
  * app pool starts every test cold — and a cold pool does not fail fast under a connect-time fault
  * (it keeps reconnecting while the query waits), so an assertion that expects the query to reject
- * waits out the test timeout instead. Pointing it at `DATABASE_URL` makes the operator connection
- * the app pool, as before the harness gained a separate one.
+ * waits out the test timeout instead. Preserve the operator identity: fixture owner/session
+ * lookups need its privileges under FORCE RLS, while application traffic stays unprivileged.
  */
-process.env.DATABASE_OPERATOR_URL = process.env.DATABASE_URL;
+const proxiedOperatorUrl = new URL(process.env.DATABASE_OPERATOR_URL ?? process.env.DATABASE_URL);
+proxiedOperatorUrl.hostname = '127.0.0.1';
+proxiedOperatorUrl.port = '25432';
+proxiedOperatorUrl.pathname = new URL(process.env.DATABASE_URL).pathname;
+process.env.DATABASE_OPERATOR_URL = proxiedOperatorUrl.toString();
 
 /**
  * Maintenance contexts (`withMaintenanceDatabaseContext` — retention, audit drain, global admin)

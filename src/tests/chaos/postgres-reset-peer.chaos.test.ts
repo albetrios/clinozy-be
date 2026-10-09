@@ -9,6 +9,8 @@ import {
 
 describe('Chaos resilience: Postgres RST through reset_peer toxin', () => {
   it('eventually reconnects cleanly after toxin removal restores upstream TCP', async () => {
+    // Poison an established connection: a cold handshake otherwise reconnects while its query waits.
+    await expect(sql`SELECT 1`).resolves.not.toThrow();
     await withTemporaryListeningProxyToxinForChaosAssertion(
       CHAOS_POSTGRES_PROXY_NAME,
       {
