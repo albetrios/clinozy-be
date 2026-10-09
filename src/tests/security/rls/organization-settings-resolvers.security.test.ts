@@ -38,7 +38,7 @@ function scalarFromResult<T>(result: unknown, key: string): T {
 async function seedUserInOrg(options: {
   mfaRequired: boolean;
   locale?: 'en' | 'es';
-  membershipStatus?: 'ACTIVE' | 'INVITED' | 'SUSPENDED';
+  membershipStatus?: 'active' | 'invited' | 'suspended';
 }) {
   const user = await createTestUser();
   const organization = await createTestOrganization({ ownerUserId: user.id });
@@ -51,7 +51,7 @@ async function seedUserInOrg(options: {
     userId: user.id,
     organizationId: organization.id,
     roleId: role.id,
-    status: options.membershipStatus ?? 'ACTIVE',
+    status: options.membershipStatus ?? 'active',
   });
   await database.insert(organization_settings).values({
     organization_id: organization.id,
@@ -105,7 +105,7 @@ describe('Security: organization-settings login-time resolvers under FORCE RLS',
     );
 
     // Pending (INVITED) members are not yet subject to organization policy.
-    const invited = await seedUserInOrg({ mfaRequired: true, membershipStatus: 'INVITED' });
+    const invited = await seedUserInOrg({ mfaRequired: true, membershipStatus: 'invited' });
     await expect(repository.userHasOrganizationRequiringMfa(invited.user.id)).resolves.toBe(false);
 
     // A string "true" is NOT a boolean true — must not trip the strict check.
@@ -120,7 +120,7 @@ describe('Security: organization-settings login-time resolvers under FORCE RLS',
       userId: user.id,
       organizationId: organization.id,
       roleId: role.id,
-      status: 'ACTIVE',
+      status: 'active',
     });
     await database.insert(organization_settings).values({
       organization_id: organization.id,

@@ -15,8 +15,25 @@ import {
 import { invalidatePermissions } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
 import { loadOrganizationPermissionRoutesFromCatalog } from '@/tests/helpers/route-catalog-registry.js';
 import type { FastifyInstance } from 'fastify';
+import {
+  appRouteBody,
+  appRouteDeleteQuery,
+  appRouteGetQuery,
+  placeholderAppRouteReferences,
+} from '@/tests/helpers/app-route-requests.js';
 
 const organizationPermissionRoutes = loadOrganizationPermissionRoutesFromCatalog();
+
+/** The public API prefix the catalog paths carry; the shared route table keys drop it. */
+const API_PREFIX = '/api/v1';
+
+/** Placeholder ids for the shared table's bodies — the permission check answers before any lookup. */
+const PLACEHOLDER_REFERENCES = placeholderAppRouteReferences();
+
+/** A catalog path without the API prefix (`/app/…`, `/tenancy/…`). */
+function routeKeyPath(path: string): string {
+  return path.startsWith(API_PREFIX) ? path.slice(API_PREFIX.length) : path;
+}
 import {
   PARAM_NAME_TO_ENTITY,
   publicIdPlaceholderFor,
@@ -27,10 +44,20 @@ function placeholderForParamName(paramName: string): string {
   return entity ? publicIdPlaceholderFor(entity) : 'placeholder';
 }
 
-function materializeOrganizationScopedPath(path: string, organizationPublicId: string): string {
-  return path
+function materializeOrganizationScopedPath(
+  route: (typeof organizationPermissionRoutes)[number],
+  organizationPublicId: string,
+): string {
+  const path = route.path
     .replace(':organization_id', organizationPublicId)
     .replace(/:([a-zA-Z_]+)/g, (_, name: string) => placeholderForParamName(name));
+  // A DELETE's reason and a GET's required filters are query schema: without them the request
+  // answers 400 before the permission check this matrix asserts on.
+  if (route.method === 'DELETE') return `${path}${appRouteDeleteQuery(routeKeyPath(route.path))}`;
+  if (route.method === 'GET') {
+    return `${path}${appRouteGetQuery({ path: routeKeyPath(route.path), references: PLACEHOLDER_REFERENCES })}`;
+  }
+  return path;
 }
 
 function payloadForPermissionRoute(
@@ -38,6 +65,13 @@ function payloadForPermissionRoute(
   planPublicId: string = publicIdPlaceholderFor('plan'),
 ): Record<string, unknown> | undefined {
   if (route.method === 'GET' || route.method === 'DELETE') return undefined;
+  // The app's writes and the tenancy team writes: the shared table's smallest valid body.
+  const sharedBody = appRouteBody({
+    method: route.method,
+    path: routeKeyPath(route.path),
+    references: PLACEHOLDER_REFERENCES,
+  });
+  if (sharedBody !== undefined) return sharedBody as Record<string, unknown>;
   if (route.path.includes('/subscriptions/:subscription_id/change-plan')) {
     return { plan_id: planPublicId };
   }
@@ -65,43 +99,11 @@ function payloadForPermissionRoute(
   if (route.path.includes('/notification-policies/:notification_policy_id')) {
     return { default_enabled: false };
   }
-  if (route.path.endsWith('/app/branches')) {
-    return {
-      name: 'Matrix branch',
-      address_line_one: '1 Main Road',
-      area: 'Adajan',
-      city: 'Surat',
-      postal_code: '395009',
-      phone: '+919800000000',
-      email: 'matrix@example.com',
-    };
-  }
-  if (route.path.endsWith('/branches/:branch_id/user-accesses')) {
-    return { membership_ids: [] };
-  }
-  if (route.path.includes('/branches/:branch_id')) {
-    return { name: 'Matrix branch' };
-  }
   if (route.path.endsWith('/webhooks')) {
     return { url: 'https://example.com/webhook', events: ['notification.created'] };
   }
   if (route.path.includes('/webhooks/:webhook_id')) {
     return { is_enabled: false };
-  }
-  if (route.path.includes('/invitations/:invitation_id/resend')) {
-    return { expires_in_days: 7 };
-  }
-  if (route.path.endsWith('/memberships')) {
-    // REQ-1: "Add member" is invite-by-email — a valid `{ email, role_id }` body so validation
-    // passes and the request reaches the permission preHandler this matrix asserts on (the route
-    // always creates an INVITED membership; status is no longer an input).
-    return {
-      email: 'matrix-member@example.test',
-      role_id: publicIdPlaceholderFor('plan'),
-    };
-  }
-  if (route.path.includes('/memberships/:membership_id')) {
-    return { status: 'ACTIVE' };
   }
   if (route.path.endsWith('/roles')) {
     return { name: 'Matrix role' };
@@ -175,10 +177,7 @@ describe('Security: Permission route matrix', () => {
         userId: user.public_id,
         organizationPublicId: organization.public_id,
       });
-      const materializedPath = materializeOrganizationScopedPath(
-        route.path,
-        organization.public_id,
-      );
+      const materializedPath = materializeOrganizationScopedPath(route, organization.public_id);
       const plan = routeNeedsExistingPlan(route) ? await createTestPlan() : undefined;
       const headers = idempotencyHeadersForPermissionRoute(route);
       const payload = payloadForPermissionRoute(route, plan?.public_id);
@@ -214,10 +213,7 @@ describe('Security: Permission route matrix', () => {
         userId: user.public_id,
         organizationPublicId: organization.public_id,
       });
-      const materializedPath = materializeOrganizationScopedPath(
-        route.path,
-        organization.public_id,
-      );
+      const materializedPath = materializeOrganizationScopedPath(route, organization.public_id);
       const plan = routeNeedsExistingPlan(route) ? await createTestPlan() : undefined;
       const headers = idempotencyHeadersForPermissionRoute(route);
       const payload = payloadForPermissionRoute(route, plan?.public_id);

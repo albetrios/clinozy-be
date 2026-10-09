@@ -168,7 +168,7 @@ describe('Security: unique-violation conflict handling', () => {
         url: testApiPath('/tenancy/organization/memberships'),
         token,
         extraHeaders: { 'x-idempotency-key': randomUUID() },
-        payload: { email, role_id: rolePublicId },
+        payload: { email, role_ids: [rolePublicId] },
       });
     }
 

@@ -17,6 +17,11 @@ import {
   type AppFlowMethod,
   calendarDay,
 } from '@/domains/app/__tests__/factories/app-flow.factory.js';
+import {
+  appRouteBody,
+  appRouteDeleteQuery,
+  placeholderAppRouteReferences,
+} from '@/tests/helpers/app-route-requests.js';
 
 /** The public API prefix every catalog key carries. */
 const API_PREFIX = '/api/v1';
@@ -303,144 +308,25 @@ describe('Security: app records are isolated per organization (models organizati
 
   /**
    * A body the attacker's own organization accepts on the route (path params aside), so the
-   * refusal is the scoped lookup. Keyed `METHOD /app/...` with the `:params` left in.
+   * refusal is the scoped lookup: the shared route table, naming the attacker's own branch,
+   * members, offering and upload, and the victim's sale line where a return names one.
    */
   function attackBody(method: AppFlowMethod, path: string): unknown {
-    const branch = attacker.branches.vesu;
-    const member = attacker.members.front_desk.membershipPublicId;
-    const today = calendarDay(attacker, 0);
-    const splits = [{ mode: 'cash', amount: 1 }];
-    const bodies: Record<string, unknown> = {
-      'PATCH /app/appointments/:appointment_id': { notes: 'Changed' },
-      'PATCH /app/branches/:branch_id': { name: 'Renamed' },
-      'PATCH /app/branches/:branch_id/holidays/:branch_holiday_id': { label: 'Renamed' },
-      'PATCH /app/branches/:branch_id/machines/:branch_machine_id': { name: 'Renamed' },
-      'PATCH /app/branches/:branch_id/rooms/:branch_room_id': { name: 'Renamed' },
-      'PATCH /app/contact-message-templates/:contact_message_template_id': { body: 'Hello' },
-      'PATCH /app/contacts/:contact_id': { has_marketing_consent: true },
-      'PATCH /app/invoices/:invoice_id': { remark: 'Changed' },
-      'PATCH /app/leads/:lead_id': { status: 'lost' },
-      'PATCH /app/manufacturers/:manufacturer_id': { tone: 'mint' },
-      'PATCH /app/medical-purchase-orders/:medical_purchase_order_id': {
-        supplier_bill_number: 'X-1',
+    return appRouteBody({
+      method,
+      path,
+      references: {
+        ...placeholderAppRouteReferences(attacker.organization.timezone),
+        branchId: attacker.branches.vesu,
+        membershipId: attacker.members.front_desk.membershipPublicId,
+        doctorMembershipId: attacker.members.doctor.membershipPublicId,
+        offeringId: attackerOffering,
+        uploadKey: attackerUpload,
+        invoiceItemId: victimIds.invoice_item_id ?? '',
+        today: calendarDay(attacker, 0),
+        laterDay: calendarDay(attacker, 41),
       },
-      'PATCH /app/medical-reps/:medical_rep_id': { name: 'Renamed' },
-      'PATCH /app/medicines/:medicine_id': { mrp: 99 },
-      'PATCH /app/memberships/me/saved-views/:membership_saved_view_id': { label: 'Renamed' },
-      'PATCH /app/offering-groups/:offering_group_id': { sort_order: 5 },
-      'PATCH /app/offerings/:offering_id': { price: 900 },
-      'PATCH /app/offers/:offer_id': { is_active: false },
-      'PATCH /app/patient-diagnoses/:patient_diagnosis_id': { name: 'Renamed' },
-      'PATCH /app/patients/:patient_id': { status: 'regular' },
-      'PATCH /app/patients/:patient_id/check-ins/:patient_check_in_id': { score: 2 },
-      'PATCH /app/patients/:patient_id/images/:patient_image_id': { caption: 'Changed' },
-      'PATCH /app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id': {
-        status: 'declined',
-      },
-      'PATCH /app/patients/:patient_id/offerings/:patient_offering_id': { sessions_total: 4 },
-      'PATCH /app/patients/:patient_id/prescriptions/:patient_prescription_id': {
-        advice: 'Changed',
-      },
-      'PATCH /app/patients/:patient_id/reports/:patient_report_id': { notes: 'Changed' },
-      'PATCH /app/patients/:patient_id/reviews/:patient_review_id': { rating: 1 },
-      'PATCH /app/patients/:patient_id/treatments/:patient_treatment_id': { remark: 'Changed' },
-      'PATCH /app/payments/:payment_id': { splits },
-      'PATCH /app/pending-credits/:pending_credit_id': { amount: 50 },
-      'PATCH /app/prescription-kits/:prescription_kit_id': { name: 'Renamed' },
-      'PATCH /app/stock-items/:stock_item_id': { min_quantity: 6 },
-      'PATCH /app/stock-purchases/:stock_purchase_id': { bill_number: 'X-1' },
-      'PATCH /app/stock-vendors/:stock_vendor_id': { phone: null },
-      'PATCH /app/suppliers/:supplier_id': { phone: null },
-      'PATCH /app/tasks/:task_id': { priority: 'high' },
-      'PUT /app/branches/:branch_id/members': { membership_ids: [member] },
-      'PUT /app/contacts/:contact_id/members': { membership_ids: [member] },
-      'POST /app/appointments/:appointment_id/cancel': { cancel_reason: 'patient_asked' },
-      'POST /app/appointments/:appointment_id/copy': {
-        appointment_date: calendarDay(attacker, 50),
-        start_time: '10:00',
-      },
-      'POST /app/appointments/:appointment_id/stage': { visit_stage: 'with_doctor' },
-      'POST /app/branches/:branch_id/holidays': {
-        holiday_date: calendarDay(attacker, 41),
-        label: 'Festival',
-      },
-      'POST /app/branches/:branch_id/machines': { name: 'Laser' },
-      'POST /app/branches/:branch_id/rooms': { name: 'Room' },
-      'POST /app/contacts/:contact_id/activities/add-note': { body: 'Note' },
-      'POST /app/contacts/:contact_id/activities/log-call': { direction: 'sent', body: 'Called' },
-      'POST /app/contacts/:contact_id/activities/send-message': { type: 'whatsapp', body: 'Hi' },
-      'POST /app/day-closes/:day_close_id/close': { counted_cash: 0 },
-      'POST /app/day-closes/:day_close_id/reopen': { reason: 'Recount' },
-      'POST /app/invoices/:invoice_id/credit-notes': {
-        amount: 1,
-        reason: 'Refund',
-        splits,
-      },
-      'POST /app/medical-purchase-orders/:medical_purchase_order_id/receive': {},
-      'POST /app/medical-reps/:medical_rep_id/visits': { samples: 'Brochure' },
-      'POST /app/medical-sales/:medical_sale_id/returns': {
-        items: [{ invoice_item_id: victimIds.invoice_item_id, quantity: 1 }],
-        reason: 'unused',
-        refund_mode: 'cash',
-      },
-      'POST /app/patients/:patient_id/check-ins': { feel: 'better', score: 8 },
-      'POST /app/patients/:patient_id/check-ins/:patient_check_in_id/actions': {
-        action: 'doctor_called',
-      },
-      'POST /app/patients/:patient_id/clinical-notes': { kind: 'complaint', text: 'Note' },
-      'POST /app/patients/:patient_id/images': {
-        file_key: attackerUpload,
-        album: 'lhr',
-        body_part: 'full_body',
-      },
-      'POST /app/patients/:patient_id/offering-suggestions': {
-        offering_id: attackerOffering,
-        quantity: 1,
-      },
-      'POST /app/patients/:patient_id/prescriptions': {
-        doctor_membership_id: attacker.members.doctor.membershipPublicId,
-        prescription_date: today,
-        items: [],
-      },
-      'POST /app/patients/:patient_id/reports': {
-        name: 'CBC',
-        report_date: today,
-        file_keys: [attackerUpload],
-      },
-      'POST /app/patients/:patient_id/reviews': { source: 'google', rating: 5 },
-      'POST /app/patients/:patient_id/reviews/:patient_review_id/actions': {
-        action: 'replied_google',
-      },
-      'POST /app/patients/:patient_id/treatments': { name: 'Peel' },
-      'POST /app/patients/:patient_id/treatments/:patient_treatment_id/reverse': {
-        reason: 'Wrong patient',
-      },
-      'POST /app/payments/:payment_id/reverse': { reason: 'Wrong patient' },
-      'POST /app/pending-credits/:pending_credit_id/settle': {
-        amount: 1,
-        method: 'money',
-        branch_id: branch,
-        splits,
-      },
-      'POST /app/stock-items/:stock_item_id/movements': { type: 'used', quantity: 1 },
-      'POST /app/stock-items/:stock_item_id/movements/:stock_item_movement_id/revert': {
-        reason: 'mistake',
-      },
-      'POST /app/suppliers/:supplier_id/payments': { branch_id: branch, splits },
-      'POST /app/tasks/:task_id/reassign': { owner_role: 'front_desk' },
-      'POST /app/tasks/:task_id/resolve': { outcome: 'done' },
-      'POST /app/tasks/:task_id/snooze': {
-        snoozed_until: new Date(Date.now() + 86_400_000).toISOString(),
-      },
-    };
-    return bodies[`${method} ${path}`];
-  }
-
-  /** The reason a route's DELETE takes. */
-  function deleteQuery(path: string): string {
-    if (path.startsWith('/app/medical-purchase-orders/')) return '?reason=supplier_cant_deliver';
-    if (path.startsWith('/app/medical-sales/')) return '?reason=customer_changed_mind';
-    return '?reason=mistake';
+    });
   }
 
   /** The route's path with the victim's ids in it. */
@@ -505,7 +391,7 @@ describe('Security: app records are isolated per organization (models organizati
       if (route.method === 'GET') {
         response = await attackFlow.call('GET', path);
       } else if (route.method === 'DELETE') {
-        response = await attackFlow.call('DELETE', `${path}${deleteQuery(route.path)}`);
+        response = await attackFlow.call('DELETE', `${path}${appRouteDeleteQuery(route.path)}`);
       } else if (route.path.endsWith('/restore')) {
         response = await attackFlow.call(route.method, path);
       } else {
