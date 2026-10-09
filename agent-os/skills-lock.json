@@ -137,7 +137,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-kickoff-iteration/SKILL.md",
-      "computedHash": "53c27ce754b88f410411a775541397bfa627e16dd31eecf028a3c623895fe032"
+      "computedHash": "8a35cb2807c77c2200d62b248ea96bfbf43f5f7a4844ea22b2c3f9d9e5dcf465"
     },
     "be-lint-warnings-handler": {
       "source": "local",

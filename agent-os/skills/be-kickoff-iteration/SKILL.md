@@ -163,6 +163,10 @@ authorize changing either.
 - Run `/be-pre-merge-review` as a review only — report its findings, change nothing on its say-so.
 - Every ROUTE row is `done`, or `deferred` with the user's explicit OK.
 - Fill `plans/acceptance.md` — a Result and Evidence for every item.
+- Write the frontend's route map, `plans/frontend-route-map.md`: section 1 the contract changes, section 2
+  each design operation (`intake-files/schema-routes.md` › Operations) → the route that serves it, section 4
+  the design features dropped (to remove from the frontend) — by hand; section 3, every route, by
+  `pnpm iteration:frontend-map <iteration>` (rerun after any route change; `--check` fails when stale).
 - Finish `AS-BUILT.md` with its closing summary: planned but not built (deferred, user OK), built but
   not planned, follow-ups for the next iteration — and the **Standing deviations**: the complete list
   of where the code now differs from the drop (the Baseline's list, minus what this iteration

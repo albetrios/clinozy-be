@@ -7,10 +7,12 @@ route the API has today, and the design features the backend dropped — so the 
 | --- | --- | --- |
 | The design's plan | 104 screen operations (`listLeads`, `createInvoice`, …), camelCase, money in paise, uuids | [`intake-files/schema-routes.md` › Operations](../intake-files/schema-routes.md) |
 | The route review | the agreed API, numbered `<sub-domain>.<route>` (the **#** column below) | [`routes-final.md`](routes-final.md) |
-| The built API | the truth — **437 routes**, 303 under `/api/v1/app` | `docs/routes.txt`, the OpenAPI spec (`pnpm docs:generate`, served at `/reference`) |
+| The built API | the truth — every route in section 3 | `docs/routes.txt`, the OpenAPI spec (`pnpm docs:generate`, served at `/reference`) |
 
-Generated 2026-10-09 from `docs/routes.txt` and the OpenAPI spec on branch `feat/clinic-launch-api`. It
-supersedes [`2026-10-07_routes-by-module_v1.md`](../2026-10-07_routes-by-module_v1.md), a snapshot taken
+Section 3 is generated: `pnpm iteration:frontend-map launch-2026-09-30-jxmr` rewrites it from `docs/routes.txt`,
+the OpenAPI document and `routes-final.md` (`--check` fails when it is stale); sections 1, 2 and 4 are written by
+hand. The prompt that hands this map to the frontend: [frontend-integration-prompt.md](frontend-integration-prompt.md).
+This map supersedes [`2026-10-07_routes-by-module_v1.md`](../2026-10-07_routes-by-module_v1.md), a snapshot taken
 before the launch rebuilt the app routes. Field-level differences: [`AS-BUILT.md` › Standing
 deviations](../AS-BUILT.md#standing-deviations).
 
@@ -26,7 +28,7 @@ deviations](../AS-BUILT.md#standing-deviations).
 | Dates and times | ISO UTC, clinic-local dates and times | timestamps ISO 8601 with offset; dates `YYYY-MM-DD`; times `HH:mm` — in the organization's time zone |
 | Lists | `{items, nextCursor}`, page size 50, no totals | `{ data: [...], meta: { pagination: { next, has_more, estimated_total } } }`; `limit` (default 25, at most 100) and `after` (the `next` cursor); `estimated_total` on the first page |
 | List filters | `created`, `followUp` presets, `branchIds` | explicit ranges — `created_from` / `created_to` (ISO with offset), `<date>_from` / `<date>_to`; several values comma-separated (`status=new,contacted`); the branch filter is a comma-separated id list (up to 20) — `branch_ids` on appointments, `branch_id` on most other lists; `q` searches; `sort` + `order` |
-| Writes | — | `X-Idempotency-Key` required on the writes marked **req** below (a fresh key per attempt; a missing key → `422`); a `PATCH` may send `expected_updated_at` — a stale save → `409 record_changed` |
+| Writes | — | `X-Idempotency-Key` required on the writes marked **req** below — one key per user action, reused when that same request is retried (the server replays its first answer); a missing key → `422`, the same key with a different body is refused; a `PATCH` may send `expected_updated_at` — a stale save → `409 record_changed` |
 | Delete | `DELETE /<resource>/:id` with a reason, Undo within 10 s | `DELETE …?reason=<delete_reason>&note=` → `204`; `POST …/restore` brings it back until the clinic's purge window (7 days by default), then the daily purge erases it |
 | Errors | validation · conflict · permission · not found · network | `{ error: { type, code, reason?, detail, errors: [{ field, message }] } }` — `400` validation (field names snake_case), `401`, `403`, `404`, `409` with a `reason` (`slot_taken`, `day_closed`, `record_changed`, …), `422` (idempotency, personal organization), `429`; see `docs/reference/api/response-codes.md` |
 | Success status | — | `200` for every method except `DELETE` (`204`) |
@@ -205,7 +207,14 @@ webhooks, subscription billing). Section 3 lists them all.
 
 ## 3. Every available route
 
-437 routes, from `docs/routes.txt`. Paths drop `/api/v1`. **Gate**: a permission code, `signed in`, `public`, `platform admin` or a token. **Idem** `req`: `X-Idempotency-Key` required. **#**: the route review number (blank for platform routes the review did not cover). **Team**: `team` = team organizations only (`422` on a personal one). Success is `200`, or `204` for a `DELETE`. **What it does** is the OpenAPI summary. The health and operations routes in the last group sit outside `/api/v1`.
+<!-- GENERATED:START -->
+
+437 routes, 303 of them the clinic's under `/api/v1/app`, from `docs/routes.txt`.
+Paths drop `/api/v1`; the health and operations routes in the last module sit outside it.
+**Gate**: a permission code, `signed in`, `public`, `platform admin` or a token. **Idem** `req`:
+`X-Idempotency-Key` required. **Team** `team`: team organizations only (`422` on a personal one).
+**#**: the route review number (blank where the review does not name the route). Success is `200`,
+or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 
 | Module | Routes |
 | --- | --- |
@@ -742,6 +751,8 @@ webhooks, subscription billing). Section 3 lists them all.
 | GET | `/livez` | public |  |  |  | Liveness probe |
 | GET | `/readyz` | public |  |  |  | Readiness probe |
 | GET | `/metrics` | token (metrics) |  |  |  | Prometheus metrics (operations only) |
+
+<!-- GENERATED:END -->
 
 ## 4. In the design, dropped — remove from the frontend
 

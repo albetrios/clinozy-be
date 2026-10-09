@@ -10,6 +10,7 @@ import {
 } from '@/domains/app/__tests__/factories/app-fixture.factory.js';
 import { AppFlow, calendarDay } from '@/domains/app/__tests__/factories/app-flow.factory.js';
 import { runTaskRulesJob } from '@/domains/app/sub-domains/tasks/workers/task-rules.processor.js';
+import { TASK_DONE_BY_CLINOZY } from '@/domains/app/sub-domains/tasks/tasks.constants.js';
 
 /**
  * The unhappy paths of a clinic day (task F1, docs/reviews/launch-confidence-plan-2026-10-09.md;
@@ -117,9 +118,9 @@ describe('Flow — no-show, cancel and an expired package', () => {
     await runTaskRules();
     await flow.expect(200, 'the rebook task', 'GET', `/app/tasks/${rebookTask}`);
     flow.expectValue(
-      'rebooked — closed by Clinozy',
+      'rebooked — closed by the app',
       '[.data.status, .data.result_text] | join(",")',
-      'done,Done by Clinozy',
+      `done,${TASK_DONE_BY_CLINOZY}`,
     );
   });
 

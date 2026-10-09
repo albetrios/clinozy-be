@@ -29,7 +29,7 @@ flowchart TB
 | Approve | you — `pnpm iteration:status <iteration> approved` | `Status: approved`, logged in `plans/decisions.md` | — |
 | Kick off | **be-kickoff-iteration**, [prompt](../prompts/kickoff-iteration-prompt.md) | `Status: implementing` | which iteration (Step 0) |
 | Build | one ROUTE row at a time | code, migrations, tests; one `AS-BUILT.md` row each | your review after every row; any scope change |
-| Close | the gates, `/be-pre-merge-review` (review only) | `plans/acceptance.md` filled, `AS-BUILT.md` summary; `Status: done` | — |
+| Close | the gates, `/be-pre-merge-review` (review only) | `plans/acceptance.md` filled, `AS-BUILT.md` summary, `plans/frontend-route-map.md` (`pnpm iteration:frontend-map`); `Status: done` | — |
 | Freeze | the last commit before the merge | `Status: frozen`; never edited again | — |
 
 ## Document ownership — write once, reference elsewhere

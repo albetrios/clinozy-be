@@ -138,9 +138,11 @@ where agent-os cannot, the row stops and asks before anything differs.
 
 The skill runs the repository's gates (`pnpm validate`, `pnpm ci:local`), `/be-pre-merge-review` as
 a review only, fills `plans/acceptance.md`, writes the `AS-BUILT.md` summary (planned-not-built,
-built-not-planned, follow-ups), then:
+built-not-planned, follow-ups) and the frontend's route map `plans/frontend-route-map.md` (sections 1, 2
+and 4 by hand), then:
 
 ```bash
+pnpm iteration:frontend-map <iteration>   # section 3: every route
 pnpm iteration:status <iteration> done
 ```
 

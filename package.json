@@ -194,6 +194,7 @@
     "iteration:intake": "tsx tooling/iterations/intake-iteration.ts",
     "iteration:diff": "tsx tooling/iterations/diff-iterations.ts",
     "iteration:baseline": "tsx tooling/iterations/set-iteration-baseline.ts",
+    "iteration:frontend-map": "tsx tooling/iterations/frontend-route-map.ts",
     "tool:codemod-import-paths": "tsx src/scripts/tooling/codemod-import-paths.ts",
     "tool:generate-dbdiagram": "tsx src/scripts/codegen/generate-dbdiagram.ts",
     "tool:test-report-email": "tsx src/scripts/ops/send-test-report-email.ts",
