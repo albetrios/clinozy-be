@@ -53,6 +53,10 @@ describe('Invoice numbering — integration (B11)', () => {
       phones: [{ phone: `+91${digits}01`, is_primary: true }],
     });
     contact = flow.last('.data.id');
+    await flow.expect(200, 'their patient file', 'POST', '/app/patients', {
+      contact_id: contact,
+      home_branch_id: vesu,
+    });
   });
 
   afterAll(async () => {

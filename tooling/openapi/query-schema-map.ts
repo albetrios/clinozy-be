@@ -26,7 +26,11 @@ import { listOffersQueryDto as appOffersListQueryDto } from '@/domains/app/sub-d
 import { listPatientsQueryDto as appPatientsListQueryDto } from '@/domains/app/sub-domains/patients/patients.dto.js';
 import { listLeadsQueryDto as appLeadsListQueryDto } from '@/domains/app/sub-domains/leads/leads.dto.js';
 import { listContactMessageTemplatesQueryDto } from '@/domains/app/sub-domains/contacts/contact-message-templates/contact-message-templates.dto.js';
-import { listContactActivitiesQueryDto } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.dto.js';
+import {
+  listContactActivitiesQueryDto,
+  messagingStatusQueryDto,
+} from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.dto.js';
+import { messagingWebhookVerifyQueryDto } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/contact-messaging-webhook.dto.js';
 import {
   dailyCountsAppointmentsQueryDto as appDailyCountsAppointmentsQueryDto,
   listAppointmentsQueryDto as appAppointmentsListQueryDto,
@@ -153,6 +157,9 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/app/contacts/{contact_id}/activities': listContactActivitiesQueryDto,
   'GET /api/v1/app/appointments/slots': appSlotsAppointmentsQueryDto,
   'GET /api/v1/app/appointments/daily-counts': appDailyCountsAppointmentsQueryDto,
+  // Not lists: an unknown query key is a 400 (the status read), the handshake's fields (Meta)
+  'GET /api/v1/app/contact-activities/messaging-status': messagingStatusQueryDto,
+  'GET /api/v1/app/messaging-webhook': messagingWebhookVerifyQueryDto,
 };
 
 /** Routes that must document `after` and `limit` query parameters in OpenAPI. */
