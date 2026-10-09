@@ -98,7 +98,7 @@ export function receiptParameters(receipt: ReceiptMessageCandidate): string[] {
 }
 
 /**
- * The messages Clinozy queues in an organization's rules run (launch D78): the day-before
+ * The messages the app queues in an organization's rules run (launch D78): the day-before
  * reminders (WC-6), the confirm requests (WC-5) and the receipts (WC-9) — each a queued WhatsApp
  * notice on the person's stream, linked to its booking or payment, sent by the messaging worker.
  * Answers how many it queued.

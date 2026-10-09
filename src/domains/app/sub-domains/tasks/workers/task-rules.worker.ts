@@ -24,7 +24,7 @@ import { runTaskRulesJob } from './task-rules.processor.js';
  * @remarks
  * - **Algorithm:** validates the payload (`parseJobDataOrDeadLetter` — a malformed one is
  *   dead-lettered at once), carries the trace, and runs {@link runTaskRulesJob} inside the
- *   organization's context (`runOrganizationScopedWorkerJob`); when Clinozy's steps queued messages,
+ *   organization's context (`runOrganizationScopedWorkerJob`); when the app's steps queued messages,
  *   asks for the organization's delivery job after the commit (launch D77).
  * - **Failure modes:** a database error takes BullMQ's retry/backoff, then the dead letter;
  *   stalled jobs are warn-logged.
@@ -49,7 +49,7 @@ export function createTaskRulesWorker(): WorkerHandle {
             { organizationPublicId },
             (databaseHandle) => runTaskRulesJob(databaseHandle, organizationPublicId),
           );
-          // Clinozy's steps queued messages (TK10): send them now, after the commit (D77).
+          // The app's steps queued messages (TK10): send them now, after the commit (D77).
           if (counts.handledCount + counts.messageCount > 0)
             await requestContactMessageDelivery(organizationPublicId);
           return counts;

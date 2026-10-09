@@ -2,10 +2,9 @@
  * A small jq subset for reading JSON response bodies in flow tests.
  *
  * @remarks
- * The launch iteration first checked every app route with curl and jq
- * (`tooling/dev/live-api/checks/`). The Vitest flows that replace those checks keep the same
- * expressions, so each assertion reads exactly as the proven check did. This is not jq — it covers
- * what those checks use:
+ * The launch iteration first checked every app route with curl and jq; the Vitest flows that
+ * replaced those checks kept the same expressions, so each assertion reads exactly as the proven
+ * check did. This is not jq — it covers what those checks use:
  * - paths `.a.b`, `.[0]`, `.a[-1]`, `.a[]`, `.[1:]`, and `.`;
  * - pipes `|`, commas `,`, collection `[…]`, grouping `(…)`;
  * - literals: strings (with `\(…)` interpolation), numbers, `true`, `false`, `null`;

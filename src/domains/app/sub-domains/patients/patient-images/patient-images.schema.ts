@@ -85,7 +85,7 @@ export const patient_images = appSchema
       index('idx_patient_images_patient_album_taken_on').on(
         table.patient_id,
         table.album,
-        table.taken_on.desc(),
+        table.taken_on,
         table.id,
       ),
       // P25: an upload is filed once

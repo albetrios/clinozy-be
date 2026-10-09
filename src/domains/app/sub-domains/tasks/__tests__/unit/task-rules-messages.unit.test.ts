@@ -16,8 +16,8 @@ const booking: BookingMessageCandidate = {
   status: 'scheduled',
 };
 
-/** The texts of Clinozy's booking messages and receipts (launch D78 — WC-5, WC-6, WC-9). */
-describe('Clinozy message bodies', () => {
+/** The texts of the app's booking messages and receipts (launch D78 — WC-5, WC-6, WC-9). */
+describe("The app's message bodies", () => {
   it('WC-5: the confirm request names the branch, the day and the time, and asks for a Yes', () => {
     expect(bookingConfirmBody(booking)).toBe(
       'Hi Asha, your visit at Vesu is booked for 12 Oct at 10:30. Reply YES to confirm.',

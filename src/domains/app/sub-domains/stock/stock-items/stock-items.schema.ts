@@ -103,7 +103,7 @@ export const stock_items = appSchema
         .on(table.organization_id)
         .where(sql`${table.deleted_at} IS NULL AND ${table.quantity} <= ${table.min_quantity}`),
       index('idx_stock_items_organization_created')
-        .on(table.organization_id, table.created_at.desc(), table.id)
+        .on(table.organization_id, table.created_at, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       index('idx_stock_items_stock_vendor_id')
         .on(table.stock_vendor_id)

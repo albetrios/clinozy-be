@@ -76,7 +76,7 @@ export const patient_offerings = appSchema
       // The patient's tab, newest first
       index('idx_patient_offerings_patient_created').on(
         table.patient_id,
-        table.created_at.desc(),
+        table.created_at,
         table.id,
       ),
       // What a treatment can spend (PK11)

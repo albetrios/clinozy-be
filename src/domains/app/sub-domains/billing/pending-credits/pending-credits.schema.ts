@@ -94,7 +94,7 @@ export const pending_credits = appSchema
         table.pending_credit_number,
       ),
       index('idx_pending_credits_organization_created')
-        .on(table.organization_id, table.created_at.desc(), table.id)
+        .on(table.organization_id, table.created_at, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       // Sub-domain 10's reminder
       index('idx_pending_credits_organization_settle_by')

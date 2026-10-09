@@ -90,13 +90,13 @@ export const stock_item_movements = appSchema
       // An item's history, newest first
       index('idx_stock_item_movements_stock_item_created').on(
         table.stock_item_id,
-        table.created_at.desc(),
+        table.created_at,
         table.id,
       ),
       // The Movements tab, newest first
       index('idx_stock_item_movements_organization_created').on(
         table.organization_id,
-        table.created_at.desc(),
+        table.created_at,
         table.id,
       ),
       index('idx_stock_item_movements_stock_purchase_id')

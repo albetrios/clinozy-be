@@ -105,10 +105,10 @@ export const medical_purchase_orders = appSchema
         table.purchase_order_number,
       ),
       index('idx_medical_purchase_orders_organization_order_date')
-        .on(table.organization_id, table.order_date.desc(), table.id)
+        .on(table.organization_id, table.order_date, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       index('idx_medical_purchase_orders_organization_created')
-        .on(table.organization_id, table.created_at.desc(), table.id)
+        .on(table.organization_id, table.created_at, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       index('idx_medical_purchase_orders_supplier_id').on(table.supplier_id),
       // What each supplier is owed, oldest first (MD10, MD11)

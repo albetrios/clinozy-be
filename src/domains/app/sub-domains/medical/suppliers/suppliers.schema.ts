@@ -74,7 +74,7 @@ export const suppliers = appSchema
         .where(sql`${table.deleted_at} IS NULL`),
       index('idx_suppliers_organization_created').on(
         table.organization_id,
-        table.created_at.desc(),
+        table.created_at,
         table.id,
       ),
       index('idx_suppliers_deleted_at')

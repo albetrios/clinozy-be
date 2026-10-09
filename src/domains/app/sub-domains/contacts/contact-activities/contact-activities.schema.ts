@@ -76,7 +76,7 @@ const contactActivityColumns = {
   delivery_claimed_at: timestamp('delivery_claimed_at', { withTimezone: true }),
   // A received Instagram message's sender (Instagram-scoped id) — the address a reply goes to
   provider_sender_id: varchar('provider_sender_id', { length: 64 }),
-  // What a message Clinozy queued is for — the booking's, a receipt, TK10's (launch D78)
+  // What a message the app queued is for — the booking's, a receipt, TK10's (launch D78)
   automation_kind: varchar('automation_kind', { length: 16 }),
   // Its WhatsApp template's parameters, in order — sent as the template outside the 24-hour window (D32)
   template_parameters: text('template_parameters').array().notNull().default([]),

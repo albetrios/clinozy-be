@@ -42,9 +42,8 @@ function check(actual: unknown, message: string) {
 }
 
 /**
- * A request flow over the app routes for the app suites — the in-process twin of the launch's
- * curl checks (`tooling/dev/live-api/live-api.sh`): act as a fixture member, call a route under
- * `/api/v1`, assert its status, read the last body with a jq expression.
+ * A request flow over the app routes for the app suites: act as a fixture member, call a route
+ * under `/api/v1`, assert its status, read the last body with a jq expression.
  *
  * @remarks
  * - **Algorithm:** every POST carries a fresh `X-Idempotency-Key` unless told otherwise, like the

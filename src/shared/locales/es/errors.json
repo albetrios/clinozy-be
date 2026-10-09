@@ -158,7 +158,7 @@
     "taskRecordNotContacts": "El registro debe existir y pertenecer a la persona de la tarea",
     "taskSnoozeInPast": "Pospón hasta una hora en el futuro",
     "taskOutcomeNeedsPatient": "Este resultado necesita que la persona tenga una ficha de paciente",
-    "taskRuleNotAutomatic": "Clinozy no puede gestionar esta regla por sí solo: solo Confirmar, Pago pendiente, Opinión y Sin visitas",
+    "taskRuleNotAutomatic": "Esta regla no se puede gestionar automáticamente: solo Confirmar, Pago pendiente, Opinión y Sin visitas",
     "medicalPurchaseOrderDateInFuture": "La fecha del pedido no puede ser posterior a hoy",
     "medicalPurchaseOrderItemNotOnOrder": "{{id}} no es una línea de este pedido",
     "medicalPurchaseOrderNothingReceived": "Recibe al menos una línea",

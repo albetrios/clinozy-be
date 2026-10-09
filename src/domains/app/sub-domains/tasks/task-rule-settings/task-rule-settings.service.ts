@@ -14,7 +14,7 @@ import { validateReplaceTaskRules } from './task-rule-settings.validator.js';
 
 /**
  * The organization's task rule switches (launch ROUTE #138, routes-final 10.B, TK10): every rule
- * with whether it is on and whether Clinozy handles it, and their save.
+ * with whether it is on and whether the app handles it, and their save.
  *
  * @remarks
  * - **Algorithm:** `listRules` merges the saved rows over the defaults (on, by hand) in the rule
@@ -22,7 +22,7 @@ import { validateReplaceTaskRules } from './task-rule-settings.validator.js';
  *   then answers with all fourteen. Reading needs `task:read`, saving `organization:update` (the
  *   routes' gates, TK2).
  * - **Failure modes:** `ValidationError` on `rules` (empty, an unknown or repeated rule) or
- *   `is_automatic` (a rule with no step Clinozy can take).
+ *   `is_automatic` (a rule with no step the app can take).
  * - **Side effects:** a save writes one row per sent rule.
  */
 export class TaskRuleSettingsService {

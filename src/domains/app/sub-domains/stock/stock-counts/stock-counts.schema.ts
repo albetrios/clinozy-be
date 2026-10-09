@@ -49,7 +49,7 @@ export const stock_counts = appSchema
       // Past stock checks, newest first
       index('idx_stock_counts_organization_counted_at').on(
         table.organization_id,
-        table.counted_at.desc(),
+        table.counted_at,
         table.id,
       ),
       index('idx_stock_counts_author_membership_id')

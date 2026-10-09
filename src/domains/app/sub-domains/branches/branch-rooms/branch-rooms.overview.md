@@ -14,7 +14,6 @@ A bookable room of a branch (D28). Table `app.branch_rooms` (renamed from `app.r
 | File | Role |
 | --- | --- |
 | `branch-rooms.schema.ts` | the table, its CHECKs, indexes and RLS policy |
-| `branch-rooms.constants.ts` | value lists the CHECKs and validators share |
 | `branch-rooms.{dto,validator,serializer,types}.ts` | request shapes, parsing, the response |
 | `branch-rooms.repository.ts` / `.service.ts` / `.controller.ts` | the shared app record layers on this table (parent `branch_id`) |
 | `branch-rooms.routes.ts` | the routes below |

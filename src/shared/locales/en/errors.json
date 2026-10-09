@@ -158,7 +158,7 @@
     "taskRecordNotContacts": "The record must exist and belong to the task's person",
     "taskSnoozeInPast": "Snooze until a time in the future",
     "taskOutcomeNeedsPatient": "This outcome needs the person to have a patient file",
-    "taskRuleNotAutomatic": "Clinozy can't handle this rule by itself — only Confirm, Payment due, Feedback and Gone quiet",
+    "taskRuleNotAutomatic": "This rule can't be handled automatically — only Confirm, Payment due, Feedback and Gone quiet",
     "medicalPurchaseOrderDateInFuture": "The order date can't be after today",
     "medicalPurchaseOrderItemNotOnOrder": "{{id}} is not a line of this order",
     "medicalPurchaseOrderNothingReceived": "Receive at least one line",

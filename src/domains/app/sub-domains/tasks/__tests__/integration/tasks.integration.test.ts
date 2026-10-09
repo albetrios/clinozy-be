@@ -10,6 +10,7 @@ import {
   createAppFixture,
 } from '@/domains/app/__tests__/factories/app-fixture.factory.js';
 import { AppFlow, calendarDay } from '@/domains/app/__tests__/factories/app-flow.factory.js';
+import { TASK_DONE_BY_CLINOZY } from '@/domains/app/sub-domains/tasks/tasks.constants.js';
 
 /** The fifteen rules, in the Rules popover's order. */
 const RULES = [
@@ -35,8 +36,8 @@ const RULES = [
  * added by hand and their life — the tabs, snooze, reassign with the lead moving, resolve with
  * what's next, delete and restore, the export; and the rules worker (TK4) — the tasks it opens once
  * per record, closes when their record changes, hides while a rule is off, wakes from a snooze, the
- * call-back a feedback action ends, and the step "Let Clinozy handle" takes — one flow over the
- * fixture organization (the launch's curl checks, `tooling/dev/live-api/checks/tasks.checks.sh`).
+ * call-back a feedback action ends, and the step "Let the app handle" takes — one flow over the
+ * fixture organization.
  * The worker runs in-process: {@link runTaskRulesJob} inside the organization's context, as one
  * job of the five-minute sweep would.
  */
@@ -146,11 +147,11 @@ describe('Tasks — integration (routes-final §10)', () => {
       'true',
     );
     flow.expectValue(
-      'Clinozy can handle four',
+      'the app can handle four',
       '[.data[] | select(.can_be_automatic) | .rule_key] | join(",")',
       'confirm,feedback,gone_quiet,payment_due',
     );
-    await flow.expect(400, "Clinozy can't handle reply", 'PUT', '/app/task-rule-settings', {
+    await flow.expect(400, "the app can't handle reply", 'PUT', '/app/task-rule-settings', {
       rules: [{ rule_key: 'reply', is_on: true, is_automatic: true }],
     });
     flow.expectValue('reply: field', FIELDS, 'rules/0/is_automatic');
@@ -526,7 +527,7 @@ describe('Tasks — integration (routes-final §10)', () => {
       `/app/tasks/${confirmTask}?reason=not_needed`,
     );
 
-    // Its record changes — the task closes itself, "Done by Clinozy".
+    // Its record changes — the task closes itself, done by the app.
     await flow.expect(
       200,
       "confirm Asha's booking",
@@ -536,9 +537,9 @@ describe('Tasks — integration (routes-final §10)', () => {
     await runTaskRules();
     await flow.expect(200, 'the Confirm task', 'GET', `/app/tasks/${confirmTask}`);
     flow.expectValue(
-      'closed by Clinozy',
+      'closed by the app',
       '[.data.status, .data.outcome, .data.result_text, .data.is_resolved_automatically, .data.resolved_by_membership_id] | map(tostring) | join(",")',
-      'done,done,Done by Clinozy,true,null',
+      `done,done,${TASK_DONE_BY_CLINOZY},true,null`,
     );
 
     // A snoozed task wakes when its time comes (its time moved to the past in the database).
@@ -590,7 +591,7 @@ describe('Tasks — integration (routes-final §10)', () => {
     `;
     expect
       .soft(closedFollowUp?.state, "an off rule's task still closes when its record changes")
-      .toBe('done,Done by Clinozy');
+      .toBe(`done,${TASK_DONE_BY_CLINOZY}`);
     await flow.expect(
       200,
       'the follow-up date is back to yesterday',
@@ -638,12 +639,12 @@ describe('Tasks — integration (routes-final §10)', () => {
     await runTaskRules();
     await flow.expect(200, 'the call-back', 'GET', `/app/tasks/${callBack}`);
     flow.expectValue(
-      'closed by Clinozy',
+      'closed by the app',
       '[.data.status, .data.result_text] | join(",")',
-      'done,Done by Clinozy',
+      `done,${TASK_DONE_BY_CLINOZY}`,
     );
 
-    // "Let Clinozy handle" a payment due (TK10): the reminder goes out on WhatsApp, the task closes.
+    // "Let the app handle" a payment due (TK10): the reminder goes out on WhatsApp, the task closes.
     await flow.expect(200, 'offering Consult', 'POST', '/app/offerings', {
       name: `Tasks consult ${S}`,
       category: 'consultation',
@@ -662,7 +663,7 @@ describe('Tasks — integration (routes-final §10)', () => {
     );
     await flow.expect(
       200,
-      'let Clinozy handle payment due',
+      'let the app handle payment due',
       'PUT',
       '/app/task-rule-settings',
       rules((rule) => {
@@ -680,9 +681,9 @@ describe('Tasks — integration (routes-final §10)', () => {
     await runTaskRules();
     await ruleTasks('payment_due', `contact_id=${bela}`, 'done');
     flow.expectValue(
-      'Clinozy took it',
+      'the app took it',
       '[(.data | length), .data[0].result_text, .data[0].is_resolved_automatically, (.data[0].invoice_id | startswith("inv"))] | map(tostring) | join(",")',
-      '1,Done by Clinozy,true,true',
+      `1,${TASK_DONE_BY_CLINOZY},true,true`,
     );
     await flow.expect(
       200,
@@ -691,7 +692,7 @@ describe('Tasks — integration (routes-final §10)', () => {
       `/app/contacts/${bela}/activities?order=desc&limit=1`,
     );
     flow.expectValue(
-      'a queued reminder from Clinozy',
+      'a queued reminder from the app',
       `[.data[0].type, .data[0].direction, .data[0].delivery_status, .data[0].author_membership_id, (.data[0].body | contains("is still due on invoice ${belaBillNumber}"))] | map(tostring) | join(",")`,
       'whatsapp,sent,queued,null,true',
     );
@@ -722,9 +723,9 @@ describe('Tasks — integration (routes-final §10)', () => {
     await runTaskRules();
     await flow.expect(200, 'the payment task', 'GET', `/app/tasks/${paymentTask}`);
     flow.expectValue(
-      'nothing due: closed by Clinozy',
+      'nothing due: closed by the app',
       '[.data.status, .data.result_text] | join(",")',
-      'done,Done by Clinozy',
+      `done,${TASK_DONE_BY_CLINOZY}`,
     );
   });
 });

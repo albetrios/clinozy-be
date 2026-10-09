@@ -16,8 +16,7 @@ import { AppFlow, calendarDay } from '@/domains/app/__tests__/factories/app-flow
  * export; clinical notes, prescriptions and their approval, kits, the diagnosis catalogue, photos
  * in three albums, reports; treatments, check-ins, reviews and feedback actions; the bought
  * offerings and the plan; the clinical gates (P14), the private album (P23) and the `system`
- * entries in the contact's activity (M10) — one flow over the fixture organization (the launch's
- * curl checks, `tooling/dev/live-api/checks/patients.checks.sh`).
+ * entries in the contact's activity (M10) — one flow over the fixture organization.
  */
 describe('Patients — integration (routes-final §7)', () => {
   const S = String(Date.now());

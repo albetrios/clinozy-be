@@ -12,8 +12,7 @@ import { AppFlow, calendarDay } from '@/domains/app/__tests__/factories/app-flow
  * Sub-domain 9, Stock 9.A–9.E (routes-final §9, launch ROUTE #137): items with their opening
  * quantity, level and how long they last; the movement ledger — every change one row, the guarded
  * balance, reverts; counts that adjust what differs; purchases that receive their lines and are paid
- * by supplier bills; vendors and what they are owed — one flow over the fixture organization (the
- * launch's curl checks, `tooling/dev/live-api/checks/stock.checks.sh`).
+ * by supplier bills; vendors and what they are owed — one flow over the fixture organization.
  */
 describe('Stock — integration (routes-final §9)', () => {
   const S = String(Date.now());

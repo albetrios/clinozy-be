@@ -97,7 +97,7 @@ const DEFAULT_MEMBERSHIP_TOMBSTONE_RETENTION_CRON = '50 5 * * *';
 const DEFAULT_APP_RECORD_PURGE_CRON = '56 5 * * *';
 /** Hourly: a day closes itself within the hour after the day following it ends, in any time zone (WC-39). */
 const DEFAULT_DAY_CLOSE_AUTO_CLOSE_SWEEP_CRON = '7 * * * *';
-/** Every five minutes: rule tasks open and close, snoozed tasks wake, Clinozy takes its steps (TK4). */
+/** Every five minutes: rule tasks open and close, snoozed tasks wake, the app takes its steps (TK4). */
 const DEFAULT_TASK_RULES_SWEEP_CRON = '*/5 * * * *';
 /** Every five minutes, off the task rules' minute: patients' AI ideas due a refresh (WC-47, D80). */
 const DEFAULT_PATIENT_IDEAS_SWEEP_CRON = '2-59/5 * * * *';

@@ -105,13 +105,13 @@ export const leads = appSchema
           sql`${table.deleted_at} IS NULL AND ${table.status} IN (${joinValues(LEAD_OPEN_STATUS_VALUES)})`,
         ),
       index('idx_leads_organization_created')
-        .on(table.organization_id, table.created_at.desc(), table.id)
+        .on(table.organization_id, table.created_at, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       // "Mine"
       index('idx_leads_organization_owner_created').on(
         table.organization_id,
         table.owner_membership_id,
-        table.created_at.desc(),
+        table.created_at,
         table.id,
       ),
       index('idx_leads_organization_follow_up_at')

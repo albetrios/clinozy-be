@@ -146,7 +146,7 @@ function appointmentIndexes(table: AppointmentTable) {
       .on(table.organization_id, table.appointment_date, table.start_time, table.id)
       .where(live),
     index('idx_appointments_organization_created')
-      .on(table.organization_id, table.created_at.desc(), table.id)
+      .on(table.organization_id, table.created_at, table.id)
       .where(live),
     index('idx_appointments_branch_day').on(
       table.branch_id,
@@ -156,9 +156,7 @@ function appointmentIndexes(table: AppointmentTable) {
     index('idx_appointments_doctor_date')
       .on(table.doctor_membership_id, table.appointment_date)
       .where(live),
-    index('idx_appointments_contact_date')
-      .on(table.contact_id, table.appointment_date.desc())
-      .where(live),
+    index('idx_appointments_contact_date').on(table.contact_id, table.appointment_date).where(live),
     index('idx_appointments_floor')
       .on(table.organization_id, table.branch_id, table.visit_stage)
       .where(sql`${table.deleted_at} IS NULL AND ${table.status} = 'checked_in'`),

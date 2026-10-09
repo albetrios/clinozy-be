@@ -114,13 +114,13 @@ function paymentIndexes(table: PaymentTable) {
     ),
     // The ledger, newest first
     index('idx_payments_organization_paid_at')
-      .on(table.organization_id, table.paid_at.desc(), table.id)
+      .on(table.organization_id, table.paid_at, table.id)
       .where(sql`${table.deleted_at} IS NULL`),
     // The day close's sums
     index('idx_payments_branch_paid_at').on(table.branch_id, table.paid_at),
     // The patient file's Payments tab
     index('idx_payments_contact_paid_at')
-      .on(table.contact_id, table.paid_at.desc())
+      .on(table.contact_id, table.paid_at)
       .where(sql`${table.contact_id} IS NOT NULL`),
     index('idx_payments_invoice_id')
       .on(table.invoice_id)
@@ -283,7 +283,7 @@ export const payment_edits = appSchema
     (table) => [
       index('idx_payment_edits_organization_id').on(table.organization_id),
       uniqueIndex('idx_payment_edits_public_id').on(table.public_id),
-      index('idx_payment_edits_payment_created').on(table.payment_id, table.created_at.desc()),
+      index('idx_payment_edits_payment_created').on(table.payment_id, table.created_at),
       index('idx_payment_edits_author_membership_id')
         .on(table.organization_id, table.author_membership_id)
         .where(sql`${table.author_membership_id} IS NOT NULL`),

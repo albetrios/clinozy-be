@@ -13,8 +13,7 @@ import { AppFlow } from '@/domains/app/__tests__/factories/app-flow.factory.js';
  * Sub-domain 5, Leads (routes-final §5, launch ROUTE #131): a lead for a contact or with a new one,
  * one open lead per contact, the list's search, filters and sorts, the owner's hold, claim and
  * release, `clinic_visited`, delete and restore, the export, what the contact and its stream read
- * and move, the gates by role — one flow over the fixture organization (the launch's curl checks,
- * `tooling/dev/live-api/checks/leads.checks.sh`).
+ * and move, the gates by role — one flow over the fixture organization.
  */
 describe('Leads — integration (routes-final §5)', () => {
   const S = String(Date.now());

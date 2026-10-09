@@ -76,7 +76,7 @@ function branchBody(name: string, stamp: string) {
 }
 
 /**
- * The app suites' fixture — the in-process twin of `pnpm dev:fixture`: a TEAM organization
+ * The app suites' fixture: a TEAM organization
  * provisioned the way signup does (owner + the clinic preset roles), two branches made through the
  * API (Vesu, Adajan), and one live member per preset role working at Vesu, each with a token.
  *

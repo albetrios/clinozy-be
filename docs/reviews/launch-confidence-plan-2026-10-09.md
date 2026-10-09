@@ -11,8 +11,8 @@ Biome, typecheck and tsdoc, then is committed and pushed. The full `pnpm test`,
 
 - Tests go where the repository puts them: `__tests__/integration/*.integration.test.ts`,
   `__tests__/unit/`, the property lane (`*.property.unit.test.ts`), the e2e flows
-  (`src/domains/app/__tests__/e2e/`) and the security lane. No new curl checks — the live checks
-  are temporary.
+  (`src/domains/app/__tests__/e2e/`) and the security lane. No curl checks — the launch's live
+  checks are removed (X6).
 - A test that finds a bug fixes the code in the same batch. The fix is recorded in **Findings**
   below.
 - A behavior change (a new env value, a column, a provider call) is decided by recommendation and
@@ -74,14 +74,14 @@ Biome, typecheck and tsdoc, then is committed and pushed. The full `pnpm test`,
 | I2 — ideas evaluation script | 5 | done (code part) | `pnpm tool:patient-ideas-eval` over 20 de-identified cases (`patient-ideas-eval.set.ts`), scored by `patient-ideas-eval.evaluate.ts` (`patient-ideas-eval.evaluate.unit.test.ts`). First run, `--oracle` (the harness itself): 20 cases, parse 100%, relevance 100%, first idea 100%, violations 0. The real run needs an Anthropic key (Ops, with I1) |
 | I4 — daily cap on Claude calls | 5 | done | `PATIENT_IDEAS_DAILY_CALL_LIMIT` (default 500) through `reserveIdeasCall` (`patient-ideas.call-budget.unit.test.ts`); the refresh leaves capped patients marked (`patient-ideas.processor.unit.test.ts` › I4); `patient_ideas_results_total` |
 | I5 — Anthropic outage pause | 5 | done | `provider-circuit-pause.chaos.test.ts` › I5 (the patient stays marked while Anthropic is down; back, the probe stores the ideas) |
-| F1 — unhappy-path flows | 6 | planned | — |
-| F2 — a day in the clinic | 6 | planned | — |
-| C2 — the activity stream at volume | 7 | planned | — |
-| R2 — the sweep at scale | 7 | planned | — |
-| X2 — k6 scenarios for the app | 7 | planned | — |
-| X5 — index follow-ups | 8 | planned | — |
-| X6 — remove the temporary live checks | 8 | planned | — |
-| X7 — the project-identity gate | 8 | planned | `pnpm tool:generate-project-identity:check` fails on the branch before this work: 95 hardcoded product-name mentions in the app domain, its locales and the live checks. Batch 5 adds none |
+| F1 — unhappy-path flows | 6 | done | `flow-unhappy-paths.e2e.test.ts`: a no-show opens the rebook task and the new booking closes it; a cancel frees the slot for someone else and the cancelled booking cannot take it back; a package that expires half used refuses its sessions and a new one is billed. The refund and its credit note are B5's flow (`flow-refund-and-credit.e2e.test.ts`) |
+| F2 — a day in the clinic | 6 | done | `flow-day-in-the-clinic.e2e.test.ts`: Vesu opens on a recounted float of ₹2,000 and Adajan carries none; walk-ins at both branches paid in cash, UPI and card, each day's totals by mode; Vesu closes on a matching count, Adajan short with its reason (refused without one); the closed day refuses a late receipt (409 `day_closed`); each close's summary reaches the admins on WhatsApp once |
+| C2 — the activity stream at volume | 7 | done | `contact-activities-volume.performance.test.ts`: 5,000 entries on one contact; the newest page and page 41 each one page of 50 under 750 ms; `EXPLAIN` shows `Index Only Scan Backward using idx_contact_activities_contact_id_occurred_at`, no sort |
+| R2 — the sweep at scale | 7 | done | `task-rules-sweep-scale.performance.test.ts`: one organization with 50 records keeping rule tasks open. First run 190 ms (opened 50); at rest 111 ms (median of 5). 500 organizations ≈ 56 s per sweep on one worker at concurrency 1 — under a fifth of the five-minute interval. The test fails above half the interval |
+| X2 — k6 scenarios for the app | 7 | done | `src/tests/load/k6/scenarios/app-clinic-day.js`: three scenarios in one run (Today, the patient file, billing) with a p95 threshold per call. First run, 120 s on the local stack: every threshold passed, 0 of 188 requests failed. p95: today-appointments 37 ms, today-daily-counts 41 ms, patient-read 35 ms, patient-lists 63 ms, patient-ideas 81 ms, invoice-create 299 ms, payment-create 143 ms |
+| X5 — index follow-ups | 8 | done | 44 list-index columns in the app schemas and the baseline migration are ascending now (`DESC NULLS LAST` gone), and the three redundant membership indexes are dropped (`idx_supplier_credits_created_by_membership_id`, `idx_medical_rep_visits_logged_by_membership_id`, `idx_medical_sale_returns_returned_by_membership_id`). `app-list-indexes.performance.test.ts`: leads, invoices and patients read their indexes backwards with no sort. `index-hygiene.integration.test.ts` passes |
+| X6 — remove the temporary live checks | 8 | done | `tooling/dev/live-api/`, `pnpm dev:fixture`, `pnpm dev:checks` and their CLAUDE.md line are gone; the suites' doc comments no longer point at them. Every sub-domain's suite holds more assertions than its checks did — checks / assertions: offerings 56 / 190, contacts 71 / 203, contact activity 45 / 134, leads 106 / 241, appointments 78 / 236, patients 178 / 510, billing 106 / 308, stock 103 / 269, tasks 54 / 130, medical 102 / 279 |
+| X7 — the project-identity gate | 8 | done | `pnpm tool:generate-project-identity:check` passes. It failed on 95 hardcoded product-name mentions: X6 took 13 with the live checks; the other 82 now say "the app" in comments and test names, the "Done by" label reads the brand from `PROJECT_BRAND_NAME` (`TASK_DONE_BY_CLINOZY`, and the tests compare against it), and the `taskRuleNotAutomatic` error in both locales no longer names the product |
 
 ## Decisions
 
@@ -103,6 +103,13 @@ Taken by recommendation (no question asked), one line each, as the batches reach
 | 5 | The ideas' daily cap counts in Redis per organization per UTC day and fails closed. | No call goes out without a counted budget. If Redis is down the worker cannot run anyway. A patient left marked costs nothing: the rule-based ideas stay shown. |
 | 5 | Notice failures are a bounded Prometheus counter, plus per-organization counts on the log line, rather than a new daily job. | A per-organization label would grow with the clinics. The log line carries the organization for a Sentry log alert, with no scheduler entry or pinned counts to change. |
 | 5 | The chaos tests move the circuit's last failure a minute into the past instead of waiting out its 60-second reset window. | It is the same state every replica reads, in Redis. Waiting would add two minutes to the chaos lane and prove nothing more. |
+| 6 | F2's day closes run on the fixture's two branches with the owner acting throughout. | The flow is about the money and the close, not the gates; P2 and T1 already prove who may open, close and pay at which branch. |
+| 7 | One k6 file, three scenarios at once (Today, the patient file, billing), paced to about 90 requests a minute. | The API's global limiter allows `RATE_LIMIT_MAX` (default 100) requests a minute per IP address, and a k6 run is one address: an unpaced run measured 429s, not the routes. The default stays — it is per address, so one clinic's front desk behind one IP shares it (recorded for Ops under X3). A heavier run raises the limit on the target and the VUs together. |
+| 7 | R2 measures one organization at 50 open rule records and projects the 500 from its run at rest, instead of seeding 500 organizations. | One worker runs the organizations one after another (concurrency 1), so a sweep costs 500 runs at rest; the runs share no state. Seeding 500 organizations through the API would take minutes and measure the same thing. |
+| 8 | X5's list indexes are ascending `(organization_id, <sort>, id)`. | The kernel lists `ORDER BY <sort> DESC, id DESC`, nulls first. A `DESC NULLS LAST` column has the other null order, so Postgres could not read the index in the list's order: it sorted on top (an incremental sort), and the keyset did not bound the scan. Read backwards, an ascending index gives exactly the kernel's order. |
+| 8 | X5 folds the ascending indexes and the dropped redundant ones into the baseline migration, like every launch schema change. | Nothing is deployed yet, so the baseline is still the one migration; `pnpm dev:stack:reset-db` rebuilds a local database. |
+| 8 | X6 removes the live checks after comparing each sub-domain's checks with its suite's assertions. | Every suite holds more assertions than its checks did (the Status row). Two sources for the same cases drift. |
+| 8 | X7 says "the app" where comments named the product, and builds the "Done by" label from `PROJECT_BRAND_NAME`. | The identity gate wants the brand in one place, so a fork or a rename changes one manifest. The label is what people see, so it keeps the brand; comments do not need it. |
 
 ## Findings
 

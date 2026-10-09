@@ -14,7 +14,6 @@ A bookable machine of a branch, e.g. a laser (D28). Table `app.branch_machines` 
 | File | Role |
 | --- | --- |
 | `branch-machines.schema.ts` | the table, its CHECKs, indexes and RLS policy |
-| `branch-machines.constants.ts` | value lists the CHECKs and validators share |
 | `branch-machines.{dto,validator,serializer,types}.ts` | request shapes, parsing, the response |
 | `branch-machines.repository.ts` / `.service.ts` / `.controller.ts` | the shared app record layers on this table (parent `branch_id`) |
 | `branch-machines.routes.ts` | the routes below |

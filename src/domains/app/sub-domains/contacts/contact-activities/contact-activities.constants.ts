@@ -53,7 +53,7 @@ export const CONTACT_ACTIVITY_DELIVERY_STATUS_VALUES = [
 ] as const;
 
 /**
- * What a message Clinozy queues is for (launch D78) — the booking's confirm request and reminder,
+ * What a message the app queues is for (launch D78) — the booking's confirm request and reminder,
  * a receipt, and TK10's payment reminder and review request; `null` on everything a person writes.
  */
 export const CONTACT_ACTIVITY_AUTOMATION_KIND = {
@@ -73,7 +73,7 @@ export const CONTACT_ACTIVITY_AUTOMATION_KIND_VALUES = [
   CONTACT_ACTIVITY_AUTOMATION_KIND.FEEDBACK_REQUEST,
 ] as const;
 
-/** A Clinozy message kind. */
+/** A kind of message the app sends by itself. */
 export type ContactActivityAutomationKind =
   (typeof CONTACT_ACTIVITY_AUTOMATION_KIND_VALUES)[number];
 

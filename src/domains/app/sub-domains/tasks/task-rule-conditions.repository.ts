@@ -53,7 +53,7 @@ export interface TaskRuleColumns {
  *
  * @remarks
  * - **Algorithm:** `from` and `recordId` name the record; `qualifies` holds while the task stays
- *   open (its record changed otherwise — the worker closes it "Done by Clinozy"); `opens` narrows
+ *   open (its record changed otherwise — the worker closes it as done by the app); `opens` narrows
  *   when a new one opens (a window such as "within 48 h"). `due(reference)` is the due time, for
  *   rules timed off the record's own moment independent of `reference`; a rule with `tracksDue`
  *   closes a task whose record moved (its due no longer matches) so a fresh one opens.

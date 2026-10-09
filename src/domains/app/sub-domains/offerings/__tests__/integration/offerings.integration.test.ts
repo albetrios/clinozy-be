@@ -12,7 +12,7 @@ import { AppFlow, calendarDay } from '@/domains/app/__tests__/factories/app-flow
 /**
  * Sub-domain 3, Offerings (routes-final §3, launch ROUTE #128): 3.A groups, 3.B offerings, 3.C
  * offers, the gates by role and the saved-view filters — one flow, step by step, over the fixture
- * organization (the launch's curl checks, `tooling/dev/live-api/checks/offerings.checks.sh`).
+ * organization.
  */
 describe('Offerings — integration (routes-final §3)', () => {
   const S = String(Date.now());

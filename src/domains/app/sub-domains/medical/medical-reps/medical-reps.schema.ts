@@ -68,7 +68,7 @@ export const medical_reps = appSchema
         .where(sql`${table.deleted_at} IS NULL`),
       index('idx_medical_reps_organization_created').on(
         table.organization_id,
-        table.created_at.desc(),
+        table.created_at,
         table.id,
       ),
       // The MR visit reminder (MD8)

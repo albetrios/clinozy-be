@@ -28,9 +28,9 @@ import { TASK_RULES_GONE_QUIET_REASON } from './task-rules.constants.js';
  * What one organization's run did (the job's return value, logged as `task-rules.completed`).
  *
  * @remarks
- * - **Notes:** `wokenCount` — snoozed tasks open again; `closedCount` — tasks closed "Done by
- *   Clinozy" because their record changed; `openedCount` — new rule tasks; `handledCount` — steps
- *   "Let Clinozy handle" took; `messageCount` — booking messages and receipts queued (D78);
+ * - **Notes:** `wokenCount` — snoozed tasks open again; `closedCount` — tasks closed as done by
+ *   the app because their record changed; `openedCount` — new rule tasks; `handledCount` — steps
+ *   "Let the app handle" took; `messageCount` — booking messages and receipts queued (D78);
  *   `retargetCount` — re-target leads opened for lapsed patients (D35, WC-17).
  */
 export interface TaskRulesRunCounts {
@@ -48,7 +48,7 @@ function isOn(switches: Map<string, TaskRuleSwitch>, rule: TaskRule): boolean {
 }
 
 /**
- * The message Clinozy sends for a `confirm`, `payment_due` or `feedback` task (TK10), with its kind
+ * The message the app sends for a `confirm`, `payment_due` or `feedback` task (TK10), with its kind
  * (D78) and its WhatsApp template's parameters (D32).
  */
 function clinozyMessageOf(step: ClinozyStepTask): {
@@ -97,9 +97,9 @@ function alreadyAsked(step: ClinozyStepTask): boolean {
 }
 
 /**
- * TK10 "Let Clinozy handle": takes one due task's step — the confirmation, payment reminder or
- * review request on WhatsApp, or a re-target lead for `gone_quiet` — and closes it "Done by
- * Clinozy"; false (the task stays for a person) when there is nobody to message, or when the
+ * TK10 "Let the app handle": takes one due task's step — the confirmation, payment reminder or
+ * review request on WhatsApp, or a re-target lead for `gone_quiet` — and closes it as done by
+ * the app; false (the task stays for a person) when there is nobody to message, or when the
  * person replied STOP to automated messages (D32).
  */
 async function takeClinozyStep(options: {
@@ -162,8 +162,8 @@ async function openLapsedPatientLeads(
 
 /**
  * Runs one organization's task rules (TK4, TK7, TK10): wakes the snoozed tasks whose time came,
- * closes each rule's tasks whose record changed ("Done by Clinozy"), opens the tasks of the rules
- * that are on for the records that qualify, and takes the step of the due tasks Clinozy handles.
+ * closes each rule's tasks whose record changed (done by the app), opens the tasks of the rules
+ * that are on for the records that qualify, and takes the step of the due tasks the app handles.
  *
  * @remarks
  * - **Algorithm:** inside the organization's context (one transaction), holding the organization's
@@ -171,13 +171,13 @@ async function openLapsedPatientLeads(
  *   Rules popover's order) close first, then open — so a moved record's task closes and its fresh
  *   one opens in the same run. A rule that is off opens nothing (its open tasks are hidden from
  *   the list, TK10) but its tasks still close when their record changes. Then the due tasks of the
- *   rules set to "Let Clinozy handle" (and on) take their step, and the booking messages and
+ *   rules set to "Let the app handle" (and on) take their step, and the booking messages and
  *   receipts go into the queue (D78, {@link queueClinozyMessages}). At most a batch per rule per
  *   run — the next run picks up the rest.
  * - **Failure modes:** a database error rolls the whole run back and propagates, so BullMQ retries;
  *   running it twice opens nothing twice (one open task per rule per record, TK4), and two runs at
  *   once take each step and queue each notice once (the run lock).
- * - **Side effects:** inserts and updates on `app.tasks`; for Clinozy's steps, queued WhatsApp
+ * - **Side effects:** inserts and updates on `app.tasks`; for the app's steps, queued WhatsApp
  *   entries on `app.contact_activities` (with the contact's activity times), a booking's reminder
  *   status, re-target leads on `app.leads`.
  */

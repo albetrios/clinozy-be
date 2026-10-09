@@ -63,14 +63,14 @@ export interface LapsedPatient {
   branchId: number | null;
 }
 
-/** A record a Clinozy message points at (M5). */
+/** A record a message the app sends points at (M5). */
 export type ClinozyMessageLink =
   | { appointment_id: number }
   | { invoice_id: number }
   | { payment_id: number }
   | Record<string, never>;
 
-/** An open task "Let Clinozy handle" takes (TK10), with what its message says. */
+/** An open task "Let the app handle" takes (TK10), with what its message says. */
 export interface ClinozyStepTask {
   taskId: number;
   rule: TaskRule;
@@ -141,7 +141,7 @@ export async function findOrganizationsForTaskRules(
  *
  * @remarks
  * - **Algorithm:** every rule is SQL ({@link TaskRuleSource}): its open tasks whose record no
- *   longer qualifies close "Done by Clinozy"; its records that qualify and have no open task — nor
+ *   longer qualifies close as done by the app; its records that qualify and have no open task — nor
  *   one a person resolved since the condition began — get one (at most a batch per rule per run;
  *   the unique open-task index keeps it one per rule per record under a race).
  */
@@ -222,7 +222,7 @@ export class TaskRulesRepository {
     return new Map(rows.map((row) => [row.rule, { isOn: row.isOn, isAutomatic: row.isAutomatic }]));
   }
 
-  /** TK4: closes the rule's open tasks whose record no longer qualifies — "Done by Clinozy". */
+  /** TK4: closes the rule's open tasks whose record no longer qualifies — done by the app. */
   async closeGoneTasks(options: {
     organizationId: number;
     source: TaskRuleSource;
@@ -277,7 +277,7 @@ export class TaskRulesRepository {
     return rows.length;
   }
 
-  /** TK10: the open tasks of the rules Clinozy handles here that have fallen due. */
+  /** TK10: the open tasks of the rules the app handles here that have fallen due. */
   async findDueClinozySteps(options: {
     organizationId: number;
     rules: readonly TaskRule[];
@@ -319,7 +319,7 @@ export class TaskRulesRepository {
   }
 
   /**
-   * A queued WhatsApp message from Clinozy (no author) on the person's stream — the messaging
+   * A queued WhatsApp message from the app (no author) on the person's stream — the messaging
    * worker sends it — marked with what it is for (`automationKind`, D78). TK10's outreach moves
    * the contact's activity times and a `new` lead to `contacted`, as a person's send does (M7,
    * 5.10); a notice (`isNotice` — a booking message, a receipt) moves only the last activity, so
@@ -478,7 +478,7 @@ export class TaskRulesRepository {
     }));
   }
 
-  /** TK10: closes a task whose step Clinozy took — "Done by Clinozy", marked handled. */
+  /** TK10: closes a task whose step the app took — done by the app, marked handled. */
   async closeTaskByClinozy(taskId: number): Promise<void> {
     await this.databaseHandle
       .update(tasks)
@@ -488,8 +488,8 @@ export class TaskRulesRepository {
 }
 
 /**
- * A task closed by the server (TK4, TK10): outcome `done`, "Done by Clinozy", no resolver;
- * `isHandled` when Clinozy took its step rather than its record changing.
+ * A task closed by the server (TK4, TK10): outcome `done`, done by the app, no resolver;
+ * `isHandled` when the app took its step rather than its record changing.
  */
 function closedByClinozy(options: { isHandled: boolean }): never {
   return {
@@ -508,8 +508,8 @@ function closedByClinozy(options: { isHandled: boolean }): never {
 
 /**
  * A rule's candidates (TK4): its records that qualify and open now, without an open task of the
- * rule — nor one a person resolved, or whose step Clinozy took (TK10), since the condition began
- * (`anchor_at`) — earliest due first. A task Clinozy closed because its record changed keeps
+ * rule — nor one a person resolved, or whose step the app took (TK10), since the condition began
+ * (`anchor_at`) — earliest due first. A task the app closed because its record changed keeps
  * nothing quiet: when the record qualifies again, a fresh task opens.
  */
 function candidatesQuery(scope: TaskRuleScope, source: TaskRuleSource): SQL {

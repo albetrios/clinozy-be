@@ -129,14 +129,10 @@ export const invoices = appSchema
       ),
       // The list, newest first
       index('idx_invoices_organization_invoice_date')
-        .on(table.organization_id, table.invoice_date.desc(), table.id)
+        .on(table.organization_id, table.invoice_date, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       // The patient file's Invoices tab
-      index('idx_invoices_contact_invoice_date').on(
-        table.contact_id,
-        table.invoice_date.desc(),
-        table.id,
-      ),
+      index('idx_invoices_contact_invoice_date').on(table.contact_id, table.invoice_date, table.id),
       index('idx_invoices_branch_invoice_date').on(table.branch_id, table.invoice_date),
       // Dues, and sub-domain 10's reminder
       index('idx_invoices_organization_due')

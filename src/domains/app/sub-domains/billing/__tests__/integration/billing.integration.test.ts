@@ -19,9 +19,8 @@ import { AppFlow, calendarDay } from '@/domains/app/__tests__/factories/app-flow
  * Sub-domain 8, Billing 8.A–8.E (routes-final §8, launch ROUTE #136): invoices with the server's
  * amounts, "Paid now", the patient offerings a line sells; credit notes and their refund; the
  * ledger's kinds, splits, edits, delete and reverse; pending credits settled in parts; day closes,
- * the day lock and the auto-close worker (WC-39) — one flow over the fixture organization (the
- * launch's curl checks, `tooling/dev/live-api/checks/billing.checks.sh`). The day closes run on a
- * branch of their own.
+ * the day lock and the auto-close worker (WC-39) — one flow over the fixture organization. The day
+ * closes run on a branch of their own.
  */
 describe('Billing — integration (routes-final §8)', () => {
   const S = String(Date.now());

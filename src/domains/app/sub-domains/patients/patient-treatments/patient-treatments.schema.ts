@@ -102,18 +102,18 @@ export const patient_treatments = appSchema
       // The patient's tab, newest first
       index('idx_patient_treatments_patient_performed').on(
         table.patient_id,
-        table.performed_at.desc(),
+        table.performed_at,
         table.id,
       ),
       // The organization list
       index('idx_patient_treatments_organization_performed').on(
         table.organization_id,
-        table.performed_at.desc(),
+        table.performed_at,
         table.id,
       ),
       // TR13: done, with an offering, not billed
       index('idx_patient_treatments_organization_not_billed')
-        .on(table.organization_id, table.performed_at.desc(), table.id)
+        .on(table.organization_id, table.performed_at, table.id)
         .where(
           sql`${table.status} = ${DONE} AND ${table.offering_id} IS NOT NULL AND ${table.patient_offering_id} IS NULL`,
         ),

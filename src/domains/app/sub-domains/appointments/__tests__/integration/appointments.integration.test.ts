@@ -13,8 +13,7 @@ import { AppFlow, calendarDay } from '@/domains/app/__tests__/factories/app-flow
  * Sub-domain 6, Appointments (routes-final §6, launch ROUTE #132): booking and walk-ins, the slot
  * rules and the exclusion constraints, the list (and the floor), moves, the lifecycle and the
  * floor stage, the check-in conversion, copy, delete and restore, the calendar reads, the export,
- * what the contact reads, the gates by role — one flow over the fixture organization (the launch's
- * curl checks, `tooling/dev/live-api/checks/appointments.checks.sh`).
+ * what the contact reads, the gates by role — one flow over the fixture organization.
  */
 describe('Appointments — integration (routes-final §6)', () => {
   const S = String(Date.now());

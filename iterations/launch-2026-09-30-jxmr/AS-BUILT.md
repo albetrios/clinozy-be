@@ -163,13 +163,16 @@ evidence for all 59 criteria.
 - Follow-ups for the next iteration:
   - Remove the temporary curl checks — `tooling/dev/live-api/`, `pnpm dev:fixture` /
     `pnpm dev:checks` and their CLAUDE.md lines — now that the suites cover every route (the
-    launch's curl-only rule).
+    launch's curl-only rule). **Done** on this branch after the close: launch-confidence task X6
+    (`docs/reviews/launch-confidence-plan-2026-10-09.md`).
   - AI ideas: switch `PATIENT_IDEAS_AI_ENABLED` on per environment once `ANTHROPIC_API_KEY` is set
     and the clinic's advisor has seen what the summary sends (D80 (4), PI6).
   - KC5 — anonymising an ended login, in the platform review (D56).
   - WhatsApp approved templates (D32): the automated notices (confirm request, reminder, receipt,
     day-close summary) are plain text, and Meta refuses free text outside the 24-hour window, so
-    most of them fail (each failure opens a call task, WC-4) until templates are built.
+    most of them fail (each failure opens a call task, WC-4) until templates are built. **Code
+    done** after the close (launch-confidence task M1, behind `WHATSAPP_TEMPLATES_ENABLED`); the
+    templates still need Meta's approval.
   - Deploy: the monolithic worker serves about 65 Postgres connections, and it refuses to boot
     when `DATABASE_POOL_MAX` is lower. Set the hosted worker services to 90, the template
     value.
@@ -215,7 +218,8 @@ evidence for all 59 criteria.
   - **Idempotency:** every app POST requires `X-Idempotency-Key`, except the public Meta webhook,
     which is deduplicated by event hash. A repeated identical payment PATCH records no edit.
   - **Verifier:** the gates and the full `pnpm test`, as listed under Close.
-- Index follow-ups for the next iteration (review, optional):
+- Index follow-ups for the next iteration (review, optional) — **both done** on this branch after
+  the close: launch-confidence task X5:
   - Declare the ~45 list indexes all-ascending `(scope, column, id)`, so a backward scan serves
     the kernel's `ORDER BY <sort> DESC, id DESC` and the keyset bounds the scan. Today an
     incremental sort serves it, which is fine at clinic volumes.

@@ -62,7 +62,7 @@ export const manufacturers = appSchema
         .where(sql`${table.deleted_at} IS NULL`),
       index('idx_manufacturers_organization_created').on(
         table.organization_id,
-        table.created_at.desc(),
+        table.created_at,
         table.id,
       ),
       index('idx_manufacturers_deleted_at')

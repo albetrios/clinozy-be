@@ -79,7 +79,7 @@ export const patient_clinical_notes = appSchema
         table.created_at,
       ),
       index('idx_patient_clinical_notes_patient_created')
-        .on(table.patient_id, table.created_at.desc(), table.id)
+        .on(table.patient_id, table.created_at, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       index('idx_patient_clinical_notes_appointment_id')
         .on(table.appointment_id)

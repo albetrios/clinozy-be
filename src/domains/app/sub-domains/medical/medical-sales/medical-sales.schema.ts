@@ -101,10 +101,10 @@ export const medical_sales = appSchema
         .on(table.patient_prescription_id)
         .where(sql`${table.deleted_at} IS NULL AND ${table.patient_prescription_id} IS NOT NULL`),
       index('idx_medical_sales_organization_sold')
-        .on(table.organization_id, table.sold_at.desc(), table.id)
+        .on(table.organization_id, table.sold_at, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       index('idx_medical_sales_organization_created')
-        .on(table.organization_id, table.created_at.desc(), table.id)
+        .on(table.organization_id, table.created_at, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       index('idx_medical_sales_contact_id').on(table.contact_id),
       index('idx_medical_sales_branch_id').on(table.branch_id),
@@ -191,9 +191,6 @@ export const medical_sale_returns = appSchema
         table.organization_id,
         table.returned_by_membership_id,
       ),
-      index('idx_medical_sale_returns_returned_by_membership_id')
-        .on(table.returned_by_membership_id)
-        .where(sql`${table.returned_by_membership_id} IS NOT NULL`),
       index('idx_medical_sale_returns_created_by_user_id')
         .on(table.created_by_user_id)
         .where(sql`${table.created_by_user_id} IS NOT NULL`),

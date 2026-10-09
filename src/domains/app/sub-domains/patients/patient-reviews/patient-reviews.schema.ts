@@ -74,11 +74,7 @@ export const patient_reviews = appSchema
     (table) => [
       index('idx_patient_reviews_organization_id').on(table.organization_id),
       uniqueIndex('idx_patient_reviews_public_id').on(table.public_id),
-      index('idx_patient_reviews_patient_date').on(
-        table.patient_id,
-        table.review_date.desc(),
-        table.id,
-      ),
+      index('idx_patient_reviews_patient_date').on(table.patient_id, table.review_date, table.id),
       // Sub-domain 10's call-back rule
       index('idx_patient_reviews_organization_needs_call')
         .on(table.organization_id, table.created_at)

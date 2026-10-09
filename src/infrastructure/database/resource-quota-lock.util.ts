@@ -55,7 +55,7 @@ export const RESOURCE_QUOTA_LOCK_NAMESPACE = {
   MEMBERSHIP_SAVED_VIEW: 0x53_56_57_53,
   /**
    * Per-organization task rules run, keyed by organization id. ASCII `TRUN`. Serializes two runs of
-   * one organization's rules (a retried or stalled job beside a fresh one), so each of Clinozy's
+   * one organization's rules (a retried or stalled job beside a fresh one), so each of the app's
    * steps and notices is taken once (TK10, D78). Taken on the worker's pinned handle by
    * `TaskRulesRepository.lockRun`.
    */

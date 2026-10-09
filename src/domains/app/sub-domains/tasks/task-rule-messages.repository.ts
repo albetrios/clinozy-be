@@ -78,7 +78,7 @@ function toBooking(row: CandidateRow): BookingMessageCandidate {
 }
 
 /**
- * The reads of the messages Clinozy queues in the rules run (launch D78 — WC-5, WC-6, WC-9), on a
+ * The reads of the messages the app queues in the rules run (launch D78 — WC-5, WC-6, WC-9), on a
  * handle pinned to one organization's context.
  *
  * @remarks

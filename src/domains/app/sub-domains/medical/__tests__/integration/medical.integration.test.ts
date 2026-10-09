@@ -16,9 +16,8 @@ import { AppFlow, calendarDay } from '@/domains/app/__tests__/factories/app-flow
  * discount; orders received into batches; supplier credits applied to what is owed and paying a
  * supplier; MRs, their visits and the visit reminder task; sales through the invoice ledger by
  * earliest expiry, their void and undo, returns with a credit note; the store's payments; the
- * medicine codes by role — one flow over the fixture organization (the launch's curl checks,
- * `tooling/dev/live-api/checks/medical.checks.sh`). The task rules run in-process, as one job of
- * the five-minute sweep would.
+ * medicine codes by role — one flow over the fixture organization. The task rules run in-process,
+ * as one job of the five-minute sweep would.
  */
 describe('Medical store — integration (routes-final §11)', () => {
   const S = String(Date.now());
@@ -352,7 +351,7 @@ describe('Medical store — integration (routes-final §11)', () => {
       'GET',
       '/app/tasks?scope=everyone&tab=open&rule_key=medical_rep_visit&limit=100',
     );
-    flow.expectValue('closed by Clinozy', `${visitTasks} | length`, 0);
+    flow.expectValue('closed by the app', `${visitTasks} | length`, 0);
   });
 
   it('11.D medicines (routes 17–24)', async () => {

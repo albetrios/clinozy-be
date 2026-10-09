@@ -9,7 +9,7 @@ rest on the evidence at commit `a46b589`:
 - `pnpm test:rls-role` (159 files / 1,349 tests);
 - route success coverage (436 / 436 routes);
 - the contract lane (11 files / 53 tests);
-- 2,413 live HTTP checks (`pnpm dev:checks`);
+- 2,413 live HTTP checks (the launch's temporary curl checks, since removed — task X6);
 - SonarQube (0 issues).
 
 This file lists what would raise each score, in the order that buys the most confidence first.
@@ -106,8 +106,8 @@ The code matches the plan: 295 assertions, 279 live checks, and the invoice-numb
 | T2 | **Preferences and saved views** — limits, a branch removed from a preference, saved views of a removed member. | Code | S | Integration cases |
 | T3 | **The locked Admin role (D40)** cannot be edited or lose a code; Owner-only actions stay Owner-only. | Code | S | Integration cases |
 
-Prefer integration tests to new curl checks: the live checks under `tooling/dev/live-api/` are
-temporary (AS-BUILT › Follow-ups).
+Write integration tests, not curl checks: the launch's temporary live checks are gone (task X6), and
+the suites hold their cases.
 
 ## Tasks and rules — 87 → 92
 

@@ -12,9 +12,11 @@ src/
     ├── app/
     │   ├── __tests__/
     │   │   ├── e2e/
+    │   │   │   ├── flow-day-in-the-clinic.e2e.test.ts
     │   │   │   ├── flow-enquiry-to-patient.e2e.test.ts
     │   │   │   ├── flow-plan-and-feedback.e2e.test.ts
     │   │   │   ├── flow-refund-and-credit.e2e.test.ts
+    │   │   │   ├── flow-unhappy-paths.e2e.test.ts
     │   │   │   └── flow-visit-to-payment.e2e.test.ts
     │   │   ├── factories/
     │   │   │   ├── app-fixture.factory.ts
@@ -2957,6 +2959,7 @@ src/
     │   │   ├── scenarios/
     │   │   │   ├── admin.js
     │   │   │   ├── api-stress.js
+    │   │   │   ├── app-clinic-day.js
     │   │   │   ├── audit-list.js
     │   │   │   ├── auth-onboarding.js
     │   │   │   ├── auth-stress-server-timing.js
@@ -2997,9 +3000,11 @@ src/
     │   │   └── setup-loadtest.sh
     │   └── load.overview.md
     ├── performance/
+    │   ├── app-list-indexes.performance.test.ts
     │   ├── auth-session-list.performance.test.ts
     │   ├── billing-list.performance.test.ts
     │   ├── concurrent-requests.performance.test.ts
+    │   ├── contact-activities-volume.performance.test.ts
     │   ├── explain-analyze.performance.test.ts
     │   ├── membership-list.performance.test.ts
     │   ├── n-plus-one.performance.test.ts
@@ -3007,6 +3012,7 @@ src/
     │   ├── performance.overview.md
     │   ├── permission-cache.performance.test.ts
     │   ├── queue-throughput.performance.test.ts
+    │   ├── task-rules-sweep-scale.performance.test.ts
     │   └── worker-bulkheads.performance.test.ts
     ├── security/
     │   ├── auth/

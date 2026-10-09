@@ -63,7 +63,7 @@ export const contact_message_templates = appSchema
       // The default list order — newest first among live templates
       index('idx_contact_message_templates_organization_created').on(
         table.organization_id,
-        table.created_at.desc(),
+        table.created_at,
         table.id,
       ),
       index('idx_contact_message_templates_deleted_at')

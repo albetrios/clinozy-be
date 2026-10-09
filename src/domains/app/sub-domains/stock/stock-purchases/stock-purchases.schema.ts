@@ -82,7 +82,7 @@ export const stock_purchases = appSchema
       ),
       // The Purchases tab, newest first
       index('idx_stock_purchases_organization_purchase_date')
-        .on(table.organization_id, table.purchase_date.desc(), table.id)
+        .on(table.organization_id, table.purchase_date, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       index('idx_stock_purchases_stock_vendor_purchase_date').on(
         table.stock_vendor_id,
@@ -93,7 +93,7 @@ export const stock_purchases = appSchema
         .on(table.organization_id, table.purchase_date)
         .where(sql`${table.deleted_at} IS NULL AND ${table.due_amount} > 0`),
       index('idx_stock_purchases_organization_created')
-        .on(table.organization_id, table.created_at.desc(), table.id)
+        .on(table.organization_id, table.created_at, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       index('idx_stock_purchases_deleted_at')
         .on(table.deleted_at)

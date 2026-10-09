@@ -90,7 +90,7 @@ export const patient_offering_suggestions = appSchema
       // The plan, newest first
       index('idx_patient_offering_suggestions_patient_created').on(
         table.patient_id,
-        table.created_at.desc(),
+        table.created_at,
         table.id,
       ),
       // PK9: the duplicate check

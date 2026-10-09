@@ -104,7 +104,7 @@ export const medicines = appSchema
         .on(table.organization_id, table.name, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       index('idx_medicines_organization_created')
-        .on(table.organization_id, table.created_at.desc(), table.id)
+        .on(table.organization_id, table.created_at, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       // "Low stock" (MD12)
       index('idx_medicines_organization_low')

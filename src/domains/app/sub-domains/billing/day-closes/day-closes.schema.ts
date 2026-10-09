@@ -95,7 +95,7 @@ export const day_closes = appSchema
       ),
       index('idx_day_closes_organization_close_date').on(
         table.organization_id,
-        table.close_date.desc(),
+        table.close_date,
         table.id,
       ),
       index('idx_day_closes_branch_close_date').on(table.branch_id, table.close_date),

@@ -102,7 +102,7 @@ export const patients = appSchema
         .on(table.organization_id, table.contact_id)
         .where(sql`${table.deleted_at} IS NULL`),
       index('idx_patients_organization_created')
-        .on(table.organization_id, table.created_at.desc(), table.id)
+        .on(table.organization_id, table.created_at, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       index('idx_patients_organization_follow_up_at')
         .on(table.organization_id, table.follow_up_at, table.id)

@@ -3091,7 +3091,7 @@ ALTER TABLE "app"."contact_message_templates" ADD CONSTRAINT "contact_message_te
 ALTER TABLE "app"."contact_message_templates" ADD CONSTRAINT "contact_message_templates_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."contact_message_templates" ADD CONSTRAINT "contact_message_templates_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_contact_message_templates_public_id" ON "app"."contact_message_templates" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_contact_message_templates_organization_created" ON "app"."contact_message_templates" USING btree ("organization_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contact_message_templates_organization_created" ON "app"."contact_message_templates" USING btree ("organization_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_contact_message_templates_organization_name" ON "app"."contact_message_templates" USING btree ("organization_id","name","id") WHERE "app"."contact_message_templates"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_contact_message_templates_organization_name_unique" ON "app"."contact_message_templates" USING btree ("organization_id",lower("name")) WHERE "app"."contact_message_templates"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_contact_message_templates_deleted_at" ON "app"."contact_message_templates" USING btree ("deleted_at") WHERE "app"."contact_message_templates"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -3268,8 +3268,8 @@ ALTER TABLE "app"."lead_involved_memberships" ADD CONSTRAINT "lead_involved_memb
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_leads_public_id" ON "app"."leads" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_leads_organization_lead_number" ON "app"."leads" USING btree ("organization_id","lead_number");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_leads_organization_contact_open_unique" ON "app"."leads" USING btree ("organization_id","contact_id") WHERE "app"."leads"."deleted_at" IS NULL AND "app"."leads"."status" IN ('new', 'contacted', 'follow_up', 'no_response');--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_organization_created" ON "app"."leads" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."leads"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_organization_owner_created" ON "app"."leads" USING btree ("organization_id","owner_membership_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_leads_organization_created" ON "app"."leads" USING btree ("organization_id","created_at","id") WHERE "app"."leads"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_leads_organization_owner_created" ON "app"."leads" USING btree ("organization_id","owner_membership_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_leads_organization_follow_up_at" ON "app"."leads" USING btree ("organization_id","follow_up_at","id") WHERE "app"."leads"."deleted_at" IS NULL AND "app"."leads"."follow_up_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_leads_organization_held_until" ON "app"."leads" USING btree ("organization_id","held_until") WHERE "app"."leads"."deleted_at" IS NULL AND "app"."leads"."held_until" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_leads_branch_id" ON "app"."leads" USING btree ("branch_id");--> statement-breakpoint
@@ -3316,10 +3316,10 @@ ALTER TABLE "app"."appointments" ADD CONSTRAINT "excl_appointments_machine_time"
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_appointments_public_id" ON "app"."appointments" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_appointments_organization_appointment_number" ON "app"."appointments" USING btree ("organization_id","appointment_number");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_organization_day" ON "app"."appointments" USING btree ("organization_id","appointment_date","start_time","id") WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_appointments_organization_created" ON "app"."appointments" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_appointments_organization_created" ON "app"."appointments" USING btree ("organization_id","created_at","id") WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_branch_day" ON "app"."appointments" USING btree ("branch_id","appointment_date","start_time");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_doctor_date" ON "app"."appointments" USING btree ("doctor_membership_id","appointment_date") WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_appointments_contact_date" ON "app"."appointments" USING btree ("contact_id","appointment_date" DESC NULLS LAST) WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_appointments_contact_date" ON "app"."appointments" USING btree ("contact_id","appointment_date") WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_floor" ON "app"."appointments" USING btree ("organization_id","branch_id","visit_stage") WHERE "app"."appointments"."deleted_at" IS NULL AND "app"."appointments"."status" = 'checked_in';--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_contact_id" ON "app"."appointments" USING btree ("contact_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_therapist_membership_id" ON "app"."appointments" USING btree ("organization_id","therapist_membership_id") WHERE "app"."appointments"."therapist_membership_id" IS NOT NULL;--> statement-breakpoint
@@ -3353,7 +3353,7 @@ ALTER TABLE "app"."patients" ADD CONSTRAINT "patients_doctor_membership_fk" FORE
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patients_public_id" ON "app"."patients" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patients_organization_patient_number" ON "app"."patients" USING btree ("organization_id","patient_number");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patients_organization_contact_unique" ON "app"."patients" USING btree ("organization_id","contact_id") WHERE "app"."patients"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patients_organization_created" ON "app"."patients" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."patients"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patients_organization_created" ON "app"."patients" USING btree ("organization_id","created_at","id") WHERE "app"."patients"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patients_organization_follow_up_at" ON "app"."patients" USING btree ("organization_id","follow_up_at","id") WHERE "app"."patients"."deleted_at" IS NULL AND "app"."patients"."follow_up_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patients_types_gin" ON "app"."patients" USING gin ("types") WHERE "app"."patients"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patients_home_branch_id" ON "app"."patients" USING btree ("home_branch_id");--> statement-breakpoint
@@ -3404,7 +3404,7 @@ ALTER TABLE "app"."patient_prescriptions" ADD CONSTRAINT "patient_prescriptions_
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_prescriptions_public_id" ON "app"."patient_prescriptions" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_prescriptions_organization_prescription_number" ON "app"."patient_prescriptions" USING btree ("organization_id","prescription_number");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_prescriptions_organization_status_date" ON "app"."patient_prescriptions" USING btree ("organization_id","status","prescription_date","id") WHERE "app"."patient_prescriptions"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_prescriptions_organization_created" ON "app"."patient_prescriptions" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."patient_prescriptions"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_prescriptions_organization_created" ON "app"."patient_prescriptions" USING btree ("organization_id","created_at","id") WHERE "app"."patient_prescriptions"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_prescriptions_patient_created" ON "app"."patient_prescriptions" USING btree ("patient_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_prescriptions_appointment_id" ON "app"."patient_prescriptions" USING btree ("appointment_id") WHERE "app"."patient_prescriptions"."appointment_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_prescriptions_doctor_membership_id" ON "app"."patient_prescriptions" USING btree ("organization_id","doctor_membership_id");--> statement-breakpoint
@@ -3429,7 +3429,7 @@ ALTER TABLE "app"."prescription_kits" ADD CONSTRAINT "prescription_kits_updated_
 ALTER TABLE "app"."prescription_kits" ADD CONSTRAINT "prescription_kits_owner_membership_fk" FOREIGN KEY ("organization_id","owner_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_prescription_kits_public_id" ON "app"."prescription_kits" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_prescription_kits_owner_name_unique" ON "app"."prescription_kits" USING btree ("organization_id","owner_membership_id",lower("name")) WHERE "app"."prescription_kits"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_prescription_kits_owner_created" ON "app"."prescription_kits" USING btree ("owner_membership_id","created_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_prescription_kits_owner_created" ON "app"."prescription_kits" USING btree ("owner_membership_id","created_at");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_prescription_kits_deleted_at" ON "app"."prescription_kits" USING btree ("deleted_at") WHERE "app"."prescription_kits"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_prescription_kits_created_by_user_id" ON "app"."prescription_kits" USING btree ("created_by_user_id") WHERE "app"."prescription_kits"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_prescription_kits_updated_by_user_id" ON "app"."prescription_kits" USING btree ("updated_by_user_id") WHERE "app"."prescription_kits"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -3452,7 +3452,7 @@ ALTER TABLE "app"."patient_clinical_notes" ADD CONSTRAINT "patient_clinical_note
 ALTER TABLE "app"."patient_clinical_notes" ADD CONSTRAINT "patient_clinical_notes_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_clinical_notes_public_id" ON "app"."patient_clinical_notes" USING btree ("public_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_patient_kind_created" ON "app"."patient_clinical_notes" USING btree ("patient_id","kind","created_at");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_patient_created" ON "app"."patient_clinical_notes" USING btree ("patient_id","created_at" DESC NULLS LAST,"id") WHERE "app"."patient_clinical_notes"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_patient_created" ON "app"."patient_clinical_notes" USING btree ("patient_id","created_at","id") WHERE "app"."patient_clinical_notes"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_appointment_id" ON "app"."patient_clinical_notes" USING btree ("appointment_id") WHERE "app"."patient_clinical_notes"."appointment_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_patient_diagnosis_id" ON "app"."patient_clinical_notes" USING btree ("patient_diagnosis_id") WHERE "app"."patient_clinical_notes"."patient_diagnosis_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_clinical_notes_deleted_at" ON "app"."patient_clinical_notes" USING btree ("deleted_at") WHERE "app"."patient_clinical_notes"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -3476,7 +3476,7 @@ ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_patient_treatm
 ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patient_images" ADD CONSTRAINT "patient_images_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_images_public_id" ON "app"."patient_images" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_images_patient_album_taken_on" ON "app"."patient_images" USING btree ("patient_id","album","taken_on" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_images_patient_album_taken_on" ON "app"."patient_images" USING btree ("patient_id","album","taken_on","id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_images_organization_file_key" ON "app"."patient_images" USING btree ("organization_id","file_key");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_images_appointment_id" ON "app"."patient_images" USING btree ("appointment_id") WHERE "app"."patient_images"."appointment_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_images_patient_treatment_id" ON "app"."patient_images" USING btree ("patient_treatment_id") WHERE "app"."patient_images"."patient_treatment_id" IS NOT NULL;--> statement-breakpoint
@@ -3498,7 +3498,7 @@ ALTER TABLE "app"."patient_reports" ADD CONSTRAINT "patient_reports_patient_id_p
 ALTER TABLE "app"."patient_reports" ADD CONSTRAINT "patient_reports_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patient_reports" ADD CONSTRAINT "patient_reports_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_reports_public_id" ON "app"."patient_reports" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_reports_patient_report_date" ON "app"."patient_reports" USING btree ("patient_id","report_date" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_reports_patient_report_date" ON "app"."patient_reports" USING btree ("patient_id","report_date","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_reports_deleted_at" ON "app"."patient_reports" USING btree ("deleted_at") WHERE "app"."patient_reports"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_reports_created_by_user_id" ON "app"."patient_reports" USING btree ("created_by_user_id") WHERE "app"."patient_reports"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_reports_updated_by_user_id" ON "app"."patient_reports" USING btree ("updated_by_user_id") WHERE "app"."patient_reports"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -3523,9 +3523,9 @@ ALTER TABLE "app"."patient_treatments" ADD CONSTRAINT "patient_treatments_update
 ALTER TABLE "app"."patient_treatments" ADD CONSTRAINT "patient_treatments_doctor_membership_fk" FOREIGN KEY ("organization_id","doctor_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patient_treatments" ADD CONSTRAINT "patient_treatments_therapist_membership_fk" FOREIGN KEY ("organization_id","therapist_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_treatments_public_id" ON "app"."patient_treatments" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_treatments_patient_performed" ON "app"."patient_treatments" USING btree ("patient_id","performed_at" DESC NULLS LAST,"id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_treatments_organization_performed" ON "app"."patient_treatments" USING btree ("organization_id","performed_at" DESC NULLS LAST,"id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_treatments_organization_not_billed" ON "app"."patient_treatments" USING btree ("organization_id","performed_at" DESC NULLS LAST,"id") WHERE "app"."patient_treatments"."status" = 'done' AND "app"."patient_treatments"."offering_id" IS NOT NULL AND "app"."patient_treatments"."patient_offering_id" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_treatments_patient_performed" ON "app"."patient_treatments" USING btree ("patient_id","performed_at","id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_treatments_organization_performed" ON "app"."patient_treatments" USING btree ("organization_id","performed_at","id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_treatments_organization_not_billed" ON "app"."patient_treatments" USING btree ("organization_id","performed_at","id") WHERE "app"."patient_treatments"."status" = 'done' AND "app"."patient_treatments"."offering_id" IS NOT NULL AND "app"."patient_treatments"."patient_offering_id" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_treatments_patient_offering_id" ON "app"."patient_treatments" USING btree ("patient_offering_id") WHERE "app"."patient_treatments"."patient_offering_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_treatments_appointment_id" ON "app"."patient_treatments" USING btree ("appointment_id") WHERE "app"."patient_treatments"."appointment_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_treatments_offering_id" ON "app"."patient_treatments" USING btree ("offering_id") WHERE "app"."patient_treatments"."offering_id" IS NOT NULL;--> statement-breakpoint
@@ -3549,8 +3549,8 @@ ALTER TABLE "app"."patient_check_ins" ADD CONSTRAINT "patient_check_ins_patient_
 ALTER TABLE "app"."patient_check_ins" ADD CONSTRAINT "patient_check_ins_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patient_check_ins" ADD CONSTRAINT "patient_check_ins_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_check_ins_public_id" ON "app"."patient_check_ins" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_patient_date" ON "app"."patient_check_ins" USING btree ("patient_id","check_in_date" DESC NULLS LAST,"id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_patient_treatment_date" ON "app"."patient_check_ins" USING btree ("patient_treatment_id","check_in_date" DESC NULLS LAST) WHERE "app"."patient_check_ins"."patient_treatment_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_patient_date" ON "app"."patient_check_ins" USING btree ("patient_id","check_in_date","id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_patient_treatment_date" ON "app"."patient_check_ins" USING btree ("patient_treatment_id","check_in_date") WHERE "app"."patient_check_ins"."patient_treatment_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_organization_needs_call" ON "app"."patient_check_ins" USING btree ("organization_id","created_at") WHERE "app"."patient_check_ins"."deleted_at" IS NULL AND ("app"."patient_check_ins"."feel" = 'worse' OR "app"."patient_check_ins"."score" <= 4);--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_appointment_id" ON "app"."patient_check_ins" USING btree ("appointment_id") WHERE "app"."patient_check_ins"."appointment_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_check_ins_deleted_at" ON "app"."patient_check_ins" USING btree ("deleted_at") WHERE "app"."patient_check_ins"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -3573,7 +3573,7 @@ ALTER TABLE "app"."patient_reviews" ADD CONSTRAINT "patient_reviews_appointment_
 ALTER TABLE "app"."patient_reviews" ADD CONSTRAINT "patient_reviews_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patient_reviews" ADD CONSTRAINT "patient_reviews_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_reviews_public_id" ON "app"."patient_reviews" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_reviews_patient_date" ON "app"."patient_reviews" USING btree ("patient_id","review_date" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_reviews_patient_date" ON "app"."patient_reviews" USING btree ("patient_id","review_date","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_reviews_organization_needs_call" ON "app"."patient_reviews" USING btree ("organization_id","created_at") WHERE "app"."patient_reviews"."deleted_at" IS NULL AND "app"."patient_reviews"."rating" <= 3;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_reviews_appointment_id" ON "app"."patient_reviews" USING btree ("appointment_id") WHERE "app"."patient_reviews"."appointment_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_reviews_deleted_at" ON "app"."patient_reviews" USING btree ("deleted_at") WHERE "app"."patient_reviews"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -3620,7 +3620,7 @@ ALTER TABLE "app"."patient_offering_suggestions" ADD CONSTRAINT "patient_offerin
 ALTER TABLE "app"."patient_offering_suggestions" ADD CONSTRAINT "patient_offering_suggestions_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patient_offering_suggestions" ADD CONSTRAINT "patient_offering_suggestions_suggested_by_membership_fk" FOREIGN KEY ("organization_id","suggested_by_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_public_id" ON "app"."patient_offering_suggestions" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_patient_created" ON "app"."patient_offering_suggestions" USING btree ("patient_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_patient_created" ON "app"."patient_offering_suggestions" USING btree ("patient_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_patient_offering" ON "app"."patient_offering_suggestions" USING btree ("patient_id","offering_id") WHERE "app"."patient_offering_suggestions"."deleted_at" IS NULL AND "app"."patient_offering_suggestions"."status" <> 'declined';--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_appointment_id" ON "app"."patient_offering_suggestions" USING btree ("appointment_id") WHERE "app"."patient_offering_suggestions"."appointment_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_offering_suggestions_patient_check_in_id" ON "app"."patient_offering_suggestions" USING btree ("patient_check_in_id") WHERE "app"."patient_offering_suggestions"."patient_check_in_id" IS NOT NULL;--> statement-breakpoint
@@ -3695,8 +3695,8 @@ CREATE INDEX IF NOT EXISTS "idx_invoice_members_created_by_user_id" ON "app"."in
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_invoices_public_id" ON "app"."invoices" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_invoices_organization_invoice_sequence" ON "app"."invoices" USING btree ("organization_id","invoice_sequence");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_invoices_branch_financial_year_number" ON "app"."invoices" USING btree ("organization_id","branch_id","financial_year","invoice_number");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_invoices_organization_invoice_date" ON "app"."invoices" USING btree ("organization_id","invoice_date" DESC NULLS LAST,"id") WHERE "app"."invoices"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_invoices_contact_invoice_date" ON "app"."invoices" USING btree ("contact_id","invoice_date" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_invoices_organization_invoice_date" ON "app"."invoices" USING btree ("organization_id","invoice_date","id") WHERE "app"."invoices"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_invoices_contact_invoice_date" ON "app"."invoices" USING btree ("contact_id","invoice_date","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoices_branch_invoice_date" ON "app"."invoices" USING btree ("branch_id","invoice_date");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoices_organization_due" ON "app"."invoices" USING btree ("organization_id","invoice_date") WHERE "app"."invoices"."deleted_at" IS NULL AND "app"."invoices"."due_amount" > 0;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoices_patient_prescription_id" ON "app"."invoices" USING btree ("patient_prescription_id") WHERE "app"."invoices"."patient_prescription_id" IS NOT NULL;--> statement-breakpoint
@@ -3730,7 +3730,7 @@ ALTER TABLE "app"."invoice_credit_notes" ADD CONSTRAINT "invoice_credit_notes_up
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_invoice_credit_notes_public_id" ON "app"."invoice_credit_notes" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_invoice_credit_notes_organization_number" ON "app"."invoice_credit_notes" USING btree ("organization_id","credit_note_number");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoice_credit_notes_invoice_id" ON "app"."invoice_credit_notes" USING btree ("invoice_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_invoice_credit_notes_organization_created" ON "app"."invoice_credit_notes" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."invoice_credit_notes"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_invoice_credit_notes_organization_created" ON "app"."invoice_credit_notes" USING btree ("organization_id","created_at","id") WHERE "app"."invoice_credit_notes"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoice_credit_notes_deleted_at" ON "app"."invoice_credit_notes" USING btree ("deleted_at") WHERE "app"."invoice_credit_notes"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoice_credit_notes_created_by_user_id" ON "app"."invoice_credit_notes" USING btree ("created_by_user_id") WHERE "app"."invoice_credit_notes"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_invoice_credit_notes_updated_by_user_id" ON "app"."invoice_credit_notes" USING btree ("updated_by_user_id") WHERE "app"."invoice_credit_notes"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -3750,7 +3750,7 @@ ALTER TABLE "app"."payment_edits" ADD CONSTRAINT "payment_edits_payment_id_payme
 ALTER TABLE "app"."payment_edits" ADD CONSTRAINT "payment_edits_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."payment_edits" ADD CONSTRAINT "payment_edits_author_membership_fk" FOREIGN KEY ("organization_id","author_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_payment_edits_public_id" ON "app"."payment_edits" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_payment_edits_payment_created" ON "app"."payment_edits" USING btree ("payment_id","created_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_payment_edits_payment_created" ON "app"."payment_edits" USING btree ("payment_id","created_at");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payment_edits_author_membership_id" ON "app"."payment_edits" USING btree ("organization_id","author_membership_id") WHERE "app"."payment_edits"."author_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payment_edits_created_by_user_id" ON "app"."payment_edits" USING btree ("created_by_user_id") WHERE "app"."payment_edits"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payment_edits_organization_id" ON "app"."payment_edits" USING btree ("organization_id");--> statement-breakpoint
@@ -3771,7 +3771,7 @@ ALTER TABLE "app"."pending_credits" ADD CONSTRAINT "pending_credits_created_by_u
 ALTER TABLE "app"."pending_credits" ADD CONSTRAINT "pending_credits_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_pending_credits_public_id" ON "app"."pending_credits" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_pending_credits_organization_number" ON "app"."pending_credits" USING btree ("organization_id","pending_credit_number");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_pending_credits_organization_created" ON "app"."pending_credits" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."pending_credits"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_pending_credits_organization_created" ON "app"."pending_credits" USING btree ("organization_id","created_at","id") WHERE "app"."pending_credits"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_pending_credits_organization_settle_by" ON "app"."pending_credits" USING btree ("organization_id","settle_by") WHERE "app"."pending_credits"."deleted_at" IS NULL AND "app"."pending_credits"."status" = 'open';--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_pending_credits_contact_id" ON "app"."pending_credits" USING btree ("contact_id") WHERE "app"."pending_credits"."contact_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_pending_credits_invoice_id" ON "app"."pending_credits" USING btree ("invoice_id") WHERE "app"."pending_credits"."invoice_id" IS NOT NULL;--> statement-breakpoint
@@ -3807,7 +3807,7 @@ CREATE INDEX IF NOT EXISTS "idx_day_close_events_created_by_user_id" ON "app"."d
 CREATE INDEX IF NOT EXISTS "idx_day_close_events_organization_id" ON "app"."day_close_events" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_day_closes_public_id" ON "app"."day_closes" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_day_closes_organization_branch_date" ON "app"."day_closes" USING btree ("organization_id","branch_id","close_date");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_day_closes_organization_close_date" ON "app"."day_closes" USING btree ("organization_id","close_date" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_day_closes_organization_close_date" ON "app"."day_closes" USING btree ("organization_id","close_date","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_day_closes_branch_close_date" ON "app"."day_closes" USING btree ("branch_id","close_date");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_day_closes_organization_open" ON "app"."day_closes" USING btree ("organization_id","close_date") WHERE "app"."day_closes"."status" = 'open';--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_day_closes_summary_pending" ON "app"."day_closes" USING btree ("closed_at") WHERE "app"."day_closes"."status" = 'closed' AND "app"."day_closes"."summary_sent_at" IS NULL;--> statement-breakpoint
@@ -3840,7 +3840,7 @@ ALTER TABLE "app"."patient_offerings" ADD CONSTRAINT "patient_offerings_invoice_
 ALTER TABLE "app"."patient_offerings" ADD CONSTRAINT "patient_offerings_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."patient_offerings" ADD CONSTRAINT "patient_offerings_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_offerings_public_id" ON "app"."patient_offerings" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_offerings_patient_created" ON "app"."patient_offerings" USING btree ("patient_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_offerings_patient_created" ON "app"."patient_offerings" USING btree ("patient_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_offerings_patient_offering_left" ON "app"."patient_offerings" USING btree ("patient_id","offering_id") WHERE "app"."patient_offerings"."deleted_at" IS NULL AND "app"."patient_offerings"."sessions_used" < "app"."patient_offerings"."sessions_total";--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patient_offerings_offering_id" ON "app"."patient_offerings" USING btree ("offering_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_offerings_invoice_item_id" ON "app"."patient_offerings" USING btree ("invoice_item_id");--> statement-breakpoint
@@ -3926,7 +3926,7 @@ ALTER TABLE "app"."stock_vendors" ADD CONSTRAINT "stock_vendors_updated_by_user_
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_vendors_public_id" ON "app"."stock_vendors" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_vendors_organization_name_unique" ON "app"."stock_vendors" USING btree ("organization_id",lower("name")) WHERE "app"."stock_vendors"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_vendors_organization_name" ON "app"."stock_vendors" USING btree ("organization_id","name","id") WHERE "app"."stock_vendors"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_vendors_organization_created" ON "app"."stock_vendors" USING btree ("organization_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_vendors_organization_created" ON "app"."stock_vendors" USING btree ("organization_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_vendors_deleted_at" ON "app"."stock_vendors" USING btree ("deleted_at") WHERE "app"."stock_vendors"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_vendors_created_by_user_id" ON "app"."stock_vendors" USING btree ("created_by_user_id") WHERE "app"."stock_vendors"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_vendors_updated_by_user_id" ON "app"."stock_vendors" USING btree ("updated_by_user_id") WHERE "app"."stock_vendors"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -3950,7 +3950,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_items_organization_name_unique" ON 
 CREATE INDEX IF NOT EXISTS "idx_stock_items_organization_name" ON "app"."stock_items" USING btree ("organization_id","name","id") WHERE "app"."stock_items"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_items_organization_category" ON "app"."stock_items" USING btree ("organization_id","category","name") WHERE "app"."stock_items"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_items_organization_low" ON "app"."stock_items" USING btree ("organization_id") WHERE "app"."stock_items"."deleted_at" IS NULL AND "app"."stock_items"."quantity" <= "app"."stock_items"."min_quantity";--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_items_organization_created" ON "app"."stock_items" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."stock_items"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_items_organization_created" ON "app"."stock_items" USING btree ("organization_id","created_at","id") WHERE "app"."stock_items"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_items_stock_vendor_id" ON "app"."stock_items" USING btree ("stock_vendor_id") WHERE "app"."stock_items"."stock_vendor_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_items_deleted_at" ON "app"."stock_items" USING btree ("deleted_at") WHERE "app"."stock_items"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_items_created_by_user_id" ON "app"."stock_items" USING btree ("created_by_user_id") WHERE "app"."stock_items"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -3993,10 +3993,10 @@ CREATE INDEX IF NOT EXISTS "idx_stock_purchase_items_stock_item_id" ON "app"."st
 CREATE INDEX IF NOT EXISTS "idx_stock_purchase_items_organization_id" ON "app"."stock_purchase_items" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_purchases_public_id" ON "app"."stock_purchases" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_purchases_organization_number" ON "app"."stock_purchases" USING btree ("organization_id","stock_purchase_number");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_purchases_organization_purchase_date" ON "app"."stock_purchases" USING btree ("organization_id","purchase_date" DESC NULLS LAST,"id") WHERE "app"."stock_purchases"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_purchases_organization_purchase_date" ON "app"."stock_purchases" USING btree ("organization_id","purchase_date","id") WHERE "app"."stock_purchases"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_purchases_stock_vendor_purchase_date" ON "app"."stock_purchases" USING btree ("stock_vendor_id","purchase_date");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_purchases_organization_due" ON "app"."stock_purchases" USING btree ("organization_id","purchase_date") WHERE "app"."stock_purchases"."deleted_at" IS NULL AND "app"."stock_purchases"."due_amount" > 0;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_purchases_organization_created" ON "app"."stock_purchases" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."stock_purchases"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_purchases_organization_created" ON "app"."stock_purchases" USING btree ("organization_id","created_at","id") WHERE "app"."stock_purchases"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_purchases_deleted_at" ON "app"."stock_purchases" USING btree ("deleted_at") WHERE "app"."stock_purchases"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_purchases_created_by_user_id" ON "app"."stock_purchases" USING btree ("created_by_user_id") WHERE "app"."stock_purchases"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_purchases_updated_by_user_id" ON "app"."stock_purchases" USING btree ("updated_by_user_id") WHERE "app"."stock_purchases"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -4040,7 +4040,7 @@ ALTER TABLE "app"."stock_counts" ADD CONSTRAINT "stock_counts_author_membership_
 CREATE INDEX IF NOT EXISTS "idx_stock_count_lines_stock_item_id" ON "app"."stock_count_lines" USING btree ("stock_item_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_count_lines_organization_id" ON "app"."stock_count_lines" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_counts_public_id" ON "app"."stock_counts" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_counts_organization_counted_at" ON "app"."stock_counts" USING btree ("organization_id","counted_at" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_counts_organization_counted_at" ON "app"."stock_counts" USING btree ("organization_id","counted_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_counts_author_membership_id" ON "app"."stock_counts" USING btree ("organization_id","author_membership_id") WHERE "app"."stock_counts"."author_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_counts_created_by_user_id" ON "app"."stock_counts" USING btree ("created_by_user_id") WHERE "app"."stock_counts"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE POLICY "stock_count_lines_tenant_isolation" ON "app"."stock_count_lines" AS PERMISSIVE FOR ALL TO public USING ("app"."stock_count_lines"."organization_id" = (
@@ -4069,8 +4069,8 @@ ALTER TABLE "app"."stock_item_movements" ADD CONSTRAINT "stock_item_movements_re
 ALTER TABLE "app"."stock_item_movements" ADD CONSTRAINT "stock_item_movements_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."stock_item_movements" ADD CONSTRAINT "stock_item_movements_author_membership_fk" FOREIGN KEY ("organization_id","author_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_stock_item_movements_public_id" ON "app"."stock_item_movements" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_item_movements_stock_item_created" ON "app"."stock_item_movements" USING btree ("stock_item_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_stock_item_movements_organization_created" ON "app"."stock_item_movements" USING btree ("organization_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_item_movements_stock_item_created" ON "app"."stock_item_movements" USING btree ("stock_item_id","created_at","id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_stock_item_movements_organization_created" ON "app"."stock_item_movements" USING btree ("organization_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_item_movements_stock_purchase_id" ON "app"."stock_item_movements" USING btree ("stock_purchase_id") WHERE "app"."stock_item_movements"."stock_purchase_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_item_movements_stock_count_id" ON "app"."stock_item_movements" USING btree ("stock_count_id") WHERE "app"."stock_item_movements"."stock_count_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_stock_item_movements_patient_treatment_id" ON "app"."stock_item_movements" USING btree ("patient_treatment_id") WHERE "app"."stock_item_movements"."patient_treatment_id" IS NOT NULL;--> statement-breakpoint
@@ -4116,7 +4116,7 @@ ALTER TABLE "app"."manufacturers" ADD CONSTRAINT "manufacturers_updated_by_user_
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_manufacturers_public_id" ON "app"."manufacturers" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_manufacturers_organization_name_unique" ON "app"."manufacturers" USING btree ("organization_id",lower("name")) WHERE "app"."manufacturers"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_manufacturers_organization_name" ON "app"."manufacturers" USING btree ("organization_id","name","id") WHERE "app"."manufacturers"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_manufacturers_organization_created" ON "app"."manufacturers" USING btree ("organization_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_manufacturers_organization_created" ON "app"."manufacturers" USING btree ("organization_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_manufacturers_deleted_at" ON "app"."manufacturers" USING btree ("deleted_at") WHERE "app"."manufacturers"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_manufacturers_created_by_user_id" ON "app"."manufacturers" USING btree ("created_by_user_id") WHERE "app"."manufacturers"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_manufacturers_updated_by_user_id" ON "app"."manufacturers" USING btree ("updated_by_user_id") WHERE "app"."manufacturers"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -4143,7 +4143,7 @@ CREATE INDEX IF NOT EXISTS "idx_supplier_manufacturers_created_by_user_id" ON "a
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_suppliers_public_id" ON "app"."suppliers" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_suppliers_organization_name_unique" ON "app"."suppliers" USING btree ("organization_id",lower("name")) WHERE "app"."suppliers"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_suppliers_organization_name" ON "app"."suppliers" USING btree ("organization_id","name","id") WHERE "app"."suppliers"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_suppliers_organization_created" ON "app"."suppliers" USING btree ("organization_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_suppliers_organization_created" ON "app"."suppliers" USING btree ("organization_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_suppliers_deleted_at" ON "app"."suppliers" USING btree ("deleted_at") WHERE "app"."suppliers"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_suppliers_created_by_user_id" ON "app"."suppliers" USING btree ("created_by_user_id") WHERE "app"."suppliers"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_suppliers_updated_by_user_id" ON "app"."suppliers" USING btree ("updated_by_user_id") WHERE "app"."suppliers"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -4232,7 +4232,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "idx_medicines_public_id" ON "app"."medicines"
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_medicines_organization_medicine_number" ON "app"."medicines" USING btree ("organization_id","medicine_number");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_medicines_organization_name_unique" ON "app"."medicines" USING btree ("organization_id",lower("name")) WHERE "app"."medicines"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medicines_organization_name" ON "app"."medicines" USING btree ("organization_id","name","id") WHERE "app"."medicines"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_medicines_organization_created" ON "app"."medicines" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."medicines"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_medicines_organization_created" ON "app"."medicines" USING btree ("organization_id","created_at","id") WHERE "app"."medicines"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medicines_organization_low" ON "app"."medicines" USING btree ("organization_id","name") WHERE "app"."medicines"."deleted_at" IS NULL AND "app"."medicines"."quantity" <= "app"."medicines"."min_stock";--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medicines_manufacturer_id" ON "app"."medicines" USING btree ("manufacturer_id") WHERE "app"."medicines"."manufacturer_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medicines_deleted_at" ON "app"."medicines" USING btree ("deleted_at") WHERE "app"."medicines"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -4308,8 +4308,8 @@ CREATE INDEX IF NOT EXISTS "idx_medical_purchase_order_items_medicine_id" ON "ap
 CREATE INDEX IF NOT EXISTS "idx_medical_purchase_order_items_medicine_batch_id" ON "app"."medical_purchase_order_items" USING btree ("medicine_batch_id") WHERE "app"."medical_purchase_order_items"."medicine_batch_id" IS NOT NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_medical_purchase_orders_public_id" ON "app"."medical_purchase_orders" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_medical_purchase_orders_organization_number" ON "app"."medical_purchase_orders" USING btree ("organization_id","purchase_order_number");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_medical_purchase_orders_organization_order_date" ON "app"."medical_purchase_orders" USING btree ("organization_id","order_date" DESC NULLS LAST,"id") WHERE "app"."medical_purchase_orders"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_medical_purchase_orders_organization_created" ON "app"."medical_purchase_orders" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."medical_purchase_orders"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_medical_purchase_orders_organization_order_date" ON "app"."medical_purchase_orders" USING btree ("organization_id","order_date","id") WHERE "app"."medical_purchase_orders"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_medical_purchase_orders_organization_created" ON "app"."medical_purchase_orders" USING btree ("organization_id","created_at","id") WHERE "app"."medical_purchase_orders"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_purchase_orders_supplier_id" ON "app"."medical_purchase_orders" USING btree ("supplier_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_purchase_orders_supplier_due" ON "app"."medical_purchase_orders" USING btree ("supplier_id","received_at","id") WHERE "app"."medical_purchase_orders"."deleted_at" IS NULL AND "app"."medical_purchase_orders"."due_amount" > 0;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_purchase_orders_deleted_at" ON "app"."medical_purchase_orders" USING btree ("deleted_at") WHERE "app"."medical_purchase_orders"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -4342,11 +4342,10 @@ ALTER TABLE "app"."supplier_credits" ADD CONSTRAINT "supplier_credits_created_by
 ALTER TABLE "app"."supplier_credits" ADD CONSTRAINT "supplier_credits_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."supplier_credits" ADD CONSTRAINT "supplier_credits_created_by_membership_fk" FOREIGN KEY ("organization_id","created_by_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_supplier_credits_public_id" ON "app"."supplier_credits" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_supplier_credits_organization_created" ON "app"."supplier_credits" USING btree ("organization_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_supplier_credits_organization_created" ON "app"."supplier_credits" USING btree ("organization_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_supplier_credits_supplier_open" ON "app"."supplier_credits" USING btree ("supplier_id","created_at","id") WHERE "app"."supplier_credits"."applied_amount" < "app"."supplier_credits"."amount";--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_supplier_credits_medicine_id" ON "app"."supplier_credits" USING btree ("medicine_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_supplier_credits_medicine_batch_id" ON "app"."supplier_credits" USING btree ("medicine_batch_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_supplier_credits_created_by_membership_id" ON "app"."supplier_credits" USING btree ("created_by_membership_id") WHERE "app"."supplier_credits"."created_by_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_supplier_credits_created_by_user_id" ON "app"."supplier_credits" USING btree ("created_by_user_id") WHERE "app"."supplier_credits"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_supplier_credits_updated_by_user_id" ON "app"."supplier_credits" USING btree ("updated_by_user_id") WHERE "app"."supplier_credits"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_supplier_credits_organization_created_by" ON "app"."supplier_credits" USING btree ("organization_id","created_by_membership_id");--> statement-breakpoint
@@ -4372,7 +4371,7 @@ CREATE INDEX IF NOT EXISTS "idx_medical_rep_manufacturers_organization_id" ON "a
 CREATE INDEX IF NOT EXISTS "idx_medical_rep_manufacturers_created_by_user_id" ON "app"."medical_rep_manufacturers" USING btree ("created_by_user_id") WHERE "app"."medical_rep_manufacturers"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_medical_reps_public_id" ON "app"."medical_reps" USING btree ("public_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_reps_organization_name" ON "app"."medical_reps" USING btree ("organization_id","name","id") WHERE "app"."medical_reps"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_medical_reps_organization_created" ON "app"."medical_reps" USING btree ("organization_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_medical_reps_organization_created" ON "app"."medical_reps" USING btree ("organization_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_reps_organization_next_visit" ON "app"."medical_reps" USING btree ("organization_id","next_visit_on") WHERE "app"."medical_reps"."deleted_at" IS NULL AND "app"."medical_reps"."next_visit_on" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_reps_deleted_at" ON "app"."medical_reps" USING btree ("deleted_at") WHERE "app"."medical_reps"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_reps_created_by_user_id" ON "app"."medical_reps" USING btree ("created_by_user_id") WHERE "app"."medical_reps"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -4401,9 +4400,8 @@ ALTER TABLE "app"."medical_rep_visits" ADD CONSTRAINT "medical_rep_visits_create
 ALTER TABLE "app"."medical_rep_visits" ADD CONSTRAINT "medical_rep_visits_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."medical_rep_visits" ADD CONSTRAINT "medical_rep_visits_logged_by_membership_fk" FOREIGN KEY ("organization_id","logged_by_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_medical_rep_visits_public_id" ON "app"."medical_rep_visits" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_medical_rep_visits_rep_visit_date" ON "app"."medical_rep_visits" USING btree ("medical_rep_id","visit_date" DESC NULLS LAST,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_medical_rep_visits_rep_visit_date" ON "app"."medical_rep_visits" USING btree ("medical_rep_id","visit_date","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_rep_visits_organization_logged_by" ON "app"."medical_rep_visits" USING btree ("organization_id","logged_by_membership_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_medical_rep_visits_logged_by_membership_id" ON "app"."medical_rep_visits" USING btree ("logged_by_membership_id") WHERE "app"."medical_rep_visits"."logged_by_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_rep_visits_deleted_at" ON "app"."medical_rep_visits" USING btree ("deleted_at") WHERE "app"."medical_rep_visits"."deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_rep_visits_created_by_user_id" ON "app"."medical_rep_visits" USING btree ("created_by_user_id") WHERE "app"."medical_rep_visits"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_rep_visits_updated_by_user_id" ON "app"."medical_rep_visits" USING btree ("updated_by_user_id") WHERE "app"."medical_rep_visits"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -4470,14 +4468,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS "idx_medical_sale_returns_public_id" ON "app".
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_medical_sale_returns_invoice_credit_note_id" ON "app"."medical_sale_returns" USING btree ("invoice_credit_note_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_sale_returns_sale_created" ON "app"."medical_sale_returns" USING btree ("medical_sale_id","created_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_sale_returns_organization_returned_by" ON "app"."medical_sale_returns" USING btree ("organization_id","returned_by_membership_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_medical_sale_returns_returned_by_membership_id" ON "app"."medical_sale_returns" USING btree ("returned_by_membership_id") WHERE "app"."medical_sale_returns"."returned_by_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_sale_returns_created_by_user_id" ON "app"."medical_sale_returns" USING btree ("created_by_user_id") WHERE "app"."medical_sale_returns"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_medical_sales_public_id" ON "app"."medical_sales" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_medical_sales_organization_sale_number" ON "app"."medical_sales" USING btree ("organization_id","sale_number");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_medical_sales_invoice_id" ON "app"."medical_sales" USING btree ("invoice_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_medical_sales_patient_prescription_unique" ON "app"."medical_sales" USING btree ("patient_prescription_id") WHERE "app"."medical_sales"."deleted_at" IS NULL AND "app"."medical_sales"."patient_prescription_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_medical_sales_organization_sold" ON "app"."medical_sales" USING btree ("organization_id","sold_at" DESC NULLS LAST,"id") WHERE "app"."medical_sales"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_medical_sales_organization_created" ON "app"."medical_sales" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."medical_sales"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_medical_sales_organization_sold" ON "app"."medical_sales" USING btree ("organization_id","sold_at","id") WHERE "app"."medical_sales"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_medical_sales_organization_created" ON "app"."medical_sales" USING btree ("organization_id","created_at","id") WHERE "app"."medical_sales"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_sales_contact_id" ON "app"."medical_sales" USING btree ("contact_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_sales_branch_id" ON "app"."medical_sales" USING btree ("branch_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_medical_sales_deleted_at" ON "app"."medical_sales" USING btree ("deleted_at") WHERE "app"."medical_sales"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -4524,9 +4521,9 @@ ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_created_by_user_id_users_i
 ALTER TABLE "app"."payments" ADD CONSTRAINT "payments_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_payments_public_id" ON "app"."payments" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_payments_organization_payment_number" ON "app"."payments" USING btree ("organization_id","payment_number");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_payments_organization_paid_at" ON "app"."payments" USING btree ("organization_id","paid_at" DESC NULLS LAST,"id") WHERE "app"."payments"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_payments_organization_paid_at" ON "app"."payments" USING btree ("organization_id","paid_at","id") WHERE "app"."payments"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payments_branch_paid_at" ON "app"."payments" USING btree ("branch_id","paid_at");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_payments_contact_paid_at" ON "app"."payments" USING btree ("contact_id","paid_at" DESC NULLS LAST) WHERE "app"."payments"."contact_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_payments_contact_paid_at" ON "app"."payments" USING btree ("contact_id","paid_at") WHERE "app"."payments"."contact_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payments_invoice_id" ON "app"."payments" USING btree ("invoice_id") WHERE "app"."payments"."invoice_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payments_pending_credit_id" ON "app"."payments" USING btree ("pending_credit_id") WHERE "app"."payments"."pending_credit_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_payments_stock_purchase_id" ON "app"."payments" USING btree ("stock_purchase_id") WHERE "app"."payments"."stock_purchase_id" IS NOT NULL;--> statement-breakpoint

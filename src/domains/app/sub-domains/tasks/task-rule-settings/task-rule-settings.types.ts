@@ -3,7 +3,7 @@
  *
  * @remarks
  * - **Notes:** `id` and `updated_at` are null for a rule never saved (on, by hand);
- *   `can_be_automatic` — the rule has a step Clinozy can take (TK10).
+ *   `can_be_automatic` — the rule has a step the app can take (TK10).
  */
 export interface TaskRuleSettingOutput {
   id: string | null;

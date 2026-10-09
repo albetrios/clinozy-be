@@ -19,6 +19,7 @@ import {
   createAppFixture,
 } from '@/domains/app/__tests__/factories/app-fixture.factory.js';
 import { AppFlow } from '@/domains/app/__tests__/factories/app-flow.factory.js';
+import { TASK_DONE_BY_CLINOZY } from '@/domains/app/sub-domains/tasks/tasks.constants.js';
 
 /** How long one tick may take: the sweep, then the organization's job. */
 const TICK_TIMEOUT_MS = 20_000;
@@ -29,7 +30,7 @@ const TICK_TIMEOUT_MS = 20_000;
  * the organization's task rules job run on BullMQ as in production. A hold three seconds long:
  * while it runs, another member's claim is a 409 and a tick opens nothing; once it has passed —
  * by waiting, not by moving the clock — a tick opens the Claim task, the other member takes the
- * lead, and the next tick closes the task "Done by Clinozy".
+ * lead, and the next tick closes the task as done by the app.
  */
 describe('Task rules worker — a lead hold running out (A3, D40)', () => {
   const S = String(Date.now());
@@ -154,9 +155,9 @@ describe('Task rules worker — a lead hold running out (A3, D40)', () => {
     flow.as('owner');
     await flow.expect(200, 'the Claim task', 'GET', `/app/tasks/${claimTask}`);
     flow.expectValue(
-      'held again — closed by Clinozy',
+      'held again — closed by the app',
       '[.data.status, .data.result_text] | join(",")',
-      'done,Done by Clinozy',
+      `done,${TASK_DONE_BY_CLINOZY}`,
     );
   });
 });

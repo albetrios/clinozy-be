@@ -13,8 +13,7 @@ import { AppFlow } from '@/domains/app/__tests__/factories/app-flow.factory.js';
  * Sub-domain 4, Contact activity (routes-final §4.C–4.D, launch ROUTE #130): the message
  * templates, a contact's stream (send a message, log a call, add a note, read, resend, a batch),
  * the contact's activity times, the record-link rules and M10's hiding, the gates by role — one
- * flow over the fixture organization (the launch's curl checks,
- * `tooling/dev/live-api/checks/contact-activities.checks.sh`).
+ * flow over the fixture organization.
  */
 describe('Contact activity — integration (routes-final §4.C–4.D)', () => {
   const S = String(Date.now());

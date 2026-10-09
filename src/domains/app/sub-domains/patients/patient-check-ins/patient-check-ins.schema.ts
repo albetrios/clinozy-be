@@ -85,12 +85,12 @@ export const patient_check_ins = appSchema
       // The card, and the previous score
       index('idx_patient_check_ins_patient_date').on(
         table.patient_id,
-        table.check_in_date.desc(),
+        table.check_in_date,
         table.id,
       ),
       // A treatment's latest check-in
       index('idx_patient_check_ins_patient_treatment_date')
-        .on(table.patient_treatment_id, table.check_in_date.desc())
+        .on(table.patient_treatment_id, table.check_in_date)
         .where(sql`${table.patient_treatment_id} IS NOT NULL`),
       // Sub-domain 10's call-back rule
       index('idx_patient_check_ins_organization_needs_call')

@@ -36,7 +36,7 @@ interface GraphSend {
  * run, the delivery job and the webhook over the fixture organization, the Graph API answered by
  * nock.
  */
-describe('Clinozy messages — integration (launch D78, ROUTE #140–#142)', () => {
+describe("The app's messages — integration (launch D78, ROUTE #140–#142)", () => {
   const S = String(Date.now());
   const WHATSAPP_ID = `11${S.slice(-10)}`;
   const INSTAGRAM_ID = `18${S.slice(-10)}`;
@@ -122,7 +122,7 @@ describe('Clinozy messages — integration (launch D78, ROUTE #140–#142)', () 
     );
   }
 
-  /** Clinozy's messages about a booking, oldest first. */
+  /** The app's messages about a booking, oldest first. */
   async function bookingMessages(appointment: string) {
     return getOperatorSql()<
       {

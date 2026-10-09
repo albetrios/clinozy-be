@@ -12,8 +12,7 @@ import { AppFlow, calendarDay } from '@/domains/app/__tests__/factories/app-flow
 /**
  * Sub-domain 4, Contacts (routes-final §4.A–4.B, launch ROUTE #129): the contact and its numbers,
  * the household rule, the one search, delete and restore, the preview, who handles the person, the
- * gates by role — one flow over the fixture organization (the launch's curl checks,
- * `tooling/dev/live-api/checks/contacts.checks.sh`).
+ * gates by role — one flow over the fixture organization.
  */
 describe('Contacts — integration (routes-final §4.A–4.B)', () => {
   const S = String(Date.now());

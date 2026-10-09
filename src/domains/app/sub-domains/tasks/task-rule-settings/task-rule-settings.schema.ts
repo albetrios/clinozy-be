@@ -25,7 +25,7 @@ import {
  *
  * @remarks
  * - **Notes:** one row per rule (`idx_task_rule_settings_organization_rule`); no row = on, by hand;
- *   "Let Clinozy handle" (`is_automatic`) only on the rules with a step the server can take
+ *   "Let the app handle" (`is_automatic`) only on the rules with a step the server can take
  *   (`chk_task_rule_settings_automatic`). No soft delete — a save upserts. RLS on the organization
  *   GUC.
  */
@@ -40,7 +40,7 @@ export const task_rule_settings = appSchema
         .references(() => organizations.id, { onDelete: 'cascade' }),
       rule_key: varchar('rule_key', { length: 17 }).notNull(),
       is_on: boolean('is_on').notNull().default(true),
-      // "Let Clinozy handle"
+      // "Let the app handle"
       is_automatic: boolean('is_automatic').notNull().default(false),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

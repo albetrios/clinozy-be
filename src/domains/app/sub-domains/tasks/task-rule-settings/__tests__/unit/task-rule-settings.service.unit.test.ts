@@ -31,7 +31,7 @@ describe('TaskRuleSettingsService', () => {
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
-  it('refuses "Let Clinozy handle" on a rule Clinozy cannot take (400)', async () => {
+  it('refuses "Let the app handle" on a rule the app cannot take (400)', async () => {
     await expect(
       service.replaceRules(
         SCOPE,

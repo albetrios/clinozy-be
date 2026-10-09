@@ -17,6 +17,7 @@ import {
   createAppFixture,
 } from '@/domains/app/__tests__/factories/app-fixture.factory.js';
 import { AppFlow, calendarDay } from '@/domains/app/__tests__/factories/app-flow.factory.js';
+import { TASK_DONE_BY_CLINOZY } from '@/domains/app/sub-domains/tasks/tasks.constants.js';
 
 const HOUR = 3_600_000;
 
@@ -67,7 +68,7 @@ async function clearOfTheHour(): Promise<void> {
  * routes-final 10.A.10, TK4, TK7, TK10, D41). The rules read `now()` in the organization's time
  * zone, so the test's clock is the zone: a fixed-offset zone is chosen whose wall clock reads the
  * hour a case needs (10:xx, then 11:xx; 23:xx, then 00:xx), and the organization is moved into it
- * before a run. R3: two runs of one organization at once take each of Clinozy's steps once.
+ * before a run. R3: two runs of one organization at once take each of the app's steps once.
  */
 describe('Task rules — the clock and overlapping runs (TK4, TK10, D41)', () => {
   const S = String(Date.now());
@@ -98,7 +99,7 @@ describe('Task rules — the clock and overlapping runs (TK4, TK10, D41)', () =>
     );
   }
 
-  /** Every rule on; `automatic` ones set to "Let Clinozy handle". */
+  /** Every rule on; `automatic` ones set to "Let the app handle". */
   async function setRules(automatic: readonly string[] = []): Promise<void> {
     flow.as('owner');
     await flow.expect(200, 'the rules', 'PUT', '/app/task-rule-settings', {
@@ -249,9 +250,9 @@ describe('Task rules — the clock and overlapping runs (TK4, TK10, D41)', () =>
     await runTaskRules();
     await flow.expect(200, 'the arrive task', 'GET', `/app/tasks/${arriveTask}`);
     flow.expectValue(
-      'moved to tomorrow — closed by Clinozy',
+      'moved to tomorrow — closed by the app',
       '[.data.status, .data.result_text] | join(",")',
-      'done,Done by Clinozy',
+      `done,${TASK_DONE_BY_CLINOZY}`,
     );
     await ruleTasks('confirm', `appointment_id=${visit}`);
     flow.expectValue('and tomorrow it needs confirming', '.data | length', 1);
@@ -316,7 +317,7 @@ describe('Task rules — the clock and overlapping runs (TK4, TK10, D41)', () =>
     );
   });
 
-  it('R3: a step Clinozy took stays taken — the next runs send nothing again', async () => {
+  it('R3: a step the app took stays taken — the next runs send nothing again', async () => {
     const contact = await patient('Ruhi');
     await unpaidBill(contact, calendarDay(fixture, -2));
     await setRules(['payment_due']);
@@ -333,7 +334,7 @@ describe('Task rules — the clock and overlapping runs (TK4, TK10, D41)', () =>
     expect(handled[1], 'the second run takes nothing').toBe(0);
   });
 
-  it("R3: two runs at once take each of Clinozy's steps once", async () => {
+  it("R3: two runs at once take each of the app's steps once", async () => {
     const contact = await patient('Pari');
     await unpaidBill(contact, calendarDay(fixture, -2));
     await runTaskRules();
@@ -351,7 +352,7 @@ describe('Task rules — the clock and overlapping runs (TK4, TK10, D41)', () =>
     flow.expectValue(
       'closed once',
       '[.data.status, .data.result_text] | join(",")',
-      'done,Done by Clinozy',
+      `done,${TASK_DONE_BY_CLINOZY}`,
     );
     await flow.expect(200, "Pari's stream", 'GET', `/app/contacts/${contact}/activities?limit=50`);
     flow.expectValue(

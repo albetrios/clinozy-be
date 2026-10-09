@@ -68,7 +68,7 @@ export const patient_reports = appSchema
       uniqueIndex('idx_patient_reports_public_id').on(table.public_id),
       index('idx_patient_reports_patient_report_date').on(
         table.patient_id,
-        table.report_date.desc(),
+        table.report_date,
         table.id,
       ),
       index('idx_patient_reports_deleted_at')

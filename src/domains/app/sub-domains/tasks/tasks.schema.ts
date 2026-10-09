@@ -140,9 +140,9 @@ const taskColumns = {
   result_text: varchar('result_text', { length: 200 }),
   note: varchar('note', { length: 280 }),
   resolved_at: timestamp('resolved_at', { withTimezone: true }),
-  // "Done by Clinozy"
+  // Closed by the server, done by the app
   is_resolved_automatically: boolean('is_resolved_automatically').notNull().default(false),
-  // Clinozy took the task's step itself (TK10) — not only closed it because its record changed;
+  // The app took the task's step itself (TK10) — not only closed it because its record changed;
   // like a person's resolution it keeps the rule quiet while the condition holds
   is_handled_by_clinozy: boolean('is_handled_by_clinozy').notNull().default(false),
   resolved_by_membership_id: bigint('resolved_by_membership_id', { mode: 'number' }),

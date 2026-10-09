@@ -468,7 +468,6 @@ Local SonarQube quality gate (pre-commit): `pnpm sonar:up` / `sonar:scan` / `son
 - `pnpm dev:worker` — run BullMQ worker process (tsx watch)
 - `pnpm dev:stack:status` / `pnpm dev:stack:stop` — the live playground stack `tooling/setup/agent/bootstrap.sh` brings up (the session-start hook launches it in every Claude Code web session; `AGENT_AUTO_STACK=0` opts out): the running step or `live`, API + worker health, logs / stop the API + worker
 - `pnpm dev:stack:reset-db` — a scratch database again (`bootstrap.sh --reset-database`): skips the installs, stops the API + worker, drops and recreates the **local Compose** database (its own `POSTGRES_DB`), then migrate → logins → full seed → API → worker; the step after editing an existing migration in place
-- `pnpm dev:fixture` / `pnpm dev:checks [--reuse-fixture] [sub-domain…]` — **temporary** (launch iteration, curl-only rule; removed with `tooling/dev/live-api/` when the test phase writes the suites): a fresh TEAM organization with two branches and one live member per preset role on the live stack, then each sub-domain's replayable curl checks (`tooling/dev/live-api/checks/<sub-domain>.checks.sh`) with a PASS/FAIL table
 - `pnpm lint` — run Biome (lint + format check on `src/` and `tooling/`)
 - `pnpm format` — run Biome formatter (`biome format --write`)
 - `pnpm typecheck` — TypeScript type check

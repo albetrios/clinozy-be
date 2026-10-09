@@ -420,7 +420,7 @@ const WORKER_QUEUE_REGISTRATION_DEFINITIONS: WorkerQueueRegistrationDefinition[]
     create: () => createDayCloseAutoCloseWorker(),
   },
   // TK4: the five-minute sweep adds one job per active team organization; each job runs that
-  // organization's task rules in its own context (opens, closes, wakes, Clinozy's steps).
+  // organization's task rules in its own context (opens, closes, wakes, the app's steps).
   retentionDefinition({
     queueName: TASK_RULES_SWEEP_QUEUE_NAME,
     family: 'retention',

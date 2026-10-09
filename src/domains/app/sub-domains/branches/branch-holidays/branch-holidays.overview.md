@@ -14,7 +14,6 @@ A day a branch is closed — no slots are offered (D41). Table `app.branch_holid
 | File | Role |
 | --- | --- |
 | `branch-holidays.schema.ts` | the table, its CHECKs, indexes and RLS policy |
-| `branch-holidays.constants.ts` | value lists the CHECKs and validators share |
 | `branch-holidays.{dto,validator,serializer,types}.ts` | request shapes, parsing, the response |
 | `branch-holidays.repository.ts` / `.service.ts` / `.controller.ts` | the shared app record layers on this table (parent `branch_id`) |
 | `branch-holidays.routes.ts` | the routes below |

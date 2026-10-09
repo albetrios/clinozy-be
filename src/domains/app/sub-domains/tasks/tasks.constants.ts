@@ -1,3 +1,5 @@
+import { PROJECT_BRAND_NAME } from '@/shared/constants/project-identity.constants.js';
+
 /** A task's kind (TK6): a rule's, a follow-up set on resolve, or one added by hand. */
 export const TASK_KIND = {
   RULE: 'rule',
@@ -52,7 +54,7 @@ export const TASK_RULE_VALUES = [
 /** A task rule key. */
 export type TaskRule = (typeof TASK_RULE_VALUES)[number];
 
-/** The rules with a step Clinozy can take itself ("Let Clinozy handle", TK10). */
+/** The rules with a step the app can take itself ("Let the app handle", TK10). */
 export const TASK_AUTOMATIC_RULE_VALUES = [
   TASK_RULE.CONFIRM,
   TASK_RULE.PAYMENT_DUE,
@@ -151,5 +153,5 @@ export const TASK_NO_ANSWER_SNOOZE_HOURS = 3;
 /** How many owner changes a task answers with (10.A.6). */
 export const TASK_OWNER_CHANGES_SHOWN = 5;
 
-/** The label a task closed by the server carries ("Done by Clinozy", TK4). */
-export const TASK_DONE_BY_CLINOZY = 'Done by Clinozy';
+/** The label a task closed by the server carries ("Done by" and the brand name, TK4). */
+export const TASK_DONE_BY_CLINOZY = `Done by ${PROJECT_BRAND_NAME}`;

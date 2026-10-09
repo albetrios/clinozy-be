@@ -77,7 +77,7 @@ export const supplier_credits = appSchema
       uniqueIndex('idx_supplier_credits_public_id').on(table.public_id),
       index('idx_supplier_credits_organization_created').on(
         table.organization_id,
-        table.created_at.desc(),
+        table.created_at,
         table.id,
       ),
       // A supplier's open credits, oldest first — applied to their dues (MD11)
@@ -86,9 +86,6 @@ export const supplier_credits = appSchema
         .where(sql`${table.applied_amount} < ${table.amount}`),
       index('idx_supplier_credits_medicine_id').on(table.medicine_id),
       index('idx_supplier_credits_medicine_batch_id').on(table.medicine_batch_id),
-      index('idx_supplier_credits_created_by_membership_id')
-        .on(table.created_by_membership_id)
-        .where(sql`${table.created_by_membership_id} IS NOT NULL`),
       index('idx_supplier_credits_created_by_user_id')
         .on(table.created_by_user_id)
         .where(sql`${table.created_by_user_id} IS NOT NULL`),

@@ -67,16 +67,13 @@ export const medical_rep_visits = appSchema
       uniqueIndex('idx_medical_rep_visits_public_id').on(table.public_id),
       index('idx_medical_rep_visits_rep_visit_date').on(
         table.medical_rep_id,
-        table.visit_date.desc(),
+        table.visit_date,
         table.id,
       ),
       index('idx_medical_rep_visits_organization_logged_by').on(
         table.organization_id,
         table.logged_by_membership_id,
       ),
-      index('idx_medical_rep_visits_logged_by_membership_id')
-        .on(table.logged_by_membership_id)
-        .where(sql`${table.logged_by_membership_id} IS NOT NULL`),
       index('idx_medical_rep_visits_deleted_at')
         .on(table.deleted_at)
         .where(sql`${table.deleted_at} IS NOT NULL`),

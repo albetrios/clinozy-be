@@ -24,7 +24,7 @@ export function taskRuleSettingsRoutes(service: TaskRuleSettingsService): Fastif
         schema: {
           summary: 'List task rules',
           description:
-            'Returns all fourteen task rules — the Rules popover — in their order, each with `is_on`, `is_automatic` ("Let Clinozy handle") and `can_be_automatic` (confirm, payment_due, feedback and gone_quiet have a step Clinozy can take); a rule never saved answers its default (`id` and `updated_at` null: on, by hand). A rule that is off hides its tasks from every tab. Requires task:read.',
+            'Returns all fourteen task rules — the Rules popover — in their order, each with `is_on`, `is_automatic` ("Let the app handle") and `can_be_automatic` (confirm, payment_due, feedback and gone_quiet have a step the app can take); a rule never saved answers its default (`id` and `updated_at` null: on, by hand). A rule that is off hides its tasks from every tab. Requires task:read.',
           tags: ['Task'],
         },
       },
@@ -39,7 +39,7 @@ export function taskRuleSettingsRoutes(service: TaskRuleSettingsService): Fastif
         schema: {
           summary: 'Save task rules',
           description:
-            'Saves the sent rules in one transaction: `rules*` (1–14, each once — a 400 `rules` otherwise) with `is_on` and `is_automatic` — "Let Clinozy handle" only on a rule with a step it can take (a 400 `is_automatic`); a switch or rule not sent keeps its value. Answers with all fourteen. Requires organization:update (Owner, Admin).',
+            'Saves the sent rules in one transaction: `rules*` (1–14, each once — a 400 `rules` otherwise) with `is_on` and `is_automatic` — "Let the app handle" only on a rule with a step it can take (a 400 `is_automatic`); a switch or rule not sent keeps its value. Answers with all fourteen. Requires organization:update (Owner, Admin).',
           tags: ['Task'],
           body: ReplaceTaskRulesDto,
         },

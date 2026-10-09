@@ -46,7 +46,7 @@ import { runTaskRulesJob } from '@/domains/app/sub-domains/tasks/workers/task-ru
 
 const ORGANIZATION = 'org_aaaaaaaaaaaaaaaaaaaa1';
 
-/** A due task Clinozy handles (TK10). */
+/** A due task the app handles (TK10). */
 function step(overrides: Record<string, unknown>) {
   return {
     taskId: 1,
@@ -118,7 +118,7 @@ describe('runTaskRulesJob', () => {
     expect([counts.closedCount, counts.openedCount]).toEqual([3, 4]);
   });
 
-  it('takes the step of the rules Clinozy handles: a message, then "Done by Clinozy"', async () => {
+  it('takes the step of the rules the app handles: a message, then done by the app', async () => {
     repository.findRuleSwitches.mockResolvedValue(
       new Map([
         ['confirm', { isOn: true, isAutomatic: true }],

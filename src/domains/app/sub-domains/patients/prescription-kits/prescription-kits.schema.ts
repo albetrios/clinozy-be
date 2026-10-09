@@ -64,10 +64,7 @@ export const prescription_kits = appSchema
       uniqueIndex('idx_prescription_kits_owner_name_unique')
         .on(table.organization_id, table.owner_membership_id, sql`lower(${table.name})`)
         .where(sql`${table.deleted_at} IS NULL`),
-      index('idx_prescription_kits_owner_created').on(
-        table.owner_membership_id,
-        table.created_at.desc(),
-      ),
+      index('idx_prescription_kits_owner_created').on(table.owner_membership_id, table.created_at),
       index('idx_prescription_kits_deleted_at')
         .on(table.deleted_at)
         .where(sql`${table.deleted_at} IS NOT NULL`),
