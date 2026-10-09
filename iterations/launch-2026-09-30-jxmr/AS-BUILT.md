@@ -187,8 +187,9 @@ evidence for all 59 criteria.
     audit.
   - **Biome, SonarQube and the intake check:** Biome clean; SonarQube 0 issues / 0 hotspots;
     `pnpm iteration:intake --check` passed.
-  - **`pnpm test:rls-role`:** the e2e and integration lanes as the RLS-subject role — re-run after #152 in progress (before it: 158 files /
-    1,342 tests passed, 3 files / 6 tests skipped).
+  - **`pnpm test:rls-role`:** the e2e and integration lanes as the RLS-subject role — 159 files /
+    1,349 tests passed (3 files / 6 tests skipped), the ideas suite's triggers, sweep and refresh
+    included.
     `pnpm test:contract`: 11 files / 53 tests (the Anthropic Messages API added).
   - **Live API (`pnpm dev:checks`, real HTTP against the running API and worker, on a database
     rebuilt from the baseline):** 2,413 checks pass over offerings, contacts, contact activity,
