@@ -63,14 +63,10 @@ const contactActivityColumns = {
   type: varchar('type', { length: 9 }).notNull(),
   direction: varchar('direction', { length: 8 }),
   body: varchar('body', { length: 1000 }).notNull(),
-  contact_message_template_id: bigint('contact_message_template_id', {
-    mode: 'number',
-  }).references(() => contact_message_templates.id, { onDelete: 'set null' }),
+  contact_message_template_id: bigint('contact_message_template_id', { mode: 'number' }),
   attachment_keys: text('attachment_keys').array().notNull().default([]),
   // The entry this one answers — in the same stream (M6)
-  reply_to_contact_activity_id: bigint('reply_to_contact_activity_id', {
-    mode: 'number',
-  }).references((): AnyPgColumn => contact_activities.id, { onDelete: 'set null' }),
+  reply_to_contact_activity_id: bigint('reply_to_contact_activity_id', { mode: 'number' }),
   delivery_status: varchar('delivery_status', { length: 9 }),
   // The provider's id (WhatsApp wamid) — matches delivery reports, once per organization (M8)
   provider_message_id: varchar('provider_message_id', { length: 128 }),
@@ -292,6 +288,17 @@ export const contact_activities = appSchema
       columns: [table.organization_id, table.author_membership_id],
       foreignColumns: [memberships.organization_id, memberships.id],
     }).onDelete('restrict'),
+    // Named here: the generated names pass Postgres's 63-character limit
+    foreignKey({
+      name: 'contact_activities_contact_message_template_id_fk',
+      columns: [table.contact_message_template_id],
+      foreignColumns: [contact_message_templates.id],
+    }).onDelete('set null'),
+    foreignKey({
+      name: 'contact_activities_reply_to_contact_activity_id_fk',
+      columns: [table.reply_to_contact_activity_id],
+      foreignColumns: [table.id],
+    }).onDelete('set null'),
     ...contactActivityChecks(table),
     pgPolicy('contact_activities_tenant_isolation', {
       as: 'permissive',

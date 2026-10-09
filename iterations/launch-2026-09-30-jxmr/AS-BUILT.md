@@ -167,6 +167,29 @@ approved plan; [plans/acceptance.md](plans/acceptance.md) holds a result and evi
   - Before launch, outside the code: the clinic's accountant confirms the tax rules (D20, D21, D23);
     the clinic's advisor confirms the 7-day purge (D38); clinozy-fe confirms machines (D28); the
     WhatsApp Business number is verified and the Meta app's webhook pointed at the API (D32, D77).
+- Pre-merge review (`/be-pre-merge-review`, review only; each finding checked before acting):
+  - **SQL design:** one blocking finding, confirmed and fixed. `app.fn_assign_invoice_number`
+    used `lpad(n, 4)`, and Postgres cuts a longer string, so invoice 10000 would have become
+    "…/1000": a duplicate number that stops the branch's billing for the rest of its year. It now
+    pads to at least four digits, and `invoice-numbering.integration.test.ts` covers 9999 → 10000.
+  - **Also fixed:** `tasks.owner_membership_id` was the one single-column member pointer; it is
+    now a K8 composite key (`tasks_owner_membership_fk`, `ON DELETE SET NULL
+    ("owner_membership_id")`) with its index led by `organization_id`. Five indexes now declare
+    the same direction in the schema and the migration (`DESC NULLS LAST`). Three foreign keys
+    carry their migration names in the schema (the generated names pass Postgres's 63-character
+    limit).
+  - **Left as follow-ups:** see below.
+  - **RLS:** every app table is ENABLE + FORCE with its organization policy; the integration and
+    e2e lanes also run under the RLS-subject role (`pnpm test:rls-role`).
+  - **Idempotency:** every app POST requires `X-Idempotency-Key`, except the public Meta webhook,
+    which is deduplicated by event hash. A repeated identical payment PATCH records no edit.
+  - **Verifier:** the gates and the full `pnpm test`, as listed under Close.
+- Index follow-ups for the next iteration (review, optional):
+  - Declare the ~45 list indexes all-ascending `(scope, column, id)`, so a backward scan serves
+    the kernel's `ORDER BY <sort> DESC, id DESC` and the keyset bounds the scan. Today an
+    incremental sort serves it, which is fine at clinic volumes.
+  - Drop the three membership indexes the composite foreign-key indexes already cover (supplier
+    credits, MR visits, sale returns).
 - Frontend adapts (user rule, 2026-10-07) — at the route rows that expose them: money as `numeric(12,2)` rupees (clinozy-fe contracts hold paise) · the operating settings read and written through `/tenancy/organization/settings` (#1) · one contact per person (`/app/contacts`, D61) with the patient file and lead holding `contact_id` · every deviation below.
 
 ## Standing deviations

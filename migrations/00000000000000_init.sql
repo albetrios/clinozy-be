@@ -1282,7 +1282,7 @@ BEGIN
     VALUES (NEW.organization_id, 'invoices:' || NEW.branch_id::text || ':' || NEW.financial_year, 1)
     ON CONFLICT (organization_id, counter_key) DO UPDATE SET last_value = c.last_value + 1
     RETURNING c.last_value INTO next_number;
-    NEW.invoice_number := NEW.financial_year || '/' || lpad(next_number::text, 4, '0');
+    NEW.invoice_number := NEW.financial_year || '/' || lpad(next_number::text, greatest(4, length(next_number::text)), '0');
   END IF;
   RETURN NEW;
 END;
@@ -3088,7 +3088,7 @@ ALTER TABLE "app"."contact_message_templates" ADD CONSTRAINT "contact_message_te
 ALTER TABLE "app"."contact_message_templates" ADD CONSTRAINT "contact_message_templates_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."contact_message_templates" ADD CONSTRAINT "contact_message_templates_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_contact_message_templates_public_id" ON "app"."contact_message_templates" USING btree ("public_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_contact_message_templates_organization_created" ON "app"."contact_message_templates" USING btree ("organization_id","created_at" DESC,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_contact_message_templates_organization_created" ON "app"."contact_message_templates" USING btree ("organization_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_contact_message_templates_organization_name" ON "app"."contact_message_templates" USING btree ("organization_id","name","id") WHERE "app"."contact_message_templates"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_contact_message_templates_organization_name_unique" ON "app"."contact_message_templates" USING btree ("organization_id",lower("name")) WHERE "app"."contact_message_templates"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_contact_message_templates_deleted_at" ON "app"."contact_message_templates" USING btree ("deleted_at") WHERE "app"."contact_message_templates"."deleted_at" IS NOT NULL;--> statement-breakpoint
@@ -3263,8 +3263,8 @@ ALTER TABLE "app"."lead_involved_memberships" ADD CONSTRAINT "lead_involved_memb
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_leads_public_id" ON "app"."leads" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_leads_organization_lead_number" ON "app"."leads" USING btree ("organization_id","lead_number");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_leads_organization_contact_open_unique" ON "app"."leads" USING btree ("organization_id","contact_id") WHERE "app"."leads"."deleted_at" IS NULL AND "app"."leads"."status" IN ('new', 'contacted', 'follow_up', 'no_response');--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_organization_created" ON "app"."leads" USING btree ("organization_id","created_at" DESC,"id") WHERE "app"."leads"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_leads_organization_owner_created" ON "app"."leads" USING btree ("organization_id","owner_membership_id","created_at" DESC,"id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_leads_organization_created" ON "app"."leads" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."leads"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_leads_organization_owner_created" ON "app"."leads" USING btree ("organization_id","owner_membership_id","created_at" DESC NULLS LAST,"id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_leads_organization_follow_up_at" ON "app"."leads" USING btree ("organization_id","follow_up_at","id") WHERE "app"."leads"."deleted_at" IS NULL AND "app"."leads"."follow_up_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_leads_organization_held_until" ON "app"."leads" USING btree ("organization_id","held_until") WHERE "app"."leads"."deleted_at" IS NULL AND "app"."leads"."held_until" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_leads_branch_id" ON "app"."leads" USING btree ("branch_id");--> statement-breakpoint
@@ -3311,10 +3311,10 @@ ALTER TABLE "app"."appointments" ADD CONSTRAINT "excl_appointments_machine_time"
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_appointments_public_id" ON "app"."appointments" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_appointments_organization_appointment_number" ON "app"."appointments" USING btree ("organization_id","appointment_number");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_organization_day" ON "app"."appointments" USING btree ("organization_id","appointment_date","start_time","id") WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_appointments_organization_created" ON "app"."appointments" USING btree ("organization_id","created_at" DESC,"id") WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_appointments_organization_created" ON "app"."appointments" USING btree ("organization_id","created_at" DESC NULLS LAST,"id") WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_branch_day" ON "app"."appointments" USING btree ("branch_id","appointment_date","start_time");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_doctor_date" ON "app"."appointments" USING btree ("doctor_membership_id","appointment_date") WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_appointments_contact_date" ON "app"."appointments" USING btree ("contact_id","appointment_date" DESC) WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_appointments_contact_date" ON "app"."appointments" USING btree ("contact_id","appointment_date" DESC NULLS LAST) WHERE "app"."appointments"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_floor" ON "app"."appointments" USING btree ("organization_id","branch_id","visit_stage") WHERE "app"."appointments"."deleted_at" IS NULL AND "app"."appointments"."status" = 'checked_in';--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_contact_id" ON "app"."appointments" USING btree ("contact_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_appointments_therapist_membership_id" ON "app"."appointments" USING btree ("organization_id","therapist_membership_id") WHERE "app"."appointments"."therapist_membership_id" IS NOT NULL;--> statement-breakpoint
@@ -4504,7 +4504,7 @@ CREATE POLICY "invoice_items_tenant_isolation" ON "app"."invoice_items" AS PERMI
 ALTER TABLE "app"."invoice_items" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 -- app.tasks (folded from the Drizzle schema): keys, indexes, RLS.
 ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_owner_membership_id_memberships_id_fk" FOREIGN KEY ("owner_membership_id") REFERENCES "tenancy"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_owner_membership_fk" FOREIGN KEY ("organization_id","owner_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE SET NULL ("owner_membership_id") ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "app"."contacts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "app"."leads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_appointment_id_appointments_id_fk" FOREIGN KEY ("appointment_id") REFERENCES "app"."appointments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -4520,7 +4520,7 @@ ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_updated_by_user_id_users_id_fk" 
 ALTER TABLE "app"."tasks" ADD CONSTRAINT "tasks_resolved_by_membership_fk" FOREIGN KEY ("organization_id","resolved_by_membership_id") REFERENCES "tenancy"."memberships"("organization_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_tasks_public_id" ON "app"."tasks" USING btree ("public_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_tasks_open_rule_source" ON "app"."tasks" USING btree ("organization_id","rule_key","source_key") WHERE "app"."tasks"."kind" = 'rule' AND "app"."tasks"."status" <> 'done' AND "app"."tasks"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_tasks_owner_status_due" ON "app"."tasks" USING btree ("owner_membership_id","status","due_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_tasks_owner_status_due" ON "app"."tasks" USING btree ("organization_id","owner_membership_id","status","due_at");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_tasks_organization_queue" ON "app"."tasks" USING btree ("organization_id","owner_role","status","due_at") WHERE "app"."tasks"."deleted_at" IS NULL AND "app"."tasks"."owner_membership_id" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_tasks_organization_status_due" ON "app"."tasks" USING btree ("organization_id","status","due_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_tasks_snoozed_until" ON "app"."tasks" USING btree ("snoozed_until") WHERE "app"."tasks"."status" = 'snoozed' AND "app"."tasks"."deleted_at" IS NULL;--> statement-breakpoint

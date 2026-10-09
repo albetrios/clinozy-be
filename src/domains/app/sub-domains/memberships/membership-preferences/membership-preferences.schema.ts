@@ -139,9 +139,7 @@ export const membership_preference_branches = appSchema
   .table(
     'membership_preference_branches',
     {
-      membership_preference_id: bigint('membership_preference_id', { mode: 'number' })
-        .notNull()
-        .references(() => membership_preferences.id, { onDelete: 'cascade' }),
+      membership_preference_id: bigint('membership_preference_id', { mode: 'number' }).notNull(),
       branch_id: bigint('branch_id', { mode: 'number' })
         .notNull()
         .references(() => branches.id, { onDelete: 'cascade' }),
@@ -155,6 +153,12 @@ export const membership_preference_branches = appSchema
         name: 'membership_preference_branches_pkey',
         columns: [table.membership_preference_id, table.branch_id],
       }),
+      // Named here: the generated name passes Postgres's 63-character limit
+      foreignKey({
+        name: 'membership_preference_branches_membership_preference_id_fk',
+        columns: [table.membership_preference_id],
+        foreignColumns: [membership_preferences.id],
+      }).onDelete('cascade'),
       index('idx_membership_preference_branches_branch_id').on(table.branch_id),
       index('idx_membership_preference_branches_organization_id').on(table.organization_id),
       pgPolicy('membership_preference_branches_tenant_isolation', {

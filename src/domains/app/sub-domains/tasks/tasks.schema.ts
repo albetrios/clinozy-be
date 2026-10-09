@@ -74,11 +74,8 @@ const taskColumns = {
   rule_key: varchar('rule_key', { length: 17 }),
   title: varchar('title', { length: 120 }).notNull(),
   why: varchar('why', { length: 280 }),
-  // An owner, or — nobody yet — a role queue (TK6)
-  owner_membership_id: bigint('owner_membership_id', { mode: 'number' }).references(
-    () => memberships.id,
-    { onDelete: 'set null' },
-  ),
+  // An owner, or — nobody yet — a role queue (TK6); a K8 key into this organization's members
+  owner_membership_id: bigint('owner_membership_id', { mode: 'number' }),
   owner_role: varchar('owner_role', { length: 10 }),
   // The person (TK5)
   contact_id: bigint('contact_id', { mode: 'number' }).references((): AnyPgColumn => contacts.id, {
@@ -181,7 +178,12 @@ function taskIndexes(table: TaskTable) {
       .where(
         sql`${table.kind} = ${sqlLiteral(TASK_KIND.RULE)} AND ${table.status} <> ${sqlLiteral(TASK_STATUS.DONE)} AND ${live}`,
       ),
-    index('idx_tasks_owner_status_due').on(table.owner_membership_id, table.status, table.due_at),
+    index('idx_tasks_owner_status_due').on(
+      table.organization_id,
+      table.owner_membership_id,
+      table.status,
+      table.due_at,
+    ),
     index('idx_tasks_organization_queue')
       .on(table.organization_id, table.owner_role, table.status, table.due_at)
       .where(sql`${live} AND ${table.owner_membership_id} IS NULL`),
@@ -280,6 +282,13 @@ export const tasks = appSchema
   .table('tasks', taskColumns, (table) => [
     ...taskIndexes(table),
     ...taskChecks(table),
+    // K8: a member of this organization; the database clears only this column when the
+    // membership row goes (`ON DELETE SET NULL ("owner_membership_id")`).
+    foreignKey({
+      name: 'tasks_owner_membership_fk',
+      columns: [table.organization_id, table.owner_membership_id],
+      foreignColumns: [memberships.organization_id, memberships.id],
+    }).onDelete('set null'),
     // K8: a member of this organization, kept when they leave (K2)
     foreignKey({
       name: 'tasks_resolved_by_membership_fk',
