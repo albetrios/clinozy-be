@@ -175,7 +175,6 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── branch-holidays.service.unit.test.ts
-    │   │   │   │   ├── branch-holidays.constants.ts
     │   │   │   │   ├── branch-holidays.controller.ts
     │   │   │   │   ├── branch-holidays.dto.ts
     │   │   │   │   ├── branch-holidays.overview.md
@@ -190,7 +189,6 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── branch-machines.service.unit.test.ts
-    │   │   │   │   ├── branch-machines.constants.ts
     │   │   │   │   ├── branch-machines.controller.ts
     │   │   │   │   ├── branch-machines.dto.ts
     │   │   │   │   ├── branch-machines.overview.md
@@ -217,7 +215,6 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── branch-rooms.service.unit.test.ts
-    │   │   │   │   ├── branch-rooms.constants.ts
     │   │   │   │   ├── branch-rooms.controller.ts
     │   │   │   │   ├── branch-rooms.dto.ts
     │   │   │   │   ├── branch-rooms.overview.md
