@@ -26,7 +26,7 @@ interface RaceCall {
 }
 
 /**
- * The app's last-unit races (tasks AP2, S1, MD2, PT2, L1 —
+ * The app's last-unit races (tasks AP2, S1, S2, MD2, PT2, L1 —
  * docs/reviews/launch-confidence-plan-2026-10-09.md): two writes for the one thing left — a
  * doctor's slot, the last of a stock item, the last medicine unit, the last session of a package,
  * an open lead — sent at once. Exactly one wins; the other gets its 409; nothing goes below zero
@@ -173,6 +173,46 @@ describe('App races — integration (A3, S5, MD5, TR7, L5)', () => {
     expect(statuses(answers)).toEqual([200, 200, 409]);
     await flow.expect(200, 'the item', 'GET', `/app/stock-items/${item}`);
     flow.expectValue('one left', '.data.quantity', 1);
+  });
+
+  it('S2: a count saved while uses post — its difference is against the stock it found, nothing lost (S9)', async () => {
+    flow.as('owner');
+    await flow.expect(200, 'an item with 20 in stock', 'POST', '/app/stock-items', {
+      name: `Swabs ${T}`,
+      opening_quantity: 20,
+    });
+    const item = flow.last('.data.id');
+    const movements = `/app/stock-items/${item}/movements`;
+    const use = { as: 'owner' as const, method: 'POST' as const, path: movements };
+    const answers = await atOnce([
+      { ...use, body: { type: 'damaged', quantity: 1 } },
+      {
+        as: 'owner',
+        method: 'POST',
+        path: '/app/stock-counts',
+        body: { lines: [{ stock_item_id: item, counted_quantity: 15 }] },
+      },
+      { ...use, body: { type: 'damaged', quantity: 1 } },
+      { ...use, body: { type: 'damaged', quantity: 1 } },
+    ]);
+    expect(statuses(answers)).toEqual([200, 200, 200, 200]);
+
+    const count = answers[1];
+    const found = Number(count?.read('.data.lines[0].system_quantity'));
+    const usesBefore = 20 - found;
+    expect(usesBefore, 'the count found 20 less the uses that went first').toBeGreaterThanOrEqual(
+      0,
+    );
+    expect(usesBefore).toBeLessThanOrEqual(3);
+    expect(Number(count?.read('.data.lines[0].difference')), 'counted less found').toBe(15 - found);
+    await flow.expect(200, 'the item', 'GET', `/app/stock-items/${item}`);
+    flow.expectValue('15, less the uses after the count', '.data.quantity', 15 - (3 - usesBefore));
+    await flow.expect(200, 'its ledger', 'GET', `${movements}?limit=50`);
+    const ledger = (flow.lastBody() as { data: { quantity_change: number }[] }).data;
+    expect(
+      ledger.reduce((total, movement) => total + movement.quantity_change, 0),
+      'opening + every change = the balance',
+    ).toBe(15 - (3 - usesBefore));
   });
 
   it('MD2: the last medicine unit sold twice at once — one sale, one 409 not_enough_stock (MD5)', async () => {

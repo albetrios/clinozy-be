@@ -46,13 +46,19 @@ task is resolved, and the tasks the rules open and close by themselves. Tables `
 ## The rules worker (TK4, TK10)
 
 Every five minutes `task-rules-sweep` pages through the active team organizations and adds one
-deduplicated `task-rules` job each. The job, in the organization's context and one transaction:
+deduplicated `task-rules` job each. The job, in the organization's context and one transaction,
+first takes the organization's run lock (`TaskRulesRepository.lockRun` — a transaction-scoped
+advisory lock in the `TASK_RULES_RUN` space), so a retried or stalled job running beside a fresh
+one waits its turn and then finds the steps taken and the notices queued. Then it:
 wakes the snoozed tasks whose time came; per rule closes the open tasks whose record no longer
 qualifies ("Done by Clinozy"), then — when the rule is on — opens one task for each record that
 qualifies and has no open one (nor one a person resolved since the condition began); then takes
 the step of the due tasks of the rules set to "Let Clinozy handle" (a queued WhatsApp message for
-`confirm`, `payment_due` and `feedback`; a re-target lead for `gone_quiet`) and closes them. At most
-200 tasks per rule per run.
+`confirm`, `payment_due` and `feedback`; a re-target lead for `gone_quiet`) and closes them, marked
+`is_handled_by_clinozy` — like a person's resolution, that keeps the rule quiet while its condition
+holds, so a reminder goes out once per condition, not every run. A task closed only because its
+record changed is not marked, and a fresh one opens when the record qualifies again. At most 200
+tasks per rule per run.
 
 It then opens a re-target lead (launch D35, D79 WC-17 — `kind` `retarget`, no owner) for each
 patient whose last visit — checked in or completed — is the clinic's `retarget_after_days` (default
@@ -76,6 +82,9 @@ queued anything.
   arm (USING only) lets the deleted-record purge erase `app.tasks` rows.
 - **One open task per rule per record (TK4):** the unique partial index on
   `(organization_id, rule_key, source_key)`; every rule task goes through it.
+- **Each step once (TK10, D78):** one run per organization at a time (the run lock); a task whose
+  step Clinozy took (`is_handled_by_clinozy`) or a person resolved keeps the rule from opening
+  another for the same condition (`anchor_at`).
 - **An owner or a role queue (TK6):** one of the two; an owner is an active member who can see tasks.
 - **Rule tasks are the server's (TK7, TK9):** never changed or deleted by hand (`409 rule_task`).
 - **Who had it (TK8):** every reassign and every leave writes an owner-change row.

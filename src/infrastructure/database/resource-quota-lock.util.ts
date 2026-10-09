@@ -53,6 +53,13 @@ export const RESOURCE_QUOTA_LOCK_NAMESPACE = {
    * Serializes the count and the insert, so two saves at once never pass the 20-view cap (launch U5).
    */
   MEMBERSHIP_SAVED_VIEW: 0x53_56_57_53,
+  /**
+   * Per-organization task rules run, keyed by organization id. ASCII `TRUN`. Serializes two runs of
+   * one organization's rules (a retried or stalled job beside a fresh one), so each of Clinozy's
+   * steps and notices is taken once (TK10, D78). Taken on the worker's pinned handle by
+   * `TaskRulesRepository.lockRun`.
+   */
+  TASK_RULES_RUN: 0x54_52_55_4e,
 } as const;
 
 /**

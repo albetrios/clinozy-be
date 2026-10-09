@@ -56,17 +56,17 @@ Biome, typecheck and tsdoc, then is committed and pushed. The full `pnpm test`,
 | P2 — branch access per section | 3 | done | `app-branch-access.integration.test.ts` (appointments, leads, invoices, payments, day closes, medical sales) |
 | RL1 — unit-db lane as the RLS role | 3 | dropped (decision) | see Decisions |
 | RL2 — read-only retention arm | 3 | done | `patients-ideas-sweep-read-only.security.test.ts` — after the fix below |
-| AP1 — time zones and midnight | 4 | planned | — |
-| P1 — holidays, rooms and machines in booking | 4 | planned | — |
-| R1 — task rules at their due times | 4 | planned | — |
-| R3 — overlapping rule runs | 4 | planned | — |
-| A2 — purge with dependents | 4 | planned | — |
-| A3 — lead hold release by the worker | 4 | planned | — |
-| S2 — a count while movements post | 4 | planned | — |
-| MD1 — earliest-expiry batches | 4 | planned | — |
-| MD3 — returns across batches | 4 | planned | — |
-| C1 — household numbers | 4 | planned | — |
-| O1 — offers at the edges | 4 | planned | — |
+| AP1 — time zones and midnight | 4 | done | `record-fields.time-zone.unit.test.ts` (India across UTC midnight, UTC+14 vs UTC−11, a daylight-saving jump and its skipped hour, a round trip every 7 hours of a year in 6 zones) |
+| P1 — holidays, rooms and machines in booking | 4 | done | `appointments-places.integration.test.ts` (a booked room or machine deleted: the booking stands, new and moved bookings refused until the place is cleared or restored; a holiday added after booking: the bookings stand, the day books nothing) |
+| R1 — task rules at their due times | 4 | done | `task-rules-clock.integration.test.ts` — the organization's zone is the clock: a step due 11:00 run at 10:xx and 11:xx, arrive at 13 and 18 minutes past the start, a visit moved to tomorrow, a follow-up turning due at the organization's midnight, a snooze to midnight |
+| R3 — overlapping rule runs | 4 | done | `task-rules-clock.integration.test.ts` › R3 × 2 — after the two fixes below |
+| A2 — purge with dependents | 4 | done | `app-record-purge.integration.test.ts` › A2 (an offering on a live bill is skipped and counted; the rest of the batch is erased; the skipped one stays restorable) |
+| A3 — lead hold release by the worker | 4 | done | `task-rules.worker.integration.test.ts` — the real sweep and task-rules workers on BullMQ, a three-second hold that runs out by waiting |
+| S2 — a count while movements post | 4 | done | `app-races.integration.test.ts` › S2 (the count's difference is against the stock it found; the uses after it still count; the ledger adds up) |
+| MD1 — earliest-expiry batches | 4 | done | `medicines.stock.unit.test.ts` (the picker) and `medical-batches.integration.test.ts` › MD1 (this month's batch first, the older batch on a tie, an expired batch neither sold nor counted, the near-expiry discount unless one is sent) |
+| MD3 — returns across batches | 4 | done | `medical-batches.integration.test.ts` › MD3 (each line back into its own batch, a written-off return not restocked, no void after a partial return) |
+| C1 — household numbers | 4 | done | shared numbers, leaving with one and the restore clash were already in `contacts`; added `contacts-household.integration.test.ts` (a move between households takes its numbers; refused while it carries the old household's shared number; the primary taken away frees the number) |
+| O1 — offers at the edges | 4 | done | `offers-edges.integration.test.ts` (live on the first and last day, ended the day after, the status filter agrees; an offering made inactive under a live offer). The server applies no offer to a bill — a line carries its own discount — so an offer ending "mid-invoice" has no server path |
 | M1 — WhatsApp templates (code part) | 5 | planned | — |
 | M3 — Meta outage pause | 5 | planned | — |
 | M4 / X4 — failure metrics (code part) | 5 | planned | — |
@@ -90,6 +90,10 @@ Taken by recommendation (no question asked), one line each, as the batches reach
 | --- | --- | --- |
 | 3 | RL1 is dropped: the unit-db lane stays on the operator role. | Run as `clinozy_be_app`, 39 of its 62 files fail by design: they test repository SQL directly, without the database context a request or a job opens. Wrapping each would test the contexts, not the SQL. The RLS role already runs the e2e and integration lanes (1,349 tests), and the security lane probes every policy per role. |
 | 3 | A member's saved branch filter lists only the branches they can see today. | A save already refuses a branch the member cannot see, so a read now drops one taken away since. The row is kept, so the branch comes back if access returns. |
+| 4 | R1's clock is the organization's time zone, not a mocked `now()`. | The rules are SQL on the database's `now()`, which a test cannot move. A fixed-offset zone (`Etc/GMT±n`) whose wall clock reads the hour a case needs — 10:xx, 11:xx, 23:xx, 00:xx — moves the organization's day and hours exactly as time passing would, with no test hook in the code. |
+| 4 | One task-rules run per organization at a time: a transaction-scoped advisory lock, `TASK_RULES_RUN` in the shared lock-space registry (`RESOURCE_QUOTA_LOCK_NAMESPACE`). | BullMQ's deduplication keeps one job per organization, but a stalled or retried job can run beside a fresh one. A second run waits, then sees the first one's work. Cheaper than a lock per step, and covers the notices (D78) too. |
+| 4 | A task Clinozy closes by taking its step is marked `is_handled_by_clinozy` (a new column on `app.tasks`, folded into the baseline migration). | The rules must tell "Clinozy took the step" (keeps the rule quiet, like a person's resolution) from "the record changed" (a fresh task when it qualifies again). The label stays "Done by Clinozy" for both. |
+| 4 | A3's hold is three seconds long and runs out by waiting. | A real lead hold is days. Three seconds keep the suite fast while the release still comes from the clock passing and the real workers, not from moving a timestamp. |
 
 ## Findings
 
@@ -101,6 +105,8 @@ Bugs the new tests found, and their fixes.
 | 2 | L1 race test | Two members claiming the same open lead at once both got 200: the claim read the lead, checked the hold, then wrote without a lock, so both saw an unheld lead and the second silently took it over. | `LeadsRepository.claim` makes the claim one guarded `UPDATE` (only while nobody else holds the lead). The loser re-reads and gets the 409 `lead_held`, as a later claim would. |
 | 3 | T2 test | A member moved off a branch still had it in their saved branch filter, although saving it again would be refused. | `MembershipPreferencesService` reads the filter through the member's visible branches (`listBranchPublicIds` takes them), on both the read and the save answer. |
 | 3 | RL2 review | The retention arm added to `app.patients` for the ideas sweep (#152) sat on the `FOR ALL` policy. It let the maintenance role delete or change a patient file under the retention context, and patient files are never purged (P7). | The arm moved to its own `FOR SELECT` policy, `patients_ideas_sweep_read`, in the schema and the baseline migration. The security test proves read yes, update and delete no. |
+| 4 | R3 overlap test | Two runs of one organization's task rules at once (a retried or stalled job beside a fresh one) both took the same due step: two payment reminders queued for one task. | `TaskRulesRepository.lockRun` — the run takes the organization's advisory lock first; the second run waits, then finds the step taken. |
+| 4 | R3 repeat test | After Clinozy took a step ("Let Clinozy handle"), the next run opened a fresh task for the same, still-unpaid bill and sent the reminder again — every five minutes. The rule ignored tasks resolved automatically, so it could not tell a step taken from a record changed. Feedback requests repeated the same way; confirm and re-target tasks reopened and closed each run. | `closeTaskByClinozy` marks the task `is_handled_by_clinozy`; the rule's candidates treat it like a person's resolution. Three runs now queue one reminder. |
 
 ## Not code — left with their owners
 

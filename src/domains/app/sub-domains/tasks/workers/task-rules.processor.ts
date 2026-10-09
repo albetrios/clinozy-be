@@ -153,7 +153,8 @@ async function openLapsedPatientLeads(
  * that are on for the records that qualify, and takes the step of the due tasks Clinozy handles.
  *
  * @remarks
- * - **Algorithm:** inside the organization's context (one transaction): per rule (10.A.10, in the
+ * - **Algorithm:** inside the organization's context (one transaction), holding the organization's
+ *   run lock ({@link TaskRulesRepository.lockRun} — two runs at once take turns): per rule (10.A.10, in the
  *   Rules popover's order) close first, then open — so a moved record's task closes and its fresh
  *   one opens in the same run. A rule that is off opens nothing (its open tasks are hidden from
  *   the list, TK10) but its tasks still close when their record changes. Then the due tasks of the
@@ -161,7 +162,8 @@ async function openLapsedPatientLeads(
  *   receipts go into the queue (D78, {@link queueClinozyMessages}). At most a batch per rule per
  *   run — the next run picks up the rest.
  * - **Failure modes:** a database error rolls the whole run back and propagates, so BullMQ retries;
- *   running it twice opens nothing twice (one open task per rule per record, TK4).
+ *   running it twice opens nothing twice (one open task per rule per record, TK4), and two runs at
+ *   once take each step and queue each notice once (the run lock).
  * - **Side effects:** inserts and updates on `app.tasks`; for Clinozy's steps, queued WhatsApp
  *   entries on `app.contact_activities` (with the contact's activity times), a booking's reminder
  *   status, re-target leads on `app.leads`.
@@ -181,6 +183,7 @@ export async function runTaskRulesJob(
     retargetCount: 0,
   };
   if (organization === null) return counts;
+  await repository.lockRun(organization.id);
   const scope = { organizationId: organization.id, timeZone: organization.timeZone };
   counts.wokenCount = await repository.wakeSnoozed(organization.id);
   const switches = await repository.findRuleSwitches(organization.id);

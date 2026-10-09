@@ -14,7 +14,9 @@ import { runAppRecordPurgeJob } from '@/domains/app/workers/app-record-purge.pro
 /**
  * WC-46 (D38, launch ROUTE #147): a deleted app record is restorable for the clinic's purge
  * window, then erased for good by the daily purge — a live record never is. Offering groups stand
- * in for every `app.*` table (the job walks them all the same way).
+ * in for every `app.*` table (the job walks them all the same way). A2
+ * (docs/reviews/launch-confidence-plan-2026-10-09.md): a deletion a live record still names (a
+ * `RESTRICT` key — an offering on a bill) is skipped and counted, never a failed job.
  */
 describe('App record purge — integration (WC-46, D38)', () => {
   const S = String(Date.now());
@@ -100,5 +102,63 @@ describe('App record purge — integration (WC-46, D38)', () => {
     await purgeAfter(7);
     await runGlobalRetentionWorkerJob((handle) => runAppRecordPurgeJob(handle));
     expect(await stored([kept])).toEqual([]);
+  });
+
+  it('A2: skips a deletion a live record still names — the run goes on, the rest are erased', async () => {
+    await purgeAfter(7);
+    /** A new offering; answers its id. */
+    const offering = async (name: string) => {
+      await flow.expect(200, `offering ${name}`, 'POST', '/app/offerings', {
+        name: `${name} ${S}`,
+        price: 300,
+      });
+      return flow.last('.data.id');
+    };
+    const billed = await offering('Billed');
+    const unused = await offering('Unused');
+    await flow.expect(200, 'a contact', 'POST', '/app/contacts', {
+      first_name: 'Uma',
+      last_name: `a${S}`,
+      phones: [{ phone: `+919${S.slice(-7)}11`, is_primary: true }],
+    });
+    const contact = flow.last('.data.id');
+    await flow.expect(200, 'her file', 'POST', '/app/patients', {
+      contact_id: contact,
+      home_branch_id: fixture.branches.vesu,
+    });
+    await flow.expect(200, 'a bill naming the offering', 'POST', '/app/invoices', {
+      branch_id: fixture.branches.vesu,
+      contact_id: contact,
+      items: [{ offering_id: billed, quantity: 1 }],
+    });
+    const bill = flow.last('.data.id');
+    for (const id of [billed, unused]) {
+      await flow.expect(204, `delete ${id}`, 'DELETE', `/app/offerings/${id}?reason=not_needed`);
+    }
+    await getOperatorSql()`
+      UPDATE app.offerings SET deleted_at = now() - interval '8 days'
+      WHERE public_id IN (${billed}, ${unused})
+    `;
+
+    const run = await runGlobalRetentionWorkerJob((handle) => runAppRecordPurgeJob(handle));
+    expect(
+      run.blockedCount,
+      'the billed offering is skipped, not a failed job',
+    ).toBeGreaterThanOrEqual(1);
+    const left = await getOperatorSql()<{ public_id: string }[]>`
+      SELECT public_id FROM app.offerings WHERE public_id IN (${billed}, ${unused})
+    `;
+    expect(
+      left.map((row) => row.public_id),
+      'the billed one stays; the unused one is erased',
+    ).toEqual([billed]);
+    await flow.expect(200, 'the bill still reads its line', 'GET', `/app/invoices/${bill}`);
+    flow.expectValue('its line', '.data.items | length', 1);
+    await flow.expect(
+      200,
+      'and the skipped one is still restorable',
+      'POST',
+      `/app/offerings/${billed}/restore`,
+    );
   });
 });

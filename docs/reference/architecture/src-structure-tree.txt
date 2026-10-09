@@ -14,22 +14,30 @@ src/
     │   │   ├── e2e/
     │   │   │   ├── flow-enquiry-to-patient.e2e.test.ts
     │   │   │   ├── flow-plan-and-feedback.e2e.test.ts
+    │   │   │   ├── flow-refund-and-credit.e2e.test.ts
     │   │   │   └── flow-visit-to-payment.e2e.test.ts
     │   │   ├── factories/
     │   │   │   ├── app-fixture.factory.ts
     │   │   │   └── app-flow.factory.ts
-    │   │   └── integration/
+    │   │   ├── integration/
     │   │   │   ├── app-automation.integration.test.ts
+    │   │   │   ├── app-branch-access.integration.test.ts
+    │   │   │   ├── app-races.integration.test.ts
     │   │   │   ├── app-record-lifecycle.integration.test.ts
     │   │   │   ├── app-record-purge.integration.test.ts
     │   │   │   ├── app-route-smoke.integration.test.ts
+    │   │   │   ├── app-team-access.integration.test.ts
     │   │   │   └── clinozy-messages.integration.test.ts
+    │   │   └── unit/
+    │   │   │   └── app-role-presets.policy.unit.test.ts
     │   ├── seed/
     │   │   └── index.ts
     │   ├── sub-domains/
     │   │   ├── appointments/
     │   │   │   ├── __tests__/
     │   │   │   │   ├── integration/
+    │   │   │   │   │   ├── appointments-lifecycle.integration.test.ts
+    │   │   │   │   │   ├── appointments-places.integration.test.ts
     │   │   │   │   │   └── appointments.integration.test.ts
     │   │   │   │   └── unit/
     │   │   │   │   │   └── appointments.service.unit.test.ts
@@ -48,6 +56,7 @@ src/
     │   │   ├── billing/
     │   │   │   ├── __tests__/
     │   │   │   │   └── integration/
+    │   │   │   │   │   ├── billing-races.integration.test.ts
     │   │   │   │   │   ├── billing.integration.test.ts
     │   │   │   │   │   └── invoice-numbering.integration.test.ts
     │   │   │   ├── day-closes/
@@ -100,6 +109,8 @@ src/
     │   │   │   ├── invoices/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   ├── invoices.amounts.property.unit.test.ts
+    │   │   │   │   │   │   ├── invoices.amounts.unit.test.ts
     │   │   │   │   │   │   └── invoices.service.unit.test.ts
     │   │   │   │   ├── invoices.amounts.ts
     │   │   │   │   ├── invoices.constants.ts
@@ -235,6 +246,7 @@ src/
     │   │   │   │   ├── integration/
     │   │   │   │   │   ├── contact-activities.integration.test.ts
     │   │   │   │   │   ├── contact-messaging.integration.test.ts
+    │   │   │   │   │   ├── contacts-household.integration.test.ts
     │   │   │   │   │   └── contacts.integration.test.ts
     │   │   │   │   └── unit/
     │   │   │   │   │   └── contacts.service.unit.test.ts
@@ -361,6 +373,7 @@ src/
     │   │   ├── medical/
     │   │   │   ├── __tests__/
     │   │   │   │   └── integration/
+    │   │   │   │   │   ├── medical-batches.integration.test.ts
     │   │   │   │   │   └── medical.integration.test.ts
     │   │   │   ├── manufacturers/
     │   │   │   │   ├── __tests__/
@@ -445,7 +458,8 @@ src/
     │   │   │   ├── medicines/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
-    │   │   │   │   │   │   └── medicines.service.unit.test.ts
+    │   │   │   │   │   │   ├── medicines.service.unit.test.ts
+    │   │   │   │   │   │   └── medicines.stock.unit.test.ts
     │   │   │   │   ├── medicines.constants.ts
     │   │   │   │   ├── medicines.controller.ts
     │   │   │   │   ├── medicines.dto.ts
@@ -544,7 +558,8 @@ src/
     │   │   ├── offerings/
     │   │   │   ├── __tests__/
     │   │   │   │   ├── integration/
-    │   │   │   │   │   └── offerings.integration.test.ts
+    │   │   │   │   │   ├── offerings.integration.test.ts
+    │   │   │   │   │   └── offers-edges.integration.test.ts
     │   │   │   │   └── unit/
     │   │   │   │   │   └── offerings.service.unit.test.ts
     │   │   │   ├── offering-groups/
@@ -917,6 +932,8 @@ src/
     │   │   └── tasks/
     │   │   │   ├── __tests__/
     │   │   │       ├── integration/
+    │   │   │       │   ├── task-rules-clock.integration.test.ts
+    │   │   │       │   ├── task-rules.worker.integration.test.ts
     │   │   │       │   └── tasks.integration.test.ts
     │   │   │       └── unit/
     │   │   │       │   ├── task-rules-messages.unit.test.ts
@@ -3069,6 +3086,7 @@ src/
     │   │   ├── organization-settings-resolvers.security.test.ts
     │   │   ├── organization-user-discovery.security.test.ts
     │   │   ├── organizations-rls-deleted.security.test.ts
+    │   │   ├── patients-ideas-sweep-read-only.security.test.ts
     │   │   ├── retention-cleanup-rls.security.test.ts
     │   │   ├── rls-matrix.security.test.ts
     │   │   ├── savepoint-guc-totality.security.test.ts
@@ -3394,6 +3412,7 @@ src/
     │   │   │   ├── file-magic.util.unit.test.ts
     │   │   │   ├── parse-with-schema.util.unit.test.ts
     │   │   │   ├── record-fields.rupees.unit.test.ts
+    │   │   │   ├── record-fields.time-zone.unit.test.ts
     │   │   │   ├── record-fields.to-text.unit.test.ts
     │   │   │   └── validation.util.unit.test.ts
     │   ├── validators/

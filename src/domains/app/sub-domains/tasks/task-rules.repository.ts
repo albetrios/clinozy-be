@@ -1,6 +1,7 @@
 import { and, asc, eq, gt, inArray, isNull, lte, type SQL, sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { assertWorkerDatabaseContext } from '@/infrastructure/database/contexts/database-context-runtime.js';
+import { RESOURCE_QUOTA_LOCK_NAMESPACE } from '@/infrastructure/database/resource-quota-lock.util.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
@@ -172,6 +173,18 @@ export class TaskRulesRepository {
       : null;
   }
 
+  /**
+   * One run of an organization's rules at a time (TK10, D78): a transaction-scoped advisory lock in
+   * the `TASK_RULES_RUN` space, keyed by the organization. A second run — a retried or stalled job
+   * beside a fresh one — waits for the first to commit, then sees its steps taken and its notices
+   * queued, so nothing goes out twice. Released at the run's commit or rollback.
+   */
+  async lockRun(organizationId: number): Promise<void> {
+    await this.databaseHandle.execute(
+      sql`SELECT pg_advisory_xact_lock(${RESOURCE_QUOTA_LOCK_NAMESPACE.TASK_RULES_RUN}::int, ${organizationId}::int)`,
+    );
+  }
+
   /** TK7: snoozed tasks whose time has come are open again. */
   async wakeSnoozed(organizationId: number): Promise<number> {
     const rows = await this.databaseHandle
@@ -214,7 +227,7 @@ export class TaskRulesRepository {
   }): Promise<number> {
     const rows = await this.databaseHandle
       .update(tasks)
-      .set(closedByClinozy())
+      .set(closedByClinozy({ isHandled: false }))
       .where(
         and(
           eq(tasks.organization_id, options.organizationId),
@@ -459,22 +472,26 @@ export class TaskRulesRepository {
     }));
   }
 
-  /** TK10: closes a task Clinozy took — "Done by Clinozy". */
+  /** TK10: closes a task whose step Clinozy took — "Done by Clinozy", marked handled. */
   async closeTaskByClinozy(taskId: number): Promise<void> {
     await this.databaseHandle
       .update(tasks)
-      .set(closedByClinozy())
+      .set(closedByClinozy({ isHandled: true }))
       .where(and(eq(tasks.id, taskId), eq(tasks.status, TASK_STATUS.OPEN)));
   }
 }
 
-/** A task closed by the server (TK4, TK10): outcome `done`, "Done by Clinozy", no resolver. */
-function closedByClinozy(): never {
+/**
+ * A task closed by the server (TK4, TK10): outcome `done`, "Done by Clinozy", no resolver;
+ * `isHandled` when Clinozy took its step rather than its record changing.
+ */
+function closedByClinozy(options: { isHandled: boolean }): never {
   return {
     status: TASK_STATUS.DONE,
     outcome: TASK_OUTCOME.DONE,
     result_text: TASK_DONE_BY_CLINOZY,
     is_resolved_automatically: true,
+    is_handled_by_clinozy: options.isHandled,
     resolved_at: sql`now()`,
     resolved_by_membership_id: null,
     snoozed_until: null,
@@ -485,7 +502,9 @@ function closedByClinozy(): never {
 
 /**
  * A rule's candidates (TK4): its records that qualify and open now, without an open task of the
- * rule — nor one a person resolved since the condition began (`anchor_at`) — earliest due first.
+ * rule — nor one a person resolved, or whose step Clinozy took (TK10), since the condition began
+ * (`anchor_at`) — earliest due first. A task Clinozy closed because its record changed keeps
+ * nothing quiet: when the record qualifies again, a fresh task opens.
  */
 function candidatesQuery(scope: TaskRuleScope, source: TaskRuleSource): SQL {
   const { columns } = source;
@@ -509,7 +528,8 @@ function candidatesQuery(scope: TaskRuleScope, source: TaskRuleSource): SQL {
         and ${tasks.source_key} = ${prefix} || ':' || candidate.record_id
         and ${tasks.deleted_at} is null
         and (${tasks.status} <> ${TASK_STATUS.DONE}
-          or (not ${tasks.is_resolved_automatically} and ${tasks.created_at} >= candidate.anchor_at)))
+          or ((not ${tasks.is_resolved_automatically} or ${tasks.is_handled_by_clinozy})
+            and ${tasks.created_at} >= candidate.anchor_at)))
   order by candidate.due_at, candidate.record_id
   limit ${TASK_RULES_TASKS_PER_RULE}`;
 }

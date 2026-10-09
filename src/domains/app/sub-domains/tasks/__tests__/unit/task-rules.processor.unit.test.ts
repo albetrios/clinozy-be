@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   repository: {
     findOrganization: vi.fn(),
+    lockRun: vi.fn(),
     wakeSnoozed: vi.fn(),
     findRuleSwitches: vi.fn(),
     closeGoneTasks: vi.fn(),
@@ -92,6 +93,15 @@ describe('runTaskRulesJob', () => {
       retargetCount: 0,
     });
     expect(mocks.queueClinozyMessages).toHaveBeenCalledOnce();
+  });
+
+  it("takes the organization's run lock before anything else (R3)", async () => {
+    await runTaskRulesJob({} as never, ORGANIZATION);
+
+    expect(repository.lockRun).toHaveBeenCalledWith(7);
+    expect(repository.lockRun.mock.invocationCallOrder[0]).toBeLessThan(
+      repository.wakeSnoozed.mock.invocationCallOrder[0] ?? 0,
+    );
   });
 
   it('a rule that is off opens nothing, but its tasks still close', async () => {
@@ -191,5 +201,6 @@ describe('runTaskRulesJob', () => {
       retargetCount: 0,
     });
     expect(repository.wakeSnoozed).not.toHaveBeenCalled();
+    expect(repository.lockRun).not.toHaveBeenCalled();
   });
 });

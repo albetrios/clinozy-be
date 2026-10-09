@@ -2827,6 +2827,7 @@ CREATE TABLE IF NOT EXISTS "app"."tasks" (
 	"note" varchar(280),
 	"resolved_at" timestamp with time zone,
 	"is_resolved_automatically" boolean DEFAULT false NOT NULL,
+	"is_handled_by_clinozy" boolean DEFAULT false NOT NULL,
 	"resolved_by_membership_id" bigint,
 	"priority" varchar(6) DEFAULT 'normal' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,

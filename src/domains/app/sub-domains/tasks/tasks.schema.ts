@@ -142,6 +142,9 @@ const taskColumns = {
   resolved_at: timestamp('resolved_at', { withTimezone: true }),
   // "Done by Clinozy"
   is_resolved_automatically: boolean('is_resolved_automatically').notNull().default(false),
+  // Clinozy took the task's step itself (TK10) — not only closed it because its record changed;
+  // like a person's resolution it keeps the rule quiet while the condition holds
+  is_handled_by_clinozy: boolean('is_handled_by_clinozy').notNull().default(false),
   resolved_by_membership_id: bigint('resolved_by_membership_id', { mode: 'number' }),
   priority: varchar('priority', { length: 6 }).notNull().default('normal'),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
