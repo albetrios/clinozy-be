@@ -55,3 +55,54 @@ export function isConfirmationReply(text: string): boolean {
     !words.some((word) => HEDGING_WORDS.has(word))
   );
 }
+
+/** The replies that stop the clinic's automated WhatsApp messages (Meta's opt-out policy, D32). */
+const STOP_REPLIES: ReadonlySet<string> = new Set([
+  'stop',
+  'stop all',
+  'stop messages',
+  'unsubscribe',
+  'opt out',
+  'optout',
+]);
+
+/** The replies that let them start again. */
+const START_REPLIES: ReadonlySet<string> = new Set([
+  'start',
+  'unstop',
+  'resume',
+  'opt in',
+  'optin',
+]);
+
+/** The reply as its plain words: lower-cased, everything but letters a single space. */
+function plainWords(text: string): string {
+  return text
+    .toLowerCase()
+    .replaceAll(/[^a-z]+/g, ' ')
+    .trim();
+}
+
+/**
+ * Whether a WhatsApp reply asks the clinic to stop its automated messages (launch D32) — the
+ * whole reply is `STOP`, `STOP ALL`, `STOP MESSAGES`, `UNSUBSCRIBE` or `OPT OUT`, in any case and
+ * punctuation.
+ *
+ * @remarks
+ * - **Notes:** the whole reply, so "please don't stop the treatment" stops nothing; English only,
+ *   as the notices are.
+ */
+export function isStopReply(text: string): boolean {
+  return STOP_REPLIES.has(plainWords(text));
+}
+
+/**
+ * Whether a WhatsApp reply lets the clinic's automated messages start again — the whole reply is
+ * `START`, `UNSTOP`, `RESUME` or `OPT IN`.
+ *
+ * @remarks
+ * - **Notes:** as {@link isStopReply}.
+ */
+export function isStartReply(text: string): boolean {
+  return START_REPLIES.has(plainWords(text));
+}

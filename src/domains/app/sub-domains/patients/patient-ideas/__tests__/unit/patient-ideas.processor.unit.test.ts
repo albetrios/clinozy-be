@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
     replaceIdeas: vi.fn(),
   },
   createAnthropicMessage: vi.fn(),
+  reserveIdeasCall: vi.fn(),
   contextDepth: 0,
 }));
 
@@ -36,6 +37,9 @@ vi.mock('@/infrastructure/ai/anthropic-messages.client.js', () => ({
     expect(mocks.contextDepth).toBe(0);
     return mocks.createAnthropicMessage(options);
   },
+}));
+vi.mock('@/domains/app/sub-domains/patients/patient-ideas/patient-ideas.call-budget.js', () => ({
+  reserveIdeasCall: mocks.reserveIdeasCall,
 }));
 vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -93,6 +97,7 @@ describe('runPatientIdeasJob', () => {
     mocks.contextDepth = 0;
     for (const method of Object.values(mocks.repository)) method.mockReset();
     mocks.createAnthropicMessage.mockReset();
+    mocks.reserveIdeasCall.mockReset().mockResolvedValue(true);
     mocks.repository.findOrganizationId.mockResolvedValue(7);
     mocks.repository.findActiveOfferings.mockResolvedValue(OFFERINGS);
     mocks.repository.findSummary.mockResolvedValue({
@@ -108,6 +113,30 @@ describe('runPatientIdeasJob', () => {
     mocks.repository.replaceIdeas.mockResolvedValue(undefined);
   });
 
+  it('I4: past the daily call budget the rest stay marked; a patient without consent is still cleared', async () => {
+    mocks.repository.findStalePatients.mockResolvedValue([
+      stalePatient(1),
+      stalePatient(2),
+      stalePatient(3, false),
+      stalePatient(4),
+    ]);
+    mocks.reserveIdeasCall.mockResolvedValueOnce(true).mockResolvedValue(false);
+    mocks.createAnthropicMessage.mockResolvedValue(JSON.stringify({ ideas: [] }));
+
+    expect(await runPatientIdeasJob(ORGANIZATION_PUBLIC_ID)).toEqual({
+      refreshedCount: 1,
+      removedCount: 1,
+      unreadCount: 0,
+      supersededCount: 0,
+      cappedCount: 2,
+    });
+    expect(mocks.createAnthropicMessage).toHaveBeenCalledOnce();
+    expect(mocks.repository.clearStaleMark.mock.calls.map((call) => call[0].patientId)).toEqual([
+      1, 3,
+    ]);
+    expect(mocks.reserveIdeasCall).toHaveBeenCalledTimes(2);
+  });
+
   it("stores Claude's ideas for a consenting patient and clears the mark it read", async () => {
     mocks.repository.findStalePatients.mockResolvedValue([stalePatient(1)]);
     mocks.createAnthropicMessage.mockResolvedValue(
@@ -119,6 +148,7 @@ describe('runPatientIdeasJob', () => {
       removedCount: 0,
       unreadCount: 0,
       supersededCount: 0,
+      cappedCount: 0,
     });
     expect(mocks.repository.clearStaleMark).toHaveBeenCalledWith({
       patientId: 1,
@@ -167,6 +197,7 @@ describe('runPatientIdeasJob', () => {
       removedCount: 0,
       unreadCount: 1,
       supersededCount: 0,
+      cappedCount: 0,
     });
   });
 
@@ -216,6 +247,7 @@ describe('runPatientIdeasJob', () => {
       removedCount: 0,
       unreadCount: 0,
       supersededCount: 0,
+      cappedCount: 0,
     });
     expect(mocks.repository.findStalePatients).not.toHaveBeenCalled();
   });

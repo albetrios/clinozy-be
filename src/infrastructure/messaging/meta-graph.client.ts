@@ -88,6 +88,55 @@ export async function sendWhatsAppTextMessage(options: {
   return sentMessageOf(answer);
 }
 
+/** An approved WhatsApp message template — its name and language in Meta Business Manager. */
+export interface MetaWhatsAppTemplate {
+  name: string;
+  languageCode: string;
+}
+
+/**
+ * Sends an approved WhatsApp template from the clinic's number — the only message Meta delivers
+ * outside the person's 24-hour window (launch D32).
+ *
+ * @remarks
+ * - **Algorithm:** `POST /{phone-number-id}/messages` with `type: template`, the template's name and
+ *   language, and its body parameters in order (`{{1}}`, `{{2}}`, …) as text; returns Meta's `wamid`.
+ * - **Failure modes:** as {@link sendWhatsAppTextMessage}; a template Meta does not know or has not
+ *   approved, or the wrong number of parameters, is a 4xx — a rejection of this one message.
+ * - **Side effects:** one HTTPS request to the Graph API.
+ */
+export async function sendWhatsAppTemplateMessage(options: {
+  phoneNumberId: string;
+  to: string;
+  template: MetaWhatsAppTemplate;
+  parameters: readonly string[];
+}): Promise<MetaSentMessage> {
+  const answer = await callGraph<GraphSendAnswer>({
+    path: `${encodeURIComponent(options.phoneNumberId)}/messages`,
+    method: 'POST',
+    body: {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: options.to.replace(/^\+/, ''),
+      type: 'template',
+      template: {
+        name: options.template.name,
+        language: { code: options.template.languageCode },
+        components:
+          options.parameters.length === 0
+            ? []
+            : [
+                {
+                  type: 'body',
+                  parameters: options.parameters.map((text) => ({ type: 'text', text })),
+                },
+              ],
+      },
+    },
+  });
+  return sentMessageOf(answer);
+}
+
 /**
  * Sends an Instagram direct message from the clinic's Instagram account (launch D77).
  *

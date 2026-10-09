@@ -254,7 +254,8 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   ├── contact-activities.service.unit.test.ts
-    │   │   │   │   │   │   └── contact-message-delivery.processor.unit.test.ts
+    │   │   │   │   │   │   ├── contact-message-delivery.processor.unit.test.ts
+    │   │   │   │   │   │   └── whatsapp-notice-templates.unit.test.ts
     │   │   │   │   ├── queues/
     │   │   │   │   │   ├── contact-message-delivery.job.schema.ts
     │   │   │   │   │   └── contact-message-delivery.queue.ts
@@ -274,7 +275,8 @@ src/
     │   │   │   │   ├── contact-activities.service.ts
     │   │   │   │   ├── contact-activities.types.ts
     │   │   │   │   ├── contact-activities.validator.ts
-    │   │   │   │   └── contact-message-delivery.repository.ts
+    │   │   │   │   ├── contact-message-delivery.repository.ts
+    │   │   │   │   └── whatsapp-notice-templates.ts
     │   │   │   ├── contact-members/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
@@ -675,6 +677,7 @@ src/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   ├── patient-ideas-sweep.processor.unit.test.ts
     │   │   │   │   │   │   ├── patient-ideas.ai.unit.test.ts
+    │   │   │   │   │   │   ├── patient-ideas.call-budget.unit.test.ts
     │   │   │   │   │   │   ├── patient-ideas.processor.unit.test.ts
     │   │   │   │   │   │   ├── patient-ideas.rules.unit.test.ts
     │   │   │   │   │   │   └── patient-ideas.service.unit.test.ts
@@ -688,6 +691,7 @@ src/
     │   │   │   │   │   ├── patient-ideas.processor.ts
     │   │   │   │   │   └── patient-ideas.worker.ts
     │   │   │   │   ├── patient-ideas.ai.ts
+    │   │   │   │   ├── patient-ideas.call-budget.ts
     │   │   │   │   ├── patient-ideas.constants.ts
     │   │   │   │   ├── patient-ideas.controller.ts
     │   │   │   │   ├── patient-ideas.dto.ts
@@ -2431,6 +2435,9 @@ src/
     │   ├── db-sequences-advance.ts
     │   ├── memory-soak.ts
     │   ├── next-migration-prefix.ts
+    │   ├── patient-ideas-eval.evaluate.ts
+    │   ├── patient-ideas-eval.set.ts
+    │   ├── patient-ideas-eval.ts
     │   ├── record-contract-fixtures.ts
     │   ├── route-coverage-audit.ts
     │   ├── secrets-key-rotate.ts
@@ -2695,6 +2702,7 @@ src/
     │   ├── postgres-reset-peer.chaos.test.ts
     │   ├── postgres-timeout-toxic.chaos.test.ts
     │   ├── postgres-webhook-queue-retry.chaos.test.ts
+    │   ├── provider-circuit-pause.chaos.test.ts
     │   ├── provision-proxies.ts
     │   ├── redis-circuit-breaker.chaos.test.ts
     │   ├── redis-idempotency.chaos.test.ts
@@ -2755,6 +2763,7 @@ src/
     │   ├── contract.overview.md
     │   ├── github-oauth.contract.test.ts
     │   ├── google-oauth.contract.test.ts
+    │   ├── meta-graph.contract.test.ts
     │   ├── request-id-eventbus.contract.test.ts
     │   ├── resend.contract.test.ts
     │   ├── s3-object-storage-adapter.contract.test.ts
@@ -3308,6 +3317,7 @@ src/
     │   │   ├── lint-migrations-rollback.unit.test.ts
     │   │   ├── lint-migrations-row-security-guc.unit.test.ts
     │   │   ├── lint-migrations-timestamp.unit.test.ts
+    │   │   ├── patient-ideas-eval.evaluate.unit.test.ts
     │   │   ├── route-catalog-registry.unit.test.ts
     │   │   ├── route-http-coverage-validation.unit.test.ts
     │   │   ├── route-schema-docs-validation.unit.test.ts

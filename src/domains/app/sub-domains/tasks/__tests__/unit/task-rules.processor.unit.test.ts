@@ -31,9 +31,13 @@ vi.mock('@/domains/app/sub-domains/tasks/task-rule-conditions.repository.js', ()
     { rule: 'gone_quiet', canOpen: true },
   ],
 }));
-vi.mock('@/domains/app/sub-domains/tasks/workers/task-rules-messages.processor.js', () => ({
-  queueClinozyMessages: mocks.queueClinozyMessages,
-}));
+vi.mock(
+  '@/domains/app/sub-domains/tasks/workers/task-rules-messages.processor.js',
+  async (importOriginal) => ({
+    ...(await importOriginal<object>()),
+    queueClinozyMessages: mocks.queueClinozyMessages,
+  }),
+);
 vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -134,7 +138,11 @@ describe('runTaskRulesJob', () => {
       'gone_quiet',
     ]);
     expect(repository.queueClinozyMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ contactId: 5, automationKind: 'booking_confirm' }),
+      expect.objectContaining({
+        contactId: 5,
+        automationKind: 'booking_confirm',
+        templateParameters: ['Asha', '12 Oct', '10:30'],
+      }),
     );
     expect(repository.markBookingMessageQueued).toHaveBeenCalledWith({
       appointmentId: 9,

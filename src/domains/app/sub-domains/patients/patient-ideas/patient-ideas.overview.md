@@ -23,6 +23,7 @@ the background; otherwise the prototype's rules on the patient's history. Table
 | `patient-ideas.repository.ts` | the patient, the menu, the plan, the history (rules), the summary (Claude), the stored ideas, the stale marks; the sweep's cross-organization read |
 | `patient-ideas.{dto,validator,serializer,types}.ts` | the path params, the idea's shape |
 | `.service.ts` / `.controller.ts` / `.routes.ts` | route 74 |
+| `patient-ideas.call-budget.ts` | the cost guard: `reserveIdeasCall` takes one Claude call from the organization's daily budget (`PATIENT_IDEAS_DAILY_CALL_LIMIT`, per UTC day, a Redis counter; fails closed) |
 | `queues/` / `workers/` | the five-minute sweep and the per-organization refresh (WC-47) |
 
 ## Routes
@@ -45,6 +46,11 @@ the background; otherwise the prototype's rules on the patient's history. Table
   the next refresh and the route shows the rules at once.
 
 ## Background work
+
+A refresh takes a Claude call from the organization's daily budget before each consenting patient;
+once it is spent the rest stay marked for the next day (`cappedCount`). Each run's outcomes go to
+`patient_ideas_results_total`; `pnpm tool:patient-ideas-eval` scores the prompt and the model on a
+de-identified evaluation set (`src/scripts/ops/patient-ideas-eval.set.ts`).
 
 - `patient-ideas-sweep` (every five minutes, off the task rules' minute): one job per organization
   with stale files (`global_retention_cleanup` read, `app.patients` bypass arm).

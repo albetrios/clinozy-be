@@ -1,6 +1,7 @@
 import { isMessagingDeliveryEnabled } from '@/infrastructure/messaging/meta-messaging.config.js';
 import { rupees } from '@/shared/utils/validation/record-fields.util.js';
 import { CONTACT_ACTIVITY_AUTOMATION_KIND } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.constants.js';
+import { templateParameter } from '@/domains/app/sub-domains/contacts/contact-activities/whatsapp-notice-templates.js';
 import {
   APPOINTMENT_REMINDER_STATUS,
   APPOINTMENT_STATUS,
@@ -38,6 +39,39 @@ export function bookingConfirmBody(booking: BookingMessageCandidate): string {
 }
 
 /**
+ * WC-6's parameters for the `booking_reminder` template (D32): name, branch, date, time.
+ *
+ * @remarks
+ * - **Notes:** in `WHATSAPP_NOTICE_TEMPLATES` order; each on one line, never empty.
+ */
+export function bookingReminderParameters(booking: BookingMessageCandidate): string[] {
+  return [
+    templateParameter(booking.firstName, 'there'),
+    templateParameter(booking.branchName, 'the clinic'),
+    templateParameter(booking.visitDate, '-'),
+    templateParameter(booking.visitTime, '-'),
+  ];
+}
+
+/**
+ * WC-5's parameters for the `booking_confirm` template (D32): name, date, time.
+ *
+ * @remarks
+ * - **Notes:** in `WHATSAPP_NOTICE_TEMPLATES` order; each on one line, never empty.
+ */
+export function bookingConfirmParameters(booking: {
+  firstName: string | null;
+  visitDate: string | null;
+  visitTime: string | null;
+}): string[] {
+  return [
+    templateParameter(booking.firstName, 'there'),
+    templateParameter(booking.visitDate, '-'),
+    templateParameter(booking.visitTime, '-'),
+  ];
+}
+
+/**
  * WC-9: the receipt — the amount, its invoice when it has one, the day it was paid.
  *
  * @remarks
@@ -46,6 +80,21 @@ export function bookingConfirmBody(booking: BookingMessageCandidate): string {
 export function receiptBody(receipt: ReceiptMessageCandidate): string {
   const against = receipt.invoiceNumber === null ? '' : ` for invoice ${receipt.invoiceNumber}`;
   return `Hi ${receipt.firstName}, we have received ${rupees(receipt.amount)}${against} on ${receipt.paidOn}. Thank you!`;
+}
+
+/**
+ * WC-9's parameters for the `payment_receipt` template (D32): name, amount, what it paid for, day.
+ *
+ * @remarks
+ * - **Notes:** "invoice …" when it has one, else "your visit".
+ */
+export function receiptParameters(receipt: ReceiptMessageCandidate): string[] {
+  return [
+    templateParameter(receipt.firstName, 'there'),
+    rupees(receipt.amount),
+    receipt.invoiceNumber === null ? 'your visit' : `invoice ${receipt.invoiceNumber}`,
+    templateParameter(receipt.paidOn, '-'),
+  ];
 }
 
 /**
@@ -77,6 +126,9 @@ export async function queueClinozyMessages(options: {
       organizationId: organization.id,
       contactId: booking.contactId,
       body: reminder ? bookingReminderBody(booking) : bookingConfirmBody(booking),
+      templateParameters: reminder
+        ? bookingReminderParameters(booking)
+        : bookingConfirmParameters(booking),
       link: { appointment_id: booking.appointmentId },
       automationKind: reminder
         ? CONTACT_ACTIVITY_AUTOMATION_KIND.BOOKING_REMINDER
@@ -108,6 +160,7 @@ export async function queueClinozyMessages(options: {
       organizationId: organization.id,
       contactId: receipt.contactId,
       body: receiptBody(receipt),
+      templateParameters: receiptParameters(receipt),
       link: { payment_id: receipt.paymentId },
       automationKind: CONTACT_ACTIVITY_AUTOMATION_KIND.PAYMENT_RECEIPT,
       isNotice: true,

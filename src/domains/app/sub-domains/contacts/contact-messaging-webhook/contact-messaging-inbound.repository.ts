@@ -241,6 +241,45 @@ export class ContactMessagingInboundRepository {
   }
 
   /**
+   * A STOP or START reply (launch D32, Meta's opt-out policy): stopping stamps the contact's
+   * `notices_stopped_at` and withdraws marketing consent; starting clears the stamp. Either way a
+   * system entry in their stream says so. A reply that changes nothing (STOP twice) adds nothing.
+   */
+  async setNoticesStopped(options: {
+    organizationId: number;
+    contactId: number;
+    isStopped: boolean;
+  }): Promise<boolean> {
+    const changed = await this.databaseHandle
+      .update(contacts)
+      .set(
+        (options.isStopped
+          ? { notices_stopped_at: sql`now()`, has_marketing_consent: false }
+          : { notices_stopped_at: null }) as never,
+      )
+      .where(
+        and(
+          eq(contacts.id, options.contactId),
+          options.isStopped
+            ? isNull(contacts.notices_stopped_at)
+            : sql`${contacts.notices_stopped_at} is not null`,
+        ),
+      )
+      .returning({ id: contacts.id });
+    if (changed.length === 0) return false;
+    await this.databaseHandle.insert(contact_activities).values({
+      public_id: generatePublicId('contactActivity'),
+      organization_id: options.organizationId,
+      contact_id: options.contactId,
+      type: CONTACT_ACTIVITY_TYPE.SYSTEM,
+      body: options.isStopped
+        ? 'Replied STOP — no more automated messages; the team can still write'
+        : 'Replied START — automated messages are on again',
+    } as never);
+    return true;
+  }
+
+  /**
    * A message the person sent: a received entry in their stream (once per Meta id — a retried
    * callback adds nothing), with the contact's last activity and last received times.
    */

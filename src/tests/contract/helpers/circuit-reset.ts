@@ -1,5 +1,6 @@
 import {
   anthropicCircuit,
+  metaCircuit,
   stripeCircuit,
   s3Circuit,
   resendCircuit,
@@ -11,5 +12,6 @@ export async function resetOutboundServiceCircuitBreakerState(): Promise<void> {
     s3Circuit.reset(),
     resendCircuit.reset(),
     anthropicCircuit.reset(),
+    metaCircuit.reset(),
   ]);
 }

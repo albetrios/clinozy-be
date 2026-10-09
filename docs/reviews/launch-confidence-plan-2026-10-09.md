@@ -31,7 +31,7 @@ Biome, typecheck and tsdoc, then is committed and pushed. The full `pnpm test`,
 | 5 — Providers | M1, M3, M4, M5, I2, I4, I5, X4 | WhatsApp templates outside the 24-hour window (D32); Meta and Anthropic outage tests; failure metrics; STOP opt-out; the ideas evaluation script; a daily per-organization cap on Claude calls |
 | 6 — Flows | F1, F2 | Unhappy-path flows (no-show, cancel, refund, expired package) and a day in the clinic across two branches |
 | 7 — Performance | C2, R2, X2 | The activity stream at volume; the task-rules sweep at scale; k6 scenarios for Today, the patient file and billing |
-| 8 — Housekeeping | X5, X6 | The index follow-ups; the temporary live checks removed once the suites hold their cases |
+| 8 — Housekeeping | X5, X6, X7 | The index follow-ups; the temporary live checks removed once the suites hold their cases; the product name out of hardcoded strings (the project-identity gate) |
 
 ## Status
 
@@ -67,13 +67,13 @@ Biome, typecheck and tsdoc, then is committed and pushed. The full `pnpm test`,
 | MD3 — returns across batches | 4 | done | `medical-batches.integration.test.ts` › MD3 (each line back into its own batch, a written-off return not restocked, no void after a partial return) |
 | C1 — household numbers | 4 | done | shared numbers, leaving with one and the restore clash were already in `contacts`; added `contacts-household.integration.test.ts` (a move between households takes its numbers; refused while it carries the old household's shared number; the primary taken away frees the number) |
 | O1 — offers at the edges | 4 | done | `offers-edges.integration.test.ts` (live on the first and last day, ended the day after, the status filter agrees; an offering made inactive under a live offer). The server applies no offer to a bill — a line carries its own discount — so an offer ending "mid-invoice" has no server path |
-| M1 — WhatsApp templates (code part) | 5 | planned | — |
-| M3 — Meta outage pause | 5 | planned | — |
-| M4 / X4 — failure metrics (code part) | 5 | planned | — |
-| M5 — STOP opt-out | 5 | planned | — |
-| I2 — ideas evaluation script | 5 | planned | — |
-| I4 — daily cap on Claude calls | 5 | planned | — |
-| I5 — Anthropic outage pause | 5 | planned | — |
+| M1 — WhatsApp templates (code part) | 5 | done | `sendWhatsAppTemplateMessage` (`meta-graph.contract.test.ts`); the notice templates and their texts in `whatsapp-notice-templates.ts` (`whatsapp-notice-templates.unit.test.ts`); the delivery worker's choice (`contact-message-delivery.processor.unit.test.ts`); inside and outside the window in `clinozy-messages.integration.test.ts` › D32. Ops: submit the six templates in Meta Business Manager, then set `WHATSAPP_TEMPLATES_ENABLED=true` |
+| M3 — Meta outage pause | 5 | done | `provider-circuit-pause.chaos.test.ts` › M3 (two replicas, the real delivery job: the circuit opens on 503s, the queue pauses, the messages stay queued; back, the probe sends all) |
+| M4 / X4 — failure metrics (code part) | 5 | done | `automated_notices_total{kind,outcome}` and `patient_ideas_results_total{outcome}`; per-organization counts on the `contact-message-delivery.completed` and `patient-ideas.completed` log lines; the alert rows in `docs/process/sentry-alerts.md` (app queue dead letters incl. day-close auto-close, provider pauses for `meta` / `anthropic`, notices failing, ideas capped) and `observability.md`. Ops: create the alerts in Sentry |
+| M5 — STOP opt-out | 5 | done | `contacts.notices_stopped_at`; STOP / START replies (`contact-messaging-webhook.replies.unit.test.ts`, `messaging-webhook-event.processor.unit.test.ts`); no notice queued or sent while stopped (`contact-message-delivery.processor.unit.test.ts`, `clinozy-messages.integration.test.ts` › STOP) |
+| I2 — ideas evaluation script | 5 | done (code part) | `pnpm tool:patient-ideas-eval` over 20 de-identified cases (`patient-ideas-eval.set.ts`), scored by `patient-ideas-eval.evaluate.ts` (`patient-ideas-eval.evaluate.unit.test.ts`). First run, `--oracle` (the harness itself): 20 cases, parse 100%, relevance 100%, first idea 100%, violations 0. The real run needs an Anthropic key (Ops, with I1) |
+| I4 — daily cap on Claude calls | 5 | done | `PATIENT_IDEAS_DAILY_CALL_LIMIT` (default 500) through `reserveIdeasCall` (`patient-ideas.call-budget.unit.test.ts`); the refresh leaves capped patients marked (`patient-ideas.processor.unit.test.ts` › I4); `patient_ideas_results_total` |
+| I5 — Anthropic outage pause | 5 | done | `provider-circuit-pause.chaos.test.ts` › I5 (the patient stays marked while Anthropic is down; back, the probe stores the ideas) |
 | F1 — unhappy-path flows | 6 | planned | — |
 | F2 — a day in the clinic | 6 | planned | — |
 | C2 — the activity stream at volume | 7 | planned | — |
@@ -81,6 +81,7 @@ Biome, typecheck and tsdoc, then is committed and pushed. The full `pnpm test`,
 | X2 — k6 scenarios for the app | 7 | planned | — |
 | X5 — index follow-ups | 8 | planned | — |
 | X6 — remove the temporary live checks | 8 | planned | — |
+| X7 — the project-identity gate | 8 | planned | `pnpm tool:generate-project-identity:check` fails on the branch before this work: 95 hardcoded product-name mentions in the app domain, its locales and the live checks. Batch 5 adds none |
 
 ## Decisions
 
@@ -94,6 +95,14 @@ Taken by recommendation (no question asked), one line each, as the batches reach
 | 4 | One task-rules run per organization at a time: a transaction-scoped advisory lock, `TASK_RULES_RUN` in the shared lock-space registry (`RESOURCE_QUOTA_LOCK_NAMESPACE`). | BullMQ's deduplication keeps one job per organization, but a stalled or retried job can run beside a fresh one. A second run waits, then sees the first one's work. Cheaper than a lock per step, and covers the notices (D78) too. |
 | 4 | A task Clinozy closes by taking its step is marked `is_handled_by_clinozy` (a new column on `app.tasks`, folded into the baseline migration). | The rules must tell "Clinozy took the step" (keeps the rule quiet, like a person's resolution) from "the record changed" (a fresh task when it qualifies again). The label stays "Done by Clinozy" for both. |
 | 4 | A3's hold is three seconds long and runs out by waiting. | A real lead hold is days. Three seconds keep the suite fast while the release still comes from the clock passing and the real workers, not from moving a timestamp. |
+| 5 | A notice goes as its template only outside the person's 24-hour window (never wrote, or 24 hours or more ago); inside it, and for the team's own messages, free text. | The task as written. Free text keeps the richer wording where Meta allows it; the window is read when the message is sent, so it cannot close between queue and send. |
+| 5 | Each notice stores its template parameters when it is queued (`contact_activities.template_parameters`); once sent as a template, the stream keeps the template's text. | The composers hold every value when they queue; reading them back at send time would repeat their logic. The stream shows what the person actually received. |
+| 5 | Templates are behind one flag, `WHATSAPP_TEMPLATES_ENABLED`, off by default. | Templates must be approved in Meta Business Manager first; until then Meta refuses them, as it refuses free text outside the window. |
+| 5 | The admins' day-close summary goes as its template whenever templates are on. | The admins' window is not known — they are members, not contacts. |
+| 5 | STOP stops the automated notices and withdraws marketing consent; the team's own messages (one at a time or a batch) still go. START lifts it. Only a reply that is just the word counts. | Meta's opt-out policy covers business-initiated messages. A team member writing is a conversation; the stream's system entry tells them the person asked. "Please don't stop the treatment" must stop nothing. |
+| 5 | The ideas' daily cap counts in Redis per organization per UTC day and fails closed. | No call goes out without a counted budget. If Redis is down the worker cannot run anyway. A patient left marked costs nothing: the rule-based ideas stay shown. |
+| 5 | Notice failures are a bounded Prometheus counter, plus per-organization counts on the log line, rather than a new daily job. | A per-organization label would grow with the clinics. The log line carries the organization for a Sentry log alert, with no scheduler entry or pinned counts to change. |
+| 5 | The chaos tests move the circuit's last failure a minute into the past instead of waiting out its 60-second reset window. | It is the same state every replica reads, in Redis. Waiting would add two minutes to the chaos lane and prove nothing more. |
 
 ## Findings
 

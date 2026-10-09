@@ -613,6 +613,7 @@ erDiagram
     choice default_channel
     json preference_tags
     boolean has_marketing_consent
+    datetime notices_stopped_at
     choice referral_source
     id referred_by_contact_id FK "→ contact"
     text referred_by_name
@@ -643,6 +644,7 @@ erDiagram
 - **Built (ROUTE #133, D69):** `is_private_photo` boolean (default false) — an entry about a private-album photo, hidden from callers without `patient:private_album:read` (M10, PC16); re-set when the photo moves albums
 - **Built (ROUTE #139, D77):** `delivery_claimed_at` (timestamptz — a delivery job's claim on a `queued` message, stale after 5 minutes; `chk_contact_activities_delivery_claim` keeps it on queued WhatsApp / Instagram messages only) and `provider_sender_id` (`varchar(64)` — the Instagram-scoped id of a received Instagram message, the reply address; `chk_contact_activities_provider_sender`, index `idx_contact_activities_organization_provider_sender_id`); the RLS policy gains the `global_retention_cleanup` arm (the delivery sweep reads across organizations)
 - **Built (ROUTE #140–#142, D78):** `automation_kind` (`varchar(16)` — what a message Clinozy queued is for: `booking_confirm`, `booking_reminder`, `payment_receipt`, `payment_reminder`, `feedback_request`; `chk_contact_activities_automation_kind` keeps it on sent WhatsApp entries with no author) — the booking messages move their appointment's `reminder_status`, a move or cancel stops the unclaimed one (`failure_reason` `reminder_stopped`), and a receipt goes once per payment; no change to `app.appointments` (its `reminder_status` and `is_confirmed_by_reply` were already there, A13)
+- **Built (launch-confidence M1, M5 — D32):** `template_parameters` (`text[]`, at most 12, only with an `automation_kind` — `chk_contact_activities_template_parameters`): the notice's WhatsApp template parameters, sent as the approved template outside the person's 24-hour window; `app.contacts.notices_stopped_at` (`timestamptz`): a STOP reply on WhatsApp stops the automated notices to the person until START
 ```mermaid
 erDiagram
   contact_activities["app.contact_activities · NEW"] {

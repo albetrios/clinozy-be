@@ -16,6 +16,18 @@ export function isMessagingDeliveryEnabled(): boolean {
 }
 
 /**
+ * Whether automated notices outside the 24-hour window, and the admins' day-close summaries, go as
+ * the approved WhatsApp templates (`WHATSAPP_TEMPLATES_ENABLED`, launch D32).
+ *
+ * @remarks
+ * - **Algorithm:** reads the one flag.
+ * - **Failure modes:** none.
+ */
+export function isWhatsAppTemplatesEnabled(): boolean {
+  return env.WHATSAPP_TEMPLATES_ENABLED;
+}
+
+/**
  * Whether the messaging webhook can verify callbacks — the app secret and the verify token are
  * set. Unset, the webhook answers 503.
  *

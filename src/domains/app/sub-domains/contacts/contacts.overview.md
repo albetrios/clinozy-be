@@ -48,6 +48,7 @@ Contacts row of the Roles matrix.
 ## Key invariants
 
 - **Tenant isolation:** ENABLE + FORCE RLS on all three tables on the organization GUC; `app.contacts` has the retention-cleanup arm (USING only) for the deleted-record purge (D38).
+- **Automated messages stopped (D32):** `notices_stopped_at` is set by a STOP reply on WhatsApp and cleared by START (the messaging webhook); while it is set, the clinic's automated notices are neither queued nor sent to the person. Not on the API — the stream's system entry shows it.
 - **Numbers (CT2):** 1–5, each once, exactly one primary (a partial unique index); `primary_phone` is the copy the lists read, written in the same transaction as the numbers.
 - **A number lives in one household (CT3):** the exclusion constraint on live numbers; a clash is a 409 `contact_phone_exists` naming the contact (checked first, so the message names it). Moving a contact moves its numbers (`ON UPDATE CASCADE`). The first contact of a household that holds others stays in its own household (a 400).
 - **One search (CT9):** `search_text` (names, email, Instagram, every live number's 10 digits, `c-<number>`) is kept by triggers on both tables behind one trigram index.

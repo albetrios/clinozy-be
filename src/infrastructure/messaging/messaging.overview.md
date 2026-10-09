@@ -35,6 +35,10 @@ module owns the calls.
   platform's (env); each organization's `whatsapp_phone_number_id` and `instagram_account_id` sit on
   `tenancy.organization_settings` — a callback names the account, and the SECURITY DEFINER resolver
   `tenancy.resolve_organization_public_id_for_messaging_account` finds the clinic.
+- **Templates (D32):** `sendWhatsAppTemplateMessage` sends an approved template — its name,
+  language and body parameters in order — the only message Meta delivers outside the person's
+  24-hour window; `isWhatsAppTemplatesEnabled` reads `WHATSAPP_TEMPLATES_ENABLED`. The app decides
+  when (the delivery worker); the contract test pins the request.
 - **Network I/O outside RLS contexts**: the workers read in one short context, call Meta, then write
   in another (`rls-context-network-isolation.global.test.ts`).
 - **Signature is byte-precise**: the webhook route registers its URL in the shared raw-body registry

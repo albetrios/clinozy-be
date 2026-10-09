@@ -125,6 +125,9 @@ export const CONTACT_ACTIVITY_LINK_COLUMNS = [
 export const CONTACT_ACTIVITY_BODY_MAX = 1000;
 /** Most attachments on one entry. */
 export const CONTACT_ACTIVITY_ATTACHMENTS_MAX = 5;
+
+/** The most WhatsApp template parameters a notice carries (`template_parameters`, launch D32). */
+export const CONTACT_ACTIVITY_TEMPLATE_PARAMETERS_MAX = 12;
 /** Most contacts one message batch reaches (route 16). */
 export const CONTACT_ACTIVITY_BATCH_CONTACTS_MAX = 200;
 

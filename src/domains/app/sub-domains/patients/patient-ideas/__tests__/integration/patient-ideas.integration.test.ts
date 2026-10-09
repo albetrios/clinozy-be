@@ -198,6 +198,7 @@ describe('Patient ideas — integration (routes-final 7.N, ROUTE #152)', () => {
       removedCount: 0,
       unreadCount: 0,
       supersededCount: 0,
+      cappedCount: 0,
     });
     expect(await staleSince()).toBeNull();
     expect(await sweptOrganizations()).not.toContain(fixture.organization.publicId);

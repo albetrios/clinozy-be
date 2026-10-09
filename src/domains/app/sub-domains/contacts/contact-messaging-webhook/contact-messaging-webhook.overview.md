@@ -41,6 +41,8 @@ Both answer 503 while the webhook is not configured.
 
 ## Key invariants
 
+- **STOP and START (D32, Meta's opt-out policy):** a WhatsApp reply that is just `STOP` (or `STOP ALL`, `UNSUBSCRIBE`, `OPT OUT`) stamps the contact's `notices_stopped_at`, withdraws marketing consent and adds a system entry; `START` (or `UNSTOP`, `RESUME`, `OPT IN`) clears it. The rules then queue no notice for them and a TK10 step stays for a person; a word inside a sentence stops nothing.
+
 - **Tenant isolation:** `app.messaging_webhook_events` is ENABLE + FORCE RLS on the organization GUC
   with the global-retention arm (the sweep and the purge read across organizations).
 - **No Graph call inside a database context.**

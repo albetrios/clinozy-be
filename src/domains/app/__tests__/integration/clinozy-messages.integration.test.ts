@@ -528,4 +528,107 @@ describe('Clinozy messages — integration (launch D78, ROUTE #140–#142)', () 
       expect.stringContaining('"type":"image"'),
     ]);
   });
+
+  it('D32: STOP stops the automated messages to them, the stream says so; START lets them start again', async () => {
+    const ela = await person('Ela', '06');
+    const elaPhone = `91${digits}06`;
+    const elaSays = (text: string, id: string) =>
+      receiveWhatsApp({
+        messages: [
+          {
+            from: elaPhone,
+            id,
+            timestamp: String(Math.floor(Date.now() / 1000)),
+            type: 'text',
+            text: { body: text },
+          },
+        ],
+      });
+    const [firstDay = '', secondDay = ''] = workDays(24, 2);
+    flow.as('owner');
+    await flow.expect(200, 'Ela agreed to offers', 'PATCH', `/app/contacts/${ela}`, {
+      has_marketing_consent: true,
+    });
+
+    await elaSays('STOP', `wamid.stop.${S}`);
+    await flow.expect(200, 'Ela', 'GET', `/app/contacts/${ela}`);
+    flow.expectValue('consent withdrawn', '.data.has_marketing_consent', false);
+    await flow.expect(200, "Ela's stream", 'GET', `/app/contacts/${ela}/activities?limit=10`);
+    flow.expectValue(
+      'a system entry says so',
+      '[.data[] | select(.type == "system" and (.body | startswith("Replied STOP")))] | length',
+      1,
+    );
+    flow.as('front_desk');
+    const stoppedBooking = await book(ela, firstDay, '15:00');
+    await runRules();
+    expect(await bookingMessages(stoppedBooking), 'no confirm request while stopped').toHaveLength(
+      0,
+    );
+    await elaSays('stop', `wamid.stop.again.${S}`);
+    flow.as('owner');
+    await flow.expect(200, "Ela's stream", 'GET', `/app/contacts/${ela}/activities?limit=10`);
+    flow.expectValue(
+      'STOP twice: one entry',
+      '[.data[] | select(.type == "system" and (.body | startswith("Replied STOP")))] | length',
+      1,
+    );
+
+    await elaSays('START', `wamid.start.${S}`);
+    flow.as('front_desk');
+    const startedBooking = await book(ela, secondDay, '15:00');
+    await runRules();
+    expect(
+      (await bookingMessages(startedBooking)).map((message) => message.automation_kind),
+      'started again: the confirm request',
+    ).toEqual(['booking_confirm']);
+  });
+
+  it('D32: outside the 24-hour window a notice goes as its template; inside it, as free text', async () => {
+    const templatesWereEnabled = env.WHATSAPP_TEMPLATES_ENABLED;
+    env.WHATSAPP_TEMPLATES_ENABLED = true;
+    try {
+      const dev = await person('Dev', '05');
+      const [devDay = '', ashaDay = ''] = workDays(20, 2);
+      flow.as('front_desk');
+      const devBooking = await book(dev, devDay, '11:00');
+      await ashaSays('See you soon', `wamid.window.${S}`);
+      const ashaLater = await book(asha, ashaDay, '12:00');
+      await runRules();
+      recordGraphSends();
+      await runContactMessageDeliveryJob(organizationPublicId);
+
+      const devPhone = `91${digits}05`;
+      const toDev = sends.filter((send) => send.body.to === devPhone);
+      expect(
+        toDev.map((send) => send.body.type),
+        'Dev never wrote: the template',
+      ).toEqual(['template']);
+      const template = toDev[0]?.body.template as {
+        name: string;
+        language: { code: string };
+        components: { parameters: { text: string }[] }[];
+      };
+      expect([template.name, template.language.code]).toEqual(['booking_confirm', 'en']);
+      expect(template.components[0]?.parameters.map((parameter) => parameter.text)[0]).toBe('Dev');
+      const [devMessage] = await bookingMessages(devBooking);
+      expect(devMessage?.delivery_status).toBe('sent');
+      expect(devMessage?.body, "the stream keeps the template's text").toMatch(
+        /^Hi Dev, please confirm your visit on .+ at 11:00\. Reply YES to confirm\.$/,
+      );
+
+      const toAsha = sends.filter(
+        (send) =>
+          send.body.to === ASHA_PHONE.slice(1) &&
+          (send.body.text as { body?: string } | undefined)?.body?.includes('12:00'),
+      );
+      expect(
+        toAsha.map((send) => send.body.type),
+        'Asha wrote just now: free text',
+      ).toEqual(['text']);
+      expect((await bookingMessages(ashaLater))[0]?.delivery_status).toBe('sent');
+    } finally {
+      env.WHATSAPP_TEMPLATES_ENABLED = templatesWereEnabled;
+    }
+  });
 });

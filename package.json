@@ -187,6 +187,7 @@
     "tool:worker-readiness": "tsx src/scripts/admin/worker-readiness.ts",
     "tool:dlq-replay": "tsx src/scripts/admin/dlq-replay.ts",
     "tool:stripe-webhook-replay": "tsx src/scripts/admin/stripe-webhook-replay.ts",
+    "tool:patient-ideas-eval": "tsx src/scripts/ops/patient-ideas-eval.ts",
     "tool:project-structure-tree": "tsx src/scripts/codegen/generate-project-structure-tree.ts",
     "tool:project-structure-tree:check": "tsx src/scripts/codegen/generate-project-structure-tree.ts --check",
     "iteration:new": "tsx tooling/iterations/new-iteration.ts",

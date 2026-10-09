@@ -12,6 +12,7 @@ import {
   CONTACT_ACTIVITY_DELIVERY_STATUS,
   CONTACT_ACTIVITY_DIRECTION,
   CONTACT_ACTIVITY_TYPE,
+  type ContactActivityAutomationKind,
 } from './contact-activities.constants.js';
 import { contact_activities } from './contact-activities.schema.js';
 import {
@@ -43,6 +44,14 @@ export interface ClaimedContactMessage {
   attachments: ContactMessageAttachment[];
   /** How many files it was sent with — more than `attachments` when an upload is gone. */
   attachmentKeyCount: number;
+  /** What an automated notice is for (D78); null for a person's message. */
+  automationKind: ContactActivityAutomationKind | null;
+  /** The notice's WhatsApp template parameters, in order (D32); empty for a person's message. */
+  templateParameters: string[];
+  /** When the person last messaged the clinic — the 24-hour window free text needs (D32). */
+  lastReceivedAt: Date | null;
+  /** The person replied STOP to automated messages (D32) — a notice to them is refused. */
+  areNoticesStopped: boolean;
 }
 
 /** A file a queued message carries — one of the organization's confirmed uploads. */
@@ -196,6 +205,8 @@ export class ContactMessageDeliveryRepository {
         contactId: contact_activities.contact_id,
         occurredAt: contact_activities.occurred_at,
         attachmentKeys: contact_activities.attachment_keys,
+        automationKind: contact_activities.automation_kind,
+        templateParameters: contact_activities.template_parameters,
       });
     if (claimed.length === 0) return [];
     const files = await this.findAttachments({
@@ -207,6 +218,8 @@ export class ContactMessageDeliveryRepository {
       .select({
         contactId: contacts.id,
         primaryPhone: contacts.primary_phone,
+        lastReceivedAt: contacts.last_received_at,
+        areNoticesStopped: sql<boolean>`${contacts.notices_stopped_at} is not null`,
         isOnWhatsApp: sql<boolean>`coalesce(${contact_phones.is_on_whatsapp}, true)`,
       })
       .from(contacts)
@@ -258,6 +271,10 @@ export class ContactMessageDeliveryRepository {
         return file ? [file] : [];
       }),
       attachmentKeyCount: message.attachmentKeys.length,
+      automationKind: message.automationKind as ContactActivityAutomationKind | null,
+      templateParameters: message.templateParameters,
+      lastReceivedAt: addressOf.get(message.contactId)?.lastReceivedAt ?? null,
+      areNoticesStopped: addressOf.get(message.contactId)?.areNoticesStopped ?? false,
     }));
   }
 
@@ -285,13 +302,17 @@ export class ContactMessageDeliveryRepository {
     return new Map(rows.map((row) => [row.fileKey, row]));
   }
 
-  /** The claimed message went out: `sent`, with Meta's id (its delivery reports carry it). */
-  async markSent(options: { id: number; providerMessageId: string }): Promise<void> {
+  /**
+   * The claimed message went out: `sent`, with Meta's id (its delivery reports carry it) — and,
+   * sent as its template (D32), the template's text as the stream's body.
+   */
+  async markSent(options: { id: number; providerMessageId: string; body?: string }): Promise<void> {
     await this.databaseHandle
       .update(contact_activities)
       .set({
         delivery_status: CONTACT_ACTIVITY_DELIVERY_STATUS.SENT,
         provider_message_id: options.providerMessageId,
+        ...(options.body === undefined ? {} : { body: options.body.slice(0, 1000) }),
         delivery_claimed_at: null,
         updated_at: sql`greatest(now(), ${contact_activities.created_at})`,
       } as never)

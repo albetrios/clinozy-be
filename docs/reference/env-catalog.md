@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**13 / 251** variables migrated to an explicit `{ allowed, description }` entry.
+**13 / 253** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -150,6 +150,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `OVERLOAD_MAX_EVENT_LOOP_DELAY_MS` | integer 1–60000 | `250` | ✓ | Overload-guard shed threshold: p99 event-loop delay (ms) above which requests get a 503. |
 | `PATIENT_IDEAS_AI_ENABLED` | — | `false` |  | — |
 | `PATIENT_IDEAS_AI_MODEL` | — | `claude-opus-5-5` |  | — |
+| `PATIENT_IDEAS_DAILY_CALL_LIMIT` | — | `500` |  | — |
 | `PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED` | — | `true` |  | — |
 | `PERSONAL_ORGANIZATION_ENABLED` | — | `true` |  | — |
 | `PORT` | integer 1–65535 | `3000` | ✓ | HTTP port the API server binds to. |
@@ -252,6 +253,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `WEBHOOK_SECRET_ROTATION_OVERLAP_HOURS` | — | `24` |  | — |
 | `WEBHOOK_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
 | `WEBHOOK_URL_ALLOWLIST` | — | — *(optional)* |  | — |
+| `WHATSAPP_TEMPLATES_ENABLED` | — | `false` |  | — |
 | `WORKER_CONCURRENCY` | — | `4` |  | — |
 | `WORKER_CONCURRENCY_MAIL` | — | — *(optional)* |  | — |
 | `WORKER_CONCURRENCY_NOTIFY` | — | — *(optional)* |  | — |

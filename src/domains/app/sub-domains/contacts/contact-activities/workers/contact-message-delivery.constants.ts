@@ -27,3 +27,7 @@ export const CONTACT_MESSAGE_IMAGE_MIME_TYPES: ReadonlySet<string> = new Set([
   'image/jpeg',
   'image/png',
 ]);
+
+/** A notice to someone who replied STOP to automated messages (launch D32). */
+export const CONTACT_MESSAGE_FAILURE_NOTICES_STOPPED =
+  'This person replied STOP to automated messages — the team can still write to them';

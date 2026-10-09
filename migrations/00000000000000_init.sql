@@ -1510,6 +1510,7 @@ CREATE TABLE IF NOT EXISTS "app"."contacts" (
 	"default_channel" varchar(9) DEFAULT 'whatsapp' NOT NULL,
 	"preference_tags" text[] DEFAULT '{}' NOT NULL,
 	"has_marketing_consent" boolean DEFAULT false NOT NULL,
+	"notices_stopped_at" timestamp with time zone,
 	"referral_source" varchar(9),
 	"referred_by_contact_id" bigint,
 	"referred_by_name" varchar(120),
@@ -3123,6 +3124,7 @@ CREATE TABLE IF NOT EXISTS "app"."contact_activities" (
 	"delivery_claimed_at" timestamp with time zone,
 	"provider_sender_id" varchar(64),
 	"automation_kind" varchar(16),
+	"template_parameters" text[] DEFAULT '{}' NOT NULL,
 	"occurred_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"delivered_at" timestamp with time zone,
 	"read_at" timestamp with time zone,
@@ -3158,6 +3160,7 @@ CREATE TABLE IF NOT EXISTS "app"."contact_activities" (
 	CONSTRAINT "chk_contact_activities_delivery_claim" CHECK ("app"."contact_activities"."delivery_claimed_at" IS NULL OR "app"."contact_activities"."delivery_status" = 'queued'),
 	CONSTRAINT "chk_contact_activities_provider_sender" CHECK ("app"."contact_activities"."provider_sender_id" IS NULL OR "app"."contact_activities"."direction" = 'received'),
 	CONSTRAINT "chk_contact_activities_automation_kind" CHECK ("app"."contact_activities"."automation_kind" IS NULL OR ("app"."contact_activities"."automation_kind" IN ('booking_confirm', 'booking_reminder', 'payment_receipt', 'payment_reminder', 'feedback_request') AND "app"."contact_activities"."type" = 'whatsapp' AND "app"."contact_activities"."direction" = 'sent' AND "app"."contact_activities"."author_membership_id" IS NULL)),
+	CONSTRAINT "chk_contact_activities_template_parameters" CHECK (cardinality("app"."contact_activities"."template_parameters") <= 12 AND (cardinality("app"."contact_activities"."template_parameters") = 0 OR "app"."contact_activities"."automation_kind" IS NOT NULL)),
 	CONSTRAINT "chk_contact_activities_updated" CHECK ("app"."contact_activities"."updated_at" >= "app"."contact_activities"."created_at")
 );
 --> statement-breakpoint

@@ -35,6 +35,8 @@ let commitDispatchDurabilityFallbacksTotal: Counter | null = null;
 let readCacheRequestsTotal: Counter<'cache' | 'result'> | null = null;
 let databaseUnscopedQueriesTotal: Counter | null = null;
 let bullmqProviderOutageParkedJobsTotal: Counter<'queue' | 'provider' | 'reason'> | null = null;
+let automatedNoticesTotal: Counter<'kind' | 'outcome'> | null = null;
+let patientIdeasResultsTotal: Counter<'outcome'> | null = null;
 
 /** The BullMQ queue and job metrics — split out of {@link registerOn} to keep each short. */
 function registerQueueMetrics(registry: Registry): void {
@@ -76,7 +78,7 @@ function registerQueueMetrics(registry: Registry): void {
 
   bullmqProviderOutageParkedJobsTotal = new Counter({
     name: 'bullmq_provider_outage_parked_jobs_total',
-    help: "Jobs parked because their third-party provider was down (reason=outage — each one re-arms the queue's five-minute pause) or throttling us (reason=throttle — paused for the provider's Retry-After), by queue and provider (resend | stripe | s3). An outage rate that keeps rising is an outage still in progress: the queue is waiting for the provider, not losing jobs",
+    help: "Jobs parked because their third-party provider was down (reason=outage — each one re-arms the queue's five-minute pause) or throttling us (reason=throttle — paused for the provider's Retry-After), by queue and provider (resend | stripe | s3 | meta | anthropic). An outage rate that keeps rising is an outage still in progress: the queue is waiting for the provider, not losing jobs",
     labelNames: ['queue', 'provider', 'reason'],
     registers: [registry],
   });
@@ -183,6 +185,20 @@ function registerOn(registry: Registry): void {
     registers: [registry],
   });
 
+  automatedNoticesTotal = new Counter({
+    name: 'automated_notices_total',
+    help: "The clinic's automated WhatsApp notices the delivery worker settled, by kind (booking_confirm | booking_reminder | payment_receipt | payment_reminder | feedback_request) and outcome (sent | failed). Alert when the failed share over 24 hours passes about 20% — a template not approved, a number Meta refuses, or people who replied STOP. The per-organization counts are in the `contact-message-delivery.completed` log line",
+    labelNames: ['kind', 'outcome'],
+    registers: [registry],
+  });
+
+  patientIdeasResultsTotal = new Counter({
+    name: 'patient_ideas_results_total',
+    help: 'Patients the AI ideas worker settled, by outcome: refreshed (new ideas stored), removed (no Data consent), unread (an answer that was not the JSON asked for, or a refused request), superseded (written to meanwhile), capped (the organization spent its daily Claude call budget — they wait for the next day). A rising unread share means the prompt or the model drifted; capped means PATIENT_IDEAS_DAILY_CALL_LIMIT is reached',
+    labelNames: ['outcome'],
+    registers: [registry],
+  });
+
   readCacheRequestsTotal = new Counter({
     name: 'read_cache_requests_total',
     help: 'Read-through cache lookups by cache name and result (hit | miss). A cache whose hit ratio sits near zero is pure overhead — it is paying a Redis round trip to still ask Postgres — and one whose ratio collapses after a deploy usually means an invalidation became too broad. Alert on a sustained drop, not on an absolute value: the right ratio differs per cache',
@@ -233,6 +249,12 @@ function bindMetricHandlesFromRegistry(registry: Registry): void {
   readCacheRequestsTotal = registry.getSingleMetric('read_cache_requests_total') as Counter<
     'cache' | 'result'
   >;
+  automatedNoticesTotal = registry.getSingleMetric('automated_notices_total') as Counter<
+    'kind' | 'outcome'
+  >;
+  patientIdeasResultsTotal = registry.getSingleMetric(
+    'patient_ideas_results_total',
+  ) as Counter<'outcome'>;
   registeredMetricsRegistry = registry;
 }
 
@@ -501,6 +523,36 @@ export function recordProviderOutageParkedJob(options: {
     provider: options.provider,
     reason: options.reason,
   });
+}
+
+/**
+ * Increments `automated_notices_total` for one automated notice the delivery worker settled
+ * (launch D78, task M4).
+ *
+ * @remarks
+ * - **Notes:** both labels are bounded — five kinds, two outcomes; the organization stays out of
+ *   the labels (its counts are logged) so cardinality does not grow with the clinics.
+ */
+export function recordAutomatedNotice(options: { kind: string; outcome: 'sent' | 'failed' }): void {
+  if (!isMetricsEnabled()) return;
+  ensurePrometheusMetricsRegistered(getMetricsRegistry());
+  automatedNoticesTotal?.inc({ kind: options.kind, outcome: options.outcome });
+}
+
+/**
+ * Adds one ideas run's results to `patient_ideas_results_total` (launch D80, task I4).
+ *
+ * @remarks
+ * - **Notes:** five bounded outcomes; a zero count adds nothing.
+ */
+export function recordPatientIdeasResults(
+  counts: Readonly<Record<'refreshed' | 'removed' | 'unread' | 'superseded' | 'capped', number>>,
+): void {
+  if (!isMetricsEnabled()) return;
+  ensurePrometheusMetricsRegistered(getMetricsRegistry());
+  for (const [outcome, count] of Object.entries(counts)) {
+    if (count > 0) patientIdeasResultsTotal?.inc({ outcome }, count);
+  }
 }
 
 /**

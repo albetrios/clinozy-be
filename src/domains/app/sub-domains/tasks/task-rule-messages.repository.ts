@@ -106,6 +106,7 @@ export class TaskRuleMessagesRepository {
         and ${appointments.deleted_at} is null
         and ${appointments.is_walk_in} = false
         and ${contacts.deleted_at} is null
+        and ${contacts.notices_stopped_at} is null
         and ${appointments.status} in (${APPOINTMENT_STATUS.SCHEDULED}, ${APPOINTMENT_STATUS.CONFIRMED})
         and ${appointments.reminder_status} in (${APPOINTMENT_REMINDER_STATUS.NOT_SENT}, ${APPOINTMENT_REMINDER_STATUS.CONFIRM_REQUESTED})
         and ${appointments.appointment_date} = (${localNow(timeZone)})::date + 1
@@ -128,6 +129,7 @@ export class TaskRuleMessagesRepository {
         and ${appointments.deleted_at} is null
         and ${appointments.is_walk_in} = false
         and ${contacts.deleted_at} is null
+        and ${contacts.notices_stopped_at} is null
         and ${appointments.status} = ${APPOINTMENT_STATUS.SCHEDULED}
         and ${appointments.reminder_status} = ${APPOINTMENT_REMINDER_STATUS.NOT_SENT}
         and ${start} > now() + interval '2 hours'
@@ -158,6 +160,7 @@ export class TaskRuleMessagesRepository {
         and ${payments.kind} = ${PAYMENT_KIND.RECEIPT}
         and ${payments.deleted_at} is null
         and ${contacts.deleted_at} is null
+        and ${contacts.notices_stopped_at} is null
         and ${payments.created_at} >= now() - interval '24 hours'
         and not exists ${reversal}
         and not exists ${receiptMessage}

@@ -54,7 +54,8 @@ wakes the snoozed tasks whose time came; per rule closes the open tasks whose re
 qualifies ("Done by Clinozy"), then — when the rule is on — opens one task for each record that
 qualifies and has no open one (nor one a person resolved since the condition began); then takes
 the step of the due tasks of the rules set to "Let Clinozy handle" (a queued WhatsApp message for
-`confirm`, `payment_due` and `feedback`; a re-target lead for `gone_quiet`) and closes them, marked
+`confirm`, `payment_due` and `feedback` — none to a person who replied STOP, D32: their task stays
+for a person; a re-target lead for `gone_quiet`) and closes them, marked
 `is_handled_by_clinozy` — like a person's resolution, that keeps the rule quiet while its condition
 holds, so a reminder goes out once per condition, not every run. A task closed only because its
 record changed is not marked, and a fresh one opens when the record qualifies again. At most 200

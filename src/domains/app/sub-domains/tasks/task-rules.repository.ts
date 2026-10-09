@@ -85,6 +85,8 @@ export interface ClinozyStepTask {
   reminderStatus: string | null;
   invoiceNumber: string | null;
   dueAmount: string | null;
+  /** The person replied STOP to automated messages (D32) — no message goes to them. */
+  areNoticesStopped: boolean;
 }
 
 /** A candidate row of a rule's SELECT (bigint and timestamp columns come back as text or Date). */
@@ -287,6 +289,7 @@ export class TaskRulesRepository {
         rule: tasks.rule_key,
         contactId: tasks.contact_id,
         firstName: contacts.first_name,
+        areNoticesStopped: sql<boolean>`${contacts.notices_stopped_at} is not null`,
         branchId: tasks.branch_id,
         appointmentId: tasks.appointment_id,
         invoiceId: tasks.invoice_id,
@@ -328,6 +331,8 @@ export class TaskRulesRepository {
     body: string;
     link: ClinozyMessageLink;
     automationKind: ContactActivityAutomationKind;
+    /** Its WhatsApp template's parameters, in order (D32). */
+    templateParameters: readonly string[];
     isNotice?: boolean;
   }): Promise<void> {
     await this.databaseHandle.insert(contact_activities).values({
@@ -339,6 +344,7 @@ export class TaskRulesRepository {
       body: options.body.slice(0, 1000),
       delivery_status: 'queued',
       automation_kind: options.automationKind,
+      template_parameters: [...options.templateParameters],
       ...options.link,
     } as never);
     const latest = (column: AnyPgColumn) =>

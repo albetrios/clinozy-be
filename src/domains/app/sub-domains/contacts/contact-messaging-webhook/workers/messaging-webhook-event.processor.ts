@@ -22,7 +22,11 @@ import type {
   WhatsAppChangeValue,
   WhatsAppInboundMessage,
 } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/contact-messaging-webhook.types.js';
-import { isConfirmationReply } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/contact-messaging-webhook.replies.js';
+import {
+  isConfirmationReply,
+  isStartReply,
+  isStopReply,
+} from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/contact-messaging-webhook.replies.js';
 import { requestMessagingWebhookEventProcessing } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/queues/messaging-webhook-event.queue.js';
 
 /** The WhatsApp report statuses the stream knows (`deleted`, `warning` … are not messages' states). */
@@ -74,7 +78,8 @@ async function applyWhatsAppValue(
 
 /**
  * One WhatsApp message to the clinic: matched by number, or a new contact with a lead (WC-3); a
- * "yes" confirms the person's next booking that was asked (WC-8, D78).
+ * "yes" confirms the person's next booking that was asked (WC-8, D78); STOP stops the automated
+ * messages to them and START lets them start again (D32, Meta's opt-out policy).
  */
 async function applyWhatsAppMessage(
   inbound: ContactMessagingInboundRepository,
@@ -103,7 +108,10 @@ async function applyWhatsAppMessage(
     ...(message.context?.id ? { replyToProviderMessageId: message.context.id } : {}),
   });
   const text = message.text?.body;
-  if (isNew && text !== undefined && isConfirmationReply(text)) {
+  if (!isNew || text === undefined) return;
+  if (isStopReply(text) || isStartReply(text)) {
+    await inbound.setNoticesStopped({ organizationId, contactId, isStopped: isStopReply(text) });
+  } else if (isConfirmationReply(text)) {
     await inbound.confirmBookingByReply({ organizationId, contactId });
   }
 }

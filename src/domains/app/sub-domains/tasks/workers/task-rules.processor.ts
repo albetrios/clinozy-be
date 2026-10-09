@@ -20,7 +20,8 @@ import {
   TASK_RULE,
   type TaskRule,
 } from '@/domains/app/sub-domains/tasks/tasks.constants.js';
-import { queueClinozyMessages } from './task-rules-messages.processor.js';
+import { templateParameter } from '@/domains/app/sub-domains/contacts/contact-activities/whatsapp-notice-templates.js';
+import { bookingConfirmParameters, queueClinozyMessages } from './task-rules-messages.processor.js';
 import { TASK_RULES_GONE_QUIET_REASON } from './task-rules.constants.js';
 
 /**
@@ -46,25 +47,33 @@ function isOn(switches: Map<string, TaskRuleSwitch>, rule: TaskRule): boolean {
   return switches.get(rule)?.isOn ?? true;
 }
 
-/** The message Clinozy sends for a `confirm`, `payment_due` or `feedback` task (TK10), with its kind (D78). */
+/**
+ * The message Clinozy sends for a `confirm`, `payment_due` or `feedback` task (TK10), with its kind
+ * (D78) and its WhatsApp template's parameters (D32).
+ */
 function clinozyMessageOf(step: ClinozyStepTask): {
   body: string;
   link: ClinozyMessageLink;
   automationKind: ContactActivityAutomationKind;
+  templateParameters: string[];
 } | null {
-  const first = step.firstName ?? 'there';
+  const first = templateParameter(step.firstName, 'there');
   if (step.rule === TASK_RULE.CONFIRM && step.appointmentId !== null) {
     return {
       body: `Hi ${first}, this is a reminder of your visit on ${step.visitDate} at ${step.visitTime}. Reply YES to confirm.`,
       link: { appointment_id: step.appointmentId },
       automationKind: CONTACT_ACTIVITY_AUTOMATION_KIND.BOOKING_CONFIRM,
+      templateParameters: bookingConfirmParameters(step),
     };
   }
   if (step.rule === TASK_RULE.PAYMENT_DUE && step.invoiceId !== null) {
+    const due = `₹${step.dueAmount}`;
+    const invoice = templateParameter(step.invoiceNumber, '-');
     return {
-      body: `Hi ${first}, ₹${step.dueAmount} is still due on invoice ${step.invoiceNumber}. You can pay at your next visit, or reply here and we will help.`,
+      body: `Hi ${first}, ${due} is still due on invoice ${invoice}. You can pay at your next visit, or reply here and we will help.`,
       link: { invoice_id: step.invoiceId },
       automationKind: CONTACT_ACTIVITY_AUTOMATION_KIND.PAYMENT_REMINDER,
+      templateParameters: [first, due, invoice],
     };
   }
   if (step.rule === TASK_RULE.FEEDBACK) {
@@ -72,6 +81,7 @@ function clinozyMessageOf(step: ClinozyStepTask): {
       body: `Hi ${first}, thank you for visiting us. How was your visit? Reply with a number from 1 (poor) to 5 (great).`,
       link: step.appointmentId === null ? {} : { appointment_id: step.appointmentId },
       automationKind: CONTACT_ACTIVITY_AUTOMATION_KIND.FEEDBACK_REQUEST,
+      templateParameters: [first],
     };
   }
   return null;
@@ -89,7 +99,8 @@ function alreadyAsked(step: ClinozyStepTask): boolean {
 /**
  * TK10 "Let Clinozy handle": takes one due task's step — the confirmation, payment reminder or
  * review request on WhatsApp, or a re-target lead for `gone_quiet` — and closes it "Done by
- * Clinozy"; false (the task stays for a person) when there is nobody to message.
+ * Clinozy"; false (the task stays for a person) when there is nobody to message, or when the
+ * person replied STOP to automated messages (D32).
  */
 async function takeClinozyStep(options: {
   repository: TaskRulesRepository;
@@ -98,6 +109,8 @@ async function takeClinozyStep(options: {
 }): Promise<boolean> {
   const { repository, organizationId, step } = options;
   if (step.contactId === null) return false;
+  // They replied STOP (D32): no message — the task stays for a person
+  if (step.areNoticesStopped && step.rule !== TASK_RULE.GONE_QUIET) return false;
   if (step.rule === TASK_RULE.GONE_QUIET) {
     await repository.openRetargetLead({
       organizationId,

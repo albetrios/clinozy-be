@@ -633,6 +633,13 @@ const envSchemaBase = z.object({
    * META_GRAPH_ACCESS_TOKEN, META_APP_SECRET and META_WEBHOOK_VERIFY_TOKEN (refine below).
    */
   MESSAGING_DELIVERY_ENABLED: booleanString('false'),
+  /**
+   * Sends the clinic's automated WhatsApp notices outside the person's 24-hour window as the approved
+   * Meta templates (launch D32; their names and texts in `whatsapp-notice-templates.ts`), and the
+   * day-close summaries to the admins always. Off, every notice goes as free text — which Meta
+   * refuses outside the window. Turn it on once the templates are approved in Meta Business Manager.
+   */
+  WHATSAPP_TEMPLATES_ENABLED: booleanString('false'),
   /** The platform Meta app's system-user token (`whatsapp_business_messaging`, `instagram_manage_messages`). */
   META_GRAPH_ACCESS_TOKEN: z.string().min(1).optional(),
   /** The Meta app's secret — every webhook callback is signed with it (`X-Hub-Signature-256`). */
@@ -655,6 +662,11 @@ const envSchemaBase = z.object({
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   /** The Claude model that suggests the offerings. */
   PATIENT_IDEAS_AI_MODEL: z.string().min(1).max(100).default('claude-opus-5-5'),
+  /**
+   * Claude calls the ideas worker makes per organization per day (UTC) — a cost guard. Past it the
+   * patients stay marked and are refreshed the next day; the rule-based ideas stay shown meanwhile.
+   */
+  PATIENT_IDEAS_DAILY_CALL_LIMIT: z.coerce.number().int().min(1).max(100_000).default(500),
   /** The Anthropic API base URL. */
   ANTHROPIC_API_BASE_URL: z.url().default('https://api.anthropic.com'),
   /** Messages API request timeout (ms) — each patient's ideas call. */

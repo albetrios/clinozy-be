@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
     createContactWithLead: vi.fn(),
     insertReceivedMessage: vi.fn(),
     confirmBookingByReply: vi.fn(),
+    setNoticesStopped: vi.fn(),
   },
   events: {
     claimBatch: vi.fn(),
@@ -144,6 +145,36 @@ describe('runMessagingWebhookEventJob', () => {
       organizationId: 7,
       phone: '+919800000099',
       firstName: 'Riya',
+    });
+    expect(inbound.confirmBookingByReply).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['STOP', true],
+    ['Unsubscribe.', true],
+    ['start', false],
+  ])('D32: %j sets the stop (%s) and confirms nothing', async (text, isStopped) => {
+    events.claimBatch.mockResolvedValue([
+      whatsAppEvent(5, {
+        messages: [
+          {
+            from: '919800000001',
+            id: `wamid.${text}`,
+            timestamp: '1',
+            type: 'text',
+            text: { body: text },
+          },
+        ],
+      }),
+    ]);
+    inbound.findContactIdByPhone.mockResolvedValue(5);
+
+    await runMessagingWebhookEventJob(ORGANIZATION);
+
+    expect(inbound.setNoticesStopped).toHaveBeenCalledWith({
+      organizationId: 7,
+      contactId: 5,
+      isStopped,
     });
     expect(inbound.confirmBookingByReply).not.toHaveBeenCalled();
   });

@@ -3,6 +3,8 @@ import { ProviderOutageError } from '@/infrastructure/queue/worker-runtime/provi
 import { createAnthropicMessage } from '@/infrastructure/ai/anthropic-messages.client.js';
 import { findAnthropicApiError } from '@/infrastructure/ai/anthropic-error.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { recordPatientIdeasResults } from '@/infrastructure/observability/metrics/prometheus-metrics.js';
+import { reserveIdeasCall } from '@/domains/app/sub-domains/patients/patient-ideas/patient-ideas.call-budget.js';
 import { createWorkerPatientIdeasRepository } from '@/domains/app/sub-domains/patients/patient-ideas/patient-ideas.repository.js';
 import {
   buildIdeasPrompt,
@@ -26,13 +28,16 @@ import type {
  * - **Notes:** `refreshedCount` — patients whose AI ideas were replaced; `removedCount` — patients
  *   without Data consent whose ideas were deleted; `unreadCount` — answers that were not the JSON
  *   asked for, or a request Anthropic refused (nothing stored, the rules stay shown);
- *   `supersededCount` — patients written to again meanwhile (taken again by the next run).
+ *   `supersededCount` — patients written to again meanwhile (taken again by the next run);
+ *   `cappedCount` — consenting patients left marked because the organization spent its daily
+ *   Claude call budget (`PATIENT_IDEAS_DAILY_CALL_LIMIT`, task I4).
  */
 export interface PatientIdeasRunCounts {
   refreshedCount: number;
   removedCount: number;
   unreadCount: number;
   supersededCount: number;
+  cappedCount: number;
 }
 
 /** One stale patient as read for the refresh: consent, and for a consenting one its summary. */
@@ -121,7 +126,8 @@ async function askForIdeas(options: {
  * @remarks
  * - **Algorithm:** one short read in the organization's context — the menu and each patient's
  *   consent, de-identified summary and planned offerings; then, outside any context, Claude per
- *   consenting patient ({@link askForIdeas}); then per patient a short write that clears the mark
+ *   consenting patient ({@link askForIdeas}) while the organization's daily call budget lasts
+ *   ({@link reserveIdeasCall} — past it the rest stay marked for the next day); then per patient a short write that clears the mark
  *   only if it still holds what was read (compare-and-clear) and, only then, replaces the stored
  *   ideas — Claude's, or none (no consent, an unreadable answer: the rules stay shown).
  * - **Failure modes:** an Anthropic throttle or outage pauses the queue (`anthropic` provider) and
@@ -138,10 +144,21 @@ export async function runPatientIdeasJob(
     removedCount: 0,
     unreadCount: 0,
     supersededCount: 0,
+    cappedCount: 0,
   };
   const batch = await readRefreshBatch(organizationPublicId);
   if (batch === null) return counts;
+  let isBudgetSpent = false;
   for (const item of batch.items) {
+    const needsClaude = item.summary !== null && batch.offerings.length > 0;
+    if (needsClaude) {
+      isBudgetSpent = isBudgetSpent || !(await reserveIdeasCall(organizationPublicId));
+      // The day's budget is spent: the patient stays marked for the next day (I4)
+      if (isBudgetSpent) {
+        counts.cappedCount += 1;
+        continue;
+      }
+    }
     const ideas =
       item.summary === null
         ? []
@@ -175,6 +192,13 @@ export async function runPatientIdeasJob(
     else if (ideas === null) counts.unreadCount += 1;
     else counts.refreshedCount += 1;
   }
+  recordPatientIdeasResults({
+    refreshed: counts.refreshedCount,
+    removed: counts.removedCount,
+    unread: counts.unreadCount,
+    superseded: counts.supersededCount,
+    capped: counts.cappedCount,
+  });
   logger.info({ organizationPublicId, ...counts }, 'patient-ideas.completed');
   return counts;
 }
