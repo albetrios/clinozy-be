@@ -22,7 +22,7 @@ that drops them is built. The medical store's routes are §11's — back in the 
 | 1. Branches & places | 0 | 14 | 11 | 25 |
 | 2. Team | 1 | 11 | 15 | 27 |
 | 3. Offerings | 0 | 0 | 19 | 19 |
-| 4. Contacts | 10 | 3 | 9 | 22 |
+| 4. Contacts | 13 | 3 | 9 | 25 |
 | 5. Leads | 0 | 0 | 9 | 9 |
 | 6. Appointments | 4 | 3 | 13 | 20 |
 | 7. Patients | 0 | 43 | 30 | 73 |
@@ -30,7 +30,7 @@ that drops them is built. The medical store's routes are §11's — back in the 
 | 9. Stock | 1 | 3 | 24 | 28 |
 | 10. Tasks & rules | 1 | 0 | 11 | 12 |
 | 11. Medical store | 4 | 3 | 44 | 51 |
-| **Total** | **25** | **82** | **211** | **318** |
+| **Total** | **28** | **82** | **211** | **321** |
 
 ## 1. Branches & places
 
@@ -144,6 +144,9 @@ that drops them is built. The medical store's routes are §11's — back in the 
 | 4.20 | KEPT | PATCH | `/contact-message-templates/{contact_message_template_id}` | `contact_activity:update` | Change a template | routes-final §4.D.7 | `PATCH /api/v1/app/contact-message-templates/:contact_message_template_id` · #130 · 8901ac9 |
 | 4.21 | KEPT | DELETE | `/contact-message-templates/{contact_message_template_id}` | `contact_activity:delete` | Delete a template | routes-final §4.D.7 | `DELETE /api/v1/app/contact-message-templates/:contact_message_template_id` · #130 · 8901ac9 |
 | 4.22 | KEPT | POST | `/contact-message-templates/{contact_message_template_id}/restore` | `contact_activity:delete` | Undo a delete | routes-final §4.D.7 | `POST /api/v1/app/contact-message-templates/:contact_message_template_id/restore` · #130 · 8901ac9 |
+| 4.23 | NEW | GET | `/contact-activities/messaging-status` | `contact_activity:read` | The composer's channel status (WC-2) | D77 | `GET /api/v1/app/contact-activities/messaging-status` · #139 · f9abd43 |
+| 4.24 | NEW | GET | `/messaging-webhook` | public (Meta's verify token) | The Meta app's webhook handshake | D77 | `GET /api/v1/app/messaging-webhook` · #139 · f9abd43 |
+| 4.25 | NEW | POST | `/messaging-webhook` | public (`X-Hub-Signature-256`) | Meta's signed callbacks — delivery reports and replies (WC-1, WC-3) | D77 | `POST /api/v1/app/messaging-webhook` · #139 · f9abd43 |
 
 ## 5. Leads
 

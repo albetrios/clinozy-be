@@ -278,6 +278,7 @@ erDiagram
 - **Sources:** schema-routes.md:138–149 · PRD.md:9 · D7
 - **Added** (a frontend request, D3, unless a decision is named): `specialties` (D7), `timezone` (D7), `currency` (D7), `default_day_float` (payments.md:76, 327), `lead_hold_days` (leads.md:180, 402), `reminder_hour` (D34), `retarget_after_days` (D35), `deleted_record_purge_days` (D38)
 - **Open:** none
+- **Built (ROUTE #139, D77):** `tenancy.organization_settings` gains `whatsapp_phone_number_id` and `instagram_account_id` (`varchar(32)`, digits only — `chk_organization_settings_whatsapp_phone_number_id` / `_instagram_account_id` `^[0-9]{5,32}$`), each unique across organizations (partial unique indexes over the set values) — the clinic's accounts on the platform Meta app, written through `PATCH /tenancy/organization/settings` (409 `messaging_account_taken`); the webhook finds an account's organization through the SECURITY DEFINER resolver `tenancy.resolve_organization_public_id_for_messaging_account(channel, account_id)`
 
 ```mermaid
 erDiagram
@@ -294,6 +295,8 @@ erDiagram
     number reminder_hour "ADDED"
     number retarget_after_days "ADDED"
     number deleted_record_purge_days "ADDED"
+    text whatsapp_phone_number_id "ADDED #139"
+    text instagram_account_id "ADDED #139"
   }
   organization ||--o| organization_settings : "settings"
 ```
@@ -638,6 +641,7 @@ erDiagram
 
 - **Built (ROUTE #130, sub-domain 4 — 4.C–4.D):** `app.messages` → `app.contact_activities` — append-only (no soft-delete columns, not in the purge list; goes with its contact `ON DELETE CASCADE`), `contact_id`, `type` `varchar(9)` (D62) `whatsapp` · `instagram` · `call_log` · `note` · `system`, `direction`, `body varchar(1000)`, `contact_message_template_id`, `attachment_keys`, `reply_to_contact_activity_id`, `delivery_status` (exactly on a sent message), `provider_message_id` (unique per organization), `failure_reason`, `occurred_at`, `delivered_at` / `read_at` / `failed_at`, `author_membership_id` (composite key to memberships, `RESTRICT` — K2, K8), the twelve record links (`num_nonnulls ≤ 1`, each `SET NULL` to today's table — D63); indexes `(contact_id, occurred_at, id)`, `(contact_id, created_at, id)`, the worker queue `(organization_id, occurred_at) WHERE delivery_status IN ('queued','failed')`, one per link. `app.message_templates` → `app.contact_message_templates` — `type` `whatsapp` · `instagram` (was `channel` with six values), `body varchar(1000)`, the list index `(organization_id, created_at DESC, id)` on live rows. `app.lead_reads` dropped (M3). Code `app/sub-domains/contacts/contact-activities/`, `contact-message-templates/`.
 - **Built (ROUTE #133, D69):** `is_private_photo` boolean (default false) — an entry about a private-album photo, hidden from callers without `patient:private_album:read` (M10, PC16); re-set when the photo moves albums
+- **Built (ROUTE #139, D77):** `delivery_claimed_at` (timestamptz — a delivery job's claim on a `queued` message, stale after 5 minutes; `chk_contact_activities_delivery_claim` keeps it on queued WhatsApp / Instagram messages only) and `provider_sender_id` (`varchar(64)` — the Instagram-scoped id of a received Instagram message, the reply address; `chk_contact_activities_provider_sender`, index `idx_contact_activities_organization_provider_sender_id`); the RLS policy gains the `global_retention_cleanup` arm (the delivery sweep reads across organizations)
 ```mermaid
 erDiagram
   contact_activities["app.contact_activities · NEW"] {
@@ -652,6 +656,8 @@ erDiagram
     choice delivery_status
     text provider_message_id
     text failure_reason
+    datetime delivery_claimed_at "ADDED #139"
+    text provider_sender_id "ADDED #139"
     datetime occurred_at
     id author_membership_id FK "→ membership"
     id appointment_id FK "→ appointment (one of twelve links)"
@@ -664,6 +670,28 @@ erDiagram
   }
   contacts ||--o{ contact_activities : "has a stream"
   contact_message_templates |o--o{ contact_activities : "is used by"
+```
+
+### messaging_webhook_event · NEW (built, not planned)
+
+- **Holds:** a Meta webhook update (a WhatsApp or Instagram message, or a delivery report) stored for its organization until the processing job applies it (D77).
+- **Built (ROUTE #139, D77):** `app.messaging_webhook_events` — `organization_id`, `channel` (`whatsapp` · `instagram`), `payload` jsonb (the update with its `account_id`), `payload_hash` (sha256 — Meta's retry is the same row: unique `(organization_id, payload_hash)`), `status` (`pending` · `processed` · `failed`), `claimed_at`, `attempt_count` (failed after 5), `failure_reason` ≤ 280, `received_at`, `processed_at`; the pending index `(organization_id, received_at, id)` and `(received_at)` for the 30-day purge of processed and failed rows; ENABLE + FORCE RLS with the organization policy and the `global_retention_cleanup` arm. The webhook splits a callback per organization at ingress — a tenant table, not a system one
+
+```mermaid
+erDiagram
+  messaging_webhook_events["app.messaging_webhook_events · NEW #139"] {
+    id id PK
+    id organization_id FK "→ organization"
+    choice channel
+    json payload
+    text payload_hash
+    choice status
+    datetime claimed_at
+    number attempt_count
+    text failure_reason
+    datetime received_at
+    datetime processed_at
+  }
 ```
 
 ### patient · NEW
