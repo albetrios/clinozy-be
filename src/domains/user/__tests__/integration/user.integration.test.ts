@@ -188,6 +188,33 @@ describe('User Domain — Integration', () => {
     });
   });
 
+  describe('PUT /api/v1/users/me/presence', () => {
+    it('should set the status dot the team sees and return the refreshed profile', async () => {
+      const user = await createTestUser();
+      const token = await generateTestToken({ userId: user.public_id });
+      const response = await injectAuthenticated(app, {
+        method: 'PUT',
+        url: testApiPath('/users/me/presence'),
+        token,
+        payload: { presence: 'busy' },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect((response.json() as { data: { presence: string } }).data.presence).toBe('busy');
+    });
+
+    it('should return 400 for a presence that is not online, busy or away', async () => {
+      const user = await createTestUser();
+      const token = await generateTestToken({ userId: user.public_id });
+      const response = await injectAuthenticated(app, {
+        method: 'PUT',
+        url: testApiPath('/users/me/presence'),
+        token,
+        payload: { presence: 'invisible' },
+      });
+      expect(response.statusCode).toBe(400);
+    });
+  });
+
   describe('POST /api/v1/users/me/onboarding/complete', () => {
     it('should return 401 without authentication', async () => {
       const response = await injectUnauthenticated(app, {
