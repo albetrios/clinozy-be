@@ -37,11 +37,11 @@ Biome, typecheck and tsdoc, then is committed and pushed. The full `pnpm test`,
 
 | Task | Batch | Status | Evidence |
 | --- | --- | --- | --- |
-| B1 — worked examples (code part) | 1 | planned | — |
-| B2 — property tests on totals | 1 | planned | — |
-| B3 — financial-year rollover | 1 | planned | — |
-| B4 — billing concurrency | 1 | planned | — |
-| B5 — refund flow e2e | 1 | planned | — |
+| B1 — worked examples (code part) | 1 | done | [gst-worked-examples-2026-10-09.md](gst-worked-examples-2026-10-09.md), pinned by `invoices.amounts.unit.test.ts` |
+| B2 — property tests on totals | 1 | done | `invoices.amounts.property.unit.test.ts` (6 properties; 5,000 runs × 3 clean after the fix below) |
+| B3 — financial-year rollover | 1 | done | `invoice-numbering.integration.test.ts` › restarts each branch's series on 1 April |
+| B4 — billing concurrency | 1 | done | `billing-races.integration.test.ts` (receipts past the total, refunds of everything paid, a close racing a payment) |
+| B5 — refund flow e2e | 1 | done | `flow-refund-and-credit.e2e.test.ts` |
 | AP2 — one slot booked twice | 2 | planned | — |
 | S1 — concurrent stock movements | 2 | planned | — |
 | MD2 — the last unit sold twice | 2 | planned | — |
@@ -89,6 +89,10 @@ Taken by recommendation (no question asked), one line each, as the batches reach
 ## Findings
 
 Bugs the new tests found, and their fixes.
+
+| Batch | Found by | Bug | Fix |
+| --- | --- | --- | --- |
+| 1 | B2 property test | The overall discount's last line took the other lines' rounding. On a bill whose overall discount covered nearly everything, with a small last line, that line's net went to −₹0.01, so its taxable value and GST went negative. | `computeInvoiceAmounts` now caps the last line's share at what it has left, and moves the excess back to the lines before it (`spillShareExcess`). Bills where the old rule held are unchanged. The counterexample is a regression case in `invoices.amounts.unit.test.ts`. |
 
 ## Not code — left with their owners
 

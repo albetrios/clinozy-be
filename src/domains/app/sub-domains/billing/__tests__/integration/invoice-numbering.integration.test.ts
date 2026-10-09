@@ -25,12 +25,16 @@ describe('Invoice numbering — integration (B11)', () => {
   let offering = '';
   let contact = '';
 
-  /** A one-line bill at Vesu; answers its number. */
-  async function bill(label: string): Promise<string> {
+  /** A one-line bill at Vesu (or `branch`, dated `invoiceDate`); answers its number. */
+  async function bill(
+    label: string,
+    options: { branch?: string; invoiceDate?: string } = {},
+  ): Promise<string> {
     await flow.expect(200, label, 'POST', '/app/invoices', {
-      branch_id: vesu,
+      branch_id: options.branch ?? vesu,
       contact_id: contact,
       items: [{ offering_id: offering, quantity: 1 }],
+      ...(options.invoiceDate === undefined ? {} : { invoice_date: options.invoiceDate }),
     });
     return flow.last('.data.invoice_number');
   }
@@ -75,5 +79,45 @@ describe('Invoice numbering — integration (B11)', () => {
     `;
     flow.expectEqual('the 10,000th', await bill('the 10,000th bill'), `${financialYear}/10000`);
     flow.expectEqual('and the next', await bill('the 10,001st bill'), `${financialYear}/10001`);
+  });
+
+  it("restarts each branch's series on 1 April, the new financial year (D23)", async () => {
+    flow.expectEqual(
+      'the last day of a financial year',
+      await bill('31 March at Vesu', { invoiceDate: '2025-03-31' }),
+      '2024-25/0001',
+    );
+    flow.expectEqual(
+      'the first day of the next one starts again',
+      await bill('1 April at Vesu', { invoiceDate: '2025-04-01' }),
+      '2025-26/0001',
+    );
+    flow.expectEqual(
+      'and goes on',
+      await bill('2 April at Vesu', { invoiceDate: '2025-04-02' }),
+      '2025-26/0002',
+    );
+    flow.expectEqual(
+      'another branch (its own GSTIN) has its own series',
+      await bill('1 April at Adajan', {
+        branch: fixture.branches.adajan,
+        invoiceDate: '2025-04-01',
+      }),
+      '2025-26/0001',
+    );
+    flow.expectEqual(
+      'a late bill of the old year continues its series',
+      await bill('30 March at Vesu, billed late', { invoiceDate: '2025-03-30' }),
+      '2024-25/0002',
+    );
+    const april = flow.last('.data.id');
+    await flow.expect(
+      400,
+      'a date moved into another financial year (B11)',
+      'PATCH',
+      `/app/invoices/${april}`,
+      { invoice_date: '2025-04-03' },
+    );
+    flow.expectValue('the date: field', '[.error.errors[].field] | join(",")', 'invoice_date');
   });
 });

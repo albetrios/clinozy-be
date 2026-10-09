@@ -55,10 +55,35 @@ function sum(values: readonly number[]): number {
 }
 
 /**
+ * Keeps every line's share of the overall discount within what the line has left. The absorbing
+ * line takes the paise the other lines' rounding left over; when it is a small line and the
+ * discount covers nearly the whole bill, that can be more than the line is worth (its net would go
+ * below zero). The excess moves back to the lines before it, each up to what it has left. The
+ * overall discount never passes what the lines come to, so the excess always fits.
+ */
+function spillShareExcess(options: {
+  shares: number[];
+  after: readonly number[];
+  fromIndex: number;
+}): void {
+  const { shares, after } = options;
+  let excess = (shares[options.fromIndex] ?? 0) - (after[options.fromIndex] ?? 0);
+  if (excess <= 0) return;
+  shares[options.fromIndex] = after[options.fromIndex] ?? 0;
+  for (let index = options.fromIndex - 1; index >= 0 && excess > 0; index -= 1) {
+    const room = (after[index] ?? 0) - (shares[index] ?? 0);
+    const moved = Math.min(room, excess);
+    shares[index] = (shares[index] ?? 0) + moved;
+    excess -= moved;
+  }
+}
+
+/**
  * Computes every line's and the invoice's amounts (routes-final 8.A, B9) — gross = quantity ×
  * rate; the line discount = gross × `discount_percent` ÷ 100; the overall discount shared across
  * the lines in proportion to what is left after their own discounts, the last line that has
- * something left absorbing the rounding; net = gross − both; taxable = net ÷ (1 + GST ÷ 100) when
+ * something left absorbing the rounding (never past what it has left — any excess moves to the
+ * lines before it); net = gross − both; taxable = net ÷ (1 + GST ÷ 100) when
  * the GST is inclusive, else net; GST = taxable × GST ÷ 100 (inclusive: net − taxable, so the line
  * comes to its price exactly); amount = taxable + GST.
  *
@@ -83,7 +108,10 @@ export function computeInvoiceAmounts(options: {
   const shares = after.map((value, index) =>
     index === absorbingIndex || afterTotal === 0 ? 0 : Math.floor((overall * value) / afterTotal),
   );
-  if (absorbingIndex >= 0) shares[absorbingIndex] = overall - sum(shares);
+  if (absorbingIndex >= 0) {
+    shares[absorbingIndex] = overall - sum(shares);
+    spillShareExcess({ shares, after, fromIndex: absorbingIndex });
+  }
   const lines = options.lines.map((line, index): InvoiceLineAmounts => {
     const net = (after[index] ?? 0) - (shares[index] ?? 0);
     const taxable = line.isGstInclusive ? Math.round((net * 100) / (100 + line.gstPercent)) : net;
