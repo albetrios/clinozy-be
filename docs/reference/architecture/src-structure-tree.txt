@@ -11,12 +11,17 @@ src/
 ├── domains/
     ├── app/
     │   ├── __tests__/
+    │   │   ├── e2e/
+    │   │   │   ├── flow-enquiry-to-patient.e2e.test.ts
+    │   │   │   ├── flow-plan-and-feedback.e2e.test.ts
+    │   │   │   └── flow-visit-to-payment.e2e.test.ts
     │   │   ├── factories/
     │   │   │   ├── app-fixture.factory.ts
     │   │   │   └── app-flow.factory.ts
     │   │   └── integration/
     │   │   │   ├── app-automation.integration.test.ts
     │   │   │   ├── app-record-lifecycle.integration.test.ts
+    │   │   │   ├── app-record-purge.integration.test.ts
     │   │   │   ├── app-route-smoke.integration.test.ts
     │   │   │   └── clinozy-messages.integration.test.ts
     │   ├── seed/

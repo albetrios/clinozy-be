@@ -47,3 +47,7 @@ as the launch's ROUTE builds them.
 
 - [organization-switch-and-capability-discovery-flow](../../FLOWS.md#organization-switch-and-capability-discovery-flow) — the active organization (the `org` claim) scopes every app route.
 - Reads tenancy through `OrganizationService` and `MembershipService` only (never their repositories).
+- The launch's three key flows (PRD 3.2) run end to end in `__tests__/e2e/`: an enquiry becomes a
+  patient (`flow-enquiry-to-patient`), visit → prescription → sale → payment
+  (`flow-visit-to-payment`), treatment plan and feedback (`flow-plan-and-feedback`); the daily
+  record purge (WC-46) has its own suite (`__tests__/integration/app-record-purge`).
