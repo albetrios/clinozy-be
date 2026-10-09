@@ -167,6 +167,21 @@ approved plan; [plans/acceptance.md](plans/acceptance.md) holds a result and evi
   - Before launch, outside the code: the clinic's accountant confirms the tax rules (D20, D21, D23);
     the clinic's advisor confirms the 7-day purge (D38); clinozy-fe confirms machines (D28); the
     WhatsApp Business number is verified and the Meta app's webhook pointed at the API (D32, D77).
+- Close gates (2026-10-09):
+  - **`pnpm test`:** green. unit + property + global 702 files / 5,090 tests; unit-db 62 / 292;
+    e2e 26 / 199; integration 134 / 1,147 (1 skipped); security 93 / 2,364; performance 10 / 24.
+    After the review's fixes, the touched suites were re-run on a rebuilt database (billing,
+    invoice numbering, index hygiene, tasks, contact activity, memberships, the global lane, the
+    three flows).
+  - **Route success coverage:** `pnpm validate:route-success-coverage` covers all 435 routes
+    (budget 0). Two reads' observed 400s are now documented in OpenAPI.
+  - **Every other `pnpm ci:local` gate:** green — validate, domain strict / coverage /
+    unit-matrix, constants, test naming, the route catalog and route gates, structure tree,
+    docs and links, tsdoc 0/0, agent-os, migration lint, env example, build, the production
+    audit.
+  - **Biome, SonarQube and the intake check:** Biome clean; SonarQube 0 issues / 0 hotspots;
+    `pnpm iteration:intake --check` passed.
+  - **`pnpm test:rls-role`:** the e2e and integration lanes as the RLS-subject role — result recorded with the status change below.
 - Pre-merge review (`/be-pre-merge-review`, review only; each finding checked before acting):
   - **SQL design:** one blocking finding, confirmed and fixed. `app.fn_assign_invoice_number`
     used `lpad(n, 4)`, and Postgres cuts a longer string, so invoice 10000 would have become
