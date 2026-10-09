@@ -10,6 +10,8 @@ import { closeWebhookDeliveryQueue } from '@/domains/notify/sub-domains/webhook/
 import { closeSubscriptionSeatSyncQueue } from '@/domains/billing/sub-domains/subscription/queues/subscription-seat-sync.queue.js';
 import { closeStripeWebhookQueue } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
 import { closeUserDataExportQueue } from '@/domains/user/sub-domains/user-data-export/queues/user-data-export.queue.js';
+import { closeContactMessageDeliveryQueue } from '@/domains/app/sub-domains/contacts/contact-activities/queues/contact-message-delivery.queue.js';
+import { closeMessagingWebhookEventQueue } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/queues/messaging-webhook-event.queue.js';
 import { flushSentry } from '@/infrastructure/observability/sentry/sentry.js';
 import { shutdownPostHog } from '@/infrastructure/observability/posthog/posthog.js';
 import { closeBullMQMetricsQueues } from '@/infrastructure/observability/metrics/bullmq-metrics.js';
@@ -72,6 +74,9 @@ const shutdownMiddleware: FastifyPluginAsync = async (app) => {
       // graceful shutdown (previously only 4 of the 6 producer queues were drained here).
       closeStripeWebhookQueue(),
       closeUserDataExportQueue(),
+      // Launch D77: a message write enqueues its delivery; the messaging webhook its processing.
+      closeContactMessageDeliveryQueue(),
+      closeMessagingWebhookEventQueue(),
     ]);
     // The same pooled BullMQ clients the readiness probe uses — released before the shared
     // connections so the API does not leave Redis sockets open on the way out.

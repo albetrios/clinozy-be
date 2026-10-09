@@ -35,6 +35,7 @@
     "Plan": "Planes de suscripción y precios",
     "Subscription": "Ciclo de vida de suscripción — crear, mejorar, cancelar, reanudar",
     "Stripe Webhook": "Receptor de webhooks de facturación de Stripe (cuerpo sin procesar, firma verificada)",
+    "Messaging webhook": "Webhook de WhatsApp e Instagram de la app de Meta de la plataforma (cuerpo sin procesar, firma verificada)",
     "Notification": "Feed de notificaciones del usuario",
     "Webhook": "Gestión de endpoints webhook e historial de envíos",
     "Upload": "Generación de URL pre-firmadas para subida de archivos",

@@ -51,6 +51,7 @@ export const EXPECTED_FORCE_RLS_TABLES: ForceRlsTableRef[] = [
   { schemaName: 'app', tableName: 'membership_preference_branches' },
   { schemaName: 'app', tableName: 'membership_preferences' },
   { schemaName: 'app', tableName: 'membership_saved_views' },
+  { schemaName: 'app', tableName: 'messaging_webhook_events' },
   { schemaName: 'app', tableName: 'offer_branches' },
   { schemaName: 'app', tableName: 'offer_offerings' },
   { schemaName: 'app', tableName: 'offering_branches' },

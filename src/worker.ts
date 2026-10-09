@@ -50,6 +50,8 @@ import { closeStripeWebhookQueue } from '@/domains/billing/sub-domains/stripe-we
 import { closeSubscriptionSeatSyncQueue } from '@/domains/billing/sub-domains/subscription/queues/subscription-seat-sync.queue.js';
 import { closeDayCloseAutoCloseQueue } from '@/domains/app/sub-domains/billing/day-closes/queues/day-close-auto-close.queue.js';
 import { closeTaskRulesQueue } from '@/domains/app/sub-domains/tasks/queues/task-rules.queue.js';
+import { closeContactMessageDeliveryQueue } from '@/domains/app/sub-domains/contacts/contact-activities/queues/contact-message-delivery.queue.js';
+import { closeMessagingWebhookEventQueue } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/queues/messaging-webhook-event.queue.js';
 import { closeMailQueue } from '@/infrastructure/mail/queues/mail.queue.js';
 import { closeNotificationQueue } from '@/domains/notify/sub-domains/notification/queues/notification.queue.js';
 import { closeWebhookDeliveryQueue } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
@@ -143,6 +145,8 @@ async function main() {
         closeUserDataExportQueue(), // sec-r4-R1: was missing from shutdown sequence
         closeDayCloseAutoCloseQueue(), // WC-39: the auto-close sweep's producer queue
         closeTaskRulesQueue(), // TK4: the task rules sweep's producer queue
+        closeContactMessageDeliveryQueue(), // D77: the messaging sweep's and task rules' producer
+        closeMessagingWebhookEventQueue(), // D77: the messaging sweep's reclaim producer
       ]);
       // Pooled BullMQ clients (queue gauges, readiness depth probes, the Redis-saturation
       // sampler) hold Redis sockets for the process lifetime — release them before the

@@ -19,6 +19,8 @@ import { AppMembershipsService } from './sub-domains/memberships/memberships.ser
 import { ContactsRepository } from './sub-domains/contacts/contacts.repository.js';
 import { ContactMembersRepository } from './sub-domains/contacts/contact-members/contact-members.repository.js';
 import { ContactMembersService } from './sub-domains/contacts/contact-members/contact-members.service.js';
+import { ContactMessagingWebhookRepository } from './sub-domains/contacts/contact-messaging-webhook/contact-messaging-webhook.repository.js';
+import { ContactMessagingWebhookService } from './sub-domains/contacts/contact-messaging-webhook/contact-messaging-webhook.service.js';
 import {
   type AppMembershipLeaveStep,
   createAppMembershipLeaveStep,
@@ -33,6 +35,8 @@ export type AppContainer = {
   taskRuleSettingsService: TaskRuleSettingsService;
   appMembershipsService: AppMembershipsService;
   contactMembersService: ContactMembersService;
+  /** The platform Meta app's WhatsApp and Instagram webhook (launch D77). */
+  contactMessagingWebhookService: ContactMessagingWebhookService;
   /** The app's part of the membership leave step (launch K4), wired into tenancy. */
   membershipLeaveStep: AppMembershipLeaveStep;
   /** The ports every app record rule calls outside the app (one object, shared by every service). */
@@ -102,6 +106,9 @@ export function createAppContainer(
       membershipService,
       new ContactsRepository(),
       new ContactMembersRepository(),
+    ),
+    contactMessagingWebhookService: new ContactMessagingWebhookService(
+      new ContactMessagingWebhookRepository(),
     ),
     membershipLeaveStep: createAppMembershipLeaveStep(),
     ports,

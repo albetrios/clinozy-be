@@ -4,7 +4,7 @@ import { WEBHOOK_RATE_LIMIT } from '@/shared/middlewares/rate-limit/rate-limit-p
 import { createStripeWebhookController } from './stripe-webhook.controller.js';
 import type { StripeWebhookService } from './stripe-webhook.service.js';
 import { stripeWebhookIngressPlugin } from './stripe-webhook-ingress.plugin.js';
-import { registerStripeWebhookRawBodyRoute } from './stripe-webhook-raw-body.registry.js';
+import { registerRawBodyRoute } from '@/shared/utils/http/raw-body-route.registry.js';
 
 /**
  * Registers the Stripe webhook receiver at the canonical path:
@@ -32,7 +32,7 @@ export function stripeWebhookRoutes(
         routeOptions.config &&
         (routeOptions.config as Record<string, unknown>).captureRawBody === true
       ) {
-        registerStripeWebhookRawBodyRoute(routeOptions.url);
+        registerRawBodyRoute({ url: routeOptions.url, signatureHeader: 'stripe-signature' });
       }
     });
 

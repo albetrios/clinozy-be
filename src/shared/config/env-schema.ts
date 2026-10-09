@@ -619,6 +619,24 @@ const envSchemaBase = z.object({
    */
   BILLING_DUNNING_GRACE_DAYS: z.coerce.number().int().min(0).max(120).default(14),
 
+  // Messaging — the platform Meta app (WhatsApp Business Platform + Instagram messaging, launch D77)
+  /**
+   * Sends the queued WhatsApp and Instagram messages through the Meta Graph API. Off, messages stay
+   * `queued` (the composer shows "Queued") and nothing is enqueued or swept. On needs
+   * META_GRAPH_ACCESS_TOKEN, META_APP_SECRET and META_WEBHOOK_VERIFY_TOKEN (refine below).
+   */
+  MESSAGING_DELIVERY_ENABLED: booleanString('false'),
+  /** The platform Meta app's system-user token (`whatsapp_business_messaging`, `instagram_manage_messages`). */
+  META_GRAPH_ACCESS_TOKEN: z.string().min(1).optional(),
+  /** The Meta app's secret — every webhook callback is signed with it (`X-Hub-Signature-256`). */
+  META_APP_SECRET: z.string().min(1).optional(),
+  /** The token Meta echoes back when the webhook is subscribed (`hub.verify_token`). */
+  META_WEBHOOK_VERIFY_TOKEN: z.string().min(1).optional(),
+  /** The Graph API base URL, its version included. */
+  META_GRAPH_API_BASE_URL: z.url().default('https://graph.facebook.com/v21.0'),
+  /** Graph API request timeout (ms) — each send or lookup the messaging workers make. */
+  META_HTTP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(10_000),
+
   // Sentry
   SENTRY_DSN: z.url().optional(),
   // The frontend Sentry DSN is clinozy-fe's (`VITE_SENTRY_DSN`); the backend has none.
@@ -1396,6 +1414,22 @@ export const envSchema = envSchemaBase
       message:
         'S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are set together or not at all (unset, the AWS SDK default credential chain applies).',
       path: ['S3_ACCESS_KEY_ID'],
+    },
+  )
+  .refine(
+    (data) =>
+      /**
+       * Delivery calls the Graph API with the token, and the replies and delivery reports it waits
+       * for arrive on the webhook — verified with the app secret, subscribed with the verify token.
+       */
+      !data.MESSAGING_DELIVERY_ENABLED ||
+      (Boolean(data.META_GRAPH_ACCESS_TOKEN) &&
+        Boolean(data.META_APP_SECRET) &&
+        Boolean(data.META_WEBHOOK_VERIFY_TOKEN)),
+    {
+      message:
+        'MESSAGING_DELIVERY_ENABLED=true needs META_GRAPH_ACCESS_TOKEN, META_APP_SECRET and META_WEBHOOK_VERIFY_TOKEN.',
+      path: ['MESSAGING_DELIVERY_ENABLED'],
     },
   )
   .refine(

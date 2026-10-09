@@ -116,7 +116,7 @@ const RLS_TABLE_SCOPE_MAP: Record<string, readonly string[]> = {
   'app.branch_members': ['app.current_organization_public_id'],
   'app.branch_rooms': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
   'app.branches': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
-  'app.contact_activities': ['app.current_organization_public_id'],
+  'app.contact_activities': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
   'app.contact_members': ['app.current_organization_public_id'],
   'app.contact_message_templates': [
     'app.current_organization_public_id',
@@ -153,6 +153,10 @@ const RLS_TABLE_SCOPE_MAP: Record<string, readonly string[]> = {
   'app.membership_preference_branches': ['app.current_organization_public_id'],
   'app.membership_preferences': ['app.current_organization_public_id'],
   'app.membership_saved_views': ['app.current_organization_public_id'],
+  'app.messaging_webhook_events': [
+    'app.current_organization_public_id',
+    'app.global_retention_cleanup',
+  ],
   'app.offer_branches': ['app.current_organization_public_id'],
   'app.offer_offerings': ['app.current_organization_public_id'],
   'app.offering_branches': ['app.current_organization_public_id'],

@@ -12,6 +12,7 @@ import {
   contactActivitiesParentParamsDto,
   LogContactCallDto,
   listContactActivitiesQueryDto,
+  messagingStatusQueryDto,
   SendContactMessageDto,
 } from './contact-activities.dto.js';
 
@@ -121,6 +122,22 @@ export function contactActivitiesRoutes(service: ContactActivitiesService): Fast
         },
       },
       controller.transition('resend'),
+    );
+    zodApplication.get(
+      '/contact-activities/messaging-status',
+      {
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.CONTACT_ACTIVITY_READ)],
+        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        schema: {
+          summary: 'Messaging status',
+          description:
+            'Returns what the message composer shows (launch D77, WC-2): `is_delivery_enabled` — queued messages are sent at all on this deployment; `is_provider_down` — Meta is failing, so messages wait in the queue ("WhatsApp down · replies will queue") and go out once it is back, never dropped; and for `whatsapp` and `instagram` each, `is_connected` — the clinic\'s account is set in the organization settings — and `queued_count`, the messages waiting to go out. Requires contact_activity:read.',
+          tags: ['Contact activity'],
+          querystring: messagingStatusQueryDto,
+        },
+      },
+      controller.collectionView('messaging-status'),
     );
     zodApplication.post(
       '/contact-activities/message-batches',

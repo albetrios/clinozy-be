@@ -33,11 +33,13 @@ edited or deleted, and it goes only with its contact.
 | `GET /app/contacts/{contact_id}/activities/{contact_activity_id}` | `contact_activity:read` |
 | `POST /app/contacts/{contact_id}/activities/{contact_activity_id}/resend` | `contact_activity:update` |
 | `POST /app/contact-activities/message-batches` | `contact_activity:create` |
+| `GET /app/contact-activities/messaging-status` | `contact_activity:read` |
 
 ## Key invariants
 
-- **Tenant isolation:** ENABLE + FORCE RLS on the organization GUC; no purge arm — an entry goes with its contact (`ON DELETE CASCADE`).
+- **Tenant isolation:** ENABLE + FORCE RLS on the organization GUC, with the global-retention read arm for the messaging sweep (launch D77); an entry goes with its contact (`ON DELETE CASCADE`).
 - **One shape per type (M2):** a direction only on messages and calls; a delivery status exactly on a sent message; no author on a system or received entry; `system` entries are the server's (no route).
 - **At most one record link (M5)**, a live record of the organization; an entry linked to a record the caller cannot read is hidden from the list and is a 404 by id (M10).
 - **The contact follows (CT10, CT4):** each entry moves `last_activity_at`, a sent / received message or call `last_sent_at` / `last_received_at`, a sent one `default_channel` — without touching the contact's `updated_at`.
-- **Delivery is the messaging worker's (M8, ROUTE #139):** a message stays `queued`; `resend` re-queues a failed one; `provider_message_id` is unique per organization.
+- **Delivery is the messaging worker's (M8, ROUTE #139, D77):** a send, a batch and a resend leave a `queued` message and, after the commit, ask for the organization's `contact-message-delivery` job (deduplicated per organization; the one-minute `contact-messaging-sweep` re-enqueues any organization whose queued messages no job holds). The job claims a batch (`delivery_claimed_at`, stale after 5 minutes), sends each through the platform Meta app outside any database context and writes `sent` + `provider_message_id`, or `failed` + `failure_reason` (no account connected, not on WhatsApp, no Instagram conversation yet, Meta's refusal); while Meta is down or throttling the queue pauses and the messages stay `queued`. An Instagram reply goes to the `provider_sender_id` of the person's latest Instagram message. `provider_message_id` is unique per organization; delivery reports from the webhook move a message forward only.
+- **The composer's status (WC-2):** `messaging-status` answers whether delivery is on, whether Meta is down (the `meta` circuit), and each channel's account and queue.

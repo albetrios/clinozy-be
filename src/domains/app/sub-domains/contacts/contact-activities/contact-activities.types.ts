@@ -33,3 +33,25 @@ export type ContactActivityOutput = {
   created_at: string;
   updated_at: string;
 } & Record<ContactActivityLinkColumn, string | null>;
+
+/** One messaging channel in {@link ContactMessagingStatusOutput}. */
+export interface ContactMessagingChannelStatus {
+  /** The clinic's account on this channel is connected (organization settings). */
+  is_connected: boolean;
+  /** Messages waiting to go out on this channel. */
+  queued_count: number;
+}
+
+/**
+ * `GET /app/contact-activities/messaging-status` (launch D77, WC-2) — what the composer shows:
+ * whether messages go out at all, whether Meta is down ("WhatsApp down · replies will queue"),
+ * and each channel's connection and queue.
+ */
+export interface ContactMessagingStatusOutput {
+  /** Delivery is on for this deployment — off, every message stays queued. */
+  is_delivery_enabled: boolean;
+  /** Meta is failing (the `meta` circuit is not closed) — messages queue until it is back. */
+  is_provider_down: boolean;
+  whatsapp: ContactMessagingChannelStatus;
+  instagram: ContactMessagingChannelStatus;
+}

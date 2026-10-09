@@ -35,6 +35,7 @@
     "Plan": "Subscription plans and pricing",
     "Subscription": "Subscription lifecycle — create, upgrade, cancel, resume",
     "Stripe Webhook": "Stripe billing webhook receiver (raw body, signature verified)",
+    "Messaging webhook": "The platform Meta app's WhatsApp and Instagram webhook (raw body, signature verified)",
     "Notification": "User notification feed",
     "Webhook": "Webhook endpoint management and delivery history",
     "Upload": "Pre-signed URL generation for file uploads",

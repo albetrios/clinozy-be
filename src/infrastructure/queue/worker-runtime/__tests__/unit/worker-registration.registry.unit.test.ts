@@ -50,8 +50,9 @@ describe('worker-registration.registry', () => {
     // REQ-4: +1 for the subscription-seat-sync worker (Stripe family, throughput, Postgres-backed);
     // +1 for the webhook-delivery-reclaim sweep (webhook family, cron, Postgres-backed); +1 for the
     // app record purge (WC-46); +2 for the day auto-close sweep and its per-organization jobs (WC-39);
-    // +2 for the task rules sweep and its per-organization runs (TK4).
-    expect(definitions).toHaveLength(38);
+    // +2 for the task rules sweep and its per-organization runs (TK4); +4 for messaging (D77): the
+    // delivery and callback-processing workers, the one-minute sweep and the callbacks' purge.
+    expect(definitions).toHaveLength(42);
     for (const definition of definitions) {
       expect(definition.queueName).toBeTruthy();
       expect(definition.logLabel).toBeTruthy();
@@ -77,15 +78,16 @@ describe('worker-registration.registry', () => {
     // webhook-delivery-reclaim sweep one Postgres-backed, scheduled, maintenance worker; the app
     // record purge and the day auto-close sweep two more, and the auto-close jobs one Postgres-backed,
     // event-driven (the sweep adds them), throughput worker; the task rules sweep and its runs the
-    // same pair again.
-    expect(definitions.filter((definition) => definition.usesPostgres)).toHaveLength(35);
-    expect(definitions.filter((definition) => definition.scheduled)).toHaveLength(30);
+    // same pair again; messaging (D77) two event-driven throughput workers and two scheduled
+    // maintenance ones.
+    expect(definitions.filter((definition) => definition.usesPostgres)).toHaveLength(39);
+    expect(definitions.filter((definition) => definition.scheduled)).toHaveLength(32);
     expect(
       definitions.filter((definition) => definition.criticality === 'throughput'),
-    ).toHaveLength(8);
+    ).toHaveLength(10);
     expect(
       definitions.filter((definition) => definition.criticality === 'maintenance'),
-    ).toHaveLength(28);
+    ).toHaveLength(30);
     expect(
       definitions.filter((definition) => definition.criticality === 'observability'),
     ).toHaveLength(2);

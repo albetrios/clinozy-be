@@ -15,6 +15,7 @@ src/
     │   │   │   ├── app-fixture.factory.ts
     │   │   │   └── app-flow.factory.ts
     │   │   └── integration/
+    │   │   │   ├── app-record-lifecycle.integration.test.ts
     │   │   │   └── app-route-smoke.integration.test.ts
     │   ├── seed/
     │   │   └── index.ts
@@ -189,8 +190,16 @@ src/
     │   │   │   ├── __tests__/
     │   │   │   │   └── integration/
     │   │   │   │   │   ├── contact-activities.integration.test.ts
+    │   │   │   │   │   ├── contact-messaging.integration.test.ts
     │   │   │   │   │   └── contacts.integration.test.ts
     │   │   │   ├── contact-activities/
+    │   │   │   │   ├── queues/
+    │   │   │   │   │   ├── contact-message-delivery.job.schema.ts
+    │   │   │   │   │   └── contact-message-delivery.queue.ts
+    │   │   │   │   ├── workers/
+    │   │   │   │   │   ├── contact-message-delivery.constants.ts
+    │   │   │   │   │   ├── contact-message-delivery.processor.ts
+    │   │   │   │   │   └── contact-message-delivery.worker.ts
     │   │   │   │   ├── contact-activities.constants.ts
     │   │   │   │   ├── contact-activities.controller.ts
     │   │   │   │   ├── contact-activities.dto.ts
@@ -202,7 +211,8 @@ src/
     │   │   │   │   ├── contact-activities.serializer.ts
     │   │   │   │   ├── contact-activities.service.ts
     │   │   │   │   ├── contact-activities.types.ts
-    │   │   │   │   └── contact-activities.validator.ts
+    │   │   │   │   ├── contact-activities.validator.ts
+    │   │   │   │   └── contact-message-delivery.repository.ts
     │   │   │   ├── contact-members/
     │   │   │   │   ├── contact-members.controller.ts
     │   │   │   │   ├── contact-members.dto.ts
@@ -225,6 +235,30 @@ src/
     │   │   │   │   ├── contact-message-templates.service.ts
     │   │   │   │   ├── contact-message-templates.types.ts
     │   │   │   │   └── contact-message-templates.validator.ts
+    │   │   │   ├── contact-messaging-webhook/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── contact-messaging-webhook.service.unit.test.ts
+    │   │   │   │   ├── queues/
+    │   │   │   │   │   ├── messaging-webhook-event.job.schema.ts
+    │   │   │   │   │   └── messaging-webhook-event.queue.ts
+    │   │   │   │   ├── workers/
+    │   │   │   │   │   ├── contact-messaging-sweep.processor.ts
+    │   │   │   │   │   ├── contact-messaging-sweep.worker.ts
+    │   │   │   │   │   ├── contact-messaging-webhook.constants.ts
+    │   │   │   │   │   ├── messaging-webhook-event-retention.worker.ts
+    │   │   │   │   │   ├── messaging-webhook-event.processor.ts
+    │   │   │   │   │   └── messaging-webhook-event.worker.ts
+    │   │   │   │   ├── contact-messaging-inbound.repository.ts
+    │   │   │   │   ├── contact-messaging-webhook-ingress.plugin.ts
+    │   │   │   │   ├── contact-messaging-webhook.constants.ts
+    │   │   │   │   ├── contact-messaging-webhook.controller.ts
+    │   │   │   │   ├── contact-messaging-webhook.dto.ts
+    │   │   │   │   ├── contact-messaging-webhook.repository.ts
+    │   │   │   │   ├── contact-messaging-webhook.routes.ts
+    │   │   │   │   ├── contact-messaging-webhook.schema.ts
+    │   │   │   │   ├── contact-messaging-webhook.service.ts
+    │   │   │   │   └── contact-messaging-webhook.types.ts
     │   │   │   ├── seed/
     │   │   │   │   ├── contacts.bulk.seed.ts
     │   │   │   │   ├── contacts.seed.ts
@@ -1107,7 +1141,6 @@ src/
     │   │   │   │   │   ├── stripe-webhook-event.repository.ledger-immutability.db.unit.test.ts
     │   │   │   │   │   ├── stripe-webhook-ingress.plugin.unit.test.ts
     │   │   │   │   │   ├── stripe-webhook-organization.util.unit.test.ts
-    │   │   │   │   │   ├── stripe-webhook-raw-body.registry.unit.test.ts
     │   │   │   │   │   ├── stripe-webhook.controller.unit.test.ts
     │   │   │   │   │   ├── stripe-webhook.job.schema.unit.test.ts
     │   │   │   │   │   ├── stripe-webhook.processor-race.unit.test.ts
@@ -1133,7 +1166,6 @@ src/
     │   │   │   ├── stripe-webhook-event.repository.ts
     │   │   │   ├── stripe-webhook-ingress.plugin.ts
     │   │   │   ├── stripe-webhook-organization.util.ts
-    │   │   │   ├── stripe-webhook-raw-body.registry.ts
     │   │   │   ├── stripe-webhook.container.ts
     │   │   │   ├── stripe-webhook.controller.ts
     │   │   │   ├── stripe-webhook.overview.md
@@ -1991,6 +2023,14 @@ src/
     │   ├── mcp-client-guide.ts
     │   ├── mcp-server.ts
     │   └── mcp.overview.md
+    ├── messaging/
+    │   ├── __tests__/
+    │   │   └── unit/
+    │   │   │   └── meta-graph-error.util.unit.test.ts
+    │   ├── messaging.overview.md
+    │   ├── meta-graph-error.util.ts
+    │   ├── meta-graph.client.ts
+    │   └── meta-messaging.config.ts
     ├── observability/
     │   ├── __tests__/
     │   │   └── unit/
@@ -2343,6 +2383,7 @@ src/
     │   │   ├── http-cache.util.ts
     │   │   ├── list-query.util.ts
     │   │   ├── pagination.util.ts
+    │   │   ├── raw-body-route.registry.ts
     │   │   ├── request.util.ts
     │   │   ├── response.util.ts
     │   │   ├── trust-proxy.util.ts
@@ -3100,6 +3141,7 @@ src/
     │   │   │   ├── fastify-server.util.unit.test.ts
     │   │   │   ├── list-query.util.unit.test.ts
     │   │   │   ├── pagination.util.unit.test.ts
+    │   │   │   ├── raw-body-route.registry.unit.test.ts
     │   │   │   ├── request.util.unit.test.ts
     │   │   │   ├── response-format-envelope.util.unit.test.ts
     │   │   │   ├── response-format-payload.util.unit.test.ts

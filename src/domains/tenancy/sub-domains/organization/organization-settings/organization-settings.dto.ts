@@ -32,6 +32,17 @@ export const updateOrganizationSettingsDto = z
     reminder_hour: z.number().int().min(0).max(23).optional(),
     retarget_after_days: z.number().int().min(7).max(730).optional(),
     deleted_record_purge_days: z.number().int().min(1).max(90).optional(),
+    // The clinic's accounts on the platform Meta app (launch D77); null disconnects one.
+    whatsapp_phone_number_id: z
+      .string()
+      .regex(/^\d{5,32}$/)
+      .nullable()
+      .optional(),
+    instagram_account_id: z
+      .string()
+      .regex(/^\d{5,32}$/)
+      .nullable()
+      .optional(),
     security_policy: z
       .record(
         z.string().min(1).max(100),

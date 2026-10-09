@@ -12,6 +12,9 @@ import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js'
 import { ContactMessageTemplatesRepository } from '@/domains/app/sub-domains/contacts/contact-message-templates/contact-message-templates.repository.js';
 import { LEAD_INTEREST_LABELS } from '@/domains/app/sub-domains/leads/leads.constants.js';
 import { LeadsRepository } from '@/domains/app/sub-domains/leads/leads.repository.js';
+import { runEnqueueAfterCommit } from '@/core/events/event-bus.js';
+import { isMetaProviderDown } from '@/infrastructure/messaging/meta-graph.client.js';
+import { isMessagingDeliveryEnabled } from '@/infrastructure/messaging/meta-messaging.config.js';
 import { fieldValidationError } from '@/shared/errors/index.js';
 import {
   CONTACT_ACTIVITY_BODY_MAX,
@@ -23,7 +26,9 @@ import {
   type ContactActivityLinkColumn,
 } from './contact-activities.constants.js';
 import type { ContactActivitiesRepository } from './contact-activities.repository.js';
+import type { ContactMessagingStatusOutput } from './contact-activities.types.js';
 import { validateContactMessageBatch } from './contact-activities.validator.js';
+import { requestContactMessageDelivery } from './queues/contact-message-delivery.queue.js';
 
 /** The read gate of each record link today (M10, D63) — an entry linked to one the caller cannot read is hidden. */
 const LINK_READ_PERMISSIONS: Readonly<Record<ContactActivityLinkColumn, string>> = {
@@ -73,6 +78,48 @@ function fillPlaceholders(
   return filled;
 }
 
+/** After the write commits, asks for the organization's delivery job (launch D77) — never fails the write. */
+async function scheduleDelivery(context: BaseRecordWriteContext): Promise<void> {
+  const { organizationPublicId } = context.scope;
+  await runEnqueueAfterCommit(() => requestContactMessageDelivery(organizationPublicId));
+}
+
+/** What the composer shows (D77, WC-2): delivery on, Meta up, each channel's account and queue. */
+async function readMessagingStatus(
+  repository: ContactActivitiesRepository,
+  organizationId: number,
+): Promise<ContactMessagingStatusOutput> {
+  const accounts = await repository.findMessagingAccounts(organizationId);
+  const queued = await repository.countQueuedByType(organizationId);
+  return {
+    is_delivery_enabled: isMessagingDeliveryEnabled(),
+    is_provider_down: await isMetaProviderDown(),
+    whatsapp: {
+      is_connected: accounts.whatsappPhoneNumberId !== null,
+      queued_count: queued.get(CONTACT_ACTIVITY_TYPE.WHATSAPP) ?? 0,
+    },
+    instagram: {
+      is_connected: accounts.instagramAccountId !== null,
+      queued_count: queued.get(CONTACT_ACTIVITY_TYPE.INSTAGRAM) ?? 0,
+    },
+  };
+}
+
+/** M9's batch check: every contact named is a live one of the organization — 400 naming the rest. */
+function assertBatchContacts(
+  publicIds: readonly string[],
+  found: ReadonlyMap<string, number>,
+): void {
+  const missing = publicIds.filter((publicId) => !found.has(publicId));
+  if (missing.length > 0) {
+    throw fieldValidationError({
+      field: 'contact_ids',
+      messageKey: 'errors:validation.recordReferenceNotFound',
+      messageParams: { id: missing.join(', '), label: 'contact' },
+    });
+  }
+}
+
 /**
  * The contact activity rules (launch ROUTE #130, routes-final 4.C): what every entry checks and
  * writes, whichever route makes it (M6, M7, M9, M10).
@@ -85,7 +132,9 @@ function fillPlaceholders(
  *   lead's first interest). In the entry's transaction the contact's last activity, last sent /
  *   received time and default channel move (`recordActivity`), and a sent line moves the open lead
  *   from `new` to `contacted`. Reads hide an entry linked to a record the caller cannot read (M10).
- *   `message-batches` writes one queued message per contact the same way.
+ *   `message-batches` writes one queued message per contact the same way. A queued message (a
+ *   send, a batch, a resend) asks for the organization's delivery job once the write commits
+ *   (launch D77).
  * - **Failure modes:** `ValidationError` (400) on `contact_message_template_id`, `attachment_keys`,
  *   `reply_to_contact_activity_id`, `body` (over 1000 once filled) or `contact_ids`.
  */
@@ -174,8 +223,15 @@ export function createContactActivitiesRules(
       return scope;
     },
     prepareCreate: prepareEntry,
-    afterWrite: async (row, change) => {
+    afterWrite: async (row, change, context) => {
       if (change.kind === 'create') await touchContact(row);
+      // A queued message — written, or a failed one resent — goes to the messaging worker (D77).
+      if (row.delivery_status === CONTACT_ACTIVITY_DELIVERY_STATUS.QUEUED) {
+        await scheduleDelivery(context);
+      }
+    },
+    collectionViews: {
+      'messaging-status': ({ context }) => readMessagingStatus(repository, context.organizationId),
     },
     collectionActions: {
       'message-batches': async ({ input, context, present, resolveReferences }) => {
@@ -185,14 +241,7 @@ export function createContactActivitiesRules(
           organizationId: context.organizationId,
           publicIds: batch.contact_ids,
         });
-        const missing = batch.contact_ids.filter((publicId) => !contactIds.has(publicId));
-        if (missing.length > 0) {
-          throw fieldValidationError({
-            field: 'contact_ids',
-            messageKey: 'errors:validation.recordReferenceNotFound',
-            messageParams: { id: missing.join(', '), label: 'contact' },
-          });
-        }
+        assertBatchContacts(batch.contact_ids, contactIds);
         const shared: Record<string, unknown> = {
           contact_message_template_id: batch.contact_message_template_id,
         };
@@ -217,6 +266,7 @@ export function createContactActivitiesRules(
           await touchContact(entry);
           entries.push(entry);
         }
+        await scheduleDelivery(context);
         return present(entries);
       },
     },

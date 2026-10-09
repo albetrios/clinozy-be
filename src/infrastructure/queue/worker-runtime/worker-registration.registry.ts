@@ -44,6 +44,20 @@ import { createTaskRulesSweepWorker } from '@/domains/app/sub-domains/tasks/work
 import { createTaskRulesWorker } from '@/domains/app/sub-domains/tasks/workers/task-rules.worker.js';
 import { TASK_RULES_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/tasks/workers/task-rules.constants.js';
 import { TASK_RULES_QUEUE_NAME } from '@/domains/app/sub-domains/tasks/queues/task-rules.queue.js';
+import { createContactMessageDeliveryWorker } from '@/domains/app/sub-domains/contacts/contact-activities/workers/contact-message-delivery.worker.js';
+import { CONTACT_MESSAGE_DELIVERY_QUEUE_NAME } from '@/domains/app/sub-domains/contacts/contact-activities/queues/contact-message-delivery.queue.js';
+import { createMessagingWebhookEventWorker } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/workers/messaging-webhook-event.worker.js';
+import { MESSAGING_WEBHOOK_EVENT_QUEUE_NAME } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/queues/messaging-webhook-event.queue.js';
+import { createContactMessagingSweepWorker } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/workers/contact-messaging-sweep.worker.js';
+import { createMessagingWebhookEventRetentionWorker } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/workers/messaging-webhook-event-retention.worker.js';
+import {
+  CONTACT_MESSAGING_SWEEP_QUEUE_NAME,
+  MESSAGING_WEBHOOK_EVENT_RETENTION_QUEUE_NAME,
+} from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/workers/contact-messaging-webhook.constants.js';
+import {
+  isMessagingDeliveryEnabled,
+  isMetaWebhookIngressConfigured,
+} from '@/infrastructure/messaging/meta-messaging.config.js';
 import { APP_RECORD_PURGE_QUEUE_NAME } from '@/domains/app/workers/app-record-purge.constants.js';
 import { createMemberRoleTombstoneRetentionWorker } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.worker.js';
 import { MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.constants.js';
@@ -419,6 +433,45 @@ const WORKER_QUEUE_REGISTRATION_DEFINITIONS: WorkerQueueRegistrationDefinition[]
     resolvePostgresConcurrency: () => RETENTION_WORKER_CONCURRENCY,
     create: () => createTaskRulesWorker(),
   },
+  // Launch D77: WhatsApp and Instagram through the platform Meta app — delivery (each message
+  // write enqueues its organization), the callbacks' processing, the one-minute safety-net sweep
+  // under both and the callbacks' daily purge. Family `notify`: messages to people.
+  {
+    queueName: CONTACT_MESSAGE_DELIVERY_QUEUE_NAME,
+    family: 'notify',
+    logLabel: 'contact message delivery worker',
+    usesPostgres: true,
+    scheduled: false,
+    criticality: 'throughput',
+    holdsConnectionDuringExternalIo: false,
+    resolvePostgresConcurrency: () => getWorkerConcurrencyNotify(),
+    isEnabled: () => isMessagingDeliveryEnabled(),
+    create: () => createContactMessageDeliveryWorker(),
+  },
+  {
+    queueName: MESSAGING_WEBHOOK_EVENT_QUEUE_NAME,
+    family: 'notify',
+    logLabel: 'messaging webhook event worker',
+    usesPostgres: true,
+    scheduled: false,
+    criticality: 'throughput',
+    holdsConnectionDuringExternalIo: false,
+    resolvePostgresConcurrency: () => getWorkerConcurrencyNotify(),
+    isEnabled: () => isMetaWebhookIngressConfigured(),
+    create: () => createMessagingWebhookEventWorker(),
+  },
+  retentionDefinition({
+    queueName: CONTACT_MESSAGING_SWEEP_QUEUE_NAME,
+    family: 'notify',
+    logLabel: 'contact messaging sweep worker',
+    create: () => createContactMessagingSweepWorker(),
+  }),
+  retentionDefinition({
+    queueName: MESSAGING_WEBHOOK_EVENT_RETENTION_QUEUE_NAME,
+    family: 'notify',
+    logLabel: 'messaging webhook event retention worker',
+    create: () => createMessagingWebhookEventRetentionWorker(),
+  }),
   retentionDefinition({
     queueName: MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME,
     family: 'retention',

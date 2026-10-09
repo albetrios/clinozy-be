@@ -312,6 +312,48 @@ describe('env-schema', () => {
     expect(parsed.success).toBe(true);
   });
 
+  describe('MESSAGING_DELIVERY_ENABLED (launch D77)', () => {
+    const metaKeys = {
+      META_GRAPH_ACCESS_TOKEN: 'EAAG-test',
+      META_APP_SECRET: 'meta-app-secret',
+      META_WEBHOOK_VERIFY_TOKEN: 'meta-verify-token',
+    };
+
+    it('is off by default and needs no Meta keys', () => {
+      const parsed = envSchema.safeParse({ ...commonRequiredBase, NODE_ENV: 'development' });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) expect(parsed.data.MESSAGING_DELIVERY_ENABLED).toBe(false);
+    });
+
+    it('rejects delivery on without every Meta key', () => {
+      for (const missing of Object.keys(metaKeys)) {
+        const parsed = envSchema.safeParse({
+          ...commonRequiredBase,
+          NODE_ENV: 'development',
+          MESSAGING_DELIVERY_ENABLED: 'true',
+          ...metaKeys,
+          [missing]: undefined,
+        });
+        expect(parsed.success, missing).toBe(false);
+        if (!parsed.success) {
+          expect(
+            parsed.error.issues.some((issue) => issue.path.includes('MESSAGING_DELIVERY_ENABLED')),
+          ).toBe(true);
+        }
+      }
+    });
+
+    it('accepts delivery on with the three Meta keys', () => {
+      const parsed = envSchema.safeParse({
+        ...commonRequiredBase,
+        NODE_ENV: 'development',
+        MESSAGING_DELIVERY_ENABLED: 'true',
+        ...metaKeys,
+      });
+      expect(parsed.success).toBe(true);
+    });
+  });
+
   it('allows EMAIL_FROM_ADDRESS to be absent when RESEND_API_KEY is unset', () => {
     const parsed = envSchema.safeParse({
       ...commonRequiredBase,

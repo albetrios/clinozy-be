@@ -11,6 +11,7 @@ import {
   integer,
   numeric,
   smallint,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { maintenanceBypassArm, tenancySchema } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
@@ -30,7 +31,9 @@ import {
  * free-form `security_policy` JSONB used for MFA enforcement and similar
  * platform rules, and the operating settings the launch's rooms and background
  * work read (opening cash float, lead hold days, reminder hour, re-target
- * days, deleted-record purge days). RLS is enforced by the
+ * days, deleted-record purge days), and the clinic's WhatsApp and Instagram accounts on the
+ * platform Meta app (launch D77 — unique, so a callback finds its one organization through
+ * `tenancy.resolve_organization_public_id_for_messaging_account`). RLS is enforced by the
  * `organization_settings_tenant_isolation` policy.
  */
 export const organization_settings = tenancySchema
@@ -62,6 +65,10 @@ export const organization_settings = tenancySchema
       deleted_record_purge_days: integer('deleted_record_purge_days')
         .notNull()
         .default(ORGANIZATION_SETTINGS_DEFAULT_DELETED_RECORD_PURGE_DAYS),
+      // The clinic's messaging accounts on the platform Meta app (launch D77) — the WhatsApp
+      // Business number's phone-number id and the Instagram account id; unset = not connected.
+      whatsapp_phone_number_id: varchar('whatsapp_phone_number_id', { length: 32 }),
+      instagram_account_id: varchar('instagram_account_id', { length: 32 }),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
@@ -80,6 +87,21 @@ export const organization_settings = tenancySchema
       index('idx_organization_settings_updated_by_user_id')
         .on(table.updated_by_user_id)
         .where(sql`${table.updated_by_user_id} IS NOT NULL`),
+      // One organization per messaging account — a callback names the account, never the clinic.
+      uniqueIndex('idx_organization_settings_whatsapp_phone_number_id')
+        .on(table.whatsapp_phone_number_id)
+        .where(sql`${table.whatsapp_phone_number_id} IS NOT NULL`),
+      uniqueIndex('idx_organization_settings_instagram_account_id')
+        .on(table.instagram_account_id)
+        .where(sql`${table.instagram_account_id} IS NOT NULL`),
+      check(
+        'chk_organization_settings_whatsapp_phone_number_id',
+        sql`${table.whatsapp_phone_number_id} ~ '^[0-9]{5,32}$'`,
+      ),
+      check(
+        'chk_organization_settings_instagram_account_id',
+        sql`${table.instagram_account_id} ~ '^[0-9]{5,32}$'`,
+      ),
       check('chk_org_settings_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_organization_settings_default_locale',

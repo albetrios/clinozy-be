@@ -5,6 +5,7 @@ import {
   THIRTY_SECONDS_MS,
 } from '@/shared/constants/ttl.constants.js';
 import {
+  metaCircuit,
   resendCircuit,
   s3Circuit,
   stripeCircuit,
@@ -13,6 +14,7 @@ import {
 } from '@/infrastructure/resilience/circuit-breaker.js';
 import { countsStripeErrorAsCircuitFailure } from '@/infrastructure/payment/stripe-error.util.js';
 import { countsS3ErrorAsCircuitFailure } from '@/infrastructure/storage/s3-error.util.js';
+import { countsMetaGraphErrorAsCircuitFailure } from '@/infrastructure/messaging/meta-graph-error.util.js';
 
 /**
  * Closed set of external integrations that {@link outboundCall} understands. Adding a
@@ -23,6 +25,7 @@ export type OutboundIntegrationName =
   | 'stripe'
   | 's3'
   | 'resend'
+  | 'meta'
   | 'webhook'
   | 'webhook-test'
   | 'oauth-google'
@@ -65,6 +68,11 @@ const OUTBOUND_DEFAULT_FACTORIES: Record<OutboundIntegrationName, OutboundDefaul
   resend: () => ({
     timeoutMs: env.RESEND_HTTP_TIMEOUT_MS,
     circuit: resendCircuit,
+  }),
+  meta: () => ({
+    timeoutMs: env.META_HTTP_TIMEOUT_MS,
+    circuit: metaCircuit,
+    countsAsCircuitFailure: countsMetaGraphErrorAsCircuitFailure,
   }),
   webhook: () => ({
     timeoutMs: WEBHOOK_DELIVERY_TIMEOUT_MS,

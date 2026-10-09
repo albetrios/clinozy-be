@@ -129,3 +129,6 @@ export const listContactActivitiesQueryDto = listSearchSortSchema([
 
 /** Parsed {@link ContactMessageBatchDto}. */
 export type ContactMessageBatchInput = z.infer<typeof ContactMessageBatchDto>;
+
+/** Query of `GET /contact-activities/messaging-status` (launch D77) — it takes none. */
+export const messagingStatusQueryDto = z.object({}).strict();

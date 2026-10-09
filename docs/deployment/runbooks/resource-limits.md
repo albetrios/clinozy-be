@@ -86,43 +86,43 @@ Each entry in [`worker-registration.registry.ts`](../../../src/infrastructure/qu
 | `criticality`                     | `throughput` / `maintenance` / `observability` — surfaced in `worker.queue_families.selected` and pool alerts so operators can correlate latency-critical workloads with pool pressure                                         |
 | `holdsConnectionDuringExternalIo` | `true` when the Postgres checkout is held during an outbound HTTP/S3/Resend call — these workers turn slow externals into pool starvation, so their concurrency is also reported as `peakPostgresConcurrencyHoldingExternalIo` |
 
-#### Per-family registry breakdown (38 workers; 35 use Postgres)
+#### Per-family registry breakdown (42 workers; 39 use Postgres)
 
 With default concurrency (`WORKER_CONCURRENCY=4`):
 
 | Family                 | Workers                                                                                                                                                                | Postgres | Peak demand     | External-IO holding                                                                    |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------------- | -------------------------------------------------------------------------------------- |
 | `mail`                 | `mail` (throughput), `mail-outbox-sweeper` (1), `commit-dispatch-recovery` (Redis-only)                                                                                | 2 / 3    | `4 + 1 = 5`     | `0`                                                                                    |
-| `notify`               | `notification` (throughput), `user-data-export` (throughput)                                                                                                           | 2 / 2    | `4 + 4 = 8`     | `0` (the export uploads between two short contexts)                                    |
+| `notify`               | `notification` (throughput), `user-data-export` (throughput), `contact-message-delivery` (throughput), `messaging-webhook-event` (throughput), `contact-messaging-sweep` (1), `messaging-webhook-event-retention` (1) | 6 / 6    | `4 × 4 + 1 + 1 = 18` | `0` (the export uploads between two short contexts; messaging sends and Instagram lookups run between short contexts) |
 | `webhook`              | `webhook-delivery` (throughput), `webhook-delivery-reclaim` (1)                                                                                                        | 2 / 2    | `4 + 1 = 5`     | `0` (short transactions around the POST, not across it; the reclaim adds jobs after its read) |
 | `stripe`               | `stripe-webhook` (throughput), `subscription-seat-sync` (throughput), `stripe-webhook-event-retention` (1), `stripe-webhook-event-reclaim` (1), `stripe-webhook-event-catchup` (1) | 5 / 5    | `4 + 4 + 1 + 1 + 1 = 11` | `0`                                                                                    |
 | `retention`            | 23 single-concurrency workers (audit retention/export/drain, session cleanup, notification retention, 2 offboarding reconcilers, 11 tombstone/retention/sweep workers, the app record purge, the day auto-close and task rules sweeps and their per-organization jobs) | 23 / 23  | `23 × 1 = 23`   | `0` (the audit export, the upload sweep and both S3 retention purges keep S3 calls outside their short contexts) |
 | `observability`        | `idempotency-cardinality`, `dlq-depth` (Redis-only), `dlq-auto-retry` (1)                                                                                              | 1 / 3    | `1`             | `0`                                                                                    |
-| **Total (monolithic)** | **38**                                                                                                                                                                 | **35**   | **`53`**        | **`0`**                                                                                |
+| **Total (monolithic)** | **42**                                                                                                                                                                 | **39**   | **`63`**        | **`0`**                                                                                |
 
 The `External-IO holding` column is the **at-risk slice** of the Postgres budget — these are the slots that can starve when Stripe, Resend, or S3 latency spikes. Watch the `workerPeakPostgresConcurrencyHoldingExternalIo` extra in the `database.pool.exhaustion.*` Sentry alerts.
 
 #### Monolithic vs split worker services
 
-**Template.** `.env.example` ships `DATABASE_POOL_MAX=70` (the default monolithic worker plus burst
+**Template.** `.env.example` ships `DATABASE_POOL_MAX=80` (the default monolithic worker plus burst
 headroom) and leaves `POSTGRES_MAX_CONNECTIONS` unset, so the budget reads the live server's
 `max_connections`. `src/tests/unit/ci/worker-pool-budget.policy.unit.test.ts` fails if the real worker
 registry outgrows the template pool, or the template budget no longer fits the Compose stack.
 
 | Mode                                                 | Trigger                                | Enforcement                                                                                                                                                                                              |
 | ---------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Monolithic**                                       | `WORKER_QUEUE_FAMILIES` unset or `all` | **Fails fast** at startup when peak Postgres demand exceeds `DATABASE_POOL_MAX` (default 51 > pool 30), and warns (`database.connection_budget.worker_demand_no_burst_headroom`) when demand fits but demand + 25% burst headroom does not. Raise `DATABASE_POOL_MAX` on the worker service (70 covers the default with headroom) or split services. |
+| **Monolithic**                                       | `WORKER_QUEUE_FAMILIES` unset or `all` | **Fails fast** at startup when peak Postgres demand exceeds `DATABASE_POOL_MAX` (default 63 > pool 30), and warns (`database.connection_budget.worker_demand_no_burst_headroom`) when demand fits but demand + 25% burst headroom does not. Raise `DATABASE_POOL_MAX` on the worker service (80 covers the default with headroom) or split services. |
 | **Split** (e.g. `WORKER_QUEUE_FAMILIES=mail,notify`) | Explicit subset                        | **Fails fast** at startup when the subset's computed Postgres demand exceeds `DATABASE_POOL_MAX`; warns on missing burst headroom the same way. |
 
 #### Example Railway split (same image, different env per service)
 
 | Service              | `WORKER_QUEUE_FAMILIES`      | `SCHEDULER_ENABLED` | Postgres demand      | Suggested `DATABASE_POOL_MAX`                           |
 | -------------------- | ---------------------------- | ------------------- | -------------------- | ------------------------------------------------------- |
-| Worker throughput    | `mail,notify,webhook,stripe` | `true`              | `5 + 8 + 5 + 11 = 29` | `30`–`37`                                               |
-| Worker retention     | `retention`                  | `true`              | `21`                 | `22`–`27`                                               |
+| Worker throughput    | `mail,notify,webhook,stripe` | `true`              | `5 + 18 + 5 + 11 = 39` | `40`–`49`                                               |
+| Worker retention     | `retention`                  | `true`              | `23`                 | `24`–`29`                                               |
 | Worker observability | `observability`              | `true`              | `1`                  | `4` (mostly Redis-only; `dlq-auto-retry` uses Postgres) |
 
-Keep **`SCHEDULER_ENABLED=true` (the default) on every worker service.** Each process registers only the crons of the queues it runs, so a service with the scheduler off leaves its families' crons unregistered — on the throughput service that is the mail outbox sweeper, the commit-dispatch recovery, the Stripe reclaim, catch-up and retention, and the webhook delivery reclaim: the sweeps that recover lost work. Registration is an idempotent upsert keyed by scheduler id, so services and replicas that register the same cron never double it. A process that runs cron queues with the scheduler off logs `scheduler.disabled.crons_not_registered` with the list.
+Keep **`SCHEDULER_ENABLED=true` (the default) on every worker service.** Each process registers only the crons of the queues it runs, so a service with the scheduler off leaves its families' crons unregistered — on the throughput service that is the mail outbox sweeper, the commit-dispatch recovery, the Stripe reclaim, catch-up and retention, the webhook delivery reclaim and the messaging sweep: the sweeps that recover lost work. Registration is an idempotent upsert keyed by scheduler id, so services and replicas that register the same cron never double it. A process that runs cron queues with the scheduler off logs `scheduler.disabled.crons_not_registered` with the list.
 
 Worker processes also poll pool pressure (same intervals as API) and attach `workerQueueFamilies` / `workerPeakPostgresConcurrency` to Sentry pool alerts when `METRICS_ENABLED` is on.
 

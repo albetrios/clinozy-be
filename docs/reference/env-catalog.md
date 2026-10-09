@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**13 / 239** variables migrated to an explicit `{ allowed, description }` entry.
+**13 / 245** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -116,6 +116,12 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `MEMBER_ROLE_MAX_PER_ORG` | — | `50` |  | — |
 | `MEMBER_ROLE_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
 | `MEMBERSHIP_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
+| `MESSAGING_DELIVERY_ENABLED` | — | `false` |  | — |
+| `META_APP_SECRET` | — | — *(optional)* |  | — |
+| `META_GRAPH_ACCESS_TOKEN` | — | — *(optional)* |  | — |
+| `META_GRAPH_API_BASE_URL` | — | `https://graph.facebook.com/v21.0` |  | — |
+| `META_HTTP_TIMEOUT_MS` | — | `10000` |  | — |
+| `META_WEBHOOK_VERIFY_TOKEN` | — | — *(optional)* |  | — |
 | `METRICS_AUTH_REQUIRED` | — | `true` |  | — |
 | `METRICS_ENABLED` | — | `true` |  | — |
 | `METRICS_SCRAPE_TOKEN` | — | — *(optional)* |  | — |

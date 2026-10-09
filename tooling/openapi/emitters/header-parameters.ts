@@ -41,7 +41,10 @@ const CAPTCHA_ROUTE_KEYS = new Set([
   'GET /api/v1/auth/oauth/{provider}',
 ]);
 
-const WEBHOOK_ROUTE_KEYS = new Set(['POST /api/v1/billing/webhook']);
+const WEBHOOK_ROUTE_KEYS = new Set([
+  'POST /api/v1/billing/webhook',
+  'POST /api/v1/app/messaging-webhook',
+]);
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
