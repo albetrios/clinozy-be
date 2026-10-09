@@ -31,6 +31,8 @@ const TENANT_SCOPING_EXEMPT_QUEUE_NAME_PATTERNS = [
   // The task rules sweep pages through the organizations in the global-retention context (TK4);
   // the per-organization jobs it adds carry organizationPublicId.
   /task-rules-sweep/i,
+  // D80: the ideas sweep reads every organization's stale patients, then adds one job each
+  /patient-ideas-sweep/i,
   // The messaging sweep pages through the organizations with unsent messages or pending callbacks
   // in the global-retention context (launch D77); the per-organization jobs it adds carry
   // organizationPublicId.

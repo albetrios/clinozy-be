@@ -33,7 +33,7 @@ re-planned ROUTE ([D50](decisions.md)) gives each one its row:
 | WC-44 — floor | #146 | refresh, no push ([D37](decisions.md)) |
 | WC-46 — purge | #147 | — |
 | WC-34 (MR visit), WC-45 (pharmacy queue) | #153 | back with [D75](decisions.md): WC-34 is the `medical_rep_visit` task rule (§11 MD8); WC-45 is `GET /patient-prescriptions?is_filled=false` (§7), no worker — **built (#153):** the fifteenth source in `task-rule-conditions.repository.ts`, run by the existing `task-rules-sweep` → `task-rules` jobs (pharmacist queue, due 11:00 on `next_visit_on`, closes when a visit moves or clears the date); `is_filled` a derived filter on `app.patient_prescriptions` (a live `app.medical_sales` row names it) |
-| WC-47 — AI ideas | #152 — deferred | `app.patient_ideas` is dropped until its feature is built (§7, P20) |
+| WC-47 — AI ideas | #152 | built by recommendation ([D80](decisions.md), routes-final 7.N): the `patient-ideas-sweep` cron → `patient-ideas` jobs, Claude through the `anthropic` outbound; P20's drop ends |
 
 ## Counts
 
@@ -142,4 +142,4 @@ A task appears by itself when its condition becomes true, and closes by itself w
 | # | Change | Background work | When it runs | What it touches | On failure | Who is told | Requirement | Source | Built |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | WC-46 | NEW | erase deleted records for good once their restore window ends (default 7 days, a clinic setting); live records are never touched | daily | every clinic record deleted more than N days ago | retried the next day; nothing erased twice *(D40)* | — | `background.deleted-record-purge` | D38 | `app-record-purge` (daily, global retention context) erases every soft-deleting app table past `deleted_record_purge_days`, children first (#124, D38) |
-| WC-47 | NEW | refresh a patient's AI ideas from a de-identified summary (Data consent only) | after a visit, treatment, package or plan change | the patient's ideas | the rule-based ideas stay shown *(D40)* | — | `background.patient-ideas` | D39; `schema-routes.md:1635`; `H:4355–4367` |
+| WC-47 | NEW | refresh a patient's AI ideas from a de-identified summary (Data consent only) | after a visit, treatment, package or plan change | the patient's ideas | the rule-based ideas stay shown *(D40)* | — | `background.patient-ideas` | D39; `schema-routes.md:1635`; `H:4355–4367` | `patient-ideas-sweep` (cron `2-59/5 * * * *`, global retention read of the stale marks) → one `patient-ideas` job per organization (deduplicated, provider-pausable on `anthropic`): up to 20 stale files, a short read, Claude outside the context, compare-and-clear + replace per file; stale marks set by database triggers (#152, D80) |

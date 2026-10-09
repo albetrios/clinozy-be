@@ -5,11 +5,14 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**13 / 246** variables migrated to an explicit `{ allowed, description }` entry.
+**13 / 251** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
 | `ALLOWED_ORIGINS` | — | — *(required)* |  | — |
+| `ANTHROPIC_API_BASE_URL` | — | `https://api.anthropic.com` |  | — |
+| `ANTHROPIC_API_KEY` | — | — *(optional)* |  | — |
+| `ANTHROPIC_HTTP_TIMEOUT_MS` | — | `60000` |  | — |
 | `API_DOCS_BASE_URL` | — | — *(optional)* |  | — |
 | `API_REFERENCE_ALLOW_PRODUCTION` | — | `false` |  | — |
 | `APP_RECORD_PURGE_CRON` | — | — *(optional)* |  | — |
@@ -145,6 +148,8 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `OTEL_SERVICE_NAME` | — | — *(optional)* |  | — |
 | `OVERLOAD_DB_POOL_SHED_RATIO` | number 0–10 | `3` | ✓ | Multiple of DATABASE_POOL_MAX in-flight units of work (running plus waiting for a connection) at which the overload guard sheds requests; above 1 lets a bounded queue form. |
 | `OVERLOAD_MAX_EVENT_LOOP_DELAY_MS` | integer 1–60000 | `250` | ✓ | Overload-guard shed threshold: p99 event-loop delay (ms) above which requests get a 503. |
+| `PATIENT_IDEAS_AI_ENABLED` | — | `false` |  | — |
+| `PATIENT_IDEAS_AI_MODEL` | — | `claude-opus-5-5` |  | — |
 | `PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED` | — | `true` |  | — |
 | `PERSONAL_ORGANIZATION_ENABLED` | — | `true` |  | — |
 | `PORT` | integer 1–65535 | `3000` | ✓ | HTTP port the API server binds to. |

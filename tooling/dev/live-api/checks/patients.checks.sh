@@ -786,3 +786,11 @@ expect 200 "marketing reads the plan" GET "/app/patients/${CHETAN_FILE}/offering
 as_role pharmacist
 expect 403 "the pharmacist plans nothing" POST "/app/patients/${CHETAN_FILE}/offering-suggestions" "{\"offering_id\":\"${CONSULT}\"}"
 as_role owner
+
+# ---- 7.N Ideas from history (route 74, D80) -----------------------------------------------------
+expect 200 "Chetan's ideas" GET "/app/patients/${CHETAN_FILE}/offering-ideas"
+expect_value "the rules (AI off), at most four, nothing planned among them" "[.meta.source, (.meta.ai_refreshed_at | tostring), ((.data | length) <= 4), ([.data[] | select(.offering_id == \"${PEEL}\" or .offering_id == \"${HYDRA}\" or .offering_id == \"${CONSULT}\")] | length)] | map(tostring) | join(\",\")" "rules,null,true,0"
+expect 404 "an unknown patient's ideas" GET "/app/patients/pat_aaaaaaaaaaaaaaaaaaaaa/offering-ideas"
+as_role marketing
+expect 200 "marketing reads the ideas" GET "/app/patients/${CHETAN_FILE}/offering-ideas"
+as_role owner

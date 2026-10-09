@@ -170,6 +170,7 @@ const RLS_TABLE_SCOPE_MAP: Record<string, readonly string[]> = {
   ],
   'app.patient_diagnoses': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
   'app.patient_feedback_actions': ['app.current_organization_public_id'],
+  'app.patient_ideas': ['app.current_organization_public_id'],
   'app.patient_images': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
   'app.patient_offering_suggestions': [
     'app.current_organization_public_id',
@@ -183,7 +184,8 @@ const RLS_TABLE_SCOPE_MAP: Record<string, readonly string[]> = {
   'app.patient_reports': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
   'app.patient_reviews': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
   'app.patient_treatments': ['app.current_organization_public_id'],
-  'app.patients': ['app.current_organization_public_id'],
+  // The AI ideas sweep reads the stale marks across organizations (WC-47, D80)
+  'app.patients': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
   'app.payment_edits': ['app.current_organization_public_id'],
   'app.payments': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
   'app.pending_credits': ['app.current_organization_public_id', 'app.global_retention_cleanup'],

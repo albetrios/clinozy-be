@@ -48,7 +48,8 @@ src/
     │   │   ├── billing/
     │   │   │   ├── __tests__/
     │   │   │   │   └── integration/
-    │   │   │   │   │   └── billing.integration.test.ts
+    │   │   │   │   │   ├── billing.integration.test.ts
+    │   │   │   │   │   └── invoice-numbering.integration.test.ts
     │   │   │   ├── day-closes/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
@@ -652,6 +653,38 @@ src/
     │   │   │   │   ├── patient-feedback-actions.serializer.ts
     │   │   │   │   ├── patient-feedback-actions.types.ts
     │   │   │   │   └── patient-feedback-actions.validator.ts
+    │   │   │   ├── patient-ideas/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   ├── integration/
+    │   │   │   │   │   │   └── patient-ideas.integration.test.ts
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   ├── patient-ideas-sweep.processor.unit.test.ts
+    │   │   │   │   │   │   ├── patient-ideas.ai.unit.test.ts
+    │   │   │   │   │   │   ├── patient-ideas.processor.unit.test.ts
+    │   │   │   │   │   │   ├── patient-ideas.rules.unit.test.ts
+    │   │   │   │   │   │   └── patient-ideas.service.unit.test.ts
+    │   │   │   │   ├── queues/
+    │   │   │   │   │   ├── patient-ideas.job.schema.ts
+    │   │   │   │   │   └── patient-ideas.queue.ts
+    │   │   │   │   ├── workers/
+    │   │   │   │   │   ├── patient-ideas-sweep.processor.ts
+    │   │   │   │   │   ├── patient-ideas-sweep.worker.ts
+    │   │   │   │   │   ├── patient-ideas.constants.ts
+    │   │   │   │   │   ├── patient-ideas.processor.ts
+    │   │   │   │   │   └── patient-ideas.worker.ts
+    │   │   │   │   ├── patient-ideas.ai.ts
+    │   │   │   │   ├── patient-ideas.constants.ts
+    │   │   │   │   ├── patient-ideas.controller.ts
+    │   │   │   │   ├── patient-ideas.dto.ts
+    │   │   │   │   ├── patient-ideas.overview.md
+    │   │   │   │   ├── patient-ideas.repository.ts
+    │   │   │   │   ├── patient-ideas.routes.ts
+    │   │   │   │   ├── patient-ideas.rules.ts
+    │   │   │   │   ├── patient-ideas.schema.ts
+    │   │   │   │   ├── patient-ideas.serializer.ts
+    │   │   │   │   ├── patient-ideas.service.ts
+    │   │   │   │   ├── patient-ideas.types.ts
+    │   │   │   │   └── patient-ideas.validator.ts
     │   │   │   ├── patient-images/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
@@ -2070,6 +2103,14 @@ src/
     │   └── user.validator.ts
     └── domain-containers.plugin.ts
 ├── infrastructure/
+    ├── ai/
+    │   ├── __tests__/
+    │   │   └── unit/
+    │   │   │   └── anthropic-error.util.unit.test.ts
+    │   ├── ai.overview.md
+    │   ├── anthropic-error.util.ts
+    │   ├── anthropic-messages.client.ts
+    │   └── anthropic-messages.config.ts
     ├── api-reference/
     │   ├── api-reference.overview.md
     │   └── scalar-api-reference.ts
@@ -2692,6 +2733,7 @@ src/
     │   │   ├── s3.schemas.ts
     │   │   └── stripe.schemas.ts
     │   ├── README.md
+    │   ├── anthropic-messages.contract.test.ts
     │   ├── contract-vitest-setup.ts
     │   ├── contract.overview.md
     │   ├── github-oauth.contract.test.ts

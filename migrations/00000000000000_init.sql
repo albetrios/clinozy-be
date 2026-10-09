@@ -1695,6 +1695,7 @@ CREATE TABLE IF NOT EXISTS "app"."patients" (
 	"has_photo_consent" boolean DEFAULT false NOT NULL,
 	"allergies" text[] DEFAULT '{}' NOT NULL,
 	"contraindications" text[] DEFAULT '{}' NOT NULL,
+	"ideas_stale_since" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
@@ -3356,12 +3357,14 @@ CREATE INDEX IF NOT EXISTS "idx_patients_doctor_membership_id" ON "app"."patient
 CREATE INDEX IF NOT EXISTS "idx_patients_lead_id" ON "app"."patients" USING btree ("lead_id") WHERE "app"."patients"."lead_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patients_contact_id" ON "app"."patients" USING btree ("contact_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patients_deleted_at" ON "app"."patients" USING btree ("deleted_at") WHERE "app"."patients"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patients_ideas_stale" ON "app"."patients" USING btree ("organization_id","ideas_stale_since") WHERE "app"."patients"."ideas_stale_since" IS NOT NULL AND "app"."patients"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patients_created_by_user_id" ON "app"."patients" USING btree ("created_by_user_id") WHERE "app"."patients"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patients_updated_by_user_id" ON "app"."patients" USING btree ("updated_by_user_id") WHERE "app"."patients"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE POLICY "patients_tenant_isolation" ON "app"."patients" AS PERMISSIVE FOR ALL TO public USING ("app"."patients"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )) WITH CHECK ("app"."patients"."organization_id" = (
+          )
+          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."patients"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
@@ -3850,6 +3853,68 @@ CREATE POLICY "patient_offerings_tenant_isolation" ON "app"."patient_offerings" 
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
 ALTER TABLE "app"."patient_offerings" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+-- app.patient_ideas — a patient's AI offering ideas: a derived cache, replaced as a whole by each refresh, no soft delete, no routes of its own (launch ROUTE #152, routes-final 7.N, D80).
+CREATE TABLE IF NOT EXISTS "app"."patient_ideas" (
+	"id" bigserial PRIMARY KEY NOT NULL,
+	"organization_id" bigint NOT NULL,
+	"patient_id" bigint NOT NULL,
+	"offering_id" bigint NOT NULL,
+	"position" smallint NOT NULL,
+	"reason" varchar(200) NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "chk_patient_ideas_position" CHECK ("app"."patient_ideas"."position" BETWEEN 1 AND 4),
+	CONSTRAINT "chk_patient_ideas_reason" CHECK (char_length("app"."patient_ideas"."reason") > 0)
+);
+--> statement-breakpoint
+ALTER TABLE "app"."patient_ideas" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "app"."patient_ideas" ADD CONSTRAINT "patient_ideas_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_ideas" ADD CONSTRAINT "patient_ideas_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app"."patient_ideas" ADD CONSTRAINT "patient_ideas_offering_id_offerings_id_fk" FOREIGN KEY ("offering_id") REFERENCES "app"."offerings"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_ideas_patient_offering" ON "app"."patient_ideas" USING btree ("patient_id","offering_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_ideas_organization_id" ON "app"."patient_ideas" USING btree ("organization_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_patient_ideas_offering_id" ON "app"."patient_ideas" USING btree ("offering_id");--> statement-breakpoint
+CREATE POLICY "patient_ideas_tenant_isolation" ON "app"."patient_ideas" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_ideas"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          )) WITH CHECK ("app"."patient_ideas"."organization_id" = (
+            SELECT id FROM tenancy.organizations
+            WHERE public_id = current_setting('app.current_organization_public_id', true)
+          ));--> statement-breakpoint
+ALTER TABLE "app"."patient_ideas" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+-- A patient's ideas are due a refresh (D80, WC-47): a write to one of their clinical notes, treatments, patient offerings or plan rows marks them (soft deletes included — they are updates). The mark moves forward on every write, so the refresh clears it only when nothing marked it again meanwhile. Under a context without the organization the row is not visible and nothing is marked.
+CREATE OR REPLACE FUNCTION app.fn_mark_patient_ideas_stale() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE app.patients SET ideas_stale_since = clock_timestamp() WHERE id = NEW.patient_id;
+  RETURN NULL;
+END;
+$$;
+--> statement-breakpoint
+-- A completed visit marks the contact's live patient file (appointments name the contact, not the file).
+CREATE OR REPLACE FUNCTION app.fn_mark_patient_ideas_stale_by_contact() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE app.patients SET ideas_stale_since = clock_timestamp()
+  WHERE contact_id = NEW.contact_id AND organization_id = NEW.organization_id AND deleted_at IS NULL;
+  RETURN NULL;
+END;
+$$;
+--> statement-breakpoint
+-- A change of Data consent marks the file itself: given, the ideas are made; withdrawn, they are deleted.
+CREATE OR REPLACE FUNCTION app.fn_mark_patient_ideas_stale_on_consent() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.ideas_stale_since := clock_timestamp();
+  RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+CREATE TRIGGER trg_patient_clinical_notes_ideas_stale AFTER INSERT OR UPDATE ON "app"."patient_clinical_notes" FOR EACH ROW EXECUTE FUNCTION app.fn_mark_patient_ideas_stale();--> statement-breakpoint
+CREATE TRIGGER trg_patient_treatments_ideas_stale AFTER INSERT OR UPDATE ON "app"."patient_treatments" FOR EACH ROW EXECUTE FUNCTION app.fn_mark_patient_ideas_stale();--> statement-breakpoint
+CREATE TRIGGER trg_patient_offerings_ideas_stale AFTER INSERT OR UPDATE ON "app"."patient_offerings" FOR EACH ROW EXECUTE FUNCTION app.fn_mark_patient_ideas_stale();--> statement-breakpoint
+CREATE TRIGGER trg_patient_offering_suggestions_ideas_stale AFTER INSERT OR UPDATE ON "app"."patient_offering_suggestions" FOR EACH ROW EXECUTE FUNCTION app.fn_mark_patient_ideas_stale();--> statement-breakpoint
+CREATE TRIGGER trg_appointments_ideas_stale AFTER UPDATE OF "status" ON "app"."appointments" FOR EACH ROW WHEN (NEW.status = 'completed' AND OLD.status IS DISTINCT FROM 'completed') EXECUTE FUNCTION app.fn_mark_patient_ideas_stale_by_contact();--> statement-breakpoint
+CREATE TRIGGER trg_patients_ideas_stale_on_consent BEFORE UPDATE OF "has_data_consent" ON "app"."patients" FOR EACH ROW WHEN (OLD.has_data_consent IS DISTINCT FROM NEW.has_data_consent) EXECUTE FUNCTION app.fn_mark_patient_ideas_stale_on_consent();--> statement-breakpoint
 -- app.stock_vendors (folded from the Drizzle schema): keys, indexes, RLS.
 ALTER TABLE "app"."stock_vendors" ADD CONSTRAINT "stock_vendors_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."stock_vendors" ADD CONSTRAINT "stock_vendors_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint

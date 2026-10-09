@@ -16,6 +16,8 @@ import { MembershipSavedViewsRepository } from './sub-domains/memberships/member
 import { MembershipSavedViewsService } from './sub-domains/memberships/membership-saved-views/membership-saved-views.service.js';
 import { TaskRuleSettingsRepository } from './sub-domains/tasks/task-rule-settings/task-rule-settings.repository.js';
 import { TaskRuleSettingsService } from './sub-domains/tasks/task-rule-settings/task-rule-settings.service.js';
+import { PatientIdeasRepository } from './sub-domains/patients/patient-ideas/patient-ideas.repository.js';
+import { PatientIdeasService } from './sub-domains/patients/patient-ideas/patient-ideas.service.js';
 import { AppMembershipsService } from './sub-domains/memberships/memberships.service.js';
 import { ContactsRepository } from './sub-domains/contacts/contacts.repository.js';
 import { ContactMembersRepository } from './sub-domains/contacts/contact-members/contact-members.repository.js';
@@ -34,6 +36,7 @@ export type AppContainer = {
   membershipPreferencesService: MembershipPreferencesService;
   membershipSavedViewsService: MembershipSavedViewsService;
   taskRuleSettingsService: TaskRuleSettingsService;
+  patientIdeasService: PatientIdeasService;
   appMembershipsService: AppMembershipsService;
   contactMembersService: ContactMembersService;
   /** The platform Meta app's WhatsApp and Instagram webhook (launch D77). */
@@ -104,6 +107,7 @@ export function createAppContainer(
       organizationService,
       new TaskRuleSettingsRepository(),
     ),
+    patientIdeasService: new PatientIdeasService(organizationService, new PatientIdeasRepository()),
     appMembershipsService: new AppMembershipsService(membershipService),
     contactMembersService: new ContactMembersService(
       organizationService,

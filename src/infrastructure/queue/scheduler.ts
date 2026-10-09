@@ -27,6 +27,7 @@ import { MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub
 import { APP_RECORD_PURGE_QUEUE_NAME } from '@/domains/app/workers/app-record-purge.constants.js';
 import { DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/billing/day-closes/workers/day-close-auto-close.constants.js';
 import { TASK_RULES_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/tasks/workers/task-rules.constants.js';
+import { PATIENT_IDEAS_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/patients/patient-ideas/workers/patient-ideas.constants.js';
 import {
   CONTACT_MESSAGING_SWEEP_QUEUE_NAME,
   MESSAGING_WEBHOOK_EVENT_RETENTION_QUEUE_NAME,
@@ -98,6 +99,8 @@ const DEFAULT_APP_RECORD_PURGE_CRON = '56 5 * * *';
 const DEFAULT_DAY_CLOSE_AUTO_CLOSE_SWEEP_CRON = '7 * * * *';
 /** Every five minutes: rule tasks open and close, snoozed tasks wake, Clinozy takes its steps (TK4). */
 const DEFAULT_TASK_RULES_SWEEP_CRON = '*/5 * * * *';
+/** Every five minutes, off the task rules' minute: patients' AI ideas due a refresh (WC-47, D80). */
+const DEFAULT_PATIENT_IDEAS_SWEEP_CRON = '2-59/5 * * * *';
 /** Launch D77: every minute — a lost enqueue of a message or a callback waits at most a minute. */
 const DEFAULT_CONTACT_MESSAGING_SWEEP_CRON = '* * * * *';
 /** Launch D77: the stored callbacks' daily purge (30 days), off the hour. */
@@ -227,6 +230,12 @@ function getAppSweepScheduledJobs(timezone: string | undefined): ScheduledJob[] 
       schedulerId: 'task-rules-sweep',
       jobName: 'find-organizations-for-task-rules',
       cronPattern: DEFAULT_TASK_RULES_SWEEP_CRON,
+    }),
+    withSchedulerTimezone(timezone, {
+      queueName: PATIENT_IDEAS_SWEEP_QUEUE_NAME,
+      schedulerId: 'patient-ideas-sweep',
+      jobName: 'find-organizations-with-stale-ideas',
+      cronPattern: DEFAULT_PATIENT_IDEAS_SWEEP_CRON,
     }),
     withSchedulerTimezone(timezone, {
       queueName: CONTACT_MESSAGING_SWEEP_QUEUE_NAME,

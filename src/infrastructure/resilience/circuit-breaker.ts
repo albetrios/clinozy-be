@@ -358,6 +358,8 @@ export const S3_CIRCUIT_RESET_TIMEOUT_MS = FIFTEEN_SECONDS_MS;
 export const RESEND_CIRCUIT_RESET_TIMEOUT_MS = MILLISECONDS_PER_MINUTE;
 /** Reset window (ms) for {@link metaCircuit}; exported for the messaging queues' backoff alignment. */
 export const META_CIRCUIT_RESET_TIMEOUT_MS = MILLISECONDS_PER_MINUTE;
+/** Reset window (ms) for {@link anthropicCircuit}; exported for the ideas queue's backoff alignment. */
+export const ANTHROPIC_CIRCUIT_RESET_TIMEOUT_MS = MILLISECONDS_PER_MINUTE;
 /** Reset window (ms) for {@link turnstileCircuit}. */
 export const TURNSTILE_CIRCUIT_RESET_TIMEOUT_MS = THIRTY_SECONDS_MS;
 
@@ -392,6 +394,16 @@ export const metaCircuit = new CircuitBreaker({
   failureThreshold: 5,
   resetTimeoutMs: META_CIRCUIT_RESET_TIMEOUT_MS,
 });
+/**
+ * Shared circuit breaker for every Anthropic Messages API call (a patient's AI offering ideas,
+ * launch D80) — trips after 5 failures, half-opens after 60s.
+ */
+export const anthropicCircuit = new CircuitBreaker({
+  name: 'anthropic',
+  redis: redisConnection,
+  failureThreshold: 5,
+  resetTimeoutMs: ANTHROPIC_CIRCUIT_RESET_TIMEOUT_MS,
+});
 /** Shared circuit breaker for Cloudflare Turnstile CAPTCHA verification — trips after 5 failures, half-opens after 30s. */
 export const turnstileCircuit = new CircuitBreaker({
   name: 'turnstile',
@@ -406,6 +418,7 @@ export const MANAGED_CIRCUIT_BREAKERS = {
   s3: s3Circuit,
   resend: resendCircuit,
   meta: metaCircuit,
+  anthropic: anthropicCircuit,
   turnstile: turnstileCircuit,
 } as const;
 
@@ -420,7 +433,7 @@ export type ManagedCircuitBreakerSnapshot = {
 
 /**
  * Reads the current state of every managed external circuit breaker (Stripe, S3, Resend, Meta,
- * Turnstile) in parallel.
+ * Anthropic, Turnstile) in parallel.
  *
  * @remarks
  * Surfaces external-dependency health without issuing any outbound call — state is read from the

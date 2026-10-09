@@ -5,6 +5,7 @@ import {
   THIRTY_SECONDS_MS,
 } from '@/shared/constants/ttl.constants.js';
 import {
+  anthropicCircuit,
   metaCircuit,
   resendCircuit,
   s3Circuit,
@@ -15,6 +16,7 @@ import {
 import { countsStripeErrorAsCircuitFailure } from '@/infrastructure/payment/stripe-error.util.js';
 import { countsS3ErrorAsCircuitFailure } from '@/infrastructure/storage/s3-error.util.js';
 import { countsMetaGraphErrorAsCircuitFailure } from '@/infrastructure/messaging/meta-graph-error.util.js';
+import { countsAnthropicErrorAsCircuitFailure } from '@/infrastructure/ai/anthropic-error.util.js';
 
 /**
  * Closed set of external integrations that {@link outboundCall} understands. Adding a
@@ -26,6 +28,7 @@ export type OutboundIntegrationName =
   | 's3'
   | 'resend'
   | 'meta'
+  | 'anthropic'
   | 'webhook'
   | 'webhook-test'
   | 'oauth-google'
@@ -73,6 +76,11 @@ const OUTBOUND_DEFAULT_FACTORIES: Record<OutboundIntegrationName, OutboundDefaul
     timeoutMs: env.META_HTTP_TIMEOUT_MS,
     circuit: metaCircuit,
     countsAsCircuitFailure: countsMetaGraphErrorAsCircuitFailure,
+  }),
+  anthropic: () => ({
+    timeoutMs: env.ANTHROPIC_HTTP_TIMEOUT_MS,
+    circuit: anthropicCircuit,
+    countsAsCircuitFailure: countsAnthropicErrorAsCircuitFailure,
   }),
   webhook: () => ({
     timeoutMs: WEBHOOK_DELIVERY_TIMEOUT_MS,

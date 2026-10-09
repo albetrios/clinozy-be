@@ -226,6 +226,7 @@
   "PATCH /api/v1/app/invoices/:invoice_id": "both",
   "DELETE /api/v1/app/invoices/:invoice_id": "both",
   "POST /api/v1/app/invoices/:invoice_id/restore": "both",
+  "GET /api/v1/app/patients/:patient_id/offering-ideas": "both",
   "GET /api/v1/app/patients/:patient_id/offering-suggestions": "both",
   "POST /api/v1/app/patients/:patient_id/offering-suggestions": "both",
   "GET /api/v1/app/payments": "both",

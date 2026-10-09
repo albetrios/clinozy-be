@@ -644,6 +644,22 @@ const envSchemaBase = z.object({
   /** Graph API request timeout (ms) — each send or lookup the messaging workers make. */
   META_HTTP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(10_000),
 
+  // Ideas from history — a patient's AI offering ideas (launch D39, D80, WC-47)
+  /**
+   * Refreshes each consenting patient's offering ideas with Claude (the Anthropic Messages API)
+   * from a de-identified summary. Off, nothing is swept or sent and the patient file shows the
+   * rule-based ideas. On needs ANTHROPIC_API_KEY (refine below).
+   */
+  PATIENT_IDEAS_AI_ENABLED: booleanString('false'),
+  /** The Anthropic API key the ideas worker calls the Messages API with. */
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  /** The Claude model that suggests the offerings. */
+  PATIENT_IDEAS_AI_MODEL: z.string().min(1).max(100).default('claude-opus-5-5'),
+  /** The Anthropic API base URL. */
+  ANTHROPIC_API_BASE_URL: z.url().default('https://api.anthropic.com'),
+  /** Messages API request timeout (ms) — each patient's ideas call. */
+  ANTHROPIC_HTTP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(60_000),
+
   // Sentry
   SENTRY_DSN: z.url().optional(),
   // The frontend Sentry DSN is clinozy-fe's (`VITE_SENTRY_DSN`); the backend has none.
@@ -1437,6 +1453,17 @@ export const envSchema = envSchemaBase
       message:
         'MESSAGING_DELIVERY_ENABLED=true needs META_GRAPH_ACCESS_TOKEN, META_APP_SECRET and META_WEBHOOK_VERIFY_TOKEN.',
       path: ['MESSAGING_DELIVERY_ENABLED'],
+    },
+  )
+  .refine(
+    (data) =>
+      /**
+       * The ideas worker calls the Anthropic Messages API (launch D80) — on, it needs the key.
+       */
+      !data.PATIENT_IDEAS_AI_ENABLED || Boolean(data.ANTHROPIC_API_KEY),
+    {
+      message: 'PATIENT_IDEAS_AI_ENABLED=true needs ANTHROPIC_API_KEY.',
+      path: ['PATIENT_IDEAS_AI_ENABLED'],
     },
   )
   .refine(

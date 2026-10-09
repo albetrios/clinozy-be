@@ -198,6 +198,7 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
   'PATCH /api/v1/app/invoices/:invoice_id': 'app-cross-organization: invoices',
   'DELETE /api/v1/app/invoices/:invoice_id': 'app-cross-organization: invoices',
   'POST /api/v1/app/invoices/:invoice_id/restore': 'app-cross-organization: invoices',
+  'GET /api/v1/app/patients/:patient_id/offering-ideas': 'app-cross-organization: patients',
   'GET /api/v1/app/patients/:patient_id/offering-suggestions': 'app-cross-organization: patients',
   'POST /api/v1/app/patients/:patient_id/offering-suggestions': 'app-cross-organization: patients',
   'GET /api/v1/app/payments/:payment_id': 'app-cross-organization: payments',

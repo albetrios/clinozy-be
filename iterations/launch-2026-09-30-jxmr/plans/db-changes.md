@@ -1283,14 +1283,23 @@ erDiagram
 
 - **Built:** `app.patient_ideas` · ROUTE #33 (2026-10-07)
 - **Dropped (ROUTE #133, P20):** `app.patient_ideas` (no routes) until its feature is built
+- **Built again (ROUTE #152, D80, routes-final 7.N PI3–PI4):** `app.patient_ideas` — the stored AI
+  ideas, a derived cache: one row per idea (at most 4), unique per patient and offering, no soft
+  delete; the rules' ideas are computed on read, never stored. The stale mark lives on the patient:
+  `app.patients.ideas_stale_since`, set by database triggers.
 ```mermaid
 erDiagram
-  patient_idea["patient_idea · NEW"] {
+  patient_idea["app.patient_ideas · NEW"] {
     id id PK
-    id patient_id FK "→ patient"
-    json ideas
-    choice source
-    datetime generated_at
+    id organization_id FK "→ organization"
+    id patient_id FK "→ patient (cascade)"
+    id offering_id FK "→ offering (cascade)"
+    number position "1–4"
+    text reason "≤ 200"
+    datetime created_at
+  }
+  patient["app.patients · CHANGED"] {
+    datetime ideas_stale_since "NEW — the refresh's mark (PI4)"
   }
 ```
 

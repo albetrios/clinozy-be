@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 436
+  Total routes: 437
 ================================================================================
 
 Legend:
@@ -13,7 +13,7 @@ Legend:
 
 ================================================================================
   DOMAIN: APP (/api/v1/app)
-  Routes: 302
+  Routes: 303
 ================================================================================
 
   — Sub Domains —
@@ -211,6 +211,7 @@ Legend:
   PATCH  /api/v1/app/patients/:patient_id/images/:patient_image_id  200  -    both  PERM: patient:update
   DELETE /api/v1/app/patients/:patient_id/images/:patient_image_id  204  -    both  PERM: patient:update
   POST   /api/v1/app/patients/:patient_id/images/:patient_image_id/restore  200  req  both  PERM: patient:update
+  GET    /api/v1/app/patients/:patient_id/offering-ideas          200  -    both  PERM: patient:read
   GET    /api/v1/app/patients/:patient_id/offering-suggestions    200  -    both  PERM: patient:read
   POST   /api/v1/app/patients/:patient_id/offering-suggestions    200  req  both  PERM: patient:update
   GET    /api/v1/app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id  200  -    both  PERM: patient:read
@@ -527,11 +528,11 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 436
+  Total routes    : 437
   Public          : 18
   Authenticated   : 51
   Role-guarded    : 9
-  Perm-guarded    : 353
+  Perm-guarded    : 354
   Token-guarded   : 5
   Team-only (O)   : 10
 

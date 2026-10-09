@@ -44,6 +44,11 @@ import { createTaskRulesSweepWorker } from '@/domains/app/sub-domains/tasks/work
 import { createTaskRulesWorker } from '@/domains/app/sub-domains/tasks/workers/task-rules.worker.js';
 import { TASK_RULES_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/tasks/workers/task-rules.constants.js';
 import { TASK_RULES_QUEUE_NAME } from '@/domains/app/sub-domains/tasks/queues/task-rules.queue.js';
+import { PATIENT_IDEAS_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/patients/patient-ideas/workers/patient-ideas.constants.js';
+import { PATIENT_IDEAS_QUEUE_NAME } from '@/domains/app/sub-domains/patients/patient-ideas/queues/patient-ideas.queue.js';
+import { isPatientIdeasAiEnabled } from '@/infrastructure/ai/anthropic-messages.config.js';
+import { createPatientIdeasSweepWorker } from '@/domains/app/sub-domains/patients/patient-ideas/workers/patient-ideas-sweep.worker.js';
+import { createPatientIdeasWorker } from '@/domains/app/sub-domains/patients/patient-ideas/workers/patient-ideas.worker.js';
 import { createContactMessageDeliveryWorker } from '@/domains/app/sub-domains/contacts/contact-activities/workers/contact-message-delivery.worker.js';
 import { CONTACT_MESSAGE_DELIVERY_QUEUE_NAME } from '@/domains/app/sub-domains/contacts/contact-activities/queues/contact-message-delivery.queue.js';
 import { createMessagingWebhookEventWorker } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/workers/messaging-webhook-event.worker.js';
@@ -432,6 +437,28 @@ const WORKER_QUEUE_REGISTRATION_DEFINITIONS: WorkerQueueRegistrationDefinition[]
     holdsConnectionDuringExternalIo: false,
     resolvePostgresConcurrency: () => RETENTION_WORKER_CONCURRENCY,
     create: () => createTaskRulesWorker(),
+  },
+  // D80, WC-47: the five-minute sweep adds one job per organization with patients marked stale;
+  // each job refreshes their AI ideas with Claude (provider `anthropic`). Both only while
+  // PATIENT_IDEAS_AI_ENABLED is on.
+  retentionDefinition({
+    queueName: PATIENT_IDEAS_SWEEP_QUEUE_NAME,
+    family: 'retention',
+    logLabel: 'patient ideas sweep worker',
+    isEnabled: () => isPatientIdeasAiEnabled(),
+    create: () => createPatientIdeasSweepWorker(),
+  }),
+  {
+    queueName: PATIENT_IDEAS_QUEUE_NAME,
+    family: 'retention',
+    logLabel: 'patient ideas worker',
+    usesPostgres: true,
+    scheduled: false,
+    criticality: 'throughput',
+    holdsConnectionDuringExternalIo: false,
+    resolvePostgresConcurrency: () => RETENTION_WORKER_CONCURRENCY,
+    isEnabled: () => isPatientIdeasAiEnabled(),
+    create: () => createPatientIdeasWorker(),
   },
   // Launch D77: WhatsApp and Instagram through the platform Meta app — delivery (each message
   // write enqueues its organization), the callbacks' processing, the one-minute safety-net sweep

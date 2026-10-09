@@ -428,6 +428,9 @@
     "model": "organization",
     "verifyNoMutation": true
   },
+  "GET /api/v1/app/patients/:patient_id/offering-ideas": {
+    "model": "organization"
+  },
   "GET /api/v1/app/patients/:patient_id/offering-suggestions": {
     "model": "organization"
   },

@@ -44,10 +44,12 @@ HTTP handlers do **not** pin a Postgres checkout for the full request: each unit
 | `stripe` | 5 | 30_000 |
 | `s3` | 3 | 15_000 |
 | `resend` | 5 | 60_000 |
+| `meta` | 5 | 60_000 |
+| `anthropic` | 5 | 60_000 |
 
 When Redis is unavailable, breakers fall back to in-memory state per process.
 
-**What counts as a failure.** Every error an operation throws counts against its circuit, except one that carries `countsAsCircuitFailure: false` ([`countsAsCircuitFailure`](../../../src/infrastructure/resilience/circuit-breaker.ts)) — the dependency answered and refused that one request. Such a call counts as a success, so a burst of bad requests can neither open a circuit nor keep a half-open one from closing. Our own error classes set the property (a Resend per-email rejection on `ResendApiError`, below); for a third-party error, `outboundCall`'s `countsAsCircuitFailure` option tags it. Every Stripe call passes [`countsStripeErrorAsCircuitFailure`](../../../src/infrastructure/payment/stripe.client.ts): a declined card, an invalid or not-found request (`resource_missing`) and an idempotency-key conflict do not count; outages, timeouts, connection, authentication and permission errors and rate limits do. Every S3 error still counts.
+**What counts as a failure.** Every error an operation throws counts against its circuit, except one that carries `countsAsCircuitFailure: false` ([`countsAsCircuitFailure`](../../../src/infrastructure/resilience/circuit-breaker.ts)) — the dependency answered and refused that one request. Such a call counts as a success, so a burst of bad requests can neither open a circuit nor keep a half-open one from closing. Our own error classes set the property (a Resend per-email rejection on `ResendApiError`, below); for a third-party error, `outboundCall`'s `countsAsCircuitFailure` option tags it. Every Stripe call passes [`countsStripeErrorAsCircuitFailure`](../../../src/infrastructure/payment/stripe.client.ts): a declined card, an invalid or not-found request (`resource_missing`) and an idempotency-key conflict do not count; outages, timeouts, connection, authentication and permission errors and rate limits do. Every S3 error still counts. Meta (`countsMetaGraphErrorAsCircuitFailure`) and Anthropic (`countsAnthropicErrorAsCircuitFailure`, launch D80) do not count a throttle (Anthropic: 429 or 529 overloaded) or a refusal of one request (a 4xx other than 401 / 403); a bad key, a 5xx, a timeout and a network failure do.
 
 ---
 

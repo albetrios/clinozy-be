@@ -64,6 +64,7 @@ export const EXPECTED_FORCE_RLS_TABLES: ForceRlsTableRef[] = [
   { schemaName: 'app', tableName: 'patient_feedback_actions' },
   { schemaName: 'app', tableName: 'patient_images' },
   { schemaName: 'app', tableName: 'patient_offering_suggestions' },
+  { schemaName: 'app', tableName: 'patient_ideas' },
   { schemaName: 'app', tableName: 'patient_offerings' },
   { schemaName: 'app', tableName: 'patient_prescriptions' },
   { schemaName: 'app', tableName: 'patient_reports' },

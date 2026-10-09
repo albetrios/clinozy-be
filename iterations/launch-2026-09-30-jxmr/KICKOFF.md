@@ -168,7 +168,7 @@ its links working (the invoices' medical lines and links) until the medical stor
 | 149 | [Flow 2 — visit, prescription, payment](plans/features/flow-visit-to-payment/story.md) — end-to-end, without the medicine sale ([D49](plans/decisions.md)) | flow | #133, #136 | `/be-build-requirement` | flow-visit-to-payment.1 (sale part deferred) | — | done |
 | 150 | [Flow 3 — treatment plan and feedback](plans/features/flow-plan-and-feedback/story.md) — end-to-end | flow | #134, #135, #136, #138 | `/be-build-requirement` | flow-plan-and-feedback.1 | — | done |
 | 151 | Acceptance — every criterion in [acceptance.md](plans/acceptance.md) checked with evidence (the medical store's deferred) | flow | #148, #149, #150 | `be-kickoff-iteration` › Close | every row of plans/acceptance.md | — | done |
-| 152 | **AI ideas** — WC-47 — deferred: `app.patient_ideas` is dropped until its feature is built (§7, P20) | background | — | — | — | — | deferred |
+| 152 | **AI ideas** — WC-47 — deferred: `app.patient_ideas` is dropped until its feature is built (§7, P20) | background | — | — | — | — | revised → AS-BUILT #152 (D80) · done |
 | 153 | **Sub-domain 11 — Medical store** — its feature, WC-34, WC-45 and the medicine sale in Flow 2 — deferred until its route review ([D49](plans/decisions.md)) | sub-domain | — | — | — | — | revised → AS-BUILT #153 (D75) · done |
 
 ### Superseded ledger (the plan of 2026-10-03)

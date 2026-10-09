@@ -18,7 +18,7 @@ Every paginated list also takes `limit` (1–100) and `after` (cursor), plus `cr
 | 4 | Contacts | `contacts/` | `contacts` (+ `preview`, `members`, `activities` with `send-message`, `log-call`, `add-note`, `resend`), `contact-activities/message-batches`, `contact-message-templates` | 22 | 1, 2 — an activity's record links reach 5–10 as they are built | **final (confirmed 2026-10-08)** · old 3.5 + 4.5 |
 | 5 | Leads | `leads/` | `leads` (+ `exports`, `claim`, `release`) | 9 | 1, 2, 4 | **final (rev 6, confirmed 2026-10-08)** · old 4 |
 | 6 | Appointments | `appointments/` | `appointments` (+ `exports`, `slots`, `daily-counts`, status actions, `copy`, `stage`, `pause`, `resume`) | 20 | 1, 2, 3, 4 — check-in opens the patient file through 7's service | **final (rev 4, confirmed 2026-10-08)** |
-| 7 | Patients | `patients/` | `patients` (+ `exports`, `clinical-notes`, `prescriptions`, `images`, `reports`, `treatments`, `check-ins`, `reviews`, `offerings`, `offering-suggestions`), `patient-prescriptions`, `prescription-kits`, `patient-diagnoses`, `patient-treatments` | 73 | 1, 2, 3, 4, 6 — what was bought links to 8's invoice lines | **final (confirmed 2026-10-08)** · old 5 + 8 + 9 |
+| 7 | Patients | `patients/` | `patients` (+ `exports`, `clinical-notes`, `prescriptions`, `images`, `reports`, `treatments`, `check-ins`, `reviews`, `offerings`, `offering-suggestions`, `offering-ideas`), `patient-prescriptions`, `prescription-kits`, `patient-diagnoses`, `patient-treatments` | 74 | 1, 2, 3, 4, 6 — what was bought links to 8's invoice lines | **final (confirmed 2026-10-08)** · old 5 + 8 + 9 |
 | 8 | Billing | `billing/` (your call) | `invoices` (+ `exports`, `credit-notes`), `invoice-credit-notes`, `payments` (+ `exports`, `edits`, `reverse`), `pending-credits` (+ `settle`), `day-closes` (+ `close`, `reopen`) | 32 | 1, 3, 4, 7 | **final (rev 2, confirmed 2026-10-08)** · old 10 |
 | 9 | Stock | `stock/` | `stock-items` (+ `exports`, `movements`, `revert`), `stock-item-movements`, `stock-counts`, `stock-purchases` (+ `exports`), `stock-vendors` | 28 | 1, 7, 8 | **final (rev 2, confirmed 2026-10-08)** · old 12 |
 | 10 | Tasks & rules | `tasks/` | `tasks` (+ `exports`, `snooze`, `resolve`, `reassign`), `task-rule-settings` | 12 | 2, 4, 5, 6, 7, 8 | **final (rev 1, confirmed 2026-10-08)** · old 13 |
@@ -3382,7 +3382,7 @@ None — one folder, `src/domains/app/sub-domains/appointments/`; `visits/` goes
 
 ---
 
-## 7. Patients — final (confirmed 2026-10-08) — nested sub-domains 7.A–7.M
+## 7. Patients — final (confirmed 2026-10-08; 7.N added by recommendation 2026-10-09, D80) — nested sub-domains 7.A–7.N
 
 *Restructured 2026-10-08: old sub-domains 5 (rev 10), 8 (rev 2) and 9 (rev 2) in one section — layout only, no decision changed.*
 
@@ -4910,6 +4910,24 @@ None beyond 7.10.
 | PKC10 | PK10: the active-offering check; `offering_name` in the serializer |
 
 ---
+
+### 7.N Ideas from history — `patients/patient-ideas/` — rev 1 (recommendation, 2026-10-09, D80)
+
+Built by recommendation at ROUTE #152 ([D80](decisions.md)): P20's "`app.patient_ideas` is dropped until
+its feature is built" ends, and PK10's "the design's ideas are not in this API" becomes one read.
+
+| # | Method | Path | Access | Operation |
+| --- | --- | --- | --- | --- |
+| 74 | GET | `/patients/{patient_id}/offering-ideas` | patient:read | the plan's ideas: the stored AI ideas, else the prototype's rules |
+
+| ID | Decision |
+| --- | --- |
+| PI1 | **Rules on read** (H:4355–4367): the doctor's treatment-suggestion notes (LHR, peel, Hydrafacial, PRP), complaints and diagnoses (pigmentation → a de-tan or peel; hair fall → PRP; acne → a peel), two or more visits → a package of the last treatment, a package with at most one session left → renew it, no visit at all → a consultation. At most 4; never an inactive offering or one already in the plan (any status but declined). Each idea: `offering_id`, `offering_name`, `category`, `sessions`, `price`, `reason`, `source` (`ai` · `note` · `history` · `consistency` · `renew` · `first`). |
+| PI2 | **AI ideas** replace the rules when the patient has Data consent, `PATIENT_IDEAS_AI_ENABLED` is on and stored ideas exist that still pass PI1's filter; `meta.source` says which (`ai` · `rules`), `meta.ai_refreshed_at` when. |
+| PI3 | **`app.patient_ideas`** — a derived cache: `organization_id`, `patient_id` (`CASCADE`), `offering_id` (`CASCADE`), `position`, `reason` (≤ 200), `created_at`; unique per patient and offering; RLS + FORCE on the organization; no soft delete, no routes of its own, outside the record purge. |
+| PI4 | **Staleness:** `app.patients.ideas_stale_since`, set by triggers on a clinical note, treatment, patient offering or plan row written for the patient, an appointment of theirs completed, or their Data consent changed; cleared by the refresh only when unchanged since it read (compare-and-clear). |
+| PI5 | **Refresh (WC-47):** `patient-ideas-sweep` (every 5 minutes) → one `patient-ideas` job per organization with stale consenting patients; the job refreshes up to 20, oldest first: a short read, Claude outside the context, a short write. No consent: the stored ideas are deleted. |
+| PI6 | **What Claude sees:** complaint and diagnosis labels — a complaint or an unlinked diagnosis reduced to a fixed vocabulary of concerns (`pigmentation`, `acne`, `hair fall`, …), a linked diagnosis by its catalogue name —, treatment names with their months, packages with sessions left, the completed visit count, the plan's offering names and the active offerings — never a name, phone, photo, free-text note or id of the patient. |
 
 ## 8. Billing — final (rev 2, confirmed 2026-10-08) — nested sub-domains 8.A–8.E
 

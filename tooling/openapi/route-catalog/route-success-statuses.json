@@ -226,6 +226,7 @@
   "PATCH /api/v1/app/invoices/:invoice_id": 200,
   "DELETE /api/v1/app/invoices/:invoice_id": 204,
   "POST /api/v1/app/invoices/:invoice_id/restore": 200,
+  "GET /api/v1/app/patients/:patient_id/offering-ideas": 200,
   "GET /api/v1/app/patients/:patient_id/offering-suggestions": 200,
   "POST /api/v1/app/patients/:patient_id/offering-suggestions": 200,
   "GET /api/v1/app/payments": 200,

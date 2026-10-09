@@ -16,7 +16,7 @@ which adds the per-attempt timeout and the error classification.
   (`lua/circuit-mutate.lua`), so a failing upstream opens the circuit for the whole cluster at once
   rather than per process.
 - **Consecutive failures open it**: any success resets the count. Thresholds and reset windows are
-  constants in `circuit-breaker.ts` (Stripe 5 / 30 s, S3 3 / 15 s, Resend 5 / 60 s, Turnstile 5 / 30 s);
+  constants in `circuit-breaker.ts` (Stripe 5 / 30 s, S3 3 / 15 s, Resend 5 / 60 s, Meta 5 / 60 s, Anthropic 5 / 60 s, Turnstile 5 / 30 s);
   half-open lets up to two probe failures through before re-opening.
 - **A refusal is not a failure**: an error the upstream answered on purpose (a declined card, a missing
   object, a rejected email) carries `countsAsCircuitFailure: false` and counts as a success, so a burst
@@ -34,7 +34,7 @@ which adds the per-attempt timeout and the error classification.
 - **Open circuit at the edge**: `CircuitBreakerOpenError` answers **503** with `Retry-After` (seconds
   until the half-open probe) — the request is retryable, never a 500.
 - **Open circuit in a worker**: a queue whose every job calls one provider (`mail`, `stripe-webhook`,
-  `subscription-seat-sync`, `user-data-export`) pauses on every replica for five minutes and parks the
+  `subscription-seat-sync`, `user-data-export`, `contact-message-delivery`, `patient-ideas`) pauses on every replica for five minutes and parks the
   job without spending an attempt; the next job after the pause is the half-open probe
   (`createProviderPausableWorker`, `src/infrastructure/queue/worker-runtime/provider-outage-pause.util.ts`).
 

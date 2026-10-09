@@ -25,12 +25,12 @@ that drops them is built. The medical store's routes are §11's — back in the 
 | 4. Contacts | 13 | 3 | 9 | 25 |
 | 5. Leads | 0 | 0 | 9 | 9 |
 | 6. Appointments | 4 | 3 | 13 | 20 |
-| 7. Patients | 0 | 43 | 30 | 73 |
+| 7. Patients | 1 | 43 | 30 | 74 |
 | 8. Billing | 4 | 2 | 26 | 32 |
 | 9. Stock | 1 | 3 | 24 | 28 |
 | 10. Tasks & rules | 1 | 0 | 11 | 12 |
 | 11. Medical store | 4 | 3 | 44 | 51 |
-| **Total** | **28** | **82** | **211** | **321** |
+| **Total** | **29** | **82** | **211** | **322** |
 
 ## 1. Branches & places
 
@@ -264,6 +264,7 @@ that drops them is built. The medical store's routes are §11's — back in the 
 | 7.71 | CHANGED | PATCH | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:update` | Change quantity, price, status, reason | routes-final §7.M.7 | `PATCH /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` · #135 · e8903a2 |
 | 7.72 | CHANGED | DELETE | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` | `patient:update` | Remove from the plan | routes-final §7.M.7 | `DELETE /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}` · #135 · e8903a2 |
 | 7.73 | CHANGED | POST | `/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}/restore` | `patient:update` | Undo | routes-final §7.M.7 | `POST /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}/restore` · #135 · e8903a2 |
+| 7.74 | NEW | GET | `/patients/{patient_id}/offering-ideas` | `patient:read` | The plan's ideas from history: the stored AI ideas, else the rules | routes-final §7.N, D80 | `GET /api/v1/app/patients/{patient_id}/offering-ideas` · #152 |
 
 ## 8. Billing
 
