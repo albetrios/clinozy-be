@@ -47,7 +47,7 @@ describe('webhook.validator', () => {
         expect.unreachable('expected a ValidationError');
       } catch (error) {
         expect(error).toBeInstanceOf(ValidationError);
-        expect((error as ValidationError).details).toHaveProperty('events');
+        expect((error as ValidationError).errors?.map((item) => item.field)).toContain('events');
       }
     }
   });

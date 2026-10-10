@@ -1,1 +1,6 @@
-{}
+{
+  "notifications": {
+    "invitationAcceptedTitle": "Invitación aceptada",
+    "invitationAcceptedMessage": "{{inviteeName}} aceptó tu invitación para unirse a {{organizationName}}."
+  }
+}

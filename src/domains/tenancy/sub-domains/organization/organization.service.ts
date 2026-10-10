@@ -650,9 +650,9 @@ export class OrganizationService {
     const parsed = validateUploadLogo(body);
     const expectedPrefix = buildOrganizationLogoKeyPrefix(public_id);
     if (!parsed.key.startsWith(expectedPrefix)) {
-      throw new ValidationError('errors:validation.logoKeyNotOwned', undefined, {
-        key: ['Logo key does not belong to this organization'],
-      });
+      throw new ValidationError('errors:validation.logoKeyNotOwned', undefined, undefined, [
+        { field: 'key', messageKey: 'errors:validation.logoKeyNotOwned' },
+      ]);
     }
     if (!this.offboardingUploadService) {
       throw new Error('UploadService is not wired for logo-attach confirmation');
@@ -668,16 +668,16 @@ export class OrganizationService {
       });
     });
     if (isSvgContentType(mimeType)) {
-      throw new ValidationError('errors:uploadContentTypeNotAllowed', undefined, {
-        key: ['SVG logos are not allowed for security reasons'],
-      });
+      throw new ValidationError('errors:validation.svgLogoNotAllowed', undefined, undefined, [
+        { field: 'key', messageKey: 'errors:validation.svgLogoNotAllowed' },
+      ]);
     }
     // External I/O (S3) runs outside the DB context. Confirmed, yet gone from storage: refuse.
     const metadata = await this.objectStorage.headObject(parsed.key);
     if (!metadata) {
-      throw new ValidationError('errors:validation.logoNotFound', undefined, {
-        key: ['Object does not exist'],
-      });
+      throw new ValidationError('errors:validation.logoNotFound', undefined, undefined, [
+        { field: 'key', messageKey: 'errors:validation.logoNotFound' },
+      ]);
     }
     // TEN-07: store the object KEY (private bucket + signed-on-read), not a permanent
     // unsigned public URL. Reads mint a short-lived signed URL via toOrganizationOutput.

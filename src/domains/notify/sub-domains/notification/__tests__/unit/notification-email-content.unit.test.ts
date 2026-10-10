@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeAll } from 'vitest';
+import { initializeI18nextForBackgroundWork } from '@/shared/middlewares/core/i18n.middleware.js';
 import { buildNotificationEmailHtml } from '@/domains/notify/sub-domains/notification/workers/notification-email-content.js';
+
+// Email copy comes from the locale files, as in the API and the worker.
+beforeAll(async () => {
+  await initializeI18nextForBackgroundWork();
+});
 
 describe('buildNotificationEmailHtml', () => {
   it('escapes HTML in title, message, and actionUrl while keeping a plain-text subject', () => {
@@ -54,5 +60,18 @@ describe('buildNotificationEmailHtml', () => {
 
     expect(html).toContain('class="button"');
     expect(html).toContain('href="http://example.com/path"');
+  });
+
+  it("labels the action button in the recipient's language", () => {
+    const { html } = buildNotificationEmailHtml({
+      title: 'Invitación aceptada',
+      message: 'Cuerpo',
+      actionUrl: 'https://example.com/path',
+      locale: 'es',
+    });
+
+    expect(html).toContain('<html lang="es">');
+    expect(html).toContain('Ver detalles');
+    expect(html).not.toContain('View Details');
   });
 });

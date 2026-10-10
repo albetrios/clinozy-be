@@ -18,6 +18,8 @@ import type {
 } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
 import { MEMBERSHIP_EVENT } from '@/domains/tenancy/sub-domains/membership/events/membership.events.js';
 import type { UserService } from '@/domains/user/user.service.js';
+import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.js';
+import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/shared/constants/i18n.constants.js';
 import type { MemberInvitationRepository } from './member-invitation.repository.js';
 import type {
   AcceptMemberInvitationOutput,
@@ -44,19 +46,17 @@ const MEMBER_INVITATION_RESOURCE = 'Member invitation';
 
 function assertInvitationAcceptable(row: MemberInvitationRow, now: Date): void {
   if (row.revoked_at) {
-    throw new ValidationError('errors:validation.invitationRevoked', undefined, {}).withReason(
+    throw new ValidationError('errors:validation.invitationRevoked').withReason(
       'invitation_revoked',
     );
   }
   if (row.accepted_at) {
-    throw new ValidationError(
-      'errors:validation.invitationAlreadyAccepted',
-      undefined,
-      {},
-    ).withReason('invitation_already_accepted');
+    throw new ValidationError('errors:validation.invitationAlreadyAccepted').withReason(
+      'invitation_already_accepted',
+    );
   }
   if (now > row.expires_at) {
-    throw new ValidationError('errors:validation.invitationExpired', undefined, {}).withReason(
+    throw new ValidationError('errors:validation.invitationExpired').withReason(
       'invitation_expired',
     );
   }
@@ -65,9 +65,9 @@ function assertInvitationAcceptable(row: MemberInvitationRow, now: Date): void {
 function throwInvitationAcceptFailure(current: MemberInvitationRow | null, now: Date): never {
   if (!current) throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
   assertInvitationAcceptable(current, now);
-  throw new ValidationError('errors:validation.invalidToken', undefined, {
-    token: ['Invalid or expired'],
-  });
+  throw new ValidationError('errors:validation.invalidToken', undefined, undefined, [
+    { field: 'token', messageKey: 'errors:validation.invalidToken' },
+  ]);
 }
 
 /**
@@ -90,7 +90,7 @@ export interface MemberInvitationCommandOptions {
  *
  * @remarks
  * - **Notes:** `invited_by_user_id` is the acting admin's internal id (the invitation's
- *   `invited_by_user_id` FK is NOT NULL); `inviter_label` is the display string for the email body;
+ *   `invited_by_user_id` FK is NOT NULL) — its holder's name is the email's inviter;
  *   `requestId` propagates the HTTP request id into the post-commit mail dispatch (omit on non-HTTP
  *   callers). Carrier-only DTO — it holds no behavior.
  */
@@ -102,8 +102,18 @@ export interface CreateInvitationForMembershipParams {
   email: string;
   expires_in_days: number;
   invited_by_user_id: number;
-  inviter_label: string;
+  /** The organization's public id — its default language is the invitation email's. */
+  organization_public_id: string;
   requestId?: string;
+}
+
+/** A member's display name: their full name, else their email. */
+function memberDisplayName(user: {
+  first_name?: string | null;
+  last_name?: string | null;
+  email: string;
+}): string {
+  return [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.email;
 }
 
 /**
@@ -141,7 +151,34 @@ export class MemberInvitationService {
     private readonly membershipRepository: MembershipRepository,
     private readonly invitationRepository: MemberInvitationRepository,
     private readonly userService?: UserService,
+    private readonly organizationSettingsService?: Pick<
+      OrganizationSettingsService,
+      'resolveDefaultLocaleForOrganization'
+    >,
   ) {}
+
+  /** The organization's default language — what an invitee, who has none yet, is written to in. */
+  private async resolveOrganizationLanguage(
+    organizationPublicId: string,
+  ): Promise<SupportedLanguage> {
+    return (
+      (await this.organizationSettingsService?.resolveDefaultLocaleForOrganization(
+        organizationPublicId,
+      )) ?? DEFAULT_LANGUAGE
+    );
+  }
+
+  /** The name an invitation email shows for a member: the inviter's name, else '' (a team member). */
+  private async resolveInviterName(
+    inviter: { internalId: number } | { publicId: string } | null,
+  ): Promise<string> {
+    if (inviter === null || this.userService === undefined) return '';
+    const user =
+      'internalId' in inviter
+        ? await this.userService.findById(inviter.internalId)
+        : await this.userService.requireUserRecordByPublicId(inviter.publicId);
+    return user ? memberDisplayName(user) : '';
+  }
 
   /**
    * REQ-4 Stripe seat-sync port, late-wired by the composition root.
@@ -235,10 +272,11 @@ export class MemberInvitationService {
         {
           email: params.email,
           organization_name: params.organization_name,
-          inviter_name: params.inviter_label,
+          inviter_name: await this.resolveInviterName({ internalId: params.invited_by_user_id }),
           token,
           invitation_public_id: output.id,
           expires_in_days: params.expires_in_days,
+          locale: await this.resolveOrganizationLanguage(params.organization_public_id),
         } satisfies MemberInvitationEmailPayload,
         params.requestId !== undefined ? { requestId: params.requestId } : undefined,
       ),
@@ -337,15 +375,13 @@ export class MemberInvitationService {
             const organization = await this.organizationRepository.findByPublicId(
               lookup.organization_public_id,
             );
-            const inviteeName =
-              [actingUser.first_name, actingUser.last_name].filter(Boolean).join(' ').trim() ||
-              actingUser.email;
             await eventBus.emit(
               buildDomainEvent(MEMBER_INVITATION_EVENT.ACCEPTED, {
                 recipient_user_ids: recipientUserIds,
                 organization_id: lookup.organization_id,
                 organization_name: organization?.name ?? '',
-                invitee_name: inviteeName,
+                invitee_name: memberDisplayName(actingUser),
+                locale: await this.resolveOrganizationLanguage(lookup.organization_public_id),
               } satisfies MemberInvitationAcceptedPayload),
             );
           }
@@ -423,12 +459,10 @@ export class MemberInvitationService {
       const membership = await this.membershipRepository.findById(row.membership_id);
       if (!membership || membership.organization_id !== organization.id)
         throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
-      if (row.accepted_at)
-        throw new ValidationError('errors:validation.invitationAlreadyAccepted', undefined, {});
-      if (row.revoked_at)
-        throw new ValidationError('errors:validation.invitationRevoked', undefined, {});
+      if (row.accepted_at) throw new ValidationError('errors:validation.invitationAlreadyAccepted');
+      if (row.revoked_at) throw new ValidationError('errors:validation.invitationRevoked');
       if (new Date() > row.expires_at)
-        throw new ValidationError('errors:validation.invitationExpired', undefined, {});
+        throw new ValidationError('errors:validation.invitationExpired');
       const token = generateInvitationToken();
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + parsed.expires_in_days);
@@ -450,10 +484,14 @@ export class MemberInvitationService {
           {
             email: row.email,
             organization_name: organization.name ?? organization.public_id,
-            inviter_name: 'Team member',
+            // The member who resends is the inviter the email names.
+            inviter_name: await this.resolveInviterName(
+              scope.userPublicId !== undefined ? { publicId: scope.userPublicId } : null,
+            ),
             token,
             invitation_public_id: output.id,
             expires_in_days: parsed.expires_in_days,
+            locale: await this.resolveOrganizationLanguage(organization.public_id),
           } satisfies MemberInvitationEmailPayload,
           options?.requestId !== undefined ? { requestId: options.requestId } : undefined,
         ),

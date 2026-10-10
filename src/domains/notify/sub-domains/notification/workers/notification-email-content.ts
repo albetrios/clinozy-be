@@ -1,4 +1,5 @@
-import { baseTemplate } from '@/infrastructure/mail/templates/base.template.js';
+import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/shared/constants/i18n.constants.js';
+import { baseTemplate, translateMailText } from '@/infrastructure/mail/templates/base.template.js';
 import { escapeHtml } from '@/shared/utils/text/html-escape.util.js';
 
 /**
@@ -34,18 +35,22 @@ export function buildNotificationEmailHtml(notification: {
   title: string;
   message: string;
   actionUrl?: string | null;
+  /** The recipient's language for the email's own copy (the title and message come translated). */
+  locale?: SupportedLanguage;
 }): { subject: string; html: string } {
+  const locale = notification.locale ?? DEFAULT_LANGUAGE;
   const safeTitle = escapeHtml(notification.title);
   const safeMessage = escapeHtml(notification.message);
   const safeActionUrl = sanitizeActionUrl(notification.actionUrl);
 
   const html = baseTemplate({
+    locale,
     title: notification.title,
     preheader: notification.message,
     body: `
                 <h1>${safeTitle}</h1>
                 <p>${safeMessage}</p>
-                ${safeActionUrl ? `<p style="text-align: center; margin: 32px 0;"><a href="${safeActionUrl}" class="button">View Details</a></p>` : ''}
+                ${safeActionUrl ? `<p style="text-align: center; margin: 32px 0;"><a href="${safeActionUrl}" class="button">${translateMailText('notificationViewDetails', locale)}</a></p>` : ''}
               `,
   });
 

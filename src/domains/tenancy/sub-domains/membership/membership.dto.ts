@@ -37,7 +37,7 @@ export const updateMembershipDto = z
   })
   .strict()
   .refine((value) => value.status !== undefined || value.role_id !== undefined, {
-    message: 'Provide at least one of status or role_id',
+    message: 'errors:validation.statusOrRoleRequired',
   });
 
 /**

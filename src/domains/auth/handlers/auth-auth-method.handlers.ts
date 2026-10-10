@@ -1,4 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { toSupportedLanguage } from '@/shared/constants/i18n.constants.js';
 import { ForbiddenError } from '@/shared/errors/index.js';
 import { successResponse } from '@/shared/utils/http/response.util.js';
 import { getRequestIdentifier, requireAuth } from '@/shared/utils/http/request.util.js';
@@ -65,6 +66,7 @@ export function createAuthAuthMethodHandlers({
     forgotPassword: async (request: FastifyRequest, _reply: FastifyReply) => {
       const data = await authMethodService.forgotPassword(request.body, {
         requestId: getRequestIdentifier(request),
+        locale: toSupportedLanguage(request.language),
       });
       return successResponse(
         resolveAuthMessageKeyResponse(request, data),

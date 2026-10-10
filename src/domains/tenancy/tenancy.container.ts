@@ -105,6 +105,8 @@ export function createTenancyContainer(
     membershipRepository,
     memberInvitationRepository,
     userService,
+    // An invitee has no language yet: invitations are written in the organization's.
+    organizationSettingsService,
   );
   const membershipService = new MembershipService(
     organizationService,

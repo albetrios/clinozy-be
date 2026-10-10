@@ -490,9 +490,9 @@ export class UserService {
   ): Promise<void> {
     const expectedPrefix = buildUserAvatarKeyPrefix(ownerPublicId);
     if (!avatarKey.startsWith(expectedPrefix)) {
-      throw new ValidationError('errors:validation.avatarKeyNotOwned', undefined, {
-        avatar_key: ['Avatar key does not belong to this user'],
-      });
+      throw new ValidationError('errors:validation.avatarKeyNotOwned', undefined, undefined, [
+        { field: 'avatar_key', messageKey: 'errors:validation.avatarKeyNotOwned' },
+      ]);
     }
     if (!this.offboardingUploadService) {
       throw new Error('UploadService is not wired for avatar-attach confirmation');

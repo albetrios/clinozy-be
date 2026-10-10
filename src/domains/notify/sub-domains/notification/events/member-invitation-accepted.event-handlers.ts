@@ -1,4 +1,5 @@
 import { eventBus, runEnqueueAfterCommit, type DomainEvent } from '@/core/events/event-bus.js';
+import i18next from 'i18next';
 import { invalidateCachedUnreadNotificationCounts } from '@/domains/notify/sub-domains/notification/notification-unread-count.cache.js';
 import {
   createAndDispatchNotification,
@@ -28,8 +29,15 @@ const INVITE_ACCEPTED_ACTION_URL = '/settings/members';
  */
 async function onMemberInvitationAcceptedEvent(event: DomainEvent): Promise<void> {
   const payload = event.payload as MemberInvitationAcceptedPayload;
-  const title = 'Invitation accepted';
-  const message = `${payload.invitee_name} accepted your invitation to join ${payload.organization_name}.`;
+  // Plain text (the inbox and the email escape it where it lands in HTML), in the organization's
+  // language; the email around it follows `data.locale`.
+  const plainText = { lng: payload.locale, interpolation: { escapeValue: false } };
+  const title = i18next.t('common:notifications.invitationAcceptedTitle', plainText);
+  const message = i18next.t('common:notifications.invitationAcceptedMessage', {
+    ...plainText,
+    inviteeName: payload.invitee_name,
+    organizationName: payload.organization_name,
+  });
   for (const recipientUserId of payload.recipient_user_ids) {
     try {
       // A savepoint per recipient: inside the accept's transaction a failed INSERT would otherwise
@@ -44,7 +52,7 @@ async function onMemberInvitationAcceptedEvent(event: DomainEvent): Promise<void
           action_url: INVITE_ACCEPTED_ACTION_URL,
           // In-app inbox item + an email to the manager (IN_APP is the persisted row itself; the
           // worker delivers the email channel).
-          data: { channels: ['in_app', 'email'] },
+          data: { channels: ['in_app', 'email'], locale: payload.locale },
         }),
       );
     } catch (error) {

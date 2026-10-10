@@ -36,10 +36,10 @@ export const UpdateMeDto = z
     avatar_key: trimmedString()
       .max(512)
       .refine((key) => key.startsWith('avatars/'), {
-        message: 'Avatar key must start with "avatars/"',
+        message: 'errors:validation.avatarKeyPrefix',
       })
       .refine(isTraversalFreeStorageKey, {
-        message: 'Avatar key must not contain path traversal',
+        message: 'errors:validation.storageKeyPathTraversal',
       })
       .optional(),
   })
@@ -56,10 +56,10 @@ export const UploadAvatarDto = z
     avatar_key: trimmedString()
       .max(512)
       .refine((key) => key.startsWith('avatars/'), {
-        message: 'Avatar key must start with "avatars/"',
+        message: 'errors:validation.avatarKeyPrefix',
       })
       .refine(isTraversalFreeStorageKey, {
-        message: 'Avatar key must not contain path traversal',
+        message: 'errors:validation.storageKeyPathTraversal',
       }),
   })
   .strict();

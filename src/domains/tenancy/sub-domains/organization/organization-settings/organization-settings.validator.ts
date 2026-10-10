@@ -17,11 +17,9 @@ function assertSecurityPolicyHasNoPollutionKeys(data: unknown): void {
   if (securityPolicy === null || typeof securityPolicy !== 'object') return;
   for (const key of Reflect.ownKeys(securityPolicy)) {
     if (typeof key === 'string' && PROTO_POLLUTION_KEYS.has(key)) {
-      throw new ValidationError('errors:invalidInput', undefined, {
-        security_policy: [
-          'security_policy: keys __proto__, constructor, and prototype are not allowed',
-        ],
-      });
+      throw new ValidationError('errors:invalidInput', undefined, undefined, [
+        { field: 'security_policy', messageKey: 'errors:validation.reservedSecurityPolicyKey' },
+      ]);
     }
   }
 }

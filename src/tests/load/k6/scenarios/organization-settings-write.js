@@ -18,8 +18,8 @@ export const options = {
 export function setup() {
   requireScopedCredentials();
 }
-export default function organizationSettingsWriteOps() {
-  const { headers } = authHeaders(__ENV.TEST_TOKEN);
+/** Each resource: read, change one field, read back, then restore and confirm the original. */
+function toggleAndRestoreEachResource(headers) {
   const resources = [
     [
       'PATCH',
@@ -89,6 +89,10 @@ export default function organizationSettingsWriteOps() {
       );
     }
   }
+}
+
+/** Replace the whole preference set, read it back, then restore and confirm the original. */
+function replaceAndRestorePreferences(headers) {
   const preferences = requireData(
     http.get(`${API_PREFIX}/users/me/notification-preferences`, {
       headers,
@@ -149,5 +153,11 @@ export default function organizationSettingsWriteOps() {
       'original preference set restored',
     );
   }
+}
+
+export default function organizationSettingsWriteOps() {
+  const { headers } = authHeaders(__ENV.TEST_TOKEN);
+  toggleAndRestoreEachResource(headers);
+  replaceAndRestorePreferences(headers);
   completed.add(1);
 }

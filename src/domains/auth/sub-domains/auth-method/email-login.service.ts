@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/shared/constants/i18n.constants.js';
 import {
   ForbiddenError,
   NotFoundError,
@@ -121,7 +122,10 @@ export class EmailLoginService {
    * `.refine()` forbids it in production; never set on a deployed runtime): under it the result carries
    * `debug_verification_code` so an out-of-process test client (k6 load test) can complete the flow.
    */
-  async sendCode(body: unknown, _context?: { requestId?: string }): Promise<EmailSendCodeResult> {
+  async sendCode(
+    body: unknown,
+    context?: { requestId?: string; locale?: SupportedLanguage },
+  ): Promise<EmailSendCodeResult> {
     const startedAtMillis = Date.now();
     const parsed = validateEmailSendCode(body);
     if (isDisposableEmailBlocked(parsed.email)) {
@@ -175,7 +179,10 @@ export class EmailLoginService {
       const user =
         (await this.userService.findByEmail(parsed.email)) ??
         (await this.createEmailCodeUser(parsed.email));
-      issuedCode = await this.issueVerificationCode(user);
+      issuedCode = await this.issueVerificationCode({
+        user,
+        locale: context?.locale ?? DEFAULT_LANGUAGE,
+      });
     }
     await enforceMinimumDuration(startedAtMillis);
     return {
@@ -256,11 +263,11 @@ export class EmailLoginService {
    * most recently emailed code is the only redeemable one (the per-email send cooldown spaces issuance
    * so an in-flight code is not invalidated by an accidental rapid re-request).
    */
-  private async issueVerificationCode(user: {
-    id: number;
-    public_id: string;
-    email: string;
+  private async issueVerificationCode(options: {
+    user: { id: number; public_id: string; email: string };
+    locale: SupportedLanguage;
   }): Promise<string> {
+    const { user, locale } = options;
     const code = generateVerificationCode();
     const expiresAt = new Date(
       Date.now() + VERIFICATION_CODE_TTL_MINUTES * MILLISECONDS_PER_MINUTE,
@@ -287,6 +294,7 @@ export class EmailLoginService {
             email: user.email,
             verification_code: code,
             expires_in_minutes: VERIFICATION_CODE_TTL_MINUTES,
+            locale,
           } satisfies EmailVerificationCodePayload,
           timestamp: new Date(),
         });

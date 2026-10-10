@@ -40,7 +40,7 @@ export function trimmedEmail(): z.ZodType<string> {
         if (!isGmailDomain) return true;
         return !localPart.includes('+');
       },
-      { message: 'Plus addressing is not allowed for Gmail addresses' },
+      { message: 'errors:validation.gmailPlusAddressing' },
     );
 }
 

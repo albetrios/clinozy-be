@@ -250,7 +250,7 @@ Follow [Paddle Errors](https://developer.paddle.com/api-reference/about/errors):
 }
 ```
 
-- **error.errors**: array of `{ field, message }` for each invalid field.
+- **error.errors**: array of `{ field, message }` for each invalid field; `field` is snake_case and `message` is in the request's language (`Accept-Language`, see [internationalization.md](../runtime/internationalization.md)).
 
 **Implementation:** Update `src/shared/middlewares/core/error-handler.middleware.ts` and `src/shared/errors/index.ts` to emit this shape; map existing `AppError` codes to snake_case (`NOT_FOUND` → `not_found`, etc.) and add `type`, `documentation_url`, and `meta.request_id`. Ensure `request_id` is set on the request (e.g. Fastify `request.id` or middleware).
 
@@ -365,7 +365,7 @@ All 19 phases from the Consolidated Master Plan (Domain API Upgrade + CI/CD + en
 - [x] `DATABASE_MIGRATION_URL` in env config; `migrate.ts` uses it with fallback
 - [x] `db:push` script added to `package.json`
 - [x] RLS migration (consolidated into the baseline `migrations/00000000000000_init.sql`) for all multi-tenant tables
-- [x] Tenant middleware sets `app.current_organization_public_id` Postgres session variable for RLS
+- [x] `app.current_organization_public_id` Postgres session variable set for RLS — today per unit of work by `withAppDatabaseContext`, from the signed `org` claim (the tenant middleware was removed)
 
 ### Phase 3 — Security hardening
 
@@ -379,7 +379,7 @@ All 19 phases from the Consolidated Master Plan (Domain API Upgrade + CI/CD + en
 - [x] CORS with explicit `ALLOWED_ORIGINS`
 - [x] Rate limiting (global + per-route)
 - [x] Idempotency middleware (Redis-backed SETNX, 24h TTL)
-- [x] Organization ID format validation in tenant middleware
+- [x] Organization ID format validation — today the signed `org` claim (the tenant middleware and its header were removed)
 
 ### Phase 4 — Code quality
 

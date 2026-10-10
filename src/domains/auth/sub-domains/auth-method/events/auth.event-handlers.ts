@@ -43,12 +43,13 @@ async function handleVerificationCodeEmail(
   const html = verificationCodeTemplate({
     code: payload.verification_code,
     expiresInMinutes: payload.expires_in_minutes,
+    locale: payload.locale,
   });
 
   await recordAndScheduleOutboxEmail(
     {
       to: payload.email,
-      subject: i18next.t('mail:verificationCodeSubject', { lng: 'en' }),
+      subject: i18next.t('mail:verificationCodeSubject', { lng: payload.locale }),
       html,
       tags: [{ name: 'category', value: 'verification-code' }],
     },
@@ -70,9 +71,9 @@ async function handlePasswordResetEmail(
   await recordAndScheduleOutboxEmail(
     {
       to: payload.email,
-      subject: i18next.t('mail:passwordResetSubject', { lng: 'en' }),
+      subject: i18next.t('mail:passwordResetSubject', { lng: payload.locale }),
       html: i18next.t('mail:passwordResetHtml', {
-        lng: 'en',
+        lng: payload.locale,
         resetUrl,
         expiresInMinutes: payload.expires_in_minutes,
       }),

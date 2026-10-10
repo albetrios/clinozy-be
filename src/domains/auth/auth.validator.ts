@@ -104,9 +104,9 @@ export function validateOauthCallbackQuery(query: unknown): OauthCallbackQueryIn
  */
 export function validateAuthMethodPublicIdParam(authMethodPublicId: string): string {
   if (!/^am_[a-z0-9]{21}$/.test(authMethodPublicId)) {
-    throw new ValidationError('errors:validation.invalidAuthMethodId', undefined, {
-      authMethodPublicId: ['Must be an am_-prefixed 21-character lowercase alphanumeric public id'],
-    });
+    throw new ValidationError('errors:validation.invalidAuthMethodId', undefined, undefined, [
+      { field: 'auth_method_id', messageKey: 'errors:validation.invalidAuthMethodId' },
+    ]);
   }
   return authMethodPublicId;
 }

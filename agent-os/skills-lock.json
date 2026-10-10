@@ -95,7 +95,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-domain-generator/SKILL.md",
-      "computedHash": "a94b208c2660cf0389febffe8c825c710edb05fd65b23935394ccb786563cc95"
+      "computedHash": "1736f91947f5060af6e293d4f395288155b6ea0747638ccbf4ac54ac867c6af5"
     },
     "be-env-schema-add": {
       "source": "local",
@@ -113,7 +113,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-i18n-message-guard/SKILL.md",
-      "computedHash": "843e56d307f13ecb7b107840460a3836a6c9d1121b3ce1904e300ccdf638117f"
+      "computedHash": "f9933cb04aa00336097d5a2e175ff566cbaa9cfb26aff35b9db436e443cc756d"
     },
     "be-ide-productivity-guard": {
       "source": "local",

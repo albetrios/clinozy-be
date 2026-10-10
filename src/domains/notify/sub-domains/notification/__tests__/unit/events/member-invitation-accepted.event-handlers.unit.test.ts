@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { initializeI18nextForBackgroundWork } from '@/shared/middlewares/core/i18n.middleware.js';
 
 const createAndDispatchNotificationMock = vi.fn();
 const resolveRecipientPublicIdsMock = vi.fn();
@@ -19,6 +20,11 @@ vi.mock('@/domains/notify/sub-domains/notification/notification-unread-count.cac
   invalidateCachedUnreadNotificationCounts: (...arguments_: unknown[]) =>
     invalidateUnreadCountsMock(...arguments_),
 }));
+
+// Email copy comes from the locale files, as in the API and the worker.
+beforeAll(async () => {
+  await initializeI18nextForBackgroundWork();
+});
 
 describe('member-invitation-accepted notification handler (item #10)', () => {
   let emitAccepted: (payload: unknown) => Promise<void>;
@@ -74,6 +80,24 @@ describe('member-invitation-accepted notification handler (item #10)', () => {
     );
     expect(createAndDispatchNotificationMock).toHaveBeenCalledWith(
       expect.objectContaining({ user_id: 22 }),
+    );
+  });
+
+  it("writes the notification in the organization's language and carries it to the email", async () => {
+    await emitAccepted({
+      recipient_user_ids: [11],
+      organization_id: 7,
+      organization_name: 'Acme & Co',
+      invitee_name: 'Dana Scully',
+      locale: 'es',
+    });
+
+    expect(createAndDispatchNotificationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Invitación aceptada',
+        message: 'Dana Scully aceptó tu invitación para unirse a Acme & Co.',
+        data: { channels: ['in_app', 'email'], locale: 'es' },
+      }),
     );
   });
 

@@ -215,15 +215,14 @@ describe('UploadService — assertKeyConfirmed / assertKeyConfirmedForOwner', ()
           statusCode: error.statusCode,
           messageKey: error.messageKey,
           message: error.message,
-          details: error.details,
           errors: error.errors,
         }),
       );
       expect(fingerprints).toHaveLength(4);
       expect(new Set(fingerprints).size).toBe(1);
 
-      // The owner-missing guard carries its own developer-facing detail string; it must still
-      // be the same error class and public shape so it never becomes an oracle either.
+      // The owner-missing guard is a caller bug, yet it answers with the same public shape so it
+      // never becomes an oracle either.
       const ownerMissing = await captureRejection(() =>
         service.assertKeyConfirmedForOwner({ fileKey: FILE_KEY }),
       );
@@ -231,10 +230,12 @@ describe('UploadService — assertKeyConfirmed / assertKeyConfirmedForOwner', ()
         code: ownerMissing.code,
         statusCode: ownerMissing.statusCode,
         messageKey: ownerMissing.messageKey,
+        errors: ownerMissing.errors,
       }).toEqual({
         code: dataDependentRefusals[0]!.code,
         statusCode: dataDependentRefusals[0]!.statusCode,
         messageKey: dataDependentRefusals[0]!.messageKey,
+        errors: dataDependentRefusals[0]!.errors,
       });
     });
   });

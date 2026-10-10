@@ -119,13 +119,25 @@ describe('MemberInvitationService', () => {
       email: 'invitee@example.com',
       is_email_verified: true,
     }),
+    // The inviter the invitation email names.
+    findById: vi.fn().mockResolvedValue({
+      id: 2,
+      first_name: 'Ada',
+      last_name: 'Lovelace',
+      email: 'ada@example.com',
+    }),
   } as unknown as UserService;
+
+  const organizationSettingsService = {
+    resolveDefaultLocaleForOrganization: vi.fn().mockResolvedValue('es'),
+  };
 
   const service = new MemberInvitationService(
     organizationRepository,
     membershipRepository,
     invitationRepository,
     userService,
+    organizationSettingsService,
   );
 
   beforeEach(() => {
@@ -178,7 +190,7 @@ describe('MemberInvitationService', () => {
       email: 'invitee@example.com',
       expires_in_days: 7,
       invited_by_user_id: 2,
-      inviter_label: 'inviter_public',
+      organization_public_id: 'org_public',
     };
 
     it('creates the invitation and emits a strict event without returning the token (R1/R2)', async () => {
@@ -194,6 +206,12 @@ describe('MemberInvitationService', () => {
       // R2: credential distribution uses emitStrict so a failed outbox write fails the request.
       expect(eventBus.emitStrict).toHaveBeenCalledOnce();
       expect(eventBus.emit).not.toHaveBeenCalled();
+      // The email names the inviter (not their public id) in the organization's language.
+      const [event] = vi.mocked(eventBus.emitStrict).mock.calls[0]!;
+      expect(event.payload).toMatchObject({ inviter_name: 'Ada Lovelace', locale: 'es' });
+      expect(organizationSettingsService.resolveDefaultLocaleForOrganization).toHaveBeenCalledWith(
+        'org_public',
+      );
       // R1: the raw token is never part of the returned shape.
       expect(result).toMatchObject({ id: 'inv_public_123' });
       expect((result as unknown as Record<string, unknown>).token).toBeUndefined();

@@ -101,7 +101,7 @@ function countPasswordCharacterClasses(value: string): number {
 export function passwordPolicy(): z.ZodType<string> {
   return trimmedStringMinMax(PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH).refine(
     (value) => countPasswordCharacterClasses(value) >= PASSWORD_MIN_CHARACTER_CLASSES,
-    { message: 'Password must include at least 3 of: lowercase, uppercase, number, symbol' },
+    { message: 'errors:validation.passwordComplexity' },
   );
 }
 
@@ -196,7 +196,7 @@ export const MfaLoginVerifyDto = z
   })
   .strict()
   .refine((value) => value.totp_code !== undefined || value.recovery_code !== undefined, {
-    message: 'Either totp_code or recovery_code is required',
+    message: 'errors:validation.totpOrRecoveryCodeRequired',
     path: ['totp_code'],
   });
 /** Inferred input type of {@link MfaLoginVerifyDto}; exactly one of `totp_code` or `recovery_code` is required. */

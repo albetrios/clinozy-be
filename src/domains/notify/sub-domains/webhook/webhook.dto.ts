@@ -41,7 +41,9 @@ const httpsUrl = z
     z
       .url()
       .max(2048)
-      .refine((url) => url.startsWith('https://'), { message: 'Webhook URL must use HTTPS' }),
+      .refine((url) => url.startsWith('https://'), {
+        message: 'errors:validation.webhookUrlMustUseHttps',
+      }),
   );
 
 /**

@@ -203,7 +203,7 @@ When the same BullMQ job can be processed concurrently (retries, stalls, or mult
 | **Mail**             | `tryClaimPendingMailOutbox()` — `pending` → `sending` update                                 | `already_sent` → no Resend call                                                                |
 | **Seat sync**        | None needed per run — it pushes an absolute quantity. Jobs for one organization never overlap: the enqueue deduplicates on `seat-sync-<organization>` with `keepLastIfActive` (`subscriptionSeatSyncDeduplication`), so a burst collapses into one job and a change that lands mid-run is synced once more after it | — (each run reads the live member count; before the key, two replicas could run one organization at once and the stale count could finish last) |
 
-Stuck `sending` rows (worker crash after claim) are reclaimed to `pending` by the repeatable **mail-outbox-sweeper** job (`reclaimStaleSendingMailOutboxIds`) before re-enqueue.
+Stuck `sending` rows (worker crash after claim) are reclaimed to `pending` by the repeatable **mail-outbox-sweeper** job (`reclaimStaleSendingMailOutboxTokens`) before re-enqueue.
 
 Regression tests: `src/tests/integration/worker-race/*.integration.test.ts` (`pnpm test:integration`).
 

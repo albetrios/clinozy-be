@@ -21,14 +21,7 @@ describe('ValidationError', () => {
     expect(error.messageParams).toEqual({ label: 'email' });
   });
 
-  it('builds errors array from details object when errors omitted', () => {
-    const error = new ValidationError('errors:invalidInput', undefined, {
-      email: ['Invalid email'],
-      password: 'Too short',
-    });
-    expect(error.errors).toEqual([
-      { field: 'email', message: 'Invalid email' },
-      { field: 'password', message: 'Too short' },
-    ]);
+  it('has no field list when none is given', () => {
+    expect(new ValidationError('errors:invalidInput').errors).toBeUndefined();
   });
 });

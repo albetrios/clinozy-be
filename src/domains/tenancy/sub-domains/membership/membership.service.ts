@@ -541,7 +541,7 @@ export class MembershipService {
         email: inviteeUser.email,
         expires_in_days: parsed.expires_in_days,
         invited_by_user_id: inviterId,
-        inviter_label: invited_by_user_public_id ?? 'Team member',
+        organization_public_id,
         ...(options?.requestId !== undefined ? { requestId: options.requestId } : {}),
       });
       await this.applyOrganizationLocaleDefaults(inviteeUser.public_id, organization_public_id);
@@ -905,7 +905,9 @@ export class MembershipService {
         organization.id,
       );
       if (newOwnerMembership?.status !== 'ACTIVE') {
-        throw new NotFoundError('New owner must be an active member');
+        // The new owner has no ACTIVE membership here: as far as this organization goes, there
+        // is no such member.
+        throw new NotFoundError('Membership');
       }
       await this.organizationService.transferOrganizationOwnership(
         organization_public_id,

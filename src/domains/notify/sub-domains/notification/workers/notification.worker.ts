@@ -36,9 +36,12 @@ import {
   type WorkerDatabaseHandle,
 } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
+import { type SupportedLanguage, toSupportedLanguage } from '@/shared/constants/i18n.constants.js';
 type NotificationDispatchData = {
   channels?: ('email' | 'in_app')[];
   email?: string;
+  /** The language the notification was written in — the email's own copy follows it. */
+  locale?: string;
 };
 
 /**
@@ -65,8 +68,10 @@ async function dispatchNotificationEmail(options: {
   message: string;
   actionUrl: string | null | undefined;
   requestId: string | undefined;
+  locale: SupportedLanguage;
 }): Promise<string | null> {
-  const { notificationPublicId, type, email, title, message, actionUrl, requestId } = options;
+  const { notificationPublicId, type, email, title, message, actionUrl, requestId, locale } =
+    options;
   if (!(isMailConfigured() && email)) {
     logger.warn({ channel: 'email', notificationPublicId }, 'notification.worker.channel_skipped');
     return null;
@@ -86,6 +91,7 @@ async function dispatchNotificationEmail(options: {
     title,
     message,
     actionUrl: actionUrl ?? null,
+    locale,
   });
 
   // Persist the durable outbox row FIRST. If this throws, no marker was written, so
@@ -223,6 +229,7 @@ export async function processNotificationDispatchJob(options: {
           message,
           actionUrl,
           requestId: jobContext.requestId,
+          locale: toSupportedLanguage(dispatchData.locale),
         });
         if (emailResult !== null) results.push(emailResult);
         break;

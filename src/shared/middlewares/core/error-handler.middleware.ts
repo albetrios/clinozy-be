@@ -1,13 +1,18 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
+import {
+  pickLocalizedMessage,
+  renderZodIssueMessages,
+} from '@/shared/utils/validation/zod-issue-messages.util.js';
 import fp from 'fastify-plugin';
 import i18next from 'i18next';
 import { randomUUID } from 'node:crypto';
-import { z, ZodError } from 'zod';
+import { ZodError } from 'zod';
 import {
   AppError,
   ConflictError,
   ERROR_CODE_TO_SNAKE,
   ValidationError,
+  type ValidationErrorItem,
 } from '@/shared/errors/index.js';
 import { EXTERNAL_ERROR_MESSAGE } from '@/shared/constants/index.js';
 import { isPostgresLockTimeout } from '@/shared/utils/infrastructure/postgres-error.util.js';
@@ -87,8 +92,15 @@ type FastifyValidationIssue = {
   /** The failed rule — for a Zod schema the issue code (`invalid_type`, `unrecognized_keys`, …). */
   keyword?: string;
   instancePath?: string;
-  /** `keys` carries a strict schema's unknown keys (`unrecognized_keys`). */
-  params?: { missingProperty?: string; keys?: unknown };
+  /**
+   * `keys` carries a strict schema's unknown keys (`unrecognized_keys`); `localizedMessages` the
+   * issue rendered per response language (`zod-type-provider.middleware.ts`).
+   */
+  params?: {
+    missingProperty?: string;
+    keys?: unknown;
+    localizedMessages?: Readonly<Record<string, string>>;
+  };
   message?: string;
 };
 
@@ -125,6 +137,26 @@ function mapFastifyValidationField(
 }
 
 /**
+ * One `errors[]` message in the request's language: a translation key goes through the same
+ * resolver as `detail` (per-request t -> i18next singleton -> fallback), so a field message never
+ * leaks a raw `errors:*` key; a message already rendered per language is picked.
+ */
+function renderFieldMessage(request: FastifyRequest, item: ValidationErrorItem): string {
+  if (item.messageKey) {
+    return translateDetail(
+      request,
+      item.messageKey,
+      item.messageParams,
+      item.message ?? item.messageKey,
+    );
+  }
+  if (item.localizedMessages !== undefined) {
+    return pickLocalizedMessage(item.localizedMessages, request.language);
+  }
+  return item.message ?? 'Invalid';
+}
+
+/**
  * The `errors[]` entries for one Fastify validation issue. A strict schema reports every key it
  * does not declare in ONE `unrecognized_keys` issue at the parent object, which would name only
  * the location (`querystring`); it becomes one entry per key, named like any other field
@@ -156,7 +188,16 @@ function mapFastifyValidationIssue(options: {
       };
     });
   }
-  return [{ field, message: issue.message ?? 'Invalid' }];
+  const localizedMessages = issue.params?.localizedMessages;
+  return [
+    {
+      field,
+      message:
+        localizedMessages !== undefined
+          ? pickLocalizedMessage(localizedMessages, request.language)
+          : (issue.message ?? 'Invalid'),
+    },
+  ];
 }
 
 interface ErrorResponseBody {
@@ -177,6 +218,23 @@ function buildTimeoutResponse(
   return {
     error: buildErrorPayload('request_error', options.code, detail),
     meta: { request_id: requestId },
+  };
+}
+
+/**
+ * A `NotFoundError` names its resource in English (`new NotFoundError('Organization')`): the noun
+ * is translated through `errors:resources.<noun>` before the sentence, so a Spanish response does
+ * not read "Organization no encontrado". An unlisted noun stays as given.
+ */
+function translateResourceNoun(
+  request: Pick<FastifyRequest, 't'>,
+  params: Record<string, string | number> | undefined,
+): Record<string, string | number> | undefined {
+  const resource = params?.resource;
+  if (typeof resource !== 'string') return params;
+  return {
+    ...params,
+    resource: translateDetail(request, `errors:resources.${resource}`, {}, resource),
   };
 }
 
@@ -213,21 +271,17 @@ function handleAppErrorResponse(
   const isValidation = error instanceof ValidationError;
   const detail = isServerError
     ? translateDetail(request, 'errors:internal', {}, EXTERNAL_ERROR_MESSAGE)
-    : translateDetail(request, error.messageKey, error.messageParams, error.message);
+    : translateDetail(
+        request,
+        error.messageKey,
+        translateResourceNoun(request, error.messageParams),
+        error.message,
+      );
   const errors =
     isValidation && error.errors
       ? error.errors.map((item) => ({
           field: item.field,
-          // Same resolver as `detail`: per-request t -> i18next singleton ->
-          // fallback, so a field message never leaks a raw `errors:*` key either.
-          message: item.messageKey
-            ? translateDetail(
-                request,
-                item.messageKey,
-                item.messageParams,
-                item.message ?? item.messageKey,
-              )
-            : (item.message ?? 'Invalid'),
+          message: renderFieldMessage(request, item),
         }))
       : undefined;
   return {
@@ -255,17 +309,17 @@ function handleZodErrorResponse(
     {},
     'Invalid values for fields in request',
   );
-  const errors = Object.entries(z.flattenError(error).fieldErrors).map(([field, fieldMessages]) => {
-    let message: string;
-    if (Array.isArray(fieldMessages)) {
-      message = fieldMessages.join(', ');
-    } else if (typeof fieldMessages === 'string') {
-      message = fieldMessages;
-    } else {
-      message = 'Invalid';
-    }
-    return { field, message };
-  });
+  const messagesByField = new Map<string, string[]>();
+  for (const issue of error.issues) {
+    if (issue.path.length === 0) continue;
+    const field = String(issue.path[0]);
+    const message = pickLocalizedMessage(renderZodIssueMessages(issue), request.language);
+    messagesByField.set(field, [...(messagesByField.get(field) ?? []), message]);
+  }
+  const errors = [...messagesByField].map(([field, messages]) => ({
+    field,
+    message: messages.join(', '),
+  }));
   return {
     error: buildErrorPayload('validation_error', 'invalid_field', detail, errors),
     meta: { request_id: requestId },

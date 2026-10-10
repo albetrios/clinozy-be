@@ -67,10 +67,10 @@ export const uploadLogoDto = z
   .object({
     key: trimmedStringMinMax(1, 512)
       .refine((key) => key.startsWith('organization-logos/'), {
-        message: 'Key must start with organization-logos/',
+        message: 'errors:validation.organizationLogoKeyPrefix',
       })
       .refine(isTraversalFreeStorageKey, {
-        message: 'Key must not contain path traversal',
+        message: 'errors:validation.storageKeyPathTraversal',
       }),
   })
   .strict();

@@ -112,17 +112,17 @@ Import shared helpers — never define local ones:
 import { getRequestIdentifier, requireAuth } from '@/shared/utils/http/request.util.js';
 ```
 
-### Validators (function-based + safeParse)
+### Validators (function-based, `parseWithSchema`)
 
 ```typescript
+import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
+
 export function validateCreate<Resource>(data: unknown): Create<Resource>Input {
-  const result = create<Resource>Dto.safeParse(data);
-  if (!result.success) {
-    throw new ValidationError('Invalid input', result.error.flatten().fieldErrors);
-  }
-  return result.data;
+  return parseWithSchema(create<Resource>Dto, data);
 }
 ```
+
+A schema's own message is a translation key (`{ message: 'errors:validation.<key>' }`), never English text; `parseWithSchema` renders every message in each response language.
 
 ### Serializers (function-based)
 

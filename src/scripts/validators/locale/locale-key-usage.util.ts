@@ -81,7 +81,12 @@ export function findUndefinedKeyReferences(): UndefinedKeyReference[] {
     lines.forEach((text, index) => {
       for (const match of text.matchAll(KEY_REFERENCE_PATTERN)) {
         const key = match[0];
-        if (!defined.has(key)) {
+        // A key ending in `.` is a dynamic prefix (`errors:resources.${noun}`): it is defined when
+        // keys exist under it.
+        const isDefined = key.endsWith('.')
+          ? [...defined].some((definedKey) => definedKey.startsWith(key))
+          : defined.has(key);
+        if (!isDefined) {
           violations.push({ file: relativePath, line: index + 1, key });
         }
       }

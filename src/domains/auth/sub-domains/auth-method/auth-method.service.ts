@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/shared/constants/i18n.constants.js';
 import {
   ConflictError,
   ForbiddenError,
@@ -373,7 +374,7 @@ export class AuthMethodService {
 
   async forgotPassword(
     body: unknown,
-    _context?: { requestId?: string },
+    context?: { requestId?: string; locale?: SupportedLanguage },
   ): Promise<{
     messageKey: string;
     messageParams?: Record<string, string | number>;
@@ -402,7 +403,10 @@ export class AuthMethodService {
     );
     if (cooldownClaimed) {
       try {
-        await this.issuePasswordResetIfUserExists(parsed.email);
+        await this.issuePasswordResetIfUserExists({
+          email: parsed.email,
+          locale: context?.locale ?? DEFAULT_LANGUAGE,
+        });
       } catch (error) {
         // Never a status oracle: a failure here (the mail outbox down, say) happens only for a
         // known account, so it must answer exactly like an unknown one. The issue is atomic — no
@@ -428,7 +432,11 @@ export class AuthMethodService {
     }
   }
 
-  private async issuePasswordResetIfUserExists(email: string): Promise<void> {
+  private async issuePasswordResetIfUserExists(options: {
+    email: string;
+    locale: SupportedLanguage;
+  }): Promise<void> {
+    const { email, locale } = options;
     const user = await this.userService.findByEmail(email);
     if (!user) return;
 
@@ -457,6 +465,7 @@ export class AuthMethodService {
             email: user.email,
             reset_token: rawToken,
             expires_in_minutes: PASSWORD_RESET_EXPIRES_IN_MINUTES,
+            locale,
           } satisfies PasswordResetEmailPayload,
           timestamp: new Date(),
         });

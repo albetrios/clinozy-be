@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { translateMessageKeyPayload } from '@/shared/utils/i18n/i18n-response.util.js';
 import { successResponse } from '@/shared/utils/http/response.util.js';
 import { getRequestIdentifier } from '@/shared/utils/http/request.util.js';
+import { toSupportedLanguage } from '@/shared/constants/i18n.constants.js';
 import { getIpAddress, setSessionCookie } from '@/domains/auth/auth.http.util.js';
 import { getUserAgent } from '@/shared/utils/http/user-agent.util.js';
 import { AuthSerializer } from '@/domains/auth/auth.serializer.js';
@@ -21,6 +22,7 @@ export function createAuthEmailLoginHandlers({
     sendEmailCode: async (request: FastifyRequest, _reply: FastifyReply) => {
       const data = await emailLoginService.sendCode(request.body, {
         requestId: getRequestIdentifier(request),
+        locale: toSupportedLanguage(request.language),
       });
       const translated = translateMessageKeyPayload(request, data);
       return successResponse(

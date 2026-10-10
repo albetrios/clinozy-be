@@ -1,3 +1,4 @@
+import type { OrganizationDefaultLocale } from './organization-settings.types.js';
 import { eq, sql } from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import {
@@ -7,7 +8,6 @@ import {
 import { organization_settings } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.schema.js';
 
 /** BCP 47 locale tag persisted in `organization_settings.default_locale` (constrained to translated locales). */
-export type OrganizationDefaultLocale = 'en' | 'es';
 
 /**
  * Drizzle data-access for `tenancy.organization_settings`. The `upsert`

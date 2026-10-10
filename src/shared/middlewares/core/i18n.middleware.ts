@@ -14,11 +14,16 @@ import type { InitOptions } from 'i18next';
 import { env } from '@/shared/config/env.config.js';
 import { captureMessage } from '@/infrastructure/observability/sentry/sentry.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import {
+  DEFAULT_LANGUAGE,
+  SUPPORTED_LANGUAGES,
+  type SupportedLanguage,
+  toSupportedLanguage,
+} from '@/shared/constants/i18n.constants.js';
 
 const LOCALES_DIR = join(process.cwd(), 'src', 'shared', 'locales');
 const LOCALES_LOAD_PATH = join(LOCALES_DIR, '{{lng}}', '{{ns}}.json');
 
-const DEFAULT_LOCALE = 'en';
 const REQUIRED_NAMESPACES = ['common', 'errors', 'success', 'mail'] as const;
 
 const I18N_IGNORE_ROUTES = ['/livez', '/readyz', '/api/v1/mcp'];
@@ -26,17 +31,16 @@ const I18N_IGNORE_ROUTES = ['/livez', '/readyz', '/api/v1/mcp'];
 /**
  * Resolves the effective locale for a request: prefers the first 2-letter
  * `Accept-Language` segment, falls back to the organization default locale,
- * then to `'en'`. Only `'en'` and `'es'` are recognized today.
+ * then to {@link DEFAULT_LANGUAGE}; only the {@link SUPPORTED_LANGUAGES} are recognized.
  */
 export function resolveRequestLanguageFromHeader(
   acceptLanguageHeader: string | string[] | undefined,
-  organizationDefaultLocale?: 'en' | 'es' | null,
-): 'en' | 'es' {
+  organizationDefaultLocale?: SupportedLanguage | null,
+): SupportedLanguage {
   if (!acceptLanguageHeader) {
-    return organizationDefaultLocale === 'es' ? 'es' : 'en';
+    return toSupportedLanguage(organizationDefaultLocale);
   }
-  const preferred = String(acceptLanguageHeader).split(',')[0]?.trim().slice(0, 2) ?? 'en';
-  return preferred === 'es' ? 'es' : 'en';
+  return toSupportedLanguage(String(acceptLanguageHeader).split(',')[0]?.trim().slice(0, 2));
 }
 
 type I18nRequest = {
@@ -47,7 +51,7 @@ type I18nRequest = {
 function applyResolvedLanguage(
   request: FastifyRequest,
   req: I18nRequest,
-  language: 'en' | 'es',
+  language: SupportedLanguage,
 ): void {
   req.language = language;
   (request as { language?: string }).language = language;
@@ -55,7 +59,7 @@ function applyResolvedLanguage(
   requestWithTranslation.t =
     req.t ??
     ((key: string, opts?: object) =>
-      i18next.t(key, { lng: requestWithTranslation.language ?? 'en', ...opts }));
+      i18next.t(key, { lng: requestWithTranslation.language ?? DEFAULT_LANGUAGE, ...opts }));
 }
 
 /**
@@ -66,7 +70,7 @@ function applyResolvedLanguage(
 export function attachRequestI18nHelpers(
   request: FastifyRequest,
   req: I18nRequest,
-  organizationDefaultLocale?: 'en' | 'es' | null,
+  organizationDefaultLocale?: SupportedLanguage | null,
 ): void {
   const language = resolveRequestLanguageFromHeader(
     request.headers['accept-language'],
@@ -87,27 +91,26 @@ export function verifyLocalesAvailable(): void {
     );
   }
   for (const namespace of REQUIRED_NAMESPACES) {
-    const filePath = join(LOCALES_DIR, DEFAULT_LOCALE, `${namespace}.json`);
+    const filePath = join(LOCALES_DIR, DEFAULT_LANGUAGE, `${namespace}.json`);
     if (!existsSync(filePath)) {
       throw new Error(
-        `Required locale file not found: ${DEFAULT_LOCALE}/${namespace}.json at ${filePath}`,
+        `Required locale file not found: ${DEFAULT_LANGUAGE}/${namespace}.json at ${filePath}`,
       );
     }
   }
 }
 
-const i18nMiddleware: FastifyPluginAsync = async (app) => {
-  verifyLocalesAvailable();
-
-  const i18nInitOptions: InitOptions = {
-    preload: ['en', 'es'],
-    ns: ['common', 'errors', 'success', 'mail'],
+/** i18next's init options — one set for the API and the worker. */
+function buildI18nInitOptions(): InitOptions {
+  return {
+    preload: [...SUPPORTED_LANGUAGES],
+    ns: [...REQUIRED_NAMESPACES],
     defaultNS: 'common',
-    fallbackLng: ['en'],
+    fallbackLng: [DEFAULT_LANGUAGE],
     returnNull: false,
     returnEmptyString: false,
     parseMissingKeyHandler: (key, language) => {
-      if (env.I18N_REPORT_MISSING_KEYS && language !== DEFAULT_LOCALE) {
+      if (env.I18N_REPORT_MISSING_KEYS && language !== DEFAULT_LANGUAGE) {
         captureMessage(`i18n missing key: ${key} (${language})`, { level: 'warning' });
       } else if (!env.I18N_REPORT_MISSING_KEYS) {
         logger.debug({ key, language }, 'i18n.missing_key');
@@ -118,8 +121,21 @@ const i18nMiddleware: FastifyPluginAsync = async (app) => {
       loadPath: LOCALES_LOAD_PATH,
     },
   };
+}
 
-  await i18next.use(Backend).use(LanguageDetector).init(i18nInitOptions);
+/**
+ * Initializes the i18next singleton in a process that renders text outside a request — the worker,
+ * for notification emails. Idempotent; the API initializes it in {@link i18nMiddleware}.
+ */
+export async function initializeI18nextForBackgroundWork(): Promise<void> {
+  if (i18next.isInitialized) return;
+  verifyLocalesAvailable();
+  await i18next.use(Backend).init(buildI18nInitOptions());
+}
+
+const i18nMiddleware: FastifyPluginAsync = async (app) => {
+  verifyLocalesAvailable();
+  await i18next.use(Backend).use(LanguageDetector).init(buildI18nInitOptions());
 
   const handler = i18nextHandle(i18next, { ignoreRoutes: I18N_IGNORE_ROUTES });
   // Use onRequest so request.t is set for every request (including 404 not-found).

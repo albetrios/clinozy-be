@@ -1,4 +1,5 @@
 import '@/shared/config/load-env-files.js';
+import { initializeI18nextForBackgroundWork } from '@/shared/middlewares/core/i18n.middleware.js';
 import {
   initSentry,
   captureException,
@@ -89,6 +90,8 @@ async function main() {
    * "Stream isn't writeable" before the lazy connect completes. */
   await connectRedis();
   await connectBullMqRedis();
+  // Notification emails are rendered here, in the recipient's language.
+  await initializeI18nextForBackgroundWork();
   warnWhenBullMqSharesCacheRedisHost();
   // An evicting Redis drops job data, locks and idempotency entries — refuse to start on one.
   await assertRedisEndpointsEvictionPolicy({

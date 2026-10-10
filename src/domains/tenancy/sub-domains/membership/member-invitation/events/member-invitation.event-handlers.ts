@@ -1,6 +1,7 @@
 import { eventBus, scheduleCommitDispatch, type DomainEvent } from '@/core/events/event-bus.js';
 import { recordOutboxEmail } from '@/infrastructure/mail/queues/mail.queue.js';
 import { invitationTemplate } from '@/infrastructure/mail/templates/invitation.template.js';
+import { translateMailText } from '@/infrastructure/mail/templates/base.template.js';
 import { isMailConfigured } from '@/infrastructure/mail/mail.service.js';
 import { env } from '@/shared/config/env.config.js';
 import { DEFAULT_FRONTEND_URL } from '@/shared/constants/index.js';
@@ -27,15 +28,19 @@ async function handleMemberInvitationEmail(
   const acceptUrl = `${frontendUrl}/accept-invite/${payload.invitation_public_id}?token=${payload.token}`;
 
   const html = invitationTemplate({
-    inviterName: payload.inviter_name,
+    inviterName:
+      payload.inviter_name || translateMailText('invitationFallbackInviter', payload.locale),
     organizationName: payload.organization_name,
     acceptUrl,
     expiresInDays: payload.expires_in_days,
+    locale: payload.locale,
   });
 
   const mailOutboxToken = await recordOutboxEmail({
     to: payload.email,
-    subject: `You've been invited to join ${payload.organization_name}`,
+    subject: translateMailText('invitationSubject', payload.locale, {
+      organizationName: payload.organization_name,
+    }),
     html,
     tags: [{ name: 'category', value: 'invitation' }],
   });

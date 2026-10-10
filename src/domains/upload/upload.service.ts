@@ -366,15 +366,15 @@ export class UploadService {
   }): Promise<{ mimeType: string }> {
     const { fileKey, userInternalId, organizationInternalId } = options;
     if (userInternalId === undefined && organizationInternalId === undefined) {
-      throw new ValidationError('errors:validation.uploadNotConfirmed', undefined, {
-        key: ['assertKeyConfirmedForOwner requires user or organization owner'],
-      });
+      throw new ValidationError('errors:validation.uploadNotConfirmed', undefined, undefined, [
+        { field: 'key', messageKey: 'errors:validation.uploadNotConfirmed' },
+      ]);
     }
     const row = await this.repository.findByFileKey(fileKey);
     const notConfirmed = (): ValidationError =>
-      new ValidationError('errors:validation.uploadNotConfirmed', undefined, {
-        key: ['Upload has not been confirmed'],
-      });
+      new ValidationError('errors:validation.uploadNotConfirmed', undefined, undefined, [
+        { field: 'key', messageKey: 'errors:validation.uploadNotConfirmed' },
+      ]);
     if (!row || row.status !== UPLOAD_STATUS.UPLOADED) throw notConfirmed();
     if (userInternalId !== undefined && row.user_id !== userInternalId) {
       throw notConfirmed();
@@ -542,9 +542,9 @@ export class UploadService {
       return this.toUploadDetail(row, userPublicId);
     }
     if (row.status !== UPLOAD_STATUS.PENDING) {
-      throw new ValidationError('errors:uploadNotPending', undefined, {
-        status: ['Upload is not awaiting confirmation'],
-      });
+      throw new ValidationError('errors:uploadNotPending', undefined, undefined, [
+        { field: 'status', messageKey: 'errors:uploadNotPending' },
+      ]);
     }
 
     // The bytes live at the (still client-writable) pending key; the verified bytes are published
@@ -565,9 +565,9 @@ export class UploadService {
         { id: validatedPublicId, fileKey: sourceKey },
         'upload.confirm.notPendingKeyedRefused',
       );
-      throw new ValidationError('errors:uploadVerificationFailed', undefined, {
-        file: ['Upload did not go through the pending-key flow; re-upload to a fresh key'],
-      });
+      throw new ValidationError('errors:uploadVerificationFailed', undefined, undefined, [
+        { field: 'file', messageKey: 'errors:uploadNotFromPendingKey' },
+      ]);
     }
 
     const verified = await this.verifyAndPublishUploadedObject({
@@ -583,9 +583,9 @@ export class UploadService {
         this.repository.markStatusByPublicId(validatedPublicId, UPLOAD_STATUS.FAILED),
       );
       if (!failedRow) throw new NotFoundError('Upload');
-      throw new ValidationError('errors:uploadVerificationFailed', undefined, {
-        file: ['Uploaded object could not be verified against its declared type and size'],
-      });
+      throw new ValidationError('errors:uploadVerificationFailed', undefined, undefined, [
+        { field: 'file', messageKey: 'errors:uploadVerificationFailed' },
+      ]);
     }
 
     // Repoint the row at the immutable final key in the same update that marks it UPLOADED, so a

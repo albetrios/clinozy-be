@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, beforeAll } from 'vitest';
+import { initializeI18nextForBackgroundWork } from '@/shared/middlewares/core/i18n.middleware.js';
 import {
   processNotificationDispatchJob,
   processNotificationJob,
@@ -107,6 +108,11 @@ function buildNotificationRow(overrides: Record<string, unknown> = {}): Record<s
     ...overrides,
   };
 }
+
+// Email copy comes from the locale files, as in the API and the worker.
+beforeAll(async () => {
+  await initializeI18nextForBackgroundWork();
+});
 
 describe('notification.worker', () => {
   beforeEach(() => {
