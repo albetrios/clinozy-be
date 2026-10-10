@@ -362,6 +362,20 @@ async function preparePaymentMethod({ publicId, row, remote }) {
   remote.default_payment_method = customer.invoice_settings.default_payment_method;
   return remote.default_payment_method;
 }
+async function requireProcessedEvent(eventId) {
+  let processed;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    [processed] = await sql`
+      SELECT processing_status, processed_at, attempt_count
+      FROM billing.stripe_webhook_events WHERE stripe_event_id = ${eventId}
+    `;
+    if (processed?.processing_status === 'processed' && processed.processed_at) break;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (processed?.processing_status !== 'processed' || !processed.processed_at)
+    throw new Error('Signed event was not processed by the local worker');
+}
+
 async function activate(publicId) {
   const row = await ownedSubscription(publicId);
   const remote = await readProviderSubscription(row, true);
@@ -429,10 +443,12 @@ async function activate(publicId) {
     body: payload,
   });
   if (response.status !== 200) throw new Error(`Webhook ingress ${response.status}`);
+  await requireProcessedEvent(event.id);
   return {
     delivered: true,
     mode,
     eventId: event.id,
+    workerProcessed: true,
     charged: !zeroPrice,
     ownedPaymentMethodReady: Boolean(methodId),
     evidence,

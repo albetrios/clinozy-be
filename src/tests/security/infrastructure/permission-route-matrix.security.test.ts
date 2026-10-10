@@ -15,6 +15,9 @@ import {
 import { invalidatePermissions } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
 import { loadOrganizationPermissionRoutesFromCatalog } from '@/tests/helpers/route-catalog-registry.js';
 import type { FastifyInstance } from 'fastify';
+import { eq } from 'drizzle-orm';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
+import { plans } from '@/domains/billing/sub-domains/plan/plan.schema.js';
 
 // Keep provider responses deterministic: this suite proves permission dispatch,
 // while signed webhook/provider transport contracts are exercised separately.
@@ -24,7 +27,10 @@ vi.mock('@/infrastructure/payment/stripe.client.js', async (importOriginal) => {
     ...actual,
     isStripeConfigured: () => true,
     createStripeCustomer: vi.fn(async () => ({ id: 'cus_permission_matrix' })),
-    createStripeSubscription: vi.fn(async () => ({ id: 'sub_permission_matrix' })),
+    createStripeSubscription: vi.fn(async () => ({
+      id: 'sub_permission_matrix',
+      status: 'incomplete',
+    })),
   };
 });
 
@@ -124,6 +130,19 @@ function routeNeedsExistingPlan(route: (typeof organizationPermissionRoutes)[num
   );
 }
 
+async function createPermissionMatrixPlan() {
+  const plan = await createTestPlan();
+  // The authorized half needs a configured billing fixture; missing prices now fail closed.
+  await getOperatorDatabase()
+    .update(plans)
+    .set({
+      stripe_price_monthly_id: 'price_permission_matrix',
+      stripe_price_yearly_id: 'price_permission_matrix_yearly',
+    })
+    .where(eq(plans.id, plan.id));
+  return plan;
+}
+
 function idempotencyHeadersForPermissionRoute(
   route: (typeof organizationPermissionRoutes)[number],
 ): Record<string, string> | undefined {
@@ -190,7 +209,7 @@ describe('Security: Permission route matrix', () => {
         route.path,
         organization.public_id,
       );
-      const plan = routeNeedsExistingPlan(route) ? await createTestPlan() : undefined;
+      const plan = routeNeedsExistingPlan(route) ? await createPermissionMatrixPlan() : undefined;
       const headers = idempotencyHeadersForPermissionRoute(route);
       const payload = payloadForPermissionRoute(route, plan?.public_id, role.public_id);
 
@@ -229,7 +248,7 @@ describe('Security: Permission route matrix', () => {
         route.path,
         organization.public_id,
       );
-      const plan = routeNeedsExistingPlan(route) ? await createTestPlan() : undefined;
+      const plan = routeNeedsExistingPlan(route) ? await createPermissionMatrixPlan() : undefined;
       const headers = idempotencyHeadersForPermissionRoute(route);
       const payload = payloadForPermissionRoute(route, plan?.public_id, role.public_id);
 

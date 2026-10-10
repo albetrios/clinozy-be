@@ -29,6 +29,24 @@ describe('PlanService', () => {
 
   const service = new PlanService(repository);
 
+  it('advertises Free as monthly only without an annual zero-price offer', async () => {
+    vi.mocked(repository.findByPublicId).mockResolvedValueOnce({
+      ...planRow,
+      name: 'Free',
+      price_monthly: '0.00',
+      price_yearly: '0.00',
+      stripe_product_id: null,
+      stripe_price_monthly_id: null,
+      stripe_price_yearly_id: null,
+      created_by_user_id: null,
+      updated_by_user_id: null,
+    });
+    const output = await service.getByPublicId('plan_public');
+    expect(output.price_monthly).toBe('0.00');
+    expect(output.price_yearly).toBeNull();
+    expect(output.billing_cycles).toEqual(['monthly']);
+  });
+
   beforeEach(() => {
     // `list()` is memoized in process for a minute, so without this the second case in this file
     // would assert against the first case's catalog.

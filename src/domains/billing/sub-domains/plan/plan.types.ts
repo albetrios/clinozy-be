@@ -27,7 +27,10 @@ export interface PlanOutput {
   name: string;
   description: string | null;
   price_monthly: string;
-  price_yearly: string;
+  /** Null when the plan does not offer annual billing. */
+  price_yearly: string | null;
+  /** Available purchase intervals; omitted by older API consumers' fixtures. */
+  billing_cycles?: ('monthly' | 'yearly')[];
   currency: string;
   is_active: boolean;
   // REQ-4: the previously-stripped `features` jsonb is now surfaced verbatim so

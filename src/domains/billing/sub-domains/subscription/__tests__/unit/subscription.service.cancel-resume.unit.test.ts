@@ -91,7 +91,11 @@ function buildService() {
   const paymentProvider = {
     isConfigured: vi.fn().mockReturnValue(true),
     getProviderPriceId: vi.fn().mockReturnValue('price_provider'),
-    createSubscription: vi.fn().mockResolvedValue({ providerSubscriptionId: 'sub_provider' }),
+    createSubscription: vi.fn().mockResolvedValue({
+      providerSubscriptionId: 'sub_provider',
+      providerCustomerId: 'cus_provider',
+      initialStatus: 'INCOMPLETE',
+    }),
     cancelSubscriptionAtPeriodEnd: vi.fn().mockResolvedValue(undefined),
     cancelSubscriptionImmediately: vi.fn().mockResolvedValue(undefined),
     resumeSubscription: vi.fn().mockResolvedValue(undefined),

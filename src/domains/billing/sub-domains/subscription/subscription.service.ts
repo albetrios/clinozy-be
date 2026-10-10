@@ -39,12 +39,15 @@ const TERMINAL_STATUSES = new Set<string>(INACTIVE_SUBSCRIPTION_STATUSES);
  * canceled. The organization keeps its full plan ceiling until `current_period_end + BILLING_DUNNING_GRACE_DAYS`
  * (F4), after which its entitlement lapses to the Free-tier ceiling.
  */
-const DUNNING_STATUSES = new Set<string>(['PAST_DUE', 'UNPAID', 'INCOMPLETE']);
+const DUNNING_STATUSES = new Set<string>(['PAST_DUE', 'UNPAID']);
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import { assertTeamOrganization } from '@/domains/tenancy/sub-domains/organization/organization-capability.js';
-import type { PlanService } from '@/domains/billing/sub-domains/plan/plan.service.js';
+import {
+  type PlanService,
+  supportsPlanBillingCycle,
+} from '@/domains/billing/sub-domains/plan/plan.service.js';
 import type { PaymentProvider } from './payment-provider.port.js';
 import type { SubscriptionRepository } from './subscription.repository.js';
 import type {
@@ -94,6 +97,8 @@ export type MembershipSeatUsagePort = {
 type SubscriptionRowWithSeatState = {
   seats: number | null;
   plan_included_seats: number | null;
+  status: string;
+  current_period_end: Date;
 };
 import {
   validateChangePlan,
@@ -197,8 +202,9 @@ export class SubscriptionService {
    * Computes `seats_total` / `seats_used` for a subscription row (REQ-4).
    *
    * @remarks
-   * - **Algorithm:** `seats_total = row.seats ?? row.plan_included_seats ?? null` (null =
-   *   unlimited); `seats_used` is the org's ACTIVE + INVITED membership count from the injected
+   * - **Algorithm:** unpaid initial subscriptions and expired dunning grace use the Free
+   *   ceiling, matching membership enforcement. Other rows use purchased or included seats
+   *   (null = unlimited); `seats_used` is the ACTIVE + INVITED membership count from the injected
    *   {@link MembershipSeatUsagePort}.
    * - **Failure modes:** when the membership port is not wired, `seats_used` defaults to 0 (and a
    *   warning is logged) so the response shape stays stable for minimal/worker harnesses.
@@ -221,9 +227,14 @@ export class SubscriptionService {
         'subscription.seats_used.membership_port_unwired',
       );
     }
+    const freeSeatCeiling = rows.some((row) => this.requiresFreeSeatCeiling(row))
+      ? await this.planService.getFreePlanSeatCeiling()
+      : null;
     return rows.map((row) => ({
       ...row,
-      seats_total: row.seats ?? row.plan_included_seats ?? null,
+      seats_total: this.requiresFreeSeatCeiling(row)
+        ? freeSeatCeiling
+        : (row.seats ?? row.plan_included_seats ?? null),
       seats_used: seatsUsed,
     }));
   }
@@ -251,16 +262,20 @@ export class SubscriptionService {
   async reserveSeatCeilingForMemberAdd(organization_id: number): Promise<number | null> {
     const seatState =
       await this.repository.findActiveSeatStateByOrganizationForUpdate(organization_id);
-    // F3/F4: no active subscription, or a dunning subscription past its grace window, falls back to
-    // the Free-tier ceiling (the cheapest active plan's included_seats) rather than "unlimited".
-    if (!seatState || this.isDunningEntitlementLapsed(seatState)) {
+    if (this.requiresFreeSeatCeiling(seatState)) {
       return this.planService.getFreePlanSeatCeiling();
     }
-    return seatState.seats ?? seatState.plan_included_seats ?? null;
+    return seatState?.seats ?? seatState?.plan_included_seats ?? null;
+  }
+
+  private requiresFreeSeatCeiling(seatState: SubscriptionRowWithSeatState | null): boolean {
+    return (
+      !seatState || seatState.status === 'INCOMPLETE' || this.isDunningEntitlementLapsed(seatState)
+    );
   }
 
   /**
-   * F4: true when `seatState` is a dunning subscription (PAST_DUE / UNPAID / INCOMPLETE) whose grace
+   * F4: true when `seatState` is a dunning subscription (PAST_DUE / UNPAID) whose grace
    * window (`current_period_end + BILLING_DUNNING_GRACE_DAYS`) has elapsed, so its entitlement has
    * lapsed to the Free tier. Non-dunning (ACTIVE / TRIALING / PAUSED) and within-grace dunning keep
    * the full plan ceiling.
@@ -637,6 +652,9 @@ export class SubscriptionService {
             throw new ConflictError('errors:subscriptionAlreadyExists');
           }
           const plan = await this.planService.requireActivePlanByPublicId(parsed.plan_id);
+          if (!supportsPlanBillingCycle({ plan, billingCycle: parsed.billing_cycle })) {
+            throw new UnprocessableEntityError('errors:planNotAvailableForBillingCycle');
+          }
           const createdByUserInternalId =
             await this.organizationService.resolveUserInternalIdByPublicId(
               created_by_user_public_id,
@@ -673,14 +691,12 @@ export class SubscriptionService {
               organization_id: organization.id,
               plan_id: plan.id,
               billing_cycle: parsed.billing_cycle.toUpperCase() as 'MONTHLY' | 'YEARLY',
-              // audit-#2: a Stripe-backed subscription is created with
-              // `payment_behavior: 'default_incomplete'`, i.e. Stripe status
-              // `incomplete` with NO successful payment yet. Persist the local row
-              // as INCOMPLETE so entitlement never over-reports as TRIALING (an
-              // entitled state) before the first `customer.subscription.updated`
-              // webhook reconciles the real status. Local-only subscriptions (no
-              // Stripe) keep the repository's TRIALING default.
-              status: paymentResult.providerSubscriptionId ? 'INCOMPLETE' : undefined,
+              // Stripe's create response is authoritative: zero-price or already-paid
+              // subscriptions may be ACTIVE despite default_incomplete. Preserve unpaid
+              // INCOMPLETE and genuine TRIALING, without relying on an older creation
+              // event to reconcile a row whose watermark already supersedes that event.
+              // Disabled-provider subscriptions retain the repository's local default.
+              status: paymentResult.initialStatus,
               current_period_start: now,
               current_period_end: periodEnd,
               created_by_user_id: createdByUserInternalId ?? undefined,
@@ -805,6 +821,14 @@ export class SubscriptionService {
           organization.id,
         );
         if (!subscription) throw new NotFoundError('Subscription');
+        if (
+          !supportsPlanBillingCycle({
+            plan,
+            billingCycle: subscription.billing_cycle === 'YEARLY' ? 'yearly' : 'monthly',
+          })
+        ) {
+          throw new UnprocessableEntityError('errors:planNotAvailableForBillingCycle');
+        }
         // sec-new-B1: terminal subscriptions cannot have their plan changed
         if (TERMINAL_STATUSES.has(subscription.status)) {
           throw new UnprocessableEntityError('errors:subscriptionNotMutable');

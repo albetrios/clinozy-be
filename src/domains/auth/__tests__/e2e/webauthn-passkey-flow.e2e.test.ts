@@ -101,7 +101,7 @@ describe('Auth e2e: WebAuthn passkey enrolment and sign-in', () => {
       data: { verified: boolean; credential_id: string };
     };
     expect(registerVerifyBody.data.verified).toBe(true);
-    expect(registerVerifyBody.data.credential_id).toBe(credentialId);
+    expect(registerVerifyBody.data.credential_id).toMatch(/^wac_[a-z0-9]{21}$/);
 
     const authenticateOptionsResponse = await injectUnauthenticated(app, {
       method: 'POST',
@@ -154,6 +154,7 @@ describe('Auth e2e: WebAuthn passkey enrolment and sign-in', () => {
     const storedCredentials = await getOperatorDatabase().select().from(webauthn_credentials);
     expect(storedCredentials).toHaveLength(1);
     expect(storedCredentials[0]?.credential_id).toBe(credentialId);
+    expect(storedCredentials[0]?.public_id).toBe(registerVerifyBody.data.credential_id);
     expect(storedCredentials[0]?.counter).toBe(1);
   });
 

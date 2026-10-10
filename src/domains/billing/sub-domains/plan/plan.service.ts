@@ -97,6 +97,27 @@ export class PlanService {
   }
 }
 
+/**
+ * Free plans renew monthly; paid plans may be purchased monthly or annually.
+ * Missing provider configuration is separate from product cycle availability.
+ *
+ * @remarks
+ * Monthly billing is available for every plan. Annual billing is unavailable only
+ * when both catalog prices are zero, so Free has no annual zero-price offer.
+ * This pure policy is shared by catalog serialization and subscription validation;
+ * it does not inspect provider price mappings or perform any external mutation.
+ */
+export function supportsPlanBillingCycle(input: {
+  plan: { price_monthly: string; price_yearly: string };
+  billingCycle: 'monthly' | 'yearly';
+}): boolean {
+  return (
+    input.billingCycle === 'monthly' ||
+    Number(input.plan.price_monthly) !== 0 ||
+    Number(input.plan.price_yearly) !== 0
+  );
+}
+
 function toOutput(row: {
   public_id: string;
   name: string;
@@ -117,7 +138,12 @@ function toOutput(row: {
     name: row.name,
     description: row.description,
     price_monthly: String(row.price_monthly),
-    price_yearly: String(row.price_yearly),
+    price_yearly: supportsPlanBillingCycle({ plan: row, billingCycle: 'yearly' })
+      ? String(row.price_yearly)
+      : null,
+    billing_cycles: supportsPlanBillingCycle({ plan: row, billingCycle: 'yearly' })
+      ? ['monthly', 'yearly']
+      : ['monthly'],
     currency: row.currency,
     is_active: row.is_active,
     features: row.features,

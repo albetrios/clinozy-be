@@ -2,14 +2,22 @@ import type { OrganizationBillingContext } from '@/domains/tenancy/sub-domains/o
 import type { PlanRecord } from '@/domains/billing/sub-domains/plan/plan.service.js';
 
 /**
- * Identifiers returned by {@link PaymentProvider.createSubscription}; either
- * field may be omitted when the provider is unconfigured (no-op stub) so
- * persistence stays optional.
+ * Authoritative initial state and identifiers returned by {@link PaymentProvider.createSubscription}.
+ * A configured provider supplies all fields; an unconfigured provider returns an empty no-op result.
+ * Requiring the state with a provider subscription prevents the repository default from granting
+ * entitlement to an unpaid subscription.
  */
-export type PaymentProviderCreateResult = {
-  providerSubscriptionId?: string;
-  providerCustomerId?: string;
-};
+export type PaymentProviderCreateResult =
+  | {
+      providerSubscriptionId: string;
+      providerCustomerId: string;
+      initialStatus: string;
+    }
+  | {
+      providerSubscriptionId?: never;
+      providerCustomerId?: never;
+      initialStatus?: never;
+    };
 
 /**
  * Port for external payment provider subscription lifecycle (Stripe today; others later).

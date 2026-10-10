@@ -44,6 +44,7 @@ vi.mock('@/infrastructure/cache/redis-lock.util.js', () => redisLockMocks);
 
 import {
   ConflictError,
+  ConfigurationError,
   NotFoundError,
   ServiceUnavailableError,
   UnprocessableEntityError,
@@ -61,7 +62,7 @@ import type { SubscriptionRepository } from '@/domains/billing/sub-domains/subsc
 const stripeMocks = vi.hoisted(() => ({
   isStripeConfigured: vi.fn(() => false),
   createStripeCustomer: vi.fn().mockResolvedValue({ id: 'cus_stripe' }),
-  createStripeSubscription: vi.fn().mockResolvedValue({ id: 'sub_stripe' }),
+  createStripeSubscription: vi.fn().mockResolvedValue({ id: 'sub_stripe', status: 'incomplete' }),
   updateStripeSubscription: vi.fn().mockResolvedValue({ id: 'sub_stripe' }),
   cancelStripeSubscription: vi.fn().mockResolvedValue({ id: 'sub_stripe' }),
   resumeStripeSubscription: vi.fn().mockResolvedValue({ id: 'sub_stripe' }),
@@ -136,6 +137,7 @@ describe('SubscriptionService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    stripeMocks.isStripeConfigured.mockReturnValue(false);
     vi.mocked(repository.findActiveByOrganization).mockResolvedValue(null);
     vi.mocked(repository.findByPublicId).mockResolvedValue(subscriptionRow as never);
     vi.mocked(repository.update).mockResolvedValue(subscriptionRow as never);
@@ -156,6 +158,42 @@ describe('SubscriptionService', () => {
   it('get throws when subscription missing', async () => {
     vi.mocked(repository.findByPublicId).mockResolvedValue(null);
     await expect(service.get(scope, 'missing')).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it.each([false, true])(
+    'rejects Free annual before provider work (Stripe enabled=%s)',
+    async (configured) => {
+      stripeMocks.isStripeConfigured.mockReturnValue(configured);
+      vi.mocked(planService.requireActivePlanByPublicId).mockResolvedValueOnce({
+        ...plan,
+        price_monthly: '0.00',
+        price_yearly: '0.00',
+      } as never);
+      await expect(
+        service.create(scope, { plan_id: 'plan_public', billing_cycle: 'yearly' }, 'user_public'),
+      ).rejects.toMatchObject({ statusCode: 422 });
+      expect(stripeMocks.createStripeCustomer).not.toHaveBeenCalled();
+      expect(stripeMocks.createStripeSubscription).not.toHaveBeenCalled();
+      expect(repository.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a local annual subscription change to monthly-only Free', async () => {
+    vi.mocked(planService.requireActivePlanByPublicId).mockResolvedValueOnce({
+      ...plan,
+      price_monthly: '0.00',
+      price_yearly: '0.00',
+    } as never);
+    vi.mocked(repository.findByPublicId).mockResolvedValueOnce({
+      ...subscriptionRow,
+      billing_cycle: 'YEARLY',
+      provider_subscription_id: null,
+    } as never);
+    await expect(
+      service.changePlan(scope, 'sub_public', { plan_id: 'plan_public' }),
+    ).rejects.toMatchObject({ statusCode: 422 });
+    expect(stripeMocks.updateStripeSubscription).not.toHaveBeenCalled();
+    expect(repository.update).not.toHaveBeenCalled();
   });
 
   it('create allows re-subscription after cancel when no non-terminal row exists', async () => {
@@ -268,6 +306,57 @@ describe('SubscriptionService', () => {
     expect(createPayload.status).toBe('INCOMPLETE');
     expect(createPayload.provider_subscription_id).toBe('sub_stripe');
   });
+
+  it.each([
+    'active',
+    'trialing',
+    'incomplete',
+    'past_due',
+    'unpaid',
+    'canceled',
+    'incomplete_expired',
+    'paused',
+  ])(
+    'create persists authoritative initial %s state without granting an unpaid subscription entitlement',
+    async (status) => {
+      stripeMocks.isStripeConfigured.mockReturnValue(true);
+      stripeMocks.createStripeSubscription.mockResolvedValueOnce({ id: 'sub_stripe', status });
+      vi.mocked(planService.requireActivePlanByPublicId).mockResolvedValueOnce({
+        ...plan,
+        stripe_price_monthly_id: 'price_monthly',
+      } as never);
+      await service.create(
+        scope,
+        { plan_id: 'plan_public', billing_cycle: 'monthly' },
+        'user_public',
+      );
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: status.toUpperCase(),
+          provider_subscription_id: 'sub_stripe',
+        }),
+      );
+    },
+  );
+
+  it.each(['monthly', 'yearly'] as const)(
+    'create rejects missing %s provider price without local or provider mutations',
+    async (billingCycle) => {
+      stripeMocks.isStripeConfigured.mockReturnValue(true);
+      vi.mocked(planService.requireActivePlanByPublicId).mockResolvedValueOnce(plan as never);
+      await expect(
+        service.create(
+          scope,
+          { plan_id: 'plan_public', billing_cycle: billingCycle },
+          'user_public',
+        ),
+      ).rejects.toBeInstanceOf(ConfigurationError);
+      expect(stripeMocks.createStripeCustomer).not.toHaveBeenCalled();
+      expect(stripeMocks.createStripeSubscription).not.toHaveBeenCalled();
+      expect(organizationService.updateStripeCustomerIdForOrganization).not.toHaveBeenCalled();
+      expect(repository.create).not.toHaveBeenCalled();
+    },
+  );
 
   it('changePlan updates plan on subscription', async () => {
     await service.changePlan(scope, 'sub_public', { plan_id: 'plan_public' });
@@ -542,7 +631,7 @@ describe('SubscriptionService', () => {
     );
   });
 
-  it('create logs and continues when plan has no Stripe price id', async () => {
+  it('create fails closed when configured Stripe plan has no price id', async () => {
     stripeMocks.isStripeConfigured.mockReturnValue(true);
     vi.mocked(planService.requireActivePlanByPublicId).mockResolvedValue({
       ...plan,
@@ -550,13 +639,12 @@ describe('SubscriptionService', () => {
       stripe_price_yearly_id: null,
     } as never);
 
-    await service.create(
-      scope,
-      { plan_id: 'plan_public', billing_cycle: 'monthly' },
-      'user_public',
-    );
+    await expect(
+      service.create(scope, { plan_id: 'plan_public', billing_cycle: 'monthly' }, 'user_public'),
+    ).rejects.toBeInstanceOf(ConfigurationError);
+    expect(stripeMocks.createStripeCustomer).not.toHaveBeenCalled();
     expect(stripeMocks.createStripeSubscription).not.toHaveBeenCalled();
-    expect(repository.create).toHaveBeenCalled();
+    expect(repository.create).not.toHaveBeenCalled();
   });
 
   it('changePlan compensates with yearly Stripe price when billing cycle is yearly', async () => {

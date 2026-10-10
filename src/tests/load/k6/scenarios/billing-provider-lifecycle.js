@@ -248,6 +248,20 @@ function createJourney(data) {
     { plan_id: 'pln_000000000000000000000', billing_cycle: cycle },
     404,
   );
+  if (initial[cycle] === 0) {
+    const free = requireData(request('GET', `/billing/plans/${initial.id}`, token), 'Free catalog');
+    assertCondition(
+      free.price_yearly === null && JSON.stringify(free.billing_cycles) === '["monthly"]',
+      'Free catalog does not advertise annual zero price',
+    );
+    request(
+      'POST',
+      '/billing/subscriptions',
+      token,
+      { plan_id: initial.id, billing_cycle: 'yearly' },
+      422,
+    );
+  }
   const key = idempotencyKey('subscription-replay');
   const body = { plan_id: initial.id, billing_cycle: cycle };
   const subscription = requireData(
@@ -255,8 +269,9 @@ function createJourney(data) {
     'subscription persisted',
   );
   assertCondition(
-    subscription.status === 'INCOMPLETE' && subscription.plan_id === initial.id,
-    'Stripe-backed create remains incomplete until reconciliation',
+    subscription.status === (initial[cycle] === 0 ? 'ACTIVE' : 'INCOMPLETE') &&
+      subscription.plan_id === initial.id,
+    'Stripe-backed create preserves authoritative initial status',
   );
   const replayResponse = request('POST', '/billing/subscriptions', token, body, 200, key);
   const replay = requireData(replayResponse, 'idempotent subscription replay');
@@ -308,9 +323,10 @@ function activateJourney({ subscription, token, initial, cycle }) {
     typeof setup.client_secret === 'string' && setup.client_secret.startsWith('seti_'),
     'payment-method setup references provider intent',
   );
+  const activation = fixture('/activate', { subscriptionId: subscription.id });
   assertCondition(
-    fixture('/activate', { subscriptionId: subscription.id }).delivered === true,
-    'real or fixture provider event relayed locally',
+    activation.delivered === true && activation.workerProcessed === true,
+    'signed provider event processed by local worker',
   );
   let active;
   for (let attempt = 0; attempt < 60; attempt++) {
@@ -325,7 +341,10 @@ function activateJourney({ subscription, token, initial, cycle }) {
     );
     sleep(0.25);
   }
-  assertCondition(active.status === 'ACTIVE', 'worker persisted activation');
+  assertCondition(
+    active.status === 'ACTIVE',
+    'subscription matches authoritative active provider state',
+  );
   assertProviderState({ subscriptionId: subscription.id, token, plan: initial, cycle });
   verifyAccountReads({ subscriptionId: subscription.id, token, planId: initial.id });
 }

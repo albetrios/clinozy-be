@@ -111,6 +111,11 @@ export class StripePaymentProvider implements PaymentProvider {
   }): Promise<PaymentProviderCreateResult> {
     if (!isStripeConfigured()) return {};
 
+    const stripePriceId = this.getProviderPriceId(input.plan, input.billingCycle);
+    if (!stripePriceId) {
+      throw new ConfigurationError('Selected billing cycle has no configured Stripe price ID');
+    }
+
     try {
       let stripeCustomerId = input.organization.stripe_customer_id;
       if (!stripeCustomerId) {
@@ -130,16 +135,6 @@ export class StripePaymentProvider implements PaymentProvider {
         );
       }
 
-      const stripePriceId = this.getProviderPriceId(input.plan, input.billingCycle);
-
-      if (!stripePriceId) {
-        logger.warn(
-          { planId: input.plan.public_id, billingCycle: input.billingCycle },
-          'Plan missing Stripe price ID — creating local-only subscription',
-        );
-        return { providerCustomerId: stripeCustomerId };
-      }
-
       const stripeSubscription = await createStripeSubscription(
         omitUndefined({
           customerId: stripeCustomerId,
@@ -155,6 +150,7 @@ export class StripePaymentProvider implements PaymentProvider {
       return {
         providerSubscriptionId: stripeSubscription.id,
         providerCustomerId: stripeCustomerId,
+        initialStatus: stripeSubscription.status.toUpperCase(),
       };
     } catch (error) {
       logger.error({ error }, 'stripe.subscription.create.failed');

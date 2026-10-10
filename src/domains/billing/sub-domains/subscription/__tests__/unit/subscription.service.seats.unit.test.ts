@@ -128,6 +128,47 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     expect(row.seats_used).toBe(3);
   });
 
+  it.each(['INCOMPLETE', 'PAST_DUE', 'UNPAID'])(
+    'list and get report the enforced Free ceiling for %s without earned entitlement',
+    async (status) => {
+      const row = baseRow({
+        status,
+        seats: 99,
+        current_period_end: new Date('2000-01-01'),
+      });
+      vi.mocked(planService.getFreePlanSeatCeiling).mockResolvedValue(1);
+      vi.mocked(repository.listByOrganization).mockResolvedValue([row, row] as never);
+      vi.mocked(repository.findByPublicId).mockResolvedValue(row as never);
+      vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValue(
+        row as never,
+      );
+
+      const rows = await service.list(scope);
+      expect(rows.map((item) => item.seats_total)).toEqual([1, 1]);
+      expect(planService.getFreePlanSeatCeiling).toHaveBeenCalledTimes(1);
+      expect((await service.get(scope, 'sub_public')).seats_total).toBe(1);
+      await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBe(1);
+    },
+  );
+
+  it.each(['ACTIVE', 'TRIALING', 'PAST_DUE', 'UNPAID'])(
+    'list and enforcement retain paid seats for %s with current entitlement',
+    async (status) => {
+      const row = baseRow({
+        status,
+        seats: 25,
+        current_period_end: new Date(Date.now() + 86_400_000),
+      });
+      vi.mocked(repository.listByOrganization).mockResolvedValue([row] as never);
+      vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValue(
+        row as never,
+      );
+      expect((await service.list(scope))[0]!.seats_total).toBe(25);
+      await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBe(25);
+      expect(planService.getFreePlanSeatCeiling).not.toHaveBeenCalled();
+    },
+  );
+
   it('reserveSeatCeilingForMemberAdd falls back to the Free-tier ceiling when the organization has no active subscription (F3)', async () => {
     vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValue(null);
     vi.mocked(planService.getFreePlanSeatCeiling).mockResolvedValue(1);
@@ -153,6 +194,26 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBe(3);
     expect(planService.getFreePlanSeatCeiling).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { seats: 99, plan_included_seats: 25 },
+    { seats: null, plan_included_seats: 25 },
+    { seats: null, plan_included_seats: null },
+  ])(
+    'unpaid INCOMPLETE subscription uses Free ceiling for $seats / $plan_included_seats',
+    async ({ seats, plan_included_seats }) => {
+      vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValueOnce({
+        seats,
+        plan_included_seats,
+        status: 'INCOMPLETE',
+        current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      });
+      vi.mocked(planService.getFreePlanSeatCeiling).mockResolvedValue(1);
+
+      await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBe(1);
+      expect(planService.getFreePlanSeatCeiling).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('reserveSeatCeilingForMemberAdd keeps the plan ceiling for a dunning sub WITHIN grace (F4)', async () => {
     // PAST_DUE, period ended yesterday — well within the default 14-day grace window.

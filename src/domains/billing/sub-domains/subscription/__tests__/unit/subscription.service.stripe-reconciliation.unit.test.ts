@@ -118,6 +118,7 @@ describe('SubscriptionService — Stripe reconciliation (sec-B1+B2+B3+B4)', () =
     createSubscription: vi.fn().mockResolvedValue({
       providerSubscriptionId: 'sub_xxx',
       providerCustomerId: 'cus_xxx',
+      initialStatus: 'INCOMPLETE',
     }),
     cancelSubscriptionAtPeriodEnd: vi.fn().mockResolvedValue(undefined),
     resumeSubscription: vi.fn().mockResolvedValue(undefined),
@@ -146,6 +147,7 @@ describe('SubscriptionService — Stripe reconciliation (sec-B1+B2+B3+B4)', () =
     vi.mocked(paymentProvider.createSubscription).mockResolvedValue({
       providerSubscriptionId: 'sub_xxx',
       providerCustomerId: 'cus_xxx',
+      initialStatus: 'INCOMPLETE',
     });
   });
 
