@@ -142,6 +142,24 @@ export const CreateInvoiceDto = z
   })
   .strict();
 
+/** The fields a change sends (8.A.8 #5) — each optional; the lines kept by `id` (B12). */
+const invoiceChangeFields = {
+  contact_id: invoiceFields.contact_id.optional(),
+  invoice_date: invoiceFields.invoice_date.optional(),
+  items: z
+    .array(changedInvoiceItem)
+    .min(1)
+    .max(INVOICE_ITEMS_MAX)
+    .refine((items) => distinct(items.flatMap((item) => (item.id ? [item.id] : []))), {
+      message: 'Each line once',
+    })
+    .optional(),
+  member_ids: invoiceFields.member_ids.optional(),
+  overall_discount: invoiceFields.overall_discount.optional(),
+  remark: invoiceFields.remark.optional(),
+  patient_prescription_id: invoiceFields.patient_prescription_id.optional(),
+};
+
 /**
  * Body of `PATCH /app/invoices/{invoice_id}` (8.A.8 #5): the contact (nothing paid yet), the date
  * (same financial year), the lines by `id` (B12), the team, the overall discount, the remark, the
@@ -150,26 +168,26 @@ export const CreateInvoiceDto = z
  */
 export const UpdateInvoiceDto = z
   .object({
-    contact_id: invoiceFields.contact_id.optional(),
-    invoice_date: invoiceFields.invoice_date.optional(),
-    items: z
-      .array(changedInvoiceItem)
-      .min(1)
-      .max(INVOICE_ITEMS_MAX)
-      .refine((items) => distinct(items.flatMap((item) => (item.id ? [item.id] : []))), {
-        message: 'Each line once',
-      })
-      .optional(),
-    member_ids: invoiceFields.member_ids.optional(),
-    overall_discount: invoiceFields.overall_discount.optional(),
-    remark: invoiceFields.remark.optional(),
-    patient_prescription_id: invoiceFields.patient_prescription_id.optional(),
+    ...invoiceChangeFields,
     expected_updated_at: expectedUpdatedAtSchema,
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
     message: 'Send at least one field',
   });
+
+/**
+ * Body of `POST /app/invoices/preview` (D81, Q2): the bill as `POST /app/invoices` takes it, without
+ * "Paid now" (`payment`) — the lines and totals it would write, nothing written. `contact_id` may
+ * wait until the patient is picked.
+ */
+export const PreviewInvoiceDto = CreateInvoiceDto.omit({ payment: true });
+
+/**
+ * Body of `POST /app/invoices/{invoice_id}/preview` (D81): a change as `PATCH` takes it — every
+ * field optional, none required (none = the stored lines' totals), no `expected_updated_at`.
+ */
+export const PreviewInvoiceChangeDto = z.object(invoiceChangeFields).strict();
 
 /**
  * Query of the invoice list and its export (8.A.8 #1, #2): `q` (`#1042` or `2026-27/0412`), the
@@ -204,3 +222,7 @@ export type UpdateInvoiceInput = z.infer<typeof UpdateInvoiceDto>;
 export type InvoiceItemInput = z.infer<typeof changedInvoiceItem>;
 /** The "Paid now" of a create. */
 export type InvoicePaidNowInput = z.infer<typeof invoicePaidNowDto>;
+/** Parsed {@link PreviewInvoiceDto}. */
+export type PreviewInvoiceInput = z.infer<typeof PreviewInvoiceDto>;
+/** Parsed {@link PreviewInvoiceChangeDto}. */
+export type PreviewInvoiceChangeInput = z.infer<typeof PreviewInvoiceChangeDto>;

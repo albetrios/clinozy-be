@@ -420,6 +420,9 @@
     "model": "organization",
     "verifyNoMutation": true
   },
+  "POST /api/v1/app/invoices/:invoice_id/preview": {
+    "model": "organization"
+  },
   "DELETE /api/v1/app/invoices/:invoice_id": {
     "model": "organization",
     "verifyNoMutation": true

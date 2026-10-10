@@ -12,6 +12,7 @@ import {
   STOCK_ITEM_LEVEL_VALUES,
   STOCK_ITEM_MEASURE_UNIT_VALUES,
   STOCK_ITEM_UNIT_VALUES,
+  STOCK_LASTS_DAYS_FILTER_MAX,
   STOCK_QUANTITY_MAX,
 } from './stock-items.constants.js';
 
@@ -89,8 +90,9 @@ export const UpdateStockItemDto = z
 
 /**
  * Query of the Items tab and its export (9.A.8 #1, #2): `q` (name, `#167`), `category` and
- * `stock_level` (several), `stock_vendor_id`, the created range; sort `name` (default, A–Z) |
- * `stock_item_number` | `category` | `quantity` | `lasts_days` | `created_at`.
+ * `stock_level` (several), `stock_vendor_id`, `lasts_days_to` (lasts at most that many whole days,
+ * D81), the created range; sort `name` (default, A–Z) | `stock_item_number` | `category` |
+ * `quantity` | `lasts_days` | `created_at`.
  */
 export const listStockItemsQueryDto = listSearchSortSchema([
   'name',
@@ -104,6 +106,7 @@ export const listStockItemsQueryDto = listSearchSortSchema([
     category: valueListSchema(STOCK_ITEM_CATEGORY_VALUES).optional(),
     stock_level: valueListSchema(STOCK_ITEM_LEVEL_VALUES).optional(),
     stock_vendor_id: recordIdSchema.optional(),
+    lasts_days_to: z.coerce.number().int().min(1).max(STOCK_LASTS_DAYS_FILTER_MAX).optional(),
     created_from: instantSchema.optional(),
     created_to: instantSchema.optional(),
   })

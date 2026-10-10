@@ -30,10 +30,18 @@ with its `invitation` (T4).
 - `events/` — `MEMBERSHIP_INVITATION_EVENT.CREATED` / `.RESENT` types, emit helpers, and handlers (registered in `register-event-handlers.ts`; they call `recordOutboxEmail()` post-commit, carrying `requestId`)
 - `seed/` — seed contribution
 - `__tests__/unit/` — validator/serializer/service and `unit/events/` handler suites
+- `__tests__/integration/` — the dev-only accept-token echo through the real add, resend and accept routes
 
 ## Key invariants
 
-- Invitation tokens are stored only as `sha256(raw)` — the raw token exists solely in the emailed link.
+- Invitation tokens are stored only as `sha256(raw)` — the raw token exists solely in the emailed link,
+  and, on a developer's machine only, in the issue and resend answers: with
+  `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` on, the add-member answer carries
+  `invitation.debug_invitation_token` and the resend answer `debug_invitation_token`, so a test member
+  accepts through the real accept route (launch ROUTE #164, D82 — the email never arrives locally).
+  The env schema refuses the flag outside the `local` and `development` targets; it defaults off and
+  the test harness pins it off. A token-bearing answer is never cached (idempotency cache skip,
+  `cache-control: no-store`).
 - Accept is atomic and one-shot, and is gated on a **verified** email that matches the invitation; a suspended member cannot self-restore via accept (activation requires status `invited`).
 - Event handlers only enqueue mail via the outbox — they never fail the originating HTTP request.
 

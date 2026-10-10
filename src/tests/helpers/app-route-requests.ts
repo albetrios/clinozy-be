@@ -120,6 +120,11 @@ export function appRouteBody(options: {
       contact_id: references.contactId,
       items: [{ offering_id: references.offeringId, quantity: 1 }],
     },
+    'POST /app/invoices/preview': {
+      branch_id: references.branchId,
+      items: [{ offering_id: references.offeringId, quantity: 1 }],
+    },
+    'POST /app/invoices/:invoice_id/preview': { remark: 'Changed' },
     'POST /app/leads': { contact_id: references.contactId, branch_id: references.branchId },
     'POST /app/manufacturers': { name: 'Alvi' },
     'POST /app/medical-purchase-orders': {

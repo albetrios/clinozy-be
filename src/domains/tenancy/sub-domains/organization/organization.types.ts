@@ -31,6 +31,11 @@ export interface OrganizationOutput {
   slug: string | null;
   type: string;
   status: string;
+  /**
+   * The owner's user id (`usr_…`, launch D81 (4)) — compare with `user.id` to know whether you own
+   * it; null only when the owner's login is gone.
+   */
+  owner_user_id: string | null;
   logo_url: string | null;
   /** What the organization practises — 1 to 6 of `skin`, `hair`, … (launch D7). */
   specialties: string[];

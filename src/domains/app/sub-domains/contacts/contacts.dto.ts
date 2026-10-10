@@ -139,7 +139,8 @@ export const UpdateContactDto = z
 
 /**
  * Query of `GET /app/contacts` (routes-final 4.A.8 #1) — keyset paging, `q` (names, email,
- * Instagram, any number, a contact number such as `C-12345`), sort `name` (default; best match
+ * Instagram, any number, a contact number such as `C-12345`, a patient's or a lead's number such as
+ * `#2371`, a patient number such as `PT-0412` — SHELL-M1), sort `name` (default; best match
  * first while `q` is set) | `created_at` | `last_activity_at`, and the filters: `phone` (every
  * contact with that number), `ids` (up to 100, CT12), `is_patient`, `has_open_lead`,
  * `is_awaiting_reply`, `member_membership_id`, `household_contact_id`, `preference_tags` (several,
@@ -152,7 +153,9 @@ export const listContactsQueryDto = listSearchSortSchema([
 ] as const)
   .extend({
     phone: phoneNumberSchema.optional(),
-    ids: recordIdListSchemaOf(CONTACT_IDS_MAX).optional(),
+    ids: recordIdListSchemaOf(CONTACT_IDS_MAX)
+      .meta({ example: 'con_a1b2c3d4e5f6g7h8i9j0k,con_k0j9i8h7g6f5e4d3c2b1a' })
+      .optional(),
     is_patient: z.enum(['true', 'false']).optional(),
     has_open_lead: z.enum(['true', 'false']).optional(),
     is_awaiting_reply: z.enum(['true', 'false']).optional(),
@@ -164,6 +167,10 @@ export const listContactsQueryDto = listSearchSortSchema([
         new RegExp(`^${TAG_BODY}(,${TAG_BODY}){0,${CONTACT_PREFERENCE_TAGS_MAX - 1}}$`),
         `Up to ${CONTACT_PREFERENCE_TAGS_MAX} tags, comma-separated`,
       )
+      .meta({
+        description: `Several: up to ${CONTACT_PREFERENCE_TAGS_MAX} preference tags, comma-separated — a contact with any of them.`,
+        example: 'no_calls,after_six_pm',
+      })
       .optional(),
     created_from: z.iso.datetime({ offset: true }).optional(),
     created_to: z.iso.datetime({ offset: true }).optional(),

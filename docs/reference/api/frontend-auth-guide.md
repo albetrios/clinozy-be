@@ -134,11 +134,20 @@ is issued — the same `session_id` keeps working, and a later refresh re-mints 
   "data": {
     "user": { "id": "usr_…", "email": "…", "is_mfa_enabled": false, "onboarding_completed": true },
     "active_organization": { "id": "org_…", "type": "TEAM" },
+    "membership_id": "mem_…",
     "my_permissions": ["organization:read", "membership:create"],
+    "my_role_ids": ["rol_…"],
+    "my_roles": [{ "id": "rol_…", "name": "Front desk", "tone": "sky", "is_system": true }],
     "global_role": null
   }
 }
 ```
+
+- **Who am I in this organization.** `membership_id` is the caller's own membership (the `id` of
+  their `GET /app/memberships` row — no list scan to find it); `my_role_ids` / `my_roles` are the
+  roles they hold, the main role first, `my_roles` naming each (`name`, `tone`, `is_system`) so a
+  member without `role:read` can show their own role. A system role's name never changes. Without an
+  active organization or a live membership, `membership_id` is `null` and both lists are empty.
 
 - **`type` vs `my_permissions` — render on the intersection.** The organization `type` says what the organization **kind** allows (only a `TEAM` organization can invite members); `my_permissions` is what **this caller** may do in the active organization (resolved permission codes). Show a team-only action only when `type === 'TEAM'` **and** the caller holds the permission.
 - **The organization-switcher list is NOT here.** It lives at `GET /users/me/organizations`, which is **paginated** — follow the cursor to the end before rendering, or a user in more than one page of organizations silently loses the rest from their switcher. It was embedded in this response once, as a flat array with no cursor filled by a default-limit read, which is exactly the truncation this split fixes. Derive each row's "is this the active one?" by comparing its `id` to `active_organization.id`.
@@ -212,7 +221,7 @@ sequenceDiagram
   API-->>FE: 200 { access_token, session_id }  + Set-Cookie session_id
   Note over FE: keep access_token in memory
   FE->>API: GET /auth/me/context   [Authorization: Bearer]
-  API-->>FE: 200 { user, active_organization, my_permissions, global_role }
+  API-->>FE: 200 { user, active_organization, membership_id, my_permissions, my_roles, global_role }
   Note over FE: dashboard painted
 ```
 
@@ -428,6 +437,7 @@ export interface Organization {
   slug: string | null;          // null for a PERSONAL organization
   type: 'PERSONAL' | 'TEAM';
   status: string;
+  owner_user_id: string | null; // usr_… — the owner; compare with user.id (null only if the login is gone)
   logo_url: string | null;
   capabilities: OrganizationCapabilities;
   created_at: string;           // ISO-8601
@@ -457,7 +467,10 @@ export interface MeUser {
 export interface MeContext {
   user: MeUser;
   active_organization: Organization | null;             // the active organization (may be an auto-provisioned personal organization)
+  membership_id: string | null;                          // the caller's own membership ("mem_…"); null without one
   my_permissions: string[];                              // e.g. ["organization:read", "membership:create"]
+  my_role_ids: string[];                                 // "rol_…", the main role first
+  my_roles: { id: string; name: string; tone: string; is_system: boolean }[]; // the same roles, named
   global_role: GlobalRole | null;                        // null for a standard user
   // NOTE: no `organizations` — the switcher list is paginated and lives at
   // GET /users/me/organizations.

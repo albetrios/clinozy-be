@@ -18,7 +18,8 @@ export function serializePaymentEdit(row: PaymentEditRow): PaymentEditOutput {
 
 /**
  * Shapes an `app.payments` row as the API returns it (routes-final 8.C.6). The billed contact's
- * summary, `is_settled`, the reversal and the edits are the rules' `decorate`.
+ * summary, `is_settled`, the reversal, the edits, who recorded it and the numbers of what it points
+ * at are the rules' `decorate`.
  */
 export function serializePayment(
   row: BaseRecordRow,
@@ -36,10 +37,15 @@ export function serializePayment(
     contact: billedContactRef(references.publicIdOf('contact_id', row)),
     patient_id: null,
     invoice_id: references.publicIdOf('invoice_id', row),
+    invoice: null,
     invoice_credit_note_id: references.publicIdOf('invoice_credit_note_id', row),
+    invoice_credit_note_number: null,
     pending_credit_id: references.publicIdOf('pending_credit_id', row),
+    pending_credit_number: null,
     stock_purchase_id: references.publicIdOf('stock_purchase_id', row),
+    stock_purchase: null,
     medical_purchase_order_id: references.publicIdOf('medical_purchase_order_id', row),
+    medical_purchase_order: null,
     reverses_payment_id: references.publicIdOf('reverses_payment_id', row),
     reversed_by_payment_id: null,
     payee_name: (row.payee_name as string | null) ?? null,
@@ -50,6 +56,7 @@ export function serializePayment(
     is_settled: false,
     edit_count: 0,
     last_edit: null,
+    created_by_membership_id: null,
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),
   };

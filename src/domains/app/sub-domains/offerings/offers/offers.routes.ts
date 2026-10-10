@@ -29,7 +29,7 @@ export function offersRoutes(service: OffersService): FastifyPluginAsync {
         schema: {
           summary: 'List offers',
           description:
-            "Returns one page of the active organization's offers — by default in the order Live → Scheduled → Paused → Ended, newest first inside each (O10) — with the total count on the first page. `q` matches the name or code; filters `status`, `kind`, `offering_id`, `branch_id` (runs there — every-branch offers included, O5), `starts_on_from` / `starts_on_to`; `sort` = `status` | `created_at` | `name` | `starts_on` (offers without a start sort earliest). Requires organization:read (every member).",
+            "Returns one page of the active organization's offers — by default in the order Live → Scheduled → Paused → Ended, newest first inside each (O10) — with the total count on the first page. `q` matches the name or code; filters `status`, `kind`, `offering_id`, `branch_id` (runs there — every-branch offers included, O5), `starts_on_from` / `starts_on_to`; `sort` = `status` | `created_at` | `name` | `starts_on` (offers without a start sort earliest); `order=desc` on `status` reverses the groups too (Ended → Paused → Scheduled → Live, oldest first inside each). Requires organization:read (every member).",
           tags: ['Offering'],
           querystring: listOffersQueryDto,
         },
@@ -45,7 +45,7 @@ export function offersRoutes(service: OffersService): FastifyPluginAsync {
         schema: {
           summary: 'Create offer',
           description:
-            'Adds a time-boxed offer: `value` by `kind` — `percent` a whole 1–100, `amount` / `fixed` rupees above 0, `extra` whole sessions 1–99; `code` A–Z / 0–9 up to 16, stored uppercase, unique among live offers (409); `offering_ids` 1–50 live, active offerings (O12); `branch_ids` empty = every branch; `ends_on` on or after `starts_on`. The response carries the derived `status`. Requires offering:create.',
+            'Adds a time-boxed offer: `value` by `kind` — `percent` a whole 1–100, `amount` / `fixed` rupees above 0, `extra` whole sessions 1–99; `code` A–Z / 0–9 up to 16 (the code typed at the bill), stored uppercase, unique among live offers in any case (a 409 `offer_code_in_use`); `offering_ids` 1–50 live, active offerings (O12); `branch_ids` empty = every branch; `ends_on` on or after `starts_on`. The response carries the derived `status`. Requires offering:create.',
           tags: ['Offering'],
           body: CreateOfferDto,
         },
@@ -77,7 +77,7 @@ export function offersRoutes(service: OffersService): FastifyPluginAsync {
         schema: {
           summary: 'Update offer',
           description:
-            "Changes any of an offer's fields — `is_active` false pauses it, true resumes it; null clears an optional one. The row the save would leave is checked like a create (value for its kind, dates, active offerings, the code). Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 `record_changed` naming who changed it (D43). Requires offering:update.",
+            "Changes any of an offer's fields — `is_active` false pauses it, true resumes it; null clears an optional one. The row the save would leave is checked like a create (value for its kind, dates, active offerings, the code — another live offer's is a 409 `offer_code_in_use`). Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 `record_changed` naming who changed it (D43). Requires offering:update.",
           tags: ['Offering'],
           params: offersIdParamsDto,
           body: UpdateOfferDto,

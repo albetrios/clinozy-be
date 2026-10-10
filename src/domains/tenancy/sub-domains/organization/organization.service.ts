@@ -38,6 +38,14 @@ import { isPostgresUniqueViolation } from '@/shared/utils/infrastructure/postgre
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import type { UploadService } from '@/domains/upload/upload.service.js';
 
+/** An organization row as serialized: the serializer's columns plus the owner's internal id. */
+type OrganizationOutputRow = Omit<
+  Parameters<typeof serializeOrganization>[0],
+  'owner_user_public_id'
+> & {
+  owner_user_id: number;
+};
+
 /**
  * Structural port for the billing side of organization offboarding (route-audit-#2).
  *
@@ -120,19 +128,33 @@ export class OrganizationService {
   }
 
   /**
-   * Serializes an organization row to {@link OrganizationOutput} with `logo_url`
-   * resolved to a short-lived signed read URL (TEN-07: private bucket +
-   * signed-on-read). The presign is a network-free local signature, so it is safe
-   * to call from within a database context.
+   * Serializes organization rows to {@link OrganizationOutput}: `logo_url` resolved to a
+   * short-lived signed read URL (TEN-07: private bucket + signed-on-read — a network-free local
+   * signature, safe inside a database context) and `owner_user_id` to the owner's user public id
+   * (launch D81 (4)) — one batch lookup for the whole set.
    */
-  private async toOrganizationOutput(
-    row: Parameters<typeof serializeOrganization>[0],
-  ): Promise<OrganizationOutput> {
-    const serialized = serializeOrganization(row);
-    return {
-      ...serialized,
-      logo_url: await resolveStoredMediaReadUrl(this.objectStorage, row.logo_url),
-    };
+  private async toOrganizationOutputs(
+    rows: readonly OrganizationOutputRow[],
+  ): Promise<OrganizationOutput[]> {
+    if (rows.length === 0) return [];
+    const ownerPublicIds = await this.repository.resolveUserPublicIdsByInternalIds([
+      ...new Set(rows.map((row) => row.owner_user_id)),
+    ]);
+    return Promise.all(
+      rows.map(async (row) => ({
+        ...serializeOrganization({
+          ...row,
+          owner_user_public_id: ownerPublicIds.get(row.owner_user_id) ?? null,
+        }),
+        logo_url: await resolveStoredMediaReadUrl(this.objectStorage, row.logo_url),
+      })),
+    );
+  }
+
+  /** {@link OrganizationService.toOrganizationOutputs} for one row. */
+  private async toOrganizationOutput(row: OrganizationOutputRow): Promise<OrganizationOutput> {
+    const [output] = await this.toOrganizationOutputs([row]);
+    return output!;
   }
 
   /**
@@ -395,7 +417,7 @@ export class OrganizationService {
         const result = await this.repository.findAllForUser(user_public_id, pagination);
         return {
           ...result,
-          items: await Promise.all(result.items.map((row) => this.toOrganizationOutput(row))),
+          items: await this.toOrganizationOutputs(result.items),
         };
       },
     );

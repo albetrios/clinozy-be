@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 437
+  Total routes: 440
 ================================================================================
 
 Legend:
@@ -13,7 +13,7 @@ Legend:
 
 ================================================================================
   DOMAIN: APP (/api/v1/app)
-  Routes: 303
+  Routes: 306
 ================================================================================
 
   — Sub Domains —
@@ -99,8 +99,10 @@ Legend:
   GET    /api/v1/app/invoices/:invoice_id/credit-notes            200  -    both  PERM: payment:read
   POST   /api/v1/app/invoices/:invoice_id/credit-notes            200  req  both  PERM: payment:create
   GET    /api/v1/app/invoices/:invoice_id/credit-notes/:invoice_credit_note_id  200  -    both  PERM: payment:read
+  POST   /api/v1/app/invoices/:invoice_id/preview                 200  -    both  PERM: payment:update
   POST   /api/v1/app/invoices/:invoice_id/restore                 200  req  both  PERM: payment:delete
   GET    /api/v1/app/invoices/exports                             200  -    both  PERM: payment:export
+  POST   /api/v1/app/invoices/preview                             200  -    both  PERM: payment:create
   GET    /api/v1/app/leads                                        200  -    both  PERM: lead:read
   POST   /api/v1/app/leads                                        200  req  both  PERM: lead:create
   GET    /api/v1/app/leads/:lead_id                               200  -    both  PERM: lead:read
@@ -270,6 +272,7 @@ Legend:
   PATCH  /api/v1/app/prescription-kits/:prescription_kit_id       200  -    both  PERM: patient_prescription:create
   DELETE /api/v1/app/prescription-kits/:prescription_kit_id       204  -    both  PERM: patient_prescription:create
   POST   /api/v1/app/prescription-kits/:prescription_kit_id/restore  200  req  both  PERM: patient_prescription:create
+  GET    /api/v1/app/roles                                        200  -    both  PERM: organization:read
   GET    /api/v1/app/stock-counts                                 200  -    both  PERM: stock_item:read
   POST   /api/v1/app/stock-counts                                 200  req  both  PERM: stock_item:update
   GET    /api/v1/app/stock-counts/:stock_count_id                 200  -    both  PERM: stock_item:read
@@ -528,11 +531,11 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 437
+  Total routes    : 440
   Public          : 18
   Authenticated   : 51
   Role-guarded    : 9
-  Perm-guarded    : 354
+  Perm-guarded    : 357
   Token-guarded   : 5
   Team-only (O)   : 10
 

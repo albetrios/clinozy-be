@@ -19,17 +19,26 @@ import {
   organizationToday,
   writePatientFileActivity,
 } from '@/domains/app/sub-domains/patients/patients.rules.js';
-import { ConflictError, fieldValidationError, NotFoundError } from '@/shared/errors/index.js';
+import {
+  ConflictError,
+  ForbiddenError,
+  fieldValidationError,
+  NotFoundError,
+} from '@/shared/errors/index.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 import {
   TASK_HAND_KIND_VALUES,
+  TASK_HAND_OUTCOME_VALUES,
   TASK_KIND,
   TASK_NO_ANSWER_SNOOZE_HOURS,
   TASK_OUTCOME,
   TASK_OWNER_ROLE,
   TASK_PATIENT_OUTCOME_VALUES,
   TASK_RULE,
+  TASK_RULE_OUTCOMES,
   TASK_STATUS,
+  type TaskOutcome,
+  type TaskRule,
 } from './tasks.constants.js';
 import { ReassignTaskDto, ResolveTaskDto, type ResolveTaskInput } from './tasks.dto.js';
 import type { TasksRepository } from './tasks.repository.js';
@@ -61,6 +70,34 @@ function assertNotDone(existing: BaseRecordRow, action: string): void {
 function assertMadeByHand(existing: BaseRecordRow): void {
   if ((TASK_HAND_KIND_VALUES as readonly unknown[]).includes(existing.kind)) return;
   throw new ConflictError('errors:taskRuleTask').withReason('rule_task');
+}
+
+/**
+ * D81 TASKS-M2: the outcomes a task offers — its rule's, or a task made by hand's — else a 400 on
+ * `outcome` naming them (a feedback outcome on another task would write its effect there).
+ */
+function assertOutcomeOffered(existing: BaseRecordRow, outcome: TaskOutcome): void {
+  const offered =
+    existing.kind === TASK_KIND.RULE
+      ? (TASK_RULE_OUTCOMES[existing.rule_key as TaskRule] ?? [])
+      : TASK_HAND_OUTCOME_VALUES;
+  if (offered.includes(outcome)) return;
+  throw fieldValidationError({
+    field: 'outcome',
+    messageKey: 'errors:validation.taskOutcomeNotOffered',
+    messageParams: { outcomes: offered.join(', ') },
+  });
+}
+
+/**
+ * D81 TASKS-M3: a task's action that moves its lead (a claim, a reassign) needs what moving the lead
+ * itself needs — `lead:update` — else a 403 `missing_permission`.
+ */
+async function assertCanMoveLead(context: BaseRecordWriteContext): Promise<void> {
+  if (await context.can(APP_PERMISSIONS.LEAD_UPDATE)) return;
+  throw new ForbiddenError('errors:taskLeadNeedsPermission', {
+    permission: APP_PERMISSIONS.LEAD_UPDATE,
+  }).withReason('missing_permission');
 }
 
 /**
@@ -305,14 +342,21 @@ async function resolvedValues(options: {
 }
 
 /**
- * TK7: takes an outcome — its effect on the record (a Better check-in, a call-back, a claimed
- * lead), optionally the next step — and answers with the task.
+ * TK7: takes an outcome the task offers (D81 TASKS-M2) — its effect on the record (a Better
+ * check-in, a call-back, a claimed lead — the claim needs `lead:update`, TASKS-M3), optionally the
+ * next step — and answers with the task.
  */
 async function resolveTask(input: BaseRecordActionInput): Promise<BaseRecordRow> {
   const { existing, context } = input;
   const repository = input.repository as TasksRepository;
   assertNotDone(existing, 'resolve');
   const body = parseWithSchema(ResolveTaskDto, input.input);
+  assertOutcomeOffered(existing, body.outcome);
+  const claimsLead =
+    body.outcome === TASK_OUTCOME.DONE &&
+    existing.rule_key === TASK_RULE.CLAIM &&
+    typeof existing.lead_id === 'number';
+  if (claimsLead) await assertCanMoveLead(context);
   const patientId =
     typeof existing.contact_id === 'number'
       ? await repository.findPatientIdOfContact(existing.contact_id)
@@ -338,22 +382,22 @@ async function resolveTask(input: BaseRecordActionInput): Promise<BaseRecordRow>
   if (body.outcome === TASK_OUTCOME.UNHAPPY && existing.rule_key === TASK_RULE.FEEDBACK) {
     await openUnhappyCallBack(updated, context);
   }
-  if (body.outcome === TASK_OUTCOME.DONE && existing.rule_key === TASK_RULE.CLAIM) {
-    await claimLeadOfTask(existing, context);
-  }
+  if (claimsLead) await claimLeadOfTask(existing, context);
   if (body.next) await setNextTask({ task: updated, next: body.next, repository, context });
   return updated;
 }
 
 /**
  * TK8: gives a task to a member or a role queue — an owner-change row, and a lead task's lead
- * follows (sub-domain 5's owner and hold).
+ * follows (sub-domain 5's owner and hold), so a lead task's reassign needs `lead:update` (D81
+ * TASKS-M3).
  */
 async function reassignTask(input: BaseRecordActionInput): Promise<BaseRecordRow> {
   const { existing, context } = input;
   const repository = input.repository as TasksRepository;
   assertNotDone(existing, 'reassign');
   const body = parseWithSchema(ReassignTaskDto, input.input);
+  if (typeof existing.lead_id === 'number') await assertCanMoveLead(context);
   const memberId = await memberIdOf({
     publicId: body.owner_membership_id,
     context,
@@ -444,12 +488,16 @@ async function decorateTasks(options: {
  * - **Algorithm:** a create is `manual`, goes to a member who can work tasks or a role queue (TK6),
  *   points at the person and at most one of their records — taking the record's person and branch
  *   (TK3, TK5). A rule task is never changed or deleted by hand (TK7, TK9). A snooze wants a future
- *   time. Resolve (TK7): `no_answer` snoozes three hours; the rest close the task — `doing_well`
- *   logs a Better check-in, `unhappy` on a feedback task opens a call-back, `done` on a claim task
- *   claims the lead; "What's next" sets a follow-up. Reassign (TK8) writes an owner-change row and
- *   moves a lead task's lead.
+ *   time. Resolve (TK7) takes an outcome the task offers ({@link TASK_RULE_OUTCOMES}, a task made
+ *   by hand `done` or `no_answer` — D81 TASKS-M2): `no_answer` snoozes three hours; the rest close
+ *   the task — `doing_well` logs a Better check-in, `unhappy` on a feedback task opens a call-back,
+ *   `done` on a claim task claims the lead; "What's next" sets a follow-up. Reassign (TK8) writes an
+ *   owner-change row and moves a lead task's lead. Moving a lead — the claim, a lead task's
+ *   reassign — needs `lead:update` (TASKS-M3).
  * - **Failure modes:** `ValidationError` on `owner_membership_id`, `owner_role`, a record link,
- *   `snoozed_until`, `outcome`, `next.*`; `ConflictError` `rule_task`, `transition_not_allowed`.
+ *   `snoozed_until`, `outcome` (not offered, or no patient file), `next.*`; `ForbiddenError`
+ *   `missing_permission` (moving a lead without `lead:update`); `ConflictError` `rule_task`,
+ *   `transition_not_allowed`.
  */
 export function createTasksRules(repository: TasksRepository): BaseRecordRules {
   return {

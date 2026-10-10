@@ -31,7 +31,7 @@ export function stockPurchasesRoutes(service: StockPurchasesService): FastifyPlu
         schema: {
           summary: 'List stock purchases',
           description:
-            "Returns one page of the organization's vendor bills for clinic stock — the Purchases tab — each with its `items`, `bill_amount`, `paid_amount`, `due_amount`, `payment_status` (`paid` · `partial` · `unpaid`) and `payment_ids`; `meta.due_total` is the open dues of every purchase the filters match (the footer). `q` is the bill number, the vendor's name or the number (`#16`); filters `stock_vendor_id`, `payment_status` (several, comma-separated), `purchase_date_from` / `purchase_date_to` (inclusive), the created range; sort `purchase_date` (default, newest first), `stock_purchase_number`, `bill_amount`, `due_amount` or `created_at`. Requires stock_item:read.",
+            "Returns one page of the organization's vendor bills for clinic stock — the Purchases tab — each with its `items`, `bill_amount`, `paid_amount`, `due_amount`, `payment_status` (`paid` · `partial` · `unpaid`) and `payment_ids` — what is due is paid with `POST /app/payments` `kind=supplier_bill`, `stock_purchase_id*`, `payee_name*` (the vendor's name), `branch_id*`, `splits*` and no `expense_category` (a 400), and listed with `GET /app/payments?stock_purchase_id=`; `meta.due_total` is the open dues of every purchase the filters match (the footer). `q` is the bill number, the vendor's name or the number (`#16`); filters `stock_vendor_id`, `payment_status` (several, comma-separated), `purchase_date_from` / `purchase_date_to` (inclusive), the created range; sort `purchase_date` (default, newest first), `stock_purchase_number`, `bill_amount`, `due_amount` or `created_at`. Requires stock_item:read.",
           tags: ['Stock'],
           querystring: listStockPurchasesQueryDto,
         },
@@ -63,7 +63,7 @@ export function stockPurchasesRoutes(service: StockPurchasesService): FastifyPlu
         schema: {
           summary: 'Record a stock purchase',
           description:
-            'Records a vendor bill and receives what arrived: `stock_vendor_id*`, `items*` (1–50 lines — a listed `stock_item_id`, or `new_item` {`name*`, `unit`} to add one as typed (an item of that name is used), `quantity*` more than 0, `rate*`; an unknown item is a 400 `items`); optional `bill_number` (≤ 30), `purchase_date` (default today, never in the future), `bill_amount` (default the lines\' total — each quantity × rate), `payment` — the drawer\'s "Paid": `branch_id*` (one of yours), `splits*` (cash · UPI · card), optional `paid_at` (an open day), `reference` — recorded as a supplier-bill payment to the vendor (needs payment:create; above the bill, a 409 `more_than_due`). Each line writes a `received` movement and sets the item\'s `last_rate`. Answers with the purchase as its "Paid" left it. Requires stock_item:create.',
+            "Records a vendor bill and receives what arrived: `stock_vendor_id*`, `items*` (1–50 lines — a listed `stock_item_id`, or `new_item` {`name*`, `unit`} to add one as typed (an item of that name, in any case, is used — else a new one with the item defaults: `consumables`, `piece` unless `unit` is sent, minimum 1, maximum 10, and the purchase's `stock_vendor_id`), `quantity*` more than 0, `rate*`; an unknown item is a 400 `items`); optional `bill_number` (≤ 30), `purchase_date` (default today, never in the future), `bill_amount` (default the lines' total — each quantity × rate), `payment` — the drawer's \"Paid\": `branch_id*` (one of yours), `splits*` (cash · UPI · card), optional `paid_at` (an open day), `reference` — recorded as a supplier-bill payment to the vendor: `kind` `supplier_bill`, `payee_name` the vendor's name, no `expense_category` (only an expense has one) (needs payment:create; above the bill, a 409 `more_than_due`). Each line writes a `received` movement and sets the item's `last_rate`. Answers with the purchase as its \"Paid\" left it. Requires stock_item:create.",
           tags: ['Stock'],
           body: CreateStockPurchaseDto,
         },
@@ -79,7 +79,7 @@ export function stockPurchasesRoutes(service: StockPurchasesService): FastifyPlu
         schema: {
           summary: 'Get a stock purchase',
           description:
-            'Returns one stock purchase with its lines, what is paid and owed, and its payments. Requires stock_item:read.',
+            'Returns one stock purchase with its lines, what is paid and owed, and its payments (`payment_ids`). Pay what is due with `POST /app/payments` — `kind=supplier_bill`, `stock_purchase_id*`, `payee_name*`, `branch_id*`, `splits*`, no `expense_category` (a 400). Requires stock_item:read.',
           tags: ['Stock'],
           params: stockPurchasesIdParamsDto,
         },
@@ -112,7 +112,7 @@ export function stockPurchasesRoutes(service: StockPurchasesService): FastifyPlu
         schema: {
           summary: 'Delete a stock purchase',
           description:
-            "Deletes an unpaid purchase (anything paid is a 409 `purchase_paid`) with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. What it received is taken back with `reverted` movements — some used since is a 409 `not_enough_stock`. Restorable until the organization's purge window ends. Requires stock_item:delete.",
+            "Deletes an unpaid purchase (anything paid is a 409 `purchase_paid`) with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. What it received is taken back with `reverted` movements — some used since is a 409 `not_enough_stock` (its detail names what is left, in English with the unit; read the item for the live quantity). Restorable until the organization's purge window ends. Requires stock_item:delete.",
           tags: ['Stock'],
           params: stockPurchasesIdParamsDto,
           querystring: recordDeleteQuerySchema,

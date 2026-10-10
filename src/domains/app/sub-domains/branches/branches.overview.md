@@ -33,7 +33,7 @@ One set of permission codes for the whole sub-domain (D12): `branch:read|create|
 
 | Route | Gate | Note |
 | --- | --- | --- |
-| `GET /app/branches/my` | `organization:read` (every member) | my active branches; a `branch:read` holder gets all (D1) |
+| `GET /app/branches/my` | `organization:read` (every member) | my active branches; a `branch:read` holder gets all (D1) — each with its hours and the address, phone and GSTIN a printed bill carries (D81) |
 | `GET /app/branches` | `branch:read` | all active, `include_inactive=true` for retired ones too |
 | `GET /app/branches/{branch_id}` | `branch:read` | |
 | `POST /app/branches` | `branch:create` | `membership_ids` = who works there (D13); without it the creator does |

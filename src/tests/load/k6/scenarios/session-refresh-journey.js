@@ -22,8 +22,9 @@ export const options = {
   scenarios: {
     sessionRefreshJourney: {
       // Iteration-bounded on purpose: `/auth/refresh` carries REFRESH_RATE_LIMIT
-      // (30 req / 60s per IP) and each iteration refreshes twice — a duration-based
-      // smoke loop from one IP would trip the limiter it is not trying to test.
+      // (30 req / 60s per IP unless the server runs with RATE_LIMIT_RELAXED_CAPS) and
+      // each iteration refreshes twice — a duration-based smoke loop from one IP would
+      // trip the limiter it is not trying to test.
       executor: 'shared-iterations',
       vus: 1,
       iterations: 5,

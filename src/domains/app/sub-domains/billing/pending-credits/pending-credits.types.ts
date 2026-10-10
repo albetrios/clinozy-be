@@ -7,7 +7,7 @@ import type { BilledContactOutput } from '@/domains/app/sub-domains/billing/invo
  * @remarks
  * - **Notes:** a contact (`contact` summary and `patient_id`) or a typed `party_name` (B23);
  *   `settled_amount` its settlements' total and `left_amount` what is left; `payment_ids` the
- *   settlements (B24).
+ *   settlements (B24); `created_by_membership_id` who recorded it (D81).
  */
 export interface PendingCreditOutput {
   id: string;
@@ -27,6 +27,8 @@ export interface PendingCreditOutput {
   source_payment_id: string | null;
   settle_by: string | null;
   payment_ids: string[];
+  /** Who recorded it — their membership (the "By" column, D81); null for an API key */
+  created_by_membership_id: string | null;
   created_at: string;
   updated_at: string;
 }

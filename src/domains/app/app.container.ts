@@ -2,6 +2,7 @@ import type { OrganizationPrincipalDatabaseScope } from '@/infrastructure/databa
 import type { FastifyInstance } from 'fastify';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import type { MembershipService } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
+import type { MemberRoleService } from '@/domains/tenancy/sub-domains/member-roles/member-role.service.js';
 import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.js';
 import { ValidationError } from '@/shared/errors/index.js';
 import type { BaseRecordConfirmedUpload, BaseRecordPorts } from './base-record.types.js';
@@ -52,6 +53,7 @@ export function createAppContainer(
   organizationService: OrganizationService,
   membershipService: MembershipService,
   organizationSettingsService: OrganizationSettingsService,
+  memberRoleService: MemberRoleService,
 ): AppContainer {
   const branchesRepository = new BranchesRepository();
   const branchMembersRepository = new BranchMembersRepository();
@@ -108,7 +110,7 @@ export function createAppContainer(
       new TaskRuleSettingsRepository(),
     ),
     patientIdeasService: new PatientIdeasService(organizationService, new PatientIdeasRepository()),
-    appMembershipsService: new AppMembershipsService(membershipService),
+    appMembershipsService: new AppMembershipsService(membershipService, memberRoleService),
     contactMembersService: new ContactMembersService(
       organizationService,
       membershipService,
@@ -163,10 +165,15 @@ export function wireAppUploads(container: AppContainer, uploads: AppUploadChecke
 
 /** Decorates `appDomain` on the Fastify instance (after the tenancy container). */
 export function registerAppContainer(application: FastifyInstance): void {
-  const { organizationService, membershipService, organizationSettingsService } =
+  const { organizationService, membershipService, organizationSettingsService, memberRoleService } =
     application.tenancyDomain;
   application.decorate(
     'appDomain',
-    createAppContainer(organizationService, membershipService, organizationSettingsService),
+    createAppContainer(
+      organizationService,
+      membershipService,
+      organizationSettingsService,
+      memberRoleService,
+    ),
   );
 }

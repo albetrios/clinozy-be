@@ -2,9 +2,19 @@ import {
   type BaseRecordRow,
   replaceLinkedIds,
   resolveRecordIds,
+  resolveRecordPublicIds,
 } from '@/domains/app/base-record.repository.js';
-import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
+import type {
+  BaseRecordActionInput,
+  BaseRecordCollectionInput,
+  BaseRecordRules,
+  BaseRecordWriteContext,
+} from '@/domains/app/base-record.types.js';
 import { ContactsRepository } from '@/domains/app/sub-domains/contacts/contacts.repository.js';
+import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
+import { medicines } from '@/domains/app/sub-domains/medical/medicines/medicines.schema.js';
+import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
+import { patient_offering_suggestions } from '@/domains/app/sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.schema.js';
 import { organizationToday } from '@/domains/app/sub-domains/patients/patients.rules.js';
 import {
   PAYMENT_DIRECTION,
@@ -15,7 +25,10 @@ import {
   splitsToColumns,
   writeBillingActivity,
 } from '@/domains/app/sub-domains/billing/payments/payments.ledger.js';
-import { PaymentsRepository } from '@/domains/app/sub-domains/billing/payments/payments.repository.js';
+import {
+  findRecordedByMemberships,
+  PaymentsRepository,
+} from '@/domains/app/sub-domains/billing/payments/payments.repository.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
 import { rupees, toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import { INVOICE_TYPE } from './invoices.constants.js';
@@ -27,8 +40,9 @@ import {
   type InvoicesRepository,
 } from './invoices.repository.js';
 import { invoices } from './invoices.schema.js';
-import { serializeInvoiceItem } from './invoices.serializer.js';
-import type { BilledContactOutput } from './invoices.types.js';
+import { serializeInvoiceItem, serializeInvoicePreview } from './invoices.serializer.js';
+import type { BilledContactOutput, InvoicePreviewOutput } from './invoices.types.js';
+import { validatePreviewInvoice, validatePreviewInvoiceChange } from './invoices.validator.js';
 
 const contactsRepository = new ContactsRepository();
 const paymentsRepository = new PaymentsRepository();
@@ -212,17 +226,22 @@ async function replanChangedLines(options: {
   return plan;
 }
 
-/** Plans a new invoice: its type and date defaults, the billed patient, the lines (B8–B13). */
-async function prepareInvoiceCreate(
-  values: Record<string, unknown>,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+/**
+ * Plans a new invoice (B8–B13): its type and date defaults, the billed patient, the lines — a
+ * preview may plan before the contact is picked (`contactOptional`).
+ */
+async function planNewInvoice(options: {
+  values: Record<string, unknown>;
+  context: BaseRecordWriteContext;
+  contactOptional?: boolean;
+}): Promise<{ plan: InvoiceLinePlan; patientId: number | null }> {
+  const { values, context } = options;
   values.type ??= INVOICE_TYPE.CLINIC;
   values.invoice_date ??= await organizationToday(context);
-  const patientId = await requirePatientFile({
-    type: String(values.type),
-    contactId: values.contact_id,
-  });
+  const patientId =
+    options.contactOptional === true && typeof values.contact_id !== 'number'
+      ? null
+      : await requirePatientFile({ type: String(values.type), contactId: values.contact_id });
   const plan = await planInvoiceLines({
     context,
     header: {
@@ -235,6 +254,15 @@ async function prepareInvoiceCreate(
     items: values.items as InvoiceItemInput[],
     existing: [],
   });
+  return { plan, patientId };
+}
+
+/** Plans a new invoice and keeps the plan for its write: the totals on the row, the lines after (B8–B13). */
+async function prepareInvoiceCreate(
+  values: Record<string, unknown>,
+  context: BaseRecordWriteContext,
+): Promise<void> {
+  const { plan, patientId } = await planNewInvoice({ values, context });
   Object.assign(values, plan.totals);
   pendingSaves.set(context, {
     plan,
@@ -246,13 +274,17 @@ async function prepareInvoiceCreate(
   delete values.payment;
 }
 
-/** Plans a change (B11, B12): the guards, the billed patient, the re-planned lines when they move. */
-async function prepareInvoiceUpdate(options: {
+/**
+ * Plans a change (B11, B12): the guards, the billed patient, the re-planned lines when they move —
+ * always for a preview (`replanAlways`, the stored lines as they are when none are sent).
+ */
+async function planInvoiceChange(options: {
   repository: InvoicesRepository;
   values: Record<string, unknown>;
   existing: BaseRecordRow;
   context: BaseRecordWriteContext;
-}): Promise<void> {
+  replanAlways?: boolean;
+}): Promise<{ plan: InvoiceLinePlan | null; patientId: number | null; contactChanges: boolean }> {
   const { values, existing, context } = options;
   await assertNotSaleInvoice(options.repository, existing.id);
   const contactChanges = 'contact_id' in values && values.contact_id !== existing.contact_id;
@@ -261,7 +293,11 @@ async function prepareInvoiceUpdate(options: {
     type: String(existing.type),
     contactId: contactChanges ? values.contact_id : existing.contact_id,
   });
-  const linesMove = 'items' in values || 'overall_discount' in values || contactChanges;
+  const linesMove =
+    options.replanAlways === true ||
+    'items' in values ||
+    'overall_discount' in values ||
+    contactChanges;
   const plan = linesMove
     ? await replanChangedLines({
         repository: options.repository,
@@ -272,6 +308,18 @@ async function prepareInvoiceUpdate(options: {
         context,
       })
     : null;
+  return { plan, patientId, contactChanges };
+}
+
+/** Plans a change and keeps the plan for its write (B11, B12). */
+async function prepareInvoiceUpdate(options: {
+  repository: InvoicesRepository;
+  values: Record<string, unknown>;
+  existing: BaseRecordRow;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
+  const { values, context } = options;
+  const { plan, patientId, contactChanges } = await planInvoiceChange(options);
   if (plan) Object.assign(values, plan.totals);
   pendingSaves.set(context, {
     plan,
@@ -336,6 +384,106 @@ async function afterInvoiceWrite(options: {
   });
 }
 
+/** A plan as a preview answers it, with the public ids its lines name — one read per kind of id. */
+async function previewOf(options: {
+  plan: InvoiceLinePlan;
+  type: string;
+  invoiceDate: string;
+  overallDiscount: number;
+  paidAmount: number;
+}): Promise<InvoicePreviewOutput> {
+  const idsOf = (field: string) =>
+    options.plan.lines.flatMap((line) => {
+      const value = line.values[field];
+      return typeof value === 'number' ? [value] : [];
+    });
+  return serializeInvoicePreview({
+    plan: options.plan,
+    type: options.type,
+    invoice_date: options.invoiceDate,
+    overall_discount: options.overallDiscount,
+    paid_amount: options.paidAmount,
+    public_ids: {
+      offerings: await resolveRecordPublicIds({ table: offerings, ids: idsOf('offering_id') }),
+      medicines: await resolveRecordPublicIds({ table: medicines, ids: idsOf('medicine_id') }),
+      suggestions: await resolveRecordPublicIds({
+        table: patient_offering_suggestions,
+        ids: idsOf('patient_offering_suggestion_id'),
+      }),
+    },
+  });
+}
+
+/**
+ * D81, Q2: what `POST /app/invoices` would write — the lines and the totals — nothing written. The
+ * branch is one of the caller's, the references are live here (the 400s of the bill); the contact
+ * may wait (a clinic or consultation bill's contact, once sent, needs a patient file).
+ */
+async function previewInvoice(input: BaseRecordCollectionInput): Promise<InvoicePreviewOutput> {
+  const { member_ids: _memberIds, ...parsed } = validatePreviewInvoice(input.input);
+  const values: Record<string, unknown> = { ...parsed };
+  await input.resolveReferences(values);
+  const visible = await input.branchScope([parsed.branch_id]);
+  if (visible && !visible.ids.includes(values.branch_id as number)) {
+    throw fieldValidationError({
+      field: 'branch_id',
+      messageKey: 'errors:validation.branchNotYours',
+    });
+  }
+  const { plan } = await planNewInvoice({ values, context: input.context, contactOptional: true });
+  return previewOf({
+    plan,
+    type: String(values.type),
+    invoiceDate: String(values.invoice_date),
+    overallDiscount: Number(values.overall_discount ?? 0),
+    paidAmount: 0,
+  });
+}
+
+/**
+ * D81: what `PATCH /app/invoices/{invoice_id}` would write — the lines (the sent ones, else the
+ * stored ones) and the totals — nothing written; it refuses what the change would (settled, a
+ * sale's, a total under what is paid, a spent session).
+ */
+async function previewInvoiceChange(
+  repository: InvoicesRepository,
+  input: BaseRecordActionInput,
+): Promise<InvoicePreviewOutput> {
+  const { existing, context } = input;
+  const { member_ids: _memberIds, ...parsed } = validatePreviewInvoiceChange(input.input);
+  const values: Record<string, unknown> = { ...parsed };
+  if (typeof parsed.contact_id === 'string') {
+    const ids = await resolveRecordIds({
+      table: contacts,
+      organizationId: context.organizationId,
+      publicIds: [parsed.contact_id],
+    });
+    const contactId = ids.get(parsed.contact_id);
+    if (contactId === undefined) {
+      throw fieldValidationError({
+        field: 'contact_id',
+        messageKey: 'errors:validation.recordReferenceNotFound',
+        messageParams: { id: parsed.contact_id, label: 'contact' },
+      });
+    }
+    values.contact_id = contactId;
+  }
+  const { plan } = await planInvoiceChange({
+    repository,
+    values,
+    existing,
+    context,
+    replanAlways: true,
+  });
+  return previewOf({
+    plan: plan!,
+    type: String(existing.type),
+    invoiceDate: String(values.invoice_date ?? existing.invoice_date),
+    overallDiscount: Number(values.overall_discount ?? toAmount(existing.overall_discount) ?? 0),
+    paidAmount: toAmount(existing.paid_amount) ?? 0,
+  });
+}
+
 /**
  * Writes an invoice another write makes in its transaction — a medical sale's bill (MD7, MD19):
  * the plan, the row, its lines, its credited team, "Paid now" and the activity entry, as
@@ -384,7 +532,8 @@ export async function recordInvoice(options: {
  *   change (nothing paid) moves the patient offerings with it. A delete needs nothing paid or
  *   credited and no spent session (B14); its patient offerings go and come back with it. A
  *   medical sale's invoice is the sale's (MDC18) — changing, deleting or restoring it here is a
- *   409 `invoice_of_sale`.
+ *   409 `invoice_of_sale`. The previews (`preview` — a bill, or a change of one) plan the same way
+ *   and write nothing (D81, Q2); a page reads who billed each invoice (D81).
  * - **Failure modes:** `ValidationError` on `contact_id` (`patient_file_required`), `items`,
  *   `invoice_date`, `overall_discount`, `patient_treatment_ids`, `below_lowest_price`;
  *   `ConflictError` `invoice_of_sale`, `invoice_settled`, `below_paid`, `offering_in_use`, `invoice_paid`,
@@ -410,11 +559,18 @@ export function createInvoicesRules(repository: InvoicesRepository): BaseRecordR
     prepareRestore: (deleted) => assertNotSaleInvoice(repository, deleted.id),
     afterWrite: (row, change, context) =>
       afterInvoiceWrite({ repository, row, kind: change.kind, context }),
+    collectionViews: { preview: previewInvoice },
+    views: { preview: (input) => previewInvoiceChange(repository, input) },
     decorate: async (outputs, context) => {
       const idsByPublicId = await resolveRecordIds({
         table: invoices,
         organizationId: context.organizationId,
         publicIds: outputs.map((output) => String(output.id)),
+      });
+      const recordedBy = await findRecordedByMemberships({
+        table: invoices,
+        ids: [...idsByPublicId.values()],
+        organizationId: context.organizationId,
       });
       const items = await repository.findItems([...idsByPublicId.values()]);
       const billed = await repository.findBilledTreatments(
@@ -435,6 +591,7 @@ export function createInvoicesRules(repository: InvoicesRepository): BaseRecordR
             ),
           );
         output.is_settled = id !== undefined && settled.has(id);
+        output.created_by_membership_id = id === undefined ? null : (recordedBy.get(id) ?? null);
       }
       await attachBilledContacts(outputs);
     },

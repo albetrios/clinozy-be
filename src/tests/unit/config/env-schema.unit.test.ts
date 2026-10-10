@@ -175,6 +175,38 @@ describe('env-schema', () => {
     });
   });
 
+  // ROUTE #164: echoing the raw invitation accept token in the add-member / resend answers is a
+  // local-QA convenience — a deployed runtime delivers it only through the email. Stated as an
+  // allowlist so a target added to the enum later is refused by default.
+  describe('MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED', () => {
+    it('defaults to false so the token leaves only through the email', () => {
+      const parsed = envSchema.parse({ ...commonRequiredBase, NODE_ENV: 'local' });
+      expect(parsed.MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED).toBe(false);
+    });
+
+    it('rejects true in production', () => {
+      const result = envSchema.safeParse({
+        ...productionRequiredBase,
+        MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED: 'true',
+      });
+      expect(result.success).toBe(false);
+      expect(JSON.stringify(result.error?.issues)).toContain(
+        'MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED',
+      );
+    });
+
+    it('allows true on the local and development targets', () => {
+      for (const NODE_ENV of ['local', 'development'] as const) {
+        const result = envSchema.safeParse({
+          ...commonRequiredBase,
+          NODE_ENV,
+          MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED: 'true',
+        });
+        expect(result.success, `${NODE_ENV} should allow it`).toBe(true);
+      }
+    });
+  });
+
   // A Turnstile outage is exactly when credential stuffing is cheapest to hide in; production
   // answers 503 instead of skipping the check.
   describe('CAPTCHA_FAIL_OPEN', () => {

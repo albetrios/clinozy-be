@@ -404,6 +404,23 @@ const envSchemaBase = z.object({
    */
   AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED: booleanString('true'),
   /**
+   * Category-B (security). Makes the add-member (`POST /tenancy/organization/memberships`) and
+   * resend-invitation answers carry the raw accept token as `debug_invitation_token` (on the
+   * invitation), so a test member accepts through the real
+   * `POST /tenancy/membership-invitations/{membership_invitation_id}/accept` (launch ROUTE #164, D82).
+   *
+   * Exists because the invitation email never arrives on a developer's machine, so its token —
+   * which the database stores only as a hash — is otherwise lost: local QA and the frontend's role
+   * journeys need real members. The echo mirrors the sign-in code's `debug_verification_code`.
+   *
+   * Defaults false, so the token leaves only through the email unless a developer opts in. A refine
+   * permits `true` ONLY on the `local` and `development` targets — an allowlist rather than a
+   * not-production test, so a target added to the enum later is refused by default instead of
+   * silently handing out accept tokens. It changes only the answer: the token, its hash, the email
+   * and the accept checks (the invitee's verified email must match) are untouched.
+   */
+  MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED: booleanString('false'),
+  /**
    * Category-B. ioredis ready-check on the cache / BullMQ connections. Defaults true (on); the test
    * harness sets `REDIS_READY_CHECK_ENABLED=false` (the per-worker singletons churn across
    * createTestApp instances and a reconnect ready-check rejects against a closing stream). Read via
@@ -411,10 +428,10 @@ const envSchemaBase = z.object({
    */
   REDIS_READY_CHECK_ENABLED: booleanString('true'),
   /**
-   * Category-B. Lift the strict public/authenticated rate-limit caps to 5000 so loopback E2E and
-   * dev UX are not throttled. Defaults false (hardened); development sets it true in `.env` and the
-   * test harness sets it true; a refine forbids `true` in production where credential-stuffing
-   * protection must stay on.
+   * Category-B. Lift the strict public/authenticated and token-refresh rate-limit caps to 5000 so
+   * loopback E2E and dev UX are not throttled. Defaults false (hardened); development sets it true
+   * in `.env` and the test harness sets it true; a refine forbids `true` in production where
+   * credential-stuffing protection must stay on.
    */
   RATE_LIMIT_RELAXED_CAPS: booleanString('false'),
   /**
@@ -1739,6 +1756,17 @@ export const envSchema = envSchemaBase
       message:
         "AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED may only be false on the 'local' or 'development' targets (it is the anti-mail-bomb spacing on send-code, so a deployed runtime must keep it on). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
       path: ['AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED'],
+    },
+  )
+  .refine(
+    (data) =>
+      !data.MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED ||
+      data.NODE_ENV === 'local' ||
+      data.NODE_ENV === 'development',
+    {
+      message:
+        "MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED may only be true on the 'local' or 'development' targets (it returns the raw invitation accept token in the add-member and resend answers, so a deployed runtime must deliver it only through the email). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
+      path: ['MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED'],
     },
   )
   .refine((data) => data.NODE_ENV !== 'production' || data.REDIS_READY_CHECK_ENABLED === true, {

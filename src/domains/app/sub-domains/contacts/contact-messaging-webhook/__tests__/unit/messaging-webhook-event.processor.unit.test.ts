@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   },
   fetchInstagramUsername: vi.fn(),
   requestMessagingWebhookEventProcessing: vi.fn(),
+  requestTaskRulesRun: vi.fn(),
 }));
 
 vi.mock('@/infrastructure/queue/worker-runtime/worker-processor.util.js', () => ({
@@ -45,6 +46,9 @@ vi.mock(
   '@/domains/app/sub-domains/contacts/contact-messaging-webhook/queues/messaging-webhook-event.queue.js',
   () => ({ requestMessagingWebhookEventProcessing: mocks.requestMessagingWebhookEventProcessing }),
 );
+vi.mock('@/domains/app/sub-domains/tasks/queues/task-rules.queue.js', () => ({
+  requestTaskRulesRun: mocks.requestTaskRulesRun,
+}));
 vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -82,6 +86,7 @@ describe('runMessagingWebhookEventJob', () => {
       ...Object.values(events),
       mocks.fetchInstagramUsername,
       mocks.requestMessagingWebhookEventProcessing,
+      mocks.requestTaskRulesRun,
     ]) {
       method.mockReset();
     }
@@ -118,6 +123,19 @@ describe('runMessagingWebhookEventJob', () => {
     );
     expect(inbound.confirmBookingByReply).toHaveBeenCalledWith({ organizationId: 7, contactId: 5 });
     expect(events.markProcessed.mock.calls.map((call) => call[0])).toEqual([1, 2]);
+    // D81 T7: the reply closes its task at once — the task rules run is asked for once per job.
+    expect(mocks.requestTaskRulesRun).toHaveBeenCalledTimes(1);
+    expect(mocks.requestTaskRulesRun).toHaveBeenCalledWith(ORGANIZATION);
+  });
+
+  it('D81 T7: a job that applied nothing asks for no task rules run', async () => {
+    events.claimBatch.mockResolvedValue([
+      whatsAppEvent(8, { statuses: [{ id: 'wamid.8', status: 'read', timestamp: '1' }] }),
+    ]);
+    inbound.advanceDeliveryStatus.mockRejectedValue(new Error('deadlock'));
+
+    expect((await runMessagingWebhookEventJob(ORGANIZATION)).processedCount).toBe(0);
+    expect(mocks.requestTaskRulesRun).not.toHaveBeenCalled();
   });
 
   it('an unknown number becomes a contact with a lead; a retried reply confirms nothing again', async () => {

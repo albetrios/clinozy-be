@@ -107,7 +107,9 @@ async function revertMovement(input: BaseRecordActionInput): Promise<BaseRecordR
  *   difference from the counted quantity (S7) — checks a use's treatment session (S14), moves the
  *   item's balance in one guarded statement and keeps the balance it left (S5); the caller is its
  *   author (K2). The revert action writes the opposite movement (S8). Every read adds
- *   `reverted_by_stock_item_movement_id`.
+ *   `reverted_by_stock_item_movement_id`, and the row's text from what it points at — the
+ *   purchase's `stock_purchase_number` and `bill_number`, a revert's `reverts_type` and
+ *   `reverts_created_at` (D81) — two reads for the whole page.
  * - **Failure modes:** `ValidationError` on `quantity`, `patient_treatment_id`; `ConflictError`
  *   `not_enough_stock`, `already_reverted`.
  */
@@ -137,11 +139,18 @@ export function createStockItemMovementsRules(
         organizationId: context.organizationId,
         publicIds: outputs.map((output) => String(output.id)),
       });
-      const reverts = await repository.findReverts([...idsByPublicId.values()]);
+      const ids = [...idsByPublicId.values()];
+      const reverts = await repository.findReverts(ids);
+      const texts = await repository.findLinkedTexts(ids);
       for (const output of outputs) {
         const id = idsByPublicId.get(String(output.id));
         output.reverted_by_stock_item_movement_id =
           id === undefined ? null : (reverts.get(id) ?? null);
+        const text = id === undefined ? undefined : texts.get(id);
+        output.stock_purchase_number = text?.stock_purchase_number ?? null;
+        output.bill_number = text?.bill_number ?? null;
+        output.reverts_type = text?.reverts_type ?? null;
+        output.reverts_created_at = text?.reverts_created_at?.toISOString() ?? null;
       }
     },
   };

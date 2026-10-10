@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**13 / 253** variables migrated to an explicit `{ allowed, description }` entry.
+**13 / 254** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -118,6 +118,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `MCP_CALL_API_ALLOWED_PATH_PREFIXES` | — | `` |  | — |
 | `MEMBER_ROLE_MAX_PER_ORG` | — | `50` |  | — |
 | `MEMBER_ROLE_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
+| `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` | — | `false` |  | — |
 | `MEMBERSHIP_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
 | `MESSAGING_DELIVERY_ENABLED` | — | `false` |  | — |
 | `META_APP_SECRET` | — | — *(optional)* |  | — |

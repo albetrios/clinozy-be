@@ -1,4 +1,14 @@
 /** OpenAPI response schemas — the app record tables (launch iteration, generated from the table specs). */
+import {
+  PAYMENT_EDIT_RECORDED_FIELDS,
+  PAYMENT_EXPENSE_CATEGORY_VALUES,
+  PAYMENT_MODE_VALUES,
+} from '@/domains/app/sub-domains/billing/payments/payments.constants.js';
+import {
+  TASK_DONE_BY_CLINOZY,
+  TASK_NO_ANSWER_SNOOZE_HOURS,
+  TASK_RULE_VALUES,
+} from '@/domains/app/sub-domains/tasks/tasks.constants.js';
 
 /** `BaseRecordExportOutput` — a list as a CSV file in the JSON envelope (`GET /app/<module>/exports`). */
 export const recordExportSchema = {
@@ -21,7 +31,8 @@ export const recordExportSchema = {
     },
     content: {
       type: 'string',
-      description: 'The CSV text (RFC 4180, CRLF)',
+      description:
+        "The CSV text (RFC 4180, CRLF): a header of the list rows' fields, in their order, then one line per row. A null is an empty cell; an object is its JSON text in one cell (a task's `contact`); a list is its items joined with `|`, an object item as its JSON (a task's `owner_changes`); a cell that starts like a formula (`=`, `+`, `-`, `@`) is prefixed with `'`",
     },
   },
 };
@@ -1091,6 +1102,11 @@ export const invoicesRecordSchema = {
     invoice_date: { type: 'string', format: 'date' },
     remark: { type: 'string', nullable: true },
     patient_prescription_id: { type: 'string', nullable: true },
+    created_by_membership_id: {
+      type: 'string',
+      nullable: true,
+      description: 'Who billed it — their membership (D81); null for an API key',
+    },
     created_at: { type: 'string', format: 'date-time' },
     updated_at: { type: 'string', format: 'date-time' },
   },
@@ -1143,8 +1159,109 @@ export const invoicesRecordExample = {
   invoice_date: '2026-10-08',
   remark: null,
   patient_prescription_id: null,
+  created_by_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
   created_at: '2026-10-08T10:30:00.000Z',
   updated_at: '2026-10-08T10:30:00.000Z',
+};
+
+/** `InvoicePreviewOutput` — what a bill or a change would come to, nothing written (D81, Q2). */
+export const invoicePreviewSchema = {
+  type: 'object',
+  properties: {
+    type: { type: 'string', enum: ['clinic', 'consultation', 'medical'] },
+    invoice_date: {
+      type: 'string',
+      format: 'date',
+      description: 'As the save would set it — the day the offers are live on',
+    },
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            nullable: true,
+            description: "The kept line's id (a change); null for a new line",
+          },
+          line_number: { type: 'integer' },
+          offering_id: { type: 'string', nullable: true },
+          medicine_id: { type: 'string', nullable: true },
+          name: { type: 'string' },
+          pack_size: { type: 'string', nullable: true },
+          quantity: { type: 'integer' },
+          rate: {
+            type: 'number',
+            description: "The server's rate — the best live offer, never below the lowest price",
+          },
+          discount_percent: { type: 'number' },
+          discount_amount: { type: 'number' },
+          gst_percent: { type: 'integer', enum: [0, 5, 12, 18, 28] },
+          is_gst_inclusive: { type: 'boolean' },
+          taxable_amount: { type: 'number' },
+          gst_amount: { type: 'number' },
+          amount: { type: 'number' },
+          sessions_total: {
+            type: 'integer',
+            nullable: true,
+            description: 'The sessions its patient offering would hold — free sessions included',
+          },
+          offer_ids: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'The live offers it applies (M26) — none on a kept line',
+          },
+          patient_offering_suggestion_id: { type: 'string', nullable: true },
+          batch_number: { type: 'string', nullable: true },
+        },
+      },
+    },
+    overall_discount: { type: 'number' },
+    subtotal: { type: 'number' },
+    discount_total: { type: 'number' },
+    taxable_total: { type: 'number' },
+    gst_total: { type: 'number' },
+    total: { type: 'number' },
+    paid_amount: { type: 'number', description: 'Already paid — 0 for a new bill' },
+    due_amount: { type: 'number' },
+  },
+};
+
+/** Example `InvoicePreviewOutput`. */
+export const invoicePreviewExample = {
+  type: 'clinic',
+  invoice_date: '2026-10-08',
+  items: [
+    {
+      id: null,
+      line_number: 1,
+      offering_id: 'off_k7x9m2pqr4w8n1v3a1b2c',
+      medicine_id: null,
+      name: 'Hydrafacial',
+      pack_size: null,
+      quantity: 1,
+      rate: 900,
+      discount_percent: 0,
+      discount_amount: 0,
+      gst_percent: 18,
+      is_gst_inclusive: false,
+      taxable_amount: 900,
+      gst_amount: 162,
+      amount: 1062,
+      sessions_total: 1,
+      offer_ids: ['ofr_k7x9m2pqr4w8n1v3a1b2c'],
+      patient_offering_suggestion_id: null,
+      batch_number: null,
+    },
+  ],
+  overall_discount: 0,
+  subtotal: 900,
+  discount_total: 0,
+  taxable_total: 900,
+  gst_total: 162,
+  total: 1062,
+  paid_amount: 0,
+  due_amount: 1062,
 };
 
 /** `PatientOfferingOutput` — what a patient bought (launch #135, routes-final 7.L.6). */
@@ -1250,6 +1367,43 @@ export const patientOfferingSuggestionsRecordExample = {
   updated_at: '2026-10-08T10:30:00.000Z',
 };
 
+/** One split of a payment as a change records it — `{ mode, amount }`. */
+const paymentEditSplitSchema = {
+  type: 'object',
+  properties: {
+    mode: { type: 'string', enum: [...PAYMENT_MODE_VALUES] },
+    amount: { type: 'number' },
+  },
+  required: ['mode', 'amount'],
+};
+
+/** What each recorded field's `from` / `to` holds (PAY-M5) — typed by the code's recorded fields. */
+const paymentEditValueSchemas: Record<(typeof PAYMENT_EDIT_RECORDED_FIELDS)[number], object> = {
+  splits: {
+    type: 'array',
+    items: paymentEditSplitSchema,
+    description: 'The splits, each `{ mode, amount }`',
+  },
+  paid_at: { type: 'string', format: 'date-time' },
+  contact_id: { type: 'string', nullable: true, description: 'A contact id (`con_…`)' },
+  invoice_id: { type: 'string', nullable: true, description: 'An invoice id (`invc_…`)' },
+  stock_purchase_id: {
+    type: 'string',
+    nullable: true,
+    description: 'A stock purchase id (`spur_…`)',
+  },
+  medical_purchase_order_id: {
+    type: 'string',
+    nullable: true,
+    description: 'A medical order id (`mpo_…`)',
+  },
+  payee_name: { type: 'string', nullable: true },
+  expense_category: { type: 'string', nullable: true, enum: [...PAYMENT_EXPENSE_CATEGORY_VALUES] },
+  reference: { type: 'string', nullable: true },
+  note: { type: 'string', nullable: true },
+  attachment_keys: { type: 'array', items: { type: 'string' } },
+};
+
 /** `PaymentEditOutput` — what one change to a payment changed (launch #136, routes-final 8.C.6). */
 export const paymentEditsRecordSchema = {
   type: 'object',
@@ -1257,8 +1411,22 @@ export const paymentEditsRecordSchema = {
     id: { type: 'string', example: 'pedit_k7x9m2pqr4w8n1v3a1b2c' },
     changes: {
       type: 'object',
-      description: '`{ field: { from, to } }` — the changed fields only',
-      additionalProperties: { type: 'object', properties: { from: {}, to: {} } },
+      description:
+        'The changed fields only, each `{ from, to }` — the value before and after, shaped as the field: `splits` lists of `{ mode, amount }`, `paid_at` an instant, the links public ids, the texts strings, `attachment_keys` a list; null where the field was empty',
+      properties: Object.fromEntries(
+        PAYMENT_EDIT_RECORDED_FIELDS.map((field) => [
+          field,
+          {
+            type: 'object',
+            properties: {
+              from: paymentEditValueSchemas[field],
+              to: paymentEditValueSchemas[field],
+            },
+            required: ['from', 'to'],
+          },
+        ]),
+      ),
+      additionalProperties: false,
     },
     author_membership_id: { type: 'string', nullable: true },
     created_at: { type: 'string', format: 'date-time' },
@@ -1311,28 +1479,83 @@ export const paymentsRecordSchema = {
     },
     patient_id: { type: 'string', nullable: true, description: "The contact's patient file" },
     invoice_id: { type: 'string', nullable: true },
+    invoice: {
+      type: 'object',
+      nullable: true,
+      description: "The invoice's numbers, type and what is still due on it (D81)",
+      properties: {
+        invoice_sequence: { type: 'integer', description: '#1042' },
+        invoice_number: { type: 'string', description: '2026-27/0412' },
+        type: { type: 'string', enum: ['clinic', 'consultation', 'medical'] },
+        due_amount: { type: 'number' },
+      },
+    },
     invoice_credit_note_id: { type: 'string', nullable: true },
+    invoice_credit_note_number: {
+      type: 'integer',
+      nullable: true,
+      description: "The credit note's number (CN-3, D81)",
+    },
     pending_credit_id: { type: 'string', nullable: true },
+    pending_credit_number: {
+      type: 'integer',
+      nullable: true,
+      description: "The pending credit's number (CR-2, D81)",
+    },
     stock_purchase_id: {
       type: 'string',
       nullable: true,
       description: 'The stock purchase a supplier bill pays (S11)',
+    },
+    stock_purchase: {
+      type: 'object',
+      nullable: true,
+      description: "The stock purchase's number and the vendor's bill number (D81)",
+      properties: {
+        stock_purchase_number: { type: 'integer' },
+        bill_number: { type: 'string', nullable: true },
+      },
     },
     medical_purchase_order_id: {
       type: 'string',
       nullable: true,
       description: 'The received medical order a supplier bill pays (MD7)',
     },
+    medical_purchase_order: {
+      type: 'object',
+      nullable: true,
+      description: "The medical order's number and the supplier's bill number (D81)",
+      properties: {
+        purchase_order_number: { type: 'integer' },
+        supplier_bill_number: { type: 'string', nullable: true },
+      },
+    },
     reverses_payment_id: { type: 'string', nullable: true },
     reversed_by_payment_id: { type: 'string', nullable: true },
-    payee_name: { type: 'string', nullable: true },
-    expense_category: { type: 'string', nullable: true },
+    payee_name: {
+      type: 'string',
+      nullable: true,
+      description:
+        "Who was paid — an expense's or a supplier bill's (required on those; a stock purchase's \"Paid\" writes the vendor's name); optional on the other kinds",
+    },
+    expense_category: {
+      type: 'string',
+      nullable: true,
+      enum: [...PAYMENT_EXPENSE_CATEGORY_VALUES],
+      description:
+        'An expense\'s category — only an expense has one: null on every other kind, a supplier bill (a stock purchase\'s "Paid") included',
+    },
     reference: { type: 'string', nullable: true },
     note: { type: 'string', nullable: true },
     attachment_keys: { type: 'array', items: { type: 'string' } },
     is_settled: { type: 'boolean', description: 'Its day is closed (B6)' },
     edit_count: { type: 'integer' },
     last_edit: { ...paymentEditsRecordSchema, nullable: true },
+    created_by_membership_id: {
+      type: 'string',
+      nullable: true,
+      description: 'Who recorded it — their membership (D81); null for an API key',
+    },
     created_at: { type: 'string', format: 'date-time' },
     updated_at: { type: 'string', format: 'date-time' },
   },
@@ -1351,10 +1574,20 @@ export const paymentsRecordExample = {
   contact: { id: 'con_k7x9m2pqr4w8n1v3a1b2c', name: 'Asha Mehta', primary_phone: '+919876543210' },
   patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
   invoice_id: 'invc_k7x9m2pqr4w8n1v3a1b2c',
+  invoice: {
+    invoice_sequence: 1042,
+    invoice_number: '2026-27/0412',
+    type: 'clinic',
+    due_amount: 680,
+  },
   invoice_credit_note_id: null,
+  invoice_credit_note_number: null,
   pending_credit_id: null,
+  pending_credit_number: null,
   stock_purchase_id: null,
+  stock_purchase: null,
   medical_purchase_order_id: null,
+  medical_purchase_order: null,
   reverses_payment_id: null,
   reversed_by_payment_id: null,
   payee_name: null,
@@ -1365,6 +1598,7 @@ export const paymentsRecordExample = {
   is_settled: false,
   edit_count: 1,
   last_edit: paymentEditsRecordExample,
+  created_by_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
   created_at: '2026-10-08T10:30:00.000Z',
   updated_at: '2026-10-08T11:00:00.000Z',
 };
@@ -1425,6 +1659,11 @@ export const pendingCreditsRecordSchema = {
     source_payment_id: { type: 'string', nullable: true },
     settle_by: { type: 'string', format: 'date', nullable: true },
     payment_ids: { type: 'array', items: { type: 'string' }, description: 'Its settlements' },
+    created_by_membership_id: {
+      type: 'string',
+      nullable: true,
+      description: 'Who recorded it — their membership (D81); null for an API key',
+    },
     created_at: { type: 'string', format: 'date-time' },
     updated_at: { type: 'string', format: 'date-time' },
   },
@@ -1448,6 +1687,7 @@ export const pendingCreditsRecordExample = {
   source_payment_id: null,
   settle_by: '2026-10-15',
   payment_ids: ['pay_k7x9m2pqr4w8n1v3a1b2c'],
+  created_by_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
   created_at: '2026-10-08T10:30:00.000Z',
   updated_at: '2026-10-08T11:00:00.000Z',
 };
@@ -1496,6 +1736,8 @@ export const dayClosesRecordSchema = {
     entry_count: { type: 'integer' },
     events: {
       type: 'array',
+      description:
+        "What happened to the day, oldest first. Render each by its `kind` and the day's figures, not by `text` (PAY-M4): `opened` — `opening_cash` (`opening_source`); `recounted` — `opening_cash` (the carried figure it replaced is only in the text); `closed` — `counted_cash`, `expected_cash`, `difference` and `difference_reason`; `auto_closed` — `expected_cash` (counted as expected); `reopened` — `text` is the reason as typed. After a reopen the figures are the latest close's (a reopen clears them, the next close stores its own): an earlier close's count is only in its event's text.",
       items: {
         type: 'object',
         properties: {
@@ -1504,8 +1746,18 @@ export const dayClosesRecordSchema = {
             type: 'string',
             enum: ['opened', 'recounted', 'closed', 'auto_closed', 'reopened'],
           },
-          text: { type: 'string', nullable: true },
-          membership_id: { type: 'string', nullable: true },
+          text: {
+            type: 'string',
+            nullable: true,
+            description:
+              'On `reopened`, the reason as typed. On the other kinds the server\'s English line, written when the step happened, with rupees formatted in it ("Opening cash ₹2,000.00", "Counted ₹5,950.00, expected ₹6,000.00", "Auto-closed: counted as expected ₹6000.00") — a log line, not for display in another language',
+          },
+          membership_id: {
+            type: 'string',
+            nullable: true,
+            description:
+              'Who did it; null for an `auto_closed` (the server closed it) or an API key',
+          },
           occurred_at: { type: 'string', format: 'date-time' },
         },
       },
@@ -2347,6 +2599,10 @@ export const stockVendorsRecordSchema = {
     phone: { type: 'string', example: '+919825044120', nullable: true },
     is_quick: { type: 'boolean', description: 'Added inline from a picker' },
     payable: { type: 'number', description: 'The open dues of its live purchases (S13)' },
+    purchase_count: {
+      type: 'integer',
+      description: 'How many live purchases it has, paid or not (D81)',
+    },
     created_at: { type: 'string', format: 'date-time' },
     updated_at: { type: 'string', format: 'date-time' },
   },
@@ -2359,6 +2615,7 @@ export const stockVendorsRecordExample = {
   phone: '+919800000001',
   is_quick: false,
   payable: 350,
+  purchase_count: 3,
   created_at: '2026-10-07T10:30:00.000Z',
   updated_at: '2026-10-07T10:30:00.000Z',
 };
@@ -2446,8 +2703,30 @@ export const stockItemMovementsRecordSchema = {
     note: { type: 'string', nullable: true },
     patient_treatment_id: { type: 'string', nullable: true },
     stock_purchase_id: { type: 'string', nullable: true },
+    stock_purchase_number: {
+      type: 'integer',
+      nullable: true,
+      description: "The purchase's number (#16) — on a row with a purchase (D81)",
+    },
+    bill_number: {
+      type: 'string',
+      nullable: true,
+      description: "The purchase's bill number, when it has one (D81)",
+    },
     stock_count_id: { type: 'string', nullable: true },
     reverts_stock_item_movement_id: { type: 'string', nullable: true },
+    reverts_type: {
+      type: 'string',
+      enum: ['opening', 'received', 'used', 'damaged', 'returned', 'adjust'],
+      nullable: true,
+      description: 'On a reverted row: the type of the movement it undid (D81)',
+    },
+    reverts_created_at: {
+      type: 'string',
+      format: 'date-time',
+      nullable: true,
+      description: 'On a reverted row: when the movement it undid was written (D81)',
+    },
     reverted_by_stock_item_movement_id: { type: 'string', nullable: true },
     revert_reason: {
       type: 'string',
@@ -2470,8 +2749,12 @@ export const stockItemMovementsRecordExample = {
   note: null,
   patient_treatment_id: 'ptrt_k7x9m2pqr4w8n1v3a1b2c',
   stock_purchase_id: null,
+  stock_purchase_number: null,
+  bill_number: null,
   stock_count_id: null,
   reverts_stock_item_movement_id: null,
+  reverts_type: null,
+  reverts_created_at: null,
   reverted_by_stock_item_movement_id: null,
   revert_reason: null,
   author_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
@@ -2582,28 +2865,18 @@ export const tasksRecordSchema = {
   properties: {
     id: { type: 'string', example: 'task_k7x9m2pqr4w8n1v3a1b2c' },
     kind: { type: 'string', enum: ['rule', 'follow_up', 'manual'] },
-    rule_key: {
+    rule_key: { type: 'string', enum: [...TASK_RULE_VALUES], nullable: true },
+    title: {
       type: 'string',
-      enum: [
-        'reply',
-        'failed_message',
-        'follow_up',
-        'claim',
-        'confirm',
-        'arrive',
-        'rebook',
-        'feedback',
-        'aftercare',
-        'call_back',
-        'next_visit',
-        'gone_quiet',
-        'payment_due',
-        'settle_by',
-      ],
-      nullable: true,
+      description:
+        'A rule task\'s (`kind` `rule`) is the server\'s English line, written once when the rule opened it, with the person\'s first name in it ("Reply to Anaya", "Collect the due on 2026-27/0412") — a client in another language builds its own from `rule_key` and the linked record (`contact`, `appointment_id`, `invoice_id`, …). A hand-made or follow-up task\'s is what its author typed',
     },
-    title: { type: 'string' },
-    why: { type: 'string', nullable: true },
+    why: {
+      type: 'string',
+      nullable: true,
+      description:
+        'A rule task\'s is the server\'s English reason, written when the rule opened it ("Their message is waiting for a reply", "Visit on 12 Oct" — dates as `DD Mon`, money unformatted: "₹3540.00 due from Anaya"); a pending credit\'s is the credit\'s reason as typed. A hand-made task\'s is what its author typed',
+    },
     owner_membership_id: { type: 'string', nullable: true },
     owner_role: {
       type: 'string',
@@ -2637,17 +2910,26 @@ export const tasksRecordSchema = {
     patient_review_id: { type: 'string', nullable: true },
     invoice_id: { type: 'string', nullable: true },
     pending_credit_id: { type: 'string', nullable: true },
+    medical_rep_id: { type: 'string', nullable: true },
     branch_id: { type: 'string', nullable: true },
     due_at: { type: 'string', format: 'date-time' },
     status: { type: 'string', enum: ['open', 'snoozed', 'done'] },
     snoozed_until: { type: 'string', format: 'date-time', nullable: true },
-    snooze_label: { type: 'string', nullable: true },
+    snooze_label: {
+      type: 'string',
+      nullable: true,
+      description: `What the snoozer sent ("Tomorrow 10:00"); \`No answer\` (English) when a \`no_answer\` outcome snoozed it for ${TASK_NO_ANSWER_SNOOZE_HOURS} hours — read \`snoozed_until\` for the time`,
+    },
     outcome: {
       type: 'string',
       enum: ['done', 'no_answer', 'doing_well', 'log_check_in', 'happy', 'unhappy'],
       nullable: true,
     },
-    result_text: { type: 'string', nullable: true },
+    result_text: {
+      type: 'string',
+      nullable: true,
+      description: `The outcome's label as the resolver sent it; \`${TASK_DONE_BY_CLINOZY}\` (English) when the rule closed the task itself (\`is_resolved_automatically\`) — render by \`outcome\` and \`is_resolved_automatically\``,
+    },
     note: { type: 'string', nullable: true },
     resolved_at: { type: 'string', format: 'date-time', nullable: true },
     is_resolved_automatically: { type: 'boolean' },
@@ -2696,6 +2978,7 @@ export const tasksRecordExample = {
   patient_review_id: null,
   invoice_id: null,
   pending_credit_id: null,
+  medical_rep_id: null,
   branch_id: 'brn_k7x9m2pqr4w8n1v3a1b2c',
   due_at: '2026-10-08T12:30:00.000Z',
   status: 'open',
@@ -2720,25 +3003,7 @@ export const taskRuleSettingsRecordSchema = {
   type: 'object',
   properties: {
     id: { type: 'string', nullable: true, example: 'trs_k7x9m2pqr4w8n1v3a1b2c' },
-    rule_key: {
-      type: 'string',
-      enum: [
-        'reply',
-        'failed_message',
-        'follow_up',
-        'claim',
-        'confirm',
-        'arrive',
-        'rebook',
-        'feedback',
-        'aftercare',
-        'call_back',
-        'next_visit',
-        'gone_quiet',
-        'payment_due',
-        'settle_by',
-      ],
-    },
+    rule_key: { type: 'string', enum: [...TASK_RULE_VALUES] },
     is_on: { type: 'boolean' },
     is_automatic: { type: 'boolean' },
     can_be_automatic: { type: 'boolean' },

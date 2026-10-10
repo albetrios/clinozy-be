@@ -35,8 +35,10 @@ describe('captured route examples fixture', () => {
       ['JWT', /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\./],
       ['Stripe-style secret', /"(sk|whsec|rk)_[A-Za-z0-9_]{8,}"/],
       [
+        // A prefixed opaque value that is not a public id the sanitizer replaced with its
+        // placeholder (`<prefix>_example000…`, any entity's prefix).
         'prefixed opaque credential',
-        /"(?!(?:usr|org|mem|inv|rol|key|pol|ses|am|mfa|ntf|whk|pln|sub|upl|exp|wda)_)[a-z]{2,8}_[A-Za-z0-9]{16,}"/,
+        /"(?![a-z]{2,8}_example0+")[a-z]{2,8}_[A-Za-z0-9]{16,}"/,
       ],
       ['otpauth URI', /otpauth:\/\//],
       ['long hex blob', /"[A-Fa-f0-9]{40,}"/],

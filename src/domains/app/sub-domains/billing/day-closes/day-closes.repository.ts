@@ -6,7 +6,10 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { BaseRecordRepository } from '@/domains/app/base-record.repository.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { PAYMENT_DIRECTION } from '@/domains/app/sub-domains/billing/payments/payments.constants.js';
-import { paymentDay } from '@/domains/app/sub-domains/billing/payments/payments.repository.js';
+import {
+  membershipOfUserSql,
+  paymentDay,
+} from '@/domains/app/sub-domains/billing/payments/payments.repository.js';
 import { payments } from '@/domains/app/sub-domains/billing/payments/payments.schema.js';
 import { DAY_CLOSE_STATUS } from './day-closes.constants.js';
 import { day_close_events, day_closes } from './day-closes.schema.js';
@@ -201,9 +204,10 @@ export class DayClosesRepository extends BaseRecordRepository {
     organizationId: number,
   ): Promise<Map<number, DayCloseMemberTotal[]>> {
     if (dayCloseIds.length === 0) return new Map();
-    const membership = sql<
-      string | null
-    >`(select ${memberships.public_id} from ${memberships} where ${memberships.organization_id} = ${organizationId} and ${memberships.user_id} = ${payments.created_by_user_id} order by ${memberships.deleted_at} desc nulls first limit 1)`;
+    const membership = membershipOfUserSql({
+      organizationId,
+      userColumn: payments.created_by_user_id,
+    });
     const rows = await getRequestDatabase()
       .select({
         id: day_closes.id,

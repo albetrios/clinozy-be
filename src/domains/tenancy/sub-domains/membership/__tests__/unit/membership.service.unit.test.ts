@@ -332,6 +332,65 @@ describe('MembershipService', () => {
     expect(membershipRepository.update).not.toHaveBeenCalled();
   });
 
+  it("update refuses the owner's status with reason owner_membership_fixed (D81 (4))", async () => {
+    vi.mocked(membershipRepository.findAnyByPublicId).mockResolvedValue({
+      ...membershipRow,
+      user_id: 99,
+    } as never);
+    await expect(
+      service.update(asScope('org_public'), 'owner_mem', { status: 'suspended' }, 'admin_public'),
+    ).rejects.toMatchObject({
+      messageKey: 'errors:ownerMembershipCannotBeModified',
+      reason: 'owner_membership_fixed',
+    });
+  });
+
+  it('update lets the owner hold extra roles after their main one (D81 (4))', async () => {
+    vi.mocked(membershipRepository.findAnyByPublicId).mockResolvedValue({
+      ...membershipRow,
+      user_id: 99,
+      role_id: role.id,
+    } as never);
+    vi.mocked(memberRoleService.requireRoleRecordForOrganization)
+      .mockResolvedValueOnce(role as never)
+      .mockResolvedValueOnce({ id: 6, public_id: 'doctor_public', name: 'Doctor' } as never);
+    await service.update(
+      asScope('org_public'),
+      'owner_mem',
+      { role_ids: ['role_public', 'doctor_public'] },
+      'owner_public',
+    );
+    expect(membershipRepository.update).toHaveBeenCalledWith(
+      'owner_mem',
+      organization.id,
+      expect.objectContaining({ role_id: role.id }),
+      expect.anything(),
+    );
+    expect(membershipAdditionalRolesRepository.replaceForMembership).toHaveBeenCalledWith(
+      expect.objectContaining({ role_ids: [6] }),
+    );
+  });
+
+  it("update refuses a change of the owner's main role (D81 (4))", async () => {
+    vi.mocked(membershipRepository.findAnyByPublicId).mockResolvedValue({
+      ...membershipRow,
+      user_id: 99,
+      role_id: role.id,
+    } as never);
+    vi.mocked(memberRoleService.requireRoleRecordForOrganization)
+      .mockResolvedValueOnce({ id: 6, public_id: 'doctor_public', name: 'Doctor' } as never)
+      .mockResolvedValueOnce(role as never);
+    await expect(
+      service.update(
+        asScope('org_public'),
+        'owner_mem',
+        { role_ids: ['doctor_public', 'role_public'] },
+        'owner_public',
+      ),
+    ).rejects.toMatchObject({ reason: 'owner_membership_fixed' });
+    expect(membershipRepository.update).not.toHaveBeenCalled();
+  });
+
   it('update allows modifying a non-owner membership with matching user_id below owner', async () => {
     // Sanity: user_id:10 !== owner_user_id:99 — update proceeds normally
     await service.update(
@@ -582,6 +641,9 @@ describe('MembershipService', () => {
     await expect(
       service.leaveOrganization(asScope('org_public'), 'owner_public'),
     ).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(
+      service.leaveOrganization(asScope('org_public'), 'owner_public'),
+    ).rejects.toMatchObject({ reason: 'owner_cannot_leave' });
   });
 
   it('leaveOrganization soft-deletes non-owner membership', async () => {
@@ -591,7 +653,10 @@ describe('MembershipService', () => {
   });
 
   it('transferOwnership requires current owner and updates organization owner', async () => {
-    const transferOrganizationOwnership = vi.fn().mockResolvedValue(undefined);
+    // The updated organization comes back so the answer is serialized against the new owner.
+    const transferOrganizationOwnership = vi
+      .fn()
+      .mockResolvedValue({ ...organization, owner_user_id: 10 });
     const organizationServiceWithTransfer = {
       ...organizationService,
       requireOrganizationRecordByPublicId: vi.fn().mockResolvedValue({
@@ -617,12 +682,14 @@ describe('MembershipService', () => {
       permissionRepository,
     );
 
-    await transferService.transferOwnership(
+    const transferred = await transferService.transferOwnership(
       asScope('org_public'),
       { new_owner_user_id: 'new_owner_public' },
       'owner_public',
     );
     expect(transferOrganizationOwnership).toHaveBeenCalled();
+    // The new owner's membership (user 10) reads as the owner (D81 (4)).
+    expect(transferred.is_owner).toBe(true);
   });
 
   it('transferOwnership rejects non-owner caller', async () => {

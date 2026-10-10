@@ -158,8 +158,8 @@ export class SubscriptionRepository {
    *   blocks on this row until the caller's seat check + membership insert commit, closing the
    *   two-concurrent-adds-exceed-the-limit race. (2) a plain (unlocked) lookup of the plan's
    *   `included_seats` (a global catalog row that must NOT be locked). Returns the per-subscription
-   *   `seats` (purchased from Stripe) and `plan_included_seats` so the caller computes
-   *   `seats_total = seats ?? included_seats ?? null` (null = unlimited).
+   *   `seats` (the Stripe quantity) and `plan_included_seats` so the caller resolves the ceiling —
+   *   the plan's `included_seats`, raised by a quantity bought above it (null = unlimited).
    * - **Failure modes:** returns `null` when the organization has no active subscription (the seat check is
    *   then a no-op — the billing-free flow still works).
    * - **Side effects:** acquires a row-level `FOR UPDATE` lock released at the enclosing

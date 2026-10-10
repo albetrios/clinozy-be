@@ -1,6 +1,10 @@
 /** OpenAPI success responses — app domain (branches and their user accesses). */
 import type { ResponseDefinition } from '@tooling/openapi/response-map/building-blocks.js';
-import { wrapPaginated, wrapSuccess } from '@tooling/openapi/response-map/building-blocks.js';
+import {
+  wrapPaginated,
+  wrapSuccess,
+  wrapUncountedPaginated,
+} from '@tooling/openapi/response-map/building-blocks.js';
 import * as schemas from '@tooling/openapi/response-map/resource-schemas.js';
 
 const branchResponse: ResponseDefinition = {
@@ -82,9 +86,16 @@ export const appRouteResponses: Record<string, ResponseDefinition> = {
   'POST /api/v1/app/branches': branchResponse,
   'PATCH /api/v1/app/branches/{branch_id}': branchResponse,
   // ── Memberships (the team picker and member directory) ──
+  // Neither directory counts: no `meta.pagination.estimated_total` (SHELL-M2)
   'GET /api/v1/app/memberships': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.appMembershipSchema, [schemas.appMembershipExample]),
+    schema: wrapUncountedPaginated(schemas.appMembershipSchema, [schemas.appMembershipExample]),
+    example: null,
+  },
+  // ── Roles (the role directory, launch D81 (4)) ──
+  'GET /api/v1/app/roles': {
+    statusCode: 200,
+    schema: wrapUncountedPaginated(schemas.appRoleSchema, [schemas.appRoleExample]),
     example: null,
   },
   // ── The member's own preferences (launch §2.F) ──

@@ -10,7 +10,10 @@ import { OauthCallbackQueryDto } from '@/domains/auth/auth.dto.js';
 import { listInvoicesQueryDto } from '@/domains/billing/sub-domains/subscription/subscription.dto.js';
 import { listNotificationsQueryDto } from '@/domains/notify/sub-domains/notification/notification.dto.js';
 import { listMembershipsQueryDto } from '@/domains/tenancy/sub-domains/membership/membership.dto.js';
-import { listAppMembershipsQueryDto } from '@/domains/app/sub-domains/memberships/memberships.dto.js';
+import {
+  listAppMembershipsQueryDto,
+  listAppRolesQueryDto,
+} from '@/domains/app/sub-domains/memberships/memberships.dto.js';
 import { listMemberRolesQueryDto } from '@/domains/tenancy/sub-domains/member-roles/member-role.dto.js';
 import { listOrganizationApiKeysQueryDto } from '@/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.dto.js';
 import { listOrganizationsQueryDto } from '@/domains/tenancy/sub-domains/organization/organization.dto.js';
@@ -87,6 +90,7 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/tenancy/organization/api-keys': listOrganizationApiKeysQueryDto,
   'GET /api/v1/tenancy/organization/memberships': listMembershipsQueryDto,
   'GET /api/v1/app/memberships': listAppMembershipsQueryDto,
+  'GET /api/v1/app/roles': listAppRolesQueryDto,
   'GET /api/v1/tenancy/organization/roles': listMemberRolesQueryDto,
   'GET /api/v1/notify/notifications': listNotificationsQueryDto,
   'GET /api/v1/notify/webhooks/{webhook_id}/delivery-attempts': listLimitQuerySchema,

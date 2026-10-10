@@ -61,7 +61,7 @@ export function offeringsRoutes(service: OfferingsService): FastifyPluginAsync {
         schema: {
           summary: 'Create offering',
           description:
-            'Adds an offering to the active organization with its prices: `min_price` ≤ `offer_price` ≤ `price` (a 400 naming the field otherwise, O4); GST defaults to 0 for a consultation, else 18; `branch_ids` empty = every branch. A name another offering has is a 409. Requires offering:create.',
+            'Adds an offering to the active organization with its prices: `min_price` ≤ `offer_price` ≤ `price` (a 400 naming the field otherwise, O4); GST defaults to 0 for a consultation, else 18; `branch_ids` empty = every branch. `min_price` needs offering:lower_price:read too — sent without it, a 403 `field_permission_required`. A name another offering has (any case) is a 409 `offering_name_taken`. Requires offering:create.',
           tags: ['Offering'],
           body: CreateOfferingDto,
         },
@@ -93,7 +93,7 @@ export function offeringsRoutes(service: OfferingsService): FastifyPluginAsync {
         schema: {
           summary: 'Update offering',
           description:
-            "Changes any of an offering's fields, prices included; null clears an optional one, `branch_ids` replaces the set (`[]` = every branch). The prices the save would leave must keep `min_price` ≤ `offer_price` ≤ `price` (O4). Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 `record_changed` naming who changed it (D43). Requires offering:update.",
+            "Changes any of an offering's fields, prices included; null clears an optional one, `branch_ids` replaces the set (`[]` = every branch). The prices the save would leave must keep `min_price` ≤ `offer_price` ≤ `price` (O4); `min_price` needs offering:lower_price:read too — sent without it, a 403 `field_permission_required`. A name another offering has (any case) is a 409 `offering_name_taken`. Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 `record_changed` naming who changed it (D43). Requires offering:update.",
           tags: ['Offering'],
           params: offeringsIdParamsDto,
           body: UpdateOfferingDto,

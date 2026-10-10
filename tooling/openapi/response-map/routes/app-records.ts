@@ -1,6 +1,10 @@
 /** OpenAPI success responses — the app record tables (launch iteration, generated from the table specs). */
 import type { ResponseDefinition } from '@tooling/openapi/response-map/building-blocks.js';
-import { wrapPaginated, wrapSuccess } from '@tooling/openapi/response-map/building-blocks.js';
+import {
+  wrapPaginated,
+  wrapSuccess,
+  wrapUncountedPaginated,
+} from '@tooling/openapi/response-map/building-blocks.js';
 import * as schemas from '@tooling/openapi/response-map/resource-schemas.js';
 
 export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
@@ -606,7 +610,16 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
   },
   'GET /api/v1/app/invoices': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.invoicesRecordSchema, [schemas.invoicesRecordExample]),
+    schema: wrapPaginated(schemas.invoicesRecordSchema, [schemas.invoicesRecordExample], {
+      due_total: {
+        type: 'number',
+        description: 'What is due on every invoice the filters match, every page (D81)',
+      },
+      paid_total: {
+        type: 'number',
+        description: 'What is paid on every invoice the filters match, every page (D81)',
+      },
+    }),
     example: null,
   },
   'GET /api/v1/app/invoices/exports': {
@@ -617,6 +630,16 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
   'POST /api/v1/app/invoices': {
     statusCode: 200,
     schema: wrapSuccess(schemas.invoicesRecordSchema, schemas.invoicesRecordExample),
+    example: null,
+  },
+  'POST /api/v1/app/invoices/preview': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.invoicePreviewSchema, schemas.invoicePreviewExample),
+    example: null,
+  },
+  'POST /api/v1/app/invoices/{invoice_id}/preview': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.invoicePreviewSchema, schemas.invoicePreviewExample),
     example: null,
   },
   'GET /api/v1/app/invoices/{invoice_id}': {
@@ -733,9 +756,12 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.paymentsRecordSchema, schemas.paymentsRecordExample),
     example: null,
   },
+  // The edits never count: no `meta.pagination.estimated_total` (SHELL-M2's class)
   'GET /api/v1/app/payments/{payment_id}/edits': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.paymentEditsRecordSchema, [schemas.paymentEditsRecordExample]),
+    schema: wrapUncountedPaginated(schemas.paymentEditsRecordSchema, [
+      schemas.paymentEditsRecordExample,
+    ]),
     example: null,
   },
   'POST /api/v1/app/payments/{payment_id}/reverse': {
@@ -1375,7 +1401,12 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
   },
   'GET /api/v1/app/stock-vendors': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.stockVendorsRecordSchema, [schemas.stockVendorsRecordExample]),
+    schema: wrapPaginated(schemas.stockVendorsRecordSchema, [schemas.stockVendorsRecordExample], {
+      payable_total: {
+        type: 'number',
+        description: 'The open dues of every vendor the filters match (D81)',
+      },
+    }),
     example: null,
   },
   'POST /api/v1/app/stock-vendors': {

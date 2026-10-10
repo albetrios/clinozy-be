@@ -42,10 +42,12 @@ export function validateDeleteMembershipQuery(data: unknown): DeleteMembershipQu
 
 /**
  * Validates the `GET /organization/memberships` query string against the strict
- * {@link listMembershipsQueryDto} (cursor pagination only).
+ * {@link listMembershipsQueryDto} — the paging, the search, the sort and the filters — with the
+ * plain invalid-input copy (USERS-M5: a bad `status` is not a paging error), the field named in
+ * `errors[]`.
  */
 export function validateListMembershipsQuery(data: unknown): ListMembershipsQueryInput {
-  return parseWithSchema(listMembershipsQueryDto, data, 'errors:validation.invalidPagination');
+  return parseWithSchema(listMembershipsQueryDto, data);
 }
 
 /**

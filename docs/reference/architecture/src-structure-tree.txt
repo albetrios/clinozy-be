@@ -58,6 +58,7 @@ src/
     │   │   ├── billing/
     │   │   │   ├── __tests__/
     │   │   │   │   └── integration/
+    │   │   │   │   │   ├── billing-desk.integration.test.ts
     │   │   │   │   │   ├── billing-races.integration.test.ts
     │   │   │   │   │   ├── billing.integration.test.ts
     │   │   │   │   │   └── invoice-numbering.integration.test.ts
@@ -113,6 +114,7 @@ src/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   ├── invoices.amounts.property.unit.test.ts
     │   │   │   │   │   │   ├── invoices.amounts.unit.test.ts
+    │   │   │   │   │   │   ├── invoices.pricing.unit.test.ts
     │   │   │   │   │   │   └── invoices.service.unit.test.ts
     │   │   │   │   ├── invoices.amounts.ts
     │   │   │   │   ├── invoices.constants.ts
@@ -120,6 +122,7 @@ src/
     │   │   │   │   ├── invoices.dto.ts
     │   │   │   │   ├── invoices.lines.ts
     │   │   │   │   ├── invoices.overview.md
+    │   │   │   │   ├── invoices.pricing.ts
     │   │   │   │   ├── invoices.repository.ts
     │   │   │   │   ├── invoices.routes.ts
     │   │   │   │   ├── invoices.rules.ts
@@ -248,7 +251,8 @@ src/
     │   │   │   │   │   ├── contacts-household.integration.test.ts
     │   │   │   │   │   └── contacts.integration.test.ts
     │   │   │   │   └── unit/
-    │   │   │   │   │   └── contacts.service.unit.test.ts
+    │   │   │   │   │   ├── contacts.service.unit.test.ts
+    │   │   │   │   │   └── contacts.validator.unit.test.ts
     │   │   │   ├── contact-activities/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
@@ -936,13 +940,16 @@ src/
     │   │   │   ├── __tests__/
     │   │   │       ├── integration/
     │   │   │       │   ├── task-rules-clock.integration.test.ts
+    │   │   │       │   ├── task-rules-requested.integration.test.ts
     │   │   │       │   ├── task-rules.worker.integration.test.ts
     │   │   │       │   └── tasks.integration.test.ts
     │   │   │       └── unit/
     │   │   │       │   ├── task-rules-messages.unit.test.ts
     │   │   │       │   ├── task-rules-sweep.processor.unit.test.ts
     │   │   │       │   ├── task-rules.processor.unit.test.ts
-    │   │   │       │   └── tasks.service.unit.test.ts
+    │   │   │       │   ├── task-rules.queue.unit.test.ts
+    │   │   │       │   ├── tasks.service.unit.test.ts
+    │   │   │       │   └── tasks.validator.unit.test.ts
     │   │   │   ├── queues/
     │   │   │       ├── task-rules.job.schema.ts
     │   │   │       └── task-rules.queue.ts
@@ -1393,6 +1400,7 @@ src/
     │   │   │   ├── __tests__/
     │   │   │       ├── integration/
     │   │   │       │   ├── subscription-happy.integration.test.ts
+    │   │   │       │   ├── subscription-seat-ceiling.integration.test.ts
     │   │   │       │   └── subscription.integration.test.ts
     │   │   │       └── unit/
     │   │   │       │   ├── billing-account.serializer.unit.test.ts
@@ -1725,6 +1733,8 @@ src/
     │   │   │   │   └── membership-additional-roles.schema.ts
     │   │   │   ├── membership-invitation/
     │   │   │   │   ├── __tests__/
+    │   │   │   │   │   ├── integration/
+    │   │   │   │   │   │   └── membership-invitation-token-echo.integration.test.ts
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   ├── events/
     │   │   │   │   │   │       └── membership-invitation.event-handlers.unit.test.ts
@@ -1901,6 +1911,7 @@ src/
     │   │   │       │   ├── permission-cache-lock-order.policy.unit.test.ts
     │   │   │       │   ├── permission-cache-no-scan.policy.unit.test.ts
     │   │   │       │   ├── permission-cache.service.invalidation.unit.test.ts
+    │   │   │       │   ├── permission-catalog.policy.unit.test.ts
     │   │   │       │   ├── permission.controller.unit.test.ts
     │   │   │       │   ├── permission.repository.cross-organization.db.unit.test.ts
     │   │   │       │   ├── permission.repository.db.unit.test.ts
@@ -3195,7 +3206,8 @@ src/
     │   │   ├── auth.error.unit.test.ts
     │   │   └── validation.error.unit.test.ts
     │   ├── helpers/
-    │   │   └── json-query.helper.unit.test.ts
+    │   │   ├── json-query.helper.unit.test.ts
+    │   │   └── route-status-observer.unit.test.ts
     │   ├── infrastructure/
     │   │   ├── cache/
     │   │   │   ├── redis-client.lifecycle.unit.test.ts
@@ -3346,6 +3358,7 @@ src/
     │   │   │   ├── route-examples.unit.test.ts
     │   │   │   ├── route-extractor.unit.test.ts
     │   │   │   ├── route-response-map-statuses.unit.test.ts
+    │   │   │   ├── route-schema-metadata.unit.test.ts
     │   │   │   └── schema-enricher.unit.test.ts
     │   │   ├── agent-docker-daemon-script.unit.test.ts
     │   │   ├── agent-live-stack.policy.unit.test.ts

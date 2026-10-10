@@ -219,12 +219,13 @@ describe('Security: app records are isolated per organization (models organizati
       contact_id: contact,
       items: [{ offering_id: offering, quantity: 1 }],
     });
+    // The bill is ₹450: billing applies the live 10% offer (M26, D81)
     await make('payment_id', 'POST', '/app/payments', {
       kind: 'receipt',
       branch_id: vesu,
       contact_id: contact,
       invoice_id: invoice,
-      splits: [{ mode: 'cash', amount: 500 }],
+      splits: [{ mode: 'cash', amount: 450 }],
     });
     // The patient offering a bill's line sold (the shape an invoice save writes for a package).
     const boughtOffering = generatePublicId('patientOffering');

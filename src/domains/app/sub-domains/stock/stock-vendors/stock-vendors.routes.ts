@@ -31,7 +31,7 @@ export function stockVendorsRoutes(service: StockVendorsService): FastifyPluginA
         schema: {
           summary: 'List stock vendors',
           description:
-            "Returns one page of the organization's stock vendors — the vendor picker — each with `payable` (the open dues of its purchases). `q` searches the name; the created range narrows; sort `name` (default, A–Z) or `created_at`. Requires stock_item:read.",
+            "Returns one page of the organization's stock vendors — the vendor picker and the Vendors tab — each with `payable` (the open dues of its live purchases) and `purchase_count` (its live purchases, paid or not); `meta.payable_total` is the open dues of every vendor the filters match (the footer, over every page). `q` searches the name; the created range narrows; sort `name` (default, A–Z), `created_at` or `payable` (most owed first by default). Requires stock_item:read.",
           tags: ['Stock'],
           querystring: listStockVendorsQueryDto,
         },
@@ -62,7 +62,8 @@ export function stockVendorsRoutes(service: StockVendorsService): FastifyPluginA
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Get a stock vendor',
-          description: 'Returns one stock vendor with its `payable`. Requires stock_item:read.',
+          description:
+            'Returns one stock vendor with its `payable` and `purchase_count`. Requires stock_item:read.',
           tags: ['Stock'],
           params: stockVendorsIdParamsDto,
         },

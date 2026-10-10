@@ -58,6 +58,23 @@ describe('rate-limit-presets', () => {
     expect(STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS.max).toBe(5000);
   });
 
+  it('REFRESH_RATE_LIMIT caps token refresh at 30 req/min per IP outside test', async () => {
+    mockEnv.RATE_LIMIT_RELAXED_CAPS = false;
+    const { REFRESH_RATE_LIMIT } = await import(
+      '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js'
+    );
+    expect(REFRESH_RATE_LIMIT.config.rateLimit.max).toBe(30);
+    expect(REFRESH_RATE_LIMIT.config.rateLimit.timeWindow).toBe(60_000);
+  });
+
+  it('REFRESH_RATE_LIMIT lifts the cap when RATE_LIMIT_RELAXED_CAPS (launch ROUTE #156, N22)', async () => {
+    mockEnv.RATE_LIMIT_RELAXED_CAPS = true;
+    const { REFRESH_RATE_LIMIT } = await import(
+      '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js'
+    );
+    expect(REFRESH_RATE_LIMIT.config.rateLimit.max).toBe(5000);
+  });
+
   it('sec-re-11: per-email key generator hashes the normalized body email and never embeds the raw address', async () => {
     // Prior to this fix the key was `email:user@example.com` verbatim — the
     // literal value Redis stored, the value the structured log carried, and

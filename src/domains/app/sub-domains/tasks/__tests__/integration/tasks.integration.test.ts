@@ -56,7 +56,7 @@ describe('Tasks — integration (routes-final §10)', () => {
   let doctor = '';
   let frontDesk = '';
   let counsellor = '';
-  let marketing = '';
+  let accountant = '';
 
   let asha = '';
   let bela = '';
@@ -120,7 +120,7 @@ describe('Tasks — integration (routes-final §10)', () => {
     doctor = fixture.members.doctor.membershipPublicId;
     frontDesk = fixture.members.front_desk.membershipPublicId;
     counsellor = fixture.members.counsellor.membershipPublicId;
-    marketing = fixture.members.marketing.membershipPublicId;
+    accountant = fixture.members.accountant.membershipPublicId;
   });
 
   afterAll(async () => {
@@ -170,8 +170,13 @@ describe('Tasks — integration (routes-final §10)', () => {
       '/app/task-rule-settings',
       rules(),
     );
-    flow.as('marketing');
-    await flow.expect(403, 'marketing has no tasks (task:read)', 'GET', '/app/task-rule-settings');
+    flow.as('accountant');
+    await flow.expect(
+      403,
+      'the accountant has no tasks (task:read)',
+      'GET',
+      '/app/task-rule-settings',
+    );
   });
 
   it('10.A tasks — add, the tabs and the drawer (routes 1–3, 5)', async () => {
@@ -224,9 +229,9 @@ describe('Tasks — integration (routes-final §10)', () => {
     });
     flow.expectValue('neither: field', FIELDS, 'owner_membership_id');
     await flow.expect(400, "an owner who can't work tasks (TK6)", 'POST', '/app/tasks', {
-      title: 'Marketing',
+      title: 'Accountant',
       due_at: instant(HOUR),
-      owner_membership_id: marketing,
+      owner_membership_id: accountant,
     });
     flow.expectValue("can't work: field", FIELDS, 'owner_membership_id');
     await flow.expect(400, "another person's lead (TK5)", 'POST', '/app/tasks', {
@@ -251,8 +256,8 @@ describe('Tasks — integration (routes-final §10)', () => {
       { title: 'No key', due_at: instant(HOUR), owner_role: 'front_desk' },
       { idempotencyKey: false },
     );
-    flow.as('marketing');
-    await flow.expect(403, "marketing can't add tasks", 'POST', '/app/tasks', {
+    flow.as('accountant');
+    await flow.expect(403, "the accountant can't add tasks", 'POST', '/app/tasks', {
       title: 'No',
       due_at: instant(HOUR),
       owner_role: 'front_desk',
@@ -270,6 +275,31 @@ describe('Tasks — integration (routes-final §10)', () => {
     await flow.expect(200, 'by the person', 'GET', `/app/tasks?scope=everyone&contact_id=${bela}`);
     flow.expectValue("Bela's: the price list", IDS, priceList);
     await flow.expect(400, 'an unknown tab', 'GET', '/app/tasks?tab=later');
+
+    // The type filter (D81 T6): `kind` takes several, `rule_key` too — a task of any one named.
+    await flow.expect(
+      200,
+      'two kinds at once',
+      'GET',
+      `/app/tasks?q=${lastName}&scope=everyone&kind=follow_up,manual`,
+    );
+    flow.expectValue('both tasks made by hand', IDS, `${callLab},${priceList}`);
+    await flow.expect(
+      200,
+      'a rule or the kinds made by hand',
+      'GET',
+      `/app/tasks?q=${lastName}&scope=everyone&rule_key=confirm&kind=follow_up,manual`,
+    );
+    flow.expectValue('OR, not AND: the hand-made ones still show', IDS, `${callLab},${priceList}`);
+    await flow.expect(
+      200,
+      'the rules kind only',
+      'GET',
+      `/app/tasks?q=${lastName}&scope=everyone&kind=rule`,
+    );
+    flow.expectValue('no rule tasks for them yet', '.data | length', 0);
+    await flow.expect(400, 'an unknown kind', 'GET', '/app/tasks?kind=manual,later');
+    await flow.expect(400, 'a kind twice', 'GET', '/app/tasks?kind=manual,manual');
 
     flow.as('front_desk');
     await flow.expect(200, 'get the task (the drawer)', 'GET', `/app/tasks/${callLab}`);
@@ -323,6 +353,37 @@ describe('Tasks — integration (routes-final §10)', () => {
     );
     flow.expectValue('it is there', IDS, callLab);
 
+    // A lead's task moves its lead, so it needs lead:update too (D81 TASKS-M3): the therapist works
+    // tasks but not leads.
+    flow.as('owner');
+    await flow.expect(200, 'the lead before', 'GET', `/app/leads/${ashaLead}`);
+    const leadOwnerBefore = flow.last('.data.owner_membership_id');
+    flow.as('therapist');
+    await flow.expect(
+      403,
+      "the therapist can't reassign a lead's task",
+      'POST',
+      `/app/tasks/${callLab}/reassign`,
+      { owner_role: 'counsellor' },
+    );
+    flow.expectValue('lead: why', REASON, 'missing_permission');
+    await flow.expect(
+      200,
+      'but reassigns a task without a lead',
+      'POST',
+      `/app/tasks/${priceList}/reassign`,
+      { owner_membership_id: counsellor },
+    );
+    flow.expectValue(
+      "still the counsellor's, one change",
+      '[.data.owner_membership_id, (.data.owner_changes | length)] | map(tostring) | join(",")',
+      `${counsellor},1`,
+    );
+    flow.as('owner');
+    await flow.expect(200, 'the lead after', 'GET', `/app/leads/${ashaLead}`);
+    flow.expectValue('the lead did not move', '.data.owner_membership_id', leadOwnerBefore);
+    flow.as('front_desk');
+
     // Reassign (TK8): an owner-change row; a lead's task moves the lead too.
     await flow.expect(200, 'give it to the counsellor', 'POST', `/app/tasks/${callLab}/reassign`, {
       owner_membership_id: counsellor,
@@ -342,10 +403,10 @@ describe('Tasks — integration (routes-final §10)', () => {
       owner_membership_id: frontDesk,
       owner_role: 'front_desk',
     });
-    await flow.expect(400, 'to marketing', 'POST', `/app/tasks/${callLab}/reassign`, {
-      owner_membership_id: marketing,
+    await flow.expect(400, 'to the accountant', 'POST', `/app/tasks/${callLab}/reassign`, {
+      owner_membership_id: accountant,
     });
-    flow.expectValue('marketing: field', FIELDS, 'owner_membership_id');
+    flow.expectValue('accountant: field', FIELDS, 'owner_membership_id');
     await flow.expect(
       200,
       'back to the front desk queue',
@@ -369,14 +430,33 @@ describe('Tasks — integration (routes-final §10)', () => {
     await flow.expect(400, 'an unknown outcome', 'POST', `/app/tasks/${callLab}/resolve`, {
       outcome: 'maybe',
     });
+    // A task made by hand offers done and no answer only (D81 TASKS-M2).
     await flow.expect(
       400,
-      'doing well needs a patient file',
+      "doing well isn't a hand-made task's",
       'POST',
       `/app/tasks/${callLab}/resolve`,
       { outcome: 'doing_well' },
     );
-    flow.expectValue('no file: field', FIELDS, 'outcome');
+    flow.expectValue('doing well: field', FIELDS, 'outcome');
+    await flow.expect(
+      400,
+      "nor happy (a feedback task's)",
+      'POST',
+      `/app/tasks/${callLab}/resolve`,
+      { outcome: 'happy' },
+    );
+    flow.expectValue(
+      'happy: field, and the outcomes it offers',
+      '[.error.errors[0].field, (.error.errors[0].message | contains("done, no_answer"))] | map(tostring) | join(",")',
+      'outcome,true',
+    );
+    await flow.expect(200, 'still open', 'GET', `/app/tasks/${callLab}`);
+    flow.expectValue(
+      'nothing written',
+      '[.data.status, .data.outcome] | map(tostring) | join(",")',
+      'snoozed,null',
+    );
     await flow.expect(
       200,
       'no answer — try again in 3 hours',
@@ -525,6 +605,47 @@ describe('Tasks — integration (routes-final §10)', () => {
       "delete a rule's task",
       'DELETE',
       `/app/tasks/${confirmTask}?reason=not_needed`,
+    );
+
+    // Each rule offers its own outcomes (D81 TASKS-M2): a confirm, done or no answer.
+    await flow.expect(
+      400,
+      "doing well isn't a confirm's",
+      'POST',
+      `/app/tasks/${confirmTask}/resolve`,
+      { outcome: 'doing_well' },
+    );
+    flow.expectValue('confirm, doing well: field', FIELDS, 'outcome');
+    await flow.expect(400, 'nor unhappy', 'POST', `/app/tasks/${confirmTask}/resolve`, {
+      outcome: 'unhappy',
+    });
+    flow.expectValue('confirm, unhappy: field', FIELDS, 'outcome');
+
+    // The type filter (D81 T6): a rule and the kinds made by hand, together.
+    await flow.expect(
+      200,
+      "Asha's confirms",
+      'GET',
+      `/app/tasks?scope=everyone&contact_id=${asha}&rule_key=confirm`,
+    );
+    flow.expectValue('the confirm task only', IDS, confirmTask);
+    await flow.expect(
+      200,
+      "Asha's follow-ups set by hand",
+      'GET',
+      `/app/tasks?scope=everyone&contact_id=${asha}&kind=follow_up,manual`,
+    );
+    flow.expectValue('the follow-up only', IDS, nextTask);
+    await flow.expect(
+      200,
+      "Asha's confirms and follow-ups together",
+      'GET',
+      `/app/tasks?scope=everyone&contact_id=${asha}&rule_key=confirm&kind=follow_up,manual`,
+    );
+    flow.expectValue(
+      'both',
+      '[.data[].id] | sort | join(",")',
+      [confirmTask, nextTask].sort((left, right) => (left < right ? -1 : 1)).join(','),
     );
 
     // Its record changes — the task closes itself, done by the app.
@@ -726,6 +847,65 @@ describe('Tasks — integration (routes-final §10)', () => {
       'nothing due: closed by the app',
       '[.data.status, .data.result_text] | join(",")',
       `done,${TASK_DONE_BY_CLINOZY}`,
+    );
+  });
+
+  it('D81 TASKS-M2, TASKS-M3 — a claim task offers done, and claiming needs lead:update', async () => {
+    flow.as('owner');
+    const chandni = await person('Chandni', '83');
+    await flow.expect(200, "Chandni's lead, the front desk's", 'POST', '/app/leads', {
+      contact_id: chandni,
+      branch_id: vesu,
+      owner_membership_id: frontDesk,
+    });
+    const chandniLead = flow.last('.data.id');
+    await getOperatorSql()`
+      UPDATE app.leads SET held_until = now() - interval '1 minute' WHERE public_id = ${chandniLead}
+    `;
+    await runTaskRules();
+    await ruleTasks('claim', `lead_id=${chandniLead}`);
+    flow.expectValue(
+      'a Claim task in the counsellor queue',
+      '[(.data | length), .data[0].owner_role] | map(tostring) | join(",")',
+      '1,counsellor',
+    );
+    const claimTask = flow.last('.data[0].id');
+
+    flow.as('therapist');
+    await flow.expect(400, 'a claim offers done only', 'POST', `/app/tasks/${claimTask}/resolve`, {
+      outcome: 'no_answer',
+    });
+    flow.expectValue('claim, no answer: field', FIELDS, 'outcome');
+    await flow.expect(
+      403,
+      "the therapist can't take the lead (lead:update)",
+      'POST',
+      `/app/tasks/${claimTask}/resolve`,
+      { outcome: 'done' },
+    );
+    flow.expectValue('claim: why', REASON, 'missing_permission');
+    flow.as('owner');
+    await flow.expect(200, 'the claim task', 'GET', `/app/tasks/${claimTask}`);
+    flow.expectValue('still open', '.data.status', 'open');
+    await flow.expect(200, 'the lead', 'GET', `/app/leads/${chandniLead}`);
+    flow.expectValue("still the front desk's", '.data.owner_membership_id', frontDesk);
+
+    flow.as('counsellor');
+    await flow.expect(200, 'the counsellor claims it', 'POST', `/app/tasks/${claimTask}/resolve`, {
+      outcome: 'done',
+      result_text: 'Claimed',
+    });
+    flow.expectValue(
+      'done by the counsellor',
+      '[.data.status, .data.resolved_by_membership_id] | join(",")',
+      `done,${counsellor}`,
+    );
+    flow.as('owner');
+    await flow.expect(200, 'the lead now', 'GET', `/app/leads/${chandniLead}`);
+    flow.expectValue(
+      "the counsellor's, with a fresh hold",
+      '[.data.owner_membership_id, (.data.held_until != null)] | map(tostring) | join(",")',
+      `${counsellor},true`,
     );
   });
 });

@@ -158,8 +158,8 @@ describe('Tenancy idempotency contract — Integration', () => {
   });
 
   describe('a malformed X-Idempotency-Key is rejected with 422 (not 400) on every required write', () => {
-    // On a required route a malformed key is a violated contract, not ordinary request validation —
-    // the 400 that optional-key routes return would let a client believe the write was protected.
+    // On a required route a malformed key is a violated contract, not ordinary request validation;
+    // an optional-key route answers the same 422 (USERS-M6 — one status for one bad header).
     it.each(REQUIRED_KEY_WRITES)('$name → 422', async ({ path, payload }) => {
       const { token } = await createOwnerContext();
       const response = await injectWithoutIdempotencyKey({

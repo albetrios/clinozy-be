@@ -537,10 +537,16 @@ const BOOKING_MESSAGE_STOPPING_ACTIONS: ReadonlySet<string> = new Set([
   'reinstate',
 ]);
 
+/** Whether a write changed the booking's status — a lifecycle action, or a move back to scheduled. */
+function changedStatus(row: BaseRecordRow, change: BaseRecordChange): boolean {
+  return change.before !== undefined && row.status !== change.before.status;
+}
+
 /**
  * WC-5, WC-7 (launch D78): a move, a cancel, a no-show, a reinstate or a delete stops the booking
- * message still waiting in the queue; a booking, a move and a reinstate ask for the rules run that
- * sends the confirm request right after the commit.
+ * message still waiting in the queue; a booking, a move, a status change (a reinstate among them —
+ * D81 T7, WC-48) and a delete ask for the rules run right after the commit — it sends the confirm
+ * request, and a confirm, a check-in or a cancel closes its task at once.
  */
 async function followBookingMessages(
   repository: AppointmentsRepository,
@@ -555,7 +561,9 @@ async function followBookingMessages(
     change.kind === 'delete' ||
     (action !== undefined && BOOKING_MESSAGE_STOPPING_ACTIONS.has(action));
   if (stops) await repository.stopQueuedBookingMessages(Number(row.id));
-  if (change.kind === 'create' || moved || action === 'reinstate') {
+  const asksForRun =
+    change.kind === 'create' || change.kind === 'delete' || moved || changedStatus(row, change);
+  if (asksForRun) {
     const { organizationPublicId } = context.scope;
     await runEnqueueAfterCommit(() => requestTaskRulesRun(organizationPublicId));
   }

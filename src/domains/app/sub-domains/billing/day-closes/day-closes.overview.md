@@ -38,7 +38,9 @@ Closing locks the day's money (B6); the auto-close worker (WC-39) closes the day
 
 - **Expected cash (B25):** the opening plus the cash received less the cash paid in the day's live
   payments; a count that differs needs a reason.
-- **Never changed or deleted:** opened, closed, reopened — each step an event (B27).
+- **Never changed or deleted:** opened, closed, reopened — each step an event (B27). An event's
+  `text` is an English log line with that moment's figures (a reopen's: the reason as typed); a
+  client renders by `kind` and the day's figures (D81 PAY-M4).
 - **Auto close (B26):** a day still open at the end of the day after it closes with the count
   taken as expected (`close_kind = auto`); money on a day nobody opened opens it first.
 - **The summary goes to the admins (WC-10, D78):** a closed day's figures go on WhatsApp to the

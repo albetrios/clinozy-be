@@ -316,6 +316,28 @@ describe('Stock — integration (routes-final §9)', () => {
     flow.expectValue('the peel, then the gauze', IDS, `${peel},${gauze}`);
     await flow.expect(
       200,
+      'runs out within 23 days (D81)',
+      'GET',
+      `/app/stock-items?q=${S}&lasts_days_to=23`,
+    );
+    flow.expectValue('within 23: the peel (23 days), not the gauze (no usage)', IDS, peel);
+    await flow.expect(
+      200,
+      'runs out within 22 days',
+      'GET',
+      `/app/stock-items?q=${S}&lasts_days_to=22`,
+    );
+    flow.expectValue('within 22: none', '.data | length', 0);
+    await flow.expect(400, 'no day count', 'GET', '/app/stock-items?lasts_days_to=');
+    flow.expectValue('blank: field', FIELDS, 'querystring.lasts_days_to');
+    await flow.expect(400, 'a negative day count', 'GET', '/app/stock-items?lasts_days_to=-1');
+    flow.expectValue('negative: field', FIELDS, 'querystring.lasts_days_to');
+    await flow.expect(400, 'a part day', 'GET', '/app/stock-items?lasts_days_to=1.5');
+    flow.expectValue('part day: field', FIELDS, 'querystring.lasts_days_to');
+    await flow.expect(400, 'not a number', 'GET', '/app/stock-items?lasts_days_to=week');
+    flow.expectValue('not a number: field', FIELDS, 'querystring.lasts_days_to');
+    await flow.expect(
+      200,
       'by number, newest first',
       'GET',
       `/app/stock-items?q=${S}&sort=stock_item_number`,
@@ -473,8 +495,20 @@ describe('Stock — integration (routes-final §9)', () => {
       '[.data.type, .data.quantity_change, .data.quantity_after, .data.reverts_stock_item_movement_id, .data.revert_reason] | map(tostring) | join(",")',
       `reverted,1.5,4.5,${used},wrong_quantity`,
     );
+    flow.expectValue(
+      'the revert names what it undid (D81): type, time; no purchase',
+      '[.data.reverts_type, (.data.reverts_created_at != null), .data.stock_purchase_number, .data.bill_number] | map(tostring) | join(",")',
+      'used,true,null,null',
+    );
+    const revertedAt = flow.last('.data.reverts_created_at');
     await flow.expect(200, 'the use, reverted', 'GET', `${movements}/${used}`);
     flow.expectValue('reverted by', '.data.reverted_by_stock_item_movement_id', revert);
+    flow.expectValue("the revert's time is the use's", '.data.created_at', revertedAt);
+    flow.expectValue(
+      'a row that reverts nothing: no revert text',
+      '[.data.reverts_type, .data.reverts_created_at] | map(tostring) | join(",")',
+      'null,null',
+    );
     await flow.expect(409, 'revert it twice', 'POST', `${movements}/${used}/revert`, {
       reason: 'mistake',
     });
@@ -583,6 +617,7 @@ describe('Stock — integration (routes-final §9)', () => {
       },
     );
     firstPurchase = flow.last('.data.id');
+    const firstNumber = flow.last('.data.stock_purchase_number');
     cotton = flow.last('.data.items[1].stock_item_id');
     flow.expectValue(
       'the bill from the lines, unpaid',
@@ -597,9 +632,9 @@ describe('Stock — integration (routes-final §9)', () => {
     );
     await flow.expect(200, 'the new item', 'GET', `/app/stock-items/${cotton}`);
     flow.expectValue(
-      'added as typed, 3 rolls',
-      '[.data.unit, .data.quantity, .data.last_rate] | map(tostring) | join(",")',
-      'roll,3,40',
+      "added as typed, 3 rolls, the item defaults and the purchase's vendor (D81)",
+      '[.data.unit, .data.quantity, .data.last_rate, .data.category, .data.max_quantity, .data.stock_vendor_id] | map(tostring) | join(",")',
+      `roll,3,40,consumables,10,${vendor}`,
     );
     await flow.expect(
       200,
@@ -608,6 +643,11 @@ describe('Stock — integration (routes-final §9)', () => {
       `/app/stock-items/${gauze}/movements?type=received`,
     );
     flow.expectValue('points at the purchase', '.data[0].stock_purchase_id', firstPurchase);
+    flow.expectValue(
+      'names the purchase (D81): its number and bill number; reverts nothing',
+      '[.data[0].stock_purchase_number, .data[0].bill_number, .data[0].reverts_type] | map(tostring) | join(",")',
+      `${firstNumber},B-${S},null`,
+    );
     await flow.expect(200, 'a purchase paid in part (S11)', 'POST', '/app/stock-purchases', {
       stock_vendor_id: vendor,
       items: [{ stock_item_id: gauze, quantity: 4, rate: 50 }],
@@ -774,7 +814,62 @@ describe('Stock — integration (routes-final §9)', () => {
       'true,2',
     );
     await flow.expect(200, 'the vendor owes', 'GET', `/app/stock-vendors/${vendor}`);
-    flow.expectValue('payable: the open dues', '.data.payable', 350);
+    flow.expectValue(
+      'payable: the open dues; two purchases (D81)',
+      '[.data.payable, .data.purchase_count] | map(tostring) | join(",")',
+      '350,2',
+    );
+    await flow.expect(200, 'the Vendors tab', 'GET', `/app/stock-vendors?q=${S}`);
+    flow.expectValue(
+      "the footer: what every vendor is owed; the inline vendor's figures (D81)",
+      `[.meta.payable_total, (.data[] | select(.id == "${quickVendor}") | .payable, .purchase_count)] | map(tostring) | join(",")`,
+      '350,0,0',
+    );
+    await flow.expect(
+      200,
+      'most owed first (D81)',
+      'GET',
+      `/app/stock-vendors?q=${S}&sort=payable`,
+    );
+    flow.expectValue('most owed: the vendor', IDS, `${vendor},${quickVendor}`);
+    await flow.expect(
+      200,
+      'least owed first',
+      'GET',
+      `/app/stock-vendors?q=${S}&sort=payable&order=asc`,
+    );
+    flow.expectValue('least owed: the inline vendor', IDS, `${quickVendor},${vendor}`);
+    await flow.expect(
+      200,
+      'most owed, one a page',
+      'GET',
+      `/app/stock-vendors?q=${S}&sort=payable&limit=1`,
+    );
+    flow.expectValue(
+      'page one: the vendor, the total on every page',
+      '[.data[0].id, .meta.payable_total] | map(tostring) | join(",")',
+      `${vendor},350`,
+    );
+    const payableNext = flow.last('.meta.pagination.next');
+    await flow.expect(
+      200,
+      'page two',
+      'GET',
+      `/app/stock-vendors?q=${S}&sort=payable&limit=1&after=${payableNext}`,
+    );
+    flow.expectValue(
+      'page two: the inline vendor, the same total',
+      '[.data[0].id, .meta.payable_total, .meta.pagination.has_more] | map(tostring) | join(",")',
+      `${quickVendor},350,false`,
+    );
+    await flow.expect(
+      200,
+      'the footer follows the search',
+      'GET',
+      `/app/stock-vendors?q=Quick%20vendor%20${S}`,
+    );
+    flow.expectValue('the inline vendor alone: 0', '.meta.payable_total', 0);
+    await flow.expect(400, 'an unknown vendor sort', 'GET', '/app/stock-vendors?sort=owed');
     await flow.expect(400, 'a receipt cannot pay a purchase', 'POST', '/app/payments', {
       kind: 'receipt',
       branch_id: vesu,
@@ -883,6 +978,11 @@ describe('Stock — integration (routes-final §9)', () => {
       'a revert of the receipt, for the purchase',
       '[.data[0].quantity_change, .data[0].stock_purchase_id, .data[0].revert_reason] | map(tostring) | join(",")',
       `-10,${firstPurchase},other`,
+    );
+    flow.expectValue(
+      'the deleted purchase still names itself; the revert names the receipt (D81)',
+      '[.data[0].stock_purchase_number, .data[0].bill_number, .data[0].reverts_type] | map(tostring) | join(",")',
+      `${firstNumber},null,received`,
     );
     await flow.expect(404, 'the deleted purchase', 'GET', `/app/stock-purchases/${firstPurchase}`);
     await flow.expect(
@@ -1048,5 +1148,6 @@ describe('Stock — integration (routes-final §9)', () => {
     flow.as('doctor');
     await flow.expect(403, 'a doctor has no stock', 'GET', '/app/stock-items');
     await flow.expect(403, 'nor its movements', 'GET', '/app/stock-item-movements');
+    await flow.expect(403, 'nor what vendors are owed', 'GET', '/app/stock-vendors?sort=payable');
   });
 });

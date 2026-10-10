@@ -16,7 +16,7 @@ S6). Table `app.stock_items`.
 | `stock-items.schema.ts` | the table: the balance `≥ 0`, size and measure both or neither, maximum `≥` minimum, RLS |
 | `stock-items.constants.ts` | categories, units, measures, the derived levels, the defaults |
 | `stock-items.rules.ts` | the opening quantity as an `opening` movement, delete only at zero, the cross-field checks |
-| `stock-items.repository.ts` | the shared reads and writes, the derived `stock_level` filter and sorts, the guarded balance |
+| `stock-items.repository.ts` | the shared reads and writes, the derived `stock_level` and `lasts_days_to` filters and sorts, the guarded balance |
 | `stock-items.{dto,validator,serializer,types}.ts` | request shapes, the response with `stock_level` and `lasts_days` |
 | `stock-items.service.ts` / `.controller.ts` / `.routes.ts` | routes 1–7 |
 
@@ -37,4 +37,6 @@ S6). Table `app.stock_items`.
 - **The quantity moves only with a movement (S5):** never in a `PATCH`; the opening quantity is
   an `opening` movement; a movement leaves `updated_at` alone (D43 is about the details).
 - **`last_rate`** follows the latest purchase line (S10).
+- **`lasts_days_to` (D81):** the items whose `lasts_days` is at most the value ("runs out within a
+  week" = 7); an item without a weekly usage has no `lasts_days` and never matches.
 - **Delete only at zero** (`409 item_has_stock`); an item with movements is never purged.

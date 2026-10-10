@@ -66,6 +66,20 @@ function throwInvitationAcceptFailure(current: MembershipInvitationRow | null, n
 }
 
 /**
+ * The dev-only accept-token echo (launch ROUTE #164, D82): the issue and resend answers carry the
+ * raw token as `debug_invitation_token` when `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` is on — a
+ * flag the env schema refuses outside the `local` and `development` targets.
+ */
+function withInvitationTokenEcho(
+  output: MembershipInvitationOutput,
+  token: string,
+): MembershipInvitationOutput {
+  return env.MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED
+    ? { ...output, debug_invitation_token: token }
+    : output;
+}
+
+/**
  * Optional per-command context for invitation create/resend.
  *
  * @remarks
@@ -124,9 +138,11 @@ export interface CreateInvitationForMembershipParams {
  *   Redis permission cache; `revoke` soft-deletes the auto-created `INVITED` membership so the members
  *   table shows no ghost invitee. Emits {@link MEMBERSHIP_INVITATION_EVENT.CREATED} / `RESENT` on the
  *   in-process event bus (the invitation-email handler turns these into a mail-outbox row dispatched on
- *   commit). The raw token is delivered **only** through the email — never in any HTTP response. Issue
- *   and resend use `emitStrict` so a failed outbox write rolls back the surrounding organization transaction,
- *   making token issuance and email delivery atomic.
+ *   commit). The raw token is delivered **only** through the email — never in any HTTP response,
+ *   except the dev-only `debug_invitation_token` echo on the issue and resend answers
+ *   (`MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED`, refused outside local/development — ROUTE #164).
+ *   Issue and resend use `emitStrict` so a failed outbox write rolls back the surrounding
+ *   organization transaction, making token issuance and email delivery atomic.
  * - **Notes:** invitations have mutually-exclusive terminal states (`accepted_at` vs `revoked_at`);
  *   resend regenerates the token and pushes `expires_at`.
  */
@@ -147,7 +163,8 @@ export class MembershipInvitationService {
    *   mail event so the `token_hash` row and the secret-bearing outbox row commit atomically with the
    *   surrounding membership transaction.
    * - **Failure modes:** propagates a failed outbox write (rolls back the organization transaction).
-   * - **Side effects:** INSERTs `membership_invitations`; enqueues the invitation email (raw token only via email).
+   * - **Side effects:** INSERTs `membership_invitations`; enqueues the invitation email (raw token only via
+   *   email, plus the dev-only `debug_invitation_token` echo on the answer when its flag is on).
    * - **Notes:** MUST be called inside the caller's `withAppDatabaseContext` (it does not open one).
    */
   async createForMembership(
@@ -191,7 +208,7 @@ export class MembershipInvitationService {
         params.requestId !== undefined ? { requestId: params.requestId } : undefined,
       ),
     );
-    return output;
+    return withInvitationTokenEcho(output, token);
   }
 
   async accept(
@@ -339,7 +356,8 @@ export class MembershipInvitationService {
    * - **Failure modes:** `NotFoundError` for an unknown or ended member, or one with no invitation;
    *   `ValidationError` `invitation_already_accepted` / `invitation_revoked`.
    * - **Side effects:** rotates `token_hash` and `expires_at`; enqueues the invitation email (the raw
-   *   token only via email).
+   *   token only via email, plus the dev-only `debug_invitation_token` echo on the answer when its
+   *   flag is on).
    */
   async resendForMembership(
     scope: OrganizationPrincipalDatabaseScope,
@@ -402,7 +420,7 @@ export class MembershipInvitationService {
         ),
       );
 
-      return output;
+      return withInvitationTokenEcho(output, token);
     });
   }
 }

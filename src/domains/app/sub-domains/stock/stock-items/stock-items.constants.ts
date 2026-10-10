@@ -52,3 +52,6 @@ export const STOCK_ITEM_DEFAULT_MAX_QUANTITY = 10;
 
 /** Largest quantity a `numeric(12,3)` stock column holds. */
 export const STOCK_QUANTITY_MAX = 999_999_999.999;
+
+/** The most days the Items tab's `lasts_days_to` filter takes — ten years (D81). */
+export const STOCK_LASTS_DAYS_FILTER_MAX = 3650;

@@ -6,7 +6,7 @@ import type { PendingCreditOutput } from './pending-credits.types.js';
 
 /**
  * Shapes an `app.pending_credits` row as the API returns it (routes-final 8.D.6). The contact's
- * summary and the settlements are the rules' `decorate`.
+ * summary, the settlements and who recorded it are the rules' `decorate`.
  */
 export function serializePendingCredit(
   row: BaseRecordRow,
@@ -31,6 +31,7 @@ export function serializePendingCredit(
     source_payment_id: references.publicIdOf('source_payment_id', row),
     settle_by: (row.settle_by as string | null) ?? null,
     payment_ids: [],
+    created_by_membership_id: null,
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),
   };

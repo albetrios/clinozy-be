@@ -97,6 +97,24 @@ export const PAYMENT_EXPENSE_CATEGORY_VALUES = [
   PAYMENT_EXPENSE_CATEGORY.MISC,
 ] as const;
 
+/**
+ * The fields a change to a payment records (B20), in the order the ledger shows them — the keys of
+ * an edit's `changes` (`{ field: { from, to } }`); the OpenAPI response map types each one's value.
+ */
+export const PAYMENT_EDIT_RECORDED_FIELDS = [
+  'splits',
+  'paid_at',
+  'contact_id',
+  'invoice_id',
+  'stock_purchase_id',
+  'medical_purchase_order_id',
+  'payee_name',
+  'expense_category',
+  'reference',
+  'note',
+  'attachment_keys',
+] as const;
+
 /** A payment's display prefix (`PAY-12`) — also read by the ledger's `q`. */
 export const PAYMENT_NUMBER_PREFIX = 'PAY';
 

@@ -101,7 +101,7 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     vi.mocked(membershipSeatUsage.countActiveMembers).mockResolvedValue(3);
   });
 
-  it('list() decorates rows with seats_total (subscription.seats ?? plan.included_seats) and seats_used', async () => {
+  it('list() decorates rows with seats_total (plan.included_seats, raised by seats bought above it) and seats_used', async () => {
     vi.mocked(repository.listByOrganization).mockResolvedValue([
       baseRow({ seats: null, plan_included_seats: 10 }),
       baseRow({ public_id: 'sub_2', seats: 50, plan_included_seats: 10 }),
@@ -111,7 +111,7 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
 
     // First row: no purchased seats → falls back to plan.included_seats.
     expect(rows[0]!.seats_total).toBe(10);
-    // Second row: purchased seats win over the plan fallback.
+    // Second row: a quantity bought above the plan raises it.
     expect(rows[1]!.seats_total).toBe(50);
     // seats_used is the organization membership count, shared across rows; resolved once.
     expect(rows[0]!.seats_used).toBe(3);
@@ -135,7 +135,7 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     expect(planService.getFreePlanSeatCeiling).toHaveBeenCalledTimes(1);
   });
 
-  it('reserveSeatCeilingForMemberAdd prefers purchased seats, else plan included_seats (active sub)', async () => {
+  it('reserveSeatCeilingForMemberAdd takes seats bought above the plan, else plan included_seats (active sub)', async () => {
     vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValueOnce({
       seats: 7,
       plan_included_seats: 3,
@@ -152,6 +152,38 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     });
     await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBe(3);
     expect(planService.getFreePlanSeatCeiling).not.toHaveBeenCalled();
+  });
+
+  it('reserveSeatCeilingForMemberAdd never lowers the plan ceiling to the synced headcount (ROUTE #165)', async () => {
+    // The seat sync wrote the member count (2) into `seats`; the plan still includes 5.
+    vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValueOnce({
+      seats: 2,
+      plan_included_seats: 5,
+      status: 'ACTIVE',
+      current_period_end: new Date('2026-06-01'),
+    });
+    await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBe(5);
+
+    // An unlimited plan stays unlimited whatever quantity is billed.
+    vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValueOnce({
+      seats: 4,
+      plan_included_seats: null,
+      status: 'ACTIVE',
+      current_period_end: new Date('2026-06-01'),
+    });
+    await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBeNull();
+  });
+
+  it('seats_total follows the same ceiling as the add check (ROUTE #165, §1.3)', async () => {
+    vi.mocked(repository.listByOrganization).mockResolvedValue([
+      baseRow({ seats: 2, plan_included_seats: 5 }),
+      baseRow({ public_id: 'sub_2', seats: 4, plan_included_seats: null }),
+    ] as never);
+
+    const rows = await service.list(scope);
+
+    expect(rows[0]!.seats_total).toBe(5);
+    expect(rows[1]!.seats_total).toBeNull();
   });
 
   it('reserveSeatCeilingForMemberAdd keeps the plan ceiling for a dunning sub WITHIN grace (F4)', async () => {

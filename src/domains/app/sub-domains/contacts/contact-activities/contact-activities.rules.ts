@@ -12,6 +12,7 @@ import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js'
 import { ContactMessageTemplatesRepository } from '@/domains/app/sub-domains/contacts/contact-message-templates/contact-message-templates.repository.js';
 import { LEAD_INTEREST_LABELS } from '@/domains/app/sub-domains/leads/leads.constants.js';
 import { LeadsRepository } from '@/domains/app/sub-domains/leads/leads.repository.js';
+import { requestTaskRulesRun } from '@/domains/app/sub-domains/tasks/queues/task-rules.queue.js';
 import { runEnqueueAfterCommit } from '@/core/events/event-bus.js';
 import { isMetaProviderDown } from '@/infrastructure/messaging/meta-graph.client.js';
 import { isMessagingDeliveryEnabled } from '@/infrastructure/messaging/meta-messaging.config.js';
@@ -84,6 +85,16 @@ async function scheduleDelivery(context: BaseRecordWriteContext): Promise<void> 
   await runEnqueueAfterCommit(() => requestContactMessageDelivery(organizationPublicId));
 }
 
+/**
+ * After the write commits, asks for the organization's task rules run (D81 T7, WC-48) — a message
+ * or a call moves the contact's last sent / received time, so the `reply` and `failed_message`
+ * tasks open or close at once rather than at the next sweep; never fails the write.
+ */
+async function scheduleTaskRules(context: BaseRecordWriteContext): Promise<void> {
+  const { organizationPublicId } = context.scope;
+  await runEnqueueAfterCommit(() => requestTaskRulesRun(organizationPublicId));
+}
+
 /** What the composer shows (D77, WC-2): delivery on, Meta up, each channel's account and queue. */
 async function readMessagingStatus(
   repository: ContactActivitiesRepository,
@@ -149,7 +160,8 @@ async function involveAuthor(
  *   from `new` to `contacted`. Reads hide an entry linked to a record the caller cannot read (M10).
  *   `message-batches` writes one queued message per contact the same way. A queued message (a
  *   send, a batch, a resend) asks for the organization's delivery job once the write commits
- *   (launch D77).
+ *   (launch D77); a message or a call (written, batched or resent) asks for the task rules run, so
+ *   a reply closes its `reply` task at once (D81 T7, WC-48).
  * - **Failure modes:** `ValidationError` (400) on `contact_message_template_id`, `attachment_keys`,
  *   `reply_to_contact_activity_id`, `body` (over 1000 once filled) or `contact_ids`.
  */
@@ -247,6 +259,9 @@ export function createContactActivitiesRules(
       if (row.delivery_status === CONTACT_ACTIVITY_DELIVERY_STATUS.QUEUED) {
         await scheduleDelivery(context);
       }
+      // A message or a call — written, or resent — may open or close a task (D81 T7).
+      const movesTasks = change.kind === 'create' || change.kind === 'transition';
+      if (movesTasks && typeof row.direction === 'string') await scheduleTaskRules(context);
     },
     collectionViews: {
       'messaging-status': ({ context }) => readMessagingStatus(repository, context.organizationId),
@@ -285,6 +300,7 @@ export function createContactActivitiesRules(
           entries.push(entry);
         }
         await scheduleDelivery(context);
+        await scheduleTaskRules(context);
         return present(entries);
       },
     },

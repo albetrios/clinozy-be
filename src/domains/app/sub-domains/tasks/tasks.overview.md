@@ -16,13 +16,13 @@ task is resolved, and the tasks the rules open and close by themselves. Tables `
 | File | Role |
 | --- | --- |
 | `tasks.schema.ts` | `app.tasks` (kind, rule key, owner or role queue, the person, one record link, the generated `source_key`, the one-open-task-per-rule-per-record index) and `app.task_owner_changes` (append-only), RLS |
-| `tasks.constants.ts` | kinds, the 14 rules, the role queues, statuses, outcomes, tabs, scopes |
-| `tasks.{dto,validator,serializer,types}.ts` | request shapes, parsing (the tab → status, the rules-on filter), the response (the person's summary, owner changes, `can_clinozy_handle`, `next_task_id`) |
-| `tasks.repository.ts` | the shared app record layer plus Mine, the rules-on filter, owner checks, owner-change rows, the record's person and branch, the leave step's release, `insertRuleTask` |
-| `tasks.rules.ts` | owner and record checks, rule tasks never edited, the actions `resolve` (outcomes and their effects, what's next) and `reassign` (the lead moves too), the drawer's decoration |
+| `tasks.constants.ts` | kinds, the 15 rules, the role queues, statuses, outcomes and the ones each rule offers (`TASK_RULE_OUTCOMES`), tabs, scopes |
+| `tasks.{dto,validator,serializer,types}.ts` | request shapes, parsing (the tab → status, the type filter, the rules-on filter), the response (the person's summary, owner changes, `can_clinozy_handle`, `next_task_id`) |
+| `tasks.repository.ts` | the shared app record layer plus Mine, the type filter, the rules-on filter, owner checks, owner-change rows, the record's person and branch, the leave step's release, `insertRuleTask` |
+| `tasks.rules.ts` | owner and record checks, rule tasks never edited, the actions `resolve` (the outcomes the task offers and their effects, what's next) and `reassign` (the lead moves too), the drawer's decoration |
 | `tasks.rule-tasks.ts` | `openRuleTask` / `openCallBackTask` — the write-time rule tasks (a check-in or review needing action, an `unhappy` outcome) |
 | `tasks.service.ts` / `.controller.ts` / `.routes.ts` | the routes below |
-| `task-rule-conditions.repository.ts` | the 14 rules as SQL — which records open a task, while when it stays open, its due time and owner |
+| `task-rule-conditions.repository.ts` | the 15 rules as SQL — which records open a task, while when it stays open, its due time and owner |
 | `task-rules.repository.ts` | the rules job's reads and writes on its pinned handle; the sweep's organization read; `queueClinozyMessage` (a queued WhatsApp entry from Clinozy with its `automation_kind`) |
 | `task-rule-messages.repository.ts` | the reads of the messages the run queues (D78): the day-before reminders, the confirm requests, the receipts |
 | `queues/` · `workers/` | TK4: the five-minute sweep (`task-rules-sweep`) and the per-organization job (`task-rules`) |
@@ -73,9 +73,11 @@ request of each scheduled booking not asked yet — more than 2 hours and at mos
 walk-in (WC-5, `confirm_requested`) — and the receipt of each `receipt` payment of the last 24 hours
 (WC-9). Reminders go first, so a booking due both gets the reminder alone. A notice moves only the
 contact's `last_activity_at` (a question the person asked still waits for a person — the `reply`
-rule). `confirm`'s own step sends nothing when the booking was asked already. A booking, a move
-and a reinstate ask for the run right after their commit; the job asks for delivery when it
-queued anything.
+rule). `confirm`'s own step sends nothing when the booking was asked already. A booking, a move,
+a status change and a delete ask for the run right after their commit, and so does a message or a
+call (D81 T7, WC-48) — a reply or a confirm closes its task at once rather than at the next sweep;
+the job asks for delivery when it queued anything. One job waits per organization, and one more
+while it runs, so a write committed during a run is picked up by the next.
 
 ## Key invariants
 
@@ -89,4 +91,15 @@ queued anything.
 - **An owner or a role queue (TK6):** one of the two; an owner is an active member who can see tasks.
 - **Rule tasks are the server's (TK7, TK9):** never changed or deleted by hand (`409 rule_task`).
 - **Who had it (TK8):** every reassign and every leave writes an owner-change row.
+- **Each task its own outcomes (D81 TASKS-M2):** a resolve takes only an outcome its rule offers
+  (`TASK_RULE_OUTCOMES`) — a task made by hand `done` or `no_answer` — else a 400 `outcome`.
+- **A lead moves only with `lead:update` (D81 TASKS-M3):** the claim of a `claim` task and the
+  reassign of a lead's task move the lead's owner, so they need `lead:update` too (a 403
+  `missing_permission`).
+- **One type filter (D81 T6):** `rule_key` and `kind` (each a comma list) together are a task of
+  any rule or kind named — `rule_key IN (…) OR kind IN (…)`.
 - **Stale saves refused (D43):** a `PATCH` with an older `expected_updated_at` is a 409.
+- **The server's words are English (D81 TASKS-M4, M6):** a rule task's `title` and `why`, a
+  `no_answer` snooze's `snooze_label` and an automatic close's `result_text` — a translated
+  client renders from `rule_key`, `outcome` and the linked record. The CSV export writes
+  `contact` as JSON in one cell and `owner_changes` as its entries' JSON joined with `|`.

@@ -29,7 +29,7 @@ export function branchesRoutes(service: BranchesService): FastifyPluginAsync {
         schema: {
           summary: 'List my branches',
           description:
-            'Returns the active branches of the active organization the caller works in — their branch accesses; a caller holding branch:read gets every active branch. Main branch first, then by name; not paginated. Used by every member (branch picker, booking rules).',
+            'Returns the active branches of the active organization the caller works in — their branch accesses; a caller holding branch:read gets every active branch. Each with its name, tone, main flag, opening hours and working days, and the address (`address_line_one`, `address_line_two`, `area`, `city`, `state`, `postal_code`), `phone` and `gst_number` a printed GST invoice carries (D81). Main branch first, then by name; not paginated. Used by every member (branch picker, booking rules, the invoice print).',
           tags: ['Branch'],
         },
       },

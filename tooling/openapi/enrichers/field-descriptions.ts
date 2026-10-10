@@ -1,5 +1,12 @@
 import { PAGINATION } from '@/shared/constants/index.js';
 
+/**
+ * A field's OpenAPI description: what it is, then required / optional, then its constraints.
+ *
+ * What it is comes from the schema's own description first — a Zod `.describe()` / `.meta({
+ * description })` on the DTO, which scopes it to the routes using that DTO (an offer's `code` is not
+ * a TOTP code) — and only then from the name-keyed dictionary below.
+ */
 export function generateFieldDescription(
   fieldName: string,
   schema: Record<string, unknown>,
@@ -7,8 +14,12 @@ export function generateFieldDescription(
 ): string {
   const parts: string[] = [];
 
-  // Add field-specific description
-  const fieldDesc = getFieldSpecificDescription(fieldName);
+  // The schema's own words beat the dictionary's, which keys on the bare field name
+  const ownDescription =
+    typeof schema.description === 'string' && schema.description.length > 0
+      ? schema.description
+      : undefined;
+  const fieldDesc = ownDescription ?? getFieldSpecificDescription(fieldName);
   if (fieldDesc) parts.push(fieldDesc);
 
   // Required indicator

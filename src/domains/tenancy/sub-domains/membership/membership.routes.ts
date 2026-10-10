@@ -103,7 +103,7 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
         schema: {
           summary: 'Add member by email',
           description:
-            'Adds a member by email: provisions or resolves the login, creates an invited membership with the given roles (role_ids, main first) and staff profile (phone, tone, branch_ids, working days and hours, commission), and emails an invitation token. The same login added again gets its ended membership back. The invitee becomes active on accept. Requires membership:create.',
+            'Adds a member by email: provisions or resolves the login, creates an invited membership with the given roles (role_ids, main first) and staff profile (phone, tone, branch_ids, working days and hours, commission), and emails an invitation token. The same login added again gets its ended membership back. The invitee becomes active on accept. Outside production, with MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED on, invitation.debug_invitation_token carries the raw accept token (for local QA — the email never arrives). Requires membership:create.',
           tags: ['Membership'],
           body: createMembershipDto,
         },
@@ -190,7 +190,7 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
         schema: {
           summary: 'Resend invitation',
           description:
-            "Resends an invited member's invite with a new token and expiry — an expired invite too. Returns the invitation. Requires membership:update.",
+            "Resends an invited member's invite with a new token and expiry — an expired invite too. Returns the invitation; outside production, with MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED on, debug_invitation_token carries the new raw accept token. Requires membership:update.",
           tags: ['Invitation'],
           params: membershipIdParamsDto,
           body: resendMembershipInvitationDto,

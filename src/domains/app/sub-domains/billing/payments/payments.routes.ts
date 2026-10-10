@@ -20,7 +20,7 @@ type PaymentParams = { Params: { payment_id: string } };
 
 /** What the ledger and its export say about their filters. */
 const LIST_FILTERS =
-  "`q` is the payee or the number (`PAY-12`); filters `direction`, `kind` (several, comma-separated), `mode` (several — has that split), `branch_id` (several), `contact_id`, `patient_id` (the patient file's contact), `invoice_id`, `pending_credit_id`, `stock_purchase_id`, `medical_purchase_order_id`, `expense_category` (several), `paid_date_from` / `paid_date_to` (the organization's days, inclusive), `is_settled` (its day is closed), the created range; sort `paid_at` (default, newest first), `created_at` or `amount`. Another branch's payments only with branch:read (B4).";
+  "`q` is the payee, the billed contact (a name, phone or contact number) or the number (`PAY-12`); filters `direction`, `kind` (several, comma-separated), `mode` (several — has that split), `branch_id` (several), `contact_id`, `patient_id` (the patient file's contact), `invoice_id`, `pending_credit_id`, `stock_purchase_id`, `medical_purchase_order_id`, `expense_category` (several), `paid_date_from` / `paid_date_to` (the organization's days, inclusive), `is_settled` (its day is closed), the created range; sort `paid_at` (default, newest first), `created_at` or `amount`. Another branch's payments only with branch:read (B4).";
 
 /**
  * Registers the `payments` routes (prefix `/api/v1/app`) — routes-final 8.C, routes 12–20.
@@ -38,7 +38,7 @@ export function paymentsRoutes(service: PaymentsService): FastifyPluginAsync {
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'List payments',
-          description: `Returns one page of the ledger — the organization's money in and out — each with its \`splits\`, the \`contact\` and \`patient_id\`, what it points at, \`is_settled\`, \`reversed_by_payment_id\`, \`edit_count\` and \`last_edit\`. ${LIST_FILTERS} Requires payment:read.`,
+          description: `Returns one page of the ledger — the organization's money in and out — each with its \`splits\`, the \`contact\` and \`patient_id\`, what it points at with the numbers the ledger's sub-line shows (\`invoice\` — \`invoice_sequence\`, \`invoice_number\`, \`type\`, \`due_amount\`; \`invoice_credit_note_number\`; \`pending_credit_number\`; \`stock_purchase\` and \`medical_purchase_order\` — their numbers and bill numbers), \`created_by_membership_id\` (who recorded it), \`is_settled\`, \`reversed_by_payment_id\`, \`edit_count\` and \`last_edit\`. ${LIST_FILTERS} Requires payment:read.`,
           tags: ['Payment'],
           querystring: listPaymentsQueryDto,
         },
@@ -118,7 +118,7 @@ export function paymentsRoutes(service: PaymentsService): FastifyPluginAsync {
         schema: {
           summary: "List a payment's changes",
           description:
-            "Returns one page of what each change to a payment changed, newest first: `changes` (`{ field: { from, to } }` — the changed fields only), `author_membership_id`, `created_at`. Another branch's payment without branch:read is a 404. Requires payment:read.",
+            "Returns one page of what each change to a payment changed, newest first: `changes` (`{ field: { from, to } }` — the changed fields only, each value shaped as the field: `splits` a list of `{ mode, amount }`, `paid_at` an instant, `contact_id` / `invoice_id` / `stock_purchase_id` / `medical_purchase_order_id` public ids, `payee_name` / `expense_category` / `reference` / `note` text, `attachment_keys` a list of keys — null where it was empty), `author_membership_id`, `created_at`. The payment's own `last_edit` is the newest of these. Another branch's payment without branch:read is a 404. Requires payment:read.",
           tags: ['Payment'],
           params: paymentsIdParamsDto,
           querystring: listPaymentEditsQueryDto,

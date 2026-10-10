@@ -317,6 +317,19 @@ describe('Offerings — integration (routes-final §3)', () => {
       name: `GLYCOLIC PEEL ${S}`,
       price: 1,
     });
+    flow.expectValue('offering name taken: why (D81)', '.error.reason', 'offering_name_taken');
+    await flow.expect(
+      409,
+      'offering PATCH to a name another offering has',
+      'PATCH',
+      `/app/offerings/${laser}`,
+      { name: `Glycolic Peel ${S}` },
+    );
+    flow.expectValue(
+      'offering PATCH name taken: why (D81)',
+      '.error.reason',
+      'offering_name_taken',
+    );
     await flow.expect(400, 'offering unknown group', 'POST', '/app/offerings', {
       name: `Bad ${S}`,
       price: 1,
@@ -522,6 +535,7 @@ describe('Offerings — integration (routes-final §3)', () => {
       value: 10,
       offering_ids: [peel],
     });
+    flow.expectValue('O11 code in use: why (D81)', '.error.reason', 'offer_code_in_use');
     await flow.expect(400, 'O11 code with a dash', 'POST', '/app/offers', {
       name: `Bad ${S}`,
       code: 'GLOW-20',
@@ -714,6 +728,7 @@ describe('Offerings — integration (routes-final §3)', () => {
       `/app/offers/${alwaysOffer}`,
       { code },
     );
+    flow.expectValue('offer PATCH code in use: why (D81)', '.error.reason', 'offer_code_in_use');
     await flow.expect(
       400,
       'offer PATCH an inactive offering',
@@ -778,6 +793,41 @@ describe('Offerings — integration (routes-final §3)', () => {
     await flow.expect(200, 'counsellor changes a price (O3)', 'PATCH', `/app/offerings/${peel}`, {
       price: 2900,
     });
+    await flow.expect(
+      403,
+      'counsellor sets a lowest price it cannot see (D81)',
+      'POST',
+      '/app/offerings',
+      { name: `Counsellor floor ${S}`, price: 100, min_price: 50 },
+    );
+    flow.expectValue(
+      'counsellor create with min_price: why',
+      '.error.reason',
+      'field_permission_required',
+    );
+    await flow.expect(
+      403,
+      'counsellor overwrites the lowest price blind (D81)',
+      'PATCH',
+      `/app/offerings/${peel}`,
+      { price: 2900, min_price: 0 },
+    );
+    flow.expectValue(
+      'counsellor PATCH min_price: why',
+      '.error.reason',
+      'field_permission_required',
+    );
+    await flow.expect(
+      403,
+      'counsellor resends the lowest price unchanged (D81)',
+      'PATCH',
+      `/app/offerings/${peel}`,
+      { min_price: 1800 },
+    );
+    flow.as('owner');
+    await flow.expect(200, 'the floor kept after the refusals', 'GET', `/app/offerings/${peel}`);
+    flow.expectValue('the floor kept: 1800', '.data.min_price', 1800);
+    flow.as('counsellor');
     await flow.expect(200, 'counsellor pauses an offer', 'PATCH', `/app/offers/${alwaysOffer}`, {
       is_active: true,
     });

@@ -17,7 +17,10 @@ import {
   recordPayment,
   splitsToColumns,
 } from '@/domains/app/sub-domains/billing/payments/payments.ledger.js';
-import { PaymentsRepository } from '@/domains/app/sub-domains/billing/payments/payments.repository.js';
+import {
+  findRecordedByMemberships,
+  PaymentsRepository,
+} from '@/domains/app/sub-domains/billing/payments/payments.repository.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
@@ -231,7 +234,8 @@ async function settlePendingCredit(input: BaseRecordActionInput): Promise<BaseRe
  *   settled. The settle action writes one payment pointing at the credit — a refund (with a credit
  *   note on the credit's invoice), a `money_back` receipt, or a receipt paid by `credit_amount` on
  *   one of the party's invoices — and the payment's write moves the settled amount and the status
- *   ({@link recordPayment}, B24). A page reads the contact's summary and the settlements.
+ *   ({@link recordPayment}, B24). A page reads the contact's summary, the settlements and who
+ *   recorded each credit (D81).
  * - **Failure modes:** `ValidationError` on `party_name`, `invoice_id`, `amount`, `method`,
  *   `branch_id`; `ConflictError` `credit_settled`, `credit_closed`, `nothing_due`,
  *   `more_than_paid`, `more_than_due`, `day_closed`.
@@ -256,10 +260,17 @@ export function createPendingCreditsRules(): BaseRecordRules {
         organizationId: context.organizationId,
         publicIds: outputs.map((output) => String(output.id)),
       });
-      const settlements = await paymentsRepository.findSettlements([...idsByPublicId.values()]);
+      const ids = [...idsByPublicId.values()];
+      const settlements = await paymentsRepository.findSettlements(ids);
+      const recordedBy = await findRecordedByMemberships({
+        table: pending_credits,
+        ids,
+        organizationId: context.organizationId,
+      });
       for (const output of outputs) {
         const id = idsByPublicId.get(String(output.id));
         output.payment_ids = id === undefined ? [] : (settlements.get(id) ?? []);
+        output.created_by_membership_id = id === undefined ? null : (recordedBy.get(id) ?? null);
       }
       await attachBilledContacts(outputs);
     },

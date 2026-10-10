@@ -63,8 +63,9 @@ function createMembershipWriteHandlers(service: MembershipService) {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
-      // REQ-1: "Add member" — the raw invitation token is delivered ONLY via email, never returned;
-      // the response carries the created INVITED membership (with its embedded invitation ref).
+      // REQ-1: "Add member" — the raw invitation token is delivered ONLY via email, never returned
+      // (bar the dev-only `invitation.debug_invitation_token` echo, ROUTE #164); the response
+      // carries the created INVITED membership (with its embedded invitation ref).
       const data = await service.create(scope, request.body, getActingUserPublicId(auth), {
         requestId: getRequestIdentifier(request),
       });

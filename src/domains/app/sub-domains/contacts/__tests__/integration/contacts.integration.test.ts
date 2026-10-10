@@ -777,4 +777,109 @@ describe('Contacts — integration (routes-final §4.A–4.B)', () => {
     flow.as('admin');
     await flow.expect(204, 'admin: delete', 'DELETE', `/app/contacts/${desk}?reason=mistake`);
   });
+
+  it('4.A contacts: #n finds the patient or lead number, PT-n the patient, C-n the contact (SHELL-M1, ROUTE #155)', async () => {
+    flow.as('owner');
+    await flow.expect(
+      200,
+      'create Pia',
+      'POST',
+      '/app/contacts',
+      contactBody('Pia', primaryPhone(`+91${digits}07`)),
+    );
+    const pia = flow.last('.data.id');
+    await flow.expect(
+      200,
+      'create Leo',
+      'POST',
+      '/app/contacts',
+      contactBody('Leo', primaryPhone(`+91${digits}10`)),
+    );
+    const leo = flow.last('.data.id');
+    const leoContactNumber = flow.last('.data.contact_number');
+    await flow.expect(200, "Pia's patient file", 'POST', '/app/patients', {
+      contact_id: pia,
+      home_branch_id: fixture.branches.vesu,
+    });
+    const piaPatientNumber = flow.last('.data.patient_number');
+    await flow.expect(200, "Leo's lead", 'POST', '/app/leads', {
+      contact_id: leo,
+      branch_id: fixture.branches.vesu,
+    });
+    const leoLead = flow.last('.data.id');
+    const leoLeadNumber = flow.last('.data.lead_number');
+    const these = `${pia},${leo},${riya}`;
+
+    await flow.expect(
+      200,
+      "#n: Pia's patient number",
+      'GET',
+      `/app/contacts?q=%23${piaPatientNumber}&ids=${these}`,
+    );
+    flow.expectValue(
+      '#n: the patient (and a lead of the same number), never contact C-n',
+      NAMES,
+      piaPatientNumber === leoLeadNumber ? 'Leo,Pia' : 'Pia',
+    );
+    await flow.expect(
+      200,
+      "#n: Leo's lead number",
+      'GET',
+      `/app/contacts?q=%23${leoLeadNumber}&ids=${leo},${riya}`,
+    );
+    flow.expectValue('#n: the lead', NAMES, 'Leo');
+    await flow.expect(
+      200,
+      "#n with Riya's contact number",
+      'GET',
+      `/app/contacts?q=%23${riyaNumber}&ids=${riya}`,
+    );
+    flow.expectValue('#n is no longer the contact number', '.data | length', 0);
+    await flow.expect(
+      200,
+      '# n spaced, zero-padded',
+      'GET',
+      `/app/contacts?q=%23%200${piaPatientNumber}&ids=${pia}`,
+    );
+    flow.expectValue('# 0n: Pia', NAMES, 'Pia');
+
+    await flow.expect(200, 'PT-n', 'GET', `/app/contacts?q=PT-${piaPatientNumber}`);
+    flow.expectValue('PT-n: exactly the patient', NAMES, 'Pia');
+    await flow.expect(200, 'pt n, lower case', 'GET', `/app/contacts?q=pt${piaPatientNumber}`);
+    flow.expectValue('ptn: exactly the patient', NAMES, 'Pia');
+    await flow.expect(
+      200,
+      "PT-n with Leo's lead number",
+      'GET',
+      `/app/contacts?q=PT-${leoLeadNumber}&ids=${leo}`,
+    );
+    flow.expectValue('PT-n is not a lead number', '.data | length', 0);
+
+    await flow.expect(
+      200,
+      'C-n stays the contact number',
+      'GET',
+      `/app/contacts?q=C-${leoContactNumber}`,
+    );
+    flow.expectValue('C-n: exactly Leo', NAMES, 'Leo');
+
+    flow.as('therapist');
+    await flow.expect(
+      200,
+      'therapist (contact:read): PT-n',
+      'GET',
+      `/app/contacts?q=PT-${piaPatientNumber}`,
+    );
+    flow.expectValue('therapist: the patient', NAMES, 'Pia');
+
+    flow.as('owner');
+    await flow.expect(204, "delete Leo's lead", 'DELETE', `/app/leads/${leoLead}?reason=duplicate`);
+    await flow.expect(
+      200,
+      '#n after the lead is deleted',
+      'GET',
+      `/app/contacts?q=%23${leoLeadNumber}&ids=${leo}`,
+    );
+    flow.expectValue('a deleted lead is not found', '.data | length', 0);
+  });
 });

@@ -6141,7 +6141,7 @@ None beyond 9.10.
 | # | Decision |
 | --- | --- |
 | S10 | **Lines are what arrived**: `app.stock_purchase_items` (item, quantity > 0, rate, amount) — each writes a `received` movement and sets the item's `last_rate`, in the same transaction; "Not in the list · add as typed" creates the item in the same call. Lines can't change once saved (`409 purchase_received`); vendor, bill number, date and bill amount can. `bill_amount` defaults to the lines' total and may be changed (design), never below what is paid. No stages (design). |
-| S11 | **Paying is sub-domain 8's**: `paid_amount` is kept by supplier-bill payments that point at the purchase — `payments.stock_purchase_id`, `ON DELETE RESTRICT` (the typed link sub-domain 8 left for this sub-domain); the drawer's "Paid" records that payment in the same transaction (like an invoice's "Paid now"), category `consumables`; "Pay ₹1,710" opens Payments with the bill picked. `due_amount` and `payment_status` (`paid` · `partial` · `unpaid`) are generated columns, as on invoices. The vendor's payable = the open dues of its purchases. |
+| S11 | **Paying is sub-domain 8's**: `paid_amount` is kept by supplier-bill payments that point at the purchase — `payments.stock_purchase_id`, `ON DELETE RESTRICT` (the typed link sub-domain 8 left for this sub-domain); the drawer's "Paid" records that payment in the same transaction (like an invoice's "Paid now") — a `supplier_bill` with the vendor as payee and no category (only an expense has one; corrected 2026-10-10, STOCK-M1, ROUTE #163); "Pay ₹1,710" opens Payments with the bill picked. `due_amount` and `payment_status` (`paid` · `partial` · `unpaid`) are generated columns, as on invoices. The vendor's payable = the open dues of its purchases. |
 | S12 | **Delete only unpaid**: nothing paid (`409 purchase_paid`); deleting reverts its `received` movements (`409 not_enough_stock` when some was used since), restoring re-applies them. |
 
 #### 9.D.2 Open questions
@@ -7667,3 +7667,23 @@ The invoice a sale writes is an ordinary `medical` invoice (8): collect with `PO
 | MDC18 | MD22: `GET /medical-payments` through the payments service; `/invoices` refuses to change or delete a live sale's invoice |
 
 ---
+
+---
+
+## 12. Frontend integration — revisions to the final reviews (D81, D82, 2026-10-10)
+
+The frontend's per-room research (clinozy-fe `plans/api-integration.md` §5.6–§5.11) asked for small changes to
+the reviews above before the rooms still to move were built on the API; the user approved them (D81, D82) and
+they were built as ROUTE #154–#165 (`AS-BUILT.md`). The reviews above stay as confirmed; this table is what
+changed on top of them. Route by route: `plans/route-changes.md` §12 (I1–I19).
+
+| Sub-domain | What changed | ROUTE |
+| --- | --- | --- |
+| 2 Team | `GET /app/roles` (every member, `organization:read`); `GET /app/memberships?holds=<code>`; `owner_user_id` on the organization, `is_owner` on memberships; the Owner role locked, the owner's main role fixed, extra roles set by the owner only, the guards' reasons; `/auth/me/context` adds `membership_id` and `my_roles`; the presets' codes and tones; the invitation token echo (local and development only) and the seat ceiling | #156, #157, #158, #164, #165 |
+| 3 Offerings | `min_price` guarded by `offering:lower_price:read` (403 `field_permission_required`); 409 `offering_name_taken`, `offer_code_in_use` | #161 |
+| 4 Contacts | `q=#n` the patient or lead number, `PT-n` the patient number, `C-n` the contact number | #155 |
+| 1 Branches | `GET /branches/my` adds the address, phone and GSTIN | #160 |
+| 8 Billing | `q` finds the person; `created_by_membership_id`; the ledger rows' link numbers; `POST /invoices/preview` and `POST /invoices/{invoice_id}/preview`; the invoice list's `meta.due_total`, `meta.paid_total`; `below_lowest_price` names its line (`items/<n>`); the best live offer applied when billing | #159 |
+| 9 Stock | vendors `sort=payable`, `meta.payable_total`, `purchase_count`; movements' purchase number, bill number, a revert's original type and time; items `lasts_days_to`; `new_item` takes the purchase's vendor | #162 |
+| 10 Tasks & rules | `kind` a list and the derived `type`; the rules run after a message, a reply and a booking's status change; resolve checks the outcome; a lead's task needs `lead:update` | #154 |
+| — | The documents the research found wrong (9 S11 above: the purchase's "Paid" carries no category — STOCK-M1) | #163 |

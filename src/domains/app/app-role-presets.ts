@@ -42,10 +42,16 @@ const EVERY_ROLE_CODES: readonly string[] = [
 
 /**
  * The tasks' View · Create · Edit (launch #138, TK2) — the roles that work the to-do list: Doctor,
- * Therapist (the aftercare calls), Front desk and Counsellor; Pharmacist, Accountant and Marketing
- * see no tasks by default.
+ * Therapist (the aftercare calls), Front desk and Counsellor.
  */
 const TASK_WORKER_CODES: readonly string[] = sectionCodes('tasks', VIEW_CREATE_EDIT);
+
+/**
+ * The tasks' View · Edit without adding any (launch D81 (5)) — the roles whose queue the rules fill:
+ * Pharmacist (the medical rep visits, TASKS-M5) and Marketing (the leads' follow-ups). They work the
+ * tasks they are given; the Accountant sees no tasks.
+ */
+const TASK_TAKER_CODES: readonly string[] = sectionCodes('tasks', ['read', 'update']);
 
 /**
  * What every role that deals with people holds — all but the Accountant: {@link EVERY_ROLE_CODES},
@@ -69,9 +75,9 @@ export interface AppRolePreset {
   name: string;
   /** Purpose line shown under the name (Users › Roles). */
   description: string;
-  /** The role's colour. */
+  /** The role's colour — the design's role tones (D81 (4)). */
   tone: ChipTone;
-  /** A locked role's access cannot be changed (only Admin, D40). */
+  /** A locked role's access cannot be changed (of the presets only Admin, D40; Owner is locked too). */
   isLocked: boolean;
   /** The permission codes granted at provisioning — each organization edits them after (D5). */
   permissionCodes: readonly string[];
@@ -109,7 +115,7 @@ const DOCTOR_PRESET: AppRolePreset = {
 const THERAPIST_PRESET: AppRolePreset = {
   name: 'Therapist',
   description: 'Runs treatment sessions and uses clinic stock.',
-  tone: CHIP_TONE.MINT,
+  tone: CHIP_TONE.BUTTER,
   isLocked: false,
   permissionCodes: unique([
     ...PERSON_FACING_ROLE_CODES,
@@ -127,7 +133,7 @@ const THERAPIST_PRESET: AppRolePreset = {
 const FRONT_DESK_PRESET: AppRolePreset = {
   name: 'Front desk',
   description: 'Answers leads, books and confirms visits, takes payments.',
-  tone: CHIP_TONE.BUTTER,
+  tone: CHIP_TONE.MINT,
   isLocked: false,
   permissionCodes: unique([
     ...PERSON_FACING_ROLE_CODES,
@@ -145,7 +151,7 @@ const FRONT_DESK_PRESET: AppRolePreset = {
 const COUNSELLOR_PRESET: AppRolePreset = {
   name: 'Counsellor',
   description: 'Plans treatments with patients and sells packages.',
-  tone: CHIP_TONE.LAVENDER,
+  tone: CHIP_TONE.SAGE,
   isLocked: false,
   permissionCodes: unique([
     ...PERSON_FACING_ROLE_CODES,
@@ -165,15 +171,19 @@ const COUNSELLOR_PRESET: AppRolePreset = {
 const PHARMACIST_PRESET: AppRolePreset = {
   name: 'Pharmacist',
   description: 'Runs the medical store: medicines, orders and sales.',
-  tone: CHIP_TONE.SAGE,
+  tone: CHIP_TONE.BLUSH,
   isLocked: false,
   permissionCodes: unique([
     ...PERSON_FACING_ROLE_CODES,
+    // Works the medical rep visits the rules queue for the pharmacist (D81 (5), TASKS-M5)
+    ...TASK_TAKER_CODES,
     ...sectionCodes('medical', VIEW_CREATE_EDIT),
     ...readCodes(['patient', 'patient_prescription']),
     // Uses clinic stock in procedures (launch #137, S2)
     ...sectionCodes('stock', VIEW_CREATE_EDIT),
-    // Sells and collects, refunds returns, pays suppliers (launch #153, MD2)
+    // Sells and collects, refunds returns, pays suppliers (launch #153, MD2) — and reads the bills
+    // and payments it takes (D81 (5), PAY-M3)
+    APP_PERMISSIONS.PAYMENT_READ,
     APP_PERMISSIONS.PAYMENT_CREATE,
     APP_PERMISSIONS.PATIENT_EXPORT,
     APP_PERMISSIONS.OFFERING_EXPORT,
@@ -190,6 +200,8 @@ const ACCOUNTANT_PRESET: AppRolePreset = {
     ...EVERY_ROLE_CODES,
     ...readCodes(['patient']),
     ...sectionCodes('payments', VIEW_CREATE_EDIT),
+    // Reverses a payment and reopens a day, as the design's (D81 (5), PAY-M2)
+    APP_PERMISSIONS.PAYMENT_DELETE,
     // The medical store: view and export only, as the design's access line (launch #153, MD2)
     ...sectionCodes('medical', ['read']),
     APP_PERMISSIONS.MEDICINE_EXPORT,
@@ -206,10 +218,12 @@ const ACCOUNTANT_PRESET: AppRolePreset = {
 const MARKETING_PRESET: AppRolePreset = {
   name: 'Marketing',
   description: 'Works leads and campaigns.',
-  tone: CHIP_TONE.BLUSH,
+  tone: CHIP_TONE.PLUM,
   isLocked: false,
   permissionCodes: unique([
     ...PERSON_FACING_ROLE_CODES,
+    // Works the follow-ups the rules give it (D81 (5))
+    ...TASK_TAKER_CODES,
     ...sectionCodes('leads', VIEW_CREATE_EDIT),
     ...readCodes(['patient']),
   ]),
@@ -220,20 +234,24 @@ const MARKETING_PRESET: AppRolePreset = {
  *
  * @remarks
  * - **Algorithm:** each role holds View · Create · Edit in its sections (D12), the read codes of
- *   the pickers it needs, and its special permissions (D18); only Admin deletes. Role-named
+ *   the pickers it needs, and its special permissions (D18); only Admin deletes — and the
+ *   Accountant, who reverses a payment and reopens a day (`payment:delete`, D81 (5)). Role-named
  *   actions are codes (D13): prescriptions are written by Doctor, treatments by Doctor and
  *   Therapist. The Accountant sees the patient file's billing only (D15); Marketing logs reviews
- *   only (D16); the task rules are an organization setting — Owner and Admin (TK2).
+ *   only (D16); Pharmacist and Marketing work the tasks they are given without adding any
+ *   (D81 (5)); the task rules are an organization setting — Owner and Admin (TK2). Each role's
+ *   tone is the design's (D81 (4)).
  * - **Notes:** Admin is everything Owner holds in the app and the team, minus deleting the
- *   organization (D8), and is the one locked role. Every other role is a system role (its name
- *   is fixed, it cannot be deleted) whose access each organization edits.
+ *   organization (D8), and is the one locked preset (the Owner role, provisioned beside them, is
+ *   locked too). Every other role is a system role (its name is fixed, it cannot be deleted)
+ *   whose access each organization edits.
  */
 export function appRolePresets(adminCodes: readonly string[]): readonly AppRolePreset[] {
   return [
     {
       name: 'Admin',
       description: 'Runs the organization: every section, settings, team and roles.',
-      tone: CHIP_TONE.SLATE,
+      tone: CHIP_TONE.LAVENDER,
       isLocked: true,
       permissionCodes: unique(adminCodes),
     },

@@ -17,13 +17,19 @@ import { addDaysToCalendarDate, toAmount } from '@/shared/utils/validation/recor
 import { computeInvoiceAmounts, type InvoiceLineAmounts } from './invoices.amounts.js';
 import { INVOICE_SESSION_CATEGORY_VALUES, INVOICE_TYPE } from './invoices.constants.js';
 import type { InvoiceItemInput } from './invoices.dto.js';
-import type { InvoiceItemWriteRow, InvoicesRepository } from './invoices.repository.js';
+import {
+  billedPriceOf,
+  type InvoiceBilledPrice,
+  type InvoiceOfferCandidate,
+} from './invoices.pricing.js';
+import { type InvoiceItemWriteRow, InvoicesRepository } from './invoices.repository.js';
 
 const medicinesRepository = new MedicinesRepository();
 const offeringsRepository = new OfferingsRepository();
 const patientOfferingsRepository = new PatientOfferingsRepository();
 const suggestionsRepository = new PatientOfferingSuggestionsRepository();
 const treatmentsRepository = new PatientTreatmentsRepository();
+const invoicesRepository = new InvoicesRepository();
 
 /** The offering category of a consultation invoice's lines (B8). */
 const CONSULTATION_CATEGORY = 'consultation';
@@ -46,6 +52,8 @@ export interface InvoiceLineHeader {
 
 /** One line as the save writes it (B9, B12, B13, B28). */
 export interface PlannedInvoiceLine {
+  /** Its place in the save's `items` (0-based) — the line a refusal names (`items/2`). */
+  index: number;
   existing: InvoiceItemWriteRow | undefined;
   offering: BaseRecordRow | null;
   /** The columns the line row is written with. */
@@ -56,6 +64,11 @@ export interface PlannedInvoiceLine {
   validUntil: string | null;
   /** The treatments it now bills (B28). */
   treatmentIds: number[];
+  /**
+   * The live offers its rate and sessions apply (M26) — the price offer, then the extra-sessions
+   * one; none on a kept line, which keeps its snapshot (B12).
+   */
+  offerIds: string[];
   amounts: InvoiceLineAmounts;
 }
 
@@ -185,10 +198,33 @@ async function resolveTreatments(options: {
   return ids;
 }
 
-/** The snapshot of a line's item (B9): its name, rate, GST — the offering's billed price, or the medicine's. */
+/**
+ * What an offering bills on the invoice's day at its branch (M26, routes-final §3.10) — the best
+ * live offer on its base price, never below its lowest price ({@link billedPriceOf}).
+ */
+function billedPriceOfOffering(options: {
+  offering: BaseRecordRow;
+  header: InvoiceLineHeader;
+  offers: ReadonlyMap<number, InvoiceOfferCandidate[]>;
+}): InvoiceBilledPrice {
+  const { offering } = options;
+  return billedPriceOf({
+    price: toAmount(offering.price) ?? 0,
+    offerPrice: toAmount(offering.offer_price),
+    minPrice: toAmount(offering.min_price) ?? 0,
+    offers: options.offers.get(offering.id) ?? [],
+    day: options.header.invoiceDate,
+  });
+}
+
+/**
+ * The snapshot of a line's item (B9): its name, rate, GST — the offering's billed price (M26), or
+ * the medicine's MRP.
+ */
 function snapshotOf(options: {
   offering: BaseRecordRow | null;
   medicine: BaseRecordRow | null;
+  billed: InvoiceBilledPrice | null;
 }): Record<string, unknown> {
   const { offering, medicine } = options;
   if (offering) {
@@ -197,7 +233,7 @@ function snapshotOf(options: {
       medicine_id: null,
       name: offering.name,
       pack_size: null,
-      rate: toAmount(offering.offer_price) ?? toAmount(offering.price) ?? 0,
+      rate: options.billed?.rate ?? toAmount(offering.price) ?? 0,
       gst_percent: offering.gst_percent,
       is_gst_inclusive: offering.is_gst_inclusive,
     };
@@ -316,12 +352,61 @@ interface LinePlanContext {
   header: InvoiceLineHeader;
   ids: InvoiceLineIds;
   offeredBranches: Map<number, number[]>;
+  /** The offers that name each offering and run at the invoice's branch (M26). */
+  offers: Map<number, InvoiceOfferCandidate[]>;
   readOffering: (id: number) => Promise<BaseRecordRow | null>;
 }
 
 /**
- * Plans one line (B8–B13, B28): its item, the fit, the spent-session guard, the snapshot, the
- * sessions and validity it sells, the treatments it bills and the plan row it invoices.
+ * PK4: the sessions a line sells — a kept line keeps its own per unit (what it was sold with,
+ * free sessions included, B12); a new or changed one the offering's sessions plus the best live
+ * extra-sessions offer's (M26), per unit. Null for an offering that sells no sessions.
+ */
+function sessionsOf(options: {
+  offering: BaseRecordRow | null;
+  kept: InvoiceItemWriteRow | undefined;
+  keepsItem: boolean;
+  quantity: number;
+  extraSessions: number;
+}): number | null {
+  const { offering, kept } = options;
+  if (!sellsSessions(offering)) return null;
+  const stored = kept?.sessions_total;
+  if (options.keepsItem && kept && typeof stored === 'number' && kept.quantity > 0) {
+    return Math.round(stored / kept.quantity) * options.quantity;
+  }
+  return (Number(offering?.sessions ?? 1) + options.extraSessions) * options.quantity;
+}
+
+/**
+ * Refuses a line change the invoice cannot take: a new or changed offering that does not fit the
+ * invoice (its branch, its patient file), and a line whose sessions were spent being changed (B13).
+ */
+async function assertLineChangeAllowed(options: {
+  item: InvoiceLineInput;
+  kept: InvoiceItemWriteRow | undefined;
+  offering: Awaited<ReturnType<LinePlanContext['readOffering']>>;
+  changesItem: boolean;
+  plan: LinePlanContext;
+}): Promise<void> {
+  const { item, kept, offering, changesItem, plan } = options;
+  if (offering && (!kept || changesItem)) {
+    await assertOfferingFits({
+      offering,
+      header: plan.header,
+      offeredBranches: plan.offeredBranches,
+    });
+  }
+  const spent = kept?.sessions_used ?? 0;
+  if (spent > 0 && (changesItem || item.quantity !== kept?.quantity)) {
+    throw new ConflictError('errors:invoiceOfferingInUse').withReason('offering_in_use');
+  }
+}
+
+/**
+ * Plans one line (B8–B13, B28): its item, the fit, the spent-session guard, the snapshot (a new or
+ * changed offering line at its billed price — the best live offer, M26), the sessions and validity
+ * it sells, the treatments it bills and the plan row it invoices.
  */
 async function planLine(options: {
   item: InvoiceLineInput;
@@ -338,22 +423,26 @@ async function planLine(options: {
     type: header.type,
   });
   const offering = offeringId === null ? null : await plan.readOffering(offeringId);
-  if (offering && (!kept || changesItem)) {
-    await assertOfferingFits({ offering, header, offeredBranches: plan.offeredBranches });
-  }
+  await assertLineChangeAllowed({ item, kept, offering, changesItem, plan });
   const spent = kept?.sessions_used ?? 0;
-  if (spent > 0 && (changesItem || item.quantity !== kept?.quantity)) {
-    throw new ConflictError('errors:invoiceOfferingInUse').withReason('offering_in_use');
-  }
   const keepsItem = kept !== undefined && !changesItem;
   const medicine =
     medicineId === null || keepsItem ? null : await medicinesRepository.findById(medicineId);
-  const snapshot = keepsItem ? keptSnapshot(kept) : snapshotOf({ offering, medicine });
-  const sessionsTotal = sellsSessions(offering)
-    ? Number(offering?.sessions ?? 1) * item.quantity
-    : null;
+  const billed =
+    offering && !keepsItem
+      ? billedPriceOfOffering({ offering, header, offers: plan.offers })
+      : null;
+  const snapshot = keepsItem ? keptSnapshot(kept) : snapshotOf({ offering, medicine, billed });
+  const sessionsTotal = sessionsOf({
+    offering,
+    kept,
+    keepsItem,
+    quantity: item.quantity,
+    extraSessions: billed?.extraSessions ?? 0,
+  });
   const validityDays = Number(offering?.validity_days ?? 0);
   return {
+    index: options.index,
     existing: kept,
     offering,
     sessionsTotal,
@@ -368,6 +457,9 @@ async function planLine(options: {
       sessionsLeft: sessionsTotal === null ? 0 : sessionsTotal - spent,
       treatmentIds: plan.ids.treatments,
     }),
+    offerIds: billed
+      ? [billed.priceOfferId, billed.extraOfferId].filter((id): id is string => id !== null)
+      : [],
     values: {
       ...snapshot,
       line_number: options.index + 1,
@@ -429,13 +521,15 @@ function withAmounts(
  *
  * @remarks
  * - **Algorithm:** a line sent with an `id` is a kept line (its snapshot stays unless its item
- *   changes), without one a new line; a stored line left out is removed. One read per kind of id;
- *   the amounts from {@link computeInvoiceAmounts}.
+ *   changes), without one a new line; a stored line left out is removed. A new or changed
+ *   offering line bills the best live offer on the invoice's day at its branch, never below the
+ *   lowest price, and a session line adds the best extra-sessions offer's free sessions (M26,
+ *   routes-final §3.10). One read per kind of id; the amounts from {@link computeInvoiceAmounts}.
  * - **Failure modes:** `ValidationError` on `items` (a line of another invoice, the wrong kind for
  *   the type, an inactive offering or one not offered here, another patient's plan row),
  *   `patient_treatment_ids`, `overall_discount` (more than the lines come to), and
- *   `below_lowest_price` (B10); `ConflictError` `offering_in_use` (a line whose patient offering
- *   has a spent session removed, or its offering or quantity changed).
+ *   `below_lowest_price` (B10, on `items/<n>` — the line); `ConflictError` `offering_in_use` (a
+ *   line whose patient offering has a spent session removed, or its offering or quantity changed).
  */
 export async function planInvoiceLines(options: {
   context: BaseRecordWriteContext;
@@ -451,6 +545,11 @@ export async function planInvoiceLines(options: {
     header,
     ids,
     offeredBranches: await offeringsRepository.findOfferedBranches([...ids.offerings.values()]),
+    // Only a sent offering takes a new snapshot — a kept line keeps its rate (B12)
+    offers: await invoicesRepository.findOfferCandidates({
+      offeringIds: [...ids.offerings.values()],
+      branchId: header.branchId,
+    }),
     readOffering: async (id) => {
       if (!offeringRows.has(id)) {
         const row = await offeringsRepository.findById(id);
@@ -480,7 +579,8 @@ export async function planInvoiceLines(options: {
 
 /**
  * B10: no offering line's net per unit — after its discounts, before GST is added — below the
- * offering's lowest price; the floor is named only to holders of `offering:lower_price:read`.
+ * offering's lowest price; the 400 names the line (`items/<n>`, its place in the save's `items` —
+ * D81, PAY-M1), and the floor only to holders of `offering:lower_price:read`.
  */
 async function assertNotBelowLowestPrice(
   lines: readonly PlannedInvoiceLine[],
@@ -492,7 +592,7 @@ async function assertNotBelowLowestPrice(
     if (line.offering && Math.round(line.amounts.net * 100) < Math.round(floor * 100) * quantity) {
       const showsFloor = await context.can(APP_PERMISSIONS.OFFERING_LOWER_PRICE_READ);
       throw fieldValidationError({
-        field: 'items',
+        field: `items/${line.index}`,
         messageKey: showsFloor
           ? 'errors:validation.invoiceBelowLowestPriceFloor'
           : 'errors:validation.invoiceBelowLowestPrice',

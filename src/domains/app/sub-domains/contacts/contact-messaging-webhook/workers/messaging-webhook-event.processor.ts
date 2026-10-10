@@ -28,6 +28,7 @@ import {
   isStopReply,
 } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/contact-messaging-webhook.replies.js';
 import { requestMessagingWebhookEventProcessing } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/queues/messaging-webhook-event.queue.js';
+import { requestTaskRulesRun } from '@/domains/app/sub-domains/tasks/queues/task-rules.queue.js';
 
 /** The WhatsApp report statuses the stream knows (`deleted`, `warning` … are not messages' states). */
 const DELIVERY_STATUSES: ReadonlySet<string> = new Set(['sent', 'delivered', 'read', 'failed']);
@@ -194,7 +195,7 @@ async function unknownInstagramSenders(
  *   again) and the rest go on. Meta down or throttling during a lookup releases the claims and
  *   throws the outage (the queue pauses); a lookup Meta refuses leaves the sender unknown.
  * - **Side effects:** `contact_activities`, `contacts`, `contact_phones`, `leads` writes; Graph
- *   API lookups; possibly a follow-up job.
+ *   API lookups; a task-rules run once an update was applied (D81 T7); possibly a follow-up job.
  */
 export async function runMessagingWebhookEventJob(
   organizationPublicId: string,
@@ -265,6 +266,10 @@ export async function runMessagingWebhookEventJob(
       );
       counts.failedCount += 1;
     }
+  }
+  if (counts.processedCount > 0) {
+    // A reply or a "yes" can close a task at once rather than at the next sweep (D81 T7, WC-48).
+    await requestTaskRulesRun(organizationPublicId);
   }
   if (events.length === MESSAGING_WEBHOOK_EVENTS_PER_JOB) {
     await requestMessagingWebhookEventProcessing(organizationPublicId);

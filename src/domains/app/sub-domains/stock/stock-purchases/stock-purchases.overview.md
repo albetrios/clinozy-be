@@ -35,8 +35,12 @@ Tables `app.stock_purchases` and `app.stock_purchase_items`.
 ## Key invariants
 
 - **Lines are what arrived (S10):** each writes a `received` movement and sets the item's
-  `last_rate`; fixed once saved (`409 purchase_received`).
+  `last_rate`; fixed once saved (`409 purchase_received`). A `new_item` line uses the live item of
+  that name (any case), else adds one with the item defaults and the purchase's vendor (D81).
 - **Paid by billing (S11):** `paid_amount` is kept by supplier-bill payments pointing at it, never
-  above the bill; "Paid" records one in the same transaction.
+  above the bill; "Paid" records one in the same transaction (`payee_name` the vendor's name, no
+  `expense_category` — only an expense has one). Paying later is `POST /app/payments`
+  `kind=supplier_bill` with `stock_purchase_id`, `payee_name`, `branch_id` and `splits` (D81
+  STOCK-M1, M2).
 - **Delete only unpaid (S12):** it takes back its received stock (`409 not_enough_stock` when some
   was used); a restore receives it again.

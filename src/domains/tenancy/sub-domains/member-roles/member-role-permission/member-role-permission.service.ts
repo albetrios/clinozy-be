@@ -23,7 +23,9 @@ import { assertCallerCanGrantPermissionCodes } from '@/domains/tenancy/sub-domai
  *   resolved by public id, then the repository is invoked.
  * - **Failure modes:** `NotFoundError` when the organization or role does not
  *   exist (or has been soft-deleted); Zod `ValidationError` from
- *   {@link validatePutMemberRolePermissions} for malformed input.
+ *   {@link validatePutMemberRolePermissions} for malformed input; `ForbiddenError` on a locked
+ *   role (`role_locked` — Owner, Admin) and on the role the owner holds as their main one
+ *   (`owner_role_fixed`).
  * - **Side effects:** {@link put} replaces the role's entire permission set
  *   (DELETE then INSERT) in a single repository call, then calls
  *   {@link invalidateOrganizationPermissions} so every member holding the role
@@ -73,7 +75,7 @@ export class MemberRolePermissionService {
       if (!organization) throw new NotFoundError('Organization');
       const role = await this.memberRoleRepository.findByPublicId(role_public_id, organization.id);
       if (!role) throw new NotFoundError('Role');
-      // Launch RC-6 (D40): a locked role's access is fixed — only Admin is locked.
+      // Launch RC-6 (D40, D81 (4)): a locked role's access is fixed — Owner and Admin are locked.
       if (role.is_locked) {
         throw new ForbiddenError('errors:roleLocked').withReason('role_locked');
       }
@@ -92,8 +94,11 @@ export class MemberRolePermissionService {
       if (!ownerMembership) {
         throw new NotFoundError('Owner membership');
       }
+      // The owner's main role only: their extra roles (D81 (4)) are not what keeps them in.
       if (ownerMembership.role_id === role.id) {
-        throw new ForbiddenError('errors:cannotModifyOwnerRolePermissions');
+        throw new ForbiddenError('errors:cannotModifyOwnerRolePermissions').withReason(
+          'owner_role_fixed',
+        );
       }
       /**
        * Held-permissions-on-remove (sec-T2): an empty-array PUT (or partial replacement)

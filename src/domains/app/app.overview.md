@@ -25,7 +25,7 @@ as the launch's ROUTE builds them.
 | Sub-domain | Tables | Routes |
 | --- | --- | --- |
 | [branches](sub-domains/branches/branches.overview.md) | `app.branches`; nested `app.branch_members`, `app.branch_rooms`, `app.branch_machines`, `app.branch_holidays` | `/app/branches`, `/app/branches/my`, `/app/branches/{branch_id}`, `/app/branches/{branch_id}/{members,rooms,machines,holidays}…` |
-| [memberships](sub-domains/memberships/memberships.overview.md) | reads `tenancy.memberships` (the team picker and member directory); nested `app.membership_preferences`, `app.membership_preference_branches`, `app.membership_saved_views` | `/app/memberships`, `/app/memberships/me/{preferences,saved-views…}` |
+| [memberships](sub-domains/memberships/memberships.overview.md) | reads `tenancy.memberships` (the team picker and member directory) and `tenancy.roles` (the role directory); nested `app.membership_preferences`, `app.membership_preference_branches`, `app.membership_saved_views` | `/app/memberships`, `/app/roles`, `/app/memberships/me/{preferences,saved-views…}` |
 | [offerings](sub-domains/offerings/offerings.overview.md) | `app.offerings`; nested `app.offering_groups`, `app.offers` | `/app/offerings…`, `/app/offering-groups…`, `/app/offers…` |
 | [contacts](sub-domains/contacts/contacts.overview.md) | `app.contacts`, `app.contact_phones`; nested `app.contact_members`, `app.contact_activities`, `app.contact_message_templates` | `/app/contacts…`, `/app/contacts/{contact_id}/{members,activities…}`, `/app/contact-message-templates…` |
 | [leads](sub-domains/leads/leads.overview.md) | `app.leads`, `app.lead_involved_memberships` | `/app/leads…` |
@@ -46,7 +46,7 @@ as the launch's ROUTE builds them.
 ## Cross-domain flows
 
 - [organization-switch-and-capability-discovery-flow](../../FLOWS.md#organization-switch-and-capability-discovery-flow) — the active organization (the `org` claim) scopes every app route.
-- Reads tenancy through `OrganizationService` and `MembershipService` only (never their repositories).
+- Reads tenancy through `OrganizationService`, `MembershipService` and `MemberRoleService` only (never their repositories).
 - The launch's three key flows (PRD 3.2) run end to end in `__tests__/e2e/`: an enquiry becomes a
   patient (`flow-enquiry-to-patient`), visit → prescription → sale → payment
   (`flow-visit-to-payment`), treatment plan and feedback (`flow-plan-and-feedback`); the daily

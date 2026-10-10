@@ -409,7 +409,7 @@ that drops them is built. The medical store's routes are §11's — back in the 
 | 11.50 | NEW     | POST   | `/medical-sales/{medical_sale_id}/returns`                             | `payment:create`  | Return from patient — refund, stock back                 | routes-final §11.H.7 | `POST /api/v1/app/medical-sales/{medical_sale_id}/returns` · #153                             |
 | 11.51 | NEW     | GET    | `/medical-payments`                                                    | `medicine:read`   | The store's Payments tab                                 | routes-final §11.H.7 | `GET /api/v1/app/medical-payments` · #153                                                     |
 
-## 12. Frontend integration (D81, ROUTE #154–#163)
+## 12. Frontend integration (D81, D82, ROUTE #154–#165)
 
 Proposed 2026-10-10 from the frontend's per-room research; built and confirmed row by row in `AS-BUILT.md`.
 
@@ -426,12 +426,14 @@ Proposed 2026-10-10 from the frontend's per-room research; built and confirmed r
 | I9  | GET        | `/auth/me/context`                                       | CHANGED | adds `membership_id` and `my_roles` (N10)                                                                                                  |
 | I10 | GET        | `/tenancy/organization`                                  | CHANGED | adds `owner_user_id`; memberships carry `is_owner`                                                                                         |
 | I11 | GET        | `/app/payments`, `/app/invoices`, `/app/pending-credits` | CHANGED | `q` finds the person; rows carry `created_by_membership_id`; ledger rows their link numbers; invoices' `meta.due_total`, `meta.paid_total` |
-| I12 | POST/PATCH | `/app/invoices`                                          | CHANGED | the best live offer applied (M26); `below_lowest_price` names its line                                                                     |
+| I12 | POST/PATCH | `/app/invoices`                                          | CHANGED | the best live offer applied (M26); `below_lowest_price` names its line (`errors[].field = items/<n>`)                                      |
 | I13 | GET        | `/app/branches/my`                                       | CHANGED | adds the phone, GSTIN and address                                                                                                          |
 | I14 | PATCH/POST | `/app/offerings`                                         | CHANGED | `min_price` guarded by `offering:lower_price:read`; the name and code conflicts' reasons                                                   |
 | I15 | GET        | `/app/stock-vendors`                                     | CHANGED | `sort=payable`, `meta.payable_total`, `purchase_count`                                                                                     |
 | I16 | GET        | `/app/stock-item-movements`                              | CHANGED | the purchase's number and bill number; a revert's original type and time                                                                   |
 | I17 | GET        | `/app/stock-items`                                       | CHANGED | `lasts_days_to`                                                                                                                            |
+| I18 | POST       | `/tenancy/organization/memberships`, `…/{membership_id}/invitation/resend` | CHANGED | `debug_invitation_token` in the answer while `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` is on — never in production (D82 (1), ROUTE #164) |
+| I19 | POST       | `/tenancy/organization/memberships`                      | CHANGED | the seat ceiling is the plan's seats or more bought, not the synced headcount; `seats_total` reads it (D82 (2), ROUTE #165)                |
 
 ## Before → after
 

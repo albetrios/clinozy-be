@@ -8,19 +8,21 @@ import type { MembershipService } from '@/domains/tenancy/sub-domains/membership
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import type { AuthorizationService } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import type { OrganizationOutput } from '@/domains/tenancy/sub-domains/organization/organization.types.js';
+import type { CallerMembershipContext } from '@/domains/tenancy/sub-domains/membership/membership.types.js';
 import type { AuthMeContextData } from './auth-me-context.types.js';
 
 /**
  * Aggregates the authenticated caller's "effective context" in one read: their
- * self profile, the active organization (with type-derived capabilities), the
- * permission codes they hold in that organization, their global role, and the
- * organizations they belong to (for an organization switcher).
+ * self profile, the active organization (with type-derived capabilities), their
+ * membership there and the roles it holds, the permission codes they hold in that
+ * organization, and their global role.
  *
  * @remarks
- * - **Algorithm:** sequential cross-domain reads through services (never
- *   repositories) — `UserService.getMe`, `OrganizationService.list`, and, when an
- *   active organization is in scope, `OrganizationService.getByPublicId` +
- *   `AuthorizationService.resolveUserOrganizationPermissions`.
+ * - **Algorithm:** cross-domain reads through services (never repositories) —
+ *   `UserService.getMe` and, when an active organization is in scope,
+ *   `OrganizationService.getByPublicId` + `AuthorizationService.resolveUserOrganizationPermissions`
+ *   + `MembershipService.getCallerMembershipContext` (the membership's public id and its roles,
+ *   main role first — launch ROUTE #156, N10, S3).
  * - **Failure modes:** propagates `NotFoundError` when the user or active organization is
  *   not accessible to the caller; an absent active-organization claim yields
  *   `activeOrganization: null` and empty permissions rather than an error.
@@ -34,8 +36,9 @@ export class AuthMeContextService {
     private readonly userService: UserService,
     private readonly organizationService: OrganizationService,
     private readonly authorizationService: AuthorizationService,
-    // Launch ROUTE #4: the caller's roles (D5); absent in the worker process and minimal harnesses.
-    private readonly membershipService?: Pick<MembershipService, 'listRolePublicIdsForCaller'>,
+    // Launch ROUTE #4 / #156: the caller's membership and roles (D5, N10); absent in the worker
+    // process and minimal harnesses.
+    private readonly membershipService?: Pick<MembershipService, 'getCallerMembershipContext'>,
   ) {}
 
   /** Assembles the caller's effective context for `GET /auth/me/context`. */
@@ -59,7 +62,7 @@ export class AuthMeContextService {
     // `resolveUserOrganizationPermissions` stays outside: it drives a DIFFERENT guc
     // (`app.current_organization_public_id`), so it must keep its own transaction and
     // can still overlap with the block below.
-    const [userScoped, myPermissions, myRoleIds] = await Promise.all([
+    const [userScoped, myPermissions, membership] = await Promise.all([
       withAppDatabaseContext(scope, async () => ({
         user: await this.userService.getMe(scope),
         activeOrganization: activeOrganizationPublicId
@@ -73,16 +76,19 @@ export class AuthMeContextService {
           )
         : Promise.resolve<string[]>([]),
       this.membershipService
-        ? this.membershipService.listRolePublicIdsForCaller(scope)
-        : Promise.resolve<string[]>([]),
+        ? this.membershipService.getCallerMembershipContext(scope)
+        : Promise.resolve<CallerMembershipContext | null>(null),
     ]);
     const { user, activeOrganization } = userScoped;
+    const myRoles = membership?.roles ?? [];
 
     return {
       user,
       activeOrganization,
+      membershipId: membership?.membership_id ?? null,
       myPermissions,
-      myRoleIds,
+      myRoleIds: myRoles.map((role) => role.id),
+      myRoles,
       globalRole: globalRole ?? null,
     };
   }

@@ -19,7 +19,7 @@ export interface MembershipInvitationRow {
 /**
  * Public HTTP response shape for a membership invitation. `id` and `membership_id`
  * are external public ids; timestamps are ISO-8601. No token material leaves
- * the service through this shape.
+ * the service through this shape — except the dev-only `debug_invitation_token`.
  */
 export interface MembershipInvitationOutput {
   id: string;
@@ -29,6 +29,12 @@ export interface MembershipInvitationOutput {
   accepted_at: string | null;
   revoked_at: string | null;
   created_at: string;
+  /**
+   * The raw accept token, on the issue and resend answers only, and only when
+   * `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` is on — which the env schema refuses outside the
+   * `local` and `development` targets (launch ROUTE #164, D82).
+   */
+  debug_invitation_token?: string;
 }
 
 /**

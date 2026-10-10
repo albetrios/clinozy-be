@@ -106,19 +106,24 @@ export interface MembershipUserSummary {
 export interface MembershipInvitationRef {
   id: string;
   expires_at: string;
+  /** The raw accept token, on the add-member answer only, in non-production (launch ROUTE #164). */
+  debug_invitation_token?: string;
 }
 
 /**
  * Public HTTP response shape for a membership (launch §2.B.6). Every identifier is an external
  * public id; timestamps are ISO-8601 strings. `role_ids[0]` is the main role (T16 — no separate
  * `role_id` / `role`); `user` embeds the login's summary; `invitation` carries the live invite on
- * `invited` rows; `display_name`, `ended_at` and `end_reason` name an ended member (D58).
+ * `invited` rows; `display_name`, `ended_at` and `end_reason` name an ended member (D58);
+ * `is_owner` names the organization's owner (D81 (4)).
  */
 export interface MembershipOutput {
   id: string;
   user_id: string;
   organization_id: string;
   status: string;
+  /** The organization's owner (launch D81 (4)) — status and main role fixed, never removed. */
+  is_owner: boolean;
   joined_at: string | null;
   created_at: string;
   updated_at: string;
@@ -144,4 +149,26 @@ export interface MembershipOutput {
   /** `HH:mm`, after `work_starts_at`. */
   work_ends_at: string;
   commission_percent: number;
+}
+
+/** A role the caller holds, as `GET /auth/me/context` names it in `my_roles` (launch ROUTE #156, S3). */
+export interface CallerRoleSummary {
+  /** The role's public id (`rol_…`). */
+  id: string;
+  /** The role's name — a system role's never changes, so a client may key on it. */
+  name: string;
+  /** The role's chip tone. */
+  tone: string;
+  /** True for a role the clinic preset made (it cannot be deleted). */
+  is_system: boolean;
+}
+
+/**
+ * The caller's membership in their active organization (`GET /auth/me/context`, launch ROUTE #156 —
+ * N10, S3): its public id and every live role it holds, the main role first (D5).
+ */
+export interface CallerMembershipContext {
+  /** The membership's public id (`mem_…`). */
+  membership_id: string;
+  roles: CallerRoleSummary[];
 }

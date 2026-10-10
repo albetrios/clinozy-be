@@ -24,7 +24,8 @@ function stockLevelCondition(level: string): SQL {
  * @remarks
  * - **Algorithm:** `q` on the name or the number (`#167`); sorts `name` (default, A–Z),
  *   `stock_item_number`, `category` (then name), `quantity`, `lasts_days` (none last) and
- *   `created_at`; the `stock_level` filter is derived (`out` · `low` · `ok`). The balance moves in
+ *   `created_at`; the `stock_level` filter is derived (`out` · `low` · `ok`), and so is
+ *   `lasts_days_to` (lasts at most that many days — none without usage, D81). The balance moves in
  *   one guarded statement — never below 0 — and leaves `updated_at` alone: a movement is not a
  *   change to the item's details (D43 stays about them).
  */
@@ -57,6 +58,8 @@ export class StockItemsRepository extends BaseRecordRepository {
             (value as string[]).map((level) => stockLevelCondition(level)),
             sql` OR `,
           )})`,
+        // D81: runs out within N days — an item without a weekly usage never does
+        lasts_days_to: (value) => sql`${LASTS_DAYS} <= ${value as number}`,
       },
       defaultSort: 'name',
       defaultOrder: 'asc',

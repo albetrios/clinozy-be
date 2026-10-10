@@ -56,7 +56,9 @@ no nested sub-domains (`visits/` went).
   `failed`) when the clinic's WhatsApp is connected; a move and a reinstate start them over
   (`not_sent`, `is_confirmed_by_reply` false); a move, a cancel, a no-show, a reinstate or a delete
   stops the one still waiting (WC-7); a "Yes" on WhatsApp confirms the next asked booking (WC-8,
-  `is_confirmed_by_reply`). A booking, a move and a reinstate ask for the rules run after the commit.
+  `is_confirmed_by_reply`). A booking, a move, a status change (a confirm, a check-in, a cancel, a
+  reinstate — D81 T7, WC-48) and a delete ask for the rules run after the commit, so the booking's
+  task opens or closes at once.
 - **The floor (A10, A11):** the stage exists only while checked in, moves forward only; pause and
   resume toggle `visit_paused_at`; undo check-in only while `waiting`.
 - **Check-in converts (A14):** the contact's open lead moves to `clinic_visited` (with a `system`

@@ -118,8 +118,62 @@ describe('Branches — Integration', () => {
       const body = response.json() as BranchListBody;
       expect(body.data.map((branch) => branch.id)).toEqual([assigned.public_id]);
       expect(Object.keys(body.data[0]!).sort()).toEqual(
-        ['closes_at', 'id', 'is_main', 'name', 'opens_at', 'tone', 'working_days'].sort(),
+        [
+          'address_line_one',
+          'address_line_two',
+          'area',
+          'city',
+          'closes_at',
+          'gst_number',
+          'id',
+          'is_main',
+          'name',
+          'opens_at',
+          'phone',
+          'postal_code',
+          'state',
+          'tone',
+          'working_days',
+        ].sort(),
       );
+    });
+
+    it("gives every member the branch's address, phone and GSTIN — a printed bill's header (D81)", async () => {
+      const { organization, token } = await adminContext();
+      const staff = await memberWith([], organization);
+      const branch = await createTestBranch({ organizationId: organization.id, name: 'Vesu' });
+      await grantTestBranchMember({
+        branchId: branch.id,
+        membershipId: staff.membership.id,
+        organizationId: organization.id,
+      });
+      const changed = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath(`/app/branches/${branch.public_id}`),
+        token,
+        payload: { gst_number: '24ABCDE1234F1Z5', address_line_two: 'Near the lake' },
+      });
+      expect(changed.statusCode).toBe(200);
+
+      const response = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/app/branches/my'),
+        token: staff.token,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const [mine] = (response.json() as BranchListBody).data;
+      expect(mine).toMatchObject({
+        id: branch.public_id,
+        address_line_one: '1 Main Road',
+        address_line_two: 'Near the lake',
+        area: 'Adajan',
+        city: 'Surat',
+        state: 'Gujarat',
+        postal_code: '395009',
+        phone: '+919800000000',
+        gst_number: '24ABCDE1234F1Z5',
+      });
     });
 
     it('gives a branch reader every active branch, main first', async () => {

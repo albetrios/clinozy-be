@@ -21,6 +21,13 @@ export const organizationSchema = {
       description: 'Possible values: ACTIVE | SUSPENDED | ARCHIVED',
       example: 'ACTIVE',
     },
+    owner_user_id: {
+      type: 'string',
+      nullable: true,
+      description:
+        "The owner's user id (`usr_…`) — compare with your own user id to know whether you own it; null only when the owner's login is gone.",
+      example: 'usr_a1b2c3d4e5f6g7h8i9j0k',
+    },
     logo_url: { type: 'string', nullable: true },
     specialties: {
       type: 'array',
@@ -40,6 +47,7 @@ export const organizationExample = {
   slug: 'acme-corporation',
   type: 'TEAM',
   status: 'ACTIVE',
+  owner_user_id: 'usr_a1b2c3d4e5f6g7h8i9j0k',
   logo_url: 'https://cdn.example.com/logos/acme-corp.png',
   specialties: ['skin'],
   timezone: 'Asia/Kolkata',
@@ -168,6 +176,11 @@ export const membershipSchema = {
       description: 'Possible values: invited | active | suspended',
       example: 'invited',
     },
+    is_owner: {
+      type: 'boolean',
+      description:
+        "The organization's owner — their status and main role are fixed and they cannot be removed (403 reason owner_membership_fixed); they may hold extra roles after the main one.",
+    },
     joined_at: { type: 'string', format: 'date-time', nullable: true },
     created_at: { type: 'string', format: 'date-time' },
     updated_at: { type: 'string', format: 'date-time' },
@@ -241,6 +254,7 @@ export const membershipExample = {
   user_id: 'usr_k7x9m2pqr4w8n1v3a1b2c',
   organization_id: 'org_k7x9m2pqr4w8n1v3a1b2c',
   status: 'active',
+  is_owner: false,
   joined_at: '2026-01-15T10:30:00.000Z',
   created_at: '2026-01-15T10:30:00.000Z',
   updated_at: '2026-02-10T14:20:00.000Z',
@@ -280,6 +294,16 @@ export const invitationSchema = {
   },
 };
 
+/**
+ * The dev-only invitation accept-token echo (launch ROUTE #164, D82) — on the add-member answer's
+ * `invitation` and on the resend answer, never in production.
+ */
+export const debugInvitationTokenProperty = {
+  type: 'string',
+  description:
+    'The raw invitation accept token — present only in non-production, when MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED is on (the env schema refuses it in production; there the token travels only in the invitation email). Pass it as `token` to POST /tenancy/membership-invitations/{membership_invitation_id}/accept.',
+};
+
 export const invitationExample = {
   id: 'inv_r4t6m3n7p2q8w5k1a1b2c',
   membership_id: 'mem_q8w3n7p2m5k1r4t6a1b2c',
@@ -301,7 +325,8 @@ export const memberRoleSchema = {
     tone: { type: 'string', example: 'sky' },
     is_locked: {
       type: 'boolean',
-      description: 'True when the role access cannot be edited (Admin).',
+      description:
+        "Its codes never change (`PUT /tenancy/organization/roles/{role_id}/permissions` is a 403 `role_locked`) — Owner and Admin as a clinic is provisioned. Not the only fixed role: the role the organization's owner holds as their main role is a 403 `owner_role_fixed` whatever this says — it is the first of `role_ids` on the `is_owner` membership (USERS-M3)",
     },
     member_count: {
       type: 'integer',

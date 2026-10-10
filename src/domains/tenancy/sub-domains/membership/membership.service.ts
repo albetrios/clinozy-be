@@ -25,6 +25,7 @@ import {
   preferredLocalesForOrganizationDefaultLocale,
 } from '@/domains/user/sub-domains/user-settings/user-settings-locale-defaults.util.js';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
+import type { OrganizationMembershipContext } from '@/domains/tenancy/sub-domains/organization/organization.types.js';
 import { assertTeamOrganization } from '@/domains/tenancy/sub-domains/organization/organization-capability.js';
 import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.js';
 import type { MemberRoleService } from '@/domains/tenancy/sub-domains/member-roles/member-role.service.js';
@@ -34,6 +35,7 @@ import type { PermissionRepository } from '@/domains/tenancy/sub-domains/permiss
 import { assertCallerCanGrantPermissionCodes } from '@/domains/tenancy/sub-domains/permission/assert-grantable-permissions.util.js';
 import type { MembershipListQuery, MembershipRepository } from './membership.repository.js';
 import {
+  type CallerMembershipContext,
   type MembershipAccessRefs,
   type MembershipOutput,
   type MembershipProfileData,
@@ -53,6 +55,7 @@ import { resolveStoredMediaReadUrl } from '@/shared/utils/infrastructure/media-u
 import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import type { MembershipInvitationService } from './membership-invitation/membership-invitation.service.js';
+import { attachInvitationTokenEcho } from './membership-invitation/membership-invitation.serializer.js';
 import { invalidatePermissions } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
 import type { OrganizationApiKeyRepository } from '@/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.repository.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
@@ -66,6 +69,9 @@ import type { CreateMembershipInput, UpdateMembershipInput } from './membership.
 
 /** A role row as the member-role service resolves it. */
 type ResolvedRole = Awaited<ReturnType<MemberRoleService['requireRoleRecordForOrganization']>>;
+
+/** What serializing a membership needs of its organization: the public id and who owns it. */
+type SerializingOrganization = Pick<OrganizationMembershipContext, 'public_id' | 'owner_user_id'>;
 
 /**
  * The app domain's branch access, as the membership routes need it (launch ROUTE #4): read and
@@ -160,6 +166,8 @@ export interface MembershipDirectoryQuery {
   q?: string | undefined;
   rolePublicId?: string | undefined;
   branchPublicId?: string | undefined;
+  /** Only members one of whose roles grants this code (T8); an unknown code matches nobody. */
+  holdsPermissionCode?: string | undefined;
   /** Every membership — any status, live or ended; otherwise live active members only. */
   includeEnded: boolean;
   publicIds?: readonly string[] | undefined;
@@ -168,13 +176,26 @@ export interface MembershipDirectoryQuery {
 }
 
 /**
+ * The 403 for a change the organization owner's membership never takes — their status, their main
+ * role, their removal (sec-new-T1): ownership is handed over first.
+ *
+ * @remarks
+ * - **Notes:** `reason: owner_membership_fixed` (launch D81 (4)) so a client tells it from a
+ *   missing permission; the owner's extra roles and staff profile stay editable.
+ */
+function ownerMembershipFixedError(messageKey: string): ForbiddenError {
+  return new ForbiddenError(messageKey).withReason('owner_membership_fixed');
+}
+
+/**
  * The checks of an edit of a live member (T10, K3, sec-new-T1): their name follows their profile,
- * the owner's status and roles are locked, working hours end after they start, and an invited
- * member's status moves only by accepting the invite.
+ * the owner's status is locked, working hours end after they start, and an invited member's status
+ * moves only by accepting the invite. The owner's roles are checked once resolved
+ * ({@link assertOwnerKeepsMainRole}).
  *
  * @remarks
  * - **Failure modes:** `ValidationError` on `display_name`, `work_ends_at`, `status`;
- *   `ForbiddenError` for the owner's status or roles.
+ *   `ForbiddenError` (`owner_membership_fixed`) for the owner's status.
  */
 function assertLiveMembershipEdit(options: {
   parsed: UpdateMembershipInput;
@@ -197,11 +218,10 @@ function assertLiveMembershipEdit(options: {
    * them out of all RBAC-gated routes with no self-recovery path. The ownership
    * transfer endpoint is the correct mechanism for any ownership-adjacent change.
    */
-  // The owner's staff profile (phone, tone, hours, branches) stays editable; only their
-  // status and roles are locked.
-  const changesStatusOrRoles = parsed.status !== undefined || parsed.role_ids !== undefined;
-  if (changesStatusOrRoles && options.ownerUserId === membership.user_id) {
-    throw new ForbiddenError('errors:ownerMembershipCannotBeModified');
+  // The owner's staff profile (phone, tone, hours, branches) and extra roles stay editable; their
+  // status is locked, and so is their main role (assertOwnerKeepsMainRole).
+  if (parsed.status !== undefined && options.ownerUserId === membership.user_id) {
+    throw ownerMembershipFixedError('errors:ownerMembershipCannotBeModified');
   }
   // Working hours: the DTO checks both ends when both come; one end is checked against the row.
   const workStartsAt = parsed.work_starts_at ?? membership.work_starts_at.slice(0, 5);
@@ -225,6 +245,27 @@ function assertLiveMembershipEdit(options: {
 }
 
 /**
+ * The owner may hold extra roles (launch D81 (4) — the owner is often the clinic's doctor), but
+ * their main role stays first: a `role_ids` whose first role is not the one they hold now is
+ * refused, so the owner never loses the role that gives them the whole organization.
+ *
+ * @remarks
+ * - **Failure modes:** `ForbiddenError` (`owner_membership_fixed`) when the main role would change.
+ * - **Notes:** the grant guard still runs after it — the caller must hold every code of every role
+ *   in the new set, so in practice the owner sets their own extra roles.
+ */
+function assertOwnerKeepsMainRole(options: {
+  membership: { user_id: number; role_id: number };
+  ownerUserId: number | null;
+  mainRoleId: number | undefined;
+}): void {
+  if (options.ownerUserId !== options.membership.user_id) return;
+  if (options.mainRoleId !== options.membership.role_id) {
+    throw ownerMembershipFixedError('errors:ownerMembershipCannotBeModified');
+  }
+}
+
+/**
  * Application service for organization memberships: list/get/create/update/
  * delete, plus self-service `leaveOrganization` and `transferOwnership`.
  *
@@ -241,8 +282,9 @@ function assertLiveMembershipEdit(options: {
  *   {@link UserSettingsService.update} if the user is still on factory-default
  *   locale settings.
  * - **Failure modes:** `NotFoundError('Membership' | 'Organization' | 'Role' |
- *   'User')` for missing rows; `ForbiddenError('errors:ownerCannotLeave')`
- *   when the organization owner tries to leave;
+ *   'User')` for missing rows; `ForbiddenError('errors:ownerCannotLeave')` (`owner_cannot_leave`)
+ *   when the organization owner tries to leave; `ForbiddenError` (`owner_membership_fixed`) for
+ *   the owner's status, main role or removal;
  *   `ForbiddenError('errors:onlyOwnerCanTransfer')` for non-owner ownership
  *   transfers;
  *   `ValidationError` on `status` when a PATCH moves a status other than
@@ -606,12 +648,14 @@ export class MembershipService {
    * live `invited` rows) the pending invitation for a page of memberships, and serializes them. The
    * internal `user_id`/`role_id` are never emitted; user summaries go through the SECURITY DEFINER
    * resolver (auth.users is FORCE RLS and unreachable by a plain join under organization-only
-   * context), and each distinct avatar key is presigned for read.
+   * context), and each distinct avatar key is presigned for read. `is_owner` comes from the
+   * organization's `owner_user_id` (launch D81 (4)).
    */
-  private async serializeMemberships(
-    rows: MembershipRow[],
-    organization_public_id: string,
-  ): Promise<MembershipOutput[]> {
+  private async serializeMemberships(options: {
+    rows: MembershipRow[];
+    organization: SerializingOrganization;
+  }): Promise<MembershipOutput[]> {
+    const { rows, organization } = options;
     if (rows.length === 0) return [];
     const membershipIds = rows.map((row) => row.id);
     const [userSummaryRows, roleSummaryRows, invitationRows, additionalRoleIds, branchIds] =
@@ -655,21 +699,25 @@ export class MembershipService {
         role_ids: [mainRolePublicId, ...(additionalRoleIds.get(row.id) ?? [])],
         branch_ids: branchIds.get(row.id) ?? [],
       };
-      return serializeMembership(
+      return serializeMembership({
         row,
-        organization_public_id,
+        organization_public_id: organization.public_id,
         user,
-        invitationRows.get(row.id) ?? null,
+        invitation: invitationRows.get(row.id) ?? null,
         access,
-      );
+        is_owner: row.user_id === organization.owner_user_id,
+      });
     });
   }
 
-  private async resolveAndSerializeMembership(
-    membership: MembershipRow,
-    organization_public_id: string,
-  ): Promise<MembershipOutput> {
-    const [output] = await this.serializeMemberships([membership], organization_public_id);
+  private async resolveAndSerializeMembership(options: {
+    membership: MembershipRow;
+    organization: SerializingOrganization;
+  }): Promise<MembershipOutput> {
+    const [output] = await this.serializeMemberships({
+      rows: [options.membership],
+      organization: options.organization,
+    });
     return output!;
   }
 
@@ -741,7 +789,7 @@ export class MembershipService {
       return {
         ...result,
         // Batch-resolve user + role summaries + live invitations for the page (no N+1).
-        items: await this.serializeMemberships(result.items, organization_public_id),
+        items: await this.serializeMemberships({ rows: result.items, organization }),
       };
     });
   }
@@ -753,7 +801,8 @@ export class MembershipService {
    *
    * @remarks
    * - **Algorithm:** the same keyset list as {@link MembershipService.list}, sorted by
-   *   `display_name`; an unknown role or branch is an empty page.
+   *   `display_name`; an unknown role or branch is an empty page; `holdsPermissionCode` keeps the
+   *   members one of whose live roles grants it (T8 — e.g. who can be given a task).
    * - **Failure modes:** none beyond the query.
    */
   async listDirectory(scope: OrganizationPrincipalDatabaseScope, query: MembershipDirectoryQuery) {
@@ -777,12 +826,13 @@ export class MembershipService {
         sort: 'name',
         order: 'asc',
         publicIds: query.publicIds,
+        holdsPermissionCode: query.holdsPermissionCode,
         statuses: query.includeEnded ? undefined : [MEMBERSHIP_STATUS.ACTIVE],
         includeEnded: query.includeEnded,
       });
       return {
         ...result,
-        items: await this.serializeMemberships(result.items, organization_public_id),
+        items: await this.serializeMemberships({ rows: result.items, organization }),
       };
     });
   }
@@ -801,7 +851,7 @@ export class MembershipService {
         organization.id,
       );
       if (!membership) throw new NotFoundError('Membership');
-      return this.resolveAndSerializeMembership(membership, organization_public_id);
+      return this.resolveAndSerializeMembership({ membership, organization });
     });
   }
 
@@ -909,7 +959,7 @@ export class MembershipService {
         actingUserId: inviterId,
       });
       // Issue the invitation (token + email) in this same organization transaction.
-      await membershipInvitationService.createForMembership({
+      const issuedInvitation = await membershipInvitationService.createForMembership({
         organization_name: organization.name ?? organization.public_id,
         organization_id: organization.id,
         membership_id: created.id,
@@ -921,7 +971,11 @@ export class MembershipService {
         ...(options?.requestId !== undefined ? { requestId: options.requestId } : {}),
       });
       await this.applyOrganizationLocaleDefaults(inviteeUser.public_id, organization_public_id);
-      return this.resolveAndSerializeMembership(created, organization_public_id);
+      // ROUTE #164: the dev-only accept-token echo rides on the embedded invitation (flag off → none).
+      return attachInvitationTokenEcho(
+        await this.resolveAndSerializeMembership({ membership: created, organization }),
+        issuedInvitation,
+      );
     });
     // sec-R11: invalidate the invitee's cached permissions AFTER the organization transaction commits.
     // Doing it pre-commit left a race where a concurrent recompute re-cached the stale set.
@@ -938,15 +992,16 @@ export class MembershipService {
    *
    * @remarks
    * - **Algorithm:** inside the organization context — the member (live or ended, 404 otherwise);
-   *   `expected_updated_at` (T14); an ended member → rename; a live one → the owner guard (status
-   *   and roles), the status move, the seat check on reactivation, the role grant guard, then the
-   *   write and the access lists. After commit: the permission cache and, when a seat changed, the
-   *   Stripe quantity.
+   *   `expected_updated_at` (T14); an ended member → rename; a live one → the owner guard (status;
+   *   the owner may hold extra roles, but their main role stays first — D81 (4)), the status move,
+   *   the seat check on reactivation, the role grant guard, then the write and the access lists.
+   *   After commit: the permission cache and, when a seat changed, the Stripe quantity.
    * - **Failure modes:** `NotFoundError('Membership')`; `ValidationError` on `display_name` (a live
    *   member's name follows the profile), `membership_ended` (anything but a rename on an ended
    *   member), `status` (a move other than `active` ↔ `suspended`), `work_ends_at`, `role_ids`,
-   *   `branch_ids`; `ForbiddenError` for the owner's status or roles and for a code the caller does
-   *   not hold; `ConflictError` `record_changed` and `seat_limit_reached`.
+   *   `branch_ids`; `ForbiddenError` (`owner_membership_fixed`) for the owner's status or main role
+   *   and for a code the caller does not hold; `ConflictError` `record_changed` and
+   *   `seat_limit_reached`.
    */
   async update(
     scope: OrganizationPrincipalDatabaseScope,
@@ -979,7 +1034,7 @@ export class MembershipService {
         return this.renameEndedMembership({
           membership,
           parsed,
-          organizationPublicId: organization_public_id,
+          organization,
           updatedByUserId: userId ?? null,
         });
       }
@@ -1004,6 +1059,11 @@ export class MembershipService {
         // guard as create — a caller must already hold every permission the roles grant together,
         // so a MEMBERSHIP_UPDATE holder cannot escalate a member past their own access.
         const roles = await this.resolveRoleIds(organization.id, parsed.role_ids);
+        assertOwnerKeepsMainRole({
+          membership,
+          ownerUserId: organization.owner_user_id,
+          mainRoleId: roles[0]?.id,
+        });
         await this.assertCallerCanGrantRoles({
           roles,
           callerUserPublicId: updated_by_user_public_id,
@@ -1038,7 +1098,7 @@ export class MembershipService {
       seatUsageChanged =
         membershipStatusConsumesSeat(membership.status) !==
         membershipStatusConsumesSeat(updated.status);
-      return this.resolveAndSerializeMembership(updated, organization_public_id);
+      return this.resolveAndSerializeMembership({ membership: updated, organization });
     });
     // sec-R11: invalidate AFTER commit so a racing recompute can't re-cache the stale role set.
     if (affectedUserInternalId !== undefined) {
@@ -1059,7 +1119,7 @@ export class MembershipService {
   private async renameEndedMembership(options: {
     membership: MembershipRow;
     parsed: UpdateMembershipInput;
-    organizationPublicId: string;
+    organization: SerializingOrganization;
     updatedByUserId: number | null;
   }): Promise<MembershipOutput> {
     const otherFields = Object.keys(options.parsed).filter(
@@ -1082,7 +1142,10 @@ export class MembershipService {
       updatedByUserId: options.updatedByUserId,
     });
     if (!renamed) throw new NotFoundError('Membership');
-    return this.resolveAndSerializeMembership(renamed, options.organizationPublicId);
+    return this.resolveAndSerializeMembership({
+      membership: renamed,
+      organization: options.organization,
+    });
   }
 
   async delete(
@@ -1105,7 +1168,7 @@ export class MembershipService {
       // The owner cannot be removed — they must transfer ownership first, or the organization
       // would be left without an owner.
       if (organization.owner_user_id === membership.user_id) {
-        throw new ForbiddenError('errors:ownerCannotBeRemoved');
+        throw ownerMembershipFixedError('errors:ownerCannotBeRemoved');
       }
       const deleted = await this.endMembershipInContext({
         organizationId: organization.id,
@@ -1121,7 +1184,7 @@ export class MembershipService {
             organization_public_id,
           );
         if (current.owner_user_id === membership.user_id) {
-          throw new ForbiddenError('errors:ownerCannotBeRemoved');
+          throw ownerMembershipFixedError('errors:ownerCannotBeRemoved');
         }
         throw new NotFoundError('Membership');
       }
@@ -1228,7 +1291,7 @@ export class MembershipService {
       }
       if (!restored) throw new NotFoundError('Membership');
       restoredUserInternalId = restored.user_id;
-      return this.resolveAndSerializeMembership(restored, organization_public_id);
+      return this.resolveAndSerializeMembership({ membership: restored, organization });
     });
     if (restoredUserInternalId !== undefined) {
       await this.invalidatePermissionsForMembership(restoredUserInternalId, organization_public_id);
@@ -1291,17 +1354,22 @@ export class MembershipService {
   }
 
   /**
-   * The caller's roles in their active organization as public ids, the main role first (D5) — for
-   * `GET /auth/me/context`. Empty with no active organization or no live membership.
+   * The caller's membership in their active organization — its public id and every live role it
+   * holds, the main role first (D5), each with its name, tone and system flag — for
+   * `GET /auth/me/context` (`membership_id`, `my_role_ids`, `my_roles`; launch ROUTE #156, N10, S3).
+   * `null` with no active organization or no live membership.
    *
    * @remarks
-   * - **Algorithm:** one user-and-organization context: the caller's live membership, its main
-   *   role's public id, then its additional roles in order.
-   * - **Failure modes:** none beyond the queries; an unknown organization reads as no roles.
+   * - **Algorithm:** one user-and-organization context: the caller's live membership, its
+   *   additional roles' ids in `position` order, then one read naming the live roles — a deleted
+   *   role drops out of the list.
+   * - **Failure modes:** none beyond the queries; an unknown organization reads as no membership.
    */
-  async listRolePublicIdsForCaller(scope: UserPrincipalDatabaseScope): Promise<string[]> {
+  async getCallerMembershipContext(
+    scope: UserPrincipalDatabaseScope,
+  ): Promise<CallerMembershipContext | null> {
     const organizationPublicId = scope.organizationPublicId;
-    if (!organizationPublicId) return [];
+    if (!organizationPublicId) return null;
     return withAppDatabaseContext(scope, async () => {
       const organization = await this.organizationService
         .requireOrganizationRecordByPublicId(organizationPublicId)
@@ -1312,21 +1380,33 @@ export class MembershipService {
       const userId = await this.organizationService.resolveUserInternalIdByPublicId(
         scope.userPublicId,
       );
-      if (!organization || userId === null) return [];
+      if (!organization || userId === null) return null;
       const membership = await this.membershipRepository.findByUserAndOrganization(
         userId,
         organization.id,
       );
-      if (!membership) return [];
-      const [mainRoles, additionalRoleIds] = await Promise.all([
-        this.membershipRepository.resolveRoleSummariesByInternalIds([membership.role_id]),
-        this.membershipAdditionalRolesRepository.listRolePublicIdsByMembershipIds([membership.id]),
-      ]);
-      const mainRolePublicId = mainRoles.get(membership.role_id)?.public_id;
-      return [
-        ...(mainRolePublicId ? [mainRolePublicId] : []),
-        ...(additionalRoleIds.get(membership.id) ?? []),
+      if (!membership) return null;
+      const roleIds = [
+        membership.role_id,
+        ...(await this.membershipAdditionalRolesRepository.listRoleIdsForMembership(membership.id)),
       ];
+      const summaries = await this.membershipRepository.resolveRoleSummariesByInternalIds(roleIds);
+      return {
+        membership_id: membership.public_id,
+        roles: roleIds.flatMap((roleId) => {
+          const summary = summaries.get(roleId);
+          return summary
+            ? [
+                {
+                  id: summary.public_id,
+                  name: summary.name,
+                  tone: summary.tone,
+                  is_system: summary.is_system,
+                },
+              ]
+            : [];
+        }),
+      };
     });
   }
 
@@ -1346,7 +1426,7 @@ export class MembershipService {
       );
       if (!membership) throw new NotFoundError('Membership');
       if (organization.owner_user_id === userId) {
-        throw new ForbiddenError('errors:ownerCannotLeave');
+        throw new ForbiddenError('errors:ownerCannotLeave').withReason('owner_cannot_leave');
       }
       const deleted = await this.endMembershipInContext({
         organizationId: organization.id,
@@ -1363,7 +1443,7 @@ export class MembershipService {
             organization_public_id,
           );
         if (current.owner_user_id === userId) {
-          throw new ForbiddenError('errors:ownerCannotLeave');
+          throw new ForbiddenError('errors:ownerCannotLeave').withReason('owner_cannot_leave');
         }
         throw new NotFoundError('Membership');
       }
@@ -1403,11 +1483,15 @@ export class MembershipService {
       if (newOwnerMembership?.status !== MEMBERSHIP_STATUS.ACTIVE) {
         throw new NotFoundError('New owner must be an active member');
       }
-      await this.organizationService.transferOrganizationOwnership(
+      const transferred = await this.organizationService.transferOrganizationOwnership(
         organization_public_id,
         newOwnerUserId,
       );
-      return this.resolveAndSerializeMembership(newOwnerMembership, organization_public_id);
+      // Serialized against the new owner, so the answer reads `is_owner: true`.
+      return this.resolveAndSerializeMembership({
+        membership: newOwnerMembership,
+        organization: transferred,
+      });
     });
     // sec-R11b: ownership itself is a live DB check (never cached), but invalidate both parties'
     // cached permission sets after commit for defense-in-depth and consistency with the other

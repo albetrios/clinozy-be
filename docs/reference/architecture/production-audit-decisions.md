@@ -33,7 +33,7 @@ Seat-ceiling table by billing state:
 
 | Org billing state | Seat ceiling |
 | ----------------- | ------------ |
-| Active entitlement — `ACTIVE` / `TRIALING` (or a dunning status still **within** grace) | purchased `seats` ?? plan `included_seats` (`null` ⇒ unlimited) |
+| Active entitlement — `ACTIVE` / `TRIALING` (or a dunning status still **within** grace) | plan `included_seats`, raised by a Stripe quantity bought above it — `max(included_seats, seats)` (`included_seats` `null` ⇒ unlimited) |
 | **No subscription** (never subscribed, or `CANCELED` / `INCOMPLETE_EXPIRED`) | **Free-tier ceiling** — the `included_seats` of the cheapest active plan (the "Free" plan) |
 | **Dunning past grace** — `PAST_DUE` / `UNPAID` / `INCOMPLETE` and `now > current_period_end + BILLING_DUNNING_GRACE_DAYS` | **Free-tier ceiling** (entitlement lapses to free) |
 
@@ -49,6 +49,13 @@ Seat-ceiling table by billing state:
   subscription. Stripe's own dunning continues in parallel and eventually moves the subscription to
   `CANCELED`, at which point the "no subscription" row applies.
 - `BILLING_DUNNING_GRACE_DAYS` — env knob, default **14** days.
+- **`seats` is never the ceiling on its own** (launch ROUTE #165, D82). `subscriptions.seats` is the
+  billed Stripe quantity, and the seat sync sets it to the member count after every add or removal.
+  The ceiling used to be `seats ?? included_seats`, so one add plus its sync capped a subscribed
+  organization at its current size (and an unlimited plan at its headcount). The plan's
+  `included_seats` is the allowance; a quantity bought above it in Stripe raises it — until the next
+  seat sync lowers the quantity to the member count again, since there is no separate record of
+  seats bought beyond the plan.
 
 ### 1.2 Over-cap on downgrade — auto-suspend (decision: *auto-suspend excess members*)
 

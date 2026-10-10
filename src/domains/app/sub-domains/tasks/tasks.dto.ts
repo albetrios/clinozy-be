@@ -120,10 +120,10 @@ export const ReassignTaskDto = z.object(taskOwnerFields).strict();
 
 /**
  * Query of the Tasks tabs and their export (10.A.8 #1): `tab` (`open` default · `snoozed` · `done`
- * — resolved today unless a range is sent), `scope` (`mine` default · `everyone`), `kind`,
- * `rule_key` (several), the owner, the queue, the person, the lead, the visit, the branch (several),
- * the due, resolved and created ranges, `q`; sort `due_at` (default, soonest first) |
- * `resolved_at` | `created_at`.
+ * — resolved today unless a range is sent), `scope` (`mine` default · `everyone`), the type filter
+ * — `kind` (several) and `rule_key` (several), a task of any rule or kind named (D81 T6) — the
+ * owner, the queue, the person, the lead, the visit, the branch (several), the due, resolved and
+ * created ranges, `q`; sort `due_at` (default, soonest first) | `resolved_at` | `created_at`.
  */
 export const listTasksQueryDto = listSearchSortSchema([
   'due_at',
@@ -133,7 +133,7 @@ export const listTasksQueryDto = listSearchSortSchema([
   .extend({
     tab: z.enum(TASK_TAB_VALUES).optional(),
     scope: z.enum(TASK_SCOPE_VALUES).optional(),
-    kind: z.enum(TASK_KIND_VALUES).optional(),
+    kind: valueListSchema(TASK_KIND_VALUES).optional(),
     rule_key: valueListSchema(TASK_RULE_VALUES).optional(),
     owner_membership_id: recordIdSchema.optional(),
     owner_role: z.enum(TASK_OWNER_ROLE_VALUES).optional(),

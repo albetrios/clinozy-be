@@ -20,7 +20,7 @@ sub-domain owns are its nested sub-domains (D54): the groups and the offers.
 | `offerings.constants.ts` | the category and specialty value lists the CHECKs and validators share |
 | `offerings.{dto,validator,serializer,types}.ts` | request shapes, parsing (`offering_group_id`, `branch_id` filters), the response |
 | `offerings.rules.ts` | the GST default by category and the price order (O4) |
-| `offerings.repository.ts` / `.service.ts` / `.controller.ts` | the shared app record layers on this table; `q` also searches `search_terms` (O9); `min_price` hidden without `offering:lower_price:read` (O15) |
+| `offerings.repository.ts` / `.service.ts` / `.controller.ts` | the shared app record layers on this table; `q` also searches `search_terms` (O9); `min_price` hidden and guarded without `offering:lower_price:read` (O15, D81) |
 | `offerings.routes.ts` | the routes below |
 | [`offering-groups/`](offering-groups/offering-groups.overview.md) | `app.offering_groups` + `/app/offering-groups…` |
 | [`offers/`](offers/offers.overview.md) | `app.offers` (+ `offer_offerings`, `offer_branches`) + `/app/offers…` |
@@ -45,7 +45,8 @@ One code set for the whole sub-domain (O2): `offering:create` · `offering:updat
 - **Tenant isolation:** ENABLE + FORCE RLS on the organization GUC; the retention-cleanup arm (USING only) lets the deleted-record purge (D38) erase rows.
 - **Prices in order (O4):** `min_price` ≤ `offer_price` ≤ `price` — a 400 naming the field, on a create and on the row a `PATCH` would leave; the CHECKs hold the same.
 - **No branches = every branch (O5):** the list's `branch_id` keeps the offerings offered there and those with no branches.
-- **The lowest price is hidden (O15):** `min_price` is `null` in every response without `offering:lower_price:read`.
+- **The lowest price is hidden (O15) and guarded (D81):** `min_price` is `null` in every response without `offering:lower_price:read`, and a create or `PATCH` naming it without the code is a 403 `field_permission_required` — a member who cannot see the floor cannot overwrite it blind.
+- **Names are unique (any case):** a name another live offering has is a 409 with reason `offering_name_taken` (D81).
 - **References are public ids:** a group or branch that is no live record of the organization is a 400 naming the field.
 - **Soft delete carries its reason:** `delete_reason` set exactly when `deleted_at` is; `other` needs a `delete_note`. Past appointments, treatments and patient offerings keep a deleted offering.
 - **Stale saves refused (D43):** a `PATCH` with an older `expected_updated_at` is a 409 (`record_changed`) naming who changed it and when.

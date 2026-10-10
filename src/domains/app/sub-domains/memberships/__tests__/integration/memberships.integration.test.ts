@@ -10,10 +10,11 @@ import { AppFlow } from '@/domains/app/__tests__/factories/app-flow.factory.js';
 import { MEMBERSHIP_SAVED_VIEWS_PER_LIST_MAX } from '@/domains/app/sub-domains/memberships/membership-saved-views/membership-saved-views.constants.js';
 
 /**
- * Sub-domain 2, the app's memberships (routes-final §2.A, §2.F–§2.G, launch ROUTE #127): the team
- * as every member reads it (the person pickers and the member directory), a member's own
- * preferences (pinned sections, theme, branches, patient-file pins, recent picks) and their saved
- * views per list — one flow over the fixture organization.
+ * Sub-domain 2, the app's memberships (routes-final §2.A, §2.F–§2.G, launch ROUTE #127, #157): the
+ * team as every member reads it (the person pickers and the member directory, `holds` — T8), the
+ * role directory beside it (D81 (4)), a member's own preferences (pinned sections, theme, branches,
+ * patient-file pins, recent picks) and their saved views per list — one flow over the fixture
+ * organization.
  */
 describe('App memberships — integration (routes-final §2)', () => {
   const FIELDS = '[.error.errors[].field] | join(",")';
@@ -52,6 +53,61 @@ describe('App memberships — integration (routes-final §2)', () => {
       '[.data[] | (has("phone") or has("work_starts_at") or has("commission_percent"))] | any',
       'false',
     );
+    flow.expectValue(
+      'the owner is named (D81 (4))',
+      '[.data[] | select(.is_owner) | .id] | join(",")',
+      members.owner.membershipPublicId,
+    );
+    await flow.expect(
+      200,
+      'who can be given a task (T8)',
+      'GET',
+      '/app/memberships?holds=task:read&limit=100',
+    );
+    flow.expectValue(
+      'everyone but the accountant — Pharmacist and Marketing work tasks too (D81 (5))',
+      '[.data[].id] | sort | join(",")',
+      Object.entries(members)
+        .filter(([role]) => role !== 'accountant')
+        .map(([, member]) => member.membershipPublicId)
+        .sort()
+        .join(','),
+    );
+    await flow.expect(
+      200,
+      'who reverses a payment',
+      'GET',
+      '/app/memberships?holds=payment:delete&limit=100',
+    );
+    flow.expectValue(
+      'the owner, the admin and the accountant',
+      '[.data[].id] | sort | join(",")',
+      [members.owner, members.admin, members.accountant]
+        .map((member) => member.membershipPublicId)
+        .sort()
+        .join(','),
+    );
+    await flow.expect(
+      200,
+      'holds and a role together',
+      'GET',
+      `/app/memberships?holds=task:read&role_id=${roles.pharmacist}`,
+    );
+    flow.expectValue('the pharmacist', IDS, members.pharmacist.membershipPublicId);
+    await flow.expect(
+      200,
+      'a code nobody holds matches nobody',
+      'GET',
+      '/app/memberships?holds=nothing:read',
+    );
+    flow.expectValue('none', '.data | length', 0);
+    await flow.expect(
+      400,
+      'a code longer than any',
+      'GET',
+      `/app/memberships?holds=${'x'.repeat(101)}`,
+    );
+    flow.expectValue('too long: field', FIELDS, 'holds');
     await flow.expect(
       200,
       "a role's members",
@@ -80,6 +136,11 @@ describe('App memberships — integration (routes-final §2)', () => {
     );
     await flow.expect(200, 'one at a time', 'GET', '/app/memberships?limit=1');
     flow.expectValue('a next page', '.meta.pagination.next != null', 'true');
+    flow.expectValue(
+      'never counted — the document maps it without estimated_total (SHELL-M2)',
+      '.meta.pagination | has("estimated_total")',
+      'false',
+    );
     await flow.expect(
       200,
       'an unknown role matches nobody',
@@ -93,6 +154,74 @@ describe('App memberships — integration (routes-final §2)', () => {
       'an id longer than any public id',
       'GET',
       `/app/memberships?role_id=rol_${'a'.repeat(25)}`,
+    );
+  });
+
+  it('2.A the roles (D81 (4) — GET /app/roles)', async () => {
+    const { members, roles } = fixture;
+    flow.as('marketing');
+    await flow.expect(200, 'every member reads the roles', 'GET', '/app/roles?limit=100');
+    flow.expectValue(
+      'in the order they were made: Owner, Admin, then the clinic roles',
+      '[.data[].name] | join(",")',
+      'Owner,Admin,Doctor,Therapist,Front desk,Counsellor,Pharmacist,Accountant,Marketing',
+    );
+    flow.expectValue(
+      "each with the design's tone",
+      '[.data[].tone] | join(",")',
+      'slate,lav,sky,butter,mint,sage,blush,peach,plum',
+    );
+    flow.expectValue(
+      'Owner and Admin are locked',
+      '[.data[] | select(.is_locked) | .name] | join(",")',
+      'Owner,Admin',
+    );
+    flow.expectValue('every preset is a system role', '[.data[].is_system] | all', 'true');
+    flow.expectValue(
+      'the slim directory shape — no codes, counts or dates',
+      '[.data[] | keys | join(",")] | unique | join(";")',
+      'id,is_locked,is_system,name,tone',
+    );
+    flow.expectValue(
+      'the ids the members hold',
+      `[.data[] | select(.id == "${roles.doctor}") | .name] | join(",")`,
+      'Doctor',
+    );
+    await flow.expect(200, 'one at a time', 'GET', '/app/roles?limit=1');
+    flow.expectValue('Owner first', '.data[0].name', 'Owner');
+    flow.expectValue(
+      'never counted (SHELL-M2)',
+      '.meta.pagination | has("estimated_total")',
+      'false',
+    );
+    const next = flow.last('.meta.pagination.next');
+    await flow.expect(200, 'the next page', 'GET', `/app/roles?limit=1&after=${next}`);
+    flow.expectValue('then Admin', '.data[0].name', 'Admin');
+    await flow.expect(400, 'a filter the directory does not take', 'GET', '/app/roles?q=Doctor');
+    await flow.expect(401, 'signed out', 'GET', '/app/roles', undefined, { anonymous: true });
+
+    // A member whose roles grant no organization:read reads no roles.
+    flow.as('owner');
+    await flow.expect(200, 'a role with no access', 'POST', '/tenancy/organization/roles', {
+      name: 'No access',
+      permission_codes: [],
+    });
+    const noAccess = flow.last('.data.id');
+    const marketing = `/tenancy/organization/memberships/${members.marketing.membershipPublicId}`;
+    await flow.expect(200, 'give it to the marketing member', 'PATCH', marketing, {
+      role_ids: [noAccess],
+    });
+    flow.as('marketing');
+    await flow.expect(403, 'no organization:read, no roles', 'GET', '/app/roles');
+    flow.as('owner');
+    await flow.expect(200, 'their role back', 'PATCH', marketing, {
+      role_ids: [roles.marketing],
+    });
+    await flow.expect(200, 'the custom role joins the end', 'GET', '/app/roles?limit=100');
+    flow.expectValue(
+      'last, not a system role',
+      '[.data[-1].name, .data[-1].is_system] | map(tostring) | join(",")',
+      'No access,false',
     );
   });
 

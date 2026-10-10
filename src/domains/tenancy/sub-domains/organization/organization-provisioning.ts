@@ -16,9 +16,13 @@ import {
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
+import { CHIP_TONE } from '@/shared/constants/record-fields.constants.js';
 
 /** Name of the auto-provisioned, undeletable owner role created with every organization. */
 export const OWNER_ROLE_NAME = 'Owner';
+
+/** The Owner role's colour — the design's role tone (launch D81 (4)). */
+const OWNER_ROLE_TONE = CHIP_TONE.SLATE;
 
 /** Every tenancy permission code — part of the set the owner role is granted. */
 const ALL_TENANCY_PERMISSION_CODES: readonly string[] = Object.values(TENANCY_PERMISSIONS);
@@ -116,8 +120,8 @@ export type DefaultTeamRole = AppRolePreset;
  * Escalation to Owner stays closed on three independent paths —
  * `assertCallerCanGrantPermissionCodes` limits any grant to codes the caller already holds (so an
  * Admin can never hand out `organization:delete`), the same guard runs on membership create and
- * update (so an Admin cannot assign the Owner role to anyone), and `is_system` blocks editing the
- * Owner role itself.
+ * update (so an Admin cannot assign the Owner role to anyone), and `is_locked` blocks editing the
+ * Owner role's codes (launch D81 (4)).
  */
 const ADMIN_PERMISSION_CODES: readonly string[] = [
   TENANCY_PERMISSIONS.ORGANIZATION_READ,
@@ -150,7 +154,8 @@ const ADMIN_PERMISSION_CODES: readonly string[] = [
  *
  * @remarks
  * - Every entry is `is_system: true`: its name is fixed and it cannot be deleted. Its access is
- *   each organization's to edit (D5), except Admin's — the one `is_locked` role (D40).
+ *   each organization's to edit (D5), except Admin's — the one locked preset (D40); the Owner role
+ *   is locked as well (D81 (4)).
  * - PERSONAL organizations are single-member and reject custom roles, so they receive only Owner;
  *   these defaults apply to TEAM organizations exclusively.
  * - Every permission code must exist in the seeded `tenancy.permissions` reference table (the grant
@@ -177,7 +182,7 @@ export interface ProvisionOrganizationResult {
 
 /**
  * Atomically bootstrap an organization with full owner access: organization row →
- * system `Owner` role → every tenancy, audit and upload permission granted to it (plus billing
+ * system, locked `Owner` role (slate) → every tenancy, audit and upload permission granted to it (plus billing
  * and notify read/manage for TEAM organizations) → the owner's ACTIVE membership. Without this, a freshly created
  * organization's owner resolves zero permissions (the permission path is a strict
  * role→membership join with no owner shortcut).
@@ -202,8 +207,10 @@ export interface ProvisionOrganizationResult {
  * - **Side effects:** table inserts (organizations, roles, role_permissions, memberships); TEAM
  *   organizations additionally insert the default clinic roles (Admin locked) and their grants.
  * - **Notes:** the owner and default roles are `is_system: true` so they cannot be deleted via the
- *   role API. Permission reference rows (the `permissions` table) are assumed seeded — they are
- *   reference data present in every environment.
+ *   role API; the Owner role is also `is_locked` (launch D81 (4) — its codes never change through
+ *   the API, `PUT …/roles/{role_id}/permissions` answers 403 `role_locked`). Permission reference
+ *   rows (the `permissions` table) are assumed seeded — they are reference data present in every
+ *   environment.
  */
 export async function provisionOrganizationWithOwner(
   input: ProvisionOrganizationInput,
@@ -265,7 +272,9 @@ async function provisionOrganization(
           public_id: generatePublicId('memberRole'),
           organization_id: organization!.id,
           name: OWNER_ROLE_NAME,
+          tone: OWNER_ROLE_TONE,
           is_system: true,
+          is_locked: true,
           created_by_user_id: input.ownerUserId,
         })
         .returning();

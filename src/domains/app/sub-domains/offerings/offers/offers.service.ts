@@ -25,8 +25,8 @@ import {
  *   must name live, active offerings (O12); `branch_ids` none = every branch (O5).
  * - **Failure modes:** `NotFoundError('Offer')`; `ValidationError` for a bad body, a value out of
  *   its kind's range, an end before the start (O11), an offering that is deleted, inactive or not
- *   here (O12) or a branch not here; `ConflictError` for a code another live offer has (O11), a
- *   stale save or a restore over a reused code.
+ *   here (O12) or a branch not here; `ConflictError` for a code another live offer has (O11 —
+ *   `offer_code_in_use`, D81), a stale save or a restore over a reused code.
  */
 export class OffersService extends BaseRecordService<OfferOutput> {
   constructor(organizationService: OrganizationService, repository: OffersRepository) {
@@ -48,7 +48,10 @@ export class OffersService extends BaseRecordService<OfferOutput> {
         { field: 'branch_ids', link: OFFER_BRANCHES_LINK, label: 'branch', emptyMeansEvery: true },
       ],
       conflicts: {
-        idx_offers_organization_code_unique: 'errors:offerCodeInUse',
+        idx_offers_organization_code_unique: {
+          key: 'errors:offerCodeInUse',
+          reason: 'offer_code_in_use',
+        },
       },
       checkValues: assertOfferValues,
       ...offersRules,

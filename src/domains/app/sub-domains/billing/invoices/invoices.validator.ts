@@ -8,6 +8,10 @@ import {
   CreateInvoiceDto,
   type CreateInvoiceInput,
   listInvoicesQueryDto,
+  PreviewInvoiceChangeDto,
+  type PreviewInvoiceChangeInput,
+  PreviewInvoiceDto,
+  type PreviewInvoiceInput,
   UpdateInvoiceDto,
   type UpdateInvoiceInput,
 } from './invoices.dto.js';
@@ -25,6 +29,16 @@ export function validateCreateInvoice(data: unknown): CreateInvoiceInput {
 /** Parses an invoice change body; throws `ValidationError` naming each bad field. */
 export function validateUpdateInvoice(data: unknown): UpdateInvoiceInput {
   return parseWithSchema(UpdateInvoiceDto, data);
+}
+
+/** Parses an invoice preview body (a bill without "Paid now"); throws `ValidationError` naming each bad field. */
+export function validatePreviewInvoice(data: unknown): PreviewInvoiceInput {
+  return parseWithSchema(PreviewInvoiceDto, data);
+}
+
+/** Parses a change preview body (any change field, none required); throws `ValidationError` naming each bad field. */
+export function validatePreviewInvoiceChange(data: unknown): PreviewInvoiceChangeInput {
+  return parseWithSchema(PreviewInvoiceChangeDto, data ?? {});
 }
 
 /** Parses the invoice list query into a list input (routes-final 8.A.8 #1, #2). */

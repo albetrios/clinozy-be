@@ -24,6 +24,7 @@ import { toAmount, toInstant } from '@/shared/utils/validation/record-fields.uti
 import {
   PAYMENT_CREATE_KIND_VALUES,
   PAYMENT_DIRECTION,
+  PAYMENT_EDIT_RECORDED_FIELDS,
   PAYMENT_KIND,
   PAYMENT_PAYEE_KIND_VALUES,
   PAYMENT_RECEIVED_KIND_VALUES,
@@ -45,26 +46,11 @@ import {
   writePaymentActivity,
 } from './payments.ledger.js';
 import { payments } from './payments.schema.js';
-import type { PaymentsRepository } from './payments.repository.js';
+import { findRecordedByMemberships, type PaymentsRepository } from './payments.repository.js';
 import { serializePaymentEdit } from './payments.serializer.js';
 
 const invoicesRepository = new InvoicesRepository();
 const creditNotesRepository = new InvoiceCreditNotesRepository();
-
-/** The fields a change records (B20), in the order the ledger shows them. */
-const RECORDED_FIELDS = [
-  'splits',
-  'paid_at',
-  'contact_id',
-  'invoice_id',
-  'stock_purchase_id',
-  'medical_purchase_order_id',
-  'payee_name',
-  'expense_category',
-  'reference',
-  'note',
-  'attachment_keys',
-] as const;
 
 /** A row's split columns as the ledger's money, in paise. */
 function paiseOf(value: unknown): number {
@@ -224,7 +210,7 @@ type RecordedReference = keyof typeof RECORDED_REFERENCES;
 /** The recorded value of one field — splits as `[{ mode, amount }]`, references as public ids. */
 function recordedValue(
   row: BaseRecordRow,
-  field: (typeof RECORDED_FIELDS)[number],
+  field: (typeof PAYMENT_EDIT_RECORDED_FIELDS)[number],
   publicIds: ReadonlyMap<RecordedReference, Map<number, string>>,
 ): unknown {
   if (field === 'splits') return columnsToSplits(row);
@@ -254,7 +240,7 @@ async function recordEdit(options: {
     publicIds.set(field as RecordedReference, await resolveRecordPublicIds({ table, ids }));
   }
   const changes: Record<string, { from: unknown; to: unknown }> = {};
-  for (const field of RECORDED_FIELDS) {
+  for (const field of PAYMENT_EDIT_RECORDED_FIELDS) {
     const from = recordedValue(before, field, publicIds);
     const to = recordedValue(after, field, publicIds);
     if (JSON.stringify(from) !== JSON.stringify(to)) changes[field] = { from, to };
@@ -354,6 +340,44 @@ async function reversePayment(input: BaseRecordActionInput): Promise<BaseRecordR
   });
 }
 
+/** The public ids a page's ledger rows name in `field` (none for a row that names none). */
+function linkedPublicIds(outputs: readonly Record<string, unknown>[], field: string): string[] {
+  return outputs.flatMap((output) => (typeof output[field] === 'string' ? [output[field]] : []));
+}
+
+/** The link's entry for a row's linked public id — null when it names none. */
+function linkOf<Link>(map: ReadonlyMap<string, Link>, publicId: unknown): Link | null {
+  return typeof publicId === 'string' ? (map.get(publicId) ?? null) : null;
+}
+
+/**
+ * D81 (G-P3): the numbers of what each ledger row points at — the invoice (`#1042`, its statutory
+ * number, type and due), the credit note (`CN-3`), the pending credit (`CR-2`), the stock purchase
+ * and the medical order (their numbers and bill numbers) — one read per kind for the page.
+ */
+async function attachLinkNumbers(
+  repository: PaymentsRepository,
+  outputs: Record<string, unknown>[],
+): Promise<void> {
+  const numbers = await repository.findLinkNumbers({
+    invoiceIds: linkedPublicIds(outputs, 'invoice_id'),
+    creditNoteIds: linkedPublicIds(outputs, 'invoice_credit_note_id'),
+    pendingCreditIds: linkedPublicIds(outputs, 'pending_credit_id'),
+    stockPurchaseIds: linkedPublicIds(outputs, 'stock_purchase_id'),
+    medicalPurchaseOrderIds: linkedPublicIds(outputs, 'medical_purchase_order_id'),
+  });
+  for (const output of outputs) {
+    output.invoice = linkOf(numbers.invoices, output.invoice_id);
+    output.invoice_credit_note_number = linkOf(numbers.creditNotes, output.invoice_credit_note_id);
+    output.pending_credit_number = linkOf(numbers.pendingCredits, output.pending_credit_id);
+    output.stock_purchase = linkOf(numbers.stockPurchases, output.stock_purchase_id);
+    output.medical_purchase_order = linkOf(
+      numbers.medicalPurchaseOrders,
+      output.medical_purchase_order_id,
+    );
+  }
+}
+
 /**
  * The payment rules (launch ROUTE #136, routes-final 8.C): what each kind needs, the day lock,
  * the money a payment moves on its invoice and pending credit, the recorded changes, the
@@ -369,7 +393,8 @@ async function reversePayment(input: BaseRecordActionInput): Promise<BaseRecordR
  *   the invoice's and the purchase's paid amount by the difference and records the changed fields
  *   (B20). A delete or restore (open day) takes the money out or
  *   puts it back — a refund's credit note goes and comes back with it (B16). The reverse action
- *   undoes a settled payment (B21).
+ *   undoes a settled payment (B21). A page reads who recorded each row and the numbers of what it
+ *   points at (D81).
  * - **Failure modes:** `ValidationError` on `splits`, `contact_id`, `invoice_id`, `payee_name`,
  *   `expense_category`, `attachment_keys`; `ConflictError` `day_closed`, `more_than_due`,
  *   `more_than_paid`, `credit_closed`, `day_open`, `already_reversed`.
@@ -471,6 +496,11 @@ export function createPaymentsRules(repository: PaymentsRepository): BaseRecordR
       const settled = await repository.findSettled(ids, context.organizationId);
       const reversals = await repository.findReversals(ids);
       const edits = await repository.findEditSummaries(ids);
+      const recordedBy = await findRecordedByMemberships({
+        table: payments,
+        ids,
+        organizationId: context.organizationId,
+      });
       for (const output of outputs) {
         const id = idsByPublicId.get(String(output.id));
         if (id === undefined) continue;
@@ -479,7 +509,9 @@ export function createPaymentsRules(repository: PaymentsRepository): BaseRecordR
         output.reversed_by_payment_id = reversals.get(id) ?? null;
         output.edit_count = summary?.count ?? 0;
         output.last_edit = summary ? serializePaymentEdit(summary.last) : null;
+        output.created_by_membership_id = recordedBy.get(id) ?? null;
       }
+      await attachLinkNumbers(repository, outputs);
       await attachBilledContacts(outputs);
     },
   };

@@ -21,7 +21,7 @@ import {
  *   the `app.offering_branches` link — none = every branch (O5); the list's `branch_id` keeps those.
  * - **Failure modes:** `NotFoundError('Offering')`; `ValidationError` for a bad body, a group or
  *   branch that is no live record here, or prices out of order (O4); `ConflictError` for a taken
- *   name, a stale save or a restore over a reused name.
+ *   name (`offering_name_taken`, D81), a stale save or a restore over a reused name.
  */
 export class OfferingsService extends BaseRecordService<OfferingOutput> {
   constructor(organizationService: OrganizationService, repository: OfferingsRepository) {
@@ -42,7 +42,10 @@ export class OfferingsService extends BaseRecordService<OfferingOutput> {
         },
       ],
       conflicts: {
-        idx_offerings_organization_name_unique: 'errors:recordAlreadyExists',
+        idx_offerings_organization_name_unique: {
+          key: 'errors:offeringNameTaken',
+          reason: 'offering_name_taken',
+        },
       },
       checkValues: assertOfferingPriceOrder,
       ...offeringsRules,

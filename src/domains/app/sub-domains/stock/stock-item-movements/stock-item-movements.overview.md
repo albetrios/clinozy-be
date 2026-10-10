@@ -17,8 +17,8 @@ S14). Table `app.stock_item_movements` — append-only.
 | `stock-item-movements.constants.ts` | the types and their signs, the revert reasons |
 | `stock-item-movements.ledger.ts` | the guarded balance and the movement row — every stock writer's one way in |
 | `stock-item-movements.rules.ts` | a movement by hand (`adjust` from the counted quantity), the treatment check, the revert |
-| `stock-item-movements.repository.ts` | the shared reads and the insert, what reverted each row, a purchase's receipts |
-| `stock-item-movements.{dto,validator,serializer,types}.ts` | request shapes, the response with `reverted_by_stock_item_movement_id` |
+| `stock-item-movements.repository.ts` | the shared reads and the insert, what reverted each row, each row's purchase and reverted-movement text, a purchase's receipts |
+| `stock-item-movements.{dto,validator,serializer,types}.ts` | request shapes, the response with `reverted_by_stock_item_movement_id` and the row's text (`stock_purchase_number`, `bill_number`, `reverts_type`, `reverts_created_at`) |
 | `stock-item-movements.service.ts` / `.controller.ts` / `.routes.ts` | routes 8–12 — listed on their own and under the item |
 
 ## Routes
@@ -38,3 +38,6 @@ S14). Table `app.stock_item_movements` — append-only.
 - **A use names its session, not the patient (S14):** `patient_treatment_id` only on `used`, a
   session that is not reversed.
 - **Who:** `author_membership_id` is the caller (K2).
+- **A row says what it points at (D81):** a row with a purchase carries its `stock_purchase_number`
+  and `bill_number` (a deleted purchase still names itself); a `reverted` row the `reverts_type`
+  and `reverts_created_at` of the movement it undid — two reads for the whole page, in `decorate`.

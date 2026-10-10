@@ -117,6 +117,46 @@ describe('Membership Sub-Domain — Integration', () => {
       expect(member.user_id).not.toMatch(/^\d+$/);
       expect(member.role_ids[0]).not.toMatch(/^\d+$/);
     });
+
+    it('names the owner on their row only (is_owner, launch D81 (4))', async () => {
+      const { token, organization, user } = await createAuthorizedContext();
+      const other = await createTestUser();
+      const role = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: [TENANCY_PERMISSIONS.ORGANIZATION_READ],
+      });
+      await createMembership({
+        userId: other.id,
+        organizationId: organization.id,
+        roleId: role.id,
+      });
+      const response = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/tenancy/organization/memberships'),
+        token,
+      });
+      expect(response.statusCode).toBe(200);
+      const items = (response.json() as { data: { user_id: string; is_owner: boolean }[] }).data;
+      expect(Object.fromEntries(items.map((item) => [item.user_id, item.is_owner]))).toEqual({
+        [user.public_id]: true,
+        [other.public_id]: false,
+      });
+    });
+
+    it('answers a bad status filter as invalid input on the field, not as paging (USERS-M5)', async () => {
+      const { token } = await createAuthorizedContext();
+      const response = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/tenancy/organization/memberships?status=INVITED'),
+        token,
+      });
+      expect(response.statusCode).toBe(400);
+      const body = response.json() as {
+        error: { detail: string; errors: { field: string }[] };
+      };
+      expect(body.error.detail).toBe(enErrors.invalidInput);
+      expect(body.error.errors.map((entry) => entry.field)).toContain('status');
+    });
   });
 
   describe('POST /api/v1/tenancy/organization/memberships', () => {

@@ -1,6 +1,7 @@
 /**
  * Shared OpenAPI response wrappers (success + paginated envelopes).
  */
+import { LIST_TOTAL_COUNT_CAP } from '@/shared/constants/index.js';
 
 // ─── Shared building blocks ────────────────────────────────────────────
 
@@ -29,7 +30,11 @@ export const paginationMetaSchema = {
             'Opaque cursor to pass as the `after` query parameter on the next request. Null when `has_more` is false.',
         },
         has_more: { type: 'boolean', example: false },
-        estimated_total: { type: 'integer', example: 3 },
+        estimated_total: {
+          type: 'integer',
+          example: 3,
+          description: `How many rows the filters match, counted up to ${LIST_TOTAL_COUNT_CAP.toLocaleString('en-US')} (that figure means "at least") — on the first page only (no \`after\`); absent on later pages, on lists that count only on request (\`include_total=true\`) and on lists that never count.`,
+        },
       },
     },
   },
@@ -78,6 +83,38 @@ export function wrapPaginated(
     },
   };
 }
+/**
+ * {@link wrapPaginated} for a list that never counts (`GET /app/memberships`, `GET /app/roles`,
+ * `GET /users/me/organizations`): its `meta.pagination` has no `estimated_total`, on any page.
+ */
+export function wrapUncountedPaginated(itemSchema: object, itemExamples: unknown[]): object {
+  const wrapped = wrapPaginated(itemSchema, itemExamples) as {
+    properties: { meta: { properties: Record<string, unknown> } };
+    example: { meta: { pagination: Record<string, unknown> } };
+  };
+  const meta = wrapped.properties.meta;
+  const pagination = meta.properties.pagination as { properties: Record<string, unknown> };
+  const { estimated_total: _countedOnly, ...uncountedProperties } = pagination.properties;
+  const { estimated_total: _exampleCount, ...uncountedExample } = wrapped.example.meta.pagination;
+  return {
+    ...wrapped,
+    properties: {
+      ...wrapped.properties,
+      meta: {
+        ...meta,
+        properties: {
+          ...meta.properties,
+          pagination: { ...pagination, properties: uncountedProperties },
+        },
+      },
+    },
+    example: {
+      ...wrapped.example,
+      meta: { ...wrapped.example.meta, pagination: uncountedExample },
+    },
+  };
+}
+
 // ─── Response definition type ──────────────────────────────────────────
 
 export interface ResponseDefinition {

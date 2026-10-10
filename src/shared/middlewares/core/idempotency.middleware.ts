@@ -4,7 +4,7 @@ import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { captureMessage } from '@/infrastructure/observability/sentry/sentry.js';
 import { env } from '@/shared/config/env.config.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
-import { ValidationError } from '@/shared/errors/index.js';
+import { UnprocessableEntityError } from '@/shared/errors/index.js';
 import {
   buildIdempotencyActorRateKey,
   buildIdempotencyCacheKey,
@@ -618,10 +618,12 @@ async function idempotencyOnRequest(request: FastifyRequest, _reply: FastifyRepl
   const parsed = parseIdempotencyKeyHeader(request.headers['x-idempotency-key']);
   if (parsed.kind === 'absent') return;
   if (parsed.kind === 'invalid') {
-    // Routes that never opted in keep the 400: there the key is optional, so a malformed
-    // one is ordinary request validation rather than a violated contract.
+    // A malformed key answers the same 422 everywhere (launch USERS-M6) — a write whose key is
+    // optional, an unknown path, and (deferred to the post-auth preHandler, below) a write that
+    // requires one — so a client never sees the same bad header as a 400 on one route and a 422
+    // on the next. The key is never silently dropped: a client that sent one meant to be protected.
     if (idempotencyRequired) return;
-    throw new ValidationError('errors:idempotencyKeyInvalid');
+    throw new UnprocessableEntityError('errors:idempotencyKeyInvalid');
   }
 
   const requestWithIdempotency = request as RequestWithIdempotency;

@@ -51,7 +51,9 @@ export function createMembershipInvitationController(service: MembershipInvitati
       const params = (request.params as { membership_id?: string }) ?? {};
       // sec-new-T2: reject malformed path params before reaching the service layer.
       const membershipId = validatePublicIdParam(params.membership_id ?? '', 'membership_id');
-      // R1 / TEN-34: regenerated token is delivered only via email, never returned.
+      // R1 / TEN-34: regenerated token is delivered only via email, never returned — except the
+      // dev-only `debug_invitation_token` echo (ROUTE #164), which the service adds when its env
+      // flag is on (the env schema refuses it outside local/development).
       const invitation = await service.resendForMembership(scope, membershipId, request.body, {
         requestId: getRequestIdentifier(request),
       });

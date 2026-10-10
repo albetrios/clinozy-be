@@ -35,3 +35,8 @@ different folder and schema.
   closing takes it `FOR UPDATE`; settled money is undone only by a reversal.
 - **Activity (B7):** billing, receiving, refunding and reversing write a `system` entry in the
   contact's activity.
+- **The desk's reads (D81):** `q` finds the billed person (the contact's names and numbers) on
+  invoices, payments and pending credits; their rows carry `created_by_membership_id` (who
+  recorded it); ledger rows carry the numbers of what they point at; the invoice list sums
+  `meta.due_total` / `meta.paid_total`; the invoice previews answer a bill's lines and totals
+  without writing; billing applies the best live offer (M26).

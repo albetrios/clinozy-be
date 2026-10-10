@@ -144,8 +144,20 @@ export const instantSchema = z.iso.datetime({ offset: true });
 export const recordIdSchema = trimmedString().min(1).max(28);
 
 /**
+ * The OpenAPI extension key a comma-separated public-id query list carries (`true`): the document
+ * generator reads it to give the parameter a list of prefixed ids as its example
+ * (`brn_…,brn_…`) — the list itself does not know which entity its ids name.
+ */
+export const COMMA_SEPARATED_ID_LIST_OPENAPI_EXTENSION = 'x-comma-separated-id-list';
+
+/**
  * A query list of up to `maximum` public ids, comma-separated (`?ids=con_…,con_…`); split it with
  * {@link splitRecordIds}.
+ *
+ * @remarks
+ * - **Notes:** carries its OpenAPI description and the
+ *   {@link COMMA_SEPARATED_ID_LIST_OPENAPI_EXTENSION} marker as Zod metadata (documentation only —
+ *   validation is the regex).
  */
 export function recordIdListSchemaOf(maximum: number): z.ZodString {
   return z
@@ -153,7 +165,11 @@ export function recordIdListSchemaOf(maximum: number): z.ZodString {
     .regex(
       new RegExp(`^[a-z0-9_]{1,28}(,[a-z0-9_]{1,28}){0,${maximum - 1}}$`),
       `Up to ${maximum} ids, comma-separated`,
-    );
+    )
+    .meta({
+      description: `Several: up to ${maximum} public ids, comma-separated.`,
+      [COMMA_SEPARATED_ID_LIST_OPENAPI_EXTENSION]: true,
+    });
 }
 
 /**
@@ -165,14 +181,24 @@ export const recordIdListSchema = recordIdListSchemaOf(20);
 /**
  * A query list of allowed values, comma-separated and each once (`?status=new,contacted`) — split
  * it with `value.split(',')`.
+ *
+ * @remarks
+ * - **Notes:** carries its OpenAPI description and example (the first two values,
+ *   `?kind=rule,follow_up`) as Zod metadata — documentation only; validation is the regex and the
+ *   each-once check.
  */
 export function valueListSchema(values: readonly string[]): z.ZodType<string> {
   const body = values.join('|');
+  const quotedValues = values.map((value) => `\`${value}\``).join(', ');
   return z
     .string()
     .regex(new RegExp(`^(${body})(,(${body}))*$`), `Comma-separated: ${values.join(', ')}`)
     .refine((value) => new Set(value.split(',')).size === value.split(',').length, {
       message: 'Each value once',
+    })
+    .meta({
+      description: `Several, comma-separated, each once: ${quotedValues}.`,
+      example: values.slice(0, 2).join(','),
     });
 }
 

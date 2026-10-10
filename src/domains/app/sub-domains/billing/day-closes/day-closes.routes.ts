@@ -18,7 +18,7 @@ type DayCloseParams = { Params: { day_close_id: string } };
 
 /** What every day close answers with. */
 const DAY_CLOSE_FIGURES =
-  'the opening cash and who accepted it, the live figures — `cash_in`, `cash_out`, `expected_cash` (live while open: opening + cash received − cash paid), `net_by_mode`, `by_member`, `entry_count` — the count, `difference` and its reason once closed, and `events` (what happened)';
+  'the opening cash and who accepted it, the live figures — `cash_in`, `cash_out`, `expected_cash` (live while open: opening + cash received − cash paid), `net_by_mode`, `by_member`, `entry_count` — the count, `difference` and its reason once closed, and `events` (what happened, oldest first — render each by its `kind` and the figures of the day: `text` is an English line from the server with rupees formatted in it, except on `reopened`, where it is the reason as typed)';
 
 /**
  * Registers the `day-closes` routes (prefix `/api/v1/app`) — routes-final 8.E, routes 28–32.

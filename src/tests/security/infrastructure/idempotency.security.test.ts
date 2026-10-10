@@ -145,9 +145,8 @@ describe('Security: Idempotency', () => {
     // Companion to the anonymous case above. A malformed key on a REQUIRED route returns early from
     // onRequest (the rejection is deferred to the post-auth preHandler), so this proves the deferral
     // does not open a hole: the request must still fail closed with 422 rather than reaching the
-    // handler with no idempotency protection. Required routes answer 422 — the 400 that
-    // `errors:idempotencyKeyInvalid` raises is reserved for routes where the key is optional and a
-    // bad one is ordinary request validation.
+    // handler with no idempotency protection. A malformed key answers the same 422 on every write
+    // (launch USERS-M6) — see the optional-key and unknown-path cases below.
     const user = await createTestUser();
     const token = await generateTestToken({ userId: user.public_id });
 
@@ -183,6 +182,35 @@ describe('Security: Idempotency', () => {
     expect((response.json() as { error?: { code?: string } }).error?.code).toBe(
       'unprocessable_entity',
     );
+  });
+
+  it('answers a too-short X-Idempotency-Key with the same 422 on an optional-key write and an unknown path (USERS-M6)', async () => {
+    // One status for one bad header: the key is optional on PATCH /users/me and the path below
+    // matches no route, yet both answer what a required write answers — 422 unprocessable_entity.
+    const user = await createTestUser();
+    const token = await generateTestToken({ userId: user.public_id });
+
+    const optional = await injectAuthenticated(app, {
+      method: 'PATCH',
+      url: testApiPath('/users/me'),
+      token,
+      headers: { 'x-idempotency-key': 'tooshort' },
+      payload: { first_name: 'Short' },
+    });
+    const unknownPath = await injectAuthenticated(app, {
+      method: 'POST',
+      url: testApiPath('/no-such-route'),
+      token,
+      headers: { 'x-idempotency-key': 'tooshort' },
+      payload: {},
+    });
+
+    for (const response of [optional, unknownPath]) {
+      expect(response.statusCode).toBe(422);
+      expect((response.json() as { error?: { code?: string } }).error?.code).toBe(
+        'unprocessable_entity',
+      );
+    }
   });
 
   it('should not persist an idempotency Redis entry when write is unauthenticated', async () => {

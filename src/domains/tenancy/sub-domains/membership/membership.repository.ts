@@ -27,6 +27,20 @@ import {
   resolveKeysetSort,
 } from '@/shared/utils/http/list-query.util.js';
 
+/**
+ * SQL condition: one of the membership's live roles — main or extra (D5) — grants `permissionCode`:
+ * the directory's `holds` filter (T8), the rule the task assignee check applies to one member.
+ */
+function membershipHoldsPermission(permissionCode: string): SQL {
+  return sql`EXISTS (
+    SELECT 1 FROM ${roles}
+    JOIN ${role_permissions} ON ${role_permissions.role_id} = ${roles.id}
+    WHERE ${membershipHoldsRole(roles.id)}
+      AND ${roles.deleted_at} IS NULL
+      AND ${role_permissions.permission_code} = ${permissionCode}
+  )`;
+}
+
 /** What {@link MembershipRepository.list} reads: paging, sort, search and the filters. */
 export interface MembershipListQuery {
   after?: string | undefined;
@@ -40,6 +54,8 @@ export interface MembershipListQuery {
   statuses?: readonly string[] | undefined;
   /** Only members holding this role (internal id), main or extra. */
   roleId?: number | undefined;
+  /** Only members one of whose live roles grants this permission code (T8 — the `holds` filter). */
+  holdsPermissionCode?: string | undefined;
   /** Only these memberships (internal ids) — e.g. the members of one branch. */
   membershipIds?: readonly number[] | undefined;
   /** Only these memberships (public ids). */
@@ -84,6 +100,8 @@ export interface MembershipUserSummaryRow {
 export interface MembershipRoleSummaryRow {
   public_id: string;
   name: string;
+  tone: string;
+  is_system: boolean;
 }
 
 /** Raw live-invitation reference from {@link MembershipRepository.resolveLiveInvitationsByMembershipIds}. */
@@ -155,7 +173,8 @@ export class MembershipRepository extends BaseRepository {
    * @remarks
    * - **Algorithm:** one keyset query over `tenancy.memberships` — `created_at` (default) or `name`
    *   (the membership's own `display_name`, K3) with the `id` tie-break; the filters are columns
-   *   (`status`, `public_id`, `id`), the role (main or extra, {@link membershipHoldsRole}) and `q`
+   *   (`status`, `public_id`, `id`), the role (main or extra, {@link membershipHoldsRole}), a
+   *   permission code one of the roles grants (`holds`, T8) and `q`
    *   (ids from the SECURITY DEFINER search, which reads the login's email). Every filter is in the
    *   cursor fingerprint, so a cursor never crosses to another filter set. The capped total runs on
    *   the first page only when asked.
@@ -180,6 +199,9 @@ export class MembershipRepository extends BaseRepository {
       query.includeEnded ? undefined : isNull(memberships.deleted_at),
       query.statuses === undefined ? undefined : inArray(memberships.status, [...query.statuses]),
       query.roleId === undefined ? undefined : membershipHoldsRole(query.roleId),
+      query.holdsPermissionCode === undefined
+        ? undefined
+        : membershipHoldsPermission(query.holdsPermissionCode),
       query.membershipIds === undefined
         ? undefined
         : inArray(memberships.id, [...query.membershipIds]),
@@ -206,6 +228,7 @@ export class MembershipRepository extends BaseRepository {
         filters: {
           statuses: query.statuses ?? null,
           role: query.roleId ?? null,
+          holds: query.holdsPermissionCode ?? null,
           members: query.membershipIds ?? null,
           ids: query.publicIds ?? null,
           ended: query.includeEnded ?? false,
@@ -290,22 +313,34 @@ export class MembershipRepository extends BaseRepository {
   }
 
   /**
-   * Maps internal role ids to summaries (public id + name) for the serializer's embedded `role`
-   * object. `roles` is organization-scoped, so a normal RLS-scoped query under the current organization context is
-   * correct (no resolver needed).
+   * Maps internal role ids to summaries (public id, name, tone, system flag) — the member list's
+   * `role_ids` and the caller's `my_roles` (`GET /auth/me/context`). `roles` is organization-scoped,
+   * so a normal RLS-scoped query under the current organization context is correct (no resolver
+   * needed).
    */
   async resolveRoleSummariesByInternalIds(
     roleInternalIds: readonly number[],
   ): Promise<Map<number, MembershipRoleSummaryRow>> {
     if (roleInternalIds.length === 0) return new Map();
     const rows = await getRequestDatabase()
-      .select({ id: roles.id, public_id: roles.public_id, name: roles.name })
+      .select({
+        id: roles.id,
+        public_id: roles.public_id,
+        name: roles.name,
+        tone: roles.tone,
+        is_system: roles.is_system,
+      })
       .from(roles)
       // audit #38: exclude soft-deleted roles so a membership referencing a deleted role does not
       // surface the deleted role's name in the member-list response (the serializer then falls
       // through to its `{ name: '' }` placeholder).
       .where(and(inArray(roles.id, [...roleInternalIds]), isNull(roles.deleted_at)));
-    return new Map(rows.map((row) => [row.id, { public_id: row.public_id, name: row.name }]));
+    return new Map(
+      rows.map((row) => [
+        row.id,
+        { public_id: row.public_id, name: row.name, tone: row.tone, is_system: row.is_system },
+      ]),
+    );
   }
 
   /**

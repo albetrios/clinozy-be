@@ -40,7 +40,9 @@ Any entry that is not a well-formed `completed` record (no `state`, an unknown `
 
 The header is **required on 13 writes** — a missing or malformed key fails closed with **422**
 (`idempotencyKeyRequired` / `idempotencyKeyInvalid`). It is **optional but strongly recommended** on
-every other write, where duplicate side effects are costly.
+every other write, where duplicate side effects are costly. A malformed key answers the same **422**
+(`idempotencyKeyInvalid`) everywhere — on an optional-key write and on an unknown path too (launch
+USERS-M6): a client that sent a key meant to be protected, so it is never silently dropped.
 
 The required set's source of truth is the `config: { idempotencyRequired: true }` flag on each route;
 the generated route catalog (`docs/routes.txt`) lists it under **IDEMPOTENCY-REQUIRED WRITES (13)**, and

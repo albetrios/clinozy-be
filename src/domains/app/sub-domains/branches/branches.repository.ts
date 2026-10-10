@@ -36,11 +36,20 @@ function inOrganization(organization_id: number): SQL {
 /** Main branch first, then by name. */
 const BRANCH_ORDER = [desc(branches.is_main), asc(branches.name)] as const;
 
+/** What `GET /app/branches/my` reads — a picker's, the booking rules' and a printed bill's header (D81). */
 const branchSummaryColumns = {
   public_id: branches.public_id,
   name: branches.name,
   tone: branches.tone,
   is_main: branches.is_main,
+  address_line_one: branches.address_line_one,
+  address_line_two: branches.address_line_two,
+  area: branches.area,
+  city: branches.city,
+  state: branches.state,
+  postal_code: branches.postal_code,
+  phone: branches.phone,
+  gst_number: branches.gst_number,
   opens_at: branches.opens_at,
   closes_at: branches.closes_at,
   working_days: branches.working_days,

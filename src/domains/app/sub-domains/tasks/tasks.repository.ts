@@ -29,6 +29,7 @@ import {
 } from './tasks.constants.js';
 import type { RuleTaskInput, TaskRecordLink } from './tasks.rule-tasks.js';
 import { task_owner_changes, tasks } from './tasks.schema.js';
+import type { TaskTypeFilter } from './tasks.types.js';
 
 /** The person and branch a task's record carries (TK3, TK5). */
 export interface TaskRecordContext {
@@ -64,6 +65,16 @@ function searchCondition(value: unknown): SQL {
     sql`${tasks.why} ilike ${pattern}`,
     sql`exists (select 1 from ${contacts} where ${contacts.id} = ${tasks.contact_id} and (${contacts.first_name} || ' ' || coalesce(${contacts.last_name}, '')) ilike ${pattern})`,
   ) as SQL;
+}
+
+/** D81 T6, the type filter: a task of one of the rules named, or of one of the kinds named. */
+function typeCondition(value: unknown): SQL {
+  const { ruleKeys, kinds } = value as TaskTypeFilter;
+  const conditions = [
+    ...(ruleKeys.length > 0 ? [inArray(tasks.rule_key, ruleKeys)] : []),
+    ...(kinds.length > 0 ? [inArray(tasks.kind, kinds)] : []),
+  ];
+  return or(...conditions) ?? sql`false`;
 }
 
 /** TK3 "Mine": owned by me, or unowned in the queue of one of my roles. */
@@ -108,8 +119,8 @@ const RULE_IS_ON = sql`(${tasks.kind} <> ${TASK_KIND.RULE} OR NOT EXISTS (
  * the shared reads and writes, plus who works the queues, the owner changes and the leave step.
  *
  * @remarks
- * - **Algorithm:** `q` (title, why, the person's name), `mine` (TK3) and `rules_on` (10.10) are
- *   derived filters; sorts `due_at` (default, soonest first), `resolved_at` (none last) and
+ * - **Algorithm:** `q` (title, why, the person's name), `type` (the rules or kinds named, D81 T6),
+ *   `mine` (TK3) and `rules_on` (10.10) are derived filters; sorts `due_at` (default, soonest first), `resolved_at` (none last) and
  *   `created_at`. A member can work tasks when they are active and one of their roles holds
  *   `task:read` (the role tables are tenancy's — read for this check only).
  */
@@ -134,6 +145,7 @@ export class TasksRepository extends BaseRecordRepository {
       },
       derivedFilters: {
         search: searchCondition,
+        type: typeCondition,
         mine: mineCondition,
         rules_on: () => RULE_IS_ON,
         resolved_today: resolvedTodayCondition,

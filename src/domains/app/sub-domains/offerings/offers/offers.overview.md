@@ -40,7 +40,7 @@ The offerings sub-domain's one code set (O2); reads are every member's.
 - **Tenant isolation:** ENABLE + FORCE RLS on the organization GUC on all three tables; the retention-cleanup arm (USING only) on `app.offers` lets the deleted-record purge (D38) erase rows.
 - **Derived status (O10):** paused when `is_active` is false, else scheduled before `starts_on`, ended after `ends_on`, live in between — on the organization's today; never stored. The list's default order is Live → Scheduled → Paused → Ended, newest first inside each.
 - **Value by kind (O11):** `percent` a whole 1–100, `amount` / `fixed` rupees above 0, `extra` whole sessions 1–99; `ends_on` on or after `starts_on` — 400s naming the field; the CHECKs hold the same.
-- **Code (O11):** A–Z and 0–9, up to 16, stored uppercase; unique among live offers — a 409 (`offerCodeInUse`), and a restore over a reused code is `record_restore_conflict`.
+- **Code (O11):** A–Z and 0–9, up to 16, stored uppercase; unique among live offers — a 409 with reason `offer_code_in_use` (D81), and a restore over a reused code is `record_restore_conflict`.
 - **Active offerings only (O12):** every `offering_ids` entry must be a live, active offering of the organization — a 400 naming it.
 - **No branches = every branch (O5):** the list's `branch_id` keeps the offers that run there and those with no branches.
 - **Stale saves refused (D43):** a `PATCH` with an older `expected_updated_at` is a 409 (`record_changed`) naming who changed it and when.

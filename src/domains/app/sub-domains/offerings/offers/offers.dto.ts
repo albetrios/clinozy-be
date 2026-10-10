@@ -19,12 +19,20 @@ import {
 /** True when every entry of a list is different. */
 const distinct = (values: readonly unknown[]) => new Set(values).size === values.length;
 
-/** An offer code as sent: letters A–Z (any case) and digits, 1–16 — stored uppercase (O11). */
+/**
+ * An offer code as sent: letters A–Z (any case) and digits, 1–16 — stored uppercase (O11). Its
+ * OpenAPI description and example travel with it (the global field dictionary's `code` is the
+ * TOTP code of the auth routes).
+ */
 const offerCodeSchema = z
   .string()
   .trim()
   .regex(new RegExp(`^[A-Za-z0-9]{1,${OFFER_CODE_MAX_LENGTH}}$`), {
     message: `Letters A–Z and digits 0–9 only, up to ${OFFER_CODE_MAX_LENGTH}`,
+  })
+  .meta({
+    description: `The offer's code — the code typed at the bill: letters A–Z (any case) and digits 0–9, up to ${OFFER_CODE_MAX_LENGTH}; stored and answered uppercase (\`diwali25\` → \`DIWALI25\`); unique among the live offers in any case (a 409 \`offer_code_in_use\`); null for none (a change clears it).`,
+    example: 'DIWALI25',
   });
 
 /** An offer's offerings: 1–50 ids, each once. */

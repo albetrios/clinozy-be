@@ -6,6 +6,16 @@ export interface TaskContactOutput {
   preference_tags: string[];
 }
 
+/**
+ * The Tasks type filter (D81 T6): the rules and the kinds a list asks for — a task of any of them
+ * (`rule_key IN (…) OR kind IN (…)`), so "Follow-ups you set" (the `follow_up` and `manual` kinds)
+ * shows beside the rules picked.
+ */
+export interface TaskTypeFilter {
+  ruleKeys: string[];
+  kinds: string[];
+}
+
 /** One owner change of a task (TK8). */
 export interface TaskOwnerChangeOutput {
   from_membership_id: string | null;

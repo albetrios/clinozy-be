@@ -42,6 +42,7 @@ vi.mock(
 );
 
 import { NotFoundError, ValidationError } from '@/shared/errors/index.js';
+import { env } from '@/shared/config/env.config.js';
 import { MembershipInvitationService } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.service.js';
 import { eventBus } from '@/core/events/event-bus.js';
 import type { OrganizationRepository } from '@/domains/tenancy/sub-domains/organization/organization.repository.js';
@@ -203,6 +204,22 @@ describe('MembershipInvitationService', () => {
       // R1: the raw token is never part of the returned shape.
       expect(result).toMatchObject({ id: 'inv_public_123' });
       expect((result as unknown as Record<string, unknown>).token).toBeUndefined();
+      // ROUTE #164: the echo flag is off in the harness, so no debug token either.
+      expect(result).not.toHaveProperty('debug_invitation_token');
+    });
+
+    it('echoes the raw token as debug_invitation_token when its env flag is on (ROUTE #164)', async () => {
+      env.MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED = true;
+      try {
+        const result = await service.createForMembership(params);
+        expect(result.debug_invitation_token).toBe('raw-token-abc123');
+        // The stored value is still only the hash.
+        expect(invitationRepository.create).toHaveBeenCalledWith(
+          expect.objectContaining({ token_hash: 'hashed-token-abc123' }),
+        );
+      } finally {
+        env.MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED = false;
+      }
     });
 
     it('throws ConflictError and does not insert when the organization is at the pending-invitation cap', async () => {
@@ -331,6 +348,21 @@ describe('MembershipInvitationService', () => {
       expect(eventBus.emit).not.toHaveBeenCalled();
       expect(result).toMatchObject({ id: 'inv_public_123' });
       expect((result as unknown as Record<string, unknown>).token).toBeUndefined();
+      expect(result).not.toHaveProperty('debug_invitation_token');
+    });
+
+    it('echoes the rotated raw token as debug_invitation_token when its env flag is on (ROUTE #164)', async () => {
+      env.MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED = true;
+      try {
+        const result = await service.resendForMembership(
+          asScope('org_public_abc'),
+          'mem_public_xyz',
+          body,
+        );
+        expect(result.debug_invitation_token).toBe('raw-token-abc123');
+      } finally {
+        env.MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED = false;
+      }
     });
 
     it('throws NotFoundError when the member is unknown or ended', async () => {

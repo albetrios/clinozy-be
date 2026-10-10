@@ -1,6 +1,10 @@
 /** OpenAPI success responses — tenancy. */
 import type { ResponseDefinition } from '@tooling/openapi/response-map/building-blocks.js';
-import { wrapPaginated, wrapSuccess } from '@tooling/openapi/response-map/building-blocks.js';
+import {
+  wrapPaginated,
+  wrapSuccess,
+  wrapUncountedPaginated,
+} from '@tooling/openapi/response-map/building-blocks.js';
 import * as schemas from '@tooling/openapi/response-map/resource-schemas.js';
 
 export const tenancyRouteResponses: Record<string, ResponseDefinition> = {
@@ -54,9 +58,10 @@ export const tenancyRouteResponses: Record<string, ResponseDefinition> = {
   },
 
   // ── Organization: API Keys ──
+  // A keyset page that never counts: no `meta.pagination.estimated_total` (SHELL-M2's class)
   'GET /api/v1/tenancy/organization/api-keys': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.apiKeySchema, [schemas.apiKeyExample]),
+    schema: wrapUncountedPaginated(schemas.apiKeySchema, [schemas.apiKeyExample]),
     example: null,
   },
   'GET /api/v1/tenancy/organization/api-keys/{api_key_id}': {
@@ -157,7 +162,23 @@ export const tenancyRouteResponses: Record<string, ResponseDefinition> = {
   },
   'POST /api/v1/tenancy/organization/memberships': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.membershipSchema, schemas.membershipExample),
+    // ROUTE #164: the embedded invitation may carry the dev-only `debug_invitation_token`.
+    schema: wrapSuccess(
+      {
+        ...schemas.membershipSchema,
+        properties: {
+          ...schemas.membershipSchema.properties,
+          invitation: {
+            ...schemas.membershipSchema.properties.invitation,
+            properties: {
+              ...schemas.membershipSchema.properties.invitation.properties,
+              debug_invitation_token: schemas.debugInvitationTokenProperty,
+            },
+          },
+        },
+      },
+      schemas.membershipExample,
+    ),
     example: null,
   },
   'PATCH /api/v1/tenancy/organization/memberships/{membership_id}': {
@@ -218,17 +239,28 @@ export const tenancyRouteResponses: Record<string, ResponseDefinition> = {
   },
   'POST /api/v1/tenancy/organization/memberships/{membership_id}/invitation/resend': {
     statusCode: 200,
-    schema: wrapSuccess(schemas.invitationSchema, {
-      ...schemas.invitationExample,
-      expires_at: '2026-02-28T10:30:00.000Z',
-    }),
+    // ROUTE #164: may carry the dev-only `debug_invitation_token`.
+    schema: wrapSuccess(
+      {
+        ...schemas.invitationSchema,
+        properties: {
+          ...schemas.invitationSchema.properties,
+          debug_invitation_token: schemas.debugInvitationTokenProperty,
+        },
+      },
+      {
+        ...schemas.invitationExample,
+        expires_at: '2026-02-28T10:30:00.000Z',
+      },
+    ),
     example: null,
   },
 
   // ── Roles ──
+  // A keyset page that never counts: no `meta.pagination.estimated_total` (SHELL-M2's class)
   'GET /api/v1/tenancy/organization/roles': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.memberRoleSchema, [schemas.memberRoleExample]),
+    schema: wrapUncountedPaginated(schemas.memberRoleSchema, [schemas.memberRoleExample]),
     example: null,
   },
   'GET /api/v1/tenancy/organization/roles/{role_id}': {

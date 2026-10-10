@@ -12,20 +12,25 @@ import type {
  * and the role and branch lists resolved by the caller. The internal sequential `user_id` /
  * `role_id` on the row are NEVER emitted (they leak enumerable ids and row counts). `invitation` is
  * the live pending invite (present only on `invited` rows); `ended_at` / `end_reason` are the
- * soft delete (D58). Timestamps become ISO-8601.
+ * soft delete (D58); `is_owner` names the organization's owner (launch D81 (4)). Timestamps become
+ * ISO-8601.
  */
-export function serializeMembership(
-  row: MembershipRow,
-  organization_public_id: string,
-  user: MembershipUserSummary,
-  invitation: { public_id: string; expires_at: Date } | null,
-  access: MembershipAccessRefs,
-): MembershipOutput {
+export function serializeMembership(options: {
+  row: MembershipRow;
+  organization_public_id: string;
+  user: MembershipUserSummary;
+  invitation: { public_id: string; expires_at: Date } | null;
+  access: MembershipAccessRefs;
+  /** Whether this membership's login owns the organization. */
+  is_owner: boolean;
+}): MembershipOutput {
+  const { row, user, invitation, access } = options;
   return {
     id: row.public_id,
     user_id: user.id,
-    organization_id: organization_public_id,
+    organization_id: options.organization_public_id,
     status: row.status,
+    is_owner: options.is_owner,
     joined_at: row.joined_at?.toISOString() ?? null,
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),

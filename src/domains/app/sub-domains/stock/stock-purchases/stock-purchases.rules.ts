@@ -57,10 +57,11 @@ function paiseOf(value: unknown): number {
 
 /**
  * S10: "Not in the list · add as typed" — the live item of that name (any case) when one exists,
- * else a new one with its unit, at 0 until the line receives it.
+ * else a new one with its unit and the purchase's vendor (D81), at 0 until the line receives it.
  */
 async function quickItemId(options: {
   newItem: NonNullable<StockPurchaseItemInput['new_item']>;
+  stockVendorId: unknown;
   context: BaseRecordWriteContext;
   repository: StockPurchasesRepository;
 }): Promise<number> {
@@ -74,6 +75,7 @@ async function quickItemId(options: {
     organization_id: context.organizationId,
     name: newItem.name,
     ...(newItem.unit === undefined ? {} : { unit: newItem.unit }),
+    stock_vendor_id: options.stockVendorId,
     created_by_user_id: context.userId,
     updated_by_user_id: context.userId,
   });
@@ -83,10 +85,12 @@ async function quickItemId(options: {
 /** S10: the lines with their items (live here, or added as typed) and amounts (quantity × rate). */
 async function resolveLines(options: {
   items: readonly StockPurchaseItemInput[];
+  /** The purchase's vendor (its internal id) — an item added as typed takes it (D81). */
+  stockVendorId: unknown;
   context: BaseRecordWriteContext;
   repository: StockPurchasesRepository;
 }): Promise<PendingLine[]> {
-  const { items, context, repository } = options;
+  const { items, stockVendorId, context, repository } = options;
   const ids = await resolveRecordIds({
     table: stock_items,
     organizationId: context.organizationId,
@@ -98,7 +102,7 @@ async function resolveLines(options: {
   for (const item of items) {
     const stockItemId =
       item.stock_item_id === undefined
-        ? await quickItemId({ newItem: item.new_item!, context, repository })
+        ? await quickItemId({ newItem: item.new_item!, stockVendorId, context, repository })
         : ids.get(item.stock_item_id);
     if (stockItemId === undefined) {
       throw fieldValidationError({
@@ -143,7 +147,12 @@ async function preparePurchase(options: {
   const payment = values.payment as StockPurchasePaymentInput | undefined;
   delete values.items;
   delete values.payment;
-  const lines = await resolveLines({ items, context, repository });
+  const lines = await resolveLines({
+    items,
+    stockVendorId: values.stock_vendor_id,
+    context,
+    repository,
+  });
   values.bill_amount ??= lines.reduce((total, line) => total + line.amountPaise, 0) / 100;
   values.purchase_date ??= await organizationToday(context);
   await assertPurchaseDate(values.purchase_date, context);
@@ -268,8 +277,9 @@ async function revertReceived(
  * receive, the bill, the "Paid", the fixed lines, delete only unpaid, and what a page reads.
  *
  * @remarks
- * - **Algorithm:** a create resolves its lines (a listed item or one added as typed), defaults the
- *   bill to their total and the date to today; once written, its lines go in, each receives its
+ * - **Algorithm:** a create resolves its lines (a listed item, or one added as typed — a new
+ *   item takes the purchase's vendor, D81), defaults the bill to their total and the date to
+ *   today; once written, its lines go in, each receives its
  *   quantity with a `received` movement and sets the item's latest rate, and "Paid" records a
  *   supplier-bill payment pointing at it (its paid amount follows — S11). A change keeps the lines
  *   (409 `purchase_received`) and never puts the bill under what is paid. A delete wants nothing

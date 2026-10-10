@@ -92,6 +92,21 @@ type SubscriptionRowWithSeatState = {
   seats: number | null;
   plan_included_seats: number | null;
 };
+
+/**
+ * The seats a subscription pays for — the one resolution behind both the add-member ceiling and
+ * the displayed `seats_total` (production-audit-decisions §1.3). `null` = unlimited.
+ *
+ * The plan's `included_seats` is the allowance; `seats` (the Stripe quantity) raises it only when
+ * the clinic pays for more than the plan includes. `seats` alone is never the limit: the seat sync
+ * writes the member count into it after every add, so reading it as the limit capped a subscribed
+ * organization at its current size after one add (launch ROUTE #165, D82). An unlimited plan stays
+ * unlimited whatever quantity is billed.
+ */
+function resolvePaidSeatCeiling(seatState: SubscriptionRowWithSeatState): number | null {
+  if (seatState.plan_included_seats === null) return null;
+  return Math.max(seatState.plan_included_seats, seatState.seats ?? 0);
+}
 import {
   validateChangePlan,
   validateCreateSubscription,
@@ -194,9 +209,10 @@ export class SubscriptionService {
    * Computes `seats_total` / `seats_used` for a subscription row (REQ-4).
    *
    * @remarks
-   * - **Algorithm:** `seats_total = row.seats ?? row.plan_included_seats ?? null` (null =
-   *   unlimited); `seats_used` is the org's ACTIVE + INVITED membership count from the injected
-   *   {@link MembershipSeatUsagePort}.
+   * - **Algorithm:** `seats_total` is the seats the subscription pays for — the plan's
+   *   `included_seats`, raised by a Stripe quantity bought above it (`null` = unlimited) — the same
+   *   resolution the add-member ceiling enforces; `seats_used` is the org's ACTIVE + INVITED
+   *   membership count from the injected {@link MembershipSeatUsagePort}.
    * - **Failure modes:** when the membership port is not wired, `seats_used` defaults to 0 (and a
    *   warning is logged) so the response shape stays stable for minimal/worker harnesses.
    * - **Side effects:** one cross-domain membership COUNT (under the organization RLS context) per call.
@@ -220,7 +236,7 @@ export class SubscriptionService {
     }
     return rows.map((row) => ({
       ...row,
-      seats_total: row.seats ?? row.plan_included_seats ?? null,
+      seats_total: resolvePaidSeatCeiling(row),
       seats_used: seatsUsed,
     }));
   }
@@ -231,7 +247,8 @@ export class SubscriptionService {
    * @remarks
    * - **Algorithm:** delegates to {@link SubscriptionRepository.findActiveSeatStateByOrganizationForUpdate},
    *   which takes `FOR UPDATE` on the active subscription row, then resolves the ceiling:
-   *   active entitlement → purchased `seats` ?? plan `included_seats`; **no active subscription**
+   *   active entitlement → the plan's `included_seats`, raised by a Stripe quantity bought above it
+   *   (never the synced headcount alone — launch ROUTE #165); **no active subscription**
    *   (F3) or a **dunning subscription past its grace window** (F4) → the Free-tier ceiling
    *   ({@link PlanService.getFreePlanSeatCeiling}). `null` still means "no ceiling to enforce"
    *   (unlimited plan, or no plan catalog configured).
@@ -253,7 +270,7 @@ export class SubscriptionService {
     if (!seatState || this.isDunningEntitlementLapsed(seatState)) {
       return this.planService.getFreePlanSeatCeiling();
     }
-    return seatState.seats ?? seatState.plan_included_seats ?? null;
+    return resolvePaidSeatCeiling(seatState);
   }
 
   /**

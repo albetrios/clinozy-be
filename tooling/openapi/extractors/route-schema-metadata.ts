@@ -21,8 +21,15 @@ export interface RouteSchemaMetadata {
   tags: string[] | null;
 }
 
-const SUMMARY_LITERAL_PATTERN = /\bsummary\s*:\s*(['"`])([\s\S]*?)\1/;
-const DESCRIPTION_LITERAL_PATTERN = /\bdescription\s*:\s*(['"`])([\s\S]*?)\1/;
+// A quoted literal — its quote (group 1) and its raw body (group 2). An escaped quote inside
+// (`\'`, `\"`, `` \` ``) does not end it: matching up to the first quote of the kind cut every
+// description holding one (`the drawer\'s "Paid"`) short in the generated document.
+const SUMMARY_LITERAL_PATTERN = /\bsummary\s*:\s*(['"`])((?:\\[\s\S]|(?!\1)[^\\])*)\1/;
+const DESCRIPTION_LITERAL_PATTERN = /\bdescription\s*:\s*(['"`])((?:\\[\s\S]|(?!\1)[^\\])*)\1/;
+/** An escape (group 1) or, in a template literal, a `${NAME}` interpolation (group 2). */
+const ESCAPE_OR_INTERPOLATION_PATTERN = /\\(['"`\\])|\$\{\s*([A-Za-z_]\w*)\s*\}/g;
+/** How deep a `${NAME}` may lead to a constant that interpolates another. */
+const INTERPOLATION_DEPTH_MAX = 3;
 const TAGS_ARRAY_PATTERN = /\btags\s*:\s*\[([\s\S]*?)\]/;
 const STRING_LITERAL_PATTERN = /(['"`])([\s\S]*?)\1/g;
 
@@ -76,7 +83,79 @@ function extractTagsFromArrayBody(arrayBody: string): string[] {
   return tags;
 }
 
-function extractMetadataFromOptionsBody(optionsBody: string): RouteSchemaMetadata {
+/** A `const NAME = '…'` (exported or not) in a source text — its quote and raw body. */
+function findStringConstant(options: {
+  name: string;
+  sourceText: string;
+}): { quote: string; body: string } | undefined {
+  const constant = new RegExp(
+    `\\bconst\\s+${options.name}\\s*(?::[^=]+)?=\\s*(['"\`])((?:\\\\[\\s\\S]|(?!\\1)[^\\\\])*)\\1`,
+  ).exec(options.sourceText);
+  if (constant?.[1] === undefined || constant[2] === undefined) return undefined;
+  return { quote: constant[1], body: constant[2] };
+}
+
+/** The source of the `@/…` module a name is imported from (undefined when it is not, or unreadable). */
+function importedModuleSource(options: { name: string; sourceText: string }): string | undefined {
+  const importMatch = new RegExp(
+    `import\\s*\\{[^}]*\\b${options.name}\\b[^}]*\\}\\s*from\\s*'@/([^']+)\\.js'`,
+  ).exec(options.sourceText);
+  if (!importMatch?.[1]) return undefined;
+  try {
+    return readFileSync(join(process.cwd(), 'src', `${importMatch[1]}.ts`), 'utf-8');
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A matched literal's value as the source means it: escaped quotes and backslashes unescaped and,
+ * in a template literal, each `${NAME}` replaced by the string constant it names — declared in the
+ * same file (a description built from a shared phrase, `${DAY_CLOSE_FIGURES}`) or imported from an
+ * `@/…` module; a name it cannot resolve stays as written.
+ */
+function literalValue(options: {
+  quote: string;
+  body: string;
+  sourceText: string;
+  depth: number;
+}): string {
+  const { quote, body, sourceText, depth } = options;
+  return body.replace(
+    ESCAPE_OR_INTERPOLATION_PATTERN,
+    (whole, escaped: string | undefined, name: string | undefined) => {
+      if (escaped !== undefined) return escaped;
+      if (quote !== '`' || name === undefined || depth >= INTERPOLATION_DEPTH_MAX) return whole;
+      const constant = resolveStringConstant({ name, sourceText, hops: 0 });
+      return constant ? literalValue({ ...constant, depth: depth + 1 }) : whole;
+    },
+  );
+}
+
+/**
+ * The string constant a name refers to from a source text: declared there, else followed through
+ * its `@/…` import (and that module's own import of it — a re-export) up to two modules away.
+ */
+function resolveStringConstant(options: {
+  name: string;
+  sourceText: string;
+  hops: number;
+}): { quote: string; body: string; sourceText: string } | undefined {
+  const { name, sourceText, hops } = options;
+  const local = findStringConstant({ name, sourceText });
+  if (local) return { ...local, sourceText };
+  if (hops >= 2) return undefined;
+  const moduleSource = importedModuleSource({ name, sourceText });
+  return moduleSource
+    ? resolveStringConstant({ name, sourceText: moduleSource, hops: hops + 1 })
+    : undefined;
+}
+
+function extractMetadataFromOptionsBody(options: {
+  optionsBody: string;
+  sourceText: string;
+}): RouteSchemaMetadata {
+  const { optionsBody, sourceText } = options;
   const schemaRange = findSchemaPropertyRange(optionsBody);
   if (!schemaRange) {
     return { summary: null, description: null, tags: null };
@@ -86,9 +165,13 @@ function extractMetadataFromOptionsBody(optionsBody: string): RouteSchemaMetadat
   const descriptionMatch = DESCRIPTION_LITERAL_PATTERN.exec(schemaBody);
   const tagsMatch = TAGS_ARRAY_PATTERN.exec(schemaBody);
   const tags = tagsMatch ? extractTagsFromArrayBody(tagsMatch[1] ?? '') : null;
+  const literalOf = (match: RegExpExecArray | null): string | null =>
+    match?.[1] === undefined || match[2] === undefined
+      ? null
+      : literalValue({ quote: match[1], body: match[2], sourceText, depth: 0 });
   return {
-    summary: summaryMatch?.[2] ?? null,
-    description: descriptionMatch?.[2] ?? null,
+    summary: literalOf(summaryMatch),
+    description: literalOf(descriptionMatch),
     tags: tags && tags.length > 0 ? tags : null,
   };
 }
@@ -146,7 +229,7 @@ function scanRouteSchemaEntries({
     const optionsRange = findOptionsObjectRange(sourceText, matchIndex);
     if (!optionsRange) continue;
     const optionsBody = sourceText.slice(optionsRange.bodyStart, optionsRange.bodyEnd);
-    const metadata = extractMetadataFromOptionsBody(optionsBody);
+    const metadata = extractMetadataFromOptionsBody({ optionsBody, sourceText });
     entries.push({
       method,
       fullPath,

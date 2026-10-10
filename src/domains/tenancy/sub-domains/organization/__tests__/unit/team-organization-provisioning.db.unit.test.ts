@@ -157,6 +157,33 @@ describe('team organization provisioning (database)', () => {
     }
   });
 
+  it("locks the Owner role and gives every role the design's tone (D81 (4))", async () => {
+    const user = await createTestUser();
+
+    const result = await provisionOrganizationWithOwner({
+      name: 'Acme Tones',
+      slug: 'acme-team-role-tones',
+      type: 'TEAM',
+      ownerUserId: user.id,
+    });
+
+    const roleRows = await database
+      .select({ name: roles.name, tone: roles.tone, is_locked: roles.is_locked })
+      .from(roles)
+      .where(eq(roles.organization_id, result.organization.id));
+
+    expect(Object.fromEntries(roleRows.map((row) => [row.name, row.tone]))).toEqual({
+      Owner: 'slate',
+      ...Object.fromEntries(DEFAULT_TEAM_ROLES.map((role) => [role.name, role.tone])),
+    });
+    expect(
+      roleRows
+        .filter((row) => row.is_locked)
+        .map((row) => row.name)
+        .sort(),
+    ).toEqual(['Admin', 'Owner']);
+  });
+
   it('provisions only the Owner role for a PERSONAL organization (no default team roles)', async () => {
     const user = await createTestUser();
 

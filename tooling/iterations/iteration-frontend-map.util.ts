@@ -79,7 +79,10 @@ const ROUTE_MODULES: readonly RouteModule[] = [
   },
   {
     name: 'Organization and team',
-    holds: (path) => path.startsWith('/tenancy/') || path.startsWith('/app/memberships'),
+    holds: (path) =>
+      path.startsWith('/tenancy/') ||
+      path.startsWith('/app/memberships') ||
+      path.startsWith('/app/roles'),
   },
   { name: 'Branches and places', holds: (path) => path.startsWith('/app/branches') },
   {

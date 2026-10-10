@@ -8,6 +8,8 @@ import type { InvoicesService } from './invoices.service.js';
 import { createInvoicesController } from './invoices.controller.js';
 import {
   CreateInvoiceDto,
+  PreviewInvoiceChangeDto,
+  PreviewInvoiceDto,
   UpdateInvoiceDto,
   invoicesIdParamsDto,
   listInvoicesQueryDto,
@@ -18,10 +20,11 @@ type InvoiceParams = { Params: { invoice_id: string } };
 
 /** What the list and export say about their filters. */
 const LIST_FILTERS =
-  "`q` is `#1042` (the sequence) or the statutory number (`2026-27/0412`); filters `type` and `branch_id` (several, comma-separated), `contact_id`, `patient_id` (the patient file's contact), `member_id` (credited), `payment_status` (several — `paid` · `partial` · `unpaid`), `invoice_date_from` / `invoice_date_to` (inclusive), the created range; sort `invoice_date` (default, newest first), `created_at` or `due_amount`. Another branch's invoices only with branch:read (B4).";
+  "`q` is `#1042` (the sequence), the statutory number (`2026-27/0412`) or the billed contact (a name, phone or contact number); filters `type` and `branch_id` (several, comma-separated), `contact_id`, `patient_id` (the patient file's contact), `member_id` (credited), `payment_status` (several — `paid` · `partial` · `unpaid`), `invoice_date_from` / `invoice_date_to` (inclusive), the created range; sort `invoice_date` (default, newest first), `created_at` or `due_amount`. Another branch's invoices only with branch:read (B4).";
 
 /**
- * Registers the `invoices` routes (prefix `/api/v1/app`) — routes-final 8.A, routes 1–7.
+ * Registers the `invoices` routes (prefix `/api/v1/app`) — routes-final 8.A, routes 1–7, and the
+ * two previews (D81, Q2).
  */
 export function invoicesRoutes(service: InvoicesService): FastifyPluginAsync {
   const controller = createInvoicesController(service);
@@ -36,7 +39,7 @@ export function invoicesRoutes(service: InvoicesService): FastifyPluginAsync {
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'List invoices',
-          description: `Returns one page of the organization's invoices, each with its lines, the billed \`contact\` and \`patient_id\`, the server's amounts, \`paid_amount\`, \`due_amount\`, \`payment_status\` and \`is_settled\` (a payment on a closed day). ${LIST_FILTERS} Requires payment:read.`,
+          description: `Returns one page of the organization's invoices, each with its lines, the billed \`contact\` and \`patient_id\`, the server's amounts, \`paid_amount\`, \`due_amount\`, \`payment_status\`, \`is_settled\` (a payment on a closed day) and \`created_by_membership_id\` (who billed it). \`meta.due_total\` and \`meta.paid_total\` sum what is due and paid over every invoice the filters match (every page). ${LIST_FILTERS} Requires payment:read.`,
           tags: ['Invoice'],
           querystring: listInvoicesQueryDto,
         },
@@ -67,12 +70,28 @@ export function invoicesRoutes(service: InvoicesService): FastifyPluginAsync {
         schema: {
           summary: 'Bill',
           description:
-            "Bills a contact: `branch_id*` (one of yours), `items*` (1–50 — each an `offering_id` (clinic, consultation — a consultation invoice takes consultation offerings only; active and offered at the branch, O13, O5) or a `medicine_id` (medical), `quantity*` (1–999), `discount_percent` (0–100, 2 decimals), `patient_offering_suggestion_id` (the plan row it invoices — the patient's live planned or accepted row for the offering when none is sent, PK7), `patient_treatment_ids` (the patient's done, unbilled treatments of the offering it pays for, up to its sessions, B28)), `contact_id` (required except `medical`; a clinic or consultation bill's contact needs a patient file — a 400 `patient_file_required`), `type` (`clinic` default · `consultation` · `medical`), `invoice_date` (default today), `member_ids` (≤ 10 — who is credited), `overall_discount` (an amount, at most what the lines come to — a 400), `remark` (≤ 500), `patient_prescription_id`, and `payment` — the drawer's \"Paid now\" (`splits*` cash · UPI · card, optional `paid_at` on an open day, `reference`), up to the total (a 409 `more_than_due`). The server sets each line's rate (the offering's billed price or the medicine's) and GST and computes every amount (B9); a line under the offering's lowest price is a 400 `below_lowest_price` (B10). A `treatment`, `package` or `lhr` line creates the patient offering (PK4), a plan row it invoices turns `accepted`, the treatments it names are billed (a 409 `treatment_billed` when billed meanwhile). The numbers come from the server (#1042, 2026-27/0412). A `system` entry joins the contact's activity. Requires payment:create.",
+            "Bills a contact: `branch_id*` (one of yours), `items*` (1–50 — each an `offering_id` (clinic, consultation — a consultation invoice takes consultation offerings only; active and offered at the branch, O13, O5) or a `medicine_id` (medical), `quantity*` (1–999), `discount_percent` (0–100, 2 decimals), `patient_offering_suggestion_id` (the plan row it invoices — the patient's live planned or accepted row for the offering when none is sent, PK7), `patient_treatment_ids` (the patient's done, unbilled treatments of the offering it pays for, up to its sessions, B28)), `contact_id` (required except `medical`; a clinic or consultation bill's contact needs a patient file — a 400 `patient_file_required`), `type` (`clinic` default · `consultation` · `medical`), `invoice_date` (default today), `member_ids` (≤ 10 — who is credited), `overall_discount` (an amount, at most what the lines come to — a 400), `remark` (≤ 500), `patient_prescription_id`, and `payment` — the drawer's \"Paid now\" (`splits*` cash · UPI · card, optional `paid_at` on an open day, `reference`), up to the total (a 409 `more_than_due`). The server sets each line's rate and GST and computes every amount (B9): an offering line bills the best live offer on the invoice date at the branch — the lowest of its percent, amount-off and fixed-price offers on the offer price (or the list price), never below the lowest price — and a session line adds the most free sessions a live extra-sessions offer gives (M26, routes-final §3.10); a medicine line bills its MRP. A line under the offering's lowest price is a 400 `below_lowest_price` naming the line (`errors[].field` `items/<n>`, its place in `items`, B10). A `treatment`, `package` or `lhr` line creates the patient offering (PK4), a plan row it invoices turns `accepted`, the treatments it names are billed (a 409 `treatment_billed` when billed meanwhile). The numbers come from the server (#1042, 2026-27/0412). A `system` entry joins the contact's activity. Requires payment:create.",
           tags: ['Invoice'],
           body: CreateInvoiceDto,
         },
       },
       controller.create,
+    );
+    zodApplication.post(
+      '/invoices/preview',
+      {
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PAYMENT_CREATE)],
+        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        schema: {
+          summary: 'Preview a bill',
+          description:
+            "Answers what `POST /app/invoices` would write for the same body without `payment` — the lines (each with its server `rate`, GST and amounts, `sessions_total` and the live `offer_ids` it applies) and the totals (`subtotal`, `discount_total`, `taxable_total`, `gst_total`, `total`, `due_amount`), with the `type` and `invoice_date` it would default to — and writes nothing (D81, Q2). The bill's refusals apply (a branch not yours, a reference not here, a line rule, a 400 `below_lowest_price` on `items/<n>`); `contact_id` may wait until the patient is picked — once sent, a clinic or consultation bill's contact needs a patient file (a 400 `patient_file_required`). Nothing is written, so `X-Idempotency-Key` is optional. Requires payment:create.",
+          tags: ['Invoice'],
+          body: PreviewInvoiceDto,
+        },
+      },
+      controller.preview,
     );
     zodApplication.get<InvoiceParams>(
       '/invoices/:invoice_id',
@@ -106,6 +125,23 @@ export function invoicesRoutes(service: InvoicesService): FastifyPluginAsync {
         },
       },
       controller.update,
+    );
+    zodApplication.post<InvoiceParams>(
+      '/invoices/:invoice_id/preview',
+      {
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PAYMENT_UPDATE)],
+        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        schema: {
+          summary: 'Preview a change to an invoice',
+          description:
+            "Answers what `PATCH /app/invoices/{invoice_id}` would write for the same fields (all optional; none = the stored lines as they are; no `expected_updated_at`) — the lines (a kept line keeps its `id` and its rate; a new or changed one bills the best live offer, M26), the totals, `paid_amount` (what is already paid) and `due_amount` — and writes nothing (D81). The change's refusals apply: a 409 `invoice_settled`, `invoice_of_sale`, `below_paid` or `offering_in_use`, a 400 `below_lowest_price` on `items/<n>`. Another branch's invoice without branch:read is a 404. Nothing is written, so `X-Idempotency-Key` is optional. Requires payment:update.",
+          tags: ['Invoice'],
+          params: invoicesIdParamsDto,
+          body: PreviewInvoiceChangeDto,
+        },
+      },
+      controller.previewChange,
     );
     zodApplication.delete<InvoiceParams>(
       '/invoices/:invoice_id',

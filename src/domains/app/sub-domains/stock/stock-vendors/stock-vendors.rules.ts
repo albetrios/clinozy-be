@@ -6,11 +6,12 @@ import { stock_vendors } from './stock-vendors.schema.js';
 
 /**
  * The stock vendor rules (launch ROUTE #137, routes-final 9.E, S13): delete only with nothing
- * owed, and what each is owed.
+ * owed, what each is owed and how many purchases each has.
  *
  * @remarks
  * - **Algorithm:** a delete is refused while a live purchase of theirs has a due; every read adds
- *   `payable` — the open dues of their live purchases.
+ *   `payable` — the open dues of their live purchases — and `purchase_count`, their live purchases
+ *   paid or not (D81), from one query for the page.
  * - **Failure modes:** `ConflictError` `vendor_has_dues`.
  */
 export function createStockVendorsRules(repository: StockVendorsRepository): BaseRecordRules {
@@ -26,10 +27,12 @@ export function createStockVendorsRules(repository: StockVendorsRepository): Bas
         organizationId: context.organizationId,
         publicIds: outputs.map((output) => String(output.id)),
       });
-      const payables = await repository.findPayables([...idsByPublicId.values()]);
+      const figures = await repository.findPurchaseFigures([...idsByPublicId.values()]);
       for (const output of outputs) {
         const id = idsByPublicId.get(String(output.id));
-        output.payable = id === undefined ? 0 : (payables.get(id) ?? 0);
+        const figure = id === undefined ? undefined : figures.get(id);
+        output.payable = figure?.payable ?? 0;
+        output.purchase_count = figure?.purchase_count ?? 0;
       }
     },
   };

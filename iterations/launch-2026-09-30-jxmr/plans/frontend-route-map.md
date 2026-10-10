@@ -209,7 +209,7 @@ webhooks, subscription billing). Section 3 lists them all.
 
 <!-- GENERATED:START -->
 
-437 routes, 303 of them the clinic's under `/api/v1/app`, from `docs/routes.txt`.
+440 routes, 306 of them the clinic's under `/api/v1/app`, from `docs/routes.txt`.
 Paths drop `/api/v1`; the health and operations routes in the last module sit outside it.
 **Gate**: a permission code, `signed in`, `public`, `platform admin` or a token. **Idem** `req`:
 `X-Idempotency-Key` required. **Team** `team`: team organizations only (`422` on a personal one).
@@ -219,14 +219,14 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 | Module | Routes |
 | --- | --- |
 | [Session and account](#session-and-account) | 47 |
-| [Organization and team](#organization-and-team) | 50 |
+| [Organization and team](#organization-and-team) | 51 |
 | [Branches and places](#branches-and-places) | 25 |
 | [Offerings](#offerings) | 19 |
 | [Contacts and messaging](#contacts-and-messaging) | 25 |
 | [Leads](#leads) | 9 |
 | [Appointments](#appointments) | 20 |
 | [Patients](#patients) | 74 |
-| [Billing — invoices, payments, credits, day close](#billing--invoices-payments-credits-day-close) | 32 |
+| [Billing — invoices, payments, credits, day close](#billing--invoices-payments-credits-day-close) | 34 |
 | [Clinic stock](#clinic-stock) | 28 |
 | [Tasks](#tasks) | 12 |
 | [Medical store](#medical-store) | 51 |
@@ -299,6 +299,7 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 | GET | `/app/memberships/me/saved-views/:membership_saved_view_id` | `organization:read` |  |  | 2.25 | Get my saved view |
 | PATCH | `/app/memberships/me/saved-views/:membership_saved_view_id` | `organization:read` |  |  | 2.26 | Update my saved view |
 | DELETE | `/app/memberships/me/saved-views/:membership_saved_view_id` | `organization:read` |  |  | 2.27 | Remove my saved view |
+| GET | `/app/roles` | `organization:read` |  |  |  | List roles (directory) |
 | POST | `/tenancy/membership-invitations/:membership_invitation_id/accept` | signed in | req |  | 2.11 | Accept invitation |
 | GET | `/tenancy/organization` | signed in |  |  |  | Get active organization |
 | PATCH | `/tenancy/organization` | `organization:update` |  |  |  | Update organization |
@@ -562,8 +563,10 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 | GET | `/app/invoices/:invoice_id/credit-notes` | `payment:read` |  |  | 8.9 | List an invoice's credit notes |
 | POST | `/app/invoices/:invoice_id/credit-notes` | `payment:create` | req |  | 8.10 | Refund with a credit note |
 | GET | `/app/invoices/:invoice_id/credit-notes/:invoice_credit_note_id` | `payment:read` |  |  | 8.11 | Get a credit note |
+| POST | `/app/invoices/:invoice_id/preview` | `payment:update` |  |  |  | Preview a change to an invoice |
 | POST | `/app/invoices/:invoice_id/restore` | `payment:delete` | req |  | 8.7 | Restore an invoice |
 | GET | `/app/invoices/exports` | `payment:export` |  |  | 8.2 | Export invoices |
+| POST | `/app/invoices/preview` | `payment:create` |  |  |  | Preview a bill |
 | GET | `/app/payments` | `payment:read` |  |  | 8.12 | List payments |
 | POST | `/app/payments` | `payment:create` | req |  | 8.14 | Receive or pay |
 | GET | `/app/payments/:payment_id` | `payment:read` |  |  | 8.15 | Get a payment |

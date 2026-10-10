@@ -893,16 +893,18 @@ export class BaseRecordRepository extends BaseRepository {
   }
 
   /**
-   * The sum of a column over every row a list query matches, on every page — a list's footer
-   * total (a purchase list's `meta.due_total`).
+   * The sum of a column — or of an expression of the row — over every row a list query matches, on
+   * every page — a list's footer total (a purchase list's `meta.due_total`, a vendor list's
+   * `meta.payable_total` over each vendor's open dues).
    */
   async sumOver(options: {
     organizationId: number;
     query: BaseRecordListQuery;
-    column: string;
+    column: string | SQL;
   }): Promise<number> {
+    const value = typeof options.column === 'string' ? this.column(options.column) : options.column;
     const rows = await getRequestDatabase()
-      .select({ total: sql<string>`coalesce(sum(${this.column(options.column)}), 0)` })
+      .select({ total: sql<string>`coalesce(sum(${value}), 0)` })
       .from(this.config.table)
       .where(this.listWhere(options.query, options.organizationId));
     return Number(rows[0]?.total ?? 0);

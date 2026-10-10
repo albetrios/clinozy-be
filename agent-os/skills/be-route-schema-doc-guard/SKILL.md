@@ -45,6 +45,7 @@ Rules:
 - **`description`** is required, complete sentences, captures the contract: what the route does, what it requires, what it returns, what it's used for. Mention idempotency, signature verification, raw-body requirements, etc. when relevant.
 - **`tags`** is required, in title case, drawn from the platform's tag vocabulary. New tags need a matching translation entry in `src/shared/locales/en/openapi.json` (and other locales).
 - The `schema` block lives on the **route registration's options object**, not in a side table. There is no `routeMetadataMap` — that side table was retired.
+- `summary` and `description` are read **statically from the source** (`tooling/openapi/extractors/route-schema-metadata.ts`): a string literal in any quote (escaped quotes are fine), or a template literal whose `${NAME}` names a **string constant** declared in the same file or imported from an `@/…` module (one re-export is followed). Anything else — a function call, a number, an object property — cannot be filled in; `src/tests/unit/tooling/openapi/route-schema-metadata.unit.test.ts` fails on a `${` left in a description or one cut short at a quote.
 
 **Enforced by `pnpm validate:route-schema-docs`** ([`src/scripts/validators/routes/validate-route-schema-docs.ts`](../../../src/scripts/validators/routes/validate-route-schema-docs.ts), wired into `ci:local` + `ci:quality`) — the gate fails closed if any registration (including the two non-routes files) is missing `summary`, `description`, or `tags`. Fix the gap; never suppress it.
 

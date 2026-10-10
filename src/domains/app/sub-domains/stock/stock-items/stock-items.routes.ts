@@ -31,7 +31,7 @@ export function stockItemsRoutes(service: StockItemsService): FastifyPluginAsync
         schema: {
           summary: 'List stock items',
           description:
-            'Returns one page of the organization\'s consumables and equipment — the Items tab — each with its `quantity`, `stock_level` (`ok` · `low` — at or under the minimum · `out` — 0) and `lasts_days` (the whole days it lasts at the weekly usage; null without usage). `q` is the name or the number (`#167`); filters `category` and `stock_level` (several, comma-separated — `stock_level=low` fills "Reorder low items"), `stock_vendor_id`, the created range; sort `name` (default, A–Z), `stock_item_number`, `category`, `quantity`, `lasts_days` (none last) or `created_at`. Requires stock_item:read.',
+            'Returns one page of the organization\'s consumables and equipment — the Items tab — each with its `quantity`, `stock_level` (`ok` · `low` — at or under the minimum · `out` — 0) and `lasts_days` (the whole days it lasts at the weekly usage; null without usage). `q` is the name or the number (`#167`); filters `category` and `stock_level` (several, comma-separated — `stock_level=low` fills "Reorder low items"), `stock_vendor_id`, `lasts_days_to` (a whole number of days, 1–3650 — the items that last at most that long, `7` = runs out within a week; an item without a weekly usage never matches), the created range; sort `name` (default, A–Z), `stock_item_number`, `category`, `quantity`, `lasts_days` (none last) or `created_at`. Requires stock_item:read.',
           tags: ['Stock'],
           querystring: listStockItemsQueryDto,
         },

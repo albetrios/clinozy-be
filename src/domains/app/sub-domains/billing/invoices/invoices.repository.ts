@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import {
@@ -14,6 +14,13 @@ import { patient_offering_suggestions } from '@/domains/app/sub-domains/patients
 import { patient_treatments } from '@/domains/app/sub-domains/patients/patient-treatments/patient-treatments.schema.js';
 import { invoice_credit_notes } from '@/domains/app/sub-domains/billing/invoice-credit-notes/invoice-credit-notes.schema.js';
 import { medical_sales } from '@/domains/app/sub-domains/medical/medical-sales/medical-sales.schema.js';
+import {
+  offer_branches,
+  offer_offerings,
+  offers,
+} from '@/domains/app/sub-domains/offerings/offers/offers.schema.js';
+import { contactSearchSql } from '@/domains/app/sub-domains/billing/payments/payments.repository.js';
+import type { InvoiceOfferCandidate } from './invoices.pricing.js';
 import { invoice_items, invoice_members, invoices } from './invoices.schema.js';
 
 /** The `member_ids` link of an invoice (`app.invoice_members`, B15). */
@@ -64,6 +71,8 @@ export interface InvoiceItemWriteRow {
   patient_offering_suggestion_id: number | null;
   batch_number: string | null;
   patient_offering_id: number | null;
+  /** The sessions its patient offering holds — the line's snapshot of what it sold (PK4). */
+  sessions_total: number | null;
   sessions_used: number | null;
 }
 
@@ -72,7 +81,8 @@ export interface InvoiceItemWriteRow {
  * (`app.invoice_members`) — launch ROUTE #136, routes-final 8.A.
  *
  * @remarks
- * - **Algorithm:** `q` on the statutory number (`2026-27/0412`) or the sequence (`#1042`); sorts
+ * - **Algorithm:** `q` on the statutory number (`2026-27/0412`), the billed contact (their names
+ *   and numbers, D81) or the sequence (`#1042`); sorts
  *   `invoice_date` (newest first), `created_at`, `due_amount`; the derived `patient_id` filter (the
  *   patient file's contact, B3). The lines are written by the invoice's save (B12) — kept by id,
  *   renumbered under the deferrable `(invoice_id, line_number)` constraint.
@@ -83,6 +93,7 @@ export class InvoicesRepository extends BaseRecordRepository {
       table: invoices,
       entity: 'invoice',
       searchColumns: ['invoice_number'],
+      searchExpressions: [contactSearchSql(invoices.contact_id)],
       numberColumn: 'invoice_sequence',
       sortColumns: { created_at: 'created_at', invoice_date: 'text' },
       sortKeys: {
@@ -172,12 +183,53 @@ export class InvoicesRepository extends BaseRecordRepository {
         patient_offering_suggestion_id: invoice_items.patient_offering_suggestion_id,
         batch_number: invoice_items.batch_number,
         patient_offering_id: patient_offerings.id,
+        sessions_total: patient_offerings.sessions_total,
         sessions_used: patient_offerings.sessions_used,
       })
       .from(invoice_items)
       .leftJoin(patient_offerings, eq(patient_offerings.invoice_item_id, invoice_items.id))
       .where(eq(invoice_items.invoice_id, invoiceId))
       .orderBy(asc(invoice_items.line_number));
+  }
+
+  /**
+   * The live offers that name each offering and run at the branch (none = every branch, O5) — the
+   * candidates billing weighs (M26), by offering id, newest first; whether each is live on the
+   * invoice's day is the pricing rule's to decide.
+   */
+  async findOfferCandidates(options: {
+    offeringIds: readonly number[];
+    branchId: number;
+  }): Promise<Map<number, InvoiceOfferCandidate[]>> {
+    const candidates = new Map<number, InvoiceOfferCandidate[]>();
+    if (options.offeringIds.length === 0) return candidates;
+    const rows = await getRequestDatabase()
+      .select({
+        offering_id: offer_offerings.offering_id,
+        id: offers.public_id,
+        kind: offers.kind,
+        value: offers.value,
+        starts_on: offers.starts_on,
+        ends_on: offers.ends_on,
+        is_active: offers.is_active,
+      })
+      .from(offer_offerings)
+      .innerJoin(offers, eq(offers.id, offer_offerings.offer_id))
+      .where(
+        and(
+          inArray(offer_offerings.offering_id, [...new Set(options.offeringIds)]),
+          isNull(offers.deleted_at),
+          sql`(not exists (select 1 from ${offer_branches} where ${offer_branches.offer_id} = ${offers.id}) or exists (select 1 from ${offer_branches} where ${offer_branches.offer_id} = ${offers.id} and ${offer_branches.branch_id} = ${options.branchId}))`,
+        ),
+      )
+      .orderBy(desc(offers.created_at), desc(offers.id));
+    for (const { offering_id, value, ...offer } of rows) {
+      candidates.set(offering_id, [
+        ...(candidates.get(offering_id) ?? []),
+        { ...offer, value: Number(value) },
+      ]);
+    }
+    return candidates;
   }
 
   /** Inserts a line with a fresh public id; returns its id. */

@@ -30,12 +30,23 @@ interface BranchRecord {
   updated_at: SerializableTimestamp;
 }
 
-/** The fields `GET /app/branches/my` returns — what a picker and the booking rules need. */
+/**
+ * The fields `GET /app/branches/my` returns — what a picker and the booking rules need, and the
+ * address, phone and GSTIN a printed GST invoice carries (D81).
+ */
 interface BranchSummaryRecord {
   public_id: string;
   name: string;
   tone: string;
   is_main: boolean;
+  address_line_one: string;
+  address_line_two: string | null;
+  area: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  phone: string;
+  gst_number: string | null;
   opens_at: string;
   closes_at: string;
   working_days: string[];
@@ -81,6 +92,14 @@ function serializeSummary(row: BranchSummaryRecord) {
     name: row.name,
     tone: row.tone,
     is_main: row.is_main,
+    address_line_one: row.address_line_one,
+    address_line_two: row.address_line_two,
+    area: row.area,
+    city: row.city,
+    state: row.state,
+    postal_code: row.postal_code,
+    phone: row.phone,
+    gst_number: row.gst_number,
     opens_at: toHourMinute(row.opens_at),
     closes_at: toHourMinute(row.closes_at),
     working_days: row.working_days,

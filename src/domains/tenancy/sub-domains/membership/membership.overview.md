@@ -32,15 +32,15 @@ One code set (launch T8): `membership:read|create|update|delete`; every `POST` t
 
 | Route | Gate | Note |
 | --- | --- | --- |
-| `GET /tenancy/organization/memberships` | `membership:read` | every status; `q`, `status`, `role_id`, `branch_id` (T2), `include_ended` (D58), `sort` `created_at` / `name`; `estimated_total` on the first page |
-| `POST /tenancy/organization/memberships` | `membership:create` | invite + `role_ids` + profile + `branch_ids`; the same login added again gets its ended membership back (K7) |
+| `GET /tenancy/organization/memberships` | `membership:read` | every status; `q`, `status`, `role_id`, `branch_id` (T2), `include_ended` (D58), `sort` `created_at` / `name`; `estimated_total` on the first page; a bad filter is 400 invalid input on the field (USERS-M5) |
+| `POST /tenancy/organization/memberships` | `membership:create` | invite + `role_ids` + profile + `branch_ids`; the same login added again gets its ended membership back (K7); the dev-only `invitation.debug_invitation_token` echo (ROUTE #164) |
 | `GET /tenancy/organization/memberships/{membership_id}` | `membership:read` | live or ended (D58) |
 | `PATCH /tenancy/organization/memberships/{membership_id}` | `membership:update` | live: `status` `active` ↔ `suspended` (T10), `role_ids`, profile; ended: `display_name` only (K6, D58); `expected_updated_at` (T14) |
 | `DELETE /tenancy/organization/memberships/{membership_id}?reason=&note=` | `membership:delete` | soft delete with `delete_reason` (+ `delete_note` for `other`) |
 | `POST /tenancy/organization/memberships/{membership_id}/restore` | `membership:delete` | undo a removal; 409 when live, rejoined or no seat; API keys stay revoked |
 | `GET /tenancy/organization/memberships/{membership_id}/permissions` | `membership:read` | `{ permission_codes }` — every code of every role held (T15) |
 | `DELETE /tenancy/organization/memberships/{membership_id}/invitation` | `membership:delete` | revoke the pending invite; the invited membership ends (`not_needed`) |
-| `POST /tenancy/organization/memberships/{membership_id}/invitation/resend` | `membership:update` | new token and expiry, an expired invite too (T11); returns the invitation |
+| `POST /tenancy/organization/memberships/{membership_id}/invitation/resend` | `membership:update` | new token and expiry, an expired invite too (T11); returns the invitation (+ the dev-only `debug_invitation_token`, ROUTE #164) |
 
 ## Response shape
 
@@ -48,7 +48,9 @@ The Membership object (launch §2.B.6) carries the staff profile (`staff_number`
 `role_ids`, `branch_ids`, `working_days`, `work_starts_at`, `work_ends_at`, `commission_percent`),
 the organization's name for the member (`display_name`, K3), `ended_at` / `end_reason` (D58) and
 the member's `user` summary (`id`, `email`, `first_name`, `last_name`, presigned `avatar_url`), so a
-members table renders without an N+1 per-row fetch. User summaries are resolved via the
+members table renders without an N+1 per-row fetch. `is_owner` names the organization's owner (from
+`organizations.owner_user_id`, launch D81 (4)); the organization object names them too
+(`owner_user_id`). User summaries are resolved via the
 `auth.resolve_user_summaries_by_ids` SECURITY DEFINER function (auth.users is FORCE RLS, unreachable
 by a plain join under organization-only context). Live `invited` rows also carry
 `invitation: { id, expires_at }` (the pending invite) so the frontend can Resend/Revoke straight
@@ -61,6 +63,12 @@ from the row; other rows have `invitation: null`. Status values are lowercase (T
   different login is always a new member.
 - **Membership change invalidates the permission cache**: every create / update / soft-delete
   invalidates the `(user, organization)` Redis key after commit.
+- **The owner's membership (sec-new-T1, launch D81 (4))**: their status and main role never change
+  and they are never removed — 403 `reason: owner_membership_fixed` (transfer ownership first); they
+  cannot leave — 403 `reason: owner_cannot_leave`. They **may hold extra roles** (the owner is often
+  the clinic's doctor): a `role_ids` that keeps their main role first is taken, through the same
+  grant guard as any member's (the caller must hold every code of every role in the set — so in
+  practice the owner sets their own). Their staff profile stays editable.
 - **Accept is gated on proven email control**: the accept route requires authentication, an email
   **matching** the invitee, **and a verified email** (`403 errors:invitationRequiresVerifiedEmail`
   otherwise). This stops a forwarded invite token from joining the organization.

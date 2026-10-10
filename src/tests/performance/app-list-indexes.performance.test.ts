@@ -55,7 +55,11 @@ describe('Performance: the app lists read their indexes backwards', () => {
     '%s: a backward index scan, no sort',
     async (_table, list) => {
       const plan = await getOperatorSql().begin(async (transaction) => {
+        // A fixture's few rows leave the planner on default estimates (the table is not analysed
+        // after its truncate), where a sequential or bitmap scan plus a sort can cost the same as
+        // the index — the question here is whether the index serves the order backwards.
         await transaction`SET LOCAL enable_seqscan = off`;
+        await transaction`SET LOCAL enable_bitmapscan = off`;
         return transaction.unsafe<{ 'QUERY PLAN': string }[]>(
           `EXPLAIN (FORMAT TEXT) SELECT id FROM ${list.table}
            WHERE organization_id = $1 ${list.live ? 'AND deleted_at IS NULL' : ''}

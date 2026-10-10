@@ -55,6 +55,22 @@ function matchRank(_organizationId: number, query: BaseRecordListQuery): SQL {
 }
 
 /**
+ * The contacts whose live patient file carries `patientNumber` — an `IN` over the organization's
+ * patient-number index (SHELL-M1).
+ */
+function patientNumberCondition(patientNumber: number, organizationId: number): SQL {
+  return sql`${contacts.id} in (select ${patients.contact_id} from ${patients} where ${patients.organization_id} = ${organizationId} and ${patients.patient_number} = ${patientNumber} and ${patients.deleted_at} is null)`;
+}
+
+/**
+ * The contacts whose live lead (open or closed) carries `leadNumber` — an `IN` over the
+ * organization's lead-number index (SHELL-M1).
+ */
+function leadNumberCondition(leadNumber: number, organizationId: number): SQL {
+  return sql`${contacts.id} in (select ${leads.contact_id} from ${leads} where ${leads.organization_id} = ${organizationId} and ${leads.lead_number} = ${leadNumber} and ${leads.deleted_at} is null)`;
+}
+
+/**
  * The condition of a list about a contact for its `q` (leads L7, appointments 6.8 —
  * `readContactLinkedSearch`): the contact's trigram-indexed search text or its contact number (an
  * `IN` over the organization's contacts), or the record's own number — any of them; `false` when
@@ -95,9 +111,10 @@ export function contactLinkedSearchCondition(options: {
  *   number's 10 digits, `c-<number>`) behind its trigram index, or the contact number. Sorts: `name`
  *   (first, then last name — the name index), `match` (the best match for `q` first, then the name),
  *   `created_at` and `last_activity_at` (newest first; a contact with no activity last). The
- *   derived filters read the numbers (`phone`), the reply state, the tags (`&&`, the GIN index) —
- *   `has_open_lead` (a live lead in an open status, L6) and `is_patient` (a live patient file —
- *   opened by a check-in since #132).
+ *   derived filters read the record numbers `q` names (`record_number` — the live patient file's or
+ *   lead's number, `#2371`; `patient_number` — `PT-0412`, SHELL-M1), the numbers (`phone`), the
+ *   reply state, the tags (`&&`, the GIN index) — `has_open_lead` (a live lead in an open status,
+ *   L6) and `is_patient` (a live patient file — opened by a check-in since #132).
  * - **Failure modes:** a unique or exclusion violation propagates (the service maps it).
  */
 export class ContactsRepository extends BaseRecordRepository {
@@ -133,6 +150,10 @@ export class ContactsRepository extends BaseRecordRepository {
         },
       },
       derivedFilters: {
+        record_number: (value, organizationId) =>
+          sql`(${patientNumberCondition(value as number, organizationId)} or ${leadNumberCondition(value as number, organizationId)})`,
+        patient_number: (value, organizationId) =>
+          patientNumberCondition(value as number, organizationId),
         phone: (value, organizationId) =>
           sql`exists (select 1 from ${contact_phones} where ${contact_phones.contact_id} = ${contacts.id} and ${contact_phones.organization_id} = ${organizationId} and ${contact_phones.phone} = ${value} and ${contact_phones.deleted_at} is null)`,
         is_awaiting_reply: (value) => {

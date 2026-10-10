@@ -97,6 +97,43 @@ export class MemberRoleService {
     });
   }
 
+  /**
+   * One page of the organization's live roles in the order they were made — Owner, Admin, the
+   * clinic presets, then the custom roles — for the role directory every member reads
+   * (`GET /app/roles`, launch D81 (4)), as the member directory is `GET /app/memberships`.
+   *
+   * @remarks
+   * - **Algorithm:** the roles keyset list sorted by `created_at` then `id` ascending (the
+   *   provisioned roles share one transaction's time, so the id keeps their order); no member
+   *   counts — the directory names roles, it does not manage them.
+   * - **Failure modes:** `NotFoundError('Organization')`.
+   * - **Side effects:** none (read-only).
+   */
+  async listDirectory(
+    scope: OrganizationPrincipalDatabaseScope,
+    pagination: { limit: number; after?: string | undefined },
+  ): Promise<{
+    items: MemberRoleRow[];
+    limit: number;
+    has_more: boolean;
+    next_cursor: string | null;
+  }> {
+    return withAppDatabaseContext(scope, async () => {
+      const organization = await this.organizationService.requireOrganizationRecordByPublicId(
+        scope.organizationPublicId,
+      );
+      return this.memberRoleRepository.findByOrganizationId(
+        organization.id,
+        omitUndefined({
+          after: pagination.after,
+          limit: pagination.limit,
+          sort: 'created_at' as const,
+          order: 'asc' as const,
+        }),
+      );
+    });
+  }
+
   async requireRoleRecordForOrganization(
     organization_id: number,
     role_public_id: string,
@@ -296,7 +333,7 @@ export class MemberRoleService {
       // sec-T3: a system role's name is immutable from the API — same guard as delete. Its tone and
       // description (the role's purpose, launch RC-141) stay editable.
       if (role.is_system && parsed.name !== undefined && parsed.name !== role.name) {
-        throw new ForbiddenError('errors:cannotModifySystemRole');
+        throw new ForbiddenError('errors:cannotModifySystemRole').withReason('system_role_fixed');
       }
       const userId =
         await this.organizationService.resolveUserInternalIdByPublicId(updated_by_user_public_id);
@@ -327,7 +364,8 @@ export class MemberRoleService {
    * @remarks
    * sec-T3 guards:
    *   1. **`is_system` guard** — the seeded roles cannot be deleted from the API.
-   *      Surfaces as `ForbiddenError('errors:cannotDeleteSystemRole')`.
+   *      Surfaces as `ForbiddenError('errors:cannotDeleteSystemRole')`, `reason: system_role_fixed`
+   *      (launch D81 (4)).
    *   2. **Member guard** — refuses to delete a role any live member holds (main or extra, any
    *      status), because the permission-resolution join filters `isNull(roles.deleted_at)` and
    *      would silently strip every member's permission set. Surfaces as
@@ -350,7 +388,7 @@ export class MemberRoleService {
       const role = await this.memberRoleRepository.findByPublicId(role_public_id, organization.id);
       if (!role) throw new NotFoundError('Role');
       if (role.is_system) {
-        throw new ForbiddenError('errors:cannotDeleteSystemRole');
+        throw new ForbiddenError('errors:cannotDeleteSystemRole').withReason('system_role_fixed');
       }
       const userId =
         await this.organizationService.resolveUserInternalIdByPublicId(deleted_by_user_public_id);

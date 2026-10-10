@@ -38,11 +38,13 @@ function getTaskRulesQueue(): Queue<TaskRulesJobData> {
 }
 
 /**
- * One live task rules job per organization (TK4) — a sweep that finds it still waiting adds
- * nothing, and the next sweep adds a fresh one once it finished.
+ * One waiting task rules job per organization (TK4), plus one more while it runs — a sweep or a
+ * request that finds a job still waiting adds nothing, and a write committed while a job runs (a
+ * message, a booking's status — D81 T7) is picked up by the job kept behind it rather than at the
+ * next sweep.
  */
 export function taskRulesDeduplication(organizationPublicId: string): DeduplicationOptions {
-  return { id: `task-rules-${organizationPublicId}` };
+  return { id: `task-rules-${organizationPublicId}`, keepLastIfActive: true };
 }
 
 /**
@@ -53,7 +55,7 @@ export function taskRulesDeduplication(organizationPublicId: string): Deduplicat
  * - **Algorithm:** validates the payload, then `queue.add` with the trace context.
  * - **Failure modes:** propagates BullMQ enqueue errors to the sweep, which logs them and goes on;
  *   the next five-minute sweep adds the organization again.
- * - **Side effects:** at most one job on the queue per organization at a time.
+ * - **Side effects:** at most one waiting job per organization, and one more while it runs.
  */
 export async function enqueueTaskRules(organizationPublicId: string): Promise<void> {
   const jobData = parseBullMQJobData(
@@ -68,9 +70,10 @@ export async function enqueueTaskRules(organizationPublicId: string): Promise<vo
 }
 
 /**
- * {@link enqueueTaskRules} that never throws — a booking's after-commit step asks for the run that
- * sends its confirm request (launch D78); a Redis outage fails nothing (the five-minute sweep
- * runs it anyway).
+ * {@link enqueueTaskRules} that never throws — a write's after-commit step asks for the run: a
+ * booking's for the confirm request it sends (launch D78), a message's and a booking's status
+ * change's so a reply or a confirm closes its task at once (D81 T7, WC-48); a Redis outage fails
+ * nothing (the five-minute sweep runs it anyway).
  *
  * @remarks
  * - **Failure modes:** none — an enqueue error is logged (`task-rules.enqueue_failed`).

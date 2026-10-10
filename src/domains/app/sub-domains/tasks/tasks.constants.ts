@@ -125,6 +125,42 @@ export const TASK_OUTCOME_VALUES = [
   TASK_OUTCOME.UNHAPPY,
 ] as const;
 
+/** A task outcome code. */
+export type TaskOutcome = (typeof TASK_OUTCOME_VALUES)[number];
+
+/**
+ * The outcomes each rule's task offers (D81 TASKS-M2) — the design's choices as effect codes (a
+ * choice that only snoozes, "Running late", is the snooze route): `no_answer` where the work is a
+ * call that may go unanswered, the feedback and aftercare outcomes on their own rules only.
+ */
+export const TASK_RULE_OUTCOMES: Readonly<Record<TaskRule, readonly TaskOutcome[]>> = {
+  [TASK_RULE.REPLY]: [TASK_OUTCOME.DONE],
+  [TASK_RULE.FAILED_MESSAGE]: [TASK_OUTCOME.DONE],
+  [TASK_RULE.FOLLOW_UP]: [TASK_OUTCOME.DONE, TASK_OUTCOME.NO_ANSWER],
+  [TASK_RULE.CLAIM]: [TASK_OUTCOME.DONE],
+  [TASK_RULE.CONFIRM]: [TASK_OUTCOME.DONE, TASK_OUTCOME.NO_ANSWER],
+  [TASK_RULE.ARRIVE]: [TASK_OUTCOME.DONE],
+  [TASK_RULE.REBOOK]: [TASK_OUTCOME.DONE],
+  [TASK_RULE.FEEDBACK]: [TASK_OUTCOME.HAPPY, TASK_OUTCOME.UNHAPPY, TASK_OUTCOME.LOG_CHECK_IN],
+  [TASK_RULE.AFTERCARE]: [
+    TASK_OUTCOME.LOG_CHECK_IN,
+    TASK_OUTCOME.DOING_WELL,
+    TASK_OUTCOME.NO_ANSWER,
+  ],
+  [TASK_RULE.CALL_BACK]: [TASK_OUTCOME.DONE],
+  [TASK_RULE.NEXT_VISIT]: [TASK_OUTCOME.DONE],
+  [TASK_RULE.GONE_QUIET]: [TASK_OUTCOME.DONE],
+  [TASK_RULE.PAYMENT_DUE]: [TASK_OUTCOME.DONE],
+  [TASK_RULE.SETTLE_BY]: [TASK_OUTCOME.DONE],
+  [TASK_RULE.MEDICAL_REP_VISIT]: [TASK_OUTCOME.DONE],
+};
+
+/** The outcomes a task made by hand offers — a `follow_up` or a `manual` one (D81 TASKS-M2). */
+export const TASK_HAND_OUTCOME_VALUES: readonly TaskOutcome[] = [
+  TASK_OUTCOME.DONE,
+  TASK_OUTCOME.NO_ANSWER,
+];
+
 /** The outcomes that need the task's person to have a patient file (TK7). */
 export const TASK_PATIENT_OUTCOME_VALUES = [
   TASK_OUTCOME.DOING_WELL,

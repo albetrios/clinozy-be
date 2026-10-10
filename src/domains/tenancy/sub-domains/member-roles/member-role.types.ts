@@ -34,7 +34,7 @@ export interface MemberRoleOutput {
   is_system: boolean;
   /** The role's chip colour. */
   tone: string;
-  /** True when the role's access cannot be edited (only Admin, D40). */
+  /** True when the role's access cannot be edited (Owner and Admin — D40, D81 (4)). */
   is_locked: boolean;
   member_count: number;
   created_at: string;

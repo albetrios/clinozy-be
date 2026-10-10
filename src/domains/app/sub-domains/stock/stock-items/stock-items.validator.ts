@@ -34,7 +34,7 @@ export function validateListStockItemsQuery(data: unknown): BaseRecordListInput 
     order: query.order,
     equals: { category: query.category?.split(',') },
     referenceEquals: { stock_vendor_id: query.stock_vendor_id },
-    derived: { stock_level: query.stock_level?.split(',') },
+    derived: { stock_level: query.stock_level?.split(','), lasts_days_to: query.lasts_days_to },
     ranges: {
       created_at: { from: readInstant(query.created_from), to: readInstant(query.created_to) },
     },

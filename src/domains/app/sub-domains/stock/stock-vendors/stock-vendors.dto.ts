@@ -49,10 +49,14 @@ export const UpdateStockVendorDto = z
   });
 
 /**
- * Query of the vendor picker (9.E.8 #23): `q` (name), the created range; sort `name` (default, A–Z)
- * | `created_at`.
+ * Query of the vendor picker and the Vendors tab (9.E.8 #23): `q` (name), the created range; sort
+ * `name` (default, A–Z) | `created_at` | `payable` (most owed first, D81).
  */
-export const listStockVendorsQueryDto = listSearchSortSchema(['name', 'created_at'] as const)
+export const listStockVendorsQueryDto = listSearchSortSchema([
+  'name',
+  'created_at',
+  'payable',
+] as const)
   .extend({
     created_from: instantSchema.optional(),
     created_to: instantSchema.optional(),

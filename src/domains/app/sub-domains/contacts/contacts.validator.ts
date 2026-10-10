@@ -2,6 +2,7 @@ import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
 import { fieldValidationError, type ValidationError } from '@/shared/errors/index.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 import { splitRecordIds } from '@/shared/utils/validation/record-fields.util.js';
+import { PATIENT_NUMBER_PREFIX } from '@/domains/app/sub-domains/patients/patients.constants.js';
 import {
   CreateContactDto,
   type CreateContactInput,
@@ -10,8 +11,21 @@ import {
   type UpdateContactInput,
 } from './contacts.dto.js';
 
-/** A whole contact number: `C-12345`, `c12345` or `#12345` (CT9). */
-const CONTACT_NUMBER_QUERY = /^(?:c-?|#)\s*0*(\d{1,9})$/i;
+/**
+ * A whole contact number: `C-12345`, `c12345` (CT9) — never `#12345`, which every screen shows for
+ * a patient's or a lead's number (SHELL-M1, D81).
+ */
+const CONTACT_NUMBER_QUERY = /^c-?\s*0*(\d{1,9})$/i;
+/** A whole record number: `#2371` (a patient's, a lead's, an appointment's). */
+const RECORD_NUMBER_QUERY = /^#\s*0*(\d{1,9})$/;
+
+/** A whole number shown with its display `prefix`: `PT-0412`, `pt 412`. */
+function prefixedNumberQuery(prefix: string): RegExp {
+  return new RegExp(`^${prefix}-?\\s*0*(\\d{1,9})$`, 'i');
+}
+
+/** A whole patient number: `PT-0412` (SHELL-M1, D81). */
+const PATIENT_NUMBER_QUERY = prefixedNumberQuery(PATIENT_NUMBER_PREFIX);
 /** A typed number: digits with the separators people type (`+91 98765-43210`). */
 const PHONE_QUERY = /^[\d\s+().-]+$/;
 /** The fewest letters a name search takes — the trigram index needs three (CT9). */
@@ -21,9 +35,14 @@ const PHONE_QUERY_MIN_DIGITS = 4;
 /** The digits of a full Indian number after its `91` country code or `0` trunk prefix. */
 const LOCAL_NUMBER_LENGTH = 10;
 
-/** How a `q` reads: a whole contact number, the digits of a number, or text. */
+/**
+ * How a `q` reads: a whole contact number, a record number (a patient's or a lead's), a patient
+ * number, the digits of a number, or text.
+ */
 type ContactSearch =
   | { kind: 'contact_number'; contactNumber: number }
+  | { kind: 'record_number'; recordNumber: number }
+  | { kind: 'patient_number'; patientNumber: number }
   | { kind: 'text'; q: string }
   | { kind: 'none' };
 
@@ -50,10 +69,6 @@ function phoneQueryDigits(q: string): string | undefined {
   return digits;
 }
 
-/** A whole record number in a list about a contact: `#2371` (a lead's, an appointment's). */
-const RECORD_NUMBER_QUERY = /^#\s*0*(\d{1,9})$/;
-/** A whole contact number without the `#` a record number takes: `C-12345`, `c12345`. */
-const LINKED_CONTACT_NUMBER_QUERY = /^c-?\s*0*(\d{1,9})$/i;
 /** A bare number short enough to be a record number. */
 const BARE_NUMBER_QUERY = /^\s*0*(\d{1,9})\s*$/;
 
@@ -83,10 +98,10 @@ export function readContactLinkedSearch(
   const prefixed =
     options.recordPrefix === undefined
       ? undefined
-      : new RegExp(`^${options.recordPrefix}-?\\s*0*(\\d{1,9})$`, 'i').exec(q)?.[1];
+      : prefixedNumberQuery(options.recordPrefix).exec(q)?.[1];
   const recordNumber = prefixed ?? RECORD_NUMBER_QUERY.exec(q)?.[1];
   if (recordNumber !== undefined) return { recordNumber: Number(recordNumber) };
-  const contactNumber = LINKED_CONTACT_NUMBER_QUERY.exec(q)?.[1];
+  const contactNumber = CONTACT_NUMBER_QUERY.exec(q)?.[1];
   if (contactNumber !== undefined) return { contactNumber: Number(contactNumber) };
   const digits = phoneQueryDigits(q);
   if (digits !== undefined) {
@@ -103,15 +118,22 @@ export function readContactLinkedSearch(
 }
 
 /**
- * Reads a contact search (CT9): a whole contact number is an exact match; a typed number keeps
- * its digits (a leading `91` or `0` dropped from a full number), 4 or more; anything else is text,
- * 3 or more characters.
+ * Reads a contact search (CT9, SHELL-M1): a whole contact number (`C-12345`) is an exact match;
+ * `#2371` is the number of the person's patient file or of their lead, and `PT-0412` the patient
+ * number; a typed number keeps its digits (a leading `91` or `0` dropped from a full number), 4 or
+ * more; anything else is text, 3 or more characters.
  */
 function readContactSearch(q: string | undefined): ContactSearch {
   if (q === undefined) return { kind: 'none' };
   const contactNumber = CONTACT_NUMBER_QUERY.exec(q)?.[1];
   if (contactNumber !== undefined)
     return { kind: 'contact_number', contactNumber: Number(contactNumber) };
+  const recordNumber = RECORD_NUMBER_QUERY.exec(q)?.[1];
+  if (recordNumber !== undefined)
+    return { kind: 'record_number', recordNumber: Number(recordNumber) };
+  const patientNumber = PATIENT_NUMBER_QUERY.exec(q)?.[1];
+  if (patientNumber !== undefined)
+    return { kind: 'patient_number', patientNumber: Number(patientNumber) };
   const digits = phoneQueryDigits(q);
   if (digits !== undefined) {
     if (digits.length < PHONE_QUERY_MIN_DIGITS) throw searchTooShortError();
@@ -133,8 +155,10 @@ export function validateUpdateContact(data: unknown): UpdateContactInput {
 
 /**
  * Parses the `GET /app/contacts` query into a list input (routes-final 4.A.8 #1): a whole contact
- * number becomes an exact match, a text or number search ranks the best match first under the
- * default name sort (`match`), and the filters map to columns, links and derived conditions.
+ * number becomes an exact match, a record number (`#2371`) or a patient number (`PT-0412`) the
+ * derived `record_number` / `patient_number` filter (SHELL-M1), a text or number search ranks the
+ * best match first under the default name sort (`match`), and the filters map to columns, links and
+ * derived conditions.
  */
 export function validateListContactsQuery(data: unknown): BaseRecordListInput {
   const query = parseWithSchema(listContactsQueryDto, data);
@@ -159,6 +183,8 @@ export function validateListContactsQuery(data: unknown): BaseRecordListInput {
       member_membership_ids: query.member_membership_id,
     },
     derived: {
+      record_number: search.kind === 'record_number' ? search.recordNumber : undefined,
+      patient_number: search.kind === 'patient_number' ? search.patientNumber : undefined,
       phone: query.phone,
       is_awaiting_reply:
         query.is_awaiting_reply === undefined ? undefined : query.is_awaiting_reply === 'true',

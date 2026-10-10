@@ -5,6 +5,7 @@ import {
   type BaseRecordRow,
   nullsLastSortKeys,
 } from '@/domains/app/base-record.repository.js';
+import { contactSearchSql } from '@/domains/app/sub-domains/billing/payments/payments.repository.js';
 import { PENDING_CREDIT_STATUS } from './pending-credits.constants.js';
 import { pending_credits } from './pending-credits.schema.js';
 
@@ -13,7 +14,8 @@ import { pending_credits } from './pending-credits.schema.js';
  * record reads and writes, plus the settled amount its settlements keep (B24).
  *
  * @remarks
- * - **Algorithm:** `q` on the typed party name or the number (`CR-2`); sorts `created_at` (newest
+ * - **Algorithm:** `q` on the typed party name, the contact (their names and numbers, D81) or the
+ *   number (`CR-2`); sorts `created_at` (newest
  *   first) and `settle_by` (soonest first, none last); the settle-by range is a column range. The
  *   settled amount moves in one guarded statement — never below 0 nor above the amount — and the
  *   status follows it: `open` while some is left, else how the last part was settled.
@@ -24,6 +26,7 @@ export class PendingCreditsRepository extends BaseRecordRepository {
       table: pending_credits,
       entity: 'pendingCredit',
       searchColumns: ['party_name'],
+      searchExpressions: [contactSearchSql(pending_credits.contact_id)],
       numberColumn: 'pending_credit_number',
       sortColumns: { created_at: 'created_at' },
       sortKeys: {

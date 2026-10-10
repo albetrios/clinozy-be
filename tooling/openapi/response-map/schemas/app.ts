@@ -67,7 +67,7 @@ export const branchExample = {
   updated_at: '2026-10-07T09:00:00.000Z',
 };
 
-// ── Branch summary (GET /app/branches/my) ──
+// ── Branch summary (GET /app/branches/my) — with the address, phone and GSTIN a bill prints (D81) ──
 export const branchSummarySchema = {
   type: 'object',
   properties: {
@@ -75,6 +75,14 @@ export const branchSummarySchema = {
     name: { type: 'string' },
     tone: { type: 'string' },
     is_main: { type: 'boolean' },
+    address_line_one: { type: 'string' },
+    address_line_two: nullableString,
+    area: { type: 'string' },
+    city: { type: 'string' },
+    state: { type: 'string' },
+    postal_code: { type: 'string' },
+    phone: { type: 'string' },
+    gst_number: nullableString,
     opens_at: hourMinute,
     closes_at: hourMinute,
     working_days: workingDays,
@@ -86,6 +94,14 @@ export const branchSummaryExample = {
   name: 'Adajan',
   tone: 'sage',
   is_main: true,
+  address_line_one: '12 Anand Mahal Road',
+  address_line_two: null,
+  area: 'Adajan',
+  city: 'Surat',
+  state: 'Gujarat',
+  postal_code: '395009',
+  phone: '+919825012345',
+  gst_number: '24ABCDE1234F1Z5',
   opens_at: '10:00',
   closes_at: '20:00',
   working_days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'],
@@ -118,6 +134,7 @@ export const appMembershipSchema = {
     role_ids: { type: 'array', items: { type: 'string' } },
     branch_ids: { type: 'array', items: { type: 'string' } },
     is_active: { type: 'boolean', description: 'Live and active — what a picker offers' },
+    is_owner: { type: 'boolean', description: "The organization's owner" },
     ended_at: { type: 'string', format: 'date-time', nullable: true },
   },
 };
@@ -133,7 +150,36 @@ export const appMembershipExample = {
   role_ids: ['rol_w3o6gphad7e9bvudnyovy'],
   branch_ids: ['brn_q4w8e2r6t1y5u9i3o7p0a'],
   is_active: true,
+  is_owner: false,
   ended_at: null,
+};
+
+/** `AppRoleOutput` — one role in the role directory (`GET /app/roles`, launch D81 (4)). */
+export const appRoleSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', description: 'The role (`rol_…`) — the id `role_ids` holds' },
+    name: { type: 'string', description: "A system role's name never changes" },
+    tone: { type: 'string', example: 'sky' },
+    is_system: {
+      type: 'boolean',
+      description: 'A clinic preset — its name is fixed, it is never deleted',
+    },
+    is_locked: {
+      type: 'boolean',
+      description:
+        "Its codes never change (`PUT /tenancy/organization/roles/{role_id}/permissions` is a 403 `role_locked`) — Owner and Admin as a clinic is provisioned. Not the only fixed role: the role the organization's owner holds as their main role is a 403 `owner_role_fixed` whatever this says — it is the first of `role_ids` on the `is_owner` membership (USERS-M3)",
+    },
+  },
+};
+
+/** Example `AppRoleOutput`. */
+export const appRoleExample = {
+  id: 'rol_w3o6gphad7e9bvudnyovy',
+  name: 'Doctor',
+  tone: 'sky',
+  is_system: true,
+  is_locked: false,
 };
 
 /** `MembershipPreferencesOutput` — a member's own settings (launch §2.F); `id` and times null before the first save. */

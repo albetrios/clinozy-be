@@ -83,8 +83,25 @@ const ENTITY_LABELS: Record<PublicIdEntity, string> = {
 /** Stable, realistic 21-char example core (alphabet [a-z0-9]). */
 const EXAMPLE_CORE = 'a1b2c3d4e5f6g7h8i9j0k';
 
+/** A second core, so a list example names two different ids. */
+const SECOND_EXAMPLE_CORE = 'k0j9i8h7g6f5e4d3c2b1a';
+
 function entityFor(parameterName: string): PublicIdEntity | undefined {
   return PARAM_NAME_TO_ENTITY[parameterName as keyof typeof PARAM_NAME_TO_ENTITY];
+}
+
+/**
+ * Example public id for a body field or query parameter named after its entity (`branch_id` →
+ * `brn_a1b2c3d4e5f6g7h8i9j0k`); a comma-separated list (`branch_ids`, or `branch_id` taking
+ * several) names two. Undefined when the name maps to no entity (`ids`).
+ */
+export function getPublicIdExample(options: { name: string; isList: boolean }): string | undefined {
+  const entity = entityFor(options.name.replace(/_ids$/, '_id'));
+  if (!entity) return undefined;
+  const prefix = PUBLIC_ID_PREFIXES[entity];
+  return options.isList
+    ? `${prefix}_${EXAMPLE_CORE},${prefix}_${SECOND_EXAMPLE_CORE}`
+    : `${prefix}_${EXAMPLE_CORE}`;
 }
 
 /**

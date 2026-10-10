@@ -15,9 +15,9 @@ routes-final 8.D, B23–B24). Table `app.pending_credits`.
 | --- | --- |
 | `pending-credits.schema.ts` | the table: `0 ≤ settled ≤ amount`, `open` exactly while some is left, RLS |
 | `pending-credits.constants.ts` | directions, statuses, settle methods |
-| `pending-credits.rules.ts` | who it is with, change and delete only while nothing is settled, the settle action |
-| `pending-credits.repository.ts` | the shared reads and writes, plus the guarded settled amount |
-| `pending-credits.{dto,validator,serializer,types}.ts` | request shapes, the response with `left_amount` and `payment_ids` |
+| `pending-credits.rules.ts` | who it is with, change and delete only while nothing is settled, the settle action, who recorded each credit |
+| `pending-credits.repository.ts` | the shared reads and writes (`q` by the typed party, the contact or the number), plus the guarded settled amount |
+| `pending-credits.{dto,validator,serializer,types}.ts` | request shapes, the response with `left_amount`, `payment_ids` and `created_by_membership_id` |
 | `pending-credits.service.ts` / `.controller.ts` / `.routes.ts` | routes 21–27 |
 
 ## Routes
@@ -36,5 +36,7 @@ routes-final 8.D, B23–B24). Table `app.pending_credits`.
 
 - **Settled in parts by payments (B24):** a refund (with a credit note on its invoice), money
   back, or a receipt paid by `credit_amount` on one of the party's invoices; each points at the
-  credit and moves its settled amount in the same transaction.
+  credit and moves its settled amount in the same transaction. A use on a bill lands at the
+  invoice's branch, dated now, as one `credit` split — that day must be open (`409 day_closed`;
+  D81 PAY-M6).
 - **The organization's (B4):** no branch filter.

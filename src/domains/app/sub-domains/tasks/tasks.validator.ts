@@ -10,10 +10,20 @@ import {
   UpdateTaskDto,
   type UpdateTaskInput,
 } from './tasks.dto.js';
+import type { TaskTypeFilter } from './tasks.types.js';
 
 /** A query instant as a `Date` (undefined when absent). */
 function readInstant(value: string | undefined): Date | undefined {
   return value === undefined ? undefined : new Date(value);
+}
+
+/** D81 T6: `rule_key` and `kind` as one type filter — undefined when neither is sent. */
+function readTypeFilter(query: {
+  rule_key?: string | undefined;
+  kind?: string | undefined;
+}): TaskTypeFilter | undefined {
+  if (query.rule_key === undefined && query.kind === undefined) return undefined;
+  return { ruleKeys: query.rule_key?.split(',') ?? [], kinds: query.kind?.split(',') ?? [] };
 }
 
 /** Parses a task made by hand; throws `ValidationError` naming each bad field. */
@@ -37,8 +47,9 @@ export function validateSnoozeTask(data: unknown): Record<string, unknown> {
 
 /**
  * Parses the Tasks tabs' query into a list input (10.A.8 #1) — the tab is a status (the done tab
- * resolved today unless a range is sent); `scope` is the service's (it knows the caller); a rule
- * that is off hides its tasks (10.10).
+ * resolved today unless a range is sent); `rule_key` and `kind` are one type filter, a task of any
+ * rule or kind named (D81 T6); `scope` is the service's (it knows the caller); a rule that is off
+ * hides its tasks (10.10).
  */
 export function validateListTasksQuery(data: unknown): BaseRecordListInput {
   const query = parseWithSchema(listTasksQueryDto, data);
@@ -52,8 +63,6 @@ export function validateListTasksQuery(data: unknown): BaseRecordListInput {
     order: query.order,
     equals: {
       status: tab === TASK_TAB.DONE ? TASK_STATUS.DONE : tab,
-      kind: query.kind,
-      rule_key: query.rule_key?.split(','),
       owner_role: query.owner_role,
     },
     referenceEquals: {
@@ -65,6 +74,7 @@ export function validateListTasksQuery(data: unknown): BaseRecordListInput {
     branchPublicIds: query.branch_id === undefined ? undefined : splitRecordIds(query.branch_id),
     derived: {
       search: query.q,
+      type: readTypeFilter(query),
       rules_on: true,
       resolved_today: doneToday ? true : undefined,
     },

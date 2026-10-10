@@ -394,6 +394,7 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
   'POST /api/v1/app/invoices/:invoice_id/credit-notes': 'app-cross-organization: invoices',
   'GET /api/v1/app/invoices/:invoice_id/credit-notes/:invoice_credit_note_id':
     'app-cross-organization: invoices',
+  'POST /api/v1/app/invoices/:invoice_id/preview': 'app-cross-organization: invoices',
   'GET /api/v1/app/payments/:payment_id/edits': 'app-cross-organization: payments',
   'POST /api/v1/app/payments/:payment_id/reverse': 'app-cross-organization: payments',
   'POST /api/v1/app/pending-credits/:pending_credit_id/settle':

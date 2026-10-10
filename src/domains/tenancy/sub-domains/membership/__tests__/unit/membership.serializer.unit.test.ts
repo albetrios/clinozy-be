@@ -14,6 +14,22 @@ const user = {
 };
 const access = { role_ids: ['role-main', 'role-extra'], branch_ids: ['brn-vesu'] };
 
+/** The serializer's options for a row, as a non-owner unless said otherwise. */
+function serialize(
+  row: MembershipRow,
+  overrides: Partial<Parameters<typeof serializeMembership>[0]> = {},
+) {
+  return serializeMembership({
+    row,
+    organization_public_id: 'org-public',
+    user,
+    invitation: null,
+    access,
+    is_owner: false,
+    ...overrides,
+  });
+}
+
 /** A live membership row with the dates and profile this suite asserts on. */
 function membershipRow(overrides: Partial<MembershipRow> = {}): MembershipRow {
   return membershipRowFixture({
@@ -33,8 +49,9 @@ function membershipRow(overrides: Partial<MembershipRow> = {}): MembershipRow {
 
 describe('membership serializer', () => {
   it('serializeMembership maps null joined_at and a null invitation (active row)', () => {
-    expect(serializeMembership(membershipRow(), 'org-public', user, null, access)).toMatchObject({
+    expect(serialize(membershipRow())).toMatchObject({
       status: 'active',
+      is_owner: false,
       joined_at: null,
       invitation: null,
       ended_at: null,
@@ -44,19 +61,14 @@ describe('membership serializer', () => {
 
   it('emits public ids, the role and branch lists and never the internal sequential ids', () => {
     const joinedAt = new Date('2026-01-03T00:00:00.000Z');
-    const serialized = serializeMembership(
-      membershipRow({ joined_at: joinedAt }),
-      'org-public',
-      user,
-      null,
-      access,
-    );
+    const serialized = serialize(membershipRow({ joined_at: joinedAt }));
 
     expect(serialized).toEqual({
       id: 'mem-public',
       user_id: 'user-public',
       organization_id: 'org-public',
       status: 'active',
+      is_owner: false,
       joined_at: joinedAt.toISOString(),
       created_at: createdAt.toISOString(),
       updated_at: updatedAt.toISOString(),
@@ -82,13 +94,9 @@ describe('membership serializer', () => {
 
   it('embeds the live invitation ref on an invited row (id + ISO expires_at)', () => {
     const expiresAt = new Date('2026-02-01T00:00:00.000Z');
-    const serialized = serializeMembership(
-      membershipRow({ status: 'invited' }),
-      'org-public',
-      user,
-      { public_id: 'inv-public', expires_at: expiresAt },
-      access,
-    );
+    const serialized = serialize(membershipRow({ status: 'invited' }), {
+      invitation: { public_id: 'inv-public', expires_at: expiresAt },
+    });
     expect(serialized.invitation).toEqual({
       id: 'inv-public',
       expires_at: expiresAt.toISOString(),
@@ -98,14 +106,12 @@ describe('membership serializer', () => {
 
   it('an ended member carries when and why it ended (D58)', () => {
     const endedAt = new Date('2026-03-01T00:00:00.000Z');
-    const serialized = serializeMembership(
-      membershipRow({ deleted_at: endedAt, delete_reason: 'left' }),
-      'org-public',
-      user,
-      null,
-      access,
-    );
+    const serialized = serialize(membershipRow({ deleted_at: endedAt, delete_reason: 'left' }));
     expect(serialized.ended_at).toBe(endedAt.toISOString());
     expect(serialized.end_reason).toBe('left');
+  });
+
+  it("names the organization's owner (launch D81 (4))", () => {
+    expect(serialize(membershipRow(), { is_owner: true }).is_owner).toBe(true);
   });
 });
