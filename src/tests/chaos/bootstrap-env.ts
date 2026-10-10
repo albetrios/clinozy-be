@@ -78,14 +78,16 @@ process.env.BLOCK_DISPOSABLE_EMAIL ??= 'false';
  * would bypass proxies, so toxins and administrative proxy disables would not affect the app.
  * The credentials are Compose's (the project's local database name as user and password); the CI
  * chaos job's Postgres service creates the same role. Locally the database is the harness's own
- * `<name>_test` (see src/tests/helpers/local-test-database.ts) — chaos suites run cleanupDatabase()
+ * `<project>_test` — keep it equal to LOCAL_TEST_DATABASE_NAME in
+ * src/tests/helpers/local-test-database.ts, which this alias-free file cannot import. Chaos suites
+ * run cleanupDatabase()
  * too, which must never truncate the database `pnpm dev` serves; CI's service container only has
  * the primary one.
  */
 process.env.DATABASE_URL =
   process.env.GITHUB_ACTIONS === 'true'
     ? 'postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy'
-    : 'postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy_test';
+    : 'postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy_be_test';
 
 process.env.REDIS_URL = 'redis://127.0.0.1:26379';
 

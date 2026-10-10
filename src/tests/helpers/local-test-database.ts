@@ -3,11 +3,15 @@ import {
   DATABASE_URL_KEYS,
   isLocalDatabaseUrl,
 } from '@/infrastructure/database/utils/connection-url.util.js';
-import { LOCAL_DATABASE_NAME } from '@/shared/constants/project-identity.constants.js';
+import {
+  LOCAL_DATABASE_NAME,
+  PROJECT_SLUG,
+} from '@/shared/constants/project-identity.constants.js';
 
 /**
- * The database the Vitest harness uses on a developer machine: `<local database>_test`, beside —
- * never inside — the database `pnpm dev` serves.
+ * The database the Vitest harness uses on a developer machine: `<project>_test` — the project slug
+ * in snake_case, the same `<project>_` stem as the database roles — beside, never inside, the
+ * database `pnpm dev` serves.
  *
  * @remarks
  * Suites truncate every table with `RESTART IDENTITY` between files. Pointed at the `pnpm dev`
@@ -15,7 +19,7 @@ import { LOCAL_DATABASE_NAME } from '@/shared/constants/project-identity.constan
  * restarted its id counters while Redis, BullMQ and third-party idempotency stores still held the
  * old ids. CI keeps its own service-container database (see {@link pointHarnessAtLocalTestDatabase}).
  */
-export const LOCAL_TEST_DATABASE_NAME = `${LOCAL_DATABASE_NAME}_test`;
+export const LOCAL_TEST_DATABASE_NAME = `${PROJECT_SLUG.replaceAll('-', '_')}_test`;
 
 /** Compose-superuser URL of {@link LOCAL_TEST_DATABASE_NAME} — the harness fallback and migration login. */
 export const LOCAL_TEST_DATABASE_URL = `postgresql://${LOCAL_DATABASE_NAME}:${LOCAL_DATABASE_NAME}@localhost:5432/${LOCAL_TEST_DATABASE_NAME}`;

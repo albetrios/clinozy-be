@@ -182,7 +182,7 @@ k6 scenarios and helpers live in `src/tests/load/k6/` (`.js` files, not Vitest).
 - [ ] New/changed **route** → domain test file (see steps below)
 - [ ] **401** without token, **403** without permission (if gated), **200** success (**204** for DELETE), **400** invalid body
 - [ ] New **permission** → align seeds (`be-seed-maintainer`) and test with/without permission
-- [ ] Run e2e freely while `pnpm dev` runs — local test runs use their own `<local database>_test` database (created and migrated by the global setup), never the one `pnpm dev` serves
+- [ ] Run e2e freely while `pnpm dev` runs — local test runs use their own `<project>_test` database (created and migrated by the global setup), never the one `pnpm dev` serves
 
 ### 3. Cross-cutting
 

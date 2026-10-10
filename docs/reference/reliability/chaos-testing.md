@@ -18,7 +18,7 @@ replay) against **live Postgres + Redis**, with failures injected by
    - `TOXIPROXY_URL=http://127.0.0.1:8474` (administration API for scripts)
 3. Register listeners (idempotent):
    - `pnpm chaos:provision`
-4. Run the focused suite — it creates and migrates the harness's own `<local database>_test` over the
+4. Run the focused suite — it creates and migrates the harness's own `<project>_test` over the
    direct connection first, and takes the same database lock as `pnpm test`:
    - `pnpm test:chaos`
 

@@ -29,7 +29,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-chaos-test-maintainer/SKILL.md",
-      "computedHash": "aefd15fae12c2fd2312b73323101e2cd3e260d87b618f1e13392f1e4e6bb84d0"
+      "computedHash": "ec11626990d59f2919ae0b7e9702e18907eb08f4a51976fa727bd9c9e943019e"
     },
     "be-ci-investigation": {
       "source": "local",
@@ -251,7 +251,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-test-generator/SKILL.md",
-      "computedHash": "fd6b9641ef3d3b920936236a8bd1cc1a02759e212dd3cac7c72aa568a0d4e5be"
+      "computedHash": "af5401ee85e656127b3229af810ea0f9e1db3f64e507ed1b356444609fc4c14c"
     },
     "be-tsdoc-export-guard": {
       "source": "local",
