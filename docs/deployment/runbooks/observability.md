@@ -92,7 +92,7 @@ curl -sS http://127.0.0.1:3000/metrics | head
 
 | Item                             | Status                                                                                               | When to revisit                                         |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| **OpenTelemetry**                | Not wired                                                                                            | When traces/metrics must export to a non-Sentry backend |
+| **OpenTelemetry export**         | Not wired: Sentry is the one tracing pipeline (the API only carries trace context across jobs)       | When traces must also reach a non-Sentry backend — add an OTLP span processor to Sentry's setup |
 | **Grafana Loki**                 | Direction only: Railway **stdout** as the log drain; no in-repo Loki pipeline                        | When centralizing logs in Grafana Cloud Loki            |
 
 ---

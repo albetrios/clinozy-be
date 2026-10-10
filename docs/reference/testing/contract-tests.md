@@ -45,7 +45,7 @@ flowchart LR
 | `turnstile.live.contract.test.ts` | Cloudflare siteverify | Cloudflare's always-pass and always-fail **test** secrets (no account key) read as a pass and an `invalid-input-response` refusal |
 | `telemetry.live.contract.test.ts` | Sentry, PostHog | one tagged event each through our modules; Sentry answers 200, PostHog reports no transport error |
 
-OpenTelemetry has no live check (no collector account). Recording a new fixture is a live run with `nock.recorder.rec({ output_objects: true })` around the calls, redacted before it is committed under `fixtures/`.
+Recording a new fixture is a live run with `nock.recorder.rec({ output_objects: true })` around the calls, redacted before it is committed under `fixtures/`.
 
 ## Layout
 

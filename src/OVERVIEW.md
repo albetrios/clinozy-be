@@ -131,7 +131,7 @@ Deliberate business, UX, and security trade-offs encoded as constants. Full rati
 - **Payments**: [Stripe 23](https://stripe.com)
 - **Email**: [Resend 6](https://resend.com)
 - **Storage**: AWS SDK v3 S3 (`@aws-sdk/client-s3`, `@aws-sdk/s3-presigned-post`, `@aws-sdk/s3-request-presigner`) — works against any S3-compatible store
-- **Observability**: [Pino 10](https://getpino.io), [Sentry 11](https://sentry.io) (errors + tracing + profiling), [OpenTelemetry](https://opentelemetry.io) traces, [prom-client](https://github.com/siimon/prom-client) metrics
+- **Observability**: [Pino 10](https://getpino.io), [Sentry 11](https://sentry.io) (errors + tracing + profiling), [OpenTelemetry API](https://opentelemetry.io) trace context across queued jobs (under Sentry's tracing), [prom-client](https://github.com/siimon/prom-client) metrics
 - **Resilience**: a Redis-backed, cluster-wide circuit breaker (`src/infrastructure/resilience/`) around Stripe / S3 / Resend / Turnstile; [opossum](https://nodeshift.dev/opossum/) per destination for customer webhooks
 - **i18n**: [i18next 26](https://www.i18next.com) with file-system backend (English + Spanish today)
 - **MCP**: [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/sdk) (optional dependency, gated by `ENABLE_MCP_SERVER`)

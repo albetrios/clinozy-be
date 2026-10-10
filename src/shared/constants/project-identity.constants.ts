@@ -66,12 +66,6 @@ export const MCP_OPENAPI_RESOURCE_URI = 'clinozy-be://openapi';
 /** MCP resource URI for the route catalog. */
 export const MCP_ROUTES_RESOURCE_URI = 'clinozy-be://routes';
 
-/** OpenTelemetry service name for the API process. */
-export const OTEL_SERVICE_NAME_API = 'clinozy-be-api';
-
-/** OpenTelemetry service name for the worker process. */
-export const OTEL_SERVICE_NAME_WORKER = 'clinozy-be-worker';
-
 /** OpenTelemetry tracer instrumentation scope name. */
 export const OTEL_TRACER_NAME = PROJECT_SLUG;
 

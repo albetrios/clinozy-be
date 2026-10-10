@@ -29,7 +29,7 @@
  * database is up) and exits — used by the cloud-agent bootstrap (`tooling/setup/agent/bootstrap.sh`).
  *
  * Targeted `.env.local` updates, every run:
- * - Third-party API keys (Stripe, Resend, S3, PostHog, OpenTelemetry — `external-credentials.ts`)
+ * - Third-party API keys (Stripe, Resend, S3, PostHog — `external-credentials.ts`)
  *   still on their `.env.example` placeholder are copied from the hosted development target's env
  *   file, else from the process environment; key names are printed, never values.
  * - `--with-captcha` / `--without-captcha` turn local CAPTCHA on (Cloudflare test keys) or off.
@@ -482,7 +482,7 @@ function syncExternalCredentials(reports: StepReport[], options: BootstrapOption
     example: readFileSync(examplePath, 'utf8'),
     sources,
   });
-  const changed = fill.copied.length > 0 || fill.retired.length > 0;
+  const changed = fill.copied.length > 0;
   if (changed && !options.check) writeFileSync(ENV_LOCAL_PATH, fill.content);
 
   const copiedLabel = [
@@ -492,9 +492,6 @@ function syncExternalCredentials(reports: StepReport[], options: BootstrapOption
         ? `${options.check ? 'would copy' : 'copied'} from ${label}: ${keys.join(', ')}`
         : '';
     }),
-    fill.retired.length > 0
-      ? `${options.check ? 'would comment out' : 'commented out'} a stale placeholder: ${fill.retired.join(', ')}`
-      : '',
   ]
     .filter(Boolean)
     .join('; ');

@@ -5,8 +5,8 @@
  *
  * @remarks
  * Keys are forced with `=`, never `??=`: the env loader layers the machine-local env file over the
- * shell, and `pnpm setup:local` copies the hosted development Stripe, Resend, S3, PostHog and
- * OpenTelemetry keys into it. With `??=` the suite ran with those real keys.
+ * shell, and `pnpm setup:local` copies the hosted development Stripe, Resend, S3 and PostHog
+ * keys into it. With `??=` the suite ran with those real keys.
  *
  * Fake keys alone were not enough: a suite that created a subscription still reached
  * api.stripe.com, and one confirm path reached AWS S3 — passing only because the fake key was
@@ -73,8 +73,6 @@ if (isLiveProviderContractRun()) {
   useFakeProviderKeys();
 }
 
-// Never live, not even in the live run (no OpenTelemetry collector is checked).
-delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 delete process.env.REDIS_BULLMQ_URL;
 
 if (isLiveProviderContractRun()) {

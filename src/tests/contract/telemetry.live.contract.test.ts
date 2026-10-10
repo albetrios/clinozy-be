@@ -18,8 +18,7 @@ registerThirdPartyContractTestIsolationHooks();
 
 /**
  * Live check of the telemetry sinks (`pnpm test:contract:live`): one tagged event each through our
- * own Sentry and PostHog modules, and the ingest endpoint accepts it. (OpenTelemetry is not
- * checked — no collector is configured.)
+ * own Sentry and PostHog modules, and the ingest endpoint accepts it.
  */
 describe('Telemetry sinks (live)', () => {
   const runId = randomUUID();

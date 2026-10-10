@@ -60,7 +60,7 @@ everything else from it:
 
 | Target | What it carries |
 | --- | --- |
-| `src/shared/constants/project-identity.constants.ts` | Runtime constants: JWT/TOTP issuer, WebAuthn RP name, MCP URI scheme, MCP server name, webhook `User-Agent`, OpenTelemetry service names, Scalar slug, Postman prefix, DBML path |
+| `src/shared/constants/project-identity.constants.ts` | Runtime constants: JWT/TOTP issuer, WebAuthn RP name, MCP URI scheme, MCP server name, webhook `User-Agent`, OpenTelemetry tracer name, Scalar slug, Postman prefix, DBML path |
 | `.github/CODEOWNERS` | Reviewer roster, from `providers.github.owners` |
 | `.github/environments/production.json` | Production reviewer handles (reconciled against the roster) |
 | `package.json` | `name`, `repository`, `bugs`, `homepage` |

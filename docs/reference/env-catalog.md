@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**13 / 238** variables migrated to an explicit `{ allowed, description }` entry.
+**13 / 236** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -134,8 +134,6 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `ORGANIZATION_NOTIFICATION_POLICY_MAX_PER_ORG` | — | `100` |  | — |
 | `ORGANIZATION_NOTIFICATION_POLICY_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
 | `ORGANIZATION_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | — *(optional)* |  | — |
-| `OTEL_SERVICE_NAME` | — | — *(optional)* |  | — |
 | `OVERLOAD_DB_POOL_SHED_RATIO` | number 0–10 | `10` | ✓ | Multiple of DATABASE_POOL_MAX in-flight units of work (running plus waiting for a connection) at which the overload guard sheds requests; above 1 lets a bounded queue form. |
 | `OVERLOAD_MAX_EVENT_LOOP_DELAY_MS` | integer 1–60000 | `250` | ✓ | Overload-guard shed threshold: p99 event-loop delay (ms) above which requests get a 503. |
 | `PERSONAL_ORGANIZATION_ENABLED` | — | `true` |  | — |

@@ -647,16 +647,6 @@ const envSchemaBase = z.object({
   METRICS_ENABLED: booleanString('true'),
   /** Bearer token a Prometheus scraper sends when scraping /metrics. Required when METRICS_ENABLED=true (min 32 chars). */
   METRICS_SCRAPE_TOKEN: z.string().min(32).optional(),
-  /** OTLP HTTP traces endpoint base URL (e.g. https://otel.example.com). Appends /v1/traces when omitted. */
-  /**
-   * sec-C3: in production the OTLP exporter MUST use https://. The
-   * runtime accepts both http:// and https://; spans carry SQL fragments,
-   * request paths, and request ids that should not traverse the network in
-   * plaintext. Refine enforced below.
-   */
-  OTEL_EXPORTER_OTLP_ENDPOINT: z.url().optional(),
-  /** OpenTelemetry service.name override (defaults to the generated API / worker service names). */
-  OTEL_SERVICE_NAME: z.string().min(1).optional(),
 
   // S3 / Object Storage
   /** Allow image/svg+xml uploads; sanitized with DOMPurify on confirm (default false). */
@@ -1735,26 +1725,6 @@ export const envSchema = envSchemaBase
       message:
         'RESPONSE_ENCRYPTION_KEY (64 hex chars / 32 bytes for AES-256) or a RESPONSE_ENCRYPTION_KEYS keyring is required when ENABLE_RESPONSE_ENCRYPTION=true.',
       path: ['RESPONSE_ENCRYPTION_KEY'],
-    },
-  )
-  .refine(
-    (data) => {
-      // sec-C3: OTLP traffic carries SQL fragments, request paths, request ids.
-      // Allow plaintext http:// in dev/test (typical local collector), require
-      // https:// in production — those environments must export over
-      // an encrypted channel.
-      if (data.OTEL_EXPORTER_OTLP_ENDPOINT === undefined) return true;
-      if (data.NODE_ENV !== 'production') return true;
-      try {
-        return new URL(data.OTEL_EXPORTER_OTLP_ENDPOINT).protocol === 'https:';
-      } catch {
-        return false;
-      }
-    },
-    {
-      message:
-        'OTEL_EXPORTER_OTLP_ENDPOINT must be an https:// URL in production (telemetry exporters cannot transmit SQL fragments / request paths in plaintext).',
-      path: ['OTEL_EXPORTER_OTLP_ENDPOINT'],
     },
   )
   .refine(

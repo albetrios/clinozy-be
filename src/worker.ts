@@ -4,13 +4,8 @@ import {
   captureException,
   flushSentry,
 } from '@/infrastructure/observability/sentry/sentry.js';
-import {
-  initOpenTelemetry,
-  shutdownOpenTelemetry,
-} from '@/infrastructure/observability/tracing/otel.js';
 import { initPostHog, shutdownPostHog } from '@/infrastructure/observability/posthog/posthog.js';
 import { closeBullMQMetricsQueues } from '@/infrastructure/observability/metrics/bullmq-metrics.js';
-import { OTEL_SERVICE_NAME_WORKER } from '@/shared/constants/project-identity.constants.js';
 import { createUnhandledRejectionHandler } from '@/infrastructure/observability/unhandled-rejection.handler.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { closeRedis, connectRedis, redisConnection } from '@/infrastructure/cache/redis.client.js';
@@ -55,9 +50,6 @@ import { closeUserDataExportQueue } from '@/domains/user/sub-domains/user-data-e
 
 // Initialize Sentry before anything else
 initSentry();
-// audit M5: start OpenTelemetry for the worker process (no-op unless
-// OTEL_EXPORTER_OTLP_ENDPOINT is set).
-initOpenTelemetry(OTEL_SERVICE_NAME_WORKER);
 // Product analytics (no-op unless POSTHOG_KEY is set).
 initPostHog();
 
@@ -145,9 +137,6 @@ async function main() {
       // shared connections go.
       await closeBullMQMetricsQueues();
       await Promise.allSettled([closeRedis(), closeBullMqRedis(), closeDatabase()]);
-      // audit M5: tear down the OpenTelemetry SDK (no-op when never started)
-      // before the Sentry flush so pending OTLP spans flush on shutdown.
-      await shutdownOpenTelemetry();
       // Flush pending product-analytics events (no-op when PostHog is disabled).
       await shutdownPostHog();
       await flushSentry();

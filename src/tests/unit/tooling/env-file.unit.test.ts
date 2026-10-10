@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import dotenv from 'dotenv';
-import {
-  commentOutEnvAssignment,
-  formatEnvValue,
-  upsertEnvAssignment,
-} from '@tooling/dev/env-file.util.js';
+import { formatEnvValue, upsertEnvAssignment } from '@tooling/dev/env-file.util.js';
 
 describe('env-file editing (setup:local)', () => {
   it('replaces an existing assignment and appends a missing one', () => {
@@ -30,11 +26,5 @@ describe('env-file editing (setup:local)', () => {
       const parsed = dotenv.parse(upsertEnvAssignment('', 'KEY', formatEnvValue(value)));
       expect(parsed.KEY).toBe(value);
     }
-  });
-
-  it('comments out an assignment so dotenv no longer sets it', () => {
-    const updated = commentOutEnvAssignment('A=1\nB=2\n', 'A');
-    expect(updated).toBe('# A=1\nB=2\n');
-    expect(dotenv.parse(updated).A).toBeUndefined();
   });
 });
