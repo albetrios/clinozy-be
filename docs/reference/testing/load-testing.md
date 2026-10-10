@@ -494,9 +494,12 @@ the first request of each journey, `GET /users/me`, self-healed a missing person
 organization for every bulk-seeded user (p95 1,157 ms on that request alone). With the
 seed provisioning it and the pool primed, three consecutive fresh-process bursts of
 240 users on the defaults passed every gate locally: cold p95 491 / 392 / 429 ms, p99
-945 / 564 / 777 ms; warm p95 193 / 235 / 180 ms; zero errors, resets or sheds. Keep
-cold-process and warm-process results separate; do not prewarm a benchmark, dilute
-cold samples, or relax thresholds to claim a fix.
+945 / 564 / 777 ms; warm p95 193 / 235 / 180 ms; zero errors, resets or sheds. The
+cold gate is sensitive to the host: on a busy laptop (load average 4–7 from other
+applications) the same build swung between 279 and 976 ms cold p95 across back-to-back
+runs, still with zero errors — run it on an otherwise idle machine, and compare builds
+by alternating them. Keep cold-process and warm-process results separate; do not
+prewarm a benchmark, dilute cold samples, or relax thresholds to claim a fix.
 Keep the monolithic worker's independently budgeted pool (60 in `.env.example`);
 do not apply the API's smaller pool to that worker.
 
