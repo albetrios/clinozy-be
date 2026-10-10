@@ -106,6 +106,7 @@ export class StripePaymentProvider implements PaymentProvider {
     organization: OrganizationBillingContext;
     plan: PlanRecord;
     billingCycle: 'monthly' | 'yearly';
+    quantity?: number;
     trialEnd?: string;
     idempotencyKey?: string;
   }): Promise<PaymentProviderCreateResult> {
@@ -139,6 +140,7 @@ export class StripePaymentProvider implements PaymentProvider {
         omitUndefined({
           customerId: stripeCustomerId,
           priceId: stripePriceId,
+          quantity: input.quantity,
           trialEnd: input.trialEnd
             ? Math.floor(new Date(input.trialEnd).getTime() / 1000)
             : undefined,

@@ -632,7 +632,7 @@ export class MembershipRepository extends BaseRepository {
     const payload: {
       status?: string;
       role_id?: number;
-      joined_at?: Date;
+      joined_at?: SQL;
       updated_at: Date | SQL;
       updated_by_user_id?: number;
     } = omitUndefined({
@@ -640,7 +640,10 @@ export class MembershipRepository extends BaseRepository {
       updated_by_user_id: updated_by_user_id ?? undefined,
     });
     if (data.status) payload.status = data.status;
-    if (data.status === 'ACTIVE') payload.joined_at = new Date();
+    // Stamped once: a reactivated member keeps the date they first joined, which orders who is
+    // suspended first when the organization must shed seats (most recently joined first).
+    if (data.status === 'ACTIVE')
+      payload.joined_at = sql`COALESCE(${memberships.joined_at}, now())`;
     if (data.role_id !== undefined) payload.role_id = data.role_id;
     const rows = await getRequestDatabase()
       .update(memberships)

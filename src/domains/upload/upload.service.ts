@@ -5,7 +5,6 @@ import { getEnv } from '@/shared/config/env.config.js';
 import {
   ConfigurationError,
   ConflictError,
-  ForbiddenError,
   NotFoundError,
   ValidationError,
 } from '@/shared/errors/index.js';

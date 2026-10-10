@@ -8,6 +8,11 @@ import { createTestSubscription } from '@/domains/billing/__tests__/factories/su
 import { SubscriptionRepository } from '@/domains/billing/sub-domains/subscription/subscription.repository.js';
 import { database } from '@/infrastructure/database/connection.js';
 import { subscriptions } from '@/domains/billing/sub-domains/subscription/subscription.schema.js';
+import {
+  createMembership,
+  createRoleWithPermissions,
+  seedAllPermissions,
+} from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 
 describe('SubscriptionRepository (database)', () => {
   const repository = new SubscriptionRepository();
@@ -61,6 +66,121 @@ describe('SubscriptionRepository (database)', () => {
       created_by_user_id: owner.id,
     });
     expect(created.public_id).toBeTruthy();
+  });
+
+  it('createUnlessProviderSubscriptionExists yields to an existing row and keeps the transaction usable', async () => {
+    const owner = await createTestUser();
+    const organization = await createTestOrganization({ ownerUserId: owner.id });
+    const plan = await createTestPlan();
+    const providerSubscriptionId = `sub_provider_conflict_${Date.now()}`;
+    const insertData = {
+      organization_id: organization.id,
+      plan_id: plan.id,
+      billing_cycle: 'MONTHLY',
+      status: 'ACTIVE',
+      current_period_start: new Date(),
+      current_period_end: new Date(Date.now() + 86_400_000),
+      provider: 'stripe',
+      provider_subscription_id: providerSubscriptionId,
+    } as const;
+
+    await database.transaction(async (transaction) => {
+      const transactionalRepository = new SubscriptionRepository(transaction as never);
+      const first =
+        await transactionalRepository.createUnlessProviderSubscriptionExists(insertData);
+      expect(first?.provider_subscription_id).toBe(providerSubscriptionId);
+
+      // The webhook's `.created` lost the race: `null`, and the transaction is NOT aborted — a
+      // caught unique violation would have failed every statement after it (25P02).
+      const second =
+        await transactionalRepository.createUnlessProviderSubscriptionExists(insertData);
+      expect(second).toBeNull();
+      const stillReadable =
+        await transactionalRepository.findByProviderSubscriptionId(providerSubscriptionId);
+      expect(stillReadable?.public_id).toBe(first?.public_id);
+    });
+
+    // Only the provider index yields: a second live subscription for the organization still throws.
+    await expect(
+      repository.createUnlessProviderSubscriptionExists({
+        ...insertData,
+        provider_subscription_id: `${providerSubscriptionId}_other`,
+      }),
+    ).rejects.toMatchObject({ cause: expect.objectContaining({ code: '23505' }) });
+  });
+
+  it('findSeatReconcileCandidates finds billed-quantity drift and organizations past the Free allowance', async () => {
+    await seedAllPermissions();
+    const owner = await createTestUser();
+    const freePlan = await createTestPlan({ priceMonthly: '0.00', includedSeats: 1 });
+    const paidPlan = await createTestPlan({ priceMonthly: '29.00', includedSeats: 10 });
+
+    async function teamWithActiveMembers(memberCount: number) {
+      const organization = await createTestOrganization({ ownerUserId: owner.id, type: 'TEAM' });
+      const role = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: [],
+      });
+      for (let index = 0; index < memberCount; index++) {
+        const member = await createTestUser();
+        await createMembership({
+          userId: member.id,
+          organizationId: organization.id,
+          roleId: role.id,
+        });
+      }
+      return organization;
+    }
+
+    // Stripe bills 1 (synced) for 2 seats in use → drift.
+    const drifted = await teamWithActiveMembers(2);
+    const driftedSubscription = await createTestSubscription({
+      organizationId: drifted.id,
+      planId: paidPlan.id,
+      providerSubscriptionId: `sub_drift_${Date.now()}`,
+    });
+    await database
+      .update(subscriptions)
+      .set({ seats: 1 })
+      .where(eq(subscriptions.id, driftedSubscription.id));
+    // Stripe bills exactly the seats in use → no drift.
+    const inSync = await teamWithActiveMembers(2);
+    const inSyncSubscription = await createTestSubscription({
+      organizationId: inSync.id,
+      planId: paidPlan.id,
+      providerSubscriptionId: `sub_in_sync_${Date.now()}`,
+    });
+    await database
+      .update(subscriptions)
+      .set({ seats: 2 })
+      .where(eq(subscriptions.id, inSyncSubscription.id));
+    // Cancelled: back on Free with 3 members against an allowance of 1 → lapsed.
+    const cancelled = await teamWithActiveMembers(3);
+    await createTestSubscription({
+      organizationId: cancelled.id,
+      planId: paidPlan.id,
+      status: 'CANCELED',
+    });
+    // Dunning, still inside its grace → keeps the plan.
+    const inGrace = await teamWithActiveMembers(3);
+    await createTestSubscription({
+      organizationId: inGrace.id,
+      planId: paidPlan.id,
+      status: 'PAST_DUE',
+    });
+    // Never subscribed, within the allowance → nothing to do.
+    const withinFree = await teamWithActiveMembers(1);
+
+    const candidates = await repository.findSeatReconcileCandidates({
+      limit: 50,
+      dunningGraceDays: 7,
+    });
+
+    expect(candidates.quantityDrift).toEqual([drifted.public_id]);
+    expect(candidates.entitlementLapsed).toEqual([cancelled.public_id]);
+    expect(candidates.entitlementLapsed).not.toContain(inGrace.public_id);
+    expect(candidates.entitlementLapsed).not.toContain(withinFree.public_id);
+    expect(freePlan.included_seats).toBe(1);
   });
 
   it('syncFromStripeProviderSubscription applies fresh events and ignores stale ones', async () => {

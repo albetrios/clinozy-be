@@ -38,6 +38,8 @@ import {
   DEFAULT_DLQ_AUTO_RETRY_CRON,
 } from '@/infrastructure/queue/dlq/dlq-auto-retry.constants.js';
 import { STRIPE_WEBHOOK_EVENT_RECLAIM_QUEUE_NAME } from '@/domains/billing/sub-domains/stripe-webhook/workers/stripe-webhook-event-reclaim.constants.js';
+import { SUBSCRIPTION_SEAT_RECONCILE_JOB_NAME } from '@/domains/billing/sub-domains/subscription/workers/subscription-seat-reconcile.constants.js';
+import { SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME } from '@/domains/billing/sub-domains/subscription/queues/subscription-seat-sync.queue.js';
 import { WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME } from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery-reclaim.constants.js';
 import { STRIPE_WEBHOOK_EVENT_CATCHUP_QUEUE_NAME } from '@/domains/billing/sub-domains/stripe-webhook/workers/stripe-webhook-event-catchup.constants.js';
 import { STRIPE_WEBHOOK_EVENT_RETENTION_QUEUE_NAME } from '@/domains/billing/sub-domains/stripe-webhook/workers/stripe-webhook-event-retention.constants.js';
@@ -101,6 +103,8 @@ const DEFAULT_STRIPE_WEBHOOK_EVENT_CATCHUP_CRON = '*/15 * * * *';
 // Every five minutes: with the 5-minute stale cutoff, a delivery whose enqueue was lost goes out
 // within about ten minutes of Redis taking writes again.
 const DEFAULT_WEBHOOK_DELIVERY_RECLAIM_CRON = '*/5 * * * *';
+/** Hourly: lost seat-sync enqueues and lapsed dunning entitlements. */
+const DEFAULT_SUBSCRIPTION_SEAT_RECONCILE_CRON = '17 * * * *';
 const DEFAULT_STRIPE_WEBHOOK_EVENT_RETENTION_CRON = '0 3 * * *';
 const DEFAULT_AUDIT_EXPORT_CRON = '15 2 * * *';
 
@@ -296,6 +300,12 @@ export function getScheduledJobs(): ScheduledJob[] {
       jobName: 'catchup-missing-stripe-webhook-events',
       cronPattern:
         env.STRIPE_WEBHOOK_EVENT_CATCHUP_CRON ?? DEFAULT_STRIPE_WEBHOOK_EVENT_CATCHUP_CRON,
+    }),
+    withSchedulerTimezone(timezone, {
+      queueName: SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME,
+      schedulerId: 'subscription-seat-reconcile',
+      jobName: SUBSCRIPTION_SEAT_RECONCILE_JOB_NAME,
+      cronPattern: DEFAULT_SUBSCRIPTION_SEAT_RECONCILE_CRON,
     }),
     withSchedulerTimezone(timezone, {
       queueName: WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME,

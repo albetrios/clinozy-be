@@ -91,6 +91,15 @@ vi.mock(
   }),
 );
 
+const runSubscriptionSeatReconcileJobMock = vi.fn();
+vi.mock(
+  '@/domains/billing/sub-domains/subscription/workers/subscription-seat-reconcile.processor.js',
+  () => ({
+    runSubscriptionSeatReconcileJob: (...arguments_: unknown[]) =>
+      runSubscriptionSeatReconcileJobMock(...arguments_),
+  }),
+);
+
 vi.mock('@/shared/config/env.config.js', () => ({
   env: { WORKER_CONCURRENCY_STRIPE: 3, WORKER_CONCURRENCY: 5, LOG_LEVEL: 'silent' },
 }));
@@ -211,6 +220,21 @@ describe('subscription-seat-sync.worker', () => {
       tracestate: 'vendor=value',
     });
     expect(spanName).toBe('sync-subscription-seats');
+  });
+
+  it('runs the hourly reconcile for its job name, without a payload to validate', async () => {
+    createSubscriptionSeatSyncWorker(billingContainer as never);
+    runSubscriptionSeatReconcileJobMock.mockResolvedValueOnce({
+      quantityDriftCount: 0,
+      entitlementLapsedCount: 0,
+    });
+
+    await workerState.processor?.(makeJob({ name: 'reconcile-subscription-seats' }));
+
+    expect(runSubscriptionSeatReconcileJobMock).toHaveBeenCalledWith(subscriptionService);
+    // The scheduler's job carries no organization: it must never be dead-lettered as poison.
+    expect(parseJobDataOrDeadLetterMock).not.toHaveBeenCalled();
+    expect(processSubscriptionSeatSyncJobMock).not.toHaveBeenCalled();
   });
 
   it('never runs the processor when the payload is rejected as poison', async () => {

@@ -74,9 +74,38 @@ describe('Stripe Webhook — out-of-order cancellation (audit-#1)', () => {
     } as unknown as Stripe.Event;
   }
 
+  function updatedEvent(
+    providerSubscriptionId: string,
+    options: {
+      eventId: string;
+      createdSeconds: number;
+      status: string;
+      cancelAtPeriodEnd?: boolean;
+      canceledAtSeconds?: number | null;
+    },
+  ): Stripe.Event {
+    return {
+      id: options.eventId,
+      type: 'customer.subscription.updated',
+      created: options.createdSeconds,
+      data: {
+        object: {
+          ...buildSubscriptionObject(providerSubscriptionId),
+          status: options.status,
+          cancel_at_period_end: options.cancelAtPeriodEnd ?? false,
+          canceled_at: options.canceledAtSeconds ?? null,
+        },
+      },
+    } as unknown as Stripe.Event;
+  }
+
   async function readSubscriptionRows(providerSubscriptionId: string) {
     return getOperatorDatabase()
-      .select({ id: subscriptions.id, status: subscriptions.status })
+      .select({
+        id: subscriptions.id,
+        status: subscriptions.status,
+        canceled_at: subscriptions.canceled_at,
+      })
       .from(subscriptions)
       .where(eq(subscriptions.provider_subscription_id, providerSubscriptionId));
   }
@@ -146,5 +175,52 @@ describe('Stripe Webhook — out-of-order cancellation (audit-#1)', () => {
     const afterDelete = await readSubscriptionRows(providerSubscriptionId);
     expect(afterDelete).toHaveLength(1);
     expect(afterDelete[0]!.status).toBe('CANCELED');
+  });
+
+  it('processes a .deleted that finds the row already past it, instead of retrying until it pages', async () => {
+    const providerSubscriptionId = `sub_ooo_${generatePublicId('subscription')}`;
+    await service.handleEvent(createdEvent(providerSubscriptionId, 'evt_created_then_final'));
+    // Stripe's final `.updated` (canceled) is applied first; the older `.deleted` arrives after.
+    await service.handleEvent(
+      updatedEvent(providerSubscriptionId, {
+        eventId: 'evt_final_update',
+        createdSeconds: deletedEventSeconds + 300,
+        status: 'canceled',
+        canceledAtSeconds: deletedEventSeconds,
+      }),
+    );
+
+    await expect(
+      service.handleEvent(deletedEvent(providerSubscriptionId, 'evt_deleted_stale')),
+    ).resolves.toBeUndefined();
+    const rows = await readSubscriptionRows(providerSubscriptionId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('CANCELED');
+  });
+
+  it('clears canceled_at when a scheduled cancellation is undone at Stripe', async () => {
+    const providerSubscriptionId = `sub_ooo_${generatePublicId('subscription')}`;
+    await service.handleEvent(createdEvent(providerSubscriptionId, 'evt_created_resume'));
+    await service.handleEvent(
+      updatedEvent(providerSubscriptionId, {
+        eventId: 'evt_cancel_scheduled',
+        createdSeconds: createdEventSeconds + 100,
+        status: 'active',
+        cancelAtPeriodEnd: true,
+        canceledAtSeconds: createdEventSeconds + 100,
+      }),
+    );
+    expect((await readSubscriptionRows(providerSubscriptionId))[0]!.canceled_at).not.toBeNull();
+
+    await service.handleEvent(
+      updatedEvent(providerSubscriptionId, {
+        eventId: 'evt_cancel_undone',
+        createdSeconds: createdEventSeconds + 200,
+        status: 'active',
+      }),
+    );
+
+    // Resumed: no cancellation date left behind for the billing account to show.
+    expect((await readSubscriptionRows(providerSubscriptionId))[0]!.canceled_at).toBeNull();
   });
 });

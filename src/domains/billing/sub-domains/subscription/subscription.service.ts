@@ -1,7 +1,10 @@
 import { ConflictError, NotFoundError, UnprocessableEntityError } from '@/shared/errors/index.js';
 import { randomUUID } from 'node:crypto';
 
-import { isPostgresUniqueViolation } from '@/shared/utils/infrastructure/postgres-error.util.js';
+import {
+  getPostgresConstraintName,
+  isPostgresUniqueViolation,
+} from '@/shared/utils/infrastructure/postgres-error.util.js';
 import { env } from '@/shared/config/env.config.js';
 import {
   RedisLockUnavailableError,
@@ -62,7 +65,7 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { PAGINATION } from '@/shared/constants/pagination.constants.js';
 import { BillingAccountSerializer } from './billing-account.serializer.js';
 import { SubscriptionSerializer } from './subscription.serializer.js';
-import { buildDomainEvent, eventBus } from '@/core/events/event-bus.js';
+import { buildDomainEvent, eventBus, runEnqueueAfterCommit } from '@/core/events/event-bus.js';
 import type { OrganizationResourceEventPayload } from '@/core/events/organization-resource-event.js';
 import { SUBSCRIPTION_EVENT, type SubscriptionEventType } from './events/subscription.events.js';
 import {
@@ -577,7 +580,7 @@ export class SubscriptionService {
     // emits one shortly after .created) will sync those columns through the
     // regular UPDATE path. For a brand-new subscription they are essentially
     // always (false, null) anyway.
-    return input.repositoryOverride.create({
+    return input.repositoryOverride.createUnlessProviderSubscriptionExists({
       organization_id: organization.id,
       plan_id: input.planId,
       billing_cycle: input.billingCycle,
@@ -609,10 +612,9 @@ export class SubscriptionService {
    *   no-op, closing the resurrection gap.
    * - **Failure modes:** returns `null` when the organization cannot be resolved
    *   (defensive — the tenancy resolver already throws earlier) so the caller can
-   *   fall back to a retryable error instead of silently advancing the ledger. A
-   *   concurrent insert that loses the `provider_subscription_id` unique race
-   *   surfaces as a Postgres unique violation; the caller catches it and treats
-   *   the now-present row as the winner.
+   *   fall back to a retryable error instead of silently advancing the ledger, and
+   *   when a concurrent insert already wrote the row for this
+   *   `provider_subscription_id` (the caller treats that row as the winner).
    * - **Side effects:** one INSERT into `billing.subscriptions`.
    */
   async insertCanceledTombstoneFromStripeWebhookEvent(input: {
@@ -630,7 +632,7 @@ export class SubscriptionService {
     if (organization === null) {
       return null;
     }
-    return input.repositoryOverride.create({
+    return input.repositoryOverride.createUnlessProviderSubscriptionExists({
       organization_id: organization.id,
       plan_id: input.planId,
       billing_cycle: input.billingCycle,
@@ -764,12 +766,21 @@ export class SubscriptionService {
       // authoritative period end; for local-only subs this is the persisted value.
       const periodEnd = addMonths(now, parsed.billing_cycle === 'yearly' ? 12 : 1);
 
+      // Bill every seat from the first invoice: the members the organization already has (Stripe
+      // requires at least 1). A member who joins in between is reconciled by the seat sync after.
+      const seatsUsed = this.membershipSeatUsage
+        ? await this.membershipSeatUsage.countActiveMembers({
+            organizationPublicId: organization_public_id,
+          })
+        : 1;
+
       // Stripe network call — outside any database context.
       const paymentResult = await this.paymentProvider.createSubscription(
         omitUndefined({
           organization,
           plan,
           billingCycle: parsed.billing_cycle,
+          quantity: Math.max(1, seatsUsed),
           // audit #3: namespace the client key by organization before it reaches Stripe's global key space.
           idempotencyKey: buildStripeIdempotencyKey(
             'sub-create',
@@ -779,8 +790,9 @@ export class SubscriptionService {
         }),
       );
 
+      let created: Awaited<ReturnType<SubscriptionRepository['create']>>;
       try {
-        const created = await withAppDatabaseContext(scope, async () => {
+        created = await withAppDatabaseContext(scope, async () => {
           const row = await this.repository.create(
             omitUndefined({
               organization_id: organization.id,
@@ -815,11 +827,21 @@ export class SubscriptionService {
           });
           return row;
         });
-        // REQ-4: a freshly-created subscription has no Stripe-synced `seats` yet, so seats_total
-        // falls back to the plan's included_seats; seats_used reflects current memberships.
-        const [decorated] = await this.decorateWithSeatCounts(organization_public_id, [created]);
-        return decorated!;
       } catch (error) {
+        // The row for this Stripe subscription is already there: the webhook fallback inserted
+        // it from `customer.subscription.created` first. It is live — never cancel it.
+        const { providerSubscriptionId } = paymentResult;
+        if (
+          providerSubscriptionId &&
+          getPostgresConstraintName(error) === 'idx_subscriptions_provider_subscription_id_unique'
+        ) {
+          const existing = await withAppDatabaseContext(scope, () =>
+            this.repository.findByProviderSubscriptionId(providerSubscriptionId),
+          );
+          if (existing) return this.completeCreatedSubscription(organization_public_id, existing);
+        }
+        // Only a failed write is compensated (the local row was not created): a failure after the
+        // commit must never cancel a subscription the organization now has.
         if (paymentResult.providerSubscriptionId) {
           await this.paymentProvider.compensateFailedCreate(paymentResult.providerSubscriptionId);
         }
@@ -830,6 +852,7 @@ export class SubscriptionService {
         }
         throw error;
       }
+      return this.completeCreatedSubscription(organization_public_id, created, idempotencyKey);
     };
 
     try {
@@ -855,6 +878,22 @@ export class SubscriptionService {
   }
 
   /**
+   * After a subscription is created: reconcile its Stripe quantity to the members who joined since
+   * the count passed at creation (out-of-band, best-effort), and shape the response. REQ-4: a fresh
+   * subscription has no Stripe-synced `seats` yet, so seats_total falls back to the plan's
+   * included_seats; seats_used reflects current memberships.
+   */
+  private async completeCreatedSubscription(
+    organization_public_id: string,
+    created: Awaited<ReturnType<SubscriptionRepository['create']>>,
+    idempotencyKey?: string,
+  ) {
+    this.enqueueSeatQuantitySync(organization_public_id, idempotencyKey);
+    const [decorated] = await this.decorateWithSeatCounts(organization_public_id, [created]);
+    return decorated!;
+  }
+
+  /**
    * F2: brings the org's active headcount within the new plan's seat allowance by auto-suspending
    * the most-recently-joined non-owner members (the owner is never suspended), AFTER the plan change
    * has committed.
@@ -875,29 +914,96 @@ export class SubscriptionService {
     organizationPublicId: string,
     newPlan: { included_seats: number | null },
   ): Promise<void> {
-    if (
-      newPlan.included_seats === null ||
-      !this.membershipSeatUsage?.suspendExcessActiveMembersToFitCeiling
-    ) {
+    await this.suspendExcessMembersToCeiling({
+      organizationPublicId,
+      ceiling: newPlan.included_seats,
+      logEvent: 'billing.changePlan.members_suspended',
+    });
+  }
+
+  /**
+   * Suspends the most recently joined non-owner ACTIVE members until the organization fits
+   * `ceiling` (the tenancy seat port). Best-effort — logged, never thrown: the change that lowered
+   * the ceiling is already committed. No-op for an unlimited ceiling or an unwired port.
+   */
+  private async suspendExcessMembersToCeiling(options: {
+    organizationPublicId: string;
+    ceiling: number | null;
+    logEvent: string;
+  }): Promise<void> {
+    const { organizationPublicId, ceiling } = options;
+    if (ceiling === null || !this.membershipSeatUsage?.suspendExcessActiveMembersToFitCeiling) {
       return;
     }
     try {
       const suspended = await this.membershipSeatUsage.suspendExcessActiveMembersToFitCeiling({
         organizationPublicId,
-        ceiling: newPlan.included_seats,
+        ceiling,
       });
       if (suspended > 0) {
-        logger.info(
-          { organizationPublicId, ceiling: newPlan.included_seats, suspended },
-          'billing.changePlan.members_suspended',
-        );
+        logger.info({ organizationPublicId, ceiling, suspended }, options.logEvent);
       }
     } catch (error) {
-      logger.error(
-        { organizationPublicId, ceiling: newPlan.included_seats, error },
-        'billing.changePlan.suspend_excess_failed',
-      );
+      logger.error({ organizationPublicId, ceiling, error }, 'billing.suspend_excess_failed');
     }
+  }
+
+  /**
+   * Brings an organization without a paid entitlement — subscription cancelled, expired, paused,
+   * never paid, or in dunning past its grace — within the Free plan's seat allowance: the most
+   * recently joined non-owner ACTIVE members are suspended (suspended, never removed;
+   * reactivating one re-checks the ceiling).
+   *
+   * @remarks
+   * - **Algorithm:** re-reads the entitlement first (the organization may have re-subscribed since
+   *   the event or sweep that asked) and does nothing while it holds one.
+   * - **Failure modes:** best-effort — logged, never thrown; an organization that is gone is a no-op.
+   * - **Side effects:** flips excess memberships to `SUSPENDED`.
+   */
+  async enforceFreeSeatCeiling(organizationPublicId: string): Promise<void> {
+    let ceiling: number | null;
+    try {
+      ceiling = await withAppDatabaseContext(
+        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
+        async () => {
+          const organization =
+            await this.organizationService.findOrganizationByPublicId(organizationPublicId);
+          if (!organization) return null;
+          const seatState = await this.repository.findActiveSeatStateByOrganizationForUpdate(
+            organization.id,
+          );
+          if (!this.requiresFreeSeatCeiling(seatState)) return null;
+          return this.planService.getFreePlanSeatCeiling();
+        },
+      );
+    } catch (error) {
+      logger.error({ organizationPublicId, error }, 'billing.free_ceiling.resolve_failed');
+      return;
+    }
+    await this.suspendExcessMembersToCeiling({
+      organizationPublicId,
+      ceiling,
+      logEvent: 'billing.entitlement_lost.members_suspended',
+    });
+  }
+
+  /**
+   * After a Stripe event leaves a subscription without its paid entitlement (cancelled, expired,
+   * paused, never paid), schedules {@link enforceFreeSeatCeiling} for once the event's unit of work
+   * commits — outside its transaction, so a suspension problem never fails the event.
+   */
+  async enforceFreeSeatCeilingAfterCommitIfEntitlementLost(options: {
+    status: string;
+    repositoryOverride: SubscriptionRepository;
+  }): Promise<void> {
+    if (
+      !(TERMINAL_STATUSES.has(options.status) || UNPAID_ENTITLEMENT_STATUSES.has(options.status))
+    ) {
+      return;
+    }
+    const organization = await options.repositoryOverride.findOrganizationFromCurrentContext();
+    if (!organization) return;
+    await runEnqueueAfterCommit(() => this.enforceFreeSeatCeiling(organization.public_id));
   }
 
   async changePlan(
@@ -908,112 +1014,134 @@ export class SubscriptionService {
   ) {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateChangePlan(body);
-    const { organization, plan, subscription, previousPlan } = await withAppDatabaseContext(
-      scope,
-      async () => {
-        const organization =
-          await this.organizationService.requireOrganizationByPublicId(organization_public_id);
-        // Personal organizations cannot manage billing — reject before the subscription
-        // lookup so a personal organization gets 422 (capability unavailable), not 404.
-        assertTeamOrganization(organization, 'BILLING');
-        const plan = await this.planService.requireActivePlanByPublicId(parsed.plan_id);
-        const subscription = await this.repository.findByPublicId(
-          subscription_public_id,
-          organization.id,
-        );
-        if (!subscription) throw new NotFoundError('Subscription');
-        if (
-          !supportsPlanBillingCycle({
-            plan,
-            billingCycle: subscription.billing_cycle === 'YEARLY' ? 'yearly' : 'monthly',
-          })
-        ) {
-          throw new UnprocessableEntityError('errors:planNotAvailableForBillingCycle');
-        }
-        // sec-new-B1: terminal subscriptions cannot have their plan changed
-        if (TERMINAL_STATUSES.has(subscription.status)) {
-          throw new UnprocessableEntityError('errors:subscriptionNotMutable');
-        }
-        const previousPlan = await this.planService.requirePlanRecordByInternalId(
-          subscription.plan_id,
-        );
-        return { organization, plan, subscription, previousPlan };
-      },
-    );
-
-    const providerPriceId = this.paymentProvider.getProviderPriceId(
-      plan,
-      subscription.billing_cycle === 'YEARLY' ? 'yearly' : 'monthly',
-    );
-    let providerPlanUpdated = false;
-
-    // audit H2: fail closed before any local write when a Stripe-backed subscription
-    // would change to a plan with no Stripe price for its cycle (extracted to keep
-    // changePlan's cognitive complexity within budget).
-    assertProviderPriceForStripeBackedPlanChange(
-      subscription.provider_subscription_id,
-      providerPriceId,
-    );
-
-    // Stripe network call — outside any database context. Fail-closed: a provider
-    // failure throws ServiceUnavailableError here (before any local write), so the
-    // local plan never silently diverges from Stripe. Local-only subscriptions
-    // (no provider_subscription_id or no mapped price) skip the call and proceed.
-    if (subscription.provider_subscription_id && providerPriceId) {
-      await this.paymentProvider.updateSubscriptionPrice(
-        subscription.provider_subscription_id,
-        providerPriceId,
-        buildStripeIdempotencyKey('sub-change-plan', organization_public_id, idempotencyKey),
-      );
-      providerPlanUpdated = true;
-    }
-
-    const periodStart = new Date(subscription.current_period_start);
-    const periodEnd = new Date(subscription.current_period_end);
+    // Two concurrent plan changes would both call Stripe and both write the plan from the same
+    // snapshot — Stripe and the row could then disagree, and a failing one compensates Stripe back
+    // to the price the OTHER request replaced. One at a time per subscription.
     try {
-      const updated = await withAppDatabaseContext(scope, async () => {
-        const row = await this.repository.update(subscription_public_id, organization.id, {
-          plan_id: plan.id,
-          current_period_start: periodStart,
-          current_period_end: periodEnd,
-          // sec-B3: stamp the watermark so a stale `customer.subscription.updated` event
-          // delivered after this HTTP mutation cannot regress the plan back to its prior
-          // price (the webhook guard accepts an event only when its `created` > watermark).
-          last_stripe_event_created_at: new Date(),
-        });
-        if (row) {
-          await this.emitSubscriptionEvent({
-            type: SUBSCRIPTION_EVENT.UPDATED,
-            organizationPublicId: organization_public_id,
-            subscription: row,
-          });
-        }
-        return row;
-      });
-      if (!updated) throw new NotFoundError('Subscription');
-      // F2: the plan change is now committed, so the new ceiling is in effect. Auto-suspend the
-      // most-recently-joined non-owner members down to the new allowance (best-effort; never rolls
-      // back the committed plan change). Runs before the Stripe quantity sync so it reconciles to the
-      // post-suspension headcount.
-      await this.suspendExcessMembersForDowngrade(organization_public_id, plan);
-      // REQ-4: a plan change can change the seat allowance and proration, so reconcile the
-      // Stripe subscription quantity to the current member count out-of-band (never inline —
-      // a Stripe outage must not fail the plan change). No-op for local-only subscriptions.
-      this.enqueueSeatQuantitySync(organization_public_id, idempotencyKey);
-      const [decorated] = await this.decorateWithSeatCounts(organization_public_id, [updated]);
-      return decorated!;
-    } catch (error) {
-      if (providerPlanUpdated && subscription.provider_subscription_id) {
-        const previousProviderPriceId = this.paymentProvider.getProviderPriceId(
-          previousPlan,
-          subscription.billing_cycle === 'YEARLY' ? 'yearly' : 'monthly',
-        );
-        if (previousProviderPriceId) {
-          await this.paymentProvider.compensatePlanChange(
-            subscription.provider_subscription_id,
-            previousProviderPriceId,
+      return await withRedisLock(
+        {
+          key: `billing:subscription:change-plan:${subscription_public_id}`,
+          ttlSeconds: SUBSCRIPTION_CREATE_LOCK_TTL_SECONDS,
+          waitTimeoutMs: SUBSCRIPTION_CREATE_LOCK_WAIT_MS,
+        },
+        async () => {
+          const { organization, plan, subscription, previousPlan } = await withAppDatabaseContext(
+            scope,
+            async () => {
+              const organization =
+                await this.organizationService.requireOrganizationByPublicId(
+                  organization_public_id,
+                );
+              // Personal organizations cannot manage billing — reject before the subscription
+              // lookup so a personal organization gets 422 (capability unavailable), not 404.
+              assertTeamOrganization(organization, 'BILLING');
+              const plan = await this.planService.requireActivePlanByPublicId(parsed.plan_id);
+              const subscription = await this.repository.findByPublicId(
+                subscription_public_id,
+                organization.id,
+              );
+              if (!subscription) throw new NotFoundError('Subscription');
+              if (
+                !supportsPlanBillingCycle({
+                  plan,
+                  billingCycle: subscription.billing_cycle === 'YEARLY' ? 'yearly' : 'monthly',
+                })
+              ) {
+                throw new UnprocessableEntityError('errors:planNotAvailableForBillingCycle');
+              }
+              // sec-new-B1: terminal subscriptions cannot have their plan changed
+              if (TERMINAL_STATUSES.has(subscription.status)) {
+                throw new UnprocessableEntityError('errors:subscriptionNotMutable');
+              }
+              const previousPlan = await this.planService.requirePlanRecordByInternalId(
+                subscription.plan_id,
+              );
+              return { organization, plan, subscription, previousPlan };
+            },
           );
-        }
+
+          const providerPriceId = this.paymentProvider.getProviderPriceId(
+            plan,
+            subscription.billing_cycle === 'YEARLY' ? 'yearly' : 'monthly',
+          );
+          let providerPlanUpdated = false;
+
+          // audit H2: fail closed before any local write when a Stripe-backed subscription
+          // would change to a plan with no Stripe price for its cycle (extracted to keep
+          // changePlan's cognitive complexity within budget).
+          assertProviderPriceForStripeBackedPlanChange(
+            subscription.provider_subscription_id,
+            providerPriceId,
+          );
+
+          // Stripe network call — outside any database context. Fail-closed: a provider
+          // failure throws ServiceUnavailableError here (before any local write), so the
+          // local plan never silently diverges from Stripe. Local-only subscriptions
+          // (no provider_subscription_id or no mapped price) skip the call and proceed.
+          if (subscription.provider_subscription_id && providerPriceId) {
+            await this.paymentProvider.updateSubscriptionPrice(
+              subscription.provider_subscription_id,
+              providerPriceId,
+              buildStripeIdempotencyKey('sub-change-plan', organization_public_id, idempotencyKey),
+            );
+            providerPlanUpdated = true;
+          }
+          try {
+            const updated = await withAppDatabaseContext(scope, async () => {
+              const row = await this.repository.update(subscription_public_id, organization.id, {
+                // The billing period is Stripe's (synced by the webhook): a plan change does not move it,
+                // and writing back this request's snapshot could rewind a renewal synced meanwhile.
+                plan_id: plan.id,
+                // sec-B3: stamp the watermark so a stale `customer.subscription.updated` event
+                // delivered after this HTTP mutation cannot regress the plan back to its prior
+                // price (the webhook guard accepts an event only when its `created` > watermark).
+                last_stripe_event_created_at: new Date(),
+              });
+              if (row) {
+                await this.emitSubscriptionEvent({
+                  type: SUBSCRIPTION_EVENT.UPDATED,
+                  organizationPublicId: organization_public_id,
+                  subscription: row,
+                });
+              }
+              return row;
+            });
+            if (!updated) throw new NotFoundError('Subscription');
+            // F2: the plan change is now committed, so the new ceiling is in effect. Auto-suspend the
+            // most-recently-joined non-owner members down to the new allowance (best-effort; never rolls
+            // back the committed plan change). Runs before the Stripe quantity sync so it reconciles to the
+            // post-suspension headcount.
+            await this.suspendExcessMembersForDowngrade(organization_public_id, plan);
+            // REQ-4: a plan change can change the seat allowance and proration, so reconcile the
+            // Stripe subscription quantity to the current member count out-of-band (never inline —
+            // a Stripe outage must not fail the plan change). No-op for local-only subscriptions.
+            this.enqueueSeatQuantitySync(organization_public_id, idempotencyKey);
+            const [decorated] = await this.decorateWithSeatCounts(organization_public_id, [
+              updated,
+            ]);
+            return decorated!;
+          } catch (error) {
+            if (providerPlanUpdated && subscription.provider_subscription_id) {
+              const previousProviderPriceId = this.paymentProvider.getProviderPriceId(
+                previousPlan,
+                subscription.billing_cycle === 'YEARLY' ? 'yearly' : 'monthly',
+              );
+              if (previousProviderPriceId) {
+                await this.paymentProvider.compensatePlanChange(
+                  subscription.provider_subscription_id,
+                  previousProviderPriceId,
+                );
+              }
+            }
+            throw error;
+          }
+        },
+      );
+    } catch (error) {
+      if (error instanceof RedisLockUnavailableError) {
+        throw new ConflictError('errors:subscriptionChangeInProgress').withReason(
+          'subscription_change_in_progress',
+        );
       }
       throw error;
     }

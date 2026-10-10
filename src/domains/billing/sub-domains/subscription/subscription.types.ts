@@ -32,7 +32,8 @@ export interface SubscriptionCreateData {
    * (audit-#1) when materialising a CANCELED row whose local subscription never
    * existed. The regular create paths leave this unset (defaults to `NULL`).
    */
-  canceled_at?: Date;
+  /** `null` clears it (a resumed subscription). */
+  canceled_at?: Date | null;
   /**
    * Set alongside {@link canceled_at} on the deletion tombstone path so the
    * CANCELED row is unambiguously terminal. Defaults to `false` for every other
@@ -60,7 +61,8 @@ export interface SubscriptionCreateData {
 export interface SubscriptionUpdateData {
   cancel_at_period_end?: boolean;
   status?: string;
-  canceled_at?: Date;
+  /** `null` clears it (a resumed subscription). */
+  canceled_at?: Date | null;
   current_period_start?: Date;
   current_period_end?: Date;
   plan_id?: number;

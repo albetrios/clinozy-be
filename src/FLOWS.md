@@ -225,7 +225,9 @@ Two paths:
 - **Inbound (authoritative)**: Stripe sends `customer.subscription.updated` → `POST /api/v1/billing/webhook`.
 - **User-initiated**: organization admin calls `POST /api/v1/billing/subscriptions/:subscription_id/change-plan` (active organization from the JWT `org` claim). The service calls Stripe; the inbound webhook lands shortly after and reconciles state.
 
-A plan change or cancel writes the local row right after Stripe accepts the call (stamping `last_stripe_event_created_at` so an older webhook cannot roll it back); the webhook that follows is authoritative and reconciles anything that drifted.
+A plan change or cancel writes the local row right after Stripe accepts the call (stamping `last_stripe_event_created_at` so an older webhook cannot roll it back); the webhook that follows is authoritative and reconciles anything that drifted. Plan changes to one subscription run one at a time (a Redis lock per subscription; a concurrent one gets `409 subscription_change_in_progress`), and a plan change never writes the billing period — that is Stripe's, synced by the webhook.
+
+A new subscription bills every member the organization already has from its first invoice (Stripe `quantity` = ACTIVE + INVITED, at least 1). Only a failed local write cancels the just-created Stripe subscription; when the webhook's `.created` inserted the row first, the create returns that row instead.
 
 ### Sequence
 
@@ -243,11 +245,12 @@ sequenceDiagram
   Stripe->>Ingest: POST /api/v1/billing/webhook (Stripe-Signature)
   Ingest->>SWS: ingestEvent(event)
   SWS->>DB: insert stripe_webhook_events (status=processing) ON CONFLICT (event_id) DO NOTHING
-  alt new event
-    SWS->>Queue: enqueue stripe-webhook job
-  else duplicate event_id
-    Note over SWS: insert returns no rows; idempotent no-op
+  alt new event, or a redelivery still waiting for its run
+    SWS->>Queue: enqueue stripe-webhook job (job id = event id)
+  else already processed or abandoned
+    Note over SWS: no enqueue; idempotent no-op
   end
+  Note over SWS: the ingress records, never claims — the worker's first claim stays free
   Ingest-->>Stripe: 200
 
   Queue->>Worker: deliver job (async, separate process)
@@ -268,7 +271,8 @@ sequenceDiagram
 ### Failure modes
 
 - **Invalid Stripe signature** → 400; Stripe retries.
-- **Duplicate `event.id`** → silently no-op (unique constraint); Stripe retries are safe.
+- **Duplicate `event.id`** → silently no-op (unique constraint); Stripe retries are safe. A redelivery that arrives before the worker ran is re-enqueued (a no-op while the job exists) and leaves the claim to the worker — an ingress that claimed made the worker wait out the 15-minute lease.
+- **`.deleted` that finds the row already cancelled or newer** → processed with a log line (`stripe.webhook.subscription_cancel_already_terminal_or_stale`), never retried into an alert.
 - **Stripe API timeout or outage (user-initiated path)** → 503 `paymentProviderUnavailable`; nothing is written locally. If Stripe did apply the change, its webhook reconciles the row.
 - **Worker crash mid-processing** → row stuck in `processing`; reclaim worker (`stripe-webhook-event-reclaim.processor`) restarts it after `STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES` (15 min).
 - **Event that keeps failing** → after `STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS` (25) handler attempts — or at once for a permanent failure — the row turns `abandoned` and one alert fires; the reclaim never selects it again.
@@ -314,6 +318,7 @@ sequenceDiagram
 
 - `subscriptions.status` transitions: `active` → `past_due` (and back, or onward to `canceled`).
 - Each transition is a `subscription.updated` (the final one a `subscription.cancelled`) to the organization's subscribed webhooks.
+- **Losing the paid entitlement suspends the excess seats.** Once a cancel, expiry, pause or never-paid status commits, the most recently joined non-owner ACTIVE members are suspended until the organization fits the Free plan's allowance (suspended, never removed; reactivating one re-checks the ceiling). The end of a dunning grace (`current_period_end + BILLING_DUNNING_GRACE_DAYS`) has no Stripe event, so the hourly `subscription-seat-reconcile` job on the seat-sync queue applies it, and re-enqueues a seat sync wherever Stripe bills a quantity other than the seats in use.
 
 ### Failure modes
 

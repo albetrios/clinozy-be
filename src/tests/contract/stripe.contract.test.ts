@@ -105,7 +105,7 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
     expect(createdStripeCustomerOutbound.id).toBe(customerCreateFixtureResponse.id);
   });
 
-  test('createStripeSubscription sends idempotency header and maps subscription payload', async () => {
+  test('createStripeSubscription sends idempotency header, the seat quantity and maps subscription payload', async () => {
     const outboundIdempotencyKeyForSubscriptionCreateFixture = `idem-contract-subscription-create-${Date.now().toFixed(0)}`;
 
     nock(stripeOutboundApiHostname)
@@ -120,9 +120,11 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
       .matchHeader('idempotency-key', outboundIdempotencyKeyForSubscriptionCreateFixture)
       .reply(200, subscriptionCreateFixtureResponse);
 
+    // The first invoice bills every member the organization already has.
     const createdStripeSubscriptionOutbound = await createStripeSubscription({
       customerId: subscriptionCreateRequestSubset.customer,
       priceId: subscriptionCreateRequestSubset['items[0][price]'],
+      quantity: Number(subscriptionCreateRequestSubset['items[0][quantity]']),
       idempotencyKey: outboundIdempotencyKeyForSubscriptionCreateFixture,
     });
 

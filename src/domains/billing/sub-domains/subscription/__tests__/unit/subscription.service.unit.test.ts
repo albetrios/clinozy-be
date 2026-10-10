@@ -235,6 +235,117 @@ describe('SubscriptionService', () => {
     expect(repository.create).not.toHaveBeenCalled();
   });
 
+  it('create bills every current member from the first invoice (Stripe quantity)', async () => {
+    stripeMocks.isStripeConfigured.mockReturnValue(true);
+    vi.mocked(planService.requireActivePlanByPublicId).mockResolvedValue({
+      ...plan,
+      stripe_price_monthly_id: 'price_monthly',
+    } as never);
+    const seatAwareService = new SubscriptionService(
+      organizationService,
+      planService,
+      repository,
+      paymentProvider,
+      { countActiveMembers: vi.fn().mockResolvedValue(4) } as never,
+    );
+
+    await seatAwareService.create(
+      scope,
+      { plan_id: 'plan_public', billing_cycle: 'monthly' },
+      'user_public',
+    );
+
+    // Previously quantity 1: an organization of four paid for one seat until the next change.
+    expect(stripeMocks.createStripeSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({ quantity: 4 }),
+    );
+  });
+
+  it('create never cancels the Stripe subscription after the row committed', async () => {
+    stripeMocks.isStripeConfigured.mockReturnValue(true);
+    vi.mocked(planService.requireActivePlanByPublicId).mockResolvedValue({
+      ...plan,
+      stripe_price_monthly_id: 'price_monthly',
+    } as never);
+    const failingAfterCommit = new SubscriptionService(
+      organizationService,
+      planService,
+      repository,
+      paymentProvider,
+      {
+        // 1: the quantity at creation; 2: the created event, inside the write; 3: the response,
+        // after the commit — the one that fails.
+        countActiveMembers: vi
+          .fn()
+          .mockResolvedValueOnce(1)
+          .mockResolvedValueOnce(1)
+          .mockRejectedValueOnce(new Error('seat count read failed')),
+      } as never,
+    );
+
+    // The response decoration fails AFTER the row is committed: the organization has the
+    // subscription, so it must not be compensated (cancelled) at Stripe.
+    await expect(
+      failingAfterCommit.create(
+        scope,
+        { plan_id: 'plan_public', billing_cycle: 'monthly' },
+        'user_public',
+      ),
+    ).rejects.toThrow('seat count read failed');
+    expect(stripeMocks.cancelStripeSubscription).not.toHaveBeenCalled();
+  });
+
+  it('create returns the row the webhook already inserted instead of cancelling it', async () => {
+    stripeMocks.isStripeConfigured.mockReturnValue(true);
+    vi.mocked(planService.requireActivePlanByPublicId).mockResolvedValue({
+      ...plan,
+      stripe_price_monthly_id: 'price_monthly',
+    } as never);
+    vi.mocked(repository.create).mockRejectedValueOnce(
+      Object.assign(new Error('duplicate key value violates unique constraint'), {
+        code: '23505',
+        constraint_name: 'idx_subscriptions_provider_subscription_id_unique',
+      }),
+    );
+    const findByProviderSubscriptionId = vi.fn().mockResolvedValue(subscriptionRow);
+    (
+      repository as unknown as { findByProviderSubscriptionId: unknown }
+    ).findByProviderSubscriptionId = findByProviderSubscriptionId;
+
+    const result = await service.create(
+      scope,
+      { plan_id: 'plan_public', billing_cycle: 'monthly' },
+      'user_public',
+    );
+
+    expect(findByProviderSubscriptionId).toHaveBeenCalledWith('sub_stripe');
+    expect(result.public_id).toBe(subscriptionRow.public_id);
+    expect(stripeMocks.cancelStripeSubscription).not.toHaveBeenCalled();
+  });
+
+  it('changePlan runs one at a time per subscription and maps contention to a retryable 409', async () => {
+    await service.changePlan(scope, 'sub_public', { plan_id: 'plan_public' });
+    const lockOptions = redisLockMocks.withRedisLock.mock.calls.at(-1)![0] as { key: string };
+    expect(lockOptions.key).toBe('billing:subscription:change-plan:sub_public');
+
+    redisLockMocks.withRedisLock.mockRejectedValueOnce(
+      new redisLockMocks.RedisLockUnavailableError('billing:subscription:change-plan:sub_public'),
+    );
+    await expect(
+      service.changePlan(scope, 'sub_public', { plan_id: 'plan_public' }),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('changePlan never writes the billing period back (the webhook owns it)', async () => {
+    await service.changePlan(scope, 'sub_public', { plan_id: 'plan_public' });
+    const updatePayload = vi.mocked(repository.update).mock.calls.at(-1)![2] as Record<
+      string,
+      unknown
+    >;
+    expect(updatePayload).not.toHaveProperty('current_period_start');
+    expect(updatePayload).not.toHaveProperty('current_period_end');
+  });
+
   it('create rejects with ConflictError before Stripe when an active subscription exists', async () => {
     stripeMocks.isStripeConfigured.mockReturnValue(true);
     vi.mocked(repository.findActiveByOrganization).mockResolvedValue(subscriptionRow as never);

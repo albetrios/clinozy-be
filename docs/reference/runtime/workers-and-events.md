@@ -85,7 +85,7 @@ Producers fail fast while Redis is unreachable or full (`noeviction` rejects wri
 | Email | `auth.mail_outbox` row | `mail-outbox-sweeper` — re-enqueues `pending` rows older than `MAIL_OUTBOX_SWEEP_PENDING_MINUTES` (3), every 2 min |
 | Stripe event | `billing.stripe_webhook_events` ledger row | `stripe-webhook-event-reclaim` (5 min) and `stripe-webhook-event-catchup`, which asks Stripe for events never received (15 min) |
 | Outbound customer webhook | `notify.webhook_delivery_attempts` row, left `PENDING` | `webhook-delivery-reclaim` — re-enqueues attempts still `PENDING` after 5 min, every 5 min; the job id is the attempt's public id, so an attempt whose job exists is left alone |
-| Seat sync | — | not recovered: the organization's next membership change syncs the live count again |
+| Seat sync | `subscriptions.seats` (the last quantity pushed to Stripe) | `subscription-seat-reconcile` — hourly, re-enqueues a seat sync for every Stripe-backed subscription whose `seats` differs from the seats in use |
 | Notification | row written, then deleted when its dispatch fails | not recovered — dropped by design |
 | Data export | export row, marked failed | the user requests a new export |
 
@@ -198,7 +198,7 @@ When the same BullMQ job can be processed concurrently (retries, stalls, or mult
 
 | Worker               | Claim mechanism                                                                              | Terminal skip                                                                                  |
 | -------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| **Stripe webhook**   | `StripeWebhookEventRepository.tryClaimEvent()` — insert ledger with `ON CONFLICT DO NOTHING` | `processed_duplicate` → no handler                                                             |
+| **Stripe webhook**   | `StripeWebhookEventRepository.tryClaimEvent()` in the worker — the ingress only records the row (`recordAtIngress`, `ON CONFLICT DO NOTHING`) and never claims it | `processed_duplicate` → no handler                                                             |
 | **Webhook delivery** | `WebhookDeliveryAttemptRepository.tryMarkSending()` — any status but `SENT` → `SENDING` (`attempt_count + 1`) | `already_sent` → no HTTP; a `SENDING` row is re-claimed at once (BullMQ runs one execution per job id, so it belongs to a crashed one); receivers dedupe on `X-Webhook-Delivery-Id` |
 | **Mail**             | `tryClaimPendingMailOutbox()` — `pending` → `sending` update                                 | `already_sent` → no Resend call                                                                |
 | **Seat sync**        | None needed per run — it pushes an absolute quantity. Jobs for one organization never overlap: the enqueue deduplicates on `seat-sync-<organization>` with `keepLastIfActive` (`subscriptionSeatSyncDeduplication`), so a burst collapses into one job and a change that lands mid-run is synced once more after it | — (each run reads the live member count; before the key, two replicas could run one organization at once and the stale count could finish last) |

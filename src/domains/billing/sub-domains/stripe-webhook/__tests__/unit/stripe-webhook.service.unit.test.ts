@@ -78,6 +78,8 @@ describe('StripeWebhookService', () => {
     // sec-B finding #5: existence check used by the webhook service to distinguish
     // stale-event from race-condition when sync returns null.
     existsByStripeProviderSubscriptionId: vi.fn().mockResolvedValue(false),
+    // Entitlement loss → Free seat allowance once the event commits.
+    enforceFreeSeatCeilingAfterCommitIfEntitlementLost: vi.fn().mockResolvedValue(undefined),
   } as unknown as SubscriptionService;
 
   const stripeWebhookEventRepository = {
@@ -1072,8 +1074,9 @@ describe('StripeWebhookService', () => {
 });
 
 describe('StripeWebhookService.ingestEvent', () => {
+  const recordAtIngress = vi.fn();
   const tryClaimEvent = vi.fn();
-  const repository = { tryClaimEvent } as unknown as StripeWebhookEventRepository;
+  const repository = { recordAtIngress, tryClaimEvent } as unknown as StripeWebhookEventRepository;
   const service = new StripeWebhookService(
     {} as SubscriptionService,
     repository,
@@ -1082,7 +1085,7 @@ describe('StripeWebhookService.ingestEvent', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    tryClaimEvent.mockResolvedValue('claimed');
+    recordAtIngress.mockResolvedValue('recorded');
     queueMocks.enqueueStripeWebhook.mockResolvedValue(undefined);
   });
 
@@ -1095,33 +1098,40 @@ describe('StripeWebhookService.ingestEvent', () => {
     } as unknown as Stripe.Event;
   }
 
-  it('claims durably to Postgres FIRST, then enqueues to BullMQ (ordering invariant)', async () => {
+  it('records durably to Postgres FIRST, then enqueues to BullMQ (ordering invariant)', async () => {
     // sec-B finding #6: the ledger row is the durability commit; it MUST land before the BullMQ
     // enqueue so a Redis-side loss between ingress and worker pickup cannot drop the event.
     const event = buildIngressEvent({ id: 'evt_1' });
     const result = await service.ingestEvent(event, { requestId: 'req-1' });
 
-    expect(tryClaimEvent).toHaveBeenCalledWith({
+    expect(recordAtIngress).toHaveBeenCalledWith({
       stripe_event_id: 'evt_1',
       event_type: 'customer.subscription.updated',
       stripe_created_at: new Date(1_750_000_000 * 1000),
       request_id: 'req-1',
     });
     expect(queueMocks.enqueueStripeWebhook).toHaveBeenCalledWith(event, 'req-1');
-    expect(tryClaimEvent.mock.invocationCallOrder[0]!).toBeLessThan(
+    expect(recordAtIngress.mock.invocationCallOrder[0]!).toBeLessThan(
       queueMocks.enqueueStripeWebhook.mock.invocationCallOrder[0]!,
     );
-    expect(result).toBe('claimed');
+    expect(result).toBe('recorded');
   });
 
-  it('enqueues when a previously failed/stuck row is reclaimed', async () => {
-    tryClaimEvent.mockResolvedValueOnce('reclaimed');
-    await service.ingestEvent(buildIngressEvent({ id: 'evt_reclaimed' }), { requestId: 'req-2' });
+  it("never claims: claiming is the worker's, or a redelivery would stall the first run", async () => {
+    await service.ingestEvent(buildIngressEvent({ id: 'evt_never_claims' }), {
+      requestId: 'req-n',
+    });
+    expect(tryClaimEvent).not.toHaveBeenCalled();
+  });
+
+  it('re-enqueues a redelivered event still waiting for its run (the job id dedupes it)', async () => {
+    recordAtIngress.mockResolvedValueOnce('already_recorded');
+    await service.ingestEvent(buildIngressEvent({ id: 'evt_redelivered' }), { requestId: 'req-2' });
     expect(queueMocks.enqueueStripeWebhook).toHaveBeenCalledTimes(1);
   });
 
   it('skips the enqueue when the event is already processed (processed_duplicate)', async () => {
-    tryClaimEvent.mockResolvedValueOnce('processed_duplicate');
+    recordAtIngress.mockResolvedValueOnce('processed_duplicate');
     const result = await service.ingestEvent(buildIngressEvent({ id: 'evt_dup' }), {
       requestId: 'req-3',
     });
@@ -1129,9 +1139,9 @@ describe('StripeWebhookService.ingestEvent', () => {
     expect(result).toBe('processed_duplicate');
   });
 
-  it('skips the enqueue when another worker is still processing within the lease', async () => {
-    tryClaimEvent.mockResolvedValueOnce('still_processing_within_lease');
-    await service.ingestEvent(buildIngressEvent({ id: 'evt_inflight' }), { requestId: 'req-4' });
+  it('skips the enqueue when the event was abandoned', async () => {
+    recordAtIngress.mockResolvedValueOnce('abandoned');
+    await service.ingestEvent(buildIngressEvent({ id: 'evt_abandoned' }), { requestId: 'req-4' });
     expect(queueMocks.enqueueStripeWebhook).not.toHaveBeenCalled();
   });
 

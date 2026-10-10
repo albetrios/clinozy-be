@@ -7,13 +7,12 @@ import {
   INACTIVE_SUBSCRIPTION_STATUSES,
 } from '@/domains/billing/sub-domains/subscription/subscription.repository.js';
 import type { SubscriptionService } from '@/domains/billing/sub-domains/subscription/subscription.service.js';
-import { isPostgresUniqueViolation } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { captureMessage } from '@/infrastructure/observability/sentry/sentry.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import type { PlanRepository } from '@/domains/billing/sub-domains/plan/plan.repository.js';
 import type {
-  StripeWebhookEventClaimResult,
+  StripeWebhookIngressResult,
   StripeWebhookEventRepository,
 } from './stripe-webhook-event.repository.js';
 import { enqueueStripeWebhook } from './queues/stripe-webhook.queue.js';
@@ -131,14 +130,15 @@ export class StripeWebhookService {
 
   /**
    * HTTP-ingress durability commit for a verified Stripe event. Persists the event to the
-   * Postgres ledger via {@link StripeWebhookEventRepository.tryClaimEvent} BEFORE the caller
-   * ACKs Stripe (sec-B finding #6), then enqueues asynchronous BullMQ processing — but only
-   * when the ledger transition was `claimed` or `reclaimed`. Returns the claim result.
+   * Postgres ledger via {@link StripeWebhookEventRepository.recordAtIngress} BEFORE the caller
+   * ACKs Stripe (sec-B finding #6), then enqueues asynchronous BullMQ processing unless the event
+   * is already terminal. Returns what the ingress found.
    *
    * @remarks
-   * - **Algorithm:** claims the event id under {@link withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER)} (no organization GUC),
-   *   then enqueues on `claimed`/`reclaimed`. `processed_duplicate` (already terminal) and
-   *   `still_processing_within_lease` (an in-flight worker will finish) skip the enqueue and log.
+   * - **Algorithm:** records the event id under {@link withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER)} (no organization GUC)
+   *   without claiming it — the worker claims. `recorded` and `already_recorded` enqueue (the job
+   *   id is the event id, so a redelivery's add is a no-op while the job exists, and re-adds a lost
+   *   one); `processed_duplicate` and `abandoned` skip the enqueue and log.
    * - **Failure modes:** an enqueue failure propagates so the caller returns non-2xx and Stripe
    *   retries the delivery; the ledger row is already durable, and the reclaim cron re-enqueues
    *   stuck rows if the enqueue was lost.
@@ -147,11 +147,11 @@ export class StripeWebhookService {
   async ingestEvent(
     event: Stripe.Event,
     context?: { requestId?: string },
-  ): Promise<StripeWebhookEventClaimResult> {
-    const claimResult = await withMaintenanceDatabaseContext(
+  ): Promise<StripeWebhookIngressResult> {
+    const ingressResult = await withMaintenanceDatabaseContext(
       MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
       () =>
-        this.stripeWebhookEventRepository.tryClaimEvent(
+        this.stripeWebhookEventRepository.recordAtIngress(
           omitUndefined({
             stripe_event_id: event.id,
             event_type: event.type,
@@ -161,16 +161,16 @@ export class StripeWebhookService {
         ),
     );
 
-    if (claimResult === 'claimed' || claimResult === 'reclaimed') {
+    if (ingressResult === 'recorded' || ingressResult === 'already_recorded') {
       await enqueueStripeWebhook(event, context?.requestId);
     } else {
       logger.info(
-        { stripeEventId: event.id, eventType: event.type, claimResult },
+        { stripeEventId: event.id, eventType: event.type, ingressResult },
         'stripe.webhook.ingress.skip_enqueue',
       );
     }
 
-    return claimResult;
+    return ingressResult;
   }
 
   /**
@@ -461,9 +461,11 @@ export class StripeWebhookService {
       omitUndefined({
         status: mappedStatus,
         cancel_at_period_end: stripeSubscription.cancel_at_period_end,
+        // `null`, not omitted, when Stripe has none: a resumed subscription must not keep its old
+        // cancellation date.
         canceled_at: stripeSubscription.canceled_at
           ? new Date(stripeSubscription.canceled_at * 1000)
-          : undefined,
+          : null,
         current_period_start: periodStart,
         current_period_end: periodEnd,
         plan_id: resolvedPlanId,
@@ -484,6 +486,11 @@ export class StripeWebhookService {
         repositoryOverride: subscriptionRepository,
         previous,
         propagateFailure: true,
+      });
+      // Cancelled, expired or paused: back on the Free allowance once this commits.
+      await this.subscriptionService.enforceFreeSeatCeilingAfterCommitIfEntitlementLost({
+        status: row.status,
+        repositoryOverride: subscriptionRepository,
       });
       logger.info(
         { providerSubscriptionId, status: mappedStatus },
@@ -675,50 +682,38 @@ export class StripeWebhookService {
       stripePriceId,
       matchedPlanForCreate,
     ).toUpperCase();
-    try {
-      const inserted = await this.subscriptionService.createFromStripeWebhookEvent({
-        providerSubscriptionId,
-        providerCustomerId:
-          typeof input.stripeSubscription.customer === 'string'
-            ? input.stripeSubscription.customer
-            : null,
-        planId: resolvedPlanId,
-        status: input.mappedStatus,
-        cancelAtPeriodEnd: input.stripeSubscription.cancel_at_period_end,
-        canceledAt: input.stripeSubscription.canceled_at
-          ? new Date(input.stripeSubscription.canceled_at * 1000)
+    const inserted = await this.subscriptionService.createFromStripeWebhookEvent({
+      providerSubscriptionId,
+      providerCustomerId:
+        typeof input.stripeSubscription.customer === 'string'
+          ? input.stripeSubscription.customer
           : null,
-        currentPeriodStart: input.periodStart,
-        currentPeriodEnd: input.periodEnd,
-        billingCycle,
-        stripeEventCreatedAt: input.stripeEventCreatedAt,
-        repositoryOverride: input.subscriptionRepository,
-      });
-      if (!inserted) return false;
-      await this.subscriptionService.emitSubscriptionEvent({
-        type: SUBSCRIPTION_EVENT.CREATED,
-        subscription: inserted,
-        repositoryOverride: input.subscriptionRepository,
-        propagateFailure: true,
-      });
-      logger.info(
-        { providerSubscriptionId, planId: resolvedPlanId, billingCycle },
-        'stripe.webhook.subscription_inserted_on_created',
-      );
-      return true;
-    } catch (error) {
-      // A concurrent `.deleted` tombstone or duplicate `.created` won the
-      // `provider_subscription_id` unique race. Treat the now-present row as the
-      // winner; the caller re-checks existence and skips instead of retrying.
-      if (isPostgresUniqueViolation(error)) {
-        logger.info(
-          { providerSubscriptionId },
-          'stripe.webhook.subscription_created_insert_lost_race',
-        );
-        return false;
-      }
-      throw error;
-    }
+      planId: resolvedPlanId,
+      status: input.mappedStatus,
+      cancelAtPeriodEnd: input.stripeSubscription.cancel_at_period_end,
+      canceledAt: input.stripeSubscription.canceled_at
+        ? new Date(input.stripeSubscription.canceled_at * 1000)
+        : null,
+      currentPeriodStart: input.periodStart,
+      currentPeriodEnd: input.periodEnd,
+      billingCycle,
+      stripeEventCreatedAt: input.stripeEventCreatedAt,
+      repositoryOverride: input.subscriptionRepository,
+    });
+    // `null`: a concurrent `.deleted` tombstone or duplicate `.created` wrote the row first; the
+    // caller re-checks existence and skips instead of retrying.
+    if (!inserted) return false;
+    await this.subscriptionService.emitSubscriptionEvent({
+      type: SUBSCRIPTION_EVENT.CREATED,
+      subscription: inserted,
+      repositoryOverride: input.subscriptionRepository,
+      propagateFailure: true,
+    });
+    logger.info(
+      { providerSubscriptionId, planId: resolvedPlanId, billingCycle },
+      'stripe.webhook.subscription_inserted_on_created',
+    );
+    return true;
   }
 
   private async handleSubscriptionDeleted(
@@ -741,7 +736,27 @@ export class StripeWebhookService {
         repositoryOverride: subscriptionRepository,
         propagateFailure: true,
       });
+      // Back on the Free allowance: excess members are suspended once this commits.
+      await this.subscriptionService.enforceFreeSeatCeilingAfterCommitIfEntitlementLost({
+        status: row.status,
+        repositoryOverride: subscriptionRepository,
+      });
       logger.info({ providerSubscriptionId }, 'stripe.webhook.subscription_canceled');
+      return;
+    }
+
+    // The row exists but the cancel matched nothing: it is already terminal (cancelled locally
+    // first) or newer than this event. Nothing is left to do — retrying would only page.
+    if (
+      await this.subscriptionService.existsByStripeProviderSubscriptionId(
+        providerSubscriptionId,
+        subscriptionRepository,
+      )
+    ) {
+      logger.info(
+        { providerSubscriptionId, stripeEventCreatedAt },
+        'stripe.webhook.subscription_cancel_already_terminal_or_stale',
+      );
       return;
     }
 
@@ -869,31 +884,19 @@ export class StripeWebhookService {
       ? new Date(stripeSubscription.canceled_at * 1000)
       : stripeEventCreatedAt;
 
-    try {
-      const inserted = await this.subscriptionService.insertCanceledTombstoneFromStripeWebhookEvent(
-        {
-          providerSubscriptionId,
-          providerCustomerId:
-            typeof stripeSubscription.customer === 'string' ? stripeSubscription.customer : null,
-          planId: matchedPlan.id,
-          billingCycle,
-          currentPeriodStart: periodStart,
-          currentPeriodEnd: periodEnd,
-          canceledAt,
-          stripeEventCreatedAt,
-          repositoryOverride: subscriptionRepository,
-        },
-      );
-      return inserted !== null;
-    } catch (error) {
-      if (isPostgresUniqueViolation(error)) {
-        logger.info(
-          { providerSubscriptionId },
-          'stripe.webhook.subscription_cancel_tombstone_lost_race',
-        );
-        return false;
-      }
-      throw error;
-    }
+    const inserted = await this.subscriptionService.insertCanceledTombstoneFromStripeWebhookEvent({
+      providerSubscriptionId,
+      providerCustomerId:
+        typeof stripeSubscription.customer === 'string' ? stripeSubscription.customer : null,
+      planId: matchedPlan.id,
+      billingCycle,
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+      canceledAt,
+      stripeEventCreatedAt,
+      repositoryOverride: subscriptionRepository,
+    });
+    // `null`: a concurrent insert already wrote this provider subscription (lost race).
+    return inserted !== null;
   }
 }

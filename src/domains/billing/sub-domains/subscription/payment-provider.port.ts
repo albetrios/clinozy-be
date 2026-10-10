@@ -31,6 +31,8 @@ export interface PaymentProvider {
     organization: OrganizationBillingContext;
     plan: PlanRecord;
     billingCycle: 'monthly' | 'yearly';
+    /** Seats billed from the first invoice (the organization's current members, at least 1). */
+    quantity?: number;
     trialEnd?: string;
     idempotencyKey?: string;
   }): Promise<PaymentProviderCreateResult>;

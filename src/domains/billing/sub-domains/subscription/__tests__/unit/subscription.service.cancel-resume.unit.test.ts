@@ -8,6 +8,13 @@ vi.mock(
   }),
 );
 
+// changePlan serializes per subscription — run the critical section transparently (the lock itself
+// is covered in redis-lock.util.unit.test.ts); here it must not open a real Redis connection.
+vi.mock('@/infrastructure/cache/redis-lock.util.js', () => ({
+  withRedisLock: vi.fn(async (_options: unknown, fn: () => Promise<unknown>) => fn()),
+  RedisLockUnavailableError: class RedisLockUnavailableError extends Error {},
+}));
+
 vi.mock('@/infrastructure/database/contexts/database-context.js', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {

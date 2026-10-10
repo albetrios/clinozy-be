@@ -408,6 +408,7 @@ src/
     │   │   │   ├── __tests__/
     │   │   │       ├── integration/
     │   │   │       │   ├── subscription-happy.integration.test.ts
+    │   │   │       │   ├── subscription-seat-entitlement.integration.test.ts
     │   │   │       │   └── subscription.integration.test.ts
     │   │   │       └── unit/
     │   │   │       │   ├── billing-account.serializer.unit.test.ts
@@ -443,6 +444,8 @@ src/
     │   │   │       ├── subscription.bulk.seed.ts
     │   │   │       └── subscription.faker.ts
     │   │   │   ├── workers/
+    │   │   │       ├── subscription-seat-reconcile.constants.ts
+    │   │   │       ├── subscription-seat-reconcile.processor.ts
     │   │   │       ├── subscription-seat-sync.processor.ts
     │   │   │       └── subscription-seat-sync.worker.ts
     │   │   │   ├── billing-account.serializer.ts

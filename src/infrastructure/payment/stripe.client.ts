@@ -242,6 +242,8 @@ export async function retrieveStripeSubscriptionSnapshot(
 export async function createStripeSubscription(options: {
   customerId: string;
   priceId: string;
+  /** Seats billed from the first invoice; Stripe's default (1) when omitted. */
+  quantity?: number;
   trialEnd?: number;
   metadata?: Record<string, string>;
   idempotencyKey?: string;
@@ -258,7 +260,7 @@ export async function createStripeSubscription(options: {
         return stripe.subscriptions.create(
           omitUndefined({
             customer: options.customerId,
-            items: [{ price: options.priceId }],
+            items: [omitUndefined({ price: options.priceId, quantity: options.quantity })],
             trial_end: options.trialEnd,
             metadata: options.metadata,
             payment_behavior: 'default_incomplete' as const,
