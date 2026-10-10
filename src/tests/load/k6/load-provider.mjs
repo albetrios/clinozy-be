@@ -4,6 +4,7 @@ import { globalAgent } from 'node:https';
 import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
 import Stripe from 'stripe';
 import postgres from 'postgres';
+import { PLAN_TIERS as tiers } from './helpers/plan-tiers.js';
 
 /** Authenticated loopback provider and signed receiver for contract/sandbox load journeys. */
 const mode = process.env.LOAD_PROVIDER_MODE;
@@ -40,12 +41,6 @@ const plans = [],
   paymentProbes = new Map();
 const id = (prefix) => `${prefix}_${randomBytes(12).toString('hex')}`;
 const catalog = [];
-const tiers = [
-  { tier: 'Free', monthly: 0, yearly: null, seats: 1 },
-  { tier: 'Starter', monthly: 10, yearly: 100, seats: 5 },
-  { tier: 'Growth', monthly: 30, yearly: 300, seats: 15 },
-  { tier: 'Pro', monthly: 99, yearly: 990, seats: 25 },
-];
 const evidence = {
   catalogReadback: stripe ? 'real-sandbox' : 'contract-fixture',
   stripeIngress: 'local-signed-replay',

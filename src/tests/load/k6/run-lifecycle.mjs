@@ -32,11 +32,14 @@ if (sourceUrl.pathname.slice(1) === database)
   throw new Error('Scratch database must differ from application database');
 if (process.env.LOAD_TEST_CREATE_DATABASE === 'true') {
   const source = sourceUrl.pathname.slice(1);
-  const adminUrl = new URL(sourceUrl);
+  // CREATE DATABASE needs the migration login locally; the operator role has no CREATEDB.
+  const adminUrl = new URL(original.DATABASE_MIGRATION_URL || sourceUrl);
   adminUrl.pathname = '/postgres';
   const sql = require('postgres')(adminUrl.toString(), { max: 1 });
   if (!/^[a-z][a-z0-9_]*$/.test(source)) throw new Error('Invalid source database');
   try {
+    // A fresh scratch copy every run (the name is guarded above as a load/test database).
+    await sql.unsafe(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
     for (let attempt = 0; ; attempt++) {
       try {
         await sql.unsafe(`CREATE DATABASE "${database}" TEMPLATE "${source}"`);
@@ -181,6 +184,19 @@ const api = spawn(process.execPath, ['dist/src/server.js'], {
   stdio: ['ignore', openSync(`${output}/api.log`, 'w'), openSync(`${output}/api-errors.log`, 'w')],
 });
 const base = 'http://127.0.0.1:3002';
+/** True when the spawned API (not a stray process) listens on :3002; `ss` on Linux, `lsof` on macOS. */
+function apiOwnsPort() {
+  try {
+    return execFileSync('ss', ['-ltnpH'], { encoding: 'utf8' })
+      .split('\n')
+      .some((line) => line.includes(':3002 ') && line.includes(`pid=${api.pid},`));
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    return execFileSync('lsof', ['-nP', '-iTCP:3002', '-sTCP:LISTEN', '-t'], { encoding: 'utf8' })
+      .split('\n')
+      .includes(String(api.pid));
+  }
+}
 async function request(path, body) {
   const response = await fetch(`${base}/api/v1${path}`, {
     method: body ? 'POST' : 'GET',
@@ -205,12 +221,7 @@ try {
       throw new Error('Fixture process exited');
     try {
       const response = await fetch(`${base}/readyz`);
-      if (
-        response.status === 200 &&
-        execFileSync('ss', ['-ltnpH'], { encoding: 'utf8' })
-          .split('\n')
-          .some((line) => line.includes(':3002 ') && line.includes(`pid=${api.pid},`))
-      ) {
+      if (response.status === 200 && apiOwnsPort()) {
         ready = true;
         break;
       }

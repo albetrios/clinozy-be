@@ -6,76 +6,44 @@ Load tests use [k6](https://k6.io/) and Autocannon. Keep this doc in sync with [
 
 ---
 
-## Browser contracts without Browser-MCP
+## Browser contracts (Playwright)
 
-The repository-owned Playwright suite runs Chromium independently of agent browser
-tools. Install dependencies with the pinned package manager, then run
-`pnpm test:browser:install`. Start an owned isolated backend with synthetic accounts,
-a dedicated database and Redis namespace. Never share its database with Vitest suites
-that truncate fixtures: clone the owned seed database for the browser process. Use
-`CAPTCHA_PROVIDER=disabled` for these local cases,
-`SESSION_ORIGIN_CSRF_REQUIRED=true`, `COOKIE_SECURE=false`, and
-`ALLOWED_ORIGINS=http://localhost:5175`. This suite measures local HTTP contracts;
-trusted HTTPS, Secure/cross-site cookies, real OAuth, CAPTCHA, physical authenticators
-and provider-hosted SCA require separate evidence.
+`pnpm test:browser:local` runs the repository-owned Playwright suite in Chromium against its own
+isolated backend, independently of agent browser tools. Install Chromium once with
+`pnpm test:browser:install`. The runner:
 
-```bash
-BROWSER_TEST_API_URL=http://localhost:63003 \
-BROWSER_TEST_CREDENTIAL_POOL=/absolute/path/to/synthetic-credential-pool.json \
-BROWSER_TEST_REPORT_DIR=/absolute/path/to/new-private-report-directory \
-pnpm test:browser
-```
+1. drops and recreates a `<database>_browser_test` scratch database on the local PostgreSQL,
+   migrates it and bulk-seeds synthetic tenants (`pnpm db:seed:loadtest`), writing their
+   credential pool beside the report — never the `pnpm dev` database or the default k6 pool;
+2. starts an API on `localhost:63003` with `CAPTCHA_PROVIDER=disabled`,
+   `SESSION_ORIGIN_CSRF_REQUIRED=true`, `COOKIE_SECURE=false`,
+   `ALLOWED_ORIGINS=http://localhost:5175`, its own Redis key prefix and no telemetry;
+3. runs `pnpm test:browser`, then stops the API.
 
-The credential pool uses the existing load-pool fields and must contain two distinct
-tenants. The harness serves pages on localhost ports 5175 and 5176; only 5175 is
-allowed by the backend. Override these through `BROWSER_TEST_ORIGIN` and
-`BROWSER_TEST_DENIED_ORIGIN`, keeping the API allowlist aligned. The suite verifies
-login and input/authentication rejection, credentialed CORS, HttpOnly/path cookies,
-session refresh, organization binding and foreign-tenant denial, originless CSRF
-double-submit handling, and logout revocation. It exercises backend browser
-contracts rather than the product frontend.
+Results, failure screenshots and traces land in the gitignored `browser-test-report/`
+(`BROWSER_TEST_REPORT_DIR` overrides it); traces can hold credentials and session data, so
+never commit them. `BROWSER_TEST_DATABASE` (must end in `_test`) and `BROWSER_TEST_API_PORT`
+override the database and port. Against a backend you started yourself, run
+`pnpm test:browser` with `BROWSER_TEST_API_URL` and `BROWSER_TEST_CREDENTIAL_POOL` (two
+distinct tenants, the load-pool fields).
 
-Missing browser binaries or backend prerequisites fail the browser run explicitly.
-Vitest, database, queue, k6 and sandbox-provider API tests remain independent. Record
-browser cases as NOT RUN until a real browser executes them. JSON results,
-failure screenshots and traces remain private: traces can contain credentials and
-session data and must not be committed. Retries are disabled so failures remain visible.
+The harness serves pages on localhost ports 5175 (allowed) and 5176 (denied);
+`BROWSER_TEST_ORIGIN` / `BROWSER_TEST_DENIED_ORIGIN` override them — keep the API allowlist
+aligned. The suite verifies login and input/authentication rejection, credentialed CORS,
+HttpOnly/path cookies, session refresh, organization binding and foreign-tenant denial,
+originless CSRF double-submit handling and logout revocation. It exercises backend browser
+contracts, not the product frontend; trusted HTTPS, Secure/cross-site cookies, real OAuth,
+CAPTCHA, physical authenticators and provider-hosted SCA need separate evidence. Retries are
+disabled so failures stay visible.
 
 ```mermaid
 flowchart LR
-  commands["Repository test commands"] --> api["API / database / queue / sandbox APIs"]
-  commands --> playwright["Playwright CLI + Chromium"]
-  playwright --> harness["Local browser contract harness"]
-  harness --> backend["Owned isolated backend"]
-  api --> backend
-  playwright --> evidence["Private JSON / screenshots / traces"]
-```
-
-## Per-test evidence and confidence
-
-`pnpm test:evidence` builds Markdown and JSON ledgers from Vitest/Playwright JSON
-reporters and an optional explicit evidence manifest. Use `--help` for the manifest
-schema. Supply the execution revision, timestamp, layer and freshness for every run;
-report generation time is not execution time. Use fresh output filenames. The
-reporter refuses to overwrite existing reports and retains failed, skipped,
-unclassified and unmapped cases.
-
-Scores describe evidence strength, not a probability that the backend is correct:
-0 means no evidence; 1 historical/source evidence; 2 current fixtures or simulated
-contracts; 3 current isolated runtime or browser evidence for a limited assertion.
-Automatic scores stop at 3. Repeated target-environment and real-provider evidence
-needs independent review before stronger confidence is warranted. A FAIL can have
-strong evidence and still fail its gate. Map route dimensions to executed test IDs
-explicitly; filename matching or a route literal does not prove runtime coverage.
-Keep real-provider transport, simulated provider contracts, local browser tests and
-historical load results in separate rows. Preserve p95 <500 ms, p99 <1,000 ms,
-all 240 distinct-user completions, zero unexpected HTTP errors/check failures/dropped
-iterations and existing provider latency budgets.
-
-```bash
-pnpm test:evidence --manifest /absolute/path/to/evidence-manifest.json \
-  --output /absolute/path/to/new-confidence-report.md \
-  --json-output /absolute/path/to/new-confidence-ledger.json
+  runner["pnpm test:browser:local"] --> database["Scratch database: migrate + synthetic tenants"]
+  runner --> api["Isolated API :63003"]
+  runner --> playwright["Playwright + Chromium"]
+  playwright --> harness["Harness pages :5175 / :5176"]
+  harness --> api
+  playwright --> report["browser-test-report/ (gitignored)"]
 ```
 
 ## Flow overview
@@ -616,25 +584,24 @@ For managed HTTP proxies on Node 24, start the API with `NODE_USE_ENV_PROXY=1` a
 
 ## Stripe provider and outbound webhook validation
 
-`pnpm test:stripe:load` first uses the configured `STRIPE_SECRET_KEY` when it is an
-`sk_test_` key, then runs the local contract fixture. A missing key or failed provider
-run still produces local test results, but the command exits nonzero until both
-checks pass. Live keys are rejected for these tests. Keys stay in environment
-configuration; reports contain modes, exit codes and results, never key values.
+`pnpm test:stripe:load` builds the API and prepares everything it needs
+(`src/tests/load/k6/prepare-provider-fixtures.mjs`): a fresh migrated
+`<database>_stripe_load_test` scratch database; synthetic tenants made with the repository test
+factories — separate sandbox, contract and k6 actor sets, each actor with an all-permission TEAM
+and its own PERSONAL organization; and, when `STRIPE_SECRET_KEY` is an `sk_test_` key, the
+four-plan sandbox catalog, reusing this account's products marked
+`metadata.purpose=load-validation` and creating only what is missing. It then runs the
+real-sandbox lane and the local contract lane against that database (`VUS=1`, `ITERATIONS=7`).
+A missing key or a failed provider run still produces local results, but the command exits
+nonzero until both lanes pass. Live keys are rejected. Keys stay in environment configuration;
+the gitignored `k6-stripe-validation/` report holds modes, exit codes and results — its private
+pools and catalog manifest are `0600` — never key values. `LOAD_TEST_DATABASE` and
+`LOAD_TEST_REPORT_DIR` override the scratch database and report directory.
 
-```sh
-LOAD_TEST_DATABASE=clinozy_load_lifecycle \
-LOAD_TEST_CREATE_DATABASE=true \
-LOAD_TEST_REPORT_DIR=k6-stripe-validation \
-pnpm test:stripe:load
-```
-
-Use a new scratch database when cloning with `LOAD_TEST_CREATE_DATABASE=true`.
-For an existing scratch database omit that flag. The runner rejects the application
-database, redirects all four database URLs, namespaces Redis and owns its API,
-Stripe worker and fixtures. The provider fixture retains its owned sandbox
-subscriptions, customers and catalog objects after stopping the worker. Reports
-record retention; unrelated provider objects must never be modified.
+The lifecycle runner rejects the application database, redirects all four database URLs,
+namespaces Redis and owns its API, Stripe worker and fixtures. Sandbox subscriptions, customers
+and catalog objects stay in the Stripe test account after the run; unrelated provider objects are
+never modified.
 
 The configured-key run uses Stripe's actual test account: independently retrieves
 an existing owned catalog, creates synthetic customers and subscriptions, confirms
@@ -658,23 +625,12 @@ independently checks active, non-live products and all seven price amounts,
 currencies and recurring intervals. It reuses these objects and never creates
 replacement products or prices. Contract setup models this catalog locally.
 
-Prepare fresh synthetic TEAM organizations, ACTIVE memberships and permissions
-with the existing test factories in an isolated migrated database. Each journey
-actor also needs a distinct owned PERSONAL organization and membership. Supply a
-private `LOAD_PROVIDER_CREDENTIAL_POOL` JSON array with the existing `email`,
-`password`, `userPublicId` and `organizationPublicId` fields plus
-`personalOrganizationPublicId` for each journey actor. The final actor is a
-foreign-tenant fixture. Do not overwrite the original tenant-burst pool, share
-these fixtures with truncating Vitest suites, or reuse teams with subscriptions.
-Every organization switch returns a rebound token; the journey uses that token
-for subsequent requests.
-
-The key-first `pnpm test:stripe:load` wrapper runs sandbox and contract against
-the same selected scratch database. Supply a private object with separate
-`sandbox` and `contract` actor arrays when using that wrapper: their teams must
-be distinct and unsubscribed. A single array is sufficient for one explicitly
-selected lane. Setup validates distinct user identities and both required
-organization scopes before starting any journey.
+`prepare-provider-fixtures.mjs` builds both private inputs: the catalog manifest
+(`LOAD_PROVIDER_CATALOG_FILE`: `realStripeSandbox: true` and four products with provider `id`,
+`title`, `description` and `prices[{ id, cycle }]`) and the `LOAD_PROVIDER_CREDENTIAL_POOL` object
+with separate `sandbox` and `contract` actor arrays — distinct, unsubscribed teams, the last actor
+of each being the foreign tenant. Every organization switch returns a rebound token; the journey
+uses that token for subsequent requests.
 
 Seven sequential journeys cover all advertised plan/cycle combinations, 18
 directed same-cycle plan changes and 24 cross-cycle requests. Change-plan rejects
@@ -714,9 +670,8 @@ invoice failure/dunning tests. API `requires_action` does not prove completed
 browser SCA. Locally signing retrieved provider events proves ingress/worker
 processing, not Stripe-initiated public delivery. Eventual cancellation, invoice
 totals/proration, seat-cap enforcement, wider IAM/provider failures and public
-ingress require separate evidence. Absence of an annual Free provider price does
-not establish backend rejection: the existing adapter can fall back to a
-local-only subscription when the price is missing.
+ingress require separate evidence. A plan cycle without a configured Stripe price is
+rejected with 422 `planNotAvailableForBillingCycle` before any provider call.
 
 The local mode (`LOAD_PROVIDER_MODE=contract`) exercises those same API writes
 against an authenticated stateful loopback Stripe model. The outbound webhook
@@ -741,104 +696,3 @@ Stripe API version and assert the dates and status passed to the writer. The wor
 also accepts valid subscription-level timestamps from older webhook endpoint API
 versions. Missing items, malformed timestamps and reversed periods fail before a
 database write; they do not manufacture a billing period or pass Invalid Dates to SQL.
-
-### Local investigation — 2026-10-09
-
-These results use an isolated local Docker/Linux API, PostgreSQL 17.10 and Redis.
-They do not establish deployed/public API performance. The starting revision was
-`d7e4e32976534c322df42ed6cb580f1cc137f936`; the retained runtime change corrects
-PostgreSQL partial-index conflict inference for pending event-key webhook deliveries.
-The conflict target now includes the existing `status = 'PENDING' AND event_key IS NOT NULL`
-predicate. A real PostgreSQL regression verifies pending deduplication and a new
-attempt after the prior attempt becomes `SENT`; this is not permanent exactly-once delivery.
-
-The distinct-user scenario now separately gates each VU's first journey and subsequent
-journeys at p95 <500 ms and p99 <1,000 ms. Setup still authenticates/switches actors and
-reads membership fixtures before those journeys. "Cold" therefore means a first measured
-journey in a fresh API process after that setup, not an untouched API's first request.
-Setup samples do not dilute either trend; expected foreign-resource 404s remain included.
-The webhook CRUD scenario adds an actual URL-changing PATCH and per-operation gates.
-Existing provider budgets and zero-error/completion gates remain unchanged.
-
-| Section | Evidence | Result and limit |
-| --- | --- | --- |
-| Final local cold bursts, three fresh processes | p95 1,231–1,311 ms; p99 1,514–1,665 ms | FAIL: both latency targets exceeded |
-| Final local warm journeys, three runs | p95 225–369 ms; p99 254–417 ms | PASS for this local configuration; deployed repeatability unverified |
-| Journey completion in each run | 240 distinct users, 480 journeys, 7,216 passing checks | Zero unexpected HTTP failures, failed checks or dropped iterations |
-| Local public-domain CRUD | 20 journeys, 160 requests, 360 checks; p95 22.9 ms, p99 85.1 ms | PASS including public DNS validation and URL-changing PATCH; historical remote p99 was not reproduced here |
-| Real public outbound HTTPS | Receiver validates timestamp/HMAC and records actual public HTTPS receipt | PASS for the covered receiver |
-| Real public queue retry/restart | Receiver 503, worker restart, automatic retry after 61,081 ms, same payload hash, valid signatures, persisted `SENT`, attempt count 2 | PASS using normal backoff and the existing on-commit boundary |
-| Real Stripe sandbox SCA | Backend creates an incomplete subscription and returns the actual PaymentIntent secret; user completes provider-hosted browser challenge; independent Stripe read reports succeeded, non-live, 3DS authenticated and active subscription | PASS for this single native-local/provider flow; provider-initiated public ingress/reconciliation unverified |
-| Local browser/IAM | Real browser login, cookie refresh, identity/organization binding and foreign-organization 403; independent HTTP logout returns policy-defined 200/empty and revoked bearer returns 401 | Covered behavior verified; local CAPTCHA disabled and secure/cross-site cookies, OAuth, MFA and WebAuthn not independently exercised |
-| Final unit/global and DB regressions | 4,747 tests / 622 files; 14 DB tests across queue dedupe and organization/RLS | PASS on retained runtime source |
-| Final repository quality | `ci:quality`, production TypeScript build, alias rewrite and the unchanged Sonar gate on an owned isolated instance | PASS; SonarQube reports 0 issues / 0 hotspots with type dependencies mounted read-only |
-| Final isolated chaos | 13 tests pass; four failures are owner-fixture lookups under FORCE RLS; two Redis idempotency assertions fail (missing replay marker and expected 503 versus received 401) | INCOMPLETE: four fault cases are inconclusive and two assertion failures remain unresolved; preserve runtime RLS |
-
-Two auth/user read-narrowing candidates failed the separate cold gates and were restored.
-No latency experiment remains in the source. Do not treat passing aggregate or warm
-latency as a cold-burst pass. Baseline CPU profiling still showed SQL construction,
-socket writes and garbage collection among prominent busy paths.
-
-The public retry producer emits a synthetic source event through the production queue;
-its transport is real. It uses `runWithOnCommitScope`, commits the RLS database work,
-then flushes the on-commit event bus. A retained earlier producer without that boundary
-raced the worker and left a failed job/pending attempt. The passing test does not prove
-recovery for arbitrary transactional callers. No non-test caller of the organization
-webhook fanout service was found, so automatic business-event-to-webhook wiring remains
-unverified. Local transport fixtures and locally signed Stripe ingress remain separate
-from actual provider-initiated public delivery and browser SCA evidence.
-
-## 2026-10-10 resumed local verification
-
-Runtime source revision: `30a7bd28af1e7dd4c81e4da55dccfb0e04bc4df4`, on
-`fix/webhook-recovery-and-chaos-tests`. These measurements are local. They do not
-establish deployed/public API latency or refresh the previous public-transport
-and browser-SCA results. The recovered environment has the prior documentation,
-but not its original public-transport reports.
-
-| Section | Current evidence | Result and scope |
-| --- | --- | --- |
-| Unit/global | 4,791 tests / 622 files, zero skips | PASS on the runtime revision |
-| Membership integration | 40 tests, zero skips | PASS; INCOMPLETE invitation/reactivation deny without writes and recover after local fixture activation |
-| Chaos | 19 tests / 17 files, zero skips | PASS assertions; the queue outage case does not explicitly observe a failed attempt, so this does not independently prove retries were exercised |
-| Playwright IAM | 14 tests, zero skipped, unexpected or flaky cases | PASS local Chromium/backend harness; three CSRF cases use APIRequestContext; shipped frontend and real OAuth remain separate |
-| Simulated provider contracts | 57 tests / 10 files | PASS; fixture evidence only |
-| Database unit / security / property regressions | 299 / 894 / 71 tests, zero skips | PASS; database/security replacement runs capture the actual runtime revision, source tree and time dynamically |
-| Four-plan contract and Stripe sandbox matrices | Each: seven journeys, 447 requests / 1,319 checks, 18 same-cycle transitions, 24 cross-cycle rejection cases, five payment probes | PASS each lane separately; sandbox API calls are real, webhook reconciliation uses local relay; the SCA probe does not complete a browser challenge |
-| After-setup cold journeys, three unprofiled runs | p95 393.21 / 470.87 / 491.23 ms; all 240 users and 480 journeys per run; zero failed checks, HTTP failures or drops | PASS for first journeys after same-process login/scope setup; this warms the measured API |
-| Warm journeys in those runs | p95 328.16 / 186.46 / 236.95 ms | PASS for the tested local configuration |
-| Stronger fresh API bursts, two runs | Only 169 / 157 of 240 users completed; 141 / 143 failed profile checks due to TCP resets/broken pipes | FAIL all-user and zero-error gates; local host listen backlog is 128, but causality is not established |
-| Public-domain webhook CRUD | 20 journeys / 160 requests / 360 checks; p95 22.89 ms, p99 65.82 ms | PASS local API with actual public-hostname DNS validation and URL-changing PATCH; no outbound delivery; earlier remote p99 near 5,148 ms remains unresolved |
-
-The fresh API experiment issues scoped tokens through normal login in process A,
-then stops A and starts process B with a distinct PID and Redis namespace. B
-receives readiness checks only before the original 240-user journey runs. It
-uses existing authenticated database sessions and a warm database/host; it is
-not a cold database test. No HTTP retries, latency relaxations, sample dilution,
-RLS bypass or host-setting changes were used to turn its failures into passes.
-
-The current CPU profile's actual API PID is 22103. A post-hoc monotonic/wall-clock
-alignment gives an approximate 2.60-second measured burst slice with about 86%
-busy samples. SQL construction, socket writes and GC remain prominent. The
-whole-process 11.6% busy figure includes setup/idle time and must not be compared
-with historical burst-only CPU percentages. Clock alignment and boundaries are
-approximate; no new performance-source optimization was retained.
-
-Free remains monthly only. Paid USD prices are 10/30/99 monthly and 100/300/990
-annually, with four distinct product titles/descriptions. Annual Free is absent
-and rejected. Live S3/Google/GitHub OAuth checks are deferred by the user; configured
-keys do not establish successful real-provider transport. Other provider targets
-still require demonstrable ownership/nonproduction scope.
-
-The database/security helper's older hardcoded revision is a provenance defect,
-not a backend assertion failure. Preserve its artifacts, use dynamically captured
-revision/source-tree provenance, and do not relabel old reports as current.
-
-The API role remains non-superuser/non-BYPASSRLS, with 31 FORCE RLS tables. The isolated
-fixture operator has BYPASSRLS for test setup; those privileged fixture operations are
-not runtime RLS evidence. The separately approved chaos login is non-superuser/non-BYPASSRLS.
-Its bootstrap aliases the fixture operator URL to the application URL, so unscoped factory
-reads are hidden by FORCE RLS. A future chaos harness repair should keep an independent
-operator connection through the owned proxy while retaining the unprivileged runtime role.
-The Docker sandbox billing attempt also reached its unchanged 30-second outbound timeout;
-the successful native provider flow does not establish Docker/provider transport recovery.

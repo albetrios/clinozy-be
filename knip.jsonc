@@ -57,6 +57,8 @@
     "gitleaks",
     "semgrep",
     // Load-test runner invoked by load:* scripts.
-    "k6"
+    "k6",
+    // Linux port-owner probe in the k6 lifecycle runner (macOS falls back to `lsof`).
+    "ss"
   ]
 }

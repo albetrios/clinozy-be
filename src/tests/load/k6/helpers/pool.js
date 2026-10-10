@@ -35,7 +35,9 @@ export const credentialPool = new SharedArray('credential-pool', () => {
   //   pnpm db:seed:loadtest
   let raw;
   try {
-    raw = open('../data/credential-pool.json');
+    // LOAD_CREDENTIAL_POOL_FILE: an isolated run's own pool (absolute path), so it never
+    // overwrites the default one seeded from the developer database.
+    raw = open(__ENV.LOAD_CREDENTIAL_POOL_FILE || '../data/credential-pool.json');
   } catch {
     throw new Error(
       '[pool.js] credential-pool.json not found.\n' +

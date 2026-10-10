@@ -5,6 +5,7 @@ import { credentialPool, mintTokenPool } from '../helpers/pool.js';
 import { API_PREFIX, PUBLIC_AUTH_FORM_HEADERS } from '../helpers/config.js';
 import { assertCondition, requireData } from '../helpers/checks.js';
 import { idempotencyKey } from '../helpers/idempotency.js';
+import { PLAN_TIERS } from '../helpers/plan-tiers.js';
 
 /** Provider API journeys and locally relayed webhook reconciliation; public provider transport is separate. */
 const vus = Number(__ENV.VUS || '4'),
@@ -21,8 +22,10 @@ const cyclesCompleted = new Counter('billing_plan_cycles_completed');
 const transitionsCompleted = new Counter('billing_plan_transitions_completed');
 const crossCyclesRejected = new Counter('billing_cross_cycle_rejections');
 const paymentProbesCompleted = new Counter('billing_payment_probe_cases_completed');
-const tiers = ['Free', 'Starter', 'Growth', 'Pro'];
-const expectedAmounts = { Free: [0, null], Starter: [10, 100], Growth: [30, 300], Pro: [99, 990] };
+const tiers = PLAN_TIERS.map((entry) => entry.tier);
+const expectedAmounts = Object.fromEntries(
+  PLAN_TIERS.map((entry) => [entry.tier, [entry.monthly, entry.yearly]]),
+);
 const combinations = tiers.flatMap((tier) =>
   ['monthly', 'yearly']
     .filter((cycle) => cycle === 'monthly' || tier !== 'Free')
