@@ -4,6 +4,8 @@ import { getWorkerConcurrencyNotify } from '@/shared/config/worker-concurrency.u
 import { USER_DATA_EXPORT_QUEUE_NAME } from '@/domains/user/sub-domains/user-data-export/queues/user-data-export.queue.js';
 import { userDataExportJobDataSchema } from '@/domains/user/sub-domains/user-data-export/queues/user-data-export.job.schema.js';
 import { runUserDataExportJob } from '@/domains/user/sub-domains/user-data-export/workers/user-data-export.processor.js';
+import { runUserDataExportReclaimJob } from '@/domains/user/sub-domains/user-data-export/workers/user-data-export-reclaim.processor.js';
+import { USER_DATA_EXPORT_RECLAIM_JOB_NAME } from '@/domains/user/sub-domains/user-data-export/workers/user-data-export-reclaim.constants.js';
 import type { UserDataExportService } from '@/domains/user/sub-domains/user-data-export/user-data-export.service.js';
 import { buildWorkerHandle } from '@/infrastructure/queue/worker-runtime/worker-close.util.js';
 import { createProviderPausableWorker } from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
@@ -34,6 +36,11 @@ export function createUserDataExportWorker(
     queueName: USER_DATA_EXPORT_QUEUE_NAME,
     provider: 's3',
     processor: async (job) => {
+      // The lost-enqueue sweep rides this queue (no worker or pool of its own); it has no payload.
+      if (job.name === USER_DATA_EXPORT_RECLAIM_JOB_NAME) {
+        await runUserDataExportReclaimJob();
+        return;
+      }
       const jobData = await parseJobDataOrDeadLetter({
         schema: userDataExportJobDataSchema,
         job,

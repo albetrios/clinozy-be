@@ -17,6 +17,7 @@ clinozy-be deduplicates mutating HTTP requests when clients send an **`X-Idempot
 | **Lost SETNX race after miss** | **409** `conflict` (translation key `errors:idempotencyKeyConflict`); replay if the winner has already completed |
 | **Duplicate after completion** | Cached response replayed with `x-idempotency-replay: true` |
 | **Commit safety** | Completed cache is written in the `onResponse` Fastify hook **only** when `statusCode < 400`, so a rolled-back request never leaves a successful replay entry behind |
+| **Client disconnected** | Fastify never runs `onResponse` for a response it cannot write: the same step then runs from the request-lifecycle's route-level `onSend` (or the socket's `close`), once the handler has finished — so a retry with the key replays the result instead of the placeholder blocking it until its TTL and the write running twice |
 
 Implementation: [`src/shared/middlewares/core/idempotency.middleware.ts`](../../../src/shared/middlewares/core/idempotency.middleware.ts).
 

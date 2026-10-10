@@ -52,7 +52,9 @@ import {
   type WorkerDatabaseContextKind,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import {
+  beginConnectionWait,
   decrementOrganizationRlsCheckoutCount,
+  endConnectionWait,
   incrementOrganizationRlsCheckoutCount,
   type OrganizationRlsCheckoutPath,
   observeOrganizationRlsCheckoutHold,
@@ -278,16 +280,17 @@ async function runWithLayeredUserIdentity<T>(options: {
  * throws out of `claimConnection`, so the transaction rolls back before running anything. Once the
  * transaction has started, the deadline no longer applies; `statement_timeout` bounds the work. The
  * gauge and the hold sample follow the transaction itself, so an abandoned waiter keeps counting as
- * in flight — and the overload guard keeps shedding — until the pool lets it go.
+ * in flight — and the overload guard keeps shedding — until the pool lets it go. Every pooled unit
+ * counts, user-only and `withTransaction` ones included: an uncounted unit holds a connection the
+ * guard cannot see. The wait itself is tracked until the connection is claimed, so the guard can
+ * also shed on how long the oldest waiter has waited (`OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS`).
  */
-async function runPooledUnitOfWork<T>(options: {
+export async function runPooledUnitOfWork<T>(options: {
   path: OrganizationRlsCheckoutPath;
-  countsAsCheckout: boolean;
   openTransaction: (claimConnection: () => void) => Promise<T>;
 }): Promise<T> {
-  if (options.countsAsCheckout) {
-    incrementOrganizationRlsCheckoutCount();
-  }
+  incrementOrganizationRlsCheckoutCount();
+  const waitToken = beginConnectionWait();
   const checkoutStartedAtNanoseconds = process.hrtime.bigint();
   let started = false;
   let abandoned = false;
@@ -296,20 +299,20 @@ async function runPooledUnitOfWork<T>(options: {
       throw new Error('Unit of work abandoned: its connection arrived after the acquire deadline');
     }
     started = true;
+    endConnectionWait(waitToken);
   };
   // Called from an async function, a synchronous throw from openTransaction becomes a rejection,
   // so the gauge below is still released, as the per-site try/finally did.
   // The unit's after-commit tasks survive only if it commits (see runInCommitUnit).
   const transaction = runInCommitUnit(() => options.openTransaction(claimConnection));
   const unitOfWork = transaction.finally(() => {
-    if (options.countsAsCheckout) {
-      decrementOrganizationRlsCheckoutCount();
-      observeOrganizationRlsCheckoutHold({
-        path: options.path,
-        durationSeconds:
-          Number(process.hrtime.bigint() - checkoutStartedAtNanoseconds) / 1_000_000_000,
-      });
-    }
+    endConnectionWait(waitToken);
+    decrementOrganizationRlsCheckoutCount();
+    observeOrganizationRlsCheckoutHold({
+      path: options.path,
+      durationSeconds:
+        Number(process.hrtime.bigint() - checkoutStartedAtNanoseconds) / 1_000_000_000,
+    });
   });
 
   const deadlineMs = getEnv().DATABASE_POOL_ACQUIRE_TIMEOUT_MS;
@@ -387,7 +390,6 @@ async function runPrincipalDatabaseContext<T>(
 
   return runPooledUnitOfWork({
     path: 'scoped_context',
-    countsAsCheckout: organizationPublicId !== undefined,
     openTransaction: (claimConnection) =>
       runWithWorkerDatabaseContext(workerContext, () =>
         database.transaction((transaction) =>
@@ -544,7 +546,6 @@ async function runSessionDatabaseContext<T>(
       : { guc: SESSION_CONTEXTS.sessionTokenHash.guc, value: scope.sessionTokenHash as string };
   return runPooledUnitOfWork({
     path: 'session_context',
-    countsAsCheckout: true,
     openTransaction: (claimConnection) =>
       database.transaction(async (transaction) => {
         claimConnection();
@@ -848,7 +849,6 @@ export async function withMaintenanceDatabaseContext<T>(
   }
   return runPooledUnitOfWork({
     path: 'maintenance_context',
-    countsAsCheckout: true,
     openTransaction: (claimConnection) =>
       runWithWorkerDatabaseContext({ kind: definition.workerContextKind }, () =>
         resolveMaintenancePool().transaction((transaction) =>

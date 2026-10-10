@@ -53,7 +53,7 @@ The same context is reused if a worker is already running inside one (no nested 
 
 ### Purpose
 
-Every security- or governance-relevant write stages a row in the `audit.outbox` table inside the caller's transaction; the audit drain worker later inserts it into `audit.logs` so post-hoc investigation always has a non-repudiable trail. Audit failures must never fail the originating request — the user-visible operation is the source of truth and the audit row is best-effort.
+Every security- or governance-relevant write stages a row in the `audit.outbox` table right after the primary write commits — in its own short unit of work (the organization's context, or `SYSTEM_AUDIT_INSERT` for a tenantless row), **not** inside the write's transaction; the audit drain worker later inserts it into `audit.logs` so post-hoc investigation has a trail. Audit failures must never fail the originating request — the user-visible operation is the source of truth and the audit row is best-effort, so a crash between the two can lose the row.
 
 ### Where it lives
 
@@ -64,7 +64,7 @@ Every security- or governance-relevant write stages a row in the `audit.outbox` 
 
 1. Handler performs its primary write (e.g. an organization or auth-method mutation).
 2. The handler calls `recordScopedAuditEvent(request, { <actor>, action, resource_type, resource_id, organizationPublicId, severity, metadata })` — network context (IP, user-agent) is filled in by the helper. `<actor>` is exactly one of `actorUserPublicId`, `actorApiKeyPublicId` (spread `buildAuditActorFields(auth)` for a request principal, which may be either) or `anonymousActor: true` (pre-authentication events only, e.g. `auth.login_failure`). The `AuditActor` type makes it required — an actorless call does not compile.
-3. The row is staged in `audit.outbox` inside the caller's transaction (no synchronous id lookup). The audit drain worker later resolves internal ids and inserts into `audit.logs`.
+3. `AuditService.record` stages the row in `audit.outbox` in its own unit of work after the primary write (no synchronous id lookup). The audit drain worker later resolves internal ids and inserts into `audit.logs`.
 4. Errors are caught and logged at `warn`; the originating request still returns success.
 
 ### How to apply
@@ -97,7 +97,7 @@ flowchart TD
     C -- miss --> F[SETNX placeholder TTL=60s]
     F -- claimed --> G[Run handler]
     G --> H[onSend: stash response]
-    H --> I[onResponse: SET completed entry, TTL=24h]
+    H --> I[onResponse — or route-level onSend when the client left: SET completed entry, TTL=24h]
     F -- not claimed --> E
 ```
 
@@ -120,7 +120,7 @@ Some tables are deliberately exempt: immutable billing ledgers (audit, ledger en
 ### Where it lives
 
 - Schema definitions: every soft-deletable table declares `deleted_at: timestamp('deleted_at', { withTimezone: true })`.
-- Repositories: list/find methods filter `WHERE deleted_at IS NULL` by default; explicit `includeDeleted` flag is opt-in for admin/forensic paths.
+- Repositories: list/find methods filter `WHERE deleted_at IS NULL`. There is no generic opt-out flag: a path that needs tombstoned rows (the retention sweeps) has its own named read, e.g. `findTombstonedUploadsBefore`.
 - Tombstone retention workers: [src/domains/tenancy/sub-domains/organization/organization-notification-policy/workers/organization-notification-policy-tombstone-retention.processor.ts](src/domains/tenancy/sub-domains/organization/organization-notification-policy/workers/organization-notification-policy-tombstone-retention.processor.ts) and similar — sweep tombstoned rows after a retention window.
 
 ### Implementation
@@ -133,7 +133,7 @@ Some tables are deliberately exempt: immutable billing ledgers (audit, ledger en
 
 - New table: add `deleted_at` unless the table is an immutable ledger. If exempt, document **why** in the schema file.
 - New repository: any query that returns user-visible rows must include `eq(table.deleted_at, null)` or use a base helper that does.
-- Forensic / admin paths: opt out explicitly via a documented `includeDeleted: true` flag.
+- Forensic / retention paths: add a dedicated, named read for tombstoned rows (run under a maintenance context) rather than a flag on the user-facing one.
 
 ## rls-context
 

@@ -72,7 +72,7 @@ Event handlers read `event.requestId` and pass it to `recordOutboxEmail()`, `enq
 
 ### Post-commit enqueue (transactional outbox)
 
-When a handler runs inside an HTTP request, BullMQ enqueue helpers are scheduled with **`eventBus.onCommit(...)`** and run only after **`eventBus.flushOnCommit()`** in [`request-context.middleware.ts`](../../../src/shared/middlewares/core/request-context.middleware.ts) (after the request DB transaction commits). Mail uses a durable outbox row plus deferred `dispatchOutboxEmail`; webhook delivery, notification dispatch, and user-data export defer `queue.add` the same way. Outside HTTP scope (workers, scripts), use **`runEnqueueAfterCommit()`** from [`event-bus.ts`](../../../src/core/events/event-bus.ts) — it enqueues immediately when no onCommit scope is active.
+When a handler runs inside an HTTP request, BullMQ enqueue helpers are scheduled with **`eventBus.onCommit(...)`** and run only after **`eventBus.flushOnCommit()`** in [`request-lifecycle.middleware.ts`](../../../src/shared/middlewares/core/request-lifecycle.middleware.ts) (once the response is sent — or, when the client left first, once the handler has finished). Mail uses a durable outbox row plus deferred `dispatchOutboxEmail`; webhook delivery, notification dispatch, and user-data export defer `queue.add` the same way. Outside HTTP scope (workers, scripts), use **`runEnqueueAfterCommit()`** from [`event-bus.ts`](../../../src/core/events/event-bus.ts) — it enqueues immediately when no onCommit scope is active.
 
 Durable `scheduleCommitDispatch` tasks are appended to Redis at emit time (before commit) and recovered by the `commit-dispatch-recovery` sweeper if the process dies after commit. **On rollback / settle-failed**, `request-lifecycle.middleware.ts` calls **`eventBus.discardCommitDispatchOnRollback()`**, which purges both the in-memory marker and the durable Redis tasks (`purgeCommitDispatchTasks`) — the referenced rows were rolled back, so leaving the tasks would let the sweeper replay them against **phantom rows**, burning the worker retry budget and raising false final-failure DLQ alerts (audit-#M2). As a second line of defence, the mail and notification workers complete a job whose row is missing as **skipped** (warn log) rather than retrying it.
 
@@ -87,7 +87,7 @@ Producers fail fast while Redis is unreachable or full (`noeviction` rejects wri
 | Outbound customer webhook | `notify.webhook_delivery_attempts` row, left `PENDING` | `webhook-delivery-reclaim` — re-enqueues attempts still `PENDING` after 5 min, every 5 min; the job id is the attempt's public id, so an attempt whose job exists is left alone |
 | Seat sync | `subscriptions.seats` (the last quantity pushed to Stripe) | `subscription-seat-reconcile` — hourly, re-enqueues a seat sync for every Stripe-backed subscription whose `seats` differs from the seats in use |
 | Notification | row written, then deleted when its dispatch fails | not recovered — dropped by design |
-| Data export | export row, marked failed | the user requests a new export |
+| Data export | `auth.user_data_exports` row, left `pending` | `reclaim-pending-user-data-exports` — a repeatable job on the export queue itself, every 5 min, re-enqueues exports still `pending` after 5 min; the job id is the export's public id |
 
 An enqueue failure never marks an outbox row failed: it leaves the row for its sweep.
 
@@ -211,7 +211,7 @@ Regression tests: `src/tests/integration/worker-race/*.integration.test.ts` (`pn
 
 ## Worker Postgres context (RLS)
 
-HTTP requests set `app.current_organization_public_id` via tenant middleware and an organization-scoped transaction. **Workers do not** — each job must use an explicit context wrapper before querying FORCE RLS tables.
+HTTP requests set `app.current_organization_public_id` per unit of work: the auth middleware derives the organization from the signed `org` claim, and the service opens `withAppDatabaseContext` with the request's scope. **Workers do not** have a request — each job must use an explicit context wrapper before querying FORCE RLS tables.
 
 | Context wrapper                                                             | GUC / purpose                                                            |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------ |

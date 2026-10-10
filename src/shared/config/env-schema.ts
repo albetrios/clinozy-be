@@ -168,13 +168,15 @@ const SERVER_VARS = {
     allowed: 'integer 1000–600000 (optional)',
     description: 'Fastify request timeout in milliseconds.',
   }),
-  FASTIFY_CONNECTION_TIMEOUT_MS: envVar(
-    z.coerce.number().int().min(1_000).max(600_000).optional(),
-    {
-      allowed: 'integer 1000–600000 (optional)',
-      description: 'Fastify connection timeout in milliseconds.',
-    },
-  ),
+  // Node's socket INACTIVITY timeout (`server.timeout`), not an accept timeout: a socket with no
+  // bytes in or out for this long is destroyed — a handler waiting on the database or Stripe
+  // included, so its 503 + Retry-After never arrives. Off by default (Fastify's own default):
+  // requestTimeout / headersTimeout bound slow clients and keepAliveTimeout reaps idle sockets.
+  FASTIFY_CONNECTION_TIMEOUT_MS: envVar(z.coerce.number().int().min(0).max(600_000).optional(), {
+    allowed: 'integer 0–600000 (optional; unset or 0 disables)',
+    description:
+      'Socket inactivity timeout in milliseconds; when set, at least DATABASE_POOL_ACQUIRE_TIMEOUT_MS + STRIPE_HTTP_TIMEOUT_MS.',
+  }),
   // Network-independent latency for load tools (k6, curl) and browser devtools without scraping
   // /metrics. Default on; set false to suppress the header (it is coarsened in production).
   HTTP_SERVER_TIMING_ENABLED: envVar(booleanString('true'), {
@@ -202,6 +204,17 @@ const SERVER_VARS = {
     description:
       'Multiple of DATABASE_POOL_MAX in-flight units of work (running plus waiting for a connection) at which the overload guard sheds requests; above 1 lets a bounded queue form.',
   }),
+  // A slow database keeps the queue short but undrained, so the ratio above never trips while every
+  // waiter runs into DATABASE_POOL_ACQUIRE_TIMEOUT_MS: shed new requests once the oldest unit of work
+  // has waited this long. A burst the pool drains is served — its waiters are milliseconds old.
+  OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS: envVar(
+    z.coerce.number().int().min(0).max(60_000).default(2_000),
+    {
+      allowed: 'integer 0–60000 (ms; 0 disables)',
+      description:
+        'Overload-guard shed threshold: how long the oldest unit of work may wait for a pooled connection before new requests get a 503.',
+    },
+  ),
   DATABASE_POOL_ACQUIRE_TIMEOUT_MS: envVar(
     z.coerce.number().int().min(0).max(60_000).default(10_000),
     {
@@ -1562,9 +1575,27 @@ export const envSchema = envSchemaBase
       path: ['COOKIE_SECURE'],
     },
   )
+  // A socket that goes quiet while its handler waits for a pooled connection and then for Stripe
+  // must not be cut before the handler can answer (with a 503 + Retry-After, at worst).
+  .refine(
+    (data) =>
+      !data.FASTIFY_CONNECTION_TIMEOUT_MS ||
+      data.FASTIFY_CONNECTION_TIMEOUT_MS >=
+        data.DATABASE_POOL_ACQUIRE_TIMEOUT_MS + data.STRIPE_HTTP_TIMEOUT_MS,
+    {
+      message:
+        'FASTIFY_CONNECTION_TIMEOUT_MS is a socket inactivity timeout: unset it (or 0), or make it at least DATABASE_POOL_ACQUIRE_TIMEOUT_MS + STRIPE_HTTP_TIMEOUT_MS so a handler waiting on the pool and Stripe can still answer.',
+      path: ['FASTIFY_CONNECTION_TIMEOUT_MS'],
+    },
+  )
   // ── Category-B environment constraints for the policy flags ────────────────
   // Runtime code no longer compares NODE_ENV; these refines are the single place that keeps a
   // security-critical flag from being overridden to an unsafe value in the wrong environment.
+  .refine((data) => data.NODE_ENV !== 'production' || data.SENTRY_DSN !== undefined, {
+    message:
+      'SENTRY_DSN must be set in production (without it every error, final job failure and alert is dropped silently).',
+    path: ['SENTRY_DSN'],
+  })
   .refine((data) => data.NODE_ENV !== 'production' || data.CAPTCHA_BYPASS_ALLOWED === false, {
     message:
       'CAPTCHA_BYPASS_ALLOWED must be false in production (captcha bypass is a dev/test affordance only).',

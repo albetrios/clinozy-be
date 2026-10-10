@@ -54,7 +54,7 @@ describe('infrastructure queue scheduler', () => {
   it('getScheduledJobs returns audit, session, stripe retention, audit export, tombstone retention, idempotency, dlq depth, mail sweeper, upload pending sweep, stripe reclaim, webhook delivery reclaim, and audit-outbox drain jobs', async () => {
     const { getScheduledJobs } = await import('@/infrastructure/queue/scheduler.js');
     const scheduledJobs = getScheduledJobs();
-    expect(scheduledJobs).toHaveLength(28);
+    expect(scheduledJobs).toHaveLength(29);
     expect(scheduledJobs.map((job) => job.queueName)).toEqual([
       'audit-retention',
       'audit-outbox-drain',
@@ -78,6 +78,8 @@ describe('infrastructure queue scheduler', () => {
       // The hourly seat reconcile rides the seat-sync queue (job `reconcile-subscription-seats`).
       'subscription-seat-sync',
       'webhook-delivery-reclaim',
+      // The export lost-enqueue sweep rides the export queue (job `reclaim-pending-user-data-exports`).
+      'user-data-export',
     ]);
   });
 
@@ -147,14 +149,14 @@ describe('infrastructure queue scheduler', () => {
   it('registerScheduledJobs registers one repeatable job per cleanup queue when enabled', async () => {
     const { registerScheduledJobs } = await import('@/infrastructure/queue/scheduler.js');
     const schedulerHandle = await registerScheduledJobs();
-    expect(upsertJobSchedulerMock).toHaveBeenCalledTimes(28);
-    // Each scheduled job opens one Queue for upsert (28) + the reconcile pass opens one Queue per
-    // unique queue name (28 — the seat reconcile shares the seat-sync queue, which no other cron
+    expect(upsertJobSchedulerMock).toHaveBeenCalledTimes(29);
+    // Each scheduled job opens one Queue for upsert (29) + the reconcile pass opens one Queue per
+    // unique queue name (29 — the seat reconcile and the export reclaim ride queues no other cron
     // uses), each closed in its own loop iteration. The upsert queues are closed as soon as
     // registration ends — not held open for the life of the process.
-    expect(queueCloseMock).toHaveBeenCalledTimes(56);
+    expect(queueCloseMock).toHaveBeenCalledTimes(58);
     await schedulerHandle.close();
-    expect(queueCloseMock).toHaveBeenCalledTimes(56);
+    expect(queueCloseMock).toHaveBeenCalledTimes(58);
   });
 
   it('registerScheduledJobs does not instantiate queues when SCHEDULER_ENABLED is false', async () => {

@@ -91,6 +91,14 @@ vi.mock(
   }),
 );
 
+const runUserDataExportReclaimJobMock = vi.fn();
+vi.mock(
+  '@/domains/user/sub-domains/user-data-export/workers/user-data-export-reclaim.processor.js',
+  () => ({
+    runUserDataExportReclaimJob: (...args: unknown[]) => runUserDataExportReclaimJobMock(...args),
+  }),
+);
+
 vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -192,6 +200,19 @@ describe('user-data-export.worker', () => {
     expect(runUserDataExportJobMock).toHaveBeenCalledWith(JOB_DATA, service, {
       isFinalAttempt: true,
     });
+  });
+
+  it('runs the lost-enqueue sweep for its job name, without a payload to validate', async () => {
+    runUserDataExportReclaimJobMock.mockResolvedValueOnce({ scannedCount: 0, addedCount: 0 });
+    const createUserDataExportWorker = await importWorkerFactory();
+    createUserDataExportWorker(service);
+
+    await workerState.processor?.({ name: 'reclaim-pending-user-data-exports', data: {} });
+
+    expect(runUserDataExportReclaimJobMock).toHaveBeenCalledOnce();
+    // The scheduler's job carries no export: it must never be dead-lettered as poison.
+    expect(parseJobDataOrDeadLetterMock).not.toHaveBeenCalled();
+    expect(runUserDataExportJobMock).not.toHaveBeenCalled();
   });
 
   it('does not run the job when the payload fails validation (poison job is dead-lettered)', async () => {

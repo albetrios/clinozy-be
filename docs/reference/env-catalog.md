@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**13 / 237** variables migrated to an explicit `{ allowed, description }` entry.
+**14 / 238** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -80,7 +80,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `ENABLE_QUEUE_DASHBOARD` | — | `false` |  | — |
 | `ENABLE_QUEUE_DASHBOARD_MUTATIONS` | — | `false` |  | — |
 | `ENABLE_RESPONSE_ENCRYPTION` | — | `false` |  | — |
-| `FASTIFY_CONNECTION_TIMEOUT_MS` | integer 1000–600000 (optional) | — *(optional)* | ✓ | Fastify connection timeout in milliseconds. |
+| `FASTIFY_CONNECTION_TIMEOUT_MS` | integer 0–600000 (optional; unset or 0 disables) | — *(optional)* | ✓ | Socket inactivity timeout in milliseconds; when set, at least DATABASE_POOL_ACQUIRE_TIMEOUT_MS + STRIPE_HTTP_TIMEOUT_MS. |
 | `FASTIFY_HEADERS_TIMEOUT_MS` | integer 1000–600000 (optional) | — *(optional)* | ✓ | Fastify headers timeout in milliseconds. |
 | `FASTIFY_KEEP_ALIVE_TIMEOUT_MS` | integer 1000–600000 (optional) | — *(optional)* | ✓ | Fastify keep-alive timeout in milliseconds. |
 | `FASTIFY_REQUEST_TIMEOUT_MS` | integer 1000–600000 (optional) | — *(optional)* | ✓ | Fastify request timeout in milliseconds. |
@@ -135,6 +135,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `ORGANIZATION_NOTIFICATION_POLICY_MAX_PER_ORG` | — | `100` |  | — |
 | `ORGANIZATION_NOTIFICATION_POLICY_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
 | `ORGANIZATION_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
+| `OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS` | integer 0–60000 (ms; 0 disables) | `2000` | ✓ | Overload-guard shed threshold: how long the oldest unit of work may wait for a pooled connection before new requests get a 503. |
 | `OVERLOAD_DB_POOL_SHED_RATIO` | number 0–10 | `10` | ✓ | Multiple of DATABASE_POOL_MAX in-flight units of work (running plus waiting for a connection) at which the overload guard sheds requests; above 1 lets a bounded queue form. |
 | `OVERLOAD_MAX_EVENT_LOOP_DELAY_MS` | integer 1–60000 | `250` | ✓ | Overload-guard shed threshold: p99 event-loop delay (ms) above which requests get a 503. |
 | `PERSONAL_ORGANIZATION_ENABLED` | — | `true` |  | — |

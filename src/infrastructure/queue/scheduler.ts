@@ -41,6 +41,8 @@ import { STRIPE_WEBHOOK_EVENT_RECLAIM_QUEUE_NAME } from '@/domains/billing/sub-d
 import { SUBSCRIPTION_SEAT_RECONCILE_JOB_NAME } from '@/domains/billing/sub-domains/subscription/workers/subscription-seat-reconcile.constants.js';
 import { SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME } from '@/domains/billing/sub-domains/subscription/queues/subscription-seat-sync.queue.js';
 import { WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME } from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery-reclaim.constants.js';
+import { USER_DATA_EXPORT_QUEUE_NAME } from '@/domains/user/sub-domains/user-data-export/queues/user-data-export.queue.js';
+import { USER_DATA_EXPORT_RECLAIM_JOB_NAME } from '@/domains/user/sub-domains/user-data-export/workers/user-data-export-reclaim.constants.js';
 import { STRIPE_WEBHOOK_EVENT_CATCHUP_QUEUE_NAME } from '@/domains/billing/sub-domains/stripe-webhook/workers/stripe-webhook-event-catchup.constants.js';
 import { STRIPE_WEBHOOK_EVENT_RETENTION_QUEUE_NAME } from '@/domains/billing/sub-domains/stripe-webhook/workers/stripe-webhook-event-retention.constants.js';
 import { AUDIT_EXPORT_QUEUE_NAME } from '@/domains/audit/workers/audit-export.constants.js';
@@ -103,6 +105,8 @@ const DEFAULT_STRIPE_WEBHOOK_EVENT_CATCHUP_CRON = '*/15 * * * *';
 // Every five minutes: with the 5-minute stale cutoff, a delivery whose enqueue was lost goes out
 // within about ten minutes of Redis taking writes again.
 const DEFAULT_WEBHOOK_DELIVERY_RECLAIM_CRON = '*/5 * * * *';
+/** Every five minutes, like the other lost-enqueue sweeps: a user is waiting for the export. */
+const DEFAULT_USER_DATA_EXPORT_RECLAIM_CRON = '*/5 * * * *';
 /** Hourly: lost seat-sync enqueues and lapsed dunning entitlements. */
 const DEFAULT_SUBSCRIPTION_SEAT_RECONCILE_CRON = '17 * * * *';
 const DEFAULT_STRIPE_WEBHOOK_EVENT_RETENTION_CRON = '0 3 * * *';
@@ -192,6 +196,61 @@ function getTombstoneRetentionScheduledJobs(timezone: string | undefined): Sched
 }
 
 /**
+ * The sweeps that recover work a lost enqueue or a missed event left behind — each re-adds what its
+ * Postgres rows (or Stripe) say is still owed. Kept apart from the retention crons in
+ * {@link getScheduledJobs}.
+ */
+function getRecoverySweepScheduledJobs(timezone: string | undefined): ScheduledJob[] {
+  return [
+    withSchedulerTimezone(timezone, {
+      queueName: MAIL_OUTBOX_SWEEPER_QUEUE_NAME,
+      schedulerId: 'mail-outbox-sweeper',
+      jobName: 're-enqueue-stale-pending-mail',
+      cronPattern: env.MAIL_OUTBOX_SWEEPER_CRON ?? DEFAULT_MAIL_OUTBOX_SWEEPER_CRON,
+    }),
+    withSchedulerTimezone(timezone, {
+      queueName: UPLOAD_PENDING_SWEEP_QUEUE_NAME,
+      schedulerId: 'upload-pending-sweep',
+      jobName: 'reconcile-stale-pending-uploads',
+      cronPattern: env.UPLOAD_PENDING_SWEEP_CRON ?? DEFAULT_UPLOAD_PENDING_SWEEP_CRON,
+    }),
+    withSchedulerTimezone(timezone, {
+      queueName: STRIPE_WEBHOOK_EVENT_RECLAIM_QUEUE_NAME,
+      schedulerId: 'stripe-webhook-event-reclaim',
+      jobName: 'reclaim-failed-stripe-webhook-events',
+      cronPattern:
+        env.STRIPE_WEBHOOK_EVENT_RECLAIM_CRON ?? DEFAULT_STRIPE_WEBHOOK_EVENT_RECLAIM_CRON,
+    }),
+    withSchedulerTimezone(timezone, {
+      queueName: STRIPE_WEBHOOK_EVENT_CATCHUP_QUEUE_NAME,
+      schedulerId: 'stripe-webhook-event-catchup',
+      jobName: 'catchup-missing-stripe-webhook-events',
+      cronPattern:
+        env.STRIPE_WEBHOOK_EVENT_CATCHUP_CRON ?? DEFAULT_STRIPE_WEBHOOK_EVENT_CATCHUP_CRON,
+    }),
+    withSchedulerTimezone(timezone, {
+      queueName: SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME,
+      schedulerId: 'subscription-seat-reconcile',
+      jobName: SUBSCRIPTION_SEAT_RECONCILE_JOB_NAME,
+      cronPattern: DEFAULT_SUBSCRIPTION_SEAT_RECONCILE_CRON,
+    }),
+    withSchedulerTimezone(timezone, {
+      queueName: WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME,
+      schedulerId: 'webhook-delivery-reclaim',
+      jobName: 're-enqueue-stale-pending-webhook-deliveries',
+      cronPattern: DEFAULT_WEBHOOK_DELIVERY_RECLAIM_CRON,
+    }),
+    // The export queue's lost-enqueue sweep rides the export queue itself (run by its worker).
+    withSchedulerTimezone(timezone, {
+      queueName: USER_DATA_EXPORT_QUEUE_NAME,
+      schedulerId: 'user-data-export-reclaim',
+      jobName: USER_DATA_EXPORT_RECLAIM_JOB_NAME,
+      cronPattern: DEFAULT_USER_DATA_EXPORT_RECLAIM_CRON,
+    }),
+  ];
+}
+
+/**
  * Canonical list of repeatable cleanup jobs (queue identity from domain constants).
  */
 export function getScheduledJobs(): ScheduledJob[] {
@@ -275,44 +334,7 @@ export function getScheduledJobs(): ScheduledJob[] {
       // sec-new-Q1: allow operators to override the default schedule via env.
       cronPattern: env.COMMIT_DISPATCH_RECOVERY_CRON ?? DEFAULT_COMMIT_DISPATCH_RECOVERY_CRON,
     }),
-    withSchedulerTimezone(timezone, {
-      queueName: MAIL_OUTBOX_SWEEPER_QUEUE_NAME,
-      schedulerId: 'mail-outbox-sweeper',
-      jobName: 're-enqueue-stale-pending-mail',
-      cronPattern: env.MAIL_OUTBOX_SWEEPER_CRON ?? DEFAULT_MAIL_OUTBOX_SWEEPER_CRON,
-    }),
-    withSchedulerTimezone(timezone, {
-      queueName: UPLOAD_PENDING_SWEEP_QUEUE_NAME,
-      schedulerId: 'upload-pending-sweep',
-      jobName: 'reconcile-stale-pending-uploads',
-      cronPattern: env.UPLOAD_PENDING_SWEEP_CRON ?? DEFAULT_UPLOAD_PENDING_SWEEP_CRON,
-    }),
-    withSchedulerTimezone(timezone, {
-      queueName: STRIPE_WEBHOOK_EVENT_RECLAIM_QUEUE_NAME,
-      schedulerId: 'stripe-webhook-event-reclaim',
-      jobName: 'reclaim-failed-stripe-webhook-events',
-      cronPattern:
-        env.STRIPE_WEBHOOK_EVENT_RECLAIM_CRON ?? DEFAULT_STRIPE_WEBHOOK_EVENT_RECLAIM_CRON,
-    }),
-    withSchedulerTimezone(timezone, {
-      queueName: STRIPE_WEBHOOK_EVENT_CATCHUP_QUEUE_NAME,
-      schedulerId: 'stripe-webhook-event-catchup',
-      jobName: 'catchup-missing-stripe-webhook-events',
-      cronPattern:
-        env.STRIPE_WEBHOOK_EVENT_CATCHUP_CRON ?? DEFAULT_STRIPE_WEBHOOK_EVENT_CATCHUP_CRON,
-    }),
-    withSchedulerTimezone(timezone, {
-      queueName: SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME,
-      schedulerId: 'subscription-seat-reconcile',
-      jobName: SUBSCRIPTION_SEAT_RECONCILE_JOB_NAME,
-      cronPattern: DEFAULT_SUBSCRIPTION_SEAT_RECONCILE_CRON,
-    }),
-    withSchedulerTimezone(timezone, {
-      queueName: WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME,
-      schedulerId: 'webhook-delivery-reclaim',
-      jobName: 're-enqueue-stale-pending-webhook-deliveries',
-      cronPattern: DEFAULT_WEBHOOK_DELIVERY_RECLAIM_CRON,
-    }),
+    ...getRecoverySweepScheduledJobs(timezone),
   ];
 }
 

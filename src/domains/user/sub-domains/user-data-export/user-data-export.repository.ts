@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNotNull, lt } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
 import { DEFAULT_REPOSITORY_LIST_LIMIT } from '@/shared/constants/query-limits.constants.js';
 import { capListWithWarning } from '@/shared/utils/infrastructure/list-cap.util.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
@@ -8,6 +8,7 @@ import {
   resolveRepositoryDatabaseHandle,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { user_data_exports } from '@/domains/user/sub-domains/user-data-export/user-data-export.schema.js';
+import { users } from '@/domains/user/user.schema.js';
 import {
   USER_DATA_EXPORT_STATUSES,
   type UserDataExportStatus,
@@ -157,31 +158,6 @@ export class UserDataExportRepository {
     return updated ?? null;
   }
 
-  /**
-   * Fails an export whose job never reached the queue (its post-commit enqueue failed), keyed by
-   * the export's public id. Runs under the owner's scope — RLS limits the update to that user's
-   * rows — and only while the export is still `pending`, so one a worker already picked up is
-   * left alone. Returns whether a row changed.
-   */
-  async markEnqueueFailed(export_public_id: string): Promise<boolean> {
-    const rows = await this.db()
-      .update(user_data_exports)
-      .set({
-        status: USER_DATA_EXPORT_STATUSES.FAILED,
-        failed_at: new Date(),
-        error_code: 'enqueue_failed',
-        updated_at: new Date(),
-      })
-      .where(
-        and(
-          eq(user_data_exports.public_id, export_public_id),
-          eq(user_data_exports.status, USER_DATA_EXPORT_STATUSES.PENDING),
-        ),
-      )
-      .returning({ id: user_data_exports.id });
-    return rows.length > 0;
-  }
-
   async deleteAllByUserId(user_id: number): Promise<number> {
     const deleted = await this.db()
       .delete(user_data_exports)
@@ -217,6 +193,34 @@ export async function findExpiredExportsWithObjectBefore(
     .orderBy(asc(user_data_exports.id))
     .limit(page.limit);
   return rows.flatMap((row) => (row.s3_key === null ? [] : [{ ...row, s3_key: row.s3_key }]));
+}
+
+/**
+ * Exports still `pending` that were requested before `createdBefore`, oldest first, with their
+ * owner's public id — the reclaim's read (retention maintenance context). A deleted user's exports
+ * are left out: the export job can no longer load the user.
+ */
+export async function findStalePendingExports(
+  databaseHandle: WorkerDatabaseHandle,
+  options: { createdBefore: Date; limit: number },
+): Promise<Array<{ exportPublicId: string; userPublicId: string }>> {
+  assertWorkerDatabaseContext(['global_retention_cleanup']);
+  return databaseHandle
+    .select({
+      exportPublicId: user_data_exports.public_id,
+      userPublicId: users.public_id,
+    })
+    .from(user_data_exports)
+    .innerJoin(users, eq(user_data_exports.user_id, users.id))
+    .where(
+      and(
+        eq(user_data_exports.status, USER_DATA_EXPORT_STATUSES.PENDING),
+        lt(user_data_exports.created_at, options.createdBefore),
+        isNull(users.deleted_at),
+      ),
+    )
+    .orderBy(asc(user_data_exports.created_at))
+    .limit(options.limit);
 }
 
 /** Hard-deletes export rows by internal id — after their objects are gone (maintenance context). */

@@ -1,3 +1,5 @@
+import { request as httpRequest } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -40,9 +42,38 @@ async function buildApplication(): Promise<FastifyInstance> {
   );
   const application = Fastify({ logger: false });
   await application.register(requestLifecycleMiddleware);
+  // Registered after the coordinator, like the idempotency snapshot: its onSend runs earlier.
+  application.addHook('onSend', async (_request, _reply, payload) => {
+    callOrder.push('instance_on_send');
+    return payload;
+  });
   application.post('/probe', async () => ({ ok: true }));
+  application.post('/slow', async () => {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    callOrder.push('handler_done');
+    return { ok: true };
+  });
   await application.ready();
   return application;
+}
+
+/** Sends `POST /slow` to a listening server and disconnects while the handler is still running. */
+async function abortWhileTheHandlerRuns(application: FastifyInstance): Promise<void> {
+  await application.listen({ port: 0, host: '127.0.0.1' });
+  const { port } = application.server.address() as AddressInfo;
+  await new Promise<void>((resolve) => {
+    const clientRequest = httpRequest({
+      host: '127.0.0.1',
+      port,
+      method: 'POST',
+      path: '/slow',
+      headers: { 'content-type': 'application/json' },
+    });
+    clientRequest.on('error', () => resolve());
+    clientRequest.on('close', () => resolve());
+    clientRequest.end('{}');
+    setTimeout(() => clientRequest.destroy(), 30);
+  });
 }
 
 describe('request-lifecycle middleware: onResponse step ordering', () => {
@@ -67,7 +98,7 @@ describe('request-lifecycle middleware: onResponse step ordering', () => {
       expect.anything(),
     );
     expect(flushOnCommitMock).toHaveBeenCalledExactlyOnceWith({ requestId: expect.any(String) });
-    expect(callOrder).toEqual(['idempotency', 'outbox_flush']);
+    expect(callOrder).toEqual(['instance_on_send', 'idempotency', 'outbox_flush']);
 
     await application.close();
   });
@@ -81,7 +112,7 @@ describe('request-lifecycle middleware: onResponse step ordering', () => {
 
     const response = await application.inject({ method: 'POST', url: '/probe' });
     expect(response.statusCode).toBe(200);
-    expect(callOrder).toEqual(['idempotency_threw', 'outbox_flush']);
+    expect(callOrder).toEqual(['instance_on_send', 'idempotency_threw', 'outbox_flush']);
 
     await application.close();
   });
@@ -95,8 +126,41 @@ describe('request-lifecycle middleware: onResponse step ordering', () => {
 
     const response = await application.inject({ method: 'POST', url: '/probe' });
     expect(response.statusCode).toBe(200);
-    expect(callOrder).toEqual(['idempotency', 'outbox_flush_threw']);
+    expect(callOrder).toEqual(['instance_on_send', 'idempotency', 'outbox_flush_threw']);
 
     await application.close();
+  });
+
+  it('still runs both steps, once, when the client disconnects before the handler finishes', async () => {
+    const application = await buildApplication();
+
+    await abortWhileTheHandlerRuns(application);
+    // Fastify never runs onResponse for a response that cannot be written: without the fallback
+    // the idempotency placeholder outlived the write and the side-effect jobs were never enqueued.
+    await vi.waitFor(() => expect(flushOnCommitMock).toHaveBeenCalledOnce());
+
+    expect(idempotencyOnResponseMock).toHaveBeenCalledOnce();
+    // After the handler and every instance-level onSend (the idempotency snapshot), never before.
+    expect(callOrder).toEqual(['handler_done', 'instance_on_send', 'idempotency', 'outbox_flush']);
+
+    await application.close();
+  });
+
+  it('runs the steps once on a normal response over a real socket (finish, then close)', async () => {
+    const application = await buildApplication();
+    await application.listen({ port: 0, host: '127.0.0.1' });
+
+    const response = await fetch(
+      `http://127.0.0.1:${(application.server.address() as AddressInfo).port}/probe`,
+      {
+        method: 'POST',
+      },
+    );
+    expect(response.status).toBe(200);
+    await vi.waitFor(() => expect(flushOnCommitMock).toHaveBeenCalledOnce());
+    await application.close();
+
+    expect(idempotencyOnResponseMock).toHaveBeenCalledOnce();
+    expect(flushOnCommitMock).toHaveBeenCalledOnce();
   });
 });

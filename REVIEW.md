@@ -9,7 +9,7 @@ are enforced by gates — do not re-litigate what a gate already proves.
 
 | Severity | Meaning | Examples in this repo |
 | -------- | ------- | --------------------- |
-| **critical** | Data loss, tenant leakage, security hole, money wrong | Missing/weakened RLS policy; query path that skips the `app.current_organization_id` GUC; billing ledger mutated in place; secret committed |
+| **critical** | Data loss, tenant leakage, security hole, money wrong | Missing/weakened RLS policy; query path that skips the `app.current_organization_public_id` GUC (a context wrapper); billing ledger mutated in place; secret committed |
 | **major** | Correctness bug a user or worker will hit | Worker calling `getRequestDatabase()`; idempotent write missing the `X-Idempotency-Key` 422/409 flow; wrong method→status mapping; unhandled promise in an event handler |
 | **minor** | Contract or convention drift that gates may not catch | Response body key in camelCase; route param named `{id}`; raw user-facing string instead of an i18n key; cross-domain repository/schema import from a service |
 | **nit** | Style/preference — cap at 2 per review, or omit | Naming taste, comment phrasing |
@@ -22,8 +22,8 @@ are enforced by gates — do not re-litigate what a gate already proves.
 2. **Money paths** — billing ledgers are append-only; Stripe mutations forward
    the client `X-Idempotency-Key` as Stripe's `idempotencyKey`.
 3. **API contract** — snake_case body keys and route params, semantic
-   `{plan_id}`-style params, `<prefix>_<21>` public ids, GET 200 / POST 201 /
-   PUT/PATCH 200 / DELETE 204.
+   `{plan_id}`-style params, `<prefix>_<21>` public ids, success 200 for every
+   method except DELETE (204) — POST included (`method-status-policy.middleware.ts`).
 4. **Layer discipline** — controllers coordinate; services own intent (no raw
    SQL); repositories own SQL; cross-domain access only via the other domain's
    service.

@@ -56,11 +56,17 @@ single box, more API processes make it slower.
 
 ## The load-shed valve
 
-`overload-guard.middleware.ts` returns `503` with `Retry-After: 1` when either
-event-loop lag crosses its threshold or in-flight database units of work reach
-`ceil(DATABASE_POOL_MAX × OVERLOAD_DB_POOL_SHED_RATIO)`. The default ratio is
-ten; the count includes units waiting for a connection as well as running
-transactions. Liveness, readiness and metrics paths bypass this guard.
+`overload-guard.middleware.ts` returns `503` with `Retry-After: 1` when
+event-loop lag crosses its threshold, when in-flight database units of work reach
+`ceil(DATABASE_POOL_MAX × OVERLOAD_DB_POOL_SHED_RATIO)`, or when the oldest unit
+of work still waiting for a connection has waited `OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS`
+(default 2 s). The default ratio is ten; the count includes every pooled unit of
+work — organization, user-only, session, maintenance and `withTransaction` —
+waiting for a connection as well as running. The wait condition covers a slow
+database: holds of seconds keep the queue short but undrained, so the ratio never
+trips while each waiter would otherwise fail slowly at
+`DATABASE_POOL_ACQUIRE_TIMEOUT_MS`. Liveness, readiness and metrics paths bypass
+this guard.
 
 The default pool of 30 therefore admits 300 in-flight units of work: a
 synchronized burst of 240 distinct users queues for a connection (bounded by
@@ -75,8 +81,9 @@ The API also opens its whole pool before it starts listening
 every connection handshake under its first burst.
 
 The structured `request.service_unavailable` log identifies the triggering signal
-as `event_loop_overload` or `database_pool_overload` in its `reason` field. If both
-signals cross their thresholds, event-loop overload takes precedence. Internal
+as `event_loop_overload`, `database_pool_overload` or `database_pool_wait_overload`
+in its `reason` field. When several cross their thresholds, they take precedence in
+that order. Internal
 reasons remain absent from the HTTP error body. A calm event loop therefore does
 not rule out deliberate database-pressure shedding. Compare checkout pressure,
 transaction duration and PostgreSQL activity before diagnosing the bottleneck;

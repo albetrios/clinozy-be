@@ -49,6 +49,8 @@ const productionRequiredBase = {
   RESEND_API_KEY: 're_production_fixture_key',
   EMAIL_FROM_ADDRESS: 'noreply@example.com',
   WEBAUTHN_RP_ID: 'app.example.com',
+  // Production cannot start without error reporting.
+  SENTRY_DSN: 'https://public@o0.ingest.sentry.io/0',
   ...productionRedisTopology,
 };
 
@@ -343,6 +345,41 @@ describe('env-schema', () => {
       ALLOWED_ORIGINS: 'https://app.example.com,https://admin.example.com',
     });
     expect(parsed.success).toBe(true);
+  });
+
+  it('requires SENTRY_DSN in production — without it every alert is dropped silently', () => {
+    const { SENTRY_DSN: _sentryDsn, ...withoutSentry } = productionRequiredBase;
+    const parsed = envSchema.safeParse(withoutSentry);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues.map((issue) => issue.path.join('.'))).toContain('SENTRY_DSN');
+
+    // Outside production Sentry stays optional (local errors would spend the hosted quota).
+    expect(envSchema.safeParse({ ...commonRequiredBase, NODE_ENV: 'development' }).success).toBe(
+      true,
+    );
+  });
+
+  it('rejects a socket inactivity timeout shorter than the pool wait plus a Stripe call', () => {
+    // 10 s (the old default) cut a handler waiting on the pool (10 s) or Stripe (30 s).
+    const tooShort = envSchema.safeParse({
+      ...commonRequiredBase,
+      NODE_ENV: 'development',
+      FASTIFY_CONNECTION_TIMEOUT_MS: '10000',
+    });
+    expect(tooShort.success).toBe(false);
+    expect(tooShort.error?.issues.map((issue) => issue.path.join('.'))).toContain(
+      'FASTIFY_CONNECTION_TIMEOUT_MS',
+    );
+
+    for (const allowed of [undefined, '0', '40000']) {
+      expect(
+        envSchema.safeParse({
+          ...commonRequiredBase,
+          NODE_ENV: 'development',
+          ...(allowed === undefined ? {} : { FASTIFY_CONNECTION_TIMEOUT_MS: allowed }),
+        }).success,
+      ).toBe(true);
+    }
   });
 
   it('rejects BLOCK_DISPOSABLE_EMAIL=false in production (Category-B)', () => {

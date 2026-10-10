@@ -41,7 +41,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-code-quality-guard/SKILL.md",
-      "computedHash": "58175bf2b330d885990b3c25423bbc61079a6166e929960b9f6056f86000c3d8"
+      "computedHash": "bcbe7198b4628fbe5db6af01f80f922a2852c81709588b2126b07aba234d8a94"
     },
     "be-code-smells-and-best-practices": {
       "source": "local",
@@ -263,7 +263,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-workers-events/SKILL.md",
-      "computedHash": "832e45dfbc1dd51a4135d11e1dada79a02abb1c546c1144684431a2599428b04"
+      "computedHash": "66aa424a9b2e20f77c3e5d092e6fa07e4050862c8466d823bc5e5165357bdca1"
     },
     "ponytail": {
       "source": "DietrichGebert/ponytail",

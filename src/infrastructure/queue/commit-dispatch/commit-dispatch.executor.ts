@@ -3,7 +3,6 @@ import { createWorkerNotificationRepository } from '@/domains/notify/sub-domains
 import { invalidateCachedUnreadNotificationCount } from '@/domains/notify/sub-domains/notification/notification-unread-count.cache.js';
 import { enqueueNotification } from '@/domains/notify/sub-domains/notification/queues/notification.queue.js';
 import { enqueueUserDataExport } from '@/domains/user/sub-domains/user-data-export/queues/user-data-export.queue.js';
-import { createWorkerUserDataExportRepository } from '@/domains/user/sub-domains/user-data-export/user-data-export.repository.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import type { CommitDispatchTask } from '@/infrastructure/queue/commit-dispatch/commit-dispatch.types.js';
 import {
@@ -67,16 +66,11 @@ export async function executeCommitDispatchTask(task: CommitDispatchTask): Promi
           userPublicId: task.userPublicId,
         });
       } catch (error) {
+        // The row stays `pending`: an enqueue error never fails a row-backed job — the
+        // `reclaim-pending-user-data-exports` sweep re-enqueues it once Redis takes writes again.
         logger.error(
           { error, exportPublicId: task.exportPublicId, userPublicId: task.userPublicId },
           'commit-dispatch.user_data_export.enqueue_failed',
-        );
-        await withAppDatabaseContext(
-          PRINCIPAL_SCOPE.VERIFIED({ userPublicId: task.userPublicId }),
-          (databaseHandle) =>
-            createWorkerUserDataExportRepository(databaseHandle).markEnqueueFailed(
-              task.exportPublicId,
-            ),
         );
       }
       return;

@@ -1035,8 +1035,10 @@ src/
     │   │   ├── user-data-export/
     │   │   │   ├── __tests__/
     │   │   │   │   ├── integration/
+    │   │   │   │   │   ├── user-data-export-reclaim.integration.test.ts
     │   │   │   │   │   └── user-data-export.integration.test.ts
     │   │   │   │   ├── unit/
+    │   │   │   │   │   ├── user-data-export-reclaim.processor.unit.test.ts
     │   │   │   │   │   ├── user-data-export-retention.processor.unit.test.ts
     │   │   │   │   │   ├── user-data-export-retention.worker.unit.test.ts
     │   │   │   │   │   ├── user-data-export.controller.unit.test.ts
@@ -1059,6 +1061,8 @@ src/
     │   │   │   │   ├── user-data-export.bulk.seed.ts
     │   │   │   │   └── user-data-export.faker.ts
     │   │   │   ├── workers/
+    │   │   │   │   ├── user-data-export-reclaim.constants.ts
+    │   │   │   │   ├── user-data-export-reclaim.processor.ts
     │   │   │   │   ├── user-data-export-retention.constants.ts
     │   │   │   │   ├── user-data-export-retention.processor.ts
     │   │   │   │   ├── user-data-export-retention.worker.ts

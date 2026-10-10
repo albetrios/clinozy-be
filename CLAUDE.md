@@ -312,6 +312,7 @@ Typical flow: `service` → `eventBus.emit` → handler → `recordOutboxEmail()
 | `registerMemberInvitationEventHandlers` | `MEMBER_INVITATION_EVENT.CREATED`, `RESENT`                                           | Mail queue              |
 | `registerNotifyEventHandlers`           | `NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED`                                             | BullMQ webhook delivery |
 | `registerNotifyEventHandlers`           | `ORGANIZATION_EVENT.*`, `MEMBERSHIP_EVENT.*`, `SUBSCRIPTION_EVENT.*`                  | Webhook delivery attempts |
+| `registerNotifyEventHandlers`           | `MEMBER_INVITATION_EVENT.ACCEPTED`                                                    | In-app notification     |
 
 ## Key Patterns
 

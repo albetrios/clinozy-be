@@ -6,6 +6,7 @@ import {
   runWithPinnedDatabaseHandle,
   type RequestScopedPostgresDatabase,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
+import { runPooledUnitOfWork } from '@/infrastructure/database/contexts/database-context.js';
 import { TEN_SECONDS_MS } from '@/shared/constants/ttl.constants.js';
 
 /** Options passed to {@link withTransaction} — per-transaction statement timeout and isolation level. */
@@ -23,7 +24,8 @@ export interface TransactionOptions {
  * The timeout is set per-transaction to prevent runaway queries.
  *
  * SET LOCAL is executed via the transaction client (not the global pool)
- * so the timeout applies only within this transaction's connection.
+ * so the timeout applies only within this transaction's connection. Runs as a pooled unit of work
+ * like every database context: counted by the overload guard, bounded by the acquire deadline.
  */
 export async function withTransaction<T>(
   callback: (transaction: unknown) => Promise<T>,
@@ -32,18 +34,23 @@ export async function withTransaction<T>(
   const timeoutMs = options?.timeoutMs ?? TEN_SECONDS_MS;
   const isolationLevel = options?.isolationLevel ?? 'read committed';
 
-  return database.transaction(
-    async (transaction) => {
-      await transaction.execute(
-        drizzleSql`SET LOCAL statement_timeout = ${drizzleSql.raw(String(timeoutMs))}`,
-      );
+  return runPooledUnitOfWork({
+    path: 'plain_transaction',
+    openTransaction: (claimConnection) =>
+      database.transaction(
+        async (transaction) => {
+          claimConnection();
+          await transaction.execute(
+            drizzleSql`SET LOCAL statement_timeout = ${drizzleSql.raw(String(timeoutMs))}`,
+          );
 
-      return callback(transaction);
-    },
-    {
-      isolationLevel,
-    },
-  );
+          return callback(transaction);
+        },
+        {
+          isolationLevel,
+        },
+      ),
+  });
 }
 
 /**

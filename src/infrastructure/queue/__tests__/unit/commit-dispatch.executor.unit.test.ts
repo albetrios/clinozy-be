@@ -6,7 +6,6 @@ const {
   enqueueNotificationMock,
   deleteNotificationByPublicIdMock,
   enqueueUserDataExportMock,
-  markExportEnqueueFailedMock,
   invalidateUnreadCountMock,
   appContextScopes,
 } = vi.hoisted(() => ({
@@ -14,7 +13,6 @@ const {
   enqueueNotificationMock: vi.fn().mockResolvedValue(undefined),
   deleteNotificationByPublicIdMock: vi.fn().mockResolvedValue(undefined),
   enqueueUserDataExportMock: vi.fn().mockResolvedValue(undefined),
-  markExportEnqueueFailedMock: vi.fn().mockResolvedValue(true),
   invalidateUnreadCountMock: vi.fn().mockResolvedValue(undefined),
   appContextScopes: [] as unknown[],
 }));
@@ -57,10 +55,6 @@ vi.mock('@/domains/user/sub-domains/user-data-export/queues/user-data-export.que
   enqueueUserDataExport: (...arguments_: unknown[]) => enqueueUserDataExportMock(...arguments_),
 }));
 
-vi.mock('@/domains/user/sub-domains/user-data-export/user-data-export.repository.js', () => ({
-  createWorkerUserDataExportRepository: () => ({ markEnqueueFailed: markExportEnqueueFailedMock }),
-}));
-
 const MAIL_OUTBOX_TOKEN = '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f';
 const NOTIFICATION_PUBLIC_ID = 'ntf_9z3rura5kqvcv8zggriym';
 const USER_PUBLIC_ID = 'usr_0y8vf3ktxqnhcm1ze21ab';
@@ -74,7 +68,6 @@ describe('executeCommitDispatchTask', () => {
     deleteNotificationByPublicIdMock.mockClear();
     enqueueUserDataExportMock.mockReset();
     enqueueUserDataExportMock.mockResolvedValue(undefined);
-    markExportEnqueueFailedMock.mockClear();
     invalidateUnreadCountMock.mockClear();
     appContextScopes.length = 0;
   });
@@ -137,10 +130,9 @@ describe('executeCommitDispatchTask', () => {
       exportPublicId: EXPORT_PUBLIC_ID,
       userPublicId: USER_PUBLIC_ID,
     });
-    expect(markExportEnqueueFailedMock).not.toHaveBeenCalled();
   });
 
-  it("fails the still-pending export under its owner's scope when the enqueue fails", async () => {
+  it('leaves the export pending for the reclaim sweep when the enqueue fails', async () => {
     enqueueUserDataExportMock.mockRejectedValueOnce(new Error('redis unavailable'));
 
     await execute({
@@ -149,7 +141,8 @@ describe('executeCommitDispatchTask', () => {
       userPublicId: USER_PUBLIC_ID,
     });
 
-    expect(appContextScopes).toEqual([expect.objectContaining({ userPublicId: USER_PUBLIC_ID })]);
-    expect(markExportEnqueueFailedMock).toHaveBeenCalledWith(EXPORT_PUBLIC_ID);
+    // An enqueue error never fails a row-backed job: the row is the outbox, and
+    // `reclaim-pending-user-data-exports` re-enqueues it once Redis takes writes again.
+    expect(appContextScopes).toEqual([]);
   });
 });

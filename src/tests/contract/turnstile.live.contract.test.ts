@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
-/** Cloudflare's published Turnstile test secrets: one always passes, one always fails. */
+/**
+ * Cloudflare's published Turnstile test secrets: one always passes, one always fails. Public
+ * documentation values, not credentials — hence the semgrep suppressions.
+ */
+// nosemgrep: generic.secrets.security.detected-generic-secret.detected-generic-secret
 const ALWAYS_PASSES_SECRET = '1x0000000000000000000000000000000AA';
+// nosemgrep: generic.secrets.security.detected-generic-secret.detected-generic-secret
 const ALWAYS_FAILS_SECRET = '2x0000000000000000000000000000000AA';
 
 const turnstileEnvironment = vi.hoisted(() => ({ secret: '' }));

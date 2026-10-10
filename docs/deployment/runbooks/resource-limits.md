@@ -152,7 +152,8 @@ Organization-scoped HTTP routes hold **one pool checkout per unit of work** via 
 > requests. Steady-state RPS ≈ `DATABASE_POOL_MAX / avg_request_seconds` per process (e.g. 20 / 0.05s
 > ≈ 400 RPS). Beyond that, units of work queue for a connection. The overload guard sheds new requests
 > with 503 + `Retry-After` once ten times the pool is in flight, running plus waiting
-> (`OVERLOAD_DB_POOL_SHED_RATIO`, default 10); a unit of work that still cannot get a connection within
+> (`OVERLOAD_DB_POOL_SHED_RATIO`, default 10), or once the oldest waiter has waited
+> `OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS` (default 2 s — a slow database); a unit of work that still cannot get a connection within
 > `DATABASE_POOL_ACQUIRE_TIMEOUT_MS` gets the same 503, and a running statement past the 5s HTTP
 > statement timeout surfaces as a 504. Scale by raising `DATABASE_POOL_MAX` (within the connection budget above) or
 > adding API replicas; watch the `database.pool.exhaustion.*` Sentry alerts (warn 80% / crit 95%).
@@ -169,7 +170,7 @@ Organization-scoped HTTP routes hold **one pool checkout per unit of work** via 
 | Variable                             | Default | Scope                                                                                                                                                                                             |
 | ------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `FASTIFY_REQUEST_TIMEOUT_MS`         | `30000` | Entire HTTP request (Fastify)                                                                                                                                                                     |
-| `FASTIFY_CONNECTION_TIMEOUT_MS`      | `10000` | TCP connection accept                                                                                                                                                                             |
+| `FASTIFY_CONNECTION_TIMEOUT_MS`      | unset (off) | Socket inactivity — a socket with no bytes in or out this long is destroyed, a handler still waiting on the pool or Stripe included. When set, at least `DATABASE_POOL_ACQUIRE_TIMEOUT_MS` + `STRIPE_HTTP_TIMEOUT_MS` (env refine) |
 | `DATABASE_HTTP_STATEMENT_TIMEOUT_MS` | `5000`  | Connection-level `statement_timeout` for HTTP handlers (scoped RLS contexts only)                                                                                                                   |
 | `DATABASE_POOL_ACQUIRE_TIMEOUT_MS`   | `10000` | Getting a pooled connection for a unit of work — 503 + `Retry-After` past it, and a late connection rolls back unrun; `0` disables |
 | `DATABASE_STATEMENT_TIMEOUT_MS`      | `30000` | Connection-level default for workers and long-running queries                                                                                                                                     |
