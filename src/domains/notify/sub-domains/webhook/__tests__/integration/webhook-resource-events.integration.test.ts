@@ -472,6 +472,49 @@ describe('Integration: organization resource events reach subscribed webhooks', 
     expect(allowed.statusCode, allowed.body).toBe(200);
   });
 
+  it('updating a webhook needs the read permissions behind the events it already receives', async () => {
+    // The owner subscribed it to member events; a webhook-only manager must not repoint it.
+    const subscribed = await createSubscribedOrganization(['membership.created']);
+    const webhookOnlyRole = await createRoleWithPermissions({
+      organizationId: subscribed.organization.id,
+      permissionCodes: ['webhook:read', 'webhook:manage'],
+      createdByUserId: subscribed.owner.id,
+    });
+    const manager = await createTestUser();
+    await createMembership({
+      userId: manager.id,
+      organizationId: subscribed.organization.id,
+      roleId: webhookOnlyRole.id,
+    });
+    const managerToken = await generateTestToken({
+      userId: manager.public_id,
+      organizationPublicId: subscribed.organization.public_id,
+    });
+
+    for (const payload of [{ url: 'https://example.com/elsewhere' }, { is_enabled: false }]) {
+      const refused = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath(`/notify/webhooks/${subscribed.webhook.public_id}`),
+        token: managerToken,
+        payload,
+      });
+      // Its pending membership attempts would go to the new URL at delivery time.
+      expect(refused.statusCode, refused.body).toBe(403);
+    }
+
+    const organizationOnly = await createSubscribedOrganization(
+      ['organization.updated'],
+      ['webhook:read', 'webhook:manage'],
+    );
+    const allowed = await injectAuthenticated(app, {
+      method: 'PATCH',
+      url: testApiPath(`/notify/webhooks/${organizationOnly.webhook.public_id}`),
+      token: organizationOnly.token,
+      payload: { url: 'https://example.com/elsewhere' },
+    });
+    expect(allowed.statusCode, allowed.body).toBe(200);
+  });
+
   it('a Stripe sync that changes no customer-visible field emits nothing', async () => {
     const { organization, webhook } = await createSubscribedOrganization();
     const plan = await createTestPlan();

@@ -9,6 +9,8 @@ import {
   requireOrganizationPermission,
 } from '@/shared/utils/auth/authorization.util.js';
 import { NOTIFY_PERMISSIONS } from '@/domains/notify/notify.permissions.js';
+import { requireOrganizationScope } from '@/shared/utils/http/request.util.js';
+import { validatePublicIdParam } from '@/shared/utils/identity/public-id-param.util.js';
 import type { WebhookService } from './webhook.service.js';
 import type { WebhookEventService } from './webhook-event/webhook-event.service.js';
 import { createWebhookController } from './webhook.controller.js';
@@ -27,20 +29,42 @@ import {
 
 /**
  * PreHandler for webhook create/update: the principal must hold the read permission behind every
- * subscribed event type ({@link WEBHOOK_EVENT_READ_PERMISSION}). Without it a `webhook:manage`-only
- * role or API key could subscribe to `membership.*` and receive member emails it cannot read through
- * the API. Runs after body validation, so `events` holds catalog types only.
+ * event the webhook will deliver ({@link WEBHOOK_EVENT_READ_PERMISSION}). Without it a
+ * `webhook:manage`-only role or API key could receive member emails it cannot read through the API.
+ *
+ * @remarks
+ * - **Algorithm:** create checks the requested `events`. Update (given `webhookService`) checks the
+ *   requested events AND the stored ones: an update keeps delivering what the webhook already
+ *   receives, and its pending attempts go to whatever URL the row holds at delivery time — so
+ *   pointing a `membership.*` webhook at a new URL needs `membership:read` even when `events` is
+ *   absent from the body.
+ * - **Failure modes:** 403 without a permission (with a deny audit row); 404 when the webhook to
+ *   update does not exist in the organization. Runs after body validation, so the requested
+ *   `events` hold catalog types only.
  */
-async function requireSubscribedEventReadPermissions(request: FastifyRequest): Promise<void> {
-  const { events } = (request.body ?? {}) as { events?: readonly WebhookEventType[] };
-  const permissionCodes = new Set(
-    (events ?? [])
-      .map((eventType) => WEBHOOK_EVENT_READ_PERMISSION[eventType])
-      .filter((code): code is string => code !== null),
-  );
-  for (const permissionCode of permissionCodes) {
-    await assertOrganizationPermission(request, permissionCode);
-  }
+function requireWebhookEventReadPermissions(
+  webhookService?: WebhookService,
+): (request: FastifyRequest) => Promise<void> {
+  return async (request) => {
+    const { events } = (request.body ?? {}) as { events?: readonly string[] };
+    const deliveredEvents = new Set<string>(events ?? []);
+    const { webhook_id: webhookPublicId } = (request.params ?? {}) as { webhook_id?: string };
+    if (webhookService !== undefined && webhookPublicId !== undefined) {
+      const stored = await webhookService.get(
+        requireOrganizationScope(request),
+        validatePublicIdParam(webhookPublicId, 'webhook_id'),
+      );
+      for (const eventType of stored.events as readonly string[]) deliveredEvents.add(eventType);
+    }
+    const permissionCodes = new Set<string>();
+    for (const eventType of deliveredEvents) {
+      const permissionCode = WEBHOOK_EVENT_READ_PERMISSION[eventType as WebhookEventType];
+      if (typeof permissionCode === 'string') permissionCodes.add(permissionCode);
+    }
+    for (const permissionCode of permissionCodes) {
+      await assertOrganizationPermission(request, permissionCode);
+    }
+  };
 }
 
 /**
@@ -106,7 +130,7 @@ export function webhookRoutes(
         onRequest: [app.authenticate],
         preHandler: [
           requireOrganizationPermission(NOTIFY_PERMISSIONS.WEBHOOK_MANAGE),
-          requireSubscribedEventReadPermissions,
+          requireWebhookEventReadPermissions(),
         ],
         config: { idempotencyRequired: true, ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config },
         schema: {
@@ -125,13 +149,13 @@ export function webhookRoutes(
         onRequest: [app.authenticate],
         preHandler: [
           requireOrganizationPermission(NOTIFY_PERMISSIONS.WEBHOOK_MANAGE),
-          requireSubscribedEventReadPermissions,
+          requireWebhookEventReadPermissions(webhookService),
         ],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Update webhook',
           description:
-            'Updates a webhook URL, events, or enabled status. Requires WEBHOOK_MANAGE permission, plus the read permission behind each subscribed event.',
+            'Updates a webhook URL, events, or enabled status. Requires WEBHOOK_MANAGE permission, plus the read permission behind each event the webhook already receives or will receive.',
           tags: ['Webhook'],
           params: webhookIdParamsDto,
           body: UpdateWebhookDto,

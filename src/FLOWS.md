@@ -337,7 +337,7 @@ A write changes one of the public resources the webhook catalog (`GET /api/v1/no
 | `subscription.updated` | change-plan, cancel at period end, resume, a Stripe sync that changes a customer-visible field (status, cancel at period end, cancelled at, periods, plan) |
 | `subscription.cancelled` | immediate cancel (`INCOMPLETE`), Stripe `.deleted` or a sync to `canceled` |
 
-A webhook can subscribe to an event only when its creator holds the permission the API needs to read that resource: `membership:read` for `membership.*`, `subscription:read` for `subscription.*` (`organization.*` is readable by every member).
+Creating or changing a webhook needs the permission the API needs to read each event's resource — for the events it will receive and, on a change, those it already receives (its pending attempts go to the URL it holds at delivery time): `membership:read` for `membership.*`, `subscription:read` for `subscription.*` (`organization.*` is readable by every member).
 
 ### Sequence
 
