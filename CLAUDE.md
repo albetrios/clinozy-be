@@ -455,7 +455,7 @@ Script namespaces: `ci:*`, `compose:*`, `test:*`, `validate:*`, `db:*`, `docs:*`
 
 Local SonarQube quality gate (pre-commit): `pnpm sonar:up` / `sonar:scan` / `sonar:down` / `sonar:reset`. The pre-commit hook (`pnpm guard:pre-commit`, step 17) blocks a commit when SonarQube has any open issue on the deployed-app surface; the gate is mandatory — there is no bypass, every issue must be resolved. See **`docs/reference/quality/sonarqube-local.md`**.
 
-- `pnpm build` — compile to `dist/` (`tsc` + `tsc-alias`); `pnpm build:check` fails if `@/` aliases remain
+- `pnpm build` — compile to `dist/` (`tsc` + `tsc-alias`, plus the circuit breaker's Redis Lua scripts, so `dist/` runs as-is); `pnpm build:check` fails if `@/` aliases remain
 - `pnpm dev` — run Fastify server (tsx watch)
 - `pnpm dev:worker` — run BullMQ worker process (tsx watch)
 - `pnpm dev:stack:status` / `pnpm dev:stack:stop` — the live playground stack `tooling/setup/agent/bootstrap.sh` brings up (the session-start hook launches it in every Claude Code web session; `AGENT_AUTO_STACK=0` opts out): the running step or `live`, API + worker health, logs / stop the API + worker

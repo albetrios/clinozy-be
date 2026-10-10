@@ -15,7 +15,7 @@
     "dev:worker": "tsx watch src/worker.ts",
     "dev:stack:status": "bash tooling/setup/agent/stack.sh status",
     "dev:stack:stop": "bash tooling/setup/agent/stack.sh stop",
-    "build": "tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && tsc-alias -p tsconfig.json && node -e \"require('node:fs').cpSync('src/infrastructure/resilience/lua', 'dist/src/infrastructure/resilience/lua', { recursive: true })\"",
     "build:check": "node tooling/ci/check-dist-imports.mjs",
     "start": "node dist/src/server.js",
     "start:worker": "node dist/src/worker.js",
