@@ -1,4 +1,5 @@
 import type { FastifyRequest } from 'fastify';
+import { getUserAgent } from '@/shared/utils/http/user-agent.util.js';
 import type { AuditActor, AuditLogRecordFields } from '@/domains/audit/audit.types.js';
 import type { AuthContext } from '@/shared/types/index.js';
 import { isApiKeyPrincipal } from '@/shared/utils/http/request.util.js';
@@ -23,8 +24,7 @@ export function getAuditRequestNetworkContext(request: FastifyRequest): {
 } {
   return {
     ip_address: request.ip ?? null,
-    user_agent:
-      typeof request.headers['user-agent'] === 'string' ? request.headers['user-agent'] : null,
+    user_agent: getUserAgent(request),
   };
 }
 

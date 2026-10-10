@@ -11,6 +11,15 @@ export const DEFAULT_AUDIT_OUTBOX_DRAIN_BATCH_SIZE = 500;
 export const DEFAULT_AUDIT_OUTBOX_DRAIN_MAX_ATTEMPTS = 5;
 
 /**
+ * Hours a drained (PROCESSED) outbox row is kept before the drain deletes it: `audit.logs` holds the
+ * record, and the copy — actor, IP, user agent, metadata — is only for a day of debugging.
+ */
+export const AUDIT_OUTBOX_PROCESSED_RETENTION_HOURS = 24;
+
+/** Most finished outbox rows one drain pass deletes per status — bounds the pass. */
+export const AUDIT_OUTBOX_PRUNE_BATCH_SIZE = 1_000;
+
+/**
  * Backstop threshold (sec-r7/M2): if the oldest still-PENDING outbox row is older than this many
  * seconds at the end of a drain pass, emit `audit.outbox.drain.backlog.stalled` so a wedged or
  * chronically-failing queue pages an operator even though the per-row attempt cap now bounds

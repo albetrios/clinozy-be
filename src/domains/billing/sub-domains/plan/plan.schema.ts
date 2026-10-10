@@ -42,8 +42,18 @@ export const plans = billingSchema.table(
     is_active: boolean('is_active').notNull().default(true),
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-    created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(() => users.id),
-    updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(() => users.id),
+    created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
+      () => users.id,
+      {
+        onDelete: 'set null',
+      },
+    ),
+    updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(
+      () => users.id,
+      {
+        onDelete: 'set null',
+      },
+    ),
   },
   (table) => [
     // Attribution FK indexes (partial on IS NOT NULL) from migration 20260623000000 — declared so

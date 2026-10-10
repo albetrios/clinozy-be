@@ -26,11 +26,15 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
   };
 });
 
+const deleteFinishedMailOutboxRowsCreatedBeforeMock = vi.fn().mockResolvedValue(0);
+
 vi.mock('@/infrastructure/mail/mail-outbox.repository.js', () => ({
   findStalePendingMailOutboxTokens: (...arguments_: unknown[]) =>
     findStalePendingMailOutboxTokensMock(...arguments_),
   reclaimStaleSendingMailOutboxTokens: (...arguments_: unknown[]) =>
     reclaimStaleSendingMailOutboxTokensMock(...arguments_),
+  deleteFinishedMailOutboxRowsCreatedBefore: (...arguments_: unknown[]) =>
+    deleteFinishedMailOutboxRowsCreatedBeforeMock(...arguments_),
 }));
 
 vi.mock('@/infrastructure/mail/queues/mail.queue.js', () => ({
@@ -78,6 +82,7 @@ describe('mail-outbox-sweeper.processor', () => {
       scannedCount: 2,
       reclaimedSendingCount: 0,
       reEnqueuedCount: 2,
+      prunedCount: 0,
     });
   });
 
@@ -93,6 +98,7 @@ describe('mail-outbox-sweeper.processor', () => {
       scannedCount: 2,
       reclaimedSendingCount: 1,
       reEnqueuedCount: 2,
+      prunedCount: 0,
     });
   });
 
@@ -119,5 +125,24 @@ describe('mail-outbox-sweeper.processor', () => {
     const cutoffAgeMinutes = (before - sendingCutoff.getTime()) / 60_000;
     expect(cutoffAgeMinutes).toBeGreaterThanOrEqual(9);
     expect(cutoffAgeMinutes).toBeLessThan(15);
+  });
+
+  it('deletes finished rows past their retention window on every sweep', async () => {
+    reclaimStaleSendingMailOutboxTokensMock.mockResolvedValue([]);
+    findStalePendingMailOutboxTokensMock.mockResolvedValue([]);
+    deleteFinishedMailOutboxRowsCreatedBeforeMock.mockResolvedValueOnce(7);
+
+    const result = await runMailOutboxSweeperJob();
+
+    const [olderThan, limit] = deleteFinishedMailOutboxRowsCreatedBeforeMock.mock.calls.at(-1) as [
+      Date,
+      number,
+    ];
+    // Thirty days back, bounded per pass.
+    expect(Date.now() - olderThan.getTime()).toBeGreaterThanOrEqual(
+      30 * 24 * 60 * 60 * 1000 - 1000,
+    );
+    expect(limit).toBe(1_000);
+    expect(result.prunedCount).toBe(7);
   });
 });

@@ -575,13 +575,38 @@ export class OrganizationService {
   }
 
   async delete(scope: OrganizationPrincipalDatabaseScope): Promise<void> {
+    await this.offboardOrganization(scope, { personalAllowed: false });
+  }
+
+  /**
+   * Tombstones the personal organization of a user whose account is being deleted — the only way a
+   * PERSONAL organization is ever deleted. Same steps as {@link delete}: logo and uploads removed,
+   * subscription cancelled, soft-deleted, permissions purged. No-op when it is already gone.
+   */
+  async offboardPersonalOrganization(userInternalId: number, userPublicId: string): Promise<void> {
+    const personalOrganizationPublicId = await withAppDatabaseContext(
+      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      () => this.repository.findPersonalOrganizationPublicId(userInternalId),
+    );
+    if (personalOrganizationPublicId === null) return;
+    await this.offboardOrganization(
+      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: personalOrganizationPublicId }),
+      { personalAllowed: true },
+    );
+  }
+
+  /** The deletion sequence behind {@link delete} and {@link offboardPersonalOrganization}. */
+  private async offboardOrganization(
+    scope: OrganizationPrincipalDatabaseScope,
+    options: { personalAllowed: boolean },
+  ): Promise<void> {
     const public_id = scope.organizationPublicId;
     const organization = await withAppDatabaseContext(scope, async () => {
       const found = await this.repository.findByPublicId(public_id);
       if (!found) throw new NotFoundError('Organization');
       // A PERSONAL organization is the user's own account-level workspace — it is never
-      // deletable on its own; it cascades only when the account itself is deleted.
-      assertTeamOrganization(found, 'MUTATION');
+      // deletable on its own; it goes only with the account (offboardPersonalOrganization).
+      if (!options.personalAllowed) assertTeamOrganization(found, 'MUTATION');
       const marked = await this.repository.markDeletionStarted(public_id);
       if (!(marked || found.deletion_started_at)) {
         throw new NotFoundError('Organization');

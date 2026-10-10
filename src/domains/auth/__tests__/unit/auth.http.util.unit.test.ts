@@ -20,7 +20,6 @@ import {
   getCsrfCookieOptions,
   getIpAddress,
   getSessionCookieOptions,
-  getUserAgent,
   isOauthProviderNotImplementedError,
   parseSessionCookieValue,
   readOauthNonceCookie,
@@ -28,6 +27,7 @@ import {
   setOauthNonceCookie,
   setSessionCookie,
 } from '@/domains/auth/auth.http.util.js';
+import { getUserAgent } from '@/shared/utils/http/user-agent.util.js';
 import { attachPrincipalScope } from '@/tests/helpers/principal-scope.helper.js';
 
 /**

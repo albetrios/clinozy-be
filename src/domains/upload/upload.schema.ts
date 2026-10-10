@@ -29,9 +29,10 @@ export const uploads = uploadSchema
     {
       id: bigserial('id', { mode: 'number' }).primaryKey(),
       public_id: varchar('public_id', { length: 28 }).notNull(),
-      user_id: bigint('user_id', { mode: 'number' })
-        .notNull()
-        .references(() => users.id),
+      // Nullable: an organization's file outlives its uploader's deleted account (SET NULL).
+      user_id: bigint('user_id', { mode: 'number' }).references(() => users.id, {
+        onDelete: 'set null',
+      }),
       organization_id: bigint('organization_id', { mode: 'number' }).references(
         () => organizations.id,
       ),
@@ -49,6 +50,7 @@ export const uploads = uploadSchema
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
     },
     (table) => [

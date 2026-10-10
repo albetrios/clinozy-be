@@ -43,7 +43,7 @@ export const verification_tokens = authSchema
       token_hash: varchar('token_hash', { length: 64 }).notNull().unique(),
       user_id: bigint('user_id', { mode: 'number' })
         .notNull()
-        .references(() => users.id),
+        .references(() => users.id, { onDelete: 'cascade' }),
       email: varchar('email', { length: 255 }).notNull(),
       expires_at: timestamp('expires_at', { withTimezone: true }).notNull(),
       used_at: timestamp('used_at', { withTimezone: true }),

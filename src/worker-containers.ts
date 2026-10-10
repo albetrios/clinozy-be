@@ -83,6 +83,17 @@ export function createDomainContainers(
     userDataExportService: userDomain.userDataExportService,
     // route-audit-#2 follow-up: block deleting a user who still owns organizations.
     organizationOwnership: tenancyDomain.organizationService,
+    // Account deletion leaves every organization and erases the user from webhook payloads.
+    tenancyDeparture: {
+      removeAllForDepartingUser: (userInternalId) =>
+        tenancyDomain.membershipService.removeAllForDepartingUser(userInternalId),
+      offboardPersonalOrganization: (userInternalId, userPublicId) =>
+        tenancyDomain.organizationService.offboardPersonalOrganization(
+          userInternalId,
+          userPublicId,
+        ),
+    },
+    webhookPayloadErasure: notifyDomain.webhookService,
   });
 
   tenancyDomain.organizationService.wireOffboardingUploadService(

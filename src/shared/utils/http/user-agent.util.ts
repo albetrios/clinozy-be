@@ -1,3 +1,5 @@
+import type { FastifyRequest } from 'fastify';
+
 /** Coarse device family and browser parsed from a `User-Agent` header for display in a session list. */
 export interface ParsedUserAgent {
   /** Operating-system / device family (e.g. `"iPhone"`, `"Android"`, `"Mac"`, `"Windows"`), or null. */
@@ -59,4 +61,22 @@ export function parseUserAgent(userAgent: string | null | undefined): ParsedUser
     device: matchFirst(userAgent, DEVICE_MATCHERS),
     browser: matchFirst(userAgent, BROWSER_MATCHERS),
   };
+}
+
+/**
+ * Max characters stored for a `User-Agent`: the width of the session column (`varchar(512)`) and
+ * the CHECK on the audit columns — the header is client-controlled, and unbounded it let an
+ * unauthenticated flood bloat every table that records it.
+ */
+export const USER_AGENT_MAX_LENGTH = 512;
+
+/** A `User-Agent` cut to {@link USER_AGENT_MAX_LENGTH} characters; `null` when absent or empty. */
+export function truncateUserAgent(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value.length > USER_AGENT_MAX_LENGTH ? value.slice(0, USER_AGENT_MAX_LENGTH) : value;
+}
+
+/** Returns the request `User-Agent` header truncated to {@link USER_AGENT_MAX_LENGTH} characters, or `null` when absent. */
+export function getUserAgent(request: FastifyRequest): string | null {
+  return truncateUserAgent(request.headers['user-agent']);
 }

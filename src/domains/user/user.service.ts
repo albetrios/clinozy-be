@@ -82,6 +82,45 @@ export type UserOffboardingDependencies = {
    * its members + billing — would be orphaned at a tombstoned owner). Require transfer/delete first.
    */
   organizationOwnership?: UserOrganizationOwnershipPort | undefined;
+  /**
+   * Account deletion leaves every organization: team memberships removed as a manager's removal
+   * would (seat count reconciled), the personal organization tombstoned (tenancy).
+   */
+  tenancyDeparture?: UserTenancyDeparturePort | undefined;
+  /** Erases the user's details from the stored webhook payloads of those organizations (notify). */
+  webhookPayloadErasure?: UserWebhookPayloadErasurePort | undefined;
+};
+
+/**
+ * Tenancy side of account deletion — see {@link UserOffboardingDependencies.tenancyDeparture}.
+ *
+ * @remarks
+ * - **Algorithm:** supplied structurally by the composition root — the membership service removes
+ *   the team memberships, the organization service tombstones the personal organization.
+ * - **Failure modes:** the implementers propagate; account deletion is re-runnable.
+ * - **Side effects:** none on this type.
+ */
+export type UserTenancyDeparturePort = {
+  /** Removes the user's team memberships; returns every organization they belonged to. */
+  removeAllForDepartingUser(userInternalId: number): Promise<{ organizationPublicIds: string[] }>;
+  /** Tombstones the user's personal organization (no-op when gone). */
+  offboardPersonalOrganization(userInternalId: number, userPublicId: string): Promise<void>;
+};
+
+/**
+ * Notify side of account deletion — see {@link UserOffboardingDependencies.webhookPayloadErasure}.
+ *
+ * @remarks
+ * - **Algorithm:** supplied structurally by the composition root (the webhook service), one unit
+ *   of work per organization the user belonged to.
+ * - **Failure modes:** the implementer propagates; the redaction is idempotent.
+ * - **Side effects:** none on this type.
+ */
+export type UserWebhookPayloadErasurePort = {
+  redactDepartedUserFromDeliveries(options: {
+    userPublicId: string;
+    organizationPublicIds: readonly string[];
+  }): Promise<void>;
 };
 
 /**
@@ -114,6 +153,8 @@ export class UserService {
   private offboardingUploadService: UploadService | null = null;
   private offboardingUserDataExportService: UserDataExportService | null = null;
   private offboardingOrganizationOwnership: UserOrganizationOwnershipPort | null = null;
+  private offboardingTenancyDeparture: UserTenancyDeparturePort | null = null;
+  private offboardingWebhookPayloadErasure: UserWebhookPayloadErasurePort | null = null;
   private authSessionService: AuthSessionService | null = null;
   private authMethodService: AuthMethodService | null = null;
 
@@ -128,6 +169,8 @@ export class UserService {
     this.offboardingUploadService = dependencies.uploadService;
     this.offboardingUserDataExportService = dependencies.userDataExportService;
     this.offboardingOrganizationOwnership = dependencies.organizationOwnership ?? null;
+    this.offboardingTenancyDeparture = dependencies.tenancyDeparture ?? null;
+    this.offboardingWebhookPayloadErasure = dependencies.webhookPayloadErasure ?? null;
   }
 
   private get offboardingDependencies(): UserOffboardingDependencies | null {
@@ -147,6 +190,8 @@ export class UserService {
       uploadService: this.offboardingUploadService,
       userDataExportService: this.offboardingUserDataExportService,
       organizationOwnership: this.offboardingOrganizationOwnership ?? undefined,
+      tenancyDeparture: this.offboardingTenancyDeparture ?? undefined,
+      webhookPayloadErasure: this.offboardingWebhookPayloadErasure ?? undefined,
     };
   }
 
@@ -237,6 +282,10 @@ export class UserService {
     //       deletion can no longer mint a session for the soon-to-be-deleted user (sec-U1).
     //   (4) purge data-exports + uploads → now that sessions/tokens are dead, no concurrent
     //       writer can re-introduce rows.
+    //   (4b) leave every organization: team memberships removed (seat counts reconciled), the
+    //       personal organization tombstoned, and the user's details erased from the webhook
+    //       payloads of each — otherwise the memberships kept their seats and the account could
+    //       never be purged (the personal organization references it).
     //   (5) softDelete → flip deleted_at; this is the final DB-state mutation.
     //   (6) clearAvatarStorage → S3 cleanup after soft-delete succeeds.
     //
@@ -247,6 +296,14 @@ export class UserService {
     await offboarding.authMethodService.invalidateAllVerificationTokensForUser(public_id);
     await offboarding.uploadService.tombstoneAllByUserId(user.id);
     await offboarding.userDataExportService.deleteAllExportsForUser(user.id, public_id);
+    const departure = (await offboarding.tenancyDeparture?.removeAllForDepartingUser(user.id)) ?? {
+      organizationPublicIds: [],
+    };
+    await offboarding.tenancyDeparture?.offboardPersonalOrganization(user.id, public_id);
+    await offboarding.webhookPayloadErasure?.redactDepartedUserFromDeliveries({
+      userPublicId: public_id,
+      organizationPublicIds: departure.organizationPublicIds,
+    });
     // global_admin for the same NEW-row SELECT-visibility reason as the short-circuit path
     // above — the self arm can never see its own tombstoned row.
     const deleted = await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_ADMIN, () =>

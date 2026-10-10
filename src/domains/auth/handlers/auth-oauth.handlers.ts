@@ -5,13 +5,13 @@ import { getRequestIdentifier } from '@/shared/utils/http/request.util.js';
 import {
   clearOauthNonceCookie,
   getIpAddress,
-  getUserAgent,
   isOauthProviderNotImplementedError,
   readOauthNonceCookie,
   sendOauthProviderNotImplementedResponse,
   setOauthNonceCookie,
   setSessionCookie,
 } from '@/domains/auth/auth.http.util.js';
+import { getUserAgent } from '@/shared/utils/http/user-agent.util.js';
 import type { OauthCallbackQueryInput } from '@/domains/auth/auth.dto.js';
 import { AuthSerializer } from '@/domains/auth/auth.serializer.js';
 import {

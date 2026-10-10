@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray, lt, sql as drizzleSql } from 'drizzle-orm';
+import { truncateUserAgent } from '@/shared/utils/http/user-agent.util.js';
 import { withMaintenanceDatabaseContext } from '@/infrastructure/database/contexts/database-context.js';
 import {
   type RequestScopedPostgresDatabase,
@@ -64,7 +65,8 @@ export async function insertAuditOutboxRow(input: AuditOutboxInsertInput): Promi
     resource_type: input.resourceType,
     resource_id: input.resourceId ?? null,
     ip_address: input.ipAddress ?? null,
-    user_agent: input.userAgent ?? null,
+    // Truncated here, the one write point: the column's CHECK refuses anything longer.
+    user_agent: truncateUserAgent(input.userAgent),
     severity: input.severity ?? 'INFO',
     metadata: input.metadata ?? {},
   });
@@ -223,26 +225,29 @@ export function createDrainAuditOutboxRepository(databaseHandle: RequestScopedPo
     },
 
     /**
-     * Returns ids of PROCESSED rows older than `olderThan` so the retention worker
-     * can prune them. PROCESSED rows are safe to delete — the canonical record is
-     * in `audit.logs`.
+     * Deletes up to `limit` rows in `status` created before `olderThan`, oldest first — the drain's
+     * pruning of finished rows (served by `idx_audit_outbox_status_created_at`). PROCESSED rows are
+     * safe to delete: the canonical record is in `audit.logs`. Returns how many went.
      */
-    async findProcessedRowsOlderThan(olderThan: Date, limit: number): Promise<number[]> {
-      const rows = await databaseHandle
+    async deleteRowsCreatedBefore(options: {
+      status: 'PROCESSED' | 'FAILED';
+      olderThan: Date;
+      limit: number;
+    }): Promise<number> {
+      const oldest = databaseHandle
         .select({ id: audit_outbox.id })
         .from(audit_outbox)
-        .where(and(eq(audit_outbox.status, 'PROCESSED'), lt(audit_outbox.processed_at, olderThan)))
-        .orderBy(asc(audit_outbox.processed_at))
-        .limit(limit);
-      return rows.map((row: { id: number }) => row.id);
-    },
-
-    /** Bulk delete drained outbox rows by id. */
-    async deleteByIds(ids: number[]): Promise<number> {
-      if (ids.length === 0) return 0;
+        .where(
+          and(
+            eq(audit_outbox.status, options.status),
+            lt(audit_outbox.created_at, options.olderThan),
+          ),
+        )
+        .orderBy(asc(audit_outbox.created_at))
+        .limit(options.limit);
       const deleted = await databaseHandle
         .delete(audit_outbox)
-        .where(inArray(audit_outbox.id, ids))
+        .where(inArray(audit_outbox.id, oldest))
         .returning({ id: audit_outbox.id });
       return deleted.length;
     },

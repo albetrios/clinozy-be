@@ -2,7 +2,8 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { translateMessageKeyPayload } from '@/shared/utils/i18n/i18n-response.util.js';
 import { successResponse } from '@/shared/utils/http/response.util.js';
 import { getRequestIdentifier } from '@/shared/utils/http/request.util.js';
-import { getIpAddress, getUserAgent, setSessionCookie } from '@/domains/auth/auth.http.util.js';
+import { getIpAddress, setSessionCookie } from '@/domains/auth/auth.http.util.js';
+import { getUserAgent } from '@/shared/utils/http/user-agent.util.js';
 import { AuthSerializer } from '@/domains/auth/auth.serializer.js';
 import {
   recordLoginAuditEvent,

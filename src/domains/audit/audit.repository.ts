@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { truncateUserAgent } from '@/shared/utils/http/user-agent.util.js';
 import {
   getTableColumns,
   and,
@@ -85,7 +86,11 @@ export class AuditRepository {
   async insert(entry: NewAuditLog): Promise<void> {
     await getRequestDatabase()
       .insert(logs)
-      .values({ ...entry, public_id: generatePublicId('auditLog') });
+      .values({
+        ...entry,
+        public_id: generatePublicId('auditLog'),
+        user_agent: truncateUserAgent(entry.user_agent),
+      });
   }
 
   /**

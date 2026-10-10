@@ -23,7 +23,11 @@ import { role_permissions } from '@/domains/tenancy/sub-domains/member-roles/mem
 import { BaseRepository } from '@/infrastructure/database/base-repository.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
-import { type MembershipRow, SEAT_CONSUMING_MEMBERSHIP_STATUSES } from './membership.types.js';
+import {
+  type DepartingUserMembershipRow,
+  type MembershipRow,
+  SEAT_CONSUMING_MEMBERSHIP_STATUSES,
+} from './membership.types.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import {
   type CursorTimestampRow,
@@ -94,6 +98,24 @@ export interface MembershipInvitationRefRow {
  * `joined_at` to `now()` when the status transitions to `ACTIVE`.
  */
 export class MembershipRepository extends BaseRepository {
+  /**
+   * Every membership row a user has — live or already removed — with its organization, for
+   * account deletion. Spans tenants, so the caller runs it under the retention maintenance context.
+   */
+  async listForDepartingUser(user_id: number): Promise<DepartingUserMembershipRow[]> {
+    return getRequestDatabase()
+      .select({
+        membership_public_id: memberships.public_id,
+        membership_deleted_at: memberships.deleted_at,
+        organization_public_id: organizations.public_id,
+        organization_type: organizations.type,
+        organization_deleted_at: organizations.deleted_at,
+      })
+      .from(memberships)
+      .innerJoin(organizations, eq(memberships.organization_id, organizations.id))
+      .where(eq(memberships.user_id, user_id));
+  }
+
   async listOrganizationsForUserDataExport(
     user_id: number,
     limit: number,

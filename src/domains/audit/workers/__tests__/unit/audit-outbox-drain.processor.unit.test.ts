@@ -11,6 +11,7 @@ const drainRepositoryMock = vi.hoisted(() => ({
   getPendingBacklogStats: vi
     .fn()
     .mockResolvedValue({ pendingCount: 0, oldestPendingAgeSeconds: 0, maxAttemptCount: 0 }),
+  deleteRowsCreatedBefore: vi.fn().mockResolvedValue(0),
 }));
 
 vi.mock('@/domains/audit/audit-outbox.repository.js', () => ({
@@ -471,5 +472,23 @@ describe('runAuditOutboxDrainJob', () => {
 
     expect(result).toEqual({ drained: 0, transientFailed: 1, permanentlyFailed: 0 });
     expect(drainRepositoryMock.getPendingBacklogStats).toHaveBeenCalled();
+  });
+
+  it('prunes finished rows on every pass, even with nothing to drain', async () => {
+    drainRepositoryMock.claimPendingBatch.mockResolvedValueOnce([]);
+    drainRepositoryMock.deleteRowsCreatedBefore.mockClear();
+
+    await runAuditOutboxDrainJob({} as never);
+
+    const calls = drainRepositoryMock.deleteRowsCreatedBefore.mock.calls.map(
+      ([options]) => options as { status: string; olderThan: Date; limit: number },
+    );
+    expect(calls.map((options) => options.status)).toEqual(['PROCESSED', 'FAILED']);
+    // Drained rows after a day; failed ones after the audit log's own window.
+    expect(Date.now() - calls[0]!.olderThan.getTime()).toBeGreaterThanOrEqual(
+      24 * 60 * 60 * 1000 - 1000,
+    );
+    expect(Date.now() - calls[1]!.olderThan.getTime()).toBeGreaterThan(24 * 60 * 60 * 1000);
+    for (const options of calls) expect(options.limit).toBe(1_000);
   });
 });

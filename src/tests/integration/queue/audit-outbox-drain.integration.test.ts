@@ -133,6 +133,39 @@ describe('Integration: audit transactional outbox drain', () => {
     });
   });
 
+  it('prunes drained rows after a day and keeps failed ones for the audit window', async () => {
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    const row = {
+      actor_user_public_id: null,
+      organization_public_id: null,
+      action: 'auth.login.failed',
+      resource_type: 'user',
+      severity: 'INFO',
+      metadata: { source: 'audit-outbox-drain.integration', actor_kind: 'anonymous' },
+    } as const;
+    await getOperatorDatabase()
+      .insert(audit_outbox)
+      .values([
+        { ...row, status: 'PROCESSED', created_at: twoDaysAgo, processed_at: twoDaysAgo },
+        { ...row, status: 'PROCESSED', processed_at: new Date() },
+        { ...row, status: 'FAILED', created_at: twoDaysAgo },
+      ]);
+
+    await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN, (databaseHandle) =>
+      runAuditOutboxDrainJob(databaseHandle),
+    );
+
+    const remaining = await getOperatorDatabase()
+      .select({ status: audit_outbox.status, created_at: audit_outbox.created_at })
+      .from(audit_outbox);
+    // The day-old drained copy is gone (audit.logs holds the record); the fresh one and the failed
+    // one (kept for AUDIT_RETENTION_DAYS) stay.
+    expect(remaining.map((outboxRow) => outboxRow.status).sort()).toEqual(['FAILED', 'PROCESSED']);
+    expect(
+      remaining.find((outboxRow) => outboxRow.status === 'PROCESSED')!.created_at.getTime(),
+    ).toBeGreaterThan(twoDaysAgo.getTime());
+  });
+
   it('the outbox CHECK refuses an actorless row that is not declared anonymous', async () => {
     const failure = await getOperatorDatabase()
       .insert(audit_outbox)

@@ -1011,6 +1011,7 @@ src/
     │   │   │   ├── user-offboarding-reconcile.worker.unit.test.ts
     │   │   │   ├── user-routes-rate-limit.policy.unit.test.ts
     │   │   │   ├── user-tombstone-retention.processor.unit.test.ts
+    │   │   │   ├── user-tombstone-retention.purge.db.unit.test.ts
     │   │   │   ├── user.controller.admin-audit.unit.test.ts
     │   │   │   ├── user.controller.unit.test.ts
     │   │   │   ├── user.repository.db.unit.test.ts
@@ -1207,6 +1208,7 @@ src/
     │   │   │   ├── mail-outbox-sweeper.processor.unit.test.ts
     │   │   │   ├── mail-outbox.dedupe.db.unit.test.ts
     │   │   │   ├── mail-outbox.resend-idempotency-token.db.unit.test.ts
+    │   │   │   ├── mail-outbox.retention.db.unit.test.ts
     │   │   │   ├── mail-outbox.scrub.db.unit.test.ts
     │   │   │   ├── mail.processor.unit.test.ts
     │   │   │   └── resend-api.error.unit.test.ts

@@ -7,9 +7,12 @@ import { users } from '@/domains/user/user.schema.js';
 import type { RequestScopedPostgresDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { setLocalDatabaseConfig } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { env } from '@/shared/config/env.config.js';
+import { MILLISECONDS_PER_DAY, MILLISECONDS_PER_HOUR } from '@/shared/constants/index.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import {
   AUDIT_OUTBOX_DRAIN_STALE_PENDING_WARN_SECONDS,
+  AUDIT_OUTBOX_PROCESSED_RETENTION_HOURS,
+  AUDIT_OUTBOX_PRUNE_BATCH_SIZE,
   DEFAULT_AUDIT_OUTBOX_DRAIN_BATCH_SIZE,
   DEFAULT_AUDIT_OUTBOX_DRAIN_MAX_ATTEMPTS,
 } from '@/domains/audit/workers/audit-outbox-drain.constants.js';
@@ -295,6 +298,31 @@ async function drainOutboxRow(options: {
 }
 
 /**
+ * Deletes finished outbox rows once their window ends, at most {@link AUDIT_OUTBOX_PRUNE_BATCH_SIZE}
+ * per status per pass: drained rows after {@link AUDIT_OUTBOX_PROCESSED_RETENTION_HOURS}, failed
+ * ones after `AUDIT_RETENTION_DAYS` (the audit log's own window). Without it the outbox grew without
+ * bound and kept each event's actor, IP and metadata past retention and erasure.
+ */
+async function pruneFinishedAuditOutboxRows(
+  drainRepository: ReturnType<typeof createDrainAuditOutboxRepository>,
+): Promise<void> {
+  const now = Date.now();
+  const processedDeleted = await drainRepository.deleteRowsCreatedBefore({
+    status: 'PROCESSED',
+    olderThan: new Date(now - AUDIT_OUTBOX_PROCESSED_RETENTION_HOURS * MILLISECONDS_PER_HOUR),
+    limit: AUDIT_OUTBOX_PRUNE_BATCH_SIZE,
+  });
+  const failedDeleted = await drainRepository.deleteRowsCreatedBefore({
+    status: 'FAILED',
+    olderThan: new Date(now - env.AUDIT_RETENTION_DAYS * MILLISECONDS_PER_DAY),
+    limit: AUDIT_OUTBOX_PRUNE_BATCH_SIZE,
+  });
+  if (processedDeleted + failedDeleted > 0) {
+    logger.info({ processedDeleted, failedDeleted }, 'audit.outbox.prune.completed');
+  }
+}
+
+/**
  * Drains a batch of PENDING `audit.outbox` rows into `audit.logs`.
  *
  * @remarks
@@ -322,6 +350,7 @@ export async function runAuditOutboxDrainJob(
     env.AUDIT_OUTBOX_DRAIN_MAX_ATTEMPTS ?? DEFAULT_AUDIT_OUTBOX_DRAIN_MAX_ATTEMPTS;
 
   const drainRepository = createDrainAuditOutboxRepository(databaseHandle);
+  await pruneFinishedAuditOutboxRows(drainRepository);
   const batch = await drainRepository.claimPendingBatch(batchSize);
   if (batch.length === 0) {
     return { drained: 0, transientFailed: 0, permanentlyFailed: 0 };

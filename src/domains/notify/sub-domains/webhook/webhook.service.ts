@@ -323,6 +323,39 @@ export class WebhookService {
     return new NotFoundError('Webhook');
   }
 
+  /**
+   * Erases a deleted user's details from the stored `membership.*` webhook payloads of every
+   * organization they belonged to (account deletion).
+   *
+   * @remarks
+   * - **Algorithm:** one unit of work per organization, under that organization's own context
+   *   (delivery attempts are tenant-scoped); see
+   *   {@link WebhookDeliveryAttemptRepository.redactMemberDetails}. An organization that is gone is
+   *   skipped — its attempts go with it.
+   * - **Failure modes:** propagates a database error; account deletion is re-runnable and the
+   *   redaction is idempotent.
+   * - **Side effects:** updates `notify.webhook_delivery_attempts` payloads.
+   */
+  async redactDepartedUserFromDeliveries(options: {
+    userPublicId: string;
+    organizationPublicIds: readonly string[];
+  }): Promise<void> {
+    for (const organizationPublicId of options.organizationPublicIds) {
+      await withAppDatabaseContext(
+        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
+        async () => {
+          const organization =
+            await this.organizationService.findOrganizationByPublicId(organizationPublicId);
+          if (!organization) return;
+          await this.deliveryAttemptRepository.redactMemberDetails({
+            organizationId: organization.id,
+            userPublicId: options.userPublicId,
+          });
+        },
+      );
+    }
+  }
+
   async delete(scope: OrganizationPrincipalDatabaseScope, webhook_public_id: string) {
     const organization_public_id = scope.organizationPublicId;
     return withAppDatabaseContext(scope, async () => {

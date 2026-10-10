@@ -10,7 +10,8 @@ import {
   recordLoginAuditEvent,
   recordLoginFailureAuditEvent,
 } from '@/domains/auth/shared/audit-login.util.js';
-import { getIpAddress, getUserAgent, setSessionCookie } from '@/domains/auth/auth.http.util.js';
+import { getIpAddress, setSessionCookie } from '@/domains/auth/auth.http.util.js';
+import { getUserAgent } from '@/shared/utils/http/user-agent.util.js';
 import { validateMfaMethodIdParam } from '@/domains/auth/auth.validator.js';
 import { AuthSerializer } from '@/domains/auth/auth.serializer.js';
 import type { AuthContainer } from '@/domains/auth/auth.container.js';

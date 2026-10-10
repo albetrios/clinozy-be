@@ -7,10 +7,10 @@ import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { recordRecentStepUp, type StepUpFactor } from '@/shared/utils/auth/recent-step-up.util.js';
 import {
   getIpAddress,
-  getUserAgent,
   resolveAuthMessageKeyResponse,
   setSessionCookie,
 } from '@/domains/auth/auth.http.util.js';
+import { getUserAgent } from '@/shared/utils/http/user-agent.util.js';
 import { recordLoginAuditEvent } from '@/domains/auth/shared/audit-login.util.js';
 import {
   validateAuthMethodPublicIdParam,

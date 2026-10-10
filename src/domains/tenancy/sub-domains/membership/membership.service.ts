@@ -9,8 +9,10 @@ import { isPostgresUniqueViolation } from '@/shared/utils/infrastructure/postgre
 import { isDisposableEmailBlocked } from '@/shared/utils/text/email.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import {
+  MAINTENANCE_SCOPE,
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
+  withMaintenanceDatabaseContext,
   type OrganizationPrincipalDatabaseScope,
 } from '@/infrastructure/database/contexts/database-context.js';
 import {
@@ -696,10 +698,11 @@ export class MembershipService {
         callerUserPublicId: scope.userPublicId,
         callerApiKeyScopes: options?.callerApiKeyScopes,
       });
-      const deleted = await this.membershipRepository.softDelete(
-        membership_public_id,
-        organization.id,
-      );
+      const deleted = await this.removeMembershipInOrganization({
+        organizationId: organization.id,
+        organizationPublicId: organization_public_id,
+        membershipPublicId: membership_public_id,
+      });
       if (!deleted) {
         // The atomic owner-guard refused the delete (a concurrent transfer made this member the
         // owner after the check above) or the row vanished — re-resolve for the precise error.
@@ -712,14 +715,7 @@ export class MembershipService {
         }
         throw new NotFoundError('Membership');
       }
-      // reaudit-#7: revoke the removed member's API keys so they lose access too.
-      await this.revokeApiKeysForDepartedMember(deleted.user_id, organization.id);
       affectedUserInternalId = deleted.user_id;
-      await this.emitMembershipEvents({
-        type: MEMBERSHIP_EVENT.DELETED,
-        memberships: [deleted],
-        organizationPublicId: organization_public_id,
-      });
     });
     // sec-R11: invalidate AFTER commit so a racing recompute can't re-cache the removed member's
     // stale permissions (delayed revocation).
@@ -728,6 +724,89 @@ export class MembershipService {
     }
     // REQ-4: the seat count just shrank — reconcile the Stripe subscription quantity out-of-band.
     this.enqueueSeatQuantitySync(organization_public_id);
+  }
+
+  /**
+   * Removes every membership of a user whose account is being deleted, as a manager's removal
+   * would — and returns the organizations the user belonged to (removed now or earlier), so account
+   * deletion can erase the user's details there too.
+   *
+   * @remarks
+   * - **Algorithm:** the user's membership rows span tenants, so they are listed under the retention
+   *   maintenance context; each live membership of a live TEAM organization is then removed under
+   *   that organization's own context ({@link removeMembershipInOrganization}: API keys revoked,
+   *   `membership.deleted` emitted), its permissions purged after the commit and its seat count
+   *   reconciled. The personal organization is tombstoned whole by the organization service.
+   * - **Failure modes:** propagates; account deletion is re-runnable and every step is idempotent.
+   * - **Side effects:** per removed membership: soft-delete, API-key revocation, event, permission
+   *   purge, seat-sync enqueue.
+   */
+  async removeAllForDepartingUser(
+    userInternalId: number,
+  ): Promise<{ organizationPublicIds: string[] }> {
+    const rows = await withMaintenanceDatabaseContext(
+      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      () => this.membershipRepository.listForDepartingUser(userInternalId),
+    );
+    for (const row of rows) {
+      if (
+        row.membership_deleted_at !== null ||
+        row.organization_deleted_at !== null ||
+        row.organization_type === 'PERSONAL'
+      ) {
+        continue;
+      }
+      const removed = await withAppDatabaseContext(
+        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: row.organization_public_id }),
+        async () => {
+          const organization = await this.organizationService.requireOrganizationRecordByPublicId(
+            row.organization_public_id,
+          );
+          return this.removeMembershipInOrganization({
+            organizationId: organization.id,
+            organizationPublicId: row.organization_public_id,
+            membershipPublicId: row.membership_public_id,
+          });
+        },
+      );
+      if (removed) {
+        await this.invalidatePermissionsForMembership(userInternalId, row.organization_public_id);
+        this.enqueueSeatQuantitySync(row.organization_public_id);
+      }
+    }
+    return {
+      organizationPublicIds: [
+        ...new Set(
+          rows
+            .filter((row) => row.organization_deleted_at === null)
+            .map((row) => row.organization_public_id),
+        ),
+      ],
+    };
+  }
+
+  /**
+   * The removal itself, inside the organization's transaction: soft-delete (the repository's atomic
+   * owner guard refuses the owner), revoke the member's API keys there (reaudit-#7) and announce
+   * `membership.deleted`. `null` when the row is gone or the guard refused it.
+   */
+  private async removeMembershipInOrganization(options: {
+    organizationId: number;
+    organizationPublicId: string;
+    membershipPublicId: string;
+  }) {
+    const deleted = await this.membershipRepository.softDelete(
+      options.membershipPublicId,
+      options.organizationId,
+    );
+    if (!deleted) return null;
+    await this.revokeApiKeysForDepartedMember(deleted.user_id, options.organizationId);
+    await this.emitMembershipEvents({
+      type: MEMBERSHIP_EVENT.DELETED,
+      memberships: [deleted],
+      organizationPublicId: options.organizationPublicId,
+    });
+    return deleted;
   }
 
   async getPermissions(

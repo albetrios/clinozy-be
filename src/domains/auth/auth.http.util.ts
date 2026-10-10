@@ -210,16 +210,6 @@ export function getIpAddress(request: FastifyRequest): string {
   return request.ip ?? '127.0.0.1';
 }
 
-/** Max bytes stored for `user_agent` — matches the `varchar(512)` DB column. */
-const USER_AGENT_MAX_LENGTH = 512;
-
-/** Returns the request `User-Agent` header truncated to {@link USER_AGENT_MAX_LENGTH} characters, or `null` when absent. */
-export function getUserAgent(request: FastifyRequest): string | null {
-  const raw = request.headers['user-agent'];
-  if (!raw) return null;
-  return raw.length > USER_AGENT_MAX_LENGTH ? raw.slice(0, USER_AGENT_MAX_LENGTH) : raw;
-}
-
 /** Detects "OAuth provider not implemented" errors (status 501, `NotImplementedError`, or a message containing "not supported") so callers can surface a typed 501. */
 export function isOauthProviderNotImplementedError(error: unknown): boolean {
   const err = error as Error & { statusCode?: number };

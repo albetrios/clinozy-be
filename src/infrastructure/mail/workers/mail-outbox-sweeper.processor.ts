@@ -1,9 +1,15 @@
 import {
+  deleteFinishedMailOutboxRowsCreatedBefore,
   findStalePendingMailOutboxTokens,
   reclaimStaleSendingMailOutboxTokens,
 } from '@/infrastructure/mail/mail-outbox.repository.js';
 import { enqueueMailOutboxJob } from '@/infrastructure/mail/queues/mail.queue.js';
-import { MAIL_OUTBOX_RECLAIM_CIRCUIT_OPEN_MULTIPLIER } from '@/infrastructure/mail/workers/mail-outbox-sweeper.constants.js';
+import {
+  MAIL_OUTBOX_FINISHED_RETENTION_DAYS,
+  MAIL_OUTBOX_PRUNE_BATCH_SIZE,
+  MAIL_OUTBOX_RECLAIM_CIRCUIT_OPEN_MULTIPLIER,
+} from '@/infrastructure/mail/workers/mail-outbox-sweeper.constants.js';
+import { MILLISECONDS_PER_DAY } from '@/shared/constants/index.js';
 import { resendCircuit } from '@/infrastructure/resilience/circuit-breaker.js';
 import { env } from '@/shared/config/env.config.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
@@ -31,6 +37,8 @@ export type MailOutboxSweeperJobResult = {
   scannedCount: number;
   reclaimedSendingCount: number;
   reEnqueuedCount: number;
+  /** Finished rows deleted after {@link MAIL_OUTBOX_FINISHED_RETENTION_DAYS}. */
+  prunedCount: number;
 };
 
 /**
@@ -53,6 +61,9 @@ export type MailOutboxSweeperJobResult = {
  *   and skipped — the next sweep retries it.
  * - **Side effects:** updates `auth.mail_outbox.status`/`updated_at` for reclaimed
  *   rows; adds BullMQ jobs to `MAIL_QUEUE_NAME`.
+ * - **Retention:** each sweep also deletes finished (`sent` / `failed`) rows older than
+ *   {@link MAIL_OUTBOX_FINISHED_RETENTION_DAYS} (at most {@link MAIL_OUTBOX_PRUNE_BATCH_SIZE}) —
+ *   every row keeps its recipient and subject, so finished ones must not stay for ever.
  * - **Notes:** idempotent and bounded by `MAIL_OUTBOX_SWEEP_BATCH_SIZE`; safe to
  *   run concurrently with the mail worker because the claim transition is atomic.
  */
@@ -96,6 +107,11 @@ async function runMailOutboxSweeperJobInner(): Promise<MailOutboxSweeperJobResul
     }
   }
 
+  const prunedCount = await deleteFinishedMailOutboxRowsCreatedBefore(
+    new Date(Date.now() - MAIL_OUTBOX_FINISHED_RETENTION_DAYS * MILLISECONDS_PER_DAY),
+    MAIL_OUTBOX_PRUNE_BATCH_SIZE,
+  );
+
   logger.info(
     {
       pendingOlderThanMinutes,
@@ -105,6 +121,7 @@ async function runMailOutboxSweeperJobInner(): Promise<MailOutboxSweeperJobResul
       scannedCount: staleMailOutboxTokens.length,
       reclaimedSendingCount: reclaimedSendingTokens.length,
       reEnqueuedCount,
+      prunedCount,
     },
     'mail-outbox-sweeper.completed',
   );
@@ -113,5 +130,6 @@ async function runMailOutboxSweeperJobInner(): Promise<MailOutboxSweeperJobResul
     scannedCount: staleMailOutboxTokens.length,
     reclaimedSendingCount: reclaimedSendingTokens.length,
     reEnqueuedCount,
+    prunedCount,
   };
 }

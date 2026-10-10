@@ -220,6 +220,40 @@ export class WebhookDeliveryAttemptRepository {
   }
 
   /** Record a delivery attempt (used for both real events and test deliveries). */
+  /**
+   * Nulls a deleted user's personal fields (email, name, avatar) in the stored `membership.*`
+   * payloads of one organization, keeping their public id and the payload's shape (account
+   * deletion). Returns how many attempts changed.
+   *
+   * @remarks `organization_id` scopes the update explicitly as well as through RLS: only attempts
+   * of that organization's webhooks are touched.
+   */
+  async redactMemberDetails(options: {
+    organizationId: number;
+    userPublicId: string;
+  }): Promise<number> {
+    const rows = await this.db()
+      .update(webhook_delivery_attempts)
+      .set({
+        payload: sql`jsonb_set(${webhook_delivery_attempts.payload}, '{data,user}', jsonb_build_object(
+          'id', ${options.userPublicId}::text,
+          'email', NULL, 'first_name', NULL, 'last_name', NULL, 'avatar_url', NULL
+        ))`,
+      })
+      .where(
+        and(
+          sql`${webhook_delivery_attempts.webhook_id} IN (
+            SELECT ${webhooks.id} FROM ${webhooks} WHERE ${webhooks.organization_id} = ${options.organizationId}
+          )`,
+          sql`${webhook_delivery_attempts.event_type} LIKE 'membership.%'`,
+          sql`${webhook_delivery_attempts.payload} -> 'data' ->> 'user_id' = ${options.userPublicId}`,
+          sql`${webhook_delivery_attempts.payload} -> 'data' -> 'user' ->> 'email' IS NOT NULL`,
+        ),
+      )
+      .returning({ id: webhook_delivery_attempts.id });
+    return rows.length;
+  }
+
   async create(data: {
     webhook_id: number;
     event_type: string;

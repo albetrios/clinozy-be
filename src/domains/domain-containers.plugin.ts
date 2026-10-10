@@ -24,6 +24,17 @@ async function registerDomainContainers(application: FastifyInstance): Promise<v
     userDataExportService: application.userDomain.userDataExportService,
     // route-audit-#2 follow-up: block deleting a user who still owns organizations.
     organizationOwnership: application.tenancyDomain.organizationService,
+    // Account deletion leaves every organization and erases the user from webhook payloads.
+    tenancyDeparture: {
+      removeAllForDepartingUser: (userInternalId) =>
+        application.tenancyDomain.membershipService.removeAllForDepartingUser(userInternalId),
+      offboardPersonalOrganization: (userInternalId, userPublicId) =>
+        application.tenancyDomain.organizationService.offboardPersonalOrganization(
+          userInternalId,
+          userPublicId,
+        ),
+    },
+    webhookPayloadErasure: application.notifyDomain.webhookService,
   });
 
   application.tenancyDomain.organizationService.wireOffboardingUploadService(

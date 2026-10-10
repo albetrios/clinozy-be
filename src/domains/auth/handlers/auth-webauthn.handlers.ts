@@ -4,10 +4,10 @@ import { getRequestIdentifier, requireAuth } from '@/shared/utils/http/request.u
 import { recordScopedAuditEvent } from '@/shared/utils/infrastructure/audit-request-context.util.js';
 import {
   getIpAddress,
-  getUserAgent,
   readRequestOrigin,
   setSessionCookie,
 } from '@/domains/auth/auth.http.util.js';
+import { getUserAgent } from '@/shared/utils/http/user-agent.util.js';
 import { AuthSerializer } from '@/domains/auth/auth.serializer.js';
 import { validateWebauthnCredentialIdParam } from '@/domains/auth/sub-domains/auth-webauthn/webauthn.validator.js';
 import {

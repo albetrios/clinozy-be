@@ -105,6 +105,8 @@ export const audit_outbox = auditSchema
         sql`${table.actor_user_public_id} IS NOT NULL OR ${table.actor_api_key_public_id} IS NOT NULL OR (${table.metadata} ->> 'actor_kind') IS NOT DISTINCT FROM 'anonymous'`,
       ),
       check('chk_audit_outbox_attempt_count_nonneg', sql`${table.attempt_count} >= 0`),
+      // The header is client-controlled: writers cut it (`truncateUserAgent`), the CHECK holds the line.
+      check('chk_audit_outbox_user_agent_length', sql`char_length(${table.user_agent}) <= 512`),
       /**
        * INSERT — tenant context writes its own organization row, OR system-audit context
        * writes a tenantless (`organization_public_id IS NULL`) row. Identical

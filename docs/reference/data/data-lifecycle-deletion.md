@@ -87,7 +87,7 @@ See migrations **`20260516000002_*` … `*_04_*`** for `deleted_at` columns and 
 | Entity / table         | On HTTP soft-delete (immediate)                                                                             | After `TOMBSTONE_RETENTION_DAYS` (delayed)                                                   |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | `uploads`              | `DELETE` removes S3 object + sets `deleted_at`; user offboarding tombstones all user uploads (+ S3 per row) | Hard-delete row + S3 (`upload-tombstone-retention`)                                          |
-| `users`                | Revoke all sessions + auth methods; clear avatar S3 key; tombstone uploads; **delete all GDPR export S3 keys + `auth.user_data_exports` rows** | Hard-delete row (`user-tombstone-retention`; blocked if still `organizations.owner_user_id`) |
+| `users`                | Revoke all sessions + auth methods; clear avatar S3 key; tombstone uploads; **delete all GDPR export S3 keys + `auth.user_data_exports` rows**; **leave every organization** — team memberships removed as a manager's removal would (API keys revoked, `membership.deleted`, seat count reconciled), the personal organization tombstoned, the user's details nulled in stored `membership.*` webhook payloads | Hard-delete row (`user-tombstone-retention`). Attribution references (`created_by` / `updated_by`, an inviter, an uploader) are `ON DELETE SET NULL` and verification tokens cascade, so only a team organization the user still owns blocks it — and deletion is refused while one exists |
 | `user_data_exports`    | Removed on user offboarding (`deleteAllExportsForUser`)                                                     | Daily `user-data-export-retention` when `expires_at` passed; S3 lifecycle on prefix `user-data-export/` (7 days) |
 | `organizations`        | Clear logo S3 key; tombstone organization-scoped uploads (DB only); **no** child membership/role/API tombstone       | Hard-delete organization (`organization-tombstone-retention`; CASCADE children)                       |
 | Other tombstone tables | API `DELETE` sets `deleted_at` only                                                                         | Matching `*-tombstone-retention` worker                                                      |
@@ -99,8 +99,8 @@ See migrations **`20260516000002_*` … `*_04_*`** for `deleted_at` columns and 
 Registered in `src/infrastructure/queue/scheduler.ts` (default stagger 05:44–05:53 UTC):
 
 1. `user-data-export-retention` — expired GDPR export artifacts (S3 + `auth.user_data_exports`)
-2. `upload-tombstone-retention` — `uploads.user_id` blocks user hard-delete
-3. `organization-tombstone-retention` — releases `owner_user_id` when organization purged
+2. `upload-tombstone-retention` — purges tombstoned uploads with their objects (`uploads.user_id` is `SET NULL` on the user's purge, so an organization's file survives its uploader)
+3. `organization-tombstone-retention` — purges the departed user's tombstoned personal organization, releasing `owner_user_id`
 4. Child tombstones (webhooks, policies, memberships, roles, API keys)
 5. `user-tombstone-retention` — last
 
