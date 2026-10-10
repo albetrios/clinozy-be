@@ -11,26 +11,16 @@ const BLOCKED_HOSTNAMES = ['localhost', '127.0.0.1', '0.0.0.0'];
 
 const WEBHOOK_URL_NOT_ALLOWED_KEY = 'errors:webhookUrlNotAllowed';
 
-/** IP ranges that must not be targeted by outbound webhooks (SSRF protection). */
-const BLOCKED_IP_RANGES = new Set<string>([
-  'loopback',
-  'private',
-  'linkLocal',
-  'uniqueLocal',
-  'unspecified',
-  'multicast',
-  'reserved',
-  'broadcast',
-  'carrierGradeNat',
-  // audit #10: `rfc6052` is the NAT64 well-known prefix `64:ff9b::/96` — in a NAT64 environment a
-  // hostname resolving to e.g. `64:ff9b::a9fe:a9fe` reaches the cloud metadata IPv4 `169.254.169.254`.
-  'rfc6052',
-  // audit #10: `ipv4Mapped` covers the IPv4-compatible form `::a.b.c.d` (deprecated, never legit
-  // traffic), which `isIPv4MappedAddress()` does NOT normalize — so `::127.0.0.1` would otherwise
-  // pass the range check. A genuinely-routable `::ffff:<public-v4>` is normalized to IPv4 *before*
-  // the range check (see `normalizeParsedAddress`), so blocking this range does not reject it.
-  'ipv4Mapped',
-]);
+/**
+ * The only address range an outbound webhook may target (SSRF protection): ipaddr.js labels every
+ * special-purpose block with its own name — loopback, private, link-local, unique-local, site-local
+ * (`fec0::/10`), carrier-grade NAT, the IPv4-embedding prefixes (NAT64 `64:ff9b::/96`, SIIT
+ * `::ffff:0:0:0/96`, 6to4 `2002::/16`, Teredo `2001::/32`, the deprecated `::a.b.c.d`), multicast,
+ * reserved and the rest — and a globally routable address `unicast`. Allowing that one name, rather
+ * than blocking a list of the others, refuses a block nobody listed (and any the library adds).
+ * A `::ffff:<public-v4>` address is normalized to IPv4 first (`normalizeParsedAddress`).
+ */
+const ROUTABLE_IP_RANGE = 'unicast';
 
 /**
  * Strips IPv6 bracket notation from URL hostnames (e.g. `[::1]` → `::1`).
@@ -63,7 +53,7 @@ function normalizeParsedAddress(address: ipaddr.IPv4 | ipaddr.IPv6): ipaddr.IPv4
 function isUnsafeIpLiteral(address: string): boolean {
   try {
     const parsed = normalizeParsedAddress(ipaddr.parse(address));
-    return BLOCKED_IP_RANGES.has(parsed.range());
+    return parsed.range() !== ROUTABLE_IP_RANGE;
   } catch {
     return true;
   }

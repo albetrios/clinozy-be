@@ -16,6 +16,14 @@ function requireOpsBearerToken(authorizationHeader: string | undefined): void {
   }
 }
 
+/** The operator write needs `OPS_ADMIN_TOKEN`; unset, the route refuses every request. */
+function requireOpsAdminBearerToken(authorizationHeader: string | undefined): void {
+  const bearerToken = getEnv().OPS_ADMIN_TOKEN;
+  if (!(bearerToken && isBearerTokenValid(authorizationHeader, bearerToken))) {
+    throw new UnauthorizedError('errors:invalidMetricsToken');
+  }
+}
+
 function resolveManagedCircuitBreaker(name: string) {
   if (!(name in MANAGED_CIRCUIT_BREAKERS)) {
     throw new NotFoundError('Circuit breaker');
@@ -24,7 +32,8 @@ function resolveManagedCircuitBreaker(name: string) {
 }
 
 /**
- * Bearer-protected internal ops routes (reuse `METRICS_SCRAPE_TOKEN`).
+ * Bearer-protected internal ops routes: listing reuses `METRICS_SCRAPE_TOKEN` (read-only), the
+ * reset needs the separate `OPS_ADMIN_TOKEN`.
  */
 const opsMiddleware: FastifyPluginAsync = async (application) => {
   application.get(
@@ -52,12 +61,12 @@ const opsMiddleware: FastifyPluginAsync = async (application) => {
       schema: {
         summary: 'Reset a circuit breaker',
         description:
-          'Forces a managed circuit breaker back to CLOSED after an operator-verified recovery. Requires the same bearer token as GET /metrics (`METRICS_SCRAPE_TOKEN`).',
+          'Forces a managed circuit breaker back to CLOSED after an operator-verified recovery. Requires the operator bearer token (`OPS_ADMIN_TOKEN`), not the metrics scrape token.',
         tags: ['Operations'],
       },
     },
     async (request) => {
-      requireOpsBearerToken(request.headers.authorization);
+      requireOpsAdminBearerToken(request.headers.authorization);
       const { circuit_name: circuitName } = request.params as { circuit_name: string };
       const circuitBreaker = resolveManagedCircuitBreaker(circuitName);
       const previousState = await circuitBreaker.getState();

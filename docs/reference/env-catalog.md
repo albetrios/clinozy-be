@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**13 / 236** variables migrated to an explicit `{ allowed, description }` entry.
+**13 / 237** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -129,6 +129,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `OAUTH_GOOGLE_CLIENT_SECRET` | — | — *(optional)* |  | — |
 | `OAUTH_GOOGLE_REDIRECT_URI` | — | — *(optional)* |  | — |
 | `OPENAPI_SPEC_PATH` | — | — *(optional)* |  | — |
+| `OPS_ADMIN_TOKEN` | — | — *(optional)* |  | — |
 | `ORGANIZATION_API_KEY_MAX_PER_ORG` | — | `25` |  | — |
 | `ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
 | `ORGANIZATION_NOTIFICATION_POLICY_MAX_PER_ORG` | — | `100` |  | — |

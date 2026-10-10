@@ -329,6 +329,25 @@ export async function setLocalDatabaseConfig(
   await databaseHandle.execute(drizzleSql`SELECT set_config(${key}, ${value}, true)`);
 }
 
+/**
+ * Sets a transaction-local session setting and returns its previous value (`null` when unset), in
+ * one round trip: the materialized CTE reads the old value before `set_config` runs.
+ */
+export async function exchangeLocalDatabaseConfig(
+  databaseHandle: RequestScopedPostgresDatabase,
+  key: string,
+  value: string,
+): Promise<string | null> {
+  const result = await databaseHandle.execute<{ previous: string | null }>(
+    drizzleSql`WITH previous AS MATERIALIZED (SELECT current_setting(${key}, true) AS value)
+      SELECT previous.value AS previous, set_config(${key}, ${value}, true) FROM previous`,
+  );
+  const rows = Array.isArray(result)
+    ? result
+    : ((result as { rows?: { previous: string | null }[] } | undefined)?.rows ?? []);
+  return rows[0]?.previous ?? null;
+}
+
 /** Anything that runs a Drizzle statement on one connection: a database or transaction handle. */
 export interface SqlStatementRunner {
   execute: (query: SQL) => PromiseLike<unknown>;

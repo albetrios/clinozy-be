@@ -136,4 +136,22 @@ describe('webhook SSRF guard over IP ranges (property)', () => {
       propertyOptions,
     );
   });
+
+  // Special-purpose IPv6 blocks that reach an internal IPv4 (or are never public): site-local,
+  // SIIT, 6to4, Teredo, discard — each must be refused even though no list names it.
+  it.each([
+    'fec0::1',
+    '::ffff:0:7f00:1',
+    '::ffff:0:a9fe:a9fe',
+    '2002:7f00:1::',
+    '2002:a9fe:a9fe::1',
+    '2001:0:4136:e378:8000:63bf:3fff:fdd2',
+    '100::1',
+    '198.18.0.1',
+  ])('refuses the special-purpose address %s', async (address) => {
+    const host = address.includes(':') ? `[${address}]` : address;
+    await expect(validateWebhookUrl(`https://${host}/hook`)).rejects.toBeInstanceOf(
+      ValidationError,
+    );
+  });
 });

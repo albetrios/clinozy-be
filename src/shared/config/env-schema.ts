@@ -647,6 +647,14 @@ const envSchemaBase = z.object({
   METRICS_ENABLED: booleanString('true'),
   /** Bearer token a Prometheus scraper sends when scraping /metrics. Required when METRICS_ENABLED=true (min 32 chars). */
   METRICS_SCRAPE_TOKEN: z.string().min(32).optional(),
+  /**
+   * Category-B (security). Bearer token for the operator-only write on the internal ops routes
+   * (`POST /internal/ops/circuit-breakers/:circuit_name/reset`). Separate from
+   * `METRICS_SCRAPE_TOKEN` — that one is handed to scrapers and dashboards, and a read token must
+   * not be able to force a breaker closed. Unset, the reset route refuses every request. Min 32
+   * chars, and a refine refuses the scrape token's value.
+   */
+  OPS_ADMIN_TOKEN: z.string().min(32).optional(),
 
   // S3 / Object Storage
   /** Allow image/svg+xml uploads; sanitized with DOMPurify on confirm (default false). */
@@ -1616,6 +1624,15 @@ export const envSchema = envSchemaBase
       'TRUST_PROXY_REQUIRED must be true in production (without a trusted proxy hop every client collapses to the proxy IP).',
     path: ['TRUST_PROXY_REQUIRED'],
   })
+  .refine(
+    (data) =>
+      data.OPS_ADMIN_TOKEN === undefined || data.OPS_ADMIN_TOKEN !== data.METRICS_SCRAPE_TOKEN,
+    {
+      message:
+        'OPS_ADMIN_TOKEN must differ from METRICS_SCRAPE_TOKEN (the scrape token is shared with scrapers and must not authorize operator writes).',
+      path: ['OPS_ADMIN_TOKEN'],
+    },
+  )
   .refine((data) => data.NODE_ENV !== 'production' || data.TEST_MODE === false, {
     message:
       'TEST_MODE must be false in production (it gates test-only affordances that must never be reachable on a deployed runtime).',

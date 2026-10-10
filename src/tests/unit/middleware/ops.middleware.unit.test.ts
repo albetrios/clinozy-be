@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const METRICS_TOKEN_FIXTURE = 'test-metrics-bearer-token-min-32-chars';
+const OPS_ADMIN_TOKEN_FIXTURE = 'test-ops-admin-token-min-32-characters-x';
 
 vi.mock('@/infrastructure/resilience/circuit-breaker.js', () => {
   const MANAGED_CIRCUIT_BREAKERS = {
@@ -36,6 +37,7 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
 describe('ops.middleware', () => {
   const originalMetricsEnabled = process.env.METRICS_ENABLED;
   const originalMetricsBearer = process.env.METRICS_SCRAPE_TOKEN;
+  const originalOpsAdminBearer = process.env.OPS_ADMIN_TOKEN;
 
   afterEach(async () => {
     vi.resetModules();
@@ -48,6 +50,11 @@ describe('ops.middleware', () => {
       delete process.env.METRICS_SCRAPE_TOKEN;
     } else {
       process.env.METRICS_SCRAPE_TOKEN = originalMetricsBearer;
+    }
+    if (originalOpsAdminBearer === undefined) {
+      delete process.env.OPS_ADMIN_TOKEN;
+    } else {
+      process.env.OPS_ADMIN_TOKEN = originalOpsAdminBearer;
     }
   });
 
@@ -90,16 +97,25 @@ describe('ops.middleware', () => {
 
   it('route-#5: emits an attributable warning when a circuit breaker is reset', async () => {
     process.env.METRICS_SCRAPE_TOKEN = METRICS_TOKEN_FIXTURE;
+    process.env.OPS_ADMIN_TOKEN = OPS_ADMIN_TOKEN_FIXTURE;
     vi.resetModules();
     loggerWarnMock.mockClear();
     const { default: opsMiddleware } = await import('@/shared/middlewares/core/ops.middleware.js');
     const application = Fastify();
     await application.register(opsMiddleware);
 
-    const response = await application.inject({
+    const refused = await application.inject({
       method: 'POST',
       url: '/internal/ops/circuit-breakers/stripe/reset',
       headers: { authorization: `Bearer ${METRICS_TOKEN_FIXTURE}` },
+    });
+    // The scrape token is read-only: a reset needs OPS_ADMIN_TOKEN.
+    expect(refused.statusCode).toBe(401);
+
+    const response = await application.inject({
+      method: 'POST',
+      url: '/internal/ops/circuit-breakers/stripe/reset',
+      headers: { authorization: `Bearer ${OPS_ADMIN_TOKEN_FIXTURE}` },
     });
 
     expect(response.statusCode).toBe(200);

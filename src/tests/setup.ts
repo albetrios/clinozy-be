@@ -272,6 +272,7 @@ process.env.REDIS_URL ??= 'redis://localhost:6379';
 process.env.RUN_REDIS_TESTS ??= '1';
 process.env.SECRETS_ENCRYPTION_KEY ??= 'a'.repeat(64);
 process.env.METRICS_SCRAPE_TOKEN ??= 'test-metrics-bearer-token-min-32-chars';
+process.env.OPS_ADMIN_TOKEN ??= 'test-ops-admin-token-min-32-characters-x';
 process.env.COOKIE_SECURE ??= 'false';
 // Hard-set (not `??=`) so a developer's `.env.local` ALLOWED_ORIGINS (e.g. a dashboards / clinozy-fe
 // origin) cannot break the auth origin/CSRF e2e tests, which assert against `http://localhost:3000`.

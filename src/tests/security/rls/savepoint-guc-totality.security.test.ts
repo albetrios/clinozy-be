@@ -180,7 +180,8 @@ describe('Security: original principal identity reuse', () => {
           );
         }),
       );
-      expect(await visibleUserPublicIds()).toEqual([foreign.public_id]);
+      // The nested unit's identity ends with it: the outer user is back.
+      expect(await visibleUserPublicIds()).toEqual([user.public_id]);
       await withAppDatabaseContext(original, async () => {
         expect(await visibleUserPublicIds()).toEqual([user.public_id]);
       });

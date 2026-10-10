@@ -44,6 +44,7 @@ import {
   runWithPinnedOrganizationDatabaseSession,
   runWithWorkerDatabaseContext,
   setLocalMaintenanceRole,
+  exchangeLocalDatabaseConfig,
   setLocalDatabaseConfig,
   workerDatabaseContextForOrganization,
   workerDatabaseContextForUser,
@@ -211,25 +212,53 @@ const principalIdentityReuseStorage = new AsyncLocalStorage<{
   identityChanged: boolean;
 }>();
 
-async function layerPrincipalUserIdentity(options: {
+/**
+ * Runs `callback` with the user identity layered onto a reused transaction, and puts the previous
+ * identity back when it ends.
+ *
+ * @remarks
+ * A `SET LOCAL` lasts for the whole transaction (and RELEASE SAVEPOINT keeps it), so without the
+ * restore the outer unit of work would carry on as the inner user. The restore runs whether the
+ * callback succeeds or fails; when it failed and the transaction is already aborted, the restore's
+ * own failure is dropped so the callback's error surfaces.
+ */
+async function runWithLayeredUserIdentity<T>(options: {
   databaseHandle: RequestScopedPostgresDatabase;
   userPublicId: string;
-}): Promise<void> {
+  callback: () => Promise<T>;
+}): Promise<T> {
   const original = principalIdentityReuseStorage.getStore();
-  if (original !== undefined) {
-    if (
-      !original.identityChanged &&
-      original.databaseHandle === options.databaseHandle &&
-      original.userPublicId === options.userPublicId
-    )
-      return;
-    original.identityChanged = true;
+  if (
+    original !== undefined &&
+    !original.identityChanged &&
+    original.databaseHandle === options.databaseHandle &&
+    original.userPublicId === options.userPublicId
+  ) {
+    return options.callback();
   }
-  await setLocalDatabaseConfig(
+  if (original !== undefined) original.identityChanged = true;
+  const previousUserPublicId = await exchangeLocalDatabaseConfig(
     options.databaseHandle,
     'app.current_user_public_id',
     options.userPublicId,
   );
+  if (previousUserPublicId === options.userPublicId) return options.callback();
+  const restoreOuterIdentity = () =>
+    setLocalDatabaseConfig(
+      options.databaseHandle,
+      'app.current_user_public_id',
+      previousUserPublicId ?? '',
+    );
+  let result: T;
+  try {
+    result = await options.callback();
+  } catch (error) {
+    // An aborted transaction refuses the restore too; the callback's error is the one to surface.
+    await restoreOuterIdentity().catch(() => undefined);
+    throw error;
+  }
+  await restoreOuterIdentity();
+  return result;
 }
 
 // The principal branch of withAppDatabaseContext: same-organization reuse, user-GUC
@@ -324,14 +353,15 @@ async function runPrincipalDatabaseContext<T>(
     organizationPublicId !== undefined &&
     activeSession.organizationPublicId === organizationPublicId
   ) {
-    return runWithWorkerDatabaseContext(workerContext, async () => {
-      if (userPublicId !== undefined) {
-        await layerPrincipalUserIdentity({
-          databaseHandle: activeSession.databaseHandle,
-          userPublicId,
-        });
-      }
-      return callback(brandWorkerContextDatabaseHandle(activeSession.databaseHandle));
+    return runWithWorkerDatabaseContext(workerContext, () => {
+      const run = () => callback(brandWorkerContextDatabaseHandle(activeSession.databaseHandle));
+      return userPublicId === undefined
+        ? run()
+        : runWithLayeredUserIdentity({
+            databaseHandle: activeSession.databaseHandle,
+            userPublicId,
+            callback: run,
+          });
     });
   }
 
@@ -346,13 +376,13 @@ async function runPrincipalDatabaseContext<T>(
     organizationPublicId === undefined &&
     userPublicId !== undefined
   ) {
-    return runWithWorkerDatabaseContext(workerContext, async () => {
-      await layerPrincipalUserIdentity({
+    return runWithWorkerDatabaseContext(workerContext, () =>
+      runWithLayeredUserIdentity({
         databaseHandle: activeSession.databaseHandle,
         userPublicId,
-      });
-      return callback(brandWorkerContextDatabaseHandle(activeSession.databaseHandle));
-    });
+        callback: () => callback(brandWorkerContextDatabaseHandle(activeSession.databaseHandle)),
+      }),
+    );
   }
 
   return runPooledUnitOfWork({

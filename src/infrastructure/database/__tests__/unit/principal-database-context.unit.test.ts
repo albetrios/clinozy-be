@@ -146,10 +146,14 @@ describe('withAppDatabaseContext', () => {
         expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
       });
 
-      // exactly one extra statement: layering app.current_user_public_id onto the outer handle
+      // two extra statements: layering app.current_user_public_id onto the outer handle, and
+      // restoring the outer identity when the nested unit ends
       const sqlTexts = executedSqlTexts();
-      expect(sqlTexts).toHaveLength(1);
+      expect(sqlTexts).toHaveLength(2);
       expect(sqlTexts[0]).toContain('app.current_user_public_id');
+      expect(sqlTexts[0]).toContain('usr_a');
+      expect(sqlTexts[1]).toContain('app.current_user_public_id');
+      expect(sqlTexts[1]).not.toContain('usr_a');
     });
   });
 
@@ -167,11 +171,14 @@ describe('withAppDatabaseContext', () => {
         // Same transaction handle — no second pool checkout, atomic with the outer trx.
         expect(innerHandle).toBe(outerHandle);
       });
+      // Layer, then restore — both touch only the user GUC.
       const sqlTexts = executedSqlTexts();
-      expect(sqlTexts).toHaveLength(1);
-      expect(sqlTexts[0]).toContain('app.current_user_public_id');
-      // The pinned session's organization GUC is never rewritten by a user-only scope.
-      expect(sqlTexts[0]).not.toContain('app.current_organization_public_id');
+      expect(sqlTexts).toHaveLength(2);
+      for (const sqlText of sqlTexts) {
+        expect(sqlText).toContain('app.current_user_public_id');
+        // The pinned session's organization GUC is never rewritten by a user-only scope.
+        expect(sqlText).not.toContain('app.current_organization_public_id');
+      }
     });
   });
 
@@ -199,10 +206,12 @@ describe('withAppDatabaseContext', () => {
       await withAppDatabaseContext(scope, async () => undefined);
       await withAppDatabaseContext(scope, async () => undefined);
     });
-    expect(mockExecute).toHaveBeenCalledTimes(4);
+    // Arm usr_a; layer usr_b + restore; then usr_a is layered (+ restored) each time — the mock
+    // never reports the current value, so no layering is skipped.
+    expect(mockExecute).toHaveBeenCalledTimes(7);
     expect(executedSqlTexts()[1]).toContain('usr_b');
-    expect(executedSqlTexts()[2]).toContain('usr_a');
     expect(executedSqlTexts()[3]).toContain('usr_a');
+    expect(executedSqlTexts()[5]).toContain('usr_a');
   });
 
   it('invalidates original-user reuse before a concurrent identity write completes', async () => {
@@ -221,7 +230,8 @@ describe('withAppDatabaseContext', () => {
       release();
       await other;
     });
-    expect(mockExecute).toHaveBeenCalledTimes(3);
+    // Arm; usr_b's pending layer; usr_a re-layered + restored; usr_b's restore.
+    expect(mockExecute).toHaveBeenCalledTimes(5);
   });
 
   it('does not reuse original-user knowledge after a failed identity write', async () => {
@@ -236,7 +246,8 @@ describe('withAppDatabaseContext', () => {
       ).rejects.toThrow('identity write failed');
       await withAppDatabaseContext(scope, async () => undefined);
     });
-    expect(mockExecute).toHaveBeenCalledTimes(3);
+    // Arm; the failed usr_b layer (nothing to restore); usr_a re-layered + restored.
+    expect(mockExecute).toHaveBeenCalledTimes(4);
   });
 
   it('arms a new transaction even if a previous callback failed on the same mock handle', async () => {
