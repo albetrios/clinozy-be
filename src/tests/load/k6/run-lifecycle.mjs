@@ -57,6 +57,9 @@ if (process.env.LOAD_TEST_CREATE_DATABASE === 'true') {
 const shared = {
   ...local,
   ...process.env,
+  // The env file is then the PRIMARY file, applied without override: a shell
+  // NODE_ENV=development would layer it on top and point the API back at the app database.
+  NODE_ENV: 'local',
   TEST_MODE: 'true',
   RATE_LIMIT_MAX: '100000',
   RATE_LIMIT_WINDOW_MS: '1000',
@@ -114,7 +117,12 @@ for (const key of [
     u.pathname = `/${database}`;
     env[key] = u.toString();
   }
-for (const key of ['SENTRY_DSN', 'OTEL_EXPORTER_OTLP_ENDPOINT', 'POSTHOG_KEY']) delete env[key];
+// No telemetry. The loader drops an empty value for a key the env file sets; deleting alone
+// would let the file refill it.
+for (const key of ['SENTRY_DSN', 'OTEL_EXPORTER_OTLP_ENDPOINT', 'POSTHOG_KEY']) {
+  if (key in local) env[key] = '';
+  else delete env[key];
+}
 for (const port of [3002, 3003, 3004, 3005, ...(providerMode ? [3006, 9092] : [])]) {
   const probe = createServer();
   await new Promise((resolve, reject) => {

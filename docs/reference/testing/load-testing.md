@@ -6,44 +6,49 @@ Load tests use [k6](https://k6.io/) and Autocannon. Keep this doc in sync with [
 
 ---
 
-## Browser contracts (Playwright)
+## Browser contracts without Browser-MCP
 
-`pnpm test:browser:local` runs the repository-owned Playwright suite in Chromium against its own
-isolated backend, independently of agent browser tools. Install Chromium once with
-`pnpm test:browser:install`. The runner:
+The repository-owned Playwright suite runs Chromium independently of agent browser
+tools. Install dependencies with the pinned package manager, then run
+`pnpm test:browser:install`. Start an owned isolated backend with synthetic accounts,
+a dedicated database and Redis namespace. Never share its database with Vitest suites
+that truncate fixtures: clone the owned seed database for the browser process. Use
+`CAPTCHA_PROVIDER=disabled` for these local cases,
+`SESSION_ORIGIN_CSRF_REQUIRED=true`, `COOKIE_SECURE=false`, and
+`ALLOWED_ORIGINS=http://localhost:5175`. This suite measures local HTTP contracts;
+trusted HTTPS, Secure/cross-site cookies, real OAuth, CAPTCHA, physical authenticators
+and provider-hosted SCA require separate evidence.
 
-1. drops and recreates a `<database>_browser_test` scratch database on the local PostgreSQL,
-   migrates it and bulk-seeds synthetic tenants (`pnpm db:seed:loadtest`), writing their
-   credential pool beside the report — never the `pnpm dev` database or the default k6 pool;
-2. starts an API on `localhost:63003` with `CAPTCHA_PROVIDER=disabled`,
-   `SESSION_ORIGIN_CSRF_REQUIRED=true`, `COOKIE_SECURE=false`,
-   `ALLOWED_ORIGINS=http://localhost:5175`, its own Redis key prefix and no telemetry;
-3. runs `pnpm test:browser`, then stops the API.
+```bash
+BROWSER_TEST_API_URL=http://localhost:63003 \
+BROWSER_TEST_CREDENTIAL_POOL=/absolute/path/to/synthetic-credential-pool.json \
+BROWSER_TEST_REPORT_DIR=/absolute/path/to/new-private-report-directory \
+pnpm test:browser
+```
 
-Results, failure screenshots and traces land in the gitignored `browser-test-report/`
-(`BROWSER_TEST_REPORT_DIR` overrides it); traces can hold credentials and session data, so
-never commit them. `BROWSER_TEST_DATABASE` (must end in `_test`) and `BROWSER_TEST_API_PORT`
-override the database and port. Against a backend you started yourself, run
-`pnpm test:browser` with `BROWSER_TEST_API_URL` and `BROWSER_TEST_CREDENTIAL_POOL` (two
-distinct tenants, the load-pool fields).
+The credential pool uses the existing load-pool fields and must contain two distinct
+tenants. The harness serves pages on localhost ports 5175 and 5176; only 5175 is
+allowed by the backend. Override these through `BROWSER_TEST_ORIGIN` and
+`BROWSER_TEST_DENIED_ORIGIN`, keeping the API allowlist aligned. The suite verifies
+login and input/authentication rejection, credentialed CORS, HttpOnly/path cookies,
+session refresh, organization binding and foreign-tenant denial, originless CSRF
+double-submit handling, and logout revocation. It exercises backend browser
+contracts rather than the product frontend.
 
-The harness serves pages on localhost ports 5175 (allowed) and 5176 (denied);
-`BROWSER_TEST_ORIGIN` / `BROWSER_TEST_DENIED_ORIGIN` override them — keep the API allowlist
-aligned. The suite verifies login and input/authentication rejection, credentialed CORS,
-HttpOnly/path cookies, session refresh, organization binding and foreign-tenant denial,
-originless CSRF double-submit handling and logout revocation. It exercises backend browser
-contracts, not the product frontend; trusted HTTPS, Secure/cross-site cookies, real OAuth,
-CAPTCHA, physical authenticators and provider-hosted SCA need separate evidence. Retries are
-disabled so failures stay visible.
+Missing browser binaries or backend prerequisites fail the browser run explicitly.
+Vitest, database, queue, k6 and sandbox-provider API tests remain independent. Record
+browser cases as NOT RUN until a real browser executes them. JSON results,
+failure screenshots and traces remain private: traces can contain credentials and
+session data and must not be committed. Retries are disabled so failures remain visible.
 
 ```mermaid
 flowchart LR
-  runner["pnpm test:browser:local"] --> database["Scratch database: migrate + synthetic tenants"]
-  runner --> api["Isolated API :63003"]
-  runner --> playwright["Playwright + Chromium"]
-  playwright --> harness["Harness pages :5175 / :5176"]
-  harness --> api
-  playwright --> report["browser-test-report/ (gitignored)"]
+  commands["Repository test commands"] --> api["API / database / queue / sandbox APIs"]
+  commands --> playwright["Playwright CLI + Chromium"]
+  playwright --> harness["Local browser contract harness"]
+  harness --> backend["Owned isolated backend"]
+  api --> backend
+  playwright --> evidence["Private JSON / screenshots / traces"]
 ```
 
 ## Flow overview
@@ -584,24 +589,25 @@ For managed HTTP proxies on Node 24, start the API with `NODE_USE_ENV_PROXY=1` a
 
 ## Stripe provider and outbound webhook validation
 
-`pnpm test:stripe:load` builds the API and prepares everything it needs
-(`src/tests/load/k6/prepare-provider-fixtures.mjs`): a fresh migrated
-`<database>_stripe_load_test` scratch database; synthetic tenants made with the repository test
-factories — separate sandbox, contract and k6 actor sets, each actor with an all-permission TEAM
-and its own PERSONAL organization; and, when `STRIPE_SECRET_KEY` is an `sk_test_` key, the
-four-plan sandbox catalog, reusing this account's products marked
-`metadata.purpose=load-validation` and creating only what is missing. It then runs the
-real-sandbox lane and the local contract lane against that database (`VUS=1`, `ITERATIONS=7`).
-A missing key or a failed provider run still produces local results, but the command exits
-nonzero until both lanes pass. Live keys are rejected. Keys stay in environment configuration;
-the gitignored `k6-stripe-validation/` report holds modes, exit codes and results — its private
-pools and catalog manifest are `0600` — never key values. `LOAD_TEST_DATABASE` and
-`LOAD_TEST_REPORT_DIR` override the scratch database and report directory.
+`pnpm test:stripe:load` first uses the configured `STRIPE_SECRET_KEY` when it is an
+`sk_test_` key, then runs the local contract fixture. A missing key or failed provider
+run still produces local test results, but the command exits nonzero until both
+checks pass. Live keys are rejected for these tests. Keys stay in environment
+configuration; reports contain modes, exit codes and results, never key values.
 
-The lifecycle runner rejects the application database, redirects all four database URLs,
-namespaces Redis and owns its API, Stripe worker and fixtures. Sandbox subscriptions, customers
-and catalog objects stay in the Stripe test account after the run; unrelated provider objects are
-never modified.
+```sh
+LOAD_TEST_DATABASE=clinozy_load_lifecycle \
+LOAD_TEST_CREATE_DATABASE=true \
+LOAD_TEST_REPORT_DIR=k6-stripe-validation \
+pnpm test:stripe:load
+```
+
+Use a new scratch database when cloning with `LOAD_TEST_CREATE_DATABASE=true`.
+For an existing scratch database omit that flag. The runner rejects the application
+database, redirects all four database URLs, namespaces Redis and owns its API,
+Stripe worker and fixtures. The provider fixture retains its owned sandbox
+subscriptions, customers and catalog objects after stopping the worker. Reports
+record retention; unrelated provider objects must never be modified.
 
 The configured-key run uses Stripe's actual test account: independently retrieves
 an existing owned catalog, creates synthetic customers and subscriptions, confirms
@@ -625,12 +631,23 @@ independently checks active, non-live products and all seven price amounts,
 currencies and recurring intervals. It reuses these objects and never creates
 replacement products or prices. Contract setup models this catalog locally.
 
-`prepare-provider-fixtures.mjs` builds both private inputs: the catalog manifest
-(`LOAD_PROVIDER_CATALOG_FILE`: `realStripeSandbox: true` and four products with provider `id`,
-`title`, `description` and `prices[{ id, cycle }]`) and the `LOAD_PROVIDER_CREDENTIAL_POOL` object
-with separate `sandbox` and `contract` actor arrays — distinct, unsubscribed teams, the last actor
-of each being the foreign tenant. Every organization switch returns a rebound token; the journey
-uses that token for subsequent requests.
+Prepare fresh synthetic TEAM organizations, ACTIVE memberships and permissions
+with the existing test factories in an isolated migrated database. Each journey
+actor also needs a distinct owned PERSONAL organization and membership. Supply a
+private `LOAD_PROVIDER_CREDENTIAL_POOL` JSON array with the existing `email`,
+`password`, `userPublicId` and `organizationPublicId` fields plus
+`personalOrganizationPublicId` for each journey actor. The final actor is a
+foreign-tenant fixture. Do not overwrite the original tenant-burst pool, share
+these fixtures with truncating Vitest suites, or reuse teams with subscriptions.
+Every organization switch returns a rebound token; the journey uses that token
+for subsequent requests.
+
+The key-first `pnpm test:stripe:load` wrapper runs sandbox and contract against
+the same selected scratch database. Supply a private object with separate
+`sandbox` and `contract` actor arrays when using that wrapper: their teams must
+be distinct and unsubscribed. A single array is sufficient for one explicitly
+selected lane. Setup validates distinct user identities and both required
+organization scopes before starting any journey.
 
 Seven sequential journeys cover all advertised plan/cycle combinations, 18
 directed same-cycle plan changes and 24 cross-cycle requests. Change-plan rejects

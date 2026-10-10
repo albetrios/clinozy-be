@@ -12,8 +12,6 @@
  *
  * Env knobs:
  *   LOAD_TEST_PASSWORD  — plaintext password stamped on bulk users (default: LoadTest123!)
- *   LOAD_TEST_CREDENTIAL_POOL_PATH — where the pool JSON is written (default below; the
- *                         browser-contract runner writes its own beside its report)
  *
  * Usage:
  *   pnpm tool:load-test-credential-pool      (after bulk seed exists)
@@ -22,7 +20,7 @@
 import '@/shared/config/load-env-files.js';
 import '@/scripts/seed/seed-runtime-url.js';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { and, eq, isNull, like, sql } from 'drizzle-orm';
 import { closeDatabase } from '@/infrastructure/database/connection.js';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
@@ -35,9 +33,7 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 const BULK_EMAIL_PATTERN = 'bulk-user-%@seed.local';
 const BULK_ORG_SLUG_PATTERN = 'bulk-organization-%';
-const OUTPUT_PATH =
-  process.env.LOAD_TEST_CREDENTIAL_POOL_PATH ??
-  join(process.cwd(), 'src/tests/load/k6/data/credential-pool.json');
+const OUTPUT_PATH = join(process.cwd(), 'src/tests/load/k6/data/credential-pool.json');
 
 /** One row in the exported credential pool. */
 export interface CredentialPoolEntry {
@@ -121,7 +117,7 @@ async function run(env: NodeJS.ProcessEnv): Promise<void> {
   }));
 
   // Step 3 — write pool JSON (gitignored; contains plaintext password).
-  await mkdir(dirname(OUTPUT_PATH), { recursive: true });
+  await mkdir(join(process.cwd(), 'src/tests/load/k6/data'), { recursive: true });
   await writeFile(OUTPUT_PATH, JSON.stringify(pool, null, 2));
 
   logger.info(

@@ -1923,7 +1923,6 @@ src/
     │   │   │   ├── data.js
     │   │   │   ├── idempotency.js
     │   │   │   ├── mailbox.js
-    │   │   │   ├── plan-tiers.js
     │   │   │   ├── pool.js
     │   │   │   └── totp.js
     │   │   ├── scenarios/
@@ -1979,7 +1978,6 @@ src/
     │   │   ├── load-provider-preload.mjs
     │   │   ├── load-provider.mjs
     │   │   ├── load-storage.mjs
-    │   │   ├── prepare-provider-fixtures.mjs
     │   │   ├── run-journey.sh
     │   │   ├── run-lifecycle.mjs
     │   │   ├── run-stripe-validation.mjs
