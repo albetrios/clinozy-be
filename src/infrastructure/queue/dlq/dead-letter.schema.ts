@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { bigserial, index, integer, jsonb, text, timestamp } from 'drizzle-orm/pg-core';
+import { bigserial, check, index, integer, jsonb, text, timestamp } from 'drizzle-orm/pg-core';
 import { auditSchema } from '@/infrastructure/database/pg-schemas.js';
 
 /**
@@ -46,6 +46,10 @@ export const dead_letter_jobs = auditSchema.table(
     auto_retry_resolved_at: timestamp('auto_retry_resolved_at', { withTimezone: true }),
   },
   (table) => [
+    // Mirrors of the database's CHECKs (20260530000002, 20261005050241).
+    check('chk_dead_letter_jobs_attempts_made_positive', sql`${table.attempts_made} >= 0`),
+    check('chk_dead_letter_jobs_max_attempts_positive', sql`${table.max_attempts} >= 1`),
+    check('chk_dead_letter_jobs_replay_depth', sql`${table.replay_depth} >= 0`),
     index('idx_dead_letter_jobs_source_queue_failed_at').on(table.source_queue, table.failed_at),
     index('idx_dead_letter_jobs_failed_at').on(table.failed_at),
     // sec-Q #31 / sec-D #31: partial index for the auto-retry sweep, which filters

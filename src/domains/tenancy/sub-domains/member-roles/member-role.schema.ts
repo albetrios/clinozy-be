@@ -47,6 +47,10 @@ export const roles = tenancySchema
       ),
     },
     (table) => [
+      // Tombstone purge: only the soft-deleted rows, so live writes never maintain it.
+      index('idx_roles_tombstoned')
+        .on(table.deleted_at)
+        .where(sql`${table.deleted_at} IS NOT NULL`),
       // Attribution FK indexes (partial on IS NOT NULL) from migration 20260623000000 — declared so
       // the schema lists every index the database has (pinned by index-hygiene.integration.test.ts).
       index('idx_roles_created_by_user_id')

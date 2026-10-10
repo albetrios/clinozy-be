@@ -85,7 +85,6 @@ export const audit_outbox = auditSchema
       /** Drain claim path: `WHERE status = 'PENDING' ORDER BY created_at`. */
       index('idx_audit_outbox_status_created_at').on(table.status, table.created_at),
       /** Per-organization operator triage: list FAILED rows for a single tenant. */
-      index('idx_audit_outbox_org_status').on(table.organization_public_id, table.status),
       check('chk_audit_outbox_status', sql`${table.status} IN ('PENDING', 'PROCESSED', 'FAILED')`),
       check(
         'chk_audit_outbox_severity',

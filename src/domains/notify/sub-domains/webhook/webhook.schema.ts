@@ -57,6 +57,10 @@ export const webhooks = notifySchema
       ),
     },
     (table) => [
+      // Tombstone purge: only the soft-deleted rows, so live writes never maintain it.
+      index('idx_webhooks_tombstoned')
+        .on(table.deleted_at)
+        .where(sql`${table.deleted_at} IS NOT NULL`),
       // Attribution FK indexes (partial on IS NOT NULL) from migration 20260623000000 — declared so
       // the schema lists every index the database has (pinned by index-hygiene.integration.test.ts).
       index('idx_webhooks_created_by_user_id')
@@ -131,17 +135,15 @@ export const webhook_delivery_attempts = notifySchema
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     },
     (table) => [
-      index('idx_webhook_attempts_webhook').on(
-        table.webhook_id,
-        table.event_type,
-        table.created_at,
-      ),
       index('idx_webhook_attempts_webhook_created_id').on(
         table.webhook_id,
         table.created_at,
         table.id,
       ),
-      index('idx_webhook_attempts_retry').on(table.status, table.next_retry_at),
+      // The webhook-delivery reclaim: PENDING attempts older than its cutoff, oldest first.
+      index('idx_webhook_attempts_pending_created_at')
+        .on(table.created_at)
+        .where(sql`${table.status} = 'PENDING'`),
       // audit-#3: supports the time-based retention sweep (DELETE WHERE created_at < cutoff).
       index('idx_webhook_attempts_created_at').on(table.created_at),
       uniqueIndex('idx_webhook_delivery_attempts_public_id').on(table.public_id),

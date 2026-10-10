@@ -85,6 +85,47 @@ describe('OrganizationRepository (database)', () => {
     expect(emptyPage.total).toBeNull();
   });
 
+  it('lists exactly the owned and ACTIVE-member organizations, each once, across pages', async () => {
+    const caller = await createTestUser({ email: 'lister@example.com' });
+    const other = await createTestUser({ email: 'other-owner@example.com' });
+    // Owned only, owned AND a member (must appear once), member only, suspended member, deleted.
+    const owned = await createTestOrganization({ ownerUserId: caller.id, name: 'Owned' });
+    const ownedAndMember = await createTestOrganization({ ownerUserId: caller.id, name: 'Both' });
+    const memberOnly = await createTestOrganization({ ownerUserId: other.id, name: 'Member' });
+    const suspended = await createTestOrganization({ ownerUserId: other.id, name: 'Suspended' });
+    const notMine = await createTestOrganization({ ownerUserId: other.id, name: 'Not mine' });
+    for (const [organization, status] of [
+      [ownedAndMember, 'ACTIVE'],
+      [memberOnly, 'ACTIVE'],
+      [suspended, 'SUSPENDED'],
+    ] as const) {
+      const role = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: [],
+      });
+      await createMembership({
+        userId: caller.id,
+        organizationId: organization.id,
+        roleId: role.id,
+        status,
+      });
+    }
+
+    const firstPage = await repository.findAllForUser(caller.public_id, { limit: 2 });
+    expect(firstPage.has_more).toBe(true);
+    const secondPage = await repository.findAllForUser(caller.public_id, {
+      limit: 2,
+      after: firstPage.next_cursor!,
+    });
+    expect(secondPage.has_more).toBe(false);
+
+    const listed = [...firstPage.items, ...secondPage.items].map((row) => row.public_id);
+    // In creation order, the owned-and-member organization once (the UNION deduplicates).
+    expect(listed).toEqual([owned.public_id, ownedAndMember.public_id, memberOnly.public_id]);
+    expect(listed).not.toContain(suspended.public_id);
+    expect(listed).not.toContain(notMine.public_id);
+  });
+
   it('creates, queries, updates, and soft-deletes organizations', async () => {
     const owner = await createTestUser({ email: 'org-owner@example.com' });
 

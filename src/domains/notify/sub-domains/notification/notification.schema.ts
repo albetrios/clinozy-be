@@ -59,7 +59,6 @@ export const notifications = notifySchema
       index('idx_notifications_user_read').on(table.user_id, table.is_read, table.created_at),
       index('idx_notifications_user_created_id').on(table.user_id, table.created_at, table.id),
       index('idx_notifications_org').on(table.organization_id, table.created_at),
-      index('idx_notifications_type').on(table.type, table.created_at),
       index('idx_notifications_created').on(table.created_at),
       check('chk_notifications_read', sql`NOT ${table.is_read} OR ${table.read_at} IS NOT NULL`),
       pgPolicy('notifications_tenant_isolation', {
