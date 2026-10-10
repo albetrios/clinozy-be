@@ -13,9 +13,16 @@ import { parseListCursor } from '@/shared/utils/http/pagination.util.js';
 const SORT_FIELDS = ['name', 'created_at'] as const;
 const schema = listSearchSortSchema(SORT_FIELDS);
 
-type Row = { created_at: Date; id: number; name: string; public_id: string };
+type Row = {
+  created_at: Date;
+  cursor_created_at: string;
+  id: number;
+  name: string;
+  public_id: string;
+};
 const row = (over: Partial<Row> = {}): Row => ({
   created_at: new Date('2026-01-01T00:00:00.000Z'),
+  cursor_created_at: '2026-01-01T00:00:00.000000Z',
   id: 1,
   name: 'alpha',
   public_id: 'role_a',

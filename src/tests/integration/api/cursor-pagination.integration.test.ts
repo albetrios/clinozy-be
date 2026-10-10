@@ -116,7 +116,7 @@ describe('Cursor pagination — integration', () => {
           roleId: role.id,
         });
         await database.execute(
-          sql`UPDATE tenancy.memberships SET created_at = ${'2026-01-01T00:00:00.' + fraction + 'Z'}::timestamptz WHERE id = ${membership.id}`,
+          sql`UPDATE tenancy.memberships SET created_at = ${`2026-01-01T00:00:00.${fraction}Z`}::timestamptz WHERE id = ${membership.id}`,
         );
       }
       const expectedRows = await database.execute<{ public_id: string }>(

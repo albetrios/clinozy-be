@@ -1,4 +1,7 @@
-import { cursorTimestampSelection } from '@/shared/utils/http/pagination.util.js';
+import {
+  type CursorTimestampRow,
+  cursorTimestampSelection,
+} from '@/shared/utils/http/pagination.util.js';
 import { getTableColumns, and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
@@ -100,7 +103,7 @@ export class MemberRoleRepository extends BaseRepository {
       .from(roles)
       .where(where)
       .orderBy(...orderBy)
-      .limit(limit + 1)) as MemberRoleRow[];
+      .limit(limit + 1)) as (MemberRoleRow & CursorTimestampRow)[];
     return finishKeysetPage(rows, { limit, sortValueFor, filterFingerprint });
   }
 

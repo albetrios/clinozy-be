@@ -25,7 +25,11 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import { type MembershipRow, SEAT_CONSUMING_MEMBERSHIP_STATUSES } from './membership.types.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
-import { parseListCursor, cursorTimestampSelection } from '@/shared/utils/http/pagination.util.js';
+import {
+  type CursorTimestampRow,
+  cursorTimestampSelection,
+  parseListCursor,
+} from '@/shared/utils/http/pagination.util.js';
 import {
   buildContainsLikePattern,
   computeListFilterFingerprint,
@@ -174,7 +178,7 @@ export class MembershipRepository extends BaseRepository {
         ),
       )
       .orderBy(...orderBy)
-      .limit(limit + 1)) as MembershipRow[];
+      .limit(limit + 1)) as (MembershipRow & CursorTimestampRow)[];
     return finishKeysetPage(rows, { limit, sortValueFor, filterFingerprint });
   }
 
@@ -226,7 +230,7 @@ export class MembershipRepository extends BaseRepository {
     // Preserve the definer function's ordering; drop any id the RLS-scoped fetch didn't return.
     const rows = idsInOrder
       .map((id) => rowsById.get(id))
-      .filter((row): row is MembershipRow => row !== undefined);
+      .filter((row): row is MembershipRow & CursorTimestampRow => row !== undefined);
     return finishKeysetPage(rows, {
       limit,
       sortValueFor: (row) => sortValueById.get(row.id),
@@ -265,10 +269,13 @@ export class MembershipRepository extends BaseRepository {
   private async findByIdsForOrganization(
     ids: readonly number[],
     organization_id: number,
-  ): Promise<Map<number, MembershipRow>> {
+  ): Promise<Map<number, MembershipRow & CursorTimestampRow>> {
     if (ids.length === 0) return new Map();
     const rows = (await getRequestDatabase()
-      .select()
+      .select({
+        ...getTableColumns(memberships),
+        cursor_created_at: cursorTimestampSelection(memberships.created_at),
+      })
       .from(memberships)
       .where(
         and(
@@ -276,7 +283,7 @@ export class MembershipRepository extends BaseRepository {
           eq(memberships.organization_id, organization_id),
           isNull(memberships.deleted_at),
         ),
-      )) as MembershipRow[];
+      )) as (MembershipRow & CursorTimestampRow)[];
     return new Map(rows.map((row) => [row.id, row]));
   }
 

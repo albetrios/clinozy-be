@@ -87,7 +87,7 @@ describe('Global: no direct DB-query primitives outside repositories (sec-r5-arc
   it('recognizes ordinary and multiline runtime connection imports while allowing type-only imports', () => {
     for (const primitive of ['database', 'sql']) {
       const scanner = FORBIDDEN_IMPORT_PATTERNS.find(({ name }) =>
-        name.includes('`' + primitive + '`'),
+        name.includes(`\`${primitive}\``),
       )?.pattern;
       expect(scanner).toBeDefined();
       for (const source of [

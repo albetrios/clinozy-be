@@ -25,6 +25,7 @@ import {
   buildDescendingCreatedAtIdCursorCondition,
   buildDescendingTextIdCursorCondition,
   createOpaqueCursorFromRow,
+  type CursorTimestampRow,
   cursorPaginationSchema,
   type ParsedListCursor,
   parseListCursor,
@@ -181,12 +182,11 @@ export function resolveKeysetSort<Row>(args: {
 
 /**
  * Turns a `limit + 1` fetch into a page result: slices to `limit`, computes `has_more`, and mints
- * the next opaque cursor (embedding `sort_value` + `filter_fingerprint`). Rows must expose
- * `created_at` + `id` for the cursor; timestamp-sorted queries also select
- * `cursor_created_at` with `cursorTimestampSelection` to retain PostgreSQL microseconds.
+ * the next opaque cursor (embedding `sort_value` + `filter_fingerprint`). Rows must expose `id`
+ * and `cursor_created_at` (selected with `cursorTimestampSelection`, keeping PostgreSQL microseconds).
  */
 export function finishKeysetPage<
-  Row extends { created_at: Date; id: number; public_id?: string; cursor_created_at?: string },
+  Row extends CursorTimestampRow & { id: number; public_id?: string },
 >(
   rows: Row[],
   args: {
@@ -203,10 +203,7 @@ export function finishKeysetPage<
     const sortValue = args.sortValueFor(last);
     // exactOptionalPropertyTypes: omit undefined-valued optional keys rather than pass `undefined`.
     next_cursor = createOpaqueCursorFromRow({
-      created_at: last.created_at,
-      ...(last.cursor_created_at !== undefined
-        ? { cursor_created_at: last.cursor_created_at }
-        : {}),
+      cursor_created_at: last.cursor_created_at,
       id: last.id,
       ...(last.public_id !== undefined ? { public_id: last.public_id } : {}),
       ...(sortValue !== undefined ? { sort_value: sortValue } : {}),

@@ -37,7 +37,7 @@ describe('Chaos resilience: Redis idempotency', () => {
     return `${prefix}-${randomUUID()}`;
   }
 
-  it('serves replayed payloads when Redis recovers despite artificial latency overhead', async () => {
+  it('serves the replayed payload while every Redis command is delayed by 2 s', async () => {
     const userWaitingForIsolation = await createTestUser();
     const authenticationTokenWaitingForIsolation = await generateTestToken({
       userId: userWaitingForIsolation.public_id,
@@ -74,6 +74,7 @@ describe('Chaos resilience: Redis idempotency', () => {
     });
 
     try {
+      const replayStartedAt = performance.now();
       const secondHttpResponseAwaitingIsolation = await injectAuthenticated(
         chaosFastifyApplicationInstance,
         {
@@ -88,6 +89,8 @@ describe('Chaos resilience: Redis idempotency', () => {
         },
       );
 
+      // Proves the toxin was on the replay path rather than silently bypassed.
+      expect(performance.now() - replayStartedAt).toBeGreaterThanOrEqual(1_950);
       expect(secondHttpResponseAwaitingIsolation.statusCode).toBe(200);
       expect(secondHttpResponseAwaitingIsolation.headers['x-idempotency-replay']).toBe('true');
       expect((secondHttpResponseAwaitingIsolation.json() as { data: unknown }).data).toEqual(

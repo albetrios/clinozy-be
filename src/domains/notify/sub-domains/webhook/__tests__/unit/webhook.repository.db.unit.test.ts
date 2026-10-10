@@ -353,7 +353,7 @@ describe('WebhookRepository (database)', () => {
         created_by_user_id: user.id,
       });
       await database.execute(
-        sql`UPDATE notify.webhooks SET created_at=${'2026-01-01T00:00:00.' + fraction + 'Z'}::timestamptz WHERE id=${hook.id}`,
+        sql`UPDATE notify.webhooks SET created_at=${`2026-01-01T00:00:00.${fraction}Z`}::timestamptz WHERE id=${hook.id}`,
       );
     }
     const expected = await database.execute<{ public_id: string }>(

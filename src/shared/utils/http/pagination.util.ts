@@ -60,14 +60,13 @@ export const listCursorPayloadSchema = z
 export type ListCursorPayload = z.infer<typeof listCursorPayloadSchema>;
 
 /**
- * Result of {@link parseListCursor}: a validated opaque cursor payload with
- * `Date`-typed `created_at`. Returns `null` (first page) for any `after` value
- * that cannot be decoded as a valid opaque cursor.
+ * Result of {@link parseListCursor}: a validated opaque cursor payload whose `created_at`
+ * is the row's PostgreSQL timestamp as UTC ISO text with microseconds (a JS `Date` would
+ * truncate to milliseconds and skip or repeat rows created within one millisecond).
  */
 export type ParsedListCursor = {
   kind: 'opaque';
-  created_at: Date;
-  created_at_iso?: string;
+  created_at: string;
   sort_value?: string;
   public_id?: string;
   id?: number;
@@ -146,8 +145,7 @@ export function parseListCursor(after: string | undefined): ParsedListCursor | n
   if (opaque) {
     return omitUndefined({
       kind: 'opaque' as const,
-      created_at: new Date(opaque.created_at),
-      created_at_iso: opaque.created_at,
+      created_at: opaque.created_at,
       sort_value: opaque.sort_value,
       public_id: opaque.public_id,
       id: opaque.id,
@@ -166,18 +164,24 @@ export function cursorTimestampSelection(createdAtColumn: AnyColumn): SQL<string
   return sql<string>`to_char(${createdAtColumn} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 }
 
-/** Builds an encrypted cursor using the full database timestamp when selected. */
-export function createOpaqueCursorFromRow(row: {
-  created_at: Date;
-  cursor_created_at?: string;
-  sort_value?: string;
-  public_id?: string;
-  id: number;
-  filter_fingerprint?: string;
-}): string {
+/** A list row that selected {@link cursorTimestampSelection} as `cursor_created_at`. */
+export type CursorTimestampRow = { cursor_created_at: string };
+
+/**
+ * Builds an encrypted cursor from a row that selected `cursor_created_at` via
+ * {@link cursorTimestampSelection} — required, so a list that forgets it fails to compile.
+ */
+export function createOpaqueCursorFromRow(
+  row: CursorTimestampRow & {
+    sort_value?: string;
+    public_id?: string;
+    id: number;
+    filter_fingerprint?: string;
+  },
+): string {
   return encodeListCursor(
     omitUndefined({
-      created_at: row.cursor_created_at ?? row.created_at.toISOString(),
+      created_at: row.cursor_created_at,
       sort_value: row.sort_value,
       public_id: row.public_id,
       id: row.id,
@@ -219,7 +223,7 @@ export function buildAscendingCreatedAtIdCursorCondition(
   if (cursor === null) {
     return undefined;
   }
-  const timestamp = sql`${cursor.created_at_iso ?? cursor.created_at.toISOString()}::timestamptz`;
+  const timestamp = sql`${cursor.created_at}::timestamptz`;
   const cursorId = cursor.id;
   if (cursorId === undefined) {
     return gt(createdAtColumn, timestamp);
@@ -263,7 +267,7 @@ export function buildDescendingCreatedAtIdCursorCondition(
   if (cursor === null) {
     return undefined;
   }
-  const timestamp = sql`${cursor.created_at_iso ?? cursor.created_at.toISOString()}::timestamptz`;
+  const timestamp = sql`${cursor.created_at}::timestamptz`;
   const cursorId = cursor.id;
   if (cursorId === undefined) {
     return lt(createdAtColumn, timestamp);
