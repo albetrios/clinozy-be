@@ -1,6 +1,7 @@
 import { SUBSCRIPTION_EVENT } from '@/domains/billing/sub-domains/subscription/events/subscription.events.js';
 import { MEMBERSHIP_EVENT } from '@/domains/tenancy/sub-domains/membership/events/membership.events.js';
 import { ORGANIZATION_EVENT } from '@/domains/tenancy/sub-domains/organization/events/organization.events.js';
+import { WEBHOOK_EVENT_TYPES, type WebhookEventType } from './webhook-event.constants.js';
 import type { WebhookEvent } from './webhook-event.types.js';
 
 /**
@@ -12,21 +13,22 @@ import type { WebhookEvent } from './webhook-event.types.js';
  *     constants, and each is emitted by its producer and fanned out by the notify webhook handler.
  * If the catalog ever moves to the database, add a schema and (if relevant) a query DTO/validator.
  */
-const AVAILABLE_WEBHOOK_EVENTS: WebhookEvent[] = [
-  { event: ORGANIZATION_EVENT.CREATED, description: 'When an organization is created' },
-  { event: ORGANIZATION_EVENT.UPDATED, description: 'When an organization is updated' },
-  { event: MEMBERSHIP_EVENT.CREATED, description: 'When a membership is created' },
-  { event: MEMBERSHIP_EVENT.UPDATED, description: 'When a membership is updated' },
-  { event: MEMBERSHIP_EVENT.DELETED, description: 'When a membership is deleted' },
-  { event: SUBSCRIPTION_EVENT.CREATED, description: 'When a subscription is created' },
-  { event: SUBSCRIPTION_EVENT.UPDATED, description: 'When a subscription is updated' },
-  { event: SUBSCRIPTION_EVENT.CANCELLED, description: 'When a subscription is cancelled' },
-];
+/** Customer-facing description per event type — typed so a new type cannot ship undescribed. */
+const WEBHOOK_EVENT_DESCRIPTIONS: Record<WebhookEventType, string> = {
+  [ORGANIZATION_EVENT.CREATED]: 'When an organization is created',
+  [ORGANIZATION_EVENT.UPDATED]: 'When an organization is updated',
+  [MEMBERSHIP_EVENT.CREATED]: 'When a membership is created',
+  [MEMBERSHIP_EVENT.UPDATED]: 'When a membership is updated',
+  [MEMBERSHIP_EVENT.DELETED]: 'When a membership is deleted',
+  [SUBSCRIPTION_EVENT.CREATED]: 'When a subscription is created',
+  [SUBSCRIPTION_EVENT.UPDATED]: 'When a subscription is updated',
+  [SUBSCRIPTION_EVENT.CANCELLED]: 'When a subscription is cancelled',
+};
 
-/** The event types customers can subscribe to — the handler subscribes to exactly these. */
-export const WEBHOOK_EVENT_TYPES: readonly string[] = AVAILABLE_WEBHOOK_EVENTS.map(
-  (entry) => entry.event,
-);
+const AVAILABLE_WEBHOOK_EVENTS: WebhookEvent[] = WEBHOOK_EVENT_TYPES.map((event) => ({
+  event,
+  description: WEBHOOK_EVENT_DESCRIPTIONS[event],
+}));
 
 /**
  * In-memory repository over the static {@link AVAILABLE_WEBHOOK_EVENTS} catalog. Wraps the

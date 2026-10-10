@@ -28,7 +28,7 @@ export async function createTestWebhook(options: CreateWebhookOptions) {
       // Store a properly-encrypted secret (as production does) — decryptFieldSecret is now
       // fail-closed and rejects unprefixed plaintext.
       encrypted_secret: encryptFieldSecret('test-secret'),
-      events: options.events ?? ['webhook.test'],
+      events: options.events ?? ['subscription.updated'],
       is_enabled: options.isEnabled ?? true,
       created_by_user_id: options.createdByUserId,
     })

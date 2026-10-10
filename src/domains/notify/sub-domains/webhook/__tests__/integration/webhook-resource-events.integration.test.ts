@@ -15,7 +15,7 @@ import {
   closeWebhookDeliveryQueue,
   type WebhookDeliveryJobData,
 } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
-import { WEBHOOK_EVENT_TYPES } from '@/domains/notify/sub-domains/webhook/webhook-event/webhook-event.repository.js';
+import { WEBHOOK_EVENT_TYPES } from '@/domains/notify/sub-domains/webhook/webhook-event/webhook-event.constants.js';
 import { createTestSubscription } from '@/domains/billing/__tests__/factories/subscription.factory.js';
 import {
   createMembership,

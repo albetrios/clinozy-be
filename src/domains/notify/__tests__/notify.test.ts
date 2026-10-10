@@ -231,7 +231,7 @@ describe('Notify Domain — Integration', () => {
         token,
         // Valid body so request passes schema validation and reaches the permission preHandler (403),
         // and a key so it clears the idempotencyRequired onRequest gate first.
-        payload: { url: 'https://example.com/hook', events: ['notification.created'] },
+        payload: { url: 'https://example.com/hook', events: ['membership.created'] },
         headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
       });
       expect(response.statusCode).toBe(403);

@@ -57,7 +57,7 @@ describe('registerNotifyEventHandlers', () => {
     // The catalog GET /notify/webhook-events advertises must match what is actually delivered.
     const { onSpy, registerNotifyEventHandlers } = await loadWithSpy();
     const { WEBHOOK_EVENT_TYPES } = await import(
-      '@/domains/notify/sub-domains/webhook/webhook-event/webhook-event.repository.js'
+      '@/domains/notify/sub-domains/webhook/webhook-event/webhook-event.constants.js'
     );
 
     registerNotifyEventHandlers();

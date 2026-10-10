@@ -441,6 +441,35 @@ describe('Webhook Sub-Domain — Integration', () => {
       expect(response.statusCode, response.body).toBe(400);
     });
 
+    it('returns 400 naming events for an event type outside the catalog', async () => {
+      const { user, organization, token } = await createAuthorizedContext();
+      const webhook = await createTestWebhook({
+        organizationId: organization.id,
+        url: 'https://example.com/patch-unknown-event',
+        createdByUserId: user.id,
+      });
+
+      const response = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath(`/notify/webhooks/${webhook.public_id}`),
+        token,
+        // A typo of `membership.updated`: stored, it would be a subscription that never fires.
+        payload: { events: ['membership.update'] },
+      });
+
+      expect(response.statusCode, response.body).toBe(400);
+      // The route schema rejects it first and names the entry; the message lists the catalog.
+      const body = response.json() as {
+        error: { errors: Array<{ field: string; message: string }> };
+      };
+      expect(body.error.errors).toEqual([
+        expect.objectContaining({
+          field: 'body.events/0',
+          message: expect.stringContaining('"membership.updated"'),
+        }),
+      ]);
+    });
+
     it('returns 403 without webhook manage permission', async () => {
       const { user, organization, token } = await createAuthorizedContext([
         NOTIFY_PERMISSIONS.WEBHOOK_READ,

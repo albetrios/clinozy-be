@@ -85,7 +85,7 @@ function payloadForPermissionRoute(
     return { default_enabled: false };
   }
   if (route.path.endsWith('/webhooks')) {
-    return { url: 'https://example.com/webhook', events: ['notification.created'] };
+    return { url: 'https://example.com/webhook', events: ['subscription.updated'] };
   }
   if (route.path.includes('/webhooks/:webhook_id')) {
     return { is_enabled: false };

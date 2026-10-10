@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { cursorPaginationSchema } from '@/shared/utils/http/pagination.util.js';
 import { trimmedString, trimmedStringMinMax } from '@/shared/utils/validation/validation.util.js';
+import { WEBHOOK_EVENT_TYPES } from './webhook-event/webhook-event.constants.js';
 
 /** Zod schema for webhook `:webhook_id` path params (get/update/delete/delivery-attempts/test). */
 export const webhookIdParamsDto = z
@@ -56,7 +57,13 @@ const httpsUrl = z
 const webhookSecret = trimmedString().min(16).max(255);
 
 /**
- * Zod schema for the `POST /notify/webhooks` request body — requires at least one event
+ * The events a webhook subscribes to — catalog types only ({@link WEBHOOK_EVENT_TYPES}), so a typo
+ * is a 400 instead of a subscription that silently never fires.
+ */
+const webhookEvents = z.array(z.enum(WEBHOOK_EVENT_TYPES)).min(1).max(WEBHOOK_EVENT_TYPES.length);
+
+/**
+ * Zod schema for the `POST /notify/webhooks` request body — requires at least one catalog event
  * and an HTTPS URL (up to 2 KB), with an optional plaintext secret (when omitted, the service
  * auto-generates a strong random secret) and an `is_enabled` flag that defaults to true.
  */
@@ -64,7 +71,7 @@ export const CreateWebhookDto = z
   .object({
     url: httpsUrl,
     secret: webhookSecret.optional(),
-    events: z.array(trimmedString().max(100)).min(1).max(50),
+    events: webhookEvents,
     is_enabled: z.boolean().optional().default(true),
   })
   .strict();
@@ -79,7 +86,7 @@ export const UpdateWebhookDto = z
   .object({
     url: httpsUrl.optional(),
     secret: webhookSecret.optional(),
-    events: z.array(trimmedString().max(100)).min(1).max(50).optional(),
+    events: webhookEvents.optional(),
     is_enabled: z.boolean().optional(),
   })
   .strict();

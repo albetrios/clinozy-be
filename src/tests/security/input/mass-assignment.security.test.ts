@@ -226,7 +226,7 @@ describe('Security: mass-assignment / over-posting', () => {
         token,
         payload: {
           url: 'https://example.com/hook',
-          events: ['billing.subscription.updated'],
+          events: ['subscription.updated'],
           organization_id: 999_999,
         },
         headers: idempotent(),
@@ -242,7 +242,7 @@ describe('Security: mass-assignment / over-posting', () => {
         token,
         payload: {
           url: 'https://example.com/hook',
-          events: ['billing.subscription.updated'],
+          events: ['subscription.updated'],
           encrypted_secret: 'pre-encrypted-by-attacker',
         },
         headers: idempotent(),
