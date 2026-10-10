@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WebhookService } from '@/domains/notify/sub-domains/webhook/webhook.service.js';
 
 /**
  * `registerNotifyEventHandlers` is the container-path registrar — it is called from
@@ -27,7 +28,12 @@ describe('registerNotifyEventHandlers', () => {
     const { registerNotifyEventHandlers } = await import(
       '@/domains/notify/events/notify.event-handlers.js'
     );
-    return { onSpy, registerNotifyEventHandlers };
+    // The organization resource handlers only call the service when an event fires.
+    const dependencies = { webhookService: {} as WebhookService };
+    return {
+      onSpy,
+      registerNotifyEventHandlers: () => registerNotifyEventHandlers(dependencies),
+    };
   }
 
   it('subscribes the webhook-delivery-requested handler', async () => {
@@ -45,6 +51,31 @@ describe('registerNotifyEventHandlers', () => {
     registerNotifyEventHandlers();
 
     expect(onSpy).toHaveBeenCalledWith(MEMBER_INVITATION_ACCEPTED, expect.any(Function));
+  });
+
+  it('subscribes every advertised webhook event type to the webhook fan-out', async () => {
+    // The catalog GET /notify/webhook-events advertises must match what is actually delivered.
+    const { onSpy, registerNotifyEventHandlers } = await loadWithSpy();
+    const { WEBHOOK_EVENT_TYPES } = await import(
+      '@/domains/notify/sub-domains/webhook/webhook-event/webhook-event.repository.js'
+    );
+
+    registerNotifyEventHandlers();
+
+    const subscribedTypes = onSpy.mock.calls.map(([eventType]) => eventType);
+    expect(WEBHOOK_EVENT_TYPES).toEqual([
+      'organization.created',
+      'organization.updated',
+      'membership.created',
+      'membership.updated',
+      'membership.deleted',
+      'subscription.created',
+      'subscription.updated',
+      'subscription.cancelled',
+    ]);
+    for (const eventType of WEBHOOK_EVENT_TYPES) {
+      expect(subscribedTypes.filter((type) => type === eventType)).toHaveLength(1);
+    }
   });
 
   it('registers both handlers exactly once when called twice', async () => {

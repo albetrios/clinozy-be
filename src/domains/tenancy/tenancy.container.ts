@@ -123,6 +123,8 @@ export function createTenancyContainer(
     userService,
     memberInvitationService,
   );
+  // Accept and revoke change memberships too; they emit through MembershipService's serializer.
+  memberInvitationService.wireMembershipEvents(membershipService);
 
   return {
     organizationService,

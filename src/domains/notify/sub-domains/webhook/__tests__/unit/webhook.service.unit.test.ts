@@ -379,11 +379,22 @@ describe('WebhookService', () => {
     ] as never);
     const requestWebhookDeliverySpy = vi.spyOn(service, 'requestWebhookDelivery');
 
-    await service.dispatchOrganizationWebhooks(1, 'subscription.updated', {
-      subscription_id: 'sub_1',
+    await service.dispatchOrganizationWebhooks({
+      organizationPublicId: scope.organizationPublicId,
+      eventType: 'subscription.updated',
+      data: { id: 'sub_1' },
     });
 
     expect(requestWebhookDeliverySpy).toHaveBeenCalledTimes(2);
+    // One envelope per event: every endpoint receives the same evt_ id, type and data.
+    const payloads = requestWebhookDeliverySpy.mock.calls.map(([input]) => input.payload);
+    expect(payloads[0]).toEqual(payloads[1]);
+    expect(payloads[0]).toMatchObject({
+      id: expect.stringMatching(/^evt_[a-z0-9]{21}$/),
+      type: 'subscription.updated',
+      created_at: expect.any(String),
+      data: { id: 'sub_1' },
+    });
   });
 
   it('dispatchOrganizationWebhooks isolates a single failing endpoint (best-effort)', async () => {
@@ -398,7 +409,11 @@ describe('WebhookService', () => {
       });
 
     await expect(
-      service.dispatchOrganizationWebhooks(1, 'subscription.updated', { subscription_id: 'sub_1' }),
+      service.dispatchOrganizationWebhooks({
+        organizationPublicId: scope.organizationPublicId,
+        eventType: 'subscription.updated',
+        data: { id: 'sub_1' },
+      }),
     ).resolves.toBeUndefined();
     expect(requestWebhookDeliverySpy).toHaveBeenCalledTimes(2);
   });
@@ -411,7 +426,11 @@ describe('WebhookService', () => {
     vi.spyOn(service, 'requestWebhookDelivery').mockRejectedValue(new Error('redis down'));
 
     await expect(
-      service.dispatchOrganizationWebhooks(1, 'subscription.updated', { subscription_id: 'sub_1' }),
+      service.dispatchOrganizationWebhooks({
+        organizationPublicId: scope.organizationPublicId,
+        eventType: 'subscription.updated',
+        data: { id: 'sub_1' },
+      }),
     ).rejects.toThrow('redis down');
   });
 

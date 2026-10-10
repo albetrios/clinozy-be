@@ -19,4 +19,4 @@ Read-only catalog of the webhook event types the platform can dispatch, served t
 ## Key invariants
 
 - Intentionally has **no** `.schema.ts` / `.dto.ts` / `.validator.ts`: the catalog is static in-memory data and the only route takes no params or body. If the catalog ever moves to the database, add a schema and (if relevant) a query DTO/validator.
-- Catalog entries are emitted by the producing domains; this folder only lists them — dispatch lives in the sibling [webhook-delivery](../webhook-delivery/webhook-delivery.overview.md) resource.
+- Catalog entries are the producing domains' event constants (`ORGANIZATION_EVENT`, `MEMBERSHIP_EVENT`, `SUBSCRIPTION_EVENT`); the producers emit them and `webhook/events/organization-resource.event-handlers.ts` fans each one out through `WebhookService.dispatchOrganizationWebhooks`. `WEBHOOK_EVENT_TYPES` exports the list; `notify.event-handlers.unit.test.ts` fails when an advertised type has no subscription. Delivery lives in the sibling [webhook-delivery](../webhook-delivery/webhook-delivery.overview.md) resource.

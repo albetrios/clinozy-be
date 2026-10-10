@@ -23,6 +23,7 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
 });
 
 import { MembershipService } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
+import { eventBus } from '@/core/events/event-bus.js';
 import {
   PRINCIPAL_SCOPE,
   type OrganizationPrincipalDatabaseScope,
@@ -48,6 +49,16 @@ describe('MembershipService.suspendExcessActiveMembersToFitCeiling (F2 downgrade
   );
   const countActiveByOrganization = vi.fn();
   const suspendExcessActiveMembers = vi.fn();
+  const suspendedRow = (id: number, userId: number) => ({
+    id,
+    public_id: `mem_${id}`,
+    user_id: userId,
+    role_id: 5,
+    status: 'SUSPENDED',
+    joined_at: new Date('2026-01-01T00:00:00Z'),
+    created_at: new Date('2026-01-01T00:00:00Z'),
+    updated_at: new Date('2026-02-01T00:00:00Z'),
+  });
 
   const organizationService = {
     requireOrganizationRecordByPublicId,
@@ -56,6 +67,9 @@ describe('MembershipService.suspendExcessActiveMembersToFitCeiling (F2 downgrade
   const membershipRepository = {
     countActiveByOrganization,
     suspendExcessActiveMembers,
+    resolveUserSummariesByInternalIds: vi.fn(async () => new Map()),
+    resolveRoleSummariesByInternalIds: vi.fn(async () => new Map()),
+    resolveLiveInvitationsByMembershipIds: vi.fn(async () => new Map()),
   } as never;
 
   // Only args 1 (organizationService) and 4 (membershipRepository) are exercised by this method;
@@ -69,6 +83,8 @@ describe('MembershipService.suspendExcessActiveMembersToFitCeiling (F2 downgrade
     {} as never,
   );
 
+  const emitSpy = vi.spyOn(eventBus, 'emit');
+
   beforeEach(() => {
     vi.clearAllMocks();
     requireOrganizationRecordByPublicId.mockResolvedValue(organizationRecord);
@@ -79,7 +95,7 @@ describe('MembershipService.suspendExcessActiveMembersToFitCeiling (F2 downgrade
 
   it('suspends exactly the excess active members, passes the owner so it is never suspended, and purges each one’s permission cache', async () => {
     countActiveByOrganization.mockResolvedValue(6);
-    suspendExcessActiveMembers.mockResolvedValue([11, 12]);
+    suspendExcessActiveMembers.mockResolvedValue([suspendedRow(1, 11), suspendedRow(2, 12)]);
 
     const suspendedCount = await service.suspendExcessActiveMembersToFitCeiling({
       organizationPublicId: 'org_public',
@@ -102,6 +118,29 @@ describe('MembershipService.suspendExcessActiveMembersToFitCeiling (F2 downgrade
     expect(resolveUserPublicIdsByInternalIds).toHaveBeenCalledWith([11, 12]);
   });
 
+  it('emits one membership.updated event per suspended member, with its public JSON', async () => {
+    countActiveByOrganization.mockResolvedValue(6);
+    suspendExcessActiveMembers.mockResolvedValue([suspendedRow(1, 11), suspendedRow(2, 12)]);
+
+    await service.suspendExcessActiveMembersToFitCeiling({
+      organizationPublicId: 'org_public',
+      ceiling: 4,
+    });
+
+    expect(emitSpy).toHaveBeenCalledTimes(2);
+    for (const membershipPublicId of ['mem_1', 'mem_2']) {
+      expect(emitSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'membership.updated',
+          payload: {
+            organization_public_id: 'org_public',
+            data: expect.objectContaining({ id: membershipPublicId, status: 'SUSPENDED' }),
+          },
+        }),
+      );
+    }
+  });
+
   it('is a no-op when the active members already fit the ceiling (excess <= 0)', async () => {
     countActiveByOrganization.mockResolvedValue(4);
 
@@ -112,6 +151,7 @@ describe('MembershipService.suspendExcessActiveMembersToFitCeiling (F2 downgrade
 
     expect(suspendExcessActiveMembers).not.toHaveBeenCalled();
     expect(invalidatePermissionsMock).not.toHaveBeenCalled();
+    expect(emitSpy).not.toHaveBeenCalled();
     expect(suspendedCount).toBe(0);
   });
 });

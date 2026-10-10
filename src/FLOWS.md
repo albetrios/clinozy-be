@@ -263,6 +263,7 @@ sequenceDiagram
 
 - `stripe_webhook_events` row keyed by Stripe `event.id` (idempotent inbound).
 - `subscriptions` table updated with the latest Stripe state.
+- `subscription.updated` (or `subscription.cancelled` once the status is `CANCELED`) to the organization's subscribed webhooks — see `organization-resource-webhook-flow`.
 
 ### Failure modes
 
@@ -312,8 +313,59 @@ sequenceDiagram
 ### Side effects
 
 - `subscriptions.status` transitions: `active` → `past_due` (and back, or onward to `canceled`).
+- Each transition is a `subscription.updated` (the final one a `subscription.cancelled`) to the organization's subscribed webhooks.
 
 ### Failure modes
 
 - **All standard subscription-change-flow failure modes apply** (signature, duplicate event id, stale events, worker crash).
 - **Customer ignores the dunning emails** → Stripe-driven cancellation eventually fires; the platform does not unilaterally cancel.
+
+## organization-resource-webhook-flow
+
+### Trigger
+
+A write changes one of the public resources the webhook catalog (`GET /api/v1/notify/webhook-events`) advertises:
+
+| Event | Emitted by |
+| ----- | ---------- |
+| `organization.created` | `POST /tenancy/organizations` |
+| `organization.updated` | `PATCH /tenancy/organization`, logo upload / delete |
+| `membership.created` | `POST /tenancy/organization/memberships` (the INVITED membership) |
+| `membership.updated` | membership PATCH (role, suspend, reactivate), invitation accept, downgrade auto-suspend |
+| `membership.deleted` | membership DELETE, leave, invitation revoke |
+| `subscription.created` | `POST /billing/subscriptions`, the Stripe `.created` fallback insert |
+| `subscription.updated` | change-plan, cancel at period end, resume, every Stripe sync that changes the row |
+| `subscription.cancelled` | immediate cancel (`INCOMPLETE`), organization offboarding, Stripe `.deleted` or a sync to `canceled` |
+
+### Sequence
+
+```mermaid
+sequenceDiagram
+  participant Service as Tenancy / billing service
+  participant Bus as Event bus
+  participant Notify as Webhook fan-out (notify)
+  participant DB as Postgres
+  participant Queue as webhook-delivery queue
+
+  Service->>DB: BEGIN (organization context); write the resource
+  Service->>Bus: emit <resource>.<verb> { organization_public_id, data: public JSON }
+  Bus->>Notify: dispatchOrganizationWebhooks (reuses the transaction)
+  Notify->>DB: list enabled webhooks subscribed to the type
+  Notify->>DB: INSERT webhook_delivery_attempts (PENDING, envelope { id, type, created_at, data })
+  Service->>DB: COMMIT
+  Notify->>Queue: enqueue one delivery job per attempt (after the commit)
+```
+
+### Side effects
+
+- One PENDING `webhook_delivery_attempts` row per subscribed enabled webhook, committed with the write. Every endpoint gets the same envelope: `id` (`evt_…`, one per event), `type`, `created_at`, `data` (what the resource's serializer returns over the API).
+- One `webhook-delivery` job per attempt, enqueued after the commit — by the request's `onResponse` flush over HTTP, and by `runWithEnqueueAfterCommit` in the Stripe webhook job and the organization-offboarding reconcile.
+
+### Failure modes
+
+- **The write rolls back** → the attempts roll back with it; nothing is delivered.
+- **Fan-out fails** → the bus logs, alerts and swallows it; the write still commits. A failed attempt insert aborts the shared transaction, so such a failure surfaces as the write's error.
+- **Redis refuses the enqueue, or the process dies after the commit** → the attempt stays PENDING and `webhook-delivery-reclaim` re-enqueues it.
+- **A Stripe event replayed** → the `last_stripe_event_created_at` watermark refuses the sync, so no second event is emitted.
+- **`organization.created`** → cannot reach a webhook: the new organization has none yet. It is emitted for completeness.
+- **Ownership transfer, organization settings, seat-quantity sync** → no event: the organization's public JSON does not change, settings are another resource, and Stripe's quantity update returns as a `customer.subscription.updated` that emits `subscription.updated`.

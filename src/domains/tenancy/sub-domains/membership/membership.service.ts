@@ -45,6 +45,9 @@ import {
   validateTransferOwnership,
 } from './membership.validator.js';
 import { serializeMembership } from './membership.serializer.js';
+import { buildDomainEvent, eventBus } from '@/core/events/event-bus.js';
+import type { OrganizationResourceEventPayload } from '@/core/events/organization-resource-event.js';
+import { MEMBERSHIP_EVENT, type MembershipEventType } from './events/membership.events.js';
 import { resolveStoredMediaReadUrl } from '@/shared/utils/infrastructure/media-url.util.js';
 import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
 import type { UserService } from '@/domains/user/user.service.js';
@@ -349,6 +352,39 @@ export class MembershipService {
     return output!;
   }
 
+  /**
+   * Emits a membership resource event per row, each with the membership's public JSON.
+   *
+   * @remarks
+   * - **Algorithm:** serializes the rows in one batch ({@link serializeMemberships}), then emits
+   *   one {@link MEMBERSHIP_EVENT} per membership.
+   * - **Failure modes:** a serialization read failure propagates (it runs in the caller's
+   *   transaction); handler failures are swallowed by the bus.
+   * - **Side effects:** the notify handler records PENDING webhook delivery attempts.
+   * - **Notes:** call it inside the write's organization database context, so the fan-out joins its
+   *   transaction. Public because {@link MemberInvitationService} (accept, revoke) changes
+   *   memberships too and emits through it.
+   */
+  async emitMembershipEvents(options: {
+    type: MembershipEventType;
+    memberships: MembershipRow[];
+    organizationPublicId: string;
+  }): Promise<MembershipOutput[]> {
+    const outputs = await this.serializeMemberships(
+      options.memberships,
+      options.organizationPublicId,
+    );
+    for (const output of outputs) {
+      await eventBus.emit(
+        buildDomainEvent<OrganizationResourceEventPayload>(options.type, {
+          organization_public_id: options.organizationPublicId,
+          data: { ...output },
+        }),
+      );
+    }
+    return outputs;
+  }
+
   async list(scope: OrganizationPrincipalDatabaseScope, query: unknown) {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateListMembershipsQuery(query);
@@ -484,7 +520,12 @@ export class MembershipService {
         ...(options?.requestId !== undefined ? { requestId: options.requestId } : {}),
       });
       await this.applyOrganizationLocaleDefaults(inviteeUser.public_id, organization_public_id);
-      return this.resolveAndSerializeMembership(created, organization_public_id);
+      const [output] = await this.emitMembershipEvents({
+        type: MEMBERSHIP_EVENT.CREATED,
+        memberships: [created],
+        organizationPublicId: organization_public_id,
+      });
+      return output!;
     });
     // sec-R11: invalidate the invitee's cached permissions AFTER the organization transaction commits.
     // Doing it pre-commit left a race where a concurrent recompute re-cached the stale set.
@@ -578,7 +619,12 @@ export class MembershipService {
       seatUsageChanged =
         membershipStatusConsumesSeat(membership.status) !==
         membershipStatusConsumesSeat(updated.status);
-      return this.resolveAndSerializeMembership(updated, organization_public_id);
+      const [output] = await this.emitMembershipEvents({
+        type: MEMBERSHIP_EVENT.UPDATED,
+        memberships: [updated],
+        organizationPublicId: organization_public_id,
+      });
+      return output!;
     });
     // sec-R11: invalidate AFTER commit so a racing recompute can't re-cache the stale role set.
     if (affectedUserInternalId !== undefined) {
@@ -632,6 +678,11 @@ export class MembershipService {
       // reaudit-#7: revoke the removed member's API keys so they lose access too.
       await this.revokeApiKeysForDepartedMember(deleted.user_id, organization.id);
       affectedUserInternalId = deleted.user_id;
+      await this.emitMembershipEvents({
+        type: MEMBERSHIP_EVENT.DELETED,
+        memberships: [deleted],
+        organizationPublicId: organization_public_id,
+      });
     });
     // sec-R11: invalidate AFTER commit so a racing recompute can't re-cache the removed member's
     // stale permissions (delayed revocation).
@@ -699,6 +750,11 @@ export class MembershipService {
       }
       // reaudit-#7: revoke the departing member's API keys so they lose access too.
       await this.revokeApiKeysForDepartedMember(userId, organization.id);
+      await this.emitMembershipEvents({
+        type: MEMBERSHIP_EVENT.DELETED,
+        memberships: [deleted],
+        organizationPublicId: organization_public_id,
+      });
     });
     // sec-R11: invalidate AFTER commit so a racing recompute can't re-cache the stale set.
     await invalidatePermissions(user_public_id, organization_public_id);
@@ -789,7 +845,8 @@ export class MembershipService {
    * - **Failure modes:** `NotFoundError('Organization')` for a missing organization; otherwise none beyond the
    *   underlying queries. Runs in the organization DB context + transaction so the count and suspend are
    *   consistent and RLS-scoped.
-   * - **Side effects:** flips excess memberships to `SUSPENDED`; invalidates permission caches.
+   * - **Side effects:** flips excess memberships to `SUSPENDED` (one `membership.updated` event
+   *   each); invalidates permission caches.
    */
   async suspendExcessActiveMembersToFitCeiling(options: {
     organizationPublicId: string;
@@ -806,11 +863,17 @@ export class MembershipService {
         );
         const excess = seatsUsed - options.ceiling;
         if (excess <= 0) return [];
-        return this.membershipRepository.suspendExcessActiveMembers({
+        const suspended = await this.membershipRepository.suspendExcessActiveMembers({
           organization_id: organization.id,
           owner_user_id: organization.owner_user_id,
           suspend_count: excess,
         });
+        await this.emitMembershipEvents({
+          type: MEMBERSHIP_EVENT.UPDATED,
+          memberships: suspended,
+          organizationPublicId: options.organizationPublicId,
+        });
+        return suspended.map((membership) => membership.user_id);
       },
     );
     // Post-commit (policy audit R11): purge each suspended member's permission cache OUTSIDE the

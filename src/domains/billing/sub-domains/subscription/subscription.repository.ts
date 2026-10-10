@@ -223,20 +223,20 @@ export class SubscriptionRepository {
   }
 
   /**
-   * Resolves the internal organization id from the active webhook RLS context.
-   * Used by the sec-B9 fallback INSERT path so it does not have to take an
-   * `OrganizationService` dependency just to map the public id baked into the
-   * GUC by `runStripeWebhookHandlerWithOrganizationContext`.
+   * Resolves the organization (internal id + public id) named by the active webhook RLS context.
+   * Used by the Stripe webhook paths (the sec-B9 fallback INSERT, the cancellation tombstone, the
+   * subscription events) so they do not have to take an `OrganizationService` dependency just to
+   * map the public id baked into the GUC by `runStripeWebhookHandlerWithOrganizationContext`.
    */
-  async findOrganizationIdFromCurrentContext(): Promise<number | null> {
+  async findOrganizationFromCurrentContext(): Promise<{ id: number; public_id: string } | null> {
     const rows = await this.db()
-      .select({ id: organizations.id })
+      .select({ id: organizations.id, public_id: organizations.public_id })
       .from(organizations)
       .where(
         sql`${organizations.public_id} = current_setting('app.current_organization_public_id', true)`,
       )
       .limit(1);
-    return rows[0]?.id ?? null;
+    return rows[0] ?? null;
   }
 
   async create(data: SubscriptionCreateData) {

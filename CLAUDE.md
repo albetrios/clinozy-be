@@ -311,6 +311,7 @@ Typical flow: `service` → `eventBus.emit` → handler → `recordOutboxEmail()
 | `registerAuthMethodEventHandlers`       | `AUTH_EVENT.EMAIL_VERIFICATION_CODE_REQUESTED`, `AUTH_EVENT.PASSWORD_RESET_REQUESTED` | Mail queue              |
 | `registerMemberInvitationEventHandlers` | `MEMBER_INVITATION_EVENT.CREATED`, `RESENT`                                           | Mail queue              |
 | `registerNotifyEventHandlers`           | `NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED`                                             | BullMQ webhook delivery |
+| `registerNotifyEventHandlers`           | `ORGANIZATION_EVENT.*`, `MEMBERSHIP_EVENT.*`, `SUBSCRIPTION_EVENT.*`                  | Webhook delivery attempts |
 
 ## Key Patterns
 

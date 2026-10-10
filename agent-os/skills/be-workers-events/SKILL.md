@@ -132,7 +132,18 @@ member-invitation.service  →  eventBus.emit(tenancy.member_invitation.accepted
 notify/sub-domains/notification/events/member-invitation-accepted.event-handlers.ts  →  notification row + enqueue
 ```
 
-Billing emits no domain events today (`billing.overview.md`).
+**Tenancy + billing → notify — organization resource events** (the webhook catalog)
+
+```text
+organization / membership / member-invitation / subscription services (+ Stripe webhook dispatch)
+  →  eventBus.emit(<ORGANIZATION|MEMBERSHIP|SUBSCRIPTION>_EVENT.*, { organization_public_id, data })
+     inside the write's organization context
+notify/sub-domains/webhook/events/organization-resource.event-handlers.ts
+  →  WebhookService.dispatchOrganizationWebhooks → PENDING attempts in the same transaction
+```
+
+Worker jobs that emit them wrap the unit of work in `runWithEnqueueAfterCommit` (Stripe webhook,
+organization-offboarding reconcile) so enqueues wait for the commit.
 
 **Notify — outbound webhook delivery**
 
@@ -141,7 +152,8 @@ emitWebhookDeliveryRequested()  →  notify/sub-domains/webhook/webhook-delivery
 notify/sub-domains/webhook/webhook-delivery/events/webhook-delivery.event-handlers.ts  →  enqueueWebhookDelivery()
 ```
 
-`notify/events/notify.event-handlers.ts` registers exactly these two notify handlers.
+`notify/events/notify.event-handlers.ts` registers these notify handlers plus the
+invite-accepted notification and the organization resource fan-out above.
 
 `src/core/events/register-event-handlers.ts` calls each domain’s `register*EventHandlers()` (from `buildApp()` before routes).
 

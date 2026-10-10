@@ -5,6 +5,7 @@ import {
   eventBus,
   enterOnCommitScope,
   runEnqueueAfterCommit,
+  runWithEnqueueAfterCommit,
   runWithOnCommitScope,
   scheduleCommitDispatch,
   resetCommitDispatchPendingStateForTests,
@@ -116,6 +117,34 @@ describe('EventBus.emit', () => {
     await bus.emit({ type: 'metric-event', payload: {}, timestamp: new Date() });
 
     expect(recordEventBusHandlerFailureMock).toHaveBeenCalledWith('metric-event');
+  });
+});
+
+describe('runWithEnqueueAfterCommit', () => {
+  it('defers runEnqueueAfterCommit tasks until the unit of work has resolved', async () => {
+    const order: string[] = [];
+    const result = await runWithEnqueueAfterCommit(async () => {
+      await runEnqueueAfterCommit(async () => {
+        order.push('enqueue');
+      });
+      order.push('commit');
+      return 'done';
+    });
+
+    expect(result).toBe('done');
+    expect(order).toEqual(['commit', 'enqueue']);
+  });
+
+  it('drops the deferred tasks when the unit of work rejects', async () => {
+    const enqueue = vi.fn();
+    await expect(
+      runWithEnqueueAfterCommit(async () => {
+        await runEnqueueAfterCommit(enqueue);
+        throw new Error('rolled back');
+      }),
+    ).rejects.toThrow('rolled back');
+
+    expect(enqueue).not.toHaveBeenCalled();
   });
 });
 

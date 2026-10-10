@@ -44,8 +44,11 @@ flowchart LR
 | `registerAuthMethodEventHandlers`       | `AUTH_EVENT.EMAIL_VERIFICATION_CODE_REQUESTED`, password reset, email verification | Mail queue              |
 | `registerMemberInvitationEventHandlers` | `MEMBER_INVITATION_EVENT.CREATED`, `RESENT`                           | Mail queue              |
 | `registerNotifyEventHandlers`           | `NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED`                             | BullMQ webhook delivery |
+| `registerNotifyEventHandlers`           | `ORGANIZATION_EVENT.*`, `MEMBERSHIP_EVENT.*`, `SUBSCRIPTION_EVENT.*`   | PENDING webhook delivery attempts (organization-resource-webhook-flow) |
 
-Billing side effects use BullMQ directly (for example [`stripe-webhook`](../../../src/domains/billing/sub-domains/stripe-webhook/)) — there is no top-level `billing/events/` aggregator.
+Billing side effects otherwise use BullMQ directly (for example [`stripe-webhook`](../../../src/domains/billing/sub-domains/stripe-webhook/)); its only domain events are `SUBSCRIPTION_EVENT.*`, and there is no top-level `billing/events/` aggregator.
+
+A worker job that emits these events runs its unit of work inside `runWithEnqueueAfterCommit` (`src/core/events/event-bus.ts`): outside an HTTP request `runEnqueueAfterCommit` has no scope to defer into and would enqueue inside the open transaction, before the delivery attempt is committed.
 
 ---
 

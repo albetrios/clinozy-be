@@ -273,6 +273,27 @@ export async function runEnqueueAfterCommit(callback: OnCommitTask): Promise<voi
   eventBus.onCommit(callback);
 }
 
+/**
+ * Runs a worker unit of work so that what it defers with {@link runEnqueueAfterCommit} runs after
+ * its transactions commit, as it does for an HTTP request.
+ *
+ * @remarks
+ * - **Algorithm:** opens an onCommit scope ({@link runWithOnCommitScope}), awaits `callback` — by
+ *   the time it resolves every database context inside it has committed — then flushes the queued
+ *   tasks ({@link EventBus.flushOnCommit}).
+ * - **Failure modes:** a rejection skips the flush: the deferred enqueues belong to work that rolled
+ *   back, or to rows a reclaim sweep re-enqueues.
+ * - **Notes:** without a scope `runEnqueueAfterCommit` runs its task at once — inside the open
+ *   transaction — so a queue job could start before the row it names is committed.
+ */
+export function runWithEnqueueAfterCommit<T>(callback: () => Promise<T>): Promise<T> {
+  return runWithOnCommitScope(async () => {
+    const result = await callback();
+    await eventBus.flushOnCommit();
+    return result;
+  });
+}
+
 /** Clears in-process pending markers — test harness only. */
 export function resetCommitDispatchPendingStateForTests(): void {
   pendingCommitDispatchRequestIds.clear();

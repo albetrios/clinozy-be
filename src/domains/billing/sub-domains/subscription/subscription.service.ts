@@ -60,6 +60,10 @@ import type {
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { PAGINATION } from '@/shared/constants/pagination.constants.js';
 import { BillingAccountSerializer } from './billing-account.serializer.js';
+import { SubscriptionSerializer } from './subscription.serializer.js';
+import { buildDomainEvent, eventBus } from '@/core/events/event-bus.js';
+import type { OrganizationResourceEventPayload } from '@/core/events/organization-resource-event.js';
+import { SUBSCRIPTION_EVENT, type SubscriptionEventType } from './events/subscription.events.js';
 import {
   createStripeSetupIntent,
   isStripeConfigured,
@@ -240,6 +244,46 @@ export class SubscriptionService {
       seats_total: freeSeatRequired[index] ? freeSeatCeiling : row.plan_included_seats,
       seats_used: seatsUsed,
     }));
+  }
+
+  /**
+   * Emits a subscription resource event with the subscription's public JSON.
+   *
+   * @remarks
+   * - **Algorithm:** re-reads the row with its plan joined (the Stripe sync paths return the bare
+   *   row), adds the seat counts ({@link decorateWithSeatCounts}) and serializes it exactly as the
+   *   API does ({@link SubscriptionSerializer}).
+   * - **Failure modes:** a read failure propagates into the caller's transaction; a row that is no
+   *   longer readable emits nothing. Handler failures are swallowed by the bus.
+   * - **Side effects:** the notify handler records PENDING webhook delivery attempts.
+   * - **Notes:** call it inside the write's organization database context — the HTTP paths and the
+   *   Stripe webhook dispatch both do — so the fan-out joins its transaction. Public so the Stripe
+   *   webhook service emits through it with its worker-scoped repository.
+   */
+  async emitSubscriptionEvent(options: {
+    type: SubscriptionEventType;
+    /** Omitted on the Stripe webhook paths: the organization named by the current context. */
+    organizationPublicId?: string;
+    subscription: { public_id: string; organization_id: number };
+    repositoryOverride?: SubscriptionRepository;
+  }): Promise<void> {
+    const repository = options.repositoryOverride ?? this.repository;
+    const organizationPublicId =
+      options.organizationPublicId ??
+      (await repository.findOrganizationFromCurrentContext())?.public_id;
+    if (organizationPublicId === undefined) return;
+    const row = await repository.findByPublicId(
+      options.subscription.public_id,
+      options.subscription.organization_id,
+    );
+    if (!row) return;
+    const [decorated] = await this.decorateWithSeatCounts(organizationPublicId, [row]);
+    await eventBus.emit(
+      buildDomainEvent<OrganizationResourceEventPayload>(options.type, {
+        organization_public_id: organizationPublicId,
+        data: SubscriptionSerializer.one(decorated!),
+      }),
+    );
   }
 
   /**
@@ -487,8 +531,8 @@ export class SubscriptionService {
     stripeEventCreatedAt: Date;
     repositoryOverride: SubscriptionRepository;
   }) {
-    const organizationId = await input.repositoryOverride.findOrganizationIdFromCurrentContext();
-    if (organizationId === null) {
+    const organization = await input.repositoryOverride.findOrganizationFromCurrentContext();
+    if (organization === null) {
       return null;
     }
     // SubscriptionCreateData does not carry cancel_at_period_end / canceled_at
@@ -497,7 +541,7 @@ export class SubscriptionService {
     // regular UPDATE path. For a brand-new subscription they are essentially
     // always (false, null) anyway.
     return input.repositoryOverride.create({
-      organization_id: organizationId,
+      organization_id: organization.id,
       plan_id: input.planId,
       billing_cycle: input.billingCycle,
       status: input.status,
@@ -545,12 +589,12 @@ export class SubscriptionService {
     stripeEventCreatedAt: Date;
     repositoryOverride: SubscriptionRepository;
   }) {
-    const organizationId = await input.repositoryOverride.findOrganizationIdFromCurrentContext();
-    if (organizationId === null) {
+    const organization = await input.repositoryOverride.findOrganizationFromCurrentContext();
+    if (organization === null) {
       return null;
     }
     return input.repositoryOverride.create({
-      organization_id: organizationId,
+      organization_id: organization.id,
       plan_id: input.planId,
       billing_cycle: input.billingCycle,
       status: 'CANCELED',
@@ -699,8 +743,8 @@ export class SubscriptionService {
       );
 
       try {
-        const created = await withAppDatabaseContext(scope, async () =>
-          this.repository.create(
+        const created = await withAppDatabaseContext(scope, async () => {
+          const row = await this.repository.create(
             omitUndefined({
               organization_id: organization.id,
               plan_id: plan.id,
@@ -726,8 +770,14 @@ export class SubscriptionService {
                 ? new Date()
                 : undefined,
             }),
-          ),
-        );
+          );
+          await this.emitSubscriptionEvent({
+            type: SUBSCRIPTION_EVENT.CREATED,
+            organizationPublicId: organization_public_id,
+            subscription: row,
+          });
+          return row;
+        });
         // REQ-4: a freshly-created subscription has no Stripe-synced `seats` yet, so seats_total
         // falls back to the plan's included_seats; seats_used reflects current memberships.
         const [decorated] = await this.decorateWithSeatCounts(organization_public_id, [created]);
@@ -884,8 +934,8 @@ export class SubscriptionService {
     const periodStart = new Date(subscription.current_period_start);
     const periodEnd = new Date(subscription.current_period_end);
     try {
-      const updated = await withAppDatabaseContext(scope, async () =>
-        this.repository.update(subscription_public_id, organization.id, {
+      const updated = await withAppDatabaseContext(scope, async () => {
+        const row = await this.repository.update(subscription_public_id, organization.id, {
           plan_id: plan.id,
           current_period_start: periodStart,
           current_period_end: periodEnd,
@@ -893,8 +943,16 @@ export class SubscriptionService {
           // delivered after this HTTP mutation cannot regress the plan back to its prior
           // price (the webhook guard accepts an event only when its `created` > watermark).
           last_stripe_event_created_at: new Date(),
-        }),
-      );
+        });
+        if (row) {
+          await this.emitSubscriptionEvent({
+            type: SUBSCRIPTION_EVENT.UPDATED,
+            organizationPublicId: organization_public_id,
+            subscription: row,
+          });
+        }
+        return row;
+      });
       if (!updated) throw new NotFoundError('Subscription');
       // F2: the plan change is now committed, so the new ceiling is in effect. Auto-suspend the
       // most-recently-joined non-owner members down to the new allowance (best-effort; never rolls
@@ -960,13 +1018,21 @@ export class SubscriptionService {
           buildStripeIdempotencyKey('sub-cancel-now', organization_public_id, idempotencyKey),
         );
       }
-      const canceled = await withAppDatabaseContext(scope, async () =>
-        this.repository.update(subscription_public_id, organization.id, {
+      const canceled = await withAppDatabaseContext(scope, async () => {
+        const row = await this.repository.update(subscription_public_id, organization.id, {
           status: 'CANCELED',
           canceled_at: new Date(),
           last_stripe_event_created_at: new Date(),
-        }),
-      );
+        });
+        if (row) {
+          await this.emitSubscriptionEvent({
+            type: SUBSCRIPTION_EVENT.CANCELLED,
+            organizationPublicId: organization_public_id,
+            subscription: row,
+          });
+        }
+        return row;
+      });
       if (!canceled) throw new NotFoundError('Subscription');
       const [decoratedCanceled] = await this.decorateWithSeatCounts(organization_public_id, [
         canceled,
@@ -982,14 +1048,23 @@ export class SubscriptionService {
       );
     }
 
-    const updated = await withAppDatabaseContext(scope, async () =>
-      this.repository.update(subscription_public_id, organization.id, {
+    // Scheduling the cancellation is an update; `subscription.cancelled` fires when it ends.
+    const updated = await withAppDatabaseContext(scope, async () => {
+      const row = await this.repository.update(subscription_public_id, organization.id, {
         cancel_at_period_end: true,
         // sec-B3: stamp the watermark so a stale Stripe `updated` event arriving later
         // cannot regress `cancel_at_period_end` back to false and silently resume billing.
         last_stripe_event_created_at: new Date(),
-      }),
-    );
+      });
+      if (row) {
+        await this.emitSubscriptionEvent({
+          type: SUBSCRIPTION_EVENT.UPDATED,
+          organizationPublicId: organization_public_id,
+          subscription: row,
+        });
+      }
+      return row;
+    });
     if (!updated) throw new NotFoundError('Subscription');
     const [decorated] = await this.decorateWithSeatCounts(organization_public_id, [updated]);
     return decorated!;
@@ -1037,12 +1112,20 @@ export class SubscriptionService {
     }
     await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization_public_id }),
-      async () =>
-        this.repository.update(subscription.public_id, organization.id, {
+      async () => {
+        const row = await this.repository.update(subscription.public_id, organization.id, {
           status: 'CANCELED',
           canceled_at: new Date(),
           last_stripe_event_created_at: new Date(),
-        }),
+        });
+        if (row) {
+          await this.emitSubscriptionEvent({
+            type: SUBSCRIPTION_EVENT.CANCELLED,
+            organizationPublicId: organization_public_id,
+            subscription: row,
+          });
+        }
+      },
     );
   }
 
@@ -1078,8 +1161,8 @@ export class SubscriptionService {
       );
     }
 
-    const updated = await withAppDatabaseContext(scope, async () =>
-      this.repository.update(subscription_public_id, organization.id, {
+    const updated = await withAppDatabaseContext(scope, async () => {
+      const row = await this.repository.update(subscription_public_id, organization.id, {
         cancel_at_period_end: false,
         // sec-B4: do NOT force-write `status: 'ACTIVE'`. The Stripe webhook is the source
         // of truth for status — the real value may be PAST_DUE (failed payment) or
@@ -1091,8 +1174,16 @@ export class SubscriptionService {
         // (e.g. delayed from the cancel that we are reversing) cannot re-set
         // `cancel_at_period_end` back to true.
         last_stripe_event_created_at: new Date(),
-      }),
-    );
+      });
+      if (row) {
+        await this.emitSubscriptionEvent({
+          type: SUBSCRIPTION_EVENT.UPDATED,
+          organizationPublicId: organization_public_id,
+          subscription: row,
+        });
+      }
+      return row;
+    });
     if (!updated) throw new NotFoundError('Subscription');
     const [decorated] = await this.decorateWithSeatCounts(organization_public_id, [updated]);
     return decorated!;

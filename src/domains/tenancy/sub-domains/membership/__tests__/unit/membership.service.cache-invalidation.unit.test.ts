@@ -82,7 +82,15 @@ describe('MembershipService — permission cache invalidation', () => {
       created_at: new Date(),
       updated_at: new Date(),
     }),
-    softDelete: vi.fn().mockResolvedValue({ public_id: 'membership_public' }),
+    softDelete: vi.fn().mockResolvedValue({
+      public_id: 'membership_public',
+      user_id: 20,
+      role_id: 2,
+      status: 'ACTIVE',
+      joined_at: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+    }),
     resolveUserSummariesByInternalIds: vi.fn(
       async (ids: readonly number[]) =>
         new Map(
@@ -177,6 +185,11 @@ describe('MembershipService — permission cache invalidation', () => {
     membershipRepository.softDelete.mockResolvedValueOnce({
       public_id: 'membership_public',
       user_id: 5,
+      role_id: 2,
+      status: 'ACTIVE',
+      joined_at: null,
+      created_at: new Date(),
+      updated_at: new Date(),
     });
 
     await service.delete(asScope('org_public_abc'), 'membership_public');

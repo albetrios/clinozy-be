@@ -42,12 +42,12 @@ This domain implements the contracts documented in [src/PATTERNS.md](src/PATTERN
 
 ## Cross-domain flows
 
-The notify domain subscribes to exactly one other domain's event: `MEMBER_INVITATION_EVENT.ACCEPTED`, registered through `registerNotifyEventHandlers()` (the container path — see [workers-and-events](docs/reference/runtime/workers-and-events.md)). Everything else is driven directly:
+The notify domain subscribes to other domains' events through `registerNotifyEventHandlers()` (the container path — see [workers-and-events](docs/reference/runtime/workers-and-events.md)): `MEMBER_INVITATION_EVENT.ACCEPTED`, and the eight organization resource events the webhook catalog advertises (`ORGANIZATION_EVENT.*`, `MEMBERSHIP_EVENT.*`, `SUBSCRIPTION_EVENT.*` — `organization-resource-webhook-flow` in [src/FLOWS.md](src/FLOWS.md)). Everything else is driven directly:
 
 - **In-app notifications** — created via `createAndDispatchNotification` (persist the row + enqueue channel dispatch), then delivered asynchronously by the `notification` worker. The invite-accepted handler is the one cross-domain producer: it fans a notification out to the organization's `membership:manage` holders and drops each recipient's cached unread count.
-- **Outbound webhook delivery** — a `webhook_delivery_attempts` row (status `PENDING`) is written inside the originating transaction; the internal `NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED` listener enqueues the BullMQ delivery job on commit.
+- **Outbound webhook delivery** — an organization resource event fans out through `WebhookService.dispatchOrganizationWebhooks`: one `webhook_delivery_attempts` row (status `PENDING`, envelope `{ id, type, created_at, data }`) per subscribed enabled webhook, written inside the originating transaction; the internal `NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED` listener enqueues the BullMQ delivery job on commit.
 
-For reference, adjacent flows do **not** route through notify today: `signup-flow` / `login-flow` / `organization-invitation-flow` send email **directly via the mail outbox** ([src/infrastructure/mail/](src/infrastructure/mail/)); `subscription-change-flow` / `dunning-flow` persist Stripe state only.
+Notify delivers `organization-resource-webhook-flow`. For reference, adjacent flows do **not** route through notify today: `signup-flow` / `login-flow` / `organization-invitation-flow` send email **directly via the mail outbox** ([src/infrastructure/mail/](src/infrastructure/mail/)); `subscription-change-flow` / `dunning-flow` persist Stripe state, and reach notify only as subscription webhook events.
 
 ## Lifecycle
 

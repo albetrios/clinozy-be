@@ -1,3 +1,4 @@
+import { runWithEnqueueAfterCommit } from '@/core/events/event-bus.js';
 import { and, isNotNull, isNull, lt, ne } from 'drizzle-orm';
 import type { OrganizationPrincipalDatabaseScope } from '@/infrastructure/database/contexts/database-context.js';
 import {
@@ -84,7 +85,11 @@ export async function runOrganizationOffboardingReconcileJob(
   let failed = 0;
   for (const { public_id } of stuck) {
     try {
-      await service.resumeOffboarding(PRINCIPAL_SCOPE.JOB({ organizationPublicId: public_id }));
+      // Cancelling the subscription emits `subscription.cancelled`: its webhook jobs start after
+      // the commit.
+      await runWithEnqueueAfterCommit(() =>
+        service.resumeOffboarding(PRINCIPAL_SCOPE.JOB({ organizationPublicId: public_id })),
+      );
       resumed += 1;
     } catch (error) {
       failed += 1;

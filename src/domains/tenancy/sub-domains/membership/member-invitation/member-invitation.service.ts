@@ -12,7 +12,11 @@ import {
 } from '@/infrastructure/database/contexts/database-context.js';
 import type { OrganizationRepository } from '@/domains/tenancy/sub-domains/organization/organization.repository.js';
 import type { MembershipRepository } from '@/domains/tenancy/sub-domains/membership/membership.repository.js';
-import type { MembershipSeatEnforcementPort } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
+import type {
+  MembershipSeatEnforcementPort,
+  MembershipService,
+} from '@/domains/tenancy/sub-domains/membership/membership.service.js';
+import { MEMBERSHIP_EVENT } from '@/domains/tenancy/sub-domains/membership/events/membership.events.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import type { MemberInvitationRepository } from './member-invitation.repository.js';
 import type {
@@ -161,6 +165,18 @@ export class MemberInvitationService {
   }
 
   /**
+   * Emits the membership events of an accept or a revoke, late-wired by the tenancy container:
+   * {@link MembershipService} takes this service in its constructor, so the reverse edge cannot be a
+   * constructor parameter. Left `null` in minimal test harnesses, where no event is emitted.
+   */
+  private membershipEvents: Pick<MembershipService, 'emitMembershipEvents'> | null = null;
+
+  /** Late-wires the membership event emitter; see {@link membershipEvents}. */
+  wireMembershipEvents(membershipEvents: Pick<MembershipService, 'emitMembershipEvents'>): void {
+    this.membershipEvents = membershipEvents;
+  }
+
+  /**
    * Best-effort enqueue of a Stripe seat-quantity reconciliation. Mirrors
    * `MembershipService.enqueueSeatQuantitySync`: a Redis blip must never fail the revoke that
    * triggered it.
@@ -296,6 +312,11 @@ export class MemberInvitationService {
           lookup.organization_id,
         );
         if (!activatedMembership) throw new NotFoundError('Membership');
+        await this.membershipEvents?.emitMembershipEvents({
+          type: MEMBERSHIP_EVENT.UPDATED,
+          memberships: [activatedMembership],
+          organizationPublicId: lookup.organization_public_id,
+        });
         acceptedMemberPublicId =
           (await this.organizationRepository.resolveUserPublicIdByInternalId(
             activatedMembership.user_id,
@@ -367,7 +388,17 @@ export class MemberInvitationService {
       // only invitation removes the invitee entirely, so soft-delete the dangling INVITED membership
       // (revoke only succeeds on a non-accepted invitation, so the row is always still INVITED) —
       // the members table never shows a ghost invitee. accept remains the only path to ACTIVE.
-      await this.membershipRepository.softDelete(membership.public_id, organization.id);
+      const removed = await this.membershipRepository.softDelete(
+        membership.public_id,
+        organization.id,
+      );
+      if (removed) {
+        await this.membershipEvents?.emitMembershipEvents({
+          type: MEMBERSHIP_EVENT.DELETED,
+          memberships: [removed],
+          organizationPublicId: organization_public_id,
+        });
+      }
     });
     // REQ-4: an INVITED membership holds a seat, so dropping it frees one — the same accounting the
     // add/remove paths report. Without this a revoked invitation stayed billed until some unrelated

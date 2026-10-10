@@ -6,6 +6,7 @@ src/
 ├── core/
     ├── events/
     │   ├── event-bus.ts
+    │   ├── organization-resource-event.ts
     │   └── register-event-handlers.ts
     └── core.overview.md
 ├── domains/
@@ -432,6 +433,8 @@ src/
     │   │   │       │   ├── subscription.service.unit.test.ts
     │   │   │       │   ├── subscription.stripe-idempotency-key.unit.test.ts
     │   │   │       │   └── subscription.validator.unit.test.ts
+    │   │   │   ├── events/
+    │   │   │       └── subscription.events.ts
     │   │   │   ├── queues/
     │   │   │       ├── subscription-seat-sync.job.schema.ts
     │   │   │       └── subscription-seat-sync.queue.ts
@@ -531,6 +534,7 @@ src/
     │   │   └── webhook/
     │   │   │   ├── __tests__/
     │   │   │       ├── integration/
+    │   │   │       │   ├── webhook-resource-events.integration.test.ts
     │   │   │       │   └── webhook.integration.test.ts
     │   │   │       └── unit/
     │   │   │       │   ├── events/
@@ -553,7 +557,8 @@ src/
     │   │   │       │   ├── webhook.service.unit.test.ts
     │   │   │       │   └── webhook.validator.unit.test.ts
     │   │   │   ├── events/
-    │   │   │       └── notify.events.ts
+    │   │   │       ├── notify.events.ts
+    │   │   │       └── organization-resource.event-handlers.ts
     │   │   │   ├── seed/
     │   │   │       ├── index.ts
     │   │   │       ├── webhook.bulk.seed.ts
@@ -730,6 +735,8 @@ src/
     │   │   │   │   │   ├── membership.service.seat-downgrade.unit.test.ts
     │   │   │   │   │   ├── membership.service.unit.test.ts
     │   │   │   │   │   └── membership.validator.unit.test.ts
+    │   │   │   ├── events/
+    │   │   │   │   └── membership.events.ts
     │   │   │   ├── member-invitation/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
@@ -792,6 +799,8 @@ src/
     │   │   │   │   │   ├── owner-permission-codes.unit.test.ts
     │   │   │   │   │   ├── personal-organization-provisioning.db.unit.test.ts
     │   │   │   │   │   └── team-organization-provisioning.db.unit.test.ts
+    │   │   │   ├── events/
+    │   │   │   │   └── organization.events.ts
     │   │   │   ├── organization-api-key/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   ├── unit/

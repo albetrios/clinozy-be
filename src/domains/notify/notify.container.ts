@@ -48,7 +48,7 @@ export function createNotifyContainer(
   const webhookEventService = new WebhookEventService(webhookEventRepository);
 
   configureNotificationDispatch(createNotificationDispatch(notificationRepository));
-  registerNotifyEventHandlers();
+  registerNotifyEventHandlers({ webhookService });
 
   return {
     notificationService,

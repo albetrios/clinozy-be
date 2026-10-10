@@ -507,15 +507,15 @@ export class MembershipRepository extends BaseRepository {
    * - **Failure modes:** none beyond the underlying queries; runs inside the caller's organization
    *   DB context (RLS-scoped) and transaction.
    * - **Side effects:** writes `status = 'SUSPENDED'` (a suspended seat is not counted toward the
-   *   cap, so this lowers the org's seat usage). Returns the internal `user_id`s actually suspended
-   *   (empty when no non-owner ACTIVE members remain — e.g. an owner-only organization that can't shrink
-   *   further) so the caller can purge each suspended member's permission cache.
+   *   cap, so this lowers the org's seat usage). Returns the suspended membership rows (empty when
+   *   no non-owner ACTIVE members remain — e.g. an owner-only organization that can't shrink
+   *   further) so the caller can emit their events and purge each member's permission cache.
    */
   async suspendExcessActiveMembers(options: {
     organization_id: number;
     owner_user_id: number;
     suspend_count: number;
-  }): Promise<number[]> {
+  }): Promise<MembershipRow[]> {
     if (options.suspend_count <= 0) return [];
     const candidates = await getRequestDatabase()
       .select({ id: memberships.id, user_id: memberships.user_id })
@@ -531,7 +531,7 @@ export class MembershipRepository extends BaseRepository {
       .orderBy(desc(memberships.joined_at))
       .limit(options.suspend_count);
     if (candidates.length === 0) return [];
-    await getRequestDatabase()
+    return getRequestDatabase()
       .update(memberships)
       .set({ status: 'SUSPENDED', updated_at: new Date() })
       .where(
@@ -539,8 +539,8 @@ export class MembershipRepository extends BaseRepository {
           memberships.id,
           candidates.map((candidate) => candidate.id),
         ),
-      );
-    return candidates.map((candidate) => candidate.user_id);
+      )
+      .returning();
   }
 
   async findByUserAndOrganization(

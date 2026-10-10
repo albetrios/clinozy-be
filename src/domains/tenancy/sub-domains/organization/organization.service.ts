@@ -26,6 +26,12 @@ import {
   validateListOrganizationsQuery,
   validateUploadLogo,
 } from './organization.validator.js';
+import { buildDomainEvent, eventBus } from '@/core/events/event-bus.js';
+import type { OrganizationResourceEventPayload } from '@/core/events/organization-resource-event.js';
+import {
+  ORGANIZATION_EVENT,
+  type OrganizationEventType,
+} from '@/domains/tenancy/sub-domains/organization/events/organization.events.js';
 import { serializeOrganization } from './organization.serializer.js';
 import { resolveStoredMediaReadUrl } from '@/shared/utils/infrastructure/media-url.util.js';
 import { provisionOrganizationWithOwner } from './organization-provisioning.js';
@@ -133,6 +139,22 @@ export class OrganizationService {
       ...serialized,
       logo_url: await resolveStoredMediaReadUrl(this.objectStorage, row.logo_url),
     };
+  }
+
+  /**
+   * Emits an organization resource event with the organization's public JSON. Called inside the
+   * write's database context so the webhook fan-out joins its transaction.
+   */
+  private async emitOrganizationEvent(
+    type: OrganizationEventType,
+    organization: OrganizationOutput,
+  ): Promise<void> {
+    await eventBus.emit(
+      buildDomainEvent<OrganizationResourceEventPayload>(type, {
+        organization_public_id: organization.id,
+        data: { ...organization },
+      }),
+    );
   }
 
   /**
@@ -464,7 +486,9 @@ export class OrganizationService {
             type: 'TEAM',
             ownerUserId: ownerId,
           });
-          return this.toOrganizationOutput(organization);
+          const created = await this.toOrganizationOutput(organization);
+          await this.emitOrganizationEvent(ORGANIZATION_EVENT.CREATED, created);
+          return created;
         } catch (error) {
           // Two concurrent creates can both pass the findBySlug pre-check; the
           // loser hits the `idx_organizations_slug` unique index. Map the
@@ -521,7 +545,9 @@ export class OrganizationService {
         throw error;
       }
       if (!updated) throw new NotFoundError('Organization');
-      return this.toOrganizationOutput(updated);
+      const output = await this.toOrganizationOutput(updated);
+      await this.emitOrganizationEvent(ORGANIZATION_EVENT.UPDATED, output);
+      return output;
     });
   }
 
@@ -644,7 +670,9 @@ export class OrganizationService {
         userId ?? null,
       );
       if (!result) throw new NotFoundError('Organization');
-      return { serialized: await this.toOrganizationOutput(result), previousLogoUrl: previous };
+      const output = await this.toOrganizationOutput(result);
+      await this.emitOrganizationEvent(ORGANIZATION_EVENT.UPDATED, output);
+      return { serialized: output, previousLogoUrl: previous };
     });
     // Reclaim the PREVIOUS owned logo object outside the DB context — replacing a logo previously
     // orphaned the old S3 object (storage leak). Best-effort + prefix-guarded.
@@ -672,7 +700,9 @@ export class OrganizationService {
       const userId = await this.repository.resolveUserIdByPublicId(updated_by_user_public_id);
       const updated = await this.repository.update(public_id, { logo_url: null }, userId ?? null);
       if (!updated) throw new NotFoundError('Organization');
-      return this.toOrganizationOutput(updated);
+      const output = await this.toOrganizationOutput(updated);
+      await this.emitOrganizationEvent(ORGANIZATION_EVENT.UPDATED, output);
+      return output;
     });
   }
 }

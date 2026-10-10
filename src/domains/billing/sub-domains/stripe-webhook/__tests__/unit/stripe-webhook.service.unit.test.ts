@@ -70,6 +70,7 @@ describe('StripeWebhookService', () => {
   const subscriptionService = {
     syncFromStripeProviderSubscription: vi.fn(),
     markCanceledByStripeProviderSubscriptionId: vi.fn(),
+    emitSubscriptionEvent: vi.fn().mockResolvedValue(undefined),
     createFromStripeWebhookEvent: vi.fn(),
     // audit-#1: deletion tombstone insert used when a `.deleted` event has no local row.
     insertCanceledTombstoneFromStripeWebhookEvent: vi.fn(),
@@ -503,6 +504,43 @@ describe('StripeWebhookService', () => {
       );
     });
 
+    it('emits subscription.updated for a synced row, and subscription.cancelled once it is CANCELED', async () => {
+      const synced = { id: 5, public_id: 'sub_local', organization_id: 9, status: 'ACTIVE' };
+      vi.mocked(subscriptionService.syncFromStripeProviderSubscription).mockResolvedValue(
+        synced as never,
+      );
+      await service.handleEvent(buildEvent());
+      expect(subscriptionService.emitSubscriptionEvent).toHaveBeenCalledWith({
+        type: 'subscription.updated',
+        subscription: synced,
+        repositoryOverride: expect.objectContaining({ databaseHandle: expect.anything() }),
+      });
+
+      vi.mocked(subscriptionService.emitSubscriptionEvent).mockClear();
+      // A Dashboard cancel arrives as `.updated` carrying status canceled.
+      vi.mocked(subscriptionService.syncFromStripeProviderSubscription).mockResolvedValue({
+        ...synced,
+        status: 'CANCELED',
+      } as never);
+      await service.handleEvent(buildEvent());
+      expect(subscriptionService.emitSubscriptionEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'subscription.cancelled' }),
+      );
+    });
+
+    it('emits nothing for a stale event the watermark refused', async () => {
+      vi.mocked(subscriptionService.syncFromStripeProviderSubscription).mockResolvedValue(
+        null as never,
+      );
+      vi.mocked(subscriptionService.existsByStripeProviderSubscriptionId).mockResolvedValue(
+        true as never,
+      );
+
+      await service.handleEvent(buildEvent());
+
+      expect(subscriptionService.emitSubscriptionEvent).not.toHaveBeenCalled();
+    });
+
     it('skips silently when sync returns null AND the row exists (stale event — newer watermark already wins) — sec-B #5', async () => {
       vi.mocked(subscriptionService.syncFromStripeProviderSubscription).mockResolvedValue(
         null as never,
@@ -754,6 +792,21 @@ describe('StripeWebhookService', () => {
         created: stripeEventCreatedAtSeconds,
         data: { object },
       }) as unknown as Stripe.Event;
+
+    it('emits subscription.cancelled for the canceled row', async () => {
+      const canceled = { id: 6, public_id: 'sub_local', organization_id: 9, status: 'CANCELED' };
+      vi.mocked(subscriptionService.markCanceledByStripeProviderSubscriptionId).mockResolvedValue(
+        canceled as never,
+      );
+
+      await service.handleEvent(deletedEvent());
+
+      expect(subscriptionService.emitSubscriptionEvent).toHaveBeenCalledWith({
+        type: 'subscription.cancelled',
+        subscription: canceled,
+        repositoryOverride: expect.objectContaining({ databaseHandle: expect.anything() }),
+      });
+    });
 
     it('cancels the subscription with the event created timestamp', async () => {
       await service.handleEvent(deletedEvent());
