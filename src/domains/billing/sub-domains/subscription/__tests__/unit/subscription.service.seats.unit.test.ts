@@ -169,6 +169,21 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     },
   );
 
+  it('keeps a finite paid allowance when grace expires during response decoration', async () => {
+    vi.mocked(repository.listByOrganization).mockResolvedValue([
+      baseRow({ status: 'PAST_DUE', seats: 25, current_period_end: new Date(0) }),
+    ] as never);
+    const clock = vi.spyOn(Date, 'now').mockReturnValueOnce(0).mockReturnValue(4_102_444_800_000);
+    try {
+      const rows = await service.list(scope);
+      expect(rows[0]!.seats_total).toBe(25);
+      expect(planService.getFreePlanSeatCeiling).not.toHaveBeenCalled();
+      expect(clock).toHaveBeenCalledTimes(1);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('reserveSeatCeilingForMemberAdd falls back to the Free-tier ceiling when the organization has no active subscription (F3)', async () => {
     vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValue(null);
     vi.mocked(planService.getFreePlanSeatCeiling).mockResolvedValue(1);

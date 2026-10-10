@@ -227,12 +227,14 @@ export class SubscriptionService {
         'subscription.seats_used.membership_port_unwired',
       );
     }
-    const freeSeatCeiling = rows.some((row) => this.requiresFreeSeatCeiling(row))
+    // Reuse each decision: grace may expire while the Free catalog lookup is pending.
+    const freeSeatRequired = rows.map((row) => this.requiresFreeSeatCeiling(row));
+    const freeSeatCeiling = freeSeatRequired.some(Boolean)
       ? await this.planService.getFreePlanSeatCeiling()
       : null;
-    return rows.map((row) => ({
+    return rows.map((row, index) => ({
       ...row,
-      seats_total: this.requiresFreeSeatCeiling(row)
+      seats_total: freeSeatRequired[index]
         ? freeSeatCeiling
         : (row.seats ?? row.plan_included_seats ?? null),
       seats_used: seatsUsed,
