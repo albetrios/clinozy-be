@@ -17,6 +17,7 @@ import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import { createTestPlan } from '@/tests/factories/plan.factory.js';
 import { createTestSubscription } from '@/domains/billing/__tests__/factories/subscription.factory.js';
+import { subscriptions } from '@/domains/billing/sub-domains/subscription/subscription.schema.js';
 import {
   generateTestToken,
   generateTestTokenWithActiveSession,
@@ -275,6 +276,90 @@ describe('Membership Sub-Domain — Integration', () => {
         payload: { email: `seat-${randomUUID()}@test.com`, role_id: memberRolePublicId },
       });
     }
+
+    async function createIncompleteSubscriptionContext() {
+      await createTestPlan({ priceMonthly: '0.00', priceYearly: '0.00', includedSeats: 1 });
+      const context = await createSeatLimitedContext(5, true);
+      await getOperatorDatabase()
+        .update(subscriptions)
+        .set({ status: 'INCOMPLETE' })
+        .where(eq(subscriptions.organization_id, context.organization.id));
+      return context;
+    }
+
+    it('denies an incomplete subscription invite without writes, then allows it after local fixture activation', async () => {
+      const { organization, adminToken, memberRole } = await createIncompleteSubscriptionContext();
+      const denied = await inviteMember(adminToken, memberRole.public_id);
+      expect(denied.statusCode).toBe(409);
+      expect((denied.json() as { error: { reason?: string } }).error.reason).toBe(
+        'seat_limit_reached',
+      );
+      const [membershipCount] = await getOperatorDatabase()
+        .select({ count: count() })
+        .from(memberships)
+        .where(eq(memberships.organization_id, organization.id));
+      expect(membershipCount!.count).toBe(1);
+      const invitations = await getOperatorDatabase().select().from(member_invitations);
+      expect(invitations).toHaveLength(0);
+
+      // This is a local database fixture transition, separate from Stripe reconciliation.
+      await getOperatorDatabase()
+        .update(subscriptions)
+        .set({ status: 'ACTIVE' })
+        .where(eq(subscriptions.organization_id, organization.id));
+      const allowed = await inviteMember(adminToken, memberRole.public_id);
+      expect(allowed.statusCode).toBe(200);
+      const createdId = (allowed.json() as { data: { id: string } }).data.id;
+      const [created] = await getOperatorDatabase()
+        .select()
+        .from(memberships)
+        .where(eq(memberships.public_id, createdId));
+      expect(created!.organization_id).toBe(organization.id);
+      expect(created!.status).toBe('INVITED');
+      expect(await getOperatorDatabase().select().from(member_invitations)).toHaveLength(1);
+    });
+
+    it('preserves a suspended member under incomplete billing, then reactivates that member after local fixture activation', async () => {
+      const { organization, adminToken, memberRole } = await createIncompleteSubscriptionContext();
+      const member = await createTestUser();
+      const suspended = await createMembership({
+        userId: member.id,
+        organizationId: organization.id,
+        roleId: memberRole.id,
+        status: 'SUSPENDED',
+      });
+      const reactivate = () =>
+        injectAuthenticated(app, {
+          method: 'PATCH',
+          url: testApiPath(`/tenancy/organization/memberships/${suspended.public_id}`),
+          token: adminToken,
+          headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
+          payload: { status: 'ACTIVE' },
+        });
+      const denied = await reactivate();
+      expect(denied.statusCode).toBe(409);
+      expect((denied.json() as { error: { reason?: string } }).error.reason).toBe(
+        'seat_limit_reached',
+      );
+      const [unchanged] = await getOperatorDatabase()
+        .select()
+        .from(memberships)
+        .where(eq(memberships.id, suspended.id));
+      expect(unchanged!.status).toBe('SUSPENDED');
+
+      // The same owned fixture gains its paid allowance only after activation.
+      await getOperatorDatabase()
+        .update(subscriptions)
+        .set({ status: 'ACTIVE' })
+        .where(eq(subscriptions.organization_id, organization.id));
+      const allowed = await reactivate();
+      expect(allowed.statusCode).toBe(200);
+      const [changed] = await getOperatorDatabase()
+        .select()
+        .from(memberships)
+        .where(eq(memberships.id, suspended.id));
+      expect(changed!.status).toBe('ACTIVE');
+    });
 
     it('returns 409 seat_limit_reached when the plan seat limit is already filled', async () => {
       // Plan grants 1 seat; the owner already occupies it, so the next add must be rejected.
