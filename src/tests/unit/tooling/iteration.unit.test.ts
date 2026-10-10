@@ -483,7 +483,7 @@ describe('iteration:status', () => {
       if (from === undefined || to === undefined) continue;
       expect(() => validateStatusTransition({ from, to, reason: undefined })).not.toThrow();
     }
-    for (const from of ['ready-for-approval', 'approved', 'implementing'] as const) {
+    for (const from of ['ready-for-approval', 'approved', 'implementing', 'done'] as const) {
       expect(() => validateStatusTransition({ from, to: 'planning', reason: undefined })).toThrow(
         /needs --reason/,
       );
@@ -495,9 +495,9 @@ describe('iteration:status', () => {
     expect(() =>
       validateStatusTransition({ from: 'planning', to: 'approved', reason: undefined }),
     ).toThrow(/allowed next status is ready-for-approval/);
-    expect(() => validateStatusTransition({ from: 'done', to: 'planning', reason: 'x' })).toThrow(
-      /Cannot move/,
-    );
+    expect(() =>
+      validateStatusTransition({ from: 'done', to: 'implementing', reason: 'x' }),
+    ).toThrow(/Cannot move/);
     expect(() => validateStatusTransition({ from: 'frozen', to: 'planning', reason: 'x' })).toThrow(
       /never edited/,
     );

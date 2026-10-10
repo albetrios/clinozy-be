@@ -138,8 +138,9 @@ Status moves one step at a time with `pnpm iteration:status <iteration> <status>
 | `done` | be-kickoff-iteration | every ROUTE row is closed, `plans/acceptance.md` filled, `AS-BUILT.md` summarized |
 | `frozen` | the last commit before the merge | the iteration merges to `main` |
 
-`ready-for-approval`, `approved` or `implementing` may go back to `planning` with
-`--reason "<why>"`; nothing else is allowed. Never edit a frozen iteration — a correction is a new
+`ready-for-approval`, `approved`, `implementing` or `done` may go back to `planning` with
+`--reason "<why>"` — `done` when work the user finds still open goes back into the same iteration
+before it is frozen; nothing else is allowed. Never edit a frozen iteration — a correction is a new
 `fix` iteration.
 
 ## Commands
