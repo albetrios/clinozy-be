@@ -8,7 +8,7 @@
 | Opened | 2026-09-30 |
 | Branch | docs/legacy-prd-import |
 | Baseline | none |
-| Status | planning |
+| Status | implementing |
 | Summary | Full clinic app: 12 screens, 93 routes, 40 entities |
 | Drop placed | 2026-10-03 |
 | Drop source | ~/projects/clinozy/clinozy-fe/iterations/launch-2026-09-30-jxmr/intake-files |
@@ -34,3 +34,6 @@
 - 2026-10-08 · approved → implementing · — · Claude
 - 2026-10-09 · implementing → done · — · Claude
 - 2026-10-10 · done → planning · back into this iteration: the backend changes the frontend integration finds for the rooms still to move (clinic stock, payments, tasks, offerings, users, the shell) and, after them, the medical store, whose route review was decided by recommendation (D75) (user 2026-10-10: continue in this iteration) · Claude
+- 2026-10-10 · planning → ready-for-approval · — · Claude
+- 2026-10-10 · ready-for-approval → approved · — · Claude
+- 2026-10-10 · approved → implementing · — · Claude
