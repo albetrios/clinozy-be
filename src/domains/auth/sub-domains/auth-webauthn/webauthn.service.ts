@@ -186,12 +186,16 @@ export class WebauthnService {
     }
 
     const expectedOrigin = resolveWebauthnExpectedOrigin(requestOrigin);
+    // @simplewebauthn throws (rather than returning verified: false) on a mismatched origin,
+    // RP ID or challenge and on a malformed attestation — a client fault, never a 500.
     const verification = await verifyRegistrationResponse({
       response: parsed.response as RegistrationResponseJSON,
       expectedChallenge: challenge.challenge,
       expectedOrigin,
       expectedRPID: resolveWebauthnRelyingPartyId(),
       requireUserVerification: true,
+    }).catch(() => {
+      throw new ValidationError('errors:webauthnRegistrationFailed');
     });
 
     if (!(verification.verified && verification.registrationInfo)) {
@@ -329,6 +333,8 @@ export class WebauthnService {
     assertUserAccountActive({ status: user.status, deleted_at: user.deleted_at });
 
     const expectedOrigin = resolveWebauthnExpectedOrigin(requestOrigin);
+    // As at registration: a thrown verification (origin, RP ID, challenge, malformed assertion)
+    // is the same failed sign-in as `verified: false`.
     const verification = await verifyAuthenticationResponse({
       response,
       expectedChallenge: challenge.challenge,
@@ -341,6 +347,8 @@ export class WebauthnService {
         counter: storedCredential.counter,
         transports: storedCredential.transports as string[],
       },
+    }).catch(() => {
+      throw new UnauthorizedError('errors:webauthnAuthenticationFailed');
     });
 
     if (!verification.verified) {

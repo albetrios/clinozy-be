@@ -1,6 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import type {
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+} from '@simplewebauthn/server';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
-import { verifyAuthenticationResponse, verifyRegistrationResponse } from '@simplewebauthn/server';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
   injectAuthenticated,
@@ -11,19 +14,25 @@ import { createTestUser } from '@/tests/factories/user.factory.js';
 import { generateTestTokenWithActiveSession } from '@/tests/helpers/test-auth.js';
 import { seedRecentStepUpForTestUser } from '@/tests/helpers/test-step-up.helper.js';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
+import {
+  createSoftwareAuthenticationResponse,
+  createSoftwareRegistrationResponse,
+  createSoftwareWebauthnCredential,
+  type SoftwareWebauthnCredential,
+} from '@/tests/helpers/webauthn-authenticator.helper.js';
 import { webauthn_credentials } from '@/domains/auth/sub-domains/auth-webauthn/webauthn-credential.schema.js';
 import type { FastifyInstance } from 'fastify';
-import type * as SimpleWebAuthnServerModule from '@simplewebauthn/server';
 
-vi.mock('@simplewebauthn/server', async (importOriginal) => {
-  const actual = await importOriginal<typeof SimpleWebAuthnServerModule>();
-  return {
-    ...actual,
-    verifyRegistrationResponse: vi.fn(),
-    verifyAuthenticationResponse: vi.fn(),
-  };
-});
+/** The browser origin the passkey ceremonies run on — the `ALLOWED_ORIGINS` entry from `src/tests/setup.ts`. */
+const BROWSER_ORIGIN = 'http://localhost:3000';
 
+type CeremonyOptionsBody<Options> = { data: { options: Options; challenge_token: string } };
+
+/**
+ * No `@simplewebauthn/server` mocks: a software P-256 authenticator produces real attestations and
+ * assertions, so registration and sign-in pass only when the library verifies the challenge, the
+ * origin, the relying-party id hash and the ES256 signature for real.
+ */
 describe('Auth e2e: WebAuthn passkey enrolment and sign-in', () => {
   let app: FastifyInstance;
 
@@ -38,111 +47,127 @@ describe('Auth e2e: WebAuthn passkey enrolment and sign-in', () => {
 
   beforeEach(async () => {
     await cleanupDatabase();
-    vi.mocked(verifyRegistrationResponse).mockReset();
-    vi.mocked(verifyAuthenticationResponse).mockReset();
   });
 
-  it('registers a passkey while authenticated, then signs in with WebAuthn', async () => {
-    const user = await createTestUser({
-      email: 'webauthn-passkey-flow@example.com',
-      isEmailVerified: true,
-    });
+  async function createSignedInUser(email: string) {
+    const user = await createTestUser({ email, isEmailVerified: true });
     const { token, sessionPublicId } = await generateTestTokenWithActiveSession(
       app,
       user.public_id,
     );
-    await seedRecentStepUpForTestUser(user.public_id, sessionPublicId);
-    const credentialId = 'e2e-test-credential-id';
-    const publicKeyBytes = Buffer.from('e2e-test-public-key');
+    return { user, token, sessionPublicId };
+  }
 
-    const registerOptionsResponse = await injectAuthenticated(app, {
+  async function requestRegistrationOptions(token: string) {
+    const response = await injectAuthenticated(app, {
       method: 'POST',
       url: testApiPath('/auth/me/webauthn/register/options'),
       token,
       payload: {},
     });
-    expect(registerOptionsResponse.statusCode).toBe(200);
-    const registerOptionsBody = registerOptionsResponse.json() as {
-      data: { options: { challenge: string }; challenge_token: string };
+    expect(response.statusCode).toBe(200);
+    return (response.json() as CeremonyOptionsBody<PublicKeyCredentialCreationOptionsJSON>).data;
+  }
+
+  async function registerPasskey(options: {
+    token: string;
+    credential: SoftwareWebauthnCredential;
+  }) {
+    const registrationOptions = await requestRegistrationOptions(options.token);
+    const payload = {
+      challenge_token: registrationOptions.challenge_token,
+      response: createSoftwareRegistrationResponse({
+        credential: options.credential,
+        creationOptions: registrationOptions.options,
+        origin: BROWSER_ORIGIN,
+      }),
     };
-    expect(registerOptionsBody.data.options.challenge).toBeTruthy();
-    expect(registerOptionsBody.data.challenge_token).toBeTruthy();
-
-    vi.mocked(verifyRegistrationResponse).mockResolvedValue({
-      verified: true,
-      registrationInfo: {
-        credential: {
-          id: credentialId,
-          publicKey: publicKeyBytes,
-          counter: 0,
-          transports: ['internal'],
-        },
-        credentialDeviceType: 'singleDevice',
-        credentialBackedUp: false,
-      },
-    } as unknown as Awaited<ReturnType<typeof verifyRegistrationResponse>>);
-
-    const registerVerifyResponse = await injectAuthenticated(app, {
+    const response = await injectAuthenticated(app, {
       method: 'POST',
       url: testApiPath('/auth/me/webauthn/register/verify'),
-      token,
-      payload: {
-        challenge_token: registerOptionsBody.data.challenge_token,
-        response: {
-          id: credentialId,
-          rawId: credentialId,
-          response: { clientDataJSON: 'dGVzdA', attestationObject: 'dGVzdA' },
-          type: 'public-key',
-        },
-      },
+      token: options.token,
+      headers: { origin: BROWSER_ORIGIN },
+      payload,
     });
-    expect(registerVerifyResponse.statusCode).toBe(200);
-    const registerVerifyBody = registerVerifyResponse.json() as {
+    return { response, payload, userHandle: registrationOptions.options.user.id };
+  }
+
+  async function requestAuthenticationOptions(email: string) {
+    const response = await injectUnauthenticated(app, {
+      method: 'POST',
+      url: testApiPath('/auth/webauthn/authenticate/options'),
+      payload: { email },
+    });
+    expect(response.statusCode).toBe(200);
+    return (response.json() as CeremonyOptionsBody<PublicKeyCredentialRequestOptionsJSON>).data;
+  }
+
+  function submitAssertion(payload: { challenge_token: string; response: unknown }) {
+    return injectUnauthenticated(app, {
+      method: 'POST',
+      url: testApiPath('/auth/webauthn/authenticate/verify'),
+      headers: { origin: BROWSER_ORIGIN },
+      payload,
+    });
+  }
+
+  it('registers a real passkey, signs in with a real assertion, and refuses both replays', async () => {
+    const { user, token, sessionPublicId } = await createSignedInUser(
+      'webauthn-passkey-flow@example.com',
+    );
+    await seedRecentStepUpForTestUser(user.public_id, sessionPublicId);
+    const credential = createSoftwareWebauthnCredential();
+
+    const registration = await registerPasskey({ token, credential });
+    expect(registration.response.statusCode).toBe(200);
+    const registerVerifyBody = registration.response.json() as {
       data: { verified: boolean; credential_id: string };
     };
     expect(registerVerifyBody.data.verified).toBe(true);
     expect(registerVerifyBody.data.credential_id).toMatch(/^wac_[a-z0-9]{21}$/);
 
-    const authenticateOptionsResponse = await injectUnauthenticated(app, {
+    // Replaying the identical registration: the challenge was consumed on first use.
+    const registrationReplay = await injectAuthenticated(app, {
       method: 'POST',
-      url: testApiPath('/auth/webauthn/authenticate/options'),
-      payload: { email: user.email },
+      url: testApiPath('/auth/me/webauthn/register/verify'),
+      token,
+      headers: { origin: BROWSER_ORIGIN },
+      payload: registration.payload,
     });
-    expect(authenticateOptionsResponse.statusCode).toBe(200);
-    const authenticateOptionsBody = authenticateOptionsResponse.json() as {
-      data: { options: { challenge: string }; challenge_token: string };
-    };
-    expect(authenticateOptionsBody.data.options.challenge).toBeTruthy();
-    expect(authenticateOptionsBody.data.challenge_token).toBeTruthy();
+    expect(registrationReplay.statusCode).toBe(401);
 
-    vi.mocked(verifyAuthenticationResponse).mockResolvedValue({
-      verified: true,
-      authenticationInfo: {
-        newCounter: 1,
-      },
-    } as unknown as Awaited<ReturnType<typeof verifyAuthenticationResponse>>);
-
-    const authenticateVerifyResponse = await injectUnauthenticated(app, {
-      method: 'POST',
-      url: testApiPath('/auth/webauthn/authenticate/verify'),
-      payload: {
-        challenge_token: authenticateOptionsBody.data.challenge_token,
-        response: {
-          id: credentialId,
-          rawId: credentialId,
-          response: { clientDataJSON: 'dGVzdA', authenticatorData: 'dGVzdA', signature: 'dGVzdA' },
-          type: 'public-key',
-        },
-      },
+    const listResponse = await injectAuthenticated(app, {
+      method: 'GET',
+      url: testApiPath('/auth/me/webauthn/credentials'),
+      token,
     });
+    expect(listResponse.statusCode).toBe(200);
+    const listed = (listResponse.json() as { data: Array<Record<string, unknown>> }).data;
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.id).toBe(registerVerifyBody.data.credential_id);
+    expect(listed[0]?.device_type).toBe('singleDevice');
+    expect(listed[0]?.transports).toEqual(['internal']);
+    for (const keyMaterialField of ['public_key', 'credential_id', 'counter', 'user_id']) {
+      expect(listed[0]).not.toHaveProperty(keyMaterialField);
+    }
 
-    expect(authenticateVerifyResponse.statusCode).toBe(200);
-    const signInBody = authenticateVerifyResponse.json() as {
-      data: { access_token: string };
+    const authenticationOptions = await requestAuthenticationOptions(user.email);
+    expect(authenticationOptions.options.allowCredentials ?? []).toEqual([]);
+    const assertionPayload = {
+      challenge_token: authenticationOptions.challenge_token,
+      response: createSoftwareAuthenticationResponse({
+        credential,
+        requestOptions: authenticationOptions.options,
+        origin: BROWSER_ORIGIN,
+        userHandle: registration.userHandle,
+      }),
     };
+    const signInResponse = await submitAssertion(assertionPayload);
+    expect(signInResponse.statusCode).toBe(200);
+    const signInBody = signInResponse.json() as { data: { access_token: string } };
     expect(signInBody.data.access_token).toBeTruthy();
 
-    const cookies = authenticateVerifyResponse.headers['set-cookie'];
+    const cookies = signInResponse.headers['set-cookie'];
     const sessionCookie = Array.isArray(cookies)
       ? cookies.find((cookie: string) => cookie.startsWith('session_id='))
       : typeof cookies === 'string' && cookies.startsWith('session_id=')
@@ -151,78 +176,123 @@ describe('Auth e2e: WebAuthn passkey enrolment and sign-in', () => {
     expect(sessionCookie).toBeDefined();
     expect(sessionCookie).toContain('HttpOnly');
 
+    // The passkey session belongs to the credential's owner.
+    const profileResponse = await injectAuthenticated(app, {
+      method: 'GET',
+      url: testApiPath('/users/me'),
+      token: signInBody.data.access_token,
+    });
+    expect(profileResponse.statusCode).toBe(200);
+    expect((profileResponse.json() as { data: { id: string } }).data.id).toBe(user.public_id);
+
+    // Replaying the identical signed assertion: the challenge was consumed on first use.
+    const assertionReplay = await submitAssertion(assertionPayload);
+    expect(assertionReplay.statusCode).toBe(401);
+
     const storedCredentials = await getOperatorDatabase().select().from(webauthn_credentials);
     expect(storedCredentials).toHaveLength(1);
-    expect(storedCredentials[0]?.credential_id).toBe(credentialId);
+    expect(storedCredentials[0]?.credential_id).toBe(credential.credentialId);
     expect(storedCredentials[0]?.public_id).toBe(registerVerifyBody.data.credential_id);
+    expect(storedCredentials[0]?.public_key).toBeTruthy();
     expect(storedCredentials[0]?.counter).toBe(1);
   });
 
-  it('rejects re-registering an already-enrolled passkey with 409 (not a 500)', async () => {
-    const user = await createTestUser({
-      email: 'webauthn-duplicate-credential@example.com',
-      isEmailVerified: true,
-    });
-    const { token, sessionPublicId } = await generateTestTokenWithActiveSession(
-      app,
-      user.public_id,
+  it('rejects an assertion whose signature does not verify against the stored public key', async () => {
+    const { user, token, sessionPublicId } = await createSignedInUser(
+      'webauthn-forged-assertion@example.com',
     );
-    const credentialId = 'duplicate-passkey-credential-id';
-    const publicKeyBytes = Buffer.from('duplicate-passkey-public-key');
+    await seedRecentStepUpForTestUser(user.public_id, sessionPublicId);
+    const credential = createSoftwareWebauthnCredential();
+    const registration = await registerPasskey({ token, credential });
+    expect(registration.response.statusCode).toBe(200);
 
-    async function registerSamePasskey() {
-      // The register ceremony is a step-up-sensitive operation; re-seed each pass so
-      // the second attempt is rejected by the unique constraint, not by a stale step-up.
-      await seedRecentStepUpForTestUser(user.public_id, sessionPublicId);
-      const optionsResponse = await injectAuthenticated(app, {
-        method: 'POST',
-        url: testApiPath('/auth/me/webauthn/register/options'),
-        token,
-        payload: {},
-      });
-      expect(optionsResponse.statusCode).toBe(200);
-      const challengeToken = (optionsResponse.json() as { data: { challenge_token: string } }).data
-        .challenge_token;
+    // Same credential id, but signed by a different private key.
+    const impostor = {
+      ...createSoftwareWebauthnCredential(),
+      credentialId: credential.credentialId,
+    };
+    const authenticationOptions = await requestAuthenticationOptions(user.email);
+    const forgedResponse = await submitAssertion({
+      challenge_token: authenticationOptions.challenge_token,
+      response: createSoftwareAuthenticationResponse({
+        credential: impostor,
+        requestOptions: authenticationOptions.options,
+        origin: BROWSER_ORIGIN,
+        userHandle: registration.userHandle,
+      }),
+    });
+    expect(forgedResponse.statusCode).toBe(401);
+    expect(forgedResponse.headers['set-cookie']).toBeUndefined();
 
-      vi.mocked(verifyRegistrationResponse).mockResolvedValue({
-        verified: true,
-        registrationInfo: {
-          credential: {
-            id: credentialId,
-            publicKey: publicKeyBytes,
-            counter: 0,
-            transports: ['internal'],
-          },
-          credentialDeviceType: 'singleDevice',
-          credentialBackedUp: false,
-        },
-      } as unknown as Awaited<ReturnType<typeof verifyRegistrationResponse>>);
+    const storedCredentials = await getOperatorDatabase().select().from(webauthn_credentials);
+    expect(storedCredentials[0]?.counter).toBe(0);
+  });
 
-      return injectAuthenticated(app, {
-        method: 'POST',
-        url: testApiPath('/auth/me/webauthn/register/verify'),
-        token,
-        payload: {
-          challenge_token: challengeToken,
-          response: {
-            id: credentialId,
-            rawId: credentialId,
-            response: { clientDataJSON: 'dGVzdA', attestationObject: 'dGVzdA' },
-            type: 'public-key',
-          },
-        },
-      });
-    }
+  it('rejects ceremonies signed for another origin as client errors, never a 500', async () => {
+    const { user, token, sessionPublicId } = await createSignedInUser(
+      'webauthn-foreign-origin@example.com',
+    );
+    await seedRecentStepUpForTestUser(user.public_id, sessionPublicId);
+    const foreignOrigin = 'https://attacker.example';
 
-    const first = await registerSamePasskey();
-    expect(first.statusCode).toBe(200);
+    // The library throws on an origin mismatch; the service must answer 400, not crash.
+    const registrationOptions = await requestRegistrationOptions(token);
+    const foreignRegistration = await injectAuthenticated(app, {
+      method: 'POST',
+      url: testApiPath('/auth/me/webauthn/register/verify'),
+      token,
+      headers: { origin: BROWSER_ORIGIN },
+      payload: {
+        challenge_token: registrationOptions.challenge_token,
+        response: createSoftwareRegistrationResponse({
+          credential: createSoftwareWebauthnCredential(),
+          creationOptions: registrationOptions.options,
+          origin: foreignOrigin,
+        }),
+      },
+    });
+    expect(foreignRegistration.statusCode).toBe(400);
+    expect(await getOperatorDatabase().select().from(webauthn_credentials)).toHaveLength(0);
 
-    const second = await registerSamePasskey();
-    expect(second.statusCode).toBe(409);
+    await seedRecentStepUpForTestUser(user.public_id, sessionPublicId);
+    const credential = createSoftwareWebauthnCredential();
+    const registration = await registerPasskey({ token, credential });
+    expect(registration.response.statusCode).toBe(200);
+    const authenticationOptions = await requestAuthenticationOptions(user.email);
+    const foreignAssertion = await submitAssertion({
+      challenge_token: authenticationOptions.challenge_token,
+      response: createSoftwareAuthenticationResponse({
+        credential,
+        requestOptions: authenticationOptions.options,
+        origin: foreignOrigin,
+        userHandle: registration.userHandle,
+      }),
+    });
+    expect(foreignAssertion.statusCode).toBe(401);
+    expect(foreignAssertion.headers['set-cookie']).toBeUndefined();
+  });
+
+  it('rejects re-registering an already-enrolled passkey with 409 (not a 500)', async () => {
+    const { user, token, sessionPublicId } = await createSignedInUser(
+      'webauthn-duplicate-credential@example.com',
+    );
+    const credential = createSoftwareWebauthnCredential();
+
+    // The register ceremony is a step-up-sensitive operation; re-seed each pass so the second
+    // attempt is rejected by the unique constraint, not by a stale step-up.
+    await seedRecentStepUpForTestUser(user.public_id, sessionPublicId);
+    const first = await registerPasskey({ token, credential });
+    expect(first.response.statusCode).toBe(200);
+
+    // A fresh challenge re-attesting the same credential, as an authenticator that ignores
+    // `excludeCredentials` would.
+    await seedRecentStepUpForTestUser(user.public_id, sessionPublicId);
+    const second = await registerPasskey({ token, credential });
+    expect(second.response.statusCode).toBe(409);
 
     // The collision must not have written a duplicate row.
     const storedCredentials = await getOperatorDatabase().select().from(webauthn_credentials);
     expect(storedCredentials).toHaveLength(1);
-    expect(storedCredentials[0]?.credential_id).toBe(credentialId);
+    expect(storedCredentials[0]?.credential_id).toBe(credential.credentialId);
   });
 });
