@@ -10,6 +10,7 @@ import {
   withAppDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
 import { webhook_delivery_attempts } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
+import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import {
   WEBHOOK_DELIVERY_QUEUE_NAME,
   closeWebhookDeliveryQueue,
@@ -37,6 +38,34 @@ import { generateTestToken } from '@/tests/helpers/test-auth.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 
+const fanOutFault = vi.hoisted(() => ({ enabled: false }));
+// When enabled, the attempt insert first runs a statement Postgres rejects (division by zero): a
+// real database failure inside the producer's transaction, not a JavaScript throw.
+vi.mock(
+  '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.js',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.repository.js')
+      >();
+    return {
+      ...actual,
+      createPendingWebhookDeliveryAttempt: async (
+        input: Parameters<typeof actual.createPendingWebhookDeliveryAttempt>[0],
+      ) => {
+        if (fanOutFault.enabled) {
+          const { getRequestDatabase } = await import(
+            '@/infrastructure/database/contexts/database-context-runtime.js'
+          );
+          const { sql } = await import('drizzle-orm');
+          await getRequestDatabase().execute(sql`SELECT 1 / 0`);
+        }
+        return actual.createPendingWebhookDeliveryAttempt(input);
+      },
+    };
+  },
+);
+
 vi.mock('@/domains/billing/sub-domains/subscription/stripe-payment-provider.js', () => {
   class FakeStripePaymentProvider {
     isConfigured(): boolean {
@@ -60,6 +89,8 @@ vi.mock('@/domains/billing/sub-domains/subscription/stripe-payment-provider.js',
 });
 
 const PERMISSIONS = [
+  'webhook:read',
+  'webhook:manage',
   'organization:update',
   'membership:read',
   'membership:manage',
@@ -98,12 +129,15 @@ describe('Integration: organization resource events reach subscribed webhooks', 
     await seedPermissions(PERMISSIONS);
   });
 
-  async function createSubscribedOrganization(events: readonly string[] = WEBHOOK_EVENT_TYPES) {
+  async function createSubscribedOrganization(
+    events: readonly string[] = WEBHOOK_EVENT_TYPES,
+    permissionCodes: readonly string[] = PERMISSIONS,
+  ) {
     const owner = await createTestUser();
     const organization = await createTestOrganization({ ownerUserId: owner.id });
     const role = await createRoleWithPermissions({
       organizationId: organization.id,
-      permissionCodes: PERMISSIONS,
+      permissionCodes: [...permissionCodes],
       createdByUserId: owner.id,
     });
     await createMembership({ userId: owner.id, organizationId: organization.id, roleId: role.id });
@@ -372,5 +406,125 @@ describe('Integration: organization resource events reach subscribed webhooks', 
     ).rejects.toThrow('write failed after the event');
 
     expect(await envelopes(webhook.id, 'organization.updated')).toEqual([]);
+    // Nor is a delivery job queued: the rolled-back unit's after-commit tasks are dropped.
+    const jobs = await deliveryQueue.getJobs(['waiting', 'delayed', 'active', 'prioritized']);
+    expect(jobs.filter((job) => job.data?.organizationPublicId === organization.public_id)).toEqual(
+      [],
+    );
+  });
+
+  it('a failed statement inside the fan-out records no attempt and leaves the write committed', async () => {
+    const { organization, webhook, token } = await createSubscribedOrganization();
+    fanOutFault.enabled = true;
+    try {
+      const response = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath('/tenancy/organization'),
+        token,
+        payload: { name: 'Saved Despite Fan-out' },
+      });
+      // Without the savepoint the aborted transaction failed the PATCH at COMMIT.
+      expect(response.statusCode, response.body).toBe(200);
+    } finally {
+      fanOutFault.enabled = false;
+    }
+    const [stored] = await getOperatorDatabase()
+      .select({ name: organizations.name })
+      .from(organizations)
+      .where(eq(organizations.id, organization.id));
+    expect(stored?.name).toBe('Saved Despite Fan-out');
+    expect(await envelopes(webhook.id, 'organization.updated')).toEqual([]);
+  });
+
+  it('subscribing to membership or subscription events needs the matching read permission', async () => {
+    const webhookOnly = await createSubscribedOrganization(
+      ['organization.updated'],
+      ['webhook:read', 'webhook:manage'],
+    );
+    for (const events of [['membership.created'], ['subscription.updated']]) {
+      const refused = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath(`/notify/webhooks/${webhookOnly.webhook.public_id}`),
+        token: webhookOnly.token,
+        payload: { events },
+      });
+      // Otherwise a webhook-only role would receive member emails it cannot read through the API.
+      expect(refused.statusCode, refused.body).toBe(403);
+    }
+    const organizationEvents = await injectAuthenticated(app, {
+      method: 'PATCH',
+      url: testApiPath(`/notify/webhooks/${webhookOnly.webhook.public_id}`),
+      token: webhookOnly.token,
+      payload: { events: ['organization.created', 'organization.updated'] },
+    });
+    expect(organizationEvents.statusCode, organizationEvents.body).toBe(200);
+
+    const reader = await createSubscribedOrganization(
+      ['organization.updated'],
+      ['webhook:read', 'webhook:manage', 'membership:read'],
+    );
+    const allowed = await injectAuthenticated(app, {
+      method: 'PATCH',
+      url: testApiPath(`/notify/webhooks/${reader.webhook.public_id}`),
+      token: reader.token,
+      payload: { events: ['membership.created'] },
+    });
+    expect(allowed.statusCode, allowed.body).toBe(200);
+  });
+
+  it('a Stripe sync that changes no customer-visible field emits nothing', async () => {
+    const { organization, webhook } = await createSubscribedOrganization();
+    const plan = await createTestPlan();
+    const providerSubscriptionId = `sub_unchanged_${randomUUID()}`;
+    const subscription = await createTestSubscription({
+      organizationId: organization.id,
+      planId: plan.id,
+      providerSubscriptionId,
+    });
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const updatedEvent = (created: number, cancelAtPeriodEnd: boolean) =>
+      ({
+        id: `evt_sync_${randomUUID()}`,
+        object: 'event',
+        type: 'customer.subscription.updated',
+        created,
+        data: {
+          object: {
+            id: providerSubscriptionId,
+            object: 'subscription',
+            status: 'active',
+            cancel_at_period_end: cancelAtPeriodEnd,
+            canceled_at: null,
+            items: {
+              data: [{ current_period_start: nowSeconds, current_period_end: nowSeconds + 86_400 }],
+            },
+          },
+        },
+      }) as unknown as Stripe.Event;
+
+    // The first sync rewrites the periods to Stripe's whole seconds: a real change.
+    await app.billingDomain.stripeWebhookService.handleEvent(updatedEvent(nowSeconds + 1, false));
+    expect(await envelopes(webhook.id, 'subscription.updated')).toHaveLength(1);
+    // The same state again (a redelivery, or the reconciliation after an HTTP mutation): nothing new.
+    await app.billingDomain.stripeWebhookService.handleEvent(updatedEvent(nowSeconds + 2, false));
+    expect(await envelopes(webhook.id, 'subscription.updated')).toHaveLength(1);
+    // A real change again.
+    await app.billingDomain.stripeWebhookService.handleEvent(updatedEvent(nowSeconds + 3, true));
+    const updates = await envelopes(webhook.id, 'subscription.updated');
+    expect(updates).toHaveLength(2);
+    expectEnvelope(updates[1], 'subscription.updated', subscription.public_id);
+    expect(updates[1]?.data).toMatchObject({ cancel_at_period_end: true });
+  });
+
+  it('cancelling for organization offboarding emits no event (nothing could deliver it)', async () => {
+    const { organization, webhook } = await createSubscribedOrganization();
+    const plan = await createTestPlan();
+    await createTestSubscription({ organizationId: organization.id, planId: plan.id });
+
+    await app.billingDomain.subscriptionService.cancelActiveForOrganizationOffboarding(
+      organization.public_id,
+    );
+
+    expect(await envelopes(webhook.id, 'subscription.cancelled')).toEqual([]);
   });
 });

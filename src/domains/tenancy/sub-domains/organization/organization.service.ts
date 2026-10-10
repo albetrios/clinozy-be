@@ -448,7 +448,7 @@ export class OrganizationService {
      * (`owner_user_id` resolves to the current `app.current_user_public_id`). The slug
      * existence check runs in the same wrap so the SELECT also sees the user GUC.
      */
-    return withAppDatabaseContext(
+    const created = await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ userPublicId: owner_user_public_id }),
       async () => {
         const ownerId = await this.repository.resolveUserIdByPublicId(owner_user_public_id);
@@ -486,9 +486,7 @@ export class OrganizationService {
             type: 'TEAM',
             ownerUserId: ownerId,
           });
-          const created = await this.toOrganizationOutput(organization);
-          await this.emitOrganizationEvent(ORGANIZATION_EVENT.CREATED, created);
-          return created;
+          return await this.toOrganizationOutput(organization);
         } catch (error) {
           // Two concurrent creates can both pass the findBySlug pre-check; the
           // loser hits the `idx_organizations_slug` unique index. Map the
@@ -504,6 +502,12 @@ export class OrganizationService {
         }
       },
     );
+    // After the create's own context: provisioning committed the organization in its own
+    // transaction, and the fan-out reads under the new organization's scope — from inside this
+    // user-scoped transaction it would hold a second pooled connection. (A brand-new organization
+    // has no webhooks yet, so this reaches none; it is emitted for completeness.)
+    await this.emitOrganizationEvent(ORGANIZATION_EVENT.CREATED, created);
+    return created;
   }
 
   async update(

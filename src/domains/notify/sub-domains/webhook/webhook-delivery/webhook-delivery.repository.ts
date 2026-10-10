@@ -1,4 +1,4 @@
-import { and, asc, eq, lt, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, lt, sql } from 'drizzle-orm';
 import {
   type RequestScopedPostgresDatabase,
   assertWorkerDatabaseContext,
@@ -104,7 +104,8 @@ export async function findOrganizationPublicIdByDeliveryAttemptPublicId(
  * - **Side effects:** none — a read.
  * - **Notes:** crosses organizations: the attempts', webhooks' and organizations' RLS policies admit
  *   the maintenance role under `app.global_retention_cleanup`. Attempts of a disabled or deleted
- *   webhook are included — the delivery worker settles them (`webhook_disabled`).
+ *   webhook are included — the delivery worker settles them (`webhook_disabled`); attempts of a
+ *   deleted organization are not — nothing can deliver them.
  */
 export async function findStalePendingDeliveryAttempts(
   databaseHandle: WorkerDatabaseHandle,
@@ -123,6 +124,9 @@ export async function findStalePendingDeliveryAttempts(
       and(
         eq(webhook_delivery_attempts.status, 'PENDING'),
         lt(webhook_delivery_attempts.created_at, options.createdBefore),
+        // A deleted organization's attempts cannot be delivered (the worker can no longer load the
+        // organization), so re-adding them would only fail again until retention removes them.
+        isNull(organizations.deleted_at),
       ),
     )
     .orderBy(asc(webhook_delivery_attempts.created_at))

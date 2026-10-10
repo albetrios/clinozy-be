@@ -55,6 +55,7 @@ import type { PaymentProvider } from './payment-provider.port.js';
 import type { SubscriptionRepository } from './subscription.repository.js';
 import type {
   StripeSubscriptionOrderingState,
+  SubscriptionPublicState,
   SubscriptionUpdateData,
 } from './subscription.types.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
@@ -153,6 +154,22 @@ function assertProviderPriceForStripeBackedPlanChange(
   if (providerSubscriptionId && !providerPriceId) {
     throw new UnprocessableEntityError('errors:planNotAvailableForBillingCycle');
   }
+}
+
+/** Whether a customer-visible subscription field differs between two states. */
+function subscriptionPublicStateChanged(
+  before: SubscriptionPublicState,
+  after: SubscriptionPublicState,
+): boolean {
+  const time = (value: Date | string | null) => (value === null ? null : new Date(value).getTime());
+  return (
+    before.status !== after.status ||
+    before.cancel_at_period_end !== after.cancel_at_period_end ||
+    time(before.canceled_at) !== time(after.canceled_at) ||
+    time(before.current_period_start) !== time(after.current_period_start) ||
+    time(before.current_period_end) !== time(after.current_period_end) ||
+    before.plan_id !== after.plan_id
+  );
 }
 
 /**
@@ -266,6 +283,17 @@ export class SubscriptionService {
     organizationPublicId?: string;
     subscription: { public_id: string; organization_id: number };
     repositoryOverride?: SubscriptionRepository;
+    /**
+     * The row's customer-visible state before a Stripe sync; when given and unchanged, nothing is
+     * emitted — the same-second reconciliation re-applies a change the HTTP mutation already announced.
+     */
+    previous?: SubscriptionPublicState | null;
+    /**
+     * Fail the caller when a handler fails (`emitStrict`) instead of logging and moving on. The
+     * Stripe webhook dispatch sets it: its job then retries the whole event, while a swallowed failure
+     * would lose the event for good (the watermark makes a re-run emit nothing).
+     */
+    propagateFailure?: boolean;
   }): Promise<void> {
     const repository = options.repositoryOverride ?? this.repository;
     const organizationPublicId =
@@ -277,13 +305,22 @@ export class SubscriptionService {
       options.subscription.organization_id,
     );
     if (!row) return;
+    if (options.previous && !subscriptionPublicStateChanged(options.previous, row)) return;
     const [decorated] = await this.decorateWithSeatCounts(organizationPublicId, [row]);
-    await eventBus.emit(
-      buildDomainEvent<OrganizationResourceEventPayload>(options.type, {
-        organization_public_id: organizationPublicId,
-        data: SubscriptionSerializer.one(decorated!),
-      }),
-    );
+    const event = buildDomainEvent<OrganizationResourceEventPayload>(options.type, {
+      organization_public_id: organizationPublicId,
+      data: SubscriptionSerializer.one(decorated!),
+    });
+    await (options.propagateFailure ? eventBus.emitStrict(event) : eventBus.emit(event));
+  }
+
+  /** The customer-visible state of a Stripe-backed row before a sync (see {@link emitSubscriptionEvent}). */
+  async findStripeSubscriptionPublicState(options: {
+    providerSubscriptionId: string;
+    repositoryOverride?: SubscriptionRepository;
+  }): Promise<SubscriptionPublicState | null> {
+    const repository = options.repositoryOverride ?? this.repository;
+    return repository.findPublicStateByProviderSubscriptionId(options.providerSubscriptionId);
   }
 
   /**
@@ -1112,20 +1149,14 @@ export class SubscriptionService {
     }
     await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization_public_id }),
-      async () => {
-        const row = await this.repository.update(subscription.public_id, organization.id, {
+      // No `subscription.cancelled`: the organization is being deleted, and a delivery queued now
+      // would run after its soft-delete, when the worker can no longer load it.
+      async () =>
+        this.repository.update(subscription.public_id, organization.id, {
           status: 'CANCELED',
           canceled_at: new Date(),
           last_stripe_event_created_at: new Date(),
-        });
-        if (row) {
-          await this.emitSubscriptionEvent({
-            type: SUBSCRIPTION_EVENT.CANCELLED,
-            organizationPublicId: organization_public_id,
-            subscription: row,
-          });
-        }
-      },
+        }),
     );
   }
 

@@ -36,7 +36,9 @@ export function isLiveProviderContractRun(): boolean {
 
 /** Refuses a live run that is not the contract slice, or whose keys are not sandbox ones. */
 function assertLiveProviderRunIsSandboxed(): void {
-  if (process.env.CONTRACT_TESTS_ENABLED !== 'true') {
+  // Set only by tooling/vitest/contract.config.ts in live mode: any other config (`pnpm test`, a
+  // single lane) refuses, so a stray flag can never run the whole suite against real providers.
+  if (process.env.LIVE_PROVIDER_CONTRACT_CONFIG !== 'true') {
     throw new Error(
       'LIVE_PROVIDER_CONTRACTS runs only the contract slice: pnpm test:contract:live',
     );

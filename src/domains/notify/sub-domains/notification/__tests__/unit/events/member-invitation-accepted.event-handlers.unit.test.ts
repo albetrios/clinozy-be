@@ -2,6 +2,11 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createAndDispatchNotificationMock = vi.fn();
 const resolveRecipientPublicIdsMock = vi.fn();
+// No Postgres in the unit lane: each recipient's savepoint runs its callback directly.
+vi.mock('@/infrastructure/database/transaction.js', () => ({
+  withSavepoint: vi.fn(async (callback: () => Promise<unknown>) => callback()),
+}));
+
 vi.mock('@/domains/notify/sub-domains/notification/notification-dispatch.service.js', () => ({
   createAndDispatchNotification: (...arguments_: unknown[]) =>
     createAndDispatchNotificationMock(...arguments_),

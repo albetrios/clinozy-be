@@ -85,6 +85,7 @@ describe('stripe-webhook.processor duplicate job delivery', () => {
     syncFromStripeProviderSubscription: vi.fn(),
     markCanceledByStripeProviderSubscriptionId: vi.fn(),
     emitSubscriptionEvent: vi.fn().mockResolvedValue(undefined),
+    findStripeSubscriptionPublicState: vi.fn().mockResolvedValue(null),
   } as unknown as SubscriptionService;
 
   const stripeWebhookEventRepository = {

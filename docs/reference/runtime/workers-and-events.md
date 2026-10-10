@@ -48,7 +48,7 @@ flowchart LR
 
 Billing side effects otherwise use BullMQ directly (for example [`stripe-webhook`](../../../src/domains/billing/sub-domains/stripe-webhook/)); its only domain events are `SUBSCRIPTION_EVENT.*`, and there is no top-level `billing/events/` aggregator.
 
-A worker job that emits these events runs its unit of work inside `runWithEnqueueAfterCommit` (`src/core/events/event-bus.ts`): outside an HTTP request `runEnqueueAfterCommit` has no scope to defer into and would enqueue inside the open transaction, before the delivery attempt is committed.
+Every unit of work releases its after-commit tasks only when it commits (`runInCommitUnit`, `src/core/events/on-commit-scope.ts`, wrapping each pooled transaction and `withSavepoint`): over HTTP into the request's `onResponse` flush, in a worker right after the commit, and never when it rolls back — so a delivery job never starts before its attempt row exists, and never for one that was rolled back.
 
 ---
 

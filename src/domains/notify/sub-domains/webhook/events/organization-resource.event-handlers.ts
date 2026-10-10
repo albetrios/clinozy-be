@@ -15,10 +15,12 @@ let organizationResourceEventHandlersRegistered = false;
  *
  * @remarks
  * - **Algorithm:** the listener hands the event's organization, type and public JSON to
- *   {@link WebhookService.dispatchOrganizationWebhooks}, which records the PENDING attempts in the
- *   producer's transaction and enqueues them after it commits.
- * - **Failure modes:** a dispatch failure propagates to the bus, which logs it, alerts and swallows
- *   it — the producer's write is never failed by webhook fan-out.
+ *   {@link WebhookService.dispatchOrganizationWebhooks}, which records the PENDING attempts in one
+ *   savepoint of the producer's transaction and enqueues them once it commits.
+ * - **Failure modes:** a dispatch failure rolls its savepoint back (no attempt of that event
+ *   survives) and propagates to the bus: `emit` logs, alerts and swallows it, so the producer's
+ *   write still commits; the Stripe webhook dispatch uses `emitStrict`, so its job retries the
+ *   whole event.
  * - **Side effects:** none at registration; one listener per event type.
  */
 export function registerOrganizationResourceEventHandlers(webhookService: WebhookService): void {

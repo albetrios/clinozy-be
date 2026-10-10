@@ -30,6 +30,7 @@ import {
   type OrganizationPrincipalDatabaseScope,
 } from '@/infrastructure/database/contexts/database-context.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import { withSavepoint } from '@/infrastructure/database/transaction.js';
 import { WEBHOOK_ORGANIZATION_FANOUT_CONCURRENCY } from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery.constants.js';
 import { PAGINATION } from '@/shared/constants/pagination.constants.js';
 import { MILLISECONDS_PER_HOUR } from '@/shared/constants/ttl.constants.js';
@@ -352,15 +353,17 @@ export class WebhookService {
    * @remarks
    * - **Algorithm:** inside `withAppDatabaseContext` for the organization — which REUSES the
    *   producer's transaction when it is already in that organization's context, so the attempts
-   *   commit or roll back with the change — build one envelope `{ id, type, created_at, data }`
-   *   (`id` = an `evt_` public id shared by every endpoint), load the subscribed enabled
-   *   endpoints, then fan delivery requests out in bounded-concurrency batches of
-   *   {@link WEBHOOK_ORGANIZATION_FANOUT_CONCURRENCY}.
-   * - **Failure modes:** per-webhook failures are isolated (best-effort) and logged;
-   *   if every dispatch in the fan-out fails, the first error is rethrown so the
-   *   caller (event handler / worker) can retry the whole event.
+   *   commit or roll back with the change — and inside one savepoint ({@link withSavepoint}): load
+   *   the subscribed enabled endpoints, build one envelope `{ id, type, created_at, data }` (`id` =
+   *   an `evt_` public id shared by every endpoint), then request a delivery per endpoint in
+   *   batches of {@link WEBHOOK_ORGANIZATION_FANOUT_CONCURRENCY}.
+   * - **Failure modes:** all or nothing per event. Inside a transaction a failed statement aborts
+   *   it, so one failed attempt cannot be skipped while the others are kept: the savepoint rolls
+   *   the whole fan-out back and the error propagates to the bus — which logs, alerts and counts it
+   *   and leaves the producer's write committed (`emit`), or fails the producer's unit so its job
+   *   retries (`emitStrict`, the Stripe webhook path).
    * - **Side effects:** persists one PENDING delivery attempt per webhook and emits
-   *   `WEBHOOK_DELIVERY_REQUESTED` for each (enqueued post-commit).
+   *   `WEBHOOK_DELIVERY_REQUESTED` for each (enqueued after the producer commits).
    */
   async dispatchOrganizationWebhooks(options: {
     organizationPublicId: string;
@@ -370,65 +373,48 @@ export class WebhookService {
     const { organizationPublicId, eventType } = options;
     await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
-      async () => {
-        const organization =
-          await this.organizationService.requireOrganizationByPublicId(organizationPublicId);
-        // sec-N4: defense-in-depth backstop — share the same per-organization cap with create().
-        // If we ever load >= cap rows the create cap and runtime list have drifted
-        // OR an operator just lifted the cap; surface the truncation so an alert
-        // can fire (Sentry log warnings, ops dashboard).
-        const fanoutCap = env.WEBHOOK_MAX_PER_ORG;
-        const webhooks = await this.webhookRepository.listEnabledSubscribedToEvent(
-          organization.id,
-          eventType,
-          undefined,
-          fanoutCap,
-        );
-        if (webhooks.length >= fanoutCap) {
-          logger.warn(
-            { organizationPublicId, eventType, fanoutCap },
-            'notify.webhook.fanout.cap_reached',
+      () =>
+        withSavepoint(async () => {
+          const organization =
+            await this.organizationService.requireOrganizationByPublicId(organizationPublicId);
+          // sec-N4: defense-in-depth backstop — share the same per-organization cap with create().
+          // If we ever load >= cap rows the create cap and runtime list have drifted
+          // OR an operator just lifted the cap; surface the truncation so an alert
+          // can fire (Sentry log warnings, ops dashboard).
+          const fanoutCap = env.WEBHOOK_MAX_PER_ORG;
+          const webhooks = await this.webhookRepository.listEnabledSubscribedToEvent(
+            organization.id,
+            eventType,
+            undefined,
+            fanoutCap,
           );
-        }
-        if (webhooks.length === 0) return;
-
-        const payload = {
-          id: generatePublicId('webhookEvent'),
-          type: eventType,
-          created_at: new Date().toISOString(),
-          data: options.data,
-        };
-        let firstError: unknown;
-        let failureCount = 0;
-        for (
-          let index = 0;
-          index < webhooks.length;
-          index += WEBHOOK_ORGANIZATION_FANOUT_CONCURRENCY
-        ) {
-          const batch = webhooks.slice(index, index + WEBHOOK_ORGANIZATION_FANOUT_CONCURRENCY);
-          const results = await Promise.allSettled(
-            batch.map((webhook) =>
-              this.requestWebhookDelivery({ webhookId: webhook.id, eventType, payload }),
-            ),
-          );
-          for (const result of results) {
-            if (result.status === 'rejected') {
-              failureCount += 1;
-              if (firstError === undefined) firstError = result.reason;
-              logger.warn(
-                { error: result.reason, organizationPublicId, eventType },
-                'notify.webhook.fanout.deliveryRequestFailed',
-              );
-            }
+          if (webhooks.length >= fanoutCap) {
+            logger.warn(
+              { organizationPublicId, eventType, fanoutCap },
+              'notify.webhook.fanout.cap_reached',
+            );
           }
-        }
+          if (webhooks.length === 0) return;
 
-        // Only surface an error when every endpoint failed — a single bad endpoint must
-        // not block delivery to the others, but a total failure should be retryable.
-        if (failureCount === webhooks.length && firstError !== undefined) {
-          throw firstError;
-        }
-      },
+          const payload = {
+            id: generatePublicId('webhookEvent'),
+            type: eventType,
+            created_at: new Date().toISOString(),
+            data: options.data,
+          };
+          for (
+            let index = 0;
+            index < webhooks.length;
+            index += WEBHOOK_ORGANIZATION_FANOUT_CONCURRENCY
+          ) {
+            const batch = webhooks.slice(index, index + WEBHOOK_ORGANIZATION_FANOUT_CONCURRENCY);
+            await Promise.all(
+              batch.map((webhook) =>
+                this.requestWebhookDelivery({ webhookId: webhook.id, eventType, payload }),
+              ),
+            );
+          }
+        }),
     );
   }
 

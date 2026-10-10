@@ -6,6 +6,7 @@ src/
 ├── core/
     ├── events/
     │   ├── event-bus.ts
+    │   ├── on-commit-scope.ts
     │   ├── organization-resource-event.ts
     │   └── register-event-handlers.ts
     └── core.overview.md
@@ -2203,6 +2204,7 @@ src/
     │   │   │   ├── scope-observability.unit.test.ts
     │   │   │   ├── scope-shape-contract.policy.unit.test.ts
     │   │   │   ├── session-context-confinement.policy.unit.test.ts
+    │   │   │   ├── transaction-savepoint.db.unit.test.ts
     │   │   │   ├── transaction.util.db.unit.test.ts
     │   │   │   ├── unscoped-query-counter.unit.test.ts
     │   │   │   ├── verified-scope-usage.policy.unit.test.ts

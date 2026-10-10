@@ -12,6 +12,7 @@
  *   never a new file or wrapper.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { runInCommitUnit } from '@/core/events/on-commit-scope.js';
 import { sql as drizzleSql } from 'drizzle-orm';
 import * as databaseConnection from '@/infrastructure/database/connection.js';
 import { database } from '@/infrastructure/database/connection.js';
@@ -269,7 +270,8 @@ async function runPooledUnitOfWork<T>(options: {
   };
   // Called from an async function, a synchronous throw from openTransaction becomes a rejection,
   // so the gauge below is still released, as the per-site try/finally did.
-  const transaction = (async () => options.openTransaction(claimConnection))();
+  // The unit's after-commit tasks survive only if it commits (see runInCommitUnit).
+  const transaction = runInCommitUnit(() => options.openTransaction(claimConnection));
   const unitOfWork = transaction.finally(() => {
     if (options.countsAsCheckout) {
       decrementOrganizationRlsCheckoutCount();

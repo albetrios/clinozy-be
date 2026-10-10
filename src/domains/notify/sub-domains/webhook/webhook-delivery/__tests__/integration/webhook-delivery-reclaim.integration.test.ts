@@ -11,6 +11,7 @@ import {
   createTestWebhookDeliveryAttempt,
 } from '@/tests/factories/webhook.factory.js';
 import { webhook_delivery_attempts } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
+import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import {
   WEBHOOK_DELIVERY_QUEUE_NAME,
   closeWebhookDeliveryQueue,
@@ -92,6 +93,19 @@ describe('Integration: webhook delivery reclaim sweep', () => {
 
   it('leaves a fresh PENDING attempt alone — its own job is just starting', async () => {
     const { deliveryAttempt } = await createPendingAttempt({ createdMinutesAgo: 1 });
+
+    const sweep = await runWebhookDeliveryReclaimJob();
+
+    expect(sweep).toEqual({ scannedCount: 0, addedCount: 0 });
+    expect(await jobsFor(deliveryAttempt.publicId)).toHaveLength(0);
+  });
+
+  it("skips a deleted organization's PENDING attempts — nothing can deliver them", async () => {
+    const { organization, deliveryAttempt } = await createPendingAttempt({ createdMinutesAgo: 10 });
+    await getOperatorDatabase()
+      .update(organizations)
+      .set({ deleted_at: new Date() })
+      .where(eq(organizations.id, organization.id));
 
     const sweep = await runWebhookDeliveryReclaimJob();
 

@@ -4,6 +4,7 @@ import {
   createAndDispatchNotification,
   resolveNotificationRecipientPublicIds,
 } from '@/domains/notify/sub-domains/notification/notification-dispatch.service.js';
+import { withSavepoint } from '@/infrastructure/database/transaction.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import {
   MEMBER_INVITATION_EVENT,
@@ -21,8 +22,9 @@ const INVITE_ACCEPTED_ACTION_URL = '/settings/members';
  * @remarks Runs synchronously inside the accept's `withAppDatabaseContext` (the event is
  * awaited there), so each `createAndDispatchNotification` INSERT sees the organization GUC and satisfies the
  * notification write-RLS. `requestId` is intentionally omitted so the commit-dispatch uses the
- * in-memory `onCommit` path — no Redis write inside the caller's RLS-context transaction. Per-recipient
- * try/catch means one bad insert cannot drop the rest, and the bus swallows any throw so accept is safe.
+ * in-memory `onCommit` path — no Redis write inside the caller's RLS-context transaction. Each
+ * recipient's insert runs in its own savepoint behind a try/catch, so one bad insert neither drops the
+ * rest nor fails the accept (without the savepoint the aborted transaction would fail it at COMMIT).
  */
 async function onMemberInvitationAcceptedEvent(event: DomainEvent): Promise<void> {
   const payload = event.payload as MemberInvitationAcceptedPayload;
@@ -30,17 +32,21 @@ async function onMemberInvitationAcceptedEvent(event: DomainEvent): Promise<void
   const message = `${payload.invitee_name} accepted your invitation to join ${payload.organization_name}.`;
   for (const recipientUserId of payload.recipient_user_ids) {
     try {
-      await createAndDispatchNotification({
-        user_id: recipientUserId,
-        organization_id: payload.organization_id,
-        type: INVITE_ACCEPTED_NOTIFICATION_TYPE,
-        title,
-        message,
-        action_url: INVITE_ACCEPTED_ACTION_URL,
-        // In-app inbox item + an email to the manager (IN_APP is the persisted row itself; the
-        // worker delivers the email channel).
-        data: { channels: ['in_app', 'email'] },
-      });
+      // A savepoint per recipient: inside the accept's transaction a failed INSERT would otherwise
+      // abort it, and postgres.js would fail the accept at COMMIT even though this catch ran.
+      await withSavepoint(() =>
+        createAndDispatchNotification({
+          user_id: recipientUserId,
+          organization_id: payload.organization_id,
+          type: INVITE_ACCEPTED_NOTIFICATION_TYPE,
+          title,
+          message,
+          action_url: INVITE_ACCEPTED_ACTION_URL,
+          // In-app inbox item + an email to the manager (IN_APP is the persisted row itself; the
+          // worker delivers the email channel).
+          data: { channels: ['in_app', 'email'] },
+        }),
+      );
     } catch (error) {
       logger.error(
         { err: error, recipientUserId, eventType: event.type },
@@ -76,7 +82,9 @@ async function invalidateRecipientUnreadCounts(
   eventType: string,
 ): Promise<void> {
   try {
-    const recipientPublicIds = await resolveNotificationRecipientPublicIds(recipientUserIds);
+    const recipientPublicIds = await withSavepoint(() =>
+      resolveNotificationRecipientPublicIds(recipientUserIds),
+    );
     await runEnqueueAfterCommit(async () => {
       await invalidateCachedUnreadNotificationCounts(recipientPublicIds);
     });

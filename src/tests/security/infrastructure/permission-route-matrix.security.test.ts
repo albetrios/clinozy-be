@@ -85,7 +85,9 @@ function payloadForPermissionRoute(
     return { default_enabled: false };
   }
   if (route.path.endsWith('/webhooks')) {
-    return { url: 'https://example.com/webhook', events: ['subscription.updated'] };
+    // An event every member may read: `membership.*` / `subscription.*` would also need their read
+    // permission, and the matrix grants exactly the route's own.
+    return { url: 'https://example.com/webhook', events: ['organization.updated'] };
   }
   if (route.path.includes('/webhooks/:webhook_id')) {
     return { is_enabled: false };

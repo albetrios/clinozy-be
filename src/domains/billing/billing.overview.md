@@ -63,7 +63,7 @@ stateDiagram-v2
 
 ## Events
 
-- Emits: `SUBSCRIPTION_EVENT.CREATED` / `UPDATED` / `CANCELLED` (`subscription/events/subscription.events.ts`) with the subscription's public JSON, inside the write's organization context — from the HTTP mutations and from the Stripe webhook dispatch. The notify domain delivers them to the organization's subscribed webhooks (`organization-resource-webhook-flow` in [src/FLOWS.md](src/FLOWS.md)).
+- Emits: `SUBSCRIPTION_EVENT.CREATED` / `UPDATED` / `CANCELLED` (`subscription/events/subscription.events.ts`) with the subscription's public JSON, inside the write's organization context — from the HTTP mutations and from the Stripe webhook dispatch, which emits only when a customer-visible field changed and fails its job when the fan-out fails, so the event is retried. Organization offboarding cancels without an event (nothing could deliver it). The notify domain delivers them to the organization's subscribed webhooks (`organization-resource-webhook-flow` in [src/FLOWS.md](src/FLOWS.md)).
 - Consumes: Stripe webhook events (verified, deduplicated, persisted, then dispatched to the appropriate `subscription` sub-domain method).
 
 ## External integrations

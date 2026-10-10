@@ -1,11 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { runInCommitUnit } from '@/core/events/on-commit-scope.js';
 import {
   EventBus,
   buildDomainEvent,
   eventBus,
   enterOnCommitScope,
   runEnqueueAfterCommit,
-  runWithEnqueueAfterCommit,
   runWithOnCommitScope,
   scheduleCommitDispatch,
   resetCommitDispatchPendingStateForTests,
@@ -120,31 +120,42 @@ describe('EventBus.emit', () => {
   });
 });
 
-describe('runWithEnqueueAfterCommit', () => {
-  it('defers runEnqueueAfterCommit tasks until the unit of work has resolved', async () => {
+describe('runInCommitUnit', () => {
+  it("moves a successful unit's tasks to the enclosing queue", async () => {
     const order: string[] = [];
-    const result = await runWithEnqueueAfterCommit(async () => {
+    await runWithOnCommitScope(async () => {
+      await runInCommitUnit(async () => {
+        eventBus.onCommit(async () => {
+          order.push('task');
+        });
+      });
+      order.push('unit done');
+      await eventBus.flushOnCommit();
+    });
+    expect(order).toEqual(['unit done', 'task']);
+  });
+
+  it("drops a failed unit's tasks", async () => {
+    const task = vi.fn();
+    await runWithOnCommitScope(async () => {
+      await runInCommitUnit(async () => {
+        eventBus.onCommit(task);
+        throw new Error('rolled back');
+      }).catch(() => undefined);
+      await eventBus.flushOnCommit();
+    });
+    expect(task).not.toHaveBeenCalled();
+  });
+
+  it('runs the tasks right after the unit when no scope encloses it (a worker)', async () => {
+    const order: string[] = [];
+    await runInCommitUnit(async () => {
       await runEnqueueAfterCommit(async () => {
         order.push('enqueue');
       });
       order.push('commit');
-      return 'done';
     });
-
-    expect(result).toBe('done');
     expect(order).toEqual(['commit', 'enqueue']);
-  });
-
-  it('drops the deferred tasks when the unit of work rejects', async () => {
-    const enqueue = vi.fn();
-    await expect(
-      runWithEnqueueAfterCommit(async () => {
-        await runEnqueueAfterCommit(enqueue);
-        throw new Error('rolled back');
-      }),
-    ).rejects.toThrow('rolled back');
-
-    expect(enqueue).not.toHaveBeenCalled();
   });
 });
 

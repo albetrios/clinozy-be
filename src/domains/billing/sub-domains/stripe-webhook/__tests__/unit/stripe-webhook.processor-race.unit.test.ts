@@ -70,6 +70,7 @@ describe('stripe-webhook.processor race', () => {
       syncFromStripeProviderSubscription: vi.fn().mockResolvedValue({ id: 1 }),
       markCanceledByStripeProviderSubscriptionId: vi.fn(),
       emitSubscriptionEvent: vi.fn().mockResolvedValue(undefined),
+      findStripeSubscriptionPublicState: vi.fn().mockResolvedValue(null),
     } as unknown as SubscriptionService;
 
     stripeWebhookEventRepository = {

@@ -267,14 +267,13 @@ describe('processWebhookDeliveryAttempt', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('fails terminally when the attempt row does not exist in the job organization', async () => {
+  it('skips — no request, nothing recorded — when the attempt is not visible in the job organization', async () => {
     findDeliveryContextMock.mockResolvedValueOnce(null);
 
-    const error = await deliver().catch((rejection: unknown) => rejection);
-
-    expect(error).toBeInstanceOf(UnrecoverableError);
-    expect((error as Error).message).toContain(DELIVERY_ATTEMPT_PUBLIC_ID);
+    // The organization was deleted (RLS hides it) or a restore lost the row: nothing to send.
+    await expect(deliver()).resolves.toEqual({ outcome: 'skipped', reason: 'attempt_missing' });
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(repository.recordOutcome).not.toHaveBeenCalled();
   });
 
   it('fails terminally — recorded, no retry, no request — when the signing secret cannot be decrypted', async () => {

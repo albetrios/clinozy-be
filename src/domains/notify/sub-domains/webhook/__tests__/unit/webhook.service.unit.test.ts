@@ -5,6 +5,11 @@ const { mockPinnedFetch, createPinnedWebhookFetchMock } = vi.hoisted(() => ({
   createPinnedWebhookFetchMock: vi.fn(),
 }));
 
+// The unit lane has no Postgres: the fan-out's savepoint runs its callback directly.
+vi.mock('@/infrastructure/database/transaction.js', () => ({
+  withSavepoint: vi.fn(async (callback: () => Promise<unknown>) => callback()),
+}));
+
 vi.mock('@/infrastructure/database/contexts/database-context.js', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
@@ -397,16 +402,16 @@ describe('WebhookService', () => {
     });
   });
 
-  it('dispatchOrganizationWebhooks isolates a single failing endpoint (best-effort)', async () => {
+  it('dispatchOrganizationWebhooks is all or nothing: one failing endpoint fails the event', async () => {
+    // Inside a transaction a failed INSERT aborts it, so the fan-out cannot keep the other
+    // attempts; it rejects so its savepoint rolls back and the bus reports the event.
     vi.mocked(webhookRepository.listEnabledSubscribedToEvent).mockResolvedValue([
       { id: 2, is_enabled: true, events: ['subscription.updated'] },
       { id: 3, is_enabled: true, events: ['subscription.updated'] },
     ] as never);
-    const requestWebhookDeliverySpy = vi
-      .spyOn(service, 'requestWebhookDelivery')
-      .mockImplementation(async ({ webhookId }) => {
-        if (webhookId === 2) throw new Error('attempt insert failed');
-      });
+    vi.spyOn(service, 'requestWebhookDelivery').mockImplementation(async ({ webhookId }) => {
+      if (webhookId === 2) throw new Error('attempt insert failed');
+    });
 
     await expect(
       service.dispatchOrganizationWebhooks({
@@ -414,8 +419,7 @@ describe('WebhookService', () => {
         eventType: 'subscription.updated',
         data: { id: 'sub_1' },
       }),
-    ).resolves.toBeUndefined();
-    expect(requestWebhookDeliverySpy).toHaveBeenCalledTimes(2);
+    ).rejects.toThrow('attempt insert failed');
   });
 
   it('dispatchOrganizationWebhooks rethrows when every endpoint fails (retryable)', async () => {

@@ -126,65 +126,85 @@ export function requireOrganizationPermission(
   permissionCode: string,
 ): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
   return async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-    const auth = request.auth;
-    if (!auth) throw new UnauthorizedError();
+    await assertOrganizationPermission(request, permissionCode);
+  };
+}
 
-    // The organization is the signed `org` token claim — the same source `requireOrganizationScope`
-    // hands the controller, so authz and the data/RLS scope cannot diverge. The claim is scope, not
-    // authority: membership is verified below (and RLS re-checked per request).
-    const organizationId = auth.organizationPublicId;
-    if (!organizationId) {
-      throw new ForbiddenError('errors:organizationContextRequired');
-    }
+/**
+ * Throws unless the request's principal holds `permissionCode` in the active organization — the
+ * check behind {@link requireOrganizationPermission}, for a permission known only from the request
+ * (e.g. the read permission each subscribed webhook event needs).
+ *
+ * @remarks
+ * - **Algorithm:** an API key must carry the code in its scopes; a user must hold it through the
+ *   organization role, and in an MFA-required organization the session must have proved a second
+ *   factor.
+ * - **Failure modes:** `UnauthorizedError` without a principal; `ForbiddenError` without an
+ *   organization claim, without the permission, or without the required MFA.
+ * - **Side effects:** a deny audit row on every refusal.
+ */
+export async function assertOrganizationPermission(
+  request: FastifyRequest,
+  permissionCode: string,
+): Promise<void> {
+  const auth = request.auth;
+  if (!auth) throw new UnauthorizedError();
 
-    if (auth.kind === 'apiKey') {
-      // An API key is pinned to the one organization it was minted in (its claim above); fail
-      // closed when its scopes lack the permission.
-      if (!auth.apiKeyScopes.includes(permissionCode)) {
-        await emitPermissionDenyAudit(
-          request,
-          buildDenyMetadata(request, {
-            deny_reason: 'api_key_scope_missing',
-            permission_code: permissionCode,
-            organization_id: organizationId,
-          }),
-        );
-        throw new ForbiddenError('errors:insufficientOrganizationPermissions');
-      }
-      return;
-    }
+  // The organization is the signed `org` token claim — the same source `requireOrganizationScope`
+  // hands the controller, so authz and the data/RLS scope cannot diverge. The claim is scope, not
+  // authority: membership is verified below (and RLS re-checked per request).
+  const organizationId = auth.organizationPublicId;
+  if (!organizationId) {
+    throw new ForbiddenError('errors:organizationContextRequired');
+  }
 
-    const permissionCodes = await resolveOrganizationPermissionsForRequest(
-      request,
-      auth.userId,
-      organizationId,
-    );
-    if (!permissionCodes.includes(permissionCode)) {
+  if (auth.kind === 'apiKey') {
+    // An API key is pinned to the one organization it was minted in (its claim above); fail
+    // closed when its scopes lack the permission.
+    if (!auth.apiKeyScopes.includes(permissionCode)) {
       await emitPermissionDenyAudit(
         request,
         buildDenyMetadata(request, {
-          deny_reason: 'organization_permission_missing',
+          deny_reason: 'api_key_scope_missing',
           permission_code: permissionCode,
           organization_id: organizationId,
         }),
       );
       throw new ForbiddenError('errors:insufficientOrganizationPermissions');
     }
-    // An organization whose security policy requires MFA admits only a session that proved a
-    // second factor (the token's `amr`). Checked per request — not only at login — so a session
-    // that joined later (invitation accepted after a first-factor login) or predates the policy
-    // cannot use the organization's authority. Runs after the permission check so a non-member
-    // learns nothing about the policy; an MFA-verified principal skips the lookup entirely.
-    if (auth.mfaVerified !== true && (await organizationRequiresMfa(organizationId))) {
-      await emitPermissionDenyAudit(
-        request,
-        buildDenyMetadata(request, {
-          deny_reason: 'organization_mfa_required',
-          permission_code: permissionCode,
-          organization_id: organizationId,
-        }),
-      );
-      throw new ForbiddenError('errors:organizationRequiresMfa').withReason('mfa_required');
-    }
-  };
+    return;
+  }
+
+  const permissionCodes = await resolveOrganizationPermissionsForRequest(
+    request,
+    auth.userId,
+    organizationId,
+  );
+  if (!permissionCodes.includes(permissionCode)) {
+    await emitPermissionDenyAudit(
+      request,
+      buildDenyMetadata(request, {
+        deny_reason: 'organization_permission_missing',
+        permission_code: permissionCode,
+        organization_id: organizationId,
+      }),
+    );
+    throw new ForbiddenError('errors:insufficientOrganizationPermissions');
+  }
+  // An organization whose security policy requires MFA admits only a session that proved a
+  // second factor (the token's `amr`). Checked per request — not only at login — so a session
+  // that joined later (invitation accepted after a first-factor login) or predates the policy
+  // cannot use the organization's authority. Runs after the permission check so a non-member
+  // learns nothing about the policy; an MFA-verified principal skips the lookup entirely.
+  if (auth.mfaVerified !== true && (await organizationRequiresMfa(organizationId))) {
+    await emitPermissionDenyAudit(
+      request,
+      buildDenyMetadata(request, {
+        deny_reason: 'organization_mfa_required',
+        permission_code: permissionCode,
+        organization_id: organizationId,
+      }),
+    );
+    throw new ForbiddenError('errors:organizationRequiresMfa').withReason('mfa_required');
+  }
 }

@@ -25,7 +25,10 @@ export default defineConfig({
     ],
     include: liveProviderRun ? [LIVE_PROVIDER_SPECS] : ['src/tests/contract/**/*.test.ts'],
     // Real sandbox round trips (Stripe's lifecycle is a dozen of them) outlast the 5 s default.
-    ...(liveProviderRun ? { testTimeout: 120_000 } : {}),
+    // The marker is what the harness checks: live mode runs only under this config, never the main one.
+    ...(liveProviderRun
+      ? { testTimeout: 120_000, env: { LIVE_PROVIDER_CONTRACT_CONFIG: 'true' } }
+      : {}),
     exclude: liveProviderRun
       ? configDefaults.exclude
       : [...configDefaults.exclude, LIVE_PROVIDER_SPECS],

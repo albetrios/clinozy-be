@@ -5,6 +5,19 @@ export interface StripeSubscriptionOrderingState {
   status: string;
 }
 
+/**
+ * The subscription fields a Stripe sync can change that the public JSON shows — compared before and
+ * after a sync so an event is emitted only when a customer-visible field moved.
+ */
+export interface SubscriptionPublicState {
+  status: string;
+  cancel_at_period_end: boolean;
+  canceled_at: Date | null;
+  current_period_start: Date;
+  current_period_end: Date;
+  plan_id: number;
+}
+
 /** Repository-level input for {@link SubscriptionRepository.create} — already-resolved numeric IDs. */
 export interface SubscriptionCreateData {
   organization_id: number;

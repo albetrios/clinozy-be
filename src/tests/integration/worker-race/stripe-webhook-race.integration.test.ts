@@ -45,6 +45,7 @@ describe('Integration: stripe-webhook worker concurrency race', () => {
         syncFromStripeProviderSubscription: vi.fn(),
         markCanceledByStripeProviderSubscriptionId: vi.fn(),
         emitSubscriptionEvent: vi.fn().mockResolvedValue(undefined),
+        findStripeSubscriptionPublicState: vi.fn().mockResolvedValue(null),
       } as unknown as SubscriptionService,
       new StripeWebhookEventRepository(),
       // sec-B7: race test fires `account.updated` (not subscription.updated)

@@ -165,8 +165,9 @@ interface WebhookDeliveryJobContext {
 }
 
 /**
- * What one delivery job did: delivered (2xx), skipped (already sent, or the webhook is disabled or
- * deleted), or stopped because the endpoint answered `410 Gone` — after which the webhook is off.
+ * What one delivery job did: delivered (2xx), skipped (already sent, the webhook disabled or
+ * deleted, or the attempt row gone), or stopped because the endpoint answered `410 Gone` — after
+ * which the webhook is off.
  *
  * @remarks
  * Every variant completes the BullMQ job: a skip or a `410` is final, not a failure to retry.
@@ -175,8 +176,15 @@ interface WebhookDeliveryJobContext {
  */
 export type WebhookDeliveryJobResult =
   | { outcome: 'delivered'; httpStatus: number }
-  | { outcome: 'skipped'; reason: 'already_sent' | 'webhook_disabled' }
+  | { outcome: 'skipped'; reason: WebhookDeliverySkipReason }
   | { outcome: 'endpoint_gone'; httpStatus: 410 };
+
+/**
+ * Why a delivery job had nothing to send: the attempt was already sent, its webhook is disabled or
+ * deleted, or the attempt is not visible in the job's organization (the organization was deleted,
+ * or a restore lost the row).
+ */
+type WebhookDeliverySkipReason = 'already_sent' | 'webhook_disabled' | 'attempt_missing';
 
 /**
  * A delivery the receiver failed: a non-2xx answer (other than 410), a timeout, a refused
@@ -198,9 +206,9 @@ export class WebhookEndpointFailure extends Error {
   }
 }
 
-/** Result of the claim phase — a skip (already sent, webhook disabled) or a claimed attempt. */
+/** Result of the claim phase — a skip (see {@link WebhookDeliverySkipReason}) or a claimed attempt. */
 type WebhookDeliveryClaim =
-  | { status: 'skipped'; reason: 'already_sent' | 'webhook_disabled' }
+  | { status: 'skipped'; reason: WebhookDeliverySkipReason }
   | { status: 'claimed'; deliveryContext: WebhookDeliveryAttemptWithWebhook };
 
 /**
@@ -225,12 +233,10 @@ async function claimWebhookDeliveryAttempt(options: {
         organizationPublicId,
       );
       if (!deliveryContext) {
-        // A job's attempt row is created before the job and never deleted while a delivery can
-        // still run — a missing row (or one in another organization) cannot be retried into
-        // existing, so fail terminally and let the dead-letter record show it.
-        throw new UnrecoverableError(
-          `webhook.delivery.attempt_not_found:${deliveryAttemptPublicId}`,
-        );
+        // The job is enqueued only after its attempt row commits, so a missing row means it is
+        // gone since: the organization was deleted (RLS hides it), or a restore lost the row.
+        // Nothing is left to send and a retry cannot bring the row back — complete as a skip.
+        return { status: 'skipped', reason: 'attempt_missing' };
       }
       // sec-N1: the fan-out filter on is_enabled / deleted_at does NOT apply to
       // BullMQ retries — without this re-check, attempts continue firing the
@@ -639,9 +645,10 @@ async function deliverClaimedWebhook(options: {
  *   with the next retry time and throws {@link WebhookEndpointFailure}: BullMQ retries on the
  *   delivery schedule (a minute, rising to ten hours — about a day in all) and the last failure
  *   reaches the dead-letter ledger without a page. `410 Gone` records `FAILED`, turns the webhook
- *   off and completes. An unreadable or empty signing secret, or a missing attempt row, throws
- *   `UnrecoverableError` (recorded and alerted). A disabled or deleted webhook records `FAILED`
- *   and skips.
+ *   off and completes. An unreadable or empty signing secret throws `UnrecoverableError`
+ *   (recorded and alerted). A disabled or deleted webhook records `FAILED` and skips; an attempt
+ *   not visible in the job's organization (deleted organization, row lost to a restore) skips at
+ *   warn level, with nothing sent.
  * - **Side effects:** outbound HTTPS POST; updates to `webhook_delivery_attempts` (and
  *   `webhooks.is_enabled` on a 410); structured logs at every transition.
  * - **Notes:** the dependency-injection seam (`fetchImplementation`, `deliveryAttemptRepository`)
@@ -664,8 +671,10 @@ export async function processWebhookDeliveryAttempt(options: {
   });
 
   if (claim.status === 'skipped') {
-    logger.info(
-      { deliveryAttemptPublicId, requestId: jobContext.requestId },
+    const log = claim.reason === 'attempt_missing' ? logger.warn : logger.info;
+    log.call(
+      logger,
+      { deliveryAttemptPublicId, organizationPublicId, requestId: jobContext.requestId },
       `webhook.delivery.${claim.reason}`,
     );
     return { outcome: 'skipped', reason: claim.reason };

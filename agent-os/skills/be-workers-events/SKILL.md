@@ -142,8 +142,9 @@ notify/sub-domains/webhook/events/organization-resource.event-handlers.ts
   →  WebhookService.dispatchOrganizationWebhooks → PENDING attempts in the same transaction
 ```
 
-Worker jobs that emit them wrap the unit of work in `runWithEnqueueAfterCommit` (Stripe webhook,
-organization-offboarding reconcile) so enqueues wait for the commit.
+Every unit of work releases its after-commit tasks only when it commits (`runInCommitUnit`), so
+enqueues wait for the commit in workers too, and are dropped when the unit rolls back. The fan-out
+runs in one savepoint (`withSavepoint`): a failure there never fails the producer's write.
 
 **Notify — outbound webhook delivery**
 

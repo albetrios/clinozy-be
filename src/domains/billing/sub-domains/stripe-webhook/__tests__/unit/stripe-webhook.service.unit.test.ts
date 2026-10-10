@@ -71,6 +71,7 @@ describe('StripeWebhookService', () => {
     syncFromStripeProviderSubscription: vi.fn(),
     markCanceledByStripeProviderSubscriptionId: vi.fn(),
     emitSubscriptionEvent: vi.fn().mockResolvedValue(undefined),
+    findStripeSubscriptionPublicState: vi.fn().mockResolvedValue(null),
     createFromStripeWebhookEvent: vi.fn(),
     // audit-#1: deletion tombstone insert used when a `.deleted` event has no local row.
     insertCanceledTombstoneFromStripeWebhookEvent: vi.fn(),
@@ -514,6 +515,9 @@ describe('StripeWebhookService', () => {
         type: 'subscription.updated',
         subscription: synced,
         repositoryOverride: expect.objectContaining({ databaseHandle: expect.anything() }),
+        previous: null,
+        // The Stripe job must retry rather than lose the event when the fan-out fails.
+        propagateFailure: true,
       });
 
       vi.mocked(subscriptionService.emitSubscriptionEvent).mockClear();
@@ -805,6 +809,7 @@ describe('StripeWebhookService', () => {
         type: 'subscription.cancelled',
         subscription: canceled,
         repositoryOverride: expect.objectContaining({ databaseHandle: expect.anything() }),
+        propagateFailure: true,
       });
     });
 

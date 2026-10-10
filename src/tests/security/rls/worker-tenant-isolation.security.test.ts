@@ -78,7 +78,7 @@ describe('Security: Worker tenant isolation', () => {
         jobContext: { id: 'security-test', attemptsMade: 0 },
         fetchImplementation: vi.fn(),
       }),
-    ).rejects.toThrow(/attempt_not_found/);
+    ).resolves.toEqual({ outcome: 'skipped', reason: 'attempt_missing' });
 
     const [row] = await database
       .select({ status: webhook_delivery_attempts.status })

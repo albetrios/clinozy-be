@@ -25,6 +25,7 @@ import {
   createRoleWithPermissions,
   createMembership,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
+import { BILLING_PERMISSIONS } from '@/domains/billing/billing.permissions.js';
 import { NOTIFY_PERMISSIONS } from '@/domains/notify/notify.permissions.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import {
@@ -33,7 +34,12 @@ import {
 } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
 import { WebhookDeliveryAttemptRepository } from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery-attempt.repository.js';
 
-const WEBHOOK_PERMISSIONS = [NOTIFY_PERMISSIONS.WEBHOOK_READ, NOTIFY_PERMISSIONS.WEBHOOK_MANAGE];
+// Subscribing to `subscription.*` also needs the permission to read subscriptions.
+const WEBHOOK_PERMISSIONS = [
+  NOTIFY_PERMISSIONS.WEBHOOK_READ,
+  NOTIFY_PERMISSIONS.WEBHOOK_MANAGE,
+  BILLING_PERMISSIONS.SUBSCRIPTION_READ,
+];
 
 /** Well-formed but nonexistent public id — passes `webhookIdParamsDto`, misses every row. */
 const UNKNOWN_WEBHOOK_ID = 'whk_aaaaaaaaaaaaaaaaaaaaa';

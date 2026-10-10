@@ -1,4 +1,8 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
+import {
+  getOnCommitQueue,
+  getOrCreateOnCommitQueue,
+  type OnCommitTask,
+} from '@/core/events/on-commit-scope.js';
 import {
   acknowledgeCommitDispatchTask,
   appendCommitDispatchTask,
@@ -52,24 +56,9 @@ export function buildDomainEvent<TPayload>(
  */
 export type EventHandler<TPayload = unknown> = (event: DomainEvent<TPayload>) => Promise<void>;
 
-type OnCommitTask = () => Promise<void>;
+export { enterOnCommitScope, runWithOnCommitScope } from '@/core/events/on-commit-scope.js';
 
-interface OnCommitQueue {
-  tasks: OnCommitTask[];
-}
-
-const onCommitStorage = new AsyncLocalStorage<OnCommitQueue>();
 const pendingCommitDispatchRequestIds = new Set<string>();
-
-function getOrCreateOnCommitQueue(): OnCommitQueue {
-  const existing = onCommitStorage.getStore();
-  if (existing !== undefined) {
-    return existing;
-  }
-  const queue: OnCommitQueue = { tasks: [] };
-  onCommitStorage.enterWith(queue);
-  return queue;
-}
 
 /**
  * In-process publish-subscribe bus for domain events. One singleton instance
@@ -129,7 +118,7 @@ export class EventBus {
       }
     }
 
-    const queue = onCommitStorage.getStore();
+    const queue = getOnCommitQueue();
     if (queue === undefined || queue.tasks.length === 0) return;
     const tasks = queue.tasks.splice(0, queue.tasks.length);
     // Bounded fan-out: a task that touches the database opens its own scoped context, and so its
@@ -199,16 +188,6 @@ export class EventBus {
   }
 }
 
-/** Runs `callback` with an isolated onCommit task queue (HTTP request scope). */
-export function runWithOnCommitScope<T>(callback: () => Promise<T>): Promise<T> {
-  return onCommitStorage.run({ tasks: [] }, callback);
-}
-
-/** Pins an empty onCommit queue for the current HTTP request (call from `onRequest`). */
-export function enterOnCommitScope(): void {
-  onCommitStorage.enterWith({ tasks: [] });
-}
-
 /**
  * Process-wide {@link EventBus} singleton. Services import this directly to
  * emit; handlers are registered against it at startup by
@@ -262,36 +241,18 @@ export async function scheduleCommitDispatch(
 }
 
 /**
- * Runs `callback` immediately when no HTTP onCommit scope is active (workers, scripts);
- * otherwise defers until {@link EventBus.flushOnCommit} runs in the request's `onResponse`.
+ * Defers `callback` until the database work that requested it has committed: inside a unit of work
+ * (every `withAppDatabaseContext` / `withMaintenanceDatabaseContext` transaction and every
+ * `withSavepoint`) it runs once that unit commits — over HTTP from the request's `onResponse`
+ * flush, in a worker right after the commit — and never if the unit rolls back. Outside every unit
+ * and scope (a script) it runs immediately.
  */
 export async function runEnqueueAfterCommit(callback: OnCommitTask): Promise<void> {
-  if (onCommitStorage.getStore() === undefined) {
+  if (getOnCommitQueue() === undefined) {
     await callback();
     return;
   }
   eventBus.onCommit(callback);
-}
-
-/**
- * Runs a worker unit of work so that what it defers with {@link runEnqueueAfterCommit} runs after
- * its transactions commit, as it does for an HTTP request.
- *
- * @remarks
- * - **Algorithm:** opens an onCommit scope ({@link runWithOnCommitScope}), awaits `callback` — by
- *   the time it resolves every database context inside it has committed — then flushes the queued
- *   tasks ({@link EventBus.flushOnCommit}).
- * - **Failure modes:** a rejection skips the flush: the deferred enqueues belong to work that rolled
- *   back, or to rows a reclaim sweep re-enqueues.
- * - **Notes:** without a scope `runEnqueueAfterCommit` runs its task at once — inside the open
- *   transaction — so a queue job could start before the row it names is committed.
- */
-export function runWithEnqueueAfterCommit<T>(callback: () => Promise<T>): Promise<T> {
-  return runWithOnCommitScope(async () => {
-    const result = await callback();
-    await eventBus.flushOnCommit();
-    return result;
-  });
 }
 
 /** Clears in-process pending markers — test harness only. */

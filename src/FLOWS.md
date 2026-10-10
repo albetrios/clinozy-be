@@ -334,8 +334,10 @@ A write changes one of the public resources the webhook catalog (`GET /api/v1/no
 | `membership.updated` | membership PATCH (role, suspend, reactivate), invitation accept, downgrade auto-suspend |
 | `membership.deleted` | membership DELETE, leave, invitation revoke |
 | `subscription.created` | `POST /billing/subscriptions`, the Stripe `.created` fallback insert |
-| `subscription.updated` | change-plan, cancel at period end, resume, every Stripe sync that changes the row |
-| `subscription.cancelled` | immediate cancel (`INCOMPLETE`), organization offboarding, Stripe `.deleted` or a sync to `canceled` |
+| `subscription.updated` | change-plan, cancel at period end, resume, a Stripe sync that changes a customer-visible field (status, cancel at period end, cancelled at, periods, plan) |
+| `subscription.cancelled` | immediate cancel (`INCOMPLETE`), Stripe `.deleted` or a sync to `canceled` |
+
+A webhook can subscribe to an event only when its creator holds the permission the API needs to read that resource: `membership:read` for `membership.*`, `subscription:read` for `subscription.*` (`organization.*` is readable by every member).
 
 ### Sequence
 
@@ -350,8 +352,10 @@ sequenceDiagram
   Service->>DB: BEGIN (organization context); write the resource
   Service->>Bus: emit <resource>.<verb> { organization_public_id, data: public JSON }
   Bus->>Notify: dispatchOrganizationWebhooks (reuses the transaction)
+  Notify->>DB: SAVEPOINT
   Notify->>DB: list enabled webhooks subscribed to the type
   Notify->>DB: INSERT webhook_delivery_attempts (PENDING, envelope { id, type, created_at, data })
+  Notify->>DB: RELEASE SAVEPOINT
   Service->>DB: COMMIT
   Notify->>Queue: enqueue one delivery job per attempt (after the commit)
 ```
@@ -359,13 +363,14 @@ sequenceDiagram
 ### Side effects
 
 - One PENDING `webhook_delivery_attempts` row per subscribed enabled webhook, committed with the write. Every endpoint gets the same envelope: `id` (`evt_…`, one per event), `type`, `created_at`, `data` (what the resource's serializer returns over the API).
-- One `webhook-delivery` job per attempt, enqueued after the commit — by the request's `onResponse` flush over HTTP, and by `runWithEnqueueAfterCommit` in the Stripe webhook job and the organization-offboarding reconcile.
+- One `webhook-delivery` job per attempt, enqueued only once the transaction commits (`runInCommitUnit`): over HTTP by the request's `onResponse` flush, in a worker right after the commit. A unit that rolls back drops its jobs.
 
 ### Failure modes
 
 - **The write rolls back** → the attempts roll back with it; nothing is delivered.
-- **Fan-out fails** → the bus logs, alerts and swallows it; the write still commits. A failed attempt insert aborts the shared transaction, so such a failure surfaces as the write's error.
+- **Fan-out fails** → the savepoint rolls back every attempt of that event (all or nothing) and the write still commits. Over HTTP the bus logs and alerts; in the Stripe webhook job the failure is rethrown (`emitStrict`), so the job retries the whole event — otherwise the watermark would let the retry emit nothing.
 - **Redis refuses the enqueue, or the process dies after the commit** → the attempt stays PENDING and `webhook-delivery-reclaim` re-enqueues it.
-- **A Stripe event replayed** → the `last_stripe_event_created_at` watermark refuses the sync, so no second event is emitted.
+- **A Stripe event replayed, or a sync that changes nothing customer-visible** (the same-second reconciliation after an HTTP mutation) → no event: the watermark refuses a replay, and a sync is compared with the row's state before it.
+- **The organization is deleted** → organization offboarding emits no `subscription.cancelled` (nothing could deliver it); `webhook-delivery-reclaim` skips its pending attempts, and a delivery job already queued completes as skipped (`attempt_missing`).
 - **`organization.created`** → cannot reach a webhook: the new organization has none yet. It is emitted for completeness.
 - **Ownership transfer, organization settings, seat-quantity sync** → no event: the organization's public JSON does not change, settings are another resource, and Stripe's quantity update returns as a `customer.subscription.updated` that emits `subscription.updated`.

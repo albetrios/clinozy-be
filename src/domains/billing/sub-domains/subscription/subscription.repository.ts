@@ -14,6 +14,7 @@ import { subscriptions } from '@/domains/billing/sub-domains/subscription/subscr
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import type {
+  SubscriptionPublicState,
   SubscriptionCreateData,
   SubscriptionUpdateData,
   StripeSubscriptionOrderingState,
@@ -330,6 +331,25 @@ export class SubscriptionRepository {
       .where(eq(subscriptions.provider_subscription_id, provider_subscription_id))
       .limit(1);
     return rows.length > 0;
+  }
+
+  /** The customer-visible fields a Stripe sync can change, before the sync runs (`null` when absent). */
+  async findPublicStateByProviderSubscriptionId(
+    provider_subscription_id: string,
+  ): Promise<SubscriptionPublicState | null> {
+    const rows = await this.db()
+      .select({
+        status: subscriptions.status,
+        cancel_at_period_end: subscriptions.cancel_at_period_end,
+        canceled_at: subscriptions.canceled_at,
+        current_period_start: subscriptions.current_period_start,
+        current_period_end: subscriptions.current_period_end,
+        plan_id: subscriptions.plan_id,
+      })
+      .from(subscriptions)
+      .where(eq(subscriptions.provider_subscription_id, provider_subscription_id))
+      .limit(1);
+    return rows[0] ?? null;
   }
 
   /** Read the precise MVCC version without losing PostgreSQL timestamp microseconds in a JS Date. */

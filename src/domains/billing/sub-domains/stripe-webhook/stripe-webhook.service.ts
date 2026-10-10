@@ -19,7 +19,6 @@ import type {
 import { enqueueStripeWebhook } from './queues/stripe-webhook.queue.js';
 import { runStripeWebhookHandlerWithOrganizationContext } from './stripe-webhook-organization.util.js';
 import { SUBSCRIPTION_EVENT } from '@/domains/billing/sub-domains/subscription/events/subscription.events.js';
-import { runWithEnqueueAfterCommit } from '@/core/events/event-bus.js';
 import {
   StripeWebhookEventAbandonedError,
   StripeWebhookPermanentError,
@@ -225,34 +224,29 @@ export class StripeWebhookService {
     // emitted only for a row the guarded write changed, so a re-run emits nothing.
     try {
       const prepared = await this.prepareEventForDispatch(event);
-      // The subscription events record webhook delivery attempts in the organization transaction;
-      // their queue jobs must start only after it commits.
-      await runWithEnqueueAfterCommit(() =>
-        withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, async () => {
-          await runStripeWebhookHandlerWithOrganizationContext(
-            prepared.event,
-            this.stripeWebhookEventRepository,
-            async (databaseHandle) => {
-              const workerSubscriptionRepository =
-                createWorkerSubscriptionRepository(databaseHandle);
-              await this.dispatchEvent(
-                prepared.event,
-                stripeEventCreatedAt,
-                workerSubscriptionRepository,
-                prepared.reconciliation,
-              );
-            },
-          );
-          // sec-new-D2: detect no-op writes (ledger row unexpectedly absent)
-          const marked = await this.stripeWebhookEventRepository.markProcessed(event.id);
-          if (!marked) {
-            logger.warn(
-              { eventId: event.id, eventType: event.type },
-              'stripe.webhook.mark_processed.no_row',
+      await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, async () => {
+        await runStripeWebhookHandlerWithOrganizationContext(
+          prepared.event,
+          this.stripeWebhookEventRepository,
+          async (databaseHandle) => {
+            const workerSubscriptionRepository = createWorkerSubscriptionRepository(databaseHandle);
+            await this.dispatchEvent(
+              prepared.event,
+              stripeEventCreatedAt,
+              workerSubscriptionRepository,
+              prepared.reconciliation,
             );
-          }
-        }),
-      );
+          },
+        );
+        // sec-new-D2: detect no-op writes (ledger row unexpectedly absent)
+        const marked = await this.stripeWebhookEventRepository.markProcessed(event.id);
+        if (!marked) {
+          logger.warn(
+            { eventId: event.id, eventType: event.type },
+            'stripe.webhook.mark_processed.no_row',
+          );
+        }
+      });
     } catch (error) {
       throw await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, () =>
         this.settleFailedEvent(event, error),
@@ -456,6 +450,12 @@ export class StripeWebhookService {
       }
     }
 
+    // The customer-visible state before the sync: the same-second reconciliation can re-apply what
+    // an HTTP mutation already wrote (and announced), and that must not emit a second event.
+    const previous = await this.subscriptionService.findStripeSubscriptionPublicState({
+      providerSubscriptionId,
+      repositoryOverride: subscriptionRepository,
+    });
     const row = await this.subscriptionService.syncFromStripeProviderSubscription(
       providerSubscriptionId,
       omitUndefined({
@@ -482,6 +482,8 @@ export class StripeWebhookService {
         type: row.status === 'CANCELED' ? SUBSCRIPTION_EVENT.CANCELLED : SUBSCRIPTION_EVENT.UPDATED,
         subscription: row,
         repositoryOverride: subscriptionRepository,
+        previous,
+        propagateFailure: true,
       });
       logger.info(
         { providerSubscriptionId, status: mappedStatus },
@@ -697,6 +699,7 @@ export class StripeWebhookService {
         type: SUBSCRIPTION_EVENT.CREATED,
         subscription: inserted,
         repositoryOverride: input.subscriptionRepository,
+        propagateFailure: true,
       });
       logger.info(
         { providerSubscriptionId, planId: resolvedPlanId, billingCycle },
@@ -736,6 +739,7 @@ export class StripeWebhookService {
         type: SUBSCRIPTION_EVENT.CANCELLED,
         subscription: row,
         repositoryOverride: subscriptionRepository,
+        propagateFailure: true,
       });
       logger.info({ providerSubscriptionId }, 'stripe.webhook.subscription_canceled');
       return;
@@ -789,6 +793,7 @@ export class StripeWebhookService {
         type: SUBSCRIPTION_EVENT.CANCELLED,
         subscription: recovered,
         repositoryOverride: subscriptionRepository,
+        propagateFailure: true,
       });
       logger.info({ providerSubscriptionId }, 'stripe.webhook.subscription_canceled');
       return;
