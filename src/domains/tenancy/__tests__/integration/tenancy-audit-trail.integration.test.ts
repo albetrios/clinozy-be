@@ -1,3 +1,4 @@
+import { seedRecentStepUpForTestUser } from '@/tests/helpers/test-step-up.helper.js';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
@@ -54,9 +55,13 @@ async function createOrganizationContext() {
     organizationId: organization.id,
     permissionCodes: [TENANCY_PERMISSIONS.MEMBERSHIP_READ],
   });
-  const { token } = await generateTestTokenWithActiveSession(application, owner.public_id, {
-    organizationPublicId: organization.public_id,
-  });
+  const { token, sessionPublicId } = await generateTestTokenWithActiveSession(
+    application,
+    owner.public_id,
+    { organizationPublicId: organization.public_id },
+  );
+  // Organization deletion and ownership transfer need a recent step-up on this session.
+  await seedRecentStepUpForTestUser(owner.public_id, sessionPublicId);
   return { owner, organization, memberRole, token };
 }
 

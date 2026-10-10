@@ -84,6 +84,7 @@ describe('Membership Sub-Domain — Integration', () => {
     const token = await generateTestToken({
       userId: user.public_id,
       organizationPublicId: organization.public_id,
+      stepUp: true,
     });
     return { organization, token, membership, user };
   }
@@ -1144,6 +1145,22 @@ describe('Membership Sub-Domain — Integration', () => {
   });
 
   describe('POST /api/v1/tenancy/organization/transfer-ownership (route-coverage gap-fill)', () => {
+    it('requires a recent step-up on this session (a stolen owner token alone is not enough)', async () => {
+      const { organization, user: owner } = await createAuthorizedContext();
+      const token = await generateTestToken({
+        userId: owner.public_id,
+        organizationPublicId: organization.public_id,
+      });
+      const response = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath(`/tenancy/organization/transfer-ownership`),
+        token,
+        headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
+        payload: { new_owner_user_id: owner.public_id },
+      });
+      expect(response.statusCode, response.body).toBe(403);
+    });
+
     it('returns 400 when new_owner_user_id is missing (validator wired at the boundary)', async () => {
       // The DTO rule is unit-proven; no 400 was ever observed on this route, so a validator that
       // stopped being wired in would pass every existing case. Key supplied → the idempotency 422
@@ -1219,6 +1236,7 @@ describe('Membership Sub-Domain — Integration', () => {
       const newOwnerToken = await generateTestToken({
         userId: newOwner.public_id,
         organizationPublicId: organization.public_id,
+        stepUp: true,
       });
       const transferredBack = await injectAuthenticated(app, {
         method: 'POST',
@@ -1254,6 +1272,7 @@ describe('Membership Sub-Domain — Integration', () => {
       const nonOwnerToken = await generateTestToken({
         userId: nonOwner.public_id,
         organizationPublicId: organization.public_id,
+        stepUp: true,
       });
       const target = await createTestUser({ email: `target-${randomUUID()}@test.com` });
       await createMembership({
@@ -1344,6 +1363,7 @@ describe('Membership Sub-Domain — Integration', () => {
       const ownerToken = await generateTestToken({
         userId: owner.public_id,
         organizationPublicId: organization.public_id,
+        stepUp: true,
       });
       const member = await createTestUser({ email: `former-member-${randomUUID()}@test.com` });
       const memberRole = await createRoleWithPermissions({

@@ -29,9 +29,13 @@ import type { MemberRoleService } from '@/domains/tenancy/sub-domains/member-rol
 import type { MemberRolePermissionService } from '@/domains/tenancy/sub-domains/member-roles/member-role-permission/member-role-permission.service.js';
 import type { AuthorizationService } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import type { PermissionRepository } from '@/domains/tenancy/sub-domains/permission/permission.repository.js';
-import { assertCallerCanGrantPermissionCodes } from '@/domains/tenancy/sub-domains/permission/assert-grantable-permissions.util.js';
+import {
+  assertCallerCanGrantPermissionCodes,
+  assertCallerHoldsMemberPermissionCodes,
+} from '@/domains/tenancy/sub-domains/permission/assert-grantable-permissions.util.js';
 import type { MembershipRepository } from './membership.repository.js';
 import {
+  type MembershipActionOptions,
   type MembershipOutput,
   type MembershipRoleSummary,
   type MembershipRow,
@@ -200,6 +204,25 @@ export class MembershipService {
    * A per-organization advisory xact lock (`MEMBERSHIP_SEAT`) taken up front serializes the count+insert on
    * BOTH paths, independent of whether the free ceiling happens to be 1.
    */
+  /** Role ordering for update/delete — see {@link assertCallerHoldsMemberPermissionCodes}. */
+  private async assertCallerHoldsMemberPermissions(options: {
+    organizationPublicId: string;
+    memberRoleId: number;
+    callerUserPublicId: string | undefined;
+    callerApiKeyScopes: readonly string[] | undefined;
+  }): Promise<void> {
+    const memberPermissionCodes = await this.memberRolePermissionService.listPermissionCodesForRole(
+      options.memberRoleId,
+    );
+    await assertCallerHoldsMemberPermissionCodes({
+      authorizationService: this.authorizationService,
+      callerUserPublicId: options.callerUserPublicId,
+      callerApiKeyScopes: options.callerApiKeyScopes,
+      organizationPublicId: options.organizationPublicId,
+      memberPermissionCodes,
+    });
+  }
+
   private async assertSeatAvailableForMemberAdd(organizationInternalId: number): Promise<void> {
     if (!this.seatEnforcement) return;
     // Serialize concurrent member-adds for this organization before the count so the free-tier path (no
@@ -541,6 +564,7 @@ export class MembershipService {
     membership_public_id: string,
     body: unknown,
     updated_by_user_public_id: string | undefined,
+    options?: MembershipActionOptions,
   ): Promise<MembershipOutput> {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateUpdateMembership(body);
@@ -563,6 +587,12 @@ export class MembershipService {
       if (organization.owner_user_id === membership.user_id) {
         throw new ForbiddenError('errors:ownerMembershipCannotBeModified');
       }
+      await this.assertCallerHoldsMemberPermissions({
+        organizationPublicId: organization_public_id,
+        memberRoleId: membership.role_id,
+        callerUserPublicId: updated_by_user_public_id,
+        callerApiKeyScopes: options?.callerApiKeyScopes,
+      });
       /**
        * Initial activation must be driven by invitation acceptance, not a
        * manager PATCH. A membership that has never joined (`joined_at IS NULL`,
@@ -643,6 +673,7 @@ export class MembershipService {
   async delete(
     scope: OrganizationPrincipalDatabaseScope,
     membership_public_id: string,
+    options?: MembershipActionOptions,
   ): Promise<void> {
     const organization_public_id = scope.organizationPublicId;
     let affectedUserInternalId: number | undefined;
@@ -659,6 +690,12 @@ export class MembershipService {
       if (organization.owner_user_id === membership.user_id) {
         throw new ForbiddenError('errors:ownerCannotBeRemoved');
       }
+      await this.assertCallerHoldsMemberPermissions({
+        organizationPublicId: organization_public_id,
+        memberRoleId: membership.role_id,
+        callerUserPublicId: scope.userPublicId,
+        callerApiKeyScopes: options?.callerApiKeyScopes,
+      });
       const deleted = await this.membershipRepository.softDelete(
         membership_public_id,
         organization.id,

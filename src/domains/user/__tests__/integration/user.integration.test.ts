@@ -282,9 +282,20 @@ describe('User Domain — Integration', () => {
       expect(response.statusCode).toBe(401);
     });
 
-    it('should soft-delete user, revoke sessions, and hide profile', async () => {
+    it('requires a recent step-up on this session (a stolen access token alone is not enough)', async () => {
       const user = await createTestUser();
       const token = await generateTestToken({ userId: user.public_id });
+      const response = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath('/users/me'),
+        token,
+      });
+      expect(response.statusCode, response.body).toBe(403);
+    });
+
+    it('should soft-delete user, revoke sessions, and hide profile', async () => {
+      const user = await createTestUser();
+      const token = await generateTestToken({ userId: user.public_id, stepUp: true });
 
       const deleteResponse = await injectAuthenticated(app, {
         method: 'DELETE',

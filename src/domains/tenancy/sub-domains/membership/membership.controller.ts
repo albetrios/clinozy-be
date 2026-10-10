@@ -3,6 +3,7 @@ import { paginatedResponse, successResponse } from '@/shared/utils/http/response
 import {
   getActingUserPublicId,
   getRequestIdentifier,
+  isApiKeyPrincipal,
   requireAuth,
   requireOrganizationScope,
   requirePrincipal,
@@ -13,7 +14,9 @@ import {
   listBodyFieldNames,
   recordScopedAuditEvent,
 } from '@/shared/utils/infrastructure/audit-request-context.util.js';
+import type { AuthContext } from '@/shared/types/index.js';
 import type { MembershipService } from './membership.service.js';
+import type { MembershipActionOptions } from './membership.types.js';
 
 /**
  * The `membership_id` path param, validated at the boundary (sec-re-18, sec-B10 class): an
@@ -92,6 +95,7 @@ function createMembershipWriteHandlers(service: MembershipService) {
         membershipId,
         request.body,
         getActingUserPublicId(auth),
+        membershipActionOptions(auth),
       );
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
@@ -112,7 +116,7 @@ function createMembershipWriteHandlers(service: MembershipService) {
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const membershipId = readMembershipIdParam(request);
-      await service.delete(scope, membershipId);
+      await service.delete(scope, membershipId, membershipActionOptions(auth));
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
         action: 'tenancy.membership.delete',
@@ -152,6 +156,11 @@ function createMembershipWriteHandlers(service: MembershipService) {
       return successResponse(data, getRequestIdentifier(request));
     },
   };
+}
+
+/** An API key's scopes stand in for its held permissions in the membership role-ordering check. */
+function membershipActionOptions(auth: AuthContext): MembershipActionOptions {
+  return isApiKeyPrincipal(auth) ? { callerApiKeyScopes: auth.apiKeyScopes } : {};
 }
 
 /**

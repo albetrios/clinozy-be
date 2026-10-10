@@ -224,6 +224,7 @@ describe('Security: Idempotency', () => {
     const tokenScopedToOrg = await generateTestToken({
       userId: user.public_id,
       organizationPublicId: organizationId,
+      stepUp: true,
     });
 
     // Regression: attaching an X-Idempotency-Key to a write that returns 204 (empty body)

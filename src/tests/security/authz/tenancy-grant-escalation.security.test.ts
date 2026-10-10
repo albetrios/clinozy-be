@@ -336,6 +336,78 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
     });
   });
 
+  describe('a membership manager acts only on members whose role is a subset of its own', () => {
+    async function memberInRole(organizationId: number, permissionCodes: string[]) {
+      const user = await createTestUser();
+      const role = await createRoleWithPermissions({ organizationId, permissionCodes });
+      const membership = await createMembership({
+        userId: user.id,
+        organizationId,
+        roleId: role.id,
+      });
+      return { user, membership };
+    }
+
+    it('cannot suspend, re-role or remove a member holding a permission the manager lacks', async () => {
+      // `membership:manage` must not let a manager lock out the people above them (an Admin
+      // holding `organization:delete`, say), even though it may manage its peers.
+      const context = await createMemberHolding([
+        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        TENANCY_PERMISSIONS.MEMBERSHIP_READ,
+      ]);
+      const above = await memberInRole(context.organization.id, [
+        TENANCY_PERMISSIONS.MEMBERSHIP_READ,
+        TENANCY_PERMISSIONS.ORGANIZATION_DELETE,
+      ]);
+      const peerRole = await createRoleWithPermissions({
+        organizationId: context.organization.id,
+        permissionCodes: [TENANCY_PERMISSIONS.MEMBERSHIP_READ],
+      });
+      const url = testApiPath(`/tenancy/organization/memberships/${above.membership.public_id}`);
+
+      for (const payload of [{ status: 'SUSPENDED' }, { role_id: peerRole.public_id }]) {
+        const refused = await injectAuthenticated(app, {
+          method: 'PATCH',
+          url,
+          token: context.token,
+          payload,
+        });
+        expect(refused.statusCode, refused.body).toBe(403);
+      }
+      const removal = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url,
+        token: context.token,
+      });
+      expect(removal.statusCode, removal.body).toBe(403);
+    });
+
+    it('may suspend and remove a member whose permissions it holds (the guard is not a blanket deny)', async () => {
+      const context = await createMemberHolding([
+        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        TENANCY_PERMISSIONS.MEMBERSHIP_READ,
+      ]);
+      const peer = await memberInRole(context.organization.id, [
+        TENANCY_PERMISSIONS.MEMBERSHIP_READ,
+      ]);
+      const url = testApiPath(`/tenancy/organization/memberships/${peer.membership.public_id}`);
+
+      const suspended = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url,
+        token: context.token,
+        payload: { status: 'SUSPENDED' },
+      });
+      expect(suspended.statusCode, suspended.body).toBe(200);
+      const removed = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url,
+        token: context.token,
+      });
+      expect(removed.statusCode, removed.body).toBe(204);
+    });
+  });
+
   describe('POST /tenancy/organizations cannot redirect ownership', () => {
     it('rejects an owner_user_id in the create body (strict DTO)', async () => {
       // `auth-self-mutation`: the acting user is the only possible owner of a newly created organization.

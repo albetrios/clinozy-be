@@ -4,6 +4,7 @@
   "unauthorized": "No autorizado",
   "forbidden": "Prohibido",
   "cannotGrantPermissionNotHeld": "No puedes otorgar un permiso que no posees",
+  "cannotManageMemberWithPermissionsNotHeld": "No puedes gestionar a un miembro que tiene permisos que tú no tienes",
   "cannotModifyOwnerRolePermissions": "No se pueden modificar los permisos del rol actualmente asignado al propietario de la organización; transfiere la propiedad a otro rol antes de editar los permisos de este rol.",
   "cannotModifyProtectedAdmin": "Esta cuenta es un superadministrador protegido y no se puede suspender ni eliminar a través de la API de administración; gestiona los superadministradores mediante la configuración GLOBAL_ADMIN_EMAILS.",
   "userOwnsOrganizations": "Esta cuenta aún es propietaria de una o más organizaciones de equipo y no se puede eliminar; transfiere la propiedad a otro miembro (o elimina las organizaciones) primero.",

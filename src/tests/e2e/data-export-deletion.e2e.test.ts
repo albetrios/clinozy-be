@@ -28,7 +28,7 @@ describe('Cross-domain e2e: data export and deletion', () => {
 
   it('requests data export then deletes account', async () => {
     const user = await createTestUser();
-    const token = await generateTestToken({ userId: user.public_id });
+    const token = await generateTestToken({ userId: user.public_id, stepUp: true });
 
     const exportResponse = await injectAuthenticated(app, {
       method: 'POST',

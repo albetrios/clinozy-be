@@ -57,3 +57,38 @@ export async function assertCallerCanGrantPermissionCodes(options: {
     }
   }
 }
+
+/**
+ * Ensures the caller holds every permission of the member it is about to suspend, reactivate,
+ * re-role or remove — a membership manager acts only on members whose role is a subset of its own.
+ *
+ * @remarks
+ * - **Why:** without it a `membership:manage` holder could suspend or remove an Admin (or anyone
+ *   holding permissions they lack), locking out the people above them. The owner is protected
+ *   separately and is never reachable here.
+ * - **Algorithm:** a user caller's held set is read from the database, not the permission cache
+ *   (a just-revoked permission must not still count); an API key's held set is its scopes. A
+ *   member with no permissions is reachable by any manager.
+ * - **Failure modes:** `ForbiddenError('errors:cannotManageMemberWithPermissionsNotHeld')` when
+ *   the member holds a permission the caller does not.
+ */
+export async function assertCallerHoldsMemberPermissionCodes(options: {
+  authorizationService: AuthorizationService;
+  callerUserPublicId: string | undefined;
+  callerApiKeyScopes: readonly string[] | undefined;
+  organizationPublicId: string;
+  memberPermissionCodes: readonly string[];
+}): Promise<void> {
+  if (options.memberPermissionCodes.length === 0) return;
+  let held: readonly string[] = options.callerApiKeyScopes ?? [];
+  if (options.callerApiKeyScopes === undefined && options.callerUserPublicId) {
+    held = await options.authorizationService.resolveUserOrganizationPermissionsFromDatabase(
+      options.callerUserPublicId,
+      options.organizationPublicId,
+    );
+  }
+  const heldSet = new Set(held);
+  if (options.memberPermissionCodes.some((permissionCode) => !heldSet.has(permissionCode))) {
+    throw new ForbiddenError('errors:cannotManageMemberWithPermissionsNotHeld');
+  }
+}

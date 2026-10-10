@@ -1,3 +1,4 @@
+import { seedRecentStepUpForTestUser } from '@/tests/helpers/test-step-up.helper.js';
 import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { env } from '@/shared/config/env.config.js';
@@ -108,6 +109,12 @@ export async function generateTestToken(options: {
   role?: string;
   organizationPublicId?: string;
   authenticationMethods?: string[];
+  /**
+   * Also record a recent step-up on the token's session — for the routes behind
+   * `requireRecentStepUpPreHandler` (account deletion, data export, ownership transfer,
+   * organization deletion, credential changes).
+   */
+  stepUp?: boolean;
 }): Promise<string> {
   const token = await signAccessToken({
     userId: options.userId,
@@ -117,7 +124,13 @@ export async function generateTestToken(options: {
       ? { authenticationMethods: options.authenticationMethods }
       : {}),
   });
-  await persistActiveSessionForToken(options.userId, token);
+  const sessionPublicId = await persistActiveSessionForToken(options.userId, token);
+  if (options.stepUp) {
+    if (!sessionPublicId) {
+      throw new Error(`generateTestToken could not persist a session for user ${options.userId}`);
+    }
+    await seedRecentStepUpForTestUser(options.userId, sessionPublicId);
+  }
   return token;
 }
 

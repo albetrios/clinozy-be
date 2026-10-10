@@ -75,6 +75,7 @@ describe('Tenancy idempotency contract — Integration', () => {
     const token = await generateTestToken({
       userId: user.public_id,
       organizationPublicId: organization.public_id,
+      stepUp: true,
     });
     return { user, organization, role, token };
   }

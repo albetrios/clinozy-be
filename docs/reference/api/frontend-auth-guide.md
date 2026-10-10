@@ -195,6 +195,16 @@ The recovery is the same in every case:
 
 ---
 
+### Step-up before an irreversible action
+
+Deleting the account (`DELETE /users/me`), requesting the data export (`POST /users/me/data-export`),
+transferring ownership (`POST /tenancy/organization/transfer-ownership`) and deleting the organization
+(`DELETE /tenancy/organization`) need a recent step-up on **this** session, valid for 10 minutes:
+`POST /auth/step-up` with the password (a passwordless account without MFA uses an emailed code), or an
+MFA verification for an MFA user. Without it they answer
+`403 errors:recentStepUpRequired` — ask the user to confirm who they are, then retry. A stolen access
+token alone can therefore not erase an account or an organization.
+
 ## Entry flows → how many calls to the dashboard
 
 Every way into the app converges on the same tail: **obtain an access token, then make one call — `GET /auth/me/context` ([above](#active-organization--switching)) — to paint the dashboard.** So "land on the dashboard" costs *(calls to obtain a token)* **+ 1**. The only exception is an organization **switch**, which returns the active-organization delta inline and needs no `/auth/me/context` follow-up.

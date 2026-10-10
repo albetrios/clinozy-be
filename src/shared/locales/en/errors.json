@@ -4,6 +4,7 @@
   "unauthorized": "Unauthorized",
   "forbidden": "Forbidden",
   "cannotGrantPermissionNotHeld": "You cannot grant a permission you do not hold",
+  "cannotManageMemberWithPermissionsNotHeld": "You cannot manage a member who holds permissions you do not hold",
   "cannotModifyOwnerRolePermissions": "Cannot modify permissions on the role currently assigned to the organization owner; transfer ownership to a different role before editing this role's permissions.",
   "cannotModifyProtectedAdmin": "This account is a protected super administrator and cannot be suspended or deleted via the admin API; manage super administrators through the GLOBAL_ADMIN_EMAILS configuration instead.",
   "userOwnsOrganizations": "This account still owns one or more team organizations and cannot be deleted; transfer ownership to another member (or delete the organizations) first.",

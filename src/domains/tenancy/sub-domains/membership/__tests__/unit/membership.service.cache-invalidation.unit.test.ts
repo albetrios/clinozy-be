@@ -8,6 +8,7 @@ vi.mock('@/domains/tenancy/sub-domains/permission/permission-cache.service.js', 
 
 vi.mock('@/domains/tenancy/sub-domains/permission/assert-grantable-permissions.util.js', () => ({
   assertCallerCanGrantPermissionCodes: vi.fn().mockResolvedValue(undefined),
+  assertCallerHoldsMemberPermissionCodes: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/infrastructure/database/contexts/database-context.js', async (importOriginal) => {

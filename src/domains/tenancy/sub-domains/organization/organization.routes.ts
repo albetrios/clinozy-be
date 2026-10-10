@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { requireRecentStepUpPreHandler } from '@/shared/middlewares/core/recent-step-up.middleware.js';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import {
   EXPENSIVE_AUTHED_RATE_LIMIT,
@@ -151,11 +152,15 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         schema: {
           summary: 'Delete organization',
           description:
-            'Deletes an organization: it disappears from every read at once, its uploads are tombstoned and its subscription is canceled, and the rows are hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires ORGANIZATION_DELETE permission.',
+            'Deletes an organization: it disappears from every read at once, its uploads are tombstoned and its subscription is canceled, and the rows are hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires ORGANIZATION_DELETE permission. Requires a recent step-up on this session (`POST /auth/step-up`, within 10 minutes).',
           tags: ['Organization'],
         },
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.ORGANIZATION_DELETE)],
+        preHandler: [
+          requireOrganizationPermission(TENANCY_PERMISSIONS.ORGANIZATION_DELETE),
+          // Irreversible: a stolen access token alone must not be enough.
+          requireRecentStepUpPreHandler,
+        ],
       },
       organizationController.deleteOrganization,
     );

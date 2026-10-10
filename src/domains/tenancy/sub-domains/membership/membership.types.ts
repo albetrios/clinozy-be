@@ -27,6 +27,14 @@ export function membershipStatusConsumesSeat(status: string): boolean {
 }
 
 /**
+ * Caller details a membership update or removal needs beyond the scope: an API key's scopes, its
+ * held permissions for the role-ordering check (a user caller's are read from the database).
+ */
+export interface MembershipActionOptions {
+  callerApiKeyScopes?: readonly string[];
+}
+
+/**
  * Raw `tenancy.memberships` row shape from Drizzle. Holds internal numeric
  * ids and the soft-delete marker (`deleted_at`); do not return this shape
  * directly from HTTP handlers — serialize via {@link serializeMembership}.

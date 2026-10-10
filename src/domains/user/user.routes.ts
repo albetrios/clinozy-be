@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { requireRecentStepUpPreHandler } from '@/shared/middlewares/core/recent-step-up.middleware.js';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import {
   EXPENSIVE_AUTHED_RATE_LIMIT,
@@ -203,10 +204,12 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       // tier (5 req / 5 min) so a hijacked session cannot rip through victim
       // accounts in bulk.
       ...EXPENSIVE_AUTHED_RATE_LIMIT,
+      // Irreversible: a stolen access token alone must not be enough.
+      preHandler: [requireRecentStepUpPreHandler],
       schema: {
         summary: 'Delete my account',
         description:
-          "Deletes the authenticated user's account: sessions are revoked and the account disappears at once; the rows are hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90).",
+          "Deletes the authenticated user's account: sessions are revoked and the account disappears at once; the rows are hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires a recent step-up on this session (`POST /auth/step-up`, within 10 minutes).",
         tags: ['User'],
       },
     },
@@ -311,10 +314,12 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
     {
       onRequest: [app.authenticate],
       ...EXPENSIVE_AUTHED_RATE_LIMIT,
+      // The bundle is every piece of personal data: a stolen access token alone must not get it.
+      preHandler: [requireRecentStepUpPreHandler],
       schema: {
         summary: 'Request GDPR data export',
         description:
-          'Enqueues an async export of all personal data. Poll GET /users/me/data-export/{data_export_id} for status and a time-limited download URL (15-minute lifetime).',
+          'Enqueues an async export of all personal data. Poll GET /users/me/data-export/{data_export_id} for status and a time-limited download URL (15-minute lifetime). Requires a recent step-up on this session (`POST /auth/step-up`, within 10 minutes).',
         tags: ['Privacy'],
       },
     },
