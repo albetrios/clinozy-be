@@ -788,6 +788,52 @@ webhook fanout service was found, so automatic business-event-to-webhook wiring 
 unverified. Local transport fixtures and locally signed Stripe ingress remain separate
 from actual provider-initiated public delivery and browser SCA evidence.
 
+## 2026-10-10 resumed local verification
+
+Runtime source revision: `30a7bd28af1e7dd4c81e4da55dccfb0e04bc4df4`, on
+`fix/webhook-recovery-and-chaos-tests`. These measurements are local. They do not
+establish deployed/public API latency or refresh the previous public-transport
+and browser-SCA results. The recovered environment has the prior documentation,
+but not its original public-transport reports.
+
+| Section | Current evidence | Result and scope |
+| --- | --- | --- |
+| Unit/global | 4,791 tests / 622 files, zero skips | PASS on the runtime revision |
+| Membership integration | 40 tests, zero skips | PASS; INCOMPLETE invitation/reactivation deny without writes and recover after local fixture activation |
+| Chaos | 19 tests / 17 files, zero skips | PASS assertions; the queue outage case does not explicitly observe a failed attempt, so this does not independently prove retries were exercised |
+| Playwright IAM | 14 tests, zero skipped, unexpected or flaky cases | PASS local Chromium/backend harness; three CSRF cases use APIRequestContext; shipped frontend and real OAuth remain separate |
+| Simulated provider contracts | 57 tests / 10 files | PASS; fixture evidence only |
+| Database unit / security / property regressions | 299 / 894 / 71 tests, zero skips | PASS; database/security replacement runs capture the actual runtime revision, source tree and time dynamically |
+| Four-plan contract and Stripe sandbox matrices | Each: seven journeys, 447 requests / 1,319 checks, 18 same-cycle transitions, 24 cross-cycle rejection cases, five payment probes | PASS each lane separately; sandbox API calls are real, webhook reconciliation uses local relay; the SCA probe does not complete a browser challenge |
+| After-setup cold journeys, three unprofiled runs | p95 393.21 / 470.87 / 491.23 ms; all 240 users and 480 journeys per run; zero failed checks, HTTP failures or drops | PASS for first journeys after same-process login/scope setup; this warms the measured API |
+| Warm journeys in those runs | p95 328.16 / 186.46 / 236.95 ms | PASS for the tested local configuration |
+| Stronger fresh API bursts, two runs | Only 169 / 157 of 240 users completed; 141 / 143 failed profile checks due to TCP resets/broken pipes | FAIL all-user and zero-error gates; local host listen backlog is 128, but causality is not established |
+| Public-domain webhook CRUD | 20 journeys / 160 requests / 360 checks; p95 22.89 ms, p99 65.82 ms | PASS local API with actual public-hostname DNS validation and URL-changing PATCH; no outbound delivery; earlier remote p99 near 5,148 ms remains unresolved |
+
+The fresh API experiment issues scoped tokens through normal login in process A,
+then stops A and starts process B with a distinct PID and Redis namespace. B
+receives readiness checks only before the original 240-user journey runs. It
+uses existing authenticated database sessions and a warm database/host; it is
+not a cold database test. No HTTP retries, latency relaxations, sample dilution,
+RLS bypass or host-setting changes were used to turn its failures into passes.
+
+The current CPU profile's actual API PID is 22103. A post-hoc monotonic/wall-clock
+alignment gives an approximate 2.60-second measured burst slice with about 86%
+busy samples. SQL construction, socket writes and GC remain prominent. The
+whole-process 11.6% busy figure includes setup/idle time and must not be compared
+with historical burst-only CPU percentages. Clock alignment and boundaries are
+approximate; no new performance-source optimization was retained.
+
+Free remains monthly only. Paid USD prices are 10/30/99 monthly and 100/300/990
+annually, with four distinct product titles/descriptions. Annual Free is absent
+and rejected. Live S3/Google/GitHub OAuth checks are deferred by the user; configured
+keys do not establish successful real-provider transport. Other provider targets
+still require demonstrable ownership/nonproduction scope.
+
+The database/security helper's older hardcoded revision is a provenance defect,
+not a backend assertion failure. Preserve its artifacts, use dynamically captured
+revision/source-tree provenance, and do not relabel old reports as current.
+
 The API role remains non-superuser/non-BYPASSRLS, with 31 FORCE RLS tables. The isolated
 fixture operator has BYPASSRLS for test setup; those privileged fixture operations are
 not runtime RLS evidence. The separately approved chaos login is non-superuser/non-BYPASSRLS.
