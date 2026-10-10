@@ -12,9 +12,10 @@ import { DATABASE_APP_ROLE } from '@/shared/constants/project-identity.constants
  * silent. `security` is left out on purpose: its RLS suites already opt into `clinozy_be_app` per
  * statement, which is the stronger assertion for policies themselves.
  *
- * Three integration suites skip themselves under this lane (`describe.runIf`, keyed on
+ * Four integration suites skip themselves under this lane (`describe.runIf`, keyed on
  * `TEST_DATABASE_ROLE`) because they test infrastructure owned by a role other than the
- * application: `transaction-rollback`, `migrations-forward` and `full-seed`. Each states why.
+ * application, or read what that role cannot see: `transaction-rollback`, `migrations-forward`,
+ * `full-seed` and `database-pool-priming`. Each states why.
  */
 const DEFAULT_PROJECTS = ['--project', 'e2e', '--project', 'integration'];
 

@@ -7,7 +7,12 @@ import { env } from '@/shared/config/env.config.js';
  * connections while it is busiest. Proof that priming opened them: every connection a full-width
  * burst then lands on was started before priming returned.
  */
-describe('primeDatabasePool', () => {
+// Skipped under `pnpm test:rls-role`: that lane switches each pooled session to `clinozy_be_app`
+// after login, and Postgres then hides `pg_stat_activity.backend_start` of those sessions from the
+// role itself. Priming is a `SELECT 1` per connection — nothing about it depends on the role.
+const runAsApplicationBehaviour = !process.env.TEST_DATABASE_ROLE;
+
+describe.runIf(runAsApplicationBehaviour)('primeDatabasePool', () => {
   it('opens every pool connection before the first burst', async () => {
     await primeDatabasePool();
     const [primed] = await sql<{ primed_at: string }[]>`
