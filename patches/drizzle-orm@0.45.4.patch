@@ -1,0 +1,88 @@
+diff --git a/postgres-js/session.cjs b/postgres-js/session.cjs
+index 4422b0337397da3c61cc65f1ec706f8944f08dc6..4f7006d9329dc4a6d337bcd9a7ddb2ce1a83654d 100644
+--- a/postgres-js/session.cjs
++++ b/postgres-js/session.cjs
+@@ -57,7 +57,7 @@ class PostgresJsPreparedQuery extends import_session.PgPreparedQuery {
+         return import_tracing.tracer.startActiveSpan("drizzle.driver.execute", () => {
+           return this.queryWithCache(query, params, async () => {
+             return await client.unsafe(query, params, {
+-              prepare: this.prepare
++              prepare: true
+             });
+           });
+         });
+@@ -69,7 +69,7 @@ class PostgresJsPreparedQuery extends import_session.PgPreparedQuery {
+         });
+         return this.queryWithCache(query, params, async () => {
+           return await client.unsafe(query, params, {
+-            prepare: this.prepare
++            prepare: true
+           }).values();
+         });
+       });
+@@ -93,7 +93,7 @@ class PostgresJsPreparedQuery extends import_session.PgPreparedQuery {
+         });
+         return this.queryWithCache(this.queryString, params, async () => {
+           return this.client.unsafe(this.queryString, params, {
+-            prepare: this.prepare
++            prepare: true
+           });
+         });
+       });
+@@ -133,10 +133,10 @@ class PostgresJsSession extends import_session.PgSession {
+   }
+   query(query, params) {
+     this.logger.logQuery(query, params);
+-    return this.client.unsafe(query, params).values();
++    return this.client.unsafe(query, params, { prepare: true }).values();
+   }
+   queryObjects(query, params) {
+-    return this.client.unsafe(query, params);
++    return this.client.unsafe(query, params, { prepare: true });
+   }
+   transaction(transaction, config) {
+     return this.client.begin(async (client) => {
+diff --git a/postgres-js/session.js b/postgres-js/session.js
+index 8dbbe0721ce7483f2789e28fcd59fda0f0d48aba..c84af0992b30aa264e5aa7cce9243a7363596008 100644
+--- a/postgres-js/session.js
++++ b/postgres-js/session.js
+@@ -32,7 +32,7 @@ class PostgresJsPreparedQuery extends PgPreparedQuery {
+         return tracer.startActiveSpan("drizzle.driver.execute", () => {
+           return this.queryWithCache(query, params, async () => {
+             return await client.unsafe(query, params, {
+-              prepare: this.prepare
++              prepare: true
+             });
+           });
+         });
+@@ -44,7 +44,7 @@ class PostgresJsPreparedQuery extends PgPreparedQuery {
+         });
+         return this.queryWithCache(query, params, async () => {
+           return await client.unsafe(query, params, {
+-            prepare: this.prepare
++            prepare: true
+           }).values();
+         });
+       });
+@@ -68,7 +68,7 @@ class PostgresJsPreparedQuery extends PgPreparedQuery {
+         });
+         return this.queryWithCache(this.queryString, params, async () => {
+           return this.client.unsafe(this.queryString, params, {
+-            prepare: this.prepare
++            prepare: true
+           });
+         });
+       });
+@@ -108,10 +108,10 @@ class PostgresJsSession extends PgSession {
+   }
+   query(query, params) {
+     this.logger.logQuery(query, params);
+-    return this.client.unsafe(query, params).values();
++    return this.client.unsafe(query, params, { prepare: true }).values();
+   }
+   queryObjects(query, params) {
+-    return this.client.unsafe(query, params);
++    return this.client.unsafe(query, params, { prepare: true });
+   }
+   transaction(transaction, config) {
+     return this.client.begin(async (client) => {

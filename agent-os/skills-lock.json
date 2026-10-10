@@ -77,7 +77,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-dependency-security/SKILL.md",
-      "computedHash": "94184555db2f26b0d1d8d349d442b38426e918a361f18cf25edb13066b1557f3"
+      "computedHash": "1be38d1287165369141aad6f6f35bbe2a79d7adb8785abe27a2b13aa965073ef"
     },
     "be-docs-audit": {
       "source": "local",
