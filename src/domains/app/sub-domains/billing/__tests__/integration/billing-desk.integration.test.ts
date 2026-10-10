@@ -253,6 +253,26 @@ describe('Billing — the desk (D81, ROUTE #159)', () => {
     );
     flow.expectValue('below: why', REASON, 'below_lowest_price');
     flow.expectValue('below: the line', FIELDS, 'items/1');
+    // The floor is a guarded figure: the front desk (no offering:lower_price:read) is told the
+    // line is below it, never what it is; the owner is told the figure.
+    flow.expectValue(
+      'below: no figure without the code',
+      '.error.errors[0].message | test("lowest price of")',
+      'false',
+    );
+    flow.as('owner');
+    await flow.expect(
+      400,
+      'the owner sends the same bill',
+      'POST',
+      '/app/invoices',
+      bill(vesu, kavya, [{ offering_id: facial }, { offering_id: facial, discount_percent: 20 }]),
+    );
+    flow.expectValue(
+      'below: the figure for a holder of the code',
+      '.error.errors[0].message | test("lowest price of [0-9]")',
+      'true',
+    );
   });
 
   it('previews a bill — the lines and totals POST would write, nothing written (Q2)', async () => {
