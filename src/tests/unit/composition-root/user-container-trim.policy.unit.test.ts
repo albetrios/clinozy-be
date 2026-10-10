@@ -29,8 +29,10 @@ function collectSourceFiles(directory: string, accumulator: string[] = []): stri
   return accumulator;
 }
 
+// Paths are relative to the project root (`src/domains/user/...`): the filter used to test
+// `domains/user/`, which matched nothing, so the user domain's own files counted as "outside".
 const OUTSIDE_USER_DOMAIN_FILES = collectSourceFiles(SRC_ROOT).filter(
-  (filePath) => !filePath.startsWith('domains/user/'),
+  (filePath) => !filePath.startsWith('src/domains/user/'),
 );
 
 describe('Policy: UserContainer trims repository from public surface', () => {

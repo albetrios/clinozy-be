@@ -1,17 +1,25 @@
 import { createHash } from 'node:crypto';
+import { finishKeysetPage } from '@/shared/utils/http/list-query.util.js';
 import { truncateUserAgent } from '@/shared/utils/http/user-agent.util.js';
 import {
   getTableColumns,
   and,
+  asc,
   desc,
   eq,
+  gt,
   gte,
   inArray,
+  isNotNull,
   isNull,
+  lt,
   lte,
   sql,
   type SQL,
 } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
+import { users } from '@/domains/user/user.schema.js';
+import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
 import {
   getContextFreeDatabase,
@@ -23,7 +31,6 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
 import { ValidationError } from '@/shared/errors/index.js';
 import {
   buildDescendingCreatedAtIdCursorCondition,
-  createOpaqueCursorFromRow,
   cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
@@ -153,14 +160,8 @@ export class AuditRepository {
       : Promise.resolve(null);
 
     const [fetchedRows, total] = await Promise.all([rowsPromise, countPromise]);
-    const hasMore = fetchedRows.length > limit;
-    const items = hasMore ? fetchedRows.slice(0, limit) : fetchedRows;
-    const lastItem = items.at(-1);
-    const nextCursor =
-      hasMore && lastItem !== undefined
-        ? createOpaqueCursorFromRow({ ...lastItem, filter_fingerprint: filterFingerprint })
-        : null;
-    return { items, total, hasMore, nextCursor };
+    const page = finishKeysetPage(fetchedRows, { limit, filterFingerprint });
+    return { items: page.items, total, hasMore: page.has_more, nextCursor: page.next_cursor };
   }
 
   async findRecent(limit: number) {
@@ -239,4 +240,67 @@ export class AuditRepository {
       );
     return new Map(rows.map((row) => [Number(row.id), row.public_id]));
   }
+}
+
+const actorUsers = alias(users, 'actor_users');
+const targetUsers = alias(users, 'target_users');
+
+/**
+ * The organizations with audit rows in `[start, end)` — the daily export's tenant discovery, read
+ * across tenants (retention maintenance context).
+ */
+export async function findOrganizationsWithAuditLogsBetween(
+  databaseHandle: WorkerDatabaseHandle,
+  window: { start: Date; end: Date },
+): Promise<Array<{ organization_id: number | null; organization_public_id: string }>> {
+  return databaseHandle
+    .selectDistinct({
+      organization_id: logs.organization_id,
+      organization_public_id: organizations.public_id,
+    })
+    .from(logs)
+    .innerJoin(organizations, eq(logs.organization_id, organizations.id))
+    .where(
+      and(
+        isNotNull(logs.organization_id),
+        gte(logs.created_at, window.start),
+        lt(logs.created_at, window.end),
+      ),
+    );
+}
+
+/**
+ * One keyset page (ascending id after `afterId`) of an organization's audit rows in `[start, end)`,
+ * with actor and target as public ids — the export's read (retention maintenance context, which
+ * reads `auth.users`; a user hard-deleted since leaves the column null).
+ */
+export async function findAuditLogExportPage(
+  databaseHandle: WorkerDatabaseHandle,
+  page: { organizationId: number; start: Date; end: Date; afterId: number; limit: number },
+) {
+  return databaseHandle
+    .select({
+      id: logs.id,
+      public_id: logs.public_id,
+      actor_user_public_id: actorUsers.public_id,
+      target_user_public_id: targetUsers.public_id,
+      action: logs.action,
+      resource_type: logs.resource_type,
+      severity: logs.severity,
+      metadata: logs.metadata,
+      created_at: logs.created_at,
+    })
+    .from(logs)
+    .leftJoin(actorUsers, eq(logs.actor_user_id, actorUsers.id))
+    .leftJoin(targetUsers, eq(logs.target_user_id, targetUsers.id))
+    .where(
+      and(
+        eq(logs.organization_id, page.organizationId),
+        gte(logs.created_at, page.start),
+        lt(logs.created_at, page.end),
+        gt(logs.id, page.afterId),
+      ),
+    )
+    .orderBy(asc(logs.id))
+    .limit(page.limit);
 }

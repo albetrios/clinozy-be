@@ -1,4 +1,5 @@
 import { and, asc, count, eq, gt, isNull, sql, type SQL } from 'drizzle-orm';
+import { finishKeysetPage } from '@/shared/utils/http/list-query.util.js';
 import {
   getContextFreeDatabase,
   getRequestDatabase,
@@ -14,7 +15,6 @@ import {
 import type { MemberInvitationRow } from './member-invitation.types.js';
 import {
   buildAscendingCreatedAtIdCursorCondition,
-  createOpaqueCursorFromRow,
   cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
@@ -97,21 +97,12 @@ export class MemberInvitationRepository {
       : Promise.resolve(null);
 
     const [fetchedRows, total] = await Promise.all([rowsPromise, countPromise]);
-    const hasMore = fetchedRows.length > limit;
-    const rows = hasMore ? fetchedRows.slice(0, limit) : fetchedRows;
-    const items = rows.map((row) => ({
+    const rows = fetchedRows.map((row) => ({
       ...row.invitation,
       cursor_created_at: row.cursor_created_at,
       membership_public_id: row.membership_public_id,
     }));
-    const lastItem = items.at(-1);
-    return {
-      items,
-      total,
-      limit,
-      has_more: hasMore,
-      next_cursor: hasMore && lastItem !== undefined ? createOpaqueCursorFromRow(lastItem) : null,
-    };
+    return finishKeysetPage(rows, { limit, total });
   }
 
   async findByPublicId(public_id: string): Promise<MemberInvitationRow | null> {

@@ -43,7 +43,7 @@ The same context is reused if a worker is already running inside one (no nested 
 
 ### How to apply
 
-- New tenant-scoped repository: extend `BaseRepository`, scope every query by `organization_id`. Any RLS-eligible table also needs an RLS policy in its migration.
+- New tenant-scoped repository: scope every query by `organization_id`; a list builds its page with `finishKeysetPage`. Any RLS-eligible table also needs an RLS policy in its migration.
 - New tenant-scoped service method: wrap database I/O in `withAppDatabaseContext(scope, fn)` — the scope is attached by the auth middleware, narrowed at the controller (`requireOrganizationScope(request)`), and relayed through the service. **Network I/O (Stripe, S3, Resend) MUST stay outside** the wrapper to avoid holding a pool checkout across remote round trips — enforced by `pnpm test:global` (`rls-context-network-isolation.global.test.ts`).
 - New worker job: use `runOrganizationScopedWorkerJob`; never call `getRequestDatabase()` from a `*.worker.ts` / `*.processor.ts` (enforced by global tests).
 - Outside a context, `getRequestDatabase()` counts the access (`database_unscoped_query_total`) — a FORCE RLS query with no GUC silently returns zero rows. A query that **cannot** depend on a context — a `SECURITY DEFINER` resolver (`<schema>.resolve_*`) or the `tenancy.permissions` catalog read — uses `getContextFreeDatabase()` instead, so a non-zero counter always means a real missing context. Confined per call site by `context-free-database-usage.policy.unit.test.ts`.
@@ -265,7 +265,7 @@ Four layers, each owning one decision. Nothing else may talk to Redis for a read
 | Domain cache module | `<domain>/…/<thing>.cache.ts` | key shape, TTL constant, stored shape, and the `getCached…` / `setCached…` / `invalidateCached…` trio. Example: [notification-unread-count.cache.ts](src/domains/notify/sub-domains/notification/notification-unread-count.cache.ts) |
 | Caller | the service (or the controller, for a serialized payload) | reading **after** authorization, and invalidating **after commit** at every write choke point — in the API *and* in workers |
 
-This keeps [cache.overview.md](src/infrastructure/cache/cache.overview.md)'s "no generic cache abstraction" rule: the shared util is not a cache, it is the three-command race protocol, and it exists because that protocol was already hand-written once in [session-token-cache.service.ts](src/domains/auth/sub-domains/auth-session/session-token-cache.service.ts) for revoked bearers and getting it subtly wrong the second time is the likely failure.
+This keeps [cache.overview.md](src/infrastructure/cache/cache.overview.md)'s "no generic cache abstraction" rule: the shared util is not a cache, it is the three-command race protocol, and it exists because that protocol was already hand-written once in [session-token-cache.service.ts](src/domains/auth/sub-domains/auth-session/session-token-cache.service.ts) for revoked bearers (which now uses the util as well) and getting it subtly wrong the second time is the likely failure.
 
 ### Implementation
 

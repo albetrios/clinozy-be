@@ -177,7 +177,7 @@ export function <domain>Routes(deps: <Domain>RoutesDeps): FastifyPluginAsync {
 
 - **controllers/** may import: own service(s) or container deps, `@/shared/utils/http/request.util.js`, `@/shared/utils/http/response.util.js`, shared errors.
 - **services/** may import: **same-domain** repository, own validator, shared errors, `src/core/events/event-bus.ts`, `src/shared/utils/infrastructure/logger.util.js`. For cross-domain reads/writes, import the other domain's **service** only — never its repository or schema.
-- **repositories/** may import: DB connection, schema, own domain types; may extend `base-repository.ts`.
+- **repositories/** may import: DB connection, schema, own domain types; a list builds its page with `finishKeysetPage` (`list-query.util.ts`).
 - **containers/** may import: own domain repositories, services. Accept cross-domain deps as parameters. Export services for route registration.
 - **validators/** call DTO `.safeParse()` methods and throw `ValidationError`.
 - **DTOs** contain Zod schemas only.

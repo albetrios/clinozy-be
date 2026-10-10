@@ -171,6 +171,34 @@ describe('Global: no direct DB-query primitives outside repositories (sec-r5-arc
     }
     expect(violations).toEqual([]);
   });
+  /**
+   * Workers and processors may build a predicate for the shared batch-delete util
+   * (`deleteInBatchesByCondition`), but the queries they run belong in a repository: four
+   * processors had grown inline `.select()` / `.insert()` / `.execute()` calls on their context
+   * handle (the offboarding reconciles, the audit outbox drain, the audit export).
+   */
+  it('forbids running queries on a database handle inside workers and processors', async () => {
+    const repositoryRoot = process.cwd();
+    const HANDLE_QUERY =
+      /\b\w*(?:[Hh]andle|[Dd]atabase)\s*\.\s*(?:select|selectDistinct|insert|update|delete|execute)\s*\(/;
+    const violations: string[] = [];
+    let scanned = 0;
+    for await (const absolutePath of walkDomainFiles(join(repositoryRoot, 'src', 'domains'))) {
+      if (!(absolutePath.endsWith('.worker.ts') || absolutePath.endsWith('.processor.ts')))
+        continue;
+      scanned += 1;
+      const fileText = await fs.readFile(absolutePath, 'utf8');
+      if (HANDLE_QUERY.test(fileText)) {
+        violations.push(`  ${relative(repositoryRoot, absolutePath)}`);
+      }
+    }
+    expect(scanned, 'The policy must scan the worker/processor inventory').toBeGreaterThan(20);
+    expect(
+      violations,
+      `Workers/processors run queries directly — move them into the repository:\n${violations.join('\n')}`,
+    ).toEqual([]);
+  });
+
   it('repositories use pinned accessors instead of opening second checkouts through connection singletons', async () => {
     const violations: string[] = [];
     let scannedRepositories = 0;

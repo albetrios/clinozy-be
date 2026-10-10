@@ -40,7 +40,7 @@ redis.client.ts            one ioredis connection; applies the deployment key pr
               └── service / controller  reads after authorization; invalidates after commit
 ```
 
-This is not a generic cache abstraction, and [`cache.overview.md`](../../../src/infrastructure/cache/cache.overview.md) still rules one out. The shared util holds exactly one thing: the three-command race protocol. It was extracted because that protocol had already been hand-written once — in [`session-token-cache.service.ts`](../../../src/domains/auth/sub-domains/auth-session/session-token-cache.service.ts), for revoked bearers — and re-deriving it per cache is how a second cache gets it subtly wrong. Everything else (what the key looks like, how long it lives, what is stored, when it dies) stays in the domain, where it can be argued about.
+This is not a generic cache abstraction, and [`cache.overview.md`](../../../src/infrastructure/cache/cache.overview.md) still rules one out. The shared util holds exactly one thing: the three-command race protocol. It was extracted because that protocol had already been hand-written once — in [`session-token-cache.service.ts`](../../../src/domains/auth/sub-domains/auth-session/session-token-cache.service.ts), for revoked bearers, which now uses the util too — and re-deriving it per cache is how a second cache gets it subtly wrong. Everything else (what the key looks like, how long it lives, what is stored, when it dies) stays in the domain, where it can be argued about.
 
 ## Request flow
 

@@ -36,9 +36,14 @@ vi.mock('@/infrastructure/mail/queues/mail.queue.js', () => ({
   dispatchOutboxEmail: (...arguments_: unknown[]) => dispatchOutboxEmailMock(...arguments_),
 }));
 
-vi.mock('@/domains/notify/sub-domains/notification/queues/notification.queue.js', () => ({
-  enqueueNotification: (...arguments_: unknown[]) => enqueueNotificationMock(...arguments_),
-}));
+// The enqueue is mocked; the clean-up is the domain's real one, on the mocked repository and cache.
+vi.mock(
+  '@/domains/notify/sub-domains/notification/queues/notification.queue.js',
+  async (importOriginal) => ({
+    ...(await importOriginal<Record<string, unknown>>()),
+    enqueueNotification: (...arguments_: unknown[]) => enqueueNotificationMock(...arguments_),
+  }),
+);
 
 vi.mock('@/domains/notify/sub-domains/notification/notification.repository.js', () => ({
   createWorkerNotificationRepository: () => ({

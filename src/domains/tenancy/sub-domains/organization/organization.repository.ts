@@ -9,24 +9,27 @@ import {
   isNull,
   or,
   sql,
+  lt,
+  ne,
 } from 'drizzle-orm';
+import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
+import { finishKeysetPage } from '@/shared/utils/http/list-query.util.js';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import {
   getContextFreeDatabase,
   getRequestDatabase,
+  assertWorkerDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { alias } from 'drizzle-orm/pg-core';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { users as authUsers } from '@/domains/user/user.schema.js';
-import { BaseRepository } from '@/infrastructure/database/base-repository.js';
 import {
   RESOURCE_QUOTA_LOCK_NAMESPACE,
   acquireResourceQuotaLock,
 } from '@/infrastructure/database/resource-quota-lock.util.js';
 import {
   buildAscendingCreatedAtIdCursorCondition,
-  createOpaqueCursorFromRow,
   cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
@@ -52,7 +55,7 @@ interface OrganizationListPagination {
  * lookups, owner transfer, and soft-delete. Organizations are inserted by
  * `provisionOrganizationWithOwner`, in the new organization's own context.
  */
-export class OrganizationRepository extends BaseRepository {
+export class OrganizationRepository {
   /**
    * Resolve `auth.users.public_id` → internal id via the `auth.resolve_user_id_by_public_id`
    * SECURITY DEFINER resolver rather than a direct `auth.users` SELECT.
@@ -200,16 +203,7 @@ export class OrganizationRepository extends BaseRepository {
       .where(accessWhere)
       .orderBy(asc(organizations.created_at), asc(organizations.id))
       .limit(limit + 1);
-    const hasMore = rows.length > limit;
-    const organizationsOnly = hasMore ? rows.slice(0, limit) : rows;
-    const lastItem = organizationsOnly.at(-1);
-    return {
-      items: organizationsOnly,
-      total: null,
-      limit,
-      has_more: hasMore,
-      next_cursor: hasMore && lastItem !== undefined ? createOpaqueCursorFromRow(lastItem) : null,
-    };
+    return finishKeysetPage(rows, { limit });
   }
 
   /**
@@ -565,4 +559,27 @@ export class OrganizationRepository extends BaseRepository {
       .returning();
     return (rows[0] ?? null) as Organization | null;
   }
+}
+
+/**
+ * TEAM organizations whose offboarding started before `startedBefore` and never finished (a crash
+ * mid-teardown) — the offboarding reconcile's read, across tenants (retention maintenance context).
+ */
+export async function findOrganizationsStuckInOffboarding(
+  databaseHandle: WorkerDatabaseHandle,
+  options: { startedBefore: Date; limit: number },
+): Promise<Array<{ public_id: string }>> {
+  assertWorkerDatabaseContext(['global_retention_cleanup']);
+  return databaseHandle
+    .select({ public_id: organizations.public_id })
+    .from(organizations)
+    .where(
+      and(
+        isNotNull(organizations.deletion_started_at),
+        isNull(organizations.deleted_at),
+        lt(organizations.deletion_started_at, options.startedBefore),
+        ne(organizations.type, 'PERSONAL'),
+      ),
+    )
+    .limit(options.limit);
 }

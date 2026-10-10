@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Postgres connection management, the abstract `BaseRepository` (with cursor pagination), the transactional helpers, the migration runner, the shared `pgSchema` definitions, and the **context family** that owns the platform's RLS contract — `withAppDatabaseContext` (minted identity scope), `withAppDatabaseContext` (pre-auth session artifacts), and `withMaintenanceDatabaseContext` (kind-dispatched bypass scopes: `MAINTENANCE_SCOPE.GLOBAL_ADMIN`, `global_retention_cleanup`, `session_retention_cleanup`, `system_audit_insert`, `audit_outbox_drain`, `system_table_retention`, `system_table_worker`). Domains never construct Drizzle clients themselves; they receive a `databaseHandle` from one of these contexts.
+Postgres connection management, the transactional helpers, the migration runner, the shared `pgSchema` definitions, and the **context family** that owns the platform's RLS contract — `withAppDatabaseContext` (minted identity scope), `withAppDatabaseContext` (pre-auth session artifacts), and `withMaintenanceDatabaseContext` (kind-dispatched bypass scopes: `MAINTENANCE_SCOPE.GLOBAL_ADMIN`, `global_retention_cleanup`, `session_retention_cleanup`, `system_audit_insert`, `audit_outbox_drain`, `system_table_retention`, `system_table_worker`). Domains never construct Drizzle clients themselves; they receive a `databaseHandle` from one of these contexts.
 
 ## Design decisions
 

@@ -14,9 +14,21 @@ const drainRepositoryMock = vi.hoisted(() => ({
   deleteRowsCreatedBefore: vi.fn().mockResolvedValue(0),
 }));
 
-vi.mock('@/domains/audit/audit-outbox.repository.js', () => ({
-  createDrainAuditOutboxRepository: vi.fn(() => drainRepositoryMock),
-}));
+// The row bookkeeping is mocked; the id lookups and the audit.logs insert are the real repository
+// methods, running against the fake database handle below.
+vi.mock('@/domains/audit/audit-outbox.repository.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/domains/audit/audit-outbox.repository.js')>();
+  return {
+    ...actual,
+    createDrainAuditOutboxRepository: vi.fn(
+      (databaseHandle: Parameters<typeof actual.createDrainAuditOutboxRepository>[0]) => ({
+        ...actual.createDrainAuditOutboxRepository(databaseHandle),
+        ...drainRepositoryMock,
+      }),
+    ),
+  };
+});
 
 const setLocalDatabaseConfigMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 

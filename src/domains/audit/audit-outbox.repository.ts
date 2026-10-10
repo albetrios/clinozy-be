@@ -7,6 +7,8 @@ import {
   getRequestDatabase,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { audit_outbox, type AuditOutboxRow } from './audit-outbox.schema.js';
+import { logs, type AuditLogInsert } from './audit.schema.js';
+import { users } from '@/domains/user/user.schema.js';
 
 /**
  * Payload accepted by {@link insertAuditOutboxRow}. Mirrors {@link AuditLogInsert}
@@ -252,6 +254,100 @@ export function createDrainAuditOutboxRepository(databaseHandle: RequestScopedPo
       return deleted.length;
     },
   };
+}
+
+/**
+ * The drain's reads and its write outside `audit.outbox`: resolving a batch's public ids to internal
+ * ids, and inserting the resolved row into `audit.logs`.
+ *
+ * @remarks
+ * - **Algorithm:** one read per id kind; organizations and API keys through their SECURITY DEFINER
+ *   resolvers, users with a plain select (the drain runs with `app.global_admin`).
+ * - **Failure modes:** query errors propagate to the drain, which rolls the batch back.
+ * - **Side effects:** `insertAuditLog` writes one `audit.logs` row on the handle it was built with
+ *   (the drain passes each row's savepoint handle, which carries that row's RLS identity).
+ */
+export function createAuditOutboxResolutionRepository(
+  databaseHandle: RequestScopedPostgresDatabase,
+) {
+  /** Runs one id-resolver function and keys its rows by public id. */
+  async function executeIdResolver(
+    statement: ReturnType<typeof drizzleSql>,
+  ): Promise<Map<string, number>> {
+    const result = await databaseHandle.execute<{ id: number | string; public_id: string }>(
+      statement,
+    );
+    const rows = Array.isArray(result)
+      ? (result as { id: number | string; public_id: string }[])
+      : ((result as { rows?: { id: number | string; public_id: string }[] }).rows ?? []);
+    return new Map(rows.map((row) => [row.public_id, Number(row.id)]));
+  }
+
+  return {
+    /**
+     * Internal ids of the given users, keyed by public id — the drain resolves a batch's actors and
+     * targets in one read (it runs with `app.global_admin`, which `auth.users` honours).
+     */
+    async resolveUserIdsByPublicIds(publicIds: readonly string[]): Promise<Map<string, number>> {
+      if (publicIds.length === 0) return new Map();
+      const rows = await databaseHandle
+        .select({ id: users.id, public_id: users.public_id })
+        .from(users)
+        .where(inArray(users.public_id, [...publicIds]));
+      return new Map(rows.map((row) => [row.public_id, row.id]));
+    },
+
+    /**
+     * Internal ids of the given organizations, through the SECURITY DEFINER resolver
+     * (`app.global_admin` grants nothing on `tenancy.*`, so a plain select returns no rows there).
+     */
+    async resolveOrganizationIdsByPublicIds(
+      publicIds: readonly string[],
+    ): Promise<Map<string, number>> {
+      if (publicIds.length === 0) return new Map();
+      // One comma-joined parameter + string_to_array: the driver's JS-array binding is not a
+      // reliable text[] literal, and public ids are [a-z0-9_], so the join is unambiguous.
+      return executeIdResolver(
+        drizzleSql`SELECT id, public_id FROM audit.resolve_organization_ids_for_public_ids(string_to_array(${publicIds.join(',')}, ','))`,
+      );
+    },
+
+    /** Internal ids of the given API keys, through their SECURITY DEFINER resolver. */
+    async resolveApiKeyIdsByPublicIds(publicIds: readonly string[]): Promise<Map<string, number>> {
+      if (publicIds.length === 0) return new Map();
+      return executeIdResolver(
+        drizzleSql`SELECT id, public_id FROM audit.resolve_api_key_ids_for_public_ids(string_to_array(${publicIds.join(',')}, ','))`,
+      );
+    },
+
+    /** Inserts one drained row into `audit.logs` (the caller's savepoint handle sets its RLS identity). */
+    async insertAuditLog(row: AuditLogInsert): Promise<void> {
+      await databaseHandle.insert(logs).values(row);
+    },
+  };
+}
+
+/**
+ * Counts PENDING rows in `audit.outbox` for tests and operator dashboards.
+ *
+ * @remarks
+ * - **Algorithm:** single `SELECT COUNT(*)` against `audit.outbox` filtered to
+ *   `status = 'PENDING'`, on the handle the caller passes (a drain or admin context).
+ * - **Failure modes:** propagates query errors (e.g. missing drain GUC under RLS).
+ * - **Side effects:** read-only.
+ * - **Notes:** used by the audit-outbox integration test that asserts the drain empties the
+ *   queue; production observability uses the `audit.outbox.drain.pass.completed` log fields.
+ */
+export async function countPendingAuditOutboxRows(
+  databaseHandle: RequestScopedPostgresDatabase,
+): Promise<number> {
+  const result = await databaseHandle.execute<{ count: number }>(
+    drizzleSql`SELECT COUNT(*)::int AS count FROM audit.outbox WHERE status = 'PENDING'`,
+  );
+  const rows = Array.isArray(result)
+    ? (result as { count: number }[])
+    : ((result as { rows?: { count: number }[] }).rows ?? []);
+  return rows[0]?.count ?? 0;
 }
 
 /** Type alias to ease wiring in tests / DI. */

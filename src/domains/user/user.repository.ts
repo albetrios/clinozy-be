@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
+import { finishKeysetPage } from '@/shared/utils/http/list-query.util.js';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import {
   getTableColumns,
@@ -11,17 +13,18 @@ import {
   or,
   sql,
   type SQL,
+  lt,
 } from 'drizzle-orm';
 import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
 import {
   getContextFreeDatabase,
   getRequestDatabase,
+  assertWorkerDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { users } from '@/domains/user/user.schema.js';
 import { escapeLikePattern } from '@/shared/utils/validation/validation.util.js';
 import {
   buildAscendingCreatedAtIdCursorCondition,
-  createOpaqueCursorFromRow,
   cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
@@ -307,18 +310,7 @@ export class UserRepository {
       : Promise.resolve(null);
 
     const [fetchedRows, total] = await Promise.all([rowsPromise, countPromise]);
-    const hasMore = fetchedRows.length > limit;
-    const items = hasMore ? fetchedRows.slice(0, limit) : fetchedRows;
-    const lastItem = items.at(-1);
-    const nextCursor =
-      hasMore && lastItem !== undefined ? createOpaqueCursorFromRow(lastItem) : null;
-    return {
-      items,
-      total,
-      limit,
-      has_more: hasMore,
-      next_cursor: nextCursor,
-    };
+    return finishKeysetPage(fetchedRows, { limit, total });
   }
 
   async adminUpdate(
@@ -424,4 +416,26 @@ export class UserRepository {
       .returning();
     return rows[0] ?? null;
   }
+}
+
+/**
+ * Users whose account deletion started before `startedBefore` and never finished (a crash
+ * mid-teardown) — the offboarding reconcile's read (retention maintenance context).
+ */
+export async function findUsersStuckInOffboarding(
+  databaseHandle: WorkerDatabaseHandle,
+  options: { startedBefore: Date; limit: number },
+): Promise<Array<{ public_id: string }>> {
+  assertWorkerDatabaseContext(['global_retention_cleanup']);
+  return databaseHandle
+    .select({ public_id: users.public_id })
+    .from(users)
+    .where(
+      and(
+        isNotNull(users.deletion_started_at),
+        isNull(users.deleted_at),
+        lt(users.deletion_started_at, options.startedBefore),
+      ),
+    )
+    .limit(options.limit);
 }

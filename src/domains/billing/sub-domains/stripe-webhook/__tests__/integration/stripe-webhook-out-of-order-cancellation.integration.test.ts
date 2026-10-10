@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import type Stripe from 'stripe';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { createStripeWebhookServiceForWorker } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook.container.js';
+import { createDomainContainers } from '@/worker-containers.js';
 import type { StripeWebhookService } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook.service.js';
 import { subscriptions } from '@/domains/billing/sub-domains/subscription/subscription.schema.js';
 import { plans } from '@/domains/billing/sub-domains/plan/plan.schema.js';
@@ -17,7 +17,7 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
  * create event to resurrect the subscription as ACTIVE. The deletion path writes
  * a terminal CANCELED tombstone; the unique index + terminal-status guard then
  * make the later create a no-op. These tests exercise the real worker service
- * (`createStripeWebhookServiceForWorker`) end-to-end against Postgres.
+ * (from the worker's composition root, `createDomainContainers`) end-to-end against Postgres.
  */
 describe('Stripe Webhook — out-of-order cancellation (audit-#1)', () => {
   let service: StripeWebhookService;
@@ -111,7 +111,7 @@ describe('Stripe Webhook — out-of-order cancellation (audit-#1)', () => {
   }
 
   beforeAll(() => {
-    service = createStripeWebhookServiceForWorker();
+    service = createDomainContainers().billingDomain.stripeWebhookService;
   });
 
   afterAll(async () => {

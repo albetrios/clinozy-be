@@ -27,6 +27,8 @@ const ALLOWED_IMPORTERS = [
   // Notification inbox reads keyed on resolved ids. (The dispatch worker left this ledger: the
   // recipient's public id now travels in its job, so it mints PRINCIPAL_SCOPE.JOB.)
   'src/domains/notify/sub-domains/notification/notification.service.ts',
+  // Post-commit dispatch clean-up: deletes a never-dispatched notification under its recipient.
+  'src/domains/notify/sub-domains/notification/queues/notification.queue.ts',
   // Webhook fan-out of an organization resource event: the organization is the one the producing
   // service already resolved and wrote under (the event is emitted inside that write).
   'src/domains/notify/sub-domains/webhook/webhook.service.ts',
@@ -47,8 +49,6 @@ const ALLOWED_IMPORTERS = [
   'src/domains/user/sub-domains/user-data-export/user-data-export.service.ts',
   'src/domains/user/sub-domains/user-settings/user-settings.service.ts',
   'src/domains/user/user.service.ts',
-  // Post-commit dispatch recovery replays rows staged under a verified identity.
-  'src/infrastructure/queue/commit-dispatch/commit-dispatch.executor.ts',
   // The namespace's own definition module.
   'src/infrastructure/database/contexts/database-context.ts',
 ] as const;

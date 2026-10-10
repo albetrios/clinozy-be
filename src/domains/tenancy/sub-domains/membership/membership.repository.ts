@@ -20,7 +20,6 @@ import { member_invitations } from '@/domains/tenancy/sub-domains/membership/mem
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
 import { role_permissions } from '@/domains/tenancy/sub-domains/member-roles/member-role-permission/member-role-permission.schema.js';
-import { BaseRepository } from '@/infrastructure/database/base-repository.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import {
@@ -97,7 +96,7 @@ export interface MembershipInvitationRefRow {
  * Listing uses a `(created_at, id)` keyset cursor; `update` flips
  * `joined_at` to `now()` when the status transitions to `ACTIVE`.
  */
-export class MembershipRepository extends BaseRepository {
+export class MembershipRepository {
   /**
    * Every membership row a user has — live or already removed — with its organization, for
    * account deletion. Spans tenants, so the caller runs it under the retention maintenance context.

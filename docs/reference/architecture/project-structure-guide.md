@@ -189,7 +189,7 @@ Always use `.js` extensions in import specifiers. CI gate: `src/tests/global/imp
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Controller | Own service(s) from container, own serializer, own validator; `@/shared/utils/http/response.util.js`, `@/shared/utils/http/request.util.js`, `@/shared/errors/index.js`, Fastify types |
 | Service    | Own repositories, own validators, other domains’ **services** (not repositories), `@/shared/errors`, infrastructure (e.g. mail queue, Stripe client, storage) as needed      |
-| Repository | Own schema(s), `@/infrastructure/database/connection.js`; some extend `BaseRepository`. No repository imports another repository class (only schema imports for joins).      |
+| Repository | Own schema(s), `@/infrastructure/database/connection.js`; lists page through `finishKeysetPage`. No repository imports another repository class (only schema imports for joins). |
 
 ### Cross-domain
 

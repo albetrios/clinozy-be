@@ -1,4 +1,5 @@
 import { getTableColumns, and, count, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
+import { finishKeysetPage } from '@/shared/utils/http/list-query.util.js';
 import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
 import { NOTIFICATION_MARK_ALL_READ_BATCH_SIZE } from '@/shared/constants/notification.constants.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
@@ -13,7 +14,6 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
 import { users } from '@/domains/user/user.schema.js';
 import {
   buildDescendingCreatedAtIdCursorCondition,
-  createOpaqueCursorFromRow,
   cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
@@ -153,18 +153,7 @@ export class NotificationRepository {
       : Promise.resolve(null);
 
     const [fetchedRows, total] = await Promise.all([rowsPromise, countPromise]);
-    const hasMore = fetchedRows.length > limit;
-    const items = hasMore ? fetchedRows.slice(0, limit) : fetchedRows;
-    const lastItem = items.at(-1);
-    const nextCursor =
-      hasMore && lastItem !== undefined ? createOpaqueCursorFromRow(lastItem) : null;
-    return {
-      items,
-      total,
-      limit,
-      has_more: hasMore,
-      next_cursor: nextCursor,
-    };
+    return finishKeysetPage(fetchedRows, { limit, total });
   }
 
   async listForUserDataExport(

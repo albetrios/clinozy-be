@@ -1,4 +1,5 @@
 import { and, desc, eq, isNull, ne, sql, type SQL } from 'drizzle-orm';
+import { finishKeysetPage } from '@/shared/utils/http/list-query.util.js';
 import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
@@ -13,7 +14,6 @@ import {
 } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
 import {
   buildDescendingCreatedAtIdCursorCondition,
-  createOpaqueCursorFromRow,
   cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
@@ -112,16 +112,7 @@ export class WebhookDeliveryAttemptRepository {
       : Promise.resolve(null);
 
     const [fetchedRows, total] = await Promise.all([rowsPromise, countPromise]);
-    const hasMore = fetchedRows.length > limit;
-    const items = hasMore ? fetchedRows.slice(0, limit) : fetchedRows;
-    const lastItem = items.at(-1);
-    return {
-      items,
-      total,
-      limit,
-      has_more: hasMore,
-      next_cursor: hasMore && lastItem !== undefined ? createOpaqueCursorFromRow(lastItem) : null,
-    };
+    return finishKeysetPage(fetchedRows, { limit, total });
   }
 
   /** Resolve webhook public_id + organization_id to internal webhook_id for auth */

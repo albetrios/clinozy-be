@@ -1,10 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { and, asc, eq, gt, gte, isNotNull, lt } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
-import { logs } from '@/domains/audit/audit.schema.js';
+import {
+  findAuditLogExportPage,
+  findOrganizationsWithAuditLogsBetween,
+} from '@/domains/audit/audit.repository.js';
 import { sanitizeAuditMetadata } from '@/domains/audit/audit.serializer.js';
-import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
-import { users } from '@/domains/user/user.schema.js';
 import { getDefaultS3ObjectStorageAdapter } from '@/infrastructure/storage/s3-adapter.js';
 import { gzipBufferAsync } from '@/shared/utils/infrastructure/gzip.util.js';
 import {
@@ -20,9 +19,6 @@ import {
   type AuditExportManifest,
   type AuditExportRow,
 } from '@/domains/audit/workers/audit-export.constants.js';
-
-const actorUsers = alias(users, 'actor_users');
-const targetUsers = alias(users, 'target_users');
 
 /** One UTC day, `daysAgo` days before `referenceDate`'s day: `[start, end)` and its `YYYY-MM-DD`. */
 function utcDayRange(options: { referenceDate: Date; daysAgo: number }): {
@@ -170,16 +166,7 @@ async function exportAuditDay(options: {
   );
 
   const organizationRows = await runInDatabaseContext((databaseHandle) =>
-    databaseHandle
-      .selectDistinct({
-        organization_id: logs.organization_id,
-        organization_public_id: organizations.public_id,
-      })
-      .from(logs)
-      .innerJoin(organizations, eq(logs.organization_id, organizations.id))
-      .where(
-        and(isNotNull(logs.organization_id), gte(logs.created_at, start), lt(logs.created_at, end)),
-      ),
+    findOrganizationsWithAuditLogsBetween(databaseHandle, { start, end }),
   );
 
   let exportedOrganizations = 0;
@@ -259,34 +246,14 @@ async function collectOrganizationAuditBatches(options: {
   const manifestObjects: AuditExportManifest['objects'] = [];
 
   while (true) {
-    // The global-retention context reads auth.users (it has a retention arm), so actor and
-    // target resolve to public ids here; a user hard-deleted since leaves the column null.
     const rows = await runInDatabaseContext((databaseHandle) =>
-      databaseHandle
-        .select({
-          id: logs.id,
-          public_id: logs.public_id,
-          actor_user_public_id: actorUsers.public_id,
-          target_user_public_id: targetUsers.public_id,
-          action: logs.action,
-          resource_type: logs.resource_type,
-          severity: logs.severity,
-          metadata: logs.metadata,
-          created_at: logs.created_at,
-        })
-        .from(logs)
-        .leftJoin(actorUsers, eq(logs.actor_user_id, actorUsers.id))
-        .leftJoin(targetUsers, eq(logs.target_user_id, targetUsers.id))
-        .where(
-          and(
-            eq(logs.organization_id, organizationId),
-            gte(logs.created_at, start),
-            lt(logs.created_at, end),
-            gt(logs.id, afterId),
-          ),
-        )
-        .orderBy(asc(logs.id))
-        .limit(batchSize),
+      findAuditLogExportPage(databaseHandle, {
+        organizationId,
+        start,
+        end,
+        afterId,
+        limit: batchSize,
+      }),
     );
 
     if (rows.length === 0) break;

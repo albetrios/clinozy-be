@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import type Stripe from 'stripe';
-import { createStripeWebhookServiceForWorker } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook.container.js';
+import { createDomainContainers } from '@/worker-containers.js';
 import { StripeWebhookRetryLaterError } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook.types.js';
 import { StripeWebhookEventRepository } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-event.repository.js';
 import { stripe_webhook_events } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook.schema.js';
@@ -76,9 +76,10 @@ describe('Stripe webhook execution claims against PostgreSQL', () => {
       SubscriptionRepository.prototype,
       'syncFromStripeProviderSubscription',
     );
-    const handlers = Array.from({ length: 10 }, () => createStripeWebhookServiceForWorker());
+    // Ten concurrent runs of the worker's own service (the composition root the worker builds).
+    const { stripeWebhookService } = createDomainContainers().billingDomain;
     const outcomes = await Promise.allSettled(
-      handlers.map((handler) => handler.handleEvent(event)),
+      Array.from({ length: 10 }, () => stripeWebhookService.handleEvent(event)),
     );
     expect(outcomes.some((outcome) => outcome.status === 'fulfilled')).toBe(true);
     for (const outcome of outcomes) {
@@ -105,7 +106,7 @@ describe('Stripe webhook execution claims against PostgreSQL', () => {
     expect(persisted?.status).toBe('PAST_DUE');
     expect(persisted?.last_stripe_event_created_at).toEqual(new Date(nowSeconds * 1000));
 
-    await handlers[0]!.handleEvent(event);
+    await stripeWebhookService.handleEvent(event);
     expect(updateSpy).toHaveBeenCalledTimes(1);
     const [replayedLedger] = await getOperatorDatabase()
       .select()

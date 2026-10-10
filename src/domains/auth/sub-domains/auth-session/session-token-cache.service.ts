@@ -1,17 +1,14 @@
-import { redisConnection } from '@/infrastructure/cache/redis.client.js';
+import {
+  invalidateTombstonedCacheEntry,
+  populateTombstonedCacheEntry,
+  readTombstonedCacheEntry,
+} from '@/infrastructure/cache/redis-tombstone-cache.util.js';
 import { SESSION_TOKEN_CACHE_TTL_SECONDS } from '@/shared/constants/index.js';
-import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 const SESSION_TOKEN_CACHE_PREFIX = 'session:tok';
 
-/**
- * Revocation tombstone value. `invalidateCachedSessionToken` writes this (not a DEL) so a concurrent
- * in-flight validation that read the session row as active BEFORE a revoke committed cannot
- * repopulate a "valid" entry afterwards: the tombstone blocks the `NX` populate and reads back as a
- * cache miss (the DB re-check then denies). Bounded by the cache TTL, the same window a populate can
- * span. Closes the populate-vs-invalidate TOCTOU (route-audit session-#1).
- */
-const SESSION_TOKEN_REVOKED_TOMBSTONE = '__revoked__';
+/** Log prefix of this cache's failures (`session-token.cache.get.failed`, …). */
+const SESSION_TOKEN_CACHE_METRIC_NAME = 'session-token';
 
 function buildSessionTokenCacheKey(sessionTokenHash: string): string {
   return `${SESSION_TOKEN_CACHE_PREFIX}:${sessionTokenHash}`;
@@ -36,17 +33,12 @@ function buildSessionTokenCacheKey(sessionTokenHash: string): string {
  *   re-reading the row.
  */
 export async function getCachedSessionTokenValid(sessionTokenHash: string): Promise<string | null> {
-  try {
-    const cached = await redisConnection.get(buildSessionTokenCacheKey(sessionTokenHash));
-    if (cached === null || cached.length === 0) return null;
-    // A revocation tombstone reads as a MISS so the caller re-checks Postgres (which denies the
-    // revoked session) instead of trusting a value that a racing populate might otherwise have set.
-    if (cached === SESSION_TOKEN_REVOKED_TOMBSTONE) return null;
-    return cached;
-  } catch (error) {
-    logger.warn({ error }, 'session-token-cache.get.failed');
-    return null;
-  }
+  // A revocation tombstone reads as a MISS so the caller re-checks Postgres (which denies the
+  // revoked session) instead of trusting a value a racing populate might otherwise have set.
+  return readTombstonedCacheEntry(
+    buildSessionTokenCacheKey(sessionTokenHash),
+    SESSION_TOKEN_CACHE_METRIC_NAME,
+  );
 }
 
 /**
@@ -94,23 +86,15 @@ export async function setCachedSessionTokenValid({
 }: SetCachedSessionTokenValidInput): Promise<void> {
   const remainingSeconds = Math.floor((sessionExpiresAt.getTime() - Date.now()) / 1000);
   const ttlSeconds = Math.min(SESSION_TOKEN_CACHE_TTL_SECONDS, remainingSeconds);
-  if (ttlSeconds <= 0) {
-    return;
-  }
-  try {
-    // `NX`: never overwrite an existing key. If a concurrent revoke has written the revocation
-    // tombstone, this in-flight (pre-revoke) populate is a no-op, so a revoked bearer can't be
-    // re-cached as valid (route-audit session-#1).
-    await redisConnection.set(
-      buildSessionTokenCacheKey(sessionTokenHash),
-      sessionPublicId,
-      'EX',
-      ttlSeconds,
-      'NX',
-    );
-  } catch (error) {
-    logger.warn({ error }, 'session-token-cache.set.failed');
-  }
+  // `NX` (in the helper): never over an existing key. If a concurrent revoke has written the
+  // revocation tombstone, this in-flight (pre-revoke) populate is a no-op, so a revoked bearer can't
+  // be re-cached as valid (route-audit session-#1). A non-positive TTL caches nothing.
+  await populateTombstonedCacheEntry({
+    key: buildSessionTokenCacheKey(sessionTokenHash),
+    value: sessionPublicId,
+    ttlSeconds,
+    metricName: SESSION_TOKEN_CACHE_METRIC_NAME,
+  });
 }
 
 /**
@@ -129,14 +113,9 @@ export async function setCachedSessionTokenValid({
  *   newly-rotated JWTs don't read a stale cache entry.
  */
 export async function invalidateCachedSessionToken(sessionTokenHash: string): Promise<void> {
-  try {
-    await redisConnection.set(
-      buildSessionTokenCacheKey(sessionTokenHash),
-      SESSION_TOKEN_REVOKED_TOMBSTONE,
-      'EX',
-      SESSION_TOKEN_CACHE_TTL_SECONDS,
-    );
-  } catch (error) {
-    logger.warn({ error }, 'session-token-cache.invalidate.failed');
-  }
+  await invalidateTombstonedCacheEntry({
+    key: buildSessionTokenCacheKey(sessionTokenHash),
+    ttlSeconds: SESSION_TOKEN_CACHE_TTL_SECONDS,
+    metricName: SESSION_TOKEN_CACHE_METRIC_NAME,
+  });
 }

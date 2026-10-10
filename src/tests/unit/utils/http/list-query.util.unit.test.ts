@@ -164,6 +164,22 @@ describe('list-query.util', () => {
       expect(decoded?.filter_fingerprint).toBe(fingerprint);
     });
 
+    it('pages a plain (created_at, id) list: total passed through, cursor without sort or filter', () => {
+      // The page builder every keyset list uses — the plain lists pass only the limit and a total.
+      const page = finishKeysetPage([row(), row({ id: 2 }), row({ id: 3 })], {
+        limit: 2,
+        total: 3,
+      });
+
+      expect(page).toMatchObject({ limit: 2, total: 3, has_more: true });
+      expect(page.items.map((item) => item.id)).toEqual([1, 2]);
+      const decoded = parseListCursor(page.next_cursor!);
+      expect(decoded).toMatchObject({ id: 2, public_id: 'role_a' });
+      expect(decoded?.sort_value).toBeUndefined();
+      expect(decoded?.filter_fingerprint).toBeUndefined();
+      expect(finishKeysetPage([row()], { limit: 2 }).total).toBeNull();
+    });
+
     it('returns no cursor when there is no next page', () => {
       const page = finishKeysetPage([row()], {
         limit: 5,

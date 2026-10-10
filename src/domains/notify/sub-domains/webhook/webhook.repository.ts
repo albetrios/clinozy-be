@@ -1,4 +1,5 @@
 import { getTableColumns, and, asc, count, eq, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
+import { finishKeysetPage } from '@/shared/utils/http/list-query.util.js';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { DEFAULT_REPOSITORY_LIST_LIMIT } from '@/shared/constants/query-limits.constants.js';
@@ -81,16 +82,7 @@ export class WebhookRepository {
       : Promise.resolve(null);
 
     const [fetchedRows, total] = await Promise.all([rowsPromise, countPromise]);
-    const hasMore = fetchedRows.length > limit;
-    const items = hasMore ? fetchedRows.slice(0, limit) : fetchedRows;
-    const lastItem = items.at(-1);
-    return {
-      items,
-      total,
-      limit,
-      has_more: hasMore,
-      next_cursor: hasMore && lastItem !== undefined ? createOpaqueCursorFromRow(lastItem) : null,
-    };
+    return finishKeysetPage(fetchedRows, { limit, total });
   }
 
   /**

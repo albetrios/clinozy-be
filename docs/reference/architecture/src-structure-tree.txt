@@ -396,7 +396,6 @@ src/
     │   │   │   ├── stripe-webhook-ingress.plugin.ts
     │   │   │   ├── stripe-webhook-organization.util.ts
     │   │   │   ├── stripe-webhook-raw-body.registry.ts
-    │   │   │   ├── stripe-webhook.container.ts
     │   │   │   ├── stripe-webhook.controller.ts
     │   │   │   ├── stripe-webhook.overview.md
     │   │   │   ├── stripe-webhook.routes.ts
@@ -1203,7 +1202,6 @@ src/
     │   │   ├── connection-url.util.ts
     │   │   ├── database-handle.types.ts
     │   │   └── force-rls-tables.constants.ts
-    │   ├── base-repository.ts
     │   ├── connection.ts
     │   ├── database.overview.md
     │   ├── pg-schemas.ts
@@ -2194,7 +2192,6 @@ src/
     │   │   │   └── redis-tombstone-cache.util.unit.test.ts
     │   │   ├── database/
     │   │   │   ├── acquire-deadline.unit.test.ts
-    │   │   │   ├── base-repository.pagination.unit.test.ts
     │   │   │   ├── batch-delete.util.db.unit.test.ts
     │   │   │   ├── batch-delete.util.unit.test.ts
     │   │   │   ├── capped-count.util.db.unit.test.ts

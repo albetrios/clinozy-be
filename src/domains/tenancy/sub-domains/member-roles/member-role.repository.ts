@@ -7,7 +7,6 @@ import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-tim
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
-import { BaseRepository } from '@/infrastructure/database/base-repository.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import {
@@ -47,7 +46,7 @@ const MEMBER_COUNT_STATUSES = ['ACTIVE', 'INVITED'] as const;
  * keyset cursor for stable alphabetical paging. Public ids are generated and
  * retried on collision via {@link runInsertWithPublicIdentifierRetry}.
  */
-export class MemberRoleRepository extends BaseRepository {
+export class MemberRoleRepository {
   /**
    * Counts the active (not soft-deleted) custom roles for the given organization.
    *

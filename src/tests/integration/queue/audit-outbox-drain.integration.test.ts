@@ -6,10 +6,8 @@ import {
 import { eq } from 'drizzle-orm';
 import { audit_outbox } from '@/domains/audit/audit-outbox.schema.js';
 import { logs } from '@/domains/audit/audit.schema.js';
-import {
-  countPendingAuditOutboxRows,
-  runAuditOutboxDrainJob,
-} from '@/domains/audit/workers/audit-outbox-drain.processor.js';
+import { runAuditOutboxDrainJob } from '@/domains/audit/workers/audit-outbox-drain.processor.js';
+import { countPendingAuditOutboxRows } from '@/domains/audit/audit-outbox.repository.js';
 import { users } from '@/domains/user/user.schema.js';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { setLocalDatabaseConfig } from '@/infrastructure/database/contexts/database-context-runtime.js';
