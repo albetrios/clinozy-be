@@ -386,6 +386,12 @@ export const healthAuthUserRouteResponses: Record<string, ResponseDefinition> = 
     schema: wrapUncountedPaginated(schemas.organizationSchema, [schemas.organizationExample]),
     example: null,
   },
+  // The caller's pending invitations (launch D84) — tenancy data in the caller's scope, uncounted.
+  'GET /api/v1/users/me/membership-invitations': {
+    statusCode: 200,
+    schema: wrapUncountedPaginated(schemas.myInvitationSchema, [schemas.myInvitationExample]),
+    example: null,
+  },
   'PATCH /api/v1/users/me': {
     statusCode: 200,
     schema: wrapSuccess(schemas.userSchema, schemas.userExample),

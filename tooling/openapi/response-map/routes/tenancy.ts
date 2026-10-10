@@ -232,6 +232,28 @@ export const tenancyRouteResponses: Record<string, ResponseDefinition> = {
     ),
     example: null,
   },
+  'POST /api/v1/tenancy/membership-invitations/{membership_invitation_id}/decline': {
+    // Launch D84 (3): the revoked invitation plus the `organization_id` it was for.
+    statusCode: 200,
+    schema: wrapSuccess(
+      {
+        type: 'object',
+        properties: {
+          ...schemas.invitationSchema.properties,
+          organization_id: {
+            type: 'string',
+            description: 'Public id of the organization whose invitation was declined.',
+          },
+        },
+      },
+      {
+        ...schemas.invitationExample,
+        revoked_at: '2026-02-14T11:00:00.000Z',
+        organization_id: 'org_k7x9m2pqr4w8n1v3a1b2c',
+      },
+    ),
+    example: null,
+  },
   'DELETE /api/v1/tenancy/organization/memberships/{membership_id}/invitation': {
     statusCode: 204,
     schema: null,

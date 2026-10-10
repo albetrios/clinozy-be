@@ -97,7 +97,8 @@ export const memberships = tenancySchema
         .notNull()
         .default('0'),
       // Why the membership ended (K2): a manager's removal picks a record reason
-      // (`DELETE …?reason=&note=`), leaving records `left`, deleting the account `account_deleted`.
+      // (`DELETE …?reason=&note=`), leaving records `left`, deleting the account `account_deleted`,
+      // declining the invite `declined`, an invite 7 days past its expiry `invitation_expired` (D84).
       delete_reason: varchar('delete_reason', { length: 20 }),
       delete_note: varchar('delete_note', { length: 280 }),
       // The name the organization keeps for the member (K3). An insert leaves it '' and

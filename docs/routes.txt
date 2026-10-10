@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 440
+  Total routes: 442
 ================================================================================
 
 Legend:
@@ -421,11 +421,12 @@ Legend:
 
 ================================================================================
   DOMAIN: TENANCY (/api/v1/tenancy)
-  Routes: 42
+  Routes: 43
 ================================================================================
 
   — Sub Domains —
   POST   /api/v1/tenancy/membership-invitations/:membership_invitation_id/accept  200  req  both  AUTH
+  POST   /api/v1/tenancy/membership-invitations/:membership_invitation_id/decline  200  req  both  AUTH
   GET    /api/v1/tenancy/organization                             200  -    both  AUTH
   PATCH  /api/v1/tenancy/organization                             200  -    both  PERM: organization:update
   DELETE /api/v1/tenancy/organization                             204  -    team  PERM: organization:delete
@@ -480,7 +481,7 @@ Legend:
 
 ================================================================================
   DOMAIN: USER (/api/v1/users)
-  Routes: 20
+  Routes: 21
 ================================================================================
 
   GET    /api/v1/users                                            200  -    both  ROLE: super_admin
@@ -496,6 +497,7 @@ Legend:
   DELETE /api/v1/users/me/avatar                                  204  -    both  AUTH
   POST   /api/v1/users/me/data-export                             200  -    both  AUTH
   GET    /api/v1/users/me/data-export/:data_export_id             200  -    both  AUTH
+  GET    /api/v1/users/me/membership-invitations                  200  -    both  AUTH
   GET    /api/v1/users/me/notification-preferences                200  -    both  AUTH
   PUT    /api/v1/users/me/notification-preferences                200  -    both  AUTH
   POST   /api/v1/users/me/onboarding/complete                     200  -    both  AUTH
@@ -531,16 +533,16 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 440
+  Total routes    : 442
   Public          : 18
-  Authenticated   : 51
+  Authenticated   : 53
   Role-guarded    : 9
   Perm-guarded    : 357
   Token-guarded   : 5
   Team-only (O)   : 10
 
 ================================================================================
-  IDEMPOTENCY-REQUIRED WRITES (127) — X-Idempotency-Key required
+  IDEMPOTENCY-REQUIRED WRITES (128) — X-Idempotency-Key required
 ================================================================================
 
   Routes flagged I = req reject a missing or reused key (422); every other write
@@ -663,6 +665,7 @@ Legend:
     POST /api/v1/billing/subscriptions/:subscription_id/resume
     POST /api/v1/notify/webhooks
     POST /api/v1/tenancy/membership-invitations/:membership_invitation_id/accept
+    POST /api/v1/tenancy/membership-invitations/:membership_invitation_id/decline
     POST /api/v1/tenancy/organization/api-keys
     POST /api/v1/tenancy/organization/memberships
     POST /api/v1/tenancy/organization/memberships/:membership_id/invitation/resend

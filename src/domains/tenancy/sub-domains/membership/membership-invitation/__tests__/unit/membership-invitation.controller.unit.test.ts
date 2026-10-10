@@ -5,9 +5,10 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { ValidationError } from '@/shared/errors/index.js';
 import { attachPrincipalScope } from '@/tests/helpers/principal-scope.helper.js';
 
-// sec-new-T2: path-param validation for the invitation routes (launch §2.C): the invitee's accept by
-// `membership_invitation_id` and the organization's resend by `membership_id`. Revoking lives on the
-// membership controller (it ends the invited membership too).
+// sec-new-T2: path-param validation for the invitation routes (launch §2.C, D84): the invitee's
+// accept and decline by `membership_invitation_id` and the organization's resend by `membership_id`.
+// Revoking lives on the membership controller (it ends the invited membership too); declining runs
+// through the membership service for the same reason.
 describe('createMembershipInvitationController — path-param validation (sec-new-T2)', () => {
   const organizationPublicId = generatePublicId('organization');
   const invitationPublicId = generatePublicId('membershipInvitation');
@@ -24,7 +25,14 @@ describe('createMembershipInvitationController — path-param validation (sec-ne
     resendForMembership: vi.fn().mockResolvedValue(invitation),
   };
 
-  const controller = createMembershipInvitationController(service as never);
+  const membershipService = {
+    declineInvitation: vi.fn().mockResolvedValue(invitation),
+  };
+
+  const controller = createMembershipInvitationController(
+    service as never,
+    membershipService as never,
+  );
 
   function mockUserRequest(params: Record<string, string>): FastifyRequest {
     return attachPrincipalScope({
@@ -69,6 +77,27 @@ describe('createMembershipInvitationController — path-param validation (sec-ne
       expect.anything(),
       expect.any(String),
     );
+  });
+
+  it('declineMembershipInvitation rejects a malformed membership_invitation_id (sec-new-T2)', async () => {
+    await expect(
+      controller.declineMembershipInvitation(
+        mockUserRequest({ membership_invitation_id: 'inv_bad id' }),
+        mockReply(),
+      ),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(membershipService.declineInvitation).not.toHaveBeenCalled();
+  });
+
+  it('declineMembershipInvitation declines for the signed-in user through the membership service (D84)', async () => {
+    await controller.declineMembershipInvitation(
+      mockUserRequest({ membership_invitation_id: invitationPublicId }),
+      mockReply(),
+    );
+    expect(membershipService.declineInvitation).toHaveBeenCalledWith({
+      invitationPublicId,
+      actingUserPublicId: expect.any(String),
+    });
   });
 
   it('resendInvitation rejects a malformed membership_id (sec-new-T2)', async () => {

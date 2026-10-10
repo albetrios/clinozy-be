@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, isNull, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, isNull, lt, type SQL } from 'drizzle-orm';
 import { sql } from '@/infrastructure/database/connection.js';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
@@ -9,7 +9,10 @@ import {
   acquireResourceQuotaLock,
   RESOURCE_QUOTA_LOCK_NAMESPACE,
 } from '@/infrastructure/database/resource-quota-lock.util.js';
-import type { MembershipInvitationRow } from './membership-invitation.types.js';
+import type {
+  MembershipInvitationRow,
+  PendingInvitationForEmailRow,
+} from './membership-invitation.types.js';
 import {
   buildAscendingCreatedAtIdCursorCondition,
   createOpaqueCursorFromRow,
@@ -197,6 +200,94 @@ export class MembershipInvitationRepository {
     };
   }
 
+  /**
+   * One email's pending invitations across organizations (launch D84 (1)) — not accepted, not
+   * revoked, not expired, the invited membership and its organization live — oldest first, each
+   * with the organization, the role names and the inviter.
+   *
+   * @remarks
+   * - **Algorithm:** the SECURITY DEFINER read
+   *   `tenancy.list_pending_membership_invitations_for_email` (the invitee is not a member of the
+   *   inviting organization, whose row-level security hides every row), keyset-paged on
+   *   `(created_at, id)`: one row past `limit` says whether there is more.
+   * - **Notes:** the caller passes a verified email only — the function trusts its argument.
+   */
+  async listPendingForEmail(
+    email: string,
+    pagination: { after?: string; limit: number },
+  ): Promise<{
+    items: PendingInvitationForEmailRow[];
+    limit: number;
+    has_more: boolean;
+    next_cursor: string | null;
+  }> {
+    const cursor = parseListCursor(pagination.after);
+    // ISO text: this client binds no Date parameters in a raw tagged template.
+    const afterCreatedAt = cursor?.id === undefined ? null : cursor.created_at.toISOString();
+    const afterId = cursor?.id ?? null;
+    const rows = await sql<
+      Array<{
+        invitation_id: string | number;
+        invitation_public_id: string;
+        organization_public_id: string;
+        organization_name: string;
+        organization_slug: string | null;
+        organization_logo_url: string | null;
+        membership_public_id: string;
+        role_names: string[] | null;
+        inviter_name: string | null;
+        invitation_expires_at: Date;
+        invitation_created_at: Date;
+      }>
+    >`
+      SELECT
+        invitation_id,
+        invitation_public_id,
+        organization_public_id,
+        organization_name,
+        organization_slug,
+        organization_logo_url,
+        membership_public_id,
+        role_names,
+        inviter_name,
+        invitation_expires_at,
+        invitation_created_at
+      FROM tenancy.list_pending_membership_invitations_for_email(
+        ${email},
+        ${pagination.limit + 1},
+        ${afterCreatedAt},
+        ${afterId}
+      )
+    `;
+    const hasMore = rows.length > pagination.limit;
+    const items = (hasMore ? rows.slice(0, pagination.limit) : rows).map((row) => ({
+      invitation_id: Number(row.invitation_id),
+      invitation_public_id: row.invitation_public_id,
+      organization_public_id: row.organization_public_id,
+      organization_name: row.organization_name,
+      organization_slug: row.organization_slug,
+      organization_logo_url: row.organization_logo_url,
+      membership_public_id: row.membership_public_id,
+      role_names: row.role_names ?? [],
+      inviter_name: row.inviter_name,
+      expires_at: new Date(row.invitation_expires_at),
+      created_at: new Date(row.invitation_created_at),
+    }));
+    const lastItem = items.at(-1);
+    return {
+      items,
+      limit: pagination.limit,
+      has_more: hasMore,
+      next_cursor:
+        hasMore && lastItem !== undefined
+          ? createOpaqueCursorFromRow({
+              created_at: lastItem.created_at,
+              id: lastItem.invitation_id,
+            })
+          : null,
+    };
+  }
+
   async create(data: {
     membership_id: number;
     email: string;
@@ -226,9 +317,14 @@ export class MembershipInvitationRepository {
     });
   }
 
+  /**
+   * Marks a pending invitation accepted — one-shot: it must still be unaccepted, unrevoked and
+   * unexpired. With a `token_hash` the emailed token must match too; `null` is the in-app accept
+   * of the verified, matching email (launch D84 (2)), which the service checked first.
+   */
   async accept(
     public_id: string,
-    token_hash: string,
+    token_hash: string | null,
     expires_after: Date,
   ): Promise<MembershipInvitationRow | null> {
     const rows = await getRequestDatabase()
@@ -237,7 +333,7 @@ export class MembershipInvitationRepository {
       .where(
         and(
           eq(membership_invitations.public_id, public_id),
-          eq(membership_invitations.token_hash, token_hash),
+          token_hash === null ? undefined : eq(membership_invitations.token_hash, token_hash),
           gt(membership_invitations.expires_at, expires_after),
           isNull(membership_invitations.accepted_at),
           isNull(membership_invitations.revoked_at),
@@ -266,7 +362,14 @@ export class MembershipInvitationRepository {
     return (rows[0] ?? null) as MembershipInvitationRow | null;
   }
 
-  async revoke(public_id: string): Promise<MembershipInvitationRow | null> {
+  /**
+   * Revokes an unaccepted invitation. `expiredBefore` (the expiry sweep, launch D84 (4)) also
+   * requires it to have expired before that moment, so a resend racing the sweep keeps it.
+   */
+  async revoke(
+    public_id: string,
+    options: { expiredBefore?: Date } = {},
+  ): Promise<MembershipInvitationRow | null> {
     const rows = await getRequestDatabase()
       .update(membership_invitations)
       .set({ revoked_at: new Date() })
@@ -274,6 +377,9 @@ export class MembershipInvitationRepository {
         and(
           eq(membership_invitations.public_id, public_id),
           isNull(membership_invitations.accepted_at),
+          options.expiredBefore === undefined
+            ? undefined
+            : lt(membership_invitations.expires_at, options.expiredBefore),
         ),
       )
       .returning();

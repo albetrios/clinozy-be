@@ -36,6 +36,7 @@ const GLOBAL_LIMITER_ONLY_ALLOWLIST = new Set<string>([
   'src/domains/notify/sub-domains/webhook/webhook.routes.ts → GET /webhook-events',
   'src/domains/notify/sub-domains/webhook/webhook.routes.ts → GET /webhooks',
   'src/domains/user/user.routes.ts → GET /me/organizations',
+  'src/domains/user/user.routes.ts → GET /me/membership-invitations',
   'src/domains/tenancy/sub-domains/member-roles/member-role.routes.ts → GET /organization/roles',
   'src/domains/tenancy/sub-domains/membership/membership.routes.ts → GET /organization/memberships',
   'src/domains/tenancy/sub-domains/organization/organization.routes.ts → GET /organization',

@@ -11,16 +11,21 @@ import {
   buildAuditActorFields,
   recordScopedAuditEvent,
 } from '@/shared/utils/infrastructure/audit-request-context.util.js';
+import type { MembershipService } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
 import type { MembershipInvitationService } from './membership-invitation.service.js';
 
 /**
- * Builds the HTTP handler map for the invitation routes (launch §2.C): the invitee-facing
- * `/membership-invitations/:membership_invitation_id/accept` and the organization-scoped resend under
+ * Builds the HTTP handler map for the invitation routes (launch §2.C, D84): the invitee-facing
+ * `/membership-invitations/:membership_invitation_id/accept` and `…/decline` (declining ends the
+ * invited membership, so it runs through the membership service) and the organization-scoped resend under
  * `/organization/memberships/:membership_id/invitation/resend`. Revoking lives on the membership
  * controller — it ends the invited membership too. Each handler records a scoped audit event — an
  * acceptance in the joined organization's log, since the invitee's token carries no organization yet.
  */
-export function createMembershipInvitationController(service: MembershipInvitationService) {
+export function createMembershipInvitationController(
+  service: MembershipInvitationService,
+  membershipService: MembershipService,
+) {
   return {
     acceptMembershipInvitation: async (request: FastifyRequest, _reply: FastifyReply) => {
       // sec-T4: route is `app.authenticate`-gated; the service binds the invitee email to the acting
@@ -39,6 +44,31 @@ export function createMembershipInvitationController(service: MembershipInvitati
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,
         action: 'tenancy.membership_invitation.accept',
+        resource_type: 'membership_invitation',
+        organizationPublicId: data.organization_id,
+        metadata: { invitation_public_id: invitationId, membership_public_id: data.membership_id },
+      });
+      return successResponse(data, getRequestIdentifier(request));
+    },
+    declineMembershipInvitation: async (request: FastifyRequest, _reply: FastifyReply) => {
+      // Like accept: the service binds the invitation to the acting user's verified email; an API
+      // key has no user identity to bind to.
+      const auth = requirePrincipal(request);
+      if (auth.kind !== 'user') {
+        throw new ForbiddenError('errors:invitationEmailMismatch');
+      }
+      const params = (request.params as { membership_invitation_id?: string }) ?? {};
+      const invitationId = validatePublicIdParam(
+        params.membership_invitation_id ?? '',
+        'membership_invitation_id',
+      );
+      const data = await membershipService.declineInvitation({
+        invitationPublicId: invitationId,
+        actingUserPublicId: auth.userId,
+      });
+      await recordScopedAuditEvent(request, {
+        actorUserPublicId: auth.userId,
+        action: 'tenancy.membership_invitation.decline',
         resource_type: 'membership_invitation',
         organizationPublicId: data.organization_id,
         metadata: { invitation_public_id: invitationId, membership_public_id: data.membership_id },

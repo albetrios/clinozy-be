@@ -36,12 +36,16 @@ export const MEMBERSHIP_ROLE_IDS_MAX = 10;
 
 /**
  * Why a membership ended (`tenancy.memberships.delete_reason`, launch K2): a manager's removal
- * picks one of the record reasons; leaving records `left`, deleting the account `account_deleted`.
+ * picks one of the record reasons; leaving records `left`, deleting the account `account_deleted`;
+ * the invitee declining records `declined`, and an invite left 7 days past its expiry
+ * `invitation_expired` (launch D84).
  */
 export const MEMBERSHIP_DELETE_REASON = {
   ...RECORD_DELETE_REASON,
   LEFT: 'left',
   ACCOUNT_DELETED: 'account_deleted',
+  DECLINED: 'declined',
+  INVITATION_EXPIRED: 'invitation_expired',
 } as const;
 
 /** Literal union of {@link MEMBERSHIP_DELETE_REASON} values. */

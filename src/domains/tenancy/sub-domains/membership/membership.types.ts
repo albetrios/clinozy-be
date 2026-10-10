@@ -133,7 +133,7 @@ export interface MembershipOutput {
   display_name: string;
   /** When the membership ended; `null` while live. */
   ended_at: string | null;
-  /** Why it ended (`mistake` … `left`, `account_deleted`); `null` while live. */
+  /** Why it ended (`mistake` … `left`, `account_deleted`, `declined`, `invitation_expired`); `null` while live. */
   end_reason: string | null;
   /** The "#12" of the team table — per organization, never reused. */
   staff_number: number;

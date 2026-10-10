@@ -93,6 +93,7 @@ import {
 } from '@/domains/app/sub-domains/stock/stock-item-movements/stock-item-movements.dto.js';
 import { listTasksQueryDto as appTasksListQueryDto } from '@/domains/app/sub-domains/tasks/tasks.dto.js';
 import { listContactsQueryDto } from '@/domains/app/sub-domains/contacts/contacts.dto.js';
+import { listMyMembershipInvitationsQueryDto } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.dto.js';
 import { listLimitQuerySchema } from '@/shared/utils/http/pagination.util.js';
 import { recordDeleteQuerySchema } from '@/shared/utils/validation/record-fields.util.js';
 
@@ -101,6 +102,7 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/users': ListUsersDto,
   'GET /api/v1/billing/invoices': listInvoicesQueryDto,
   'GET /api/v1/users/me/organizations': listOrganizationsQueryDto,
+  'GET /api/v1/users/me/membership-invitations': listMyMembershipInvitationsQueryDto,
   'GET /api/v1/tenancy/organization/audit-logs': ListAuditLogsQueryDto,
   'GET /api/v1/tenancy/organization/api-keys': listOrganizationApiKeysQueryDto,
   'GET /api/v1/tenancy/organization/memberships': listMembershipsQueryDto,

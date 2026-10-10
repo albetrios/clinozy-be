@@ -65,6 +65,7 @@ through a resolver that sees deleted organizations.
 | `tenancy.membership.restore` | `membership` | Removed member restored |
 | `tenancy.membership.transfer_ownership` | `organization` | Ownership transferred — the new owner in `target_user_id` (`WARNING`) |
 | `tenancy.membership_invitation.accept` | `membership_invitation` | Invitation accepted — recorded in the joined organization's log |
+| `tenancy.membership_invitation.decline` | `membership_invitation` | Invitation declined by the invitee — recorded in the inviting organization's log |
 | `tenancy.membership_invitation.resend` | `membership_invitation` | Invitation resent |
 | `tenancy.membership_invitation.revoke` | `membership_invitation` | Invitation revoked |
 | `tenancy.role.create` | `role` | Role created |

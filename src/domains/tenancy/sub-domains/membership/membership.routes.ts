@@ -36,14 +36,16 @@ export interface MembershipRoutesDeps {
  * Fastify plugin that registers the team's routes (launch §2.B, §2.C): the active organization's
  * memberships (list, get, add, change, remove, restore, effective codes), the invited member's
  * invite (revoke, resend — nested under the membership, T9), self-service leave /
- * transfer-ownership, and the invitee-facing `/membership-invitations/:membership_invitation_id/accept`.
- * One code set gates them (T8): `membership:read|create|update|delete`; accepting needs only a
- * signed-in user; every `POST` takes `X-Idempotency-Key` (T13).
+ * transfer-ownership, and the invitee-facing `/membership-invitations/:membership_invitation_id/accept`
+ * and `…/decline` (launch D84). One code set gates them (T8): `membership:read|create|update|delete`;
+ * accepting and declining need only the signed-in owner of the invited, verified email; every
+ * `POST` takes `X-Idempotency-Key` (T13).
  */
 export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync {
   const membershipController = createMembershipController(deps.membershipService);
   const invitationController = createMembershipInvitationController(
     deps.membershipInvitationService,
+    deps.membershipService,
   );
 
   return async (app) => {
@@ -249,13 +251,29 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
         schema: {
           summary: 'Accept invitation',
           description:
-            'Accepts a pending invitation with its token. Requires sign-in with the invited, verified email. Activates the invited membership and returns the invitation with the organization_id just joined.',
+            'Accepts a pending invitation. Requires sign-in with the invited, verified email. The token from the invitation email is optional — without it the signed-in owner of that email accepts in the app (the invitation listed by GET /users/me/membership-invitations); a token that is sent must match. Activates the invited membership and returns the invitation with the organization_id just joined.',
           tags: ['Invitation'],
           params: membershipInvitationIdParamsDto,
           body: acceptMembershipInvitationDto,
         },
       },
       invitationController.acceptMembershipInvitation,
+    );
+    zodApplication.post<{ Params: { membership_invitation_id: string } }>(
+      '/membership-invitations/:membership_invitation_id/decline',
+      {
+        // Launch D84 (3): bound to the invitee's verified email like accept; idempotent (T13).
+        config: { ...STRICT_PUBLIC_RATE_LIMIT.config, idempotencyRequired: true },
+        onRequest: [app.authenticate],
+        schema: {
+          summary: 'Decline invitation',
+          description:
+            'Turns down a pending invitation, expired or not. Requires sign-in with the invited, verified email. Revokes the invitation, ends the invited membership (end_reason declined), which frees its seat, and tells the inviter in the app. Returns the revoked invitation with the organization_id it was for.',
+          tags: ['Invitation'],
+          params: membershipInvitationIdParamsDto,
+        },
+      },
+      invitationController.declineMembershipInvitation,
     );
   };
 }

@@ -55,7 +55,11 @@ import { resolveStoredMediaReadUrl } from '@/shared/utils/infrastructure/media-u
 import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import type { MembershipInvitationService } from './membership-invitation/membership-invitation.service.js';
-import { attachInvitationTokenEcho } from './membership-invitation/membership-invitation.serializer.js';
+import {
+  attachInvitationTokenEcho,
+  serializeMembershipInvitation,
+} from './membership-invitation/membership-invitation.serializer.js';
+import type { MembershipInvitationOutput } from './membership-invitation/membership-invitation.types.js';
 import { invalidatePermissions } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
 import type { OrganizationApiKeyRepository } from '@/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.repository.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
@@ -1318,12 +1322,7 @@ export class MembershipService {
     membership_public_id: string,
   ): Promise<void> {
     const organization_public_id = scope.organizationPublicId;
-    const invitationService = this.membershipInvitationService;
-    if (!invitationService) {
-      throw new ConfigurationError(
-        'MembershipInvitationService must be wired on MembershipService (tenancy.container).',
-      );
-    }
+    const invitationService = this.requireInvitationService();
     let affectedUserInternalId: number | undefined;
     await withAppDatabaseContext(scope, async () => {
       const organization =
@@ -1351,6 +1350,155 @@ export class MembershipService {
     }
     // REQ-4: an invited membership holds a seat, so revoking the invite frees one.
     this.enqueueSeatQuantitySync(organization_public_id);
+  }
+
+  /**
+   * The invitee turns down an invitation (launch D84 (3), ROUTE #174): the invite is revoked, the
+   * invited membership ends (`declined`) through the one leave step, and the inviter is told — in
+   * one transaction in the inviting organization.
+   *
+   * @remarks
+   * - **Algorithm:** the verified invitee and the invitation's organization (the SECURITY DEFINER
+   *   lookup — the invitee is no member there); inside that organization's context the invitation
+   *   is revoked for the invitee's email, the still-`invited` membership ended, and the decline
+   *   notice emitted. After commit: the permission cache and the seat sync (an invited member
+   *   holds a seat).
+   * - **Failure modes:** `NotFoundError` (no invitation, or its membership or organization gone);
+   *   `ForbiddenError` (`invitationRequiresVerifiedEmail`, `invitationEmailMismatch`);
+   *   `ValidationError` `invitation_revoked` / `invitation_already_accepted`.
+   * - **Side effects:** writes `tenancy.membership_invitations`, `tenancy.memberships` and, through
+   *   the leave step, the app's tables; one in-app notification.
+   * - **Notes:** an expired invitation can be declined too — it frees the seat at once.
+   */
+  async declineInvitation(options: {
+    invitationPublicId: string;
+    actingUserPublicId: string;
+  }): Promise<MembershipInvitationOutput & { organization_id: string }> {
+    const invitationService = this.requireInvitationService();
+    const { invitee, lookup } = await invitationService.resolveInviteeAndOrganization(
+      options.invitationPublicId,
+      options.actingUserPublicId,
+    );
+    let affectedUserInternalId: number | undefined;
+    const revoked = await withAppDatabaseContext(
+      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: lookup.organization_public_id }),
+      async () => {
+        const invitation = await invitationService.revokeForInvitee(
+          options.invitationPublicId,
+          invitee.email,
+        );
+        const ended = await this.endInvitedMembershipInContext({
+          organizationId: lookup.organization_id,
+          membershipPublicId: lookup.membership_public_id,
+          reason: MEMBERSHIP_DELETE_REASON.DECLINED,
+        });
+        if (!ended) throw new NotFoundError('Membership invitation');
+        affectedUserInternalId = ended.user_id;
+        await invitationService.notifyDeclined({
+          invitation,
+          organizationId: lookup.organization_id,
+          organizationPublicId: lookup.organization_public_id,
+          inviteeUserId: ended.user_id,
+          inviteeName:
+            [invitee.first_name, invitee.last_name].filter(Boolean).join(' ').trim() ||
+            invitee.email,
+        });
+        return invitation;
+      },
+    );
+    if (affectedUserInternalId !== undefined) {
+      await this.invalidatePermissionsForMembership(
+        affectedUserInternalId,
+        lookup.organization_public_id,
+      );
+    }
+    this.enqueueSeatQuantitySync(lookup.organization_public_id);
+    return {
+      ...serializeMembershipInvitation(revoked, lookup.membership_public_id),
+      organization_id: lookup.organization_public_id,
+    };
+  }
+
+  /**
+   * Ends an invited membership whose invitation expired before `expiredBefore` (launch D84 (4),
+   * ROUTE #175) — the expiry sweep's step for one membership: the invite is revoked and the
+   * membership ends (`invitation_expired`) through the one leave step, freeing its seat.
+   *
+   * @remarks
+   * - **Algorithm:** inside the organization's context (ids the sweep's own scan proved): the
+   *   still-`invited` membership, its latest invitation revoked only while open and that long
+   *   expired, then the leave step. After commit: the permission cache and the seat sync.
+   * - **Failure modes:** none of its own — anything no longer due (accepted, revoked, resent,
+   *   removed) is a `false` skip, so the sweep is safe to run twice.
+   * - **Side effects:** as {@link MembershipService.declineInvitation}, without a notice.
+   */
+  async endExpiredInvitation(options: {
+    organizationPublicId: string;
+    membershipPublicId: string;
+    expiredBefore: Date;
+  }): Promise<boolean> {
+    const invitationService = this.requireInvitationService();
+    const ended = await withAppDatabaseContext(
+      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: options.organizationPublicId }),
+      async () => {
+        const organization = await this.organizationService.findOrganizationByPublicId(
+          options.organizationPublicId,
+        );
+        if (!organization) return null;
+        const membership = await this.membershipRepository.findByPublicId(
+          options.membershipPublicId,
+          organization.id,
+        );
+        if (membership?.status !== MEMBERSHIP_STATUS.INVITED) return null;
+        const revoked = await invitationService.revokeExpiredForMembership(
+          membership.id,
+          options.expiredBefore,
+        );
+        if (!revoked) return null;
+        return this.endInvitedMembershipInContext({
+          organizationId: organization.id,
+          membershipPublicId: options.membershipPublicId,
+          reason: MEMBERSHIP_DELETE_REASON.INVITATION_EXPIRED,
+        });
+      },
+    );
+    if (!ended) return false;
+    await this.invalidatePermissionsForMembership(ended.user_id, options.organizationPublicId);
+    this.enqueueSeatQuantitySync(options.organizationPublicId);
+    return true;
+  }
+
+  /** The wired invitation service; a {@link ConfigurationError} in a harness that left it out. */
+  private requireInvitationService(): MembershipInvitationService {
+    if (!this.membershipInvitationService) {
+      throw new ConfigurationError(
+        'MembershipInvitationService must be wired on MembershipService (tenancy.container).',
+      );
+    }
+    return this.membershipInvitationService;
+  }
+
+  /**
+   * Ends a membership that is still `invited` through the one leave step — the invitee declined
+   * or the invite expired (launch D84). `null` when it is no longer invited (accepted meanwhile,
+   * or already ended). MUST run inside the organization context.
+   */
+  private async endInvitedMembershipInContext(options: {
+    organizationId: number;
+    membershipPublicId: string;
+    reason: MembershipDeleteReason;
+  }): Promise<MembershipRow | null> {
+    const membership = await this.membershipRepository.findByPublicId(
+      options.membershipPublicId,
+      options.organizationId,
+    );
+    if (membership?.status !== MEMBERSHIP_STATUS.INVITED) return null;
+    return this.endMembershipInContext({
+      organizationId: options.organizationId,
+      membershipPublicId: options.membershipPublicId,
+      reason: options.reason,
+      note: null,
+    });
   }
 
   /**

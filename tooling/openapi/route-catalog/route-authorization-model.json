@@ -986,5 +986,9 @@
   "POST /api/v1/app/suppliers/:supplier_id/payments": {
     "model": "organization",
     "verifyNoMutation": true
+  },
+  "POST /api/v1/tenancy/membership-invitations/:membership_invitation_id/decline": {
+    "model": "email",
+    "verifyNoMutation": true
   }
 }

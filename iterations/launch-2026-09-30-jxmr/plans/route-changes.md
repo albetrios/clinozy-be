@@ -409,7 +409,7 @@ that drops them is built. The medical store's routes are §11's — back in the 
 | 11.50 | NEW     | POST   | `/medical-sales/{medical_sale_id}/returns`                             | `payment:create`  | Return from patient — refund, stock back                 | routes-final §11.H.7 | `POST /api/v1/app/medical-sales/{medical_sale_id}/returns` · #153                             |
 | 11.51 | NEW     | GET    | `/medical-payments`                                                    | `medicine:read`   | The store's Payments tab                                 | routes-final §11.H.7 | `GET /api/v1/app/medical-payments` · #153                                                     |
 
-## 12. Frontend integration (D81, D82, D83, ROUTE #154–#171)
+## 12. Frontend integration (D81, D82, D83, D84, ROUTE #154–#176)
 
 Proposed 2026-10-10 from the frontend's per-room research; built and confirmed row by row in `AS-BUILT.md`.
 
@@ -442,6 +442,10 @@ Proposed 2026-10-10 from the frontend's per-room research; built and confirmed r
 | I25 | POST       | `/app/tasks`, `…/{task_id}/reassign`, `…/{task_id}/resolve` (`next`) | CHANGED | a role queue whose role here holds no `task:read` is a `400` `owner_role` (D83 (5), ROUTE #170)                                            |
 | I26 | DELETE     | every record delete                                      | CHANGED | documented only: the OpenAPI document shows the required `reason` and the `note` query (D83 (6), ROUTE #171)                               |
 | I27 | every      | every route behind a permission                          | CHANGED | the route-level `403` carries `reason` `missing_permission`; `docs/routes.txt` names every code a route requires (D83 (6), ROUTE #171)     |
+| I28 | GET        | `/users/me/membership-invitations`                       | NEW     | the signed-in person's pending invitations on their verified email — the clinic (`id`, `name`, `slug`, `logo_url`), `role_names`, `inviter_name`, `expires_at`; none for an unverified email (D84 (1), ROUTE #172) |
+| I29 | POST       | `/tenancy/membership-invitations/{membership_invitation_id}/accept` | CHANGED | `token` optional: the verified, matching email accepts in the app; a sent token must match (D84 (2), ROUTE #173) |
+| I30 | POST       | `/tenancy/membership-invitations/{membership_invitation_id}/decline` | NEW | the invitee declines (expired or not): revoked, the membership ends `declined` (seat freed), the inviter told in the app; the invitation plus `organization_id` (D84 (3), ROUTE #174) |
+| I31 | GET        | `/tenancy/organization/memberships` (ended members)      | CHANGED | `end_reason` gains `declined` and `invitation_expired` — the daily expiry sweep ends an invite 7 days past its expiry (D84 (4), ROUTE #175) |
 
 ## Before → after
 

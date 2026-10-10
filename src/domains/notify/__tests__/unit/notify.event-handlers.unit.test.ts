@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 describe('registerNotifyEventHandlers', () => {
   const WEBHOOK_DELIVERY_REQUESTED = 'notify.webhook_delivery.requested';
   const MEMBERSHIP_INVITATION_ACCEPTED = 'tenancy.membership_invitation.accepted';
+  const MEMBERSHIP_INVITATION_DECLINED = 'tenancy.membership_invitation.declined';
 
   beforeEach(() => {
     vi.resetModules();
@@ -38,13 +39,14 @@ describe('registerNotifyEventHandlers', () => {
     expect(onSpy).toHaveBeenCalledWith(WEBHOOK_DELIVERY_REQUESTED, expect.any(Function));
   });
 
-  it('subscribes the cross-domain membership-invitation-accepted handler', async () => {
-    // The only cross-domain event edge in the codebase — notify consumes a tenancy event.
+  it('subscribes the cross-domain membership-invitation handlers (accepted, declined)', async () => {
+    // The only cross-domain event edge in the codebase — notify consumes tenancy's invitation events.
     const { onSpy, registerNotifyEventHandlers } = await loadWithSpy();
 
     registerNotifyEventHandlers();
 
     expect(onSpy).toHaveBeenCalledWith(MEMBERSHIP_INVITATION_ACCEPTED, expect.any(Function));
+    expect(onSpy).toHaveBeenCalledWith(MEMBERSHIP_INVITATION_DECLINED, expect.any(Function));
   });
 
   it('registers both handlers exactly once when called twice', async () => {

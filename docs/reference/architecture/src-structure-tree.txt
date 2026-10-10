@@ -1480,7 +1480,7 @@ src/
     │   │   │   │   │   ├── events/
     │   │   │   │   │       ├── worker/
     │   │   │   │   │       │   └── notification-retention.worker.unit.test.ts
-    │   │   │   │   │       └── membership-invitation-accepted.event-handlers.unit.test.ts
+    │   │   │   │   │       └── membership-invitation.event-handlers.unit.test.ts
     │   │   │   │   │   ├── notification-dispatch.service.unit.test.ts
     │   │   │   │   │   ├── notification-email-content.unit.test.ts
     │   │   │   │   │   ├── notification-email-idempotency.unit.test.ts
@@ -1497,7 +1497,7 @@ src/
     │   │   │   │   │   ├── notification.validator.unit.test.ts
     │   │   │   │   │   └── notification.worker.unit.test.ts
     │   │   │   ├── events/
-    │   │   │   │   └── membership-invitation-accepted.event-handlers.ts
+    │   │   │   │   └── membership-invitation.event-handlers.ts
     │   │   │   ├── queues/
     │   │   │   │   ├── notification.job.schema.ts
     │   │   │   │   └── notification.queue.ts
@@ -1734,10 +1734,12 @@ src/
     │   │   │   ├── membership-invitation/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   ├── integration/
+    │   │   │   │   │   │   ├── membership-invitation-invitee.integration.test.ts
     │   │   │   │   │   │   └── membership-invitation-token-echo.integration.test.ts
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   ├── events/
     │   │   │   │   │   │       └── membership-invitation.event-handlers.unit.test.ts
+    │   │   │   │   │   │   ├── membership-invitation-expiry.processor.unit.test.ts
     │   │   │   │   │   │   ├── membership-invitation.controller.unit.test.ts
     │   │   │   │   │   │   ├── membership-invitation.repository.db.unit.test.ts
     │   │   │   │   │   │   ├── membership-invitation.serializer.unit.test.ts
@@ -1751,6 +1753,10 @@ src/
     │   │   │   │   │   ├── index.ts
     │   │   │   │   │   ├── membership-invitation.bulk.seed.ts
     │   │   │   │   │   └── membership-invitation.faker.ts
+    │   │   │   │   ├── workers/
+    │   │   │   │   │   ├── membership-invitation-expiry.constants.ts
+    │   │   │   │   │   ├── membership-invitation-expiry.processor.ts
+    │   │   │   │   │   └── membership-invitation-expiry.worker.ts
     │   │   │   │   ├── membership-invitation.controller.ts
     │   │   │   │   ├── membership-invitation.dto.ts
     │   │   │   │   ├── membership-invitation.overview.md

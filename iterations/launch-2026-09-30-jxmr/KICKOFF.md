@@ -135,7 +135,9 @@ organization's settings, #3 a user's presence) stay as built.
 frontend's per-room research found the API should change before the rooms still to move are built on it — each small,
 each with its tests, built through `/be-build-requirement` and recorded in `AS-BUILT.md`. The medical store's changes
 wait (the user's call); so does load testing. Rows #164–#165 came with D82; rows #166–#171 are what the
-role-by-role QA of a clinic with one member per role found and the user decided ([D83](plans/decisions.md), 2026-10-10).
+role-by-role QA of a clinic with one member per role found and the user decided ([D83](plans/decisions.md), 2026-10-10). Rows
+#172–#176 give an invited person who signs in their invitations — read, accept without the link, decline — and free
+an expired invite's seat ([D84](plans/decisions.md), 2026-10-10).
 
 **The medical store is not touched** ([D49](plans/decisions.md), [D52](plans/decisions.md)). Its folders
 (`manufacturers/`, `suppliers/`, `medical-reps/`, `medical-rep-visits/`, `medicines/`, `medical-purchase-orders/`,
@@ -194,6 +196,11 @@ its links working (the invoices' medical lines and links) until the medical stor
 | 169 | **Presets and the review codes** ([D83](plans/decisions.md) (4)) — Doctor `payment:read`, Pharmacist `appointment:read`, Counsellor `payment:update`; review writes on their own codes, granted to every `patient:update` role and Marketing, and by migration to existing roles | sub-domain | #165 | `/be-build-requirement` | the presets as provisioned; the migration; the review routes per role | — | done |
 | 170 | **A task can't wait in a queue nobody can see** ([D83](plans/decisions.md) (5), C6) — a role queue whose role holds no `task:read` is a `400` | sub-domain | #165 | `/be-build-requirement` | create, reassign and a resolve's next refused; tests | — | done |
 | 171 | **Documents** ([D83](plans/decisions.md) (6)) — every code a route requires in the catalogue, the delete query in the OpenAPI document, `reason` on the route-level `403` | docs | #166–#170 | `/be-build-requirement` | `routes:catalog:check`, a query-map guard test, `docs:check`; the route gates green | — | done |
+| 172 | **My invitations** ([D84](plans/decisions.md) (1)) — `GET /users/me/membership-invitations`: the signed-in person's pending invitations on their verified email, each with the clinic, the role names and the inviter | sub-domain | #171 | `/be-build-requirement` | the read (verified, unverified, another email, expired, revoked, accepted, a deleted clinic); the migration; the response map | — | done |
+| 173 | **Accept without the link** ([D84](plans/decisions.md) (2)) — `token` optional on accept for the verified, matching email; a sent token must match | sub-domain | #172 | `/be-build-requirement` | accept with and without the token; a wrong token, another email, an unverified email refused | — | done |
+| 174 | **Decline** ([D84](plans/decisions.md) (3)) — `POST /tenancy/membership-invitations/{membership_invitation_id}/decline`: revoked, the membership ended `declined`, the seat freed, the inviter told | sub-domain | #173 | `/be-build-requirement` | decline (and of an expired one), the seat, the notice, another email refused (the `email` model), decline then accept refused | — | done |
+| 175 | **An expired invite frees its seat** ([D84](plans/decisions.md) (4)) — a cron ends `invited` memberships whose invitation expired more than 7 days ago (`invitation_expired`) | worker | #174 | `/be-build-requirement` | the sweep (due, not yet due, accepted, revoked, already ended), the seat sync, the registry and scheduler gates | — | done |
+| 176 | **Documents** ([D84](plans/decisions.md)) — the routes catalogue, the OpenAPI document, the overviews, the frontend route map | docs | #172–#175 | `/be-build-requirement` | `routes:catalog:check`, `docs:check`, `iteration:frontend-map --check` | — | done |
 
 ### Superseded ledger (the plan of 2026-10-03)
 

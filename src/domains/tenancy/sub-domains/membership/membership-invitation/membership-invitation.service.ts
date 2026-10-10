@@ -10,34 +10,48 @@ import {
   withAppDatabaseContext,
   type OrganizationPrincipalDatabaseScope,
 } from '@/infrastructure/database/contexts/database-context.js';
+import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
 import type { OrganizationRepository } from '@/domains/tenancy/sub-domains/organization/organization.repository.js';
 import type { MembershipRepository } from '@/domains/tenancy/sub-domains/membership/membership.repository.js';
 import type { UserService } from '@/domains/user/user.service.js';
-import type { MembershipInvitationRepository } from './membership-invitation.repository.js';
+import type {
+  MembershipInvitationOrganizationLookupRow,
+  MembershipInvitationRepository,
+} from './membership-invitation.repository.js';
 import type {
   AcceptMembershipInvitationOutput,
   MembershipInvitationOutput,
   MembershipInvitationRow,
+  MyMembershipInvitationOutput,
 } from './membership-invitation.types.js';
 import {
   validateAcceptMembershipInvitation,
+  validateListMyMembershipInvitationsQuery,
   validateResendMembershipInvitation,
 } from './membership-invitation.validator.js';
-import { serializeMembershipInvitation } from './membership-invitation.serializer.js';
+import {
+  serializeMembershipInvitation,
+  serializeMyMembershipInvitation,
+} from './membership-invitation.serializer.js';
+import { resolveStoredMediaReadUrl } from '@/shared/utils/infrastructure/media-url.util.js';
+import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import { hashInvitationToken, generateInvitationToken } from './membership-invitation.token.js';
 import { invalidatePermissions } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import { buildDomainEvent, eventBus } from '@/core/events/event-bus.js';
 import {
   MEMBERSHIP_INVITATION_EVENT,
   type MembershipInvitationEmailPayload,
   type MembershipInvitationAcceptedPayload,
+  type MembershipInvitationDeclinedPayload,
 } from '@/domains/tenancy/sub-domains/membership/membership-invitation/events/membership-invitation.events.js';
 
 const MEMBERSHIP_INVITATION_RESOURCE = 'Membership invitation';
 
-function assertInvitationAcceptable(row: MembershipInvitationRow, now: Date): void {
+/** An invitation still open — neither revoked nor accepted (resend and decline, expired or not). */
+function assertInvitationOpen(row: MembershipInvitationRow): void {
   if (row.revoked_at) {
     throw new ValidationError('errors:validation.invitationRevoked', undefined, {}).withReason(
       'invitation_revoked',
@@ -50,6 +64,10 @@ function assertInvitationAcceptable(row: MembershipInvitationRow, now: Date): vo
       {},
     ).withReason('invitation_already_accepted');
   }
+}
+
+function assertInvitationAcceptable(row: MembershipInvitationRow, now: Date): void {
+  assertInvitationOpen(row);
   if (now > row.expires_at) {
     throw new ValidationError('errors:validation.invitationExpired', undefined, {}).withReason(
       'invitation_expired',
@@ -152,7 +170,103 @@ export class MembershipInvitationService {
     private readonly membershipRepository: MembershipRepository,
     private readonly invitationRepository: MembershipInvitationRepository,
     private readonly userService?: UserService,
+    private readonly objectStorage?: ObjectStoragePort,
   ) {}
+
+  /** The signed-in person's user record. `NotFoundError('User')` when the login is gone. */
+  private async requireActingUser(actingUserPublicId: string) {
+    if (!this.userService) {
+      throw new Error(
+        'UserService is not configured on MembershipInvitationService. Wire it via tenancy.container.',
+      );
+    }
+    const actingUser = await this.userService.requireUserRecordByPublicId(actingUserPublicId);
+    if (!actingUser) throw new NotFoundError('User');
+    return actingUser;
+  }
+
+  /**
+   * The signed-in person behind an invitee-facing call (accept, decline): their user record, with
+   * a **verified** email. email-code / OAuth sign-in proves control of the email; an
+   * email/password claim of a pre-provisioned invited account stays unverified until the emailed
+   * code is entered — without this, someone merely FORWARDED the invite email could claim the
+   * invited address and act on it (sec-T4 follow-up).
+   *
+   * @remarks
+   * - **Failure modes:** `NotFoundError('User')`; `ForbiddenError('errors:invitationRequiresVerifiedEmail')`.
+   */
+  private async requireVerifiedInvitee(actingUserPublicId: string) {
+    const actingUser = await this.requireActingUser(actingUserPublicId);
+    if (!actingUser.is_email_verified) {
+      throw new ForbiddenError('errors:invitationRequiresVerifiedEmail');
+    }
+    return actingUser;
+  }
+
+  /**
+   * The verified invitee and the invitation's organization, for an invitee-facing call — the
+   * organization through the SECURITY DEFINER lookup, since the invitee's token carries none yet.
+   *
+   * @remarks
+   * - **Failure modes:** those of {@link MembershipInvitationService.requireVerifiedInvitee};
+   *   `NotFoundError` when the invitation, its membership or its organization is gone.
+   */
+  async resolveInviteeAndOrganization(
+    invitation_public_id: string,
+    actingUserPublicId: string,
+  ): Promise<{
+    invitee: { email: string; first_name: string | null; last_name: string | null };
+    lookup: MembershipInvitationOrganizationLookupRow;
+  }> {
+    const invitee = await this.requireVerifiedInvitee(actingUserPublicId);
+    const lookup =
+      await this.invitationRepository.lookupOrganizationByInvitationPublicId(invitation_public_id);
+    if (!lookup) throw new NotFoundError(MEMBERSHIP_INVITATION_RESOURCE);
+    return { invitee, lookup };
+  }
+
+  /**
+   * The signed-in person's pending invitations (launch D84 (1), ROUTE #172) — matched on their
+   * verified email across organizations, oldest first, each with the clinic, the roles and the
+   * inviter.
+   *
+   * @remarks
+   * - **Algorithm:** the caller's user record; an unverified email reads none (nothing leaks to
+   *   someone who has not proved the address); otherwise one keyset page of the SECURITY DEFINER
+   *   read, each clinic logo presigned.
+   * - **Failure modes:** `ValidationError` for a bad query; `NotFoundError('User')`.
+   */
+  async listMine(
+    query: unknown,
+    actingUserPublicId: string,
+  ): Promise<{
+    items: MyMembershipInvitationOutput[];
+    limit: number;
+    has_more: boolean;
+    next_cursor: string | null;
+  }> {
+    const parsed = validateListMyMembershipInvitationsQuery(query);
+    const actingUser = await this.requireActingUser(actingUserPublicId);
+    if (!actingUser.is_email_verified) {
+      return { items: [], limit: parsed.limit, has_more: false, next_cursor: null };
+    }
+    const page = await this.invitationRepository.listPendingForEmail(
+      actingUser.email.toLowerCase(),
+      omitUndefined({ after: parsed.after, limit: parsed.limit }),
+    );
+    const objectStorage = this.objectStorage;
+    const items = await Promise.all(
+      page.items.map(async (row) =>
+        serializeMyMembershipInvitation(
+          row,
+          objectStorage
+            ? await resolveStoredMediaReadUrl(objectStorage, row.organization_logo_url)
+            : null,
+        ),
+      ),
+    );
+    return { ...page, items };
+  }
 
   /**
    * Issues an invitation (token + email) for an already-created `INVITED` membership — the invitation
@@ -219,31 +333,19 @@ export class MembershipInvitationService {
     const parsed = validateAcceptMembershipInvitation(body);
     // sec-T4: previously accept was unauthenticated, so anyone with the
     // invitation URL could flip the victim's pending membership to ACTIVE.
-    // Bind the acting user's email to the invitee email so a forwarded
-    // invitation link cannot be accepted by anyone but the invitee.
-    if (!this.userService) {
-      throw new Error(
-        'UserService is not configured on MembershipInvitationService. Wire it via tenancy.container.',
-      );
-    }
-    const actingUser = await this.userService.requireUserRecordByPublicId(actingUserPublicId);
-    if (!actingUser) throw new NotFoundError('User');
-    // sec-T4 follow-up: require a VERIFIED email to join an organization. email-code / OAuth onboarding prove
-    // email control (and set is_email_verified); an email/password signup-claim of a pre-provisioned
-    // invited account stays unverified until the emailed code is entered. Without this, someone merely
-    // FORWARDED the invite email could claim the invited address via password signup and accept —
-    // re-opening exactly the takeover the email-match check (below) was added to close.
-    if (!actingUser.is_email_verified) {
-      throw new ForbiddenError('errors:invitationRequiresVerifiedEmail');
-    }
+    // Bind the acting user's VERIFIED email to the invitee email so a forwarded
+    // invitation link cannot be accepted by anyone but the invitee. That binding is also what
+    // lets the invitee accept in the app without the link (launch D84 (2)): signing in with the
+    // invited, verified email proves what holding the emailed token proves.
     /**
      * Public route: no organization context up front. Resolve the owning organization via the
      * SECURITY DEFINER lookup, then wrap the read + UPDATE in
      * `withAppDatabaseContext` so RLS sees the organization GUC.
      */
-    const lookup =
-      await this.invitationRepository.lookupOrganizationByInvitationPublicId(invitation_public_id);
-    if (!lookup) throw new NotFoundError(MEMBERSHIP_INVITATION_RESOURCE);
+    const { invitee: actingUser, lookup } = await this.resolveInviteeAndOrganization(
+      invitation_public_id,
+      actingUserPublicId,
+    );
     let acceptedMemberPublicId: string | null = null;
     const result = await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: lookup.organization_public_id }),
@@ -253,7 +355,7 @@ export class MembershipInvitationService {
         if (row.email.toLowerCase() !== actingUser.email.toLowerCase()) {
           throw new ForbiddenError('errors:invitationEmailMismatch');
         }
-        const tokenHash = hashInvitationToken(parsed.token);
+        const tokenHash = parsed.token === undefined ? null : hashInvitationToken(parsed.token);
         const now = new Date();
         assertInvitationAcceptable(row, now);
         const updated = await this.invitationRepository.accept(
@@ -347,6 +449,113 @@ export class MembershipInvitationService {
   }
 
   /**
+   * The invitation half of an invitee declining (launch D84 (3), ROUTE #174) — the signed-in
+   * owner of the invited email turns down an open invitation, expired or not;
+   * `MembershipService.declineInvitation` ends the invited membership in the same transaction.
+   *
+   * @remarks
+   * - **Algorithm:** the invitation; the invitee's email must match it; it must still be open;
+   *   then revoked (one-shot: a concurrent accept wins and this refuses).
+   * - **Failure modes:** `NotFoundError`; `ForbiddenError('errors:invitationEmailMismatch')`;
+   *   `ValidationError` `invitation_revoked` / `invitation_already_accepted`.
+   * - **Notes:** MUST run inside the invitation's organization context.
+   */
+  async revokeForInvitee(
+    invitation_public_id: string,
+    inviteeEmail: string,
+  ): Promise<MembershipInvitationRow> {
+    const row = await this.invitationRepository.findByPublicId(invitation_public_id);
+    if (!row) throw new NotFoundError(MEMBERSHIP_INVITATION_RESOURCE);
+    if (row.email.toLowerCase() !== inviteeEmail.toLowerCase()) {
+      throw new ForbiddenError('errors:invitationEmailMismatch');
+    }
+    assertInvitationOpen(row);
+    const revoked = await this.invitationRepository.revoke(invitation_public_id);
+    if (!revoked) {
+      throw new ValidationError(
+        'errors:validation.invitationAlreadyAccepted',
+        undefined,
+        {},
+      ).withReason('invitation_already_accepted');
+    }
+    return revoked;
+  }
+
+  /**
+   * The invitation half of the expiry sweep (launch D84 (4), ROUTE #175): revokes a membership's
+   * latest invitation when it is still open and expired before `expiredBefore`;
+   * `MembershipService.endExpiredInvitation` ends the invited membership in the same transaction.
+   *
+   * @remarks
+   * - **Algorithm:** the latest invitation; nothing to do (none, accepted, revoked, or not that
+   *   long expired — a resend pushed it) → `null`. The revoke re-checks the expiry, so a resend
+   *   racing the sweep keeps its invitation.
+   * - **Notes:** MUST run inside the organization context.
+   */
+  async revokeExpiredForMembership(
+    membership_id: number,
+    expiredBefore: Date,
+  ): Promise<MembershipInvitationRow | null> {
+    const latest = await this.invitationRepository.findLatestByMembershipId(membership_id);
+    if (!latest || latest.accepted_at || latest.revoked_at || latest.expires_at >= expiredBefore) {
+      return null;
+    }
+    return this.invitationRepository.revoke(latest.public_id, { expiredBefore });
+  }
+
+  /**
+   * Tells the inviter that the invitee declined (launch D84 (3)) — in the app
+   * (`membership.invite_declined`) — or, when the inviter is no longer an active member here, the
+   * members who can add members (`membership:create`), minus the invitee.
+   *
+   * @remarks
+   * - **Algorithm:** recipients resolved here, inside the organization context, so the notify
+   *   handler only fans out; emitted with `emit` (handler errors swallowed).
+   * - **Failure modes:** none escape — a failure is logged and the decline stands.
+   * - **Notes:** MUST run inside the organization context.
+   */
+  async notifyDeclined(options: {
+    invitation: MembershipInvitationRow;
+    organizationId: number;
+    organizationPublicId: string;
+    inviteeUserId: number;
+    inviteeName: string;
+  }): Promise<void> {
+    try {
+      const inviter = await this.membershipRepository.findByUserAndOrganization(
+        options.invitation.invited_by_user_id,
+        options.organizationId,
+      );
+      const recipientUserIds =
+        inviter?.status === MEMBERSHIP_STATUS.ACTIVE
+          ? [inviter.user_id]
+          : (
+              await this.membershipRepository.findUserIdsWithPermission(
+                options.organizationId,
+                TENANCY_PERMISSIONS.MEMBERSHIP_CREATE,
+              )
+            ).filter((userId) => userId !== options.inviteeUserId);
+      if (recipientUserIds.length === 0) return;
+      const organization = await this.organizationRepository.findByPublicId(
+        options.organizationPublicId,
+      );
+      await eventBus.emit(
+        buildDomainEvent(MEMBERSHIP_INVITATION_EVENT.DECLINED, {
+          recipient_user_ids: recipientUserIds,
+          organization_id: options.organizationId,
+          organization_name: organization?.name ?? '',
+          invitee_name: options.inviteeName,
+        } satisfies MembershipInvitationDeclinedPayload),
+      );
+    } catch (error) {
+      logger.error(
+        { err: error, invitationPublicId: options.invitation.public_id },
+        'membership_invitation.decline.notify_failed',
+      );
+    }
+  }
+
+  /**
    * Resends a member's invite with a new token and expiry (launch §2.C route 10). An expired invite
    * can be resent (T11); an accepted or revoked one cannot.
    *
@@ -377,18 +586,7 @@ export class MembershipInvitationService {
       if (!membership) throw new NotFoundError('Membership');
       const row = await this.invitationRepository.findLatestByMembershipId(membership.id);
       if (!row) throw new NotFoundError(MEMBERSHIP_INVITATION_RESOURCE);
-      if (row.accepted_at) {
-        throw new ValidationError(
-          'errors:validation.invitationAlreadyAccepted',
-          undefined,
-          {},
-        ).withReason('invitation_already_accepted');
-      }
-      if (row.revoked_at) {
-        throw new ValidationError('errors:validation.invitationRevoked', undefined, {}).withReason(
-          'invitation_revoked',
-        );
-      }
+      assertInvitationOpen(row);
       // T11: an expired invite gets a new token and a new expiry like any other.
       const token = generateInvitationToken();
       const expiresAt = new Date();

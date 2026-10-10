@@ -1,5 +1,9 @@
 import type { MembershipInvitationRef } from '@/domains/tenancy/sub-domains/membership/membership.types.js';
-import type { MembershipInvitationOutput } from './membership-invitation.types.js';
+import type {
+  MembershipInvitationOutput,
+  MyMembershipInvitationOutput,
+  PendingInvitationForEmailRow,
+} from './membership-invitation.types.js';
 
 /**
  * Shapes a `membership_invitations` row into the HTTP response form. Substitutes
@@ -25,6 +29,30 @@ export function serializeMembershipInvitation(
     expires_at: row.expires_at.toISOString(),
     accepted_at: row.accepted_at?.toISOString() ?? null,
     revoked_at: row.revoked_at?.toISOString() ?? null,
+    created_at: row.created_at.toISOString(),
+  };
+}
+
+/**
+ * Shapes one of the signed-in person's pending invitations (launch D84 (1)) for
+ * `GET /users/me/membership-invitations` — public ids only, timestamps ISO-8601, the clinic logo
+ * as the read URL the caller resolved (`null` when there is none).
+ */
+export function serializeMyMembershipInvitation(
+  row: PendingInvitationForEmailRow,
+  logo_url: string | null,
+): MyMembershipInvitationOutput {
+  return {
+    id: row.invitation_public_id,
+    organization: {
+      id: row.organization_public_id,
+      name: row.organization_name,
+      slug: row.organization_slug,
+      logo_url,
+    },
+    role_names: row.role_names,
+    inviter_name: row.inviter_name,
+    expires_at: row.expires_at.toISOString(),
     created_at: row.created_at.toISOString(),
   };
 }

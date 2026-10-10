@@ -213,7 +213,17 @@ export const membershipSchema = {
     end_reason: {
       type: 'string',
       nullable: true,
-      enum: ['mistake', 'duplicate', 'not_needed', 'other', 'left', 'account_deleted', null],
+      enum: [
+        'mistake',
+        'duplicate',
+        'not_needed',
+        'other',
+        'left',
+        'account_deleted',
+        'declined',
+        'invitation_expired',
+        null,
+      ],
       description: 'Why the membership ended; null while live.',
     },
     // Live (pending) invitation reference — present only on invited rows so the frontend can
@@ -311,6 +321,54 @@ export const invitationExample = {
   expires_at: '2026-02-21T10:30:00.000Z',
   accepted_at: null,
   revoked_at: null,
+  created_at: '2026-02-14T10:30:00.000Z',
+};
+
+/** `GET /users/me/membership-invitations` item — one of the caller's pending invitations (launch D84). */
+export const myInvitationSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', description: 'The invitation — accept or decline it by this id.' },
+    organization: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        slug: { type: 'string', nullable: true },
+        logo_url: {
+          type: 'string',
+          nullable: true,
+          description: 'A short-lived read URL of the organization logo; null without one.',
+        },
+      },
+    },
+    role_names: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'The roles the invited membership holds — the main role first.',
+    },
+    inviter_name: {
+      type: 'string',
+      nullable: true,
+      description:
+        'Who invited the caller — their name in that organization, else their profile name; null when neither is known.',
+    },
+    expires_at: { type: 'string', format: 'date-time' },
+    created_at: { type: 'string', format: 'date-time' },
+  },
+};
+
+export const myInvitationExample = {
+  id: 'inv_r4t6m3n7p2q8w5k1a1b2c',
+  organization: {
+    id: 'org_k7x9m2pqr4w8n1v3a1b2c',
+    name: 'Skin Studio Adajan',
+    slug: 'skin-studio-adajan',
+    logo_url: null,
+  },
+  role_names: ['Doctor', 'Counsellor'],
+  inviter_name: 'Nikunj Mavani',
+  expires_at: '2026-02-21T10:30:00.000Z',
   created_at: '2026-02-14T10:30:00.000Z',
 };
 

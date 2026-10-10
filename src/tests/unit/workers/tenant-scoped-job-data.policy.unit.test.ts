@@ -37,6 +37,10 @@ const TENANT_SCOPING_EXEMPT_QUEUE_NAME_PATTERNS = [
   // in the global-retention context (launch D77); the per-organization jobs it adds carry
   // organizationPublicId.
   /contact-messaging-sweep/i,
+  // Launch D84: the invitation expiry sweep reads every organization's long-expired invites in the
+  // global-retention context, then ends each in that organization's own context — no per-job
+  // tenant payload.
+  /membership-invitation-expiry/i,
 ] as const;
 
 function collectWorkerFiles(directory: string, collected: string[] = []): string[] {

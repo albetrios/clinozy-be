@@ -24,6 +24,7 @@ import { USER_OFFBOARDING_RECONCILE_QUEUE_NAME } from '@/domains/user/workers/us
 import { ORGANIZATION_OFFBOARDING_RECONCILE_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/workers/organization-offboarding-reconcile.constants.js';
 import { ORGANIZATION_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/workers/organization-tombstone-retention.constants.js';
 import { MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/membership/workers/membership-tombstone-retention.constants.js';
+import { MEMBERSHIP_INVITATION_EXPIRY_QUEUE_NAME } from '@/domains/tenancy/sub-domains/membership/membership-invitation/workers/membership-invitation-expiry.constants.js';
 import { APP_RECORD_PURGE_QUEUE_NAME } from '@/domains/app/workers/app-record-purge.constants.js';
 import { DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/billing/day-closes/workers/day-close-auto-close.constants.js';
 import { TASK_RULES_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/tasks/workers/task-rules.constants.js';
@@ -93,6 +94,8 @@ const DEFAULT_WEBHOOK_TOMBSTONE_RETENTION_CRON = '47 5 * * *';
 const DEFAULT_WEBHOOK_DELIVERY_ATTEMPT_RETENTION_CRON = '40 3 * * *';
 const DEFAULT_ORGANIZATION_NOTIFICATION_POLICY_TOMBSTONE_RETENTION_CRON = '48 5 * * *';
 const DEFAULT_MEMBERSHIP_TOMBSTONE_RETENTION_CRON = '50 5 * * *';
+/** Daily: invited memberships whose invite expired more than 7 days ago free their seat (launch D84). */
+const DEFAULT_MEMBERSHIP_INVITATION_EXPIRY_CRON = '10 4 * * *';
 /** Daily erase of deleted app records past each organization's restore window (WC-46, D38). */
 const DEFAULT_APP_RECORD_PURGE_CRON = '56 5 * * *';
 /** Hourly: a day closes itself within the hour after the day following it ends, in any time zone (WC-39). */
@@ -173,6 +176,12 @@ function getTombstoneRetentionScheduledJobs(timezone: string | undefined): Sched
       jobName: 'purge-old-deleted-memberships',
       cronPattern:
         env.MEMBERSHIP_TOMBSTONE_RETENTION_CRON ?? DEFAULT_MEMBERSHIP_TOMBSTONE_RETENTION_CRON,
+    }),
+    withSchedulerTimezone(timezone, {
+      queueName: MEMBERSHIP_INVITATION_EXPIRY_QUEUE_NAME,
+      schedulerId: 'daily-membership-invitation-expiry',
+      jobName: 'end-long-expired-membership-invitations',
+      cronPattern: DEFAULT_MEMBERSHIP_INVITATION_EXPIRY_CRON,
     }),
     withSchedulerTimezone(timezone, {
       queueName: APP_RECORD_PURGE_QUEUE_NAME,

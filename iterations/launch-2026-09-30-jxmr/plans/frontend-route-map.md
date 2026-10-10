@@ -51,6 +51,7 @@ Paths below drop `/api/v1`. "→ §n" points at the route review section that ex
 | `contactCard` | `GET /app/contacts/:contact_id/preview` | the hover card |
 | `updatePreference` | `PATCH /app/memberships/me/preferences` | `pinned_sections`, `theme`, `branch_ids`, `patient_file_pins`, `recent_picks`; one row per membership |
 | `setPresence` | `PUT /users/me/presence` | |
+| my invitations (not a design operation — D84) | `GET /users/me/membership-invitations` · `POST /tenancy/membership-invitations/:membership_invitation_id/accept` (body `{}` — no token needed) · `…/decline` | after any sign-in, before onboarding or the picker: an invitee with no clinic sees their invitations instead of "create a clinic"; one already in a clinic sees an "Invited" row and badge in the picker and switcher; accept → `POST /auth/switch-to-organization` with the answer's `organization_id`; decline ends the invite and tells the inviter; `end_reason` `declined` / `invitation_expired` on ended members |
 
 ### Today
 
@@ -209,7 +210,7 @@ webhooks, subscription billing). Section 3 lists them all.
 
 <!-- GENERATED:START -->
 
-440 routes, 306 of them the clinic's under `/api/v1/app`, from `docs/routes.txt`.
+442 routes, 306 of them the clinic's under `/api/v1/app`, from `docs/routes.txt`.
 Paths drop `/api/v1`; the health and operations routes in the last module sit outside it.
 **Gate**: a permission code, `signed in`, `public`, `platform admin` or a token. **Idem** `req`:
 `X-Idempotency-Key` required. **Team** `team`: team organizations only (`422` on a personal one).
@@ -218,8 +219,8 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 
 | Module | Routes |
 | --- | --- |
-| [Session and account](#session-and-account) | 47 |
-| [Organization and team](#organization-and-team) | 51 |
+| [Session and account](#session-and-account) | 48 |
+| [Organization and team](#organization-and-team) | 52 |
 | [Branches and places](#branches-and-places) | 25 |
 | [Offerings](#offerings) | 19 |
 | [Contacts and messaging](#contacts-and-messaging) | 25 |
@@ -279,6 +280,7 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 | DELETE | `/users/me/avatar` | signed in |  |  |  | Remove avatar |
 | POST | `/users/me/data-export` | signed in |  |  |  | Request GDPR data export |
 | GET | `/users/me/data-export/:data_export_id` | signed in |  |  |  | Get GDPR data export status |
+| GET | `/users/me/membership-invitations` | signed in |  |  |  | List my invitations |
 | GET | `/users/me/notification-preferences` | signed in |  |  |  | Get my notification preferences |
 | PUT | `/users/me/notification-preferences` | signed in |  |  |  | Replace notification preferences |
 | POST | `/users/me/onboarding/complete` | signed in |  |  |  | Mark onboarding complete |
@@ -301,6 +303,7 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 | DELETE | `/app/memberships/me/saved-views/:membership_saved_view_id` | `organization:read` |  |  | 2.27 | Remove my saved view |
 | GET | `/app/roles` | `organization:read` |  |  |  | List roles (directory) |
 | POST | `/tenancy/membership-invitations/:membership_invitation_id/accept` | signed in | req |  | 2.11 | Accept invitation |
+| POST | `/tenancy/membership-invitations/:membership_invitation_id/decline` | signed in | req |  |  | Decline invitation |
 | GET | `/tenancy/organization` | signed in |  |  |  | Get active organization |
 | PATCH | `/tenancy/organization` | `organization:update` |  |  |  | Update organization |
 | DELETE | `/tenancy/organization` | `organization:delete` |  | team |  | Delete organization |

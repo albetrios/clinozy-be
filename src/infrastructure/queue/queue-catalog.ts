@@ -23,6 +23,7 @@ import { ORGANIZATION_NOTIFICATION_POLICY_TOMBSTONE_RETENTION_QUEUE_NAME } from 
 import { USER_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/user/workers/user-tombstone-retention.constants.js';
 import { ORGANIZATION_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/workers/organization-tombstone-retention.constants.js';
 import { MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/membership/workers/membership-tombstone-retention.constants.js';
+import { MEMBERSHIP_INVITATION_EXPIRY_QUEUE_NAME } from '@/domains/tenancy/sub-domains/membership/membership-invitation/workers/membership-invitation-expiry.constants.js';
 import { APP_RECORD_PURGE_QUEUE_NAME } from '@/domains/app/workers/app-record-purge.constants.js';
 import { DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/billing/day-closes/workers/day-close-auto-close.constants.js';
 import { DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME } from '@/domains/app/sub-domains/billing/day-closes/queues/day-close-auto-close.queue.js';
@@ -84,6 +85,7 @@ export const WORKER_QUEUE_NAMES = [
   USER_TOMBSTONE_RETENTION_QUEUE_NAME,
   ORGANIZATION_TOMBSTONE_RETENTION_QUEUE_NAME,
   MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME,
+  MEMBERSHIP_INVITATION_EXPIRY_QUEUE_NAME,
   APP_RECORD_PURGE_QUEUE_NAME,
   DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME,
   DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME,

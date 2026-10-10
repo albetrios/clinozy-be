@@ -15,8 +15,9 @@ vi.mock('@/domains/notify/sub-domains/notification/notification-unread-count.cac
     invalidateUnreadCountsMock(...arguments_),
 }));
 
-describe('membership-invitation-accepted notification handler (item #10)', () => {
+describe('membership-invitation notification handlers (item #10, launch D84)', () => {
   let emitAccepted: (payload: unknown) => Promise<void>;
+  let emitDeclined: (payload: unknown) => Promise<void>;
 
   beforeAll(async () => {
     // One cold import + handler registration for the file — avoids per-test
@@ -25,13 +26,20 @@ describe('membership-invitation-accepted notification handler (item #10)', () =>
     const { MEMBERSHIP_INVITATION_EVENT } = await import(
       '@/domains/tenancy/sub-domains/membership/membership-invitation/events/membership-invitation.events.js'
     );
-    const { registerMembershipInvitationAcceptedNotificationHandlers } = await import(
-      '@/domains/notify/sub-domains/notification/events/membership-invitation-accepted.event-handlers.js'
+    const { registerMembershipInvitationNotificationHandlers } = await import(
+      '@/domains/notify/sub-domains/notification/events/membership-invitation.event-handlers.js'
     );
-    registerMembershipInvitationAcceptedNotificationHandlers();
+    registerMembershipInvitationNotificationHandlers();
     emitAccepted = async (payload: unknown) => {
       await eventBus.emit({
         type: MEMBERSHIP_INVITATION_EVENT.ACCEPTED,
+        payload,
+        timestamp: new Date(),
+      });
+    };
+    emitDeclined = async (payload: unknown) => {
+      await eventBus.emit({
+        type: MEMBERSHIP_INVITATION_EVENT.DECLINED,
         payload,
         timestamp: new Date(),
       });
@@ -70,6 +78,30 @@ describe('membership-invitation-accepted notification handler (item #10)', () =>
     expect(createAndDispatchNotificationMock).toHaveBeenCalledWith(
       expect.objectContaining({ user_id: 22 }),
     );
+  });
+
+  it('tells the inviter in the app only when an invitation is declined (D84)', async () => {
+    resolveRecipientPublicIdsMock.mockResolvedValue(['usr_inviter']);
+
+    await emitDeclined({
+      recipient_user_ids: [11],
+      organization_id: 7,
+      organization_name: 'Acme',
+      invitee_name: 'Dana Scully',
+    });
+
+    expect(createAndDispatchNotificationMock).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        user_id: 11,
+        organization_id: 7,
+        type: 'membership.invite_declined',
+        title: 'Invitation declined',
+        message: 'Dana Scully declined your invitation to join Acme.',
+        action_url: '/settings/members',
+        data: { channels: ['in_app'] },
+      }),
+    );
+    expect(invalidateUnreadCountsMock).toHaveBeenCalledWith(['usr_inviter']);
   });
 
   it('one failed dispatch does not drop the rest and never throws out of the handler', async () => {

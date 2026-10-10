@@ -125,11 +125,11 @@ auth/sub-domains/auth-method/events/*.ts  →  recordOutboxEmail() + onCommit(di
 auth/events/index.ts  →  registerAuthEventHandlers()
 ```
 
-**Notify — in-app notification** (invitation accepted)
+**Notify — in-app notification** (invitation accepted or declined)
 
 ```text
-membership-invitation.service  →  eventBus.emit(tenancy.membership_invitation.accepted)
-notify/sub-domains/notification/events/membership-invitation-accepted.event-handlers.ts  →  notification row + enqueue
+membership-invitation.service  →  eventBus.emit(tenancy.membership_invitation.accepted | .declined)
+notify/sub-domains/notification/events/membership-invitation.event-handlers.ts  →  notification row + enqueue
 ```
 
 Billing emits no domain events today (`billing.overview.md`).

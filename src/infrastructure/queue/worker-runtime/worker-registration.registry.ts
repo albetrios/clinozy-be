@@ -35,6 +35,8 @@ import { createOrganizationTombstoneRetentionWorker } from '@/domains/tenancy/su
 import { ORGANIZATION_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/workers/organization-tombstone-retention.constants.js';
 import { createMembershipTombstoneRetentionWorker } from '@/domains/tenancy/sub-domains/membership/workers/membership-tombstone-retention.worker.js';
 import { MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/membership/workers/membership-tombstone-retention.constants.js';
+import { MEMBERSHIP_INVITATION_EXPIRY_QUEUE_NAME } from '@/domains/tenancy/sub-domains/membership/membership-invitation/workers/membership-invitation-expiry.constants.js';
+import { createMembershipInvitationExpiryWorker } from '@/domains/tenancy/sub-domains/membership/membership-invitation/workers/membership-invitation-expiry.worker.js';
 import { createAppRecordPurgeWorker } from '@/domains/app/workers/app-record-purge.worker.js';
 import { createDayCloseAutoCloseSweepWorker } from '@/domains/app/sub-domains/billing/day-closes/workers/day-close-auto-close-sweep.worker.js';
 import { createDayCloseAutoCloseWorker } from '@/domains/app/sub-domains/billing/day-closes/workers/day-close-auto-close.worker.js';
@@ -393,6 +395,13 @@ const WORKER_QUEUE_REGISTRATION_DEFINITIONS: WorkerQueueRegistrationDefinition[]
     family: 'retention',
     logLabel: 'membership tombstone retention worker',
     create: () => createMembershipTombstoneRetentionWorker(),
+  }),
+  retentionDefinition({
+    queueName: MEMBERSHIP_INVITATION_EXPIRY_QUEUE_NAME,
+    family: 'retention',
+    logLabel: 'membership invitation expiry worker',
+    create: (workerContainers) =>
+      createMembershipInvitationExpiryWorker(workerContainers.tenancyDomain.membershipService),
   }),
   retentionDefinition({
     queueName: APP_RECORD_PURGE_QUEUE_NAME,

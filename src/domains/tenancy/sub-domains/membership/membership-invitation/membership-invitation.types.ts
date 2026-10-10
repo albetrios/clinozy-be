@@ -46,3 +46,43 @@ export interface MembershipInvitationOutput {
 export interface AcceptMembershipInvitationOutput extends MembershipInvitationOutput {
   organization_id: string;
 }
+
+/**
+ * One of the signed-in person's pending invitations, as the cross-organization SECURITY DEFINER
+ * read `tenancy.list_pending_membership_invitations_for_email` answers it (launch D84 (1)) —
+ * internal ids included, for the cursor; never serialized as is.
+ */
+export interface PendingInvitationForEmailRow {
+  invitation_id: number;
+  invitation_public_id: string;
+  organization_public_id: string;
+  organization_name: string;
+  organization_slug: string | null;
+  /** The stored logo — an object-storage key or an absolute URL; presigned before it leaves. */
+  organization_logo_url: string | null;
+  membership_public_id: string;
+  role_names: string[];
+  inviter_name: string | null;
+  expires_at: Date;
+  created_at: Date;
+}
+
+/**
+ * `GET /users/me/membership-invitations` item (launch D84 (1), ROUTE #172): what the invitee is
+ * shown before accepting or declining — the clinic, the roles they would hold and who invited them.
+ */
+export interface MyMembershipInvitationOutput {
+  id: string;
+  organization: {
+    id: string;
+    name: string;
+    slug: string | null;
+    logo_url: string | null;
+  };
+  /** The roles the membership holds — the main role first, then the additional ones in order. */
+  role_names: string[];
+  /** The inviter's name in that organization (else their profile name); `null` when neither is known. */
+  inviter_name: string | null;
+  expires_at: string;
+  created_at: string;
+}

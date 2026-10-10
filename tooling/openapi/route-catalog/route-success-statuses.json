@@ -438,5 +438,7 @@
   "POST /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id/restore": 200,
   "POST /api/v1/app/medical-sales/:medical_sale_id/returns": 200,
   "POST /api/v1/app/medicines/near-expiry-discount": 200,
-  "POST /api/v1/app/suppliers/:supplier_id/payments": 200
+  "POST /api/v1/app/suppliers/:supplier_id/payments": 200,
+  "POST /api/v1/tenancy/membership-invitations/:membership_invitation_id/decline": 200,
+  "GET /api/v1/users/me/membership-invitations": 200
 }

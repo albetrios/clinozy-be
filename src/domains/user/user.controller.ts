@@ -8,6 +8,7 @@ import {
 import { validatePublicIdParam } from '@/shared/utils/identity/public-id-param.util.js';
 import { recordScopedAuditEvent } from '@/shared/utils/infrastructure/audit-request-context.util.js';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
+import type { MembershipInvitationService } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.service.js';
 import type { UserContainer } from './user.container.js';
 
 type AdminUserAuditAction =
@@ -46,10 +47,14 @@ export function createUserController({
   userSettingsService,
   userNotificationPreferencesService,
   organizationService,
+  membershipInvitationService,
 }: Pick<
   UserContainer,
   'userService' | 'userSettingsService' | 'userNotificationPreferencesService'
-> & { organizationService?: OrganizationService }) {
+> & {
+  organizationService?: OrganizationService;
+  membershipInvitationService?: MembershipInvitationService;
+}) {
   return {
     // ── Self-service ──────────────────────────────────────────
 
@@ -71,6 +76,23 @@ export function createUserController({
         next: result.next_cursor,
         has_more: result.has_more,
         ...(result.total !== null ? { estimated_total: result.total } : {}),
+      });
+    },
+
+    /**
+     * `GET /users/me/membership-invitations` — the caller's pending invitations (launch D84 (1)):
+     * tenancy's data in the caller's scope, like `listMyOrganizations`. Never counts.
+     */
+    listMyMembershipInvitations: async (request: FastifyRequest, _reply: FastifyReply) => {
+      if (!membershipInvitationService) {
+        throw new Error('Membership invitation service not configured');
+      }
+      const auth = requireAuth(request);
+      const result = await membershipInvitationService.listMine(request.query, auth.userId);
+      return paginatedResponse(result.items, getRequestIdentifier(request), {
+        per_page: result.limit,
+        next: result.next_cursor,
+        has_more: result.has_more,
       });
     },
 

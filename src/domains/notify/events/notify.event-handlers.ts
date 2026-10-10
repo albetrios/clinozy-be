@@ -1,5 +1,5 @@
 import { registerWebhookDeliveryEventHandlers } from '@/domains/notify/sub-domains/webhook/webhook-delivery/events/webhook-delivery.event-handlers.js';
-import { registerMembershipInvitationAcceptedNotificationHandlers } from '@/domains/notify/sub-domains/notification/events/membership-invitation-accepted.event-handlers.js';
+import { registerMembershipInvitationNotificationHandlers } from '@/domains/notify/sub-domains/notification/events/membership-invitation.event-handlers.js';
 
 let notifyEventHandlersRegistered = false;
 
@@ -11,5 +11,5 @@ export function registerNotifyEventHandlers(): void {
   if (notifyEventHandlersRegistered) return;
   notifyEventHandlersRegistered = true;
   registerWebhookDeliveryEventHandlers();
-  registerMembershipInvitationAcceptedNotificationHandlers();
+  registerMembershipInvitationNotificationHandlers();
 }
