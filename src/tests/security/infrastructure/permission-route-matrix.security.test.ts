@@ -15,7 +15,6 @@ import {
 import { invalidatePermissions } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
 import { loadOrganizationPermissionRoutesFromCatalog } from '@/tests/helpers/route-catalog-registry.js';
 import type { FastifyInstance } from 'fastify';
-import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import {
   PARAM_NAME_TO_ENTITY,
@@ -37,22 +36,19 @@ const API_PREFIX = '/api/v1';
 const PLACEHOLDER_REFERENCES = placeholderAppRouteReferences();
 
 /**
- * The codes a route checks besides the one its catalog line names: an app export also reads the
- * list — the base controller's `readPermission`, `<resource>:read` or the member-wide
- * `organization:read` (offerings) — and a patient's clinical notes, images and reports writes also
- * need `patient:clinical_record:read` (their routes stack both checks). Deduplicated, so a route
- * whose catalog code is the companion grants it once.
+ * The codes a route checks: every code its catalog line names (a patient's clinical notes, images
+ * and reports writes stack `patient:update` and `patient:clinical_record:read` — the catalogue
+ * names both, launch D83 (6)), and an app export also reads the list — the base controller's
+ * `readPermission`, `<resource>:read` or the member-wide `organization:read` (offerings).
+ * Deduplicated, so a route whose catalog code is the companion grants it once.
  */
 function grantedPermissionCodes(route: (typeof organizationPermissionRoutes)[number]): string[] {
-  const codes = [route.permissionCode];
+  const codes = [...route.permissionCodes];
   if (route.permissionCode.endsWith(':export')) {
     codes.push(
       route.permissionCode.replace(/:export$/, ':read'),
       TENANCY_PERMISSIONS.ORGANIZATION_READ,
     );
-  }
-  if (/\/app\/patients\/:patient_id\/(clinical-notes|images|reports)\b/.test(route.path)) {
-    codes.push(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ);
   }
   return [...new Set(codes)];
 }
@@ -181,8 +177,8 @@ describe('Security: Permission route matrix', () => {
   });
 
   for (const route of organizationPermissionRoutes) {
-    it(`${route.method} ${route.path} returns 403 without ${route.permissionCode}`, async () => {
-      await seedPermissions([route.permissionCode]);
+    it(`${route.method} ${route.path} returns 403 without ${route.permissionCodes.join(' + ')}`, async () => {
+      await seedPermissions(route.permissionCodes);
 
       const user = await createTestUser();
       const organization = await createTestOrganization({ ownerUserId: user.id });
@@ -214,9 +210,13 @@ describe('Security: Permission route matrix', () => {
       });
 
       expect(response.statusCode, response.body).toBe(403);
+      // Launch D83 (6): the route gate names the cause like the service-level checks do.
+      expect((response.json() as { error: { reason?: string } }).error.reason, response.body).toBe(
+        'missing_permission',
+      );
     });
 
-    it(`${route.method} ${route.path} does not return 403 with ${route.permissionCode}`, async () => {
+    it(`${route.method} ${route.path} does not return 403 with ${route.permissionCodes.join(' + ')}`, async () => {
       const grantedCodes = grantedPermissionCodes(route);
       await seedPermissions(grantedCodes);
 

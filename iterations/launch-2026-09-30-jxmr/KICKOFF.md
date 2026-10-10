@@ -134,7 +134,8 @@ organization's settings, #3 a user's presence) stay as built.
 **Reopened 2026-10-10 for the frontend integration** ([D81](plans/decisions.md)). Rows #154–#163 are what the
 frontend's per-room research found the API should change before the rooms still to move are built on it — each small,
 each with its tests, built through `/be-build-requirement` and recorded in `AS-BUILT.md`. The medical store's changes
-wait (the user's call); so does load testing.
+wait (the user's call); so does load testing. Rows #164–#165 came with D82; rows #166–#171 are what the
+role-by-role QA of a clinic with one member per role found and the user decided ([D83](plans/decisions.md), 2026-10-10).
 
 **The medical store is not touched** ([D49](plans/decisions.md), [D52](plans/decisions.md)). Its folders
 (`manufacturers/`, `suppliers/`, `medical-reps/`, `medical-rep-visits/`, `medicines/`, `medical-purchase-orders/`,
@@ -187,6 +188,12 @@ its links working (the invoices' medical lines and links) until the medical stor
 | 163 | **Documents — the response map and route descriptions the frontend research found wrong** ([D81](plans/decisions.md) (10))                                                                                                                                                                                                                                                                                     | docs       | #154–#162              | `/be-build-requirement`                                         | `pnpm docs:check`, `routes:catalog:check` and the route gates green                                      | —        | done                                 |
 | 164 | **Dev-only invitation token echo** ([D82](plans/decisions.md) (1)) — an env flag, off by default and refused in production, so local test members accept their invitations | platform | #153 | `/be-build-requirement` | the flag, its refine, `.env.example`, the echo on create and resend, tests | — | done    |
 | 165 | **Seat limit after a member is added** ([D82](plans/decisions.md) (2)) — reproduce, then the add check follows the plan's seats | platform | #153 | `/be-build-requirement` | a failing test first, then the fix and its tests | — | done    |
+| 166 | **Refunds need `payment:delete`** ([D83](plans/decisions.md) (1), D25) — the credit note, the give-back settle (and any refund kind); a `403` `missing_permission`; the medical sale's return parked | sub-domain | #165 | `/be-build-requirement` | each refund route refused to the Front desk and allowed to the Accountant; tests | — | done |
+| 167 | **Day close stays with `payment:update`** ([D83](plans/decisions.md) (2)) — the counter closes, reopening `payment:delete`; said in the routes | docs | #165 | `/be-build-requirement` | the two gates verified by tests; the route descriptions | — | done |
+| 168 | **Patient medical details hidden unless clinical** ([D83](plans/decisions.md) (3)) — `allergies`, `contraindications`, `notes` null (CSV blank) without `patient:clinical_record:read`, `patient:update` or `patient_prescription:read` | sub-domain | #165 | `/be-build-requirement` | the record, the list and the export per role; the response map | — | done |
+| 169 | **Presets and the review codes** ([D83](plans/decisions.md) (4)) — Doctor `payment:read`, Pharmacist `appointment:read`, Counsellor `payment:update`; review writes on their own codes, granted to every `patient:update` role and Marketing, and by migration to existing roles | sub-domain | #165 | `/be-build-requirement` | the presets as provisioned; the migration; the review routes per role | — | done |
+| 170 | **A task can't wait in a queue nobody can see** ([D83](plans/decisions.md) (5), C6) — a role queue whose role holds no `task:read` is a `400` | sub-domain | #165 | `/be-build-requirement` | create, reassign and a resolve's next refused; tests | — | done |
+| 171 | **Documents** ([D83](plans/decisions.md) (6)) — every code a route requires in the catalogue, the delete query in the OpenAPI document, `reason` on the route-level `403` | docs | #166–#170 | `/be-build-requirement` | `routes:catalog:check`, a query-map guard test, `docs:check`; the route gates green | — | done |
 
 ### Superseded ledger (the plan of 2026-10-03)
 

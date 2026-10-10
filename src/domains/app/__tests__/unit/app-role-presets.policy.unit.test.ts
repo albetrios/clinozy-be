@@ -28,10 +28,19 @@ const SENSITIVE_HOLDERS: Readonly<Record<string, readonly string[]>> = {
   'patient_treatment:update': ['Doctor', 'Therapist'],
   'patient:update': ['Counsellor', 'Doctor', 'Front desk', 'Therapist'],
   'patient:export': ['Accountant', 'Doctor', 'Pharmacist'],
-  'payment:read': ['Accountant', 'Counsellor', 'Front desk', 'Pharmacist'],
+  // The review writes' own codes: every role that changes the file, and Marketing (D16, D83 (4)).
+  'patient_review:create': ['Counsellor', 'Doctor', 'Front desk', 'Marketing', 'Therapist'],
+  'patient_review:update': ['Counsellor', 'Doctor', 'Front desk', 'Marketing', 'Therapist'],
+  'patient_review:delete': ['Counsellor', 'Doctor', 'Front desk', 'Marketing', 'Therapist'],
+  // The Pharmacist sees who is at the pharmacy (D83 (4), QA C4).
+  'appointment:read': ['Counsellor', 'Doctor', 'Front desk', 'Pharmacist', 'Therapist'],
+  // The Doctor sees the file's bills (D83 (4), QA C3).
+  'payment:read': ['Accountant', 'Counsellor', 'Doctor', 'Front desk', 'Pharmacist'],
+  // Taking payments; a refund is payment:delete (D83 (1)).
   'payment:create': ['Accountant', 'Counsellor', 'Front desk', 'Pharmacist'],
-  'payment:update': ['Accountant', 'Front desk'],
-  // Reverse a payment, reopen a day — the Accountant's (D81 (5), PAY-M2).
+  // Editing bills and closing the day — the Counsellor too (D83 (2), (4)).
+  'payment:update': ['Accountant', 'Counsellor', 'Front desk'],
+  // Refund, reverse a payment, reopen a day — the Accountant's (D25, D81 (5), D83 (1)).
   'payment:delete': ['Accountant'],
   'offering:lower_price:read': ['Accountant'],
   // Pharmacist and Marketing work the tasks they are given; they add none (D81 (5), TASKS-M5).
@@ -63,12 +72,14 @@ describe('app role presets — the sensitive codes (policy)', () => {
     },
   );
 
-  it("gives no preset role a delete but the Accountant's payment:delete — Owner and Admin delete (D12, D81 (5))", () => {
+  it("gives no preset role a delete but the Accountant's payment:delete and the review delete — Owner and Admin delete (D12, D81 (5), D83 (4))", () => {
     const deleters = PRESETS.flatMap((preset) =>
       preset.permissionCodes
-        .filter((code) => code.endsWith(':delete'))
+        .filter((code) => code.endsWith(':delete') && code !== 'patient_review:delete')
         .map((code) => `${preset.name} ${code}`),
     );
+    // A review's delete came with patient:update before its codes split off (D83 (4)); the
+    // holders are pinned in SENSITIVE_HOLDERS.
     expect(deleters).toEqual(['Accountant payment:delete']);
   });
 

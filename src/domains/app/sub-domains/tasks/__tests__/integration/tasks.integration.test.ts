@@ -234,6 +234,25 @@ describe('Tasks — integration (routes-final §10)', () => {
       owner_membership_id: accountant,
     });
     flow.expectValue("can't work: field", FIELDS, 'owner_membership_id');
+    await flow.expect(
+      400,
+      'a queue nobody can see — the accountant (D83 (5), C6)',
+      'POST',
+      '/app/tasks',
+      {
+        title: 'Accountant queue',
+        due_at: instant(HOUR),
+        owner_role: 'accountant',
+      },
+    );
+    flow.expectValue('queue nobody sees: field', FIELDS, 'owner_role');
+    await flow.expect(200, "the pharmacist's queue — its role sees tasks", 'POST', '/app/tasks', {
+      // No run name in the title — the tabs below search this run's tasks by it.
+      title: 'Pharmacy queue check',
+      due_at: instant(HOUR),
+      owner_role: 'pharmacist',
+    });
+    flow.expectValue('queued for the pharmacist', '.data.owner_role', 'pharmacist');
     await flow.expect(400, "another person's lead (TK5)", 'POST', '/app/tasks', {
       title: 'Wrong lead',
       due_at: instant(HOUR),
@@ -408,6 +427,14 @@ describe('Tasks — integration (routes-final §10)', () => {
     });
     flow.expectValue('accountant: field', FIELDS, 'owner_membership_id');
     await flow.expect(
+      400,
+      "to the accountant's queue (D83 (5))",
+      'POST',
+      `/app/tasks/${callLab}/reassign`,
+      { owner_role: 'accountant' },
+    );
+    flow.expectValue("accountant's queue: field", FIELDS, 'owner_role');
+    await flow.expect(
       200,
       'back to the front desk queue',
       'POST',
@@ -474,6 +501,17 @@ describe('Tasks — integration (routes-final §10)', () => {
       FROM app.tasks WHERE public_id = ${callLab}
     `;
     expect.soft(snooze?.hours, 'for 3 hours').toBe('3');
+    await flow.expect(
+      400,
+      "what's next in a queue nobody can see (D83 (5))",
+      'POST',
+      `/app/tasks/${callLab}/resolve`,
+      {
+        outcome: 'done',
+        next: { title: 'Reconcile', due_at: instant(DAY), owner_role: 'accountant' },
+      },
+    );
+    flow.expectValue("next's queue: field", FIELDS, 'next.owner_role');
     await flow.expect(200, "done, with what's next", 'POST', `/app/tasks/${callLab}/resolve`, {
       outcome: 'done',
       result_text: 'Lab called',

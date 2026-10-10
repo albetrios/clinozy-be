@@ -132,6 +132,7 @@ describe('authorization.util', () => {
 
         await expect(handler(mockRequest(), mockReply)).rejects.toMatchObject({
           messageKey: 'errors:insufficientOrganizationPermissions',
+          reason: 'missing_permission',
         });
         expect(mockedOrganizationRequiresMfa).not.toHaveBeenCalled();
       });
@@ -227,6 +228,10 @@ describe('authorization.util', () => {
         },
       } as Partial<FastifyRequest>);
       await expect(handler(request, mockReply)).rejects.toThrow(ForbiddenError);
+      // Launch D83 (6): the route gate names the cause like the service-level checks do.
+      await expect(handler(request, mockReply)).rejects.toMatchObject({
+        reason: 'missing_permission',
+      });
     });
 
     it('fails closed when an API-key principal carries an empty organization', async () => {

@@ -20,7 +20,9 @@ import {
  * @remarks
  * - **Algorithm:** the shared {@link BaseRecordService} nested under the patient (`patient_id` — a
  *   removed or unknown patient is a 404); the visit is a reference. No organization-wide list
- *   (TR11). Reading needs `patient:read`, writing `patient:update` (the routes' gates).
+ *   (TR11). Reading needs `patient:read`; logging `patient_review:create`, changing and logging an action
+ *   `patient_review:update`, deleting and restoring `patient_review:delete` (the routes' gates — their
+ *   own codes so Marketing logs reviews, launch D83 (4)).
  * - **Failure modes:** `NotFoundError('Patient review')` / `('Patient')`; `ValidationError` for a
  *   bad body or query, a reference that is no live record here, another contact's visit, a file
  *   that is no confirmed upload, a non-`https://` link or a future `review_date`; `ConflictError`

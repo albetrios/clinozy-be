@@ -2,7 +2,11 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { resolveUserOrganizationPermissions } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import { organizationRequiresMfa } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-mfa-policy.js';
 import type { GlobalRole } from '@/shared/constants/roles.constants.js';
-import { ForbiddenError, UnauthorizedError } from '@/shared/errors/index.js';
+import {
+  ForbiddenError,
+  MISSING_PERMISSION_REASON,
+  UnauthorizedError,
+} from '@/shared/errors/index.js';
 import {
   buildAuditActorFields,
   recordScopedAuditEvent,
@@ -145,6 +149,11 @@ export function requireRole(
  *
  * Looks up: user -> membership -> role -> role_permissions
  *
+ * A caller without the code (an API key without the scope) gets a 403 with `reason`
+ * `missing_permission` ({@link MISSING_PERMISSION_REASON}) — the same field the service-level
+ * checks set, so a client branches on one value (launch D83 (6)); an organization that requires MFA
+ * answers `mfa_required`.
+ *
  * @param permissionCode - The permission code to check (use domain constants, never bare strings)
  *
  * Usage:
@@ -177,7 +186,9 @@ export function requireOrganizationPermission(
             organization_id: organizationId,
           }),
         );
-        throw new ForbiddenError('errors:insufficientOrganizationPermissions');
+        throw new ForbiddenError('errors:insufficientOrganizationPermissions').withReason(
+          MISSING_PERMISSION_REASON,
+        );
       }
       return;
     }
@@ -196,7 +207,9 @@ export function requireOrganizationPermission(
           organization_id: organizationId,
         }),
       );
-      throw new ForbiddenError('errors:insufficientOrganizationPermissions');
+      throw new ForbiddenError('errors:insufficientOrganizationPermissions').withReason(
+        MISSING_PERMISSION_REASON,
+      );
     }
     // An organization whose security policy requires MFA admits only a session that proved a
     // second factor (the token's `amr`). Checked per request — not only at login — so a session

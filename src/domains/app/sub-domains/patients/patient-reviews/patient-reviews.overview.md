@@ -24,12 +24,12 @@ ROUTE #134 — routes-final 7.J, TR11). Table `app.patient_reviews`.
 | Route | Gate |
 | --- | --- |
 | `GET /app/patients/{patient_id}/reviews` | `patient:read` |
-| `POST /app/patients/{patient_id}/reviews` | `patient:update` |
+| `POST /app/patients/{patient_id}/reviews` | `patient_review:create` (launch D83 (4)) |
 | `GET …/reviews/{patient_review_id}` | `patient:read` |
-| `PATCH …/reviews/{patient_review_id}` | `patient:update` |
-| `DELETE …/reviews/{patient_review_id}` | `patient:update` |
-| `POST …/reviews/{patient_review_id}/restore` | `patient:update` |
-| `POST …/reviews/{patient_review_id}/actions` | `patient:update` |
+| `PATCH …/reviews/{patient_review_id}` | `patient_review:update` |
+| `DELETE …/reviews/{patient_review_id}` | `patient_review:delete` |
+| `POST …/reviews/{patient_review_id}/restore` | `patient_review:delete` |
+| `POST …/reviews/{patient_review_id}/actions` | `patient_review:update` |
 
 ## Key invariants
 

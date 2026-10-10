@@ -70,6 +70,10 @@ export const SYSTEM_PERMISSIONS = [
   { code: 'medicine:update', name: 'Update Medicines', category: 'medical' },
   { code: 'medicine:create', name: 'Create Medicines', category: 'medical' },
   { code: 'medicine:read', name: 'View Medicines', category: 'medical' },
+  // The reviews a patient gave (launch D83 (4)) — their own codes so Marketing logs reviews.
+  { code: 'patient_review:delete', name: 'Delete Reviews', category: 'patients' },
+  { code: 'patient_review:update', name: 'Update Reviews', category: 'patients' },
+  { code: 'patient_review:create', name: 'Log Reviews', category: 'patients' },
   { code: 'patient_treatment:update', name: 'Update Treatments', category: 'patients' },
   { code: 'patient_treatment:create', name: 'Record Treatments', category: 'patients' },
   { code: 'patient_treatment:read', name: 'View Treatments', category: 'patients' },

@@ -1193,6 +1193,48 @@ describe('Patients — integration (routes-final §7)', () => {
       contact_id: dev,
       home_branch_id: vesu,
     });
+
+    // D83 (3): the medical details go to the clinical team, the desk and the pharmacy only.
+    const MEDICAL =
+      '[((.data.allergies // []) | join("|")), ((.data.contraindications // []) | join("|")), (.data.notes // "")] | join(",")';
+    for (const role of ['marketing', 'accountant'] as const) {
+      flow.as(role);
+      await flow.expect(200, `${role} reads the file`, 'GET', `/app/patients/${ashaFile}`);
+      flow.expectValue(
+        `${role}: name and contact only — the medical details null`,
+        '[.data.allergies, .data.contraindications, .data.notes, (.data.contact_id != null)] | map(tostring) | join(",")',
+        'null,null,null,true',
+      );
+      await flow.expect(200, `${role} lists the files`, 'GET', `/app/patients?q=${lastName}`);
+      flow.expectValue(
+        `${role}: none in the list either`,
+        '[.data[] | (.allergies == null and .contraindications == null and .notes == null)] | all',
+        'true',
+      );
+    }
+    flow.as('accountant');
+    await flow.expect(200, 'the accountant exports', 'GET', `/app/patients/exports?q=${lastName}`);
+    flow.expectValue(
+      "the accountant's export: the cells blank",
+      '[(.data.content | test("Penicillin")), (.data.content | test("Prefers mornings")), (.data.content | test("Pregnancy")), (.data.content | test("allergies"))] | map(tostring) | join(",")',
+      'false,false,false,true',
+    );
+    for (const role of ['front_desk', 'pharmacist', 'doctor', 'therapist', 'counsellor'] as const) {
+      flow.as(role);
+      await flow.expect(200, `${role} reads the file`, 'GET', `/app/patients/${ashaFile}`);
+      flow.expectValue(
+        `${role} sees the medical details`,
+        MEDICAL,
+        'Penicillin,Pregnancy,Prefers mornings',
+      );
+    }
+    flow.as('pharmacist');
+    await flow.expect(200, 'the pharmacist exports', 'GET', `/app/patients/exports?q=${lastName}`);
+    flow.expectValue(
+      "the pharmacist's export carries them",
+      '[(.data.content | test("Penicillin")), (.data.content | test("Prefers mornings"))] | map(tostring) | join(",")',
+      'true,true',
+    );
   });
 
   it('#134 set-up: offerings, bought offerings, a booked visit', async () => {
@@ -1839,13 +1881,61 @@ describe('Patients — integration (routes-final §7)', () => {
       `/app/patients/${chetanFile}/check-ins`,
     );
     await flow.expect(200, 'marketing reads reviews', 'GET', reviews);
-    flow.as('pharmacist');
-    await flow.expect(403, 'the pharmacist logs no review (patient:update)', 'POST', reviews, {
-      source: 'google',
+    // D83 (4): Marketing logs reviews on their own codes — without changing the file.
+    await flow.expect(200, 'marketing logs a review', 'POST', reviews, {
+      source: 'instagram',
+      rating: 4,
+      text: 'Great results',
     });
+    const marketingReview = flow.last('.data.id');
+    await flow.expect(200, 'marketing changes it', 'PATCH', `${reviews}/${marketingReview}`, {
+      rating: 5,
+    });
+    flow.expectValue('changed', '.data.rating', 5);
+    await flow.expect(
+      200,
+      'marketing logs an action',
+      'POST',
+      `${reviews}/${marketingReview}/actions`,
+      { action: 'replied_instagram' },
+    );
+    await flow.expect(
+      204,
+      'marketing deletes it',
+      'DELETE',
+      `${reviews}/${marketingReview}?reason=duplicate`,
+    );
+    await flow.expect(200, 'and restores it', 'POST', `${reviews}/${marketingReview}/restore`);
     await flow.expect(
       403,
-      'the pharmacist logs no action',
+      'marketing still changes no file (patient:update)',
+      'PATCH',
+      `/app/patients/${chetanFile}`,
+      { status: 'vip' },
+    );
+    flow.as('front_desk');
+    await flow.expect(200, 'the front desk still logs reviews', 'POST', reviews, {
+      source: 'google',
+      rating: 5,
+    });
+    flow.as('accountant');
+    await flow.expect(403, 'the accountant logs no review', 'POST', reviews, {
+      source: 'google',
+    });
+    flow.expectValue('accountant: why', REASON, 'missing_permission');
+    flow.as('pharmacist');
+    await flow.expect(
+      403,
+      'the pharmacist logs no review (patient_review:create)',
+      'POST',
+      reviews,
+      {
+        source: 'google',
+      },
+    );
+    await flow.expect(
+      403,
+      'the pharmacist logs no action (patient_review:update)',
       'POST',
       `${reviews}/${lowReview}/actions`,
       { action: 'replied_google' },

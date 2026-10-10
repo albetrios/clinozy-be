@@ -28,7 +28,7 @@ export function patientsRoutes(service: PatientsService): FastifyPluginAsync {
         schema: {
           summary: 'List patients',
           description:
-            "Returns one page of the active organization's patient files — each carries `contact_id` only, no embedded contact (P3; read the names with `GET /contacts?ids=…`). `q` searches the patient number (`PT-0412`, `#412`) and, through the contact, names, numbers and the contact number (`C-12345`) — text needs 3+ characters, a number 4+ digits (a 400 otherwise, P9). Filters: `status`, `conversion`, `types` (comma-separated — any of them), `home_branch_id`, `doctor_membership_id`, `contact_id`, the follow-up and created ranges. Sort `created_at` (default, newest first), `patient_number` or `follow_up_at` (a file without one last). Not branch-scoped (P6). Requires patient:read.",
+            "Returns one page of the active organization's patient files — each carries `contact_id` only, no embedded contact (P3; read the names with `GET /contacts?ids=…`). `q` searches the patient number (`PT-0412`, `#412`) and, through the contact, names, numbers and the contact number (`C-12345`) — text needs 3+ characters, a number 4+ digits (a 400 otherwise, P9). Filters: `status`, `conversion`, `types` (comma-separated — any of them), `home_branch_id`, `doctor_membership_id`, `contact_id`, the follow-up and created ranges. Sort `created_at` (default, newest first), `patient_number` or `follow_up_at` (a file without one last). Not branch-scoped (P6). The medical details — `allergies`, `contraindications`, `notes` — are null unless the caller holds patient:clinical_record:read, patient:update or patient_prescription:read (D83; the same on every answer that returns a file). Requires patient:read.",
           tags: ['Patient'],
           querystring: listPatientsQueryDto,
         },
@@ -44,7 +44,7 @@ export function patientsRoutes(service: PatientsService): FastifyPluginAsync {
         schema: {
           summary: 'Export patients',
           description:
-            "Returns the patient files the same filters and sort as the list would (every page, up to 5,000 rows; `limit` and `after` ignored) as a CSV file inside the JSON envelope (`file_name` `patients-YYYY-MM-DD.csv`, `content_type`, `row_count`, `is_truncated`, `content` — the file fields as columns plus the contact's `contact_name` and `contact_primary_phone`, lists joined with `|`). Requires patient:export (P5) and patient:read.",
+            "Returns the patient files the same filters and sort as the list would (every page, up to 5,000 rows; `limit` and `after` ignored) as a CSV file inside the JSON envelope (`file_name` `patients-YYYY-MM-DD.csv`, `content_type`, `row_count`, `is_truncated`, `content` — the file fields as columns plus the contact's `contact_name` and `contact_primary_phone`, lists joined with `|`). The medical-detail cells (`allergies`, `contraindications`, `notes`) are blank unless the caller holds patient:clinical_record:read, patient:update or patient_prescription:read (D83). Requires patient:export (P5) and patient:read.",
           tags: ['Patient'],
           querystring: listPatientsQueryDto,
         },
@@ -76,7 +76,7 @@ export function patientsRoutes(service: PatientsService): FastifyPluginAsync {
         schema: {
           summary: 'Get patient',
           description:
-            'Returns one patient file of the active organization (`contact_id` only — the person lives on the contact, P3). Requires patient:read.',
+            'Returns one patient file of the active organization (`contact_id` only — the person lives on the contact, P3). The medical details — `allergies`, `contraindications`, `notes` — are null unless the caller holds patient:clinical_record:read, patient:update or patient_prescription:read (D83; the same on every answer that returns a file). Requires patient:read.',
           tags: ['Patient'],
           params: patientsIdParamsDto,
         },

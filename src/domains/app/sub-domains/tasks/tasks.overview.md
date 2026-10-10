@@ -88,7 +88,9 @@ while it runs, so a write committed during a run is picked up by the next.
 - **Each step once (TK10, D78):** one run per organization at a time (the run lock); a task whose
   step Clinozy took (`is_handled_by_clinozy`) or a person resolved keeps the rule from opening
   another for the same condition (`anchor_at`).
-- **An owner or a role queue (TK6):** one of the two; an owner is an active member who can see tasks.
+- **An owner or a role queue (TK6):** one of the two; an owner is an active member who can see tasks,
+  and a queue's role must hold `task:read` here — a queue nobody can see is a 400 `owner_role` (launch
+  D83 (5); the rules' own queues are chosen by the rule).
 - **Rule tasks are the server's (TK7, TK9):** never changed or deleted by hand (`409 rule_task`).
 - **Who had it (TK8):** every reassign and every leave writes an owner-change row.
 - **Each task its own outcomes (D81 TASKS-M2):** a resolve takes only an outcome its rule offers

@@ -192,6 +192,14 @@ function schemaDeclaresBody(optionsBody: string): boolean {
   return /(?:^|[,{\s])body\s*:/.test(schemaBody);
 }
 
+/** True when the route's `schema` block declares a `querystring` (drives the query map gate). */
+function schemaDeclaresQuerystring(optionsBody: string): boolean {
+  const schemaRange = findSchemaPropertyRange(optionsBody);
+  if (!schemaRange) return false;
+  const schemaBody = optionsBody.slice(schemaRange.bodyStart, schemaRange.bodyEnd);
+  return /(?:^|[,{\s])querystring\s*:/.test(schemaBody);
+}
+
 /** A single route registration paired with its (possibly incomplete) extracted schema metadata. */
 export interface RouteSchemaEntry {
   method: string;
@@ -210,6 +218,12 @@ export interface RouteSchemaEntry {
    * `routeSchemaMap` (`tooling/openapi/schema-map.ts`), so each such route needs its entry there.
    */
   hasBodySchema?: boolean;
+  /**
+   * True when the route declares `schema.querystring` — the OpenAPI document reads query parameters
+   * from `routeQuerySchemaMap` (`tooling/openapi/query-schema-map.ts`), so each such route needs its
+   * entry there (a record delete's `reason` / `note`, launch D83 (6)).
+   */
+  hasQuerySchema?: boolean;
 }
 
 function scanRouteSchemaEntries({
@@ -250,6 +264,7 @@ function scanRouteSchemaEntries({
       metadata,
       hasParamsSchema: schemaDeclaresParams(optionsBody),
       hasBodySchema: schemaDeclaresBody(optionsBody),
+      hasQuerySchema: schemaDeclaresQuerystring(optionsBody),
     });
   }
 

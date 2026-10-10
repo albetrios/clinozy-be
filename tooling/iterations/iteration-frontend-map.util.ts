@@ -227,7 +227,14 @@ export function openApiSummaries(document: OpenApiSummarySource): ReadonlyMap<st
 }
 
 function gateText(gate: string): string {
-  if (gate.startsWith('PERM: ')) return `\`${gate.slice('PERM: '.length)}\``;
+  if (gate.startsWith('PERM: ')) {
+    // A route that requires several codes lists each (`a` + `b`, launch D83 (6)).
+    return gate
+      .slice('PERM: '.length)
+      .split(' + ')
+      .map((code) => `\`${code}\``)
+      .join(' + ');
+  }
   if (gate === 'AUTH') return 'signed in';
   if (gate === 'PUBLIC') return 'public';
   if (gate.startsWith('ROLE: ')) return 'platform admin';

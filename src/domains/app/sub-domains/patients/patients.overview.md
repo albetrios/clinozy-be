@@ -57,4 +57,12 @@ care, in the nested sub-domains below. **The person lives on the contact** (P1, 
 - **The clinical gates (P14):** clinical notes, photos and reports are read with
   `patient:clinical_record:read` and written with `patient:update` and it; a private photo also
   needs `patient:private_album:read` (P23).
+- **Medical details unless clinical (launch D83 (3)):** a file's `allergies`, `contraindications`
+  and `notes` are `null` on every answer (the list, the file, the create / change / restore
+  answers; the export's cells blank) unless the caller holds `patient:clinical_record:read`,
+  `patient:update` or `patient_prescription:read` — the controller's `hiddenFields` (any of the
+  codes), the mechanism the offerings' `min_price` uses. The Accountant and Marketing see the name
+  and the contact.
+- **Reviews have their own codes (launch D83 (4)):** `patient_review:create` · `update` · `delete`
+  gate the review writes (7.J), so Marketing logs reviews without `patient:update`.
 - **Tenant isolation:** ENABLE + FORCE RLS on the organization GUC; not branch-scoped (P6).

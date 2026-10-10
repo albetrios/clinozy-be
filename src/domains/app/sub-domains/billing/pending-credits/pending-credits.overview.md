@@ -30,7 +30,7 @@ routes-final 8.D, B23–B24). Table `app.pending_credits`.
 | `PATCH /app/pending-credits/{pending_credit_id}` | `payment:update` |
 | `DELETE /app/pending-credits/{pending_credit_id}` | `payment:delete` |
 | `POST /app/pending-credits/{pending_credit_id}/restore` | `payment:delete` |
-| `POST /app/pending-credits/{pending_credit_id}/settle` | `payment:create` |
+| `POST /app/pending-credits/{pending_credit_id}/settle` | `payment:create`; a `give` credit's settlement (a refund, or the credit used on a bill) also `payment:delete` — 403 `missing_permission` (launch D83 (1)) |
 
 ## Key invariants
 

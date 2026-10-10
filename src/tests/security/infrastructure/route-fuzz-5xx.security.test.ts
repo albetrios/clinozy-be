@@ -21,7 +21,9 @@ import type { FastifyInstance } from 'fastify';
 
 const catalogRoutes = loadRouteRegistryFromCatalog();
 const allPermissionCodes = [
-  ...new Set(loadOrganizationPermissionRoutesFromCatalog().map((route) => route.permissionCode)),
+  ...new Set(
+    loadOrganizationPermissionRoutesFromCatalog().flatMap((route) => route.permissionCodes),
+  ),
 ];
 
 /**

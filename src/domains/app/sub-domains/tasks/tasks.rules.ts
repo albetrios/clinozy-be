@@ -23,6 +23,7 @@ import {
   ConflictError,
   ForbiddenError,
   fieldValidationError,
+  MISSING_PERMISSION_REASON,
   NotFoundError,
 } from '@/shared/errors/index.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
@@ -97,12 +98,13 @@ async function assertCanMoveLead(context: BaseRecordWriteContext): Promise<void>
   if (await context.can(APP_PERMISSIONS.LEAD_UPDATE)) return;
   throw new ForbiddenError('errors:taskLeadNeedsPermission', {
     permission: APP_PERMISSIONS.LEAD_UPDATE,
-  }).withReason('missing_permission');
+  }).withReason(MISSING_PERMISSION_REASON);
 }
 
 /**
  * TK6: exactly one of a member and a role queue; a member must be active here and hold
- * `task:read` (400 `owner_membership_id` / `owner_role`).
+ * `task:read` (400 `owner_membership_id`), and so must the role a queue names — a queue nobody can
+ * see is refused the same way (400 `owner_role`, D83 (5), QA C6).
  */
 async function assertOwner(options: {
   repository: TasksRepository;
@@ -121,7 +123,20 @@ async function assertOwner(options: {
       messageKey: 'errors:validation.taskOwnerOrQueue',
     });
   }
-  if (!hasMember) return;
+  if (!hasMember) {
+    const queueCanWork = await options.repository.roleQueueHolds({
+      organizationId: options.context.organizationId,
+      roleKey: String(role),
+      code: APP_PERMISSIONS.TASK_READ,
+    });
+    if (!queueCanWork) {
+      throw fieldValidationError({
+        field: field('owner_role'),
+        messageKey: 'errors:validation.taskQueueCannotWork',
+      });
+    }
+    return;
+  }
   const canWork = await options.repository.membershipHolds({
     organizationId: options.context.organizationId,
     membershipId: memberId as number,

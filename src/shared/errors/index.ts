@@ -8,6 +8,7 @@ export {
   NotFoundError,
   UnauthorizedError,
   ForbiddenError,
+  MISSING_PERMISSION_REASON,
   ConflictError,
   NotImplementedError,
   RateLimitedError,

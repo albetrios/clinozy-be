@@ -27,6 +27,11 @@ different folder and schema.
 ## Key invariants
 
 - **One code set (B2):** `payment:read` · `create` · `update` · `delete` · `export` — every route's gate.
+- **Who gives money back (D25, launch D83):** a refund is `payment:delete` (Owner, Admin, Accountant)
+  — the credit note's route, and the settlement of a `give` pending credit (money or used on a bill;
+  a 403 `missing_permission`). Taking payments — receipts, `money_back` (money coming *to* the clinic),
+  expenses, supplier bills — stays `payment:create`. The day is closed with `payment:update` (whoever
+  counts the drawer) and reopened with `payment:delete`.
 - **The billed person is a contact (B3):** invoices, payments and pending credits carry
   `contact_id`; a clinic or consultation bill's contact needs a patient file.
 - **Branch (B4):** invoices, payments and day closes are branch-filtered (`branch:read` sees

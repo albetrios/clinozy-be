@@ -66,7 +66,7 @@ export function tasksRoutes(service: TasksService): FastifyPluginAsync {
         schema: {
           summary: 'Add a task',
           description:
-            "Adds a task by hand (`kind` `manual`): `title*` (1–120), `due_at*`, and `owner_membership_id` (an active member who can see tasks) or `owner_role` (a role queue) — neither, both or a member who cannot work tasks is a 400; optional `why` (≤ 280), `contact_id`, one record — `lead_id`, `appointment_id`, `patient_treatment_id`, `patient_check_in_id`, `patient_review_id`, `invoice_id`, `pending_credit_id` or `medical_rep_id` (more than one, or another contact's, a 400; the task takes the record's person and branch) — and `priority` (`low` · `normal` · `high`). Requires task:create.",
+            "Adds a task by hand (`kind` `manual`): `title*` (1–120), `due_at*`, and `owner_membership_id` (an active member who can see tasks) or `owner_role` (a role queue whose role here can see tasks) — neither, both, a member who cannot work tasks or a queue nobody can see (D83 — the Accountant's, by default) is a 400; optional `why` (≤ 280), `contact_id`, one record — `lead_id`, `appointment_id`, `patient_treatment_id`, `patient_check_in_id`, `patient_review_id`, `invoice_id`, `pending_credit_id` or `medical_rep_id` (more than one, or another contact's, a 400; the task takes the record's person and branch) — and `priority` (`low` · `normal` · `high`). Requires task:create.",
           tags: ['Task'],
           body: CreateTaskDto,
         },
@@ -132,7 +132,7 @@ export function tasksRoutes(service: TasksService): FastifyPluginAsync {
         schema: {
           summary: 'Resolve a task',
           description:
-            "Takes an outcome the task offers: `outcome*` — `done` (on a claim task, the lead is yours — that needs lead:update, a 403 `missing_permission` otherwise), `no_answer` (snoozes it 3 hours), `doing_well` (logs a Better check-in for the patient), `log_check_in`, `happy`, `unhappy` (opens a call-back for the visit's doctor). Each task offers its own: `follow_up` and `confirm` rules `done` · `no_answer`; `feedback` `happy` · `unhappy` · `log_check_in`; `aftercare` `log_check_in` · `doing_well` · `no_answer`; every other rule `done`; a task made by hand (`follow_up`, `manual`) `done` · `no_answer` — another is a 400 `outcome`, as are `doing_well` and `log_check_in` without the person's patient file. Optional `result_text` (≤ 200 — the outcome's label), `note` (≤ 280), `next` — What's next: `title*`, `due_at*`, an owner or a role queue, `note` — a follow-up for the same person and record, its id in `next_task_id`. A done task is a 409 `transition_not_allowed`. Requires task:update.",
+            "Takes an outcome the task offers: `outcome*` — `done` (on a claim task, the lead is yours — that needs lead:update, a 403 `missing_permission` otherwise), `no_answer` (snoozes it 3 hours), `doing_well` (logs a Better check-in for the patient), `log_check_in`, `happy`, `unhappy` (opens a call-back for the visit's doctor). Each task offers its own: `follow_up` and `confirm` rules `done` · `no_answer`; `feedback` `happy` · `unhappy` · `log_check_in`; `aftercare` `log_check_in` · `doing_well` · `no_answer`; every other rule `done`; a task made by hand (`follow_up`, `manual`) `done` · `no_answer` — another is a 400 `outcome`, as are `doing_well` and `log_check_in` without the person's patient file. Optional `result_text` (≤ 200 — the outcome's label), `note` (≤ 280), `next` — What's next: `title*`, `due_at*`, an owner or a role queue (checked as on create — a 400 `next.owner_role` for a queue nobody can see), `note` — a follow-up for the same person and record, its id in `next_task_id`. A done task is a 409 `transition_not_allowed`. Requires task:update.",
           tags: ['Task'],
           params: tasksIdParamsDto,
           body: ResolveTaskDto,
@@ -149,7 +149,7 @@ export function tasksRoutes(service: TasksService): FastifyPluginAsync {
         schema: {
           summary: 'Reassign a task',
           description:
-            "Gives a task to `owner_membership_id` (an active member who can see tasks) or `owner_role` (a role queue) — exactly one, a 400 otherwise; an owner-change row records from, to and by whom (`owner_changes`). A lead's task moves the lead too — a member owns it with a fresh hold, a queue returns it to the pool — so it needs lead:update as well (a 403 `missing_permission`). A done task is a 409 `transition_not_allowed`. Requires task:update.",
+            "Gives a task to `owner_membership_id` (an active member who can see tasks) or `owner_role` (a role queue whose role here can see tasks — a queue nobody can see is a 400 `owner_role`, D83) — exactly one, a 400 otherwise; an owner-change row records from, to and by whom (`owner_changes`). A lead's task moves the lead too — a member owns it with a fresh hold, a queue returns it to the pool — so it needs lead:update as well (a 403 `missing_permission`). A done task is a 409 `transition_not_allowed`. Requires task:update.",
           tags: ['Task'],
           params: tasksIdParamsDto,
           body: ReassignTaskDto,

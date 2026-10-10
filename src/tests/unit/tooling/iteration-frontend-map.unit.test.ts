@@ -155,6 +155,24 @@ describe('renderRouteSection', () => {
   });
 });
 
+describe('renderRouteSection — a route that requires several codes (launch D83 (6))', () => {
+  it('names each code in the gate column', () => {
+    const catalog = `================================================================================
+  DOMAIN: APP (/api/v1/app)
+  Routes: 1
+================================================================================
+
+  POST   /api/v1/app/patients/:patient_id/clinical-notes          200  req  both  PERM: patient:update + patient:clinical_record:read
+`;
+    const block = renderRouteSection({
+      routes: parseRouteCatalog(catalog),
+      summaries: new Map(),
+      reviewNumbers: new Map(),
+    });
+    expect(block).toContain('`patient:update` + `patient:clinical_record:read`');
+  });
+});
+
 describe('spliceGeneratedBlock', () => {
   it('replaces only what sits between the markers', () => {
     const document = `# Map\n\nhand\n\n${GENERATED_BLOCK_START}\nold\n${GENERATED_BLOCK_END}\n\nafter\n`;

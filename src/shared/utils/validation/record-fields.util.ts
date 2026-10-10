@@ -68,8 +68,17 @@ export function recordDeleteQuerySchemaOf<const Reasons extends readonly [string
 ) {
   return z
     .object({
-      reason: z.enum(reasons),
-      note: trimmedString().min(1).max(RECORD_DELETE_NOTE_MAX_LENGTH).optional(),
+      reason: z.enum(reasons).meta({
+        description: `Why it goes (required): ${reasons.join(' · ')}`,
+        example: reasons[0],
+      }),
+      note: trimmedString()
+        .min(1)
+        .max(RECORD_DELETE_NOTE_MAX_LENGTH)
+        .optional()
+        .meta({
+          description: `In words, up to ${RECORD_DELETE_NOTE_MAX_LENGTH} characters — required when the reason is other`,
+        }),
     })
     .strict()
     .refine((value) => value.reason !== RECORD_DELETE_REASON.OTHER || value.note !== undefined, {

@@ -3353,6 +3353,7 @@ src/
     │   │   │   ├── locale-loader.unit.test.ts
     │   │   │   ├── mcp-openapi.unit.test.ts
     │   │   │   ├── operation-helpers.unit.test.ts
+    │   │   │   ├── query-schema-map.unit.test.ts
     │   │   │   ├── request-body-map.unit.test.ts
     │   │   │   ├── response-map.unit.test.ts
     │   │   │   ├── responses-builder.unit.test.ts

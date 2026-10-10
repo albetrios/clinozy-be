@@ -1,3 +1,4 @@
+import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
 import { type BaseRecordRow, resolveRecordIds } from '@/domains/app/base-record.repository.js';
 import type {
   BaseRecordActionInput,
@@ -21,7 +22,12 @@ import {
   findRecordedByMemberships,
   PaymentsRepository,
 } from '@/domains/app/sub-domains/billing/payments/payments.repository.js';
-import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
+import {
+  ConflictError,
+  ForbiddenError,
+  fieldValidationError,
+  MISSING_PERMISSION_REASON,
+} from '@/shared/errors/index.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import {
@@ -193,12 +199,27 @@ async function settleOnBill(options: {
 }
 
 /**
+ * D83 (1), D25: settling a `give` credit gives money back — a refund, or the credit used on a bill —
+ * so it needs `payment:delete` (Owner, Admin, Accountant), else a 403 `missing_permission`; taking
+ * money back (`take`) stays with `payment:create`.
+ */
+async function assertCanGiveBack(context: BaseRecordWriteContext): Promise<void> {
+  if (await context.can(APP_PERMISSIONS.PAYMENT_DELETE)) return;
+  throw new ForbiddenError('errors:refundNeedsPermission', {
+    permission: APP_PERMISSIONS.PAYMENT_DELETE,
+  }).withReason(MISSING_PERMISSION_REASON);
+}
+
+/**
  * B24: settles a part of a pending credit — up to what is left — as a payment pointing at it;
- * its settled amount and status follow in the same transaction.
+ * its settled amount and status follow in the same transaction. A `give` credit's settlement is a
+ * refund's — `payment:delete` (D83 (1)).
  */
 async function settlePendingCredit(input: BaseRecordActionInput): Promise<BaseRecordRow> {
   const { existing, context } = input;
   const body = parseWithSchema(SettlePendingCreditDto, input.input);
+  const give = existing.direction === PENDING_CREDIT_DIRECTION.GIVE;
+  if (give) await assertCanGiveBack(context);
   if (existing.status !== PENDING_CREDIT_STATUS.OPEN) {
     throw new ConflictError('errors:pendingCreditClosed').withReason('credit_closed');
   }
@@ -208,7 +229,6 @@ async function settlePendingCredit(input: BaseRecordActionInput): Promise<BaseRe
       messageKey: 'errors:validation.pendingCreditAmountMoreThanLeft',
     });
   }
-  const give = existing.direction === PENDING_CREDIT_DIRECTION.GIVE;
   if (body.method === PENDING_CREDIT_SETTLE_METHOD.USE_ON_BILL) {
     if (!give) {
       throw fieldValidationError({
@@ -237,7 +257,8 @@ async function settlePendingCredit(input: BaseRecordActionInput): Promise<BaseRe
  *   ({@link recordPayment}, B24). A page reads the contact's summary, the settlements and who
  *   recorded each credit (D81).
  * - **Failure modes:** `ValidationError` on `party_name`, `invoice_id`, `amount`, `method`,
- *   `branch_id`; `ConflictError` `credit_settled`, `credit_closed`, `nothing_due`,
+ *   `branch_id`; `ForbiddenError` `missing_permission` (settling a `give` credit without
+ *   `payment:delete`, D83 (1)); `ConflictError` `credit_settled`, `credit_closed`, `nothing_due`,
  *   `more_than_paid`, `more_than_due`, `day_closed`.
  */
 export function createPendingCreditsRules(): BaseRecordRules {

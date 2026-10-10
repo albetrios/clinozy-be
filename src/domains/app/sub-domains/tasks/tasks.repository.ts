@@ -317,6 +317,31 @@ export class TasksRepository extends BaseRecordRepository {
     return rows.length > 0;
   }
 
+  /**
+   * TK6, D83 (5): whether the role a queue names (`front_desk` — the live role of that name here)
+   * holds `code` (`task:read`) — false when no such role is here, so nobody could work the queue.
+   */
+  async roleQueueHolds(options: {
+    organizationId: number;
+    roleKey: string;
+    code: string;
+  }): Promise<boolean> {
+    const rows = await getRequestDatabase()
+      .select({ id: roles.id })
+      .from(roles)
+      .innerJoin(role_permissions, eq(role_permissions.role_id, roles.id))
+      .where(
+        and(
+          eq(roles.organization_id, options.organizationId),
+          isNull(roles.deleted_at),
+          sql`${ROLE_KEY} = ${options.roleKey}`,
+          eq(role_permissions.permission_code, options.code),
+        ),
+      )
+      .limit(1);
+    return rows.length > 0;
+  }
+
   /** K4: a member's main role key, for the queue their tasks return to (null for a custom role). */
   async findRoleKeyOfMembership(membershipId: number): Promise<string | null> {
     const rows = await getRequestDatabase()

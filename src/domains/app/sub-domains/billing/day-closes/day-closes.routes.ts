@@ -83,7 +83,7 @@ export function dayClosesRoutes(service: DayClosesService): FastifyPluginAsync {
         schema: {
           summary: 'Close the day',
           description:
-            "Counts and closes an open day: `counted_cash*`; `difference_reason` (1–280 — required when the count differs from the expected cash, a 400). Stores the expected cash (opening + cash received − cash paid in the day's live payments), the difference and who closed it, records a `closed` event, and locks the day — its payments can no longer be added, changed, deleted or restored (B6). A closed day is a 409 `transition_not_allowed`. Requires payment:update.",
+            "Counts and closes an open day: `counted_cash*`; `difference_reason` (1–280 — required when the count differs from the expected cash, a 400). Stores the expected cash (opening + cash received − cash paid in the day's live payments), the difference and who closed it, records a `closed` event, and locks the day — its payments can no longer be added, changed, deleted or restored (B6). A closed day is a 409 `transition_not_allowed`. Requires payment:update — whoever counts the drawer closes the day (the Front desk, Counsellor and Accountant presets hold it, beside Owner and Admin; launch D83); reopening is payment:delete.",
           tags: ['Payment'],
           params: dayClosesIdParamsDto,
           body: CloseDayCloseDto,
@@ -100,7 +100,7 @@ export function dayClosesRoutes(service: DayClosesService): FastifyPluginAsync {
         schema: {
           summary: 'Reopen a closed day',
           description:
-            'Reopens a closed day with `reason*` (1–280 — kept on the `reopened` event); the count is cleared and the next close recomputes. An open day is a 409 `transition_not_allowed`. Requires payment:delete.',
+            "Reopens a closed day with `reason*` (1–280 — kept on the `reopened` event); the count is cleared and the next close recomputes. An open day is a 409 `transition_not_allowed`. Requires payment:delete — reopening a counted day is the Owner's, the Admin's and the Accountant's, not the counter's who closed it (launch D83).",
           tags: ['Payment'],
           params: dayClosesIdParamsDto,
           body: ReopenDayCloseDto,

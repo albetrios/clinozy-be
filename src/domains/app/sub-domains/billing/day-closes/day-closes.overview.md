@@ -31,8 +31,8 @@ Closing locks the day's money (B6); the auto-close worker (WC-39) closes the day
 | `GET /app/day-closes` | `payment:read` |
 | `POST /app/day-closes` | `payment:update` |
 | `GET /app/day-closes/{day_close_id}` | `payment:read` |
-| `POST /app/day-closes/{day_close_id}/close` | `payment:update` |
-| `POST /app/day-closes/{day_close_id}/reopen` | `payment:delete` |
+| `POST /app/day-closes/{day_close_id}/close` | `payment:update` — whoever counts the drawer: Front desk, Counsellor, Accountant, Owner, Admin (launch D83 (2), the deliberate rule) |
+| `POST /app/day-closes/{day_close_id}/reopen` | `payment:delete` — Owner, Admin, Accountant (launch D83 (2)) |
 
 ## Key invariants
 

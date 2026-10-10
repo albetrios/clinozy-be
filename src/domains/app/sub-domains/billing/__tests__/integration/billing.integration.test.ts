@@ -504,7 +504,21 @@ describe('Billing — integration (routes-final §8)', () => {
       '/app/invoices/exports',
     );
     flow.as('doctor');
-    await flow.expect(403, 'the doctor reads no bills (payment:read)', 'GET', '/app/invoices');
+    await flow.expect(
+      200,
+      "the doctor reads the file's bills (payment:read, D83 (4))",
+      'GET',
+      '/app/invoices',
+    );
+    await flow.expect(
+      403,
+      'but bills nothing (payment:create)',
+      'POST',
+      '/app/invoices',
+      invoiceBody(vesu, asha, consult, { type: 'consultation' }),
+    );
+    flow.as('marketing');
+    await flow.expect(403, 'marketing reads no bills (payment:read)', 'GET', '/app/invoices');
   });
 
   it('8.C payments (routes 12–20)', async () => {
@@ -739,9 +753,10 @@ describe('Billing — integration (routes-final §8)', () => {
     flow.expectValue('CSV name', '.data.file_name | startswith("payments-")', true);
     flow.as('counsellor');
     await flow.expect(403, 'the counsellor exports no payments', 'GET', '/app/payments/exports');
+    flow.as('pharmacist');
     await flow.expect(
       403,
-      'the counsellor changes no payment (payment:update)',
+      'the pharmacist changes no payment (payment:update — the counsellor does, D83 (4))',
       'PATCH',
       `/app/payments/${firstReceipt}`,
       { note: 'x' },
@@ -876,8 +891,8 @@ describe('Billing — integration (routes-final §8)', () => {
       `/app/invoices/${branchInvoice}/credit-notes/${branchCreditNote}`,
     );
     await flow.expect(
-      404,
-      'nor a refund on it',
+      403,
+      'nor a refund on it — the front desk refunds nothing (payment:delete, D83 (1))',
       'POST',
       `/app/invoices/${branchInvoice}/credit-notes`,
       { amount: 10, reason: 'x', splits: [{ mode: 'cash', amount: 10 }] },
@@ -1187,10 +1202,10 @@ describe('Billing — integration (routes-final §8)', () => {
       '[.data.cash_in, .data.cash_out, .data.expected_cash, .data.entry_count, .data.net_by_mode.cash, (.data.by_member | length), .data.by_member[0].membership_id] | map(tostring) | join(",")',
       `400,100,300,2,300,1,${owner}`,
     );
-    flow.as('counsellor');
+    flow.as('pharmacist');
     await flow.expect(
       403,
-      'the counsellor closes no day (payment:update)',
+      'the pharmacist closes no day (payment:update)',
       'POST',
       `/app/day-closes/${yesterdayClose}/close`,
       { counted_cash: 300 },
@@ -1397,6 +1412,163 @@ describe('Billing — integration (routes-final §8)', () => {
       'today still open',
       '[.data[] | "\\(.close_date):\\(.close_kind)"] | join(",")',
       `${today}:null,${yesterday}:manual`,
+    );
+  });
+
+  it('D83: who gives money back (#166) and who closes the day (#167)', async () => {
+    const CASH = (amount: number) => [{ mode: 'cash', amount }];
+    flow.as('owner');
+    const dina = await person('Dina', '24');
+    await flow.expect(200, "Dina's file", 'POST', '/app/patients', {
+      contact_id: dina,
+      home_branch_id: vesu,
+    });
+    await flow.expect(
+      200,
+      'bill Dina a facial, 1000 paid now',
+      'POST',
+      '/app/invoices',
+      invoiceBody(vesu, dina, facial, { payment: { splits: CASH(1000) } }),
+    );
+    const dinaInvoice = flow.last('.data.id');
+    const creditNotes = `/app/invoices/${dinaInvoice}/credit-notes`;
+    const refund = { amount: 100, reason: 'Charged twice', splits: CASH(100) };
+
+    // #166: a credit note is a refund — payment:delete.
+    for (const role of ['front_desk', 'counsellor', 'pharmacist'] as const) {
+      flow.as(role);
+      await flow.expect(403, `${role} refunds nothing`, 'POST', creditNotes, refund);
+      flow.expectValue(`${role}: why`, REASON, 'missing_permission');
+    }
+    flow.as('accountant');
+    await flow.expect(
+      200,
+      'the accountant refunds with a credit note',
+      'POST',
+      creditNotes,
+      refund,
+    );
+    flow.expectValue('the credit note of 100', '.data.amount', 100);
+
+    // #166: settling a give-back credit is a refund too; taking money back is not.
+    flow.as('owner');
+    await flow.expect(200, 'owe Dina 300', 'POST', '/app/pending-credits', {
+      direction: 'give',
+      amount: 300,
+      reason: 'Session cancelled',
+      contact_id: dina,
+    });
+    const giveSettle = `/app/pending-credits/${flow.last('.data.id')}/settle`;
+    await flow.expect(200, 'Dina owes 200', 'POST', '/app/pending-credits', {
+      direction: 'take',
+      amount: 200,
+      reason: 'Balance on the peel',
+      contact_id: dina,
+    });
+    const takeSettle = `/app/pending-credits/${flow.last('.data.id')}/settle`;
+    await flow.expect(
+      200,
+      'a second bill to use the credit on',
+      'POST',
+      '/app/invoices',
+      invoiceBody(vesu, dina, consult, { type: 'consultation' }),
+    );
+    const dinaConsultation = flow.last('.data.id');
+    flow.as('front_desk');
+    await flow.expect(403, 'the front desk gives no money back', 'POST', giveSettle, {
+      amount: 100,
+      method: 'money',
+      branch_id: vesu,
+      splits: CASH(100),
+    });
+    flow.expectValue('give back: why', REASON, 'missing_permission');
+    await flow.expect(403, 'nor uses the credit on a bill', 'POST', giveSettle, {
+      amount: 100,
+      method: 'use_on_bill',
+      invoice_id: dinaConsultation,
+    });
+    flow.expectValue('use on bill: why', REASON, 'missing_permission');
+    await flow.expect(200, 'but takes money back (payment:create)', 'POST', takeSettle, {
+      amount: 200,
+      method: 'money',
+      branch_id: vesu,
+      splits: CASH(200),
+    });
+    flow.expectValue('got back', '.data.status', 'got_back');
+    await flow.expect(
+      200,
+      'and records money coming back to the clinic (money_back — B17)',
+      'POST',
+      '/app/payments',
+      payment('money_back', vesu, CASH(50), { note: 'Vendor returned money' }),
+    );
+    flow.as('accountant');
+    await flow.expect(200, 'the accountant gives the money back', 'POST', giveSettle, {
+      amount: 100,
+      method: 'money',
+      branch_id: vesu,
+      splits: CASH(100),
+    });
+    await flow.expect(200, 'and uses the rest on the bill', 'POST', giveSettle, {
+      amount: 200,
+      method: 'use_on_bill',
+      invoice_id: dinaConsultation,
+    });
+    flow.expectValue('settled', '.data.status', 'used');
+
+    // #167: the counter closes the day (payment:update); reopening is payment:delete.
+    const longBack = calendarDay(fixture, -30);
+    flow.as('front_desk');
+    await flow.expect(200, 'the front desk opens a past day', 'POST', '/app/day-closes', {
+      branch_id: vesu,
+      close_date: longBack,
+    });
+    const pastDay = flow.last('.data.id');
+    const opening = Number(flow.last('.data.opening_cash'));
+    await flow.expect(200, 'and closes it', 'POST', `/app/day-closes/${pastDay}/close`, {
+      counted_cash: opening,
+    });
+    flow.expectValue('closed', '.data.status', 'closed');
+    for (const role of ['front_desk', 'counsellor'] as const) {
+      flow.as(role);
+      await flow.expect(
+        403,
+        `${role} reopens no day`,
+        'POST',
+        `/app/day-closes/${pastDay}/reopen`,
+        {
+          reason: 'Recount',
+        },
+      );
+      flow.expectValue(`${role} reopen: why`, REASON, 'missing_permission');
+    }
+    flow.as('accountant');
+    await flow.expect(
+      200,
+      'the accountant reopens it',
+      'POST',
+      `/app/day-closes/${pastDay}/reopen`,
+      {
+        reason: 'Recount the drawer',
+      },
+    );
+    flow.as('counsellor');
+    await flow.expect(
+      200,
+      'the counsellor closes the day too (its preset, D83 (4))',
+      'POST',
+      `/app/day-closes/${pastDay}/close`,
+      { counted_cash: opening },
+    );
+    flow.as('pharmacist');
+    await flow.expect(
+      403,
+      'the pharmacist closes none',
+      'POST',
+      `/app/day-closes/${pastDay}/close`,
+      {
+        counted_cash: opening,
+      },
     );
   });
 });

@@ -34,7 +34,8 @@ type ListOptions = Parameters<BaseRecordService<InvoiceCreditNoteOutput>['list']
  *   {@link InvoicesService} — another branch's is a 404 without `branch:read` — and the
  *   organization-wide list is narrowed to the caller's branches. The rules write the refund
  *   payment in the credit note's transaction. Reading needs `payment:read`, refunding
- *   `payment:create` (the routes' gates).
+ *   `payment:delete` — a refund gives money back, Owner, Admin and Accountant (the routes' gates,
+ *   D25, D83 (1)).
  * - **Failure modes:** `NotFoundError('Invoice credit note')` / `('Invoice')`; `ValidationError`
  *   for a bad body or query; `ConflictError` `more_than_paid`, `day_closed`.
  */

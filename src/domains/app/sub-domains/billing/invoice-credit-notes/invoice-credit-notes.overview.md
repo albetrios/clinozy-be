@@ -26,7 +26,7 @@ ROUTE #136 — routes-final 8.B, B16). Table `app.invoice_credit_notes` (was
 | --- | --- |
 | `GET /app/invoice-credit-notes` | `payment:read` |
 | `GET /app/invoices/{invoice_id}/credit-notes` | `payment:read` |
-| `POST /app/invoices/{invoice_id}/credit-notes` | `payment:create` |
+| `POST /app/invoices/{invoice_id}/credit-notes` | `payment:delete` — a refund gives money back: Owner, Admin, Accountant (D25, launch D83 (1)) |
 | `GET /app/invoices/{invoice_id}/credit-notes/{invoice_credit_note_id}` | `payment:read` |
 
 ## Key invariants

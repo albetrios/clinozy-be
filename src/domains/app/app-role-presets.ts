@@ -54,6 +54,17 @@ const TASK_WORKER_CODES: readonly string[] = sectionCodes('tasks', VIEW_CREATE_E
 const TASK_TAKER_CODES: readonly string[] = sectionCodes('tasks', ['read', 'update']);
 
 /**
+ * Logging, changing and deleting a patient's reviews (launch D83 (4)) — their own codes since the
+ * review writes left `patient:update`: every role that changes the patient file holds them (as it did
+ * through `patient:update`), and Marketing, which logs reviews without touching the file (D16).
+ */
+const PATIENT_REVIEW_CODES: readonly string[] = [
+  APP_PERMISSIONS.PATIENT_REVIEW_CREATE,
+  APP_PERMISSIONS.PATIENT_REVIEW_UPDATE,
+  APP_PERMISSIONS.PATIENT_REVIEW_DELETE,
+];
+
+/**
  * What every role that deals with people holds — all but the Accountant: {@link EVERY_ROLE_CODES},
  * the contacts' View · Create · Edit (launch #129, CT5) and the activity's (launch #130, M4).
  */
@@ -100,8 +111,11 @@ const DOCTOR_PRESET: AppRolePreset = {
     ...sectionCodes('leads', VIEW_CREATE_EDIT),
     ...sectionCodes('appointments', VIEW_CREATE_EDIT),
     ...sectionCodes('patients', VIEW_CREATE_EDIT),
+    ...PATIENT_REVIEW_CODES,
     // Picks medicines on prescriptions (launch #153, MD2)
     ...readCodes(['medicine']),
+    // Sees the patient's bills and payments in the file (launch D83 (4), QA C3)
+    APP_PERMISSIONS.PAYMENT_READ,
     APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ,
     APP_PERMISSIONS.PATIENT_PRIVATE_ALBUM_READ,
     APP_PERMISSIONS.OFFERING_EXPORT,
@@ -122,6 +136,7 @@ const THERAPIST_PRESET: AppRolePreset = {
     ...TASK_WORKER_CODES,
     ...sectionCodes('appointments', VIEW_CREATE_EDIT),
     ...resourceCodes('patient', VIEW_CREATE_EDIT),
+    ...PATIENT_REVIEW_CODES,
     ...resourceCodes('patient_treatment', VIEW_CREATE_EDIT),
     ...readCodes(['patient_prescription']),
     ...sectionCodes('stock', VIEW_CREATE_EDIT),
@@ -141,8 +156,10 @@ const FRONT_DESK_PRESET: AppRolePreset = {
     ...sectionCodes('leads', VIEW_CREATE_EDIT),
     ...sectionCodes('appointments', VIEW_CREATE_EDIT),
     ...resourceCodes('patient', VIEW_CREATE_EDIT),
+    ...PATIENT_REVIEW_CODES,
     ...readCodes(['patient_treatment']),
     ...sectionCodes('stock', VIEW_CREATE_EDIT),
+    // Takes payments and closes the day it counted (launch D83 (2)); refunds are payment:delete
     ...sectionCodes('payments', VIEW_CREATE_EDIT),
   ]),
 };
@@ -159,8 +176,10 @@ const COUNSELLOR_PRESET: AppRolePreset = {
     ...sectionCodes('leads', VIEW_CREATE_EDIT),
     ...sectionCodes('appointments', VIEW_CREATE_EDIT),
     ...resourceCodes('patient', VIEW_CREATE_EDIT),
+    ...PATIENT_REVIEW_CODES,
     ...readCodes(['patient_prescription', 'patient_treatment']),
-    ...sectionCodes('payments', ['read', 'create']),
+    // Fixes the bills it makes — and so closes the day too (launch D83 (4), QA C7: accepted)
+    ...sectionCodes('payments', VIEW_CREATE_EDIT),
     // Groups, offerings — prices included — and offers (O2, O3)
     ...sectionCodes('offerings', ['create', 'update']),
     APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ,
@@ -179,6 +198,8 @@ const PHARMACIST_PRESET: AppRolePreset = {
     ...TASK_TAKER_CODES,
     ...sectionCodes('medical', VIEW_CREATE_EDIT),
     ...readCodes(['patient', 'patient_prescription']),
+    // Sees who is at the pharmacy stage of today's visits (launch D83 (4), QA C4)
+    ...readCodes(['appointment']),
     // Uses clinic stock in procedures (launch #137, S2)
     ...sectionCodes('stock', VIEW_CREATE_EDIT),
     // Sells and collects, refunds returns, pays suppliers (launch #153, MD2) — and reads the bills
@@ -226,6 +247,8 @@ const MARKETING_PRESET: AppRolePreset = {
     ...TASK_TAKER_CODES,
     ...sectionCodes('leads', VIEW_CREATE_EDIT),
     ...readCodes(['patient']),
+    // Logs the reviews patients give (D16, launch D83 (4)) — without changing the file
+    ...PATIENT_REVIEW_CODES,
   ]),
 };
 
@@ -235,10 +258,13 @@ const MARKETING_PRESET: AppRolePreset = {
  * @remarks
  * - **Algorithm:** each role holds View · Create · Edit in its sections (D12), the read codes of
  *   the pickers it needs, and its special permissions (D18); only Admin deletes — and the
- *   Accountant, who reverses a payment and reopens a day (`payment:delete`, D81 (5)). Role-named
+ *   Accountant, who refunds, reverses a payment and reopens a day (`payment:delete`, D81 (5),
+ *   D83 (1)); the review codes, delete included, go to every role that changes the patient file and
+ *   to Marketing (D83 (4) — they held them through `patient:update` before). Role-named
  *   actions are codes (D13): prescriptions are written by Doctor, treatments by Doctor and
- *   Therapist. The Accountant sees the patient file's billing only (D15); Marketing logs reviews
- *   only (D16); Pharmacist and Marketing work the tasks they are given without adding any
+ *   Therapist. The Accountant sees the patient file's billing only (D15 — the medical details are
+ *   hidden from it, D83 (3)); Marketing logs reviews only (D16, its review codes D83 (4)); the Doctor
+ *   reads payments, the Pharmacist the appointments, the Counsellor edits bills (D83 (4)); Pharmacist and Marketing work the tasks they are given without adding any
  *   (D81 (5)); the task rules are an organization setting — Owner and Admin (TK2). Each role's
  *   tone is the design's (D81 (4)).
  * - **Notes:** Admin is everything Owner holds in the app and the team, minus deleting the

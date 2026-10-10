@@ -52,6 +52,11 @@ export const APP_PERMISSIONS = {
   PATIENT_PRESCRIPTION_CREATE: 'patient_prescription:create',
   PATIENT_PRESCRIPTION_UPDATE: 'patient_prescription:update',
   PATIENT_PRESCRIPTION_DELETE: 'patient_prescription:delete',
+  // Reviews (launch D83 (4)): logging, changing and deleting the reviews a patient gave have their own
+  // codes, so Marketing logs reviews (D16) without changing the file; reading them is `patient:read`.
+  PATIENT_REVIEW_CREATE: 'patient_review:create',
+  PATIENT_REVIEW_UPDATE: 'patient_review:update',
+  PATIENT_REVIEW_DELETE: 'patient_review:delete',
   PATIENT_TREATMENT_READ: 'patient_treatment:read',
   PATIENT_TREATMENT_CREATE: 'patient_treatment:create',
   PATIENT_TREATMENT_UPDATE: 'patient_treatment:update',

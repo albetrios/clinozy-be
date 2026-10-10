@@ -2,19 +2,27 @@
  * Maps OpenAPI route patterns (method + path) to Zod querystring DTOs.
  *
  * Used by generate-openapi.ts to document query parameters (especially cursor pagination).
- * When adding a list route with query validation, add its mapping here.
+ * When adding a route with query validation — a list, a record delete's `reason` — add its mapping
+ * here (`query-schema-map.unit.test.ts` fails a route that declares `schema.querystring` without it).
  */
 import type { ZodTypeAny } from 'zod';
 import { ListAuditLogsQueryDto } from '@/domains/audit/audit.dto.js';
 import { OauthCallbackQueryDto } from '@/domains/auth/auth.dto.js';
 import { listInvoicesQueryDto } from '@/domains/billing/sub-domains/subscription/subscription.dto.js';
 import { listNotificationsQueryDto } from '@/domains/notify/sub-domains/notification/notification.dto.js';
-import { listMembershipsQueryDto } from '@/domains/tenancy/sub-domains/membership/membership.dto.js';
+import { listWebhooksQueryDto } from '@/domains/notify/sub-domains/webhook/webhook.dto.js';
+import {
+  deleteMembershipQueryDto,
+  listMembershipsQueryDto,
+} from '@/domains/tenancy/sub-domains/membership/membership.dto.js';
 import {
   listAppMembershipsQueryDto,
   listAppRolesQueryDto,
 } from '@/domains/app/sub-domains/memberships/memberships.dto.js';
-import { listMemberRolesQueryDto } from '@/domains/tenancy/sub-domains/member-roles/member-role.dto.js';
+import {
+  deleteMemberRoleQueryDto,
+  listMemberRolesQueryDto,
+} from '@/domains/tenancy/sub-domains/member-roles/member-role.dto.js';
 import { listOrganizationApiKeysQueryDto } from '@/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.dto.js';
 import { listOrganizationsQueryDto } from '@/domains/tenancy/sub-domains/organization/organization.dto.js';
 import { ListUsersDto } from '@/domains/user/user.dto.js';
@@ -66,8 +74,14 @@ import { listSuppliersQueryDto as appSuppliersListQueryDto } from '@/domains/app
 import { listMedicalRepsQueryDto as appMedicalRepsListQueryDto } from '@/domains/app/sub-domains/medical/medical-reps/medical-reps.dto.js';
 import { listMedicalRepVisitsQueryDto as appMedicalRepVisitsListQueryDto } from '@/domains/app/sub-domains/medical/medical-reps/medical-rep-visits/medical-rep-visits.dto.js';
 import { listMedicinesQueryDto as appMedicinesListQueryDto } from '@/domains/app/sub-domains/medical/medicines/medicines.dto.js';
-import { listMedicalPurchaseOrdersQueryDto as appMedicalPurchaseOrdersListQueryDto } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.dto.js';
-import { listMedicalSalesQueryDto as appMedicalSalesListQueryDto } from '@/domains/app/sub-domains/medical/medical-sales/medical-sales.dto.js';
+import {
+  cancelMedicalPurchaseOrderQueryDto as appCancelMedicalPurchaseOrderQueryDto,
+  listMedicalPurchaseOrdersQueryDto as appMedicalPurchaseOrdersListQueryDto,
+} from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.dto.js';
+import {
+  listMedicalSalesQueryDto as appMedicalSalesListQueryDto,
+  voidMedicalSaleQueryDto as appVoidMedicalSaleQueryDto,
+} from '@/domains/app/sub-domains/medical/medical-sales/medical-sales.dto.js';
 import { listSupplierCreditsQueryDto as appSupplierCreditsListQueryDto } from '@/domains/app/sub-domains/medical/suppliers/supplier-credits/supplier-credits.dto.js';
 import { listStockVendorsQueryDto as appStockVendorsListQueryDto } from '@/domains/app/sub-domains/stock/stock-vendors/stock-vendors.dto.js';
 import { listStockItemsQueryDto as appStockItemsListQueryDto } from '@/domains/app/sub-domains/stock/stock-items/stock-items.dto.js';
@@ -80,6 +94,7 @@ import {
 import { listTasksQueryDto as appTasksListQueryDto } from '@/domains/app/sub-domains/tasks/tasks.dto.js';
 import { listContactsQueryDto } from '@/domains/app/sub-domains/contacts/contacts.dto.js';
 import { listLimitQuerySchema } from '@/shared/utils/http/pagination.util.js';
+import { recordDeleteQuerySchema } from '@/shared/utils/validation/record-fields.util.js';
 
 export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/audit/logs': ListAuditLogsQueryDto,
@@ -164,6 +179,52 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   // Not lists: an unknown query key is a 400 (the status read), the handshake's fields (Meta)
   'GET /api/v1/app/contact-activities/messaging-status': messagingStatusQueryDto,
   'GET /api/v1/app/messaging-webhook': messagingWebhookVerifyQueryDto,
+  // Record deletes (launch D83 (6), QA B2): the `reason` (and `note`, required for `other`) every
+  // one requires — the document read no query on a DELETE before.
+  'DELETE /api/v1/app/appointments/{appointment_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/branches/{branch_id}/holidays/{branch_holiday_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/branches/{branch_id}/machines/{branch_machine_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/branches/{branch_id}/rooms/{branch_room_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/contact-message-templates/{contact_message_template_id}':
+    recordDeleteQuerySchema,
+  'DELETE /api/v1/app/contacts/{contact_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/invoices/{invoice_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/leads/{lead_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/manufacturers/{manufacturer_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/medical-reps/{medical_rep_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/medical-reps/{medical_rep_id}/visits/{medical_rep_visit_id}':
+    recordDeleteQuerySchema,
+  'DELETE /api/v1/app/medicines/{medicine_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/offering-groups/{offering_group_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/offerings/{offering_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/offers/{offer_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/patient-diagnoses/{patient_diagnosis_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/patients/{patient_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/patients/{patient_id}/check-ins/{patient_check_in_id}':
+    recordDeleteQuerySchema,
+  'DELETE /api/v1/app/patients/{patient_id}/clinical-notes/{patient_clinical_note_id}':
+    recordDeleteQuerySchema,
+  'DELETE /api/v1/app/patients/{patient_id}/images/{patient_image_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/patients/{patient_id}/offering-suggestions/{patient_offering_suggestion_id}':
+    recordDeleteQuerySchema,
+  'DELETE /api/v1/app/patients/{patient_id}/prescriptions/{patient_prescription_id}':
+    recordDeleteQuerySchema,
+  'DELETE /api/v1/app/patients/{patient_id}/reports/{patient_report_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/patients/{patient_id}/reviews/{patient_review_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/payments/{payment_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/pending-credits/{pending_credit_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/prescription-kits/{prescription_kit_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/stock-items/{stock_item_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/stock-purchases/{stock_purchase_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/stock-vendors/{stock_vendor_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/suppliers/{supplier_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/tasks/{task_id}': recordDeleteQuerySchema,
+  'DELETE /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}':
+    appCancelMedicalPurchaseOrderQueryDto,
+  'DELETE /api/v1/app/medical-sales/{medical_sale_id}': appVoidMedicalSaleQueryDto,
+  'DELETE /api/v1/tenancy/organization/memberships/{membership_id}': deleteMembershipQueryDto,
+  'DELETE /api/v1/tenancy/organization/roles/{role_id}': deleteMemberRoleQueryDto,
+  'GET /api/v1/notify/webhooks': listWebhooksQueryDto,
 };
 
 /** Routes that must document `after` and `limit` query parameters in OpenAPI. */

@@ -48,12 +48,12 @@ export function patientReviewsRoutes(service: PatientReviewsService): FastifyPlu
       '/patients/:patient_id/reviews',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE)],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_REVIEW_CREATE)],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Log a review',
           description:
-            "Logs a review the patient gave: `source*` (`google` · `video` · `instagram` · `internal_form` · `whatsapp`); optional `review_date` (default the organization's today, never in the future), `rating` (1–5), `text` (≤ 2,000), `link` (`https://` only — a 400 otherwise, TR11), `file_keys` (up to 10 confirmed uploads of the organization — a 400 otherwise), `appointment_id` (the patient's contact's — a 400 otherwise). A `system` entry joins the contact's activity; a rating ≤ 3 also creates a doctor call-back task. Requires patient:update.",
+            "Logs a review the patient gave: `source*` (`google` · `video` · `instagram` · `internal_form` · `whatsapp`); optional `review_date` (default the organization's today, never in the future), `rating` (1–5), `text` (≤ 2,000), `link` (`https://` only — a 400 otherwise, TR11), `file_keys` (up to 10 confirmed uploads of the organization — a 400 otherwise), `appointment_id` (the patient's contact's — a 400 otherwise). A `system` entry joins the contact's activity; a rating ≤ 3 also creates a doctor call-back task. Requires patient_review:create (D83 — Marketing logs reviews without changing the file).",
           tags: ['Patient file'],
           params: patientReviewsParentParamsDto,
           body: CreatePatientReviewDto,
@@ -81,12 +81,12 @@ export function patientReviewsRoutes(service: PatientReviewsService): FastifyPlu
       '/patients/:patient_id/reviews/:patient_review_id',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE)],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_REVIEW_UPDATE)],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Change a review',
           description:
-            'Changes a review — any field of the log (at least one; null clears an optional one), with the same checks. An edit that lowers the rating to 3 or less adds a call-back task. Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 `record_changed` (D43). Requires patient:update.',
+            'Changes a review — any field of the log (at least one; null clears an optional one), with the same checks. An edit that lowers the rating to 3 or less adds a call-back task. Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 `record_changed` (D43). Requires patient_review:update (D83 — Marketing logs reviews without changing the file).',
           tags: ['Patient file'],
           params: patientReviewsIdParamsDto,
           body: UpdatePatientReviewDto,
@@ -98,12 +98,12 @@ export function patientReviewsRoutes(service: PatientReviewsService): FastifyPlu
       '/patients/:patient_id/reviews/:patient_review_id',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE)],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_REVIEW_DELETE)],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Delete a review',
           description:
-            "Deletes a review with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Restorable until the organization's purge window ends (D38). Requires patient:update.",
+            "Deletes a review with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Restorable until the organization's purge window ends (D38). Requires patient_review:delete (D83 — Marketing logs reviews without changing the file).",
           tags: ['Patient file'],
           params: patientReviewsIdParamsDto,
           querystring: recordDeleteQuerySchema,
@@ -115,12 +115,12 @@ export function patientReviewsRoutes(service: PatientReviewsService): FastifyPlu
       '/patients/:patient_id/reviews/:patient_review_id/restore',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE)],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_REVIEW_DELETE)],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Restore a review',
           description:
-            "Undoes a review's delete. A live review is a 409 `record_not_deleted`. Requires patient:update.",
+            "Undoes a review's delete. A live review is a 409 `record_not_deleted`. Requires patient_review:delete (D83 — Marketing logs reviews without changing the file).",
           tags: ['Patient file'],
           params: patientReviewsIdParamsDto,
         },
@@ -131,12 +131,12 @@ export function patientReviewsRoutes(service: PatientReviewsService): FastifyPlu
       '/patients/:patient_id/reviews/:patient_review_id/actions',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE)],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_REVIEW_UPDATE)],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Log a review action',
           description:
-            'Logs what was done about a review: `action*` (`doctor_called` · `asked_revisit` · `free_review_booked` · `plan_changed` · `replied_google` · `replied_instagram` · `replied_whatsapp` · `refund_credit` · `other`) and `note` (1–280, required for other — a 400 otherwise); the caller is the author. Append-only — a wrong one is followed by a right one (TR12); the first turns `needs_action` off. Answers the review with its `actions`, the new one first. A review of another patient, or a deleted one, is a 404. Requires patient:update.',
+            'Logs what was done about a review: `action*` (`doctor_called` · `asked_revisit` · `free_review_booked` · `plan_changed` · `replied_google` · `replied_instagram` · `replied_whatsapp` · `refund_credit` · `other`) and `note` (1–280, required for other — a 400 otherwise); the caller is the author. Append-only — a wrong one is followed by a right one (TR12); the first turns `needs_action` off. Answers the review with its `actions`, the new one first. A review of another patient, or a deleted one, is a 404. Requires patient_review:update (D83 — Marketing logs reviews without changing the file).',
           tags: ['Patient file'],
           params: patientReviewsIdParamsDto,
           body: LogPatientFeedbackActionDto,

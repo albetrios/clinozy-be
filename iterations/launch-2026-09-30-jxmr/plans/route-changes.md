@@ -409,7 +409,7 @@ that drops them is built. The medical store's routes are §11's — back in the 
 | 11.50 | NEW     | POST   | `/medical-sales/{medical_sale_id}/returns`                             | `payment:create`  | Return from patient — refund, stock back                 | routes-final §11.H.7 | `POST /api/v1/app/medical-sales/{medical_sale_id}/returns` · #153                             |
 | 11.51 | NEW     | GET    | `/medical-payments`                                                    | `medicine:read`   | The store's Payments tab                                 | routes-final §11.H.7 | `GET /api/v1/app/medical-payments` · #153                                                     |
 
-## 12. Frontend integration (D81, D82, ROUTE #154–#165)
+## 12. Frontend integration (D81, D82, D83, ROUTE #154–#171)
 
 Proposed 2026-10-10 from the frontend's per-room research; built and confirmed row by row in `AS-BUILT.md`.
 
@@ -434,6 +434,14 @@ Proposed 2026-10-10 from the frontend's per-room research; built and confirmed r
 | I17 | GET        | `/app/stock-items`                                       | CHANGED | `lasts_days_to`                                                                                                                            |
 | I18 | POST       | `/tenancy/organization/memberships`, `…/{membership_id}/invitation/resend` | CHANGED | `debug_invitation_token` in the answer while `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` is on — never in production (D82 (1), ROUTE #164) |
 | I19 | POST       | `/tenancy/organization/memberships`                      | CHANGED | the seat ceiling is the plan's seats or more bought, not the synced headcount; `seats_total` reads it (D82 (2), ROUTE #165)                |
+| I20 | POST       | `/app/invoices/{invoice_id}/credit-notes`                | CHANGED | needs `payment:delete` (was `payment:create`) — a refund is Owner, Admin and Accountant's (D83 (1), ROUTE #166)                            |
+| I21 | POST       | `/app/pending-credits/{pending_credit_id}/settle`        | CHANGED | settling a `give` credit (money back or use on a bill) also needs `payment:delete` — a `403` `missing_permission` (D83 (1), ROUTE #166)     |
+| I22 | POST       | `/app/day-closes/{day_close_id}/close`, `…/reopen`       | CHANGED | documented only: closing is `payment:update` (the counter counts the drawer), reopening `payment:delete` (D83 (2), ROUTE #167)            |
+| I23 | GET        | `/app/patients`, `/app/patients/{patient_id}`, `/app/patients/exports` | CHANGED | `allergies`, `contraindications`, `notes` are `null` (the CSV blank) without `patient:clinical_record:read`, `patient:update` or `patient_prescription:read` — on every answer that returns a patient (D83 (3), ROUTE #168) |
+| I24 | POST/PATCH/DELETE | `/app/patients/{patient_id}/reviews`, `…/{patient_review_id}`, `…/restore`, `…/actions` | CHANGED | gated by `patient_review:create` · `update` · `delete` instead of `patient:update`; the catalogue gains the three codes (D83 (4), ROUTE #169) |
+| I25 | POST       | `/app/tasks`, `…/{task_id}/reassign`, `…/{task_id}/resolve` (`next`) | CHANGED | a role queue whose role here holds no `task:read` is a `400` `owner_role` (D83 (5), ROUTE #170)                                            |
+| I26 | DELETE     | every record delete                                      | CHANGED | documented only: the OpenAPI document shows the required `reason` and the `note` query (D83 (6), ROUTE #171)                               |
+| I27 | every      | every route behind a permission                          | CHANGED | the route-level `403` carries `reason` `missing_permission`; `docs/routes.txt` names every code a route requires (D83 (6), ROUTE #171)     |
 
 ## Before → after
 

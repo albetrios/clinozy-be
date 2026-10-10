@@ -425,6 +425,13 @@ export const offersRecordExample = {
   updated_at: '2026-10-07T10:30:00.000Z',
 };
 
+/**
+ * What a patient's medical details (`allergies`, `contraindications`, `notes`) say about who sees
+ * them (launch D83 (3)).
+ */
+const PATIENT_MEDICAL_DETAIL_NOTE =
+  "A medical detail — null (the export's cell blank) unless the caller holds patient:clinical_record:read (the clinical team), patient:update (the front desk records it at intake) or patient_prescription:read (the pharmacy dispenses); the Accountant and Marketing see the name and the contact only.";
+
 /** `PatientOutput` — the clinical side of a contact (launch #133, routes-final 7.A.6). */
 export const patientsRecordSchema = {
   type: 'object',
@@ -453,7 +460,12 @@ export const patientsRecordSchema = {
     },
     doctor_membership_id: { type: 'string', nullable: true, description: 'The usual doctor' },
     follow_up_at: { type: 'string', format: 'date-time', nullable: true },
-    notes: { type: 'string', maxLength: 2000, nullable: true },
+    notes: {
+      type: 'string',
+      maxLength: 2000,
+      nullable: true,
+      description: PATIENT_MEDICAL_DETAIL_NOTE,
+    },
     lead_id: {
       type: 'string',
       nullable: true,
@@ -461,8 +473,20 @@ export const patientsRecordSchema = {
     },
     has_data_consent: { type: 'boolean' },
     has_photo_consent: { type: 'boolean' },
-    allergies: { type: 'array', maxItems: 30, items: { type: 'string', maxLength: 120 } },
-    contraindications: { type: 'array', maxItems: 30, items: { type: 'string', maxLength: 120 } },
+    allergies: {
+      type: 'array',
+      maxItems: 30,
+      items: { type: 'string', maxLength: 120 },
+      nullable: true,
+      description: PATIENT_MEDICAL_DETAIL_NOTE,
+    },
+    contraindications: {
+      type: 'array',
+      maxItems: 30,
+      items: { type: 'string', maxLength: 120 },
+      nullable: true,
+      description: PATIENT_MEDICAL_DETAIL_NOTE,
+    },
     created_at: { type: 'string', format: 'date-time' },
     updated_at: { type: 'string', format: 'date-time' },
   },

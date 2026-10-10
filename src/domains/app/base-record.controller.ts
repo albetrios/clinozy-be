@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { ForbiddenError } from '@/shared/errors/index.js';
+import { ForbiddenError, MISSING_PERMISSION_REASON } from '@/shared/errors/index.js';
 import { paginatedResponse, successResponse } from '@/shared/utils/http/response.util.js';
 import {
   getActingUserPublicId,
@@ -24,6 +24,17 @@ function pathParams(request: FastifyRequest): Record<string, string | undefined>
   return request.params as Record<string, string | undefined>;
 }
 
+/** Whether the caller holds at least one of `codes` (each read from the request's memoized set). */
+async function holdsAnyPermission(
+  request: FastifyRequest,
+  codes: readonly string[],
+): Promise<boolean> {
+  for (const code of codes) {
+    if (await hasOrganizationPermission(request, code)) return true;
+  }
+  return false;
+}
+
 /** Where a table's routes take their ids from, and how its audit rows are named. */
 export interface BaseRecordControllerOptions {
   /** Singular resource name for audit actions and types (`offering`). */
@@ -33,10 +44,11 @@ export interface BaseRecordControllerOptions {
   /** The parent path param of nested list and create routes (`patient_id`). */
   parentParam?: string;
   /**
-   * Output fields only holders of a permission see — everyone else gets `null`
-   * (`{ min_price: 'offering:lower_price:read' }`, launch O15 "Lowest price").
+   * Output fields only holders of a permission see — everyone else gets `null` (the export's cell
+   * blank): one code (`{ min_price: 'offering:lower_price:read' }`, launch O15 "Lowest price") or a
+   * list, any of which shows it (a patient's medical details, launch D83 (3)).
    */
-  hiddenFields?: Readonly<Record<string, string>>;
+  hiddenFields?: Readonly<Record<string, string | readonly string[]>>;
   /** Body fields only holders of a permission may send — 403 otherwise (`{ field: 'resource:code' }`). */
   guardedFields?: Readonly<Record<string, string>>;
   /** The table's read permission — an export (gated by its resource's export code) needs it too. */
@@ -116,14 +128,20 @@ export class BaseRecordController<Output extends { id: string }> {
     });
   }
 
-  /** Hides the output fields the caller may not see (null), per {@link BaseRecordControllerOptions.hiddenFields}. */
+  /**
+   * Hides the output fields the caller may not see (null), per
+   * {@link BaseRecordControllerOptions.hiddenFields} — a field with a code list shows when the caller
+   * holds any of them.
+   */
   protected async present<Item extends Output | Output[]>(
     request: FastifyRequest,
     output: Item,
   ): Promise<Item> {
     const hidden: string[] = [];
-    for (const [field, code] of Object.entries(this.options.hiddenFields ?? {})) {
-      if (!(await hasOrganizationPermission(request, code))) hidden.push(field);
+    for (const [field, codes] of Object.entries(this.options.hiddenFields ?? {})) {
+      if (!(await holdsAnyPermission(request, typeof codes === 'string' ? [codes] : codes))) {
+        hidden.push(field);
+      }
     }
     if (hidden.length === 0) return output;
     const blank = (item: Output) =>
@@ -299,7 +317,7 @@ export class BaseRecordController<Output extends { id: string }> {
   readonly export = async (request: FastifyRequest, _reply: FastifyReply) => {
     const { readPermission } = this.options;
     if (readPermission && !(await hasOrganizationPermission(request, readPermission))) {
-      throw new ForbiddenError('errors:forbidden').withReason('missing_permission');
+      throw new ForbiddenError('errors:forbidden').withReason(MISSING_PERMISSION_REASON);
     }
     const { rows, is_truncated } = await this.service.exportRows(
       requireOrganizationScope(request),

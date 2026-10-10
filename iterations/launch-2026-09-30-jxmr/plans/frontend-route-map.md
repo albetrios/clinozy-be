@@ -491,16 +491,16 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 | POST | `/app/patients/:patient_id/check-ins/:patient_check_in_id/actions` | `patient:update` | req |  | 7.63 | Log a check-in action |
 | POST | `/app/patients/:patient_id/check-ins/:patient_check_in_id/restore` | `patient:update` | req |  | 7.56 | Restore a check-in |
 | GET | `/app/patients/:patient_id/clinical-notes` | `patient:clinical_record:read` |  |  | 7.8 | List a patient's clinical notes |
-| POST | `/app/patients/:patient_id/clinical-notes` | `patient:update` | req |  | 7.9 | Add a clinical note |
+| POST | `/app/patients/:patient_id/clinical-notes` | `patient:update` + `patient:clinical_record:read` | req |  | 7.9 | Add a clinical note |
 | GET | `/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id` | `patient:clinical_record:read` |  |  | 7.10 | Get a clinical note |
-| DELETE | `/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id` | `patient:update` |  |  | 7.11 | Delete a clinical note |
-| POST | `/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id/restore` | `patient:update` | req |  | 7.12 | Restore a clinical note |
+| DELETE | `/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id` | `patient:update` + `patient:clinical_record:read` |  |  | 7.11 | Delete a clinical note |
+| POST | `/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id/restore` | `patient:update` + `patient:clinical_record:read` | req |  | 7.12 | Restore a clinical note |
 | GET | `/app/patients/:patient_id/images` | `patient:clinical_record:read` |  |  | 7.33 | List a patient's photos |
-| POST | `/app/patients/:patient_id/images` | `patient:update` | req |  | 7.34 | Add a photo |
+| POST | `/app/patients/:patient_id/images` | `patient:update` + `patient:clinical_record:read` | req |  | 7.34 | Add a photo |
 | GET | `/app/patients/:patient_id/images/:patient_image_id` | `patient:clinical_record:read` |  |  | 7.35 | Get a photo |
-| PATCH | `/app/patients/:patient_id/images/:patient_image_id` | `patient:update` |  |  | 7.36 | Change or move a photo |
-| DELETE | `/app/patients/:patient_id/images/:patient_image_id` | `patient:update` |  |  | 7.37 | Delete a photo |
-| POST | `/app/patients/:patient_id/images/:patient_image_id/restore` | `patient:update` | req |  | 7.38 | Restore a photo |
+| PATCH | `/app/patients/:patient_id/images/:patient_image_id` | `patient:update` + `patient:clinical_record:read` |  |  | 7.36 | Change or move a photo |
+| DELETE | `/app/patients/:patient_id/images/:patient_image_id` | `patient:update` + `patient:clinical_record:read` |  |  | 7.37 | Delete a photo |
+| POST | `/app/patients/:patient_id/images/:patient_image_id/restore` | `patient:update` + `patient:clinical_record:read` | req |  | 7.38 | Restore a photo |
 | GET | `/app/patients/:patient_id/offering-ideas` | `patient:read` |  |  | 7.74 | A patient's ideas from history |
 | GET | `/app/patients/:patient_id/offering-suggestions` | `patient:read` |  |  | 7.68 | List a patient's plan |
 | POST | `/app/patients/:patient_id/offering-suggestions` | `patient:update` | req |  | 7.69 | Add to the plan |
@@ -519,19 +519,19 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 | POST | `/app/patients/:patient_id/prescriptions/:patient_prescription_id/approve` | `patient_prescription:update` | req |  | 7.18 | Approve a prescription |
 | POST | `/app/patients/:patient_id/prescriptions/:patient_prescription_id/restore` | `patient_prescription:delete` | req |  | 7.20 | Restore a draft prescription |
 | GET | `/app/patients/:patient_id/reports` | `patient:clinical_record:read` |  |  | 7.39 | List a patient's reports |
-| POST | `/app/patients/:patient_id/reports` | `patient:update` | req |  | 7.40 | Add a report |
+| POST | `/app/patients/:patient_id/reports` | `patient:update` + `patient:clinical_record:read` | req |  | 7.40 | Add a report |
 | GET | `/app/patients/:patient_id/reports/:patient_report_id` | `patient:clinical_record:read` |  |  | 7.41 | Get a report |
-| PATCH | `/app/patients/:patient_id/reports/:patient_report_id` | `patient:update` |  |  | 7.42 | Change a report |
-| DELETE | `/app/patients/:patient_id/reports/:patient_report_id` | `patient:update` |  |  | 7.43 | Delete a report |
-| POST | `/app/patients/:patient_id/reports/:patient_report_id/restore` | `patient:update` | req |  | 7.44 | Restore a report |
+| PATCH | `/app/patients/:patient_id/reports/:patient_report_id` | `patient:update` + `patient:clinical_record:read` |  |  | 7.42 | Change a report |
+| DELETE | `/app/patients/:patient_id/reports/:patient_report_id` | `patient:update` + `patient:clinical_record:read` |  |  | 7.43 | Delete a report |
+| POST | `/app/patients/:patient_id/reports/:patient_report_id/restore` | `patient:update` + `patient:clinical_record:read` | req |  | 7.44 | Restore a report |
 | POST | `/app/patients/:patient_id/restore` | `patient:delete` | req |  | 7.7 | Restore patient |
 | GET | `/app/patients/:patient_id/reviews` | `patient:read` |  |  | 7.57 | List a patient's reviews |
-| POST | `/app/patients/:patient_id/reviews` | `patient:update` | req |  | 7.58 | Log a review |
+| POST | `/app/patients/:patient_id/reviews` | `patient_review:create` | req |  | 7.58 | Log a review |
 | GET | `/app/patients/:patient_id/reviews/:patient_review_id` | `patient:read` |  |  | 7.59 | Get a review |
-| PATCH | `/app/patients/:patient_id/reviews/:patient_review_id` | `patient:update` |  |  | 7.60 | Change a review |
-| DELETE | `/app/patients/:patient_id/reviews/:patient_review_id` | `patient:update` |  |  | 7.61 | Delete a review |
-| POST | `/app/patients/:patient_id/reviews/:patient_review_id/actions` | `patient:update` | req |  | 7.64 | Log a review action |
-| POST | `/app/patients/:patient_id/reviews/:patient_review_id/restore` | `patient:update` | req |  | 7.62 | Restore a review |
+| PATCH | `/app/patients/:patient_id/reviews/:patient_review_id` | `patient_review:update` |  |  | 7.60 | Change a review |
+| DELETE | `/app/patients/:patient_id/reviews/:patient_review_id` | `patient_review:delete` |  |  | 7.61 | Delete a review |
+| POST | `/app/patients/:patient_id/reviews/:patient_review_id/actions` | `patient_review:update` | req |  | 7.64 | Log a review action |
+| POST | `/app/patients/:patient_id/reviews/:patient_review_id/restore` | `patient_review:delete` | req |  | 7.62 | Restore a review |
 | GET | `/app/patients/:patient_id/treatments` | `patient_treatment:read` |  |  | 7.46 | List a patient's treatments |
 | POST | `/app/patients/:patient_id/treatments` | `patient_treatment:create` | req |  | 7.47 | Record a treatment session |
 | GET | `/app/patients/:patient_id/treatments/:patient_treatment_id` | `patient_treatment:read` |  |  | 7.48 | Get a treatment session |
@@ -561,7 +561,7 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 | PATCH | `/app/invoices/:invoice_id` | `payment:update` |  |  | 8.5 | Change an invoice |
 | DELETE | `/app/invoices/:invoice_id` | `payment:delete` |  |  | 8.6 | Delete an unpaid invoice |
 | GET | `/app/invoices/:invoice_id/credit-notes` | `payment:read` |  |  | 8.9 | List an invoice's credit notes |
-| POST | `/app/invoices/:invoice_id/credit-notes` | `payment:create` | req |  | 8.10 | Refund with a credit note |
+| POST | `/app/invoices/:invoice_id/credit-notes` | `payment:delete` | req |  | 8.10 | Refund with a credit note |
 | GET | `/app/invoices/:invoice_id/credit-notes/:invoice_credit_note_id` | `payment:read` |  |  | 8.11 | Get a credit note |
 | POST | `/app/invoices/:invoice_id/preview` | `payment:update` |  |  |  | Preview a change to an invoice |
 | POST | `/app/invoices/:invoice_id/restore` | `payment:delete` | req |  | 8.7 | Restore an invoice |
