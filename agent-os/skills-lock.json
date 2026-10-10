@@ -53,7 +53,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-contract-test-maintainer/SKILL.md",
-      "computedHash": "e5399e59b4d1b9e2bec53292368ca674817a3ec4e618651f2721cf6b8317d79f"
+      "computedHash": "6afb792fe1cf67f793dd5ee192c04f325b6b57ba4a1df4d47353630c9df396eb"
     },
     "be-cursor-global-skills": {
       "source": "local",
@@ -263,7 +263,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-workers-events/SKILL.md",
-      "computedHash": "c320af80548415ebb249966c88abe166192312776818d5a31c5af84b78128cb0"
+      "computedHash": "d678209c828b69a0983d4e3c03843ae555c6966e336219f6535e45d9b01dff58"
     },
     "ponytail": {
       "source": "DietrichGebert/ponytail",
