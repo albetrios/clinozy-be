@@ -15,6 +15,8 @@ import { WebauthnCredentialRepository } from '@/domains/auth/sub-domains/auth-we
 import { VERIFICATION_CODE_RESEND_COOLDOWN_SECONDS } from '@/domains/auth/sub-domains/auth-method/verification-code.js';
 import { hashPassword, verifyPassword } from '@/shared/utils/security/password.util.js';
 import { eventBus } from '@/core/events/event-bus.js';
+import { captureException } from '@/infrastructure/observability/sentry/sentry.js';
+import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import {
   AUTH_EVENT,
@@ -399,12 +401,31 @@ export class AuthMethodService {
       'NX',
     );
     if (cooldownClaimed) {
-      await this.issuePasswordResetIfUserExists(parsed.email);
+      try {
+        await this.issuePasswordResetIfUserExists(parsed.email);
+      } catch (error) {
+        // Never a status oracle: a failure here (the mail outbox down, say) happens only for a
+        // known account, so it must answer exactly like an unknown one. The issue is atomic — no
+        // token without its email — so nothing half-done is left; release the cooldown so the
+        // user's retry is not refused, and report it.
+        logger.error({ err: error }, 'auth.password_reset.issue_failed');
+        captureException(error, { tags: { flow: 'password_reset_request' } });
+        await this.releasePasswordResetCooldown(cooldownKey);
+      }
     }
     // Both branches return the same body; hold them to a common minimum duration so the extra
     // token-issuing writes on the known-account path cannot leak existence via response latency.
     await enforceMinimumDuration(startedAtMillis);
     return { messageKey: 'success:passwordResetEmailSent' };
+  }
+
+  /** Best-effort: frees the per-email reset cooldown after a failed issue (logged, never thrown). */
+  private async releasePasswordResetCooldown(cooldownKey: string): Promise<void> {
+    try {
+      await this.redis.del(cooldownKey);
+    } catch (error) {
+      logger.warn({ err: error }, 'auth.password_reset.cooldown_release_failed');
+    }
   }
 
   private async issuePasswordResetIfUserExists(email: string): Promise<void> {

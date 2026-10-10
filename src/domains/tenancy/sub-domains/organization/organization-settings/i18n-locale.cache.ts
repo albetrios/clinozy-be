@@ -1,5 +1,9 @@
-import { redisConnection } from '@/infrastructure/cache/redis.client.js';
-import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import {
+  invalidateTombstonedCacheEntry,
+  populateTombstonedCacheEntry,
+  readTombstonedCacheEntry,
+} from '@/infrastructure/cache/redis-tombstone-cache.util.js';
+import { CACHE_INVALIDATION_TOMBSTONE_TTL_SECONDS } from '@/shared/constants/ttl.constants.js';
 
 /**
  * Redis cache for the organization → default-locale resolution used by the
@@ -21,6 +25,7 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
  */
 const I18N_LOCALE_CACHE_PREFIX = 'i18n:locale';
 const I18N_LOCALE_CACHE_TTL_SECONDS = 300;
+const I18N_LOCALE_METRIC = 'i18n-locale';
 
 function buildKey(organizationPublicId: string): string {
   return `${I18N_LOCALE_CACHE_PREFIX}:${organizationPublicId}`;
@@ -34,47 +39,39 @@ function buildKey(organizationPublicId: string): string {
 export async function getCachedOrganizationDefaultLocale(
   organizationPublicId: string,
 ): Promise<string | null> {
-  try {
-    return await redisConnection.get(buildKey(organizationPublicId));
-  } catch (error) {
-    logger.warn({ error, organizationPublicId }, 'i18n-locale.cache.get.failed');
-    return null;
-  }
+  return readTombstonedCacheEntry(buildKey(organizationPublicId), I18N_LOCALE_METRIC);
 }
 
 /**
- * Stores the resolved default locale for an organization with a 5-minute TTL.
- * Best-effort: a Redis outage logs at `warn` and does NOT propagate, so the
- * resolution path returns the freshly-computed value regardless.
+ * Stores the resolved default locale for an organization with a 5-minute TTL — never over an
+ * invalidation tombstone (`SET … NX`), so a read that resolved the old locale just before a change
+ * committed cannot reinstall it. Best-effort: a Redis outage logs at `warn` and does NOT propagate,
+ * so the resolution path returns the freshly-computed value regardless.
  */
 export async function setCachedOrganizationDefaultLocale(
   organizationPublicId: string,
   locale: string,
 ): Promise<void> {
-  try {
-    await redisConnection.set(
-      buildKey(organizationPublicId),
-      locale,
-      'EX',
-      I18N_LOCALE_CACHE_TTL_SECONDS,
-    );
-  } catch (error) {
-    logger.warn({ error, organizationPublicId }, 'i18n-locale.cache.set.failed');
-  }
+  await populateTombstonedCacheEntry({
+    key: buildKey(organizationPublicId),
+    value: locale,
+    ttlSeconds: I18N_LOCALE_CACHE_TTL_SECONDS,
+    metricName: I18N_LOCALE_METRIC,
+  });
 }
 
 /**
- * Drops the cached default locale for an organization. Called from the
- * organization-settings mutation paths that change the default locale, so a
- * dashboard switch from `'en' → 'es'` reflects in the next request rather
- * than waiting up to {@link I18N_LOCALE_CACHE_TTL_SECONDS}. Best-effort.
+ * Invalidates the cached default locale for an organization with a short tombstone (not a `DEL`,
+ * which an in-flight read could overwrite with the old value). Called after the organization-settings
+ * mutation that changes the default locale commits, so a dashboard switch from `'en' → 'es'` reflects
+ * in the next request rather than waiting up to {@link I18N_LOCALE_CACHE_TTL_SECONDS}. Best-effort.
  */
 export async function invalidateCachedOrganizationDefaultLocale(
   organizationPublicId: string,
 ): Promise<void> {
-  try {
-    await redisConnection.del(buildKey(organizationPublicId));
-  } catch (error) {
-    logger.warn({ error, organizationPublicId }, 'i18n-locale.cache.invalidate.failed');
-  }
+  await invalidateTombstonedCacheEntry({
+    key: buildKey(organizationPublicId),
+    ttlSeconds: CACHE_INVALIDATION_TOMBSTONE_TTL_SECONDS,
+    metricName: I18N_LOCALE_METRIC,
+  });
 }

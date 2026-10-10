@@ -14,6 +14,7 @@ import { mockedRedisSet } from '@/tests/helpers/redis-mock.helper.js';
 import type { VerificationTokenRepository } from '@/domains/auth/sub-domains/auth-method/verification-token/verification-token.repository.js';
 import type { AuthSessionService } from '@/domains/auth/sub-domains/auth-session/auth-session.service.js';
 import type * as EventBusModule from '@/core/events/event-bus.js';
+import { eventBus } from '@/core/events/event-bus.js';
 
 vi.mock('@/core/events/event-bus.js', async (importOriginal) => {
   const original = await importOriginal<typeof EventBusModule>();
@@ -312,6 +313,17 @@ describe('AuthMethodService', () => {
     // success is preserved so the cooldown is not an account-existence oracle.
     expect(userService.findByEmail).not.toHaveBeenCalled();
     expect(verificationTokenRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('forgotPassword answers a failed issue for a known account exactly like an unknown one', async () => {
+    // The mail outbox insert fails: the atomic issue rolls back. A 503 here (an unknown email
+    // still gets 200) would tell an attacker which emails have accounts.
+    vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
+    vi.mocked(eventBus.emitStrict).mockRejectedValueOnce(new Error('outbox unavailable'));
+    const result = await service.forgotPassword({ email: user.email });
+    expect(result.messageKey).toBe('success:passwordResetEmailSent');
+    // The cooldown is released so the user's retry is not refused.
+    expect(redis.del).toHaveBeenCalledWith(expect.stringMatching(/^auth:password_reset_cooldown:/));
   });
 
   it('forgotPassword enforces a constant-time floor on both account-existence branches', async () => {
