@@ -77,6 +77,6 @@ and distinct-user tenant pagination scenarios. Configure lifecycle runs with
 The nightly workflow enforces the distinct-user and persisted-lifecycle gates;
 failed checks or incomplete journeys fail the job.
 
-The six additional account, MFA, tenant, admin, upload and WebAuthn lifecycle gates use an isolated database and loopback fixtures. See [fixture-backed lifecycle coverage](../../../../docs/reference/testing/load-testing.md#fixture-backed-lifecycle-coverage) for setup, verified behavior and provider limitations.
-
-Stripe key-first testing and the local signed outbound receiver are documented in [Stripe provider and outbound webhook validation](../../../../docs/reference/testing/load-testing.md#stripe-provider-and-outbound-webhook-validation). Run `pnpm test:stripe:load` with an explicit scratch database.
+`auth-security-lifecycle.js` runs in the same strict nightly step on the seeded pool; the
+other lifecycle journeys are covered by the Vitest lanes. See
+[lifecycle journeys](../../../../docs/reference/testing/load-testing.md#lifecycle-journeys).

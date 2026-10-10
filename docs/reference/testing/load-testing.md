@@ -6,51 +6,6 @@ Load tests use [k6](https://k6.io/) and Autocannon. Keep this doc in sync with [
 
 ---
 
-## Browser contracts without Browser-MCP
-
-The repository-owned Playwright suite runs Chromium independently of agent browser
-tools. Install dependencies with the pinned package manager, then run
-`pnpm test:browser:install`. Start an owned isolated backend with synthetic accounts,
-a dedicated database and Redis namespace. Never share its database with Vitest suites
-that truncate fixtures: clone the owned seed database for the browser process. Use
-`CAPTCHA_PROVIDER=disabled` for these local cases,
-`SESSION_ORIGIN_CSRF_REQUIRED=true`, `COOKIE_SECURE=false`, and
-`ALLOWED_ORIGINS=http://localhost:5175`. This suite measures local HTTP contracts;
-trusted HTTPS, Secure/cross-site cookies, real OAuth, CAPTCHA, physical authenticators
-and provider-hosted SCA require separate evidence.
-
-```bash
-BROWSER_TEST_API_URL=http://localhost:63003 \
-BROWSER_TEST_CREDENTIAL_POOL=/absolute/path/to/synthetic-credential-pool.json \
-BROWSER_TEST_REPORT_DIR=/absolute/path/to/new-private-report-directory \
-pnpm test:browser
-```
-
-The credential pool uses the existing load-pool fields and must contain two distinct
-tenants. The harness serves pages on localhost ports 5175 and 5176; only 5175 is
-allowed by the backend. Override these through `BROWSER_TEST_ORIGIN` and
-`BROWSER_TEST_DENIED_ORIGIN`, keeping the API allowlist aligned. The suite verifies
-login and input/authentication rejection, credentialed CORS, HttpOnly/path cookies,
-session refresh, organization binding and foreign-tenant denial, originless CSRF
-double-submit handling, and logout revocation. It exercises backend browser
-contracts rather than the product frontend.
-
-Missing browser binaries or backend prerequisites fail the browser run explicitly.
-Vitest, database, queue, k6 and sandbox-provider API tests remain independent. Record
-browser cases as NOT RUN until a real browser executes them. JSON results,
-failure screenshots and traces remain private: traces can contain credentials and
-session data and must not be committed. Retries are disabled so failures remain visible.
-
-```mermaid
-flowchart LR
-  commands["Repository test commands"] --> api["API / database / queue / sandbox APIs"]
-  commands --> playwright["Playwright CLI + Chromium"]
-  playwright --> harness["Local browser contract harness"]
-  harness --> backend["Owned isolated backend"]
-  api --> backend
-  playwright --> evidence["Private JSON / screenshots / traces"]
-```
-
 ## Flow overview
 
 ```mermaid
@@ -89,31 +44,22 @@ Load scenarios must fail on missing prerequisites and gate semantic checks as we
 
 Report separately: executed route coverage, concurrency profile, fixture/identity/tenant counts, status distribution, semantic check results, latency percentiles, and exclusions. An all-green run means no failures in those checks; it does not imply an error-free backend.
 
-## Fixture-backed lifecycle coverage
+## Lifecycle journeys
 
-The nightly workflow additionally gates six lifecycle scenarios, each with four virtual users and five iterations. They require 100% checks, zero unexpected HTTP failures, zero dropped iterations and exactly 20 completed journeys per scenario.
+`auth-security-lifecycle.js` runs in the nightly strict step against the running API on the
+seeded credential pool (`VUS=4`, `ITERATIONS=5`: 20 distinct users). Each journey revokes
+sessions, links and removes a sign-in method, changes and restores the password, enrolls real
+TOTP MFA, verifies and replays codes, consumes a recovery code and removes MFA, so every pool
+user ends as it started. It requires 100% checks, zero unexpected HTTP failures, zero dropped
+iterations and exactly 20 completed journeys.
 
-| Scenario | Verified behavior |
-| --- | --- |
-| `auth-security-lifecycle.js` | Session revocation, linked methods, password change/restore, real TOTP enrollment, verification/replay, recovery-code consumption and MFA removal |
-| `account-onboarding-lifecycle.js` | Real email-code redemption, password reset/replay, settings read, onboarding persistence, export request/status and account deletion |
-| `tenant-membership-lifecycle.js` | Team creation, invitations/resend/acceptance, suspension, ownership transfer, leave, invitation revocation, membership removal and team deletion |
-| `admin.js` | Real super-admin context, ordinary-user denials, user search/detail/update/readback, global audit and deletion |
-| `webauthn-lifecycle.js` | Genuine P-256 registration and signed authentication, challenge replay denials, identity binding, credential listing and revocation |
-| `upload-asset-lifecycle.js` | Actual PNG bytes, upload ownership denials, confirmation, avatar/logo attach/readback/detach and upload deletion |
-
-Run `pnpm build` first. Generate a credential pool against the seeded source database. Stop every connection to that source before cloning it, then run:
-
-```bash
-LOAD_TEST_DATABASE=clinozy_load_lifecycle LOAD_TEST_CREATE_DATABASE=true \
-  node src/tests/load/k6/run-lifecycle.mjs
-```
-
-Cloning requires PostgreSQL CREATEDB permission. To use an already prepared scratch database, omit `LOAD_TEST_CREATE_DATABASE`. The runner refuses the configured application database and requires a database name containing an underscore-delimited `load` or `test` segment. It redirects **all four** configured database URLs, including `DATABASE_MAINTENANCE_URL`, to the scratch database, uses a unique Redis namespace, checks that ports 3002–3005 are free, and stops only its own API and fixture processes. Scratch data and reports are retained for investigation; the runner does not drop databases. Reports default to `k6-lifecycle/`; override with `LOAD_TEST_REPORT_DIR`.
-
-The authenticated loopback mailbox reads tokens from actual committed mail-outbox records and can create a provider-free local subscription for newly created load teams. This preserves seat-quota enforcement without making payment-provider requests. No worker is started and no live email is sent. The loopback storage fixture handles actual bytes and the application's HEAD/GET/copy/delete requests, but does not validate AWS signatures. Export testing verifies the persisted queued request and status, not worker completion or downloadable contents. The loopback virtual authenticator generates genuine P-256 keys, CBOR attestation and signed assertions; the API uses its real WebAuthn verifier. It does not cover browser UI or physical authenticators. Live payment-provider flows and OAuth completion require separate validation.
-
-Source coverage is a route-inventory guard, not proof that each route executed successfully. Keep raw samples and exact journey counters alongside each result. Expected 400/401/403/404 responses prove specific denial or replay behavior and must not be counted as successful positive-route coverage.
+The account, tenant, upload, passkey, billing-provider and webhook-delivery journeys are
+covered by the Vitest lanes (the same assertions, in-process, with the existing factories and
+mocks): `src/domains/auth/__tests__/` (password, MFA, email-code, reset, CSRF and real P-256
+passkey ceremonies via `src/tests/helpers/webauthn-authenticator.helper.ts`),
+`membership.integration.test.ts`, `upload.integration.test.ts`, `user-admin.integration.test.ts`,
+`notify.test.ts`, `billing-subscription-mutations.integration.test.ts`, and the Stripe contract
+tests under `src/tests/contract/`.
 
 ## Nightly CI gate (GitHub Actions)
 
@@ -126,7 +72,8 @@ The service containers are plaintext and the connection is the superuser, while 
 | Role                 | Scenarios                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Job outcome                                                          |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
 | **Gate (must pass)** | `health-stress.js`, `api-stress.js`, `login-smoke.js`, `permission-cached.js`, `stripe-webhook-ingest.js`, `idempotency-storm.js`                                                                                                                                                                                                                                                                                                                                                                                        | Workflow **fails** if any k6 threshold fails                         |
-| **Informational**    | `auth-onboarding.js`, `passwordless-signup.js`, `daily-ops.js`, `billing.js`, `webhooks.js`; the organization-scoped set (`audit-list.js`, `organization-membership-list.js`, `notification-policy-crud.js`, `billing-subscriptions-rls.js`, `user-data-export.js`, `rls-concurrency-beyond-pool.js`); and the organization writes (`member-role-permission-list.js`, `permission-write.js`, `tenancy-role-write.js`, `organization-settings-write.js`, `notification-write.js`, `organization-api-key-lifecycle.js`); and `fe-full-surface.js`, every call clinozy-fe makes, walked once by each of 20 pool users (the job seeds the pool with `pnpm db:seed:loadtest` and starts the API with `AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED=true`) | `continue-on-error`; failures do not fail the workflow by themselves |
+| **Informational**    | `auth-onboarding.js`, `passwordless-signup.js`, `daily-ops.js`, `webhooks.js`, `admin.js`; the organization-scoped set (`audit-list.js`, `organization-membership-list.js`, `notification-policy-crud.js`, `billing-subscriptions-rls.js`, `user-data-export.js`, `rls-concurrency-beyond-pool.js`); and the organization writes (`member-role-permission-list.js`, `permission-write.js`, `tenancy-role-write.js`, `organization-settings-write.js`, `organization-api-key-lifecycle.js`); and `fe-full-surface.js`, every call clinozy-fe makes, walked once by each of 20 pool users (the job seeds the pool with `pnpm db:seed:loadtest` and starts the API with `AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED=true`) | `continue-on-error`; failures do not fail the workflow by themselves |
+| **Strict (must pass)** | On the seeded pool: `multi-tenant-membership-read.js`, `notification-write.js`, `auth-security-lifecycle.js`; then `tenancy-role-write.js`, `organization-api-key-lifecycle.js`, `notification-policy-crud.js`, `organization-settings-write.js`, `webhooks.js` and `billing.js` as completed-journey gates | Workflow **fails** if any check, completion count or threshold fails |
 
 **SLO-style thresholds (k6):** Scenarios define `http_req_duration` percentiles on tagged requests and `http_req_failed` (see each file under `src/tests/load/k6/scenarios/`). A `{name:<tag>}` threshold only measures requests sent with exactly that `name` tag; on a tag no request carries it has no samples, reports p(95)=0s and always passes, so `k6-coverage.policy.unit.test.ts` fails on any threshold its scenario never tags. The gate enforces:
 
@@ -137,7 +84,7 @@ Artifacts (`k6-*.json` summaries and `server.log`) are uploaded for 14 days. Opt
 
 **Writes, paced.** Every organization write route carries a 100-per-minute cap per (organization, actor) that `RATE_LIMIT_RELAXED_CAPS` does not lift, and a k6 run is one actor (the demo user). The write scenarios therefore use the `pacedWrites` profile in `helpers/config.js` (one iteration per second) rather than 10 closed-loop VUs, which measured the rate limiter (429) instead of the route. Writes take their `X-Idempotency-Key` from `idempotencyKey()` in `helpers/idempotency.js`: the API requires 16–255 characters, and a timestamp keeps a key from replaying an earlier run.
 
-**Route coverage.** `pnpm load:coverage` matches every request the scenario files make — method and path — against `docs/routes.txt`; `pnpm load:coverage --nightly` counts only the files this workflow runs. It skips ROLE and TOKEN routes and public infrastructure routes (OAuth, email sign-in, WebAuthn, the Stripe webhook, health). The nightly count is a ratchet: `tooling/ci/load-coverage-budget.json` records it, and `k6-coverage.policy.unit.test.ts` fails when the nightly load-tests fewer routes — raise the budget when a change adds coverage. The workflow references all 104 eligible catalog routes; this static inventory does not prove every route passed at runtime. Stripe-backed writes and signed outbound webhook delivery run in the separate provider contract gate. Account deletion, organization leave/ownership transfer and S3 transport writes now run in the isolated lifecycle gate. The runner provisions a distinct real super-admin session per virtual user and permits at most five deletion iterations per admin, respecting the five-deletions-per-five-minutes protection.
+**Route coverage.** `pnpm load:coverage` matches every request the scenario files make — method and path — against `docs/routes.txt`; `pnpm load:coverage --nightly` counts only the files this workflow runs. It skips ROLE and TOKEN routes and public infrastructure routes (OAuth, email sign-in, WebAuthn, the Stripe webhook, health). The nightly count is a ratchet: `tooling/ci/load-coverage-budget.json` records it, and `k6-coverage.policy.unit.test.ts` fails when the nightly load-tests fewer routes — raise the budget when a change adds coverage. The nightly workflow references 78 eligible catalog routes; this static inventory does not prove every route passed at runtime. Stripe-backed writes, signed outbound webhook delivery, account deletion, organization leave/ownership transfer and S3 transport writes are covered by the Vitest lanes (see [Lifecycle journeys](#lifecycle-journeys)), not by load.
 
 **Reproduce locally:** `pnpm compose:up`, `pnpm db:migrate`, `pnpm setup:local --only-env`, `DEMO_PASSWORD=DemoPassword123! pnpm db:seed:full`, `pnpm dev:loadtest`, then `pnpm tool:load-test-credentials`, export `TEST_TOKEN` / `TEST_ORG_ID`, and run `pnpm load:stress` and `pnpm load:stress:api` (same thresholds as CI).
 
@@ -526,11 +473,8 @@ DURATION=20s MIN_COMPLETED=20 k6 run src/tests/load/k6/scenarios/tenancy-role-wr
 For 240-user capacity investigations, record the admission ceiling as
 `ceil(DATABASE_POOL_MAX × OVERLOAD_DB_POOL_SHED_RATIO)`: this counts running and
 waiting organization-scoped database work, rather than database connections alone.
-The lifecycle runner honors explicit `DATABASE_POOL_MAX` and
-`OVERLOAD_DB_POOL_SHED_RATIO` process variables and records their effective values
-in `runtime.json`; its fallback remains pool 60 / ratio 3. That fallback starts
-shedding at 180 in-flight units and cannot promise error-free admission of a
-synchronized 240-user burst.
+Pool 60 / ratio 3 starts shedding at 180 in-flight units and cannot promise
+error-free admission of a synchronized 240-user burst.
 
 On the four-core cloud host, pool 30 / ratio 10 (a bounded ceiling of 300) eliminated
 unexpected HTTP errors across repeated 240-user bursts. The organization access
@@ -546,8 +490,6 @@ Keep the monolithic worker's independently budgeted pool (60 in `.env.example`);
 do not apply the API's smaller pool to that worker.
 
 Queue recovery and future clinic workflows require additional controlled fixtures.
-Provider-backed billing and signed outbound webhook processing use the separate
-provider journeys described below.
 
 The nightly workflow runs the strict notification and tenant journeys after
 bulk seeding and before front-end scenarios consume those fixtures. Notification
@@ -560,8 +502,7 @@ name, and the complete notification-preference set. Billing reads
 require nonempty plan/subscription fixtures and matching tenant-scoped details.
 Billing uses two ordinary bulk-seeded tenants and proves foreign subscription
 access returns 404. It does not send fake seed customer IDs to live payment
-providers; invoice and payment-method reads are compared with independent provider records
-in `billing-provider-lifecycle.js`.
+providers; invoice and payment-method mapping is pinned by the Stripe contract tests.
 These strict steps fail the job; earlier informational scenarios retain their
 separate purpose. The idempotency storm reuses the strict role journey instead
 of treating billing validation rejections as successful idempotency coverage.
@@ -570,7 +511,7 @@ Webhook CRUD never invokes test delivery. `WEBHOOK_TEST_BASE_URL` can select a
 public numeric HTTPS fixture to isolate backend latency from external hostname
 DNS latency; the default remains `https://example.com`. SSRF checks still apply.
 Hostname DNS behavior and public-network delivery still need separate measurements.
-The provider contract gate below verifies local signed delivery and persisted attempts.
+Signed test delivery and its persisted attempts are covered by `notify.test.ts`.
 
 Timestamp keysets select `cursor_created_at` using
 `cursorTimestampSelection(created_at)` and pass it through cursor creation.
@@ -586,130 +527,3 @@ Set `VUS` to the number of distinct credential-pool users. Set `DURATION=10m` fo
 Measure RSS and file descriptors for the actual API process, after warm-up. The existing memory-soak helper measures its orchestration process and is insufficient evidence of API memory stability. Raising overload admission can remove 503 responses while increasing latency; retain the latency thresholds and report both outcomes.
 
 For managed HTTP proxies on Node 24, start the API with `NODE_USE_ENV_PROXY=1` and retain loopback addresses in `NO_PROXY`. The Stripe production SDK uses the platform HTTPS agent so these proxy settings apply; retain platform CA trust.
-
-## Stripe provider and outbound webhook validation
-
-`pnpm test:stripe:load` first uses the configured `STRIPE_SECRET_KEY` when it is an
-`sk_test_` key, then runs the local contract fixture. A missing key or failed provider
-run still produces local test results, but the command exits nonzero until both
-checks pass. Live keys are rejected for these tests. Keys stay in environment
-configuration; reports contain modes, exit codes and results, never key values.
-
-```sh
-LOAD_TEST_DATABASE=clinozy_load_lifecycle \
-LOAD_TEST_CREATE_DATABASE=true \
-LOAD_TEST_REPORT_DIR=k6-stripe-validation \
-pnpm test:stripe:load
-```
-
-Use a new scratch database when cloning with `LOAD_TEST_CREATE_DATABASE=true`.
-For an existing scratch database omit that flag. The runner rejects the application
-database, redirects all four database URLs, namespaces Redis and owns its API,
-Stripe worker and fixtures. The provider fixture retains its owned sandbox
-subscriptions, customers and catalog objects after stopping the worker. Reports
-record retention; unrelated provider objects must never be modified.
-
-The configured-key run uses Stripe's actual test account: independently retrieves
-an existing owned catalog, creates synthetic customers and subscriptions, confirms
-a virtual Visa payment for paid subscriptions, retrieves
-the real provider activation event, signs it locally and sends it through the real
-ingress and BullMQ worker. It checks payment/setup secrets, idempotency replay,
-foreign-tenant denial, plan change, cancel/resume and final provider/local agreement.
-It proves provider API behavior and local webhook processing; it does not prove
-Stripe can initiate delivery to a public tunnel. Billing's provider latency budget
-is p95 below 3000 ms, separately from the tenant-read p95 below 500 ms.
-
-### Four-plan billing matrix
-
-The approved sandbox catalog has distinct Free, Starter, Growth and Pro titles and
-descriptions. Monthly USD prices are 0, 10, 30 and 99; annual USD prices are 100,
-300 and 990 for the paid tiers. Free annual is not advertised. Set
-`LOAD_PROVIDER_CATALOG_FILE` to its private JSON manifest with
-`realStripeSandbox: true` and four `products` containing provider `id`,
-`title`, `description`, and `prices` with provider `id`/`cycle`. Sandbox setup
-independently checks active, non-live products and all seven price amounts,
-currencies and recurring intervals. It reuses these objects and never creates
-replacement products or prices. Contract setup models this catalog locally.
-
-Prepare fresh synthetic TEAM organizations, ACTIVE memberships and permissions
-with the existing test factories in an isolated migrated database. Each journey
-actor also needs a distinct owned PERSONAL organization and membership. Supply a
-private `LOAD_PROVIDER_CREDENTIAL_POOL` JSON array with the existing `email`,
-`password`, `userPublicId` and `organizationPublicId` fields plus
-`personalOrganizationPublicId` for each journey actor. The final actor is a
-foreign-tenant fixture. Do not overwrite the original tenant-burst pool, share
-these fixtures with truncating Vitest suites, or reuse teams with subscriptions.
-Every organization switch returns a rebound token; the journey uses that token
-for subsequent requests.
-
-The key-first `pnpm test:stripe:load` wrapper runs sandbox and contract against
-the same selected scratch database. Supply a private object with separate
-`sandbox` and `contract` actor arrays when using that wrapper: their teams must
-be distinct and unsubscribed. A single array is sufficient for one explicitly
-selected lane. Setup validates distinct user identities and both required
-organization scopes before starting any journey.
-
-Seven sequential journeys cover all advertised plan/cycle combinations, 18
-directed same-cycle plan changes and 24 cross-cycle requests. Change-plan rejects
-`billing_cycle` with 400; those cases establish schema rejection, not cycle
-migration. Exact counters require every combination and transition, every check,
-zero unexpected HTTP errors, zero drops and all journeys completing. Backend
-p95 remains below 500 ms for contract mode and 3000 ms for real sandbox mode.
-
-```bash
-LOAD_TEST_DATABASE=clinozy_load_billing_contract \
-LOAD_TEST_REPORT_DIR=/absolute/path/to/new-private-contract-report \
-LOAD_PROVIDER_MODE=contract \
-LOAD_PROVIDER_CREDENTIAL_POOL=/absolute/path/to/fresh-private-pool.json \
-VUS=1 ITERATIONS=7 \
-node src/tests/load/k6/run-lifecycle.mjs src/tests/load/k6/scenarios/billing-provider-lifecycle.js
-```
-
-For the real lane, use a separately prepared scratch database/pool, set
-`LOAD_PROVIDER_MODE=sandbox` and `LOAD_PROVIDER_CATALOG_FILE`, and retain test-only
-Stripe credentials in private environment configuration. A k6 archive freezes
-execution options: explicitly pass VUS, ITERATIONS, provider mode and the private
-pool while creating it, then verify its metadata. Keep archives private because
-they contain credentials. Normal direct execution does not need an archive.
-
-The matrix checks replay markers/stable IDs, the specific 422
-`idempotency_key_reuse` conflict, duplicate-subscription409, unauthenticated401,
-explicit PERSONAL422, foreign-tenant404 and invalid payload/unknown-plan denials.
-Zero-price subscriptions have no payment secret; paid subscriptions use actual
-PaymentIntents. Account IDs are compared with independent provider reads. Cancel
-and resume both compare API, database and provider state, including the expected
-period-end cancellation flag.
-
-Five bounded payment probes cover decline, insufficient funds, expired card,
-requires-action and canceled states; the three declines recover with a valid
-virtual method. These are standalone owned USD1 PaymentIntents, not subscription
-invoice failure/dunning tests. API `requires_action` does not prove completed
-browser SCA. Locally signing retrieved provider events proves ingress/worker
-processing, not Stripe-initiated public delivery. Eventual cancellation, invoice
-totals/proration, seat-cap enforcement, wider IAM/provider failures and public
-ingress require separate evidence. A plan cycle without a configured Stripe price is
-rejected with 422 `planNotAvailableForBillingCycle` before any provider call.
-
-The local mode (`LOAD_PROVIDER_MODE=contract`) exercises those same API writes
-against an authenticated stateful loopback Stripe model. The outbound webhook
-journey intercepts only the final HTTP transport to a public-IP fixture. Production
-URL validation, signing and delivery-history writes remain active: a private URL
-is rejected, a forged signature fails, a valid timestamped HMAC reaches the owned
-receiver and the persisted delivery attempt records HTTP 200. The receiver then returns 503: the API must report failure and persist a FAILED attempt. A subsequent manual test delivery recovers, secret rotation must use the new HMAC, and old-secret or correctly signed stale requests are rejected. Delivery history must retain all four attempts with three SENT/200 and one FAILED/503. This tests synchronous test-delivery recovery; automatic BullMQ retries and public transport need separate evidence. No tunnel or ngrok
-credential is required. This contract gate uses p95 below 500 ms, zero unexpected
-HTTP failures and every check passing. Billing requires at least seven prepared
-journey actors plus a foreign tenant; the example uses exactly seven completed
-journeys (`VUS=1`, `ITERATIONS=7`). The separate outbound scenario defaults to 20
-completed journeys (`VUS=4`, `ITERATIONS=5`). Provider runs remain separate from the six existing
-lifecycle scenarios so the Stripe worker does not alter their queue assertions.
-
-Same-second subscription events reconcile against current provider truth outside
-SQL transactions. The subsequent write compares PostgreSQL's exact MVCC version,
-keeps the watermark from regressing and retries concurrent changes. Older seconds
-and terminal subscriptions retain their stale-event and non-resurrection guards.
-
-Contract fixtures pin item-level billing-period timestamps from the configured
-Stripe API version and assert the dates and status passed to the writer. The worker
-also accepts valid subscription-level timestamps from older webhook endpoint API
-versions. Missing items, malformed timestamps and reversed periods fail before a
-database write; they do not manufacture a billing period or pass Invalid Dates to SQL.

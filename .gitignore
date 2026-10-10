@@ -150,9 +150,3 @@ SESSION.md
 
 # Local greenfield legacy-cleanup reference notes (never committed)
 LEGACY-CLEANUP-NOTES.md
-
-# Local fixture-backed k6 reports (raw request samples and process logs).
-k6-lifecycle/
-k6-stripe-validation/
-# Local Playwright browser-contract reports, traces and the synthetic credential pool.
-browser-test-report/

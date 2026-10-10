@@ -1923,18 +1923,15 @@ src/
     │   │   │   ├── config.js
     │   │   │   ├── data.js
     │   │   │   ├── idempotency.js
-    │   │   │   ├── mailbox.js
     │   │   │   ├── pool.js
     │   │   │   └── totp.js
     │   │   ├── scenarios/
-    │   │   │   ├── account-onboarding-lifecycle.js
     │   │   │   ├── admin.js
     │   │   │   ├── api-stress.js
     │   │   │   ├── audit-list.js
     │   │   │   ├── auth-onboarding.js
     │   │   │   ├── auth-security-lifecycle.js
     │   │   │   ├── auth-stress-server-timing.js
-    │   │   │   ├── billing-provider-lifecycle.js
     │   │   │   ├── billing-subscriptions-rls.js
     │   │   │   ├── billing.js
     │   │   │   ├── comprehensive-journey.js
@@ -1962,26 +1959,15 @@ src/
     │   │   │   ├── session-refresh-journey.js
     │   │   │   ├── stripe-webhook-ingest.js
     │   │   │   ├── tenancy-role-write.js
-    │   │   │   ├── tenant-membership-lifecycle.js
-    │   │   │   ├── upload-asset-lifecycle.js
     │   │   │   ├── upload-list.js
     │   │   │   ├── user-data-export.js
     │   │   │   ├── user-journey.js
-    │   │   │   ├── webauthn-lifecycle.js
-    │   │   │   ├── webhook-delivery-lifecycle.js
     │   │   │   └── webhooks.js
     │   │   ├── COMPREHENSIVE-JOURNEY.md
     │   │   ├── README.md
     │   │   ├── check-prereqs.mjs
     │   │   ├── export-load-test-credentials.sh
-    │   │   ├── load-authenticator.mjs
-    │   │   ├── load-mailbox.mjs
-    │   │   ├── load-provider-preload.mjs
-    │   │   ├── load-provider.mjs
-    │   │   ├── load-storage.mjs
     │   │   ├── run-journey.sh
-    │   │   ├── run-lifecycle.mjs
-    │   │   ├── run-stripe-validation.mjs
     │   │   └── setup-loadtest.sh
     │   └── load.overview.md
     ├── performance/
