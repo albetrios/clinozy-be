@@ -90,7 +90,7 @@ export type OrganizationOffboardingDependencies = {
  * - **Algorithm:** every mutation runs inside `withAppDatabaseContext`
  *   (sets `app.current_organization_public_id` for RLS) and reads use
  *   `withAppDatabaseContext (user scope)` to satisfy the `organizations_user_discovery`
- *   policy. Slug uniqueness is enforced explicitly; access checks short-
+ *   policy (read-only: a write needs the organization's own context). Slug uniqueness is enforced explicitly; access checks short-
  *   circuit for global admins and otherwise require ownership or an active
  *   membership via {@link OrganizationRepository.userCanAccessOrganization}.
  * - **Failure modes:** `NotFoundError` for missing organizations, members,
@@ -444,9 +444,9 @@ export class OrganizationService {
     }
     const parsed = validateCreateOrganization(body);
     /**
-     * INSERT must pass `organizations_user_discovery` WITH CHECK
-     * (`owner_user_id` resolves to the current `app.current_user_public_id`). The slug
-     * existence check runs in the same wrap so the SELECT also sees the user GUC.
+     * The quota count and the slug check read under the user's identity
+     * (`organizations_user_discovery`, read-only); the INSERT itself runs in the new
+     * organization's own context (`provisionOrganizationWithOwner`).
      */
     const created = await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ userPublicId: owner_user_public_id }),

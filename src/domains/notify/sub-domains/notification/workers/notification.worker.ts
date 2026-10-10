@@ -243,7 +243,7 @@ export async function processNotificationDispatchJob(options: {
  * @remarks
  * - **Algorithm:** pin the scope from the job — the organization's
  *   (`runOrganizationScopedWorkerJob`) or, for a notification without one, the recipient's
- *   (`runUserScopedWorkerJob`, which the `notifications_owner_access` policy authorises) — and
+ *   (`runUserScopedWorkerJob`, which the `notifications_owner_select` policy authorises) — and
  *   delegate to {@link processNotificationDispatchJob} with a repository on that handle.
  * - **Failure modes:** as {@link processNotificationDispatchJob}.
  * - **Side effects:** one scoped transaction for the read; the email channel's own writes.

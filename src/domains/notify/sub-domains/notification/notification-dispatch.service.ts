@@ -62,7 +62,7 @@ export function createNotificationDispatch(
               input.organization_id,
             );
       // The recipient's public id scopes the worker's read of a notification without an
-      // organization (`notifications_owner_access`), so the job never needs the bigserial.
+      // organization (`notifications_owner_select`), so the job never needs the bigserial.
       const [user_public_id] = await notificationRepository.resolveUserPublicIdsByInternalIds([
         input.user_id,
       ]);

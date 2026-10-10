@@ -88,11 +88,10 @@ describe('OrganizationRepository (database)', () => {
   it('creates, queries, updates, and soft-deletes organizations', async () => {
     const owner = await createTestUser({ email: 'org-owner@example.com' });
 
-    const created = await repository.create({
+    const created = await createTestOrganization({
+      ownerUserId: owner.id,
       name: 'Acme Corp',
       slug: 'acme-corp',
-      owner_user_id: owner.id,
-      created_by_user_id: owner.id,
     });
 
     const byPublicId = await repository.findByPublicId(created.public_id);
@@ -145,14 +144,6 @@ describe('OrganizationRepository (database)', () => {
     expect(await repository.findById(created.id)).toBeNull();
     expect(await repository.resolveUserIdByPublicId('missing_user_public_id')).toBeNull();
 
-    const withoutCreator = await repository.create({
-      name: 'No Creator Org',
-      slug: 'no-creator-org',
-      owner_user_id: owner.id,
-      created_by_user_id: null,
-    });
-    expect(withoutCreator.name).toBe('No Creator Org');
-
     expect(await repository.update('missing_org', { name: 'X' }, owner.id)).toBeNull();
     expect(await repository.updateOwner('missing_org', owner.id)).toBeNull();
   });
@@ -163,11 +154,10 @@ describe('OrganizationRepository (database)', () => {
   // and attach a new subscription to a deleted tenant.
   it('updateStripeCustomerId returns null for a soft-deleted organization (sec-new-D1)', async () => {
     const owner = await createTestUser({ email: 'stripe-cid-deleted@example.com' });
-    const organization = await repository.create({
+    const organization = await createTestOrganization({
+      ownerUserId: owner.id,
       name: 'Deleted Stripe Org',
       slug: 'deleted-stripe-org',
-      owner_user_id: owner.id,
-      created_by_user_id: owner.id,
     });
 
     // Soft-delete requires marking deletion as started first.
@@ -181,11 +171,10 @@ describe('OrganizationRepository (database)', () => {
 
   it('updateOwner transfers only to a member who is still active (atomic TOCTOU guard)', async () => {
     const owner = await createTestUser({ email: 'transfer-owner@example.com' });
-    const organization = await repository.create({
+    const organization = await createTestOrganization({
+      ownerUserId: owner.id,
       name: 'Transfer Org',
       slug: 'transfer-org',
-      owner_user_id: owner.id,
-      created_by_user_id: owner.id,
     });
     const role = await createRoleWithPermissions({
       organizationId: organization.id,

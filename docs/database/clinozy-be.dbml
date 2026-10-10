@@ -430,7 +430,7 @@ Table notify.notifications {
 }
 
 Note notify.notifications {
-  'RLS: enabled\nPolicies: notifications_tenant_isolation, notifications_owner_access\nFORCE ROW LEVEL SECURITY'
+  'RLS: enabled\nPolicies: notifications_tenant_isolation, notifications_owner_select, notifications_owner_update, notifications_owner_delete\nFORCE ROW LEVEL SECURITY'
 }
 
 Table notify.webhook_delivery_attempts {

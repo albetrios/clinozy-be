@@ -12,6 +12,9 @@ import {
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { member_invitations } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.schema.js';
+import { notifications } from '@/domains/notify/sub-domains/notification/notification.schema.js';
+import { createTestNotification } from '@/tests/factories/notification.factory.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
 import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
@@ -266,5 +269,141 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
     const organizationIds = new Set(rows.map((row) => row.organization_public_id));
     expect(organizationIds.has(organizationA.public_id)).toBe(true);
     expect(organizationIds.has(organizationB.public_id)).toBe(true);
+  });
+
+  describe('the user identity alone grants no organization or membership writes', () => {
+    async function createMemberOfOrganization() {
+      const owner = await createTestUser();
+      const member = await createTestUser();
+      const organization = await createTestOrganization({ ownerUserId: owner.id });
+      const role = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: [],
+      });
+      const membership = await createMembership({
+        userId: member.id,
+        organizationId: organization.id,
+        roleId: role.id,
+      });
+      return { owner, member, organization, role, membership };
+    }
+
+    it('a member can neither take ownership of the organization nor delete it', async () => {
+      const { member, organization } = await createMemberOfOrganization();
+
+      const updated = await executeAsClinozyBeAppUser(member.public_id, (transaction) =>
+        transaction
+          .update(organizations)
+          .set({ owner_user_id: member.id })
+          .where(eq(organizations.id, organization.id))
+          .returning({ id: organizations.id }),
+      );
+      expect(updated).toEqual([]);
+
+      const deleted = await executeAsClinozyBeAppUser(member.public_id, (transaction) =>
+        transaction
+          .delete(organizations)
+          .where(eq(organizations.id, organization.id))
+          .returning({ id: organizations.id }),
+      );
+      expect(deleted).toEqual([]);
+    });
+
+    it('a member can neither rewrite nor delete their own membership', async () => {
+      const { member, membership } = await createMemberOfOrganization();
+
+      const updated = await executeAsClinozyBeAppUser(member.public_id, (transaction) =>
+        transaction
+          .update(memberships)
+          .set({ status: 'SUSPENDED' })
+          .where(eq(memberships.id, membership.id))
+          .returning({ id: memberships.id }),
+      );
+      expect(updated).toEqual([]);
+
+      const deleted = await executeAsClinozyBeAppUser(member.public_id, (transaction) =>
+        transaction
+          .delete(memberships)
+          .where(eq(memberships.id, membership.id))
+          .returning({ id: memberships.id }),
+      );
+      expect(deleted).toEqual([]);
+    });
+
+    it('a user cannot add themselves to an organization', async () => {
+      const { organization, role } = await createMemberOfOrganization();
+      const stranger = await createTestUser();
+
+      await expect(
+        executeAsClinozyBeAppUser(stranger.public_id, (transaction) =>
+          transaction.insert(memberships).values({
+            public_id: generatePublicId('memberRole'),
+            user_id: stranger.id,
+            organization_id: organization.id,
+            role_id: role.id,
+            status: 'ACTIVE',
+            joined_at: new Date(),
+          }),
+        ),
+      ).rejects.toMatchObject({
+        cause: expect.objectContaining({ message: expect.stringMatching(/row-level security/) }),
+      });
+    });
+  });
+
+  describe('notification owner arms', () => {
+    it('the owner reads, marks read and deletes, but cannot create or move a notification', async () => {
+      const owner = await createTestUser();
+      const organization = await createTestOrganization({ ownerUserId: owner.id });
+      const elsewhere = await createTestOrganization({ ownerUserId: (await createTestUser()).id });
+      const notification = await createTestNotification({
+        userId: owner.id,
+        organizationId: organization.id,
+      });
+
+      const marked = await executeAsClinozyBeAppUser(owner.public_id, (transaction) =>
+        transaction
+          .update(notifications)
+          .set({ is_read: true, read_at: new Date() })
+          .where(eq(notifications.id, notification.id))
+          .returning({ id: notifications.id }),
+      );
+      expect(marked).toHaveLength(1);
+
+      // The application role may change a notification's read state only.
+      await expect(
+        executeAsClinozyBeAppUser(owner.public_id, (transaction) =>
+          transaction
+            .update(notifications)
+            .set({ organization_id: elsewhere.id })
+            .where(eq(notifications.id, notification.id)),
+        ),
+      ).rejects.toMatchObject({
+        cause: expect.objectContaining({ message: expect.stringMatching(/permission denied/) }),
+      });
+
+      await expect(
+        executeAsClinozyBeAppUser(owner.public_id, (transaction) =>
+          transaction.insert(notifications).values({
+            public_id: generatePublicId('notification'),
+            user_id: owner.id,
+            organization_id: elsewhere.id,
+            type: 'system',
+            title: 'Planted',
+            message: 'Planted in another organization',
+          }),
+        ),
+      ).rejects.toMatchObject({
+        cause: expect.objectContaining({ message: expect.stringMatching(/row-level security/) }),
+      });
+
+      const deleted = await executeAsClinozyBeAppUser(owner.public_id, (transaction) =>
+        transaction
+          .delete(notifications)
+          .where(eq(notifications.id, notification.id))
+          .returning({ id: notifications.id }),
+      );
+      expect(deleted).toHaveLength(1);
+    });
   });
 });

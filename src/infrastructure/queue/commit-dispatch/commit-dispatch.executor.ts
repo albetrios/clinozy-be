@@ -45,7 +45,7 @@ export async function executeCommitDispatchTask(task: CommitDispatchTask): Promi
           { error, notificationPublicId: task.notificationPublicId },
           'commit-dispatch.notification.enqueue_failed',
         );
-        // Delete the orphan under its recipient's scope: `notifications_owner_access` reaches the
+        // Delete the orphan under its recipient's scope: `notifications_owner_delete` reaches the
         // row whether or not it has an organization. The system-table maintenance scope this ran
         // under before matched no notification policy, so on the RLS-subject application role the
         // delete removed nothing and the never-dispatched row stayed in the inbox.

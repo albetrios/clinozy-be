@@ -161,7 +161,7 @@ A context sets **one** GUC. It grants access only on tables whose policies test 
 | Context | GUC it sets | Grants on |
 | --- | --- | --- |
 | `withAppDatabaseContext` (organization scope) | `app.current_organization_public_id` | tenant-scoped tables (`organizations_tenant_isolation` and the per-table `*_tenant_isolation` policies) |
-| `withAppDatabaseContext` (user scope) | `app.current_user_public_id` | user-owned rows — `auth.users`, `auth.auth_methods`, uploads/notifications, **and the tenancy discovery policies** (`organizations_user_discovery`, `memberships_user_self_discovery`) |
+| `withAppDatabaseContext` (user scope) | `app.current_user_public_id` | user-owned rows — `auth.users`, `auth.auth_methods`, uploads/notifications, **and the tenancy discovery policies** (`organizations_user_discovery`, `memberships_user_self_discovery` — read-only: tenancy writes need the organization's context) |
 | `MAINTENANCE_SCOPE.GLOBAL_ADMIN` | `app.global_admin` | **`auth.*` and `audit.logs` ONLY** |
 | `MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP` | `app.global_retention_cleanup` | retention-sweep tables only |
 

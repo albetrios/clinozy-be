@@ -227,6 +227,14 @@ export async function countRowsAsGlobalAdmin(
   );
 }
 
+/**
+ * The column a no-op cross-tenant UPDATE writes: `id`, except on a table where the application role
+ * may update only some columns (`notify.notifications`: its read state).
+ */
+const NO_OP_UPDATE_COLUMN: Readonly<Record<string, string>> = {
+  'notify.notifications': 'read_at',
+};
+
 export async function updateRowAsTenant(
   schemaName: string,
   tableName: string,
@@ -234,9 +242,12 @@ export async function updateRowAsTenant(
   organizationPublicId: string,
 ): Promise<number> {
   const qualified = `"${schemaName}"."${tableName}"`;
+  const column = NO_OP_UPDATE_COLUMN[`${schemaName}.${tableName}`] ?? 'id';
   return executeAsClinozyBeAppTenant(organizationPublicId, async (transaction) => {
     const result = await transaction.execute(
-      drizzleSql.raw(`UPDATE ${qualified} SET id = id WHERE id = ${rowId} RETURNING id`),
+      drizzleSql.raw(
+        `UPDATE ${qualified} SET "${column}" = "${column}" WHERE id = ${rowId} RETURNING id`,
+      ),
     );
     // Drizzle postgres-js execute returns row arrays, not a node-postgres rowCount.
     // RETURNING makes an accidental cross-tenant mutation directly observable.

@@ -20,7 +20,7 @@ const UNREAD_COUNT_CACHE_NAME = 'notify_unread_count';
  * not a shortcut.
  *
  * @remarks
- * `notify.notifications` carries two permissive RLS policies, OR'd: `notifications_owner_access`
+ * `notify.notifications` carries two permissive RLS policies, OR'd: `notifications_owner_select`
  * (rows whose `user_id` is the current user GUC) and `notifications_tenant_isolation` (rows in the
  * active organization). The count query additionally filters `user_id = <me>` in SQL, so the
  * tenant arm can only ever add rows the app-level predicate then removes. The visible set is

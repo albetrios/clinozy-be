@@ -18,10 +18,16 @@ import {
   createRoleWithPermissions,
   createMembership,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
+import { BILLING_PERMISSIONS } from '@/domains/billing/billing.permissions.js';
 import { NOTIFY_PERMISSIONS } from '@/domains/notify/notify.permissions.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 
-const WEBHOOK_PERMISSIONS = [NOTIFY_PERMISSIONS.WEBHOOK_READ, NOTIFY_PERMISSIONS.WEBHOOK_MANAGE];
+// The factory's webhooks receive `subscription.updated`: changing one needs `subscription:read`.
+const WEBHOOK_PERMISSIONS = [
+  NOTIFY_PERMISSIONS.WEBHOOK_READ,
+  NOTIFY_PERMISSIONS.WEBHOOK_MANAGE,
+  BILLING_PERMISSIONS.SUBSCRIPTION_READ,
+];
 
 /**
  * Notify's rate-limit coverage had two halves and neither closed the loop:

@@ -19,8 +19,6 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { users as authUsers } from '@/domains/user/user.schema.js';
 import { BaseRepository } from '@/infrastructure/database/base-repository.js';
-import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
-import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import {
   RESOURCE_QUOTA_LOCK_NAMESPACE,
   acquireResourceQuotaLock,
@@ -50,9 +48,8 @@ interface OrganizationListPagination {
  * Drizzle data-access for the `tenancy.organizations` table. Honours
  * soft-delete (`deleted_at IS NULL`) on every read; supports cursor-based
  * listings (global and per-user via memberships join), slug + Stripe customer
- * lookups, owner transfer, and soft-delete. Insert paths use
- * {@link runInsertWithPublicIdentifierRetry} to recover from rare public-id
- * collisions.
+ * lookups, owner transfer, and soft-delete. Organizations are inserted by
+ * `provisionOrganizationWithOwner`, in the new organization's own context.
  */
 export class OrganizationRepository extends BaseRepository {
   /**
@@ -429,31 +426,6 @@ export class OrganizationRepository extends BaseRepository {
       )
       .limit(1);
     return rows[0] ?? null;
-  }
-
-  async create(data: {
-    name: string;
-    /** Null for a personal organization (no human handle); kebab string for a team. */
-    slug: string | null;
-    /** `PERSONAL` or `TEAM` (defaults to `TEAM` for the public create endpoint). */
-    type?: string;
-    owner_user_id: number;
-    created_by_user_id: number | null;
-  }) {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const public_id = generatePublicId('organization');
-      const row = {
-        public_id,
-        name: data.name,
-        slug: data.slug,
-        type: data.type ?? 'TEAM',
-        owner_user_id: data.owner_user_id,
-        created_by_user_id: data.created_by_user_id ?? undefined,
-        updated_by_user_id: data.created_by_user_id ?? undefined,
-      };
-      const rows = await getRequestDatabase().insert(organizations).values(row).returning();
-      return rows[0]! as Organization;
-    });
   }
 
   async update(

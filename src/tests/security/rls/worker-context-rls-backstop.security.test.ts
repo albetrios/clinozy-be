@@ -99,18 +99,19 @@ describe('Security: worker context RLS backstop (wrong-organization context cann
       PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationB.public_id }),
       async (handle) => {
         await setLocalApplicationRole(handle);
+        // The read state: the only columns the application role may update at all.
         await handle
           .update(notifications)
-          .set({ title: 'tampered by organization B' })
+          .set({ is_read: true, read_at: new Date() })
           .where(eq(notifications.id, notificationId));
       },
     );
 
     // Re-read as the RLS-exempt superuser: organization A's row is untouched (RLS USING blocked the UPDATE).
     const [row] = await database
-      .select({ title: notifications.title })
+      .select({ is_read: notifications.is_read })
       .from(notifications)
       .where(eq(notifications.id, notificationId));
-    expect(row?.title).toBe('Tenant A notification');
+    expect(row?.is_read).toBe(false);
   });
 });

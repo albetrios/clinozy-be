@@ -35,6 +35,7 @@ When you add a **new table in a tenant-owned schema** (`tenancy`, `billing`, `no
 - [ ] `ALTER TABLE … FORCE ROW LEVEL SECURITY` — **without FORCE, the table-owning `clinozy_be_app` role bypasses RLS → cross-organization leak.**
 - [ ] `CREATE POLICY … FOR ALL` with predicate `organization_id = (SELECT id FROM tenancy.organizations WHERE public_id = current_setting('app.current_organization_public_id', true)) OR current_setting('app.global_retention_cleanup', true) = 'true'`.
 - [ ] **Writable tables define both `USING` and an explicit `WITH CHECK`.** A `USING`-only policy makes Postgres reuse `USING` for the write check — and since `USING` carries the `app.global_retention_cleanup` (and any `app.global_admin`) bypass, that bypass then leaks to INSERT/UPDATE, letting a retention/admin context plant a row in **any** tenant (audit #41 / H1). The explicit `WITH CHECK` MUST pin to the active-organization GUC **without** the retention/admin bypass arm: `WITH CHECK (organization_id = (SELECT id FROM tenancy.organizations WHERE public_id = current_setting('app.current_organization_public_id', true)))`. Add it with `ALTER POLICY … WITH CHECK (…)` (no policy-gap) and mirror it in the schema `pgPolicy({ … withCheck })`.
+- [ ] **A user-identity arm grants only the commands the code runs through it.** A policy keyed on `app.current_user_public_id` (set on every signed-in request) is `FOR SELECT` unless a code path writes through it, and a write arm is split per command (`FOR UPDATE` with `WITH CHECK`, `FOR DELETE`) — never `FOR ALL`. A `FOR ALL` discovery arm once let any member make themselves owner of the organization or rewrite their own membership. Columns the arm must never change are pinned by a column grant (`notify.notifications`: the app role updates `is_read` / `read_at` only). Pinned by `organization-user-discovery.security.test.ts`.
 - [ ] Keep the `app.global_retention_cleanup` escape clause **in `USING` only**, so the retention/tombstone worker can still SELECT/DELETE cross-tenant but can never write cross-tenant.
 - [ ] Add the table to `EXPECTED_FORCE_RLS_TABLES` (`force-rls-tables.constants.ts`, alphabetical) — `diffForceRlsTables` asserts the live DB FORCE-RLS set matches exactly.
 
@@ -85,7 +86,7 @@ A `with*DatabaseContext` wrapper sets **one** GUC and grants access only on tabl
 | Context | GUC | Grants on |
 | --- | --- | --- |
 | `withAppDatabaseContext` (organization scope) | `app.current_organization_public_id` | tenant-scoped tables (`*_tenant_isolation`) |
-| `withAppDatabaseContext` (user scope) | `app.current_user_public_id` | user-owned rows (`auth.*`, uploads, notifications) **and** the tenancy discovery policies (`organizations_user_discovery`, `memberships_user_self_discovery`) |
+| `withAppDatabaseContext` (user scope) | `app.current_user_public_id` | user-owned rows (`auth.*`, uploads, notifications) **and** the tenancy discovery policies (`organizations_user_discovery`, `memberships_user_self_discovery` — `FOR SELECT` only: a user-identity arm never grants a write the code does not make through it) |
 | `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_ADMIN)` | `app.global_admin` | **`auth.*` and `audit.logs` ONLY** |
 | `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP)` | `app.global_retention_cleanup` | retention-sweep tables |
 
