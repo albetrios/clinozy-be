@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
-import { IP_FAILED_LOGIN_THRESHOLD } from '@/shared/constants/index.js';
+import { IP_FAILED_LOGIN_THRESHOLD, SECONDS_PER_DAY } from '@/shared/constants/index.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
   injectAuthenticated,
@@ -14,7 +14,11 @@ import { eq } from 'drizzle-orm';
 import { createTestUserWithPassword } from '@/tests/factories/user.factory.js';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { users } from '@/domains/user/user.schema.js';
-import { CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/domains/auth/auth.http.util.js';
+import {
+  CSRF_COOKIE_NAME,
+  CSRF_HEADER_NAME,
+  SESSION_COOKIE_NAME,
+} from '@/domains/auth/auth.http.util.js';
 import { env } from '@/shared/config/env.config.js';
 import esSuccess from '@/shared/locales/es/success.json' with { type: 'json' };
 import type { FastifyInstance } from 'fastify';
@@ -238,6 +242,31 @@ describe('Auth Domain — Response contract (integration)', () => {
     it('should set csrf_token cookie on login', async () => {
       const loginHeaders = await loginAndGetResponseHeaders();
       expect(cookiePairFromLoginResponse(loginHeaders, 'csrf_token')).toMatch(/^csrf_token=/);
+    });
+
+    it('sends both cookies with the attributes the browser enforces', async () => {
+      const loginHeaders = await loginAndGetResponseHeaders();
+      const raw = loginHeaders['set-cookie'];
+      const cookies = Array.isArray(raw) ? raw : [String(raw)];
+      const attributesOf = (cookieName: string) => {
+        const cookie = cookies.find((candidate) => candidate.startsWith(`${cookieName}=`));
+        expect(cookie).toBeDefined();
+        return String(cookie)
+          .split(';')
+          .slice(1)
+          .map((attribute) => attribute.trim().toLowerCase());
+      };
+      const session = attributesOf(SESSION_COOKIE_NAME);
+      const csrf = attributesOf(CSRF_COOKIE_NAME);
+      for (const attributes of [session, csrf]) {
+        expect(attributes).toContain(`path=${testApiPath('/auth')}`);
+        expect(attributes).toContain(`samesite=${env.COOKIE_SAMESITE}`);
+        expect(attributes).toContain(`max-age=${env.AUTH_SESSION_MAX_AGE_DAYS * SECONDS_PER_DAY}`);
+        expect(attributes.includes('secure')).toBe(env.COOKIE_SECURE);
+      }
+      // Page scripts must never read the refresh secret, and must read the CSRF token to echo it.
+      expect(session).toContain('httponly');
+      expect(csrf).not.toContain('httponly');
     });
 
     it('should return 403 when Origin header is not in ALLOWED_ORIGINS', async () => {
