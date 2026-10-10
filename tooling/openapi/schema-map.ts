@@ -83,6 +83,8 @@ import {
 } from '@/domains/app/sub-domains/patients/patient-reports/patient-reports.dto.js';
 import {
   CreateInvoiceDto as appCreateInvoiceDto,
+  PreviewInvoiceChangeDto as appPreviewInvoiceChangeDto,
+  PreviewInvoiceDto as appPreviewInvoiceDto,
   UpdateInvoiceDto as appUpdateInvoiceDto,
 } from '@/domains/app/sub-domains/billing/invoices/invoices.dto.js';
 import { UpdatePatientOfferingDto as appUpdatePatientOfferingDto } from '@/domains/app/sub-domains/patients/patient-offerings/patient-offerings.dto.js';
@@ -192,7 +194,9 @@ import {
   ResetPasswordDto,
   ChangePasswordDto,
   MfaEnrollDto,
+  MfaEnrollConfirmDto,
   MfaLoginVerifyDto,
+  StepUpVerifyDto,
 } from '@/domains/auth/auth.dto.js';
 
 // ─── User ──────────────────────────────────────────────────────────────
@@ -283,6 +287,8 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'POST /api/v1/auth/email/login': EmailLoginDto,
   'POST /api/v1/auth/me/mfa/verify': MfaVerifyDto,
   'POST /api/v1/auth/me/mfa/enroll': MfaEnrollDto,
+  'POST /api/v1/auth/me/mfa/enroll/confirm': MfaEnrollConfirmDto,
+  'POST /api/v1/auth/step-up': StepUpVerifyDto,
   'POST /api/v1/auth/mfa/login': MfaLoginVerifyDto,
   'POST /api/v1/auth/password/forgot': ForgotPasswordDto,
   'POST /api/v1/auth/password/reset': ResetPasswordDto,
@@ -421,6 +427,8 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
     appCreatePatientOfferingSuggestionDto,
   'PATCH /api/v1/app/invoices/{invoice_id}': appUpdateInvoiceDto,
   'POST /api/v1/app/invoices': appCreateInvoiceDto,
+  'POST /api/v1/app/invoices/preview': appPreviewInvoiceDto,
+  'POST /api/v1/app/invoices/{invoice_id}/preview': appPreviewInvoiceChangeDto,
   'POST /api/v1/app/patients/{patient_id}/reports': appCreatePatientReportDto,
   'POST /api/v1/app/patients/{patient_id}/images': appCreatePatientImageDto,
   'PATCH /api/v1/app/prescription-kits/{prescription_kit_id}': appUpdatePrescriptionKitDto,

@@ -184,6 +184,14 @@ function schemaDeclaresParams(optionsBody: string): boolean {
   return /(?:^|[,{\s])params\s*:/.test(schemaBody);
 }
 
+/** True when the route's `schema` block declares a request `body` (drives the request-body map gate). */
+function schemaDeclaresBody(optionsBody: string): boolean {
+  const schemaRange = findSchemaPropertyRange(optionsBody);
+  if (!schemaRange) return false;
+  const schemaBody = optionsBody.slice(schemaRange.bodyStart, schemaRange.bodyEnd);
+  return /(?:^|[,{\s])body\s*:/.test(schemaBody);
+}
+
 /** A single route registration paired with its (possibly incomplete) extracted schema metadata. */
 export interface RouteSchemaEntry {
   method: string;
@@ -197,6 +205,11 @@ export interface RouteSchemaEntry {
    * "no params schema".
    */
   hasParamsSchema?: boolean;
+  /**
+   * True when the route declares `schema.body` — the OpenAPI document reads request bodies from
+   * `routeSchemaMap` (`tooling/openapi/schema-map.ts`), so each such route needs its entry there.
+   */
+  hasBodySchema?: boolean;
 }
 
 function scanRouteSchemaEntries({
@@ -236,6 +249,7 @@ function scanRouteSchemaEntries({
       lookupKey: buildLookupKey(method, fullPath),
       metadata,
       hasParamsSchema: schemaDeclaresParams(optionsBody),
+      hasBodySchema: schemaDeclaresBody(optionsBody),
     });
   }
 
