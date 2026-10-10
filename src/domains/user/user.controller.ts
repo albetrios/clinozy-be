@@ -6,9 +6,13 @@ import {
   requireUserScope,
 } from '@/shared/utils/http/request.util.js';
 import { validatePublicIdParam } from '@/shared/utils/identity/public-id-param.util.js';
-import { recordScopedAuditEvent } from '@/shared/utils/infrastructure/audit-request-context.util.js';
+import {
+  listBodyFieldNames,
+  recordScopedAuditEvent,
+} from '@/shared/utils/infrastructure/audit-request-context.util.js';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import type { MembershipInvitationService } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.service.js';
+import type { UserSettingsOutput } from '@/domains/user/sub-domains/user-settings/user-settings.types.js';
 import type { UserContainer } from './user.container.js';
 
 type AdminUserAuditAction =
@@ -34,6 +38,28 @@ async function recordAdminUserAudit(
     resource_type: 'user',
     ...(severity ? { severity } : {}),
     metadata: { target_user_public_id: targetUserPublicId },
+  });
+}
+
+/**
+ * Keeps an analytics consent decision as its own audit row — the decision, the policy version it
+ * answered and when: the proof of consent (launch D85). Nothing when the body carried no decision.
+ */
+async function recordAnalyticsConsentAudit(
+  request: FastifyRequest,
+  actorUserPublicId: string,
+  settings: UserSettingsOutput,
+): Promise<void> {
+  if (!listBodyFieldNames(request.body).includes('analytics_consent')) return;
+  await recordScopedAuditEvent(request, {
+    actorUserPublicId,
+    action: 'user.settings.analytics_consent.update',
+    resource_type: 'user_settings',
+    metadata: {
+      analytics_consent: settings.analytics_consent,
+      analytics_consent_version: settings.analytics_consent_version,
+      analytics_consent_at: settings.analytics_consent_at,
+    },
   });
 }
 
@@ -148,6 +174,7 @@ export function createUserController({
         action: 'user.settings.update',
         resource_type: 'user_settings',
       });
+      await recordAnalyticsConsentAudit(request, auth.userId, data);
       return successResponse(data, getRequestIdentifier(request));
     },
 

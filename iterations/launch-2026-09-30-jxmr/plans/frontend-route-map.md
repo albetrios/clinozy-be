@@ -52,6 +52,7 @@ Paths below drop `/api/v1`. "→ §n" points at the route review section that ex
 | `updatePreference` | `PATCH /app/memberships/me/preferences` | `pinned_sections`, `theme`, `branch_ids`, `patient_file_pins`, `recent_picks`; one row per membership |
 | `setPresence` | `PUT /users/me/presence` | |
 | my invitations (not a design operation — D84) | `GET /users/me/membership-invitations` · `POST /tenancy/membership-invitations/:membership_invitation_id/accept` (body `{}` — no token needed) · `…/decline` | after any sign-in, before onboarding or the picker: an invitee with no clinic sees their invitations instead of "create a clinic"; one already in a clinic sees an "Invited" row and badge in the picker and switcher; accept → `POST /auth/switch-to-organization` with the answer's `organization_id`; decline ends the invite and tells the inviter; `end_reason` `declined` / `invitation_expired` on ended members |
+| analytics consent (not a design operation — D85) | `GET /users/me/settings` · `PATCH /users/me/settings` (`analytics_consent` + `analytics_consent_version` together) | at sign-in the saved decision wins over the device's (a decision made before signing in is saved to the account); ask again when `analytics_consent_at` is six months old or the policy version moved; sign-out clears the device's decision; Settings › Privacy withdraws it |
 
 ### Today
 

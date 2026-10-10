@@ -91,6 +91,12 @@ export function getFieldSpecificDescription(fieldName: string): string {
     security_policy: 'Organization security policy settings (JSON object).',
     language: 'Preferred language code (e.g. en, es, fr).',
     preferred_locales: 'Ordered list of preferred locale codes.',
+    analytics_consent:
+      "The person's answer to analytics (granted or denied); null until they first answer. Sent with analytics_consent_version.",
+    analytics_consent_version:
+      'The consent policy version the answer was given to; null with analytics_consent.',
+    analytics_consent_at:
+      'When the consent answer was given (ISO 8601, set by the server); null with analytics_consent.',
     muted_until: 'Mute notifications until this date (ISO 8601). Null to unmute.',
     expires_in_days: 'Number of days until the invitation or key expires.',
     tax_id: 'Tax identification number (e.g. VAT ID, EIN).',

@@ -385,6 +385,7 @@ erDiagram
 - **Built (ROUTE #4):** `staff_number` integer (trigger `trg_memberships_staff_number`, unique per organization, never reused), `phone` varchar(16), `tone` varchar(10) (`sky`), `working_days` text[] (Mon–Sat), `work_starts_at` / `work_ends_at` time (10:00 / 19:00, ends after starts), `commission_percent` numeric(5,2) 0–100, `delete_reason` / `delete_note`; `roles` → main stays `role_id` + new `tenancy.membership_additional_roles` (membership_id, role_id, organization_id, position 1–9); `branch_ids` → `app.branch_user_accesses` (ROUTE #2); `seq` → `staff_number`, `starts_at`/`ends_at` → `work_starts_at`/`work_ends_at`, `commission_pct` → `commission_percent`
 - **Built (ROUTE #124, K2–K8):** `display_name` varchar(120) NOT NULL (the login's first + last name, or its email, copied at join by `trg_memberships_display_name`; kept equal to the profile while live by `trg_users_sync_membership_display_names` on `auth.users`; frozen once ended), `delete_reason` gains `left` and `account_deleted`, unique `(organization_id, id)` (`idx_memberships_organization_id_id`) for the app's composite membership keys
 - **Built (ROUTE #126, sub-domain 2):** `status` values lowercase — `invited`, `active`, `suspended` (T17; `chk_memberships_status`, `chk_memberships_joined`, default `invited`, the SQL resolvers that read it); `joined_at` set only by accepting the invite (T10); `trg_memberships_display_name` also fires when an ended membership is live again (restore, re-add — K3, K7); the invite table `tenancy.member_invitations` → **`tenancy.membership_invitations`** (T9 — indexes, checks `chk_membership_invitations_*`, policy, keys and its SQL resolvers renamed); the name sort reads `display_name` and the name-sort SECURITY DEFINER function is gone.
+- **Built (ROUTE #172–#175, D84):** `chk_memberships_delete_reason` gains `declined` (the invitee declined) and `invitation_expired` (the expiry sweep, WC-49); `tenancy.list_pending_membership_invitations_for_email` (SECURITY DEFINER, owned by the migration role) returns what the invitee is shown — the organization's name, slug and logo, the role names main first, the inviter's name — for the latest invitation of each still-`invited` membership, keyset-paged (`20261010204437_membership_invitations_for_the_invitee.sql`)
 
 ```mermaid
 erDiagram
@@ -400,6 +401,23 @@ erDiagram
     text ends_at "ADDED"
     number commission_pct "ADDED"
     json branch_ids "ADDED → branch list"
+  }
+```
+
+### user_settings · CHANGED (D85, built, not planned)
+
+- **Holds:** A person's own settings; now also their analytics consent — the proof of consent the DPDP Act asks for.
+- **Table:** `auth.user_settings` (EXISTING, one row per user, RLS on `app.current_user_public_id`)
+- **Sources:** D85 · the frontend's consent research (2026-10-10)
+- **Built (ROUTE #177, D85):** `analytics_consent` varchar(10) (`granted` / `denied`), `analytics_consent_version` integer (> 0) and `analytics_consent_at` timestamptz — null until first answered, written together (`chk_user_settings_analytics_consent`, added NOT VALID then validated); the time is the database's (`20261010224215_user_settings_analytics_consent.sql`)
+
+```mermaid
+erDiagram
+  user_settings["user_settings · CHANGED"] {
+    id user_id PK "→ user"
+    choice analytics_consent "ADDED"
+    number analytics_consent_version "ADDED"
+    datetime analytics_consent_at "ADDED"
   }
 ```
 

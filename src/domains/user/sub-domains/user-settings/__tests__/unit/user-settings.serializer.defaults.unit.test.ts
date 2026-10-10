@@ -8,6 +8,9 @@ describe('user-settings.serializer defaults', () => {
       is_notifications_enabled: true,
       language: 'en',
       preferred_locales: ['en'],
+      analytics_consent: null,
+      analytics_consent_version: null,
+      analytics_consent_at: null,
     });
   });
 
@@ -17,6 +20,9 @@ describe('user-settings.serializer defaults', () => {
       is_notifications_enabled: false,
       language: 'es',
       preferred_locales: ['es', 'en'],
+      analytics_consent: null,
+      analytics_consent_version: null,
+      analytics_consent_at: null,
     });
 
     expect(result.is_dark_mode_enabled).toBe(false);
@@ -31,6 +37,9 @@ describe('user-settings.serializer defaults', () => {
       is_notifications_enabled: true,
       language: 'en',
       preferred_locales: null,
+      analytics_consent: null,
+      analytics_consent_version: null,
+      analytics_consent_at: null,
     });
 
     expect(result.preferred_locales).toEqual(['en']);
@@ -42,8 +51,27 @@ describe('user-settings.serializer defaults', () => {
       is_notifications_enabled: true,
       language: 'en',
       preferred_locales: [],
+      analytics_consent: null,
+      analytics_consent_version: null,
+      analytics_consent_at: null,
     });
 
     expect(result.preferred_locales).toEqual([]);
+  });
+
+  it('serializeUserSettings returns the consent decision, its version and when (launch D85)', () => {
+    const result = serializeUserSettings({
+      is_dark_mode_enabled: false,
+      is_notifications_enabled: true,
+      language: 'en',
+      preferred_locales: ['en'],
+      analytics_consent: 'granted',
+      analytics_consent_version: 2,
+      analytics_consent_at: new Date('2026-10-10T08:00:00.000Z'),
+    });
+
+    expect(result.analytics_consent).toBe('granted');
+    expect(result.analytics_consent_version).toBe(2);
+    expect(result.analytics_consent_at).toBe('2026-10-10T08:00:00.000Z');
   });
 });

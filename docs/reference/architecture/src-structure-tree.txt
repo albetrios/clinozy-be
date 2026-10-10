@@ -2111,6 +2111,7 @@ src/
     │   │   │       ├── user-settings.bulk.seed.ts
     │   │   │       └── user-settings.faker.ts
     │   │   │   ├── user-settings-locale-defaults.util.ts
+    │   │   │   ├── user-settings.constants.ts
     │   │   │   ├── user-settings.dto.ts
     │   │   │   ├── user-settings.overview.md
     │   │   │   ├── user-settings.repository.ts

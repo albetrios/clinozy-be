@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { and, eq } from 'drizzle-orm';
+import { audit_outbox } from '@/domains/audit/audit-outbox.schema.js';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import {
@@ -339,6 +342,91 @@ describe('User Domain — Integration', () => {
         payload: {},
       });
       expect(response.statusCode).toBe(401);
+    });
+
+    // Launch D85: the analytics consent decision is the person's, with the policy version it
+    // answered and a server stamp, and every decision is its own audit row.
+    it('keeps an analytics consent decision with its version and time, and audits it', async () => {
+      const user = await createTestUser();
+      const token = await generateTestToken({ userId: user.public_id });
+      const before = Date.now();
+      const granted = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath('/users/me/settings'),
+        token,
+        payload: { analytics_consent: 'granted', analytics_consent_version: 1 },
+      });
+      expect(granted.statusCode, granted.body).toBe(200);
+      const grantedData = (granted.json() as { data: Record<string, unknown> }).data;
+      expect(grantedData).toMatchObject({
+        analytics_consent: 'granted',
+        analytics_consent_version: 1,
+      });
+      expect(Date.parse(String(grantedData.analytics_consent_at))).toBeGreaterThanOrEqual(
+        before - 1000,
+      );
+
+      // Another setting leaves the decision as it was.
+      const darkMode = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath('/users/me/settings'),
+        token,
+        payload: { is_dark_mode_enabled: true },
+      });
+      expect(darkMode.statusCode, darkMode.body).toBe(200);
+      expect((darkMode.json() as { data: Record<string, unknown> }).data).toMatchObject({
+        is_dark_mode_enabled: true,
+        analytics_consent: 'granted',
+        analytics_consent_version: 1,
+        analytics_consent_at: grantedData.analytics_consent_at,
+      });
+
+      const withdrawn = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath('/users/me/settings'),
+        token,
+        payload: { analytics_consent: 'denied', analytics_consent_version: 2 },
+      });
+      expect(withdrawn.statusCode, withdrawn.body).toBe(200);
+
+      const read = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/users/me/settings'),
+        token,
+      });
+      expect(read.statusCode, read.body).toBe(200);
+      expect((read.json() as { data: Record<string, unknown> }).data).toMatchObject({
+        analytics_consent: 'denied',
+        analytics_consent_version: 2,
+      });
+
+      const staged = await getOperatorDatabase()
+        .select()
+        .from(audit_outbox)
+        .where(
+          and(
+            eq(audit_outbox.action, 'user.settings.analytics_consent.update'),
+            eq(audit_outbox.actor_user_public_id, user.public_id),
+          ),
+        );
+      expect(staged.map((row) => row.metadata)).toEqual([
+        expect.objectContaining({ analytics_consent: 'granted', analytics_consent_version: 1 }),
+        expect.objectContaining({ analytics_consent: 'denied', analytics_consent_version: 2 }),
+      ]);
+    });
+
+    it('refuses a consent decision without the policy version it answers', async () => {
+      const user = await createTestUser();
+      const token = await generateTestToken({ userId: user.public_id });
+      const response = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath('/users/me/settings'),
+        token,
+        payload: { analytics_consent: 'granted' },
+      });
+      expect(response.statusCode, response.body).toBe(400);
+      const body = response.json() as { error: { errors?: { field: string }[] } };
+      expect(body.error.errors?.[0]?.field).toBe('analytics_consent_version');
     });
   });
 

@@ -142,6 +142,7 @@
     "pendingCreditPartyRequired": "Elige un contacto o escribe un nombre",
     "pendingCreditUseOnBillGiveOnly": "Solo el dinero que la clínica debe puede usarse en una factura",
     "stockItemSizeWithMeasure": "Indica el tamaño por unidad y su medida juntos, o ninguno",
+    "analyticsConsentWithVersion": "Envía el consentimiento junto con la versión de la política que responde",
     "stockItemMaxBelowMin": "El máximo no puede ser menor que el mínimo",
     "stockMovementTreatmentReversed": "Esa sesión de tratamiento se revirtió: elige una realizada",
     "stockMovementAdjustUnchanged": "La cantidad contada es la que hay en stock: no hay nada que ajustar",

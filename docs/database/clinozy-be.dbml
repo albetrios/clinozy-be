@@ -1970,6 +1970,7 @@ Note auth.user_notification_preferences {
 }
 
 Table auth.user_settings {
+  analytics_consent varchar(10)
   created_at timestamptz [not null]
   is_dark_mode_enabled boolean [not null]
   is_notifications_enabled boolean [not null]

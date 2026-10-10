@@ -12,4 +12,31 @@ describe('user-settings.validator', () => {
   it('validateUpdateUserSettings rejects unknown fields', () => {
     expect(() => validateUpdateUserSettings({ unknownField: true })).toThrow(ValidationError);
   });
+
+  it('validateUpdateUserSettings takes a consent decision with its policy version (launch D85)', () => {
+    expect(
+      validateUpdateUserSettings({ analytics_consent: 'denied', analytics_consent_version: 1 }),
+    ).toEqual({ analytics_consent: 'denied', analytics_consent_version: 1 });
+  });
+
+  it('validateUpdateUserSettings refuses a consent decision without its version, and the reverse', () => {
+    for (const body of [{ analytics_consent: 'granted' }, { analytics_consent_version: 1 }]) {
+      try {
+        validateUpdateUserSettings(body);
+        expect.unreachable('a lone consent field must be refused');
+      } catch (error) {
+        expect(error).toBeInstanceOf(ValidationError);
+        expect((error as ValidationError).errors?.[0]?.field).toBe('analytics_consent_version');
+      }
+    }
+  });
+
+  it('validateUpdateUserSettings refuses an unknown consent value or a version below one', () => {
+    expect(() =>
+      validateUpdateUserSettings({ analytics_consent: 'maybe', analytics_consent_version: 1 }),
+    ).toThrow(ValidationError);
+    expect(() =>
+      validateUpdateUserSettings({ analytics_consent: 'granted', analytics_consent_version: 0 }),
+    ).toThrow(ValidationError);
+  });
 });

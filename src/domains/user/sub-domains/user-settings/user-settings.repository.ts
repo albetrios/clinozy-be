@@ -6,7 +6,8 @@ import { user_settings } from '@/domains/user/sub-domains/user-settings/user-set
 /**
  * Drizzle data-access for `auth.user_settings`. Implements an upsert-merge for the singleton
  * row keyed by `user_id`: missing fields fall back to the existing row, then to the platform
- * factory defaults (light mode, notifications on, `en` language, `['en']` preferred locales).
+ * factory defaults (light mode, notifications on, `en` language, `['en']` preferred locales, no
+ * analytics consent). A consent decision writes its three columns together, stamped by the database.
  */
 export class UserSettingsRepository {
   async getByUserId(user_id: number) {
@@ -25,8 +26,19 @@ export class UserSettingsRepository {
       is_notifications_enabled?: boolean;
       language?: string;
       preferred_locales?: unknown;
+      analytics_consent?: string;
+      analytics_consent_version?: number;
     },
   ) {
+    // A consent decision is stamped by the database clock, never the client's (launch D85).
+    const consent =
+      data.analytics_consent !== undefined && data.analytics_consent_version !== undefined
+        ? {
+            analytics_consent: data.analytics_consent,
+            analytics_consent_version: data.analytics_consent_version,
+            analytics_consent_at: databaseNowTimestamp,
+          }
+        : null;
     // audit #12: single atomic INSERT ... ON CONFLICT DO UPDATE. The prior read-branch-write
     // (getByUserId → UPDATE or INSERT) raced under concurrency: two concurrent first-time writes
     // both read `existing = null`, both INSERT, and one hit the user_id PK (23505) → HTTP 500;
@@ -41,6 +53,7 @@ export class UserSettingsRepository {
         is_notifications_enabled: data.is_notifications_enabled ?? true,
         language: data.language ?? 'en',
         preferred_locales: (data.preferred_locales as string[] | undefined) ?? ['en'],
+        ...consent,
       })
       .onConflictDoUpdate({
         target: user_settings.user_id,
@@ -55,6 +68,7 @@ export class UserSettingsRepository {
           ...(data.preferred_locales !== undefined && {
             preferred_locales: data.preferred_locales as string[],
           }),
+          ...consent,
           updated_at: databaseNowTimestamp,
         },
       })

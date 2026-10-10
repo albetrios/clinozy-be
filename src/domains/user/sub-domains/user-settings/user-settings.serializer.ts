@@ -1,3 +1,4 @@
+import type { AnalyticsConsent } from './user-settings.constants.js';
 import type { UserSettingsOutput } from './user-settings.types.js';
 
 /** Minimal row projection accepted by {@link serializeUserSettings} (database row → API output). */
@@ -6,6 +7,9 @@ export interface UserSettingsRow {
   is_notifications_enabled: boolean;
   language: string;
   preferred_locales: unknown;
+  analytics_consent: string | null;
+  analytics_consent_version: number | null;
+  analytics_consent_at: Date | null;
 }
 
 const DEFAULT_USER_SETTINGS: UserSettingsOutput = {
@@ -13,6 +17,9 @@ const DEFAULT_USER_SETTINGS: UserSettingsOutput = {
   is_notifications_enabled: true,
   language: 'en',
   preferred_locales: ['en'],
+  analytics_consent: null,
+  analytics_consent_version: null,
+  analytics_consent_at: null,
 };
 
 /**
@@ -32,5 +39,9 @@ export function serializeUserSettings(row: UserSettingsRow | null): UserSettings
     preferred_locales: (row.preferred_locales as string[]) ?? [
       ...DEFAULT_USER_SETTINGS.preferred_locales,
     ],
+    // The CHECK keeps the three null together or set together; the column only holds the enum's values.
+    analytics_consent: (row.analytics_consent as AnalyticsConsent | null) ?? null,
+    analytics_consent_version: row.analytics_consent_version ?? null,
+    analytics_consent_at: row.analytics_consent_at?.toISOString() ?? null,
   };
 }

@@ -142,6 +142,7 @@
     "pendingCreditPartyRequired": "Pick a contact or type a name",
     "pendingCreditUseOnBillGiveOnly": "Only money the clinic owes can be used on a bill",
     "stockItemSizeWithMeasure": "Give the size per unit and its measure together, or neither",
+    "analyticsConsentWithVersion": "Send the consent and the policy version it answers together",
     "stockItemMaxBelowMin": "The maximum can't be under the minimum",
     "stockMovementTreatmentReversed": "That treatment session was reversed — pick a done one",
     "stockMovementAdjustUnchanged": "The counted quantity is what is in stock — nothing to adjust",

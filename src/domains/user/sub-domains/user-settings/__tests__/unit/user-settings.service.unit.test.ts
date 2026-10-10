@@ -75,6 +75,9 @@ describe('UserSettingsService', () => {
       is_notifications_enabled: true,
       language: 'en',
       preferred_locales: ['en'],
+      analytics_consent: null,
+      analytics_consent_version: null,
+      analytics_consent_at: null,
     });
   });
 
