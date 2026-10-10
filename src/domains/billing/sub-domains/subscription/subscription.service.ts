@@ -40,6 +40,9 @@ const TERMINAL_STATUSES = new Set<string>(INACTIVE_SUBSCRIPTION_STATUSES);
  * (F4), after which its entitlement lapses to the Free-tier ceiling.
  */
 const DUNNING_STATUSES = new Set<string>(['PAST_DUE', 'UNPAID']);
+// Unpaid states that never earned the plan: INCOMPLETE (first payment pending) and PAUSED
+// (trial ended without a payment method). Both hold the Free ceiling until payment lands.
+const UNPAID_ENTITLEMENT_STATUSES = new Set<string>(['INCOMPLETE', 'PAUSED']);
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
@@ -95,7 +98,6 @@ export type MembershipSeatUsagePort = {
 
 /** Repository row enriched with the REQ-4 seat counters before serialization. */
 type SubscriptionRowWithSeatState = {
-  seats: number | null;
   plan_included_seats: number | null;
   status: string;
   current_period_end: Date;
@@ -202,9 +204,10 @@ export class SubscriptionService {
    * Computes `seats_total` / `seats_used` for a subscription row (REQ-4).
    *
    * @remarks
-   * - **Algorithm:** unpaid initial subscriptions and expired dunning grace use the Free
-   *   ceiling, matching membership enforcement. Other rows use purchased or included seats
-   *   (null = unlimited); `seats_used` is the ACTIVE + INVITED membership count from the injected
+   * - **Algorithm:** unpaid (INCOMPLETE / PAUSED) subscriptions and expired dunning grace use the
+   *   Free ceiling, matching membership enforcement. Other rows use the plan's included seats
+   *   (null = unlimited) — never `subscriptions.seats`, which is only the quantity billed in Stripe
+   *   and follows the member count; `seats_used` is the ACTIVE + INVITED membership count from the injected
    *   {@link MembershipSeatUsagePort}.
    * - **Failure modes:** when the membership port is not wired, `seats_used` defaults to 0 (and a
    *   warning is logged) so the response shape stays stable for minimal/worker harnesses.
@@ -234,9 +237,7 @@ export class SubscriptionService {
       : null;
     return rows.map((row, index) => ({
       ...row,
-      seats_total: freeSeatRequired[index]
-        ? freeSeatCeiling
-        : (row.seats ?? row.plan_included_seats ?? null),
+      seats_total: freeSeatRequired[index] ? freeSeatCeiling : row.plan_included_seats,
       seats_used: seatsUsed,
     }));
   }
@@ -247,8 +248,10 @@ export class SubscriptionService {
    * @remarks
    * - **Algorithm:** delegates to {@link SubscriptionRepository.findActiveSeatStateByOrganizationForUpdate},
    *   which takes `FOR UPDATE` on the active subscription row, then resolves the ceiling:
-   *   active entitlement → purchased `seats` ?? plan `included_seats`; **no active subscription**
-   *   (F3) or a **dunning subscription past its grace window** (F4) → the Free-tier ceiling
+   *   active entitlement → plan `included_seats` (never `subscriptions.seats`, the billed quantity
+   *   seat sync keeps equal to the member count); **no active subscription** (F3), an **unpaid
+   *   INCOMPLETE / PAUSED subscription**, or a **dunning subscription past its grace window** (F4)
+   *   → the Free-tier ceiling
    *   ({@link PlanService.getFreePlanSeatCeiling}). `null` still means "no ceiling to enforce"
    *   (unlimited plan, or no plan catalog configured).
    * - **Failure modes:** none beyond the underlying queries; the caller MUST already hold an
@@ -267,20 +270,21 @@ export class SubscriptionService {
     if (this.requiresFreeSeatCeiling(seatState)) {
       return this.planService.getFreePlanSeatCeiling();
     }
-    return seatState?.seats ?? seatState?.plan_included_seats ?? null;
+    return seatState?.plan_included_seats ?? null;
   }
 
   private requiresFreeSeatCeiling(seatState: SubscriptionRowWithSeatState | null): boolean {
     return (
-      !seatState || seatState.status === 'INCOMPLETE' || this.isDunningEntitlementLapsed(seatState)
+      !seatState ||
+      UNPAID_ENTITLEMENT_STATUSES.has(seatState.status) ||
+      this.isDunningEntitlementLapsed(seatState)
     );
   }
 
   /**
    * F4: true when `seatState` is a dunning subscription (PAST_DUE / UNPAID) whose grace
    * window (`current_period_end + BILLING_DUNNING_GRACE_DAYS`) has elapsed, so its entitlement has
-   * lapsed to the Free tier. Non-dunning (ACTIVE / TRIALING / PAUSED) and within-grace dunning keep
-   * the full plan ceiling.
+   * lapsed to the Free tier. ACTIVE / TRIALING and within-grace dunning keep the full plan ceiling.
    */
   private isDunningEntitlementLapsed(seatState: {
     status: string;

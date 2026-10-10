@@ -361,6 +361,24 @@ describe('Membership Sub-Domain — Integration', () => {
       expect(changed!.status).toBe('ACTIVE');
     });
 
+    it('keeps the plan seat limit after seat sync records the billed quantity', async () => {
+      const { organization, adminToken, memberRole } = await createSeatLimitedContext(5, true);
+      expect((await inviteMember(adminToken, memberRole.public_id)).statusCode).toBe(200);
+
+      // The seat-sync worker's write: the billed quantity follows the member count.
+      await app.billingDomain.subscriptionService.syncSeatQuantityForOrganization(
+        organization.public_id,
+      );
+      const [synced] = await getOperatorDatabase()
+        .select({ seats: subscriptions.seats })
+        .from(subscriptions)
+        .where(eq(subscriptions.organization_id, organization.id));
+      expect(synced!.seats).toBe(2);
+
+      // The synced quantity is not an allowance: the 5-seat plan still admits a third member.
+      expect((await inviteMember(adminToken, memberRole.public_id)).statusCode).toBe(200);
+    });
+
     it('returns 409 seat_limit_reached when the plan seat limit is already filled', async () => {
       // Plan grants 1 seat; the owner already occupies it, so the next add must be rejected.
       const { adminToken, memberRole } = await createSeatLimitedContext(1, true);

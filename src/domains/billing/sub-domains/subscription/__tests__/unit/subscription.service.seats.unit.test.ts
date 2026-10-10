@@ -101,34 +101,33 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     vi.mocked(membershipSeatUsage.countActiveMembers).mockResolvedValue(3);
   });
 
-  it('list() decorates rows with seats_total (subscription.seats ?? plan.included_seats) and seats_used', async () => {
+  it('list() decorates rows with seats_total (plan.included_seats) and seats_used', async () => {
     vi.mocked(repository.listByOrganization).mockResolvedValue([
       baseRow({ seats: null, plan_included_seats: 10 }),
-      baseRow({ public_id: 'sub_2', seats: 50, plan_included_seats: 10 }),
+      baseRow({ public_id: 'sub_2', seats: 3, plan_included_seats: 10 }),
     ] as never);
 
     const rows = await service.list(scope);
 
-    // First row: no purchased seats → falls back to plan.included_seats.
+    // The plan sets the allowance; `seats` is only the billed quantity seat sync wrote.
     expect(rows[0]!.seats_total).toBe(10);
-    // Second row: purchased seats win over the plan fallback.
-    expect(rows[1]!.seats_total).toBe(50);
+    expect(rows[1]!.seats_total).toBe(10);
     // seats_used is the organization membership count, shared across rows; resolved once.
     expect(rows[0]!.seats_used).toBe(3);
     expect(rows[1]!.seats_used).toBe(3);
     expect(membershipSeatUsage.countActiveMembers).toHaveBeenCalledTimes(1);
   });
 
-  it('get() seats_total is null when both subscription.seats and plan.included_seats are null (unlimited)', async () => {
+  it('get() seats_total is null when the plan is unlimited, whatever quantity is billed', async () => {
     vi.mocked(repository.findByPublicId).mockResolvedValue(
-      baseRow({ seats: null, plan_included_seats: null }) as never,
+      baseRow({ seats: 4, plan_included_seats: null }) as never,
     );
     const row = await service.get(scope, 'sub_public');
     expect(row.seats_total).toBeNull();
     expect(row.seats_used).toBe(3);
   });
 
-  it.each(['INCOMPLETE', 'PAST_DUE', 'UNPAID'])(
+  it.each(['INCOMPLETE', 'PAUSED', 'PAST_DUE', 'UNPAID'])(
     'list and get report the enforced Free ceiling for %s without earned entitlement',
     async (status) => {
       const row = baseRow({
@@ -156,7 +155,8 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     async (status) => {
       const row = baseRow({
         status,
-        seats: 25,
+        seats: 3,
+        plan_included_seats: 25,
         current_period_end: new Date(Date.now() + 86_400_000),
       });
       vi.mocked(repository.listByOrganization).mockResolvedValue([row] as never);
@@ -171,7 +171,7 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
 
   it('keeps a finite paid allowance when grace expires during response decoration', async () => {
     vi.mocked(repository.listByOrganization).mockResolvedValue([
-      baseRow({ status: 'PAST_DUE', seats: 25, current_period_end: new Date(0) }),
+      baseRow({ status: 'PAST_DUE', plan_included_seats: 25, current_period_end: new Date(0) }),
     ] as never);
     const clock = vi.spyOn(Date, 'now').mockReturnValueOnce(0).mockReturnValue(4_102_444_800_000);
     try {
@@ -191,17 +191,16 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     expect(planService.getFreePlanSeatCeiling).toHaveBeenCalledTimes(1);
   });
 
-  it('reserveSeatCeilingForMemberAdd prefers purchased seats, else plan included_seats (active sub)', async () => {
+  it('reserveSeatCeilingForMemberAdd uses plan included_seats, never the synced billed quantity (active sub)', async () => {
+    // Seat sync writes the member count to `subscriptions.seats`; that quantity never caps adds.
     vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValueOnce({
-      seats: 7,
-      plan_included_seats: 3,
+      plan_included_seats: 25,
       status: 'ACTIVE',
       current_period_end: new Date('2026-06-01'),
     });
-    await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBe(7);
+    await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBe(25);
 
     vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValueOnce({
-      seats: null,
       plan_included_seats: 3,
       status: 'ACTIVE',
       current_period_end: new Date('2026-06-01'),
@@ -211,16 +210,16 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
   });
 
   it.each([
-    { seats: 99, plan_included_seats: 25 },
-    { seats: null, plan_included_seats: 25 },
-    { seats: null, plan_included_seats: null },
+    { status: 'INCOMPLETE', plan_included_seats: 25 },
+    { status: 'INCOMPLETE', plan_included_seats: null },
+    { status: 'PAUSED', plan_included_seats: 25 },
+    { status: 'PAUSED', plan_included_seats: null },
   ])(
-    'unpaid INCOMPLETE subscription uses Free ceiling for $seats / $plan_included_seats',
-    async ({ seats, plan_included_seats }) => {
+    'unpaid $status subscription uses Free ceiling for plan seats $plan_included_seats',
+    async ({ status, plan_included_seats }) => {
       vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValueOnce({
-        seats,
         plan_included_seats,
-        status: 'INCOMPLETE',
+        status,
         current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       });
       vi.mocked(planService.getFreePlanSeatCeiling).mockResolvedValue(1);
@@ -234,7 +233,6 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     // PAST_DUE, period ended yesterday — well within the default 14-day grace window.
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
     vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValueOnce({
-      seats: null,
       plan_included_seats: 5,
       status: 'PAST_DUE',
       current_period_end: yesterday,
@@ -247,7 +245,6 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     // UNPAID, period ended 30 days ago — past the 14-day grace window.
     const longAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValueOnce({
-      seats: 99,
       plan_included_seats: 25,
       status: 'UNPAID',
       current_period_end: longAgo,

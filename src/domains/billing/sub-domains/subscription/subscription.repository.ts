@@ -161,9 +161,9 @@ export class SubscriptionRepository {
    *   `FOR UPDATE` against the nullable side of an outer join (`42601`) — so a concurrent member-add
    *   blocks on this row until the caller's seat check + membership insert commit, closing the
    *   two-concurrent-adds-exceed-the-limit race. (2) a plain (unlocked) lookup of the plan's
-   *   `included_seats` (a global catalog row that must NOT be locked). Returns the per-subscription
-   *   `seats` (purchased from Stripe) and `plan_included_seats` so the caller computes
-   *   `seats_total = seats ?? included_seats ?? null` (null = unlimited).
+   *   `included_seats` (a global catalog row that must NOT be locked). Returns
+   *   `plan_included_seats` (the ceiling; null = unlimited) with the status and period the caller
+   *   needs for the Free-ceiling decisions.
    * - **Failure modes:** returns `null` when the organization has no active subscription (the seat check is
    *   then a no-op — the billing-free flow still works).
    * - **Side effects:** acquires a row-level `FOR UPDATE` lock released at the enclosing
@@ -171,14 +171,12 @@ export class SubscriptionRepository {
    *   the subsequent insert.
    */
   async findActiveSeatStateByOrganizationForUpdate(organization_id: number): Promise<{
-    seats: number | null;
     plan_included_seats: number | null;
     status: string;
     current_period_end: Date;
   } | null> {
     const lockedRows = await this.db()
       .select({
-        seats: subscriptions.seats,
         plan_id: subscriptions.plan_id,
         status: subscriptions.status,
         current_period_end: subscriptions.current_period_end,
@@ -201,7 +199,6 @@ export class SubscriptionRepository {
       .where(eq(plans.id, locked.plan_id))
       .limit(1);
     return {
-      seats: locked.seats,
       plan_included_seats: planRows[0]?.included_seats ?? null,
       status: locked.status,
       current_period_end: locked.current_period_end,
