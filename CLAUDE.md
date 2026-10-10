@@ -488,6 +488,7 @@ Local SonarQube quality gate (pre-commit): `pnpm sonar:up` / `sonar:scan` / `son
 - `pnpm test:rls-role` — runs the **e2e** and **integration** lanes with the pool under test opened as the RLS-subject `clinozy_be_app` role. Every other lane connects as a role that BYPASSES row-level security (Compose's `POSTGRES_USER: clinozy` is a superuser; the local operator role carries `rolbypassrls`), so a path reaching a FORCE RLS table without a database context reads rows there and **none** in production. Harness fixtures use the operator connection (`src/tests/helpers/operator-database.ts`). CI job: `RLS application role (whole connection)`
 - `pnpm test:chaos` — Toxiproxy chaos / fault-injection suite (`tooling/vitest/chaos.config.ts`; see `docs/reference/reliability/chaos-testing.md`)
 - `pnpm test:contract` — outbound HTTP contracts for Stripe, Resend, S3 (`tooling/vitest/contract.config.ts`; see `docs/reference/testing/contract-tests.md`)
+- `pnpm test:contract:live` — opt-in, never in CI: the `*.live.contract.test.ts` specs against the Stripe sandbox, Resend, the configured S3 bucket, Turnstile test secrets, Sentry and PostHog, with the configured keys (refuses a live Stripe key)
 - `pnpm chaos:up` / `pnpm chaos:down` — start/stop the Toxiproxy sidecar (`docker compose --profile chaos`)
 - `pnpm chaos:provision` — register Postgres + Redis listener proxies (`src/tests/chaos/provision-proxies.ts`)
 - `pnpm test:api-smoke` — live API smoke (server running + seed)

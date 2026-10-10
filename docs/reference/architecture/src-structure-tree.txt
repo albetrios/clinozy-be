@@ -1427,7 +1427,6 @@ src/
     │   ├── db-sequences-advance.ts
     │   ├── memory-soak.ts
     │   ├── next-migration-prefix.ts
-    │   ├── record-contract-fixtures.ts
     │   ├── route-coverage-audit.ts
     │   ├── secrets-key-rotate.ts
     │   ├── send-load-test-results-email.ts
@@ -1731,7 +1730,6 @@ src/
     │   │   │   └── subscription.update.resume.response.json
     │   ├── helpers/
     │   │   ├── circuit-reset.ts
-    │   │   ├── contract-mode.ts
     │   │   ├── register-contract-test-hooks.ts
     │   │   ├── stripe-form.ts
     │   │   └── stripe-signature.ts
@@ -1747,11 +1745,16 @@ src/
     │   ├── google-oauth.contract.test.ts
     │   ├── request-id-eventbus.contract.test.ts
     │   ├── resend.contract.test.ts
+    │   ├── resend.live.contract.test.ts
     │   ├── s3-object-storage-adapter.contract.test.ts
+    │   ├── s3-object-storage-adapter.live.contract.test.ts
     │   ├── stripe-billing-account.contract.test.ts
     │   ├── stripe-webhook.contract.test.ts
     │   ├── stripe.contract.test.ts
+    │   ├── stripe.live.contract.test.ts
+    │   ├── telemetry.live.contract.test.ts
     │   ├── turnstile.contract.test.ts
+    │   ├── turnstile.live.contract.test.ts
     │   └── webhook-request-id-forward.contract.test.ts
     ├── e2e/
     │   ├── billing-onboarding.e2e.test.ts

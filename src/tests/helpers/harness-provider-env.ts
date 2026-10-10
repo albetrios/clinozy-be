@@ -14,40 +14,77 @@
  * so such a call fails at once, offline, instead of depending on a third party's answer.
  * Loopback stays open for the test servers and Toxiproxy's admin API; Postgres and Redis speak
  * their own protocols over raw sockets, which nock never touches. Contract tests register their
- * own interceptors on top; fixture recording (`CONTRACT_RECORD`) re-enables the network itself.
+ * own interceptors on top.
  *
  * Also removed: the S3 endpoint (a local MinIO URL changes presigned URLs), the separate BullMQ
  * Redis (queues must share the test prefix on the test Redis) and every telemetry sink.
+ *
+ * The one exception is `pnpm test:contract:live` (`LIVE_PROVIDER_CONTRACTS=true`): the
+ * `*.live.contract.test.ts` specs check the real providers, so that run keeps the configured
+ * sandbox keys and telemetry sinks and may reach the network. It refuses a live Stripe key, a
+ * bucket whose name says production, and any lane but the contract slice.
  */
 import nock from 'nock';
 
 /** `host` or `host:port` of this machine — the only destinations a Vitest run may connect to. */
 const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\]|::1)(:\d+)?$/;
 
-process.env.STRIPE_SECRET_KEY = 'sk_test_contract_fixture_key_for_nock_stubs';
-process.env.STRIPE_WEBHOOK_SECRET =
-  'whsec_test_contract_fixture_webhook_signing_must_be_minimum_32characters';
-process.env.RESEND_API_KEY = 're_test_contract_fixture_key';
-// EMAIL_FROM_ADDRESS is required by the env schema whenever RESEND_API_KEY is set.
-process.env.EMAIL_FROM_ADDRESS = 'noreply@example.com';
-process.env.S3_BUCKET = 'contract-test-bucket';
-process.env.S3_REGION = 'us-east-1';
-process.env.S3_ACCESS_KEY_ID = 'test-s3-access-key-id';
-process.env.S3_SECRET_ACCESS_KEY = 'test-s3-secret-access-key';
-
-for (const key of [
-  'S3_ENDPOINT',
-  'REDIS_BULLMQ_URL',
-  'SENTRY_DSN',
-  'POSTHOG_KEY',
-  'POSTHOG_HOST',
-  'OTEL_EXPORTER_OTLP_ENDPOINT',
-]) {
-  delete process.env[key];
+/** Whether this run is the opt-in live provider check (`pnpm test:contract:live`). */
+export function isLiveProviderContractRun(): boolean {
+  return process.env.LIVE_PROVIDER_CONTRACTS === 'true';
 }
 
-if (!nock.isActive()) {
-  nock.activate();
+/** Refuses a live run that is not the contract slice, or whose keys are not sandbox ones. */
+function assertLiveProviderRunIsSandboxed(): void {
+  if (process.env.CONTRACT_TESTS_ENABLED !== 'true') {
+    throw new Error(
+      'LIVE_PROVIDER_CONTRACTS runs only the contract slice: pnpm test:contract:live',
+    );
+  }
+  if (!process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_')) {
+    throw new Error('Live provider contracts need a Stripe sandbox key (sk_test_…)');
+  }
+  if (/prod/i.test(process.env.S3_BUCKET ?? '')) {
+    throw new Error('Live provider contracts refuse a bucket whose name says production');
+  }
 }
-nock.disableNetConnect();
-nock.enableNetConnect((host) => LOOPBACK_HOST.test(host));
+
+/** Fake provider credentials and no telemetry sinks — every run but the live one. */
+function useFakeProviderKeys(): void {
+  process.env.STRIPE_SECRET_KEY = 'sk_test_contract_fixture_key_for_nock_stubs';
+  process.env.STRIPE_WEBHOOK_SECRET =
+    'whsec_test_contract_fixture_webhook_signing_must_be_minimum_32characters';
+  process.env.RESEND_API_KEY = 're_test_contract_fixture_key';
+  // EMAIL_FROM_ADDRESS is required by the env schema whenever RESEND_API_KEY is set.
+  process.env.EMAIL_FROM_ADDRESS = 'noreply@example.com';
+  process.env.S3_BUCKET = 'contract-test-bucket';
+  process.env.S3_REGION = 'us-east-1';
+  process.env.S3_ACCESS_KEY_ID = 'test-s3-access-key-id';
+  process.env.S3_SECRET_ACCESS_KEY = 'test-s3-secret-access-key';
+
+  for (const key of ['S3_ENDPOINT', 'SENTRY_DSN', 'POSTHOG_KEY', 'POSTHOG_HOST']) {
+    delete process.env[key];
+  }
+}
+
+if (isLiveProviderContractRun()) {
+  assertLiveProviderRunIsSandboxed();
+} else {
+  useFakeProviderKeys();
+}
+
+// Never live, not even in the live run (no OpenTelemetry collector is checked).
+delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+delete process.env.REDIS_BULLMQ_URL;
+
+if (isLiveProviderContractRun()) {
+  // Real requests only: nock's pass-through breaks Node `http` clients (the AWS SDK, Sentry's
+  // transport) even with the network enabled, so the live run takes nock out entirely.
+  nock.restore();
+} else {
+  if (!nock.isActive()) {
+    nock.activate();
+  }
+  nock.disableNetConnect();
+  nock.enableNetConnect((host) => LOOPBACK_HOST.test(host));
+}
