@@ -153,6 +153,14 @@ describe('Auth e2e: email verification-code login flow', () => {
     });
     expect(firstLogin.statusCode).toBe(200);
 
+    // The redeemed code itself cannot be replayed for a second session.
+    const replayedLogin = await injectUnauthenticated(app, {
+      method: 'POST',
+      url: testApiPath('/auth/email/login'),
+      payload: { email: user.email, code: firstCode },
+    });
+    expect(replayedLogin.statusCode).toBe(401);
+
     // Redeeming the first code invalidated every other live code, so the still-unexpired second fails.
     const secondLogin = await injectUnauthenticated(app, {
       method: 'POST',

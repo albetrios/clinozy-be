@@ -4,12 +4,18 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { IP_FAILED_LOGIN_THRESHOLD } from '@/shared/constants/index.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
-import { injectUnauthenticated, injectRoute } from '@/tests/helpers/test-http-inject.helper.js';
+import {
+  injectAuthenticated,
+  injectUnauthenticated,
+  injectRoute,
+} from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { eq } from 'drizzle-orm';
 import { createTestUserWithPassword } from '@/tests/factories/user.factory.js';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { users } from '@/domains/user/user.schema.js';
+import { CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/domains/auth/auth.http.util.js';
+import { env } from '@/shared/config/env.config.js';
 import esSuccess from '@/shared/locales/es/success.json' with { type: 'json' };
 import type { FastifyInstance } from 'fastify';
 
@@ -311,6 +317,85 @@ describe('Auth Domain — Response contract (integration)', () => {
       expect(refreshResponse.statusCode).toBe(200);
       const body = refreshResponse.json() as { data?: { access_token?: string } };
       expect(body.data).toHaveProperty('access_token');
+    });
+
+    it('should return 401 when the session cookie is replayed after logout', async () => {
+      const { user, password } = await createTestUserWithPassword();
+      const loginResponse = await injectUnauthenticated(app, {
+        method: 'POST',
+        url: testApiPath(AUTH_LOGIN_PATH),
+        payload: { email: user.email, password },
+      });
+      expect(loginResponse.statusCode).toBe(200);
+      const cookieHeader = authCookieHeaderFromLoginResponse(loginResponse.headers);
+      const accessToken = (loginResponse.json() as { data: { access_token: string } }).data
+        .access_token;
+
+      const logoutResponse = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/logout'),
+        token: accessToken,
+      });
+      expect(logoutResponse.statusCode).toBe(200);
+
+      const refreshResponse = await app.inject({
+        method: 'POST',
+        url: testApiPath('/auth/refresh'),
+        headers: {
+          cookie: cookieHeader,
+          referer: 'http://localhost:3000/',
+        },
+        payload: {},
+      });
+      expect(refreshResponse.statusCode).toBe(401);
+    });
+
+    // Production requires the double-submit CSRF token whenever Origin is absent; the harness
+    // turns that off (Referer fallback), so these cases switch it back on.
+    describe('originless refresh with SESSION_ORIGIN_CSRF_REQUIRED', () => {
+      let originalSessionOriginCsrfRequired: boolean;
+
+      beforeEach(() => {
+        originalSessionOriginCsrfRequired = env.SESSION_ORIGIN_CSRF_REQUIRED;
+        env.SESSION_ORIGIN_CSRF_REQUIRED = true;
+      });
+
+      afterEach(() => {
+        env.SESSION_ORIGIN_CSRF_REQUIRED = originalSessionOriginCsrfRequired;
+      });
+
+      it('should return 403 when X-CSRF-Token does not match the csrf_token cookie', async () => {
+        const loginHeaders = await loginAndGetResponseHeaders();
+
+        const refreshResponse = await app.inject({
+          method: 'POST',
+          url: testApiPath('/auth/refresh'),
+          headers: {
+            cookie: authCookieHeaderFromLoginResponse(loginHeaders),
+            [CSRF_HEADER_NAME]: 'incorrect-csrf-token',
+          },
+          payload: {},
+        });
+        expect(refreshResponse.statusCode).toBe(403);
+      });
+
+      it('should return 200 when X-CSRF-Token matches the csrf_token cookie', async () => {
+        const loginHeaders = await loginAndGetResponseHeaders();
+        const csrfPair = cookiePairFromLoginResponse(loginHeaders, CSRF_COOKIE_NAME);
+
+        const refreshResponse = await app.inject({
+          method: 'POST',
+          url: testApiPath('/auth/refresh'),
+          headers: {
+            cookie: authCookieHeaderFromLoginResponse(loginHeaders),
+            [CSRF_HEADER_NAME]: csrfPair.slice(`${CSRF_COOKIE_NAME}=`.length),
+          },
+          payload: {},
+        });
+        expect(refreshResponse.statusCode).toBe(200);
+        const body = refreshResponse.json() as { data?: { access_token?: string } };
+        expect(body.data).toHaveProperty('access_token');
+      });
     });
   });
 

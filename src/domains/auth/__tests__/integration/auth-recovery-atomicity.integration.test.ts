@@ -3,7 +3,10 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach, vi } 
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
-import { injectUnauthenticated } from '@/tests/helpers/test-http-inject.helper.js';
+import {
+  injectAuthenticated,
+  injectUnauthenticated,
+} from '@/tests/helpers/test-http-inject.helper.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUserWithPassword } from '@/tests/factories/user.factory.js';
@@ -121,5 +124,46 @@ describe('Auth recovery atomicity — password reset', () => {
       .from(users)
       .where(eq(users.id, user.id));
     expect(reset!.is_email_verified).toBe(true);
+  });
+
+  it('a committed reset revokes a bearer issued before it and refuses a replay of its token (401)', async () => {
+    const { user, rawToken } = await seedUserWithResetToken('OldPassword123!');
+    const login = await injectUnauthenticated(app, {
+      method: 'POST',
+      url: testApiPath('/auth/login'),
+      payload: { email: user.email, password: 'OldPassword123!' },
+    });
+    expect(login.statusCode).toBe(200);
+    const preResetToken = (login.json() as { data: { access_token: string } }).data.access_token;
+    const beforeReset = await injectAuthenticated(app, {
+      method: 'GET',
+      url: testApiPath('/users/me'),
+      token: preResetToken,
+    });
+    expect(beforeReset.statusCode).toBe(200);
+
+    const resetPayload = { token: rawToken, password: 'BrandNewPassword456!' };
+    const response = await injectUnauthenticated(app, {
+      method: 'POST',
+      url: testApiPath('/auth/password/reset'),
+      payload: resetPayload,
+    });
+    expect(response.statusCode).toBe(200);
+
+    // The reset revoked every prior session, so the bearer minted before it is dead...
+    const afterReset = await injectAuthenticated(app, {
+      method: 'GET',
+      url: testApiPath('/users/me'),
+      token: preResetToken,
+    });
+    expect(afterReset.statusCode).toBe(401);
+
+    // ...and the consumed token cannot reset the password (or mint a session) a second time.
+    const replay = await injectUnauthenticated(app, {
+      method: 'POST',
+      url: testApiPath('/auth/password/reset'),
+      payload: resetPayload,
+    });
+    expect(replay.statusCode).toBe(401);
   });
 });

@@ -521,6 +521,17 @@ describe('Auth Domain — Route gates (e2e)', () => {
         },
       });
       expect(loginResponse.statusCode).toBe(200);
+
+      // The replaced password no longer authenticates
+      const oldPasswordLogin = await injectUnauthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/login'),
+        payload: {
+          email: user.email,
+          password,
+        },
+      });
+      expect(oldPasswordLogin.statusCode).toBe(401);
     });
   });
 

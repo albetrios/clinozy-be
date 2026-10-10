@@ -66,6 +66,25 @@ describe('User admin routes — happy paths', () => {
     expect(body.data.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('GET /users?search= returns the matching user and leaves out the rest', async () => {
+    // The ILIKE over email + display name was proven against the repository only; this pins that
+    // `search` reaches it through the admin route's query DTO.
+    const match = await createTestUser({ email: 'search-target-quokka@example.com' });
+    const nonMatch = await createTestUser({ email: 'search-bystander@example.com' });
+    const response = await injectAuthenticated(app, {
+      method: 'GET',
+      url: testApiPath('/users'),
+      token: adminToken,
+      query: { search: 'QUOKKA' },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const listedIds = (response.json() as { data: Array<{ id: string }> }).data.map(
+      (listedUser) => listedUser.id,
+    );
+    expect(listedIds).toEqual([match.public_id]);
+    expect(listedIds).not.toContain(nonMatch.public_id);
+  });
+
   it('GET /users/:user_id returns the target profile', async () => {
     const target = await createTestUser();
     const response = await injectAuthenticated(app, {

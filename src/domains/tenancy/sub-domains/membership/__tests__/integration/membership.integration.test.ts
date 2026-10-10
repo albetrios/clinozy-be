@@ -1099,6 +1099,48 @@ describe('Membership Sub-Domain — Integration', () => {
       });
       expect(response.statusCode, response.body).toBe(400);
     });
+
+    it("refuses a SUSPENDED member's already-issued organization token on GET /tenancy/organization (404)", async () => {
+      // The token below is minted while the membership is ACTIVE and its signed `org` claim stays
+      // valid after the suspension — only the per-request membership check can refuse it.
+      const { organization, token: ownerToken } = await createAuthorizedContext();
+      const member = await createTestUser({ email: `suspended-${randomUUID()}@test.com` });
+      const memberRole = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: [TENANCY_PERMISSIONS.ORGANIZATION_READ],
+      });
+      const membership = await createMembership({
+        userId: member.id,
+        organizationId: organization.id,
+        roleId: memberRole.id,
+      });
+      const memberToken = await generateTestToken({
+        userId: member.public_id,
+        organizationPublicId: organization.public_id,
+      });
+
+      const beforeSuspension = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/tenancy/organization'),
+        token: memberToken,
+      });
+      expect(beforeSuspension.statusCode, beforeSuspension.body).toBe(200);
+
+      const suspend = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath(`/tenancy/organization/memberships/${membership.public_id}`),
+        token: ownerToken,
+        payload: { status: 'SUSPENDED' },
+      });
+      expect(suspend.statusCode, suspend.body).toBe(200);
+
+      const afterSuspension = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/tenancy/organization'),
+        token: memberToken,
+      });
+      expect(afterSuspension.statusCode, afterSuspension.body).toBe(404);
+    });
   });
 
   describe('POST /api/v1/tenancy/organization/transfer-ownership (route-coverage gap-fill)', () => {
@@ -1146,6 +1188,55 @@ describe('Membership Sub-Domain — Integration', () => {
         .where(eq(organizations.id, organization.id));
       expect(updatedOrg!.owner_user_id).toBe(newOwner.id);
       expect(updatedOrg!.owner_user_id).not.toBe(owner.id);
+    });
+
+    it('lets the new owner transfer ownership back to the previous owner (200 both ways)', async () => {
+      const { organization, token: ownerToken, user: owner } = await createAuthorizedContext();
+      const newOwner = await createTestUser({ email: `round-trip-owner-${randomUUID()}@test.com` });
+      const memberRole = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: MEMBERSHIP_PERMISSIONS,
+      });
+      await createMembership({
+        userId: newOwner.id,
+        organizationId: organization.id,
+        roleId: memberRole.id,
+      });
+
+      const transferred = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath(`/tenancy/organization/transfer-ownership`),
+        token: ownerToken,
+        headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
+        payload: { new_owner_user_id: newOwner.public_id },
+      });
+      expect(transferred.statusCode, transferred.body).toBe(200);
+      expect((transferred.json() as { data: { user_id: string } }).data.user_id).toBe(
+        newOwner.public_id,
+      );
+
+      // The previous owner keeps an ACTIVE membership, so it is a valid transfer target.
+      const newOwnerToken = await generateTestToken({
+        userId: newOwner.public_id,
+        organizationPublicId: organization.public_id,
+      });
+      const transferredBack = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath(`/tenancy/organization/transfer-ownership`),
+        token: newOwnerToken,
+        headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
+        payload: { new_owner_user_id: owner.public_id },
+      });
+      expect(transferredBack.statusCode, transferredBack.body).toBe(200);
+      expect((transferredBack.json() as { data: { user_id: string } }).data.user_id).toBe(
+        owner.public_id,
+      );
+
+      const [organizationAfterRoundTrip] = await getOperatorDatabase()
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, organization.id));
+      expect(organizationAfterRoundTrip!.owner_user_id).toBe(owner.id);
     });
 
     it('rejects non-owner callers with 403 (errors:onlyOwnerCanTransfer)', async () => {
@@ -1233,6 +1324,60 @@ describe('Membership Sub-Domain — Integration', () => {
         .from(memberships)
         .where(eq(memberships.id, ownerMembership.id));
       expect(stillActive!.deleted_at).toBeNull();
+    });
+  });
+
+  describe('GET /api/v1/users/me/organizations after the organization is deleted', () => {
+    it("drops a deleted organization from its former member's organization list", async () => {
+      await seedPermissions([TENANCY_PERMISSIONS.ORGANIZATION_DELETE]);
+      const owner = await createTestUser();
+      const organization = await createTestOrganization({ ownerUserId: owner.id });
+      const ownerRole = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: [TENANCY_PERMISSIONS.ORGANIZATION_DELETE],
+      });
+      await createMembership({
+        userId: owner.id,
+        organizationId: organization.id,
+        roleId: ownerRole.id,
+      });
+      const ownerToken = await generateTestToken({
+        userId: owner.public_id,
+        organizationPublicId: organization.public_id,
+      });
+      const member = await createTestUser({ email: `former-member-${randomUUID()}@test.com` });
+      const memberRole = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: [TENANCY_PERMISSIONS.ORGANIZATION_READ],
+      });
+      await createMembership({
+        userId: member.id,
+        organizationId: organization.id,
+        roleId: memberRole.id,
+      });
+      const memberToken = await generateTestToken({ userId: member.public_id });
+      const listMemberOrganizationIds = async (): Promise<string[]> => {
+        const response = await injectAuthenticated(app, {
+          method: 'GET',
+          url: testApiPath('/users/me/organizations'),
+          token: memberToken,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        return (response.json() as { data: { id: string }[] }).data.map(
+          (listedOrganization) => listedOrganization.id,
+        );
+      };
+
+      expect(await listMemberOrganizationIds()).toContain(organization.public_id);
+
+      const deleteResponse = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath('/tenancy/organization'),
+        token: ownerToken,
+      });
+      expect(deleteResponse.statusCode, deleteResponse.body).toBe(204);
+
+      expect(await listMemberOrganizationIds()).not.toContain(organization.public_id);
     });
   });
 

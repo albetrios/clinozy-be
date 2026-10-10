@@ -18,6 +18,7 @@ import {
 import { createTestSubscription } from '@/domains/billing/__tests__/factories/subscription.factory.js';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { subscriptions } from '@/domains/billing/sub-domains/subscription/subscription.schema.js';
 import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
@@ -158,6 +159,31 @@ describe('Billing Subscription Mutations — Integration', () => {
     return { user, organization, plan, subscription, token };
   }
 
+  // ─── POST create (organization already subscribed) ─────────────────────────
+
+  describe('POST /api/v1/billing/subscriptions', () => {
+    it('should return 409 when the organization already has an active subscription', async () => {
+      // The duplicate guard runs before any provider call, so the unreachable Stripe stub above is
+      // never reached — the refusal is the service's own `subscriptionAlreadyExists`.
+      const { organization, plan, token } = await createBillingMutationContext();
+
+      const response = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/billing/subscriptions'),
+        token,
+        payload: { plan_id: plan.public_id, billing_cycle: 'monthly' },
+        headers: { 'x-idempotency-key': generatePublicId('subscription') },
+      });
+      expect(response.statusCode, response.body).toBe(409);
+
+      const organizationSubscriptions = await getOperatorDatabase()
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.organization_id, organization.id));
+      expect(organizationSubscriptions).toHaveLength(1);
+    });
+  });
+
   // ─── POST change-plan ──────────────────────────────────────────────────────
 
   describe('POST /api/v1/billing/subscriptions/:subscription_id/change-plan', () => {
@@ -172,6 +198,21 @@ describe('Billing Subscription Mutations — Integration', () => {
         url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
         token,
         payload: {},
+        headers: { 'x-idempotency-key': generatePublicId('subscription') },
+      });
+      expect(response.statusCode, response.body).toBe(400);
+    });
+
+    it('should return 400 when the body carries a billing_cycle (no cross-cycle change)', async () => {
+      // ChangePlanDto is strict and accepts only plan_id: a cycle switch is not a plan change.
+      const { subscription, token } = await createBillingMutationContext();
+      const newPlan = await createTestPlan({ name: 'Cross Cycle Plan' });
+
+      const response = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath(`/billing/subscriptions/${subscription.public_id}/change-plan`),
+        token,
+        payload: { plan_id: newPlan.public_id, billing_cycle: 'yearly' },
         headers: { 'x-idempotency-key': generatePublicId('subscription') },
       });
       expect(response.statusCode, response.body).toBe(400);
