@@ -77,7 +77,9 @@ earlier under sustained overload; keep acquisition timeouts and event-loop
 shedding enabled either way.
 
 The API also opens its whole pool before it starts listening
-(`primeDatabasePool()` in `server.ts`), so a freshly started process does not pay
+(`primeDatabasePool()` in `server.ts`, best-effort: during a rolling deploy at `max_connections` the
+connections that open stay, a warning names the rest, and only a database that accepts none fails
+the boot), so a freshly started process does not pay
 every connection handshake under its first burst.
 
 The structured `request.service_unavailable` log identifies the triggering signal

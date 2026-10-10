@@ -32,6 +32,18 @@ describe('redis-url.parse.util', () => {
     });
   });
 
+  it('parseRedisUrl keeps the ACL user (Redis 6) and decodes both credentials', () => {
+    expect(parseRedisUrl('redis://queue-worker:p%40ss@redis.internal:6380/1')).toEqual({
+      host: 'redis.internal',
+      port: 6380,
+      username: 'queue-worker',
+      password: 'p@ss',
+      databaseIndex: 1,
+    });
+    // `redis://:password@host` is the `default` user: no username.
+    expect(parseRedisUrl('redis://:secret@localhost:6379/0')).not.toHaveProperty('username');
+  });
+
   it('isRedisTlsUrl detects rediss scheme', () => {
     expect(isRedisTlsUrl('rediss://localhost:6379/0')).toBe(true);
     expect(isRedisTlsUrl('redis://localhost:6379/0')).toBe(false);

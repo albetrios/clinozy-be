@@ -6,6 +6,8 @@ const DEFAULT_REDIS_PORT = 6379;
 export type ParsedRedisUrl = {
   host: string;
   port: number;
+  /** Redis 6 ACL user — the user part of the URL's credentials; absent means the `default` user. */
+  username?: string;
   password?: string;
   databaseIndex: number;
 };
@@ -71,10 +73,12 @@ export function parseRedisUrl(redisUrl: string): ParsedRedisUrl {
     throw new Error(`redis.invalid_database_index:${redisUrl}`);
   }
   const password = normalizedUrl.password ? decodeURIComponent(normalizedUrl.password) : undefined;
+  const username = normalizedUrl.username ? decodeURIComponent(normalizedUrl.username) : undefined;
 
   return omitUndefined({
     host: normalizedUrl.hostname,
     port: normalizedUrl.port ? Number.parseInt(normalizedUrl.port, 10) : DEFAULT_REDIS_PORT,
+    username,
     password,
     databaseIndex,
   });

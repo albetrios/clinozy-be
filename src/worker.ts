@@ -23,7 +23,7 @@ import {
 } from '@/infrastructure/database/safety/assert-database-rls-safety.js';
 import { assertDatabaseTlsVerification } from '@/infrastructure/database/safety/assert-database-tls-safety.js';
 import { assertRedisTlsVerification } from '@/infrastructure/cache/assert-redis-tls-safety.js';
-import { assertRedisEvictionPolicy } from '@/infrastructure/cache/assert-redis-eviction-policy.js';
+import { assertRedisEndpointsEvictionPolicy } from '@/infrastructure/cache/assert-redis-eviction-policy.js';
 import { usesSeparateBullMqRedisDatabase } from '@/infrastructure/cache/redis-url.util.js';
 import { computeWorkerPostgresPoolDemand } from '@/infrastructure/queue/worker-runtime/worker-connection-budget.js';
 import { setWorkerPostgresPoolDemandContext } from '@/infrastructure/queue/worker-runtime/worker-pool-demand-context.js';
@@ -40,7 +40,10 @@ import {
   startWorkerHealthServer,
   stopWorkerHealthServer,
 } from '@/infrastructure/queue/worker-runtime/worker-health.server.js';
-import { getShutdownWatchdogMs } from '@/infrastructure/queue/worker-runtime/shutdown-timing.util.js';
+import {
+  getShutdownWatchdogMs,
+  startShutdownBudget,
+} from '@/infrastructure/queue/worker-runtime/shutdown-timing.util.js';
 import { closeStripeWebhookQueue } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
 import { closeSubscriptionSeatSyncQueue } from '@/domains/billing/sub-domains/subscription/queues/subscription-seat-sync.queue.js';
 import { closeMailQueue } from '@/infrastructure/mail/queues/mail.queue.js';
@@ -87,12 +90,12 @@ async function main() {
   await connectRedis();
   await connectBullMqRedis();
   warnWhenBullMqSharesCacheRedisHost();
-  // BullMQ loses job data and lock keys on an evicting Redis — refuse to start on one.
-  await assertRedisEvictionPolicy(
-    usesSeparateBullMqRedisDatabase()
-      ? { client: bullmqRedisConnection, endpointName: 'REDIS_BULLMQ_URL' }
-      : { client: redisConnection, endpointName: 'REDIS_URL' },
-  );
+  // An evicting Redis drops job data, locks and idempotency entries — refuse to start on one.
+  await assertRedisEndpointsEvictionPolicy({
+    cacheClient: redisConnection,
+    queueClient: bullmqRedisConnection,
+    queuesOnSeparateInstance: usesSeparateBullMqRedisDatabase(),
+  });
   setWorkerPostgresPoolDemandContext(computeWorkerPostgresPoolDemand());
   await assertPostgresConnectionBudget({ assertWorkerConcurrency: true });
   await assertDatabaseRoleRlsSafety();
@@ -109,6 +112,8 @@ async function main() {
     logger.info({ signal }, 'Worker shutdown requested');
     stopRssMonitoring();
 
+    // Every close step below draws on one budget; the watchdog fires its buffer after it ends.
+    startShutdownBudget();
     const watchdogMs = getShutdownWatchdogMs();
     const watchdogTimer = setTimeout(() => {
       logger.error({ watchdogMs }, 'Worker shutdown timeout exceeded');

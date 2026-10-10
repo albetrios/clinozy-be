@@ -132,7 +132,9 @@ export function initSentry(): void {
     Sentry.httpIntegration(),
     Sentry.fastifyIntegration({ shouldHandleError: shouldCaptureErrorInSentry }),
     ...(profilingEnabled ? [nodeProfilingIntegration()] : []),
-    ...(tracingEnabled ? [Sentry.postgresIntegration(), Sentry.redisIntegration()] : []),
+    // postgres.js, not `pg`: `postgresIntegration` instruments a driver this service does not use,
+    // so database spans never appeared in a trace.
+    ...(tracingEnabled ? [Sentry.postgresJsIntegration(), Sentry.redisIntegration()] : []),
   ];
 
   Sentry.init({

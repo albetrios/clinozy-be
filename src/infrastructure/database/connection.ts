@@ -2,7 +2,8 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { THIRTY_SECONDS_MS } from '@/shared/constants/ttl.constants.js';
 import { env } from '@/shared/config/env.config.js';
-import { getShutdownTimeoutMs } from '@/infrastructure/queue/worker-runtime/shutdown-timing.util.js';
+import { getRemainingShutdownBudgetMs } from '@/infrastructure/queue/worker-runtime/shutdown-timing.util.js';
+import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import {
   isNeonPoolerConnection,
   isStrictDatabaseTlsVerification,
@@ -95,14 +96,32 @@ export const database = drizzle(sql);
  * @remarks
  * - **Algorithm:** issues `DATABASE_POOL_MAX` concurrent `SELECT 1` queries; postgres.js opens a
  *   connection per in-flight query up to `max`, so the pool is full when they resolve.
- * - **Failure modes:** a connection error rejects (the boot fails, as for the Redis connect).
- * - **Side effects:** `DATABASE_POOL_MAX` open connections until their idle timeout.
+ * - **Failure modes:** best-effort per connection — during a rolling deploy the old replicas still
+ *   hold theirs, and a refused connection (`max_connections`) used to fail the whole boot, so the new
+ *   replica crash-looped. Now the ones that open stay, a warning names how many did not (the pool
+ *   opens them on demand), and only a database that accepts none fails the boot.
+ * - **Side effects:** up to `DATABASE_POOL_MAX` open connections until their idle timeout.
  * - **Notes:** without it a freshly started process opens its connections under its first burst,
  *   so the first requests pay the TCP + authentication handshakes while the event loop is
  *   busiest — the same startup race the eager Redis connect in `server.ts` avoids.
  */
-export async function primeDatabasePool(): Promise<void> {
-  await Promise.all(Array.from({ length: env.DATABASE_POOL_MAX }, () => sql`SELECT 1`));
+export async function primeDatabasePool(
+  openConnection: () => Promise<unknown> = () => sql`SELECT 1`,
+): Promise<void> {
+  const outcomes = await Promise.allSettled(
+    Array.from({ length: env.DATABASE_POOL_MAX }, () => openConnection()),
+  );
+  const refused = outcomes.filter((outcome) => outcome.status === 'rejected');
+  if (refused.length === 0) return;
+  if (refused.length === outcomes.length) throw refused[0]!.reason;
+  logger.warn(
+    {
+      opened: outcomes.length - refused.length,
+      refused: refused.length,
+      error: refused[0]!.reason,
+    },
+    'database.pool_prime.partial',
+  );
 }
 
 let maintenanceSql: ReturnType<typeof postgres> | undefined;
@@ -131,22 +150,26 @@ export function getMaintenanceDatabase(): ReturnType<typeof drizzle> {
   return maintenanceDatabaseHandle;
 }
 
+/** What is left of the shared shutdown budget, in whole seconds (the unit `sql.end` takes). */
+function remainingShutdownBudgetSeconds(): number {
+  return Math.ceil(getRemainingShutdownBudgetMs() / 1_000);
+}
+
 /**
  * Drains the postgres.js pool and waits up to the shared shutdown drain budget
  * (`SHUTDOWN_TIMEOUT_MS`, 15s default) for in-flight queries before terminating.
  * Called from the shutdown middleware.
  *
  * @remarks
- * Uses {@link getShutdownTimeoutMs} (not its own 30s default) so the database
- * drain budget is always ≤ the force-exit watchdog (drain budget + buffer). A
- * larger local default could let the watchdog kill the drain mid-flight, severing
- * in-flight queries instead of letting them finish.
+ * Waits for what is left of the shared shutdown budget ({@link getRemainingShutdownBudgetMs}), so
+ * the drain always ends inside the force-exit watchdog (budget + buffer) however long the steps
+ * before it took. postgres.js takes the timeout in SECONDS: the milliseconds passed before meant a
+ * 15 000-second wait, and the watchdog — not the drain — ended every slow shutdown.
  */
 export async function closeDatabase(): Promise<void> {
-  const timeout = getShutdownTimeoutMs();
-  await sql.end({ timeout });
+  await sql.end({ timeout: remainingShutdownBudgetSeconds() });
   if (maintenanceSql !== undefined) {
-    await maintenanceSql.end({ timeout });
+    await maintenanceSql.end({ timeout: remainingShutdownBudgetSeconds() });
     maintenanceSql = undefined;
     maintenanceDatabaseHandle = undefined;
   }

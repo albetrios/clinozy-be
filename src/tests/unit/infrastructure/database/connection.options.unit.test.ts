@@ -4,8 +4,13 @@ import {
   closeDatabase,
   isNeonPoolerConnection,
   sql,
+  primeDatabasePool,
 } from '@/infrastructure/database/connection.js';
-import { getShutdownTimeoutMs } from '@/infrastructure/queue/worker-runtime/shutdown-timing.util.js';
+import {
+  getShutdownTimeoutMs,
+  resetShutdownBudgetForTests,
+  startShutdownBudget,
+} from '@/infrastructure/queue/worker-runtime/shutdown-timing.util.js';
 import { env } from '@/shared/config/env.config.js';
 
 describe('postgres connection options', () => {
@@ -62,16 +67,52 @@ describe('postgres connection options', () => {
 
   describe('closeDatabase (EX-32)', () => {
     it('drains using the shared shutdown timeout so it can never exceed the watchdog budget', async () => {
-      // EX-32: closeDatabase must use getShutdownTimeoutMs() (the same drain budget the watchdog is
-      // derived from), not its own longer default — otherwise the force-exit watchdog could kill the
-      // postgres pool drain mid-flight.
+      // EX-32: closeDatabase must use the shutdown budget the watchdog is derived from — in SECONDS,
+      // the unit postgres.js `end` takes. The milliseconds passed before were a 15 000-second wait.
       const endSpy = vi.spyOn(sql, 'end').mockResolvedValue(undefined);
       try {
         await closeDatabase();
-        expect(endSpy).toHaveBeenCalledWith({ timeout: getShutdownTimeoutMs() });
+        expect(endSpy).toHaveBeenCalledWith({ timeout: Math.ceil(getShutdownTimeoutMs() / 1_000) });
       } finally {
         endSpy.mockRestore();
       }
+    });
+
+    it('drains for what is left of the shared budget once shutdown has begun', async () => {
+      const endSpy = vi.spyOn(sql, 'end').mockResolvedValue(undefined);
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      try {
+        startShutdownBudget();
+        // The steps before (worker close, queue drains) took 11 of the 15 seconds.
+        now.mockReturnValue(1_000_000 + getShutdownTimeoutMs() - 4_000);
+        await closeDatabase();
+        expect(endSpy).toHaveBeenCalledWith({ timeout: 4 });
+      } finally {
+        resetShutdownBudgetForTests();
+        now.mockRestore();
+        endSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('primeDatabasePool', () => {
+    it('keeps the connections that opened when some are refused (a rolling deploy at max_connections)', async () => {
+      let attempt = 0;
+      const openConnection = vi.fn(async () => {
+        attempt += 1;
+        if (attempt % 2 === 0) throw new Error('sorry, too many clients already');
+      });
+
+      await expect(primeDatabasePool(openConnection)).resolves.toBeUndefined();
+      expect(openConnection).toHaveBeenCalledTimes(env.DATABASE_POOL_MAX);
+    });
+
+    it('fails the boot only when the database accepts no connection at all', async () => {
+      await expect(
+        primeDatabasePool(async () => {
+          throw new Error('connection refused');
+        }),
+      ).rejects.toThrow('connection refused');
     });
   });
 });

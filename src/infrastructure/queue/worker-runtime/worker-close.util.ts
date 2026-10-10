@@ -1,6 +1,6 @@
 import type { Worker } from 'bullmq';
 import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
-import { getShutdownTimeoutMs } from '@/infrastructure/queue/worker-runtime/shutdown-timing.util.js';
+import { getRemainingShutdownBudgetMs } from '@/infrastructure/queue/worker-runtime/shutdown-timing.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 /** Bounded close for bootstrap handles; falls back to handle.close() for scheduler-only handles. */
@@ -24,7 +24,7 @@ export async function closeWorkerWithTimeout(
   worker: Worker,
   options?: { timeoutMs?: number; queueName?: string },
 ): Promise<void> {
-  const timeoutMs = options?.timeoutMs ?? getShutdownTimeoutMs();
+  const timeoutMs = options?.timeoutMs ?? getRemainingShutdownBudgetMs();
   const queueName = options?.queueName ?? worker.name;
 
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;

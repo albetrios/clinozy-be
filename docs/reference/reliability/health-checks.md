@@ -104,7 +104,7 @@ readinessProbe:
   failureThreshold: 2
 ```
 
-On `SIGTERM`/`SIGINT`, the API sets a draining flag before `app.close()`. `/readyz` returns **503** with `status: "draining"` so load balancers stop new traffic while in-flight requests finish; `/livez` keeps reporting the process state. Align platform grace with `SHUTDOWN_TIMEOUT_MS` (default 30s) — [resource-limits.md](../../deployment/runbooks/resource-limits.md).
+On `SIGTERM`/`SIGINT`, the API sets a draining flag before `app.close()`. `/readyz` returns **503** with `status: "draining"` so load balancers stop new traffic while in-flight requests finish; `/livez` keeps reporting the process state. Align platform grace with `SHUTDOWN_TIMEOUT_MS` (default 15 s, shared by every close step, plus a 5 s watchdog buffer) — [resource-limits.md](../../deployment/runbooks/resource-limits.md).
 
 ## Worker `GET /livez` and `GET /readyz`
 

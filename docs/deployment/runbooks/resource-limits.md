@@ -209,7 +209,7 @@ Alerting runs on API startup (`registerPostgresPoolMetrics` in `server.ts`) and 
 
 3. **CD workflow:** `NODE_OPTIONS` can be synced from GitHub Environment variables (`NODE_OPTIONS`) via [reusable-railway-deploy.yml](../../../.github/workflows/reusable-railway-deploy.yml) to both API and worker services. Use equal or higher heap for workers if they run heavier jobs.
 
-4. **Graceful drain:** On `SIGTERM`/`SIGINT`, the API sets a process-wide draining flag before `app.close()`. **`GET /readyz` returns HTTP 503** with `status: "draining"` so the load balancer stops sending traffic while in-flight requests finish, while **`GET /livez` stays HTTP 200** until the process exits. Align platform **draining / health-check grace** with `SHUTDOWN_TIMEOUT_MS` (default 30s).
+4. **Graceful drain:** On `SIGTERM`/`SIGINT`, the API sets a process-wide draining flag before `app.close()`. **`GET /readyz` returns HTTP 503** with `status: "draining"` so the load balancer stops sending traffic while in-flight requests finish, while **`GET /livez` stays HTTP 200** until the process exits. Align platform **draining / health-check grace** with `SHUTDOWN_TIMEOUT_MS` (default 15 s) — one budget every close step shares (worker close, queue and pool drains each wait only for what is left of it), with the force-exit watchdog 5 s after it.
 
 ---
 
@@ -240,7 +240,7 @@ spec:
           memory: '1Gi'
 ```
 
-- **`terminationGracePeriodSeconds`** should exceed application shutdown budget (for example **`SHUTDOWN_TIMEOUT_MS`** default **30000** in [.env.example](../../../.env.example)) so in-flight Fastify drains and BullMQ workers close cleanly.
+- **`terminationGracePeriodSeconds`** should exceed the application's shutdown budget plus its watchdog buffer (**`SHUTDOWN_TIMEOUT_MS`**, default **15000**, + 5 s, + the 3 s API drain pause — see [.env.example](../../../.env.example)) so in-flight Fastify drains and BullMQ workers close cleanly.
 
 ### When a Pod exits with exit code **137**
 

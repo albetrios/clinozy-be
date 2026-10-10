@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { assertRedisEvictionPolicy } from '@/infrastructure/cache/assert-redis-eviction-policy.js';
+import {
+  assertRedisEndpointsEvictionPolicy,
+  assertRedisEvictionPolicy,
+} from '@/infrastructure/cache/assert-redis-eviction-policy.js';
 
 function redisReporting(info: string) {
   return { info: async () => info };
@@ -53,5 +56,42 @@ describe('assertRedisEvictionPolicy', () => {
         endpointName: 'REDIS_URL',
       }),
     ).resolves.toBeUndefined();
+  });
+
+  describe('assertRedisEndpointsEvictionPolicy', () => {
+    const evicting = redisReporting('maxmemory:268435456\r\nmaxmemory_policy:allkeys-lru\r\n');
+    const safe = redisReporting('maxmemory:268435456\r\nmaxmemory_policy:noeviction\r\n');
+
+    it('checks REDIS_URL even when the queues run on their own instance', async () => {
+      // Idempotency entries and rate-limit counters live there: an evicting cache instance used to
+      // pass unchecked whenever BullMQ had a separate one.
+      await expect(
+        assertRedisEndpointsEvictionPolicy({
+          cacheClient: evicting,
+          queueClient: safe,
+          queuesOnSeparateInstance: true,
+        }),
+      ).rejects.toThrow(/REDIS_URL runs maxmemory-policy "allkeys-lru"/);
+    });
+
+    it('checks REDIS_BULLMQ_URL as well when it is a separate instance', async () => {
+      await expect(
+        assertRedisEndpointsEvictionPolicy({
+          cacheClient: safe,
+          queueClient: evicting,
+          queuesOnSeparateInstance: true,
+        }),
+      ).rejects.toThrow(/REDIS_BULLMQ_URL/);
+    });
+
+    it('does not read the queue client when the queues share REDIS_URL', async () => {
+      await expect(
+        assertRedisEndpointsEvictionPolicy({
+          cacheClient: safe,
+          queueClient: evicting,
+          queuesOnSeparateInstance: false,
+        }),
+      ).resolves.toBeUndefined();
+    });
   });
 });

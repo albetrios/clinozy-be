@@ -1265,6 +1265,7 @@ src/
     │   │   └── unit/
     │   │   │   ├── bullmq-trace-propagation.unit.test.ts
     │   │   │   ├── posthog.unit.test.ts
+    │   │   │   ├── sentry-integrations.unit.test.ts
     │   │   │   ├── sentry.unit.test.ts
     │   │   │   ├── trace-context.util.unit.test.ts
     │   │   │   └── unhandled-rejection.handler.unit.test.ts

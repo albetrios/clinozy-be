@@ -6,9 +6,14 @@ import {
 } from '@/infrastructure/observability/sentry/sentry.js';
 import { initPostHog } from '@/infrastructure/observability/posthog/posthog.js';
 import { createUnhandledRejectionHandler } from '@/infrastructure/observability/unhandled-rejection.handler.js';
-import { connectRedis } from '@/infrastructure/cache/redis.client.js';
+import { connectRedis, redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { primeDatabasePool } from '@/infrastructure/database/connection.js';
-import { connectBullMqRedis } from '@/infrastructure/cache/bullmq-redis.client.js';
+import {
+  bullmqRedisConnection,
+  connectBullMqRedis,
+} from '@/infrastructure/cache/bullmq-redis.client.js';
+import { assertRedisEndpointsEvictionPolicy } from '@/infrastructure/cache/assert-redis-eviction-policy.js';
+import { usesSeparateBullMqRedisDatabase } from '@/infrastructure/cache/redis-url.util.js';
 import { warnWhenBullMqSharesCacheRedisHost } from '@/infrastructure/cache/redis-topology-warn.util.js';
 import { assertPostgresConnectionBudget } from '@/infrastructure/database/safety/assert-connection-budget.js';
 import {
@@ -70,6 +75,12 @@ async function main() {
   await connectRedis();
   await connectBullMqRedis();
   warnWhenBullMqSharesCacheRedisHost();
+  // Idempotency entries and rate-limit counters live on REDIS_URL: refuse an evicting instance.
+  await assertRedisEndpointsEvictionPolicy({
+    cacheClient: redisConnection,
+    queueClient: bullmqRedisConnection,
+    queuesOnSeparateInstance: usesSeparateBullMqRedisDatabase(),
+  });
   await assertPostgresConnectionBudget();
   await assertDatabaseRoleRlsSafety();
   await assertMaintenanceDatabaseRoleRlsSafety();

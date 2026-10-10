@@ -20,6 +20,10 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
 }));
 
 import { closeWorkerWithTimeout } from '@/infrastructure/queue/worker-runtime/worker-close.util.js';
+import {
+  resetShutdownBudgetForTests,
+  startShutdownBudget,
+} from '@/infrastructure/queue/worker-runtime/shutdown-timing.util.js';
 
 describe('worker-close.util', () => {
   beforeEach(() => {
@@ -28,7 +32,24 @@ describe('worker-close.util', () => {
   });
 
   afterEach(() => {
+    resetShutdownBudgetForTests();
     vi.useRealTimers();
+  });
+
+  it('by default waits only for what is left of the shared shutdown budget', async () => {
+    mockEnv.SHUTDOWN_TIMEOUT_MS = 10_000;
+    startShutdownBudget();
+    // Earlier steps used 9.9 of the 10 seconds: this close gets the last 100 ms, not 10 s more.
+    await vi.advanceTimersByTimeAsync(9_900);
+    const worker = {
+      name: 'mail',
+      close: vi.fn(() => new Promise<void>(() => {})),
+    } as unknown as Worker;
+
+    const closePromise = closeWorkerWithTimeout(worker, { queueName: 'mail' });
+    const assertion = expect(closePromise).rejects.toThrow(/exceeded 100ms/);
+    await vi.advanceTimersByTimeAsync(150);
+    await assertion;
   });
 
   it('resolves when worker.close completes within timeout', async () => {

@@ -8,7 +8,7 @@ What is **in place today** for production signals, and what is **deferred**. For
 
 | Signal                      | Tool / path                                                         | Notes                                                                                                |
 | --------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Errors, traces, profiling   | [Sentry](../../../src/infrastructure/observability/sentry/sentry.ts)       | `SENTRY_DSN`, release + environment tags                                                             |
+| Errors, traces, profiling   | [Sentry](../../../src/infrastructure/observability/sentry/sentry.ts)       | `SENTRY_DSN` (required in production), release + environment tags; database spans from `postgresJsIntegration` (the driver in use) |
 | Structured logs             | Pino ([`logger.util.ts`](../../../src/shared/utils/infrastructure/logger.util.ts)) | JSON to stdout; Railway log drain                                                                    |
 | Liveness / readiness        | `GET /livez`, `GET /readyz`                             | See [health-checks.md](../../reference/reliability/health-checks.md); deploy probes and load tests               |
 | Idempotency cardinality     | Repeatable BullMQ job `idempotency-cardinality`                     | Bounded Redis SCAN + log / Sentry thresholds (`IDEMPOTENCY_CARDINALITY_*`)                           |

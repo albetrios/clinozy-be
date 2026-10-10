@@ -9,6 +9,8 @@ clinozy-be uses **two Redis surfaces**:
 
 **Recommended topology:** run BullMQ on a **dedicated** Redis instance (`REDIS_BULLMQ_URL`) in production, separate from the write-critical cache/idempotency/rate-limit store on `REDIS_URL`. A worker outage lets the BullMQ waiting queue grow until Redis fills; with `maxmemory-policy=noeviction` a full instance rejects all writes. Isolating queues means a queue backlog **cannot** starve idempotency/rate-limit writes and turn a worker problem into an API write outage.
 
+**ACL users:** the user named in a `REDIS_*_URL`'s credentials reaches every client — BullMQ's queues and workers included (they used to send the password for `default`, which a Redis with per-service ACL users refuses).
+
 **Local/dev fallback:** when `REDIS_BULLMQ_URL` is unset, BullMQ shares `REDIS_URL`, keeping local development and CI single-instance with no extra service to run.
 
 ---
@@ -25,7 +27,7 @@ When cache and BullMQ **share one instance** (local, or production before isolat
 
 Isolating BullMQ onto `REDIS_BULLMQ_URL` removes the cross-workload blast radius: a queue backlog can only fill the queue instance, leaving idempotency and rate-limit writes healthy on the cache instance.
 
-**Eviction policy — `noeviction` is required.** BullMQ keeps job data and lock keys in Redis; an evicting policy (`allkeys-lru`, `volatile-lru`, …) drops them exactly when memory fills under a backlog, so jobs vanish or a live job loses its lock and runs twice. The worker refuses to start on a Redis whose `maxmemory-policy` is not `noeviction` while `maxmemory` is set ([`assert-redis-eviction-policy.ts`](../../../src/infrastructure/cache/assert-redis-eviction-policy.ts), `redis.eviction_policy.unsafe`); an unreadable `INFO` only warns. With `noeviction` a full Redis rejects writes instead — loud and recoverable, and what the saturation alerts below watch for.
+**Eviction policy — `noeviction` is required.** BullMQ keeps job data and lock keys in Redis; an evicting policy (`allkeys-lru`, `volatile-lru`, …) drops them exactly when memory fills under a backlog, so jobs vanish or a live job loses its lock and runs twice. The API and the worker refuse to start on a Redis whose `maxmemory-policy` is not `noeviction` while `maxmemory` is set — `REDIS_URL` always (idempotency entries and rate-limit counters live there too), and `REDIS_BULLMQ_URL` as well when the queues run on their own instance ([`assert-redis-eviction-policy.ts`](../../../src/infrastructure/cache/assert-redis-eviction-policy.ts), `redis.eviction_policy.unsafe`); an unreadable `INFO` only warns. With `noeviction` a full Redis rejects writes instead — loud and recoverable, and what the saturation alerts below watch for.
 
 **Connections per process.** Each BullMQ worker holds two Redis connections (a command client and a blocking one); the scheduler opens one per cron queue only while registering, then closes them. Inspection clients — the queue-depth gauges and the DLQ mirrors, both pooled per queue — open lazily, one per queue, up to the 33 worker queues each. A monolithic worker therefore uses roughly 66 + 66 + a handful (producers, cache, health) ≈ 139 connections at most, an API process up to about 70; multiply by replicas and keep the total well under the server's `maxclients` (10 000 by default; much lower on some managed plans).
 
