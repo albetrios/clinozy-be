@@ -59,18 +59,20 @@ single box, more API processes make it slower.
 `overload-guard.middleware.ts` returns `503` with `Retry-After: 1` when either
 event-loop lag crosses its threshold or in-flight database units of work reach
 `ceil(DATABASE_POOL_MAX × OVERLOAD_DB_POOL_SHED_RATIO)`. The default ratio is
-three; the count includes units waiting for a connection as well as running
+ten; the count includes units waiting for a connection as well as running
 transactions. Liveness, readiness and metrics paths bypass this guard.
 
-Match capacity-test expectations to this admission limit. A pool of 60 with the
-default ratio of three admits at most 180 in-flight units of work; a 240-client
-test can therefore receive intentional `database_pool_overload` responses even
-when its latency is below the SLO. To evaluate a bounded 240-client queue on that
-pool, explicitly configure `OVERLOAD_DB_POOL_SHED_RATIO=5` (300 in-flight units),
-then retain the original latency and zero-error acceptance criteria. This is
-workload-specific admission tuning, not evidence that the default configuration
-supports 240 clients. Keep acquisition timeouts and event-loop shedding enabled,
-and record both the default-policy failures and the tuned-policy results.
+The default pool of 30 therefore admits 300 in-flight units of work: a
+synchronized burst of 240 distinct users queues for a connection (bounded by
+`DATABASE_POOL_ACQUIRE_TIMEOUT_MS`) instead of receiving
+`database_pool_overload` 503s. The previous default of three (90 units) shed part
+of such a burst even with latency inside the SLO. Lower the ratio to fail fast
+earlier under sustained overload; keep acquisition timeouts and event-loop
+shedding enabled either way.
+
+The API also opens its whole pool before it starts listening
+(`primeDatabasePool()` in `server.ts`), so a freshly started process does not pay
+every connection handshake under its first burst.
 
 The structured `request.service_unavailable` log identifies the triggering signal
 as `event_loop_overload` or `database_pool_overload` in its `reason` field. If both

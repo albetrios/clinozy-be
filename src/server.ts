@@ -9,6 +9,7 @@ import { initPostHog } from '@/infrastructure/observability/posthog/posthog.js';
 import { OTEL_SERVICE_NAME_API } from '@/shared/constants/project-identity.constants.js';
 import { createUnhandledRejectionHandler } from '@/infrastructure/observability/unhandled-rejection.handler.js';
 import { connectRedis } from '@/infrastructure/cache/redis.client.js';
+import { primeDatabasePool } from '@/infrastructure/database/connection.js';
 import { connectBullMqRedis } from '@/infrastructure/cache/bullmq-redis.client.js';
 import { warnWhenBullMqSharesCacheRedisHost } from '@/infrastructure/cache/redis-topology-warn.util.js';
 import { assertPostgresConnectionBudget } from '@/infrastructure/database/safety/assert-connection-budget.js';
@@ -77,6 +78,8 @@ async function main() {
   await assertPostgresConnectionBudget();
   await assertDatabaseRoleRlsSafety();
   await assertMaintenanceDatabaseRoleRlsSafety();
+  // Open the pool before listening, so the first burst does not pay every connection handshake.
+  await primeDatabasePool();
   registerPostgresPoolMetrics();
   startProcessMemoryMonitoring({
     processLabel: 'api',

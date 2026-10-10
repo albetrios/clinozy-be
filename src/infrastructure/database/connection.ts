@@ -89,6 +89,22 @@ export const sql = postgres(env.DATABASE_URL, buildPostgresOptions(env.DATABASE_
  */
 export const database = drizzle(sql);
 
+/**
+ * Opens every connection of the {@link sql} pool before the server accepts traffic.
+ *
+ * @remarks
+ * - **Algorithm:** issues `DATABASE_POOL_MAX` concurrent `SELECT 1` queries; postgres.js opens a
+ *   connection per in-flight query up to `max`, so the pool is full when they resolve.
+ * - **Failure modes:** a connection error rejects (the boot fails, as for the Redis connect).
+ * - **Side effects:** `DATABASE_POOL_MAX` open connections until their idle timeout.
+ * - **Notes:** without it a freshly started process opens its connections under its first burst,
+ *   so the first requests pay the TCP + authentication handshakes while the event loop is
+ *   busiest — the same startup race the eager Redis connect in `server.ts` avoids.
+ */
+export async function primeDatabasePool(): Promise<void> {
+  await Promise.all(Array.from({ length: env.DATABASE_POOL_MAX }, () => sql`SELECT 1`));
+}
+
 let maintenanceSql: ReturnType<typeof postgres> | undefined;
 let maintenanceDatabaseHandle: ReturnType<typeof drizzle> | undefined;
 

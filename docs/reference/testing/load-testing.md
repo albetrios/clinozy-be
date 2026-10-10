@@ -473,19 +473,30 @@ DURATION=20s MIN_COMPLETED=20 k6 run src/tests/load/k6/scenarios/tenancy-role-wr
 For 240-user capacity investigations, record the admission ceiling as
 `ceil(DATABASE_POOL_MAX × OVERLOAD_DB_POOL_SHED_RATIO)`: this counts running and
 waiting organization-scoped database work, rather than database connections alone.
-Pool 60 / ratio 3 starts shedding at 180 in-flight units and cannot promise
-error-free admission of a synchronized 240-user burst.
+The defaults (pool 30, ratio 10) admit 300 units, and the API opens its pool before
+listening, so a freshly started process takes a synchronized 240-user burst
+without shedding or paying connection handshakes under load. The bulk seed gives every
+seeded user the personal organization signup provisions, so a user's first
+`GET /users/me` measures a read, not the on-demand self-heal that would otherwise write
+one under the burst.
 
-On the four-core cloud host, pool 30 / ratio 10 (a bounded ceiling of 300) eliminated
-unexpected HTTP errors across repeated 240-user bursts. The organization access
-check now fetches the row and checks owner/active membership in one query, with
-FORCE RLS regression coverage. Three consecutive bursts on one API process passed
-p95 <500 ms / p99 <1000 ms (p95 489.71, 436.58, 404.97 ms), but fresh-process runs
-still failed the 500 ms p95 gate. This configuration is an **HTTP-error mitigation,
-not a complete latency fix**. Keep cold-process and warm-process results separate;
-do not prewarm a benchmark, dilute cold samples, or relax thresholds to claim a fix.
-Connection warming, TCP_NODELAY, a larger libuv thread pool, combined summary queries,
-and two/four API processes did not produce repeatable cold-burst passes on this host.
+On macOS the kernel caps a listener's accept queue at `kern.ipc.somaxconn` (128 by
+default), so a burst of more than 128 simultaneous TCP connects to one fresh process
+can be refused with `connection reset by peer` before the API sees it. Linux defaults
+to 4096. For a local 240-user burst, raise it until reboot first:
+`sudo sysctl -w kern.ipc.somaxconn=1024`.
+
+A 240-user burst needs at least 240 distinct pool users: seed them with
+`BULK_ORGS=200 BULK_USERS_PER_ORG=10 pnpm db:seed:bulk` followed by
+`pnpm tool:load-test-credential-pool` (the pool excludes members of organizations
+that require MFA). Fresh-process runs used to fail the 500 ms cold p95 gate because
+the first request of each journey, `GET /users/me`, self-healed a missing personal
+organization for every bulk-seeded user (p95 1,157 ms on that request alone). With the
+seed provisioning it and the pool primed, three consecutive fresh-process bursts of
+240 users on the defaults passed every gate locally: cold p95 491 / 392 / 429 ms, p99
+945 / 564 / 777 ms; warm p95 193 / 235 / 180 ms; zero errors, resets or sheds. Keep
+cold-process and warm-process results separate; do not prewarm a benchmark, dilute
+cold samples, or relax thresholds to claim a fix.
 Keep the monolithic worker's independently budgeted pool (60 in `.env.example`);
 do not apply the API's smaller pool to that worker.
 

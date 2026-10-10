@@ -1,15 +1,18 @@
 /**
- * Tenancy bulk seeder — creates organizations (deterministic slugs `bulk-organization-<index>`), each
- * with an Admin role + full permission grant and a faker-sized set of ACTIVE memberships drawn
- * from the user pool in the registry. Created organizations are appended to the registry for
- * downstream domains (billing, notify, upload, audit).
+ * Tenancy bulk seeder — gives every pool user the personal organization signup provisions, then
+ * creates organizations (deterministic slugs `bulk-organization-<index>`), each with an Admin role +
+ * full permission grant and a faker-sized set of ACTIVE memberships drawn from the user pool in the
+ * registry. Created organizations are appended to the registry for downstream domains (billing,
+ * notify, upload, audit).
  *
- * Idempotency: only organization indices beyond those already present are created, so a re-run
- * with the same counts is a no-op.
+ * Idempotency: a user who already has a personal organization keeps it, and only organization
+ * indices beyond those already present are created, so a re-run with the same counts is a no-op.
  */
-import { like } from 'drizzle-orm';
+import { and, eq, isNull, like } from 'drizzle-orm';
+import { env } from '@/shared/config/env.config.js';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
+import { provisionPersonalOrganization } from '@/domains/tenancy/sub-domains/organization/organization-provisioning.js';
 import { SYSTEM_PERMISSIONS } from '@/domains/tenancy/sub-domains/permission/seed/permission.reference.seed.js';
 import type { SeedContext, SeededUser } from '@/scripts/seed/seed-contract.js';
 import { generateBulkOrganizationName } from './tenancy.faker.js';
@@ -20,14 +23,32 @@ const BULK_SLUG_PATTERN = `${BULK_SLUG_PREFIX}%`;
 const ADMIN_PERMISSION_CODES = SYSTEM_PERMISSIONS.map((permission) => permission.code);
 
 /**
+ * Gives each pool user who has none the personal organization signup provisions, through the same
+ * `provisionPersonalOrganization`; a no-op when `PERSONAL_ORGANIZATION_ENABLED` is off.
+ */
+async function seedPersonalOrganizations(pool: readonly SeededUser[]): Promise<void> {
+  if (!env.PERSONAL_ORGANIZATION_ENABLED) return;
+  const owners = await getRequestDatabase()
+    .select({ owner_user_id: organizations.owner_user_id })
+    .from(organizations)
+    .where(and(eq(organizations.type, 'PERSONAL'), isNull(organizations.deleted_at)));
+  const ownerIds = new Set(owners.map((owner) => owner.owner_user_id));
+  for (const user of pool) {
+    if (!ownerIds.has(user.id)) await provisionPersonalOrganization(user.id);
+  }
+}
+
+/**
  * Seeds organizations + roles + memberships and appends each organization to `context.registry`.
  *
  * @remarks
- * Algorithm: count existing bulk organizations, create only the missing higher indices (each with an
- * Admin role, full grant, owner membership, and additional members), then re-select all bulk
- * organizations into the registry. Side effects: inserts into organizations / roles / role_permissions /
- * memberships. Failure modes: warns and returns early if the user pool is empty; otherwise
- * propagates DB errors.
+ * Algorithm: when `PERSONAL_ORGANIZATION_ENABLED`, provision the personal organization of each pool
+ * user who has none (`provisionPersonalOrganization`, the signup path), so a seeded user's first
+ * profile read does not self-heal one under load; then count existing bulk organizations, create
+ * only the missing higher indices (each with an Admin role, full grant, owner membership, and
+ * additional members), then re-select all bulk organizations into the registry. Side effects:
+ * inserts into organizations / roles / role_permissions / memberships. Failure modes: warns and
+ * returns early if the user pool is empty; otherwise propagates DB errors.
  */
 export async function seedOrganizationsBulk(context: SeedContext): Promise<void> {
   const database = getRequestDatabase();
@@ -37,6 +58,8 @@ export async function seedOrganizationsBulk(context: SeedContext): Promise<void>
     context.logger.warn('seed.bulk.tenancy: empty user pool; run the user seeder first');
     return;
   }
+
+  await seedPersonalOrganizations(pool);
 
   let cursor = 0;
   const nextUser = (): SeededUser => pool[cursor++ % pool.length] as SeededUser;

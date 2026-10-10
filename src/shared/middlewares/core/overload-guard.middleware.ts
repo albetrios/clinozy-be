@@ -58,8 +58,8 @@ export function shouldShedRequest(options: {
  *   and reset each tick; the `onRequest` hook reads the cached p99 (no per-request syscall) and
  *   sheds above `env.OVERLOAD_MAX_EVENT_LOOP_DELAY_MS`. (2) DB-pool saturation: the hook reads the
  *   live in-process checkout gauge — units of work running or still waiting for a connection — and
- *   sheds at `ceil(DATABASE_POOL_MAX × shedRatio)`. The default ratio (3) lets a queue twice the
- *   pool's size form first, so a burst the pool drains in milliseconds is served, not shed. Both
+ *   sheds at `ceil(DATABASE_POOL_MAX × shedRatio)`. The default ratio (10) lets a queue nine times
+ *   the pool's size form first, so a burst the pool drains in milliseconds is served, not shed. Both
  *   throw {@link ServiceUnavailableError} with `Retry-After`.
  * - **Why:** without a valve, a backlog grows an unbounded queue and tail latency runs to multiple
  *   seconds. Shedding bounds the tail — requests the box cannot serve promptly get a fast, cheap
